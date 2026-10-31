@@ -116,7 +116,7 @@ inline bool TryRescue(GameState& s, const ManaCost& cost, const char* for_card)
 {
     const int active = s.active_player_index;
     PayRollbackLedger& L = s.pay_ledger;
-    L.Stamp(s.turn_number, active);
+    L.Stamp(s.TurnSeq(), active);
     if (L.n == 0)           { Declined(s, "empty ledger", for_card); return false; }
     if (L.untap_effect)     { Declined(s, "an untap effect fired this turn", for_card); return false; }
     if (L.rollbacks >= 1)   { Declined(s, "already rolled back this turn", for_card); return false; }

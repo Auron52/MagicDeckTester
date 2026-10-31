@@ -23,6 +23,7 @@
 #include "../core/EffectHandler.h"   // PushCastTriggers (real-stack cascade/demonstrate)
 #include "../core/SpellEffects.h"
 #include "../core/RolloutTouch.h"
+#include "../core/GameSetup.h"   // gamesetup::BlindSearchSalt (the known-respecting blind search)
 #include <algorithm>
 #include <cstdlib>
 #include <functional>
@@ -360,27 +361,31 @@ HumanCommitPreview PrepareHumanCommit(const GameState& state, const TurnSolver::
     // A trial apply on a copy: the casts it drops, and (when asked) the order it realised and the steps
     // that did not happen. The capture pointers are null for every legacy pin, so the historical trials
     // are untouched.
+    // `reasons_out` (optional): why each drop happened, index-aligned with `drops_out` (Q37).
     auto trial = [&](const TurnSolver::Plan& pl, std::vector<std::string>* drops_out,
-                     std::vector<std::string>* seen, std::vector<std::string>* fails) -> std::size_t
+                     std::vector<std::string>* seen, std::vector<std::string>* fails,
+                     std::vector<std::string>* reasons_out = nullptr) -> std::size_t
     {
         GameState g = state;
         TurnSolver::Plan t = pl;
-        std::vector<std::string> drops;
+        std::vector<std::string> drops, reasons;
         std::vector<std::string>* const prev_sink = g_play_dropped_cast_sink;
         {
             ComboOffApplyPause co_quiet;
             RevealLogPause quiet;
-            g_play_dropped_cast_sink = &drops;
+            // The trial's OWN (casts, reasons) pair: the harness's logs never see a trial's drops.
+            PlayDropSinkScope drop_scope(&drops, &reasons);
             g_line_order_capture     = seen;
             g_human_step_fail_sink   = fails;
             if (is_pre_combat_main) { TurnSolver::DeferHumanAuraSwapToCombat(g, t, nullptr); }
             TurnSolver::ApplyPlan(g, t, is_pre_combat_main);
-            g_play_dropped_cast_sink = nullptr;
             g_line_order_capture     = nullptr;
             g_human_step_fail_sink   = nullptr;
         }
         g_play_dropped_cast_sink = prev_sink;
+        reasons.resize(drops.size());
         if (drops_out != nullptr) { *drops_out = drops; }
+        if (reasons_out != nullptr) { *reasons_out = reasons; }
         return drops.size();
     };
     bool fallback = false;
@@ -393,21 +398,25 @@ HumanCommitPreview PrepareHumanCommit(const GameState& state, const TurnSolver::
     // form (no "**"), so saved references replay as recorded.
     if (pv.sequence)
     {
-        std::vector<std::string> drops_v, seen_ok;
-        trial(pinned, &drops_v, nullptr, nullptr);
+        std::vector<std::string> drops_v, seen_ok, why_v;
+        trial(pinned, &drops_v, nullptr, nullptr, &why_v);
         if (!drops_v.empty())
         {
             const bool engine_pays = trial(chosen, nullptr, &seen_ok, nullptr) == 0;
             std::string pays;
             for (const std::string& x : seen_ok) { pays += (pays.empty() ? "" : ", ") + x; }
-            for (const std::string& d : drops_v)
+            for (std::size_t k = 0; k < drops_v.size(); ++k)
             {
+                const std::string& d = drops_v[k];
                 std::string cost;
-                for (const Card& c : state.ActivePlayer().hand)   // ZoneCard: a hand card's own cost is a placeholder {0}
+                for (const Card& c : state.ActivePlayer().hand)
                 { if (c.m_name == d) { cost = ZoneCard(c).m_mana_cost.ToDisplayString(); break; } }
-                pv.errors.push_back("cast " + d + ": it cannot be paid at its position in your order -- "
-                                    + (cost.empty() ? std::string("its cost") : cost)
-                                    + " is more than the steps queued before it leave available"
+                // The board's own account of the shortfall when the drop site gave one (Q37: "Seething Song
+                // costs {2}{R}; only 1 mana available" -- what is left at that position in the order).
+                const std::string why = k < why_v.size() && !why_v[k].empty()
+                    ? why_v[k] + " at that point"
+                    : (cost.empty() ? std::string("its cost") : cost) + " is more than the steps queued before it leave available";
+                pv.errors.push_back("cast " + d + ": it cannot be paid at its position in your order -- " + why
                                     + (engine_pays ? " (the order " + pays + " pays every spell: queue it that way)"
                                                    : std::string()));
             }
@@ -447,7 +456,7 @@ HumanCommitPreview PrepareHumanCommit(const GameState& state, const TurnSolver::
         pv.plan = chosen;
     }
     else { pv.plan = std::move(pinned); }
-    if (trial_result) { trial(pv.plan, &pv.dropped, nullptr, &pv.failed); }
+    if (trial_result) { trial(pv.plan, &pv.dropped, nullptr, &pv.failed, &pv.dropped_reasons); }
     return pv;
 }
 
@@ -686,6 +695,7 @@ inline bool CarriesPostApplyPin(const TurnSolver::Plan& p)
         || p.grace_choice >= 0 || p.upkeep_gy_reanimate_choice >= 0 || p.echo_choice >= 0
         || p.doth_put_choice >= 0
         || p.atk_dork_release >= 0 || p.combat_landfall_target_choice >= 0 || p.landfall_target_choice >= 0
+        || p.cast_trigger_target_choice >= 0
         || p.combat_transform_choice >= 0
         || p.sweep_choice >= 0 || p.le_fire_choice >= 0 || p.dig_choice == 0 || p.dig_choice == 1;
 }
@@ -724,6 +734,7 @@ inline void RecordReSolveRealized(const GameState& s, const TurnSolver::Plan& p,
     if (p.combat_transform_choice >= 0
         && s.scripted_combat_transform != p.combat_transform_choice)                               { ok = false; }
     if (p.landfall_target_choice >= 0  && LandfallTargetPinFor(s) != p.landfall_target_choice)     { ok = false; }
+    if (p.cast_trigger_target_choice >= 0 && CastTriggerTargetPinFor(s) != p.cast_trigger_target_choice) { ok = false; }
     if (p.saga_target_choice >= 0      && s.scripted_saga_target != p.saga_target_choice)          { ok = false; }
     if (p.grace_choice >= 0            && s.scripted_grace_choice != p.grace_choice)               { ok = false; }
     if (p.upkeep_gy_reanimate_choice >= 0
@@ -1851,6 +1862,201 @@ void AIEngine::FlagNonConvergence(const GameState& state, const TurnSolver::Plan
     std::cerr << os.str();
 }
 
+// ---- THE KNOWN-RESPECTING BLIND SEARCH (gamesetup::BlindSearchSalt; default OFF => byte-identical) ----------
+// The Cyclone hard-prune clairvoyance test (2026-10-28; USER: "any testing or inference about whether something is
+// clairvoyant should take in to account known information about the top of the library, since this deck manipulates
+// it a lot"). Every REAL decision searches a COPY of the game whose libraries have only the positions their owner
+// does not know re-randomised (Library::BlindUnknownOrder keeps the known top positions and the placed bottom
+// block), and whose mid-game shuffles are salted apart from the real ones, so the search can neither read an undrawn
+// card nor a post-shuffle order. The plan is executed on the REAL game. Everything the plan decided against the
+// sampled library that a real player decides only after a reveal is re-decided against the reveal: a breakpoint
+// continuation is re-solved (blind) instead of replayed by index, a committed line is never kept past this phase,
+// and the put-back pair / Ponder order are chosen at the real resolution (BlindDrawChooser below). A trial game
+// (the London bottomer, the searched discard) is played on a blinded copy too: its outcome would otherwise read the
+// real future. Several salts per game = a blind ENSEMBLE (manifest "blind_salt").
+namespace blindsearch
+{
+inline bool On() { return gamesetup::BlindSearchSalt() >= 0; }
+inline std::uint64_t Mix(std::uint64_t h, std::uint64_t v)
+{
+    h ^= v + 0x9e3779b97f4a7c15ull + (h << 6) + (h >> 2);
+    h *= 0x100000001b3ull;
+    return h ^ (h >> 29);
+}
+// The sample key of one decision: the blind salt, the game, the turn, the phase, a site tag and the visible state
+// that distinguishes two decisions of one turn (hand, library size, the shuffle ordinal). Deterministic.
+inline std::uint64_t Key(const GameState& s, std::uint64_t tag, bool with_hand)
+{
+    std::uint64_t h = Mix(0xB11D5EEDull, static_cast<std::uint64_t>(gamesetup::BlindSearchSalt()));
+    h = Mix(h, s.game_seed);
+    h = Mix(h, static_cast<std::uint64_t>(s.TurnSeq()));
+    h = Mix(h, tag);
+    if (with_hand)
+    {
+        const Player& p = s.players[static_cast<std::size_t>(s.active_player_index)];
+        h = Mix(h, static_cast<std::uint64_t>(p.library.size()));
+        h = Mix(h, s.search_count);
+        for (const Card& c : p.hand) { h = Mix(h, static_cast<std::uint64_t>(c.m_number)); }
+        h = Mix(h, static_cast<std::uint64_t>(s.battlefield.size()));
+    }
+    return h;
+}
+// MTG_SEARCH_BLIND_NOOP=1 (DIAGNOSTIC, default off): run every piece of the blind machinery -- the re-solved
+// breakpoints, the resolution chooser, no committed line past this phase, the trial-game copies -- with NOTHING
+// blinded (the libraries and salts untouched). Its play quality is the machinery's own ceiling: it should match
+// clairvoyant play, so a gap there is a defect in the machinery, not blindness.
+inline bool NoopOn() { static const bool v = EnvOn("MTG_SEARCH_BLIND_NOOP"); return v; }
+// Decomposition levers for the machinery (DIAGNOSTIC): MTG_SEARCH_BLIND_CHOOSER=0 keeps the plan's put-back / Ponder pin
+// (no resolution chooser); MTG_SEARCH_BLIND_REPLAY=1 replays breakpoint continuations and keeps committed lines as the
+// clairvoyant executor does. Both are wrong under real blinding; they exist to price each piece under NOOP.
+inline bool ChooserOn() { static const bool v = EnvOn("MTG_SEARCH_BLIND_CHOOSER", true); return v; }
+inline bool ReplayOn()  { static const bool v = EnvOn("MTG_SEARCH_BLIND_REPLAY"); return v; }
+// The chooser's evaluator: MTG_SEARCH_BLIND_EVAL_LA=1 (diagnostic) = a SolveWithLookahead per candidate (win turn, then
+// the graded leaf); default = the executor's own decision engine, FullSearchLineHybrid, per candidate (its line's win
+// turn) -- measured the closer match to the search's own pin choice (ledger, "the blind machinery").
+inline bool EvalLaOn() { static const bool v = EnvOn("MTG_SEARCH_BLIND_EVAL_LA"); return v; }
+// The executor's replay / commit stand-downs: on only for a real blind run without the replay diagnostic.
+inline bool NoReplay();
+inline void BlindInPlace(GameState& s, std::uint64_t h)
+{
+    if (NoopOn()) { return; }
+    for (std::size_t pi = 0; pi < s.players.size(); ++pi)
+    { s.players[pi].library.BlindUnknownOrder(Mix(h, 0x51ull + pi)); }
+    const std::uint64_t salt = Mix(h, 0x5A17ull) | (1ull << 62);   // never the real (small) salts
+    s.shuffle_salt        = salt;
+    s.shuffle_salt_search = salt;
+}
+// The state a real decision's search reads: the real one (mode off) or a blinded copy held in `scratch`.
+inline const GameState& View(const GameState& real, std::optional<GameState>& scratch, std::uint64_t tag)
+{
+    if (!On()) { return real; }
+    scratch.emplace(real);
+    BlindInPlace(*scratch, Key(real, tag, true));
+    return *scratch;
+}
+// The executor's chooser object: forwards to the engine's evaluation for the phase being played.
+struct DrawChooser final : BlindDrawSpellChooser
+{
+    AIEngine& eng;
+    bool      is_pre;
+    DrawChooser(AIEngine& e, bool pre) : eng(e), is_pre(pre) {}
+    int Choose(const GameState& state, const StackEntry& entry, const CardDefinition& def) override
+    { return eng.BlindChooseDrawSpell(state, entry, def, is_pre); }
+};
+struct ChooserScope
+{
+    BlindDrawSpellChooser* saved;
+    explicit ChooserScope(BlindDrawSpellChooser* c) : saved(g_blind_draw_chooser) { g_blind_draw_chooser = c; }
+    ~ChooserScope() { g_blind_draw_chooser = saved; }
+    ChooserScope(const ChooserScope&) = delete;
+    ChooserScope& operator=(const ChooserScope&) = delete;
+};
+// MTG_BLIND_TRACE=1 (diagnostic, print-only): every blind chooser decision (the candidate values).
+inline bool TraceOn() { static const bool v = EnvOn("MTG_BLIND_TRACE"); return v; }
+inline bool NoReplay() { return On() && !ReplayOn(); }
+}   // namespace blindsearch
+
+int AIEngine::BlindChooseDrawSpell(const GameState& state, const StackEntry& entry, const CardDefinition& def,
+                                   bool is_pre_combat)
+{
+    if (m_lookahead_depth <= 0 || m_in_rollout) { return -1; }
+    const bool pb = def.params.put_back_from_hand > 0;
+    // ONE blind sample for every candidate (common random numbers: the keyed refill keeps the unknown cards'
+    // relative order, so candidates differ by what they place, not by sample noise).
+    const std::uint64_t key = blindsearch::Key(state, pb ? 0xB7ull : 0xB9ull, true);
+    int count = -1;
+    if (!pb)
+    {
+        // Ponder: the candidate list over the real look (what the player sees when he chooses).
+        const Player& ap = state.ActivePlayer();
+        const int look = std::min(def.params.cast_reorder, static_cast<int>(ap.library.size()));
+        if (look <= 0) { return -1; }
+        std::vector<Card> looked;
+        for (int i = 0; i < look; ++i) { looked.push_back(ap.library.RawAt(static_cast<std::size_t>(i))); }
+        const int saved_da = g_reorder_draw_after;
+        g_reorder_draw_after = def.params.draw;
+        count = static_cast<int>(TopDispositionCandidates(state, looked, LookKind::Reorder,
+                                                          entry.ponder_keep.value_or(-1)).size());
+        g_reorder_draw_after = saved_da;
+        if (count <= 1) { return -1; }
+    }
+    // The value of candidate r: resolve the spell on a copy with r pinned (the real draw / look -- the player
+    // sees it before he chooses), then a blind search from the state it leaves.
+    // A candidate's value: (win turn, the search's graded no-win tie-break) -- the coarse win turn alone ties almost
+    // every candidate on this deck (its greedy leaf rarely wins by the horizon), the comparison the search itself
+    // refines with the graded leaf.
+    long long cur_tb = 0;
+    auto eval = [&](int r, int* width_out) -> int
+    {
+        GameState c = state;
+        {
+            RevealLogPause _rlp;
+            ScriptedPutBack _spb(pb ? r : g_scripted_putback_choice);
+            ScriptedReorder _sro(pb ? g_scripted_reorder_choice : r);
+            g_putback_resolved_w = -1;
+            EffectHandler::Resolve(c, entry, def);
+            if (width_out != nullptr) { *width_out = g_putback_resolved_w; }
+        }
+        cur_tb = std::numeric_limits<long long>::min();
+        if (OpponentHasLost(c)) { return c.turn_number; }
+        blindsearch::BlindInPlace(c, key);
+        SearchBudget b = DecisionBudget();
+        int win = m_max_turns + 1, sub = 0;
+        if (blindsearch::EvalLaOn() || !is_pre_combat)
+        {
+            (void)TurnSolver::SolveWithLookahead(c, is_pre_combat, m_lookahead_depth, m_max_turns, &b, true,
+                                                 m_search_post_combat, nullptr, &win, &sub);
+            cur_tb = TurnSolver::LastCommittedTieBreak();
+            return win;
+        }
+        // The executor's own engine (TakeTurn's FullSearchLineHybrid call, value-play levers off: the deck plays no
+        // value block), so a candidate is valued the way the real decision values a line.
+        static const int s_vmd_env = []{ const char* e = std::getenv("MTG_VALUE_MIN_DEPTH");
+                                         return (e && *e) ? std::atoi(e) : -1; }();
+        const int vmd = (valuearm::t_arm.value_min_depth >= -1) ? valuearm::t_arm.value_min_depth : s_vmd_env;
+        const int escalate_below = (vmd >= 0) ? vmd
+                                 : (m_profile.value_trust_depth > 0) ? m_profile.value_trust_depth : m_lookahead_depth + 1;
+        TurnSolver::SearchLeafDepthScope _sld(m_profile.search_leaf_depth, m_profile.search_leaf_first_turn_depth);
+        int searched_depth = m_lookahead_depth;
+        const TurnSolver::SearchLine line = TurnSolver::FullSearchLineHybrid(
+            c, m_lookahead_depth, m_max_turns, m_search_post_combat, nullptr, &b, &searched_depth, escalate_below,
+            m_budget_ms, m_profile.value_no_fallback, m_profile.value_fallback_take_at, -1, 2, 0, -1.0);
+        cur_tb = 0;
+        return line.win_turn > 0 ? line.win_turn : m_max_turns + 1;
+    };
+    int best_r = 0;
+    int best_v = 0;
+    long long best_tb = 0;
+    std::string trace;
+    if (pb)
+    {
+        int w = -1;
+        best_v = eval(0, &w);
+        best_tb = cur_tb;
+        count = w;
+        if (count <= 1) { return -1; }
+    }
+    else
+    {
+        best_v = eval(0, nullptr);
+        best_tb = cur_tb;
+    }
+    if (blindsearch::TraceOn()) { trace = std::to_string(best_v); }
+    for (int r = 1; r < count; ++r)
+    {
+        const int v = eval(r, nullptr);
+        if (blindsearch::TraceOn()) { trace += "," + std::to_string(v); }
+        if (v < best_v || (v == best_v && cur_tb < best_tb)) { best_v = v; best_r = r; best_tb = cur_tb; }
+    }
+    if (blindsearch::TraceOn())
+    {
+        std::fprintf(stderr, "[blind-choose] seed=%llu T%d %s count=%d pick=%d win=%d values=%s\n",
+                     static_cast<unsigned long long>(state.game_seed), state.turn_number,
+                     def.card.m_name.c_str(), count, best_r, best_v, trace.c_str());
+    }
+    return best_r;
+}
+
 int AIEngine::RolloutWinTurn(GameState trial, int max_turns, int* lands_out)
 {
     return RolloutWinTurnFrom(std::move(trial), max_turns, GameEngine::ResumeAt::NewTurn, lands_out);
@@ -1900,6 +2106,10 @@ int AIEngine::RolloutWinTurnFrom(GameState trial, int max_turns,
     trial.m_model_feat_mask = dominance::ModelFeatureMask(trial.m_evaluator)
                             | dominance::ModelFeatureMask(trial.m_value_model);
     ShuffleEvalGuard  _seg(true);   // decoupling instrument: rollout shuffles use shuffle_salt_search
+    // BLIND SEARCH (blindsearch; off => untouched): a trial game played on the REAL library would read the real
+    // future, so it is played on a blinded copy. One sample per (game, turn) -- not per trial hand -- so the
+    // candidates of one decision (each bottom) share it (common random numbers).
+    if (blindsearch::On()) { blindsearch::BlindInPlace(trial, blindsearch::Key(trial, 0x7121A1ull, /*with_hand=*/false)); }
     // The rollout PlayOut shares this AIEngine by reference, so isolate its committed
     // full-depth line: stash the real game's line, run the rollout on a fresh empty
     // line, then restore. Otherwise the rollout would consume/overwrite the line the
@@ -2670,7 +2880,7 @@ void MergeStagedIntoHand(GameState& state)
     ap.staged_cards.clear();
     for (StagedCard& sc : snap)
     {
-        if (sc.expiry_turn < state.turn_number) { continue; }  // end-of-next-turn expiry (CR 406)
+        if (sc.expiry_turn < state.TurnSeq()) { continue; }  // end-of-next-turn expiry (CR 406)
         sc.card.m_is_staged     = true;
         sc.card.m_staged_expiry = sc.expiry_turn;  // travels with the card so the rollout can expire it
         EnterHand(state, state.active_player_index, sc.card, HandEntryReason::StagedMerge);
@@ -2709,7 +2919,7 @@ static int UnexpiredStagedCount(const GameState& state)
 {
     int n = 0;
     for (const StagedCard& sc : state.ActivePlayer().staged_cards)
-    { if (sc.expiry_turn >= state.turn_number) { ++n; } }
+    { if (sc.expiry_turn >= state.TurnSeq()) { ++n; } }
     return n;
 }
 
@@ -2824,8 +3034,9 @@ bool AIEngine::TrySecondMainStrandedKill(GameState& state)
         {
             SearchBudget resolve_budget = DecisionBudget();
             turncensus::SiteTag _tcs(turncensus::kSiteM2);   // census: mode-2 post-draw re-solve
+            std::optional<GameState> _bsv;   // the blind search's view (blindsearch; off => `state`)
             TurnSolver::Plan p2 = TurnSolver::SolveWithLookahead(
-                state, /*is_pre_combat=*/false, m_lookahead_depth, m_max_turns,
+                blindsearch::View(state, _bsv, 0x4D32ull), /*is_pre_combat=*/false, m_lookahead_depth, m_max_turns,
                 &resolve_budget, true, m_search_post_combat, m_shared_tt);
             if (!p2.actions.empty() || !p2.land_to_play.empty())
             {
@@ -2861,8 +3072,17 @@ bool AIEngine::TrySecondMainStrandedKill(GameState& state)
 // apply_one arms for it (its CANTRIP breakpoint, site def = the Remand). Classifying by X instead would
 // open X's class in this world only (an Expressive Iteration's inline replay, a tutor's deferred
 // acquisition) and shift every later breakpoint ordinal. card_name for every other action.
+// REMAND-ON-REMAND (Action::remand_chain_by): X RESOLVES after the Remand's draw. When X is itself a plain
+// cantrip (IsPlainCantripDef) its own resolution opens the cantrip breakpoint -- after both draws -- and the
+// rollout opens no second one for the Remand, so the class / site is X's; otherwise the Remand's (the
+// can't-be-countered shape). The post-pass admits no other draw class as a chain target.
 static const std::string& BpNameOf(const Action& a)
 {
+    if (!a.remand_chain_by.empty())
+    {
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+        if (d != nullptr && TurnSolver::IsPlainCantripDef(*d)) { return a.card_name.str(); }
+    }
     return a.remand_by.empty() ? a.card_name.str() : a.remand_by.str();
 }
 
@@ -3833,6 +4053,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // its land drop and held for the rest of the phase -- lockstep with ApplyPlanDirect's
     // ScriptedLandfallTarget. Empty (nothing installed) for a plan carrying no policy.
     std::optional<ScriptedLandfallTarget> landfall_target_exec;
+    // ...and its CAST-TRIGGER target policy (Plan::cast_trigger_target_choice; Ulamog), the same shape,
+    // installed before its first cast -- lockstep with ApplyPlanDirect's ScriptedCastTriggerTarget.
+    std::optional<ScriptedCastTriggerTarget> cast_trigger_target_exec;
 
     if (play_this_phase)
     {
@@ -4072,8 +4295,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                                             valuearm::t_deck_esc_skip_r = prev_sr; valuearm::t_deck_emul_r = prev_er; }
                     } _shape(m_profile);
                     const unsigned long long proof_trunc0 = TurnSolver::TruncEvents();
+                    std::optional<GameState> _bsv;   // the blind search's view (blindsearch; off => `state`)
                     TurnSolver::SearchLine line = TurnSolver::FullSearchLineHybrid(
-                        state, m_lookahead_depth, m_max_turns, m_search_post_combat,
+                        blindsearch::View(state, _bsv, is_pre_combat_main ? 0x46531ull : 0x46532ull),
+                        m_lookahead_depth, m_max_turns, m_search_post_combat,
                         fd_tt, &budget, &searched_depth, escalate_below, m_budget_ms,
                         m_profile.value_no_fallback, m_profile.value_fallback_take_at,
                         // Per-deck escalation beam; fires whenever the block drives (depth-adaptive inside the
@@ -4176,7 +4401,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     static const bool s_fd_always_research =
                         EnvOn("MTG_FD_ALWAYS_RESEARCH");
                     const bool verified_win =
-                        !s_fd_always_research
+                        !s_fd_always_research && !blindsearch::NoReplay()
                         && line.win_turn <= state.turn_number + searched_depth - 1;
                     if (s_fd_trace)
                     {
@@ -4190,8 +4415,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     {
                         // Keep the current turn only: its pre-combat phase plus any
                         // immediate second main (everything before the next pre-combat).
+                        // BLIND SEARCH: only THIS phase (a later main was planned on a sampled library).
                         size_t keep = 1;
-                        while (keep < line.phases.size()
+                        while (!blindsearch::NoReplay() && keep < line.phases.size()
                                && !line.phases[keep].is_pre_combat) { ++keep; }
                         line.phases.resize(keep);
                     }
@@ -4239,7 +4465,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     if (s_fd_trace)
                     { std::fprintf(stderr, "[fd] T%d pre=%d FALLBACK lookahead\n", state.turn_number, is_pre_combat_main ? 1 : 0); }
                     SearchBudget fallback_budget = DecisionBudget();
-                    plan = TurnSolver::SolveWithLookahead(state, is_pre_combat_main,
+                    std::optional<GameState> _bsv;   // the blind search's view (blindsearch; off => `state`)
+                    plan = TurnSolver::SolveWithLookahead(blindsearch::View(state, _bsv, is_pre_combat_main ? 0x4C41ull : 0x4C42ull),
+                                                          is_pre_combat_main,
                                                           m_lookahead_depth, m_max_turns,
                                                           &fallback_budget, true,
                                                           m_search_post_combat, m_shared_tt,
@@ -4249,7 +4477,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             }
             else
             {
-                plan = TurnSolver::SolveWithLookahead(state, is_pre_combat_main,
+                std::optional<GameState> _bsv;   // the blind search's view (blindsearch; off => `state`)
+                plan = TurnSolver::SolveWithLookahead(blindsearch::View(state, _bsv, is_pre_combat_main ? 0x4C47ull : 0x4C48ull),
+                                                      is_pre_combat_main,
                                                       m_lookahead_depth, m_max_turns,
                                                       &budget, true, m_search_post_combat,
                                                       m_shared_tt,
@@ -4450,7 +4680,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
 
             // The plan's landfall-target policy, before its land drop (see landfall_target_exec).
             if (plan.landfall_target_choice >= 0)
-            { landfall_target_exec.emplace(plan.landfall_target_choice, state.turn_number); }
+            { landfall_target_exec.emplace(plan.landfall_target_choice, state.TurnSeq()); }
+            if (plan.cast_trigger_target_choice >= 0)
+            { cast_trigger_target_exec.emplace(plan.cast_trigger_target_choice, state.TurnSeq()); }
             if (fold_land && plan.land_decided && !plan.land_to_play.empty())
             {
                 const CardDefinition* ld = CardDatabase::Instance().Lookup(plan.land_to_play);
@@ -4590,6 +4822,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     ScriptedSagaCh1 _ssc1_exec(plan.saga_ch1_choice);
     ScriptedReorder _sr_exec(plan.ponder_choice);   // executor/rollout lockstep for the Ponder disposition
     ScriptedPutBack _sputback_exec(plan.putback_choice);   // executor/rollout lockstep for the Brainstorm put-back
+    // BLIND SEARCH (blindsearch; off => null => byte-identical): the real game's put-back / Ponder choice is made
+    // at the resolution, after the reveal, by the blind chooser (never inside a trial game).
+    blindsearch::DrawChooser _bdc_obj(*this, is_pre_combat_main);
+    blindsearch::ChooserScope _bdc((blindsearch::On() && blindsearch::ChooserOn() && !m_in_rollout && m_lookahead_depth > 0) ? &_bdc_obj : nullptr);
     ScriptedEtbCounter _sec_exec(plan.etbcounter_choice);   // lockstep: optional ETB counter payment
     ScriptedTutor _stut_exec(plan.tutor_choice);    // executor/rollout lockstep for the searched tutor
                                                     // pick (index resolved at the true state); -1 inert
@@ -4655,7 +4891,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // casts first): the re-solve's ApplyPlanDirect installed it before its land block, -1 installing
         // nothing (the committed plan's policy stays) -- the same rule here.
         if (x.landfall_target_choice >= 0)
-        { landfall_target_exec.reset(); landfall_target_exec.emplace(x.landfall_target_choice, state.turn_number); }
+        { landfall_target_exec.reset(); landfall_target_exec.emplace(x.landfall_target_choice, state.TurnSeq()); }
+        if (x.cast_trigger_target_choice >= 0)
+        { cast_trigger_target_exec.reset(); cast_trigger_target_exec.emplace(x.cast_trigger_target_choice, state.TurnSeq()); }
         rs_last = x;
     };
 
@@ -5251,7 +5489,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         rp.staged_cards.clear();
         for (StagedCard& sc : snap)
         {
-            if (sc.expiry_turn < state.turn_number) { continue; }
+            if (sc.expiry_turn < state.TurnSeq()) { continue; }
             sc.card.m_is_staged     = true;
             sc.card.m_staged_expiry = sc.expiry_turn;
             EnterHand(state, state.active_player_index, sc.card, HandEntryReason::StagedMerge);
@@ -5273,6 +5511,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         int rec_mc = 0, rec_pt = 0;
         for (const Action& a : recs)
         {
+            // Exact step metadata belongs to that payment, not the surrounding section.
+            if (a.rec_payment_traits) { continue; }
             rec_mc = std::max(rec_mc, a.rec_mana_casts);
             if (rec_pt == 0 && a.rec_pump_target != 0) { rec_pt = a.rec_pump_target; }
         }
@@ -5331,6 +5571,19 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         }
         for (const Action& a : recs)
         {
+            // Inline continuations can inherit an outer scope with fewer casts and no
+            // pending cycle. Re-deriving from their realized records invents a different
+            // hold (s131117: Ponder strands a filter's last feeder). Restore the actual
+            // payer scope, including explicit null/zero, through resolution and recursion.
+            // Dig scopes are installed below AFTER earlier queued activations are flushed.
+            std::optional<PlanTraitsScope> record_traits;
+            std::optional<TapKeepLastScope> record_keep;
+            if ((a.kind == Action::Kind::CastFromHand || a.kind == Action::Kind::CastFromGraveyard)
+                && a.rec_payment_traits.has_value())
+            {
+                record_traits.emplace(a.rec_payment_traits->get());
+                record_keep.emplace(a.rec_pump_target);
+            }
             if (a.cont_pins)
             {
                 rec_pins.reset();
@@ -5376,7 +5629,31 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             else if (a.kind == Action::Kind::Suspend)
             { ApplySuspend(state, state.active_player_index, a.card_name); }
             else if (a.kind == Action::Kind::DigDraw)
-            { PerformDig(state, a.card_name, a.dig_sacrifice); }
+            {
+                // ORDER: the rollout cycles AFTER the board activations of everything recorded before
+                // this dig (a continuation's activations follow its casts; the dig loop and the searched
+                // cycle chain run after the trailing pass), so those activations must be dispatched NOW,
+                // not after the whole list. Unflushed, a continuation's Myriad Landscape search (a
+                // shuffle) ran after the recorded cycle in the executor and before it in the rollout --
+                // the walk then found a different card (Cyclone s7322 gi22: proven T7, realised T9).
+                if (!rec_acts.empty())
+                {
+                    rec_unlock.reset();   // the cast section ends before its trailing activations
+                    exec_continuation_activations(rec_acts);
+                    rec_acts.clear();
+                }
+                // The record carries the step's REALISED pins (a searched cycle seed: Curator's scry j in
+                // devour_count, Cyclone's free cast in ponder_keep; -1 / -1 for every legacy dig), and a
+                // replaced draw's free cast is resolved before the nested records replay.
+                // A searched step retains its owner's exact payment context. A record list can
+                // be a strict subset of that plan, so deriving from the list alone loses casts,
+                // pending activation holds and even an explicit zero pump target. Scope only
+                // this cycle; its nested continuation installs/replays its own context below.
+                PlanTraitsScope cycle_scope(a.rec_payment_traits ? a.rec_payment_traits->get() : CurrentPlanTraits());
+                TapKeepLastScope cycle_keep(a.rec_payment_traits ? a.rec_pump_target : g_tap_keep_last_card);
+                PerformDigFull(state, a.card_name, a.dig_sacrifice, a.devour_count, a.ponder_keep, resolve_stack,
+                               a.seed_pay_split);
+            }
             // A GO-OFF ROUTE recorded as the continuation. This branch was MISSING, and a missing
             // branch here is silent: the search's own continuation apply (apply_continuation_plan ->
             // apply_plan_actions) dispatches ComboRoute provider-wise, so a line whose continuation
@@ -5548,7 +5825,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                                            ResolveProvider(state).CondemnsConsideredAtBreakpoint(),
                                            karoo_deferred,
                                            TurnSolver::ManaSourceCount(state),
-                                           rdb_site_activated, state.turn_number,
+                                           rdb_site_activated, state.TurnSeq(),
                                            TurnSolver::NewOnlyBreakpointContinuationsActive(state),
                                            &pre_plan_acts);
         // Executor twin of the rollout's marker (MTG_CONDEMN_M1_BP) -- the lockstep pair. Without
@@ -5559,7 +5836,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         rp.staged_cards.clear();
         for (StagedCard& sc : snap)
         {
-            if (sc.expiry_turn < state.turn_number) { continue; }
+            if (sc.expiry_turn < state.TurnSeq()) { continue; }
             sc.card.m_is_staged     = true;
             sc.card.m_staged_expiry = sc.expiry_turn;
             EnterHand(state, state.active_player_index, sc.card, HandEntryReason::StagedMerge);
@@ -5588,7 +5865,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // The choice the plan carries for THIS occurrence: bp_choice at bp_at (every one under bp_all),
         // or a deviation sequence's earlier entry (MTG_BP_DEV_SEQ) -- the rollout's own reader.
         const int bp_ch = TurnSolver::BpChoiceAt(plan, bp_idx);
-        if (bp_idx >= 0 && bp_ch >= 0)
+        if (bp_idx >= 0 && bp_ch >= 0 && !blindsearch::NoReplay())
         {
             const std::vector<TurnSolver::Plan> cands =
                 TurnSolver::EnumerateBreakpointPlans(state, is_pre_combat_main);
@@ -5674,7 +5951,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // Ice-Fang Coatl / Arcum's Astrolabe draw found no continuation). Up to the target the line is
         // the scored one, so it is mirrored; after it the estimate re-solve resumes.
         const TurnSolver::BpOccurrence rdb_occ = TurnSolver::ClassifyBpOccurrence(plan, bp_idx);
-        if (!bp_searched_here && TurnSolver::ExecMirrorsUnreplayedBp(rdb_occ, fd_plan_committed, fd_plan_verified))
+        if (!bp_searched_here && !blindsearch::NoReplay()
+            && TurnSolver::ExecMirrorsUnreplayedBp(rdb_occ, fd_plan_committed, fd_plan_verified))
         {
             extra              = TurnSolver::Plan{};
             extra.land_decided = true;
@@ -5740,7 +6018,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 // it carries a full fresh DecisionBudget() -- so the turn's cost is the sum over
                 // these and the `root`/host column cannot tell them apart. See TurnCensus.h.
                 turncensus::SiteTag _tcs(turncensus::kSiteBpResolve);
-                extra = TurnSolver::SolveWithLookahead(state, is_pre_combat_main,
+                std::optional<GameState> _bsv;   // the blind search's view (blindsearch; off => `state`)
+                extra = TurnSolver::SolveWithLookahead(blindsearch::View(state, _bsv, 0x4250ull + static_cast<std::uint64_t>(bp_depth)),
+                                                       is_pre_combat_main,
                                                        m_lookahead_depth, m_max_turns,
                                                        &bp_budget, true,
                                                        m_search_post_combat, m_shared_tt);
@@ -6295,7 +6575,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     // the rollout had applied the variant's continuation: the committed line was not
                     // the line the search scored.
                     const int pod_ch = TurnSolver::BpChoiceAt(plan, pod_bp_idx);   // incl. MTG_BP_DEV_SEQ's bp_pre
-                    if (pod_bp_idx >= 0 && pod_ch >= 0)
+                    if (pod_bp_idx >= 0 && pod_ch >= 0 && !blindsearch::NoReplay())
                     {
                         const std::vector<TurnSolver::Plan> cands =
                             TurnSolver::EnumerateBreakpointPlans(state, is_pre_combat_main);
@@ -6343,7 +6623,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     // ...and an occurrence BEFORE the plan's targeted one, on an unverified line too: the
                     // main site's PRE-TARGET rule (lockstep up to the plan's own searched decision).
                     const TurnSolver::BpOccurrence pod_occ = TurnSolver::ClassifyBpOccurrence(plan, pod_bp_idx);
-                    if (!pod_bp_searched
+                    if (!pod_bp_searched && !blindsearch::NoReplay()
                         && TurnSolver::ExecMirrorsUnreplayedBp(pod_occ, fd_plan_committed, fd_plan_verified))
                     {
                         if (!TurnSolver::BpUnbranchedCanon(state, is_pre_combat_main, plan, pod_bp_idx,
@@ -6379,7 +6659,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                             { execgreedy::g_bp_searched.fetch_add(1, std::memory_order_relaxed); }
                             SearchBudget bp_budget = DecisionBudget();
                             turncensus::SiteTag _tcs(turncensus::kSitePodBp);   // census: pod twin
-                            extra = TurnSolver::SolveWithLookahead(state, is_pre_combat_main,
+                            std::optional<GameState> _bsv;   // the blind search's view (blindsearch; off => `state`)
+                            extra = TurnSolver::SolveWithLookahead(blindsearch::View(state, _bsv, 0x504Full),
+                                                                   is_pre_combat_main,
                                                                    m_lookahead_depth, m_max_turns,
                                                                    &bp_budget, true,
                                                                    m_search_post_combat, m_shared_tt);
@@ -8355,10 +8637,13 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     }
     if (!staged_break && fd_plan_committed && !plan.breakpoint_actions.empty())
     {
-        std::vector<Action> rest;
+        // Each ordinal is a separate applied continuation. Combining the remaining
+        // records derives payer traits from later sections and delays earlier acts.
+        // Reuse the normal trigger path, including empty ordinals between sections.
+        int last_ord = rec_seg_next - 1;
         for (const Action& r : plan.breakpoint_actions)
-        { if (r.rec_bp_ord >= rec_seg_next) { rest.push_back(r); } }
-        if (!rest.empty()) { replay_recorded(rest); }
+        { last_ord = std::max(last_ord, r.rec_bp_ord); }
+        while (rec_seg_next <= last_ord) { replay_segment(); }
         bp_replayed = true;
     }
 
@@ -8404,12 +8689,17 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // uncommitted and a heuristic dig would realise a cycle the search never modelled (fluctuator
     // d3 s1001 gi87: a T3 main-2 Canyon Slough cycle spent a Drannith Stinger ping the T4 kill
     // needed, T4 -> T5 at every budget).
-    if (is_pre_combat_main && !fd_plan_committed)
+    // ...and a searched CYCLE SEED (the plan's own cycle action, Unpredictable Cyclone phase 3) is realised
+    // here in EITHER main: it is the line's choice, not a heuristic dig, so the main-1-only rule does not
+    // apply to it (in main 2 the reactive loop itself still never runs: dig_choice 0 there).
+    const Action* eom_seed = CycleSeedOf(eom.actions);
+    if ((is_pre_combat_main || eom_seed != nullptr) && !fd_plan_committed)
     {
         // A drawn land played as the drop (depth 0, DigUsesDrawnLandDrop): re-solve with its mana.
         // The dig pin: the last searched re-solve's when there was one (its candidates ran their own dig
         // loop under their own dig_choice), else the plan's.
-        if (UseSurplusLandAbilities(state, resolve_stack, eom.dig_choice)) { cast_draw_engine = true; }
+        if (UseSurplusLandAbilities(state, resolve_stack, is_pre_combat_main ? eom.dig_choice : 0, eom_seed))
+        { cast_draw_engine = true; }
     }
     // (AnimateLandsShared / ActivateTapTokensShared deleted 2026-09-30: Mutavault and the token
     // taps are searched plan actions, realised in exec_trailing_activations below.)
@@ -8551,11 +8841,25 @@ bool AIEngine::TryPlayLand(GameState& state)
 
 bool AIEngine::UseSurplusLandAbilities(GameState& state,
                                        const std::function<void(GameState&)>& resolve_stack,
-                                       int dig_choice)
+                                       int dig_choice, const Action* cycle_seed)
 {
     Player& ap = state.ActivePlayer();
     bool dug_a_land = false;   // the drawn-land drop below (DigUsesDrawnLandDrop)
     if (!state.stack.empty()) { return false; }   // let pending spells resolve first
+    // THE PLAN'S SEARCHED CYCLE (a cycle seed, CollectActions) on this uncommitted path: the line the search
+    // scored cycles that card first, with its pins. A provider that searches its cycles then stops here --
+    // its next cycle was a decision the uncommitted path has no searched answer for, and the reactive gate
+    // below is its PLAYOUT policy, not an in-window choice (the rollout's legacy_dig_ok) -- and asks for the
+    // second pass, which re-solves the main with what the cycle brought.
+    if (cycle_seed != nullptr)
+    {
+        const DigOutcome o = PerformDigFull(state, cycle_seed->card_name, false, cycle_seed->devour_count,
+                                            cycle_seed->ponder_keep, resolve_stack, cycle_seed->seed_pay_split);
+        // A failed searched pin means this plan performed NO cycle. It must not fall through
+        // to SelectDigSource and cycle a different card (the rollout disables that loop too).
+        if (ResolveProvider(state).CyclesAreSearched()) { return o != DigOutcome::Failed; }
+        if (o == DigOutcome::DrewLand) { dug_a_land = true; }
+    }
     // THE SEARCHED CHOICE, REALISED (MTG_DIG_SEARCHED_CHOICE, default ON). This path runs only when the
     // turn carries no recorded script (d0, or the develop-when-stuck fallback), and there the plan's
     // dig_choice is all that says which world the search scored: ApplyPlanDirect suppresses the loop at
@@ -8597,9 +8901,12 @@ bool AIEngine::UseSurplusLandAbilities(GameState& state,
         // distinction load-bearing: `cards_drawn_this_turn` moves iff a dig actually happened, so
         // "could not perform" still breaks unconditionally (else an unaffordable/absent source
         // would spin forever) while "drew a nonland" is the one the provider may continue past.
-        const int  drawn_before = ap.cards_drawn_this_turn;
-        const bool drew_land    = PerformDig(state, src, is_sac);
-        if (ap.cards_drawn_this_turn == drawn_before) { break; }   // dig did not happen
+        // The tri-state (hazard R1): a REPLACED cycle (Unpredictable Cyclone) draws nothing, so the old
+        // "cards_drawn_this_turn moved" test would read it as "no dig" and end the chain; and a free cast it
+        // made is resolved inside (resolve_stack) before the chain goes on.
+        const DigOutcome o   = PerformDigFull(state, src, is_sac, -1, kCycFcDefault, resolve_stack);
+        if (o == DigOutcome::Failed) { break; }   // dig did not happen
+        const bool drew_land = o == DigOutcome::DrewLand;
         if (drew_land) { dug_a_land = true; }
         // The rebuy deployment (Fluctuator: cycle Stinger -> Unearth). This reactive path runs
         // AFTER the turn's cast loop, so a reanimation the dig just made live would otherwise sit
@@ -8655,13 +8962,22 @@ bool AIEngine::UseSurplusLandAbilities(GameState& state,
 
 bool AIEngine::PerformDig(GameState& state, const std::string& source, bool is_sacrifice)
 {
+    return PerformDigFull(state, source, is_sacrifice, -1, kCycFcDefault, {}) == DigOutcome::DrewLand;
+}
+
+AIEngine::DigOutcome AIEngine::PerformDigFull(GameState& state, const std::string& source, bool is_sacrifice,
+                                              int scry_pin, int fc_pin,
+                                              const std::function<void(GameState&)>& resolve_stack,
+                                              std::int32_t pay_split)
+{
     Player& ap = state.ActivePlayer();
     const CardDefinition* sd = CardDatabase::Instance().Lookup(source);
-    if (!sd) { return false; }
+    if (!sd) { return DigOutcome::Failed; }
+    std::optional<CycleSeedResolvedScope> _cycle_resolved;
 
     if (is_sacrifice)
     {
-        if (!sd->params.sacrifice_draw_cost.has_value()) { return false; }
+        if (!sd->params.sacrifice_draw_cost.has_value()) { return DigOutcome::Failed; }
         int idx = -1;
         for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
         {
@@ -8669,13 +8985,13 @@ bool AIEngine::PerformDig(GameState& state, const std::string& source, bool is_s
             if (p.controller_index == state.active_player_index
                 && !p.tapped && p.card.m_name == source) { idx = i; break; }
         }
-        if (idx < 0) { return false; }
+        if (idx < 0) { return DigOutcome::Failed; }
         ManaPool avail = AvailableManaPool(state);
         state.battlefield[idx].tapped = true;  // {T}; tap before paying so it isn't its own source
         if (!TapForCost(state, sd->params.sacrifice_draw_cost.value(), avail, false))
         {
             state.battlefield[idx].tapped = false;
-            return false;
+            return DigOutcome::Failed;
         }
         if (m_logger) { m_logger->LogDiscard(state.battlefield[idx].card.m_number, source); }
         ap.graveyard.push_back(state.battlefield[idx].card);
@@ -8683,28 +8999,142 @@ bool AIEngine::PerformDig(GameState& state, const std::string& source, bool is_s
     }
     else
     {
-        if (!sd->params.cycling_cost.has_value()) { return false; }
-        // P1/P2 -- affordability probe and the real payment, both on the Fluctuator-reduced cost.
+        if (!sd->params.cycling_cost.has_value()) { return DigOutcome::Failed; }
+        // P1/P2 -- the real payment on the Fluctuator-reduced cost, plus the LIFE half (Street Wraith;
+        // CyclingLifePayable / PayCyclingLife, SpellEffects.h). NO ManaPool::CanPay pre-probe: the payer
+        // itself decides (it leaves the state unchanged on failure), exactly as the rollout's seeded chain,
+        // its dig loop (P4) and human play (P3) do with TapForCostDirect. The pool books a filter land
+        // (Cascade Bluffs) only as its own taps, so the probe refused a cycle the payer makes by feeding the
+        // filter from floating mana -- Seething Song's RRRRR into "{U/R}, {T}: Add {U}{U}" for Curator of
+        // Mysteries' {U} (fd-diverge s93143 gi143: the rollout cycled, the executor did not, a proven
+        // turn-7 kill lost; test_cyclone_stage5.cpp).
         const ManaCost cyc_cost = EffectiveCyclingCostFor(state, *sd);
+        if (!CyclingLifePayable(state, state.active_player_index, *sd)) { return DigOutcome::Failed; }
         ManaPool avail = AvailableManaPool(state);
-        if (!avail.CanPay(cyc_cost)) { return false; }
         std::vector<Card>::iterator it = std::find_if(ap.hand.begin(), ap.hand.end(),
             [&source](const Card& c) { return c.m_name == source; });
-        if (it == ap.hand.end()) { return false; }
-        if (!TapForCost(state, cyc_cost, avail, false)) { return false; }
+        if (it == ap.hand.end()) { return DigOutcome::Failed; }
+        {
+            const CycleSeedPayScope _csp;   // lockstep with the rollout's cycle_chain_step (PlanTraits::cycle_seed_pips)
+            // THE PAYMENT SPLIT (ledger Q61): the seed's searched split, lockstep with cycle_chain_step. 0 -> no hold.
+            const SeedPaySplitScope _sps(state, state.active_player_index, pay_split);
+            if (!_sps.Valid()) { return DigOutcome::Failed; }
+            if (!TapForCost(state, cyc_cost, avail, false)) { return DigOutcome::Failed; }
+        }
+        // TapForCost may have moved the hand (a payment that mutates zones): re-find the copy.
+        it = std::find_if(ap.hand.begin(), ap.hand.end(), [&source](const Card& c) { return c.m_name == source; });
+        if (it == ap.hand.end()) { return DigOutcome::Failed; }
+        _cycle_resolved.emplace(*sd);   // paid seed stays released through the draw/free cast
+        PayCyclingLife(state, state.active_player_index, *sd);
         if (m_logger) { m_logger->LogDiscard(it->m_number, it->m_name); }
         {   // THE SHARED DISCARD HOOK (Vampires A1): cycling's "discard this" is a COST, so a madness
             // trigger would resolve before the draw (the pool's cycling cards are lands: uniformity).
             std::vector<MadnessPending> mq;
+            const CycleDiscardScope _cds;   // the cycle fires Curator's trigger itself (below)
             DiscardCardFromHand(state, state.active_player_index, static_cast<int>(it - ap.hand.begin()),
                                 &mq, source);
             ResolvePendingMadness(state, mq, MadnessWindowNow(state), MadnessPin{}, source);
         }
+        // Curator of Mysteries' triggers resolve BEFORE the cycling draw, with the line's searched pin
+        // (lockstep with the rollout's seeded chain / dig loop). 0 triggers for every deck without one.
+        ResolveDiscardScryTriggers(state, state.active_player_index,
+                                   DiscardScryTriggers(state, state.active_player_index), scry_pin);
         // D1 -- the executor's cycle site: Hollow One's counter + Drannith Stinger's trigger.
         OnCardCycled(state, state.active_player_index);
+        // UNPREDICTABLE CYCLONE: the draw is REPLACED (lockstep with TurnSolver's cyclone_replaced_draw:
+        // walk -> cast the hit -> bottom the rest in a random order -> the Remand). The human never reaches
+        // this site (human play applies through TurnSolver), so there is no chooser here.
+        if (const CardDefinition* rep = CycleDrawReplacer(state, state.active_player_index, *sd))
+        {
+            const int me = state.active_player_index;
+            CycleWalk w;
+            WalkExileUntilSharedType(state, me, CycleWalkTypeMask(sd->card), w);
+            const CardDefinition* hd = w.have ? CardDatabase::Instance().LookupCached(w.hit) : nullptr;
+            const bool castable = w.have && CycleHitCastable(state, me, hd);
+            const CardDefinition* rm =
+                castable ? CycleFreeCastRemand(state, me, *hd, AvailableManaPool(state)) : nullptr;
+            const CardDefinition* rm_b = nullptr;   // Remand-on-Remand: A = rm_a on the hit, B = rm_b on A
+            const CardDefinition* rm_a = castable && fc_pin == kCycFcTakeRemandChain
+                ? CycleFreeCastRemandChain(state, me, AvailableManaPool(state), &rm_b) : nullptr;
+            const int fc = castable ? ResolveCycleFreeCastChoice(state, me, *hd, true, fc_pin, rm, rm_a) : kCycFcDecline;
+            EmitCycloneWalk(state, *rep, *sd, w, fc != kCycFcDecline);
+            const Card hit = w.hit;   // the copy PushFreeCast puts on the stack (the Remand's target)
+            bool cast = false;
+            if (fc != kCycFcDecline) { cast = EffectHandler::PushFreeCast(state, hit, me); }
+            if (cast)
+            {
+                if (m_logger) { m_logger->LogCastSpell(hit.m_number, hit.m_name, "free (" + rep->card.m_name.str() + ")"); }
+            }
+            else if (w.have) { w.rest.push_back(std::move(w.hit)); }
+            BottomInRandomOrder(state, me, std::move(w.rest));
+            // TAKE-AND-REMAND: with priority after the cycling ability has resolved, the Remand is cast on the
+            // hit (its only target); the passive opponent passes, so it resolves now -- the hit to hand (unless
+            // it can't be countered: then it stays on the stack and resolves after), and a card. Lockstep with
+            // apply_one's free_remand rider (CastAndResolveRemand is the shared resolution).
+            if (cast && fc == kCycFcTakeRemand && rm != nullptr)
+            {
+                ManaPool pool = AvailableManaPool(state);
+                const ManaCost rc = EffectiveSpellCost(*rm, state, 1);
+                if (TapForCost(state, rc, pool, /*for_creature=*/false))
+                {
+                    const bool countered = !hd->params.cant_be_countered;
+                    if (countered)
+                    {
+                        for (auto sit = state.stack.end(); sit != state.stack.begin(); )
+                        {
+                            --sit;
+                            if (sit->type == StackEntry::EntryType::Spell && !sit->is_copy
+                                && sit->source.m_number == hit.m_number)
+                            { state.stack.erase(sit); break; }
+                        }
+                    }
+                    Card remand_card;
+                    const std::size_t before_draw =
+                        CastAndResolveRemand(state, me, *rm, m_exec_post_combat, countered, hit, &remand_card);
+                    if (m_logger)
+                    {
+                        m_logger->LogCastSpell(remand_card.m_number, remand_card.m_name,
+                                               rc.ToString() + " (target: " + hit.m_name.str()
+                                               + (countered ? ", countered to hand)" : ", can't be countered)"));
+                        const Player& cp = state.players[me];
+                        for (std::size_t hi = before_draw; hi < cp.hand.size(); ++hi)
+                        { m_logger->LogDraw(cp.hand[hi].m_number, cp.hand[hi].m_name); }
+                    }
+                }
+            }
+            // TAKE + REMAND-ON-REMAND: A is cast on the hit, B on A; B resolves (A to hand, B draws) and the
+            // hit -- never countered -- resolves normally below. Both Remands are paid now. Lockstep with
+            // apply_one's free_remand chain rider (CastAndResolveRemandChain is the shared resolution).
+            if (cast && fc == kCycFcTakeRemandChain && rm_a != nullptr && rm_b != nullptr)
+            {
+                ManaPool pool = AvailableManaPool(state);
+                ManaCost rc = EffectiveSpellCost(*rm_a, state, 1);
+                AddManaCost(rc, EffectiveSpellCost(*rm_b, state, 1));
+                if (TapForCost(state, rc, pool, /*for_creature=*/false))
+                {
+                    Card a_card, b_card;
+                    const std::size_t before_draw =
+                        CastAndResolveRemandChain(state, me, *rm_a, *rm_b, m_exec_post_combat, &a_card, &b_card);
+                    if (m_logger)
+                    {
+                        m_logger->LogCastSpell(a_card.m_number, a_card.m_name,
+                                               EffectiveSpellCost(*rm_a, state, 1).ToString() + " (target: "
+                                               + hit.m_name.str() + ")");
+                        m_logger->LogCastSpell(b_card.m_number, b_card.m_name,
+                                               EffectiveSpellCost(*rm_b, state, 1).ToString() + " (target: "
+                                               + a_card.m_name.str() + ", countered to hand)");
+                        const Player& cp = state.players[me];
+                        for (std::size_t hi = before_draw; hi < cp.hand.size(); ++hi)
+                        { m_logger->LogDraw(cp.hand[hi].m_number, cp.hand[hi].m_name); }
+                    }
+                }
+            }
+            if (resolve_stack) { resolve_stack(state); }
+            return DigOutcome::Replaced;
+        }
     }
 
-    if (ap.library.empty()) { return false; }
+    if (ap.library.empty()) { return DigOutcome::Failed; }
     // MTG_TRACE=dig -- the REALISED dig, in the real game (the rollout has its own inline loop).
     // This is the census instrument for the generic dig gate: a capability whose only symptom is
     // "an ability is never offered" cannot be verified by a digest diff, because zero-variants-
@@ -8720,7 +9150,7 @@ bool AIEngine::PerformDig(GameState& state, const std::string& source, bool is_s
     EnterHand(state, state.active_player_index, std::move(drawn), HandEntryReason::Draw);
     if (state.deck_has_draw_ping) { ResolveDrawTriggers(state); }   // the Niv loop (rollout twins: both dig loops)
     LandDrawCensusAfterDig(state, drew_land, drawn_num);   // MTG_LANDDRAW_CENSUS (diagnostic only)
-    return drew_land;
+    return drew_land ? DigOutcome::DrewLand : DigOutcome::DrewNonland;
 }
 
 // ---- MTG_LANDDRAW_CENSUS (diagnostic only; see AIEngine::LandDrawCensusEndTurn) ------------------
@@ -8929,6 +9359,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
     const ManaPool land_put_credit = riders.land_put;
     const int      attach_equip_id = riders.attach_equip_id;
     const InternedName remand_name = riders.remand_by;   // the REMAND rider (Action::remand_by)
+    const InternedName remand_chain_name = riders.remand_chain_by;   // ...and Remand-on-Remand's A
     m_last_cast_remanded = false;
     Player& ap = state.ActivePlayer();
     auto def = CardDatabase::Instance().LookupCached((*hand_card_p));
@@ -9005,7 +9436,18 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
             { if (hc.m_name == remand_name && hc.m_number != (*hand_card_p).m_number) { remand_def = rd; break; } }
         }
     }
-    const bool remand_countered = remand_def != nullptr && !def->params.cant_be_countered;
+    // REMAND-ON-REMAND (Action::remand_chain_by): live only with two Remand copies besides X and three casts
+    // left (RemandChainLive, the rollout's own predicate); otherwise the WHOLE rider is void -- X is cast
+    // plainly, exactly as apply_one. X is never countered (B counters A), so it resolves normally.
+    const CardDefinition* remand_chain_def = nullptr;
+    if (remand_def != nullptr && !remand_chain_name.empty())
+    {
+        remand_chain_def = RemandChainLive(state, state.active_player_index, remand_chain_name, remand_name,
+                                           hand_card_number);
+        if (remand_chain_def == nullptr) { remand_def = nullptr; }
+    }
+    const bool remand_countered = remand_def != nullptr && remand_chain_def == nullptr
+                               && !def->params.cant_be_countered;
 
     StackEntry entry;
     entry.type             = StackEntry::EntryType::Spell;
@@ -9303,6 +9745,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
     {
         remand_cost = EffectiveCost(*remand_def, state);
         AddRemandRiderCost(effective, state, remand_name.str());
+        if (remand_chain_def != nullptr) { AddRemandRiderCost(effective, state, remand_chain_name.str()); }
     }
     // Maelstrom Archangel: spend a banked free cast (mirror of the rollout's prep_free +
     // cascade_free arm). Consumed here so exactly this cast skips payment; a stranded marker
@@ -9728,7 +10171,29 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
     // after), and the Remand draws. The shared CastAndResolveRemand is the rollout's own call. (The
     // remand-eligible X never pushes a cast trigger or a replicate copy above itself -- CollectActions
     // excludes cascade / demonstrate / replicate -- so the Remand is the only thing between X and the top.)
-    if (remand_def != nullptr)
+    if (remand_def != nullptr && remand_chain_def != nullptr)
+    {
+        // REMAND-ON-REMAND: A on X, B on A; B resolves (A to hand, B draws), X stays on the stack and
+        // resolve_now() resolves it -- the can't-be-countered shape. Shared body: CastAndResolveRemandChain.
+        Card a_card, b_card;
+        const std::size_t before_draw =
+            CastAndResolveRemandChain(state, state.active_player_index, *remand_chain_def, *remand_def,
+                                      m_exec_post_combat, &a_card, &b_card);
+        m_last_cast_remanded = true;
+        if (m_logger)
+        {
+            m_logger->LogCastSpell(a_card.m_number, a_card.m_name,
+                                   EffectiveCost(*remand_chain_def, state).ToString() + " (target: "
+                                   + def->card.m_name.str() + ")");
+            m_logger->LogCastSpell(b_card.m_number, b_card.m_name,
+                                   remand_cost.ToString() + " (target: " + a_card.m_name.str()
+                                   + ", countered to hand)");
+            const Player& cp = state.players[state.active_player_index];
+            for (std::size_t hi = before_draw; hi < cp.hand.size(); ++hi)
+            { m_logger->LogDraw(cp.hand[hi].m_number, cp.hand[hi].m_name); }
+        }
+    }
+    else if (remand_def != nullptr)
     {
         if (remand_countered)
         {

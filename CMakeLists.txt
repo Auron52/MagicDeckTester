@@ -491,6 +491,21 @@ add_executable(mtg-test
     test/unit/test_lfe_fury.cpp
     test/unit/test_lfe_fixpay.cpp
     test/unit/test_lfe_integration.cpp
+    test/unit/test_cyclone_phase1.cpp
+    test/unit/test_cyclone_phase2.cpp
+    test/unit/test_cyclone_phase3.cpp
+    test/unit/test_cyclone_phase4.cpp
+    test/unit/test_cyclone_phase5.cpp
+    test/unit/test_cyclone_stage5.cpp
+    test/unit/test_cyclone_cantrip_order.cpp
+    test/unit/test_cyclone_remand_chain.cpp
+    test/unit/test_cyclone_refs.cpp
+    test/unit/test_cyclone_sound_folds.cpp
+    test/unit/test_known_library.cpp
+    test/unit/test_cyclone_cantrip_plans.cpp
+    test/unit/test_spell_copy_id.cpp
+    test/unit/test_cyclone_discard_buckets.cpp
+    test/unit/test_cyclone_cast_order.cpp
 )
 target_link_libraries(mtg-test PRIVATE mtg-core doctest::doctest)
 # Precompiled header for the unit tests ONLY (the engine binaries are untouched, so codegen and determinism

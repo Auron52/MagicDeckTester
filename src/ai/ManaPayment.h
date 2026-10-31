@@ -23,6 +23,7 @@
 #include "../core/GameState.h"
 #include "TurnSolver.h"   // Action
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -82,6 +83,27 @@ void AddRemandRiderCost(ManaCost& bill, const GameState& state, const std::strin
 std::size_t CastAndResolveRemand(GameState& state, int controller, const CardDefinition& remand_def,
                                  bool post_combat, bool countered, const Card& x_card,
                                  Card* remand_out);
+
+// REMAND-ON-REMAND (Action::remand_chain_by; the Cyclone remand ceiling >= 2, USER 2026-10-28), ONE body
+// for both worlds, called at the same point as CastAndResolveRemand (X's cast-time block done, X paid
+// with BOTH Remands in its bill): Remand A (`a_def`) is cast targeting X -- it leaves the hand (the
+// cast-copy rule), counts as a spell cast and fires its cast triggers -- then Remand B (`b_def`) is cast
+// targeting A, and B resolves first (CastAndResolveRemand with A as the countered spell): A returns to
+// its owner's hand, B draws and goes to the graveyard. A is gone from the stack, so X -- never countered
+// -- stays on the stack and resolves normally after this (the caller's normal resolution path, exactly
+// the can't-be-countered shape). Returns the hand size just before B's draw. The caller has verified two
+// copies in hand (A and B may share a name); `a_out` / `b_out` get the two cards.
+// Is a Remand-on-Remand rider LIVE for this cast? `a_name` = the Remand that targets X (Action::remand_chain_by),
+// `b_name` = the one that targets A (Action::remand_by); both must be Remand-type cards with a copy in hand other
+// than X's own card (`x_number`) -- two copies when they share a name -- and a cast restrictor must leave three
+// casts (X, A, B). Returns A's definition, or null (the whole rider is then void and X is cast plainly). The one
+// predicate both worlds read (the rollout's apply_one, the executor's CastSpellFromHand).
+const CardDefinition* RemandChainLive(const GameState& state, int controller, const InternedName& a_name,
+                                      const InternedName& b_name, int x_number);
+
+std::size_t CastAndResolveRemandChain(GameState& state, int controller, const CardDefinition& a_def,
+                                      const CardDefinition& b_def, bool post_combat,
+                                      Card* a_out, Card* b_out);
 
 // Apply a Ragemonger-style COLOURED pip reduction to `cost`: one plain pip of each of the
 // reduction's coloured pips comes off (floored at 0, generic untouched), consuming a PLAIN pip
@@ -677,6 +699,82 @@ public:
     void Paid() { AddManaCost(g_act_line_paid, m_cost); }
 private:
     ManaCost m_prev, m_cost;
+};
+
+// CYCLE SEED PAYMENT (PlanTraits::cycle_seed_pips): set while the plan's cycle seed pays its OWN cycling
+// cost, so ActLineHoldMask does not hold a provider back for the very pip being paid (with an Island and
+// a Steam Vents up it would hold the Island and tap the dual). Set at all three cycle payment sites --
+// the rollout's cycle_chain_step, human play's DigDraw pass and the executor's PerformDigFull -- in
+// lockstep. It only zeroes the seed half of the hold, which is zero for every deck without seeds.
+extern thread_local bool g_cycle_seed_paying;
+
+// THE SEED PAYMENT SPLIT (MTG_CYCLE_SEED_PAY_SPLIT, DEFAULT OFF; ledger Q61). A cycle seed pays
+// BEFORE its continuation exists; colours needed by that continuation must remain searchable.
+// Source units occupy low three bytes; high byte is an ordinal of a <=3-unit concrete floating
+// colour multiset (84 possibilities). SeedPaySplits covers one-unit unrestricted lands, including
+// a filter's free-C tap, and the float possible before the seed from in-hand rituals/filter output.
+// Dynamic/restricted/multi-unit sources and wild/provenance-bearing float use the ordinary payer.
+// Plain colour-subset dominance is applied within a fixed float allocation; special lands keep
+// their stable identity. This does not enumerate every possible filter output-colour production.
+// Scope exposes only the selected floating units to the payer, holding the rest aside until the
+// payment returns; a valid source/float pin is binding and a stale/unrealizable pin fails atomically.
+bool SeedPaySplitOn();
+std::vector<std::int32_t> SeedPaySplits(const GameState& state, int me, const ManaCost& cost,
+                                        const CardDefinition& seed_def);
+std::uint64_t SeedPaySplitHoldMask(const GameState& state, int me, std::int32_t split);
+extern thread_local std::uint64_t g_seed_pay_hold;
+extern thread_local std::int32_t g_seed_pay_split;
+class SeedPaySplitScope
+{
+public:
+    SeedPaySplitScope(GameState& state, int me, std::int32_t split);
+    ~SeedPaySplitScope();
+    bool Valid() const { return m_valid; }
+    SeedPaySplitScope(const SeedPaySplitScope&)            = delete;
+    SeedPaySplitScope& operator=(const SeedPaySplitScope&) = delete;
+private:
+    std::uint64_t m_prev;
+    std::int32_t m_prev_split;
+    GameState* m_state = nullptr;
+    ManaPool m_held_float;
+    bool m_valid = true;
+};
+
+class CycleSeedPayScope
+{
+public:
+    CycleSeedPayScope() : m_prev(g_cycle_seed_paying) { g_cycle_seed_paying = true; }
+    ~CycleSeedPayScope() { g_cycle_seed_paying = m_prev; }
+    CycleSeedPayScope(const CycleSeedPayScope&)            = delete;
+    CycleSeedPayScope& operator=(const CycleSeedPayScope&) = delete;
+private:
+    bool m_prev;
+};
+
+// A cycle that paid its cost no longer owes the plan's seed pips. Keep the other
+// pending activation holds, but release this seed's hold through the rest of its
+// resolution. A same-name Cyclone hit temporarily enters the rollout's hand before
+// its free cast; counting it must not resurrect the paid seed (the executor puts
+// that hit directly on the stack). A nested continuation installs its own traits
+// above this scope, so its newly selected seed still receives its own hold.
+class CycleSeedResolvedScope
+{
+public:
+    explicit CycleSeedResolvedScope(const CardDefinition& seed)
+    {
+        const PlanTraits* pt = CurrentPlanTraits();
+        if (pt == nullptr || pt->cycle_seed_def != &seed) { return; }
+        m_traits.emplace(*pt);
+        m_traits->cycle_seed_def = nullptr;
+        m_traits->cycle_seed_hand_floor = 0;
+        for (int& pip : m_traits->cycle_seed_pips) { pip = 0; }
+        m_scope.emplace(&*m_traits);
+    }
+    CycleSeedResolvedScope(const CycleSeedResolvedScope&)            = delete;
+    CycleSeedResolvedScope& operator=(const CycleSeedResolvedScope&) = delete;
+private:
+    std::optional<PlanTraits> m_traits;
+    std::optional<PlanTraitsScope> m_scope;   // restored before m_traits is destroyed
 };
 
 // RAII for g_plan_reserved_sources: sets it for the plan's cast section and restores the previous

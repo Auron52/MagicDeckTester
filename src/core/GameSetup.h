@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdlib>
+#include "EnvFlags.h"
 
 // PER-JOB GAME-SETUP overrides. Today: starting life, which is what "Two-Headed Giant" means
 // for a goldfish (user, 2026-08-19: "regular play (20 life) and 2HG (30 life)").
@@ -53,6 +54,10 @@ struct Setup
     // forbids. As job fields every (arm, salt) cell of an ensemble shares ONE queue and one tail.
     long long shuffle_salt        = -1;   // manifest "shuffle_salt"
     long long shuffle_salt_search = -1;   // manifest "shuffle_salt_search"
+    // THE KNOWN-RESPECTING BLIND SEARCH (the clairvoyance test; see BlindSearchSalt below). -1 unset |
+    // >=0 = blind mode ON with this salt (manifest "blind_salt"), so a blind ENSEMBLE (several salts,
+    // both arms) is one pooled batch.
+    long long blind_salt          = -1;
 };
 
 inline thread_local Setup t_setup;
@@ -117,5 +122,25 @@ inline unsigned long long SearchShuffleSalt()
     if (t_setup.shuffle_salt_search >= 0)
     { return static_cast<unsigned long long>(t_setup.shuffle_salt_search); }
     return s_env_set ? s_env : ShuffleSalt();
+}
+
+// THE KNOWN-RESPECTING BLIND SEARCH (MTG_SEARCH_BLIND_UNKNOWN=1 + MTG_SEARCH_BLIND_SALT=<k>, or the
+// manifest's per-job "blind_salt"; Unpredictable Cyclone hard prunes, 2026-10-28). -1 = OFF (every
+// game byte-identical). When on, every REAL decision's search sees a copy of the game whose library
+// has only the positions the player does NOT know re-randomised (Library::BlindUnknownOrder: known
+// top positions -- put-backs, Ponder / scry keeps, Long-Term Plans' placement -- and the placed bottom
+// block are kept), with the search's own mid-game shuffles salted apart from the real ones; the real
+// future is unchanged. Decisions made AFTER a reveal (a put-back's pair, Ponder's order, a breakpoint
+// continuation) are re-decided at the real resolution against what was revealed. See AIEngine
+// (BlindView / the blind chooser) and the Cyclone ledger "Hard prunes + known-top blind test".
+inline long long BlindSearchSalt()
+{
+    static const long long s_env = []
+    {
+        if (!EnvOn("MTG_SEARCH_BLIND_UNKNOWN")) { return -1LL; }
+        const char* e = std::getenv("MTG_SEARCH_BLIND_SALT");
+        return (e && *e) ? static_cast<long long>(std::strtoull(e, nullptr, 10)) : 1LL;
+    }();
+    return t_setup.blind_salt >= 0 ? t_setup.blind_salt : s_env;
 }
 }   // namespace gamesetup

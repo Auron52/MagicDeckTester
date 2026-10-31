@@ -56,4 +56,19 @@ struct MtgTestSeam
 
     // How many breakpoint continuations TakeTurn's resolve_draw_breakpoint has run on this engine.
     static long long BpResolves(const AIEngine& e) { return e.m_bp_resolves; }
+
+    // The executor's realised dig (cycle from hand / sacrifice-to-draw): the lockstep twin of the
+    // rollout dig loop and the human-play DigDraw action. Returns PerformDig's drew-a-land flag.
+    static bool PerformDig(AIEngine& e, GameState& s, const std::string& source, bool is_sacrifice)
+    { return e.PerformDig(s, source, is_sacrifice); }
+    // ...its full form (Unpredictable Cyclone phase 3): the searched pins (Curator's scry j, Cyclone's
+    // free-cast choice) and the resolver for what a replaced draw put on the stack. Returns the tri-state.
+    static AIEngine::DigOutcome PerformDigFull(AIEngine& e, GameState& s, const std::string& source,
+                                               bool is_sacrifice, int scry_pin, int fc_pin,
+                                               const std::function<void(GameState&)>& resolve)
+    { return e.PerformDigFull(s, source, is_sacrifice, scry_pin, fc_pin, resolve); }
+    // The reactive (uncommitted / d0) dig, with an optional cycle seed.
+    static bool UseSurplusLandAbilities(AIEngine& e, GameState& s, const std::function<void(GameState&)>& resolve,
+                                        int dig_choice, const Action* seed)
+    { return e.UseSurplusLandAbilities(s, resolve, dig_choice, seed); }
 };

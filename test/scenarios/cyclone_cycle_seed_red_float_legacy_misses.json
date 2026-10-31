@@ -1,0 +1,58 @@
+{
+  "_comment": [
+    "Q61 negative control: the float-first payer spends the only floating red before the continuation exists. The same legal round-3 kill is unfindable even with unlimited budget."
+  ],
+  "deck": "decks/Unpredictable Cyclone/Unpredictable Cyclone.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "active_life": 20,
+  "opponent_life": 15,
+  "battlefield": [
+    {
+      "name": "Mountain",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    }
+  ],
+  "hand": [
+    "Unpredictable Cyclone",
+    "Unpredictable Cyclone"
+  ],
+  "library_top": [
+    "Street Wraith",
+    "Emrakul, the Aeons Torn"
+  ],
+  "library_filler": "Island",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 0,
+  "max_turns": 3,
+  "env": {
+    "MTG_CYCLE_SEED_PAY_SPLIT": "0"
+  },
+  "floating_mana": {
+    "R": 1
+  },
+  "expect_no_win": true
+}

@@ -1,0 +1,33 @@
+{
+  "comment": "Q37 (USER 2026-10-29: 'Seething Song plans should error properly if cast with 1 mana'). One Mountain out, the land drop spent: TurnSolver's order-free ritual affordability credit (a ritual's float counts toward its own cost -- load-bearing as a PROPOSAL in the autonomous search) still enumerates the one-step plan, so the viewer used to ACCEPT the line and the commit silently dropped the cast. The one-step line is now previewed like a '**' line (ValidateHumanSequence) and is ILLEGAL, the reason read off the board at the failed payment.",
+  "deck": "decks/Unpredictable Cyclone/Unpredictable Cyclone.cod",
+  "turn": 1,
+  "on_the_play": true,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "active_life": 20,
+  "opponent_life": 20,
+  "battlefield": [
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Seething Song",
+    "Island"
+  ],
+  "library_filler": "Mountain",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 50,
+  "max_turns": 1,
+  "env": {
+    "MTG_HUMAN_PLAY": "1",
+    "MTG_UNPRUNED": "1"
+  },
+  "validate_line": "cast=Seething Song",
+  "expect_verdict": "illegal",
+  "expect_reason_contains": "Seething Song costs {2}{R}; only 1 mana available"
+}

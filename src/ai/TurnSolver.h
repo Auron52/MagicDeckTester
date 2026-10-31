@@ -706,6 +706,18 @@ struct Action
                                        // any number"); declining is often right, since the bodies are
                                        // usually worth more attacking.
                                        // SENTINEL -1 = not a devour cast.
+    std::int32_t seed_pay_split  = 0;
+                                       // A searched CYCLE SEED's PAYMENT SPLIT (MTG_CYCLE_SEED_PAY_SPLIT,
+                                       // ledger Q61): WHICH sources pay the seed's all-generic cycling
+                                       // cost, as a packed multiset of source colour SIGNATURES
+                                       // (SeedPaySplits / SeedPaySplitHoldMask, ManaPayment.h). A seed
+                                       // pays BEFORE its site-4 continuation exists, so the payer alone
+                                       // could spend the colours the continuation needs (two Cyclones,
+                                       // three Mountains: the {2} took two Mountains and the other
+                                       // Cyclone's {R}{R} was unpayable at ANY budget). 0 = the payer
+                                       // decides (every non-seed action, human play, the lever off).
+                                       // Folded beside devour_count only when non-zero, so every key is
+                                       // byte-identical with the lever off.
     int         replicate_count  = -1;
                                        // REPLICATE (CR 702.56, Hatchery Sliver + every Sliver spell it
                                        // grants it to): how many EXTRA token copies this cast pays for.
@@ -750,6 +762,15 @@ struct Action
                                        // odometer group key and the canonical-order key of the subset
                                        // guard; never read at apply, which takes the Remand BY NAME --
                                        // copies are interchangeable). -1 = not a remand variant.
+    InternedName remand_chain_by;      // REMAND-ON-REMAND (Cyclone remand ceiling >= 2, USER 2026-10-28).
+                                       // Non-empty only on a remand variant: a Remand of THIS name (A) is
+                                       // cast targeting X, then remand_by (B) is cast targeting A. B
+                                       // resolves first: A returns to its owner's hand, B draws a card;
+                                       // then X RESOLVES NORMALLY (nothing countered it). Cost = X + A + B
+                                       // in one bill; three casts (storm, cast triggers). Needs two Remand
+                                       // copies in hand at apply (else the rider is void: X cast plainly).
+                                       // Shared body: CastAndResolveRemandChain (ManaPayment.h), both
+                                       // worlds. Admitted per deck by DecisionProvider::AdmitRemandOnRemand.
     InternedName pitch_name;           // PITCH EVOKE (CardParams::evoke_exile_color -- Fury "Evoke--Exile
                                        // a red card from your hand"). Non-empty only on an evoke variant
                                        // of such a card: the NAME of the hand card exiled as the cost. One
@@ -820,6 +841,11 @@ struct Action
     // realised no win). 0 = not recorded (legacy record / lever off): the replay keeps its own.
     int rec_mana_casts  = 0;
     int rec_pump_target = 0;
+    // Realized records can be a strict subset of a plan, or an inline continuation paid
+    // under inherited traits. Preserve the actual full scope for casts and searched cycles.
+    // Unengaged = legacy/unrecorded; engaged nullptr = explicitly no traits. The separate
+    // rec_pump_target also records zero, overriding any surrounding pump hold.
+    std::optional<std::shared_ptr<const PlanTraits>> rec_payment_traits;
     // Which MAIN-LEVEL breakpoint of the apply produced this TOP-LEVEL breakpoint record (0 = the
     // first). The executor replays each recorded segment at the matching main-level breakpoint.
     // Before 2026-09-30 the whole top-level list replayed at the FIRST one, which is right only
@@ -898,6 +924,29 @@ inline bool IsSelfDrawXCast(const CardDefinition& d, int draw_target)
     return d.tmpl == CardTemplate::DrawX && (!d.params.draw_target_player || draw_target == 0);
 }
 
+// A SEARCHED CYCLE seed (CollectActions, Unpredictable Cyclone phase 3): a hand-cycle DigDraw carried by
+// NAME (hand_index -1) WITH its definition, Curator's scry pin in devour_count and Cyclone's free-cast pin in
+// ponder_keep. Neither the human-play standalone dig action (AppendHumanPlayDigPlans) nor a recorded DigDraw
+// (the breakpoint script) carries `def`, so neither ever reads as a seed.
+inline bool IsCycleSeed(const Action& a)
+{
+    return a.kind == Action::Kind::DigDraw && !a.dig_sacrifice && a.hand_index < 0 && a.def != nullptr;
+}
+// A HUMAN-PLAY cycle seed on a deck whose provider does NOT search its cycles (QR1, HumanPlayCycleSources) carries
+// hand_index kHumanGenericCycleSeedHand (-2) instead of -1: still a seed everywhere (every reader tests
+// hand_index < 0), but distinguishable from the standalone dig plan's action and its breakpoint variants, which
+// can carry a back-filled def and so read as seeds too. EnumerateMainPlans' OrderHumanCycleSeedPlans keys on it.
+constexpr int kHumanGenericCycleSeedHand = -2;
+inline bool IsHumanGenericCycleSeed(const Action& a)
+{
+    return IsCycleSeed(a) && a.hand_index == kHumanGenericCycleSeedHand;
+}
+inline const Action* CycleSeedOf(const std::vector<Action>& acts)
+{
+    for (const Action& a : acts) { if (IsCycleSeed(a)) { return &a; } }
+    return nullptr;
+}
+
 struct CastRiders
 {
     int      loyalty_ability = -1;   // Action::loyalty_ability on a walker CAST (the rollout's activation;
@@ -919,6 +968,11 @@ struct CastRiders
                                         // ApplyCastLifegain in both worlds
     InternedName pitch_name;            // Action::pitch_name: the hand card a pitch evoke exiles as its
                                         // cost (Fury); empty for every other cast
+    InternedName remand_chain_by;       // Action::remand_chain_by: Remand-on-Remand (A targets X, remand_by
+                                        // targets A; X resolves, A back to hand)
+    bool     free_remand     = false;   // the remand_by rider rides a FREE walk cast (Unpredictable
+                                        // Cyclone's take-and-Remand): only the Remand is paid. Set by the
+                                        // walk itself, never by CastRiders::Of (no plan Action carries it)
 
     static CastRiders Of(const Action& a)
     {
@@ -930,6 +984,7 @@ struct CastRiders
         r.land_put        = a.rock_mana;
         r.free_cast       = a.free_cast;
         r.remand_by       = a.remand_by;
+        r.remand_chain_by = a.remand_chain_by;
         r.player_target   = a.player_target;
         r.draw_target     = a.draw_target;
         r.pitch_name      = a.pitch_name;
@@ -1518,6 +1573,17 @@ public:
         // AppendSubdecisionAxes on a pre-combat list whose state has an untapped banked source and a
         // firebreathing / team-pump source on the battlefield or in hand.
         int8_t fb_hold_choice = -1;
+        // SEARCHED CAST-TRIGGER TARGETS (2026-10-27; Ulamog, the Ceaseless Hunger's "exile two target
+        // permanents", Ulamog, the Infinite Gyre's "destroy target permanent"). -1 (default) == the
+        // provider's front option at every targeted cast trigger; k >= 1 == the option ranked k
+        // (CastTriggerTargetOption: multisets of N identity-folded classes in
+        // DecisionProvider::CastTriggerTargetOrder's order), computed AT EACH TRIGGER's state and clamped.
+        // A WHOLE-TURN POLICY (the landfall_target_choice shape): installed by both worlds for the turn
+        // (ScriptedCastTriggerTarget, keyed on GameState::TurnSeq) and folded into every plan key while
+        // live. Emitted by AppendSubdecisionAxes for plans that cast a targeted cast-trigger card from
+        // hand, every option (no width cap -- a cap would make the later options unfindable at any budget).
+        // int16_t: a two-target option list on a wide board exceeds 127.
+        int16_t cast_trigger_target_choice = -1;
 
         // HOLD-vs-TAP of this turn's mana creatures. 0 (default) == the shipped heuristic (reserve
         // every mana creature for the whole turn, and sort them last in the tap backtracker);
@@ -2124,6 +2190,13 @@ public:
     // shifts every later bp_at index -- which is how the first cut of this rule cost Mirrorwing
     // +0.1266 at every budget.
     static bool ParamKeyedDrawClass(const GameState& state, const CardDefinition& def);
+    // A PLAIN CANTRIP by definition: the DrawSpell template, neither staging nor Expressive Iteration -- the
+    // casts whose resolution opens the plain cantrip breakpoint (apply_one's DrawSpell branch, plain_cantrip
+    // = true). The Remand-on-Remand rider admits exactly these among the draw classes (see BpNameOf).
+    static bool IsPlainCantripDef(const CardDefinition& d)
+    {
+        return d.tmpl == CardTemplate::DrawSpell && !d.params.stages_cards && !d.params.expressive_iteration;
+    }
 
     // Lands + mana rocks + mana dorks the active player controls. Snapshotted at a breakpoint so a
     // decline can be re-admitted once the mana base grows (BpTurnManaSettled).
@@ -2354,6 +2427,8 @@ public:
     // COMBO OFF route narrates each link it plays with it, so the history lists the actions, not a macro.
     static std::string PlanLineSummary(const Plan& plan, const GameState& state);
     static void              ApplyPlan(GameState& state, const Plan& plan, bool is_pre_combat);
+    // Build the real dynamic replay script while applying a fixed plan, for executor parity tests.
+    static void ApplyPlanWithRecordsForTest(GameState& state, Plan& plan, bool is_pre_combat);
     // The rollout's staged-card re-lay at an executor pass head (TurnSolver.cpp MergeStagedToHandEnd,
     // lockstep #5): staged hand cards move to the END, order kept. Public only so a unit test can hold
     // it to the executor's layout (AIEngine.h MergeStagedIntoHand); the engine calls the static.
@@ -2390,6 +2465,10 @@ public:
     // Charge `n` units of such sub-search work to `budget` (no-op on nullptr), attributed to the
     // census's `equip_route` bucket.
     static void              ChargeDecisionUnits(SearchBudget* budget, int n);
+    // MTG_CACHE_HIT_CHARGE: a provider sub-search that charges the decision budget and memoises per DECISION
+    // (the equip-route DFS's SeenForThisDecision, the AA route walk) ran inside the cacheable computation in
+    // flight -- its cost depends on that memo's warmth, so the computation is not stored (mode 1).
+    static void              NoteChargingSubsearch();
     // The same for the AccomplishedAlchemist untap-loop route walk (MTG_AA_ROUTE_NODE_UNITS), attributed
     // to the census's own `aa_route` bucket. No-op on nullptr or n <= 0.
     static void              ChargeAaRouteUnits(SearchBudget* budget, int n);
@@ -2431,6 +2510,10 @@ public:
     // Work units the Brainstorm put-back price (MTG_PUTBACK_PRICE) has charged on THIS thread so far --
     // a running total, so a caller diffs it around a game to report that game's units net of the price.
     static long long         PutBackPriceCharged();
+    // The sound cantrip folds' process-wide counters (docs/design/cantrip-search-optimization.md §2), for tests and
+    // reports: [0] F2 exactly sized fans, [1] F3 mirror ranks declined, [2] F4 stranding ranks declined, [3] F5
+    // cross-base ranks declined, [4] Q36 seed variants not emitted. Monotonic; a caller diffs around its work.
+    static void              SoundFoldCounters(long long out[5]);
     // True inside a horizon playout -- beyond the search window, where a greedy policy is permitted.
     static bool              InRolloutPlayout();
     // True inside the depth-0 executor's greedy pick (a GreedyPermit(D0Runner) is live) -- the
@@ -2584,7 +2667,8 @@ public:
     // EMPTY child from the snapshot. Returns false when the apply did not pend. `at_capture` is the line's
     // unpaid-cost hold where the full apply stopped; `at_resume` the hold the resumed apply ran under.
     static bool BpResumeLineHoldForTest(const GameState& state, const Plan& plan, bool is_pre_combat,
-                                        ManaCost& at_capture, ManaCost& at_resume);
+                                        ManaCost& at_capture, ManaCost& at_resume,
+                                        GameState* complete_state = nullptr, GameState* resumed_state = nullptr);
     // MTG_BP_PO_W0_FOLD test hook (the playout wave-0 identity; see the pofold namespace in
     // TurnSolver.cpp). Applies `base` and then each of `variants` (all carrying bp_base = 0) INSIDE A
     // PLAYOUT, exactly as SolveWithLookahead's candidate loop does: the base apply is measured (its
@@ -3214,6 +3298,14 @@ public:
         // same card a different way, so `cast=<name>` cannot distinguish the two. EMPTY => legacy
         // matching (a Channel action matches by card name inside the ordinary cast multiset).
         std::vector<std::string> channels;
+        // "cycle=<card name>": cycle a card from hand (a DigDraw action, dig_sacrifice false) and
+        // "sacdraw=<land name>": sacrifice a land in play to draw (dig_sacrifice true). A DigDraw is
+        // ALWAYS matched against these (never by name inside the cast multiset): `cast=Curator of
+        // Mysteries` and "cycle Curator of Mysteries" play the same card two different ways, and a plan
+        // that cycles (a cycle seed, USER 2026-10-28: "Cycling should be a plan item like any other") must
+        // never match a line that does not.
+        std::vector<std::string> cycles;
+        std::vector<std::string> sac_draws;
         // "suspend=<card name>": Lotus Bloom's own Suspend (CR 702.61) -- exile it from hand with
         // time counters instead of casting it. Its own verb for the SAME reason `channel=` has one:
         // suspend is a from-hand ALTERNATIVE to casting the same card, so `cast=<name>` cannot say
@@ -3454,6 +3546,9 @@ public:
     // can detect non-convergence (a later turn's verified win exceeding an earlier
     // one). A win-this-turn reports (turn, depth-1); an empty / depth<=0 decision
     // reports (max_turns+1, 0) i.e. "no verified win".
+    // The graded no-win leaf quantity of the line the last enforcing SolveWithLookahead on this thread committed
+    // (LOWER = better; LLONG_MAX = none). Read by the blind resolution chooser only.
+    static long long LastCommittedTieBreak();
     static Plan SolveWithLookahead(const GameState& state, bool is_pre_combat,
                                    int depth, int max_turns = 20,
                                    SearchBudget* budget = nullptr,

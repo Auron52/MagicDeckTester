@@ -30,6 +30,10 @@ public:
                    const std::map<std::string, std::vector<int>>& card_numbering);
 
     void StartPhase(int turn, const std::string& phase);
+    // EXTRA TURNS (Emrakul): `extra` = k when this phase is in the k-th extra turn taken (0 = a regular
+    // turn). Folded into the play digest and written as "extraTurn" ONLY when nonzero, so every game
+    // without an extra turn keeps its exact digest and log.
+    void StartPhase(int turn, const std::string& phase, int extra);
 
     // Called once per hand drawn during the mulligan process.
     // attempt=0 is the initial 7-card hand; each mulligan increments by 1.
@@ -92,6 +96,21 @@ public:
                       const std::string& mana_paid, int chosen_x = -1,
                       const std::vector<TargetDesc>& targets = {});
     void LogDraw(int card_num, const std::string& card_name);
+    // THE PUT-BACK RECORD (Brainstorm / Brainsurge; cantrip item 1, 2026-10-28). The hand-diff DRAW lines of a
+    // draw spell (GameEngine::ResolveStack) cannot see a card that was drawn AND put back by the same
+    // resolution, and nothing logged which cards went back, in what order -- so a 3-card Brainstorm read as two
+    // DRAWs and the card put back appeared as the next turn's draw. ResolvePutBackFromHand NOTES the put-back
+    // (real resolution only); ResolveStack then FLUSHES it right after its DRAW lines: a DRAW for every put-back
+    // card that was not in hand before the spell resolved, then a REVEAL "<card> (put back)" listing the cards,
+    // top first, all "kept" (on top). LOG ONLY -- deliberately NOT folded into the play digest, so every recorded
+    // fingerprint and GT digest stays byte-identical (the put-back's effect on play is already in the digest
+    // through the later draws). A note never flushed by ResolveStack is written at CommitPhase (REVEAL only).
+    void NotePutBack(const std::string& source, const std::vector<int>& nums, const std::vector<std::string>& names);
+    // One line per recorded action, in order: "T<turn> <PHASE> <TYPE> <card>[: <cards looked at / put back>]".
+    // The scenario harness's `expect_log_sequence` assertion reads these (a statement about the PLAY, which a
+    // win-turn assertion cannot make).
+    std::vector<std::string> ActionLines() const;
+    void FlushPutBack(const std::vector<int>& hand_before_nums);
     void LogDiscard(int card_num, const std::string& card_name);
     void LogAttack(int damage, int opp_life_after);
 
@@ -230,6 +249,7 @@ private:
     struct PhaseEntry
     {
         int                 turn = 0;
+        int                 extra_turn = 0;   // k = the k-th extra turn taken (0 = regular); see StartPhase
         std::string         phase;
         std::vector<Action> actions;
         int                 player_life = 0;
@@ -252,6 +272,10 @@ private:
     std::vector<std::string>                m_opening_hand_names;
     std::vector<PhaseEntry>                 m_phases;
     PhaseEntry                              m_current;
+    // NotePutBack / FlushPutBack: the pending put-back of the resolving spell (empty source = none).
+    std::string                             m_pb_source;
+    std::vector<int>                        m_pb_nums;
+    std::vector<std::string>                m_pb_names;
     bool                                    m_in_phase    = false;
     int                                     m_win_turn    = -1;
     bool                                    m_digest_only = false;
@@ -830,6 +854,30 @@ using FreeCastChooser = std::function<int(const GameState& state, int controller
                                           const std::vector<Card>& candidates, int heuristic_index,
                                           const std::vector<std::string>& walked)>;
 extern thread_local FreeCastChooser* g_play_free_cast_chooser;
+// A PAID follow-up asked through the free_cast decision (PRESENTATION ONLY). Unpredictable Cyclone's walk
+// reuses free_cast for "Remand the free-cast hit?" (and "...then Remand that Remand?"), but those spells
+// are NOT free -- each Remand pays its own cost (USER 2026-10-28: *"it isn't really a free cast"*). The
+// site installs this (FreeCastPaidScope) around the chooser call and the decision JSON then carries
+// `paid_cost` / `paid_target` / `paid_outcome`, which the viewer words as a paid cast. The decision's
+// type, source, candidates and answer encoding are unchanged, so every recorded game replays as before.
+struct FreeCastPaidInfo
+{
+    std::string cost;      // the total mana paid, e.g. "{1}{U}" (two Remands: both costs)
+    std::string target;    // what the paid spell targets (the walk's hit, or the first Remand)
+    std::string outcome;   // what happens if accepted, in words
+};
+extern thread_local const FreeCastPaidInfo* g_play_free_cast_paid;
+class FreeCastPaidScope
+{
+public:
+    explicit FreeCastPaidScope(const FreeCastPaidInfo* info) : m_prev(g_play_free_cast_paid)
+    { g_play_free_cast_paid = info; }
+    ~FreeCastPaidScope() { g_play_free_cast_paid = m_prev; }
+    FreeCastPaidScope(const FreeCastPaidScope&)            = delete;
+    FreeCastPaidScope& operator=(const FreeCastPaidScope&) = delete;
+private:
+    const FreeCastPaidInfo* m_prev;
+};
 
 // ---- Human-play MADNESS chooser (Vampires A1, 2026-10-18; CR 702.35) -------------------------
 // "If you discard a card with madness, discard it into exile. When you do, cast it for its madness
@@ -982,12 +1030,18 @@ std::string RevealDisposition(int card_num,
 // `text` is the human-readable line. Nulled by RevealLogPause during every search/rollout scope, so
 // only real play appends -> autonomous play is byte-identical (an external vector never touches
 // GameState). Inert unless set.
-struct PlayEvent { int turn; std::string kind; std::string text; };
+// `extra` (EXTRA TURNS, Emrakul): the extra turns taken so far in the real game when the event fired
+// (g_play_extra_turns_taken, stamped by GameEngine::RunTurnFrom at each turn start), so a serializer can
+// write turn_seq = turn + extra -- two turns can share a round (`turn`), and the per-turn replay specs
+// (--force-attackers off the combat events) key on turns TAKEN. 0 for every game without an extra turn,
+// whose JSON then carries no turn_seq (byte-identical).
+struct PlayEvent { int turn; std::string kind; std::string text; int extra = 0; };
 extern thread_local std::vector<PlayEvent>* g_play_event_sink;
+extern thread_local int g_play_extra_turns_taken;
 // Append a play event if the sink is live (real play only). Safe no-op otherwise.
 inline void EmitPlayEvent(int turn, const char* kind, std::string text)
 {
-    if (g_play_event_sink) { g_play_event_sink->push_back({ turn, kind, std::move(text) }); }
+    if (g_play_event_sink) { g_play_event_sink->push_back({ turn, kind, std::move(text), g_play_extra_turns_taken }); }
 }
 
 // Server-truth "dropped cast" sink for the play viewer (SERVER-TRUTH RESOLUTION). When a committed
@@ -999,6 +1053,48 @@ inline void EmitPlayEvent(int turn, const char* kind, std::string text)
 // search/rollout/enumeration scope (incl. CheckLine's plan_pays trial-apply), so autonomous play is
 // byte-identical (appending to an external vector never touches GameState). Inert unless set.
 extern thread_local std::vector<std::string>* g_play_dropped_cast_sink;
+// ...and WHY each one dropped (Q37, USER 2026-10-29: "Seething Song plans should error properly if cast with 1
+// mana"). One human-readable reason per entry of the cast sink above, read off the board AT the failed payment
+// ("Seething Song costs {2}{R}; only 1 mana available"), so the viewer's rollback and the line validation can say
+// what the line was short of instead of a generic "not enough mana". PAIRED: written only while
+// g_play_dropped_reason_pair == g_play_dropped_cast_sink, so a scope that swaps the cast sink for a local one
+// (a trial apply) without swapping this pair never lands its reasons in the outer log -- and RevealLogPause,
+// which nulls the cast sink, silences both. Index-aligned with the cast sink: a drop recorded by a site that
+// gives no reason gets "" (PlayReportDrop pads). Viewer-only, like the cast sink: GameState is never touched.
+extern thread_local std::vector<std::string>*       g_play_dropped_reason_sink;
+extern thread_local const std::vector<std::string>* g_play_dropped_reason_pair;
+// Is a reason wanted for the next drop? (Callers build the reason -- a board scan -- only when this is true.)
+inline bool PlayDropReasonWanted()
+{
+    return g_play_dropped_cast_sink != nullptr && g_play_dropped_reason_sink != nullptr
+        && g_play_dropped_reason_pair == g_play_dropped_cast_sink;
+}
+// Record one drop in the cast sink (the caller has checked it is non-null) and, when wanted, its reason.
+inline void PlayReportDrop(const std::string& name, const std::string& reason)
+{
+    g_play_dropped_cast_sink->push_back(name);
+    if (PlayDropReasonWanted())
+    {
+        g_play_dropped_reason_sink->resize(g_play_dropped_cast_sink->size() - 1);   // pad any unreasoned drop
+        g_play_dropped_reason_sink->push_back(reason);
+    }
+}
+// Install a (casts, reasons) pair for a scope -- the harness's logs, or a trial apply's locals -- and restore
+// the previous pair on exit.
+struct PlayDropSinkScope
+{
+    std::vector<std::string>*       prev_casts;
+    std::vector<std::string>*       prev_reasons;
+    const std::vector<std::string>* prev_pair;
+    PlayDropSinkScope(std::vector<std::string>* casts, std::vector<std::string>* reasons)
+        : prev_casts(g_play_dropped_cast_sink), prev_reasons(g_play_dropped_reason_sink),
+          prev_pair(g_play_dropped_reason_pair)
+    { g_play_dropped_cast_sink = casts; g_play_dropped_reason_sink = reasons; g_play_dropped_reason_pair = casts; }
+    ~PlayDropSinkScope()
+    { g_play_dropped_cast_sink = prev_casts; g_play_dropped_reason_sink = prev_reasons; g_play_dropped_reason_pair = prev_pair; }
+    PlayDropSinkScope(const PlayDropSinkScope&) = delete;
+    PlayDropSinkScope& operator=(const PlayDropSinkScope&) = delete;
+};
 
 // ---- RevealLogPause fast-path flag (PURE PERF; docs/design/engine-cost-profile-2026-08-16.md #2) --
 // RevealLogPause proves "nothing is installed" by loading 26 chooser/sink pointers, and it is
@@ -1450,6 +1546,23 @@ inline bool GszShuffleCopyIdOn()
 {
     static const bool s_env = EnvOn("MTG_GSZ_SHUFFLE_COPY_ID", true);
     return heurarm::Flag(heurarm::GSZ_SHUFFLE_COPY_ID, s_env) && !g_play_legacy_gsz_shuffle;
+}
+
+// RESOLVED-SPELL COPY ID (Cyclone ledger Q53, 2026-10-29) -- GszShuffleCopyIdOn's general case. The APPLY path
+// (search lookahead AND human play) files a resolved instant / sorcery into the graveyard -- or a self-exiling one
+// into exile -- as its CAST COPY (its m_number), as the executor always did, not the definition's template (m_number
+// 0). Every card in a zone then carries its own deck number, which three readers rely on: Library::ShuffleByKey
+// (a total order only over DISTINCT numbers), apply_one's re-find of the cast copy by number after its payment, and
+// every by-number identity (aura hosts, the m1 snapshot). With the template, an Eldrazi's graveyard shuffle
+// (put_into_graveyard_shuffles_graveyard) dealt several number-0 cards back: casting a number-0 Brainstorm erased a
+// number-0 Ponder and the shuffled order was not the CRN order. The recording stamp `spell_copy_id` reads this;
+// `--legacy-spell-copy` restores the template for REPLAY of a reference recorded before (its replayer,
+// test/viewer_protocol_check.py, passes it). MTG_SPELL_COPY_ID (heurarm slot SPELL_COPY_ID), DEFAULT ON.
+inline bool g_play_legacy_spell_copy = false;
+inline bool SpellCopyIdOn()
+{
+    static const bool s_env = EnvOn("MTG_SPELL_COPY_ID", true);
+    return heurarm::Flag(heurarm::SPELL_COPY_ID, s_env) && !g_play_legacy_spell_copy;
 }
 
 // CR 510.4 TWO-STEP COMBAT DAMAGE (2026-10-18, Combat.cpp ResolveCombatDamageTwoStep): with a first or

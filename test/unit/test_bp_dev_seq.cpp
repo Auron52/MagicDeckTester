@@ -203,3 +203,17 @@ TEST_CASE("a seeded host-applied variant opens its compound slots")
         CHECK(HasStep(t, { 0, -1 }, 1, 2));
     }
 }
+
+// Only a test-only extern; the public solver interface gains no API.
+extern int DevSeqLocalFslCarryForTest(bool win, bool replay);
+
+TEST_CASE("deviation sequences: local FSL WIN hit carries dirty ancestry")
+{
+    CHECK(DevSeqLocalFslCarryForTest(true, true) == 31);
+    CHECK(DevSeqLocalFslCarryForTest(true, false) == 16);
+}
+TEST_CASE("deviation sequences: local FSL NOWIN hit carries dirty ancestry")
+{
+    CHECK(DevSeqLocalFslCarryForTest(false, true) == 31);
+    CHECK(DevSeqLocalFslCarryForTest(false, false) == 16);
+}

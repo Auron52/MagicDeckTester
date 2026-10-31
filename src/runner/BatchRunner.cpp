@@ -148,6 +148,7 @@ struct Job
     // one job per cell, pooled with every other cell.
     long long       shuffle_salt        = -1;
     long long       shuffle_salt_search = -1;
+    long long       blind_salt          = -1;   // manifest "blind_salt" (gamesetup::BlindSearchSalt)
     bool            second_main         = false;  // precomputed DeckUsesSecondMain
     int             sched_weight        = 0;   // optional LPT scheduling priority (higher = run first);
                                                // overrides the depth/budget cost proxy for known-slow
@@ -734,6 +735,7 @@ Job ParseJob(const json& jspec, ProfileCache& cache)
     // (arm, salt), so carrying the salt per job is what keeps the ensemble in ONE pooled batch.
     j.shuffle_salt        = jspec.value("shuffle_salt", -1LL);
     j.shuffle_salt_search = jspec.value("shuffle_salt_search", -1LL);
+    j.blind_salt          = jspec.value("blind_salt", -1LL);
     j.abandon_units       = jspec.value("abandon_units", 0LL);   // per-game ceiling; see Job::abandon_units
     j.abandon_k           = jspec.value("abandon_k", 0.0);       // ...or k x the cell's own median
     j.abandon_calib       = jspec.value("abandon_calib", 0);     //    over its first N games
@@ -795,6 +797,10 @@ Job ParseJob(const json& jspec, ProfileCache& cache)
     if (jspec.contains("enum_charge_w"))  { j.arm.enum_charge_w  = jspec["enum_charge_w"].get<int>(); }
     if (jspec.contains("aa_route_units")) { j.arm.aa_route_units = jspec["aa_route_units"].get<int>(); }
     if (jspec.contains("bp_chain_slot")) { j.arm.bp_chain_slot = jspec["bp_chain_slot"].get<int>(); }
+    if (jspec.contains("cyclone_remand_max_mv"))
+    { j.arm.cyclone_remand_max_mv = jspec["cyclone_remand_max_mv"].get<int>(); }
+    if (jspec.contains("cyclone_remand_inert"))
+    { j.arm.cyclone_remand_inert = jspec["cyclone_remand_inert"].get<int>(); }
     if (jspec.contains("leaf_greedy_from_depth")) { j.arm.leaf_greedy_from = jspec["leaf_greedy_from_depth"].get<int>(); }
     j.arm.value_profile   = jspec.value("value_profile", std::string());
     // "exhaustive_profile": "none" | <path>, "exhaustive_bottom": bool -- the per-job keep/bottom policy
@@ -1772,6 +1778,7 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                     gamesetup::t_setup.opponent_heads      = jobs[wi.job].opponent_heads;
                     gamesetup::t_setup.shuffle_salt        = jobs[wi.job].shuffle_salt;
                     gamesetup::t_setup.shuffle_salt_search = jobs[wi.job].shuffle_salt_search;
+                    gamesetup::t_setup.blind_salt          = jobs[wi.job].blind_salt;
                     // Same lifetime rule, and it must also precede the engine build: a provider's
                     // cast order is consulted from the first solve onward (see ai/HeuristicArm.h).
                     heurarm::t_arm  = jobs[wi.job].flags;
