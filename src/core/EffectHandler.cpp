@@ -480,7 +480,7 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
                                       entry.land_put_credit.Total() > 0 ? &entry.land_put_credit
                                                                         : nullptr);
                 }
-                if (def.params.tutor_to_hand || def.params.tutor_to_top)
+                if (IsLibraryTutor(def.params))
                 {
                     // Fetch the searched target carried on the stack entry (empty -> the
                     // heuristic's top pick), matching the rollout's ApplyPlanDirect.
@@ -568,7 +568,7 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
                 {
                     Player& imp = state.players[entry.controller_index];
                     const int expiry = def.params.impulse_expiry_this_turn
-                                     ? state.turn_number : state.turn_number + 1;
+                                     ? state.TurnSeq() : state.TurnSeq() + 1;
                     std::vector<Card> exiled = DrawTopAsImpulseStaged(
                         state, entry.controller_index, def.params.impulse_exile, expiry);
                     for (Card& ec : exiled)
@@ -938,6 +938,22 @@ void EffectHandler::ResolveDrawSpell(GameState& state, const StackEntry& entry,
     Player& controller = state.players[entry.controller_index];
     int n = def.params.draw;
 
+    // THE BLIND RESOLUTION CHOOSER (blind mode only; null otherwise => byte-identical): the put-back's pair /
+    // Ponder's order is decided here, after the draw / the look, against what the resolution reveals.
+    if (g_blind_draw_chooser != nullptr && !def.params.expressive_iteration && !def.params.stages_cards
+        && (def.params.put_back_from_hand > 0 || def.params.cast_reorder > 0))
+    {
+        BlindDrawSpellChooser* ch = g_blind_draw_chooser;
+        g_blind_draw_chooser = nullptr;   // the chooser's own trial resolutions take their pins
+        const int r = ch->Choose(state, entry, def);
+        g_blind_draw_chooser = ch;
+        if (r >= 0)
+        {
+            if (def.params.put_back_from_hand > 0) { g_scripted_putback_choice = r; }
+            else                                   { g_scripted_reorder_choice = r; }
+        }
+    }
+
     // Expressive Iteration: look 3 -> 1 hand / 1 exiled-staged-this-turn / 1 bottom (its own model,
     // not the normal draw/scry path). Mirrors the rollout's apply_one DrawSpell branch (lockstep).
     if (def.params.expressive_iteration)
@@ -950,12 +966,12 @@ void EffectHandler::ResolveDrawSpell(GameState& state, const StackEntry& entry,
     // Scry-then-draw (Preordain): bottom the unwanted, reorder the rest, before drawing.
     if (def.params.cast_scry > 0) { ScryTop(state, def.params.cast_scry, def.card.m_name); }
     // Reorder-or-shuffle-then-draw (Ponder): keep all on top in best order, or shuffle away.
-    if (def.params.cast_reorder > 0) { ReorderTopOrShuffle(state, def.params.cast_reorder, def.card.m_name, entry.ponder_keep.value_or(-1)); }
+    if (def.params.cast_reorder > 0) { ReorderTopOrShuffle(state, def.params.cast_reorder, def.card.m_name, entry.ponder_keep.value_or(-1), def.params.draw); }
 
     if (def.params.stages_cards)
     {
         // Cards go to a staged exile zone; playable until end of the player's next turn.
-        int expiry = state.turn_number + 1;
+        int expiry = state.TurnSeq() + 1;
         for (int i = 0; i < n && !controller.library.empty(); ++i)
         {
             StagedCard sc;
@@ -1077,6 +1093,45 @@ void EffectHandler::PushCastTriggers(GameState& state, const CardDefinition& def
         te.controller_index = controller;
         state.stack.push_back(std::move(te));
     }
+    // Emrakul, the Aeons Torn: "When you cast this spell, take an extra turn after this one." One entry per
+    // granted turn. Lockstep twin: apply_one's inline cast-trigger block. 0 for every other card.
+    for (int i = 0; i < def.params.cast_trigger_extra_turns; ++i)
+    {
+        StackEntry te;
+        te.type             = StackEntry::EntryType::Triggered;
+        te.trigger_kind     = StackEntry::TriggerKind::ExtraTurn;
+        te.source           = def.card;
+        te.controller_index = controller;
+        state.stack.push_back(std::move(te));
+    }
+    // The Ulamogs' TARGETED cast triggers: targets chosen NOW, as the trigger is put on the stack (CR
+    // 603.3d), by the shared chooser (the searched rank policy); fewer legal targets than it needs ->
+    // removed (not pushed). Lockstep twin: apply_one's inline block (same chooser, same board).
+    const int n_exile   = def.params.cast_trigger_exile_target_permanents;
+    const int n_destroy = def.params.cast_trigger_destroy_target_permanents;
+    for (int which = 0; which < 2; ++which)
+    {
+        const int  n       = which == 0 ? n_exile : n_destroy;
+        const bool destroy = which == 1;
+        if (n <= 0) { continue; }
+        const std::vector<int> nums =
+            ChooseCastTriggerTargets(state, controller, n, destroy, def.card.m_name.str());
+        if (nums.empty()) { continue; }
+        StackEntry te;
+        te.type             = StackEntry::EntryType::Triggered;
+        te.trigger_kind     = destroy ? StackEntry::TriggerKind::CastDestroyTarget
+                                      : StackEntry::TriggerKind::CastExileTargets;
+        te.source           = def.card;
+        te.controller_index = controller;
+        for (int num : nums)
+        {
+            Target t;
+            t.type            = Target::Type::Permanent;
+            t.permanent_index = num;   // the target's m_number (re-found on resolution, CR 608.2b)
+            te.targets.push_back(t);
+        }
+        state.stack.push_back(std::move(te));
+    }
     if (def.params.cascade_max_mv > 0)
     {
         // One entry per instance ("Cascade, cascade" = 2 -- cascade_count). The instances are
@@ -1161,6 +1216,17 @@ bool EffectHandler::ResolveTriggered(GameState& state, const StackEntry& entry,
             ResolveEtbExileFreeCast(state, entry, def); return true;
         case StackEntry::TriggerKind::Demonstrate:
             ResolveDemonstrate(state, entry, def);      return true;
+        case StackEntry::TriggerKind::ExtraTurn:
+            ResolveCastTriggerExtraTurn(state, entry.source.m_name.str()); return true;
+        case StackEntry::TriggerKind::CastExileTargets:
+        case StackEntry::TriggerKind::CastDestroyTarget:
+        {
+            std::vector<int> nums;
+            for (const Target& t : entry.targets) { nums.push_back(t.permanent_index); }
+            ResolveCastTriggerTargets(state, entry.controller_index, entry.source.m_name.str(), nums,
+                                      entry.trigger_kind == StackEntry::TriggerKind::CastDestroyTarget);
+            return true;
+        }
         default:                                        return true;
     }
 }

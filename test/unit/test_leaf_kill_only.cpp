@@ -172,9 +172,84 @@ TEST_CASE("Leaf kill-only: a full-horizon rollout and a deck without a searched 
         CHECK(b.t_on.armed == 0);
     }
     {
+        // A deck that does not search its second main: off under MTG_LEAF_KILL_ONLY_NOM2=0 (the old gate)...
+        ArmScope nom2(heurarm::LEAF_KILL_ONLY_NOM2, 0);
         const Both b = Run(s, /*cutoff=*/6, /*second_main=*/false);
         CHECK(b.on == b.off);
         CHECK(b.t_on.armed == 0);
+    }
+}
+
+TEST_CASE("Leaf kill-only NOM2: a deck on which no post-combat main can open arms the scope and agrees with the full solve")
+{
+    EnsureCardsLoaded();
+    ArmScope nom2(heurarm::LEAF_KILL_ONLY_NOM2, 1);   // DEFAULT OFF pending the fleet A/B
+    for (int opp : { 20, 2 })
+    {
+        CAPTURE(opp);
+        GameState s = NoKillBoard();
+        s.players[1].life = opp;
+        s.uses_second_main = false;
+        const Both b = Run(s, /*cutoff=*/6, /*second_main=*/false);
+        CHECK(b.on == b.off);
+        CHECK(b.t_on.armed == 1);
+        if (opp == 20) { CHECK(b.on == kMaxTurns + 1); CHECK(b.t_on.skipped > 0); }
+        else           { CHECK(b.on == 6); }
+    }
+}
+
+// EXTRA-TURN DECKS (MTG_LEAF_KILL_ONLY_EXTRA; ledger Q13): Emrakul's cast trigger grants an extra turn of the SAME
+// round, where a kill still scores the cutoff. The candidate that leaves the extra turn pending is scored in full;
+// every other non-killer is skipped.
+TEST_CASE("Leaf kill-only EXTRA: an extra-turn deck arms the scope; an Emrakul cast whose extra turn kills is still found")
+{
+    EnsureCardsLoaded();
+    ArmScope nom2(heurarm::LEAF_KILL_ONLY_NOM2, 1);   // Cyclone plays no second main: both levers are needed here
+    auto board = [](int opp)
+    {
+        GameState s = Fresh(opp);
+        s.deck_has_extra_turn = true;
+        s.uses_second_main = false;
+        for (int k = 0; k < 15; ++k) { Put(s, "Swamp", 50 + k); }
+        Hand(s, "Emrakul, the Aeons Torn", 10);
+        Hand(s, "Legion Lieutenant", 11);
+        return s;
+    };
+    {
+        // Emrakul attacks in the extra turn of round 6 for 15: a win AT the cutoff.
+        const GameState s = board(15);
+        const Both b = Run(s, /*cutoff=*/6, /*second_main=*/false);
+        CHECK(b.off == 6);
+        CHECK(b.on == 6);
+        CHECK(b.t_on.armed >= 1);
+    }
+    {
+        // Out of reach this round: both no-win (the Emrakul candidate is scored through its extra turn).
+        const GameState s = board(40);
+        const Both b = Run(s, /*cutoff=*/6, /*second_main=*/false);
+        CHECK(b.off == kMaxTurns + 1);
+        CHECK(b.on == kMaxTurns + 1);
+        CHECK(b.t_on.armed >= 1);
+    }
+    {
+        // An extra-turn deck with no extra turn on offer: every non-killer is skipped, as for any deck.
+        GameState s = NoKillBoard();
+        s.deck_has_extra_turn = true;
+        s.uses_second_main = false;
+        const Both b = Run(s, /*cutoff=*/6, /*second_main=*/false);
+        CHECK(b.on == b.off);
+        CHECK(b.on == kMaxTurns + 1);
+        CHECK(b.t_on.armed == 1);
+        CHECK(b.t_on.skipped > 0);
+    }
+    {
+        // =0: the extra-turn deck never arms (the Q13 default).
+        ArmScope ex(heurarm::LEAF_KILL_ONLY_EXTRA, 0);
+        const GameState s = board(15);
+        TurnSolver::KillOnlyTally t;
+        const int w = TurnSolver::SimulateToEndForTest(s, 1, kMaxTurns, 6, false, &t);
+        CHECK(w == 6);
+        CHECK(t.armed == 0);
     }
 }
 

@@ -72,7 +72,7 @@ std::vector<int> DeclareAttackerIndices(const GameState& state)
     // line needed -- power 1, so the rule below does not reach it and it stays pinned out).
     if (g_play_attackers_chooser && active == 0)
     {
-        if (const std::vector<std::string>* pin = (*g_play_attackers_chooser)(state.turn_number))
+        if (const std::vector<std::string>* pin = (*g_play_attackers_chooser)(state.TurnSeq()))
         {
             std::vector<std::string> want = *pin;
             for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)

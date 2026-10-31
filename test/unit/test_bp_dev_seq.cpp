@@ -203,3 +203,32 @@ TEST_CASE("a seeded host-applied variant opens its compound slots")
         CHECK(HasStep(t, { 0, -1 }, 1, 2));
     }
 }
+
+// Only a test-only extern; the public solver interface gains no API.
+extern int DevSeqMemoCarryForTest(bool win, bool replay, bool replay_min = true, bool searched_m2 = false);
+
+TEST_CASE("deviation sequences: local FSL WIN hit carries dirty ancestry")
+{
+    CHECK(DevSeqMemoCarryForTest(true, true) == 31);
+    CHECK(DevSeqMemoCarryForTest(true, false) == 16);
+    // Dirty marks alone leave B/R cached when the tail-skip metadata loses their earliest turn.
+    CHECK(DevSeqMemoCarryForTest(true, true, false) == 23);
+}
+TEST_CASE("deviation sequences: local FSL NOWIN hit carries dirty ancestry")
+{
+    CHECK(DevSeqMemoCarryForTest(false, true) == 31);
+    CHECK(DevSeqMemoCarryForTest(false, false) == 16);
+    // The same unsafe carry is possible for a cached refutation.
+    CHECK(DevSeqMemoCarryForTest(false, true, false) == 23);
+}
+
+TEST_CASE("deviation sequences: searched M2 memo carries latent WIN ancestry")
+{
+    CHECK(DevSeqMemoCarryForTest(true, true, true, true) == 31);
+    CHECK(DevSeqMemoCarryForTest(true, false, true, true) == 16);
+}
+TEST_CASE("deviation sequences: searched M2 memo carries latent NOWIN ancestry")
+{
+    CHECK(DevSeqMemoCarryForTest(false, true, true, true) == 31);
+    CHECK(DevSeqMemoCarryForTest(false, false, true, true) == 16);
+}

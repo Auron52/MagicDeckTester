@@ -788,6 +788,17 @@ struct CardParams
     // AI uses only when the card is surplus (see AIEngine cycling heuristic).
     std::optional<ManaCost> cycling_cost;
 
+    // Life-cost cycling (Street Wraith: "Cycling--Pay 2 life."): the LIFE part of the cycling cost,
+    // paid in addition to `cycling_cost`'s mana part (Street Wraith carries `cycling_cost: ""`, an
+    // all-zero ManaCost, so the mana part is free). The loader REQUIRES cycling_cost alongside it.
+    // Probed and paid at EVERY cycle site through CyclingLifePayable / PayCyclingLife (SpellEffects.h),
+    // in lockstep with EffectiveCyclingCost's mana part. Payable only while life > N: CR 119.4 lets a
+    // player pay life equal to their total, but paying to 0 loses at the next state-based check (CR
+    // 704.5a), which happens before the cycling draw resolves, so a pay-to-0 cycle can never gain
+    // anything -- a sound dominance prune, applied identically in human play. Fluctuator-style
+    // reducers do not touch it (they reduce MANA, CR 601.2f). 0 = no life cost.
+    int cycling_life_cost = 0;
+
     // Sacrifice-to-draw activated ability (e.g. Fiery Islet: {1}, {T}, Sacrifice: draw
     // a card). Cost is this mana plus tapping and sacrificing the source.
     std::optional<ManaCost> sacrifice_draw_cost;
@@ -1370,6 +1381,16 @@ struct CardParams
     // Tutor (enchantment -> hand), Enlightened Tutor (artifact/enchantment -> top).
     bool                     tutor_to_hand = false;
     bool                     tutor_to_top  = false;
+    // "Search your library for a card, then shuffle and put that card N-th from the top" (Long-Term
+    // Plans: 3). 0 = off; N >= 2 (1 IS tutor_to_top, and the loader refuses it and any combination
+    // with tutor_to_hand / tutor_to_top). Deliberately NOT tutor_to_top: about 30 provider sites read
+    // tutor_to_top as "the found card is the NEXT DRAW" (Stompy's Worldly Tutor line, the TopResolve
+    // re-arm, Fluctuator's order slot, the Harbinger finders, top_stacked_turn), and tutor_to_top
+    // alone sets the anti-lifegain routing signature. Every site that must treat this card as a
+    // library tutor asks IsLibraryTutor() (below the struct). Resolution: PerformTutor inserts the
+    // card at index min(N-1, library size) after the search shuffle -- with fewer than N-1 cards
+    // left, that is the bottom (the Long-Term Plans ruling). Not a top stack (top_stacked_turn unset).
+    int                      tutor_library_position = 0;
     // "You MAY search" -- opens a DECLINE arm on the searched tutor axis
     // (kTutorDeclineChoice, SpellEffects.h). Default false keeps every existing tutor deck
     // byte-identical, so this is opt-in per card rather than a blanket behaviour change.
@@ -4044,7 +4065,8 @@ struct CardParams
     // Applied by EffectiveCyclingCost at ALL SIX sites a cycling cost is read (three payments, two
     // affordability filters, one human-play offer probe) -- the affordability sites MUST move in
     // lockstep with the payment sites, or a loop filters in a cycle it then cannot buy and silently
-    // breaks. UNLIKE Training Grounds the floor is ZERO, not one mana: Fluctuator's wording carries
+    // breaks. (Street Wraith's LIFE half, cycling_life_cost, rides the same sites: CyclingPayable /
+    // CyclingLifePayable / PayCyclingLife.) UNLIKE Training Grounds the floor is ZERO, not one mana: Fluctuator's wording carries
     // no "can't reduce below one mana" clause, so a {2} cycler goes to {0} -- which is the whole
     // point of this deck. Generic half only (CR 601.2f); a coloured cycling pip survives.
     int reduces_cycling_activation = 0;
@@ -4055,6 +4077,53 @@ struct CardParams
     // "another" is structurally always satisfied: the watcher is on the battlefield and cycling
     // happens from HAND, so a card can never cycle-trigger itself. 0 = not a cycle watcher.
     int cycle_trigger_damage_each_opponent = 0;
+
+    // ---- Unpredictable Cyclone deck (onboarding 2026-10-26) --------------------------------------------
+    // Added in phase 1 of the onboarding so CycloneProvider's routing signature (DetectDecisionProvider's
+    // `cyclone` flag) can key on them before the cards exist. Phase 2 wired the extra turn (below); the
+    // Cyclone replacement and the Curator watcher are still PARSED, NOT YET WIRED (phase 3).
+    //
+    // Unpredictable Cyclone: "If a cycling ability of another nonland card would cause you to draw a
+    // card, instead exile cards from the top of your library until you exile a card that shares a card
+    // type with the cycled card. You may cast that card without paying its mana cost. Then put the
+    // exiled cards that weren't cast this way on the bottom of your library in a random order."
+    // A REPLACEMENT of the cycling draw (phase 3).
+    bool cycle_draw_exile_shared_type_freecast = false;
+    // Emrakul, the Aeons Torn: "When you cast this spell, take an extra turn after this one." The
+    // number of extra turns the CAST trigger grants. WIRED (phase 2): pushed above the spell at EVERY cast
+    // (EffectHandler::PushCastTriggers -- hand casts and PushFreeCast's free casts -- and the rollout
+    // apply_one cast block, lockstep); resolving it does ++GameState::pending_extra_turns, which the
+    // next turn transition consumes (GameState::AdvanceTurnCounter). Extra turns do NOT advance
+    // turn_number (USER 2026-10-26: they do not count toward the turn count). 0 = none.
+    int cast_trigger_extra_turns = 0;
+    // Ulamog, the Ceaseless Hunger: "When you cast this spell, exile N target permanents." A MANDATORY
+    // cast trigger with N DISTINCT targets (CR 115.3) chosen as it is put on the stack (CR 603.3d) from
+    // every permanent on the battlefield, either side (the spell itself is on the stack, not a target).
+    // Fewer than N legal targets -> the trigger is removed from the stack (603.3d). Re-checked on
+    // resolution (608.2b): a target that left is skipped. Exile ignores indestructible and is not a
+    // graveyard. The target CHOICE is searched (Plan::cast_trigger_target_choice). 0 = none.
+    int cast_trigger_exile_target_permanents = 0;
+    // Ulamog, the Infinite Gyre: "When you cast this spell, destroy N target permanent(s)." Same trigger
+    // shape and target axis as above, DESTROY semantics: an indestructible target is a legal no-op; a
+    // destroyed creature dies through OnCreatureDies. 0 = none.
+    int cast_trigger_destroy_target_permanents = 0;
+    // ANNIHILATOR N (CR 702.86): "Whenever this creature attacks, defending player sacrifices N
+    // permanents." Applied at declare attackers in both worlds (ApplyAnnihilator, beside battle cry). The
+    // sacrifice choice is the OPPONENT's, not ours, so a fixed deterministic rule is legitimate under the
+    // no-greedy rule (DecisionProvider never sees it; nothing for the viewer): the passive opponent's
+    // permanents are its scheduled vanilla spawns, each an equally good future target. 0 = none.
+    // (Modelled as a param, not a Keyword: the audit lists "annihilator" in MODELED_ELSEWHERE_KEYWORDS.)
+    int annihilator = 0;
+    // "When <this> is put into a graveyard from anywhere, its owner shuffles their graveyard into their
+    // library." (Emrakul, the Aeons Torn; Ulamog, the Infinite Gyre). A TRIGGER (CR 603.6a, a zone-change
+    // trigger), NOT Progenitus's replacement (graveyard_replace_shuffle_library): the card reaches the
+    // graveyard, then its owner shuffles the WHOLE graveyard, the card included, into the library
+    // (FireGraveyardEntryTriggers, called after the move at the graveyard-entry sites; the shuffle is
+    // ShuffleAfterSearch so the search cannot foresee it). Gated per game on GameState::deck_has_gy_shuffle.
+    bool put_into_graveyard_shuffles_graveyard = false;
+    // Curator of Mysteries: "Whenever you cycle or discard another card, scry N." A battlefield watcher
+    // on every discard from hand, cycling included (phase 3). 0 = not a watcher.
+    int cycle_or_discard_trigger_scry = 0;
 
     // Hollow One: "This spell costs {2} less to cast for each card you've cycled or discarded this
     // turn." A cost reduction scaled by a PER-TURN COUNTER (Player::cards_cycled_or_discarded_this_
@@ -4464,6 +4533,14 @@ inline bool IsManaConversionSource(const CardParams& p)
 inline bool IsSacManaOutlet(const CardParams& p)
 { return p.sac_creature_outlet
       && (!p.sac_outlet_add_mana_color.empty() || p.sac_outlet_add_mana_any_color); }
+
+// A LIBRARY TUTOR: a spell that searches the library for a card and puts it in hand
+// (tutor_to_hand), on top (tutor_to_top) or N-th from the top (tutor_library_position, Long-Term
+// Plans). THE single predicate for every generic site that must emit, resolve, size the target axis
+// of, or classify a tutor -- so the position tutor cannot silently miss one (IsManaConversionSource's
+// reason). Provider sites that mean "the found card is the next draw" keep reading tutor_to_top.
+inline bool IsLibraryTutor(const CardParams& p)
+{ return p.tutor_to_hand || p.tutor_to_top || p.tutor_library_position > 1; }
 
 // A fully resolved card definition: base Card data plus template + parameters.
 struct CardDefinition

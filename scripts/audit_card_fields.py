@@ -118,6 +118,13 @@ MODELED_ELSEWHERE_KEYWORDS = {
     # this check protects (it grants no evasion and changes no combat legality, only power), so
     # stripping the tag cannot mask a missing one.
     "battle cry",
+    # Annihilator N (CR 702.86, Emrakul, the Aeons Torn 6 / Ulamog, the Infinite Gyre 4): modeled
+    # structurally via the `annihilator` param -> ApplyAnnihilator at declare attackers (both worlds),
+    # not a keyword tag: the ability carries a NUMBER, which a tag cannot hold, and the Keyword enum only
+    # carries keywords some code path reads. (The mask itself is uint64 with room since 2026-09-26 -- the
+    # "32-bit, full" notes above are stale; that is not the reason here.) Annihilator grants no evasion and
+    # changes no combat legality, so stripping the tag cannot mask a missing combat keyword.
+    "annihilator",
     # Soulbond (CR 702.46b, Silverblade Paladin): modeled structurally via the `soulbond` param ->
     # two pairing triggers in the enter cascade + Permanent::paired_with, not a keyword tag. Same
     # hard constraint as battle cry above -- the Keyword enum is already over its 32-bit mask, so a

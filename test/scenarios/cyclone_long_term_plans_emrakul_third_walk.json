@@ -1,0 +1,55 @@
+{
+  "_comment": [
+    "Unpredictable Cyclone phase 4: Long-Term Plans sets up the walk. Round 3, main 1, land drop made, Cyclone +",
+    "three Islands out; Long-Term Plans and Street Wraith in hand. The library top is Curator of Mysteries, two",
+    "Islands, then Emrakul. Cycling the Wraith straight away walks to the CURATOR (the first creature) -- no",
+    "round-3 kill. The winning line casts Long-Term Plans first (all three Islands) for EMRAKUL: the search",
+    "shuffles and puts Emrakul third from the top, so the Wraith's walk (pay 2 life, no mana) passes the two",
+    "shuffled cards above it and casts Emrakul free -- an extra turn, Emrakul attacks for 15, and the 15-life",
+    "opponent dies in ROUND 3. Needs the SEARCHED tutor target (Emrakul) and the cast-then-cycle order."
+  ],
+  "deck": "decks/Unpredictable Cyclone/Unpredictable Cyclone.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "active_life": 20,
+  "opponent_life": 15,
+  "battlefield": [
+    {
+      "name": "Unpredictable Cyclone",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Island",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Island",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Long-Term Plans",
+    "Street Wraith"
+  ],
+  "library_top": [
+    "Curator of Mysteries",
+    "Island",
+    "Island",
+    "Emrakul, the Aeons Torn"
+  ],
+  "library_filler": "Island",
+  "library_size": 30,
+  "depth": 2,
+  "budget_ms": 100,
+  "max_turns": 5,
+  "expect_win_turn": 3
+}

@@ -1320,11 +1320,34 @@ function digSources() {
   for (const p of (d.plans || [])) {
     const a = p.actions || [];
     if (a.length === 1 && a[0] && a[0].dig) {
-      if (a[0].dig_sacrifice) sac[a[0].card] = p.index; else cyc[a[0].card] = p.index;
+      // The land-less plan is THE dig (a deck whose cycles are plan actions also offers "land=X; cycle Y").
+      const m = a[0].dig_sacrifice ? sac : cyc;
+      if (m[a[0].card] == null || !p.land) m[a[0].card] = p.index;
     }
   }
   S._digFor = d; S._dig = { cyc, sac };
   return S._dig;
+}
+// Does this decision offer cycling `name` INSIDE a plan with other actions (a deck whose cycles are plan
+// items -- the engine's cycle seeds)? Then a queued cycle joins the line it ends; otherwise it is a
+// standalone dig and commits as a segment of its own (LineBuild.segmentParts reads `alone`).
+function cycleCombines(name) {
+  const d = S.decision;
+  if (!d || d.type !== 'main_phase') return false;
+  return (d.plans || []).some(p => { const a = p.actions || [];
+    return (a.length > 1 || p.land) && a.some(x => x && x.dig && !x.dig_sacrifice && x.card === name); });
+}
+// Queue a CYCLE of a hand card as a line item (USER 2026-10-28: "Cycling should be a plan item like any
+// other"): `cycle=<name>` in the line, after whatever is queued before it, so the line's payment knows the
+// cycle is coming (the engine holds the colour it needs). Click again to take the last one back.
+function queueCycle(name) {
+  if (S.busy || S.over) return;
+  const d = S.decision;
+  const cap = LineBuild.castableCount(d, name) - LineBuild.plannedCount(S.plan, name);
+  if (cap <= 0) { flashHint(`No copy of ${name} left in hand to cycle.`); return; }
+  S.plan.push({ name, kind: 'cycle', alone: !cycleCombines(name) });
+  flashHint(`Cycle ${name} queued — it runs after what is queued before it. Click ✕ on the chip to take it back.`);
+  renderBoard();
 }
 // Fire a dig (cycle a hand land / sacrifice a board land to draw). It is a STANDALONE action, so clear
 // any half-built line first -- otherwise applyAccepted's dropped-cast detector would see the queued
@@ -2052,12 +2075,18 @@ function pruneCommitted(){
 // it is a different play. Stops at the first segment that is not loopable (a land drop / Land's
 // Edge discard), because a loop is a CONTIGUOUS tail -- skipping over a land drop in the middle
 // would repeat a block the human never played as one.
+// EXTRA TURNS (Emrakul): `turn` is the ROUND (extra turns do not count toward the turn count, USER
+// 2026-10-26), so two turns can share it. The engine adds `turn_seq` (turns taken) and `extra_turn` (k
+// in the k-th extra turn) once an extra turn has been taken -- absent in every other game, so these fall
+// back to `turn`. Anything that means "the same turn" keys on turnKey; the per-turn side-channels
+// (--firebreathe / --jitte / --storage-hold) do too, matching the engine's TurnSeq-keyed maps.
+function turnKey(d){ return d ? (d.turn_seq != null ? d.turn_seq : d.turn) : undefined; }
 function loopTail(){
   if (!S.decision || S.decision.type!=='main_phase') return [];
   const out=[]; const all=pruneCommitted();
   for (let i=all.length-1; i>=0 && out.length<LOOP_KS[LOOP_KS.length-1]; --i){
     const c=all[i];
-    if (c.turn !== S.decision.turn) break;
+    if ((c.tkey != null ? c.tkey : c.turn) !== turnKey(S.decision)) break;
     if (!LB.segmentLoopable(c.entries)) break;
     out.unshift(c);
   }
@@ -2458,7 +2487,7 @@ function renderBoard() {
     if(p.target && p.kind==='activate'){ return; }
     // 'channel' is a from-HAND ability: the card is discarded for an effect, so like an activation it
     // puts nothing onto the battlefield and belongs in the spells row, not the planned-permanents row.
-    if(p.kind==='retrace'||p.kind==='nonpermanent'||p.kind==='activate'||p.kind==='channel'||p.kind==='suspend'||p.kind==='eternalize'){ plannedSpells.push(plannedThumb(p,i,ord[i])); return; }
+    if(p.kind==='retrace'||p.kind==='nonpermanent'||p.kind==='activate'||p.kind==='channel'||p.kind==='suspend'||p.kind==='eternalize'||p.kind==='cycle'){ plannedSpells.push(plannedThumb(p,i,ord[i])); return; }
     if(p.target){ return; }   // a queued aura with a target -> drawn overlapping its host (below)
     // The CAST half of a from-hand cast-and-equip: its equip half is already drawn on the host, so
     // drawing this too would put the same card in two places on the field.
@@ -2506,7 +2535,7 @@ function renderBoard() {
   // and other after-combat plays happen).
   const phaseLabel = d.phase==='pre_main' ? 'Main 1 · pre-combat'
                    : d.phase==='post_main' ? 'Main 2 · post-combat' : (d.phase||'').replace('_',' ');
-  h += `<div id="turnbar"><span class="turn">Turn ${d.turn ?? '?'}</span>`+
+  h += `<div id="turnbar"><span class="turn">Turn ${d.turn ?? '?'}${d.extra_turn ? ` (extra ${d.extra_turn})` : ''}</span>`+
     `<span class="phase">${esc(phaseLabel)}</span>`+
     `<span class="who">${d.on_the_play ? 'on the play' : 'on the draw'}</span></div>`;
   // Flow hint: explain that combat is automatic and Spectacle spells land in Main 2. Shown in Main 1
@@ -2726,12 +2755,13 @@ function renderPlanbar() {
         `<span class="nm" data-name="${esc(p.name)}">⛏ ${p.sac?'sac':'tap'} ${esc(p.name)} → ${esc(preTapFaceText(p.color))}${ac.length?` +{${esc(ac.join('} +{'))}}`:''}</span>`+
         `<span class="x" data-rm="${i}">✕</span></span>`;
     }
-    const cls = p.kind==='vial'?'vial':p.kind==='retrace'?'retrace':(p.kind==='activate'||p.kind==='channel'||p.kind==='suspend'||p.kind==='eternalize')?'act':(p.kind==='land'?'land':'spell');
+    const cls = p.kind==='vial'?'vial':p.kind==='retrace'?'retrace':(p.kind==='activate'||p.kind==='channel'||p.kind==='suspend'||p.kind==='eternalize'||p.kind==='cycle')?'act':(p.kind==='land'?'land':'spell');
     // A board activation names WHAT it does where the verb already says so — "⟳ ability" on four
     // chips reading "Bonesplitter / Shadowspear / Balan / Stoneforge" tells you nothing about which
     // of them equips, attaches everything, or puts a card from hand.
     const act = p.kind==='channel' ? (channelSources()[p.name]==='transmute' ? ' ⚡ transmute (discard)' : ' ⚡ channel (discard)')
               : p.kind==='suspend' ? ' ⌛ suspend (exile)'
+              : p.kind==='cycle' ? ' ↻ cycle (discard)'
               : p.kind==='eternalize' ? ' ⟳ eternalize (from graveyard)'
               : p.kind!=='activate' ? ''
               : p.verb==='gyexile'   ? ' ⟳ ' + (p.mode===2 ? 'exile a creature, gain 2' : 'exile an instant/sorcery, drain 2')
@@ -2881,7 +2911,7 @@ function renderHand() {
       // land-face / channel / suspend badges below do -- and, unlike them, cycling RESOLVES ON THE
       // SPOT (fireDig commits the plan), so it must never be what an ordinary click on the card body
       // does. Clicking the body plays the card.
-      (canCyc?`<span class="digbadge" data-cycle="${esc(c.name)}" title="CYCLE — discard ${esc(c.name)} to draw a card (resolves immediately). Click the card itself to play it instead.">↻ cycle</span>`:'')+
+      (canCyc?`<span class="digbadge" data-cycle="${esc(c.name)}" title="CYCLE — queue cycling ${esc(c.name)} as part of your line (it runs after what is queued before it; commit the line to do it). Click the card itself to play it instead.">↻ cycle</span>`:'')+
       // MDFC land side: an explicit badge, because the card's own kind is the FRONT's and every
       // other route on this thumb (double-click, drag) casts that front. Clicking it queues the
       // land drop instead (`land=<front name>`, which is how the engine names the play).
@@ -2935,7 +2965,7 @@ function renderHand() {
     b.onclick = e => { e.stopPropagation(); e.preventDefault();
       const nm = b.dataset.cycle, idx = digSources().cyc[nm];
       if (idx == null) return;                       // re-rendered since; not offered any more
-      fireDig(idx, `cycle ${nm} to draw`); };
+      queueCycle(nm); };
     b.ondblclick = e => { e.stopPropagation(); e.preventDefault(); };
   });
   // MDFC land-side badge: queue the LAND drop, not the front cast. stopPropagation keeps the
@@ -3696,7 +3726,7 @@ function applyAccepted(planIndex, label, planView) {
   // an undo drops it for free (pruneCommitted) -- rollbackStep pops steps, and a record whose step
   // is gone describes a line that no longer happened.
   if (seg0.length) {
-    (S.committed=S.committed||[]).push({ at:S.steps.length, turn:dec0 && dec0.turn,
+    (S.committed=S.committed||[]).push({ at:S.steps.length, turn:dec0 && dec0.turn, tkey:turnKey(dec0),
                                          entries:seg0.map(p => Object.assign({}, p)) });
     if (S.committed.length > 60) { S.committed.splice(0, S.committed.length - 60); }
   }
@@ -4072,7 +4102,7 @@ function sameNameMultiset(a,b){
 function sacBurstAuto(d){
   const q=S.sacBurst;
   if (!q) return false;
-  if (!d || d.type!=='sacrifice' || !(+d.pick_total>1) || d.source!==q.source || d.turn!==q.turn
+  if (!d || d.type!=='sacrifice' || !(+d.pick_total>1) || d.source!==q.source || turnKey(d)!==q.turn
       || !q.want.length) { S.sacBurst=null; return false; }
   const got=(d.options||[]).map(o=>o.name);
   if (!sameNameMultiset(got, q.expect)) { S.sacBurst=null; return false; }   // board moved -- ask
@@ -4605,6 +4635,22 @@ function freeCastPanelHtml(d){
   // redundant and the affordance the user rejected ("not in a separate dialog"). Declining is a
   // first-class button because the card grants a PERMISSION, not an obligation -- World War Hulk's
   // chapter I reads "CAN be cast without paying its mana cost".
+  // A PAID follow-up that reuses this decision (the engine's `paid_cost`): Remand on an Unpredictable
+  // Cyclone walk's hit, or a second Remand on that Remand. NOT a free cast -- the spell is cast for its
+  // cost (USER 2026-10-28: "it isn't really a free cast"), so say what is paid, what it targets and what
+  // happens. Same answer encoding as ever (0 = cast it, -1 = decline), so recorded games replay as before.
+  if (d.paid_cost){
+    const nm=(cands[0]||{}).name||'the spell';
+    const aiName=(cands.find(c=>c.index===aiPick)||{}).name;
+    return `<h3>Cast ${esc(nm)} on ${esc(d.paid_target||'the spell')}? (pay ${esc(d.paid_cost)})</h3>`+
+      `<div class="sub">This is a <b>paid</b> cast, not a free one: you pay <b>${esc(d.paid_cost)}</b>`+
+      ` to cast ${esc(nm)} targeting <b>${esc(d.paid_target||'')}</b>.`+
+      (d.paid_outcome?` If you do: ${esc(d.paid_outcome)}.`:'')+
+      ` Decline to let it resolve without ${esc(nm)}.`+
+      (aiName?` The AI would cast it.`:` The AI would decline.`)+`</div>`+
+      `<div class="pbtns"><span class="spacer"></span><button id="fcdecline" class="ghost">Decline</button>`+
+      `<button id="fcpaid" class="primary">Cast ${esc(nm)} (pay ${esc(d.paid_cost)})</button></div>`;
+  }
   if (d.zone==='hand'){
     const cands=d.candidates||[];
     const pickName=(cands.find(c=>c.index===S.handSel)||{}).name;
@@ -5206,6 +5252,10 @@ function wireDecisionPanel(d, dec){
       const cb=panel.querySelector('#decconfirm');
       if (cb) cb.onclick=()=>{ if (S.handSel!=null) commitFreeCast(d, S.handSel); };
       const db=panel.querySelector('#fcdecline'); if (db) db.onclick=()=>commitFreeCast(d, -1);
+      const pb=panel.querySelector('#fcpaid'); if (pb) pb.onclick=()=>commitFreeCast(d, 0);   // a paid prompt
+    } else if (d.paid_cost){
+      const pb=panel.querySelector('#fcpaid'); if (pb) pb.onclick=()=>commitFreeCast(d, 0);
+      const db=panel.querySelector('#fcdecline'); if (db) db.onclick=()=>commitFreeCast(d, -1);
     } else {
       panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitFreeCast(d, +b.dataset.opt));
     }
@@ -5731,7 +5781,7 @@ function jittePanelHtml(d){
   return h+`</div>`;
 }
 function commitJitte(d, k){
-  const t=d.turn, max=d.max_count||0;
+  const t=turnKey(d), max=d.max_count||0;
   (S.jitte=S.jitte||{})[t]=k;
   S.history.push({ turn:t, label:jitteLabel(k, max) });
   S.prev=S.decision;
@@ -5743,9 +5793,9 @@ function commitJitte(d, k){
 // turn key (fb) so undo (rollbackStep) can pop it and drop the side-channel entry, keeping the #2
 // checkpoint/step bookkeeping 1:1 (one shown decision -> one checkpoint -> one step).
 function commitFirebreathe(d, k){
-  const t=d.turn, max=d.max_count||0;
+  const t=turnKey(d), max=d.max_count||0;
   (S.firebreathe=S.firebreathe||{})[t]=k;
-  S.history.push({ turn:t, label:`firebreathe ×${k}${k<max?` (held ${max-k})`:''}` });
+  S.history.push({ turn:d.turn, label:`firebreathe ×${k}${k<max?` (held ${max-k})`:''}` });
   S.prev=S.decision;
   (S.steps=S.steps||[]).push({ n:0, auto:!!(d&&d._autoStep), fb:t });   // consumes NO --choices slot
   renderHistory(); hideDecPanel(); step();
@@ -5808,7 +5858,7 @@ function storageHoldPanelHtml(d){
 // Record the hold answer in the (turn, land-number)-keyed side-channel and re-step. Like commitFirebreathe
 // it appends NO --choices int; it pushes a ZERO-int step carrying the side-channel key (sh) so undo drops it.
 function commitStorageHold(d, k){
-  const key=`${d.turn}:${d.land_idx}`;
+  const key=`${turnKey(d)}:${d.land_idx}`;
   (S.storageHold=S.storageHold||{})[key]=k;
   S.history.push({ turn:d.turn, label:`${d.land||'storage'} ${k?'hold (charge)':'allow tap'}` });
   S.prev=S.decision;
@@ -5884,7 +5934,7 @@ function commitBoardSel(d, dec){
       const expect=(d.options||[]).map(o=>o.name);
       expect.splice(expect.indexOf(picked[0].name), 1);
       const rest=picked.slice(1).map(o=>o.name);
-      S.sacBurst = rest.length ? { source:d.source, turn:d.turn, want:rest, expect } : null;
+      S.sacBurst = rest.length ? { source:d.source, turn:turnKey(d), want:rest, expect } : null;
       return pushChoice(d, picked[0].index,
         `${d.source}: sacrifice ${picked.map(o=>o.name).join(' + ')}`
         + (sacBurstForced(d)?' (forced — every creature)':''));
@@ -6218,10 +6268,10 @@ function advanceTo(dec) { (dec&&dec.mdfc_backs||[]).forEach(n=>MDFC_BACKS.add(n)
   // ARMED: once it is answered, the next main-phase frame of this turn is passed as before. (It used
   // to cancel the skip, so every Karoo land dropped the user back into Main 1 -- USER 2026-10-08.)
   if (!undoing && S.commitTurn != null) {
-    if (dec && dec.type==='main_phase' && dec.turn===S.commitTurn && (S.commitTurnPasses||0) < 40) {
+    if (dec && dec.type==='main_phase' && turnKey(dec)===S.commitTurn && (S.commitTurnPasses||0) < 40) {
       S.commitTurnPasses = (S.commitTurnPasses||0) + 1; dec._autoStep=true; S.plan=[]; commitLine(); return;
     }
-    if (dec && dec.type!=='main_phase' && dec.turn===S.commitTurn) return;   // answer it, keep skipping
+    if (dec && dec.type!=='main_phase' && turnKey(dec)===S.commitTurn) return;   // answer it, keep skipping
     S.commitTurn = null;   // turn advanced / cap hit -> resume normal interaction
   }
 }
@@ -6232,7 +6282,7 @@ function isDeadOpponentMain(dec){
 }
 // Commit the current line, then auto-pass the rest of THIS turn (see advanceTo). The turn number is
 // captured now so the skip stops once the engine advances to the next turn.
-function commitTurn(){ if (S.busy) return; S.commitTurn = S.decision && S.decision.turn; S.commitTurnPasses = 0; commitLine(); }
+function commitTurn(){ if (S.busy) return; S.commitTurn = S.decision ? turnKey(S.decision) : undefined; S.commitTurnPasses = 0; commitLine(); }
 function renderHistory() {
   $('hist').innerHTML=S.history.map((h,i)=>`<li class="${h.rej?'rej':''} ${h.win?'win':''} ${h.cls||''}"><span class="t">T${h.turn}</span><span class="lab">${esc(h.label)}</span>`
     + (h.note ? ` <span class="sbadge" data-h="${i}" title="${esc(h.note.tip)} — click for details">⚠ search can’t pay</span>` : '') + `</li>`).join('');
@@ -6290,22 +6340,27 @@ async function step() {
     // A frame that reports a drop is never advanced to: the rollback owns it.
     const dropped=(res.decision||{}).dropped_casts||[];
     const note=S.pendingSearchNote; S.pendingSearchNote=null;
-    if (dropped.length) return rollbackLine(dropped);
+    if (dropped.length) return rollbackLine(dropped, (res.decision||{}).dropped_reasons||[]);
     advanceTo(res.decision);
     if (note) showSearchNote(note);
   } else if (res.kind==='result') {
     const dropped=(res.result||{}).dropped_casts||[];
     S.pendingSearchNote=null;
-    if (dropped.length) return rollbackLine(dropped);
+    if (dropped.length) return rollbackLine(dropped, (res.result||{}).dropped_reasons||[]);
     showResult(res.result);
   } else showError(res.error||'unknown error', res.raw);
 }
 // (detectDropped removed: dropped-cast detection is now server-truth via decision.dropped_casts,
 // read directly in step(). The old board-diff inference false-positived on working lines — issue #3a.)
-function notifyDropped(names){
+// `reasons` (engine decision.dropped_reasons, parallel to dropped_casts; Q37, USER 2026-10-29: "Seething
+// Song plans should error properly if cast with 1 mana"): what each drop was short of, read off the board
+// at the failed payment ("Seething Song costs {2}{R}; only 1 mana available"). Absent on an older binary.
+function notifyDropped(names, reasons){
+  const why=(reasons||[]).filter(r=>r);
   const ve=$('verdict'); ve.className='unsupported';
   ve.innerHTML=`<span class="vtag">line rejected</span>`+
     `<h4>${names.map(esc).join(', ')} — not paid</h4>`+
+    (why.length ? `<div class="dropwhy">${why.map(r=>esc(r)+'.').join('<br>')}</div>` : '')+
     `<div>When the line was played, the engine’s automatic tapping couldn’t pay for `+
     `${names.length>1?'these spells':'this spell'} in the order queued, so the whole line was <b>rolled back</b> — `+
     `nothing was cast, tapped, or drawn. That is not always the board running out of mana: queuing your own `+
@@ -6384,7 +6439,7 @@ async function undo() {
 // Roll the whole line back to the previous phase — as if it was never committed (nothing cast/tapped/
 // drawn, history entries removed) — then re-fetch that decision and tell the user why. Stateless replay
 // makes the rollback exact: reducing S.choices and re-stepping reconstructs the pre-commit board.
-async function rollbackLine(names) {
+async function rollbackLine(names, reasons) {
   // A rolled-back line voids any pending "Commit turn" skip (mirror handleVerdict's reject branch):
   // otherwise the post-rollback advanceTo re-fires the commit-turn auto-pass and BURNS the turn --
   // the user reported "Commit turn played nothing and went to turn N+1" after a rejected line.
@@ -6392,7 +6447,7 @@ async function rollbackLine(names) {
   rollbackStep();
   S.undoing = true;                // land ON the restored pre-commit decision, don't auto-advance it (mirror undo())
   renderHistory(); await step();   // re-fetch the pre-commit decision (board fully restored)
-  notifyDropped(names);            // then surface why the line was rejected
+  notifyDropped(names, reasons);   // then surface why the line was rejected
 }
 async function saveRef(suboptimal) {
   $('saveinfo').textContent='saving…';
