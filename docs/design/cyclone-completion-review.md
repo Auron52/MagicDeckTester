@@ -3,25 +3,31 @@
 Status: integrated code is landed; focused follow-up validation is in progress,
 2026-10-31. No mulligan or value-leaf generation has started.
 
-The shared branch and primary are at `3889a0a11`. Follow-up `496b78235`, source
-`89b146d10406063213d9abe41e1cfdf1a616c021`, is pushed on the backup branch
-`cyclone-landing2c76` with checkpoint `d727b40cc`. It repairs the demonstrated
-plan-cache billing context, fetched-shock interactive choice, and optimistic
-proposal contract. All2,420 unit cases /3,568,115 assertions pass. The failing
-Hinata seed now matches normal/tiny/disabled plan caches in full traces and all
-work counters; actual fetch-choice and proposal frames pass. Fresh smoke has
-three searched tied play changes and no score changes; their full trace review
-is pending. Fresh PGO and three-game compiler parity pass. Full normal regression with
-strict references is running at32workers; cache/VERIFY, actual Claude and quiet
-cost remain. Latestdfcb PD/Slivers artifacts are retained in single-parent
-union4c19ce805 on cyclone-landingdfcb. EarlierC2
-checks below remain historical and do not certify new89b outputs.
+The shared branch is atdfcb18cb9; primary remains acceptedC2 integration3889.
+Follow-up branch cyclone-landingdfcb retains all latestPD/Slivers artifacts and
+has clean source89b146d10406063213d9abe41e1cfdf1a616c021. All2,420unitcases pass;
+freshPGO20de8d519c6c7c8494925d5170ff91ed06f5b4fcde4fd1bc04d1325113bb5e80
+and three-game full-trace compiler parity pass. Normal smoke/regression have
+completed physical reviews and normal harness acceptance (initialrc1/accept0).
+Exactly10GTkeys moved; unrelated/latestupstream/overnight results are retained.
 
-The authoritative current commands and stage paths are in
-`cyclone-completion-checkpoint.md`. Generation follows final reviewed tests,
-actual same-run3x Hinata admission, all3suite tiers and a full shared-branch push.
-No fixed per-thread cache quota or optional policy default changed. Nothing
-targets main.
+Smoke has three legal ties and no score changes. Regression has four legal ties
+and three one-turn slowdowns; all three new normal games match oldC2 without
+plan memos in full physical JSON and totalunits. All9higher-budget/d8b0 probes
+recover prior winturn, with legal actual lines. Pooled census cannot uniquely
+attribute individual hits. All40,000d0 outcomes are exact. Strict709 and both
+suboptimal references pass; knownFD3 are unchanged, NONCONV0. Independent source
+review and actual fetched-entry/proposal tests pass. No fixedper-threadquota or
+optionalpolicy default changed.
+
+Normal32/tiny32 cache outcomes/digests/units match all168cores under positive
+pressure; unbounded32 and VERIFY have completed. The one-worker run and fresh
+actual15-Claude sweep are active together; no competing32-worker batch. Full
+four-context report, updated-artifact filtered smoke, quiet855 cost, final push,
+all3tier admission and measured feasibility precede artifact generation. No
+mulligan/valueleaf generation has begun; nothing targets main. Current exact
+commands/status are in cyclone-completion-checkpoint.md. EarlierC2 checks below
+are historical and do not certify new89b outcomes.
 
 ## Accepted C2 integration — historical validation
 

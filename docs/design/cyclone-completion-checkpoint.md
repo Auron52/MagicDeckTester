@@ -4,92 +4,73 @@ User scope: finish outstanding changes, re-evaluate, and land/push to the latest
 `phase-1-2-deck-analyzer` with normal tests before mulligan/value generation.
 No changes target `main`. Normal throughput uses all 32 available logical CPUs.
 
-## Operative status — follow-up validation, 2026-10-31 13:49 UTC
+## Operative status — follow-up validation, 2026-10-31 14:01 UTC
 
-Shared branch has advanced to `dfcb18cb90ae65aeb4968787550a10b1fb9bc55e` with
-four artifact-only commits for Prevent Damage and Slivers. Their17 files,
-source and references are verified. The single-parent union is checked out at
-`4c19ce8055980eec1409c128ceea6a834f7638aa` on `cyclone-landingdfcb` in existing
-`.claude/worktrees/cyclone-landing905`. Its clean source remains
-`89b146d10406063213d9abe41e1cfdf1a616c021`; all26 Cyclone/Hinata/Kitty apparatus
-files are unchanged. Older follow-up branch `cyclone-landing2c76` and all prior
-history remain intact. Primary is still acceptedC2 integration3889 with matching
-binaries; its unrelated `test/ref_bench.json` remains unchanged. Nothing targets
-main. No generation has begun.
+Active branch `cyclone-landingdfcb` in existing `.claude/worktrees/cyclone-landing905`
+is a single-parent union4c19ce805 on latest shared `dfcb18cb90ae65aeb4968787550a10b1fb9bc55e`.
+The four new PD/Slivers artifact commits and all17files were retained exactly;
+source89b and26 Cyclone/Hinata/Kitty apparatus files are unchanged. Older pushed
+branches/worktrees remain intact. Primary is still acceptedC2 integration3889;
+its unrelated `test/ref_bench.json` remains byte-exact. Nothing targets main.
+No mulligan or value-leaf generation has begun.
 
-The follow-up repairs demonstrated plan-cache billing context, exposes fetched-
-shock entry choices, and truthfully labels optimistic plans. No fixed per-thread
-quota, dirty-provenance weakening or policy default changed. Independent source
-review finds no blocker. All2,420 unit cases /3,568,115 assertions pass. Normal,
-1KB and disabled plan caches now match the exact failing Hinata seed in full
-physical traces, every decision-unit counter, T6 and32,120 units. Actual fetched-
-shock choice and proposal-contract frames pass.
-
-Fresh Release smoke root62647 closed initialrc1:154PASS/3FAIL/0NEW, three searched
-tied play changes (BrunaGI3, EDFGI87, LandfallGI60), no score/d0 changes; all157
-cases/51,675game folds and390scenarios audited, known NivFD1/NONCONV0. Full paired
-trace review remains pending: normal smoke retained wins rather than full traces.
-Guarded six-game pairedPGO inputs are ready under
-`landing905-review/followup-release-smoke/paired-controls/`.
-After review use filtered acceptance for ONLYbruna,edf,landfall; the actual
-harness filters both aggregate and per-game keys even from fullRESULTS (fixed
-2026-10-20; stale contrary skill wording corrected). This preserves latest
-upstream PD/Slivers GT. Then fresh filtered artifact smoke covers those updated
-PD/pd2hg/slivers/slivers2hg cells without repeating the whole suite.
-
-Fresh PGO root90292 DONE0,197trainingjobs/5513games,32workers; all training closed
-before artifact checkout. Actual mtg SHA:
+Follow-up source `89b146d10406063213d9abe41e1cfdf1a616c021` repairs demonstrated
+cache billing context, fetched-shock choices and optimistic proposal labels.
+No per-thread quota, provenance weakening or optional policy default changed.
+All2,420unitcases/3,568,115assertions, focused real fetched-entry/proposal frames,
+independent source review and actual123021 normal/tiny/disabled-cache proof PASS.
+PGO root90292 DONE0,197trainingjobs/5513games,32workers. Actual mtg SHA:
 `20de8d519c6c7c8494925d5170ff91ed06f5b4fcde4fd1bc04d1325113bb5e80`.
-Receipt `build/scratch/cyclone-finish/landing905-review/followup-final-pgo.json`.
-Release SHA `aca52a788964b4b80ab321477595a348221652a749c27c936f57b93362e0e56d`.
-Fresh3game Release/PGO parity root47704 DONE0, requested32workers, full physical
-traces/digests/units exact, T4/T5/T4, FD/NONCONV0. No rebuild is needed for data-
-only upstream changes. Full normal PGO regression root22426 CLOSEDinitialrc1:
-246PASS/7FAIL/0NEW,253jobs,72,413/72,414games. All40,000d0 outcomes are exact;
-searched4ties/3one-turnslowers. Strict709passes266ok/442repaired/1beaten, every
-failure category0; both suboptimal games are beaten. The existing Melira bounded
-omission and all3FDtuples/outcomes/digests/units match the accepted prior context;
-NONCONV0. Fresh89b physical equality with oldFD traces is not claimed. Evidence:
-`landing905-review/followup-normal-regression/{strict-complete-audit,closure-fd-review.json}`.
-Seven changed games remain unaccepted.
+ReleaseSHA `aca52a788964b4b80ab321477595a348221652a749c27c936f57b93362e0e56d`.
+Fresh three-game32worker compiler parity47704 passes full physical traces,
+digests/units/T4-T5-T4, zero diagnostics. No source rebuild for artifact-only delta.
 
-Lean packet `build/scratch/cyclone-finish/v7-905-lean/prepared-89b146d-final/`
-is sealed with actualPGO SHA. Newmemory32 root16862 DONE0/all468games; tiny32
-root35625 DONE0/all168. Early comparator15864 DONE0: all168core wins/digests/units
-EXACT, actual20MiB pressure positive, FD/NONCONV/FSL clean. This is a preliminary
-pair proof, NOT completed four-context invariance. Evidence:
-`landing905-review/memory32-tiny32-early89b/preliminary-memory32-tiny32.json`.
-HistoricalC2 tiny failure is preserved unchanged. Memory1, unbounded32, VERIFY24
-and quietcost855 are unrun on89b.
+Normal tests are CLOSED and REVIEWED/ACCEPTED. Release smoke62647 initialrc1:
+154PASS/3FAIL/0NEW,51,675games,390scenariosPASS, three legal searched ties, no score
+changes. PGO fullreg22426 initialrc1:246PASS/7FAIL/0NEW,253jobs/72,413actual of72,414;
+all40,000d0 exact, four legal searched ties and three one-turn slowdowns (+3turns).
+Strict709passes266ok/442repaired/1beaten/allfailure0; both suboptimal games beaten.
+Known bounded Melira omission and all3FD tuples/wins/digests/units match accepted
+prior context; NONCONV0. No fresh89b equality with oldFD full traces is claimed.
 
-Root70502 is RUNNING guarded combined controls at
-`landing905-review/followup89-combined-controls/`: three sequential native32-worker
-pools, baselineC2normal10, current89bnormal10+9selectedrecoveries, baselineC2with
-plan memos disabled3. Those32games cover all7regressionchanges plus3smoketies
-without duplicating the older separate smoke packet (still unrun). The3slowers
-are Minotaur3171/GI168, Hinata2HG2023/GI21, MidrangeBurn2HG2016/GI14. Retain exact
-seed/GI, actuald5/profile/life and2HGheads; selected current recoveries are4x/16x
-budget andd8/b0. Full traces, units and cache census will be preserved. No
-reproduction, recovery, legality or uncached-equality conclusion is assumed.
-Independent reviewers have read the actual card definitions and await outputs.
-No competing engine/build should launch while this controller runs.
+Combined native controls70502 DONE0/all32games: oldnormal10 and newnormal10
+reproduce measured rows; old no-plan3 EXACTLY match newnormal in full physical
+JSON (only deckId/runId excluded) and deterministic total units. All9recoveries
+(4x/16x/d8b0) recover original win turn. Minotaur3171/GI168 and Burn2016/GI14
+recover exactold physical lines; Hinata2HG2023/GI21 has an independently checked
+legal alternateT5. All7tied traces have card/source/payer/zone reviews. Pooled
+u_sites census is contended and cannot attribute a specific cache hit; no such
+claim is made. Verdicts under `landing905-review/followup89-combined-controls/`.
+Root83825 normalaccept DONE0: exactly3smoke+7reg GTkeys changed; all other keys,
+latestPD/Slivers and overnight retained. Initialrc1 and actualaccept0 are preserved
+in `landing905-review/normal-accept89b/closure.json`. Binding earlier notes carried.
+After active work closes, run standard filtered artifact smoke8cells/2600games:
+`run_artifact_smoke_89b.py --run --prior-smoke-review-closed`, then inspect/accept
+with same pd,pd2hg,slivers,slivers2hg filter. Oldfullsmoke320files are preserved.
 
-Fresh actual15-Claude packet `build/scratch/cyclone-finish/claude-sweep-89b146d/`
-still needs fresh32-worker AI benchmark, seal and explicit root launch grant.
-Its15 serial clients may overlap only the explicit one-worker memory diagnostic;
-all other throughput uses32. Candidate CI41205133080/41205848626 are watched in
-root88458/59417, Linux green on first; Windows/parity still pending. No whole-smoke
-repeat is selected: after three tied smoke traces close, filtered acceptance
-bruna/edf/landfall retains newPD/Slivers GT, then standard filtered artifact smoke
-`run_artifact_smoke_89b.py --run --prior-smoke-review-closed` measures8cells/2600games.
-Original fullsmoke320files are preserved under followup-release-smoke/measured-smoke-files.
+Authoritative sealed packet `build/scratch/cyclone-finish/v7-905-lean/prepared-89b146d-final/`:
+memory32 root16862 DONE0/all468; tiny32 root35625 DONE0/all168; unbounded32 root90207
+DONE0/all168; VERIFY24 root33126 DONE0, positive junk/rank/kill-only exercise and
+no mismatches (`landing905-review/followup-verify-report/`). Early normal32/tiny
+comparison15864 passes all168wins/digests/units with actual20MiB positive pressure
+and noFD/NONCONV/FSL issue. Full four-context proof awaits memory1 root52540,
+RUNNING since13:57,168games/oneworker (explicit invariance-debug exception).
+HistoricalC2 tiny failure remains preserved. Quiet855 has NOT RUN.
 
-Close all selected source-bound checks, flags and changed-game reviews, then one
-quiet855 same-run cost measurement. Publish all follow-up/evidence to latest
-phase-1-2 branch, preserving user files/references. Admit Cyclone to all3tiers
-only if actual shipping cost meets3x Hinata, push everything, measure feasibility,
-then mulligan fast followed by value-leaf. Optional policy choices remain pending;
-no old partial-quality verdict is relabelled as current-source evidence.
+Fresh15AIbenchmark25158 DONE0 (source89b/PGO20de/fulltraces/zero diagnostics).
+Actual15nativeClaudeSonnet5 sweep84856 is RUNNING since13:57 in
+`build/scratch/cyclone-finish/claude-sweep-89b146d/`, sealed with actualPGO and
+explicitrootgrant. No oldC2 answers/choices/outcomes carried. This iterative
+15seed repeat is correctness verification, not an independent quality sample.
+Only this sweep's15serial clients and memory1 may overlap (max16engines); no
+32-worker batch, build or generation may launch until both close. Close all new
+flags from actual native events. Then full4context report, filtered artifactsmoke,
+reference safety, final evidence archive and one quiet855 same-run Hinata cost.
+Candidate CI41205133080/41205848626 watched in root88458/59417; Linux green onfirst,
+Windows/parity pending. Push all follow-up/code/GT/proofs to latest phase-1-2,
+nevermain. Admit Cyclone in all3tiers only if actual shippingcost<=3xHinata;
+push membership/GT, measure feasibility, then solitary mulligan fast→valueleaf.
+Optional policy choices remain pending; no historical partial verdict is adopted.
 
 ## Prior Landing905 milestones — historical, superseded above
 
