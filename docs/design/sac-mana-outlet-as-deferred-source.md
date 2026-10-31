@@ -741,3 +741,33 @@ debt.
 UNMEASURED — A/B pending" and "default OFF, measured and rejected (evidence: ...)" are different
 facts and must not share a phrasing. `MTG_FUNGUS_SAC_DRAW_CLOCK` was on the same 2026-09-18 list
 ("built and measured, adoption not yet decided") and is worth auditing for the same ambiguity.
+
+# DEFAULT ON (2026-10-31) — the Goblins stack lands
+
+USER 2026-10-31: *"2 we should turn on."* `MTG_SAC_OUTLET_PAY` is default ON together with `MTG_SUBSET_SAC_OUTLETS`,
+`MTG_BP_DEV_SEQ` and `MTG_SAC_MANA_ACT_DEMAND`. With the payer on, fodder is the payment's LAST source, eaten
+minimally, per order; the searched SacForMana action stays only where the death has value (Pashalik Mons, Mogg War
+Marshal, Rundvelt boards), with the payer off there.
+
+Measured, the whole stack on vs off (shipped settings, `MTG_PGO=0`):
+
+| sample | games | slower | faster | net turns | units |
+|---|---:|---:|---:|---:|---:|
+| 41 suite cases, seed 1580001 | 18117 | 6 | 185 | -179 | 1.074 |
+| Alchemist, seed 1600001 | 1500 | 3 | 25 | -21 | 0.984 |
+| Alchemist 2HG, seed 1600001 | 500 | 2 | 9 | -6 (unwon = max_turns+1) | 0.984 |
+| Midrange Burn, seed 1600001 | 1000 | 0 | 2 | -2 | 1.049 |
+
+Every slower game recovers at `--depth 8 --budget-ms 0 --ignore-play-profile` (the digest is equal on both arms),
+except Goblins 2HG gi794, which is T7 on both arms under `MTG_NC_SEARCH=1`: clear clairvoyance. Alchemist gi267 goes
+from a T7 win to unwon at the shipped budget with the stack on; at d8 b0 it is T7 on both arms (budget churn).
+
+`MTG_BP_DEV_SEQ`'s share, devseq on vs off with the payer on: 8 faster, 1 slower (-7 net, 6 of them Goblins out of
+4000) at x1.077 units. Landfall at 3000 games: 2 faster, 1 slower (gi378, T5 on both arms at d8 b0). The cost is
+uneven: Melira x1.27 with no game moved, Goblins x1.15, Goblins 2HG x1.13, Landfall x1.06, Minotaur x1.05. USER
+2026-10-31: devseq "could be okay if it improves quality notably and only costs a little more", so it stays ON and the
+wasted share (Melira first) is being folded out losslessly on `wip/devseq-prune`.
+
+The same accept also takes TH and Niv 2HG regression keys that `MTG_RAMP_FILTER_C_FEED` (df33bd631) moved and its
+scoped `--deck=niv` accept missed: held-out seed 1610001, TH 1500 games 0 slower / 0 faster (7 moved), Niv 2HG 300
+games 0 slower / 1 faster.
