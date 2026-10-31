@@ -143,7 +143,7 @@ breaching_smoke_d0_s1001	1
 breaching_smoke_d3_s1001	103
 breaching_smoke_d5_s1001	55
 bruna2hg_smoke_d3_s1001	87681
-bruna2hg_smoke_d5_s1001	29689
+bruna2hg_smoke_d5_s1001	29695
 bruna_overnight_d0_s10010	1
 bruna_overnight_d0_s4004	1
 bruna_overnight_d0_s6006	1
@@ -166,10 +166,10 @@ bruna_regression_d5_s2002	13931
 bruna_regression_d5_s3003	13191
 bruna_regression_d5_s30221	1606
 bruna_smoke_d0_s1001	1
-bruna_smoke_d3_s1001	11800
-bruna_smoke_d5_s1001	15627
+bruna_smoke_d3_s1001	11805
+bruna_smoke_d5_s1001	15630
 burn2hg_smoke_d3_s1001	11885
-burn2hg_smoke_d5_s1001	23201
+burn2hg_smoke_d5_s1001	23205
 burn_overnight_d0_s10010	1
 burn_overnight_d0_s4004	1
 burn_overnight_d0_s6006	1
@@ -383,7 +383,7 @@ fivecolour2hg_overnight_d5_s7007	50485
 fivecolour2hg_regression_d3_s2002	39213
 fivecolour2hg_regression_d5_s2002	97710
 fivecolour2hg_smoke_d3_s1001	35610
-fivecolour2hg_smoke_d5_s1001	80262
+fivecolour2hg_smoke_d5_s1001	85115
 fivecolour_overnight_d0_s10010	1
 fivecolour_overnight_d0_s4004	1
 fivecolour_overnight_d0_s6006	1
@@ -406,8 +406,8 @@ fivecolour_regression_d5_s2002	24764
 fivecolour_regression_d5_s3003	24733
 fivecolour_regression_d5_s30331	16682
 fivecolour_smoke_d0_s1001	1
-fivecolour_smoke_d3_s1001	13146
-fivecolour_smoke_d5_s1001	19853
+fivecolour_smoke_d3_s1001	13620
+fivecolour_smoke_d5_s1001	20516
 fluctuator2hg_overnight_d5_s4004	2050
 fluctuator2hg_overnight_d5_s5005	1175
 fluctuator2hg_overnight_d5_s6006	1801
@@ -465,7 +465,7 @@ fungusv3_regression_d5_s30001	3192
 fungusv3_regression_d5_s3003	5429
 fungusv3_smoke_d0_s1001	1
 fungusv3_smoke_d3_s1001	4124
-fungusv3_smoke_d5_s1001	4955
+fungusv3_smoke_d5_s1001	4970
 galadriel2hg_overnight_d5_s4004	3675
 galadriel2hg_overnight_d5_s5005	3771
 galadriel2hg_overnight_d5_s6006	4351
@@ -529,7 +529,7 @@ goblins2hg_overnight_d5_s7007	5677
 goblins2hg_regression_d3_s2002	3527
 goblins2hg_regression_d5_s2002	10004
 goblins2hg_smoke_d3_s1001	3971
-goblins2hg_smoke_d5_s1001	14003
+goblins2hg_smoke_d5_s1001	12683
 goblins_overnight_d0_s10010	1
 goblins_overnight_d0_s4004	1
 goblins_overnight_d0_s6006	1
@@ -553,7 +553,7 @@ goblins_regression_d5_s30001	1903
 goblins_regression_d5_s3003	5405
 goblins_smoke_d0_s1001	1
 goblins_smoke_d3_s1001	3145
-goblins_smoke_d5_s1001	6191
+goblins_smoke_d5_s1001	6179
 hinata2hg_overnight_d5_s4004	74680
 hinata2hg_overnight_d5_s5005	64031
 hinata2hg_overnight_d5_s6006	65818
@@ -809,7 +809,7 @@ niv2hg_overnight_d5_s7007	29935
 niv2hg_regression_d3_s2002	15140
 niv2hg_regression_d5_s2002	24603
 niv2hg_smoke_d3_s1001	12096
-niv2hg_smoke_d5_s1001	17698
+niv2hg_smoke_d5_s1001	18146
 niv_overnight_d0_s10010	1
 niv_overnight_d0_s4004	1
 niv_overnight_d0_s6006	1
@@ -823,13 +823,13 @@ niv_overnight_d5_s5005	25313
 niv_overnight_d5_s6006	25663
 niv_overnight_d5_s7007	23162
 niv_regression_d0_s2002	1
-niv_regression_d3_s2002	17151
+niv_regression_d3_s2002	17364
 niv_regression_d3_s3003	12857
-niv_regression_d5_s2002	26478
-niv_regression_d5_s3003	23620
+niv_regression_d5_s2002	27006
+niv_regression_d5_s3003	23702
 niv_smoke_d0_s1001	1
-niv_smoke_d3_s1001	13401
-niv_smoke_d5_s1001	43182
+niv_smoke_d3_s1001	13815
+niv_smoke_d5_s1001	43630
 pd2hg_overnight_d5_s4004	37921
 pd2hg_overnight_d5_s5005	34309
 pd2hg_overnight_d5_s6006	38256
@@ -837,7 +837,7 @@ pd2hg_overnight_d5_s7007	39887
 pd2hg_regression_d3_s2002	25692
 pd2hg_regression_d5_s2002	49620
 pd2hg_smoke_d3_s1001	15376
-pd2hg_smoke_d5_s1001	50937
+pd2hg_smoke_d5_s1001	50920
 pd_overnight_d0_s10010	1
 pd_overnight_d0_s4004	1
 pd_overnight_d0_s6006	1
@@ -860,8 +860,8 @@ pd_regression_d5_s2002	29076
 pd_regression_d5_s30001	42954
 pd_regression_d5_s3003	34990
 pd_smoke_d0_s1001	1
-pd_smoke_d3_s1001	18171
-pd_smoke_d5_s1001	30565
+pd_smoke_d3_s1001	18165
+pd_smoke_d5_s1001	30491
 pirates2hg_overnight_d5_s4004	17886
 pirates2hg_overnight_d5_s5005	13307
 pirates2hg_overnight_d5_s6006	16428
@@ -1024,7 +1024,7 @@ stompy_smoke_d0_s1001	1
 stompy_smoke_d3_s1001	3996
 stompy_smoke_d5_s1001	3564
 th2hg_smoke_d3_s1001	10016
-th2hg_smoke_d5_s1001	37511
+th2hg_smoke_d5_s1001	37581
 th_overnight_d0_s10010	1
 th_overnight_d0_s4004	1
 th_overnight_d0_s6006	1
@@ -1047,8 +1047,8 @@ th_regression_d5_s2002	9114
 th_regression_d5_s30001	13474
 th_regression_d5_s3003	7241
 th_smoke_d0_s1001	1
-th_smoke_d3_s1001	6645
-th_smoke_d5_s1001	8970
+th_smoke_d3_s1001	6652
+th_smoke_d5_s1001	8980
 vampires2hg_overnight_d5_s4004	32708
 vampires2hg_overnight_d5_s5005	32931
 vampires2hg_overnight_d5_s6006	23789

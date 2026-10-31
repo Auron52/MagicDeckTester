@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 1e9587385  date 2026-10-31
+# Regression ground truth -- commit e012c62d8  date 2026-10-31
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-10-27): Overnight rebaseline 2026-10-27 on af6bfce94 (PGO, 22m20s): the USER Hinata floor (keep-table decks >= Hinata's play-row games: edf/landfall/melira/niv/pd/snow + 2hg), the USER adoptions (LandfallElementals staged b20, NivMizzetCombo emulnl b20) and upstream MTG_PAY_SHRINK default ON + mana oracle. Overlapping games: searched 185 faster / 28 slower, d0 50 / 46; classify 24 churn / 4 PERSISTS (edf s5005 gi328 draws diverge T3; elementals s5005 gi399, s7007 gi376 and niv s4004 gi151 on the adopted shapes, measured better held out).
 # accepted-with-regressions (overnight, 2026-10-28): Bruna TUTOR FIT (USER 2026-10-11) + keep table ADOPTED (see the smoke note). TUTOR FIT alone, table absent: searched 4 slower / 3 faster (all 4 PERSIST at 4x/16x and pass a Glittering Wish / Open the Armory before diverging; net +1 turn over 2,000 d5 games), d0 net faster. With the table: d5 s4004-7007 4.956->4.806 / 5.030->4.852 / 4.936->4.790 / 5.120->4.808, d3 s4004 5.104->4.696, d0 -0.26..-0.29 on all 4 seeds; backstop d3/d5 s30231 (3 games) 3.667->4.333 = 1 game, different mulligan count. Attribution 5176 mull-count + 928 bottom + 25 bottom-order; the 5 d5 'unexplained' games (same hand and bottom, play differs) are the lookahead bottoming's residue, not a table leak: each reproduces singly and matches the table-off digest with the table keeping and MTG_EXHAUSTIVE_BOTTOM=0. Units/game 3.8-5.3x lower.
@@ -147,8 +147,8 @@ galadriel_smoke_d3_s1001=4.8200/27c8079c8746ce2a
 galadriel_smoke_d5_s1001=5.0343/de12b4178a6498b1
 galadriel2hg_smoke_d5_s1001=4.8933/c5dceba1c36445b0
 niv_smoke_d0_s1001=6.0930/193621af703f3953
-niv_smoke_d3_s1001=4.4800/f5546de7b0566634
-niv_smoke_d5_s1001=4.6100/cf26c09192113d1c
+niv_smoke_d3_s1001=4.4800/2e96493860186d1a
+niv_smoke_d5_s1001=4.6100/77f3e119bf5bf092
 niv2hg_smoke_d5_s1001=4.4800/7c409b3387c8cb85
 colossus_smoke_d0_s1001=4.3580/f1a3ce0a59cfc500
 colossus_smoke_d3_s1001=3.3000/2c637b903ddbd91e
@@ -393,9 +393,9 @@ galadriel_regression_d5_s2002=4.8650/92994d5299b8490e
 galadriel_regression_d5_s3003=4.9600/34de41de690c60d6
 galadriel2hg_regression_d5_s2002=4.8133/d5c14dd1b4a66662
 niv_regression_d0_s2002=6.0340/963ff3f32bf26c06
-niv_regression_d3_s2002=4.4800/d8d6ae05583fa706
-niv_regression_d5_s2002=4.4800/58afd7c5718bfa5f
-niv_regression_d5_s3003=4.5067/bd4d29e5d0f695d6
+niv_regression_d3_s2002=4.4800/e3368b7ee23c3157
+niv_regression_d5_s2002=4.4800/47b09bb2c776ff62
+niv_regression_d5_s3003=4.5067/ab537215ce397016
 niv2hg_regression_d5_s2002=4.4667/685a92e300ed5708
 colossus_regression_d0_s2002=4.4220/ae6fe0b99f69692d
 colossus_regression_d3_s2002=3.4800/256c45f4dbd5f29b
