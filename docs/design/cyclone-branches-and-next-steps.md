@@ -18,6 +18,16 @@
 > is added, and no mulligan or value-leaf generation has begun. The measured
 > performance follow-up is `cyclone-cost-optimization-next-steps.md`.
 >
+> Later October 31 follow-up (validated on `cyclone-performance-20261031`):
+> with seeds pooled by depth and budget, the official source-bound PGO cost gate
+> gives 2.26x for the PB + Ponder + Curator-scry hard prunes and Cyclone-only
+> no-second-main parity. Paired quality is -4 turn steps over 800 depth-3 games
+> and -6 over 200 depth-5 games. The full smoke and regression tiers passed;
+> the screened unlimited-budget backstops and all 14 Cyclone overnight cases
+> passed and entered ground truth. The
+> depth-8 blind replay investigation is recorded in the performance note.
+> Nothing has been generated or sent to `main`.
+>
 > Fixed 512 MB per-thread plan/FSL quotas are removed. Existing shared RAM-sized
 > budgets remain; no broad cache-budget redesign is a prerequisite. Use all
 > 32 logical CPUs normally. The approved two-Ulamog bucket merge is implemented;

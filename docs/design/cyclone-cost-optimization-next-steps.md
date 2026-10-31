@@ -1,9 +1,10 @@
 # Cyclone cost optimization after integration
 
 The implementation and reviewed validation landed on `phase-1-2-deck-analyzer`
-at `08d816495ab054db887fa16b007e0f18f171de8d`. Later checkpoint commits change
-only documentation. This is a performance follow-up; no optimization below has
-been implemented, no policy has been adopted, and no artifact generation started.
+at `08d816495ab054db887fa16b007e0f18f171de8d`. The measurements under
+"Admission measurement" are the historical starting point. The October 31
+follow-up below was validated on an isolated branch before landing on the
+shared `phase-1-2-deck-analyzer` branch.
 
 The baseline source is `89b146d10406063213d9abe41e1cfdf1a616c021`; canonical PGO
 SHA256 is `20de8d519c6c7c8494925d5170ff91ed06f5b4fcde4fd1bc04d1325113bb5e80`.
@@ -13,8 +14,8 @@ All original branches/worktrees and reference games remain preserved.
 ## Admission measurement
 
 The sole uncontended pool completed all855 games and86 chunks at32 workers.
-The existing gate uses worst searched-cell mean per-game wall duration divided
-by same-run Hinata, not batch makespan or measured thread CPU time. Hinata's
+At that time the gate used the worst searched-cell mean per-game wall duration
+divided by same-run Hinata, not batch makespan or measured thread CPU time. Hinata's
 worst cell measured2,040.213ms/game.
 
 | Configuration | Worst ms/game | Ratio | Required reduction to3x |
@@ -64,6 +65,83 @@ Compact reports, guarded replay recipe and results are committed in
 The raw perf file is152,729,556 bytes and stays outside Git. Source reviews and
 small reports are preserved separately; do not call incomplete ancestors a
 measured complete pipeline or infer a speedup from operation counts alone.
+
+## October 31 measured policy candidate
+
+The cost metric now pools seeds within each searched depth and budget, then
+takes the largest per-game average (USER 2026-10-31). A same-run 32-worker PGO
+batch measured 615 games on the baseline-source binary with explicit policy
+flags. Both Cyclone arms used the two-plan put-back prune, the two-plan Ponder
+prune and no-second-main kill-only parity; only the candidate also pruned the
+Curator scry pin. The 3x yardstick is Hinata's d5/b30 grouped mean.
+
+| Group | Baseline ms/game | With seed prune ms/game | Hinata ms/game |
+|---|---:|---:|---:|
+| d3/b10 | 3,684.150 | 3,543.175 | 1,171.960 |
+| d5/b20 Cyclone; d5/b30 Hinata | 5,645.625 | 5,294.625 | 1,801.623 |
+
+The gated ratio is 3.134x without the seed prune and **2.939x with it**.
+The Release check was a separate screen; the PGO batch above is the relevant
+compiler setting. The source-bound build and tier gate still have to confirm
+the ratio after changing defaults.
+
+Paired play quality on the Phase C seed block and a fresh d3 extension was
+d3/b10 **-4 total turn steps over 800 games** and d5/b20 **-6 over 200**,
+seed prune minus the other Cyclone flags. The first 400 d3 games were +3, the
+next 400 were -7. Eight known-library
+blind salts on every slower game found no repeated bad scry choice; seven of
+eight residual cases tied at 4x or 16x budget. The one remaining salt was one
+turn slower at 16x, but its game over 40 paired hidden-library salts favored
+the prune by 0.275 turns/game (SE 0.183; 11 better, 6 worse, 23 tied). This is
+evidence against a consistent known-information loss, not a proof that no
+individual future can go worse. Working results are in
+`build/scratch/cyclone-seed-{pgo-gate,quality,quality-extension,blind-classify,gi317-blind40}-20261031/`.
+
+The official source-bound PGO cost gate, after making these policies default,
+measured Cyclone at 4,111.030 ms/game (worst d5/b20) against same-run Hinata at
+1,822.547 ms/game: **2.26x, PASS**. The full smoke tier passed 157 existing
+cases and admitted four Cyclone keys; the full regression tier passed 253
+existing cases and admitted five Cyclone keys. Its strict reference check found
+zero play drift, board divergence, or contract failures. The regression tier
+had no searched-depth slower games or play changes against committed ground
+truth. These runs used a fresh PGO binary from this branch's source tree.
+
+The Cyclone-only overnight tier then passed all 14 new cases (four depth-0,
+four d3/b10, four d5/b20, and two screened budget-0 backstops). The 300-game
+d5 blocks averaged 5.0767, 5.1100, 5.1567, and 5.0967 turns; the 400-game
+d3 blocks averaged 5.0550, 5.1175, 5.1575, and 5.1125. All new fingerprints
+were accepted; `check_gt_logs.py` reported 937 consistent, zero stale or
+missing. The full 516-job overnight suite was stopped after its early existing
+deck groups to start Cyclone's long artifact build sooner. Full smoke, full
+regression, the strict 709-reference replay, and the Cyclone overnight tier
+completed on this source.
+
+The one depth-8/budget-0 blind replay that lost the depth-3/budget-160 win was
+seed 111317, game 317, blind salt 2, with the same forced opening hand and
+bottoms (Toxic Deluge and Ponder). Both depths cast Brainstorm on turn 1 and
+put back Curator and Emrakul. Depth 3's budget commits its first-pass forecast
+of a sampled turn-5 win, holding Street Wraith; that line wins on real turn 7.
+Depth 8 finds a turn-5 win in the *sampled unknown library* by cycling Street
+Wraith during Brainstorm's continuation. It commits that equal-turn sampled
+line, but real draws then leave the game unwon through turn 8. At the decisive
+Brainstorm breakpoint, the depth-3 first pass rates the cycle branch at turn 8
+and the hold branch at turn 5. The deeper pass rates the cycle branch at turn 5;
+its earlier-win cutoff then seeks only a turn-4-or-earlier alternative and does
+not retain the hold line on a tie. Both arms of the Curator seed-prune test are
+unwon at depth 8/budget 0 on this salt, so that prune did not introduce the
+depth-8 miss. The eight-salt depth comparison below holds that prune OFF in
+both arms.
+Showing the real
+library to either depth yields a turn-4 win; disabling the blind machinery's
+library shuffle while retaining its executor also yields a turn-4 win. Thus the
+miss is caused by a single sampled unknown order, not a missing legal play or
+an executor divergence. On eight blind salts of that same fixed hand, depth 8
+scores 61 total turn steps versus depth 3's 62: salt 2 is +2 for depth 8,
+salt 3 is +1, salt 7 is -3, salt 6 is -1, and the other four tie. This does not prove a
+general quality gain; it does show the reported game is not a consistent
+depth-8 failure. Replays and the paired batch are in
+`build/scratch/cyclone-seed-gi317-diagnostic-20261031/` and
+`build/scratch/cyclone-gi317-depth-blind-salts-20261031/`.
 
 ## Next work
 

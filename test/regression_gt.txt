@@ -1,10 +1,7 @@
-# Regression ground truth -- commit d3cdf5cf0  date 2026-10-31
+# Regression ground truth -- commit c1fde0408  date 2026-10-31
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-10-27): Overnight rebaseline 2026-10-27 on af6bfce94 (PGO, 22m20s): the USER Hinata floor (keep-table decks >= Hinata's play-row games: edf/landfall/melira/niv/pd/snow + 2hg), the USER adoptions (LandfallElementals staged b20, NivMizzetCombo emulnl b20) and upstream MTG_PAY_SHRINK default ON + mana oracle. Overlapping games: searched 185 faster / 28 slower, d0 50 / 46; classify 24 churn / 4 PERSISTS (edf s5005 gi328 draws diverge T3; elementals s5005 gi399, s7007 gi376 and niv s4004 gi151 on the adopted shapes, measured better held out).
 # accepted-with-regressions (overnight, 2026-10-28): Bruna TUTOR FIT (USER 2026-10-11) + keep table ADOPTED (see the smoke note). TUTOR FIT alone, table absent: searched 4 slower / 3 faster (all 4 PERSIST at 4x/16x and pass a Glittering Wish / Open the Armory before diverging; net +1 turn over 2,000 d5 games), d0 net faster. With the table: d5 s4004-7007 4.956->4.806 / 5.030->4.852 / 4.936->4.790 / 5.120->4.808, d3 s4004 5.104->4.696, d0 -0.26..-0.29 on all 4 seeds; backstop d3/d5 s30231 (3 games) 3.667->4.333 = 1 game, different mulligan count. Attribution 5176 mull-count + 928 bottom + 25 bottom-order; the 5 d5 'unexplained' games (same hand and bottom, play differs) are the lookahead bottoming's residue, not a table leak: each reproduces singly and matches the table-off digest with the table keeping and MTG_EXHAUSTIVE_BOTTOM=0. Units/game 3.8-5.3x lower.
-# accepted-with-regressions (smoke, 2026-10-31): Cyclone integration: seven audited rows; zero searched score changes, nine legal same-score lines; exact prior smoke evidence and upstream Snow drift; d0 net -1 turn. Known upstream Niv1082 FD unchanged. See docs/design/cyclone-completion-review.md.
-# accepted-with-regressions (smoke, 2026-10-31): Cyclone89b billing-context correctness follow-up: three physically reviewed legal same-turn changes only; filtered acceptance preserves latest PD/Slivers artifacts and GT. Exact paired native controls and review are in followup89-combined-controls; no policy default changed.
-# accepted-with-regressions (regression, 2026-10-31): Cyclone correctness integration: all33 searched changes paired against exact upstream2c; 12 Snow GT drifts, 20 legal same-score alternatives, one FiveColour3146 T5->T6 at d7/b40 recovers byte-exact original physical line at b160/b640/d8b0. Three FD tuples pre-exist in exact2c; NONCONV0;709refs pass. Lighter d0 review records net +4 turns. See docs/design/cyclone-completion-review.md. Follow-up89b: four legal searched ties and three one-turn slowdowns (+3 total turns), all physically reviewed. Each new normal matches old C2 with plan memos disabled in full physical JSON and total units. All three recover prior win turn at4x/16x andd8/b0 (Minotaur/Burn exact old physical line; Hinata alternate legal T5). This necessary billing-correctness fix restores cache-hit/miss invariance, not a heuristic adoption. Pooled per-decision census attribution is unavailable; no unique per-hit mechanism claimed. All40000d0 exact, known FD3 unchanged, strict709 and both suboptimal references pass. Overnight left for periodic run.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -38,6 +35,10 @@ antilife_smoke_d5_s1001=4.2246/5f36ed7da40370f9
 hinata_smoke_d0_s1001=6.7830/780989093156f2ff
 hinata_smoke_d3_s1001=6.0000/b65957bf1bcf627b
 hinata_smoke_d5_s1001=5.7200/7bc7abd2624edf82
+cyclone_smoke_d0_s1001=8.3630/e390c15fb7e05279
+cyclone_smoke_d3_s1001=5.1600/0717b57392ea4531
+cyclone_smoke_d5_s1001=5.0600/b661041f7fa97867
+cyclone2hg_smoke_d3_s1001=5.2200/0c9f222c1800a5d6
 dragonstorm_smoke_d0_s1001=4.9790/dc745ef2a7e0828c
 dragonstorm_smoke_d3_s1001=4.5000/7cf4ded3804f4228
 dragonstorm_smoke_d5_s1001=4.4600/a33c29a2f7ee08e7
@@ -168,6 +169,8 @@ elementals_smoke_d3_s1001=4.4600/92003b3289a67020
 elementals_smoke_d5_s1001=4.3360/6ae2c4ad1da84992
 
 # --- regression ---
+cyclone_regression_d3_s30031=5.3333/0bda8499e912c855
+cyclone_regression_d5_s30031=5.0000/64b1c8b741425be5
 midrangeburn_regression_d3_s30021=4.0000/02b6ee67bad9be24
 midrangeburn_regression_d5_s30021=4.0000/02b6ee67bad9be24
 alchemist_regression_d3_s30211=5.0000/3d84efedeea45474
@@ -278,6 +281,11 @@ hinata_regression_d0_s2002=6.8460/ad1effc6f1ee0581
 hinata_regression_d3_s2002=5.6933/dcd9057de29ae636
 hinata_regression_d5_s2002=5.5667/7ef5353f84700e7b
 hinata_regression_d5_s3003=5.6267/28cc9af17a725e22
+cyclone_regression_d0_s2002=8.3320/cfbe05dae5911584
+cyclone_regression_d3_s2002=5.1333/1a1f52ca31821589
+cyclone_regression_d3_s3003=5.0533/b733ac34d992f7fc
+cyclone_regression_d5_s2002=5.0400/828f7fc155aad293
+cyclone_regression_d5_s3003=4.9800/09a4211a4611f397
 dragonstorm_regression_d0_s2002=5.0010/a7f021373380920f
 dragonstorm_regression_d3_s2002=4.2300/8acf33bfdd6cfb35
 dragonstorm_regression_d5_s2002=4.3106/8ecd14e879216387
@@ -423,6 +431,8 @@ midrangeburn_regression_d5_s3003=4.2733/ecdc58112064d976
 midrangeburn2hg_regression_d5_s2002=5.9333/ff2c389975b3330d
 
 # --- overnight ---
+cyclone_overnight_d3_s30051=5.0000/8c00f4fc85f4b21a
+cyclone_overnight_d5_s30051=5.0000/3b4f7adf5b66853f
 midrangeburn_overnight_d3_s30041=4.3333/af5954b2ad5cceef
 midrangeburn_overnight_d5_s30041=4.3333/af5954b2ad5cceef
 alchemist_overnight_d3_s30101=4.8000/e3ed67adcd562587
@@ -573,6 +583,18 @@ hinata_overnight_d5_s4004=5.6565/f008ab1ccea45d1e
 hinata_overnight_d5_s5005=5.6118/1e41d1f0f11af3b3
 hinata_overnight_d5_s6006=5.6706/1cca6e0f29372c2f
 hinata_overnight_d5_s7007=5.6400/c631922460e9d30d
+cyclone_overnight_d0_s4004=8.3830/663fd20fc9dcd0a4
+cyclone_overnight_d0_s6006=8.3755/500cfcf28f8edd47
+cyclone_overnight_d0_s8008=8.4050/16b8d733d52c75c3
+cyclone_overnight_d0_s10010=8.3650/e6cb3865de478bd9
+cyclone_overnight_d3_s4004=5.0550/d11d6469a64fa3d1
+cyclone_overnight_d3_s5005=5.1175/ae99b7f4e33442d2
+cyclone_overnight_d3_s6006=5.1575/9a50c288c10ffedf
+cyclone_overnight_d3_s7007=5.1125/47afba54470f831f
+cyclone_overnight_d5_s4004=5.0767/684f0174b412d2b6
+cyclone_overnight_d5_s5005=5.1100/2976e02d8d3e39c2
+cyclone_overnight_d5_s6006=5.1567/12ab21dee1a60845
+cyclone_overnight_d5_s7007=5.0967/7a4fd404d63cc41f
 dragonstorm_overnight_d0_s4004=4.9625/5991e82c9e9f79a0
 dragonstorm_overnight_d0_s6006=5.0320/dd4a7327ab67ca51
 dragonstorm_overnight_d0_s8008=4.9895/57b99d8d44eee794
