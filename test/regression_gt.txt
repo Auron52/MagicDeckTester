@@ -1,4 +1,4 @@
-# Regression ground truth -- commit c0ca03f14  date 2026-10-31
+# Regression ground truth -- commit e707f3ee3  date 2026-10-31
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-10-27): Overnight rebaseline 2026-10-27 on af6bfce94 (PGO, 22m20s): the USER Hinata floor (keep-table decks >= Hinata's play-row games: edf/landfall/melira/niv/pd/snow + 2hg), the USER adoptions (LandfallElementals staged b20, NivMizzetCombo emulnl b20) and upstream MTG_PAY_SHRINK default ON + mana oracle. Overlapping games: searched 185 faster / 28 slower, d0 50 / 46; classify 24 churn / 4 PERSISTS (edf s5005 gi328 draws diverge T3; elementals s5005 gi399, s7007 gi376 and niv s4004 gi151 on the adopted shapes, measured better held out).
 # accepted-with-regressions (overnight, 2026-10-28): Bruna TUTOR FIT (USER 2026-10-11) + keep table ADOPTED (see the smoke note). TUTOR FIT alone, table absent: searched 4 slower / 3 faster (all 4 PERSIST at 4x/16x and pass a Glittering Wish / Open the Armory before diverging; net +1 turn over 2,000 d5 games), d0 net faster. With the table: d5 s4004-7007 4.956->4.806 / 5.030->4.852 / 4.936->4.790 / 5.120->4.808, d3 s4004 5.104->4.696, d0 -0.26..-0.29 on all 4 seeds; backstop d3/d5 s30231 (3 games) 3.667->4.333 = 1 game, different mulligan count. Attribution 5176 mull-count + 928 bottom + 25 bottom-order; the 5 d5 'unexplained' games (same hand and bottom, play differs) are the lookahead bottoming's residue, not a table leak: each reproduces singly and matches the table-off digest with the table keeping and MTG_EXHAUSTIVE_BOTTOM=0. Units/game 3.8-5.3x lower.
@@ -134,10 +134,10 @@ bruna2hg_smoke_d5_s1001=5.2800/67815150ef1aa4f3
 bruna_smoke_d0_s1001=5.9380/6fded1ec96a0ca43
 bruna_smoke_d3_s1001=4.7200/334e43f0e1b8571a
 bruna_smoke_d5_s1001=4.7133/d8f5394f07dcaa4e
-edf2hg_smoke_d5_s1001=3.9600/f47b64fd1d9400ed
-edf_smoke_d0_s1001=5.3070/843783cbf628b5b0
-edf_smoke_d3_s1001=4.0000/fb06be7ce155e8ed
-edf_smoke_d5_s1001=4.1200/15ef73b163e076fc
+edf2hg_smoke_d5_s1001=3.9600/1fe51d246fc62a23
+edf_smoke_d0_s1001=5.3040/3b45571bd14eed1a
+edf_smoke_d3_s1001=4.0000/97b239e36a080abc
+edf_smoke_d5_s1001=4.1100/eddabbe6f70076bc
 snow_smoke_d0_s1001=6.1300/589bf86103368c03
 snow_smoke_d3_s1001=5.7600/8858c7d906f05bab
 snow_smoke_d5_s1001=5.7440/2314f2e10617aa33
@@ -196,8 +196,8 @@ dragons_regression_d3_s30001=5.7000/60632b777f5dafe9
 dragons_regression_d5_s30001=5.7000/60632b777f5dafe9
 dragonstorm_regression_d3_s30201=4.6667/9e6254f78e142f87
 dragonstorm_regression_d5_s30201=4.6667/9e6254f78e142f87
-edf_regression_d3_s30001=3.9500/53fb19f5d2c533c3
-edf_regression_d5_s30001=3.9500/cde30b8f6f2eb117
+edf_regression_d3_s30001=3.9500/db2710d4a206b804
+edf_regression_d5_s30001=3.9500/22d0514448b56f18
 fivecolour_regression_d3_s30331=4.7000/43464126ca589453
 fivecolour_regression_d5_s30331=4.7000/4116913f76f182d5
 fluctuator_regression_d3_s30001=3.7000/e7b06f6136d76c7d
@@ -377,10 +377,10 @@ bruna_regression_d0_s2002=5.8900/bcabd573953fbe3e
 bruna_regression_d3_s2002=4.7400/8b8c79507a77d9ba
 bruna_regression_d5_s2002=4.8600/bbad0cb6ed814328
 bruna_regression_d5_s3003=4.7000/00dae101b7496de3
-edf_regression_d0_s2002=5.3250/30eb48e1e7142bac
-edf_regression_d3_s2002=3.9200/45150eb9b46f4b0a
-edf_regression_d5_s2002=4.0533/7518923272604436
-edf_regression_d5_s3003=4.1267/ff0cbde17dc83db9
+edf_regression_d0_s2002=5.3210/21edd2d4bff3604d
+edf_regression_d3_s2002=3.9200/9714f65d77852488
+edf_regression_d5_s2002=4.0533/b16894490d195fed
+edf_regression_d5_s3003=4.1200/d8f106130c003948
 snow_regression_d0_s2002=6.1610/674c81c816a67736
 snow_regression_d3_s2002=5.6800/b24ce18174b0650a
 snow_regression_d5_s2002=5.6333/9c218954f403350a
@@ -388,7 +388,7 @@ snow_regression_d5_s3003=5.7067/1d0edb5b2c7e342e
 landfall_regression_d0_s2002=7.4990/9900e880d8be8205
 landfall_regression_d3_s2002=5.8800/089e6deca47f86f2
 landfall_regression_d5_s2002=5.6133/c74af587892847be
-landfall_regression_d5_s3003=5.7067/f420de1e8c9a91d8
+landfall_regression_d5_s3003=5.7067/4766f07a18a0e552
 galadriel_regression_d0_s2002=6.9500/2eadad5edfde174a
 galadriel_regression_d3_s2002=4.6600/a5a93fee0901ef15
 galadriel_regression_d5_s2002=4.8650/92994d5299b8490e
