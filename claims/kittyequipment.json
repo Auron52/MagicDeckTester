@@ -4,9 +4,12 @@
   "valueleaf": "em:295602f6f4ea5eaa9346"
  },
  "deck": "kittyequipment",
+ "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_kittyequipment/DECISIONS.txt)",
+ "finished": "2026-10-31T21:35:26Z",
  "frozen": "6fe26602c5f99df1395aebcad5441f190672f07a",
  "heartbeat": "2026-10-31T21:25:23Z",
  "host": "58199181d02e",
+ "result_branch": "artifact-refresh/kittyequipment-20261031-2135",
  "run_id": "kittyequipment-artifact-queue-tool-647f24-20261031T165332",
  "score": 0.003,
  "stage": "valueleaf",
@@ -14,6 +17,6 @@
   "valueleaf"
  ],
  "started": "2026-10-31T16:53:32Z",
- "state": "running",
+ "state": "done",
  "worker": "artifact-queue-tool-647f24"
 }
