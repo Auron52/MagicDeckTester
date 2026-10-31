@@ -1075,45 +1075,7 @@ static EquivReport BuildEquivalenceClasses(const Decklist& deck, const MulliganP
     // parity is preserved: chunks with the same spec share the fingerprint; a different spec won't pool.
     if (!cfg.force_merge.empty())
     {
-        auto split = [](const std::string& s, char d) {
-            std::vector<std::string> out; std::string cur;
-            for (char c : s) { if (c == d) { if (!cur.empty()) out.push_back(cur); cur.clear(); } else cur += c; }
-            if (!cur.empty()) out.push_back(cur);
-            return out; };
-        auto trim = [](std::string s) {
-            std::size_t a = s.find_first_not_of(" \t"); std::size_t b = s.find_last_not_of(" \t");
-            return (a == std::string::npos) ? std::string() : s.substr(a, b - a + 1); };
-        std::vector<char> removed(eq.classes.size(), 0);
-        for (const std::string& grp : split(cfg.force_merge, ';'))
-        {
-            int keep_cls = -1;
-            for (const std::string& raw : split(grp, ','))
-            {
-                const std::string nm = trim(raw);
-                if (nm.empty()) { continue; }
-                // Match the full member name OR its pre-comma segment, so a card whose name CONTAINS a
-                // comma (e.g. "Karrthus, Tyrant of Jund", "Lathliss, Dragon Queen") is addressable by its
-                // leading name ("Karrthus", "Lathliss") -- the group delimiter is ',' so the full comma
-                // name can't be written literally. Comma-free names still match exactly (unchanged).
-                int found = -1;
-                for (std::size_t c = 0; c < eq.classes.size(); ++c)
-                    if (!removed[c])
-                        for (const std::string& mem : eq.classes[c].members)
-                            if (mem == nm || mem.substr(0, mem.find(',')) == nm)
-                            { found = static_cast<int>(c); break; }
-                if (found < 0) { std::cerr << "[keepgen]   force-merge: card not found: '" << nm << "'\n"; continue; }
-                if (keep_cls < 0) { keep_cls = found; }
-                else if (found != keep_cls)
-                {
-                    for (const std::string& mem : eq.classes[found].members)
-                    { eq.classes[keep_cls].members.push_back(mem); }
-                    removed[found] = 1;
-                }
-            }
-        }
-        std::vector<EquivClass> kept;
-        for (std::size_t c = 0; c < eq.classes.size(); ++c) if (!removed[c]) kept.push_back(eq.classes[c]);
-        eq.classes = std::move(kept);
+        ApplyBucketMergeSpec(eq, cfg.force_merge, std::cerr);
         std::cerr << "[keepgen] force-merge applied: -> " << eq.classes.size() << " buckets\n" << std::flush;
     }
 
