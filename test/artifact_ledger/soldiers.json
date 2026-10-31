@@ -20,6 +20,25 @@
     "",
     "=== 2026-10-29T22:20:41  PHASE E.6: no allowance for soldiers -- no ladder escalations in 1200 games (single-path or trust-dominated); fleet default R = 0"
    ]
+  },
+  {
+   "run_id": "soldiers-artifact-queue-tool-647f24-20261031T102203",
+   "kind": "valueleaf",
+   "verdict": "kept-incumbent",
+   "ident": "em:8e0bad0bb01c0bd8b26a",
+   "frozen": "90503a7783c32e4cf7622cb3073421ebfcc67752",
+   "src_tree": "520d6ef09669321b0ab80c3252a15f487a7db01c",
+   "date": "2026-10-31",
+   "worker": "artifact-queue-tool-647f24",
+   "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_soldiers/DECISIONS.txt)",
+   "decisions": [
+    "    VERDICT arm=d7b30 adopt=0 delta=+0.00000 t=+0.00 cost=0.998x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=byte-identical to the baseline: the arm is not engaging",
+    "    VERDICT arm=d7b45 adopt=0 delta=-0.00025 t=-1.53 cost=1.035x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.03x) with quality better (-0.00025) -- a TRADE, the user's call",
+    "    VERDICT arm=d7b60 adopt=0 delta=-0.00025 t=-1.53 cost=1.058x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.06x) with quality better (-0.00025) -- a TRADE, the user's call",
+    "    PICK arm=none why=no candidate is cheaper than live with quality not notably worse",
+    "",
+    "=== 2026-10-31T10:40:07  PHASE E.6: no allowance for soldiers -- no ladder escalations in 1200 games (single-path or trust-dominated); fleet default R = 0"
+   ]
   }
  ]
 }
