@@ -4,9 +4,12 @@
   "valueleaf": "em:b8979a38ce5ac04339f6"
  },
  "deck": "giants",
+ "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_giants/DECISIONS.txt)",
+ "finished": "2026-10-31T16:37:36Z",
  "frozen": "f5a889b1b838ee2ff872b91bf3d93d0b2f8fb885",
  "heartbeat": "2026-10-31T16:27:05Z",
  "host": "58199181d02e",
+ "result_branch": "artifact-refresh/giants-20261031-1637",
  "run_id": "giants-artifact-queue-tool-647f24-20261031T162646",
  "score": 0.0034,
  "stage": "valueleaf",
@@ -14,6 +17,6 @@
   "valueleaf"
  ],
  "started": "2026-10-31T16:26:46Z",
- "state": "running",
+ "state": "done",
  "worker": "artifact-queue-tool-647f24"
 }
