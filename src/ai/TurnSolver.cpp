@@ -71144,7 +71144,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             // earn the widen (t = live first, so the largest credit wins). One domain colour books as
             // that colour, several as wild (AddSourceToPool) -- the yield comes off the same field.
             const int k = static_cast<int>(s_wid.size());
-            const int n_dom = __builtin_popcount(static_cast<unsigned>(domain_mask));
+            const int n_dom = std::popcount(static_cast<unsigned>(domain_mask));
             int best_mask = 0, best_units = 0, best_t = 0;
             if (k >= 2 && k <= 12)   // a 1-widener subset IS the refused all-credit
             {
@@ -71171,7 +71171,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                             m |= s_wid[static_cast<std::size_t>(b)].mask;
                             AddCostCarryingHybrids(wc, s_wid[static_cast<std::size_t>(b)].cost);
                         }
-                        const int units = t * __builtin_popcount(static_cast<unsigned>(m));
+                        const int units = t * std::popcount(static_cast<unsigned>(m));
                         if (units <= best_units || !held.CanPay(wc)) { continue; }
                         // The held sources tap for the WIDENED domain's colours only, so the rest of
                         // the plan's pips in any other colour come out of `held` too, beside cost(W)
@@ -72032,7 +72032,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 { miss |= (1 << ci); }
             }
         }
-        widen_bound = live_scaling * __builtin_popcount(static_cast<unsigned>(miss));
+        widen_bound = live_scaling * std::popcount(static_cast<unsigned>(miss));
     }
     int growth_bound = 0;
     for (const DorkGrowthGroup& dg : dork_growth)
