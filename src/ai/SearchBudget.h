@@ -108,6 +108,23 @@ public:
         return b;
     }
 
+    // MTG_NOWIN_TWIN_FREE (TurnSolver.cpp, nwtwin::FreeScope): hand back up to `n` units a SUB-GATE twin
+    // re-search spent, never more than `pool_frac` x the limit over this budget's life. Only the budget's own
+    // count moves: the game and decision meters already counted the work and keep it (they bound REAL work).
+    // Returns the units refunded. An unlimited budget refunds nothing (nothing reads its count).
+    long long Refund(long long n, double pool_frac)
+    {
+        if (Unlimited() || n <= 0) { return 0; }
+        const long long pool = SatMulD(pool_frac, m_limit);
+        long long got = pool - m_refunded;
+        if (got > n) { got = n; }
+        if (got > m_used) { got = m_used; }
+        if (got <= 0) { return 0; }
+        m_used -= got; m_refunded += got;
+        return got;
+    }
+    long long Refunded() const { return m_refunded; }
+
     // Units left before exhaustion, clamped to >= 0 (LLONG_MAX if unlimited).
     // Clamping keeps the start-gate / overrun arithmetic well-behaved once the
     // budget has been overrun by a pass running to completion.
@@ -143,4 +160,5 @@ private:
     long long m_limit         = 0;   // 0 (or negative) == unlimited
     long long m_used          = 0;
     long long m_overrun_limit = 0;   // 0 == disarmed (no mid-pass abort)
+    long long m_refunded      = 0;   // MTG_NOWIN_TWIN_FREE: units handed back so far (see Refund)
 };

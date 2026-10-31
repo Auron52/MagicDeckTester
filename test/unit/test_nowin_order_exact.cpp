@@ -272,3 +272,56 @@ TEST_CASE("Twin estimate hints: control -- pinned OFF, the next decision searche
     CHECK(r.win[2] == r.win[1]);
     CHECK(r.units[2] > 0);
 }
+
+// MTG_NOWIN_TWIN_FREE: a SUB-GATE twin re-search (a covering twin hint exists but costs <= share x Remaining, so the
+// gate searches this order instead of reusing the twin) hands the units it spent back to its budget: the order-exact
+// answer at the canonical hit's price. The budget is sized so the gate stays SHUT at the root (hint well under
+// 0.0005 x budget). The lever is default OFF (a measurement), so these pin it.
+TEST_CASE("Twin re-search refund: a sub-gate twin re-search is searched and refunded")
+{
+    EnsureCardsLoaded();
+    const TurnSolver::TwinCacheProbe cal =
+        TurnSolver::TwinNoWinCacheForTest(Board(false), Board(true), kDepth, kMaxTurns, false);
+    REQUIRE(cal.first_units > 0);
+    const long long budget = 4000 * cal.first_units;   // gate threshold = 2 x the twin's cost: shut
+    {
+        const ArmScope off(heurarm::NOWIN_TWIN_FREE, 0);
+        const TurnSolver::TwinCacheProbe r =
+            TurnSolver::TwinNoWinCacheForTest(Board(false), Board(true), kDepth, kMaxTurns, false, budget);
+        CHECK(r.second_win == kMaxTurns + 1);
+        CHECK(r.second_units > 0);    // searched and charged
+    }
+    {
+        const ArmScope on(heurarm::NOWIN_TWIN_FREE, 1);
+        const TurnSolver::TwinCacheProbe r =
+            TurnSolver::TwinNoWinCacheForTest(Board(false), Board(true), kDepth, kMaxTurns, false, budget);
+        CHECK(r.second_win == kMaxTurns + 1);   // the same answer: this order's own search ran...
+        CHECK(r.second_root_hit == 0);          // ...it was not a cache hit...
+        CHECK(r.second_units == 0);             // ...and the budget got its units back
+    }
+}
+
+TEST_CASE("Twin re-search refund: inert at an unlimited budget")
+{
+    EnsureCardsLoaded();
+    const ArmScope on(heurarm::NOWIN_TWIN_FREE, 1);
+    const TurnSolver::TwinCacheProbe r =
+        TurnSolver::TwinNoWinCacheForTest(Board(false), Board(true), kDepth, kMaxTurns, false);
+    CHECK(r.second_root_hit == 0);
+    CHECK(r.second_units > 0);   // every unit metered: no gate, no refund
+}
+
+TEST_CASE("Twin re-search refund: never more than the pool")
+{
+    EnsureCardsLoaded();
+    SearchBudget b(1000);
+    b.Consume(400);
+    CHECK(b.Refund(30, 0.05) == 30);     // pool = 50
+    CHECK(b.Refund(30, 0.05) == 20);     // 20 left in the pool
+    CHECK(b.Refund(30, 0.05) == 0);
+    CHECK(b.Used() == 350);
+    SearchBudget u(0);
+    u.Consume(10);
+    CHECK(u.Refund(5, 0.05) == 0);       // unlimited: nothing refunded
+    CHECK(u.Used() == 10);
+}

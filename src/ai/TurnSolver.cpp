@@ -89080,6 +89080,20 @@ static double NowinTwinShare()
       return x > 0.0 ? x : 0.0005; }();
     return v;
 }
+// MTG_NOWIN_TWIN_FREE (heurarm NOWIN_TWIN_FREE; default OFF, measurement): see nwtwin::FreeScope.
+static bool NowinTwinFreeOn()
+{
+    static const bool env = EnvOn("MTG_NOWIN_TWIN_FREE");   // DEFAULT OFF (measurement lever)
+    return heurarm::Flag(heurarm::NOWIN_TWIN_FREE, env);
+}
+static double NowinTwinFreePool()
+{
+    static const double v = []() -> double
+    { const char* e = std::getenv("MTG_NOWIN_TWIN_FREE_POOL");
+      const double x = (e != nullptr && *e != '\0') ? std::strtod(e, nullptr) : 0.05;
+      return x > 0.0 ? x : 0.0; }();
+    return v;
+}
 // MTG_NOWIN_TWIN_EST's game-cache WIN estimate: a win line found by a search cut only by twin reuses, under the
 // ORDER-EXACT win key (so the index-encoded line is replayable) folded with a private salt nothing else computes.
 inline TranspositionTable::Key FSEstWinKey(const TranspositionTable::Key& key_win)
@@ -89136,10 +89150,44 @@ namespace nwtwin
         }
         ~ResearchMeter() { if (on) { if (--t_rs_active == 0) { t_rs_u += b->Used() - u0; } } }
     };
+    // MTG_NOWIN_TWIN_FREE: a SUB-GATE twin re-search (the gate stayed shut because the twin's hint costs <= share x
+    // Remaining, so the order-exact answer is bought by searching) gives its units back to the budget when it ends:
+    // at most `cap` (the gate threshold it was admitted under) per re-search, and at most MTG_NOWIN_TWIN_FREE_POOL of
+    // the budget's limit in all (SearchBudget::Refund). The canonical key answered the same node for the price of a
+    // lookup; this prices the order-exact re-search the same way, so the ladder's start gate, the overrun ceiling
+    // and every twin gate above see the canonical arm's costs while the ANSWER is this order's own. The leaves it
+    // evaluated are handed back to g_fs_leaf_evals in proportion (the emulated ladder's reconstruction and the
+    // K-predictor read them as cost). It re-prices only: it admits, skips and reuses nothing, and at an unlimited
+    // budget it never starts (the twin gate is never consulted there). Nested scopes compose: an inner refund is
+    // already out of the outer one's spend.
+    inline std::atomic<long long> g_free_n{0}, g_free_u{0}, g_free_short{0};
+    struct FreeScope
+    {
+        SearchBudget* b = nullptr; long long u0 = 0, l0 = 0, cap = 0; bool on = false;
+        void Start(SearchBudget* bb, long long thresh)
+        {
+            if (on || bb == nullptr || bb->Unlimited()) { return; }
+            on = true; b = bb; u0 = bb->Used(); l0 = g_fs_leaf_evals; cap = thresh;
+        }
+        ~FreeScope()
+        {
+            if (!on) { return; }
+            const long long spent = b->Used() - u0;
+            if (spent <= 0) { return; }
+            const long long got = b->Refund(std::min(spent, std::max<long long>(cap, 1)), NowinTwinFreePool());
+            if (got < spent) { g_free_short.fetch_add(1, std::memory_order_relaxed); }
+            const long long lv = g_fs_leaf_evals - l0;
+            if (lv > 0 && got > 0)
+            { g_fs_leaf_evals -= (got >= spent) ? lv : static_cast<long long>(static_cast<double>(lv) * static_cast<double>(got) / static_cast<double>(spent)); }
+            g_free_n.fetch_add(1, std::memory_order_relaxed);
+            g_free_u.fetch_add(got, std::memory_order_relaxed);
+        }
+    };
     struct Reporter { ~Reporter() { if (g_hints.load() == 0) { return; }   // a per-job arm can set it: print on use
         std::cerr << "[nowin-twin-wave] hints=" << g_hints.load() << " reused(lc)=" << g_reused_lc.load()
                   << " reused(gamelc)=" << g_reused_gl.load() << " est_hints=" << g_est_hints.load()
-                  << " est_wins=" << g_est_wins.load() << " est_win_reused=" << g_est_win_reused.load() << "\n"; } };
+                  << " est_wins=" << g_est_wins.load() << " est_win_reused=" << g_est_win_reused.load()
+                  << " free_n=" << g_free_n.load() << " free_u=" << g_free_u.load() << " free_short=" << g_free_short.load() << "\n"; } };
     inline Reporter g_reporter;
 }
 // Store a twin-refutation hint (see above): the widest bound any order proved, and what that order's search cost.
@@ -89228,6 +89276,13 @@ namespace nwverify
     inline thread_local const char* t_last_job = nullptr;
     inline thread_local Counts*     t_counts   = nullptr;
     inline std::atomic<long long>   g_printed{0};
+    // MTG_NOWIN_FSL_VERIFY_PRINT=N: print up to N WRONG lines per job (and 100 x N in all). Default 4.
+    inline long long PrintCap() { static const long long v = std::max(0, EnvInt("MTG_NOWIN_FSL_VERIFY_PRINT", 4)); return v; }
+    // MTG_NOWIN_FSL_VERIFY_PLAY (heurarm NOWIN_VERIFY_PLAY; DIAGNOSTIC): a WRONG hit plays the fresh answer.
+    inline bool PlayOn() { static const bool env = EnvOn("MTG_NOWIN_FSL_VERIFY_PLAY"); return heurarm::Flag(heurarm::NOWIN_VERIFY_PLAY, env); }
+    inline std::atomic<long long>   g_played{0};
+    inline thread_local bool t_play_hit = false;
+    inline thread_local TurnSolver::SearchLine t_play_line;
     // MTG_NOWIN_FSL_VERIFY_DUMP=1: each no-win store records the storing state's zone ORDER under its key, and a WRONG
     // hit prints both orders (the querying position and the twin whose refutation it was served). Diagnostic only, for a
     // single-game repro: the per-thread description map is never cleared.
@@ -89351,6 +89406,7 @@ static void NwVerifyCheck(int cache, const GameState& state, int depth, int max_
                           SearchBudget* budget, TranspositionTable* tt, int bound, std::uint64_t stored_sig,
                           const TranspositionTable::Key& key)
 {
+    nwverify::t_play_hit = false;
     nwverify::Counts& c = nwverify::Mine();
     c.hits[cache].fetch_add(1, std::memory_order_relaxed);
     const std::uint64_t sig = nwverify::FullSig(state);
@@ -89371,13 +89427,20 @@ static void NwVerifyCheck(int cache, const GameState& state, int depth, int max_
     {
         c.wrong[cache].fetch_add(1, std::memory_order_relaxed);
         (cross ? c.wrong_cross : c.wrong_same)[cache].fetch_add(1, std::memory_order_relaxed);
-        if (c.printed.fetch_add(1, std::memory_order_relaxed) < 4 && nwverify::g_printed.fetch_add(1, std::memory_order_relaxed) < 400)
+        if (nwverify::PlayOn()) { nwverify::t_play_hit = true; nwverify::t_play_line = r; nwverify::g_played.fetch_add(1, std::memory_order_relaxed); }
+        if (c.printed.fetch_add(1, std::memory_order_relaxed) < nwverify::PrintCap()
+            && nwverify::g_printed.fetch_add(1, std::memory_order_relaxed) < 100 * nwverify::PrintCap())
         {
             std::cerr << "[nowin-verify] WRONG cache=" << (cache == 0 ? "lc" : "gamelc")
                       << " job=" << (heurarm::t_job_name ? heurarm::t_job_name : "-") << " gi=" << escstats::t_gi
                       << " seed=" << state.game_seed << " turn=" << state.turn_number << " m2=" << (second_main ? 1 : 0)
                       << " depth=" << depth << " cutoff=" << cutoff << " bound=" << bound << " fresh=" << r.win_turn
                       << " order=" << (cross ? "CROSS" : (stored_sig == 0 ? "unknown" : "same")) << " nest=" << g_fsline_nest
+                      // the pass context: a probe / beam-recording pass keeps the INCLUSIVE child cut (a win at exactly
+                      // the cutoff ties an ancestor's best there), an O(1) leaf, a forced leaf, an emulated warm-up
+                      << " probe=" << (g_probe_recording ? 1 : 0) << " vrec=" << (g_probe_val_recording ? 1 : 0)
+                      << " o1=" << (FsLeafIsO1(state) ? 1 : 0) << " fh=" << (g_force_heuristic_leaf ? 1 : 0)
+                      << " fv=" << (g_force_value_leaf ? 1 : 0) << " warm=" << (g_emul_warm_pass ? 1 : 0)
                       << "\n";
             if (nwverify::Dump())
             {
@@ -89405,6 +89468,15 @@ static void NwVerifyCheck(int cache, const GameState& state, int depth, int max_
     }
     else if (!cut) { c.agree[cache].fetch_add(1, std::memory_order_relaxed); }
     else           { c.unverified[cache].fetch_add(1, std::memory_order_relaxed); }
+}
+
+// MTG_NOWIN_FSL_VERIFY_PLAY: the answer a verified no-win hit returns -- the fresh one when the verify found the hit
+// WRONG under the PLAY diagnostic, else the cached one. Consumes the flag NwVerifyCheck set.
+static inline TurnSolver::SearchLine NwPlayOr(const TurnSolver::SearchLine& cached)
+{
+    if (!nwverify::t_play_hit) { return cached; }
+    nwverify::t_play_hit = false;
+    return nwverify::t_play_line;
 }
 
 static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int max_turns,
@@ -89588,6 +89660,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // nothing reads a no-win entry's order_sig, so this is the only reader).
     const bool nw_verify = nwverify::On();
     std::uint64_t nw_sig = 0;
+    nwtwin::FreeScope twin_free;     // MTG_NOWIN_TWIN_FREE (declared first: it refunds after twin_rs has metered)
     nwtwin::ResearchMeter twin_rs;   // diagnostics only (see nwtwin::t_rs_n)
     if (lc != nullptr)
     {
@@ -89625,7 +89698,8 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     gamelc::g_nowin_hits.fetch_add(1, std::memory_order_relaxed);
                     if (nw_verify && nwverify::t_in == 0)
                     { NwVerifyCheck(1, state, depth, max_turns, cutoff, second_main, budget, tt, gn->second.nowin_bound, gn->second.order_sig, key_nw); }
-                    if (!gamelc::Verify()) { ++g_fs_memo_nowin_hits; return gn->second.line; }
+                    if (!gamelc::Verify()) { ++g_fs_memo_nowin_hits; return NwPlayOr(gn->second.line); }
+                    nwverify::t_play_hit = false;
                     gamelc_hit = true; gamelc_hit_win = max_turns + 1; gamelc::t_hit_key = gn->first;
                 }
             }
@@ -89720,7 +89794,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 ++g_fs_memo_nowin_hits;
                 if (nw_verify && nwverify::t_in == 0)
                 { NwVerifyCheck(0, state, depth, max_turns, cutoff, second_main, budget, tt, itn->second.nowin_bound, itn->second.order_sig, key_nw); }
-                return itn->second.line;
+                return NwPlayOr(itn->second.line);
             }
             // ...and a winless CERTIFICATE's refutation, which stays on the canonical key (a proof about the
             // position; see its store). Under MTG_NOWIN_ORDER_EXACT nothing else is stored there as a no-win.
@@ -89734,7 +89808,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     ++g_fs_memo_nowin_hits;
                     if (nw_verify && nwverify::t_in == 0)
                     { NwVerifyCheck(0, state, depth, max_turns, cutoff, second_main, budget, tt, itc->second.nowin_bound, itc->second.order_sig, key); }
-                    return itc->second.line;
+                    return NwPlayOr(itc->second.line);
                 }
             }
             // TWIN REFUTATION WAVE (MTG_NOWIN_TWIN_WAVE): no refutation for THIS order, but a twin's covers the cutoff and
@@ -89762,7 +89836,11 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                         auto gh = gamelc::t_map.find(gamelc::Tag(tk, state));
                         if (gh != gamelc::t_map.end() && cutoff <= gh->second.nowin_bound) { hu = static_cast<long long>(gh->second.order_sig); }
                     }
-                    if (hu >= 0) { twin_rs.Start(budget, hu); }
+                    if (hu >= 0)
+                    {
+                        twin_rs.Start(budget, hu);
+                        if (NowinTwinFreeOn()) { twin_free.Start(budget, thresh); }
+                    }
                 }
                 if (reuse != 0)
                 {
@@ -89852,7 +89930,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 ++g_fs_memo_nowin_hits;
                 if (nw_verify && nwverify::t_in == 0)
                 { NwVerifyCheck(0, state, depth, max_turns, cutoff, second_main, budget, tt, itx->second.nowin_bound, itx->second.order_sig, key_nw); }
-                return itx->second.line;
+                return NwPlayOr(itx->second.line);
             }
         }
         FSLineCache::const_iterator it = lc->find(key);
@@ -89887,6 +89965,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                         ++g_fs_memo_nowin_hits;
                         if (nw_verify && nwverify::t_in == 0)
                         { NwVerifyCheck(0, state, depth, max_turns, cutoff, second_main, budget, tt, it->second.nowin_bound, it->second.order_sig, key); }
+                        return NwPlayOr(it->second.line);
                     }
                     return it->second.line;
                 }
