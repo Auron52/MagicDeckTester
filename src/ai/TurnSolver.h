@@ -2622,6 +2622,10 @@ public:
     // reached, counting one it could reach only by targeting it (the site-9 re-open's latent count).
     // Every list is `list_len` long. `seed_*` seeds one host-applied (wave-0) variant, as the hosts do (a
     // negative reach, there as from reach_of, is a LATENT reach of -reach).
+    // MTG_DEV_SEQ_TAIL_SKIP's second-pass skip predicate, for the unit test: a first-pass tail recorded under
+    // cutoff `rec_cut` with answer `rec_win` and earliest latent turn `rec_mlt`; may the second pass skip the same
+    // tail under `cut`? (Builds a reading carry with that one record and asks the gate the hosts use.)
+    static bool DevSeqTailSkipForTest(const GameState& tail_state, int rec_cut, int rec_win, int rec_mlt, int cut);
     struct DevSeqStep { std::vector<int> pre; int bp_choice; int bp_at; };
     static std::vector<DevSeqStep> WaveWalkerDevSeqForTest(const GameState& state,
                                                            const std::vector<Plan>& plans, int list_len,

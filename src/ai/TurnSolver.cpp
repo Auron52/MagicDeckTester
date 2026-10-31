@@ -1910,6 +1910,9 @@ void TurnSolver::RecordCommittedDepth(int committed_sub_depth)
 // pass the start gate admitted and that ran on past its budget (the overrun ceiling is 25x). Counted only
 // under MTG_ROLLOUT_STATS; read-only.
 static std::atomic<long long> g_units_after_spent{0};
+// MTG_DEV_SEQ_STATS (diagnostic): per-site units spent inside a two-pass search's SECOND pass.
+static thread_local int g_dvs_in_p2 = 0;
+static std::atomic<long long> g_dvs_p2_site[unitsite::kSiteCount];
 static inline void ConsumeAt(SearchBudget* budget, unitsite::Site site)
 {
     if (budget == nullptr) { return; }
@@ -1917,12 +1920,14 @@ static inline void ConsumeAt(SearchBudget* budget, unitsite::Site site)
     { g_units_after_spent.fetch_add(1, std::memory_order_relaxed); }
     budget->Consume(1);
     if (s_rollout_stats) { unitsite::g_units[site].fetch_add(1, std::memory_order_relaxed); }
+    if (g_dvs_in_p2 > 0) { g_dvs_p2_site[site].fetch_add(1, std::memory_order_relaxed); }
 }
 static inline void ConsumeAtN(SearchBudget* budget, unitsite::Site site, long long n)
 {
     if (budget == nullptr || n <= 0) { return; }
     budget->Consume(n);
     if (s_rollout_stats) { unitsite::g_units[site].fetch_add(n, std::memory_order_relaxed); }
+    if (g_dvs_in_p2 > 0) { g_dvs_p2_site[site].fetch_add(n, std::memory_order_relaxed); }
 }
 
 namespace
@@ -28051,11 +28056,17 @@ static thread_local int  g_devseq_suppress  = 0;
 static thread_local bool g_devseq_latent_hit = false;
 static thread_local unsigned long long g_devseq_latent_n = 0;   // every latent record, ever (a node's subtree test)
 static thread_local int  g_devseq_two_pass = 0;   // inside a two-pass FullSearchLine (a nested one runs plain)
+static thread_local int  g_devseq_latent_min_turn = INT_MAX;   // the earliest turn a latent occurrence was met at
 // The first pass's line memo, carried into the second (see FullSearchLine): the ladder takes it in place of a fresh
 // one, and every node whose walk met a latent occurrence names its keys in g_devseq_dirty so the carry drops them.
 struct FSLineCache;
 static thread_local FSLineCache* g_devseq_lc_handoff = nullptr;
 static thread_local std::vector<TranspositionTable::Key>* g_devseq_dirty = nullptr;
+// ...and per dirty node (one entry per key pair above): its earliest latent turn, and whether its first-pass walk was
+// COMPLETE (no truncation, no budget bind, no first-win horizon exit) -- MTG_DEV_SEQ_TAIL_SKIP keeps such a node's
+// answer when every latent occurrence under it lies past the second pass's window (see FslEraseDirty).
+struct DvsNodeMeta { int mlt; bool complete; int cutoff; };
+static thread_local std::vector<DvsNodeMeta>* g_devseq_dirty_meta = nullptr;
 static thread_local int  g_fsl_root_cut     = 0;   // 0 = none: the root's cutoff is max_turns + 1
 static inline int FslRootCut(int max_turns)
 { return (g_fsl_root_cut > 0 && g_fsl_root_cut < max_turns + 1) ? g_fsl_root_cut : max_turns + 1; }
@@ -28086,6 +28097,31 @@ namespace devseqstats
                   g_dirty.fetch_add(static_cast<long long>(dirty / 2), std::memory_order_relaxed); } }
     inline void Pass2(bool taken)
     { if (On()) { g_p2.fetch_add(1, std::memory_order_relaxed); if (taken) { g_p2_taken.fetch_add(1, std::memory_order_relaxed); } } }
+    // DIAGNOSTIC (MTG_DEV_SEQ_STATS=1): where the lever's units go. Pass units; compound hand-outs per host
+    // (0 FSLineWin m1, 1 FSLineTail m2, 2 SolveWithLookahead) inside / outside a two-pass search; the searched-m2
+    // memo's second-pass recomputes of a state its first pass already solved.
+    inline std::atomic<long long> g_u_p1{0}, g_u_p1_of2{0}, g_u_p2{0};
+    inline std::atomic<long long> g_cmp_n[3][2], g_cmp_u[3][2], g_cmp_fresh[3][2], g_cmp_u_fresh[3][2];
+    inline std::atomic<long long> g_m2_redo{0}, g_m2_redo_u{0}, g_m2_redo_lat{0}, g_m2_miss_unsup{0}, g_m2_miss_unsup_u{0};
+    inline std::atomic<long long> g_p2_skippable{0}, g_p2_skippable_u{0}, g_m2_hidden_latent{0}, g_p2_exhausted{0}, g_p2_shallower{0};
+    inline std::atomic<long long> g_tail_rec{0}, g_tail_skip{0}, g_tail_seen{0}, g_tail_looser{0}, g_tail_inwin{0}, g_tail_latent{0};   // MTG_DEV_SEQ_TAIL_SKIP
+    inline std::atomic<long long> g_node_kept{0}, g_node_erased{0}, g_apply_skip{0}, g_clean_read_dirty{0};
+    // compound hand-out outcome census (m1 host): 0 retired, 1 dup of a loop/wave-0/node state, 2 dup of an ordinary
+    // walker hand-out, 3 dup within the same compound slot, 4 dup of another compound slot, 5 fresh
+    inline std::atomic<long long> g_cls[2][6], g_cls_empty[2][6], g_prelen[2][4];
+    struct HandoutScope
+    {
+        int host; int tp; bool on; long long u0; bool fresh = false;
+        HandoutScope(int h, bool compound, int two_pass) : host(h), tp(two_pass > 0 ? 1 : 0), on(On() && compound), u0(gamework::t_used) {}
+        ~HandoutScope()
+        {
+            if (!on) { return; }
+            g_cmp_n[host][tp].fetch_add(1, std::memory_order_relaxed);
+            g_cmp_u[host][tp].fetch_add(gamework::t_used - u0, std::memory_order_relaxed);
+            if (fresh) { g_cmp_fresh[host][tp].fetch_add(1, std::memory_order_relaxed);
+                         g_cmp_u_fresh[host][tp].fetch_add(gamework::t_used - u0, std::memory_order_relaxed); }
+        }
+    };
     struct Reporter
     {
         ~Reporter()
@@ -28094,6 +28130,40 @@ namespace devseqstats
             std::cerr << "[dev-seq] pass1=" << g_p1.load() << " met_latent=" << g_p1_latent.load()
                       << " pass2=" << g_p2.load() << " pass2_better=" << g_p2_taken.load()
                       << " carried=" << g_carry.load() << " dirty_nodes=" << g_dirty.load();
+            if (On())
+            {
+                std::cerr << "\n[dev-seq-units] p1=" << g_u_p1.load() << " p1_of_runs_with_p2=" << g_u_p1_of2.load()
+                          << " p2=" << g_u_p2.load() << " p2_skippable(latent only past cut)=" << g_p2_skippable.load()
+                          << " units=" << g_p2_skippable_u.load()
+                          << "\n[dev-seq-m2memo] p2_redo_of_p1_state=" << g_m2_redo.load() << " units=" << g_m2_redo_u.load()
+                          << " of_which_p1_met_latent=" << g_m2_redo_lat.load()
+                          << " unsup_misses=" << g_m2_miss_unsup.load() << " units=" << g_m2_miss_unsup_u.load()
+                          << " p1_hits_hiding_latent=" << g_m2_hidden_latent.load();
+                for (int h = 0; h < 2; ++h)
+                {
+                    std::cerr << "\n[dev-seq-cls] " << (h ? "m2" : "m1") << " retired/dup_loop/dup_ord/dup_same/dup_othercmp/fresh:";
+                    for (int c = 0; c < 6; ++c) { std::cerr << " " << g_cls[h][c].load(); }
+                    std::cerr << " | EMPTY arms:";
+                    for (int c = 0; c < 6; ++c) { std::cerr << " " << g_cls_empty[h][c].load(); }
+                    std::cerr << " | prelen1/2/3/4+:";
+                    for (int c = 0; c < 4; ++c) { std::cerr << " " << g_prelen[h][c].load(); }
+                }
+                std::cerr << "\n[dev-seq-tail] recorded=" << g_tail_rec.load() << " p2_gate_hits=" << g_tail_seen.load()
+                          << " skipped=" << g_tail_skip.load() << " not:cut_looser=" << g_tail_looser.load()
+                          << " not:first_pass_won_in_window=" << g_tail_inwin.load() << " not:latent_in_window=" << g_tail_latent.load()
+                          << " | dirty nodes kept=" << g_node_kept.load() << " erased=" << g_node_erased.load()
+                          << " | m1 applies skipped=" << g_apply_skip.load()
+                          << " | clean nodes that read a dirty answer=" << g_clean_read_dirty.load();
+                std::cerr << "\n[dev-seq-p2] budget_exhausted_at_end=" << g_p2_exhausted.load() << " committed_shallower=" << g_p2_shallower.load() << " sites:";
+                for (int i = 0; i < unitsite::kSiteCount; ++i)
+                { const long long v = g_dvs_p2_site[i].load(); if (v) { std::cerr << " " << unitsite::kNames[i] << "=" << v; } }
+                static const char* hn[3] = { "fsl_m1", "fsl_m2", "swl" };
+                for (int h = 0; h < 3; ++h)
+                    for (int t = 0; t < 2; ++t)
+                        std::cerr << "\n[dev-seq-compound] " << hn[h] << (t ? " in_two_pass" : " outside")
+                                  << " n=" << g_cmp_n[h][t].load() << " fresh=" << g_cmp_fresh[h][t].load()
+                                  << " units=" << g_cmp_u[h][t].load() << " (fresh: " << g_cmp_u_fresh[h][t].load() << ")";
+            }
             if (Verify())
             { std::cerr << " verified=" << g_ver_n.load() << " TWO_PASS_LATER=" << g_ver_worse.load()
                         << " two_pass_earlier=" << g_ver_better.load(); }
@@ -47992,7 +48062,8 @@ namespace solvememo
     // 0) for the greedy Solve memo: its interior collects run outside the candidate space, where
     // the searched-only condemnation filter never fires.
     struct Entry { uint64_t epoch = 0; TurnSolver::Plan plan;
-                   uint32_t condemn_drops = 0; uint32_t trunc_delta = 0; };
+                   uint32_t condemn_drops = 0; uint32_t trunc_delta = 0;
+                   bool dvs_latent = false; };   // MTG_BP_DEV_SEQ: the solve met a latent occurrence
     // thread_local: the batch runner plays games concurrently; capped so one long decision
     // cannot grow it without bound (wholesale clear, same policy as the bp-enum memo).
     inline thread_local std::unordered_map<TranspositionTable::Key, Entry,
@@ -63555,7 +63626,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 // never counted (see g_bp_seen_latent), so the numbering stays the executor's.
                 if (BpDevSeqOn() && g_rollout_nest == 0 && g_bp_enum_depth == 0
                     && TurnSolver::PostEntryActivationPending(state, s9_keys))
-                { g_bp_seen_latent = std::max(g_bp_seen_latent, bp_seen + 1); g_devseq_latent_hit = true; ++g_devseq_latent_n; }
+                { g_bp_seen_latent = std::max(g_bp_seen_latent, bp_seen + 1); g_devseq_latent_hit = true; ++g_devseq_latent_n;
+                  g_devseq_latent_min_turn = std::min(g_devseq_latent_min_turn, state.turn_number); }
                 break;
             }
             if (!TurnSolver::PostEntryActivationPending(state, s9_keys)) { break; }
@@ -74644,6 +74716,16 @@ public:
     // its later occurrences on mid-turn states no other line reached, so its applies derive continuation
     // lists the cache has never seen, and a derivation bills no unit of its own.
     bool LastIsCompound() const { return m_last < m_slots.size() && !m_slots[m_last].pre.empty(); }
+    bool LastIsEmptyArm() const { return m_last_empty; }   // MTG_DEV_SEQ_STATS (read before Report)
+    std::size_t LastPreLen() const { return m_last < m_slots.size() ? m_slots[m_last].pre.size() : 0; }
+    std::string SlotDesc(std::size_t i) const   // MTG_DEV_SEQ_STATS
+    {
+        if (i >= m_slots.size()) { return "?"; }
+        const Slot& sl = m_slots[i];
+        std::string d = "tmpl=" + std::to_string(sl.base) + " at=" + std::to_string(sl.at) + " pre=[";
+        for (int x : sl.pre) { d += std::to_string(x); d += ","; }
+        return d + "] n=" + std::to_string(sl.n);
+    }
     bool LastIsCanonOnly() const
     { return !m_canon_only.empty() && m_last < m_slots.size() && m_canon_only.count(m_slots[m_last].base_slot) != 0; }
 
@@ -86256,6 +86338,18 @@ struct FSLineCache : std::unordered_map<TranspositionTable::Key, FSLineEntry,
                                         TranspositionTable::KeyHash>
 {
     long long charged_kb = 0;   // BYTES acquired from the pool by THIS cache's live entries (name kept)
+    // MTG_DEV_SEQ_TAIL_SKIP (see DvsTailGate): set only on a two-pass search's carried memo. 1 = the first pass,
+    // recording; 2 = the second pass, reading. dvs_dirty: the first pass's dirty node keys so far, each with its
+    // earliest latent turn (a node that reads one inherits it); dvs_clean_tail: (node, tail state, kind) -> the
+    // first-pass tail's cutoff, answer and earliest latent turn, recorded by complete tails of dirty nodes.
+    int dvs_mode = 0;
+    std::unordered_map<TranspositionTable::Key, int, TranspositionTable::KeyHash> dvs_dirty;   // -> its earliest latent turn
+    struct DvsTailInfo { int cut; int win; int mlt; };   // first-pass cutoff, answer, earliest latent turn inside
+    std::unordered_map<TranspositionTable::Key, DvsTailInfo, TranspositionTable::KeyHash> dvs_clean_tail;
+    // ...and (node, static plan index) -> a main-1 plan whose APPLY the second pass may skip too (see the m1 loop):
+    // its tail record, a guard over the plan's content, and the NSKIP length its apply measured (n, m; -1 = none).
+    struct DvsApplyInfo { DvsTailInfo t; uint64_t guard; int n; int m; };
+    std::unordered_map<TranspositionTable::Key, DvsApplyInfo, TranspositionTable::KeyHash> dvs_apply_skip;
     FSLineCache() = default;
     FSLineCache(const FSLineCache&) = delete;             // a copy's entries were never acquired;
     FSLineCache& operator=(const FSLineCache&) = delete;
@@ -86265,7 +86359,8 @@ struct FSLineCache : std::unordered_map<TranspositionTable::Key, FSLineEntry,
     FSLineCache(FSLineCache&& o) noexcept
         : std::unordered_map<TranspositionTable::Key, FSLineEntry,
                              TranspositionTable::KeyHash>(std::move(o)),
-          charged_kb(o.charged_kb)
+          charged_kb(o.charged_kb), dvs_mode(o.dvs_mode), dvs_dirty(std::move(o.dvs_dirty)),
+          dvs_clean_tail(std::move(o.dvs_clean_tail)), dvs_apply_skip(std::move(o.dvs_apply_skip))
     { o.charged_kb = 0; }
     FSLineCache& operator=(FSLineCache&& o) noexcept
     {
@@ -86277,6 +86372,10 @@ struct FSLineCache : std::unordered_map<TranspositionTable::Key, FSLineEntry,
                                TranspositionTable::KeyHash>::operator=(std::move(o));
             charged_kb = o.charged_kb;
             o.charged_kb = 0;
+            dvs_mode = o.dvs_mode;
+            dvs_dirty = std::move(o.dvs_dirty);
+            dvs_clean_tail = std::move(o.dvs_clean_tail);
+            dvs_apply_skip = std::move(o.dvs_apply_skip);
         }
         return *this;
     }
@@ -88478,6 +88577,157 @@ std::vector<int> TurnSolver::DothBoundaryPinsForTest(const GameState& state)
     }
     return out;
 }
+// ---- MTG_DEV_SEQ_TAIL_SKIP (DEFAULT ON; =0 restores the full second-pass re-walk) ------------------------------
+//
+// MTG_BP_DEV_SEQ's second pass (TurnSolver::FullSearchLine) looks for a line STRICTLY earlier than the first pass's
+// win turn R, so it runs under the root cut R - 1 and every cutoff in it is <= R - 1. It re-walks every node whose
+// first-pass walk met a latent occurrence (a DIRTY node: the carry drops its entry), and at such a node it re-ran
+// EVERY option's tail (FSLineTail: the main-2 loop, each of its plans applied, each child looked up). Almost none of
+// that could find anything: Melira Pod (300 games, seed 1580001, play settings) spent +3.48M units (+27%) on the
+// second pass for zero moved games, ~70% of it re-walking (fs_main2 1.52M, fs_pre 0.66M) rather than compound lines.
+//
+// Three folds, all IDENTITIES within the second pass's window (nothing it can return changes):
+//  * TAIL SKIP. The first pass records, per (dirty node, tail state, tail kind), the tail's cutoff, its answer and
+//    the earliest turn at which anything under it met a latent occurrence -- or read the answer of a dirty node,
+//    which carries that node's own earliest turn (DvsMltFrame) -- and only for a COMPLETE tail (no truncation, no
+//    budget bind, no first-win horizon exit: its answer is the minimum within its cutoff). The second pass skips the
+//    same tail under a cutoff `cut` when the first pass's cutoff was at least as loose, its answer was later than
+//    `cut`, and its earliest latent turn is later than `cut`. Then the second pass's walk of it would be the first
+//    pass's walk under a tighter cutoff (every compound line under it starts after `cut` and is cut at once), so its
+//    answer is "no win by `cut`" -- exactly what the skip returns.
+//  * NODE KEEP (FslEraseDirty). A dirty node whose walk was complete and whose earliest latent turn is past the root
+//    cut keeps its first-pass entry: within the window its full-tree answer is its first-pass answer, by the same
+//    argument at the node.
+//  * APPLY SKIP (the main-1 plan loop, above its unit charge). A main-1 plan whose apply met no latent occurrence and
+//    left nothing the walker reads (no canon record, no node pend, one tail), and whose tail is skippable as above,
+//    is skipped before its unit and its apply; identified by its static index (DvsPlanGuard).
+// Measured (41 suite cases, seed 1580001, play settings): every digest identical; units 0.9906x overall, Melira 0.939x
+// (the lever's cost there +26.8% -> +19.1%), Landfall 0.993x, Goblins 0.991x, Goblins 2HG 0.996x.
+// What changes is only what lies PAST the window -- a value >= R the second pass discards anyway (take2 needs < R),
+// and which the game-line cache files as the same refutation either way (a past-cutoff line is stored only as "no
+// win by the cutoff"). Compound lines in the window are untouched: no first-pass tail held one, and every tail or
+// node that could reach one is walked. Nodes and tails that record per-option values for a later pass (rec_vals)
+// are never skipped or kept. At an unlimited budget the second pass therefore finds exactly what it found; under a
+// budget it spends fewer units to find it, and only budget dynamics downstream can move (a re-pricing, never a
+// refusal). The records die with the carry.
+static bool DvsTailSkipOn()
+{
+    static const bool v = EnvOn("MTG_DEV_SEQ_TAIL_SKIP", true);
+    return heurarm::Flag(heurarm::BP_DEV_SEQ_TAIL_SKIP, v);
+}
+// One FSLineTail call site of an FSLineWin node, around the call. `node_key` = the node's order-exact key; `which`
+// tells the tail kinds of one option apart (0 the natural combat, 1 the dork-release combat). Every site passes the
+// same FSLineTail arguments but the state (dom_arch differs only under DomActive, which disarms the gate), so one
+// record answers every site: a later candidate landing on a recorded candidate's state finds its record too.
+using DvsTailRec = std::vector<std::pair<TranspositionTable::Key, FSLineCache::DvsTailInfo>>;
+using DvsApplyRec = std::vector<std::pair<TranspositionTable::Key, FSLineCache::DvsApplyInfo>>;
+// A main-1 plan's identity across the two passes is its STATIC index in the node's list (the enumeration is a
+// function of the node's state; only the id-order hint rotates it, and idh_static_idx undoes that). This guard over
+// its content is belt and braces: a record whose plan does not match is simply not used.
+static uint64_t DvsPlanGuard(const TurnSolver::Plan& p)
+{
+    TranspositionTable::Key k{ 0x9D17ULL, 0x51A7ULL };
+    for (const Action& a : p.actions)
+    {
+        Fold(k, reinterpret_cast<uint64_t>(&a.card_name.str()));
+        Fold(k, static_cast<uint64_t>(a.kind)); Fold(k, static_cast<uint64_t>(a.chosen_x));
+    }
+    Fold(k, std::hash<std::string>{}(p.land_to_play)); Fold(k, static_cast<uint64_t>(p.land_decided));
+    Fold(k, static_cast<uint64_t>(p.bp_choice)); Fold(k, static_cast<uint64_t>(p.bp_at)); Fold(k, static_cast<uint64_t>(p.bp_all));
+    Fold(k, static_cast<uint64_t>(p.scry_choice)); Fold(k, static_cast<uint64_t>(p.dig_choice));
+    Fold(k, static_cast<uint64_t>(p.tutor_choice)); Fold(k, static_cast<uint64_t>(p.land_slot));
+    return k.h1 ^ (k.h2 * 0x9E3779B97F4A7C15ULL);
+}
+// The earliest-latent-turn SCOPE (g_devseq_latent_min_turn): a frame starts its own minimum and folds it into its
+// parent's on exit, so every tail and every node knows the earliest turn at which anything under it met a latent
+// occurrence (or read a dirty node's answer, which carries that node's own earliest turn).
+struct DvsMltFrame
+{
+    int prev;
+    DvsMltFrame() : prev(g_devseq_latent_min_turn) { g_devseq_latent_min_turn = INT_MAX; }
+    int Mine() const { return g_devseq_latent_min_turn; }
+    ~DvsMltFrame() { g_devseq_latent_min_turn = std::min(prev, g_devseq_latent_min_turn); }
+};
+struct DvsTailGate
+{
+    FSLineCache* lc = nullptr;
+    DvsTailRec* rec = nullptr;
+    TranspositionTable::Key ck{};
+    const FSLineCache::DvsTailInfo* seen = nullptr;   // the second pass: this tail's first-pass record
+    std::optional<DvsMltFrame> frame;                  // the first pass: this tail's latent-turn scope
+    unsigned long long trunc0 = 0, binds0 = 0; long long hex0 = 0;
+    // `allow` false where the node records per-option values for a later pass (rec_vals: the probe's beam / oracle
+    // order), which a skipped tail would record differently.
+    DvsTailGate(FSLineCache* c, DvsTailRec* node_rec, const TranspositionTable::Key& node_key, const GameState& ts,
+                int which, bool allow)
+    {
+        if (c == nullptr || c->dvs_mode == 0 || !allow || DomActive() || !DvsTailSkipOn()) { return; }
+        if (c->dvs_mode == 2 && c->dvs_clean_tail.empty()) { return; }
+        ck = BuildDedupKey(ts);
+        Fold(ck, node_key.h1); Fold(ck, node_key.h2); Fold(ck, 0xD75A11ULL + static_cast<uint64_t>(which));
+        if (c->dvs_mode == 2)
+        {
+            const auto it = c->dvs_clean_tail.find(ck);
+            if (it != c->dvs_clean_tail.end()) { seen = &it->second; }
+            return;
+        }
+        lc = c; rec = node_rec;
+        frame.emplace();
+        trunc0 = g_fs_trunc_events; binds0 = budgetbind::t_binds; hex0 = g_fs_hexits;
+    }
+    // The second pass, about to call the tail under `cut`: skip it when the first pass ran the same tail, complete,
+    // under a cutoff at least as loose, found nothing by `cut`, and met no latent occurrence (nor read a dirty node
+    // whose earliest one is) at or before `cut` -- every compound line under it starts past `cut` and is cut, and
+    // everything else is the first pass's own walk under a tighter cutoff: its answer here is "no win by cut".
+    bool Skip(int cut) const
+    {
+        const bool k = seen != nullptr && cut <= seen->cut && seen->win > cut && seen->mlt > cut;
+        if (devseqstats::On() && seen != nullptr)
+        { devseqstats::g_tail_seen.fetch_add(1, std::memory_order_relaxed);
+          if (k) { devseqstats::g_tail_skip.fetch_add(1, std::memory_order_relaxed); }
+          else if (cut > seen->cut) { devseqstats::g_tail_looser.fetch_add(1, std::memory_order_relaxed); }
+          else if (seen->win <= cut) { devseqstats::g_tail_inwin.fetch_add(1, std::memory_order_relaxed); }
+          else { devseqstats::g_tail_latent.fetch_add(1, std::memory_order_relaxed); } }
+        return k;
+    }
+    // The first pass, after the call under `cut`: record the tail if it was complete (no truncation, no budget bind,
+    // no first-win horizon exit -- so its answer is the minimum within `cut`), with its earliest latent turn.
+    bool Done(const TurnSolver::SearchLine& tail, int cut)
+    {
+        if (lc == nullptr || rec == nullptr || !frame) { return false; }
+        if (g_fs_trunc_events == trunc0 && budgetbind::t_binds == binds0 && g_fs_hexits == hex0
+            && !decisionwork::Exceeded() && !tail.truncated)
+        {
+            info = FSLineCache::DvsTailInfo{ cut, tail.win_turn, frame->Mine() };
+            rec->push_back({ ck, info });
+            if (devseqstats::On()) { devseqstats::g_tail_rec.fetch_add(1, std::memory_order_relaxed); }
+            return true;
+        }
+        return false;
+    }
+    FSLineCache::DvsTailInfo info{ 0, 0, 0 };   // what Done recorded
+};
+
+bool TurnSolver::DevSeqTailSkipForTest(const GameState& tail_state, int rec_cut, int rec_win, int rec_mlt, int cut)
+{
+    const TranspositionTable::Key node{ 0x5EEDULL, 0xC0FFEEULL };
+    const int mlt_saved = g_devseq_latent_min_turn;
+    FSLineCache rec_lc;
+    rec_lc.dvs_mode = 1;
+    DvsTailRec rec;
+    {
+        DvsTailGate g(&rec_lc, &rec, node, tail_state, 2, true);
+        if (rec_mlt != INT_MAX) { g_devseq_latent_min_turn = rec_mlt; }   // what the tail's walk would have met
+        g.Done(TurnSolver::SearchLine{ rec_win, {} }, rec_cut);
+    }
+    g_devseq_latent_min_turn = mlt_saved;
+    FSLineCache lc;
+    for (const auto& r : rec) { lc.dvs_clean_tail.emplace(r.first, r.second); }
+    lc.dvs_mode = 2;
+    const DvsTailGate g2(&lc, nullptr, node, tail_state, 2, true);
+    return g2.Skip(cut);
+}
+
 static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int max_turns,
                                          int cutoff, bool second_main, TranspositionTable* tt,
                                          FSLineCache* lc, SearchBudget* budget,
@@ -89392,6 +89642,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                 TurnSolver::Plan v;
                 static const bool s_m2w_prefix_cache = !EnvOn("MTG_NO_BP_PREFIX_CACHE");
                 std::unordered_map<uint64_t, BpPrefixSnap> prefix_cache;
+                std::unordered_map<TranspositionTable::Key, int64_t, TranspositionTable::KeyHash> dvs_origin;   // MTG_DEV_SEQ_STATS
                 while (walker.Next(post, v))
                 {
                     // Anytime: a variant only ever wins on a STRICTLY better win turn, so
@@ -89399,6 +89650,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                     if (AnytimeStop(budget))
                     { ++g_fs_trunc_events; break; }
                     CanonWaveBillScope _cwb(walker.LastIsCanonOnly() || walker.LastIsCompound(), budget);   // MTG_BP_CANON_WAVE's price, and MTG_BP_DEV_SEQ's
+                    devseqstats::HandoutScope _dhs(1, walker.LastIsCompound(), g_devseq_two_pass);   // MTG_DEV_SEQ_STATS (diagnostic)
                     ConsumeAt(budget, unitsite::kFsM2Wave);   // one interior node (plan applied)
                     if (s_rollout_stats)
                     { g_interior_nodes.fetch_add(1, std::memory_order_relaxed); }
@@ -89422,9 +89674,26 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                     // Past the end of the list: the slot retires (the walker hands the slot's EMPTY
                     // out explicitly, under MTG_BP_WAVE_EMPTY, and Report scores that one). The
                     // apply's counts are reported alongside so nested indices open their own slots.
-                    if (walker.Report(post, g_bp_cands_last, g_bp_seen_last, g_bp_demoted_last)) { continue; }
+                    const bool dvs_cmp = devseqstats::On() && walker.LastIsCompound();   // MTG_DEV_SEQ_STATS
+                    const bool dvs_emp = walker.LastIsEmptyArm();
+                    const int64_t dvs_slot = walker.LastIsCompound() ? static_cast<int64_t>(walker.LastSlot()) : -1;
+                    if (dvs_cmp) { devseqstats::g_prelen[1][std::min<std::size_t>(walker.LastPreLen(), 4) - 1].fetch_add(1); }
+                    if (walker.Report(post, g_bp_cands_last, g_bp_seen_last, g_bp_demoted_last))
+                    { if (dvs_cmp) { (dvs_emp ? devseqstats::g_cls_empty : devseqstats::g_cls)[1][0].fetch_add(1); } continue; }
                     const TranspositionTable::Key wk = BuildDedupKey(s);
-                    if (!node_child_seen.insert(wk).second) { continue; }
+                    const bool fresh_wk = node_child_seen.insert(wk).second;
+                    if (devseqstats::On())
+                    {
+                        if (fresh_wk) { dvs_origin.emplace(wk, dvs_slot); }
+                        if (dvs_cmp)
+                        {
+                            int c = 5;
+                            if (!fresh_wk) { const auto oi = dvs_origin.find(wk); c = oi == dvs_origin.end() ? 1 : oi->second < 0 ? 2 : oi->second == dvs_slot ? 3 : 4; }
+                            (dvs_emp ? devseqstats::g_cls_empty : devseqstats::g_cls)[1][c].fetch_add(1);
+                        }
+                    }
+                    if (!fresh_wk) { continue; }
+                    _dhs.fresh = true;
                     if (s.ActivePlayer().life <= 0) { continue; }   // self-lethal guard, as above
                     if (OpponentHasLost(s))
                     {
@@ -89840,6 +90109,10 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     if (state.turn_number > cutoff)    { ++g_fs_cut_prunes; return { max_turns + 1, {} }; }  // can't beat incumbent
     const pastcut::CutFrame _pcf(cutoff);   // MTG_FSL_PASTCUT_PROBE: this node's cutoff, for FSLineStoreWin
     const unsigned long long dvs_latent_at_entry = g_devseq_latent_n;   // MTG_BP_DEV_SEQ: see DvsDirty below
+    // MTG_DEV_SEQ_TAIL_SKIP: this node's earliest-latent-turn scope and its completeness watermarks (see DvsDirty).
+    const DvsMltFrame dvs_mlt;
+    const unsigned long long dvs_trunc0 = g_fs_trunc_events, dvs_binds0 = budgetbind::t_binds;
+    const long long dvs_hex0 = g_fs_hexits;
     const ProvEpochGuard _prov(g_fsline_nest == 0, budget);   // a pass root opens its own provisional epoch
     GreedyChargeGuard _gcg(state, budget);   // MTG_SOLVE_CHARGE: greedy walks under this host bill here
     // The search-window frame GreedyPermit checks (greedywindow, TurnSolver.h): THIS node's remaining
@@ -90013,6 +90286,15 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         key      = SimKeyAtDepth(key_base, depth);
         key_win = key;
         if (s_split_keys && CanonSimKeyOn()) { Fold(key_win, FsOrderSig(state)); }
+        // MTG_DEV_SEQ_TAIL_SKIP: a first-pass read of a dirty node's answer depends on its latent occurrences too.
+        if (lc->dvs_mode == 1 && !lc->dvs_dirty.empty())
+        {
+            for (const TranspositionTable::Key* dk : { &key, &key_win })
+            {
+                const auto di = lc->dvs_dirty.find(*dk);
+                if (di != lc->dvs_dirty.end()) { g_devseq_latent_min_turn = std::min(g_devseq_latent_min_turn, di->second); }
+            }
+        }
         // MTG_GAME_LINE_CACHE: an answer an earlier decision of this game computed (see gamelc).
         if (gamelc::On() && g_fsline_nest > 0)
         {
@@ -90027,7 +90309,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 && (gw->second.order_sig == 0 || gw->second.order_sig == gsig))
             {
                 gamelc::g_win_hits.fetch_add(1, std::memory_order_relaxed);
-                if (gt == 1) { g_devseq_latent_hit = true; ++g_devseq_latent_n; }
+                if (gt == 1) { g_devseq_latent_hit = true; ++g_devseq_latent_n; g_devseq_latent_min_turn = std::min(g_devseq_latent_min_turn, state.turn_number); }
                 if (!gamelc::Verify()) { ++g_fs_memo_win_hits; return gw->second.line; }
                 gamelc_hit = true; gamelc_hit_win = gw->second.line.win_turn; gamelc::t_hit_key = gw->first;
             }
@@ -90038,7 +90320,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     && cutoff <= gn->second.nowin_bound)
                 {
                     gamelc::g_nowin_hits.fetch_add(1, std::memory_order_relaxed);
-                    if (gt == 1) { g_devseq_latent_hit = true; ++g_devseq_latent_n; }
+                    if (gt == 1) { g_devseq_latent_hit = true; ++g_devseq_latent_n; g_devseq_latent_min_turn = std::min(g_devseq_latent_min_turn, state.turn_number); }
                     if (!gamelc::Verify()) { ++g_fs_memo_nowin_hits; return gn->second.line; }
                     gamelc_hit = true; gamelc_hit_win = max_turns + 1; gamelc::t_hit_key = gn->first;
                 }
@@ -90255,17 +90537,55 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // one-deviation tree only, so whatever it stores under its keys must not reach the second pass. Its keys are
     // named on exit (every return below), and the carry drops them before the second pass starts. A node that
     // met none answered for the full tree: the compound slots it lacks are built only off a latent occurrence.
+    // ...and (MTG_DEV_SEQ_TAIL_SKIP) its complete tails, recorded by the gates below, are kept for the second pass's
+    // re-walk of this node; its keys join dvs_dirty with its earliest latent turn, which a later first-pass read of
+    // them inherits; and its own earliest latent turn and completeness go to FslEraseDirty (g_devseq_dirty_meta).
+    DvsTailRec dvs_tails;
+    DvsApplyRec dvs_applies;   // ...and its main-1 plans whose whole evaluation the second pass may skip
     struct DvsDirty
     {
-        const FSLineCache* lc; const TranspositionTable::Key& key; const TranspositionTable::Key& key_win;
-        unsigned long long at_entry;
+        FSLineCache* lc; const TranspositionTable::Key& key; const TranspositionTable::Key& key_win;
+        unsigned long long at_entry; DvsTailRec& tails; DvsApplyRec& applies; const DvsMltFrame& mlt;
+        unsigned long long trunc0, binds0; long long hex0; int cutoff;
+        bool no_keep = false;   // the node records per-option values (rec_vals): a second pass must re-record them
         ~DvsDirty()
         {
+            // MTG_DEV_SEQ_STATS: a CLEAN node that read a dirty node's answer (its earliest latent turn is finite only
+            // through that read). It is carried into the second pass as a full-tree answer, and filed in the game-line
+            // cache under the full-tree tag, though it rests on a smaller-tree answer (see the design doc, 6.1).
+            if (devseqstats::On() && g_devseq_dirty != nullptr && lc != nullptr && lc->dvs_mode == 1
+                && g_devseq_latent_n == at_entry && mlt.Mine() != INT_MAX)
+            { devseqstats::g_clean_read_dirty.fetch_add(1, std::memory_order_relaxed); }
             if (g_devseq_dirty == nullptr || lc == nullptr || g_devseq_latent_n == at_entry) { return; }
             g_devseq_dirty->push_back(key);
             g_devseq_dirty->push_back(key_win);
+            // One meta entry per key pair, in step (a nested search's own cache: never kept -- not in the carry anyway).
+            if (g_devseq_dirty_meta != nullptr && lc->dvs_mode != 1) { g_devseq_dirty_meta->push_back({ 0, false, 0 }); }
+            if (lc->dvs_mode == 1)
+            {
+                const int m = mlt.Mine();
+                const bool complete = g_fs_trunc_events == trunc0 && budgetbind::t_binds == binds0 && g_fs_hexits == hex0
+                                   && !decisionwork::Exceeded() && !no_keep;
+                if (g_devseq_dirty_meta != nullptr) { g_devseq_dirty_meta->push_back({ m, complete, cutoff }); }
+                for (const TranspositionTable::Key* dk : { &key, &key_win })
+                {
+                    const auto ins = lc->dvs_dirty.emplace(*dk, m);
+                    if (!ins.second) { ins.first->second = std::min(ins.first->second, m); }
+                }
+                for (const auto& t : tails)
+                {
+                    // Keep the record searched under the LOOSEST cutoff: it answers every tighter query.
+                    const auto ins = lc->dvs_clean_tail.emplace(t.first, t.second);
+                    if (!ins.second && t.second.cut > ins.first->second.cut) { ins.first->second = t.second; }
+                }
+                for (const auto& a : applies)
+                {
+                    const auto ins = lc->dvs_apply_skip.emplace(a.first, a.second);
+                    if (!ins.second && a.second.t.cut > ins.first->second.t.cut) { ins.first->second = a.second; }
+                }
+            }
         }
-    } _dvs_dirty{ lc, key, key_win, dvs_latent_at_entry };
+    } _dvs_dirty{ lc, key, key_win, dvs_latent_at_entry, dvs_tails, dvs_applies, dvs_mlt, dvs_trunc0, dvs_binds0, dvs_hex0, cutoff };
     // "STUCK -- PASS THE TURN" (UnboundedSearchScope / WinlessCertificateActive above). This node
     // sits on the horizon edge, so the only line that can score is one that kills THIS turn; if the
     // provider can PROVE none exists, the whole pre-combat plan space below is answer-preserving
@@ -90837,6 +91157,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // reuses the ANSWER under a budget gate instead.
     ProbePlanVals* const rec_map = (g_oo_mode == 1) ? g_oo_vals : g_probe_plan_vals;
     const bool rec_vals = ((g_oo_mode == 1) || g_probe_val_recording) && rec_map != nullptr && lc != nullptr;
+    _dvs_dirty.no_keep = rec_vals;   // MTG_DEV_SEQ_TAIL_SKIP (see DvsDirty)
     std::vector<int> node_vals;
     if (rec_vals) { node_vals.reserve(pre_view.size()); }
 
@@ -91344,6 +91665,36 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         // MTG_FB_HOLD_FOLD_FREE: a searched banked-hold variant is charged its node unit only once the
         // combat-pin fold below has NOT folded it -- an uncontested or dominated flip is its base plan's
         // combat, so it re-prices to nothing (see FbHoldFoldFreeOn).
+        // MTG_DEV_SEQ_TAIL_SKIP, the APPLY skip: in the second pass, a plan the first pass applied at this node with no
+        // latent occurrence in the apply, and whose tail it then recorded as skippable under this cutoff (see
+        // DvsTailGate), is skipped before its unit and its apply. Its whole evaluation is the first pass's under a
+        // tighter cutoff, so it can return no line by the cutoff. What its apply would have left for later candidates is
+        // either replayed (the NSKIP length the walker reads) or a pure saving (a fold or the post-apply dedup that does
+        // not fire evaluates the candidate in full, which lands on this plan's state and finds its tail record).
+        if (lc != nullptr && lc->dvs_mode == 2 && !lc->dvs_apply_skip.empty() && !rec_vals && !beam_here
+            && DvsTailSkipOn() && !DomActive())
+        {
+            TranspositionTable::Key ak = key_win; Fold(ak, 0xA9915EEDULL + static_cast<uint64_t>(p_sidx));
+            const auto ai = lc->dvs_apply_skip.find(ak);
+            if (ai != lc->dvs_apply_skip.end() && ai->second.guard == DvsPlanGuard(p))
+            {
+                const int acut = FsChildCut(state, cutoff, cut_best(), max_turns, budget);
+                const FSLineCache::DvsTailInfo& t = ai->second.t;
+                if (acut <= t.cut && t.win > acut && t.mlt > acut)
+                {
+                    if (ai->second.n >= 0 && BpWaveNSkipOn() && p.bp_base >= 0)
+                    {
+                        BpWaveWalker::W0Len& e = bp_known_n[(static_cast<uint64_t>(p.bp_base) << 8)
+                                                            | static_cast<uint64_t>(p.bp_at & 0xFF)];
+                        e.n     = ai->second.n;
+                        e.max_k = std::max(e.max_k, p.bp_choice);
+                        e.m     = ai->second.m;
+                    }
+                    if (devseqstats::On()) { devseqstats::g_apply_skip.fetch_add(1, std::memory_order_relaxed); }
+                    continue;
+                }
+            }
+        }
         const bool fb_fold_free = pin_fold_here && ((p.fb_hold_choice >= 0 && FbHoldFoldFreeOn())
                                                     || PlanHasAttackTriggerPin(p));   // ...and a Tectonic / Flinger pin
         if (!fb_fold_free) { ConsumeAt(budget, unitsite::kFsPre); }   // one interior node (plan applied)
@@ -91434,7 +91785,10 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         // through, so its reach is read here and seeded into the walker below.
         const bool m1_dvs = m1_devseq && p.bp_choice >= 0 && !p.bp_all;
         if (m1_dvs) { g_bp_seen_last = 0; g_bp_seen_latent = 0; }
+        const unsigned long long dvs_lat_apply0 = g_devseq_latent_n;   // MTG_DEV_SEQ_TAIL_SKIP (the apply skip)
         ApplyPlanDirect(s, p, true, &bp, node_host_here ? &node_snap : nullptr);
+        const bool dvs_apply_latent = g_devseq_latent_n != dvs_lat_apply0;
+        const int  dvs_apply_n = g_bp_cands_last, dvs_apply_m = g_bp_demoted_last;
         if (m1_dvs && !node_snap.pending && DevSeqSeedWorth(p.bp_at, g_bp_seen_last, g_bp_seen_latent))
         { m1_dvs_seeds.push_back(DevSeqSeed{ static_cast<std::size_t>(p_pos), p.bp_at, p.bp_choice, g_bp_seen_last, g_bp_seen_latent }); }
         if (p.bp_choice < 0 && g_bp_base_canon_last != m1_canon_before && BpCanonWaveOn())
@@ -91725,9 +92079,17 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                         FSLineStoreWin(lc, key_win, win, state, &key, OF_UNITS());
                         return win;
                     }
-                    TurnSolver::SearchLine tail =
-                        FSLineTail(s3, depth - 1, max_turns, FsChildCut(s3, cutoff, cut_best(), max_turns, budget),
-                                   second_main, tt, lc, budget, nullptr, eot_ptr);
+                    TurnSolver::SearchLine tail{ max_turns + 1, {} };
+                    {
+                        const int dvs_cut = FsChildCut(s3, cutoff, cut_best(), max_turns, budget);
+                        DvsTailGate dvs_g(lc, &dvs_tails, key_win, s3, 0, !rec_vals);   // MTG_DEV_SEQ_TAIL_SKIP
+                        if (!dvs_g.Skip(dvs_cut))
+                        {
+                            tail = FSLineTail(s3, depth - 1, max_turns, dvs_cut,
+                                              second_main, tt, lc, budget, nullptr, eot_ptr);
+                            dvs_g.Done(tail, dvs_cut);
+                        }
+                    }
                     if (bp_root && FsRootDumpTurn() == state.turn_number)
                     { FsDumpPlan("bp-child", v, tail.win_turn); }
                     FswDeclinedTrace(state, depth, v, "node-child", bp3, s3, tail.win_turn, best.win_turn);
@@ -91985,8 +92347,35 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 for (const Action& a : p.actions) { g_fsw_path += a.card_name; g_fsw_path += ","; }
                 g_fsw_path += "|";
             }
-            tail = FSLineTail(s, depth - 1, max_turns, FsChildCut(s, cutoff, cut_best(), max_turns, budget), second_main,
-                              tt, lc, budget, &dom_arch, eot_ptr);
+            {
+                const int dvs_cut = FsChildCut(s, cutoff, cut_best(), max_turns, budget);
+                DvsTailGate dvs_g(lc, &dvs_tails, key_win, s, 0, !rec_vals);   // MTG_DEV_SEQ_TAIL_SKIP
+                if (!dvs_g.Skip(dvs_cut))
+                {
+                    tail = FSLineTail(s, depth - 1, max_turns, dvs_cut, second_main,
+                                      tt, lc, budget, &dom_arch, eot_ptr);
+                    // ...and the APPLY skip's record (see the second pass's check above the unit charge): a plan
+                    // whose apply met no latent occurrence and whose only other trace on this node's later work is
+                    // what it leaves for the folds and the post-apply dedup (each a pure saving: a fold or dedup
+                    // that does not fire evaluates its candidate in full) -- not one the walker reads (a canon-taking
+                    // base opens canon-wave slots; a dork-contested plan has a second tail).
+                    // A BASE plan is skipped only where no later candidate is folded or collapsed against its apply
+                    // (no wave-0 variants, no fold armed): otherwise the second pass would evaluate those in full.
+                    const bool dvs_base_free = p.bp_choice >= 0
+                        || (!bp_variants_here && !bounce_fold.on && !dig_fold.on && !pb_fold.on && !put_fold.on
+                            && !etb_fold.on && !etbc_fold.on);
+                    if (dvs_g.Done(tail, dvs_cut) && !dvs_apply_latent && !dork_contested && dvs_base_free
+                        && m1_canon_bases.count(static_cast<std::size_t>(p_pos)) == 0
+                        && etbc_expect < 0 && bounce_expect == nullptr && !put_fold_expect && !etb_fold_expect)
+                    {
+                        TranspositionTable::Key ak = key_win; Fold(ak, 0xA9915EEDULL + static_cast<uint64_t>(p_sidx));
+                        const bool nsk = BpWaveNSkipOn() && p.bp_choice >= 0 && p.bp_choice < kBpEmptyChoice
+                                      && !p.bp_all && p.bp_base >= 0;
+                        dvs_applies.push_back({ ak, FSLineCache::DvsApplyInfo{ dvs_g.info, DvsPlanGuard(p),
+                                                                               nsk ? dvs_apply_n : -1, nsk ? dvs_apply_m : -1 } });
+                    }
+                }
+            }
             if (s_fsw_path) { g_fsw_path.resize(path_len); }
         }
         if (dork_contested)
@@ -92011,10 +92400,17 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 FSLineStoreWin(lc, key_win, win, state, &key, OF_UNITS());
                 return win;
             }
-            TurnSolver::SearchLine tail_rel =
-                FSLineTail(s_rel, depth - 1, max_turns,
-                           std::min(FsChildCut(s_rel, cutoff, cut_best(), max_turns, budget), tail.win_turn),
-                           second_main, tt, lc, budget, &dom_arch, eot_ptr);
+            TurnSolver::SearchLine tail_rel{ max_turns + 1, {} };
+            {
+                const int dvs_cut = std::min(FsChildCut(s_rel, cutoff, cut_best(), max_turns, budget), tail.win_turn);
+                DvsTailGate dvs_g(lc, &dvs_tails, key_win, s_rel, 1, !rec_vals);   // MTG_DEV_SEQ_TAIL_SKIP
+                if (!dvs_g.Skip(dvs_cut))
+                {
+                    tail_rel = FSLineTail(s_rel, depth - 1, max_turns, dvs_cut,
+                                          second_main, tt, lc, budget, &dom_arch, eot_ptr);
+                    dvs_g.Done(tail_rel, dvs_cut);
+                }
+            }
             // RELEASE WINS TIES (<=, not <): the hold's only possible payoff is within THIS
             // turn -- every source untaps next turn (the hold rule's own premise) -- so a tail
             // tie means the held mana demonstrably bought nothing the search could see, while
@@ -92240,6 +92636,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             // capped so a pathological node cannot hold hundreds of GameState copies.
             static const bool s_prefix_cache = !EnvOn("MTG_NO_BP_PREFIX_CACHE");
             std::unordered_map<uint64_t, BpPrefixSnap> prefix_cache;
+            std::unordered_map<TranspositionTable::Key, int64_t, TranspositionTable::KeyHash> dvs_origin;   // MTG_DEV_SEQ_STATS
             while (walker.Next(pre_view, v))
             {
                 // Anytime: a variant only ever wins on a STRICTLY better win turn, so stopping here
@@ -92248,6 +92645,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 { ++g_fs_trunc_events;
                   if (BpWaveProbeOn()) { g_bp_wave_probe.stopped.fetch_add(1); } break; }
                 CanonWaveBillScope _cwb(walker.LastIsCanonOnly() || walker.LastIsCompound(), budget);   // MTG_BP_CANON_WAVE's price, and MTG_BP_DEV_SEQ's
+                devseqstats::HandoutScope _dhs(0, walker.LastIsCompound(), g_devseq_two_pass);   // MTG_DEV_SEQ_STATS (diagnostic)
                 if (BpWaveProbeOn()) { g_bp_wave_probe.scored.fetch_add(1); BpWaveRank(walker.LastRank()); }
 
                 ConsumeAt(budget, unitsite::kFsBpWave);   // one interior node (plan applied)
@@ -92275,8 +92673,13 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 // Past the end of the list: the continuation fell back to greedy, so this variant is
                 // a copy of its own base plan (already scored) and the slot retires. The apply's
                 // breakpoint COUNT is reported alongside so nested indices open their own slots.
+                const bool dvs_cmp = devseqstats::On() && walker.LastIsCompound();
+                const bool dvs_emp = walker.LastIsEmptyArm();
+                const int64_t dvs_slot = walker.LastIsCompound() ? static_cast<int64_t>(walker.LastSlot()) : -1;
+                if (dvs_cmp) { devseqstats::g_prelen[0][std::min<std::size_t>(walker.LastPreLen(), 4) - 1].fetch_add(1); }
                 if (walker.Report(pre_view, g_bp_cands_last, g_bp_seen_last, g_bp_demoted_last))
                 {
+                    if (dvs_cmp) { (dvs_emp ? devseqstats::g_cls_empty : devseqstats::g_cls)[0][0].fetch_add(1); }
                     if (BpWaveProbeOn()) { g_bp_wave_probe.retired.fetch_add(1); }
                     continue;
                 }
@@ -92285,6 +92688,38 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 {
                     const TranspositionTable::Key wk = BuildDedupKey(s);
                     const bool fresh_wk = bp_seen_states.insert(wk).second;
+                    if (devseqstats::On())
+                    {
+                        if (fresh_wk) { dvs_origin.emplace(wk, dvs_slot); }
+                        if (dvs_cmp)
+                        {
+                            int c = 5;
+                            if (!fresh_wk)
+                            {
+                                const auto oi = dvs_origin.find(wk);
+                                c = oi == dvs_origin.end() ? 1 : oi->second < 0 ? 2 : oi->second == dvs_slot ? 3 : 4;
+                            }
+                            (dvs_emp ? devseqstats::g_cls_empty : devseqstats::g_cls)[0][c].fetch_add(1);
+                            static const int s_dump = EnvInt("MTG_DEV_SEQ_DUMP", 0);
+                            static std::atomic<int> s_dumped{0};
+                            if (s_dump > 0 && s_dumped.fetch_add(1) < s_dump)
+                            {
+                                std::string acts, pre, cont;
+                                for (const Action& a : v.actions) { acts += a.card_name.str(); acts += ","; }
+                                for (int x : v.bp_pre) { pre += std::to_string(x); pre += ","; }
+                                for (const Permanent& q : s.battlefield)
+                                { if (q.controller_index == s.active_player_index && !q.card.IsLand()) { cont += q.card.m_name.str(); cont += q.tapped ? "(T)," : ","; } }
+                                std::string od = "-";
+                                if (c == 4 || c == 3) { const auto oi = dvs_origin.find(wk); if (oi != dvs_origin.end()) { od = walker.SlotDesc(static_cast<std::size_t>(oi->second)); } }
+                                std::fprintf(stderr, "[dev-seq-dump] m1 T%d d%d slot=%lld {%s} origin={%s} land=%s cls=%d plan=[%s] pre=[%s] at=%d choice=%d n=%d seen=%d latent=%d opp=%d hand=%zu gy=%zu board=[%s]\n",
+                                             state.turn_number, depth, static_cast<long long>(dvs_slot), walker.SlotDesc(walker.LastSlot()).c_str(), od.c_str(),
+                                             v.land_to_play.c_str(), c, acts.c_str(), pre.c_str(),
+                                             v.bp_at, v.bp_choice, g_bp_cands_last, g_bp_seen_last, g_bp_seen_latent,
+                                             s.players[1 - s.active_player_index].life, s.ActivePlayer().hand.size(),
+                                             s.ActivePlayer().graveyard.size(), cont.c_str());
+                            }
+                        }
+                    }
                     if (BpWaveProbeOn())
                     {
                         const std::size_t si = walker.LastSlot();
@@ -92308,6 +92743,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     }
                     if (!fresh_wk) { continue; }
                 }
+                _dhs.fresh = true;
                 if (BpWaveProbeOn()) { g_bp_wave_probe.rolled.fetch_add(1); }
                 if (s.ActivePlayer().life <= 0) { continue; }   // self-kill guard, as above
                 SimulateCombat(s);
@@ -92347,9 +92783,17 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     FSLineStoreWin(lc, key_win, win, state, &key, OF_UNITS());
                     return win;
                 }
-                TurnSolver::SearchLine tail =
-                    FSLineTail(s, depth - 1, max_turns, FsChildCut(s, cutoff, best.win_turn, max_turns, budget), second_main,
-                               tt, lc, budget, nullptr, eot_ptr);
+                TurnSolver::SearchLine tail{ max_turns + 1, {} };
+                {
+                    const int dvs_cut = FsChildCut(s, cutoff, best.win_turn, max_turns, budget);
+                    DvsTailGate dvs_g(lc, &dvs_tails, key_win, s, 0, !rec_vals);   // MTG_DEV_SEQ_TAIL_SKIP
+                    if (!dvs_g.Skip(dvs_cut))
+                    {
+                        tail = FSLineTail(s, depth - 1, max_turns, dvs_cut, second_main,
+                                          tt, lc, budget, nullptr, eot_ptr);
+                        dvs_g.Done(tail, dvs_cut);
+                    }
+                }
                 // ...and the tail half of the [fsw-wave] line above (same gate).
                 {
                     static const bool s_fsw_w  = EnvOn("MTG_FSW_TRACE");
@@ -92489,9 +92933,17 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     won_now = true;
                     return true;
                 }
-                TurnSolver::SearchLine tail =
-                    FSLineTail(s, depth - 1, max_turns, FsChildCut(s, cutoff, best.win_turn, max_turns, budget), second_main,
-                               tt, lc, budget, nullptr, eot_ptr);
+                TurnSolver::SearchLine tail{ max_turns + 1, {} };
+                {
+                    const int dvs_cut = FsChildCut(s, cutoff, best.win_turn, max_turns, budget);
+                    DvsTailGate dvs_g(lc, &dvs_tails, key_win, s, 0, !rec_vals);   // MTG_DEV_SEQ_TAIL_SKIP
+                    if (!dvs_g.Skip(dvs_cut))
+                    {
+                        tail = FSLineTail(s, depth - 1, max_turns, dvs_cut, second_main,
+                                          tt, lc, budget, nullptr, eot_ptr);
+                        dvs_g.Done(tail, dvs_cut);
+                    }
+                }
                 // FRESH-SPEND admissibility (mirror of wave 0's check): a freshmode variant is
                 // admitted only when its line realizes a WIN within the horizon; a this-turn kill
                 // took the won_now return above. See the wave-0 comment for the doctrine.
@@ -93116,7 +93568,14 @@ struct OrderOracleProbe
 // MTG_BP_DEV_SEQ: drop the first pass's answers for every node whose walk met a latent occurrence (see the two
 // passes in FullSearchLine): the node's no-win and order-exact win entries, its provisional and its twin-hint entry.
 // Refunds the line pool exactly as the stores charged it.
-static void FslEraseDirty(FSLineCache* lc, const std::vector<TranspositionTable::Key>& dirty)
+// MTG_DEV_SEQ_TAIL_SKIP: a dirty node whose walk was COMPLETE and met no latent occurrence (nor read a dirty node's
+// answer that did) at or before `cut` -- the second pass's root cut, the loosest cutoff it ever searches under --
+// is KEPT: every compound line under it starts after `cut`, so within the second pass's window its full-tree answer
+// is its first-pass answer (`meta` is empty with the lever off: every dirty node is dropped, as before).
+// A kept node's WIN entry must be its minimum, not a line it met past its own cutoff (the node searched nothing
+// between that cutoff and the line, so a looser second-pass query would be answered short): such a node is dropped.
+static void FslEraseDirty(FSLineCache* lc, const std::vector<TranspositionTable::Key>& dirty,
+                          const std::vector<DvsNodeMeta>& meta, int cut)
 {
     auto drop = [&](const TranspositionTable::Key& k, bool hint)
     {
@@ -93130,6 +93589,20 @@ static void FslEraseDirty(FSLineCache* lc, const std::vector<TranspositionTable:
     };
     for (std::size_t i = 0; i < dirty.size(); i += 2)
     {
+        const std::size_t mi = i / 2;
+        if (mi < meta.size() && meta[mi].complete && meta[mi].mlt > cut)
+        {
+            bool past_cut_win = false;
+            for (std::size_t j = i; j < i + 2; ++j)
+            {
+                const auto it = lc->find(dirty[j]);
+                if (it != lc->end() && it->second.nowin_bound == std::numeric_limits<int>::max()
+                    && it->second.line.win_turn > meta[mi].cutoff) { past_cut_win = true; }
+            }
+            if (!past_cut_win)
+            { if (devseqstats::On()) { devseqstats::g_node_kept.fetch_add(1, std::memory_order_relaxed); } continue; }
+        }
+        if (devseqstats::On() && mi < meta.size()) { devseqstats::g_node_erased.fetch_add(1, std::memory_order_relaxed); }
         drop(dirty[i], false);
         drop(dirty[i + 1], false);
         drop(FSProvKey(dirty[i]), false);
@@ -93179,19 +93652,33 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         std::vector<TranspositionTable::Key>* const dirty_prev = g_devseq_dirty;
         FSLineCache carry;
         std::vector<TranspositionTable::Key> dirty;
+        std::vector<DvsNodeMeta> dirty_meta;   // MTG_DEV_SEQ_TAIL_SKIP (see FslEraseDirty)
+        std::vector<DvsNodeMeta>* const meta_prev = g_devseq_dirty_meta;
         g_devseq_latent_hit = false;
         g_fsl_root_cut      = 0;
+        const int lmt_prev = g_devseq_latent_min_turn;
+        g_devseq_latent_min_turn = INT_MAX;
+        const long long dsu0 = gamework::t_used;   // MTG_DEV_SEQ_STATS (diagnostic)
         int c1 = 0;
         SearchLine line1;
         {
             struct Suppress { Suppress() { ++g_devseq_suppress; } ~Suppress() { --g_devseq_suppress; } } _sup;
             g_devseq_lc_handoff = &carry;
             g_devseq_dirty      = &dirty;
+            const bool dvs_ts   = DvsTailSkipOn();
+            g_devseq_dirty_meta = dvs_ts ? &dirty_meta : nullptr;
+            carry.dvs_mode      = dvs_ts ? 1 : 0;   // MTG_DEV_SEQ_TAIL_SKIP: record (see DvsTailGate)
             line1 = FullSearchLine(state, depth, max_turns, second_main, tt, budget, &c1);
+            carry.dvs_mode      = 0;
+            g_devseq_dirty_meta = meta_prev;
             g_devseq_dirty      = dirty_prev;
             g_devseq_lc_handoff = lc_prev;
         }
         const bool met_latent = g_devseq_latent_hit;
+        const int  lmt1 = g_devseq_latent_min_turn;
+        g_devseq_latent_min_turn = std::min(lmt_prev, lmt1);
+        const long long dsu1 = gamework::t_used;
+        if (devseqstats::On()) { devseqstats::g_u_p1.fetch_add(dsu1 - dsu0, std::memory_order_relaxed); }
         const int  miss1 = g_fsl_leafless_miss_depth;
         const bool emul1 = g_fsl_emul_heuristic_commit;
         g_devseq_latent_hit = latent_prev || met_latent;
@@ -93206,16 +93693,36 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             verify(line1);
             return line1;
         }
-        FslEraseDirty(&carry, dirty);
+        FslEraseDirty(&carry, dirty, dirty_meta, cut2);
         devseqstats::Carry(carry.size(), dirty.size());
         g_lazy_known_miss_depth = known_miss;
         g_fsl_root_cut = cut2;
         g_devseq_lc_handoff = &carry;
         int c2 = 0;
+        if (devseqstats::On()) { ++g_dvs_in_p2; }
+        carry.dvs_mode = DvsTailSkipOn() ? 2 : 0;   // MTG_DEV_SEQ_TAIL_SKIP: read (see DvsTailGate)
+        carry.dvs_dirty.clear();
         SearchLine line2 = FullSearchLine(state, c1 > 0 ? c1 : depth, max_turns, second_main, tt, budget, &c2);
+        carry.dvs_mode = 0;
+        if (devseqstats::On())
+        {
+            --g_dvs_in_p2;
+            if (budget != nullptr && !budget->Unlimited() && budget->Exhausted()) { devseqstats::g_p2_exhausted.fetch_add(1, std::memory_order_relaxed); }
+            if (c2 < c1) { devseqstats::g_p2_shallower.fetch_add(1, std::memory_order_relaxed); }
+        }
         g_devseq_lc_handoff = lc_prev;
         g_fsl_root_cut = cut_prev;
         const bool take2 = line2.win_turn < line1.win_turn;
+        if (devseqstats::On())
+        {
+            const long long u2 = gamework::t_used - dsu1;
+            devseqstats::g_u_p2.fetch_add(u2, std::memory_order_relaxed);
+            devseqstats::g_u_p1_of2.fetch_add(dsu1 - dsu0, std::memory_order_relaxed);
+            if (lmt1 > cut2)
+            { devseqstats::g_p2_skippable.fetch_add(1, std::memory_order_relaxed);
+              devseqstats::g_p2_skippable_u.fetch_add(u2, std::memory_order_relaxed);
+              if (take2) { std::cerr << "[dev-seq] SKIPPABLE PASS 2 WAS BETTER lmt=" << lmt1 << " cut2=" << cut2 << "\n"; } }
+        }
         devseqstats::Pass2(take2);
         if (take2)
         {
@@ -99103,6 +99610,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     { ++g_fs_trunc_events;
                       if (BpWaveProbeOn()) { g_bp_wave_probe.stopped.fetch_add(1); } break; }
                     CanonWaveBillScope _cwb(walker.LastIsCanonOnly() || walker.LastIsCompound(), budget);   // MTG_BP_CANON_WAVE's price, and MTG_BP_DEV_SEQ's
+                    devseqstats::HandoutScope _dhs(2, walker.LastIsCompound(), g_devseq_two_pass);   // MTG_DEV_SEQ_STATS (diagnostic)
                     if (BpWaveProbeOn())
                     { g_bp_wave_probe.scored.fetch_add(1); g_bp_wave_probe.la_scored.fetch_add(1);
                       BpWaveRank(walker.LastRank()); }
@@ -99145,6 +99653,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                                                  g_bp_wave_probe.la_retired.fetch_add(1); }
                           continue; }
                         if (LaWaveDup(walker, v, copy, bp_seen_states, la_key_slot)) { continue; }
+                        _dhs.fresh = true;
                         if (BpWaveProbeOn()) { g_bp_wave_probe.rolled.fetch_add(1);
                                                g_bp_wave_probe.la_rolled.fetch_add(1); }
                         SimulateCombat(copy);
@@ -99173,6 +99682,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                         RunPostMain2ExtraCombats(copy);   // Moraug: main 2's queued combats
                         if (OpponentHasLost(copy)) { report(state.turn_number, depth - 1); return v; }
                         if (LaWaveDup(walker, v, copy, bp_seen_states, la_key_slot)) { continue; }
+                        _dhs.fresh = true;
                         if (BpWaveProbeOn()) { g_bp_wave_probe.rolled.fetch_add(1);
                                                g_bp_wave_probe.la_rolled.fetch_add(1); }
                     }
@@ -100345,6 +100855,8 @@ static TurnSolver::Plan SearchedSecondMainMemoized(const GameState& state, int d
                                     : BuildBreakpointKey(state, /*is_pre_combat=*/false);
     Fold(k, 0x5E2C);                                // searched-m2 key namespace
     Fold(k, static_cast<uint64_t>(depth));          // fidelity is part of what is reused
+    TranspositionTable::Key k_sup = k;              // MTG_DEV_SEQ_STATS: the same state's first-pass key
+    Fold(k_sup, 0x6A3E0D5FULL);
     // MTG_BP_DEV_SEQ: the first of a full-line search's two passes solves with compound waves suppressed, and this memo
     // outlives the pass (it is per decision), so the second pass must not reuse its smaller-tree plan.
     if (g_devseq_suppress > 0) { Fold(k, 0x6A3E0D5FULL); }
@@ -100352,8 +100864,8 @@ static TurnSolver::Plan SearchedSecondMainMemoized(const GameState& state, int d
     // escalation's suppressed re-run must not hit a plan this memo computed under the filter
     // (its fresh esc_tt guards the TT but not this thread_local cache).
     static const bool s_hosttag_m2s = EnvOn("MTG_ENUM_MEMO_HOSTTAG", true);
-    if (s_hosttag_m2s && g_condemn_suppress) { Fold(k, 0xC5B9); }
-    if (t_rollout_narrow) { Fold(k, kRolloutNarrowTag); }
+    if (s_hosttag_m2s && g_condemn_suppress) { Fold(k, 0xC5B9); Fold(k_sup, 0xC5B9); }
+    if (t_rollout_narrow) { Fold(k, kRolloutNarrowTag); Fold(k_sup, kRolloutNarrowTag); }
     auto& cache = solvememo::t_m2cache;
     auto it = cache.find(k);
     // MTG_LEAF_KILL_ONLY (see LeafKillOnlyOn): a kill-only solve's plan lives under its own namespace;
@@ -100369,6 +100881,8 @@ static TurnSolver::Plan SearchedSecondMainMemoized(const GameState& state, int d
     if (it != cache.end() && it->second.epoch == g_decision_epoch)
     {
         solvememo::g_m2_hits.fetch_add(1, std::memory_order_relaxed);
+        if (devseqstats::On() && it->second.dvs_latent && g_devseq_suppress > 0)
+        { devseqstats::g_m2_hidden_latent.fetch_add(1, std::memory_order_relaxed); }
         // Verify pass (MTG_SOLVE_MEMO_VERIFY; the coarse key's mandatory soundness gate): every
         // hit ALSO recomputes uncached and compares. A mismatch under MTG_M2_KEY_COARSE means a
         // coarse-dropped fold was a REAL dependency -- wrong plan reuse, not noise.
@@ -100407,9 +100921,24 @@ static TurnSolver::Plan SearchedSecondMainMemoized(const GameState& state, int d
     solvememo::g_m2_misses.fetch_add(1, std::memory_order_relaxed);
     const unsigned long long drops_before = g_condemn_drops;
     const unsigned long long trunc_before = g_fs_trunc_events;
+    const unsigned long long dvs_lat_before = g_devseq_latent_n;
+    const long long dsu0 = gamework::t_used;
     TurnSolver::Plan p = TurnSolver::SolveWithLookahead(state, /*is_pre_combat=*/false, depth,
                                                         max_turns, budget,
                                                         /*enforce_budget=*/false, second_main, tt);
+    if (devseqstats::On() && g_devseq_suppress == 0 && !ko_hit)
+    {
+        const long long du = gamework::t_used - dsu0;
+        devseqstats::g_m2_miss_unsup.fetch_add(1, std::memory_order_relaxed);
+        devseqstats::g_m2_miss_unsup_u.fetch_add(du, std::memory_order_relaxed);
+        const auto it1 = cache.find(k_sup);
+        if (it1 != cache.end() && it1->second.epoch == g_decision_epoch)
+        {
+            devseqstats::g_m2_redo.fetch_add(1, std::memory_order_relaxed);
+            devseqstats::g_m2_redo_u.fetch_add(du, std::memory_order_relaxed);
+            if (it1->second.dvs_latent) { devseqstats::g_m2_redo_lat.fetch_add(1, std::memory_order_relaxed); }
+        }
+    }
     if (cache.size() >= solvememo::Cap())
     {
         cache.clear();
@@ -100418,7 +100947,8 @@ static TurnSolver::Plan SearchedSecondMainMemoized(const GameState& state, int d
     if (ko_hit && s_rollout_stats) { g_ko_memo_ns.fetch_add(1, std::memory_order_relaxed); }
     cache[k] = solvememo::Entry{ g_decision_epoch, p,
                                  static_cast<uint32_t>(g_condemn_drops - drops_before),
-                                 static_cast<uint32_t>(g_fs_trunc_events - trunc_before) };
+                                 static_cast<uint32_t>(g_fs_trunc_events - trunc_before),
+                                 g_devseq_latent_n != dvs_lat_before };
     return p;
 }
 
