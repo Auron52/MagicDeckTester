@@ -503,8 +503,9 @@ launch unless the user requests a restart.
     shouldn't be arbitrarily increasing the limit."* Only the USER changes the yardstick.) Check with
     `suite_gate.py --cost decks/<Deck>`; the table is `test/suite_cost.json`, refilled by
     `--measure-all` from **one pooled tier run** (never a per-deck loop — that is the "waves are a
-    loop" defect). The gated number is per-game core-ms at the deck's worst *searched* case, not total
-    tier time, because total is confounded by the game counts we choose and so is gameable by sizing.
+    loop" defect). Pool the seeds of each searched depth and budget, compute ms per game for each
+    depth and budget, then gate on the largest of those averages (USER 2026-10-31). Exclude budget-0
+    backstops. Total tier time is confounded by the game counts we choose and is gameable by sizing.
   * **A deck ENTERS with the small overnight ENTRY set and expands at its keep-table adoption** (USER
     2026-10-10): before the keep table every mulligan game plays out each candidate bottom as a full game,
     so the deck is at its most expensive (Bruna at the standard shape was 28.6% of the overnight tier). Expand

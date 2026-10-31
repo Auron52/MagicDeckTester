@@ -44,8 +44,9 @@ comes before the value leaf and the mulligan profile.
 
 WHAT IS MEASURED, and why it is this and not total tier time
 ------------------------------------------------------------
-`cost_per_game_ms` = the **maximum per-game core-ms over the deck's SEARCHED (depth>0) cases** in the
-tier. Reasons:
+`cost_per_game_ms` = the **maximum per-game core-ms after pooling seeds at each (deck, depth,
+budget) searched shape** in the tier (user, 2026-10-31). The numerator and denominator are summed
+across that shape's seeds before division. Reasons:
 
   * It cannot be gamed by sizing. Total tier core-ms is the thing the budget actually cares about, but
     it is the product of intrinsic cost AND the game counts we chose -- so a pathologically slow deck
@@ -89,6 +90,7 @@ COST_CACHE = os.path.join(ROOT, "test/suite_cost.json")
 MULTIPLE = 3.0
 TIER = "regression"
 REFERENCE_KEY = "hinata"   # the PINNED yardstick (USER 2026-10-22); see THE YARDSTICK IS PINNED above
+COST_METRIC = "searched_depth_budget_pooled_seeds_v2"
 
 
 # --------------------------------------------------------------------------- cases file
@@ -193,13 +195,15 @@ def has_both_artifacts(deck_path):
 def load_cache():
     if os.path.exists(COST_CACHE):
         try:
-            return json.load(open(COST_CACHE))
+            cache = json.load(open(COST_CACHE))
+            if cache.get("_metric") == COST_METRIC:
+                return cache
         except (ValueError, OSError):
             pass
     return {"_note": "Per-deck suite cost, written by scripts/suite_gate.py. "
-                     "cost_per_game_ms = max per-game core-ms over the deck's searched (depth>0) "
-                     f"{TIER} cases; total_core_ms = the whole tier for that deck.",
-            "_multiple": MULTIPLE, "decks": {}}
+                     "cost_per_game_ms = max pooled-seed ms/game by searched (deck, depth, budget) "
+                     f"{TIER} shape; total_core_ms = the whole tier for that deck.",
+            "_metric": COST_METRIC, "_multiple": MULTIPLE, "decks": {}}
 
 
 def save_cache(c):
@@ -257,18 +261,23 @@ def measure(deck_path, key, tier=TIER, run=True):
     if not jobs:
         raise SystemExit(f"no {tier} timings for {key} in {log} -- run "
                          f"`bash test/regression.sh --deck={key}` first")
-    unbudgeted = {(k, d, s) for k, d, s, _g, b in _cases(tier) if b == 0}
+    case_by_name = {f"{k}_{tier}_d{d}_s{s}": (k, d, b)
+                    for k, d, s, _g, b in _cases(tier)}
     searched = {}
     for name, (games, ms) in jobs.items():
-        m = re.search(rf"^(\w+?)_{tier}_d(\d+)_s(\d+)$", name)
-        if not m or not games:
+        case = case_by_name.get(name)
+        if case is None or not games:
             continue
-        case = (m.group(1), int(m.group(2)), int(m.group(3)))
-        if case[1] > 0 and case not in unbudgeted:
-            searched[name] = ms / games
+        deck, depth, budget = case
+        if depth > 0 and budget > 0:
+            shape = f"{deck}_{tier}_d{depth}_b{budget}"
+            old_games, old_ms = searched.get(shape, (0, 0))
+            searched[shape] = (old_games + games, old_ms + ms)
+    per_shape = {shape: ms / games for shape, (games, ms) in searched.items()}
     return {"key": key, "tier": tier,
-            "cost_per_game_ms": round(max(searched.values()), 4) if searched else 0.0,
-            "worst_case": max(searched, key=searched.get) if searched else None,
+            "cost_per_game_ms": round(max(per_shape.values()), 4) if per_shape else 0.0,
+            "worst_case": max(per_shape, key=per_shape.get) if per_shape else None,
+            "cost_metric": COST_METRIC,
             "total_core_ms": sum(ms for _g, ms in jobs.values()),
             "jobs": len(jobs)}
 
