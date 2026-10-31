@@ -9,6 +9,8 @@
  "frozen": "6fe26602c5f99df1395aebcad5441f190672f07a",
  "heartbeat": "2026-10-31T21:25:23Z",
  "host": "58199181d02e",
+ "landed": "ac0213a434388532aabce8ae0f01515b98743b4e",
+ "landed_at": "2026-10-31T21:45:43Z",
  "result_branch": "artifact-refresh/kittyequipment-20261031-2135",
  "run_id": "kittyequipment-artifact-queue-tool-647f24-20261031T165332",
  "score": 0.003,
