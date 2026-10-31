@@ -1,16 +1,27 @@
 # Cyclone completion review
 
-Status: primary complete; follow-up measurements in progress, 2026-10-31. This is the concise review alongside
-`cyclone-completion-checkpoint.md`; it does not replace the historical analysis ledger.
-No mulligan or value-leaf generation has started during completion.
+Status: integration implementation complete; final validation in progress, 2026-10-31.
+No mulligan or value-leaf generation has started.
 
-The implementation has since been integrated with main `138d2dbea` on
-`cyclone-landing138`, code `a515040de`, source
-`5e96106ee481c9a93859b10ffe5b373b1b2d4f6f`. Linux CI passes; Windows and fresh
-local integration gates remain pending. This merge adds earliest-turn propagation
-to local memo-hit provenance and restores searched-M2 cached latent dependencies.
-Neither changes the shared-budget policy. The measurements below remain labelled
-V5; fresh integrated-source memory, regression and quiet timing are still owed.
+Current integration is `cyclone-landing905`, based on
+`phase-1-2-deck-analyzer` commit `90503a778`. Pushed backup code `e3e095a26`
+has source tree `c2c6d4a03a5c1df9cf72c55bd29940aacff41efc`. It has not yet
+landed on the shared branch. Full local units pass: 2,415 cases / 3,567,944
+assertions. Fresh PGO+LTO is building at 32 workers; normal smoke, regression,
+reference replay, final cache validation and quiet timing follow. CI41193237355
+is running on Linux and Windows. No changes target `main`.
+
+The newer shared-branch union preserves all 760 heuristic slots, all 914 upstream
+ground-truth/log files and all 729 reference files. Completion also repairs
+memo-hit earliest-turn provenance and searched-M2 latent dependencies, adds
+unambiguous diagnostic job attribution, and wires the approved two-Ulamog bucket
+merge through generation's production parser. Actual K remains unmeasured.
+
+The optional V5 follow-up stopped at 2,439 / 5,986 completed games under the
+user's priority to land promptly. Its partial evidence is preserved in
+`cyclone-pending-policy-experiments.md`; it supplies no complete-pool verdict.
+All measurements below are historical V5 evidence, not final-source results.
+The user requires tests and push to `phase-1-2-deck-analyzer` before generation.
 
 ## Implementation and source
 

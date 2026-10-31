@@ -1,9 +1,55 @@
 # Cyclone completion checkpoint — 2026-10-31
 
-User scope: finish outstanding changes in `origin/cyclone-analysis:docs/design/cyclone-branches-and-next-steps.md`, then re-evaluate. Do not start mulligan/value generation before that review.
+User scope: finish outstanding changes, re-evaluate, and land/push to the latest
+`phase-1-2-deck-analyzer` with normal tests before mulligan/value generation.
+No changes target `main`. Normal throughput uses all 32 available logical CPUs.
 
-Active integration: `cyclone-landing138`, `.claude/worktrees/cyclone-landing138`,
-based on main `138d2dbea`. V5 remains frozen/pushed separately on
+## Operative status — Landing905, 2026-10-31
+
+Active integration is `cyclone-landing905`, worktree
+`.claude/worktrees/cyclone-landing905`, based on shared-branch commit
+`90503a778`. Backup code `e3e095a2654b52e5853c378cf7ebe56b072689e0` is pushed;
+clean source tree is `c2c6d4a03a5c1df9cf72c55bd29940aacff41efc`. The change
+has NOT yet landed on `phase-1-2-deck-analyzer`. Full units: 2,415 cases /
+3,567,944 assertions PASS. Root owns active fresh PGO+LTO build session64102
+at 32 workers; no PGO hash is asserted before completion. Superseded Landing138
+PGO was stopped by root; all old source and measurements remain preserved.
+
+The six upstream commits since138 add EDF energy/payment shapes (four default
+ON, EF_SCALAR_REFUND defaultOFF), accepted EDF/Landfall GT and MidrangeBurn's
+leafless play model. Integration preserves all760heuristic slots,914upstream
+GT/log files and729references. No analyzer, card-data, Cyclone/Hinata/Kitty
+deck or generation-driver changes came from that upstream delta. Static main-
+pool census finds no energy, land-aura, ETB-untapper or painland capability in
+those three active apparatus families; this is source applicability evidence,
+not a substitute for fresh normal tests.
+
+Authoritative UNSEALED final packet:
+`build/scratch/cyclone-finish/v7-905-lean/prepared-c2c6d4a-final`.
+Seal only after actual fresh PGO stamp/hash is available; do not launch older
+V6/V7 prototypes. Root will run normal smoke and regression at32workers,
+including their scenario/reference gates, then inspect ALL changed per-game
+records and every searched slower case against preserved905ground truth.
+No acceptance from aggregate scores alone; no automatic13kquality repeat.
+Final cache/quiet tests and linear shared-branch push remain root-owned.
+
+The approved two-Ulamog `.buckets.json` is persisted (SHA256
+`8d54582851fa6c31638ee35b7e81eec49c961c74d0930a68fbdce6d57e6256d2`),
+with comma-safe exact-name generation parsing and focused tests. No K19land
+merge or hand-written screen marker was added. Actual K/settings remain
+unmeasured. Generation follows final validation/admission, shared-branch push
+and review: mulligan `fast` first, value leaf second, each alone on the box.
+
+Exploratory V5followups are STOPPED/-2 at10:07:36UTC,2439/5986closed;
+the engine lease is RELEASED. No full conditional aggregate, DONE0 claim,
+alias installation, reversed40run or new launch is authorized by its old plan.
+1025ordinary controls completed; only2/4selected deep pairs closed. These
+remain partial historical evidence, with pending experiments kept pending.
+
+## Historical checkpoints below — superseded lifecycle and paths
+
+The progress, running-PID, unbuilt and pending statements below record earlier
+stages. They do not override the operative status above. V5 is frozen separately on
 `cyclone-current` at `ed05f3663`, SRC8b/PGO2371; its measurements below keep that
 source label. All original/intermediate branches and worktrees remain intact.
 Primary checkout's unrelated `test/ref_bench.json` edit remains untouched.

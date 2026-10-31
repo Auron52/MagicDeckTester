@@ -1,16 +1,23 @@
 # Unpredictable Cyclone: branch map, state and next steps (2026-10-31)
 
-> Completion update (2026-10-31): the backup branches have been integrated on
-> `cyclone-current` against main `547e6fe8b`; original and intermediate branch refs remain intact. The fixed 512 MB per-thread
-> plan-cache policy and the companion per-thread FSL quota were removed. The existing shared,
-> RAM-sized budgets remain, together with exact keys and hit-equals-miss pricing. The user prefers
-> landing Cyclone before the separate cache-budgeting project. No broader cache redesign is being
-> adopted as an implied prerequisite. Three rollout/executor replay defects found during completion
-> are fixed and tested, along with a latent-discovery provenance defect in the local FSL cache. Fresh
-> source-matching V5 measurements are running; earlier stopped runs do not establish adoption results.
-> Mulligan and value-leaf generation wait until the requested re-evaluation. Current implementation,
-> verification and pending measurements are tracked in
-> `cyclone-completion-checkpoint.md`; the branch map and measurements below are historical.
+> Completion update (2026-10-31): all implementation branches are integrated on
+> `cyclone-landing905`, based on `phase-1-2-deck-analyzer` commit `90503a778`.
+> Code `e3e095a26` has source tree `c2c6d4a03a5c1df9cf72c55bd29940aacff41efc`;
+> it is backed up on origin but has not yet landed on the shared branch.
+> The full local unit suite passes (2,415 cases / 3,567,944 assertions).
+> Fresh PGO, normal smoke/regression/replay checks, final cache checks and quiet
+> timing are in progress. The optional V5 follow-up was stopped after 2,439 of
+> 5,986 games to prioritize landing; partial results remain preserved and labelled.
+> Fixed 512 MB per-thread plan/FSL quotas are removed; existing shared RAM-sized
+> budgets retain exact keys and equal hit/miss pricing. Cache budgeting remains a
+> separate project. The approved two-Ulamog bucket merge is now wired through the
+> generation policy and tested; actual post-discovery K is still unmeasured.
+> User order: finish normal tests, push everything to `phase-1-2-deck-analyzer`,
+> then assess feasibility and run mulligan generation followed by value-leaf.
+> No changes target `main`. Use all 32 logical CPUs for normal throughput.
+> See `cyclone-completion-checkpoint.md` for current runs and
+> `cyclone-pending-policy-experiments.md` for preserved optional work.
+> The branch map and original measurements below are historical.
 
 
 Standalone hand-off for whoever resumes the Cyclone work. The per-deck ledger, with every measurement, is
