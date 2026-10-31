@@ -1,0 +1,144 @@
+{
+  "_comment": [
+    "Phase 2: two Emrakuls cast on round 3 (30 Islands) owe TWO extra turns (two cast triggers;",
+    "the legend rule then puts the second copy into the graveyard, whose shuffle trigger fires).",
+    "Both extra turns are part of round 3: two 15-point attacks kill the 30-life opponent in ROUND 3."
+  ],
+  "deck": "decks/Unpredictable Cyclone/Unpredictable Cyclone.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 30,
+  "battlefield": [
+    {
+      "name": "Island",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    }
+  ],
+  "hand": [
+    "Emrakul, the Aeons Torn",
+    "Emrakul, the Aeons Torn"
+  ],
+  "library_filler": "Island",
+  "library_size": 30,
+  "depth": 2,
+  "budget_ms": 200,
+  "max_turns": 4,
+  "expect_win_turn": 3
+}

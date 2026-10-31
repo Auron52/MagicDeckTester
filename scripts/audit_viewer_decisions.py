@@ -164,6 +164,10 @@ MANIFEST = {
     "draw_target_player":    ("main_phase",           truthy),
     "tutor_to_hand":         ("main_phase",           truthy),
     "tutor_to_top":          ("main_phase",           truthy),
+    # Long-Term Plans ("search your library for a card, then shuffle and put that card third from the
+    # top"): the same searched tutor target (Plan::tutor_choice / tutor_target plan variants); in human
+    # play an instant tutor re-asks at resolution (HumanPlayDefersTutorTarget -> the `tutor` chooser).
+    "tutor_library_position": ("main_phase",          positive),
     # "You MAY search" (Giant Harbinger). This is a real decision, not inert: TurnSolver.cpp
     # emits an extra DECLINE plan variant (`v.tutor_choice = kTutorDeclineChoice`) alongside the
     # per-target variants, so it rides the same main_phase plan list as the tutor pick it
@@ -562,6 +566,25 @@ MANIFEST = {
     # ResolveLandfallTargetCounters, over EVERY legal Plant; the engine's searched pick
     # (Plan::landfall_target_choice) is preselected. A single legal Plant is forced (not prompted).
     "landfall_target_counters": ("target",            positive),
+    # ---- Unpredictable Cyclone phase 2 (2026-10-27): the Ulamogs' targeted CAST triggers ----
+    # "exile two target permanents" / "destroy target permanent": WHICH permanents (either side) is asked
+    # through the shared `target` board-click (g_play_loyalty_chooser) at ChooseCastTriggerTargets -- the
+    # shared push/inline chooser both apply paths call -- one pick per target over EVERY legal permanent;
+    # the engine's searched option (Plan::cast_trigger_target_choice) is preselected; a forced pick is not
+    # prompted.
+    "cast_trigger_exile_target_permanents":   ("target", positive),
+    "cast_trigger_destroy_target_permanents": ("target", positive),
+    # ---- Unpredictable Cyclone phase 3 (2026-10-27) ----
+    # Unpredictable Cyclone's replaced cycling draw: "You may cast that card without paying its mana cost"
+    # -- the shared `free_cast` decision at the human-play dig (TurnSolver's cyclone_replaced_draw), source
+    # "Unpredictable Cyclone", the walk's non-hits shown; with a Remand in hand that could answer the hit, a
+    # SECOND free_cast prompt offers that Remand (zone "hand"; its cost is paid). The autonomous engine
+    # searches it (the cycle seed's free-cast pin).
+    "cycle_draw_exile_shared_type_freecast":  ("free_cast", truthy),
+    # Curator of Mysteries' "whenever you cycle or discard another card, scry 1": the ordinary `scry`
+    # decision (ScryTop's g_play_top_chooser), one prompt per trigger, at the cycle (before its draw) and at
+    # every other discard (ResolveDiscardScryTriggers). The autonomous engine searches a cycle's j.
+    "cycle_or_discard_trigger_scry":          ("scry", positive),
     # ---- the land-search cluster (2026-10-15; core/LandSearch.h) ----
     # WHICH land(s) every land search finds is asked at RESOLUTION through the shared `tutor_etb`
     # chooser, one sequential prompt per land (PerformLandSearch -- the shared resolution helper, so it
@@ -771,6 +794,10 @@ INERT_PARAMS = {
     # Midrange Burn: fixed arithmetic/cost semantics; the existing cast/tap actions own timing.
     "damage_per_nonbasic_land": "Price of Progress deals its printed multiple to EACH player from the live nonbasic count; no targets or chosen amount",
     "tap_is_life_payment": "Fiery Islet's printed life payment is a mandatory mana-ability cost, not preventable damage; the mana activation is the existing tap action",
+    # ---- Unpredictable Cyclone phase 2 (2026-10-27) -- PROVISIONAL, pending the user's OK ----
+    "cast_trigger_extra_turns": "Emrakul's 'take an extra turn after this one' -- MANDATORY cast trigger, no choice (display only: the turn bar's 'Turn N (extra k)', an event line, extra_turn/turn_seq in the decision JSON)",
+    "annihilator": "Annihilator N -- the DEFENDING player's sacrifice (the passive opponent sacrifices oldest first, a fixed rule); not our choice, nothing to surface (event line only)",
+    "put_into_graveyard_shuffles_graveyard": "Emrakul / Ulamog the Infinite Gyre: the owner shuffles their graveyard into their library -- MANDATORY trigger, no choice (event line)",
     # ---- LandfallElementals (2026-10-18) -- PROVISIONAL, pending the user's OK ----
     "landfall_self_pump_power": "Akoum Hellhound / Brushfire Elemental: 'this creature gets +2/+2 until end of turn' on each landfall -- MANDATORY, untargeted SELF pump, no choice (the land drop's timing is the decision and rides main_phase via Plan::land_slot)",
     "landfall_self_pump_toughness": "toughness half of the landfall self pump (rides landfall_self_pump_power) -- no choice",
@@ -1597,6 +1624,10 @@ MAINPHASE_PARAMS = {
     # sub-choices reuse the existing `face` / `fetch` subs and the `bounce` decision.
     "play_lands_from_library_top": "Courser of Kruphix's 'You may play lands from the top of your library' -- the land drop's SOURCE is a main_phase plan variant (Plan::land_from_top; line verb landtop=, board field library_top)",
     "cycling_cost":        "cycling = discard-to-draw activation from hand (main_phase play)",
+    # Street Wraith (2026-10-26): "Cycling--Pay 2 life" -- the LIFE half of the cycling cost. It prices the
+    # same cycling_cost main_phase play (offered only while life > N; the viewer's offer probe and every
+    # payer read CyclingLifePayable), so it adds no decision of its own.
+    "cycling_life_cost":   "life half of a cycling cost (Street Wraith); prices the cycling_cost main_phase play, no choice",
     # Remand (2026-10-17): "Counter target spell ... put it into its owner's hand ... Draw a card." Its
     # only legal target is one of OUR OWN spells on the stack, so WHICH spell it answers is a main_phase
     # PLAN VARIANT -- Action::remand_by on the target's cast ("X + Remand on it"), one per legal target,
@@ -1875,6 +1906,7 @@ def modeled_tokens(card):
     if real_target(p.get("targeting", "none")) or p.get("spectacle_cost"): t.add("target")
     if p.get("sacrifice_land"):                                            t.add("sacrifice")
     if p.get("etb_scry", 0) > 0 or p.get("cast_scry", 0) > 0:              t.add("scry")
+    if p.get("cycle_or_discard_trigger_scry", 0) > 0:                      t.add("scry")   # Curator
     if p.get("etb_surveil", 0) > 0:                                        t.add("surveil")
     if p.get("damage_divided"):                                           t.add("divide")
     if p.get("etb_damage_divided_creatures", 0) > 0:                      t.add("divide")   # Fury's ETB
@@ -1892,6 +1924,7 @@ def modeled_tokens(card):
     if p.get("grants_madness_creature_subtype"):
         t.add("discard")
     if p.get("tutor_to_hand") or p.get("tutor_to_top") or p.get("fetch_land_types") \
+            or p.get("tutor_library_position", 0) > 1 \
             or p.get("tutor_to_battlefield_single") or p.get("tutor_land_to_battlefield") \
             or p.get("look_top_put_creature_count", 0) > 0:
         t.add("search")
@@ -1915,6 +1948,10 @@ def modeled_tokens(card):
     # Foundation Breaker's optional twin (the `dig` "(may destroy)" pick IS its target choice) and
     # Fulminator Mage's sacrifice payload (the `target` board-click).
     if p.get("etb_destroy_artifact_enchantment_optional") or p.get("sac_outlet_destroy_nonbasic_land"):
+        t.add("target")
+    # Unpredictable Cyclone phase 2: the Ulamogs' targeted CAST triggers (the `target` board-click,
+    # one pick per target, at ChooseCastTriggerTargets).
+    if p.get("cast_trigger_exile_target_permanents", 0) > 0 or p.get("cast_trigger_destroy_target_permanents", 0) > 0:
         t.add("target")
     if p.get("transmute_cost") or p.get("life_gated_put_creatures_cost"):
         t.add("search")
@@ -2124,7 +2161,7 @@ def verify_card(deck, prof, card_name, expected_types, base_seed, budget, max_tu
                 in_hand_here = True
             choice = pick_toward(d, target_lc)
             if t in ("jitte", "firebreathe"):   # side-channel reply, keyed by turn (see step())
-                jitte.append(("fb|" if t == "firebreathe" else "") + f"{d.get('turn')}:{choice}")
+                jitte.append(("fb|" if t == "firebreathe" else "") + f"{d.get('turn_seq', d.get('turn'))}:{choice}")
                 continue
             if t == "main_phase":
                 key = (d.get("turn"),
@@ -2207,7 +2244,7 @@ def verify_activation(deck, prof, card_name, marker, base_seed, budget, max_turn
                                              "turn": d.get("turn"), "marker": marker})
             choice = pick_toward(d, target_lc)
             if d.get("type") in ("jitte", "firebreathe"):
-                jitte.append(("fb|" if d.get("type") == "firebreathe" else "") + f"{d.get('turn')}:{choice}")
+                jitte.append(("fb|" if d.get("type") == "firebreathe" else "") + f"{d.get('turn_seq', d.get('turn'))}:{choice}")
                 continue
             if d.get("type") == "main_phase":
                 key = (d.get("turn"),
@@ -2274,7 +2311,7 @@ def run_sweep(deck, prof, base_seed, n_games, max_turns, mana_names=frozenset())
                             max_open_mana[nm] = open_mana
             choice = pick(d)
             if d.get("type") in ("jitte", "firebreathe"):   # side-channel reply, keyed by turn (see step())
-                jitte.append(("fb|" if d.get("type") == "firebreathe" else "") + f"{d.get('turn')}:{choice}")
+                jitte.append(("fb|" if d.get("type") == "firebreathe" else "") + f"{d.get('turn_seq', d.get('turn'))}:{choice}")
                 continue
             # Free repeatable actions (equip {0}: Lightning Greaves, metalcraft) legally recur
             # forever -- the engine faithfully re-offers "move the equipment back" after every

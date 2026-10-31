@@ -75,6 +75,50 @@ struct TopDisposition;   // core/GameLogger.h
 enum class LookKind;     // core/GameLogger.h
 #include <vector>
 
+// THE SCORED CANTRIP ORDER's inputs (DecisionProvider::CantripReadinessOf / ScoreTopDisposition; design:
+// docs/design/cantrip-search-optimization.md §3.3). Computed ONCE per resolution, before the candidates
+// are scored.
+// ONE BATCH of DecisionProvider::CantripPlanOf calls: the engine's plan-admission loops (PutBackPickAt's derivation,
+// PutBackCandidates) ask the plan of every candidate of ONE resolution with the SAME state and the SAME readiness
+// object. A provider may memoise per-resolution facts its plan hook derives from those two alone for the lifetime of
+// the batch (t_id != 0; ids are per-thread, unique per batch). Outside a batch t_id is 0 and nothing may be reused.
+namespace cantripbatch
+{
+inline thread_local unsigned long long t_id   = 0;
+inline thread_local unsigned long long t_next = 0;
+struct Scope
+{
+    unsigned long long prev;
+    Scope() : prev(t_id) { t_id = ++t_next; }
+    ~Scope() { t_id = prev; }
+    Scope(const Scope&) = delete;
+    Scope& operator=(const Scope&) = delete;
+};
+}   // namespace cantripbatch
+
+struct CantripReadiness
+{
+    int  k = -1;                 // our draw steps before the payoff turn (0 = this turn); -1 = unknown
+    int  c = 0;                  // payoff actions payable on that turn (Cyclone: creature cycles)
+    bool missing_piece = false;  // a piece the payoff needs is not in hand / on the battlefield
+    bool shuffle_after = false;  // a library shuffle is available AFTER the cantrip this turn
+    int  dead_in_hand  = 0;      // hand cards the provider rates as dead (keep need 0)
+    std::vector<int> keep_need;  // per HAND index: the provider's cost of removing that card (its scale)
+    int  aux[16] = {};           // provider-private context computed with the readiness (read by its scorer)
+};
+// ONE candidate of a put-back / reorder resolution, as its RESULT. The pointers live for the duration of the
+// ScoreTopDisposition call only.
+struct TopDispositionView
+{
+    bool putback  = false;       // Brainstorm-style: cards leave the hand for the library top
+    bool shuffle  = false;       // the candidate shuffles the library (Ponder's "you may shuffle")
+    int  draw_now = 0;           // how many of `top` the resolving spell itself draws right after (Ponder: 1)
+    const Card* top[8] = {};     // the KNOWN top-of-library sequence after the candidate, top first
+    int  n_top = 0;
+    int  removed[2] = { -1, -1 };   // put-back: the HAND indices that leave the hand, top first
+    int  n_removed = 0;
+};
+
 // A "scaled cast" variant of a spell whose mana cost depends on how much OUTPUT it commits -- the
 // divided-damage analogue of an {X} value. `face` damage reaches the opponent; the total `cost` is
 // what committing that much face costs (all discounts already applied). An archetype's
@@ -650,6 +694,91 @@ public:
     // asked at resolution). Default false -> every candidate is searched.
     virtual bool PutBackSingleCandidate(const GameState& s) const { (void)s; return false; }
 
+    // ---- THE SCORED CANTRIP ORDER (docs/design/cantrip-search-optimization.md §3.2-3.3) -----------------
+    // CantripReadinessOf -- the provider's cheap GO-OFF estimate at a cantrip resolution: k = our draw steps
+    // before the payoff turn (0 = this turn), c = payoff actions payable on that turn, plus per-HAND-index
+    // keep needs. TRUE turns on the scored order for this resolution: the engine scores every candidate
+    // with ScoreTopDisposition and STABLE-sorts them by score, the existing order being the tie-break,
+    // inside the shared PutBackPickAt / PutBackCandidates / TopDispositionCandidates (core/SpellEffects.h)
+    // -- so the executor, the rollout and human play's default see the same ranks (ordinal lockstep). AN
+    // ORDER ONLY: the candidate SET and its size are untouched, so at an unlimited budget the search reaches
+    // exactly what it reached before. Must read only what the player KNOWS (hand, battlefield, life, the
+    // cards this resolution reveals or places). Default false -> today's order, byte-identical.
+    virtual bool CantripReadinessOf(const GameState& s, int controller, CantripReadiness& out) const
+    { (void)s; (void)controller; (void)out; return false; }
+
+    // ScoreTopDisposition -- score ONE candidate of a put-back / reorder resolution; LOWER = earlier in the
+    // fan. A pure function of (state, readiness, candidate) -- the ordinal pin names a rank, so the two
+    // worlds must sort identically. `view` holds the RESULT of the candidate: the known top-of-library
+    // sequence after it (top first), the hand indices it removes (put-back), whether it shuffles, and how
+    // many of the top cards the resolving spell draws right after (Ponder: 1). A shuffle candidate is placed
+    // by the engine at index 0 or 1 of a reorder fan (the USER's "the shuffle is ALWAYS searched, beside
+    // the best keep order"): its score only decides which of the two goes first. Returning false for any
+    // candidate keeps the existing order for the whole resolution. Default false.
+    virtual bool ScoreTopDisposition(const GameState& s, int controller, const CantripReadiness& r,
+                                     const TopDispositionView& view, int& score_out) const
+    { (void)s; (void)controller; (void)r; (void)view; (void)score_out; return false; }
+
+    // CantripOrderKey -- the PER-FAN RANKING CACHE's key (design item 8; a pure speedup, byte-identical): append
+    // to `key` EVERY input CantripReadinessOf and ScoreTopDisposition read off `s` for `controller` (and every
+    // per-job flag they consult), so that two states with equal keys provably score every candidate the same.
+    // The engine appends the candidate list itself (and, for a reorder, the looked cards and the library top
+    // the shuffle's score reads). Every searched fan member re-applies the same prefix and reaches the same
+    // resolution, so the scores are computed once per fan instead of once per member. FALSE (the default) =
+    // no cache: the scores are derived at every resolution, as before. A provider that changes what its scorer
+    // reads must change this key with it (MTG_CANTRIP_RANK_CACHE_VERIFY=1 re-derives every hit and aborts on
+    // a mismatch).
+    virtual bool CantripOrderKey(const GameState& s, int controller, std::vector<std::uint64_t>& key) const
+    { (void)s; (void)controller; (void)key; return false; }
+
+    // ---- PLAN-LEVEL CANTRIP BRANCHING (USER 2026-10-28; Cyclone ledger "Hard prunes + known-top blind test") ----
+    // USER: "search options that are vastly different when needed. So for example, putting junk on top when we plan
+    // to throw away those cards vs setting up a big creature to cycle into, but the heuristic would choose how to
+    // fulfil those options. Similarly Ponder shuffle vs reorder, but the heuristic would choose the order of the
+    // reorder. Naturally, even for these we may be able to prune the second or third plan depending on the
+    // situation." A HARD PRUNE of the scored fan (a provider RESTRICTION, lossy, the USER's call to adopt): every
+    // candidate is assigned to a PLAN; the engine keeps, per plan, only its best-scored candidate (the scored
+    // order's first member of that plan = the heuristic's fulfilment), so the search still branches over the PLANS.
+    // CantripPlanOf -- the plan of ONE scored candidate (same arguments as ScoreTopDisposition, called after it):
+    // >= 0 a plan id (the engine keeps that plan's best-scored candidate), kCantripPlanKeep (-2) keep this candidate
+    // ungrouped, kCantripPlanDrop (-1) drop it (a situational prune), kCantripPlanBoth (-3) belongs to
+    // BOTH plan 0 and plan 1. Select each role's best candidate before folding shared winners. FALSE = no plan-level
+    // admission for this resolution. The engine never leaves a fan empty (an all-dropped fan keeps its rank 0).
+    // Applied inside the shared PutBackPickAt / PutBackCandidates / ScoredReorderCandidates, so the executor, the
+    // rollout and the blind chooser read the same (shorter) list; must be a pure function of the resolution
+    // state (and, like the scorer, of what the player knows). Default false.
+    static constexpr int kCantripPlanDrop = -1;
+    static constexpr int kCantripPlanKeep = -2;
+    static constexpr int kCantripPlanBoth = -3;
+    virtual bool CantripPlanOf(const GameState& s, int controller, const CantripReadiness& r,
+                               const TopDispositionView& view, int& plan_out) const
+    { (void)s; (void)controller; (void)r; (void)view; (void)plan_out; return false; }
+    // CantripFanCap -- the most candidates the plan-level admission can leave in ONE put-back (putback = true) /
+    // reorder (false) resolution, i.e. the search fan's width cap at enumeration (the resolution list is never
+    // longer, so a wider fan's extra ranks would only clamp onto its last member). -1 = no cap (default).
+    virtual int CantripFanCap(const GameState& s, bool putback) const { (void)s; (void)putback; return -1; }
+    // CantripPlansActive -- is the plan-level admission on for this kind of resolution at all? The cheap gate the
+    // engine reads before asking CantripPlanOf per candidate (false => byte-identical, nothing computed). Default false.
+    virtual bool CantripPlansActive(const GameState& s, bool putback) const { (void)s; (void)putback; return false; }
+    // CycleScryPinHeuristic -- a searched cycle seed normally carries the "whenever you cycle ... scry 1" watchers'
+    // disposition as a pin (j = 0..N: bottom the top j). TRUE = no pin: the seed is emitted once, unpinned, and the
+    // provider's ScryKeepOnTop decides each scry at resolution, after the reveal (a provider HARD PRUNE of the j fan
+    // to its heuristic, the rule-as-prune shape: lossy, the USER's call). Default false -> every j is searched.
+    virtual bool CycleScryPinHeuristic(const GameState& s) const { (void)s; return false; }
+    // CycleSeedAdmissionSets -- a provider HARD PRUNE of WHICH cycler a plan's cycle seed may use, judged at PLAN level
+    // (EnumeratePlans' emission) because the seed cycles AFTER the plan's casts: `if_replacer_out` = the admitted cycler
+    // names when a cycle-draw replacer (Unpredictable Cyclone) is on the battlefield or cast by the plan before the cycle;
+    // `if_not` = when none will be out. TRUE = filter; false (default) = every seed stays. Human play is never filtered.
+    virtual bool CycleSeedAdmissionSets(const GameState& s, std::vector<std::string>& if_replacer_out,
+                                        std::vector<std::string>& if_not) const
+    { (void)s; (void)if_replacer_out; (void)if_not; return false; }
+    // ...and the PER-PLAN refinement when the replacer is (or will be) out: is `cycler` admitted for a plan whose own
+    // casts spend `plan_mana` (mana value, rituals' net output already subtracted) and `plan_blue` {U} pips before the
+    // cycle? Called only when CycleSeedAdmissionSets returned true. Default: the if_replacer_out list decides.
+    virtual bool CycleSeedAdmitOut(const GameState& s, const std::string& cycler, int plan_mana, int plan_blue,
+                                   bool* decided) const
+    { (void)s; (void)cycler; (void)plan_mana; (void)plan_blue; if (decided) { *decided = false; } return true; }
+
     // CleanupDiscardShedStable -- is the shed order above PREFIX-STABLE? That is: after shedding
     // its own top pick, does re-ranking the smaller hand leave the remaining cards in the same
     // order? When true (the default, and true of every bucket rule in the suite -- they choose which
@@ -824,6 +953,21 @@ public:
     virtual void LandfallDoubleTargetOrder(const GameState& s, int controller,
                                            std::vector<int>& class_reps) const;
 
+    // CastTriggerTargetOrder -- a MANDATORY targeted CAST trigger over "target permanent", either side
+    // (Ulamog, the Ceaseless Hunger's exile two; Ulamog, the Infinite Gyre's destroy one; `destroy` says
+    // which). `class_reps` arrives as battlefield indices, ONE per identity class (CastTriggerTargetFoldKey),
+    // and the provider ORDERS it in place; the engine's options are the multisets of N classes in that
+    // order (rank 0 = the default; Plan::cast_trigger_target_choice is the searched rank). ORDER ONLY --
+    // opponent-first is NOT a provable dominance (exiling our own land is sometimes the line; destroying
+    // our own Emrakul fires its graveyard shuffle), so a provider must not restrict this list.
+    //
+    // Base rule (out-of-line): the opponent's permanents (smallest power first); for a destroy, our
+    // indestructible permanents next (a legal no-op); then our tapped lands, our untapped lands, our
+    // creatures (lowest power first), our other permanents; our cast-trigger fatties (power >= 10) last.
+    // Stable, so ties keep battlefield order (oldest first).
+    virtual void CastTriggerTargetOrder(const GameState& s, int controller, bool destroy,
+                                        std::vector<int>& class_reps) const;
+
     // JitteSpendCount -- Umezawa's Jitte: how many charge counters to spend on "+2/+2 until end
     // of turn" for THIS attacker's combat damage. Default -1 = greedy spend-all INCLUDING the
     // double-strike mid-step earnings (see JitteDamageMath; per-turn damage-optimal). The one
@@ -934,6 +1078,51 @@ public:
 
     virtual bool TakeFreeCast(const GameState& /*s*/, int /*controller*/,
                               const CardDefinition& /*found*/) const { return true; }
+
+    // ---- Searched CYCLING (Unpredictable Cyclone phase 3, 2026-10-27) ------------------------------
+    // SearchedCycleSources -- WHICH hand cyclers the search may cycle as a plan action (Action::Kind::
+    // DigDraw with dig_sacrifice false, a "seed" of the plan's dig chain; see CollectActions). An ORDERED,
+    // RESTRICTED list of DISTINCT card names (copies are one option: the apply worlds cycle BY NAME, so
+    // which copy is unobservable). A provider may restrict or order the set, never collapse a set it
+    // admits to an unbranched pick -- the engine emits one action per name and the search chooses.
+    // DEFAULT EMPTY: the deck keeps the legacy dig loop (ShouldConsiderDig + SelectDigSource), byte-
+    // identical. A provider that returns a non-empty list OWNS hand cycling through these actions inside
+    // the search window: its in-window plans run no legacy hand cycle (TurnSolver's dig loop), and the
+    // legacy gate + SelectDigSource remain only the permitted playout policy (the horizon leaf, the d0
+    // runner). [Opting the other cycling decks in is an open USER question -- see the Cyclone ledger.]
+    virtual std::vector<std::string> SearchedCycleSources(const GameState& /*s*/) const { return {}; }
+    // The cheap STATE-FREE twin of the above (read per apply): does this provider search its hand cycling
+    // at all? Must be true exactly when SearchedCycleSources can be non-empty. Default false.
+    virtual bool CyclesAreSearched() const { return false; }
+    // FreeCastTakeDominated -- is TAKING this free cast (Unpredictable Cyclone's walk hit) provably no worse
+    // than declining it (the hit to the bottom)? True folds the decline option away (no decline variant;
+    // a decline pin takes). A dominance RESTRICTION owned by the deck. DEFAULT FALSE: nothing is folded,
+    // every offer's take / decline is branched -- the sound default.
+    virtual bool FreeCastTakeDominated(const GameState& /*s*/, int /*controller*/,
+                                       const CardDefinition& /*hit*/) const { return false; }
+    // AdmitRemandOnFreeCast -- may a Remand (counters_target_spell_to_hand) in hand answer this FREE
+    // cast (Unpredictable Cyclone's walk hit, on the stack)? A RESTRICTION hook (default: admit all);
+    // the take / decline / take-and-Remand choice itself is searched (the DigDraw seed's free-cast pin).
+    virtual bool AdmitRemandOnFreeCast(const GameState& /*s*/, int /*controller*/,
+                                       const CardDefinition& /*hit*/) const { return true; }
+    // AdmitRemandRider -- may a Remand ride THIS hand cast of `target` (CollectActions' remand post-pass)?
+    // A RESTRICTION hook (default: admit all), so a deck can prune self-Remands it does not want offered
+    // (CycloneProvider: a mana-value ceiling, MTG_CYCLONE_REMAND_MAX_MV).
+    virtual bool AdmitRemandRider(const GameState& /*s*/, int /*controller*/,
+                                  const CardDefinition& /*target*/) const { return true; }
+    // AdmitRemandOnRemand -- may a second Remand target a first Remand (Action::remand_chain_by: A on any
+    // spell X, B on A; X resolves, A back to hand, B draws)? Read wherever a Remand rider is offered (the
+    // hand-cast post-pass and the Cyclone free-cast pin). `remand` = the Remand being targeted (A).
+    // DEFAULT FALSE: the line is new (2026-10-28) and every other Remand deck (Hinata2, NivMizzetCombo) keeps
+    // its measured play until its own A/B; opting one in is a USER decision (Cyclone ledger, Remand ceiling).
+    virtual bool AdmitRemandOnRemand(const GameState& /*s*/, int /*controller*/,
+                                     const CardDefinition& /*remand*/) const { return false; }
+    // AdmitRemandOnlyCast -- may a goldfish_inert card (never cast on its own) be cast ONLY as the target of
+    // a Remand rider (it never resolves: Remand returns it to hand, so its effect and any additional cost
+    // that scales with an X chosen as 0 are never realised)? DEFAULT FALSE (every inert card stays a dead
+    // card); CycloneProvider admits it under its ceiling behind MTG_CYCLONE_REMAND_INERT.
+    virtual bool AdmitRemandOnlyCast(const GameState& /*s*/, int /*controller*/,
+                                     const CardDefinition& /*inert*/) const { return false; }
 
     // DemonstrateCopy -- Creative Technique's "you may copy this spell" (CR 702.145). Default
     // TRUE: the copy is a second free payload at zero cost and the opponent's copy is inert
@@ -2625,6 +2814,10 @@ public:
     // Read through ProviderSecondMainLive (DecisionProviders.h), which never opens one on a deck that
     // already plays a full second main.
     virtual bool RestrictedSecondMainLive(const GameState& s) const { (void)s; return false; }
+    // MayOpenRestrictedSecondMain -- DECK-LEVEL: can RestrictedSecondMainLive ever return true for this provider? A
+    // provider that overrides it says so (true). Read where a proof needs "no post-combat main ever opens" without a
+    // state to ask (the rollout kill-only turn's no-m2 parity, TurnSolver KillOnlyNoM2Parity).
+    virtual bool MayOpenRestrictedSecondMain() const { return false; }
     virtual bool RestrictedSecondMainAdmits(const GameState& s, const Action& a) const
     { (void)s; (void)a; return true; }
 

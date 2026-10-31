@@ -526,3 +526,21 @@ WhiteKnights signature on Silverblade's payload (`9c9adecaa`).
   for every tabled hand, so the setting no longer matters for Niv.
 
 ## Approved deferrals
+
+### 2026-10-31: pre-existing smoke forecast/execution discrepancy (observed during Cyclone integration)
+
+With `MTG_FD_ORACLE=1 MTG_FLAG_NONCONV=1`, smoke's Niv case reports actual seed1082,
+global game81: predicted winT5 at turn1, actual winT6, `leaf_est=none`.
+An isolated control on the frozen pre-repair PGO (source
+`ce3431d90d7f7ee88b47a791ce61595740f907f0`, SHA256
+`795a713382ea7be04453327cfe64f99d3d9fdcaaf30a32a3bc13b9a8d17b09c3`)
+reproduces the exact warning, outcome/digest `81 6 ec2b6791edf31ecb`, and6682units.
+The isolated manifest retains the suite job's profile-driven settings, sets only
+seed1082/game_index81/games1, and uses one thread. The FD logger prints local gi0;
+the wins/trace retain global81.
+
+The complete100-game cell is also unchanged between pre-repair and integrated code:
+avg4.6100, digestcf26c09192113d1c,4,318,274units. Deck/profile/card-data hashes match.
+This establishes a pre-existing forecast/replay issue; its root cause remains open.
+It is not an observed Cyclone regression. Reproducer manifest, full trace and provenance:
+`build/scratch/cyclone-finish/niv1082-old-control/`, with `CLASSIFICATION.md`.

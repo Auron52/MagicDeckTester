@@ -1,0 +1,77 @@
+{
+  "deck": "decks/Unpredictable Cyclone/Unpredictable Cyclone.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "active_life": 20,
+  "opponent_life": 20,
+  "battlefield": [
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Island",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Island",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Island",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Island",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Seething Song",
+    "Remand",
+    "Remand"
+  ],
+  "library_top": [
+    "Street Wraith"
+  ],
+  "library_filler": "Island",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 50,
+  "max_turns": 4,
+  "_comment": [
+    "REMAND-ON-REMAND through the play viewer's line path (USER 2026-10-28; ceiling 2). The human declares the",
+    "line as played, cast=Seething Song;cast=Remand;cast=Remand: CheckLine matches the chain variant (Action::remand_chain_by",
+    "+ remand_by, both Remands in its cast multiset), and the shared apply resolves it: Remand A on the Song, Remand B on A;",
+    "B resolves -- A back to hand, B draws (the Wraith) -- and the Song, never countered, resolves (RRRRR)."
+  ],
+  "env": {
+    "MTG_HUMAN_PLAY": "1",
+    "MTG_CYCLONE_REMAND_MAX_MV": "2"
+  },
+  "human_lines": [
+    "cast=Seething Song;cast=Remand;cast=Remand"
+  ],
+  "expect_no_win": true,
+  "expect_human_summary_contains": "Seething Song + Remand on it + Remand on that Remand",
+  "expect_history_contains": [
+    "Remand targets Seething Song; Remand targets Remand -- it goes back to hand; draw a card; Seething Song resolves"
+  ]
+}

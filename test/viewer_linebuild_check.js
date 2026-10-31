@@ -1030,6 +1030,23 @@ function checkSegmentOrder() {
   const q = [A, L1, b1, B, L2, b2];
   const flat = [].concat(...LB.segmentParts(q));
   if (flat.length !== q.length || flat.some((p, i) => p !== q[i])) fails.push('segments do not concatenate back to the queue');
+  // A queued CYCLE (USER 2026-10-28: "Cycling should be a plan item like any other") ENDS its segment --
+  // the engine runs a plan's cycle after its casts -- and on a deck whose cycles are standalone plans
+  // (`alone`) it is a segment of its own. Its line token is cycle=, its "**" step cycle=.
+  const C = { name: 'Curator of Mysteries', kind: 'cycle', alone: false };
+  const Cs = { name: 'Lonely Sandbar', kind: 'cycle', alone: true };
+  got = names(LB.segmentParts([A, B, C]));
+  if (!eq(got, [['A', 'B', 'Curator of Mysteries']])) fails.push(`cast, cast, cycle -> ${JSON.stringify(got)}`);
+  got = names(LB.segmentParts([A, C, B]));
+  if (!eq(got, [['A', 'Curator of Mysteries'], ['B']])) fails.push(`cast, cycle, cast -> ${JSON.stringify(got)}`);
+  got = names(LB.segmentParts([C, C]));
+  if (!eq(got, [['Curator of Mysteries'], ['Curator of Mysteries']])) fails.push(`cycle, cycle -> ${JSON.stringify(got)}`);
+  got = names(LB.segmentParts([A, Cs, B]));
+  if (!eq(got, [['A'], ['Lonely Sandbar'], ['B']])) fails.push(`cast, standalone cycle, cast -> ${JSON.stringify(got)}`);
+  if (LB.encodeLine([A, B, C]) !== 'cast=A;cast=B;cycle=Curator of Mysteries')
+    fails.push(`encodeLine(cast, cast, cycle) -> ${LB.encodeLine([A, B, C])}`);
+  if (JSON.stringify(LB.sequenceTokens([A, B, C])) !== JSON.stringify(['cast=A', 'cast=B', 'cycle=Curator of Mysteries']))
+    fails.push(`sequenceTokens(cast, cast, cycle) -> ${JSON.stringify(LB.sequenceTokens([A, B, C]))}`);
   return fails;
 }
 

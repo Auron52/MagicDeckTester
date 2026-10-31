@@ -801,6 +801,15 @@
     "toughness": null,
     "type_line": "Instant"
   },
+  "Brainsurge": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{U}",
+    "oracle_text": "Draw four cards, then put two cards from your hand on top of your library in any order.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
+  },
   "Branchloft Pathway": {
     "cmc": 0.0,
     "keywords": [],
@@ -1309,6 +1318,19 @@
     "toughness": null,
     "type_line": "Sorcery"
   },
+  "Curator of Mysteries": {
+    "cmc": 4.0,
+    "keywords": [
+      "Cycling",
+      "Flying",
+      "Scry"
+    ],
+    "mana_cost": "{2}{U}{U}",
+    "oracle_text": "Flying\nWhenever you cycle or discard another card, scry 1.\nCycling {U} ({U}, Discard this card: Draw a card.)",
+    "power": "4",
+    "toughness": "4",
+    "type_line": "Creature — Sphinx"
+  },
   "Curiosity": {
     "cmc": 1.0,
     "keywords": [
@@ -1726,6 +1748,19 @@
     "power": "4",
     "toughness": "4",
     "type_line": "Legendary Creature — Unicorn"
+  },
+  "Emrakul, the Aeons Torn": {
+    "cmc": 15.0,
+    "keywords": [
+      "Annihilator",
+      "Flying",
+      "Protection"
+    ],
+    "mana_cost": "{15}",
+    "oracle_text": "This spell can't be countered.\nWhen you cast this spell, take an extra turn after this one.\nFlying, protection from spells that are one or more colors, annihilator 6\nWhen Emrakul is put into a graveyard from anywhere, its owner shuffles their graveyard into their library.",
+    "power": "15",
+    "toughness": "15",
+    "type_line": "Legendary Creature — Eldrazi"
   },
   "Enlightened Tutor": {
     "cmc": 1.0,
@@ -3313,6 +3348,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Land"
+  },
+  "Long-Term Plans": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{U}",
+    "oracle_text": "Search your library for a card, then shuffle and put that card third from the top.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
   },
   "Lord of Lineage": {
     "cmc": 4.0,
@@ -5443,6 +5487,19 @@
     "toughness": "2",
     "type_line": "Creature — Kor Artificer"
   },
+  "Street Wraith": {
+    "cmc": 5.0,
+    "keywords": [
+      "Cycling",
+      "Landwalk",
+      "Swampwalk"
+    ],
+    "mana_cost": "{3}{B}{B}",
+    "oracle_text": "Swampwalk (This creature can't be blocked as long as defending player controls a Swamp.)\nCycling—Pay 2 life. (Pay 2 life, Discard this card: Draw a card.)",
+    "power": "3",
+    "toughness": "4",
+    "type_line": "Creature — Wraith"
+  },
   "Striking Sliver": {
     "cmc": 1.0,
     "keywords": [],
@@ -5873,6 +5930,15 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Toxic Deluge": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{B}",
+    "oracle_text": "As an additional cost to cast this spell, pay X life.\nAll creatures get -X/-X until end of turn.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
   "Trace of Abundance": {
     "cmc": 2.0,
     "keywords": [
@@ -5983,6 +6049,29 @@
     "toughness": "5",
     "type_line": "Creature — Dragon"
   },
+  "Ulamog, the Ceaseless Hunger": {
+    "cmc": 10.0,
+    "keywords": [
+      "Indestructible"
+    ],
+    "mana_cost": "{10}",
+    "oracle_text": "When you cast this spell, exile two target permanents.\nIndestructible\nWhenever Ulamog attacks, defending player exiles the top twenty cards of their library.",
+    "power": "10",
+    "toughness": "10",
+    "type_line": "Legendary Creature — Eldrazi"
+  },
+  "Ulamog, the Infinite Gyre": {
+    "cmc": 11.0,
+    "keywords": [
+      "Annihilator",
+      "Indestructible"
+    ],
+    "mana_cost": "{11}",
+    "oracle_text": "When you cast this spell, destroy target permanent.\nIndestructible\nAnnihilator 4 (Whenever this creature attacks, defending player sacrifices four permanents of their choice.)\nWhen Ulamog is put into a graveyard from anywhere, its owner shuffles their graveyard into their library.",
+    "power": "10",
+    "toughness": "10",
+    "type_line": "Legendary Creature — Eldrazi"
+  },
   "Umezawa's Jitte": {
     "cmc": 2.0,
     "keywords": [
@@ -6051,6 +6140,17 @@
     "power": null,
     "toughness": null,
     "type_line": "Instant"
+  },
+  "Unpredictable Cyclone": {
+    "cmc": 5.0,
+    "keywords": [
+      "Cycling"
+    ],
+    "mana_cost": "{3}{R}{R}",
+    "oracle_text": "If a cycling ability of another nonland card would cause you to draw a card, instead exile cards from the top of your library until you exile a card that shares a card type with the cycled card. You may cast that card without paying its mana cost. Then put the exiled cards that weren't cast this way on the bottom of your library in a random order.\nCycling {2} ({2}, Discard this card: Draw a card.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment"
   },
   "Urza's Incubator": {
     "cmc": 3.0,
@@ -6256,6 +6356,15 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Watery Grave": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "({T}: Add {U} or {B}.)\nAs this land enters, you may pay 2 life. If you don't, it enters tapped.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land — Island Swamp"
+  },
   "Weather the Storm": {
     "cmc": 2.0,
     "keywords": [
@@ -6353,6 +6462,17 @@
     "power": "2",
     "toughness": "2",
     "type_line": "Creature — Human Knight"
+  },
+  "Xander's Lounge": {
+    "cmc": 0.0,
+    "keywords": [
+      "Cycling"
+    ],
+    "mana_cost": "",
+    "oracle_text": "({T}: Add {U}, {B}, or {R}.)\nThis land enters tapped.\nCycling {3} ({3}, Discard this card: Draw a card.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land — Island Swamp Mountain"
   },
   "Yavimaya Coast": {
     "cmc": 0.0,

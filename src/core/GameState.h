@@ -225,8 +225,12 @@ struct StackEntry
                            // time (CR 601.2i), so the exile walk + free cast resolve first
         EtbExileFreeCast,  // Breaching Dragonstorm's enter trigger (exile until nonland,
                            // may free-cast if MV <= etb_exile_free_cast_max_mv, else to hand)
-        Demonstrate        // Creative Technique's cast trigger (may copy the spell; the copy
+        Demonstrate,       // Creative Technique's cast trigger (may copy the spell; the copy
                            // is pushed above the original and resolves first)
+        ExtraTurn,         // Emrakul's "take an extra turn after this one" (one per instance)
+        CastExileTargets,  // Ulamog CH's "exile two target permanents": targets chosen at PUSH
+                           // (CR 603.3d), stored as m_numbers in targets[i].permanent_index
+        CastDestroyTarget  // Ulamog IG's "destroy target permanent": same target storage
     };
     TriggerKind         trigger_kind = TriggerKind::None;  // meaningful on EntryType::Triggered
     bool                is_copy     = false;  // demonstrate copy: resolves its payload but was
@@ -305,7 +309,8 @@ struct GameState
     // every such plan applied to the FIRST spawn whatever it promised, and the viewer printed them
     // all as "#0". A base of their own so the token ids above are untouched; both spawn sites draw
     // from it in the same order (lockstep). Orchard Spirits are real tokens and use the counter above.
-    int                      next_opp_spawn_number = 500000;
+    static constexpr int     kFirstOppSpawnNumber  = 500000;   // a spawn is a TOKEN (is_token is not set on it)
+    int                      next_opp_spawn_number = kFirstOppSpawnNumber;
     int                      consecutive_passes           = 0;
     int                      turn_number                  = 0;
     bool                     player_lost_on_draw          = false;
@@ -394,6 +399,87 @@ struct GameState
     // scenario harness) keeps the outlet. Placed in the last byte of the padding after
     // pending_extra_combats (sizeof(GameState) unchanged, measured). A deck constant: never folded.
     bool                     deck_reads_life_total = true;
+    // EXTRA TURNS (Emrakul, the Aeons Torn -- CardParams::cast_trigger_extra_turns; Unpredictable Cyclone
+    // phase 2, 2026-10-27). USER RULING 2026-10-26: *"Importantly, extra turns do not count toward the
+    // turn count."* So `turn_number` stays the ROUND (how many turns the opponent has been given; every
+    // win-turn, cutoff, horizon and max_turns read is in rounds and needs no edit), and an extra turn
+    // does NOT advance it. The fields:
+    //   pending_extra_turns -- extra turns granted (a resolved cast trigger) and not yet taken. Consumed
+    //     one per turn transition (GameEngine::RunTurnFrom / TurnSolver's SimulateEndAndStartNextTurn,
+    //     lockstep). FUTURE-DETERMINING: folded value-gated into the sim key and the dominance key.
+    //   extra_turns_taken -- extra turns begun so far this game. TurnSeq() below = turns taken.
+    //   in_extra_turn -- the CURRENT turn is an extra turn (the opponent took no turn before it: no
+    //     notional draw, no scheduled spawn). Display (viewer "Turn N (extra k)") + the spawn gate.
+    //   deck_has_extra_turn -- DECK CONSTANT (StampDeckTraits): the mainboard holds a
+    //     cast_trigger_extra_turns card. Gates the TurnSeq key fold and switches OFF the turn-edge prunes
+    //     that assume "the next turn is round+1" (FslEdgeNoReach, the rollout kill-only turn, the winless
+    //     certificate, the edge-tail elides). DEFAULT FALSE: every other deck keeps them.
+    // Every other deck: pending == extra_turns_taken == 0 forever, so TurnSeq() == turn_number and every
+    // site moved to TurnSeq() is byte-identical by construction.
+    bool                     deck_has_extra_turn          = false;
+    bool                     in_extra_turn                = false;
+    std::uint8_t             pending_extra_turns          = 0;
+    std::uint8_t             extra_turns_taken            = 0;
+    // GRAVEYARD-SHUFFLE TRIGGER (CardParams::put_into_graveyard_shuffles_graveyard: Emrakul, Ulamog the
+    // Infinite Gyre). DECK CONSTANT (StampDeckTraits, main + sideboard): FireGraveyardEntryTriggers'
+    // scan runs only while set, so every other deck pays one bool test per graveyard entry. DEFAULT
+    // FALSE (only StampDeckTraits sets it; a unit test that wants the trigger sets it by hand).
+    bool                     deck_has_gy_shuffle          = false;
+    // ANNIHILATOR (CardParams::annihilator: Emrakul 6, Ulamog the Infinite Gyre 4). DECK CONSTANT
+    // (StampDeckTraits, main + sideboard): the declare-attackers scan (both worlds) runs only while
+    // set. DEFAULT FALSE.
+    bool                     deck_has_annihilator         = false;
+    // TARGETED CAST TRIGGERS (CardParams::cast_trigger_exile_target_permanents /
+    // cast_trigger_destroy_target_permanents: the Ulamogs). DECK CONSTANT (StampDeckTraits, mainboard):
+    // gates AppendSubdecisionAxes' cast-trigger-target axis scan (a per-plan action walk) so every other
+    // deck pays one bool test per enumeration. DEFAULT FALSE.
+    bool                     deck_has_cast_target_trigger = false;
+    // UNPREDICTABLE CYCLONE (CardParams::cycle_draw_exile_shared_type_freecast; phase 3, 2026-10-27).
+    // DECK CONSTANT (StampDeckTraits, MAINBOARD -- it replaces a draw, a behaviour): CycleDrawReplacer's
+    // battlefield scan at the three cycle sites runs only while set, so every other deck pays one bool
+    // test per cycle. DEFAULT FALSE (only StampDeckTraits sets it; a unit test sets it by hand).
+    bool                     deck_has_cycle_draw_replacement = false;
+    // CURATOR OF MYSTERIES (CardParams::cycle_or_discard_trigger_scry). DECK CONSTANT (StampDeckTraits,
+    // main + sideboard -- it only gates a scan that would find nothing): DiscardScryTriggers' battlefield
+    // scan at every discard and cycle runs only while set. DEFAULT FALSE.
+    bool                     deck_has_discard_scry_watcher = false;
+    // Graveyard-shuffle trigger BATCHING (FireGraveyardEntryTriggers / GyShuffleBatch, SpellEffects.h):
+    // a trigger fired inside one simultaneous event (the cleanup discard, a legend-rule SBA batch) waits
+    // until the event completes, so its shuffle takes EVERY card that moved with it (CR 603.2 / 603.3:
+    // triggers are put on the stack after the event). Open-batch depth + per-owner pending count. Both 0
+    // at every point a key is built (a batch never spans a decision), so never folded.
+    std::uint8_t             gy_shuffle_batch             = 0;
+    std::uint8_t             pending_gy_shuffles[2]       = { 0, 0 };
+    // TURNS TAKEN (regular + extra). The SAME-TURN identity reads ("is this stamp from THIS turn?":
+    // m1_hand_turn, m2_stage_turn, combat_hand_turn, staged expiries, suspend arrivals, pay ledger,
+    // search pins, shuffle salts, the T1 draw skip) use this, never turn_number, so a stamp written in
+    // the regular turn of a round is stale inside that round's extra turn.
+    int TurnSeq() const { return turn_number + static_cast<int>(extra_turns_taken); }
+    // TERMINATION BACKSTOP for extra-turn chains (both worlds): a game / rollout / search node whose
+    // turns taken exceed 4x the round horizon is ended as a no-win. Unreachable in practice (every extra
+    // turn needs a cast Emrakul, and each Emrakul attack is 15 damage), but Emrakul's graveyard shuffle
+    // plus the legend rule can return it to the library, so in principle a chain recurs, and depth
+    // counted in ROUNDS would not bound it at an unlimited budget. Value-gated on extra_turns_taken:
+    // false for every deck that never takes an extra turn.
+    bool TurnSeqCapped(int max_turns) const
+    { return extra_turns_taken != 0 && TurnSeq() > 4 * max_turns; }
+    // THE TURN COUNTER STEP, shared by both worlds' turn transition (GameEngine::RunTurnFrom's NewTurn
+    // entry, TurnSolver's SimulateEndAndStartNextTurn) so they cannot drift: a pending extra turn is
+    // taken now and the ROUND does not advance; otherwise the next round begins.
+    void AdvanceTurnCounter()
+    {
+        if (pending_extra_turns > 0)
+        {
+            --pending_extra_turns;
+            if (extra_turns_taken < 255) { ++extra_turns_taken; }
+            in_extra_turn = true;
+        }
+        else
+        {
+            ++turn_number;
+            in_extra_turn = false;
+        }
+    }
     // Turn the active player last STACKED the top of their library with a tutor-to-top
     // (Worldly Tutor). -1 = never. The USER's intentionality gate for top-consumer models
     // (MTG_TOP_RESOLVE, 2026-08-21): a consumer decision may read the top ONLY when the stack
@@ -1382,11 +1468,11 @@ struct GameState
         }
         if (top_land_number > 0 && top_land_number < 128)
         { m1start_hand_mask[top_land_number >> 6] |= (1ULL << (top_land_number & 63)); }
-        m1start_hand_turn = turn_number;
+        m1start_hand_turn = TurnSeq();
     }
     bool HeldSinceMain1(const Card& c) const
     {
-        if (m1start_hand_turn != turn_number || c.m_number < 0 || c.m_number >= 128) { return false; }
+        if (m1start_hand_turn != TurnSeq() || c.m_number < 0 || c.m_number >= 128) { return false; }
         return (m1start_hand_mask[c.m_number >> 6] >> (c.m_number & 63)) & 1ULL;
     }
 };
