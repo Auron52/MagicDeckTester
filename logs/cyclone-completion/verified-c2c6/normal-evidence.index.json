@@ -1,0 +1,2004 @@
+{
+  "scope": "Closed normal integration evidence only: immutable source controls, raw physical diagnostic traces (not saved user references), diagnostics/reviews and normal acceptance. Excludes binaries, credentials and native Claude conversations. Active final-cache/oracle data is separate.",
+  "source_tree": "c2c6d4a03a5c1df9cf72c55bd29940aacff41efc",
+  "upstream_source": "520d6ef09669321b0ab80c3252a15f487a7db01c",
+  "original_root": "/workspaces/MagicDeckTester/build/scratch/cyclone-finish/landing905-review",
+  "archive_sha256": "831db6e71061013766405eadb5ebda324232d29e63fa1dc4639f03793c8c51d9",
+  "files": [
+    {
+      "path": "explain-fixed-fivecolour3146.json",
+      "sha256": "881e02d0bd9a9bccb08f3abcecc95f4a4188da7de1c53680ebc67ba974809b97",
+      "bytes": 2459
+    },
+    {
+      "path": "fd-three-exact-2c-postrun-review.json",
+      "sha256": "d5e35efea9f50fcaf46637cebeea0972fe33565924bb62045b68735c3316871b",
+      "bytes": 12373
+    },
+    {
+      "path": "final-pgo.json",
+      "sha256": "568237cdbef8c44597abb404a8dd454869d2fe19e2c96880077d4fad3e4c0a58",
+      "bytes": 828
+    },
+    {
+      "path": "fivecolour3146-selected-recovery/DONE",
+      "sha256": "edfcd9dd0ea8b4a34095df9fa3a41f4d6941007b119b38dd633c3e5cc49897e7",
+      "bytes": 5367
+    },
+    {
+      "path": "fivecolour3146-selected-recovery/batch.err",
+      "sha256": "049ed3b3d7528da90bd3fb163d649cb178cfa181f427fcbd750bfd1b788d438d",
+      "bytes": 872
+    },
+    {
+      "path": "fivecolour3146-selected-recovery/batch.log",
+      "sha256": "20827cf47b90d42c30ef340c6b52c024a2a2f51657f3de531e7b50b632e280c1",
+      "bytes": 361
+    },
+    {
+      "path": "fivecolour3146-selected-recovery/manifest.json",
+      "sha256": "442b08b52202664664409fbc6635d7c85cfb31c44bf8439b65793d9d83c7ae51",
+      "bytes": 817
+    },
+    {
+      "path": "fivecolour3146-selected-recovery/status.json",
+      "sha256": "edfcd9dd0ea8b4a34095df9fa3a41f4d6941007b119b38dd633c3e5cc49897e7",
+      "bytes": 5367
+    },
+    {
+      "path": "fivecolour3146-selected-recovery/traces/fivecolour3146_budget16x_gi143.json",
+      "sha256": "f09117af14ffc729be383326e61d9967bc3d7727e0e03ff1af051751c82fb3b1",
+      "bytes": 42991
+    },
+    {
+      "path": "fivecolour3146-selected-recovery/traces/fivecolour3146_budget4x_gi143.json",
+      "sha256": "a6269a065f9b8e0f571bcfc11b04d204c5760149f6218e70f5e7c8b3b1f23ff6",
+      "bytes": 42990
+    },
+    {
+      "path": "fivecolour3146-selected-recovery/traces/fivecolour3146_d8b0_gi143.json",
+      "sha256": "d9a8a41a253d6b83347bee9aa0d95099d4d168166d7696c94c8d040cc033c8b3",
+      "bytes": 42986
+    },
+    {
+      "path": "fivecolour3146-selected-recovery/wins/fivecolour3146_budget16x.units",
+      "sha256": "874d5c0084f8182605c15b5a41f20060c027692ee6cca33a011696d416434194",
+      "bytes": 10
+    },
+    {
+      "path": "fivecolour3146-selected-recovery/wins/fivecolour3146_budget16x.wins",
+      "sha256": "7cebc21c71456c54e6a70980478ef0dedd333fad7c77dab1ef82a0817e68c4ee",
+      "bytes": 23
+    },
+    {
+      "path": "fivecolour3146-selected-recovery/wins/fivecolour3146_budget4x.units",
+      "sha256": "bf4d982478c56f3daa1493155a9d7c348756ab9cd9fd2d2e0cdd6ed6c31fd898",
+      "bytes": 10
+    },
+    {
+      "path": "fivecolour3146-selected-recovery/wins/fivecolour3146_budget4x.wins",
+      "sha256": "7cebc21c71456c54e6a70980478ef0dedd333fad7c77dab1ef82a0817e68c4ee",
+      "bytes": 23
+    },
+    {
+      "path": "fivecolour3146-selected-recovery/wins/fivecolour3146_d8b0.units",
+      "sha256": "6aab2955c175acd24504154b8f12570e9513f160b45fbc5aea0b820f61f7e299",
+      "bytes": 10
+    },
+    {
+      "path": "fivecolour3146-selected-recovery/wins/fivecolour3146_d8b0.wins",
+      "sha256": "7cebc21c71456c54e6a70980478ef0dedd333fad7c77dab1ef82a0817e68c4ee",
+      "bytes": 23
+    },
+    {
+      "path": "latest2c76-tree-preparation.json",
+      "sha256": "920ab1a11ace949d0ca005886f7589f07381a9fddd88a2a3e427cd2c902ac269",
+      "bytes": 973
+    },
+    {
+      "path": "normal-audit/regression/D0-LIGHT-REVIEW.md",
+      "sha256": "0194ffd72dcfbbb304277168ec40a4f6adfeb7a7f6c533144681cac4b0f8f923",
+      "bytes": 1650
+    },
+    {
+      "path": "normal-audit/regression/REVIEW-PENDING.md",
+      "sha256": "8398974c121aa213cb69d0add14d78048f7e573c032be2adcbbd7b86024d16d7",
+      "bytes": 4095
+    },
+    {
+      "path": "normal-audit/regression/audit.json",
+      "sha256": "cec7ee06f5e4246caa72fba7ae2ac27a670ef74d85ed4c54a822d331fdd5a1d7",
+      "bytes": 183177
+    },
+    {
+      "path": "normal-audit/regression/baseline/alchemist_regression_d5_s3003.wins",
+      "sha256": "60acc5bf1f3e4c5a928357a53044a6e46a72270f6ac77f6ef5829050a9b57465",
+      "bytes": 3920
+    },
+    {
+      "path": "normal-audit/regression/baseline/antilife_regression_d0_s2002.wins",
+      "sha256": "bd2dea16ecc0d51a43bd3e6f33a02b580b1b51cb43cfbcdb3bddcfa1c5bceaf4",
+      "bytes": 22938
+    },
+    {
+      "path": "normal-audit/regression/baseline/antilife_regression_d5_s2002.wins",
+      "sha256": "56de6258d2ac3b9966ca2e5534a6f4bfdfe93452b2bb10b3197d8539b2df98ce",
+      "bytes": 11392
+    },
+    {
+      "path": "normal-audit/regression/baseline/edf_regression_d5_s2002.wins",
+      "sha256": "dce741faf1576aaf89ba9b3463a89e7bf62ec8ac5fcfee2c2e795c1ba4884136",
+      "bytes": 3340
+    },
+    {
+      "path": "normal-audit/regression/baseline/elementals_regression_d3_s2002.wins",
+      "sha256": "f9675bdec1937d464d70ec55d3d46164e5e17d563d0e0d5ac2e814be66f37934",
+      "bytes": 1090
+    },
+    {
+      "path": "normal-audit/regression/baseline/fivecolour_regression_d5_s3003.wins",
+      "sha256": "776361f3cf045efcd15c35fbbcd55f96eb32cf0b804cffc79b369ade2eb7129d",
+      "bytes": 4490
+    },
+    {
+      "path": "normal-audit/regression/baseline/fluctuator_regression_d0_s2002.wins",
+      "sha256": "77a69f0bc39a5efa2e278dbab29bb264f36c4edf6adaa6464247ad2c38931496",
+      "bytes": 22978
+    },
+    {
+      "path": "normal-audit/regression/baseline/fluctuator_regression_d5_s3003.wins",
+      "sha256": "2d97d3d96e776f04f3f46070704955857e3d0f1215a5acd9f7b9127bf986142f",
+      "bytes": 4491
+    },
+    {
+      "path": "normal-audit/regression/baseline/goblins_regression_d3_s2002.wins",
+      "sha256": "2ca03e8fcd51980a8d4a6db08b616c5fd52dd06be060dba9f614f23366a1745a",
+      "bytes": 2190
+    },
+    {
+      "path": "normal-audit/regression/baseline/kittyv3_regression_d5_s2002.wins",
+      "sha256": "f7f639cf01c76ce8a115e0c12f378816f7c0c0274bf497a9f7775b4c1a1c253d",
+      "bytes": 3343
+    },
+    {
+      "path": "normal-audit/regression/baseline/melira_regression_d5_s3003.wins",
+      "sha256": "814683ae09983881c98bfe7bbd081a8bd26604a5fe557fd330d0563cc0e62a67",
+      "bytes": 3340
+    },
+    {
+      "path": "normal-audit/regression/baseline/mirrorwing_regression_d5_s2002.wins",
+      "sha256": "8169e70fd0ce04e4c0b7d21a96f7db4b5aeff6a6e40f15b16c5029cf40607b7f",
+      "bytes": 5065
+    },
+    {
+      "path": "normal-audit/regression/baseline/pd_regression_d0_s2002.wins",
+      "sha256": "eb4cc03e113c43a4fd77af0128f812a5680bf09d8b20298e57305da2d3371e93",
+      "bytes": 23237
+    },
+    {
+      "path": "normal-audit/regression/baseline/selesnyav22hg_regression_d5_s2002.wins",
+      "sha256": "aca6faac28008fd6b205696f020db741717cfc0aefa404dc9d49f2bcadb83d0d",
+      "bytes": 3341
+    },
+    {
+      "path": "normal-audit/regression/baseline/selesnyav2_regression_d3_s2002.wins",
+      "sha256": "6e6d2e034b5a41010009a186f1c9ccaf991164bfef263aeb9a2e467d4de7543c",
+      "bytes": 1090
+    },
+    {
+      "path": "normal-audit/regression/baseline/selesnyav2_regression_d5_s2002.wins",
+      "sha256": "4ea560eec7a5422c139adce99ce988332fcf4428b5534f3bc8ee84754d76e595",
+      "bytes": 4490
+    },
+    {
+      "path": "normal-audit/regression/baseline/selesnyav2_regression_d5_s3003.wins",
+      "sha256": "9528d154edabe0080a0627bf5dd61c8ca814cb03fdea0ce2f58c8aac7025466a",
+      "bytes": 4490
+    },
+    {
+      "path": "normal-audit/regression/baseline/snow_regression_d0_s2002.wins",
+      "sha256": "f8a168a0220e7f2551c729ac1c0390f86485c8c5c692dea8b2c006a6ce643714",
+      "bytes": 22934
+    },
+    {
+      "path": "normal-audit/regression/baseline/snow_regression_d3_s2002.wins",
+      "sha256": "755931fa00f1bf52682aaf90467e871c12f5c1659dac432e18743c7a0c1cd42c",
+      "bytes": 540
+    },
+    {
+      "path": "normal-audit/regression/baseline/snow_regression_d5_s2002.wins",
+      "sha256": "9848296963d5f8f65a54a249941a720bf4b5d0956251ae1bd1b97422921eb88a",
+      "bytes": 3341
+    },
+    {
+      "path": "normal-audit/regression/baseline/snow_regression_d5_s3003.wins",
+      "sha256": "cbf7d496be1b5a1e355122f7c072d15973495340db282f76f1af46bd3d099691",
+      "bytes": 3340
+    },
+    {
+      "path": "normal-audit/regression/baseline/vampires2hg_regression_d5_s2002.wins",
+      "sha256": "24bcf518e6db7a6bea1a2028a0e43276bd85e78a813e175e8d94d2db00ff7bfd",
+      "bytes": 2190
+    },
+    {
+      "path": "normal-audit/regression/batch.err",
+      "sha256": "e171caca7631c5d903f2da62ca4ef07bffc1bbfc8b007077ea5815016adf6693",
+      "bytes": 29986
+    },
+    {
+      "path": "normal-audit/regression/batch.log",
+      "sha256": "280cf1d09e274821755317fa16f09faf7e388cc0cd66ceee9daa358cb2873beb",
+      "bytes": 24432
+    },
+    {
+      "path": "normal-audit/regression/causal-review-pending.json",
+      "sha256": "30af7223ecb300346ee2f12a001f00dada1519281f45dbd5b5e1fb5f23a248f7",
+      "bytes": 93931
+    },
+    {
+      "path": "normal-audit/regression/d0-light-review.json",
+      "sha256": "de35b5ff0e831662c3950086d7f91b731d9e70904f58e575c79fc497c6c41513",
+      "bytes": 66532
+    },
+    {
+      "path": "normal-audit/regression/d8-recovery.UNSELECTED.json",
+      "sha256": "def6b776b9bc32a6aa3d6ab0e1c15881ca7cd9fff7d95e3afb41f8fc6114b137",
+      "bytes": 336
+    },
+    {
+      "path": "normal-audit/regression/manifest.json",
+      "sha256": "5898a0b90032bb2c13a9e47603ba1517f247b6a249db98effd380e5b4a9f6709",
+      "bytes": 60382
+    },
+    {
+      "path": "normal-audit/regression/observed/alchemist_regression_d5_s3003.wins",
+      "sha256": "2a2af6a8b65e3c5143601ab555123b1aad541f33349cc0e96560e34c9bc33bbb",
+      "bytes": 3920
+    },
+    {
+      "path": "normal-audit/regression/observed/antilife_regression_d0_s2002.wins",
+      "sha256": "2fb0e0023e9c2b4d3c1d62c502b07629e96cf7c8c4399d141ecc2ff6289891d0",
+      "bytes": 22939
+    },
+    {
+      "path": "normal-audit/regression/observed/antilife_regression_d5_s2002.wins",
+      "sha256": "4e5991b0388b8256b1f175519655733ae5bf64a1f3fb91ef83ed1c936c98d3b5",
+      "bytes": 11392
+    },
+    {
+      "path": "normal-audit/regression/observed/edf_regression_d5_s2002.wins",
+      "sha256": "c490960e0ca6429b9006e6eee553d1bc41442c11bed3c56eb7c9455f22b9ce0d",
+      "bytes": 3340
+    },
+    {
+      "path": "normal-audit/regression/observed/elementals_regression_d3_s2002.wins",
+      "sha256": "6d9e66a4cb4ae7638de2baf6d666d250fe9edfe08f6a42b448fb56688e09a2e1",
+      "bytes": 1090
+    },
+    {
+      "path": "normal-audit/regression/observed/fivecolour_regression_d5_s3003.wins",
+      "sha256": "4378d6a32424d0f1d995ba408123d625c5c96307d16138b77cf269c5acf33697",
+      "bytes": 4490
+    },
+    {
+      "path": "normal-audit/regression/observed/fluctuator_regression_d0_s2002.wins",
+      "sha256": "6159c8e0fea2769a588e84b31f9fda9393af985a8eba89e4045c6aaeca73b281",
+      "bytes": 22978
+    },
+    {
+      "path": "normal-audit/regression/observed/fluctuator_regression_d5_s3003.wins",
+      "sha256": "94fd023a1a53af3bbc581329eac0d01b01a76c7b4d3ef06e8ae0099367bf9258",
+      "bytes": 4491
+    },
+    {
+      "path": "normal-audit/regression/observed/goblins_regression_d3_s2002.wins",
+      "sha256": "0ba957ea6eb5d205be754b1f5400b50d9965c168226752b7d2d6d472fb829175",
+      "bytes": 2190
+    },
+    {
+      "path": "normal-audit/regression/observed/kittyv3_regression_d5_s2002.wins",
+      "sha256": "dd7979e566681b973282682d64e927214ea8f1874be28e7413ef8f9d261d3557",
+      "bytes": 3343
+    },
+    {
+      "path": "normal-audit/regression/observed/melira_regression_d5_s3003.wins",
+      "sha256": "3bf68ee9f4f8fe8be3c6596fecebab01eae493399fd0759754c1b3c1865b6a6e",
+      "bytes": 3340
+    },
+    {
+      "path": "normal-audit/regression/observed/mirrorwing_regression_d5_s2002.wins",
+      "sha256": "752bd551116128cd2f87bc54739a9931c959d993d5dce0ea90e420c3d6561db1",
+      "bytes": 5065
+    },
+    {
+      "path": "normal-audit/regression/observed/pd_regression_d0_s2002.wins",
+      "sha256": "3ae4139588242f43fa1829da54676c2a83f5b1d0368e5d160e49c338d4bf7316",
+      "bytes": 23237
+    },
+    {
+      "path": "normal-audit/regression/observed/selesnyav22hg_regression_d5_s2002.wins",
+      "sha256": "75a36f798b6e6ed6c7cc3f0dbc1d642680e5a41ed31dcaf20546b035b8e19ae5",
+      "bytes": 3341
+    },
+    {
+      "path": "normal-audit/regression/observed/selesnyav2_regression_d3_s2002.wins",
+      "sha256": "6a66c50c8d5e4d99c831a26c47d6dc701bd9ce313d7f34612e60888dd41aa190",
+      "bytes": 1090
+    },
+    {
+      "path": "normal-audit/regression/observed/selesnyav2_regression_d5_s2002.wins",
+      "sha256": "4d48398b757897475e8bd5d0474c639fa391fe2622b4102ef1b7dd2b614012a9",
+      "bytes": 4490
+    },
+    {
+      "path": "normal-audit/regression/observed/selesnyav2_regression_d5_s3003.wins",
+      "sha256": "0fb19a36685678e923c6468bb3058df898e6cb1fd1c85c436b260fb57b3537e1",
+      "bytes": 4490
+    },
+    {
+      "path": "normal-audit/regression/observed/snow_regression_d0_s2002.wins",
+      "sha256": "def52995f24765b21c600973eb29a4cb1aa43cf902c47bf71549818175bba169",
+      "bytes": 22934
+    },
+    {
+      "path": "normal-audit/regression/observed/snow_regression_d3_s2002.wins",
+      "sha256": "fb0776cee597306f355472c5147f98235f7eb1569db18e934f3c104833bf9219",
+      "bytes": 540
+    },
+    {
+      "path": "normal-audit/regression/observed/snow_regression_d5_s2002.wins",
+      "sha256": "e547a5fac19d0f9b7a960d17e3cddb3ff6f680ba9c016f55bca700831476215c",
+      "bytes": 3341
+    },
+    {
+      "path": "normal-audit/regression/observed/snow_regression_d5_s3003.wins",
+      "sha256": "a1f9daca322800ad783055ff78f05098797e9b859259ac88c28798c548e95dd6",
+      "bytes": 3340
+    },
+    {
+      "path": "normal-audit/regression/observed/vampires2hg_regression_d5_s2002.wins",
+      "sha256": "754d83ff8e892dd58f358abe130fcf91dc93af6cbcf9105c9f681bb5938017ca",
+      "bytes": 2190
+    },
+    {
+      "path": "normal-audit/regression/searched-slower.json",
+      "sha256": "0ee422dacf1e3ee79453cead87f7bbc61686680ff7ed879c07b3b4f163d22d45",
+      "bytes": 550
+    },
+    {
+      "path": "normal-audit/smoke/audit.json",
+      "sha256": "0088d1b308e4952b0acbe6e7a0ecc5248e3c0ffd89ae0a3941c5497ea0d7271a",
+      "bytes": 102379
+    },
+    {
+      "path": "normal-audit/smoke/baseline/antilife_smoke_d0_s1001.wins",
+      "sha256": "31094299fad170a99f3747d730f9b6c330b7818a81b4c1e96012aa6ac126c12f",
+      "bytes": 22919
+    },
+    {
+      "path": "normal-audit/smoke/baseline/fluctuator_smoke_d0_s1001.wins",
+      "sha256": "455c8a4be28af6f9bb314a6f09de3f3214ff262f5cecc02c9bf0da852722e748",
+      "bytes": 22981
+    },
+    {
+      "path": "normal-audit/smoke/baseline/goblins2hg_smoke_d5_s1001.wins",
+      "sha256": "cb0b85b5929f6677bb9dbdd4ae84f7f79b7ffeaca737671774fbd5f2e531f601",
+      "bytes": 1640
+    },
+    {
+      "path": "normal-audit/smoke/baseline/pd_smoke_d0_s1001.wins",
+      "sha256": "e184c6c5df6acb6a29db9acc3e9903b1026491b34a6030bd6294a59e3d305b4a",
+      "bytes": 23227
+    },
+    {
+      "path": "normal-audit/smoke/baseline/snow_smoke_d0_s1001.wins",
+      "sha256": "77a12ebcc4d89db0f1360828e3d4569f463887d9433b00fd798a79f9e8fd7ab6",
+      "bytes": 22924
+    },
+    {
+      "path": "normal-audit/smoke/baseline/snow_smoke_d3_s1001.wins",
+      "sha256": "c60212ace983032ebdb6bc153161432f56c2291678c0094d1719d59c6166746c",
+      "bytes": 540
+    },
+    {
+      "path": "normal-audit/smoke/baseline/snow_smoke_d5_s1001.wins",
+      "sha256": "7b1ab8efeb2fa37793ee3b781b66b01b363a63a0e8eddc9472cf279ab563f881",
+      "bytes": 2765
+    },
+    {
+      "path": "normal-audit/smoke/batch.err",
+      "sha256": "6035bebcbed0ca877455f5d287805208c9b6e631964bf4586b13c60b180680bd",
+      "bytes": 18329
+    },
+    {
+      "path": "normal-audit/smoke/batch.log",
+      "sha256": "e04bfd9d851a2c50744916451fb65b25e90af8592a9c702037f7f476ade53a27",
+      "bytes": 14418
+    },
+    {
+      "path": "normal-audit/smoke/d8-recovery.UNSELECTED.json",
+      "sha256": "2f527e61389013edcdf5461496d3d656066a912a9749aacf3dd51b3e1e906d10",
+      "bytes": 17
+    },
+    {
+      "path": "normal-audit/smoke/evidence-carry-addendum.json",
+      "sha256": "1febced3ac311e3b5c21135b25f1a99be3eb1b0b3b454d461888f34c91d4a1a4",
+      "bytes": 10786
+    },
+    {
+      "path": "normal-audit/smoke/manifest.json",
+      "sha256": "3a9205746c5ca9c96b1d668dcf49fa7063bb8cab1e9f2c457f6d6054583331cb",
+      "bytes": 36956
+    },
+    {
+      "path": "normal-audit/smoke/observed/antilife_smoke_d0_s1001.wins",
+      "sha256": "5d4a19f2457304692bcda13442d819d528c069a8270e8c164eec24de761a85f1",
+      "bytes": 22919
+    },
+    {
+      "path": "normal-audit/smoke/observed/fluctuator_smoke_d0_s1001.wins",
+      "sha256": "096656ff16f05f4393f02908c279acad3394cb3231f17dc4bdd69c723e7dd84c",
+      "bytes": 22981
+    },
+    {
+      "path": "normal-audit/smoke/observed/goblins2hg_smoke_d5_s1001.wins",
+      "sha256": "d989c7f1246c373258f6842501a8fad3fe350e9c3fbee2a7c4904767c49ef71e",
+      "bytes": 1640
+    },
+    {
+      "path": "normal-audit/smoke/observed/pd_smoke_d0_s1001.wins",
+      "sha256": "1e17b2ed4f853d5ff82351db9e912522c25ae5c32c014fd4ab810d9ef68a551d",
+      "bytes": 23226
+    },
+    {
+      "path": "normal-audit/smoke/observed/snow_smoke_d0_s1001.wins",
+      "sha256": "2bfb15a96b84130a734e200dbf48ea3bacd2d4c8b10bd54085c7c0ec7efeb4a1",
+      "bytes": 22924
+    },
+    {
+      "path": "normal-audit/smoke/observed/snow_smoke_d3_s1001.wins",
+      "sha256": "31ee14c66a058f915a72ba02b502735865b794db8239ebb745e267c2c85b8951",
+      "bytes": 540
+    },
+    {
+      "path": "normal-audit/smoke/observed/snow_smoke_d5_s1001.wins",
+      "sha256": "650de2848e0e98fa15289d315e960444f92fc3126ceda3af1f9c34a7c189ec77",
+      "bytes": 2765
+    },
+    {
+      "path": "normal-audit/smoke/searched-slower.json",
+      "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+      "bytes": 3
+    },
+    {
+      "path": "normal-audit/smoke-v2/REVIEW-RECEIPT.json",
+      "sha256": "4f73fcf68a14c350ee983ea99580e74b94de1497e9033942b9bf0b1ea749a879",
+      "bytes": 1674
+    },
+    {
+      "path": "normal-audit/smoke-v2/REVIEW.md",
+      "sha256": "a93480d9b0a656282c9176e28f588ec774f43f3712639eb0f2770655d642c198",
+      "bytes": 4999
+    },
+    {
+      "path": "normal-audit/smoke-v2/audit.json",
+      "sha256": "8613e354b590b66eff8e04dd4e3cabd9d807ad94608af2c68a627d90ae909646",
+      "bytes": 102683
+    },
+    {
+      "path": "normal-audit/smoke-v2/baseline/antilife_smoke_d0_s1001.wins",
+      "sha256": "31094299fad170a99f3747d730f9b6c330b7818a81b4c1e96012aa6ac126c12f",
+      "bytes": 22919
+    },
+    {
+      "path": "normal-audit/smoke-v2/baseline/fluctuator_smoke_d0_s1001.wins",
+      "sha256": "455c8a4be28af6f9bb314a6f09de3f3214ff262f5cecc02c9bf0da852722e748",
+      "bytes": 22981
+    },
+    {
+      "path": "normal-audit/smoke-v2/baseline/goblins2hg_smoke_d5_s1001.wins",
+      "sha256": "cb0b85b5929f6677bb9dbdd4ae84f7f79b7ffeaca737671774fbd5f2e531f601",
+      "bytes": 1640
+    },
+    {
+      "path": "normal-audit/smoke-v2/baseline/pd_smoke_d0_s1001.wins",
+      "sha256": "e184c6c5df6acb6a29db9acc3e9903b1026491b34a6030bd6294a59e3d305b4a",
+      "bytes": 23227
+    },
+    {
+      "path": "normal-audit/smoke-v2/baseline/snow_smoke_d0_s1001.wins",
+      "sha256": "77a12ebcc4d89db0f1360828e3d4569f463887d9433b00fd798a79f9e8fd7ab6",
+      "bytes": 22924
+    },
+    {
+      "path": "normal-audit/smoke-v2/baseline/snow_smoke_d3_s1001.wins",
+      "sha256": "c60212ace983032ebdb6bc153161432f56c2291678c0094d1719d59c6166746c",
+      "bytes": 540
+    },
+    {
+      "path": "normal-audit/smoke-v2/baseline/snow_smoke_d5_s1001.wins",
+      "sha256": "7b1ab8efeb2fa37793ee3b781b66b01b363a63a0e8eddc9472cf279ab563f881",
+      "bytes": 2765
+    },
+    {
+      "path": "normal-audit/smoke-v2/batch.err",
+      "sha256": "6035bebcbed0ca877455f5d287805208c9b6e631964bf4586b13c60b180680bd",
+      "bytes": 18329
+    },
+    {
+      "path": "normal-audit/smoke-v2/batch.log",
+      "sha256": "e04bfd9d851a2c50744916451fb65b25e90af8592a9c702037f7f476ade53a27",
+      "bytes": 14418
+    },
+    {
+      "path": "normal-audit/smoke-v2/d8-recovery.UNSELECTED.json",
+      "sha256": "2f527e61389013edcdf5461496d3d656066a912a9749aacf3dd51b3e1e906d10",
+      "bytes": 17
+    },
+    {
+      "path": "normal-audit/smoke-v2/manifest.json",
+      "sha256": "3a9205746c5ca9c96b1d668dcf49fa7063bb8cab1e9f2c457f6d6054583331cb",
+      "bytes": 36956
+    },
+    {
+      "path": "normal-audit/smoke-v2/observed/antilife_smoke_d0_s1001.wins",
+      "sha256": "5d4a19f2457304692bcda13442d819d528c069a8270e8c164eec24de761a85f1",
+      "bytes": 22919
+    },
+    {
+      "path": "normal-audit/smoke-v2/observed/fluctuator_smoke_d0_s1001.wins",
+      "sha256": "096656ff16f05f4393f02908c279acad3394cb3231f17dc4bdd69c723e7dd84c",
+      "bytes": 22981
+    },
+    {
+      "path": "normal-audit/smoke-v2/observed/goblins2hg_smoke_d5_s1001.wins",
+      "sha256": "d989c7f1246c373258f6842501a8fad3fe350e9c3fbee2a7c4904767c49ef71e",
+      "bytes": 1640
+    },
+    {
+      "path": "normal-audit/smoke-v2/observed/pd_smoke_d0_s1001.wins",
+      "sha256": "1e17b2ed4f853d5ff82351db9e912522c25ae5c32c014fd4ab810d9ef68a551d",
+      "bytes": 23226
+    },
+    {
+      "path": "normal-audit/smoke-v2/observed/snow_smoke_d0_s1001.wins",
+      "sha256": "2bfb15a96b84130a734e200dbf48ea3bacd2d4c8b10bd54085c7c0ec7efeb4a1",
+      "bytes": 22924
+    },
+    {
+      "path": "normal-audit/smoke-v2/observed/snow_smoke_d3_s1001.wins",
+      "sha256": "31ee14c66a058f915a72ba02b502735865b794db8239ebb745e267c2c85b8951",
+      "bytes": 540
+    },
+    {
+      "path": "normal-audit/smoke-v2/observed/snow_smoke_d5_s1001.wins",
+      "sha256": "650de2848e0e98fa15289d315e960444f92fc3126ceda3af1f9c34a7c189ec77",
+      "bytes": 2765
+    },
+    {
+      "path": "normal-audit/smoke-v2/searched-slower.json",
+      "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+      "bytes": 3
+    },
+    {
+      "path": "normal-regression/accept.log",
+      "sha256": "e5d7b2551aa6246e5ac433fbf82be60aaedb2bc402c5a988f49d3072018fe535",
+      "bytes": 811
+    },
+    {
+      "path": "normal-regression/gt-diff-review.json",
+      "sha256": "12c5353a8803165ccf8c1309d100f4fd43f1ff340e7187bf2eb376778adb4348",
+      "bytes": 2062
+    },
+    {
+      "path": "normal-regression/harness.log",
+      "sha256": "25be1e07a6c52d4bc6245e24d423ef985c252b9c8718e065942de9430c2c620a",
+      "bytes": 104988
+    },
+    {
+      "path": "normal-regression/status.json",
+      "sha256": "5d947f8054d77adde4a0f525aa96dc41e74479225d956f5f3e0046e5c72ea8e4",
+      "bytes": 966
+    },
+    {
+      "path": "normal-review-closure.json",
+      "sha256": "c9fe8b5aa9b6345eeb77130847443fb7ab47951f6bbc8e840dd5f2193feed5c0",
+      "bytes": 4068
+    },
+    {
+      "path": "normal-smoke/accept.log",
+      "sha256": "7370d2511d4842f0f3c5b28536f93e3d5a040abbee6b459a93e280f562ef83a7",
+      "bytes": 664
+    },
+    {
+      "path": "normal-smoke/gt-diff-review.json",
+      "sha256": "a321e4b88e574889e094c435f40977064cf1fe6b12c05012a1bcd542268824f4",
+      "bytes": 490
+    },
+    {
+      "path": "normal-smoke/harness.log",
+      "sha256": "78145bebe59241d75a34217a00a09d6e64059f0c67268d32fff5bfa557126307",
+      "bytes": 75033
+    },
+    {
+      "path": "normal-smoke/status.json",
+      "sha256": "be38c59dccb06b9e7f1a766881b7aadd3f22228c9932a555707048a56a776514",
+      "bytes": 956
+    },
+    {
+      "path": "preflight/PREPARATION-CHECK.json",
+      "sha256": "57632684d4f8a2dc926bbdf5b328b2eff3b54070b10a262fe726324823b0b15e",
+      "bytes": 399
+    },
+    {
+      "path": "preflight/README.md",
+      "sha256": "3558f9d493a24ed0035ca0c79f0ae56a7623795f59d2ced8184717a6e3ee9d39",
+      "bytes": 3470
+    },
+    {
+      "path": "preflight/manifest.json",
+      "sha256": "0c48a9429fcf181af87cf439c06ea98213cd8b4b9487dbfa1a56d8cc629a62c9",
+      "bytes": 5055
+    },
+    {
+      "path": "preflight/preflight.py",
+      "sha256": "90df83c2edab49d418e3eefdaaa10eea077b58e1134f184f17ef727fe5006d24",
+      "bytes": 10410
+    },
+    {
+      "path": "preflight/review.json",
+      "sha256": "e38a2248243cf3a84f137014470e381f417aa1aa8ece69edd069ec1c77a1a5eb",
+      "bytes": 3263
+    },
+    {
+      "path": "preflight/run-preparation.UNSEALED.json",
+      "sha256": "05237fd9cfad856df9671c83b668c4b288622533caab6a83e49b07607f81467f",
+      "bytes": 2204
+    },
+    {
+      "path": "preflight/run-preparation.json",
+      "sha256": "6fd3e7db6605ad586875be7ec78cc3dfbb0f6a5dc1fb499855cedeae015a5b05",
+      "bytes": 2885
+    },
+    {
+      "path": "preflight/runs/pgo/batch.err",
+      "sha256": "283814ccb2c08399073e20e4a0d2fc17b41a8dc1b095b0641e1eb2fc306e2c8b",
+      "bytes": 1610
+    },
+    {
+      "path": "preflight/runs/pgo/batch.log",
+      "sha256": "ecb4e08d24061d3a4a8470c6967ec6afb6c2281fb01ff9108fde27b03d7c6486",
+      "bytes": 372
+    },
+    {
+      "path": "preflight/runs/pgo/traces/cyclone_d3_s107000_off0_gi8.json",
+      "sha256": "1d26ad10f1ea7aa50f0585ce5ddec524cd3584754c35c9a5cd09a2ceb395d490",
+      "bytes": 39605
+    },
+    {
+      "path": "preflight/runs/pgo/traces/fd131117_base_original_gi117.json",
+      "sha256": "c51168d0e0420aead6928120f2d96e94564dcd30fc309c929ea92e224780b486",
+      "bytes": 41111
+    },
+    {
+      "path": "preflight/runs/pgo/traces/qc3_leaf0_d3_s127000_off10_gi12.json",
+      "sha256": "b389ef05fedc5282ddcb9b71351c87cad57671839357f3c6a97ffcd6328d95fd",
+      "bytes": 67598
+    },
+    {
+      "path": "preflight/runs/pgo/wins/cyclone_d3_s107000_off0.units",
+      "sha256": "751d92b91aeb93636877d1376d1cf6fb949b6200406aec3fe196a0c69959f9f3",
+      "bytes": 10
+    },
+    {
+      "path": "preflight/runs/pgo/wins/cyclone_d3_s107000_off0.wins",
+      "sha256": "4f1e923ba27394615f8510cfdf4aa07d1997cc6d4296282858718cb69faf479a",
+      "bytes": 21
+    },
+    {
+      "path": "preflight/runs/pgo/wins/fd131117_base_original.units",
+      "sha256": "c663632a3113cb0ce8604d0168e467072c9798eda252b2cc1888c7d633584cce",
+      "bytes": 11
+    },
+    {
+      "path": "preflight/runs/pgo/wins/fd131117_base_original.wins",
+      "sha256": "846a0c3e480dc0bc1f7ebd76ee0db3d530d30410a5cc2eabfdd9cc47006d8c40",
+      "bytes": 23
+    },
+    {
+      "path": "preflight/runs/pgo/wins/qc3_leaf0_d3_s127000_off10.units",
+      "sha256": "4d154f45e5584e2e8f73cf1329bbe91760bc97fc2723ec3cd69ca1e289d868a7",
+      "bytes": 9
+    },
+    {
+      "path": "preflight/runs/pgo/wins/qc3_leaf0_d3_s127000_off10.wins",
+      "sha256": "6baa71381864cbc9f3a72766159d3c5e7295ee020e0c854fc024f830d00a0bf5",
+      "bytes": 22
+    },
+    {
+      "path": "preflight/runs/provenance.json",
+      "sha256": "3ea45b2fe7a55590de928dbaea611c5cbcd7f31dd75f21daebf3071bf1b62331",
+      "bytes": 4978
+    },
+    {
+      "path": "preflight/runs/release/batch.err",
+      "sha256": "283814ccb2c08399073e20e4a0d2fc17b41a8dc1b095b0641e1eb2fc306e2c8b",
+      "bytes": 1610
+    },
+    {
+      "path": "preflight/runs/release/batch.log",
+      "sha256": "3153715b12e8f5ce333f35b889e5b1dfd71abb0de58f58017661cb3a99007191",
+      "bytes": 372
+    },
+    {
+      "path": "preflight/runs/release/traces/cyclone_d3_s107000_off0_gi8.json",
+      "sha256": "1d26ad10f1ea7aa50f0585ce5ddec524cd3584754c35c9a5cd09a2ceb395d490",
+      "bytes": 39605
+    },
+    {
+      "path": "preflight/runs/release/traces/fd131117_base_original_gi117.json",
+      "sha256": "c51168d0e0420aead6928120f2d96e94564dcd30fc309c929ea92e224780b486",
+      "bytes": 41111
+    },
+    {
+      "path": "preflight/runs/release/traces/qc3_leaf0_d3_s127000_off10_gi12.json",
+      "sha256": "b389ef05fedc5282ddcb9b71351c87cad57671839357f3c6a97ffcd6328d95fd",
+      "bytes": 67598
+    },
+    {
+      "path": "preflight/runs/release/wins/cyclone_d3_s107000_off0.units",
+      "sha256": "751d92b91aeb93636877d1376d1cf6fb949b6200406aec3fe196a0c69959f9f3",
+      "bytes": 10
+    },
+    {
+      "path": "preflight/runs/release/wins/cyclone_d3_s107000_off0.wins",
+      "sha256": "4f1e923ba27394615f8510cfdf4aa07d1997cc6d4296282858718cb69faf479a",
+      "bytes": 21
+    },
+    {
+      "path": "preflight/runs/release/wins/fd131117_base_original.units",
+      "sha256": "c663632a3113cb0ce8604d0168e467072c9798eda252b2cc1888c7d633584cce",
+      "bytes": 11
+    },
+    {
+      "path": "preflight/runs/release/wins/fd131117_base_original.wins",
+      "sha256": "846a0c3e480dc0bc1f7ebd76ee0db3d530d30410a5cc2eabfdd9cc47006d8c40",
+      "bytes": 23
+    },
+    {
+      "path": "preflight/runs/release/wins/qc3_leaf0_d3_s127000_off10.units",
+      "sha256": "4d154f45e5584e2e8f73cf1329bbe91760bc97fc2723ec3cd69ca1e289d868a7",
+      "bytes": 9
+    },
+    {
+      "path": "preflight/runs/release/wins/qc3_leaf0_d3_s127000_off10.wins",
+      "sha256": "6baa71381864cbc9f3a72766159d3c5e7295ee020e0c854fc024f830d00a0bf5",
+      "bytes": 22
+    },
+    {
+      "path": "regression-exact-controls/ROOT-LAUNCH-GRANT.json",
+      "sha256": "d0b8cd4de2b3b51da9e88d3f9ae101d7468c5d83980aeacab9e480f84c3c0f57",
+      "bytes": 217
+    },
+    {
+      "path": "regression-exact-controls/assets-bridge.json",
+      "sha256": "fcc9b796928cfe9300144f5ee4fb4474cc3a85a84c7d1ba7158d6741953d4a8f",
+      "bytes": 217227
+    },
+    {
+      "path": "regression-exact-controls/baseline-manifest.json",
+      "sha256": "ccbb70e649d66b7edeaa68cc2872faffb508b468a88ab1317bc3ccd85be85463",
+      "bytes": 10947
+    },
+    {
+      "path": "regression-exact-controls/cases.json",
+      "sha256": "1bce19cbce23819cfb9333f17e1e419be61aeb2f19d201305e51e21fc4f889fa",
+      "bytes": 52710
+    },
+    {
+      "path": "regression-exact-controls/comparison.json",
+      "sha256": "f1570844fe1d81f2e4adb9b7f08b4cc0b3966f40919be13c7bf9fde612ac4587",
+      "bytes": 446632
+    },
+    {
+      "path": "regression-exact-controls/current-manifest.json",
+      "sha256": "ccbb70e649d66b7edeaa68cc2872faffb508b468a88ab1317bc3ccd85be85463",
+      "bytes": 10947
+    },
+    {
+      "path": "regression-exact-controls/last16-review/REVIEW.md",
+      "sha256": "d60326d019acbdd5a78e22cc5108dc7ff01ee11308efc34735bfbca5c07337f3",
+      "bytes": 4528
+    },
+    {
+      "path": "regression-exact-controls/last16-review/review.json",
+      "sha256": "77ebcb5257782b3f91e198a20a9cf827d622469d3d9ac6f2a6689a42f9578c08",
+      "bytes": 28732
+    },
+    {
+      "path": "regression-exact-controls/preparation.json",
+      "sha256": "a64bf96b8baa9ec0a9ba5fb17ce0074dc420a25cdc0b0f1dfab96826c702a0c9",
+      "bytes": 3511
+    },
+    {
+      "path": "regression-exact-controls/prepare.py",
+      "sha256": "958eb225c4aa7e38b88c76e0b1150f381168df010686f509affd834acc1ba90d",
+      "bytes": 9572
+    },
+    {
+      "path": "regression-exact-controls/run.py",
+      "sha256": "2f9242d4022a200f8653a4e0b510e6ec10c3b9516ebc228c0d202bc3b964fd9e",
+      "bytes": 11908
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/DONE",
+      "sha256": "3348a8e18c61105a14db85b5226662129936dc8a2d7f08b7e3250584f6a6cd4c",
+      "bytes": 52616
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/argv.json",
+      "sha256": "0e761b3382164c6388c3f20c454f54ef391283a32818dea40eeeed69c0995ad4",
+      "bytes": 668
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/batch.err",
+      "sha256": "d2ef30851db2bb8b6047726d894254ce990933910095d95eea51e7f72e25e59b",
+      "bytes": 14287
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/batch.log",
+      "sha256": "005986041e1bdd920c1f2cfb364c8ad12054fa3999974b801d6bd91b1bf3b50e",
+      "bytes": 3818
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/environment.json",
+      "sha256": "f067c9c3f83c14247273c4d3cabd001f2c0b63faad32e17069ef5099ef10f3a5",
+      "bytes": 106
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/status.json",
+      "sha256": "3348a8e18c61105a14db85b5226662129936dc8a2d7f08b7e3250584f6a6cd4c",
+      "bytes": 52616
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/traces/alchemist_regression_d5_s3003_exact_gi153_gi153.json",
+      "sha256": "032b0f6eb9e34da77474ff23a0c10484a3c615aec5f171dc6226a3f878d94d2b",
+      "bytes": 72921
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/traces/alchemist_regression_d5_s3003_exact_gi86_gi86.json",
+      "sha256": "a21aa064ba7806c8ccd1774eec6dc55d210a24821750ef2f3f66dbf205c55e7d",
+      "bytes": 69954
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/traces/antilife_regression_d5_s2002_exact_gi373_gi373.json",
+      "sha256": "831da4f5f12e54d72627a7baef5ca63ec659686688ff00aca0ac547d0e0b8aee",
+      "bytes": 54598
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/traces/edf_regression_d5_s2002_exact_gi123_gi123.json",
+      "sha256": "e57c833e88f1216cf1b04aa2fe020bfa3ef5ad17e4202df638bdc540d53cd025",
+      "bytes": 94053
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/traces/edf_regression_d5_s2002_exact_gi70_gi70.json",
+      "sha256": "e5e8e8563eb3a3f10b2d7704586a310911e65388adf0084865f212cb8b5ec8be",
+      "bytes": 97494
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/traces/edf_regression_d5_s2002_exact_gi71_gi71.json",
+      "sha256": "d492df0079efcb1787e056370952a9a3cc30cbe3a4b1fa5f45e0912f6fb48565",
+      "bytes": 90037
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/traces/elementals_regression_d3_s2002_exact_gi22_gi22.json",
+      "sha256": "c9b44ea18b1e9f5d3374d7bc4cc822c6c2dffd58b147bbbcbe17d9ba892fc75c",
+      "bytes": 47410
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/traces/fivecolour_regression_d5_s3003_exact_gi143_gi143.json",
+      "sha256": "a5046b3da91615eb11ba84c8f945434759687ebd451409562d7e651ef534717f",
+      "bytes": 43009
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/traces/fluctuator_regression_d5_s3003_exact_gi35_gi35.json",
+      "sha256": "eeee79f14d3e3b38e393572558d3fcf06fde24e33ae274aba45d835e6cb22046",
+      "bytes": 33139
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/traces/goblins_regression_d3_s2002_exact_gi57_gi57.json",
+      "sha256": "9b1d5ce96c030a2eb3528dfe456304060e5ffe3b14e462954eaa5524e16f46a5",
+      "bytes": 26798
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/traces/kittyv3_regression_d5_s2002_exact_gi99_gi99.json",
+      "sha256": "885fcefbfa6395b246fc911a212b411d9c4502f17a8226149ab0bc1fb5400d12",
+      "bytes": 50471
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/traces/melira_regression_d5_s3003_exact_gi139_gi139.json",
+      "sha256": "70f3b5f8ce8a30e9d3c096f8188a3a0b6dd3d079b3d0f42ee1b6ee293ec9bdac",
+      "bytes": 27662
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/traces/melira_regression_d5_s3003_exact_gi52_gi52.json",
+      "sha256": "cffc4895b581b774fd77cb391102148ae5481d4fbc4480a9c44df203c0136019",
+      "bytes": 35114
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/traces/mirrorwing_regression_d5_s2002_exact_gi63_gi63.json",
+      "sha256": "4c25774cab3f56fdb50f557df0356f7a3a9e7caa5e685750bb3c9c0694927168",
+      "bytes": 44832
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/traces/niv_regression_d5_s3003_exact_gi92_gi92.json",
+      "sha256": "d10dd9edbec3d935da61e86b3c13d9b49d622f7b864e54a54df2827ed2d50f89",
+      "bytes": 63166
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/traces/selesnyav22hg_regression_d5_s2002_exact_gi3_gi3.json",
+      "sha256": "609cb4b075e099f647105f36205ac583921b0a25f22676e9f87ab42a5e12e627",
+      "bytes": 55176
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/traces/selesnyav22hg_regression_d5_s2002_exact_gi86_gi86.json",
+      "sha256": "7380e1b584a41a9d7b9d5ccdb3d351495f967952f96aa00bf07aba83366f1689",
+      "bytes": 49129
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/traces/selesnyav22hg_regression_d5_s2002_exact_gi97_gi97.json",
+      "sha256": "42a8eed4b68c912fc2f25e11846bf147923700d440c79031cc414e5853c5fb0a",
+      "bytes": 39019
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/traces/selesnyav2_regression_d3_s2002_exact_gi3_gi3.json",
+      "sha256": "6b844df0d838308ad1f3114f2a0afebb401bba974b542e63d736714c73c50586",
+      "bytes": 43566
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/traces/selesnyav2_regression_d5_s2002_exact_gi3_gi3.json",
+      "sha256": "eb2055f85a03929cc6242528335a36beac5a823de41bceb5c892b048e8a597c9",
+      "bytes": 43566
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/traces/selesnyav2_regression_d5_s3003_exact_gi115_gi115.json",
+      "sha256": "27e4de13df417a404c05dda5f4eed980a1deac694c1d1340e1908ce51aea607c",
+      "bytes": 43795
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/traces/selesnyav2_regression_d5_s3003_exact_gi55_gi55.json",
+      "sha256": "8955d53df8bce88506643451ce6a0994cf63d4c1e12b3d91d8d2ea8bdae82a6c",
+      "bytes": 37595
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/traces/snow_regression_d3_s2002_exact_gi3_gi3.json",
+      "sha256": "d61776b8469f6cd12dd666c96f517c8940922cb2eaf1db94e212b562fa308eac",
+      "bytes": 66136
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/traces/snow_regression_d5_s2002_exact_gi101_gi101.json",
+      "sha256": "f01f0a87dbd36a30883f53dbd4a3c81d3c33077d291094926e8aafe755937134",
+      "bytes": 65262
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/traces/snow_regression_d5_s2002_exact_gi141_gi141.json",
+      "sha256": "48724125243b94b4ecfd46120069745d5980488e604e87c990f61082f5951c84",
+      "bytes": 42779
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/traces/snow_regression_d5_s2002_exact_gi26_gi26.json",
+      "sha256": "33aecb9934918fdb84787ff3d5ef08b01ead408a1e113ceebf75982e019f0ce7",
+      "bytes": 50912
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/traces/snow_regression_d5_s2002_exact_gi31_gi31.json",
+      "sha256": "5c2733de1775c78fae74b7dbd0825fbb3fa9b650374d4e2d557fd0abdf8bd753",
+      "bytes": 66792
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/traces/snow_regression_d5_s2002_exact_gi3_gi3.json",
+      "sha256": "cd169187a6cc8fa187cbdbb4861a7a52bb26d98fbeb71194185951629a914ffc",
+      "bytes": 66136
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/traces/snow_regression_d5_s2002_exact_gi47_gi47.json",
+      "sha256": "d4b7bedd216e0b927779a511f6cabab86ab3d6e694a0bbe7222104abfdf27c24",
+      "bytes": 47794
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/traces/snow_regression_d5_s2002_exact_gi76_gi76.json",
+      "sha256": "94183ea41b3f127ddbe9d8c874536e1377bf9f06b8d0593156bbf2fd4aa8dce6",
+      "bytes": 56339
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/traces/snow_regression_d5_s3003_exact_gi111_gi111.json",
+      "sha256": "c747538a11e67b7cc289107647fd5f432d493232ab8080e603984f20822f90a3",
+      "bytes": 44460
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/traces/snow_regression_d5_s3003_exact_gi51_gi51.json",
+      "sha256": "1cd5f6604ef85d94d0fa9aa3cbbb25ff84d4c3a2b689245698898a6c082c9724",
+      "bytes": 49938
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/traces/snow_regression_d5_s3003_exact_gi5_gi5.json",
+      "sha256": "eafa85f0db2d92235acc338711a8569ae3652ca0f17bfb313bc8ae77ce7f9e11",
+      "bytes": 41945
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/traces/snow_regression_d5_s3003_exact_gi70_gi70.json",
+      "sha256": "620ac35e621fc3a2372d7a923f30866584df6a4f3549662db928daf6306fa64d",
+      "bytes": 56540
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/traces/th_regression_d5_s3003_exact_gi457_gi457.json",
+      "sha256": "81f3a5bd893a00a7cbe6f57dd2eb241ac89df736a11f6084ea61ae4c145dd556",
+      "bytes": 54956
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/traces/vampires2hg_regression_d5_s2002_exact_gi40_gi40.json",
+      "sha256": "dbc9b464a29269f9c03167d2d19fafb88eab80fe0ca8e818ed6400595c908023",
+      "bytes": 51237
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/alchemist_regression_d5_s3003_exact_gi153.units",
+      "sha256": "f9fa1cc3811751ed5b6ac3e792c3d99abf634ba5148c5e0a1546d684f2eed28b",
+      "bytes": 10
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/alchemist_regression_d5_s3003_exact_gi153.wins",
+      "sha256": "e2fe65667737e254ad74bc30656879e1de9bc0065ff351001c831af11d1c831a",
+      "bytes": 23
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/alchemist_regression_d5_s3003_exact_gi86.units",
+      "sha256": "a6d9c81584a6e2b5192d54553d9d943e23b98789e30c89e742f8642f8b7f3cf1",
+      "bytes": 10
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/alchemist_regression_d5_s3003_exact_gi86.wins",
+      "sha256": "28d9465bd67a3f3aa92eb7055ae59db9e17121f7b758df4712e5dce41d356b87",
+      "bytes": 23
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/antilife_regression_d5_s2002_exact_gi373.units",
+      "sha256": "a568fc538c562c7764046213743ca2d60b1afb34ed4ac7804a58f4eda6970794",
+      "bytes": 10
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/antilife_regression_d5_s2002_exact_gi373.wins",
+      "sha256": "5865fed966ca62d0ba6a91de3af75047b33134bc22e0249c8bc0a4cf42b55973",
+      "bytes": 23
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/edf_regression_d5_s2002_exact_gi123.units",
+      "sha256": "65e25f6440b8b64ca9f6d5a8f459281cd85c4333035d7184bf11c01f5214e164",
+      "bytes": 9
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/edf_regression_d5_s2002_exact_gi123.wins",
+      "sha256": "ec992c6d7dae3b6f7fe338e8f2040b0106477f2e486a30693e41cc4f11adc37f",
+      "bytes": 23
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/edf_regression_d5_s2002_exact_gi70.units",
+      "sha256": "a3b288d7ca5ee654d1342843ea06c90a1458c3062a90c8a809d82dbb31410919",
+      "bytes": 9
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/edf_regression_d5_s2002_exact_gi70.wins",
+      "sha256": "d0023ab53c722a51190202c968f20f984bd6d0088ec441c09b7971105fb5ee21",
+      "bytes": 22
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/edf_regression_d5_s2002_exact_gi71.units",
+      "sha256": "2decad752168211b50e28db80e1d8ca8821b2cbc9d87c9c4effa8ce4818f95b4",
+      "bytes": 9
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/edf_regression_d5_s2002_exact_gi71.wins",
+      "sha256": "fe869867f81bae0b85357f7b125d5009b8d6799a3bec3b45fd7649a85c2b6d0a",
+      "bytes": 22
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/elementals_regression_d3_s2002_exact_gi22.units",
+      "sha256": "d413f31e1c391c784d6fdfd16ab8fec8846e08ddebf6477b06dee1b0fbcc475c",
+      "bytes": 9
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/elementals_regression_d3_s2002_exact_gi22.wins",
+      "sha256": "885c694525166962a5094ac8b37aed8dd8183b315ef47e068992f9934c917f2a",
+      "bytes": 22
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/fivecolour_regression_d5_s3003_exact_gi143.units",
+      "sha256": "d6ad282b8b7ece36e923923a33f54a01c63d53a6fd407c2d8412bb06aa8ec630",
+      "bytes": 10
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/fivecolour_regression_d5_s3003_exact_gi143.wins",
+      "sha256": "7cebc21c71456c54e6a70980478ef0dedd333fad7c77dab1ef82a0817e68c4ee",
+      "bytes": 23
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/fluctuator_regression_d5_s3003_exact_gi35.units",
+      "sha256": "eb838db5cbbd072d92819697ad0b6619075638cd88fdb7b91b140a3456e2c3fc",
+      "bytes": 8
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/fluctuator_regression_d5_s3003_exact_gi35.wins",
+      "sha256": "04b9decb758d79f665bb7bc490b95c9897f1a4e642cbff47de6c51c267ce07fe",
+      "bytes": 22
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/goblins_regression_d3_s2002_exact_gi57.units",
+      "sha256": "2fd86be3e61ff58eb91ece65e7f19838d81837c8fdece595041d74f93428d7e8",
+      "bytes": 9
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/goblins_regression_d3_s2002_exact_gi57.wins",
+      "sha256": "7a024e2ccc569ba48ed97e8e63a90ad77b16e38012f45bc17c4f29468552cfb2",
+      "bytes": 22
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/kittyv3_regression_d5_s2002_exact_gi99.units",
+      "sha256": "aed8a26ff964a084727ef1e3f2876949119435aac0be61b56020722ecbae578e",
+      "bytes": 9
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/kittyv3_regression_d5_s2002_exact_gi99.wins",
+      "sha256": "44a4bf06a909b51ee29aa1fe501bbd12829f38ef4f5bda4af88e030da761a090",
+      "bytes": 22
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/melira_regression_d5_s3003_exact_gi139.units",
+      "sha256": "3da8b355b90feb621aaa2f91240a8740ad3c8662d86dd46f04552f67a893cd06",
+      "bytes": 10
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/melira_regression_d5_s3003_exact_gi139.wins",
+      "sha256": "d817cfdb2a46f06dad0c6581b0ea8ba672b8855fdb0e49d52d0e3a4e9971ede3",
+      "bytes": 23
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/melira_regression_d5_s3003_exact_gi52.units",
+      "sha256": "9549d41a4456c8a9e959e18bbe6cb5cd1104ec82a8e38d642a58c44727639cc3",
+      "bytes": 9
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/melira_regression_d5_s3003_exact_gi52.wins",
+      "sha256": "16ed73de5b2e5844ebe13fac5746c1f3eb0c50f6f0615919cacd95a1f2e8bf42",
+      "bytes": 22
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/mirrorwing_regression_d5_s2002_exact_gi63.units",
+      "sha256": "6029ea580d11b88658595410c04dfa12372e794270bda002219ff43cdb4ed80c",
+      "bytes": 9
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/mirrorwing_regression_d5_s2002_exact_gi63.wins",
+      "sha256": "b45f6ddf8216a19158f3b1bf15c126ac0ce768103463b9e4c80913014b59aee1",
+      "bytes": 22
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/niv_regression_d5_s3003_exact_gi92.units",
+      "sha256": "137adf7426a1c07b375395d7b0385649a223d3617fdbaf6b92cc30d89478e72b",
+      "bytes": 9
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/niv_regression_d5_s3003_exact_gi92.wins",
+      "sha256": "b5b0ada7b7f607e62d04a3027888ca6a00ef9d8d967ea919638e6b82f4f4fb21",
+      "bytes": 22
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/selesnyav22hg_regression_d5_s2002_exact_gi3.units",
+      "sha256": "0f93d5fcda82af380a6915575ea5615b9b6bd79c1c3f40b8a74ac24a57558c0d",
+      "bytes": 8
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/selesnyav22hg_regression_d5_s2002_exact_gi3.wins",
+      "sha256": "02e8b6111a55ea322c1051eb0f28e40a0a7706d89d4d033c2e542798a369e4d2",
+      "bytes": 21
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/selesnyav22hg_regression_d5_s2002_exact_gi86.units",
+      "sha256": "4ed1e2141c5a3536c0a88e3222cf23032ad42d0cd745a15281d237aff3c66e52",
+      "bytes": 9
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/selesnyav22hg_regression_d5_s2002_exact_gi86.wins",
+      "sha256": "602aa6e7825081c36ff1a5a0626f03c225cc7cde998a6c3f42af5de4ae616744",
+      "bytes": 22
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/selesnyav22hg_regression_d5_s2002_exact_gi97.units",
+      "sha256": "287db52fff985b286c782337bed10efe9443e883af868b2b3cc1f5f980830ecc",
+      "bytes": 7
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/selesnyav22hg_regression_d5_s2002_exact_gi97.wins",
+      "sha256": "20c73a488198896c937a8bab575612aba883e39116fa175d1113ace91d21d53a",
+      "bytes": 22
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/selesnyav2_regression_d3_s2002_exact_gi3.units",
+      "sha256": "e5d8db3cf1d0198c39e2223fd1a7d86f1c2756fc39797309710905008cd2794c",
+      "bytes": 8
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/selesnyav2_regression_d3_s2002_exact_gi3.wins",
+      "sha256": "83f8d95789342d3517b5fab9ea7f42b659427b805c179e76e994721b7d9e5100",
+      "bytes": 21
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/selesnyav2_regression_d5_s2002_exact_gi3.units",
+      "sha256": "90be0cf058c08a682a92be6b57b516aa1b47f4439dd8b42585e6d05a324c2857",
+      "bytes": 8
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/selesnyav2_regression_d5_s2002_exact_gi3.wins",
+      "sha256": "83f8d95789342d3517b5fab9ea7f42b659427b805c179e76e994721b7d9e5100",
+      "bytes": 21
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/selesnyav2_regression_d5_s3003_exact_gi115.units",
+      "sha256": "2cde2d28d51e654f7456efa836b218133b027ad3116124dfe154fa381f858a4d",
+      "bytes": 9
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/selesnyav2_regression_d5_s3003_exact_gi115.wins",
+      "sha256": "8a4fd5def3b30aa85109603197bd6fdcdf066b17ae1bec67322a0a934bb6b7a5",
+      "bytes": 23
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/selesnyav2_regression_d5_s3003_exact_gi55.units",
+      "sha256": "8261429f26700bfbe731d1928cd84c4c38fe623661c2e5ecf598c1397a4e4b92",
+      "bytes": 8
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/selesnyav2_regression_d5_s3003_exact_gi55.wins",
+      "sha256": "18ed455d48aecc4584ca23900d27b798be2afb46563e41e018ed2429fff523db",
+      "bytes": 22
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/snow_regression_d3_s2002_exact_gi3.units",
+      "sha256": "a4a8c886ecbb7609d6e67b621a463451fdf82e861c2d66da5254d8749075bbf4",
+      "bytes": 8
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/snow_regression_d3_s2002_exact_gi3.wins",
+      "sha256": "f64365a9a91ae303d69fbb7d4875ce993cd96e72d5feeb914f390af3893da29c",
+      "bytes": 21
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/snow_regression_d5_s2002_exact_gi101.units",
+      "sha256": "74630620ea4bb2b34ee4c76e405f16c6bdd447ab628fd58dbbc78f330a976ab1",
+      "bytes": 10
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/snow_regression_d5_s2002_exact_gi101.wins",
+      "sha256": "de86efa6c35b9d3c418ccc1cad858285be192979cd52d1afe7cd897caa1b70b8",
+      "bytes": 23
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/snow_regression_d5_s2002_exact_gi141.units",
+      "sha256": "20dd25a14433e4179781f92d4ab5db6e6e52a54a38311374095f949b932535f8",
+      "bytes": 10
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/snow_regression_d5_s2002_exact_gi141.wins",
+      "sha256": "b1c2ce4e11ab22cacfea814929cfdfe32a1a81c0147c5aed4af75858f2cd3bc1",
+      "bytes": 23
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/snow_regression_d5_s2002_exact_gi26.units",
+      "sha256": "c07b776ec5c812578b134d5c80d06c682b606b9230105fd4e4be00db8482681b",
+      "bytes": 9
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/snow_regression_d5_s2002_exact_gi26.wins",
+      "sha256": "51d7bcdcefa19716c03a4d59d27c1ba2a3484a979f933cd5a79ccc2adce36c11",
+      "bytes": 22
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/snow_regression_d5_s2002_exact_gi3.units",
+      "sha256": "b27bb6a55c270192f280a9cf16dfdff61420c2077ff42da7de6282299eeb28d7",
+      "bytes": 8
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/snow_regression_d5_s2002_exact_gi3.wins",
+      "sha256": "f64365a9a91ae303d69fbb7d4875ce993cd96e72d5feeb914f390af3893da29c",
+      "bytes": 21
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/snow_regression_d5_s2002_exact_gi31.units",
+      "sha256": "30e61441b71852c35ac26a403a1db4e566f7de6a64fc5548eea8230d362091a3",
+      "bytes": 10
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/snow_regression_d5_s2002_exact_gi31.wins",
+      "sha256": "bb5cc9a98ac9a227e81c24ee402db37a36915ec06f813b4e1bf1cfa9807c78ff",
+      "bytes": 22
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/snow_regression_d5_s2002_exact_gi47.units",
+      "sha256": "3783604665763ff64dd98ac706d6a6dcd6de6c0e8fe65c46f075ecbfb0b60348",
+      "bytes": 9
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/snow_regression_d5_s2002_exact_gi47.wins",
+      "sha256": "3c7ecd598f0eb994706e925919d60832a66563f1f7319c211835e949806b311e",
+      "bytes": 22
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/snow_regression_d5_s2002_exact_gi76.units",
+      "sha256": "1a33b2387c2865935e83f4a9f29be8788c93893921a745b02b376f486b2bc899",
+      "bytes": 10
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/snow_regression_d5_s2002_exact_gi76.wins",
+      "sha256": "68d0c387d09250a62a22e5a08a73568d5fda2dcbdad099e5f34611fd9d3e5f46",
+      "bytes": 22
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/snow_regression_d5_s3003_exact_gi111.units",
+      "sha256": "23f7bad049c1635be9db903e1375851ad27cfea3181c7b877699cf1d2039f842",
+      "bytes": 10
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/snow_regression_d5_s3003_exact_gi111.wins",
+      "sha256": "b63a88ab395e876c15edacfcd2dcf313eb4220b94f3f203d46874cccf69bf054",
+      "bytes": 23
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/snow_regression_d5_s3003_exact_gi5.units",
+      "sha256": "5dfc02f39ff9d99e4c4e26eb391055cdd684e34169dbdc108af3574b5d87ed1f",
+      "bytes": 8
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/snow_regression_d5_s3003_exact_gi5.wins",
+      "sha256": "aa3a76663aa2c0382babc9d8729711b74aba53632fa798d4ae6f51102f21bb9e",
+      "bytes": 21
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/snow_regression_d5_s3003_exact_gi51.units",
+      "sha256": "755a9a0057cdb0d3a03f42cd7d35a548144061e4fbbb934dee99098b6d3c0774",
+      "bytes": 9
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/snow_regression_d5_s3003_exact_gi51.wins",
+      "sha256": "7b917cdbb6f3f9c77be03c2fc48d416fc48c5bbcfa7f98f5d5b0077f857a7ad8",
+      "bytes": 22
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/snow_regression_d5_s3003_exact_gi70.units",
+      "sha256": "d8e7c2e9255d40ea30c747a224bb3e25ee08198c06e4fbba0c99c28ee635e8f3",
+      "bytes": 9
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/snow_regression_d5_s3003_exact_gi70.wins",
+      "sha256": "3cd81b3b35ef2be2c74b55aa91df52b85c12445bd348bbaa065b82162bd6f6fe",
+      "bytes": 22
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/th_regression_d5_s3003_exact_gi457.units",
+      "sha256": "02808b7b90ea226566788fc47ff109b71d0b941299dd079b69e2d3c769a88693",
+      "bytes": 10
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/th_regression_d5_s3003_exact_gi457.wins",
+      "sha256": "fae9959aaa709b4b39dbe67110d65a4b92061096693f695f2fbf8b704ab026c3",
+      "bytes": 23
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/vampires2hg_regression_d5_s2002_exact_gi40.units",
+      "sha256": "cf74c2890dc9cd74a39b24f3bdf0c8575be69c46168da711c2b5d1c594c49bee",
+      "bytes": 9
+    },
+    {
+      "path": "regression-exact-controls/runs/baseline/wins/vampires2hg_regression_d5_s2002_exact_gi40.wins",
+      "sha256": "7de4fdce1f92c7d35be92cd3b308488ff1036fbdd5e7e3cedd5660512dfed3ff",
+      "bytes": 22
+    },
+    {
+      "path": "regression-exact-controls/runs/current/DONE",
+      "sha256": "62223a31c1fea141ff246493f63788b2dc0c370520437b595062f1922fbd1243",
+      "bytes": 52937
+    },
+    {
+      "path": "regression-exact-controls/runs/current/argv.json",
+      "sha256": "8882e14bc23a52076458e1fb8a931bc67b8ff33f287a19267aefaaf841b60f1a",
+      "bytes": 657
+    },
+    {
+      "path": "regression-exact-controls/runs/current/batch.err",
+      "sha256": "9fee6c728ec35e3a8b536297477b163150aa38a7b0846ee47e58bc533fb5b24b",
+      "bytes": 10814
+    },
+    {
+      "path": "regression-exact-controls/runs/current/batch.log",
+      "sha256": "b123d77481a26fdd66599947cb5298514058a717b29530809a478d53f2f056dc",
+      "bytes": 3817
+    },
+    {
+      "path": "regression-exact-controls/runs/current/environment.json",
+      "sha256": "f067c9c3f83c14247273c4d3cabd001f2c0b63faad32e17069ef5099ef10f3a5",
+      "bytes": 106
+    },
+    {
+      "path": "regression-exact-controls/runs/current/status.json",
+      "sha256": "62223a31c1fea141ff246493f63788b2dc0c370520437b595062f1922fbd1243",
+      "bytes": 52937
+    },
+    {
+      "path": "regression-exact-controls/runs/current/traces/alchemist_regression_d5_s3003_exact_gi153_gi153.json",
+      "sha256": "4dd154c51c50d019f7ef56201ded17a29323692f8982b816b210a2aaf0159a4d",
+      "bytes": 66857
+    },
+    {
+      "path": "regression-exact-controls/runs/current/traces/alchemist_regression_d5_s3003_exact_gi86_gi86.json",
+      "sha256": "5c4656093b180250572b02abb82de134f02f0bf8eac797b94dcaca06e08e01f5",
+      "bytes": 70551
+    },
+    {
+      "path": "regression-exact-controls/runs/current/traces/antilife_regression_d5_s2002_exact_gi373_gi373.json",
+      "sha256": "b6ec8923458d8840e92a30d537399601448362f7a6f5859e0cb9a771c1512ac9",
+      "bytes": 57350
+    },
+    {
+      "path": "regression-exact-controls/runs/current/traces/edf_regression_d5_s2002_exact_gi123_gi123.json",
+      "sha256": "5ad440c085158faa0aaea13115bbdf51f123dd4b20a4a37bb94d0b316b528b94",
+      "bytes": 95229
+    },
+    {
+      "path": "regression-exact-controls/runs/current/traces/edf_regression_d5_s2002_exact_gi70_gi70.json",
+      "sha256": "43df2c32b081c681523e7e16ffb1c3f7219abe8a67d282d00609c076edb8bbfe",
+      "bytes": 95670
+    },
+    {
+      "path": "regression-exact-controls/runs/current/traces/edf_regression_d5_s2002_exact_gi71_gi71.json",
+      "sha256": "d492df0079efcb1787e056370952a9a3cc30cbe3a4b1fa5f45e0912f6fb48565",
+      "bytes": 90037
+    },
+    {
+      "path": "regression-exact-controls/runs/current/traces/elementals_regression_d3_s2002_exact_gi22_gi22.json",
+      "sha256": "f77f1a801c7eea6a8a015791689775604cb5c72997bb96b1748cbf6abb7ed9c8",
+      "bytes": 47977
+    },
+    {
+      "path": "regression-exact-controls/runs/current/traces/fivecolour_regression_d5_s3003_exact_gi143_gi143.json",
+      "sha256": "6c14700538d46fdc21c9da615794a4ff0131fab8ddbc9a4d940a860188646261",
+      "bytes": 56574
+    },
+    {
+      "path": "regression-exact-controls/runs/current/traces/fluctuator_regression_d5_s3003_exact_gi35_gi35.json",
+      "sha256": "e8a7399f6edce0c8fc193e22fc46ebf5ef583e43ec162858f26cd4625530a303",
+      "bytes": 33134
+    },
+    {
+      "path": "regression-exact-controls/runs/current/traces/goblins_regression_d3_s2002_exact_gi57_gi57.json",
+      "sha256": "d0afffd81d26c79d487ff4db1f0e7f93535b85cb9d2e0b04200f5706afe1c9b4",
+      "bytes": 25669
+    },
+    {
+      "path": "regression-exact-controls/runs/current/traces/kittyv3_regression_d5_s2002_exact_gi99_gi99.json",
+      "sha256": "df8c70f4c78dc5e424da8d8486b1fb0007d82fb2ced771f588662824acc347b8",
+      "bytes": 50584
+    },
+    {
+      "path": "regression-exact-controls/runs/current/traces/melira_regression_d5_s3003_exact_gi139_gi139.json",
+      "sha256": "dea35a9db987779986fc897e9c2972549dbd0af23875f17bebe54d3f47bca27f",
+      "bytes": 32932
+    },
+    {
+      "path": "regression-exact-controls/runs/current/traces/melira_regression_d5_s3003_exact_gi52_gi52.json",
+      "sha256": "7316c2ecbfded7fb370c105db65deb882358592713e47c11c1193f522c832b38",
+      "bytes": 33827
+    },
+    {
+      "path": "regression-exact-controls/runs/current/traces/mirrorwing_regression_d5_s2002_exact_gi63_gi63.json",
+      "sha256": "ea3b37b5e31f59ddc351b0f0537a52f12bb446c86ecf58b967d4add00ec446f1",
+      "bytes": 43300
+    },
+    {
+      "path": "regression-exact-controls/runs/current/traces/niv_regression_d5_s3003_exact_gi92_gi92.json",
+      "sha256": "d10dd9edbec3d935da61e86b3c13d9b49d622f7b864e54a54df2827ed2d50f89",
+      "bytes": 63166
+    },
+    {
+      "path": "regression-exact-controls/runs/current/traces/selesnyav22hg_regression_d5_s2002_exact_gi3_gi3.json",
+      "sha256": "530257a24845a4f7d0a1ce30a4f2ce528312771dccf4b6c4117a472567a0bf82",
+      "bytes": 55173
+    },
+    {
+      "path": "regression-exact-controls/runs/current/traces/selesnyav22hg_regression_d5_s2002_exact_gi86_gi86.json",
+      "sha256": "c1623f701b21a0ec1e8d94f1f1ce36c478b1d4c35cbcabe86d7ce13d5cf99d56",
+      "bytes": 49128
+    },
+    {
+      "path": "regression-exact-controls/runs/current/traces/selesnyav22hg_regression_d5_s2002_exact_gi97_gi97.json",
+      "sha256": "5532557e1b10d3e223a3f5253a925318cb0b758facb7e12d4a2e85153fe9cf5f",
+      "bytes": 39017
+    },
+    {
+      "path": "regression-exact-controls/runs/current/traces/selesnyav2_regression_d3_s2002_exact_gi3_gi3.json",
+      "sha256": "8f2df319fdbebeabe879e0fcedcd602ce9766e30509bfe5ce4cc16e46edbfdd3",
+      "bytes": 43565
+    },
+    {
+      "path": "regression-exact-controls/runs/current/traces/selesnyav2_regression_d5_s2002_exact_gi3_gi3.json",
+      "sha256": "d5251f11c542346cc915d872314867f89ae73bb72ae4e294dacbf682945f55d7",
+      "bytes": 43565
+    },
+    {
+      "path": "regression-exact-controls/runs/current/traces/selesnyav2_regression_d5_s3003_exact_gi115_gi115.json",
+      "sha256": "ceb7d87973154d3f8f3eb03718dd29f4cb7d0c2ada7fe2f72d0fa70a29733d87",
+      "bytes": 43793
+    },
+    {
+      "path": "regression-exact-controls/runs/current/traces/selesnyav2_regression_d5_s3003_exact_gi55_gi55.json",
+      "sha256": "a3b732b399f0d562bf3c020e0a411ede53859eb0d00eb0ef2f6e2b0387334eab",
+      "bytes": 37594
+    },
+    {
+      "path": "regression-exact-controls/runs/current/traces/snow_regression_d3_s2002_exact_gi3_gi3.json",
+      "sha256": "d61776b8469f6cd12dd666c96f517c8940922cb2eaf1db94e212b562fa308eac",
+      "bytes": 66136
+    },
+    {
+      "path": "regression-exact-controls/runs/current/traces/snow_regression_d5_s2002_exact_gi101_gi101.json",
+      "sha256": "f01f0a87dbd36a30883f53dbd4a3c81d3c33077d291094926e8aafe755937134",
+      "bytes": 65262
+    },
+    {
+      "path": "regression-exact-controls/runs/current/traces/snow_regression_d5_s2002_exact_gi141_gi141.json",
+      "sha256": "48724125243b94b4ecfd46120069745d5980488e604e87c990f61082f5951c84",
+      "bytes": 42779
+    },
+    {
+      "path": "regression-exact-controls/runs/current/traces/snow_regression_d5_s2002_exact_gi26_gi26.json",
+      "sha256": "33aecb9934918fdb84787ff3d5ef08b01ead408a1e113ceebf75982e019f0ce7",
+      "bytes": 50912
+    },
+    {
+      "path": "regression-exact-controls/runs/current/traces/snow_regression_d5_s2002_exact_gi31_gi31.json",
+      "sha256": "5c2733de1775c78fae74b7dbd0825fbb3fa9b650374d4e2d557fd0abdf8bd753",
+      "bytes": 66792
+    },
+    {
+      "path": "regression-exact-controls/runs/current/traces/snow_regression_d5_s2002_exact_gi3_gi3.json",
+      "sha256": "cd169187a6cc8fa187cbdbb4861a7a52bb26d98fbeb71194185951629a914ffc",
+      "bytes": 66136
+    },
+    {
+      "path": "regression-exact-controls/runs/current/traces/snow_regression_d5_s2002_exact_gi47_gi47.json",
+      "sha256": "d4b7bedd216e0b927779a511f6cabab86ab3d6e694a0bbe7222104abfdf27c24",
+      "bytes": 47794
+    },
+    {
+      "path": "regression-exact-controls/runs/current/traces/snow_regression_d5_s2002_exact_gi76_gi76.json",
+      "sha256": "94183ea41b3f127ddbe9d8c874536e1377bf9f06b8d0593156bbf2fd4aa8dce6",
+      "bytes": 56339
+    },
+    {
+      "path": "regression-exact-controls/runs/current/traces/snow_regression_d5_s3003_exact_gi111_gi111.json",
+      "sha256": "c747538a11e67b7cc289107647fd5f432d493232ab8080e603984f20822f90a3",
+      "bytes": 44460
+    },
+    {
+      "path": "regression-exact-controls/runs/current/traces/snow_regression_d5_s3003_exact_gi51_gi51.json",
+      "sha256": "1cd5f6604ef85d94d0fa9aa3cbbb25ff84d4c3a2b689245698898a6c082c9724",
+      "bytes": 49938
+    },
+    {
+      "path": "regression-exact-controls/runs/current/traces/snow_regression_d5_s3003_exact_gi5_gi5.json",
+      "sha256": "eafa85f0db2d92235acc338711a8569ae3652ca0f17bfb313bc8ae77ce7f9e11",
+      "bytes": 41945
+    },
+    {
+      "path": "regression-exact-controls/runs/current/traces/snow_regression_d5_s3003_exact_gi70_gi70.json",
+      "sha256": "620ac35e621fc3a2372d7a923f30866584df6a4f3549662db928daf6306fa64d",
+      "bytes": 56540
+    },
+    {
+      "path": "regression-exact-controls/runs/current/traces/th_regression_d5_s3003_exact_gi457_gi457.json",
+      "sha256": "81f3a5bd893a00a7cbe6f57dd2eb241ac89df736a11f6084ea61ae4c145dd556",
+      "bytes": 54956
+    },
+    {
+      "path": "regression-exact-controls/runs/current/traces/vampires2hg_regression_d5_s2002_exact_gi40_gi40.json",
+      "sha256": "8d059d985d11c122577605570d15116312f3af9587d0bc3fb8529b11af9c2d99",
+      "bytes": 52667
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/alchemist_regression_d5_s3003_exact_gi153.units",
+      "sha256": "bf3c13c0788795024a36503345ac39c703b8b69be0c06e8e32714581423c19b9",
+      "bytes": 10
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/alchemist_regression_d5_s3003_exact_gi153.wins",
+      "sha256": "9924e78c9c06a602d4430ec319af6a9f2f6726fe1cbfc28a9044abc18d1f1e35",
+      "bytes": 23
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/alchemist_regression_d5_s3003_exact_gi86.units",
+      "sha256": "13df890e7524839758d4cadc9072ba4dcef6597013106c537574afe25fc2c376",
+      "bytes": 10
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/alchemist_regression_d5_s3003_exact_gi86.wins",
+      "sha256": "ebdc004ff4b5d7158f30705590a8a3bcfe71249b394b5461a39e06bb5fac9822",
+      "bytes": 23
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/antilife_regression_d5_s2002_exact_gi373.units",
+      "sha256": "6e14d7830a7c83d56603dfb98e4b8002d205d65339f390ed02c2d23a91486bed",
+      "bytes": 10
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/antilife_regression_d5_s2002_exact_gi373.wins",
+      "sha256": "5115f6586195cee9a86378ae28444bd54014ef9a41dfab0af896b580b83c4af7",
+      "bytes": 23
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/edf_regression_d5_s2002_exact_gi123.units",
+      "sha256": "7e97f4f7e8c96d2fa7534168cf225edd5b83ff6eec7a8b5cf0f9bd87419fd149",
+      "bytes": 9
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/edf_regression_d5_s2002_exact_gi123.wins",
+      "sha256": "25e628fad6ae8a5012d49b5e896681bf5327763c6ee03e3c37beadc355987331",
+      "bytes": 23
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/edf_regression_d5_s2002_exact_gi70.units",
+      "sha256": "f192825e92fd21c74bad6e7e092e83d682145e86feb363788fae9e68ff2a9152",
+      "bytes": 9
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/edf_regression_d5_s2002_exact_gi70.wins",
+      "sha256": "50b121ae5b6d3a0daaba8fe7264257823a3a539e16f53fe06117a8c933264744",
+      "bytes": 22
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/edf_regression_d5_s2002_exact_gi71.units",
+      "sha256": "2decad752168211b50e28db80e1d8ca8821b2cbc9d87c9c4effa8ce4818f95b4",
+      "bytes": 9
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/edf_regression_d5_s2002_exact_gi71.wins",
+      "sha256": "fe869867f81bae0b85357f7b125d5009b8d6799a3bec3b45fd7649a85c2b6d0a",
+      "bytes": 22
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/elementals_regression_d3_s2002_exact_gi22.units",
+      "sha256": "aab54f4168f427b2865dd5002666d67e38903e914dc99b4d81a1fc5342e30b66",
+      "bytes": 9
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/elementals_regression_d3_s2002_exact_gi22.wins",
+      "sha256": "80abded2dd3bea4b794f0d8e57fdb81b4ca6dab40367d0b9697cd395cd6e3690",
+      "bytes": 22
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/fivecolour_regression_d5_s3003_exact_gi143.units",
+      "sha256": "0e0a3d4494346a8e28672ffcc5b23587a2ff30818cf2cc98ac379795818d82e5",
+      "bytes": 11
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/fivecolour_regression_d5_s3003_exact_gi143.wins",
+      "sha256": "4f4fb8d3f1aea3cd34aca7b945b69a8a8415fd167272d8e93293eb7182a8c43c",
+      "bytes": 23
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/fluctuator_regression_d5_s3003_exact_gi35.units",
+      "sha256": "eb838db5cbbd072d92819697ad0b6619075638cd88fdb7b91b140a3456e2c3fc",
+      "bytes": 8
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/fluctuator_regression_d5_s3003_exact_gi35.wins",
+      "sha256": "d104cad4f9bd45a988abef6c752473b2f61ab5f799873259ea7235a8b439a8f2",
+      "bytes": 22
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/goblins_regression_d3_s2002_exact_gi57.units",
+      "sha256": "e191e6436a17d04a0002e08ae5c4154e3aa5b3f8db0143840d0ca1af861cf49f",
+      "bytes": 9
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/goblins_regression_d3_s2002_exact_gi57.wins",
+      "sha256": "3de04475117cffca02f393bf673c39ffd35107bbfa5dac1b4ea9d5fc03155b16",
+      "bytes": 22
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/kittyv3_regression_d5_s2002_exact_gi99.units",
+      "sha256": "80b5365b83cf1bd4cdb561618cff90e71e3fb6cc6799b435eefa431219f42ab3",
+      "bytes": 9
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/kittyv3_regression_d5_s2002_exact_gi99.wins",
+      "sha256": "f47ae72133571d7b3351c646d28360abd10ef2b969dd5dabcae6e4e6f62b75f4",
+      "bytes": 22
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/melira_regression_d5_s3003_exact_gi139.units",
+      "sha256": "e122a2d36148a908e8c08b05862f8ea347c12239c56a24f1e56c05158eed65e4",
+      "bytes": 11
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/melira_regression_d5_s3003_exact_gi139.wins",
+      "sha256": "d700a2c12b1aa975671cf5f8abde605fc629886eed01a093258aed8767281502",
+      "bytes": 23
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/melira_regression_d5_s3003_exact_gi52.units",
+      "sha256": "840b358a346b29aa6e96be9d38590b6948dd60eda692308f31d7dfc088f53b4f",
+      "bytes": 9
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/melira_regression_d5_s3003_exact_gi52.wins",
+      "sha256": "38b239eba85a9c8e95ded75b3a04b2d2021998c3e2ddf8422200925017a5290f",
+      "bytes": 22
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/mirrorwing_regression_d5_s2002_exact_gi63.units",
+      "sha256": "40ef77989f955e5b702e598e5fa997265d1b060e55f6c9241652eff74f64b883",
+      "bytes": 9
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/mirrorwing_regression_d5_s2002_exact_gi63.wins",
+      "sha256": "f79a2e19cab5cdc48046487a5d5daab34d02aa2c0cc5320cc0229d27cf66afc7",
+      "bytes": 22
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/niv_regression_d5_s3003_exact_gi92.units",
+      "sha256": "137adf7426a1c07b375395d7b0385649a223d3617fdbaf6b92cc30d89478e72b",
+      "bytes": 9
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/niv_regression_d5_s3003_exact_gi92.wins",
+      "sha256": "b5b0ada7b7f607e62d04a3027888ca6a00ef9d8d967ea919638e6b82f4f4fb21",
+      "bytes": 22
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/selesnyav22hg_regression_d5_s2002_exact_gi3.units",
+      "sha256": "0f93d5fcda82af380a6915575ea5615b9b6bd79c1c3f40b8a74ac24a57558c0d",
+      "bytes": 8
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/selesnyav22hg_regression_d5_s2002_exact_gi3.wins",
+      "sha256": "4884f73dec1955482f12daa2a5b34b50a54ef6b9bcd5e200d023b7792be537bd",
+      "bytes": 21
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/selesnyav22hg_regression_d5_s2002_exact_gi86.units",
+      "sha256": "a96f855fdc81728e79d3d2a8af75f90edc9282789a53f02017b154ff361a0ae7",
+      "bytes": 9
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/selesnyav22hg_regression_d5_s2002_exact_gi86.wins",
+      "sha256": "b97422117696dda86656daa21ea8d25571bf22e44ec9d6bb37639adc885e238c",
+      "bytes": 22
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/selesnyav22hg_regression_d5_s2002_exact_gi97.units",
+      "sha256": "287db52fff985b286c782337bed10efe9443e883af868b2b3cc1f5f980830ecc",
+      "bytes": 7
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/selesnyav22hg_regression_d5_s2002_exact_gi97.wins",
+      "sha256": "c95654e2336ab6c45e0d690807b6aeb02fa82e7d0edd19df6b896a439f78b09b",
+      "bytes": 22
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/selesnyav2_regression_d3_s2002_exact_gi3.units",
+      "sha256": "e5d8db3cf1d0198c39e2223fd1a7d86f1c2756fc39797309710905008cd2794c",
+      "bytes": 8
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/selesnyav2_regression_d3_s2002_exact_gi3.wins",
+      "sha256": "83d9785f9cc5ab0c0cb04db3890096a0fbc3500f6c674daa1f07dc3181b854bf",
+      "bytes": 21
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/selesnyav2_regression_d5_s2002_exact_gi3.units",
+      "sha256": "90be0cf058c08a682a92be6b57b516aa1b47f4439dd8b42585e6d05a324c2857",
+      "bytes": 8
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/selesnyav2_regression_d5_s2002_exact_gi3.wins",
+      "sha256": "83d9785f9cc5ab0c0cb04db3890096a0fbc3500f6c674daa1f07dc3181b854bf",
+      "bytes": 21
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/selesnyav2_regression_d5_s3003_exact_gi115.units",
+      "sha256": "2cde2d28d51e654f7456efa836b218133b027ad3116124dfe154fa381f858a4d",
+      "bytes": 9
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/selesnyav2_regression_d5_s3003_exact_gi115.wins",
+      "sha256": "58ff1177f1c71755815fbf981662334382a4dbd71bdfe107e79cd60173856577",
+      "bytes": 23
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/selesnyav2_regression_d5_s3003_exact_gi55.units",
+      "sha256": "8261429f26700bfbe731d1928cd84c4c38fe623661c2e5ecf598c1397a4e4b92",
+      "bytes": 8
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/selesnyav2_regression_d5_s3003_exact_gi55.wins",
+      "sha256": "8bd7370c0dbe8da4e4d4adf85e7cdfc849a11b93a48f9fd840645e48a50fba65",
+      "bytes": 22
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/snow_regression_d3_s2002_exact_gi3.units",
+      "sha256": "a4a8c886ecbb7609d6e67b621a463451fdf82e861c2d66da5254d8749075bbf4",
+      "bytes": 8
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/snow_regression_d3_s2002_exact_gi3.wins",
+      "sha256": "f64365a9a91ae303d69fbb7d4875ce993cd96e72d5feeb914f390af3893da29c",
+      "bytes": 21
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/snow_regression_d5_s2002_exact_gi101.units",
+      "sha256": "74630620ea4bb2b34ee4c76e405f16c6bdd447ab628fd58dbbc78f330a976ab1",
+      "bytes": 10
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/snow_regression_d5_s2002_exact_gi101.wins",
+      "sha256": "de86efa6c35b9d3c418ccc1cad858285be192979cd52d1afe7cd897caa1b70b8",
+      "bytes": 23
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/snow_regression_d5_s2002_exact_gi141.units",
+      "sha256": "20dd25a14433e4179781f92d4ab5db6e6e52a54a38311374095f949b932535f8",
+      "bytes": 10
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/snow_regression_d5_s2002_exact_gi141.wins",
+      "sha256": "b1c2ce4e11ab22cacfea814929cfdfe32a1a81c0147c5aed4af75858f2cd3bc1",
+      "bytes": 23
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/snow_regression_d5_s2002_exact_gi26.units",
+      "sha256": "c07b776ec5c812578b134d5c80d06c682b606b9230105fd4e4be00db8482681b",
+      "bytes": 9
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/snow_regression_d5_s2002_exact_gi26.wins",
+      "sha256": "51d7bcdcefa19716c03a4d59d27c1ba2a3484a979f933cd5a79ccc2adce36c11",
+      "bytes": 22
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/snow_regression_d5_s2002_exact_gi3.units",
+      "sha256": "b27bb6a55c270192f280a9cf16dfdff61420c2077ff42da7de6282299eeb28d7",
+      "bytes": 8
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/snow_regression_d5_s2002_exact_gi3.wins",
+      "sha256": "f64365a9a91ae303d69fbb7d4875ce993cd96e72d5feeb914f390af3893da29c",
+      "bytes": 21
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/snow_regression_d5_s2002_exact_gi31.units",
+      "sha256": "30e61441b71852c35ac26a403a1db4e566f7de6a64fc5548eea8230d362091a3",
+      "bytes": 10
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/snow_regression_d5_s2002_exact_gi31.wins",
+      "sha256": "bb5cc9a98ac9a227e81c24ee402db37a36915ec06f813b4e1bf1cfa9807c78ff",
+      "bytes": 22
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/snow_regression_d5_s2002_exact_gi47.units",
+      "sha256": "3783604665763ff64dd98ac706d6a6dcd6de6c0e8fe65c46f075ecbfb0b60348",
+      "bytes": 9
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/snow_regression_d5_s2002_exact_gi47.wins",
+      "sha256": "3c7ecd598f0eb994706e925919d60832a66563f1f7319c211835e949806b311e",
+      "bytes": 22
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/snow_regression_d5_s2002_exact_gi76.units",
+      "sha256": "1a33b2387c2865935e83f4a9f29be8788c93893921a745b02b376f486b2bc899",
+      "bytes": 10
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/snow_regression_d5_s2002_exact_gi76.wins",
+      "sha256": "68d0c387d09250a62a22e5a08a73568d5fda2dcbdad099e5f34611fd9d3e5f46",
+      "bytes": 22
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/snow_regression_d5_s3003_exact_gi111.units",
+      "sha256": "23f7bad049c1635be9db903e1375851ad27cfea3181c7b877699cf1d2039f842",
+      "bytes": 10
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/snow_regression_d5_s3003_exact_gi111.wins",
+      "sha256": "b63a88ab395e876c15edacfcd2dcf313eb4220b94f3f203d46874cccf69bf054",
+      "bytes": 23
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/snow_regression_d5_s3003_exact_gi5.units",
+      "sha256": "5dfc02f39ff9d99e4c4e26eb391055cdd684e34169dbdc108af3574b5d87ed1f",
+      "bytes": 8
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/snow_regression_d5_s3003_exact_gi5.wins",
+      "sha256": "aa3a76663aa2c0382babc9d8729711b74aba53632fa798d4ae6f51102f21bb9e",
+      "bytes": 21
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/snow_regression_d5_s3003_exact_gi51.units",
+      "sha256": "755a9a0057cdb0d3a03f42cd7d35a548144061e4fbbb934dee99098b6d3c0774",
+      "bytes": 9
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/snow_regression_d5_s3003_exact_gi51.wins",
+      "sha256": "7b917cdbb6f3f9c77be03c2fc48d416fc48c5bbcfa7f98f5d5b0077f857a7ad8",
+      "bytes": 22
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/snow_regression_d5_s3003_exact_gi70.units",
+      "sha256": "d8e7c2e9255d40ea30c747a224bb3e25ee08198c06e4fbba0c99c28ee635e8f3",
+      "bytes": 9
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/snow_regression_d5_s3003_exact_gi70.wins",
+      "sha256": "3cd81b3b35ef2be2c74b55aa91df52b85c12445bd348bbaa065b82162bd6f6fe",
+      "bytes": 22
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/th_regression_d5_s3003_exact_gi457.units",
+      "sha256": "02808b7b90ea226566788fc47ff109b71d0b941299dd079b69e2d3c769a88693",
+      "bytes": 10
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/th_regression_d5_s3003_exact_gi457.wins",
+      "sha256": "fae9959aaa709b4b39dbe67110d65a4b92061096693f695f2fbf8b704ab026c3",
+      "bytes": 23
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/vampires2hg_regression_d5_s2002_exact_gi40.units",
+      "sha256": "bcaf346301f4a6156f9c95935b8b3a2a3cab130e30ce16efd8ad273a353ba4e0",
+      "bytes": 9
+    },
+    {
+      "path": "regression-exact-controls/runs/current/wins/vampires2hg_regression_d5_s2002_exact_gi40.wins",
+      "sha256": "123764dd240d5bed708faa2dbfb6a2e719c495d5393d642b821874849c0573fb",
+      "bytes": 22
+    },
+    {
+      "path": "regression-exact-controls/sealed-plan.json",
+      "sha256": "12aee552935b1971db051b4eb7bb5a73960379aaf61a7fea2680f48dadff4033",
+      "bytes": 3896
+    },
+    {
+      "path": "searched-first17-review/REVIEW.md",
+      "sha256": "973e0ab71944fc97214bee12650e203faa0f8ca80562d7a6e0fe2a641302ce31",
+      "bytes": 10328
+    },
+    {
+      "path": "searched-first17-review/card-definitions-read.json",
+      "sha256": "ec8a2bf4f398f68dcbc48eae090f138b18ebcb07ba6376d8e3beedd50d22a788",
+      "bytes": 169832
+    },
+    {
+      "path": "searched-first17-review/review.json",
+      "sha256": "395cf4c9a3c78d6a5d754d7bac8c9289ffe9b6009bc1b865638403df2af45731",
+      "bytes": 80086
+    },
+    {
+      "path": "searched-first17-review/selected-and-traces.json",
+      "sha256": "93e92eae39a916f616619fbff01b66223cbd7b958b58baa8fcc91a599a6e4ea5",
+      "bytes": 2117115
+    },
+    {
+      "path": "upstream2c76-release-build.json",
+      "sha256": "80bcdc4c3890c14210f1a1ad9c66e9dcd30d8addd1016d7f980fe7fec691cbcb",
+      "bytes": 577
+    }
+  ]
+}

@@ -78,6 +78,15 @@ def main():
         if m:
             fingerprints[m[1]] = (float(m[2]), m[3])
     batch_raw = (run / "batch.log").read_bytes()
+    err_raw = (run / "batch.err").read_bytes()
+    abandoned = {}
+    for line in err_raw.decode(errors="replace").splitlines():
+        m = re.match(r"^\[goldfish\] ABANDONED job=([A-Za-z0-9_]+) gi=(\d+) units=(\d+) limit=(\d+) cause=UNITS(?: |$)", line)
+        if m:
+            identity = (m[1], int(m[2]))
+            if identity in abandoned:
+                raise ValueError("duplicate abandonment witness")
+            abandoned[identity] = (int(m[3]), int(m[4]))
     batch_results = {}
     for line in batch_raw.decode().splitlines():
         m = re.match(r"^([A-Za-z0-9_]+): played=(\d+) avg=([0-9.]+) digest=([0-9a-f]+)(?: |$)", line)
@@ -99,19 +108,24 @@ def main():
         old, new = wins(old_raw), wins(new_raw)
         start = job.get("game_index", 0)
         expected = set(range(start, start + job["games"]))
-        if set(new) != expected or set(old) != expected:
+        missing = expected - set(new)
+        if set(new) - expected or set(old) - expected or expected - set(old) != missing:
             raise ValueError("incomplete/mismatched GI coverage: " + name)
+        if missing:
+            limit = job.get("abandon_units", 0)
+            if limit <= 0 or any(abandoned.get((name, gi)) != (limit, limit) for gi in missing):
+                raise ValueError("missing GI lacks matching bounded-job abandonment witness: " + name)
         horizon = job.get("max_turns", 8)
         old_fp, new_fp = fingerprint(old, horizon), fingerprint(new, horizon)
         accepted = fingerprints[name]
         observed = batch_results[name]
         if old_fp[1] != accepted[1] or abs(old_fp[0] - accepted[0]) > 5.01e-5:
             raise ValueError("baseline aggregate/per-game GT inconsistent: " + name)
-        if observed[0] != job["games"] or new_fp[1] != observed[2] or abs(new_fp[0] - observed[1]) > 5.01e-5:
+        if observed[0] != len(new) or new_fp[1] != observed[2] or abs(new_fp[0] - observed[1]) > 5.01e-5:
             raise ValueError("run aggregate/per-game result inconsistent: " + name)
         band = "d0" if "_d0_" in name else "searched"
         nchanged = 0
-        for gi in sorted(expected):
+        for gi in sorted(new):
             if old[gi] == new[gi]:
                 tallies[band]["unchanged"] += 1
                 continue
@@ -130,18 +144,32 @@ def main():
                 r.update(name=f"d8_{name}_gi{gi}", games=1, seed=row["actual_seed"],
                          game_index=gi, depth=8, budget_ms=0, ignore_play_profile=True)
                 recovery.append(r)
-        cases.append(dict(key=name, games=len(new), old_avg=old_fp[0], new_avg=new_fp[0],
+        cases.append(dict(key=name, games=len(new), requested_games=job["games"],
+                          baseline_equal_abandoned_gis=sorted(missing), old_avg=old_fp[0], new_avg=new_fp[0],
                           changed=nchanged, old_sha256=sha(old_raw), new_sha256=sha(new_raw)))
         if nchanged:
             evidence[f"baseline/{name}.wins"] = old_raw
             evidence[f"observed/{name}.wins"] = new_raw
-    err_raw = (run / "batch.err").read_bytes()
-    attention = [dict(line=i, text=l) for i, l in enumerate(err_raw.decode(errors="replace").splitlines(), 1)
-                 if re.search(r"FORECAST.DISAGREEMENT|\[FD\]|NONCONV|\[counterlist\] OVERFLOW", l, re.I)]
+    attention = []
+    diagnostic_counts = dict(fd=0, nonconv=0, counter_overflow=0)
+    for i, line in enumerate(err_raw.decode(errors="replace").splitlines(), 1):
+        kinds = []
+        if re.search(r"FORECAST.DISAGREEMENT|\[(?:FD|fd-diverge)\]", line, re.I):
+            kinds.append("fd")
+        if re.search(r"NONCONV", line, re.I):
+            kinds.append("nonconv")
+        if re.search(r"\[counterlist\] OVERFLOW", line, re.I):
+            kinds.append("counter_overflow")
+        if kinds:
+            attention.append(dict(line=i, text=line, kinds=kinds))
+            for kind in kinds:
+                diagnostic_counts[kind] += 1
     report = dict(status="COMPLETE_MECHANICAL_AUDIT_REQUIRES_CAUSAL_REVIEW_NOT_ADOPTION",
                   source_tree=source, baseline_commit=baseline, mode=a.mode,
-                  jobs=len(jobs), games=sum(j["games"] for j in jobs), tallies=tallies,
+                  jobs=len(jobs), games=sum(c["games"] for c in cases),
+                  requested_games=sum(j["games"] for j in jobs), tallies=tallies,
                   changed=changed, cases=cases, diagnostic_attention=attention,
+                  diagnostic_counts=diagnostic_counts,
                   raw_sha256={"manifest.json":sha(manifest_raw), "batch.log":sha(batch_raw),
                               "batch.err":sha(err_raw), "mtg.run":sha((run / "mtg.run").read_bytes())},
                   scope="No engine runs. Raw digests remain exact; every searched slower game needs review.")

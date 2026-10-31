@@ -1,33 +1,70 @@
 # Cyclone completion review
 
-Status: integration implementation complete; final validation in progress, 2026-10-31.
+Status: implementation and normal test review complete; final analysis/cost checks in progress, 2026-10-31.
 No mulligan or value-leaf generation has started.
 
-Current integration is `cyclone-landing2c76` in the existing Landing905 worktree,
-based on `phase-1-2-deck-analyzer` commit `2c76c854e`. Pushed backup code
-`e63afece6` retains source tree `c2c6d4a03a5c1df9cf72c55bd29940aacff41efc`
-and the latest upstream artifact/GT updates. It has not yet landed on the shared
-branch. Full local units pass:2,415cases/3,567,944assertions; the repeat after the
-data-only update also passes all2,415cases/3,567,944assertions. PGO+LTO has completed all197jobs/5513games at32workers,
-SHA256 `962bc5a514a3128b6a141bfdc1d2f3b21353ea8fd11572cb4d2fd6055249788d`.
-Normal smoke/regression, reference replay, final cache checks and quiet timing
-follow. Source CI41193237355 passes Linux, Windows and parity; candidate
-CI41195511867 is running. Local frontend line-build/reference-backup pass.
-No changes target `main`.
+The linear candidate is `cyclone-landing2c76` in the Landing905 worktree, based on
+shared `phase-1-2-deck-analyzer` commit `2c76c854e`. Source is
+`c2c6d4a03a5c1df9cf72c55bd29940aacff41efc`; final PGO+LTO SHA256 is
+`962bc5a514a3128b6a141bfdc1d2f3b21353ea8fd11572cb4d2fd6055249788d`.
+Original/intermediate branches remain preserved. No changes target `main`.
 
-The newer shared-branch union preserves all 760 heuristic slots, all 914 upstream
-ground-truth/log files and all 729 reference files. Completion also repairs
-memo-hit earliest-turn provenance and searched-M2 latent dependencies, adds
-unambiguous diagnostic job attribution, and wires the approved two-Ulamog bucket
-merge through generation's production parser. Actual K remains unmeasured.
+Fresh validation:
 
-The optional V5 follow-up stopped at 2,439 / 5,986 completed games under the
-user's priority to land promptly. Its partial evidence is preserved in
-`cyclone-pending-policy-experiments.md`; it supplies no complete-pool verdict.
-All measurements below are historical V5 evidence, not final-source results.
-The user requires tests and push to `phase-1-2-deck-analyzer` before generation.
+- Full units pass twice, including after the latest artifact update:
+  2,415 cases / 3,567,944 assertions. All 390 scenarios pass.
+- Linux, Windows and cross-platform determinism CI41195511867 pass.
+  Local viewer line-building and reference-backup checks pass.
+- Normal smoke:150PASS/7initialFAIL/0NEW. All81changed rows match prior reviewed
+  evidence exactly; no searched score changes and9legal same-score changes.
+- Full regression:231PASS/22initialFAIL/0NEW,253jobs,72,413played of72,414requested.
+  One accepted Melira backstop omits the same GI11 as upstream with an explicit
+  current2M-unit abandonment witness; it is not a loss or silently missing result.
+- Strict replay:709references, zero play/board/enum/contract failures, and the
+  suboptimal-reference gate passes. No reference was changed or removed.
+- All33searched changed games have exact native upstream/current physical
+  controls. Twelve Snow results/full traces equal upstream2c and represent stale
+  GT. Twenty same-score source alternatives are legal. The sole searched
+  slowdown is FiveColour seed3146/GI143, T5→T6 at shipped d7/b40. At b160,b640
+  and d8/b0, all three current probes recover the exact old T5 digest AND whole
+  physical trace, with identical opening/mulligans and zero diagnostics.
+  This is budget-sensitive variation; its originating source delta is unisolated.
+- Three regression FD warnings reproduce on exact upstream2c with identical
+  prediction/realization/proven-turn/leaf tuples, units and whole physical traces:
+  Niv3095(6/5), TreasureHunt3460(7/5), EDF2073(6/5). They remain known upstream
+  defects; this is not a zero-FD claim. NONCONV0. Smoke's Niv1082 warning is also
+  pre-existing. D0's lighter review records net+4turns in regression, not neutrality.
+- Normal harness acceptance promotes these reviewed differences, preserving all
+  unrelated/overnight GT. Exact changed keys are7smoke+22regression. No optional
+  policy default was changed. Proof hashes and initial/accept logs are under
+  `build/scratch/cyclone-finish/landing905-review/normal-review-closure.json`.
+- Three repaired Cyclone cases match Release/PGO in complete physical traces,
+  outcomes, digests and units (T4/T5/T4), zero fidelity warnings. A separate
+  15-game fresh AI benchmark completes with zero ordinary warnings.
 
-## Implementation and source
+The diagnostic helper previously forced matrix labeld5 while FiveColour shipsd7;
+it now reproduces the exact saved manifest job through batch mode, retaining
+profile-driven depth, setup/flags and seed/GI addressing. Correct batch trace
+flags, exit-status checks and no timeout replace the incorrect reconstruction.
+Four focused tests pass, and a real FiveColour replay reproduces the actualT6.
+The normal audit collector also accounts explicitly for structured bounded
+abandonment and the actual enriched `[fd-diverge]` syntax; two tests pass.
+
+Active final checks:15 real Claude Sonnet games (resolved `claude-sonnet-5`),
+source/PGO-bound cache validation at1/32workers plus tiny/unbounded32 and VERIFY,
+then one quiet855-game cost pool against same-run Hinata. One worker is the
+explicit cache-invariance diagnostic exception; normal throughput uses32.
+Artifacts require the3x admission gate, a shared-branch push first, and measured
+feasibility; mulligan `fast` precedes value-leaf. Actual bucket K is unmeasured;
+the approved exact-name two-Ulamog merge is implemented/tested without K19lands.
+
+The optional V5 follow-up was stopped at2,439/5,986games to prioritize landing.
+No complete-pool verdict or policy rejection follows. Pending experiments are
+recorded in `cyclone-pending-policy-experiments.md`; current run state is in
+`cyclone-completion-checkpoint.md`. The V5 sections below are historical and
+never substitute for the final-source checks above.
+
+## Historical V5 implementation and source
 
 All original implementation branches are integrated in `cyclone-current`, based on
 main `547e6fe8b`. Code commit `4a9ed39e5` has source tree

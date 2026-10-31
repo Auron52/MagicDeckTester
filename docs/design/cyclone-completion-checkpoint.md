@@ -18,7 +18,7 @@ accepted Burn ground truth, artifact ledgers and job cost data. All nine files
 are retained exactly. Source, all references and the26 Cyclone/Hinata/Kitty
 apparatus assets are unchanged. The linear union and checkout proof is
 `build/scratch/cyclone-finish/landing905-review/latest2c76-tree-preparation.json`;
-older pushed branches and all33worktrees remain intact.
+older pushed branches and all34worktrees remain intact.
 
 Fresh PGO+LTO build root64102 DONE0, all197training jobs/5513games at32workers.
 Final PGO SHA256:
@@ -32,6 +32,36 @@ new candidate CI41195511867 is running (rootwatch12286). Local line-build and
 reference-backup checks PASS. Reference safety PASS across33worktrees; repeat
 before session close. Normal smoke/regression32 run next, before cache/oracle
 stages, with baseline2c76. No whole13koptional-quality repeat is selected.
+
+Normal smoke6065 and full regression19474 CLOSED/initialrc1, all per-game
+reviews complete and both normal accept commands DONE0 (root29031/81519).
+Smoke150PASS/7FAIL/0NEW; regression231PASS/22FAIL/0NEW. Exact7+22GTkeys changed;
+all other/overnight keys retained. Full count72,414requested/72,413played; existing
+MeliraGI11 bounded omission is explicit. All390scenarios and709strictrefs pass.
+Root closure: `landing905-review/normal-review-closure.json`, corrected helper
+and review receipts under `normal-audit/{smoke-v2,regression}`. Four replay-helper
+checks/two collector tests pass; actual fixed replay accurately uses shippedd7.
+
+Native exact-source controls root90741 DONE0,36current+36upstream. Allcurrent
+rows reproduce the full regression. FD3 prediction tuples/units/physical traces
+match exact2c upstream (not merely presence); NONCONV0. Separate addendum
+`landing905-review/fd-three-exact-2c-postrun-review.json`. All33searched changes
+reviewed by first17/last16 verdicts. Sole FiveColour3146/GI143 T5→T6 atd7/b40
+recovers exactold T5 FULLJSON/digest atb160,b640,d8b0, identicalmulligans/opening,
+zero diagnostics; root76000DONE0. No per-lever cause isolated. D0lighter review
+records7slower/5faster/82ties, net+4turns; no neutral/94-isolated-proofs claim.
+
+Cyclone3case compiler/fulltrace preflight root79738DONE0, exactT4/T5/T4,
+zeroFD/NONCONV. Fresh15AIbenchmark root11828DONE0, sourceC2/PGO962, all15traces.
+ACTUAL15Claude games root46492 RUNNING since11:48; native modelclaude-sonnet-5,
+no substitutedmodel. Controller at `build/scratch/cyclone-finish/claude-sweep-c2c6d4a`,
+sealedplan9fddee6..., rootlaunchgrant exists. DO NOTlaunch a duplicate. Root91825
+memory1 RUNNING child1940750, finalV7sealedpacket. These are the only active
+engine workloads:15serial interactiveclients alongside1worker cache diagnostic.
+Afterbothclose: memory32, tiny32, unbounded32, VERIFY, quiet855. No13koptional
+repeat. Rootreference-safety scanner58362 across34trees currentlyrunning; exact
+upstreamRelease baseline21103DONE0/SHA5155731d..., source520d, retained in new
+`cyclone-upstream2c76` worktree. All older pushed refs remain untouched.
 
 The six upstream commits since138 add EDF energy/payment shapes (four default
 ON, EF_SCALAR_REFUND defaultOFF), accepted EDF/Landfall GT and MidrangeBurn's

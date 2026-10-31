@@ -35,7 +35,11 @@ An ordinary harness exit1 can mean a fingerprint difference requiring review;
 collect its completed output before deciding. The collector fails closed without
 the harness final Result line, any manifest summary, any expected GI, a matching
 source pin, consistent aggregate/per-game folds, or the exact immutable old GT.
-Its output path must be new. Changed raw `.wins` files, both-side hashes, original
+Its output path must be new. Identical missing GIs on both sides are permitted only
+for an original positive `abandon_units` backstop with the exact current structured
+ABANDONED job/GI/units/limit witness; they are separately reported, never converted
+to losses. The old cause remains inferred from the same accepted bounded cohort,
+not presented as a newly observed old-side abandonment log. Changed raw `.wins` files, both-side hashes, original
 manifest/jobs, batch output, diagnostics and binary hash are retained; baseline
 is the explicit commit, never a moving `HEAD~1`. Do not rerun a mode over its
 `test/logs/<mode>` outputs before preserving its artifacts and binary snapshot.
@@ -52,7 +56,9 @@ Normal harness behavior to retain:
   rows use `ignore_play_profile`. Original jobs preserve this distinction.
 - `audit_changed_games.py`, which the harness invokes at the end, **does run
   engine repros** through `explain_game.py`, capped at20. Do not invoke it as a
-  supposedly read-only tool during PGO. The new collector never starts engines.
+  supposedly read-only tool during PGO. The new collector never starts engines. `explain_game.py` has now been corrected
+  to prefer the saved job and retain profile-driven depth; its pre-fix standalone
+  d5 explanations are not recovery evidence for shipped d6/d7 rows.
 
 ## Review obligations
 
