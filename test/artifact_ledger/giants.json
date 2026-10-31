@@ -38,6 +38,25 @@
     "=== 2026-10-25T16:32:33  PHASE E.6: no allowance for giants -- no ladder escalations in 1200 games (single-path or trust-dominated); fleet default R = 0",
     "    the live sidecar's existing escalation_skip_r = [97.2, 73.7, 68.6, 0.0, 0.0] is KEPT -- it was measured against the leaf live when it was set; if this run installed a new leaf it is stale: USER, keep or remove it."
    ]
+  },
+  {
+   "run_id": "giants-artifact-queue-tool-647f24-20261031T162646",
+   "kind": "valueleaf",
+   "verdict": "kept-incumbent",
+   "ident": "em:b8979a38ce5ac04339f6",
+   "frozen": "f5a889b1b838ee2ff872b91bf3d93d0b2f8fb885",
+   "src_tree": "89b146d10406063213d9abe41e1cfdf1a616c021",
+   "date": "2026-10-31",
+   "worker": "artifact-queue-tool-647f24",
+   "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_giants/DECISIONS.txt)",
+   "decisions": [
+    "=== 2026-10-31T16:37:22  PHASE E.7b: giants -- trust REJECTED at d5 -> value_trust_depth unset (unchanged); play moved d5/20 -> d6/20 after phase E decided trust",
+    "      trust candidate d5: ON-OFF +0.00000 turns (se 0.00000, one-sided 95% upper +0.00062) over 8 seeds x 1000 games; cost 565 vs 504 core-s (1.12x); 8/8 seeds byte-identical; se 0.00000 -> 0.00038 after the 3/n floor; tol 0.0020",
+    "      trust: REJECTED -- the lever NEVER ENGAGED: play is byte-identical on every seed AND cost is 1.12x (>= 0.98), so trusting at d5 changed nothing at all. A non-inferiority test passes trivially on a dead experiment, and no evidence is not evidence of safety. Usual cause: a staged sidecar carrying value_play leaf:none, which swaps the model for a Constant() so it can never be consulted. Shipping UNSET (always eligible to escalate).",
+    "",
+    "=== 2026-10-31T16:37:28  PHASE E.6: no allowance for giants -- no ladder escalations in 1200 games (single-path or trust-dominated); fleet default R = 0",
+    "    the live sidecar's existing escalation_skip_r = [97.2, 73.7, 68.6, 0.0, 0.0] is KEPT -- it was measured against the leaf live when it was set; if this run installed a new leaf it is stale: USER, keep or remove it."
+   ]
   }
  ]
 }
