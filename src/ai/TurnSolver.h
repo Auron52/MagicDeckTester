@@ -841,10 +841,11 @@ struct Action
     // realised no win). 0 = not recorded (legacy record / lever off): the replay keeps its own.
     int rec_mana_casts  = 0;
     int rec_pump_target = 0;
-    // A searched cycle can run after its owner's casts/trailing pass. Rebuilding traits from
-    // only the DigDraw records loses that owner's context; retain the exact immutable snapshot
-    // for this payment/free-hit resolution. Null on enumerated actions and legacy dig records.
-    std::shared_ptr<const PlanTraits> rec_cycle_traits;
+    // Realized records can be a strict subset of a plan, or an inline continuation paid
+    // under inherited traits. Preserve the actual full scope for casts and searched cycles.
+    // Unengaged = legacy/unrecorded; engaged nullptr = explicitly no traits. The separate
+    // rec_pump_target also records zero, overriding any surrounding pump hold.
+    std::optional<std::shared_ptr<const PlanTraits>> rec_payment_traits;
     // Which MAIN-LEVEL breakpoint of the apply produced this TOP-LEVEL breakpoint record (0 = the
     // first). The executor replays each recorded segment at the matching main-level breakpoint.
     // Before 2026-09-30 the whole top-level list replayed at the FIRST one, which is right only

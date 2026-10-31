@@ -5491,8 +5491,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         int rec_mc = 0, rec_pt = 0;
         for (const Action& a : recs)
         {
-            // Cycle metadata belongs to that step, not the surrounding record section.
-            if (a.rec_cycle_traits) { continue; }
+            // Exact step metadata belongs to that payment, not the surrounding section.
+            if (a.rec_payment_traits) { continue; }
             rec_mc = std::max(rec_mc, a.rec_mana_casts);
             if (rec_pt == 0 && a.rec_pump_target != 0) { rec_pt = a.rec_pump_target; }
         }
@@ -5551,6 +5551,19 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         }
         for (const Action& a : recs)
         {
+            // Inline continuations can inherit an outer scope with fewer casts and no
+            // pending cycle. Re-deriving from their realized records invents a different
+            // hold (s131117: Ponder strands a filter's last feeder). Restore the actual
+            // payer scope, including explicit null/zero, through resolution and recursion.
+            // Dig scopes are installed below AFTER earlier queued activations are flushed.
+            std::optional<PlanTraitsScope> record_traits;
+            std::optional<TapKeepLastScope> record_keep;
+            if ((a.kind == Action::Kind::CastFromHand || a.kind == Action::Kind::CastFromGraveyard)
+                && a.rec_payment_traits.has_value())
+            {
+                record_traits.emplace(a.rec_payment_traits->get());
+                record_keep.emplace(a.rec_pump_target);
+            }
             if (a.cont_pins)
             {
                 rec_pins.reset();
@@ -5616,8 +5629,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 // be a strict subset of that plan, so deriving from the list alone loses casts,
                 // pending activation holds and even an explicit zero pump target. Scope only
                 // this cycle; its nested continuation installs/replays its own context below.
-                PlanTraitsScope cycle_scope(a.rec_cycle_traits ? a.rec_cycle_traits.get() : CurrentPlanTraits());
-                TapKeepLastScope cycle_keep(a.rec_cycle_traits ? a.rec_pump_target : g_tap_keep_last_card);
+                PlanTraitsScope cycle_scope(a.rec_payment_traits ? a.rec_payment_traits->get() : CurrentPlanTraits());
+                TapKeepLastScope cycle_keep(a.rec_payment_traits ? a.rec_pump_target : g_tap_keep_last_card);
                 PerformDigFull(state, a.card_name, a.dig_sacrifice, a.devour_count, a.ponder_keep, resolve_stack,
                                a.seed_pay_split);
             }

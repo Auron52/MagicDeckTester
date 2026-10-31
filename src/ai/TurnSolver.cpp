@@ -61156,7 +61156,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 // than the records at this nesting level (a nested breakpoint realises the
                 // planned tail one level down). The replay installs these instead of re-deriving
                 // them from a narrower record set -- seed 3100 T4, see the field's note.
-                if (const PlanTraits* pt = CurrentPlanTraits()) { rec.rec_mana_casts = pt->mana_casts; }
+                const PlanTraits* pt = CurrentPlanTraits();
+                if (pt != nullptr) { rec.rec_mana_casts = pt->mana_casts; }
+                rec.rec_payment_traits = CapturePlanTraitsForRecord(pt);
                 rec.rec_pump_target = g_tap_keep_last_card;
             }
             sink_stack.back()->push_back(rec);
@@ -63175,7 +63177,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             rec.ponder_keep   = seed.ponder_keep;    // overwritten with the REALISED free-cast choice
             // Capture the context from BEFORE payment/paid-seed clearing. The executor installs
             // it for this step only, then PerformDigFull releases the paid seed in the same way.
-            if (cycle_traits != nullptr) { rec.rec_cycle_traits = std::make_shared<const PlanTraits>(*cycle_traits); }
+            rec.rec_payment_traits = CapturePlanTraitsForRecord(cycle_traits);
             rec.rec_pump_target = g_tap_keep_last_card;
             if (rec_sink == out_breakpoint) { rec.rec_bp_ord = main_bp_ord + 1; }
             rec_sink->push_back(rec);
@@ -85072,15 +85074,16 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
 // byte-accounted plan cache: the enummemo/bp-enum budget below and the FSL pool's ApproxFslBytes.
 // An underestimate only loosens a result-neutral bound, so this counts the known-heavy members
 // rather than chasing exactness.
-// Recorded cycles own immutable payment-context snapshots. Charge their payloads as well
+// Recorded casts and cycles own immutable payment-context snapshots. Charge their payloads as well
 // as the Action vectors below; a shared snapshot is conservatively charged per reference.
-inline std::size_t ApproxCycleTraitsBytes(const std::vector<Action>& records)
+inline std::size_t ApproxReplayTraitsBytes(const std::vector<Action>& records)
 {
     std::size_t bytes = 0;
     for (const Action& a : records)
     {
-        if (a.rec_cycle_traits) { bytes += sizeof(PlanTraits) + 32; }   // control block / allocation overhead
-        bytes += ApproxCycleTraitsBytes(a.breakpoint_casts);
+        if (a.rec_payment_traits && *a.rec_payment_traits)
+        { bytes += sizeof(PlanTraits) + 32; }   // control block / allocation overhead
+        bytes += ApproxReplayTraitsBytes(a.breakpoint_casts);
     }
     return bytes;
 }
@@ -85092,11 +85095,11 @@ inline std::size_t ApproxPlanBytes(const TurnSolver::Plan& p)
     {
         b += a.breakpoint_casts.capacity() * sizeof(Action);
         b += a.trick_hand_target.capacity();
-        if (a.rec_cycle_traits) { b += sizeof(PlanTraits) + 32; }
-        b += ApproxCycleTraitsBytes(a.breakpoint_casts);
+        if (a.rec_payment_traits && *a.rec_payment_traits) { b += sizeof(PlanTraits) + 32; }
+        b += ApproxReplayTraitsBytes(a.breakpoint_casts);
     }
     b += p.breakpoint_actions.capacity() * sizeof(Action);
-    b += ApproxCycleTraitsBytes(p.breakpoint_actions);
+    b += ApproxReplayTraitsBytes(p.breakpoint_actions);
     b += p.would_drop.capacity() * sizeof(std::string);
     for (const std::string& s : p.would_drop) { b += s.capacity(); }
     b += p.sac_pins.capacity() * sizeof(int);

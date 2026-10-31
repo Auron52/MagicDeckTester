@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -212,6 +213,11 @@ struct PlanTraits
 // Null when no plan apply is in scope (or every consumer lever is off -- the builder is not run).
 const PlanTraits* CurrentPlanTraits();
 
+// Immutable recorded-payment context. Reuse one lazy snapshot per live scope;
+// callers may request an outer scope's saved pointer after entering a nested one.
+// Only the snapshot escapes the scope; nullptr records an explicitly absent context.
+std::shared_ptr<const PlanTraits> CapturePlanTraitsForRecord(const PlanTraits* pt);
+
 // RAII setter, PlanContextScope's twin. Nests safely.
 class PlanTraitsScope
 {
@@ -222,5 +228,9 @@ public:
     PlanTraitsScope& operator=(const PlanTraitsScope&) = delete;
 
 private:
+    friend std::shared_ptr<const PlanTraits> CapturePlanTraitsForRecord(const PlanTraits* pt);
     const PlanTraits* m_prev;
+    const PlanTraits* m_current;
+    const PlanTraitsScope* m_prev_scope;
+    mutable std::shared_ptr<const PlanTraits> m_record_snapshot;
 };

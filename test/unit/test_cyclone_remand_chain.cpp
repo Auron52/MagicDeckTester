@@ -725,8 +725,9 @@ TEST_CASE("Cyclone recorded seed: real TakeTurn replays the owner's payment cont
     const auto dig = std::find_if(recorded.breakpoint_actions.begin(), recorded.breakpoint_actions.end(),
                                   [](const Action& a) { return a.kind == Action::Kind::DigDraw; });
     REQUIRE(dig != recorded.breakpoint_actions.end());
-    REQUIRE(dig->rec_cycle_traits != nullptr);
-    REQUIRE(dig->rec_cycle_traits->mana_casts == 2);
+    REQUIRE(dig->rec_payment_traits.has_value());
+    REQUIRE(*dig->rec_payment_traits != nullptr);
+    REQUIRE((*dig->rec_payment_traits)->mana_casts == 2);
     CHECK_FALSE(OnBfRC(roll, "Treasure Token"));
     auto replay = [&](const TurnSolver::Plan& plan)
     {
@@ -750,10 +751,229 @@ TEST_CASE("Cyclone recorded seed: real TakeTurn replays the owner's payment cont
     // The old path is a real control: without the recorded context, replay's
     // derived zero-cast traits arm OneShotHoldMask and preserve the Treasure.
     TurnSolver::Plan legacy = recorded;
-    for (Action& a : legacy.breakpoint_actions) { a.rec_cycle_traits.reset(); }
+    for (Action& a : legacy.breakpoint_actions) { a.rec_payment_traits.reset(); }
     const GameState old = replay(legacy);
     CHECK(OnBfRC(old, "Treasure Token"));
     CHECK(sources(old) != sources(roll));
+}
+
+
+TEST_CASE("Cyclone inline Remand continuation: recorded Ponder preserves the next cycle's physical payment")
+{
+    // Ordinary fd-diverge s131117: after the first extra turn's cycle/Remand,
+    // Ponder and the next cycle share the last Steam Vents + Cascade Bluffs.
+    // Paying Ponder through the filter leaves U for that cycle; paying Steam
+    // directly leaves an unfeedable Bluffs. Counts of available mana hide it.
+    EnsureCardsRC();
+    struct RestoreArms
+    {
+        heurarm::Arm saved = heurarm::t_arm;
+        ~RestoreArms() { heurarm::t_arm = saved; }
+    } restore;
+    heurarm::Clear();
+    heurarm::t_arm[heurarm::ACT_LINE_HOLD] = 1;
+    heurarm::t_arm[heurarm::FEED_FILTER_FIRST] = 1;
+    heurarm::t_arm[heurarm::CYCLONE_CYCLER_RULE] = 1;
+    heurarm::t_arm[heurarm::CYCLONE_CANTRIP_ORDER] = 1;
+    ArmScope arm(2, -1);
+    GameState initial = BaseRC({ "Island", "Steam Vents", "Cascade Bluffs", "Steam Vents", "Mountain" },
+                               { kCurator, kRemand, kRemand },
+                               { kCurator, "Ponder", "Island", "Brainsurge", kCurator,
+                                 "Emrakul, the Aeons Torn", "Myriad Landscape", kRemand, "Scalding Tarn" });
+    PutRC(initial, kCyclone, 30);
+    PutRC(initial, "Emrakul, the Aeons Torn", 31);
+    initial.in_extra_turn = true;
+    initial.extra_turns_taken = 1;
+
+    // Reach the Remand draw without running any continuation, then choose the
+    // existing Ponder + trailing Curator candidate by its actual menu rank.
+    TurnSolver::Plan prefix = SeedPlanRC(kCurator, kCycFcTakeRemand);
+    prefix.bp_choice = TurnSolver::kBpEmptyChoice;
+    prefix.bp_all = true;
+    GameState reached = initial;
+    TurnSolver::ApplyPlan(reached, prefix, true);
+    REQUIRE(NamesRC(reached.players[0].hand)
+            == std::vector<std::string>{ kCurator, "Ponder", kRemand });
+    REQUIRE_FALSE(reached.battlefield[2].tapped);
+    REQUIRE_FALSE(reached.battlefield[3].tapped);
+    const std::vector<TurnSolver::Plan> candidates = TurnSolver::EnumerateBreakpointPlans(reached, true);
+    const auto chosen = std::find_if(candidates.begin(), candidates.end(), [](const TurnSolver::Plan& p)
+    {
+        if (p.actions.size() != 2 || p.bp_choice >= 0 || !p.land_to_play.empty()
+            || p.ponder_choice >= 0) { return false; }
+        bool ponder = false, cycle = false;
+        for (const Action& a : p.actions)
+        {
+            if (a.kind == Action::Kind::CastFromHand && a.card_name.str() == "Ponder"
+                && a.remand_by.empty() && a.ponder_keep != 0) { ponder = true; }
+            else if (a.kind == Action::Kind::DigDraw && !a.dig_sacrifice
+                     && a.card_name.str() == kCurator && a.ponder_keep == kCycFcTake
+                     && a.seed_pay_split == 0) { cycle = true; }
+            else { return false; }
+        }
+        return ponder && cycle;
+    });
+    REQUIRE(chosen != candidates.end());
+    TurnSolver::Plan recorded = SeedPlanRC(kCurator, kCycFcTakeRemand);
+    recorded.bp_at = 0;   // Remand's inline draw, before the cycle's own site 4
+    recorded.bp_choice = static_cast<int>(chosen - candidates.begin());
+    GameState roll = initial;
+    TurnSolver::ApplyPlanWithRecordsForTest(roll, recorded, true);
+    REQUIRE(recorded.breakpoint_actions.size() == 1);
+    const Action& first = recorded.breakpoint_actions.front();
+    REQUIRE(first.kind == Action::Kind::DigDraw);
+    REQUIRE(first.ponder_keep == kCycFcTakeRemand);
+    REQUIRE(first.breakpoint_casts.size() == 2);
+    REQUIRE(first.breakpoint_casts[0].kind == Action::Kind::CastFromHand);
+    REQUIRE(first.breakpoint_casts[0].card_name.str() == "Ponder");
+    const Action& ponder_record = first.breakpoint_casts[0];
+    REQUIRE(ponder_record.rec_payment_traits.has_value());
+    REQUIRE(*ponder_record.rec_payment_traits != nullptr);
+    CHECK((*ponder_record.rec_payment_traits)->mana_casts == 0);
+    CHECK((*ponder_record.rec_payment_traits)->cast_mv_total == 0);
+    CHECK((*ponder_record.rec_payment_traits)->mid_turn_casts);
+    CHECK((*ponder_record.rec_payment_traits)->cycle_seed_def == nullptr);
+    CHECK((*ponder_record.rec_payment_traits)->cycle_seed_hand_floor == 0);
+    CHECK((*ponder_record.rec_payment_traits)->cycle_seed_pips[1] == 0);
+    REQUIRE(first.breakpoint_casts[1].kind == Action::Kind::DigDraw);
+    REQUIRE(first.breakpoint_casts[1].card_name.str() == kCurator);
+    // Prove this fixture actually performs the desired second cycle, rather
+    // than passing parity because both paths silently stopped after Ponder.
+    // The second Emrakul sends the old legend to the graveyard and shuffles
+    // that graveyard back in. Thus the cycled hit #500 is in the library,
+    // rather than still in hand or necessarily still in the graveyard.
+    REQUIRE(std::none_of(roll.players[0].hand.begin(), roll.players[0].hand.end(),
+                         [](const Card& c) { return c.m_number == 500; }));
+    REQUIRE(std::any_of(roll.players[0].library.begin(), roll.players[0].library.end(),
+                        [](const Card& c) { return c.m_number == 500; }));
+    REQUIRE(roll.pending_extra_turns == 1);
+
+    auto replay = [&](const TurnSolver::Plan& plan)
+    {
+        GameState state = initial;
+        AIEngine engine(MulliganProfile::DefaultProfile(), 3, 10);
+        MtgTestSeam::CommitPhasePlan(engine, plan, true);
+        engine.TakeTurn(state, true, ResolveAllRC);
+        return state;
+    };
+    auto check_exact = [&](const GameState& exec)
+    {
+        CheckSameRC(OfRC(roll, kCurator), OfRC(exec, kCurator));
+        CHECK(exec.pending_extra_turns == roll.pending_extra_turns);
+        CHECK(exec.extra_turns_taken == roll.extra_turns_taken);
+        const ManaPool& rf = roll.floating_mana;
+        const ManaPool& ef = exec.floating_mana;
+        CHECK(ef.white == rf.white);
+        CHECK(ef.blue == rf.blue);
+        CHECK(ef.black == rf.black);
+        CHECK(ef.red == rf.red);
+        CHECK(ef.green == rf.green);
+        CHECK(ef.colorless == rf.colorless);
+        CHECK(ef.wild == rf.wild);
+        REQUIRE(exec.battlefield.size() == roll.battlefield.size());
+        for (std::size_t i = 0; i < roll.battlefield.size(); ++i)
+        {
+            INFO("physical source/body ", roll.battlefield[i].card.m_number);
+            CHECK(exec.battlefield[i].card.m_number == roll.battlefield[i].card.m_number);
+            CHECK(exec.battlefield[i].tapped == roll.battlefield[i].tapped);
+        }
+    };
+    check_exact(replay(recorded));
+
+    // Remove ONLY Ponder's exact context: the legacy section derives a new
+    // cycle hold, reserves Bluffs and spends its last feeder directly.
+    TurnSolver::Plan legacy = recorded;
+    legacy.breakpoint_actions[0].breakpoint_casts[0].rec_payment_traits.reset();
+    const GameState old = replay(legacy);
+    CHECK(old.pending_extra_turns == 0);
+    CHECK_FALSE(old.battlefield[2].tapped);
+    CHECK(old.battlefield[3].tapped);
+    CHECK(std::any_of(old.players[0].hand.begin(), old.players[0].hand.end(),
+                      [](const Card& c) { return c.m_number == 500; }));
+
+    // Explicit absence is a recorded context, unlike absent metadata. It must
+    // suppress the section's invented hold and retain the legal second cycle.
+    TurnSolver::Plan explicit_null = recorded;
+    auto& null_context = explicit_null.breakpoint_actions[0].breakpoint_casts[0].rec_payment_traits;
+    null_context = std::shared_ptr<const PlanTraits>{};
+    REQUIRE(null_context.has_value());
+    REQUIRE(*null_context == nullptr);
+    check_exact(replay(explicit_null));
+}
+
+
+TEST_CASE("Cyclone payment snapshots: shared owners survive nested paid-seed scopes and their lifetimes")
+{
+    EnsureCardsRC();
+    struct RestoreArms
+    {
+        heurarm::Arm saved = heurarm::t_arm;
+        ~RestoreArms() { heurarm::t_arm = saved; }
+    } restore;
+    heurarm::Clear();
+    heurarm::t_arm[heurarm::ACT_LINE_HOLD] = 1;
+    ActLinePassScope activation_pass;
+    GameState state = BaseRC({ "Island", "Forest", "Wirewood Lodge", "Mountain" }, { kCurator });
+    ManaCost one;
+    one.generic = 1;
+    constexpr std::uint64_t other_holds = (1ull << 1) | (1ull << 2);
+    constexpr std::uint64_t seed_hold = 1ull << 0;
+    const PlanTraits* previous = CurrentPlanTraits();
+    std::shared_ptr<const PlanTraits> escaped;
+    {
+        PlanTraits owner = TurnSolver::ComputePlanTraits(state, SeedPlanRC(kCurator, kCycFcTake).actions);
+        owner.act_pips[4] = 1;
+        owner.act_src_count = 1;
+        owner.act_src_nums[0] = state.battlefield[2].card.m_number;
+        PlanTraitsScope outer(&owner);
+        const PlanTraits* const before_pay = CurrentPlanTraits();
+        escaped = CapturePlanTraitsForRecord(before_pay);
+        REQUIRE(escaped != nullptr);
+        CHECK(CapturePlanTraitsForRecord(before_pay) == escaped);
+        CHECK(ActLineHoldMask(state, one) == (seed_hold | other_holds));
+        {
+            CycleSeedResolvedScope paid(DefRC(kCurator));
+            REQUIRE(CurrentPlanTraits() != before_pay);
+            CHECK(CurrentPlanTraits()->cycle_seed_def == nullptr);
+            CHECK(ActLineHoldMask(state, one) == other_holds);
+            // The current scope is cleared, but the saved entry pointer must
+            // find the original live owner and reuse its one cached snapshot.
+            CHECK(CapturePlanTraitsForRecord(before_pay) == escaped);
+            const auto cleared = CapturePlanTraitsForRecord(CurrentPlanTraits());
+            REQUIRE(cleared != nullptr);
+            CHECK(cleared != escaped);
+            CHECK(cleared->cycle_seed_def == nullptr);
+            CHECK(CapturePlanTraitsForRecord(CurrentPlanTraits()) == cleared);
+            const PlanTraits* paid_context = CurrentPlanTraits();
+            {
+                PlanTraits next = owner;
+                PlanTraitsScope nested(&next);
+                CHECK(ActLineHoldMask(state, one) == (seed_hold | other_holds));
+                CHECK(CapturePlanTraitsForRecord(before_pay) == escaped);
+                CHECK(CapturePlanTraitsForRecord(&next) != escaped);
+            }
+            CHECK(CurrentPlanTraits() == paid_context);
+            {
+                PlanTraitsScope absent(nullptr);
+                CHECK(CurrentPlanTraits() == nullptr);
+                CHECK(CapturePlanTraitsForRecord(nullptr) == nullptr);
+                CHECK(CapturePlanTraitsForRecord(before_pay) == escaped);
+            }
+            CHECK(CurrentPlanTraits() == paid_context);
+        }
+        CHECK(CurrentPlanTraits() == before_pay);
+    }
+    CHECK(CurrentPlanTraits() == previous);
+    // Both the stack traits and every owner scope are gone. The record's
+    // immutable snapshot still protects the same real sources when installed.
+    REQUIRE(escaped != nullptr);
+    CHECK(escaped->cycle_seed_def == &DefRC(kCurator));
+    CHECK(escaped->cycle_seed_pips[1] == 1);
+    {
+        PlanTraitsScope replay(escaped.get());
+        CHECK(ActLineHoldMask(state, one) == (seed_hold | other_holds));
+    }
+    CHECK(CurrentPlanTraits() == previous);
 }
 
 
@@ -799,7 +1019,8 @@ TEST_CASE("Cyclone catch-all: separate recorded sections retain their own physic
     REQUIRE(seed.breakpoint_actions.size() == 1);
     REQUIRE(seed.breakpoint_actions[0].kind == Action::Kind::DigDraw);
     REQUIRE(seed.breakpoint_actions[0].rec_bp_ord == 0);
-    REQUIRE(seed.breakpoint_actions[0].rec_cycle_traits != nullptr);
+    REQUIRE(seed.breakpoint_actions[0].rec_payment_traits.has_value());
+    REQUIRE(*seed.breakpoint_actions[0].rec_payment_traits != nullptr);
     REQUIRE(expected.players[0].life == 18);
     REQUIRE(expected.spells_cast_this_turn == 2); // paid Brainsurge and actual Cyclone free cast
     REQUIRE(expected.battlefield.size() == initial.battlefield.size() + 1);
