@@ -2,9 +2,9 @@
 
 User scope: finish outstanding changes in `origin/cyclone-analysis:docs/design/cyclone-branches-and-next-steps.md`, then re-evaluate. Do not start mulligan/value generation before that review.
 
-Working branch/worktree: `cyclone-final`, `.claude/worktrees/cyclone-final`, based on main `85f4546d3`. Original backup branches and the intermediate finish/land/portable branches remain intact and pushed. Primary checkout has an existing unrelated `test/ref_bench.json` edit; preserve it.
+Working branch/worktree: `cyclone-ready`, `.claude/worktrees/cyclone-ready`, based on phase-1-2 main `2b863538f`. The measured A7 experiment continues unchanged in `cyclone-final`. All original and intermediate branches/worktrees remain intact and pushed. Primary checkout's unrelated `test/ref_bench.json` edit remains untouched.
 
-Current stage (02:54 UTC): source frozen at `a7e4708006cef4c7bfc75c89638b2d9feb3eb1a1`, HEAD `ac10ec517`. Both paid-cycle context and continuation-segment replay fixes are committed. Release full units: 2,363 tests / 3,566,610 assertions PASS. Smoke: 150 PASS / 7 audited baseline FAIL / 0 NEW; all 157 outcomes/digests/work counts match source A. Fresh PGO+LTO is complete. Current viewer checks cover 709 strict references and 59 native suspend-affected references, with an explicit unchanged-path proof carrying 648 earlier native results. V1/V2 simulation queues were superseded by concrete replay defects; their partial results are diagnostic only. Regenerate fresh V3 inputs after PGO, complete the 13,142-game pooled comparisons and remaining memory/VERIFY/isolation/quiet-cost checks, then run regression and re-evaluate. No mulligan/value generation or proposal adoption before that review.
+Current stage (03:48 UTC): integrated source `1e4afaef66d4308e314adf7c9d49d34ed9fa7364`, code commit `29b2c88cc`, is pushed for CI. Local integration builds wait for the one active heavy queue. The measured source A7 (`a7e4708006cef4c7bfc75c89638b2d9feb3eb1a1`) has 2,363 units / 3,566,610 assertions PASS, 150 PASS / 7 audited baseline FAIL / 0 NEW smoke, full V3 viewer PASS, and exact normal1/6 memory preflight. Its 13,142-game V3 quality pool is running; all480 QC3 games completed with zero fidelity warnings. The three new upstream mana capabilities are provably inactive for Cyclone/Hinata/Kitty, including reachable sideboards. A prepared 39-game exact bridge will check carry of A7 quality contrasts after fresh integration builds; timing does not carry. Remaining final gates include fresh smoke/regression, full709 strict +122 affected native refs (585 conditional carry), remaining cache/isolation/conditional pruning proofs and the quiet535-game bottoming-ON cost gate. No mulligan/value generation or proposal adoption before re-evaluation.
 
 The dated milestones below are historical records; later entries supersede earlier progress and pending-work statements.
 
@@ -364,3 +364,36 @@ that explicit path proof. No profile/value generation or proposal-default adopti
   pruning manifests may be prepared once all720PhaseCjobs are complete; no follow-up
   engine runs overlap this pool. Then remaining tiny12/unbounded6/iso92, conditional
   blind/recovery proofs, full regression and quiet535-game bottoming-ON cost gate.
+
+
+## Integration of new upstream mana fixes (03:48 UTC)
+
+While A7 V3 ran, main advanced85f4546d3→2b863538f with ramp-filter colourless-feed,
+land-Aura host holds and exact domain-opening gates plus scoped GT accepts. Fresh
+`cyclone-ready` preserves all100 prior commits and the upstream fixes with linear
+history. A full-tree comparison against the intended merge caught and repaired
+four paths after an index-lock interruption. Final tracked tree is byte-identical
+to that intended integration with the reviewed three-slot HeuristicArm union;
+all744 previous enum/name pairs are retained and all747 current pairs align.
+Independent review confirms exactlythe4 expected source files differ from A7.
+
+The main/sideboard/producer closure for all three frozen measurement pools has no
+reachable ramp_filter, mana-producing landAura or domain_mana. Cascade Bluffs is
+`is_filter`, a distinct parameter. Hinata's side Izzet Signet is unreachable (no
+wish); Gamble searches the library. Quality evidence can carry only after the
+inactive-path review plus exact fresh bridge controls. Unconditional added scans,
+changed full-arm hashes and compiler layout require fresh cost measurements.
+
+Prepared scratch evidence: `v3/upstream-main-applicability.md`,
+`v3/merged-ready-audit.md`, `v3/ready-bridge/README.md`. Bridge has35 sealed expected
+rows and4 QC1 rows pending their actual A7 outputs; refresh to39 before launch.
+It covers both repaired FD cases, baseline/PBCYC, cast/raw/blind, payment, nested,
+allQC3 modes, Hinata/Kitty and Goblins recovery. No bridge engine has run yet.
+Existing memory proof remains source-labelled A7; bridge is not a pressure proof.
+
+V4viewer plan is prepared/unsealed at `v4-viewer/`: fresh strict709, native122 over
+8 selectors/10 apparatus groups, including fresh4 Bruna pins; conditional585
+native carry comprises59 freshV3 +526 originalA refs. Actual cards/decks/refs and
+frontend/checker bytes are unchanged. No V4 local build/checker has run yet.
+CI for code29b2c88cc is run41165380782; A7 code's Linux/Windows/parity run41160289976
+is already green. Preserve separate source and evidence labels.

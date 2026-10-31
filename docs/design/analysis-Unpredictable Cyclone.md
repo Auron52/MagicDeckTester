@@ -1,6 +1,6 @@
 # Analysis ledger — Unpredictable Cyclone
 
-> Completion work is now on `cyclone-final`, based on main `85f4546d3` (2026-10-31).
+> Completion work is now on `cyclone-ready`, based on main `2b863538f` (2026-10-31).
 > See [the completion checkpoint](cyclone-completion-checkpoint.md) for current gates and
 > pending measurements. The fixed 512 MB per-thread plan and FSL quotas have been removed;
 > the shared RAM-sized pools remain. Historical branch results below do not establish
