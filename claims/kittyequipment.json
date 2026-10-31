@@ -1,0 +1,19 @@
+{
+ "blobs": {
+  "mulligan": "9e2670743885e3ef38fd05679bca887a3241780e",
+  "valueleaf": "em:295602f6f4ea5eaa9346"
+ },
+ "deck": "kittyequipment",
+ "frozen": "6fe26602c5f99df1395aebcad5441f190672f07a",
+ "heartbeat": "2026-10-31T16:53:32Z",
+ "host": "58199181d02e",
+ "run_id": "kittyequipment-artifact-queue-tool-647f24-20261031T165332",
+ "score": 0.003,
+ "stage": "valueleaf",
+ "stages": [
+  "valueleaf"
+ ],
+ "started": "2026-10-31T16:53:32Z",
+ "state": "running",
+ "worker": "artifact-queue-tool-647f24"
+}
