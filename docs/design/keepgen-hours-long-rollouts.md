@@ -231,7 +231,7 @@ of 30 s-10 min plus 2,000 ordinary samples, 24 threads, summary on. RSS was 7-9 
 generation's own rss-cap monitor is the live check from here; the old binary peaked at ~27 GB and never
 aborted.
 
-## 5b. The residual case after the fix: pool THRASH (2026-10-30)
+## 5b. The residual case after the fix: pool THRASH (2026-10-30), and the phantom store
 
 After the resume on the fix, the slowest rollout was `size7 play r=2 seed=15755400543391521167` (hand: Soulfire
 Eruption, Reality Spasm, Preordain, Forbidden Orchard x4). It took 1,665 s in the gen, at 24 threads.
@@ -262,16 +262,39 @@ its time in the thrash band. That is why it took 28 min there.
 decision ran to the decision-unit ceiling. That is consistent with the derivations here charging nothing, but it does
 not show pool size is unit-neutral in general (see the 4-thread coupling above).
 
-**Candidate play-identical fix (not built): the PHANTOM STORE.** When a list the summary covers would fit, book its
-bytes in the pool exactly as the store would, but keep only its summary. Pool occupancy, clear-on-full and every
-later hit/miss would then be identical to today's, so play is identical by construction. A rank past the head
-re-derives as it does now (head doubling). One detail: a hit on a phantom entry must replay what a CACHE HIT does
-(no derivation counters), not what a miss does, because today that list would have been a real hit. The pool's
-accounting then over-states the bytes held, which only errs on the safe side for memory. This removes the thrash band without touching the unit question. The
-alternative is the cache audit's fix (hits charge what a miss would, `docs/design/cache-unit-neutrality-audit.md`).
-After that, the summary could serve whatever the pool holds.
+**The fix: the PHANTOM STORE (`MTG_BP_PHANTOM`, default ON; built 2026-10-31).** The summary is now filed for big
+STORED lists too (at least `MTG_BP_PHANTOM_MIN_KB`, default 16384 KB). When a summarised list would fit, the serve does
+the store's bookkeeping itself: the same clear-on-full, the same pool bytes acquired, the same map slot and epoch stamp.
+It then inserts a PHANTOM entry, one that holds no plans. Pool occupancy, clear-on-full and every later hit/miss are
+therefore identical to today's, so play is identical by construction.
 
-Scratch for these runs: `build/scratch/hinata-slow2/` (rep.sh, rep_{A,B,P100,P4G}.{out,err}).
+- A later read of a phantom is a cache HIT, so it replays no derivation counters, exactly as today's real hit would
+  not.
+- A reader the summary cannot answer (a rank past the head; `BpCanonFront` without a summary head) gets
+  `BpPhantomMaterialize`. It re-derives, then restores every channel the derivation moved: units, lookups, the four
+  monotonic counters, the last-apply channels and the interrupted flag. A derivation that charged a unit or made a nested
+  lookup counts as IMPURE, which must stay 0.
+- The pool's accounting over-states the bytes really held. That errs on the safe side for memory, but do not tune pool
+  sizes against it.
+- **Delete it once hits charge what a miss costs** (the cache audit, `docs/design/cache-unit-neutrality-audit.md`).
+  After that the summary can serve whatever it holds, and the bookkeeping exists only to copy today's behaviour.
+
+**Measured (single-thread replay arms, gen settings, pool 2.5 GB).** The arms ran the 287 post-fix SLOW-ROLLOUT lines
+plus 300 ordinary sampled rollouts. OLD = the worker's PGO fix8 binary; NEW = Release with the phantom store.
+
+| check | result |
+|---|---|
+| paired rollouts, units and win turn (OLD arms vs NEW, `MIN_KB` 16384) | **identical 492 / 492** |
+| the same vs NEW with `MTG_BP_PHANTOM_MIN_KB=0` (phantom on every stored list) | identical 490 / 490 |
+| `MTG_BP_SUMMARY_VERIFY=1`, MIN_KB=0 (every phantom hit/store re-derived and compared) | ok 219,500, BAD 0 |
+| IMPURE (MIN_KB 16384 / 0) | 0 / 0 (materialized 121 / 3,699; phantom hits 11,436 / 568,740) |
+| the 27.8-min thrash rollout | OLD **15,263 s** -> NEW **75 s**, units 406,135 both |
+| wall over all pairs (NEW Release vs OLD PGO, so the ratio understates NEW) | 0.44x |
+
+In a one-thread replay the OLD binary thrashed even on rollouts that took 1-6 min in the gen: three of them each ran
+3+ hours without finishing, and NEW took 47-226 s on them. Unit tests 2045/2045; smoke 149/149 and regression 280/280 ALL PASS, 0 play-changed.
+
+Scratch for these runs: `build/scratch/hinata-slow2/` (rep.sh, lst.sh, cmp.py, lst_*.{out,err}).
 
 ## 6. Open (for the USER)
 
