@@ -1,0 +1,19 @@
+{
+ "blobs": {
+  "mulligan": "24b023de6805fd81a6a6531249b4450e7ff360f2",
+  "valueleaf": "em:431d3f80483d739b6631"
+ },
+ "deck": "breachingdragonstorm",
+ "frozen": "11f93aa0392c01d9dab7a1a2ab39f9b8d1bb2a0b",
+ "heartbeat": "2026-10-31T15:53:22Z",
+ "host": "58199181d02e",
+ "run_id": "breachingdragonstorm-artifact-queue-tool-647f24-20261031T155322",
+ "score": 0.0118,
+ "stage": "valueleaf",
+ "stages": [
+  "valueleaf"
+ ],
+ "started": "2026-10-31T15:53:22Z",
+ "state": "running",
+ "worker": "artifact-queue-tool-647f24"
+}
