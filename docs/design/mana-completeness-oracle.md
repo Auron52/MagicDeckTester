@@ -946,7 +946,7 @@ the bound cut from the real menu prints no line before `DECISION` but an `early-
 | NivMizzetCombo | 2 | Generator Servant's {C} through Izzet Signet: a {1}-fed ramp filter turns a {C} into coloured mana, under-counted by one per fed filter | the per-subset credits | relabel up to one {C} per fed filter as wild | open |
 | EDF | 6 | the rescue's scalar ceiling omits the ETB-untap refund (Cloud of Faeries, Peregrine Drake) | `ef-scalar` pre-filter | add the refund | **built, DEFAULT OFF** (`MTG_EF_SCALAR_REFUND`, 13.8: one held-out slower game does not recover; a USER decision) |
 | EDF | 4 | the odometer gate prices the untap refund off the pre-plan board, missing a same-selection land Aura on the refunded land | `BuildManaGateIndex`, `ManaPruneBound` | scale the Aura bonus by the untappers | **fixed** (`MTG_ETB_BOUND_AURA`, 13.8) |
-| EDF | 12 | the rescue walk is ONE greedy payment: Aether Hub's energy colour counted as cover, a painland's painless {C} never banked ahead of an untap, a coloured unit that must be banked before the untap, the tap-ahead's host and colour choice | the EDF sequential rescue | "Proposal X" (the oracle's bounded payment search as the last rescue, its script on the plan) -- NOT built: the shapes on the re-census are three payer rules, each exact, in the shared payer (13.8) | **fixed** for the energy-cover and painland-bank shapes (`MTG_TAPAHEAD_ENERGY_COVER`, `MTG_PAINLAND_TAPAHEAD_CAST_AUTO`); the other shapes did not recur on the 20-game census |
+| EDF | 12 | the rescue walk is ONE greedy payment: Aether Hub's energy colour counted as cover, a painland's painless {C} never banked ahead of an untap, a coloured unit that must be banked before the untap, the tap-ahead's host and colour choice | the EDF sequential rescue | "Proposal X" (the oracle's bounded payment search as the last rescue, its script on the plan) -- NOT built: the shapes on the re-census are three payer rules, each exact, in the shared payer (13.8) | **fixed** for the energy-cover and painland-bank shapes (`MTG_TAPAHEAD_ENERGY_COVER`, `MTG_PAINLAND_TAPAHEAD_CAST_AUTO`, 13.8); the other shapes did not recur on the 20-game census (14 -> 6 ENUM-GAP shipped, 0 with the refund) |
 
 **Oracle false positives** (the plan is not lost; the oracle must learn the rule): Slivers 34 (an apply that silently
 skips a TapForTokenPay / AnimateLand whose source is tapped -- `Clean()` checks casts only); NivMizzetCombo 97
@@ -1011,7 +1011,7 @@ already has Garth's crack) with the tree after it:
 |---|---|---|---|
 | NivMizzetCombo | 106 | 6 | rock funds rock (4) and {C} through Izzet Signet (2): real |
 | Slivers | 34 | 0 | |
-| EDF | 24 | 19 | the rescue-walk classes A-G (proposal X): real -- closed by 13.8 (14 -> 0 on its own 20-game census) |
+| EDF | 24 | 19 | the rescue-walk classes A-G (proposal X): real -- 13.8 takes its own 20-game census 14 -> 6 shipped (0 with `MTG_EF_SCALAR_REFUND`) |
 | Fungus | 11 | 11 | F1 / F2: real |
 | FiveColour | 9 | 9 | A / B: real |
 | Selesnya | 5 | 0 | (5 HIDDEN-INFO) |
@@ -1302,6 +1302,19 @@ gi2 T3 alone that is ~40 per enumeration -- against the few-percent bar.
 
 `test/unit/test_edf_pay_rescue.cpp` pins each shape on its witness board and fails with its lever off.
 
+**Census** (EDF, 20 games, seed 1100001; `logs/mana_oracle/edfx{0,1,2}`; play identity oracle on/off byte-identical in
+all three):
+
+| build | ENUM-GAP | APPLY-DROP | DOMINATED-OTHER | DOMINATED-LIFE | menu plans |
+|---|---|---|---|---|---|
+| before (`edfx0`) | 14 | 0 | 89 | 385 | 3,840 |
+| all five levers (`edfx1`) | **0** | 0 | 27 | 329 | 4,158 |
+| shipped: four, refund OFF (`edfx2`) | **6** | 0 | 27 | 325 | 4,148 |
+
+The six left under the shipped defaults are the refund's: gi5 T2 {Trace of Abundance, Cloud of Faeries x2} on
+Adarkar Wastes and on Aether Hub (two hosts each), and gi8 T2 {Wild Growth -> Adarkar, Trace of Abundance, Cloud of
+Faeries, Training Grounds} (two Trace hosts). DOMINATED-OTHER is mostly the energy class: 89 -> 27.
+
 **Measurement.** One pooled `mtg --batch` per round, per-job heurarm flags, every deck at its play settings,
 `MTG_RSS_CAP_GB=12 MTG_PGO=0`, two threads (`build/scratch/edfx/ab1`, `ab2`). Units are the cost measure; the wall
 column of round 2 is contended (another session's batch shared the box) and is quoted only for completeness.
@@ -1340,3 +1353,16 @@ The slower games, each at `--depth 8 --budget-ms 0 --ignore-play-profile` on bot
 where it goes (the T2 refund and Aura bounds admit more subsets, and the walk pays them). The oracle's own cost rose
 far more (applies 5.1 M -> 19.8 M on the 20-game census, one game's decision alone 0.56 h): more plans on the menu
 are more plans to audit -- an oracle-only cost, play identity on/off unchanged.
+
+**The witness, after.** `edf_s3432_t3_hub_energy_kept.json` passes ({E} 1 at the end of T3, `[paydbg] cost={G} ok=1
+energy 1->1 taps: Aether Hub` -- the {C} face). On the T4 board that line leaves (Kitchen + Wild Growth, Aether Hub +
+Wild Growth, Kitchen; Cloud of Faeries, Eldrazi Displacer, Peregrine Drake, a land in hand; rebuilt as a scenario,
+`build/scratch/edfx/t4_e{0,1}.json`) the turn goes off with the {E} kept -- Conservatory, Cloud, Drake, Displacer and
+the blink loop draws the library -- and stalls after the Displacer with it spent (no finisher is in that rebuilt hand,
+so neither wins by T4; the go-off is the difference). Unit suite 2,244 / 2,244; scenarios 350 / 350.
+
+**Open.**
+* `MTG_EF_SCALAR_REFUND` (DEFAULT OFF): the USER's call, and the gi552 in-tree defect it exposes (above) is worth
+  chasing on its own -- a larger exact menu should never lose a line at an unlimited budget.
+* Proposal X as the general backstop: not needed for any flag on this census; the next census that shows a walk
+  failure no payer rule explains is where it would start.
