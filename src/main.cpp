@@ -78,7 +78,7 @@ static std::vector<std::string> SortedHandNames(GameState& state)
 // stay on the engine heuristics). Stateless-replay protocol: each process run replays
 // the deterministic game (fixed seed + game-index) applying the pre-supplied --choices,
 // and when it reaches the first un-chosen main-phase decision it prints that decision
-// (current legal info + the enumerated legal plans) and exits with code 70. The driver
+// (current legal info + enumerated plan proposals) and exits with code 70. The driver
 // (a Claude agent) reads it, appends a plan index, and re-invokes. When every decision
 // is supplied the game finishes and the result (win turn) is printed. Purpose: a flag-
 // generating verification sweep -- a game Claude wins earlier than the AI, or a plan
@@ -1782,7 +1782,11 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
     if (main_ordinal >= 0) { d.Int("main_ordinal", main_ordinal); }
     d.Type("main_phase").Turn(s)
      .Word("phase", is_pre_combat ? "pre_main" : "post_main")
-     .Bool("on_the_play", s.on_the_play);
+     .Bool("on_the_play", s.on_the_play)
+     // Enumeration is optimistic: a proposal may execute a playable subset after dropping
+     // a declared cast. Absence of `drops` is NOT a legality certificate (single-cast
+     // ritual proposals bypass the ordering expansion that computes would_drop).
+     .Word("plan_contract", "enumerated_proposals");
     // Cards drawn since the previous main-phase decision (turn draw + any cantrip draws this
     // segment), each with the turn it was drawn on, so the viewer history can show exactly what
     // was drawn rather than guessing from a hand diff. Empty for replayed/validation contexts.
@@ -2335,6 +2339,8 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
         os << "    { \"index\": " << i << ", \"summary\": ";
         JsonStr(os, SummarizePlan(p, s, swap_in_combat));
         if (swap_in_combat >= 0) { os << ", \"swap_in_combat\": true"; }
+        os << ", \"declared_order_payability\": ";
+        JsonStr(os, p.would_drop.empty() ? "not_verified" : "known_drops");
         // Structured land + cast list so the GUI can match a hand-assembled line against
         // the model's plans (and show, after a reject, exactly which lines it WOULD play).
         os << ", \"land\": ";
@@ -3236,7 +3242,7 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
     // "listed only UA variants with no explicit pass entry"). Index -1 is the pass the note has
     // always documented; the viewer's own Pass buttons submit the same value.
     os << "  \"pass\": { \"index\": -1, \"summary\": \"pass -- cast nothing this phase\" },\n";
-    os << "  \"note\": \"reply with one plan index (0-based), or -1 (the pass entry) to cast nothing\"\n";
+    os << "  \"note\": \"reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line\"\n";
     os << "}\n";
 }
 

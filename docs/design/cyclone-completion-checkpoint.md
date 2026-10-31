@@ -11,7 +11,10 @@ Active integration: `cyclone-landing2c76` in the existing worktree
 `2c76c854e7ce593f129c0aced8f6854339dd00c2`. Backup code
 `e63afece6c8a7d0d0081ccefd6a0dda2475b69da` is pushed, single parent2c76;
 clean source remains `c2c6d4a03a5c1df9cf72c55bd29940aacff41efc`.
-It has NOT yet landed on `phase-1-2-deck-analyzer`.
+It LANDED on `phase-1-2-deck-analyzer` at `3889a0a11c9ba75d90aa8c2af306fd4f64918e05`.
+Primary is fast-forwarded to that commit; canonical Release/PGO binaries were
+installed with exactC2 source/hash checks. Unrelated `test/ref_bench.json` remains
+byte-exact (backup/hash in primary-before-ff.json). No changes targeted `main`.
 
 The three latest upstream commits change only Burn's value-play settings,
 accepted Burn ground truth, artifact ledgers and job cost data. All nine files
@@ -62,6 +65,42 @@ Afterbothclose: memory32, tiny32, unbounded32, VERIFY, quiet855. No13koptional
 repeat. Rootreference-safety scanner58362 across34trees currentlyrunning; exact
 upstreamRelease baseline21103DONE0/SHA5155731d..., source520d, retained in new
 `cyclone-upstream2c76` worktree. All older pushed refs remain untouched.
+
+Post-landing verification update (2026-10-31): C2 memory1 root91825 DONE0,
+all168games; memory32 root31647 DONE0/all468, samecore wins/digests/units.
+Root memory-tiny32 is starting next on this frozenC2. No source edited yet.
+Full15 actual nativeClaudeSonnet5 games completed. Original parser mislabeled11
+as failed on legitimate string-valued permission_denied metadata; separate v3
+read-only recovery validates all15 without any model/engine replay. Ten actual-
+event/negative tests pass; original sealed/raw files byte-exact. Report:
+`build/scratch/cyclone-finish/claude-sweep-parser-recovery-v3/RECOVERY-REPORT.json`.
+Flags10 concern intentionally optimistic Song proposals incorrectly calledLEGAL
+by old skill: sourceQ37 deliberately preserves indices; metadata/skill correction
+is drafted at `landing905-review/oracle-menu-contract`. Distinctflag1900008 is a
+real missing fetched-shock land_entry chooser: Tarn→Steam paid2 withoutprompt.
+Minimal interactive-only patch/tests drafted outside source at
+`build/scratch/cyclone-finish/fetched-shock-entry-review`. Null-hook AI behavior,
+preview suppression and forced/predecided entries must stay exact. Root will
+apply both after current C2 stages close, build/test new source, push follow-up,
+then current-binary quietcost/admission/scout before generation. No legal-only
+menu filtering or policy default changes are selected. Reference scanner58362
+PASS all34; shared-sourceCI41199579937 is watched in root88618.
+
+Follow-up source 89b146d10406063213d9abe41e1cfdf1a616c021 is ready for commit. Three focused changes now applied:
+existing plan-cache key folds canon-wave billing presence (bit64), preserving
+free-vs-billed derivation context; shared Natural EnterLand exposes the already
+armed land_entry chooser outside previews; main-phase JSON explicitly labels
+optimistic proposals/payability and skill wording matches it. No cache quota,
+policy default or dirty-provenance weakening was added. Release39308DONE0;
+5new focused cases/171assertions pass; full2420cases/3,568,115assertions PASS.
+OldC2 memory proof remains FAILED: normal1/32exact168 buttiny32 Hinata123021/GI21
++2units, unchangedwins/digest. Stronger exact1KB and plan-memo-disabled probes
+bothT6/32120 vsnormalT5/18065. Same-input T3 census identifiesenum_charge0vs1702;
+physicaltraces stayidentical throughT5draw, divergingT5main. Cachekey/testdraft
+proofs are in `landing905-review/cache-unit123021`. No C2unbounded/VERIFY/cost
+run is selected now; fresh final-source validation follows the actualfix. Next:
+fresh Release probes across3cachecontexts, actualmenu/fetch0/1frames, then fresh
+PGO+normaltests/finalcache/quietcost, pushfollowup andadmission/scout/generation.
 
 The six upstream commits since138 add EDF energy/payment shapes (four default
 ON, EF_SCALAR_REFUND defaultOFF), accepted EDF/Landfall GT and MidrangeBurn's

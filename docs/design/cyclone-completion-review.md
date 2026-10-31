@@ -3,7 +3,9 @@
 Status: implementation and normal test review complete; final analysis/cost checks in progress, 2026-10-31.
 No mulligan or value-leaf generation has started.
 
-The linear candidate is `cyclone-landing2c76` in the Landing905 worktree, based on
+The linear integration landed at `3889a0a11` on `phase-1-2-deck-analyzer`;
+primary is up to date with matching canonical binaries. The working branch is
+`cyclone-landing2c76` in the Landing905 worktree, based on
 shared `phase-1-2-deck-analyzer` commit `2c76c854e`. Source is
 `c2c6d4a03a5c1df9cf72c55bd29940aacff41efc`; final PGO+LTO SHA256 is
 `962bc5a514a3128b6a141bfdc1d2f3b21353ea8fd11572cb4d2fd6055249788d`.

@@ -3,10 +3,12 @@
 > Completion update (2026-10-31): all implementation branches are integrated on
 > `cyclone-landing2c76` (same Landing905 worktree), based on shared commit `2c76c854e`.
 > Code `e63afece6` has source tree `c2c6d4a03a5c1df9cf72c55bd29940aacff41efc`;
-> it is backed up on origin but has not yet landed on the shared branch.
+> it landed on `phase-1-2-deck-analyzer` at `3889a0a11`; primary is up to date.
 > The full local unit suite passes (2,415 cases / 3,567,944 assertions).
-> Fresh PGO is complete; normal smoke/regression/replay checks, final cache checks
-> and quiet timing follow. The optional V5 follow-up was stopped after 2,439 of
+> Fresh PGO and reviewed normal smoke/regression/709-reference checks are complete.
+> Final cache checks and quiet timing continue. A15-game actual Claude sweep found
+> an interactive fetched-shock choice gap and a proposal-contract documentation gap;
+> focused follow-up fixes are being prepared before generation. The optional V5 follow-up was stopped after 2,439 of
 > 5,986 games to prioritize landing; partial results remain preserved and labelled.
 > Fixed 512 MB per-thread plan/FSL quotas are removed; existing shared RAM-sized
 > budgets retain exact keys and equal hit/miss pricing. Cache budgeting remains a
