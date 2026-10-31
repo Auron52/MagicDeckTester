@@ -176,3 +176,40 @@ current mainca9132b9d via fresh cyclone-land; pushed cyclone-finish remains inta
 GT consistency894/894, no stale/missing logs. New source-matching PGO and v2 viewer full sweeps
 are next; PGO smoke must pass/audit before any v2 measurement is trusted. Previous v1 runtime
 outcomes are not reused as v2 baseline/adoption evidence. No profile/value-leaf generation.
+
+## v2 PGO / smoke / viewer progress (01:13UTC)
+
+Fresh suite-trained PGO21320 DONE:197jobs/5513traininggames; SRC_TREE
+`d11370b6daaaffe3206811dec9ef213ff1a1cac1`, binarySHA
+`d74a112e70c640e34cb6d4758f64c9fb73004b8ea1826ce8c6e6ca2a924c8de3`.
+PGO smoke8762 completed150PASS/7knownFAIL/0NEW,160s batch makespan. The seven
+mismatches and their per-game fingerprints exactly retain the earlier audits; noGTaccepted.
+Against preservedv1 smoke, only ten upstream FiveColour/Fungus/Midrange jobs change
+outcomes/digests/units; all147otherjobs exact. All seven changed win/digest jobs match
+current-main GT. Full difference is scratch/v2-smoke-v1-diff.json.
+
+Newly enabled FD diagnostics found Niv-Mizzet s1082/globalGI81, predicted5/actual6,
+provenT1/leaf_estnone. Isolated frozenv1PGO control reproduces the EXACT same FD,
+actualdigestec2b6791edf31ecb and6682units. This is a pre-existing non-Cyclone issue,
+not a new integration defect; evidence scratch/niv1082-old-control. Nonconv0.
+
+New v2 inputs are sealed at13142games/1490jobs, no preparation warnings; only the
+validated600 QC1 setup hands are reused (97selected), no old outcome baselines.
+Memory6/1 now explicitly enable FD_ORACLE and NONCONV. Normal default shared RAM-sized
+cache budgets remain; no per-thread quota exists. Starting fresh memory6 preflight.
+
+V2 viewer runner52855: cyclepinPASS; EDF72frames/47grownPASS;15-ref menu prefix has
+only two FiveColour menu differences isolated exactly to the four upstream mana-oracle
+flags (turning those OFF restores all6frames). Both Cyclone references pass. Normal-default
+full strict699PASS:264ok/434repaired/1beaten,0drift/gaps/contracts;697validate now running.
+Root fixture30084 DONE allPASS: client313.982s, saveparity22.704s, review1.581s,
+referencebackup6.405s. No persistent viewer was started and no user reference changed.
+
+- Independent sealed-v2 input audit PASS34checks (all6castarms, livePBcontrol,468memory
+  references with no jobflags, exactsource/PGOseals,97QC1hands,zerooutside-v2runtimepaths).
+  Conditional blind/recovery launches must explicitly retain environment cleanup plus
+  FD_ORACLE/NONCONV; their standalone pruning run plans only list DUMP_UNITS/SLOW_GAME_MS.
+- Memory6 source preflight running53678, owner1562906/engine1562975 since01:13:44UTC.
+  First79completedgames have0FD/0nonconv; observedVmHWM1,418,080KB. First24playreference
+  avg5.2917/digesta653af4cfb6f7151,43,422,021units. No result-invariance claim until
+  full168pair comparison against the separately rerun memory1 process.
