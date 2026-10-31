@@ -4,7 +4,7 @@ User scope: finish outstanding changes in `origin/cyclone-analysis:docs/design/c
 
 Working branch/worktree: `cyclone-current`, `.claude/worktrees/cyclone-current`, based on phase-1-2 main `547e6fe8b`. Prior `cyclone-ready` is frozen/pushed at `2c9b15398`, sourcec45; all original/intermediate branches and worktrees remain intact. Primary checkout's unrelated `test/ref_bench.json` edit remains untouched.
 
-Current stage (06:09 UTC): integrated source is committed/pushed as4a9ed39e5 on main547, clean src8b0bc5ea046ce748c456f7e4aceef4ea11807aa5. Canonical Release SHA b61ca8af7ab87abcff7e3bb49f75bf4bddbd298cd955f0638b513abed2a380da. Local-FSL provenance fix passed RED2fail→GREEN4assertions; all2396units/3,567,476assertions and388scenariosPASS. Fresh smoke26197DONE1:150PASS/7familiarFAIL/0NEW, no searched slower games; sole new searched fingerprint Gob2HG GI41 needs paired T3 trace review before acceptance. Niv1082 is the only known FD, nonconv0. Fresh PGO82887 is RUNNING (8workers, stage2 suite training); source CI41175135290 watched58802. V5 viewer is sealed/RUNNING under reviewer session86237, strict709/native290 with417conditional carry. No V5 quality/memory input has been generated. Old c45 normal6/viewer/CI evidence remains historical, normal1STOPPED and no V4 quality ever launched. Exact547 baseline checkout is being prepared solely for one Gob2HG tie audit; no baseline build/engine runs yet. No mulligan/value generation or proposal adoption before re-evaluation.
+Current stage (06:36 UTC): frozen code4a9ed39e5 on main547, clean src8b0bc5ea046ce748c456f7e4aceef4ea11807aa5; fresh PGO2371bc0e0adc3daf2fe65f2fc42139146aaae11e0d9627cf2f1e75d276d630b6. All2396units/3,567,476assertions,388scenarios, three fresh Release/PGO FD parity cases and paired GobGI41 trace audit PASS. Smoke is audited/accepted through harness, all894GTconsistent, zero searched score regressions; known Niv1082 FD persists. Source CI41175135290 PASS Linux/Windows/parity. Fresh V5 viewer PASS with observed709strict/290native and clean guards,417conditionalcarry/4Bruna pins carried. V5 normal6 DONE0/all468 independently audited with positive shared-pool refusal pressure; normal1 is RUNNING86541/PID1816063. V5 inputs1490jobs/13142games sealed and independent auditGO. No primary quality has launched. Next: completed normal1/6 exact preflight, primary24, remaining process-only memory/isolation/conditional proofs, full regression and quiet535 cost. No mulligan/value generation or proposal adoption before re-evaluation.
 
 The dated milestones below are historical records; later entries supersede earlier progress and pending-work statements.
 
@@ -635,3 +635,53 @@ GI41 audit, SRC3c20824b0fdbd1f5b31041c1d713f1f47ccbe494. Build only its optimize
 mtg target after the one active PGO heavy process finishes, then compare one game
 per source using the original shipped-row manifest (no explicit depth override;
 profile suppliesd7/b60, life30/two heads). This is not another suite or broad A/B.
+
+
+## V5 final-source gates and cache preflight (06:36 UTC)
+
+Fresh PGO82887 completed all197trainingjobs/5513games and LTO onSRC8b0bc;
+actual binarySHA2371bc0e0adc3daf2fe65f2fc42139146aaae11e0d9627cf2f1e75d276d630b6.
+V5 three-case preflight ran exactly one Release and one PGO process, bothDONE0 and
+zeroFD/nonconv. All wins/digests/units/fullphysicalJSON match:107008T4/1099992units;
+127012T5/89312;131117T4/319457. A result-reader typo was corrected after completion;
+original script/hash and checker-fix receipt preserved, no engine rerun. Independent
+review confirmed only the string parsing fix and unchanged raw output hashes.
+
+Exact547 baseline optimized mtg-only build42489 completed, SHA
+77d549695d2b1eede05c29c349cf2bef1e504e184d1defbd99206aba142f0629.
+Two serialGI41 probes reproduce both original rows exactly: currentece28b437b33e2a2
+versus baseline2a713f15d6191818, bothT3. Paired physical review confirms identical
+opening/mulligan throughT2draw; current casts PiledriverT2 and preserves Lackeys,
+then casts StingscourgerT3 and legally deals30combat against29life. Baseline casts
+StingscourgerT2, sacrifices Lackeys to cast Piledriver, then ChieftainT3 and deals29.
+Summoning-sick current Stingscourger does not attack but adds to Muxus's count.
+Both lines are legal; +61109current units has no isolated-code attribution.
+`goblins-gi41-pair/VERDICT.md` closes the last smoke trace obligation.
+
+After V5 viewer completion, root accepted the already-audited smoke via the normal
+harness; all894GTentries consistent. No searched score regression; d0net-1total
+turn. Known Niv1082FD remains documented. No full regression run yet on8b source.
+CI41175135290 completedPASS Linux,Windows anddeterminismparity.
+
+V5 viewer session86237 completedPASS all6stages/observed exits/clean guards, no
+GTbridge needed: strict709=273ok/435repaired/1beaten, all failure classes0; native290
+1176accept/93choose/0unsupported/91nonhand/2baseline-knownLandfall limits/0regression;
+mana1167findable/0lost/0unaudited,0unaligned.417native refs are explicit conditional
+carry; freshpins0/0 with c45Bruna4/4carried by unchanged path/hash proof.
+Report `v5-viewer/REVIEW_CLASSIFICATION.md`; no viewer engines remain.
+
+Fresh V5 generation/seal37921 completed1490jobs/13142games,24primaryworkers,
+no warnings. Independent audit `v5-current-review/sealed-v5-audit.json` isGO on full
+8b/2371 pins, exact immutable semantic inputs,751names,97/600QC1identity and correct
+all-fresh memory plans. No uncontrolled inherited MTG environment. No old quality
+outcome carries. The exact source-supported upstream stack scenarios are already
+in388PASS; incomplete historical full-game witness apparatus was not guessed.
+
+Normal6 session84960 finished06:34:21UTC/DONE0, all468rows independently audited:
+zeroFD/nonconv/FSLbinding; shared pool1027328KB high1027327,refused8,residual0.
+Per-game max840865KB(~821.2MiB),458cache-activegames; all468results independently
+complete. Normal1 session86541/PID1816063 isRUNNING; after it completes compare all
+168core wins/digests/units before primary24. Viewer is fully done, so no24worker
+overlap. Remaining normal12/tiny12/unbounded6 are separate process proofs.
+`v5/live-fidelity/live_inventory.py` is prepared,17checksPASS, source/bin/manifest
+pinned and six raw131117chunks+QC3480completion gated; primary isNOTSTARTED.
