@@ -40,7 +40,17 @@ blind bottoming -0.0488 turns versus the prior policies. Smoke and regression
 ground-truth changes were attributed to mulligan count, bottom choice, or
 bottomed-card order with zero unexplained play changes; both tiers were
 accepted. With the profile active, the ten references still show zero search
-shortfalls. The value leaf is next.
+shortfalls. The resized overnight set (depth 3: 4x1,000; depth 5: 4x500;
+2HG depth 5: 4x170) was measured first without the table, then with it. Over
+14,006 single-player games the loss-penalized average moved from 5.2012 to
+4.8440 turns (-0.3572); over 680 2HG games it moved from 5.9794 to 5.8236
+(-0.1558). The overnight attribution reproduced both baselines. Four
+same-hand play digests differed under table bottoming, but all four exactly
+matched the static baseline with lookahead bottoming restored, confirming
+bottoming-method search residue rather than an in-game table effect. Only
+Midrange Burn's overnight ground truth was accepted; the full-suite run also
+found unrelated stale keys that need their own large-change audit. The value
+leaf is next.
 
 ## Search cost and cost-choice audit (2026-10-30)
 

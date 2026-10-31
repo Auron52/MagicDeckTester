@@ -1685,24 +1685,24 @@ OVERNIGHT_CASES=(
   "elementals 5  5005   525 20"
   "elementals 5  6006   525 20"
   "elementals 5  7007   525 20"
-  # Midrange Burn: explicit pre-keep-table ENTRY set. Expand only at the planned
-  # keep-table adoption, sized from actual play-row cost and rebaselined table-absent first.
+  # Midrange Burn: FULL set after the keep-table adoption. The measured post-table
+  # regression rows are inexpensive enough for the standard 4x1000 d3 / 4x500 d5
+  # shape at this deck's play budgets, with 2HG at about one third of d5.
   "midrangeburn     0  4004 2000 0"
   "midrangeburn     0  6006 2000 0"
   "midrangeburn     0  8008 2000 0"
   "midrangeburn     0 10010 2000 0"
-  "midrangeburn     3  4004  400 10"
-  "midrangeburn     3  5005  400 10"
-  "midrangeburn     3  6006  400 10"
-  "midrangeburn     3  7007  400 10"
-  "midrangeburn     5  4004  300 20"
-  "midrangeburn     5  5005  300 20"
-  "midrangeburn     5  6006  300 20"
-  "midrangeburn     5  7007  300 20"
-  # Relevant 2HG play rows: one third of the standard ENTRY sample at b20.
-  "midrangeburn2hg  5  4004  100 20"
-  "midrangeburn2hg  5  5005  100 20"
-  "midrangeburn2hg  5  6006  100 20"
-  "midrangeburn2hg  5  7007  100 20"
+  "midrangeburn     3  4004 1000 10"
+  "midrangeburn     3  5005 1000 10"
+  "midrangeburn     3  6006 1000 10"
+  "midrangeburn     3  7007 1000 10"
+  "midrangeburn     5  4004  500 20"
+  "midrangeburn     5  5005  500 20"
+  "midrangeburn     5  6006  500 20"
+  "midrangeburn     5  7007  500 20"
+  "midrangeburn2hg  5  4004  170 20"
+  "midrangeburn2hg  5  5005  170 20"
+  "midrangeburn2hg  5  6006  170 20"
+  "midrangeburn2hg  5  7007  170 20"
 
 )
