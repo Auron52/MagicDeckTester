@@ -57207,6 +57207,7 @@ struct BpPrefixSnap
     const CardDefinition* deferred_site = nullptr;   // MTG_CANTRIP_ORDER watermark (registry-stable)
     std::vector<int>      deferred_hand;             // PRE-DRAW hand of that site (drawn-card exemption)
     ManaCost              line_unpaid;               // g_line_unpaid_cost as the prefix left it (MTG_BP_RESUME_LINE_HOLD)
+    PlanTraits            cycle_traits;              // original pre-cast context for the trailing searched seed
 };
 // The hold a resumed apply runs its continuation under, as last set by the resume branch (this thread).
 // Written there unconditionally (one copy, resume-only), read by nothing but BpResumeLineHoldForTest.
@@ -63068,6 +63069,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         }
         std::vector<Card>::iterator it = find_copy();   // the payment may have moved the hand
         if (it == ap.hand.end()) { return; }
+        const CycleSeedResolvedScope _cycle_resolved(*sd);   // lockstep with PerformDigFull
         ++cycle_chain_depth;
         apd_dug = true;
         PayCyclingLife(state, me, *sd);
@@ -63119,6 +63121,17 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         {
             ContPinFrame _cpf(extra, sink);
             bp_play_searched_land(extra, sink);
+            // Site 4 owns a new plan just as the deferred continuation does. Install its
+            // context before precasts and retain it through its own cycle and activations;
+            // executor replay computes this same context from the recorded continuation.
+            PlanTraits cont_traits;
+            if (PlanTraitsWanted())
+            {
+                cont_traits = TurnSolver::ComputeContinuationTraits(state, extra);
+                TurnSolver::CarryPendingActivations(cont_traits, CurrentPlanTraits());
+            }
+            PlanTraitsScope cont_scope(PlanTraitsWanted() ? &cont_traits : nullptr);
+            TapKeepLastScope cont_keep(PumpTargetHoldEnabled() ? cont_traits.pump_target_card : 0);
             apply_continuation_precasts(extra);
             apply_continuation_plan(extra);   // ...whose own cycle seed, if any, is the chain's next step
             // ...INCLUDING an unbranched-canon continuation's seed HERE, at site 4 (apply_continuation_plan
@@ -64053,6 +64066,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             line_order_trace("dig", a);
             const CardDefinition* sd = CardDatabase::Instance().LookupInterned(a.card_name);
             if (!sd) { continue; }
+            std::optional<CycleSeedResolvedScope> _cycle_resolved;
             if (a.dig_sacrifice)
             {
                 if (!sd->params.sacrifice_draw_cost.has_value()) { continue; }
@@ -64083,6 +64097,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 std::vector<Card>::iterator it = std::find_if(ap.hand.begin(), ap.hand.end(),
                     [&a](const Card& c) { return c.m_name == a.card_name; });
                 if (it == ap.hand.end()) { continue; }
+                _cycle_resolved.emplace(*sd);   // human cycle uses the same paid-seed lifetime
                 PayCyclingLife(state, state.active_player_index, *sd);
                 {   // THE SHARED DISCARD HOOK (Vampires A1) -- see the executor's D1 site.
                     std::vector<MadnessPending> mq;
@@ -65194,11 +65209,16 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     }
     };
 
+    // The searched seed runs after the cast section closes. Preserve the original pre-cast
+    // traits, including across prefix resume; recomputing from the post-cast hand changes holds.
+    PlanTraits root_cycle_traits;
+
     // bp_resume: the whole main-phase execution below (Lotus float, batch pre-pay, the cast loop,
     // Krenko taps, sac outlets, the deferred Karoo) already happened inside the snapshot's state;
     // skip straight to the deferred re-solve and re-arm the context that must resume with it.
     if (bp_resume != nullptr)
     {
+        root_cycle_traits = bp_resume->cycle_traits;
         main_trailing_done = true;   // the snapshot already ran the phase's trailing pass
         bp_seen                  = bp_resume->bp_seen;
         bp_seen_shadow           = bp_resume->bp_seen;
@@ -65293,6 +65313,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // the same builder -> lockstep. Null scope (levers off) = every consumer behaves as before.
     PlanTraits _plan_traits;
     if (PlanTraitsWanted()) { _plan_traits = TurnSolver::ComputePlanTraits(state, plan.actions); }
+    if (CycleSeedOf(plan.actions) != nullptr) { root_cycle_traits = _plan_traits; }
     // MTG_ACT_DROP_AUDIT diagnostic: per-apply record of which sources a breakpoint CONTINUATION
     // activated, so the drop site can join on it exactly (see t_cont_act_srcs).
     if (ActDropAuditOn()) { t_cont_act_srcs.clear(); }
@@ -65675,6 +65696,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             bp_capture->deferred_site = deferred_cantrip_site;
             bp_capture->deferred_hand = deferred_hand_before;
             bp_capture->line_unpaid   = g_line_unpaid_cost;   // MTG_BP_RESUME_LINE_HOLD (restored on resume)
+            bp_capture->cycle_traits  = root_cycle_traits;
         }
         // MTG_BP_NODE pend (see BpNodeEnabled): a BASE plan applied by a node-hosting caller stops
         // HERE -- the partition point, post-draw and post-Karoo, its blind tail already truncated
@@ -65713,6 +65735,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             bp_capture->deferred_site = deferred_cantrip_site;
             bp_capture->deferred_hand = deferred_hand_before;
             bp_capture->line_unpaid   = g_line_unpaid_cost;   // MTG_BP_RESUME_LINE_HOLD (restored on resume)
+            bp_capture->cycle_traits  = root_cycle_traits;
             return;
         }
         deferred_cantrip_resolve = false;
@@ -65848,7 +65871,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // loop's position -- and its chain continues through each step's site-4 re-solve (cycle_chain_step).
     if (!s_human_play)
     {
-        if (const Action* seed0 = CycleSeedOf(plan.actions)) { cycle_chain_step(*seed0); }
+        if (const Action* seed0 = CycleSeedOf(plan.actions))
+        {
+            // TakeTurn retains its original main-plan context through PerformDigFull. The
+            // rollout's cast scope has closed, so restore that exact snapshot for this seed.
+            PlanTraitsScope cycle_scope(PlanTraitsWanted() ? &root_cycle_traits : nullptr);
+            TapKeepLastScope cycle_keep(PumpTargetHoldEnabled() ? root_cycle_traits.pump_target_card : 0);
+            cycle_chain_step(*seed0);
+        }
     }
 
     // A provider that SEARCHES its hand cycling (DecisionProvider::SearchedCycleSources / CyclesAreSearched --
@@ -77022,7 +77052,8 @@ static void NodeNestedToWalker(BpWaveWalker& w, const CandSeq& plans,
 
 // See the declaration in TurnSolver.h. The node host's capture + resume, minus the scoring.
 bool TurnSolver::BpResumeLineHoldForTest(const GameState& state, const Plan& plan, bool is_pre_combat,
-                                         ManaCost& at_capture, ManaCost& at_resume)
+                                         ManaCost& at_capture, ManaCost& at_resume,
+                                         GameState* complete_state, GameState* resumed_state)
 {
     GameState s1 = state;
     BpPrefixSnap snap;
@@ -77038,6 +77069,13 @@ bool TurnSolver::BpResumeLineHoldForTest(const GameState& state, const Plan& pla
     g_bp_resume_line_seen = ManaCost{};
     ApplyPlanDirect(s3, v, is_pre_combat, &bp3, nullptr, &snap);
     at_resume = g_bp_resume_line_seen;
+    if (resumed_state != nullptr) { *resumed_state = s3; }
+    if (complete_state != nullptr)
+    {
+        GameState whole = state;
+        ApplyPlanDirect(whole, v, is_pre_combat);
+        *complete_state = std::move(whole);
+    }
     return true;
 }
 

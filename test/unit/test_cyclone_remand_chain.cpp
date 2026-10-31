@@ -483,3 +483,214 @@ TEST_CASE("Cyclone remand ceiling: the cycle seed carries the chain pin only at 
     CHECK(chains(2, 1) == 0);
     CHECK(chains(2, 2) > 0);
 }
+
+
+TEST_CASE("Cyclone cycle traits: rollout and executor preserve identical physical sources for free-hit Remand")
+{
+    // Ordinary fd-diverge s107008 gi8, normal d3 b10: the extra T4 cycles into a Curator
+    // and Remands it. A trait-less rollout paid generic from Mountain, preserving U for
+    // another cycle; the executor's live mid-turn traits preserved Mountain instead. Compare
+    // source identities, since both payments tap three lands and leave all zones identical.
+    EnsureCardsRC();
+    heurarm::Clear();
+    ArmScope arm(2, -1);
+    GameState initial = BaseRC({ "Steam Vents", "Island", "Watery Grave", "Mountain" },
+                               { kCurator, kDeluge, kRemand },
+                               { "Brainsurge", kCurator, kCurator, "Ponder", "Emrakul, the Aeons Torn" });
+    PutRC(initial, kCyclone, 30);
+    TurnSolver::Plan plan = SeedPlanRC(kCurator, kCycFcTakeRemand);
+    // Isolate the paid cycle/free-cast/Remand itself. No later search is allowed to obscure the
+    // first divergent payment by choosing a different continuation or consuming more sources.
+    plan.bp_choice = TurnSolver::kBpEmptyChoice;
+    plan.bp_all = true;
+    GameState roll = initial;
+    TurnSolver::ApplyPlan(roll, plan, true);
+
+    GameState exec = initial;
+    AIEngine eng(MulliganProfile::DefaultProfile(), 3, 10);
+    PlanTraits traits = TurnSolver::ComputePlanTraits(exec, plan.actions);
+    REQUIRE(traits.cycle_seed_def == &DefRC(kCurator));
+    {
+        // TakeTurn installs precisely these pending-seed traits before dispatching its DigDraw.
+        PlanTraitsScope scope(&traits);
+        const AIEngine::DigOutcome outcome = MtgTestSeam::PerformDigFull(
+            eng, exec, kCurator, false, -1, kCycFcTakeRemand, [](GameState& s) { ResolveAllRC(s); });
+        REQUIRE(outcome != AIEngine::DigOutcome::Failed);
+    }
+    ResolveAllRC(exec);
+    CHECK(std::count_if(exec.players[0].hand.begin(), exec.players[0].hand.end(),
+                       [](const Card& c) { return c.m_name.str() == kCurator; }) == 2);
+    CHECK_FALSE(OnBfRC(exec, kCurator));   // the free hit was actually countered back to hand
+    CHECK(exec.spells_cast_this_turn == 2);
+    CheckSameRC(OfRC(roll, kCurator), OfRC(exec, kCurator));
+    std::vector<std::pair<int, bool>> roll_sources, exec_sources;
+    for (const Permanent& p : roll.battlefield)
+    { if (p.card.IsLand()) { roll_sources.emplace_back(p.card.m_number, p.tapped); } }
+    for (const Permanent& p : exec.battlefield)
+    { if (p.card.IsLand()) { exec_sources.emplace_back(p.card.m_number, p.tapped); } }
+    // Equal counts of three tapped lands hide the bug: WHICH blue provider survives is decisive.
+    REQUIRE(roll_sources.size() == exec_sources.size());
+    for (std::size_t i = 0; i < roll_sources.size(); ++i)
+    {
+        INFO("source number ", roll_sources[i].first);
+        CHECK(roll_sources[i].first == exec_sources[i].first);
+        CHECK(roll_sources[i].second == exec_sources[i].second);
+    }
+}
+
+
+TEST_CASE("Cyclone paid seed: new nested seed holds and other pending activation holds survive")
+{
+    EnsureCardsRC();
+    struct RestoreArms
+    {
+        heurarm::Arm saved = heurarm::t_arm;
+        ~RestoreArms() { heurarm::t_arm = saved; }
+    } restore;
+    heurarm::Clear();
+    heurarm::t_arm[heurarm::ACT_LINE_HOLD] = 1;
+    ActLinePassScope activation_pass;
+    GameState state = BaseRC({ "Island", "Forest", "Wirewood Lodge", "Mountain" }, { kCurator });
+    PutRC(state, "Llanowar Elves", 70);
+    state.battlefield.back().tapped = true;   // a legal target for the pending Lodge untap
+    const TurnSolver::Plan seed = SeedPlanRC(kCurator, kCycFcTake);
+    PlanTraits traits = TurnSolver::ComputePlanTraits(state, seed.actions);
+    REQUIRE(traits.cycle_seed_def == &DefRC(kCurator));
+    // An unrelated pending Lodge activation still owes {G} and its own {T}.
+    traits.act_pips[4] = 1;
+    traits.act_src_count = 1;
+    traits.act_src_nums[0] = state.battlefield[2].card.m_number;
+    const PlanTraitsScope original(&traits);
+    ManaCost one;
+    one.generic = 1;
+    ManaCost blue;
+    blue.blue = 1;
+    // Pay the original seed from float, so all four sources remain available for
+    // the later payment whose reservations this regression observes.
+    state.floating_mana.blue = 1;
+    {
+        const CycleSeedPayScope paying;
+        REQUIRE(TapForCostDirect(state, blue, false));
+    }
+    state.players[0].graveyard.push_back(state.players[0].hand.front());
+    state.players[0].hand.erase(state.players[0].hand.begin());
+    state.players[0].hand.push_back(CardRC(kCurator, 200));   // the same-name free hit
+    const GameState fresh = state;
+    constexpr std::uint64_t island = 1ull << 0;
+    constexpr std::uint64_t other_holds = (1ull << 1) | (1ull << 2);
+    CHECK(ActLineHoldMask(state, one) == (island | other_holds));
+    {
+        const CycleSeedResolvedScope paid(DefRC(kCurator));
+        CHECK(ActLineHoldMask(state, one) == other_holds);
+        {
+            // A NEW continuation chooses the newly revealed Curator as its seed.
+            // Sharing its name with the paid seed must not disable this fresh hold.
+            PlanTraits next = traits;
+            const PlanTraitsScope next_scope(&next);
+            CHECK(ActLineHoldMask(state, one) == (island | other_holds));
+            REQUIRE(TapForCostDirect(state, one, false));
+            CHECK(state.battlefield[3].tapped);   // only Mountain was unreserved
+            CHECK_FALSE(state.battlefield[0].tapped);
+        }
+        CHECK(ActLineHoldMask(state, one) == other_holds);
+        REQUIRE(TapForCostDirect(state, one, false));
+        CHECK(state.battlefield[0].tapped);       // paid seed's Island is usable now
+        CHECK_FALSE(state.battlefield[1].tapped); // pending activation's {G} survives
+        CHECK_FALSE(state.battlefield[2].tapped); // pending activation's {T} survives
+    }
+    // Observe restoration through the payer's mask, using an untouched board.
+    CHECK(ActLineHoldMask(fresh, one) == (island | other_holds));
+}
+
+
+TEST_CASE("Cyclone root seed: a resumed cantrip prefix preserves the root payer traits")
+{
+    EnsureCardsRC();
+    heurarm::Clear();
+    ArmScope arm(2, -1);
+    GameState initial = BaseRC({ "Island", "Steam Vents", "Island", "Watery Grave", "Mountain" },
+                               { "Gitaxian Probe", kCurator, kRemand },
+                               { "Island", "Brainsurge", kCurator, kCurator, "Ponder" });
+    PutRC(initial, kCyclone, 30);
+    TurnSolver::Plan plan = SeedPlanRC(kCurator, kCycFcTakeRemand);
+    Action probe;
+    probe.kind = Action::Kind::CastFromHand;
+    probe.card_name = "Gitaxian Probe";
+    probe.def = &DefRC("Gitaxian Probe");
+    probe.cost = EffectiveSpellCost(*probe.def, initial, 1);
+    probe.card_mv = probe.def->card.m_mana_cost.ManaValue();
+    plan.actions.insert(plan.actions.begin(), probe);
+    plan.bp_all = true;   // the resumed EMPTY child also leaves later cycle/cantrip sites empty
+    ManaCost capture_hold, resume_hold;
+    GameState complete, resumed;
+    REQUIRE(TurnSolver::BpResumeLineHoldForTest(initial, plan, true, capture_hold, resume_hold,
+                                               &complete, &resumed));
+    REQUIRE(complete.battlefield.size() == resumed.battlefield.size());
+    for (std::size_t i = 0; i < complete.battlefield.size(); ++i)
+    {
+        CHECK(complete.battlefield[i].card.m_number == resumed.battlefield[i].card.m_number);
+        CHECK(complete.battlefield[i].tapped == resumed.battlefield[i].tapped);
+    }
+    // Probe, cycle and Remand spend four mana. Under the executor's live mid-turn
+    // traits the scarce-red rank keeps Mountain; an absent resumed trait scope
+    // spends Mountain for Remand's generic pip and incorrectly leaves a blue source.
+    for (std::size_t i = 0; i < 4; ++i)
+    {
+        CHECK(complete.battlefield[i].tapped);
+        CHECK(resumed.battlefield[i].tapped);
+    }
+    CHECK_FALSE(complete.battlefield[4].tapped);
+    CHECK_FALSE(resumed.battlefield[4].tapped);
+    CHECK(NamesRC(complete.players[0].hand) == NamesRC(resumed.players[0].hand));
+    CHECK(NamesRC(complete.players[0].graveyard) == NamesRC(resumed.players[0].graveyard));
+}
+
+
+TEST_CASE("Cyclone site 4: a continuation protects its own colored cycle seed while its ritual pays")
+{
+    EnsureCardsRC();
+    heurarm::Clear();
+    GameState initial = BaseRC({ "Island", "Island", "Mountain", "Mountain" },
+                               { kWraith, kSong, kCurator }, { kWraith, kCurator });
+    PutRC(initial, kCyclone, 30);
+    // First reach the exact site-4 board, leaving its continuation explicitly empty.
+    // The root Wraith seed costs life, so its traits have no blue cycling reservation.
+    TurnSolver::Plan prefix = SeedPlanRC(kWraith, kCycFcTake);
+    prefix.bp_choice = TurnSolver::kBpEmptyChoice;
+    prefix.bp_all = true;
+    GameState reached = initial;
+    TurnSolver::ApplyPlan(reached, prefix, true);
+    REQUIRE(OnBfRC(reached, kWraith));
+    const std::vector<TurnSolver::Plan> candidates = TurnSolver::EnumerateBreakpointPlans(reached, true);
+    const auto chosen = std::find_if(candidates.begin(), candidates.end(), [](const TurnSolver::Plan& p)
+    {
+        if (p.actions.size() != 2 || p.bp_choice >= 0 || !p.land_to_play.empty()) { return false; }
+        bool song = false, cycle = false;
+        for (const Action& a : p.actions)
+        {
+            if (a.kind == Action::Kind::CastFromHand && a.card_name.str() == kSong)
+            { song = true; }
+            else if (a.kind == Action::Kind::DigDraw && !a.dig_sacrifice
+                     && a.card_name.str() == kCurator && a.ponder_keep == kCycFcTake)
+            { cycle = true; }
+            else { return false; }
+        }
+        return song && cycle;
+    });
+    REQUIRE(chosen != candidates.end());
+    TurnSolver::Plan root = SeedPlanRC(kWraith, kCycFcTake);
+    root.bp_at = 0;
+    root.bp_choice = static_cast<int>(chosen - candidates.begin());
+    GameState applied = initial;
+    TurnSolver::ApplyPlan(applied, root, true);
+    // Child traits reserve an Island while Song pays {2}{R}; that Island then
+    // pays the child's Curator cycle. Inheriting only the root Wraith's traits
+    // taps both Islands for Song and strands the selected Curator in hand.
+    CHECK(OnBfRC(applied, kCurator));
+    CHECK(std::count_if(applied.players[0].graveyard.begin(), applied.players[0].graveyard.end(),
+                        [](const Card& c) { return c.m_name.str() == kCurator; }) == 1);
+    CHECK(std::count_if(applied.players[0].graveyard.begin(), applied.players[0].graveyard.end(),
+                        [](const Card& c) { return c.m_name.str() == kSong; }) == 1);
+    CHECK(applied.spells_cast_this_turn == 3);   // free Wraith, Song, free Curator
+    for (std::size_t i = 0; i < 4; ++i) { CHECK(applied.battlefield[i].tapped); }
+}

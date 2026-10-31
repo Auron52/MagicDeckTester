@@ -23,6 +23,7 @@
 #include "../core/GameState.h"
 #include "TurnSolver.h"   // Action
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -738,6 +739,32 @@ public:
     CycleSeedPayScope& operator=(const CycleSeedPayScope&) = delete;
 private:
     bool m_prev;
+};
+
+// A cycle that paid its cost no longer owes the plan's seed pips. Keep the other
+// pending activation holds, but release this seed's hold through the rest of its
+// resolution. A same-name Cyclone hit temporarily enters the rollout's hand before
+// its free cast; counting it must not resurrect the paid seed (the executor puts
+// that hit directly on the stack). A nested continuation installs its own traits
+// above this scope, so its newly selected seed still receives its own hold.
+class CycleSeedResolvedScope
+{
+public:
+    explicit CycleSeedResolvedScope(const CardDefinition& seed)
+    {
+        const PlanTraits* pt = CurrentPlanTraits();
+        if (pt == nullptr || pt->cycle_seed_def != &seed) { return; }
+        m_traits.emplace(*pt);
+        m_traits->cycle_seed_def = nullptr;
+        m_traits->cycle_seed_hand_floor = 0;
+        for (int& pip : m_traits->cycle_seed_pips) { pip = 0; }
+        m_scope.emplace(&*m_traits);
+    }
+    CycleSeedResolvedScope(const CycleSeedResolvedScope&)            = delete;
+    CycleSeedResolvedScope& operator=(const CycleSeedResolvedScope&) = delete;
+private:
+    std::optional<PlanTraits> m_traits;
+    std::optional<PlanTraitsScope> m_scope;   // restored before m_traits is destroyed
 };
 
 // RAII for g_plan_reserved_sources: sets it for the plan's cast section and restores the previous
