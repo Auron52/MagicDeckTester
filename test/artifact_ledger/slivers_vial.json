@@ -1,0 +1,25 @@
+{
+ "deck": "slivers_vial",
+ "_doc": "artifact refresh verdicts -- scripts/artifact_queue.py (LEDGER_DIR)",
+ "entries": [
+  {
+   "run_id": "slivers_vial-artifact-queue-tool-647f24-20261031T122526",
+   "kind": "valueleaf",
+   "verdict": "kept-incumbent",
+   "ident": "em:e51b96bdd73c6618f1d6",
+   "frozen": "8e8fa8e44e21f140b441549fe538a26fc7fc1273",
+   "src_tree": "c2c6d4a03a5c1df9cf72c55bd29940aacff41efc",
+   "date": "2026-10-31",
+   "worker": "artifact-queue-tool-647f24",
+   "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_slivers_vial/DECISIONS.txt)",
+   "decisions": [
+    "    VERDICT arm=d6b20 adopt=0 delta=+0.00000 t=+0.00 cost=0.987x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=byte-identical to the baseline: the arm is not engaging",
+    "    VERDICT arm=d6b30 adopt=0 delta=-0.00025 t=-1.53 cost=1.010x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.01x) with quality better (-0.00025) -- a TRADE, the user's call",
+    "    VERDICT arm=d6b40 adopt=0 delta=-0.00025 t=-1.53 cost=1.028x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.03x) with quality better (-0.00025) -- a TRADE, the user's call",
+    "    PICK arm=none why=no candidate is cheaper than live with quality not notably worse",
+    "",
+    "=== 2026-10-31T12:42:59  PHASE E.6: no allowance for slivers_vial -- no ladder escalations in 1200 games (single-path or trust-dominated); fleet default R = 0"
+   ]
+  }
+ ]
+}
