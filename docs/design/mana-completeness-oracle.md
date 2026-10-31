@@ -1124,3 +1124,86 @@ and its exact order walk (`ExactOrderWalkImpl`) does not model a land Aura's bon
 projects unpayable and the given (failing) order is kept: admitting the subset alone would trade this ENUM-GAP for
 an APPLY-DROP. The lockstep fix is the Aura bonus in BOTH walks (the next tap of an untapped host after the Aura
 resolves adds `land_aura_extra_mana`), then the producer domain at site 1 for the enumerator's retry.
+
+### 13.7 Rocks that fund each other, realised (2026-10-31): the feed-blind order walk, and the Servant's haste
+
+USER 2026-10-31: *"There is nothing wrong with Sol Ring going first or paying for the Signet."* -- the
+APPLY-DROP-ORDER plans 13.5's Fix 3 admitted (a Signet ordered ahead of the Sol Ring that pays for it) are an
+engine defect, not a cast-order question.
+
+**The mechanism (which step puts the Signet first, and why nothing reorders it).** Niv has no USER cast order
+(no `CastOrderRank` override; the `MTG_NIV_ORDER_*` levers order Ponder/Preordain LOOKS, not casts), so the
+generic tiers apply: Sol Ring and Izzet Signet are both tier 5 (`mana_rock`, non-creature), the comparator
+keeps plan (hand) order, and a Signet listed first is cast first. The step that should then rescue an order
+that cannot pay is the payable-order decider (`PayableCastOrderCore`, apply site: a rock's `rock_mana` puts the
+order in its producer domain). It never fired, because its order walks (`ExactOrderWalkImpl`,
+`FirstUnpayablePosImpl`, both through `CreditCastOutput`) credited the cast Signet's `rock_mana` -- +1 wild, its
+NET gain once fed -- right after its own payment, whether or not anything was left to pay its {1}. On two lands
+"Signet, Sol Ring" spent both lands on the Signet and then paid Sol Ring out of that phantom, so the walk read
+the order as payable and kept it; both apply worlds then cast the Signet and dropped Sol Ring. Witnesses:
+census s1100014 gi13 T3 {Signet, Signet, Sol Ring} on Island + Sandstone Needle (the oracle's paying order:
+Signet > Sol Ring > Signet), and the cast-order draft's probe p2 (Island + an Island drop, Signet ahead of Sol
+Ring in hand: `paid=0` for Sol Ring at d1/d3/d5; the swapped hand casts both).
+
+**Fix 1 (`MTG_RAMP_FILTER_FEED_ORDER`, DEFAULT ON).** The walks HOLD a ramp-filter rock's credit until the pool
+holds a unit to feed it (a later cast's output -- Sol Ring's {C}{C} -- included; a fed filter feeds the next).
+The Signet-first order then projects unpayable and the decider's nearest payable permutation (Sol Ring first)
+is what the executor and the rollout realise, since both order through `ApplyPayableCastOrder`. It only removes
+the phantom: whenever a unit is left after the filter's own payment the credit lands at once, as before, and the
+aggregate bound keeps the unconditional credit (it must stay a necessary condition). Probe p2: Sol Ring then
+the Signet, both paid. General, not Niv's: it moves any deck that casts a ramp-filter rock in a line (in the
+suite only Niv -- Hinata2's Signet is in its sideboard).
+
+**Fix 2 (`MTG_SERVANT_HASTE_KEEP`, DEFAULT ON).** The same lines exposed a payer hole the cast-order draft traced
+(probe p5; the USER hit it saving references): Generator Servant's {C}{C} are haste-tagged, and the payer drains
+floating mana before it taps, so a NONCREATURE cast ahead of the creature spent the haste -- "crack the Servant,
+Signet off two Islands, hasty Firemind attacks for 4" never won, even at `--budget-ms 0`. Both apply worlds now
+seed `g_line_haste_takers` beside the line hold (the creature casts that would take a tagged unit) and both cast
+sites count a creature down as it is paid; a noncreature payment that would spend a tagged unit those creatures
+could take is tried on scratch boards with the units set aside (first as many as the creatures take, then all of
+them) and is taken only if it pays AND the rest of the line stays payable on the board it leaves -- the
+`RampFeedRouteRepay` shape, in the shared payer, so the viewer's auto-tap gets it too. Probe p5 wins T5 (d3 b50
+and b0; T-none before).
+
+**The USER's Niv cast order (`MTG_NIV_CAST_ORDER`, DEFAULT ON)** landed beside them (Sol Ring > Signet > ...; the
+order and its rulings are in `analysis-NivMizzetCombo.md`). With it Sol Ring ranks ahead of the Signet outright,
+so for Niv the walk fix is a backstop; it stays the general fix for every deck on the generic tiers.
+
+**Held out** (seed 1640001, one pooled batch, per-job heurarm arms; branch `wip/niv-rock-order`):
+
+| comparison | n | slower | faster | net | units |
+|---|---|---|---|---|---|
+| Niv off -> feed (Fix 1) | 2000 | 1 | 0 | +2 | 0.999x |
+| Niv feed -> feed + haste (Fix 2) | 2000 | 0 | 4 | -4 | 0.996x |
+| Niv feed + haste -> + the USER's order | 2000 | 31 | 34 | -4 | 0.986x |
+| Niv off -> all three | 2000 | 29 | 35 | -6 | 0.982x |
+| Hinata2 / Dragons / Giants off -> all three | 300 / 500 / 300 | 0 | 0 | 0 | byte-identical |
+
+Every slower game against the bar (`build/scratch/nivorder/d8/run1.log`, each arm at `--depth 8 --budget-ms 0
+--ignore-play-profile`): Fix 1's one (gi1045, T5 -> T7) is T4 on both arms at d8 b0. Fix 2 has none. Of the
+order's 31, 30 recover at d8 b0 (the same turn on both arms; e.g. gi29/gi45/gi247 T4, gi273/gi306 T5,
+gi391/gi1379 T6); gi1950 (T4 -> T5, T4 vs T5 at d8 b0 too) is T5 on BOTH arms under `MTG_NC_SEARCH=1` at d8 b0,
+so it is clear clairvoyance (the off arm's T4 needs the draws it cannot know). Every deck nets <= 0 for the
+package (Niv -6); Fix 1 alone nets +2 on this seed (its one slower game, which recovers).
+
+**Second held-out seed** (1650001, 2,000 Niv games per arm, single-thread batches `ab2` / `ab3`): Fix 1 alone 3
+slower / 2 faster (+1; gi670 T3, gi831 T5, gi1390 T6 -- all three recover at d8 b0, the same turn on both arms);
+Fix 1 on top of Fix 2 + the order (the SHIPPED configuration) is **byte-identical** (0 moved of 2,000: with Sol
+Ring ranked first the phantom order never arises on Niv); the package against off 43 slower / 46 faster (-2).
+Pooled over both seeds: package -8 on 4,000 games; Fix 1 alone +3 on 4,000, every one of its slower games
+recovering at d8 b0. Fix 1 is a lossless projection fix (it only stops a walk from promising mana that does not
+exist), so its residue on the generic tiers is the budgeted search re-spending, not a lost line.
+The package's 43 second-seed slower games against the bar (`build/scratch/nivorder/d8/run2a.log`, `run2b.log`,
+`nc2.log`): at the time of writing 25 recover at d8 b0; two do not (gi774 T3 -> T4 and gi887 T4 -> T5, the
+package's arm one turn later at d8 b0 too) and are in the non-clairvoyant check (`MTG_NC_SEARCH=1`, d8 b0); the
+remaining 16 (gi877 .. gi1992) are still running at d8 b0 -- late-turn Niv games take an hour or more there.
+
+**Census** (Niv, seed 1100001, the same 19 games on both binaries -- gi7, which runs the oracle for over half an
+hour, left out): APPLY-DROP-ORDER **4 -> 0**, APPLY-DROP 37 -> 21, DROP-COVERED 123 -> 87, DOMINATED-HASTE 28 -> 25.
+PHANTOM 21 -> 28, all on boards the changed play reaches (s1100014 and s1100006 take a different T2): the s1100014
+T3 ones are the pre-existing ENUMERATION twin of the walk's phantom -- a menu plan casting a Signet and a cheap
+spell off exactly the Signet's unfed +1 ({Signet, Preordain} on two lands) -- and s1100006 T3's six are
+{Preordain, Generator Servant} (+/- Sol Ring) sets of the class base already shows on that seed's T4. Open: `AddSourceToPool`'s ramp_filter branch and
+`SequencedRockProduction` credit the +1 whenever the BOARD has a feeder, not whether one survives the plan's own
+payments, so those plans reach the menu and their apply drops the spell. The walk's hold is the apply half; the
+gate half is the same hold in the subset walkers (13.4 D).

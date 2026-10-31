@@ -31,6 +31,48 @@ generic).
 - One heavy job (build or batch) at a time; total threads <= 24. Other sessions share this box.
 - Agents: no `cd` in compound commands, no `rm` / `rm -rf`, no `timeout`.
 
+## Cast order -- the USER's (2026-10-31; `MTG_NIV_CAST_ORDER`, DEFAULT ON)
+
+Before this the deck had NO cast order of its own: `NivMizzetComboProvider` overrode none of the order hooks,
+so the generic tiers applied (Sol Ring and Izzet Signet TIED at 5, hand order deciding -- the Signet-first drop
+in `mana-completeness-oracle.md` 13.7). The USER asked for one (*"we will need to make a cast order for Niv"*),
+reviewed the draft (`build/scratch/castorder/drafts/NivMizzetCombo.md`) and approved it with one change --
+Brainstorm FIRST among the draws, *"then you can pitch junk using the preordain and ponder"* -- and
+*"Otherwise it looks sensible"*:
+
+    land (searched, no pin) -> Sol Ring -> Izzet Signet -> Niv-Mizzet, the Firemind / Niv-Mizzet, Parun
+    (name tie) -> Curiosity when its host is a Niv -> Tandem Lookout when a Niv is on the battlefield or
+    earlier in the plan -> Brainstorm -> Ponder -> Preordain -> Gitaxian Probe -> Remand (with its target,
+    ranked as the last draw) -> [no Niv: Curiosity -> Tandem Lookout] -> Generator Servant (cast)
+
+The draft's defaults were accepted as the USER's rulings:
+- **Q1 YES** -- the order binds inside cantrip (order-opaque) plans too: `OrderOpaqueCastsByRank`.
+- **Q2 YES, amended** -- Q11 below is SIGNED OFF with the change that Curiosity / Tandem Lookout go ahead of
+  the cantrips only when a Niv is in play or earlier in the plan (Curiosity: when its host is a Niv).
+  `MayPrecedeCantrip` (TurnSolver.cpp) reads the same lever, so the enumeration and the apply sort agree.
+- **Q3** -- the draws' sub-order is the USER's amended one (Brainstorm, Ponder, Preordain, Probe, Remand).
+- **Q4 main 1** for both Nivs, Curiosity and Tandem Lookout (`MainPhaseOverride`). Advisory today: the deck opts
+  into neither the main-phase filter nor condemnation, so this moves only `--cast-order-report` and the
+  `MTG_ORDER_M1_FIRST` tie-break.
+- **Q5 YES** -- the Generator Servant haste payment hole is fixed (`MTG_SERVANT_HASTE_KEEP`, 13.7 of the oracle
+  doc; the USER: *"We should definitely fix the Generator Servant issue. I ran into problems with this in the
+  viewer when I made a few references."*).
+
+Implementation (by params, never names): `CastOrderRank` Sol Ring 4 (`mana_rock`, no `ramp_filter`), Signet 5,
+Nivs 8 (`draw_trigger_damage`), Curiosity 9 / 22, Lookout 10 / 23, Brainstorm 12 (`put_back_from_hand`), Ponder
+13 (`cast_reorder`), Preordain 14 (`cast_scry`), Probe 15 (plain `draw`), Remand 16, Servant 24
+(`sac_for_mana_grants_haste`); `CastOrderActionRank` puts Curiosity at 9 only when its host (battlefield, or a
+same-plan cast) is a Niv, and a Remand rider whose target is a draw at 16 (on a non-draw target it keeps the
+target's slot, as the draft's section 7 specified); `ArrangeCastOrder` moves a Lookout to 10 when the plan casts
+a Niv; `CastOrderTotalByName` breaks the Niv tie by name. `test/unit/test_niv_cast_order.cpp`.
+
+Measured held out (seed 1640001, 2,000 Niv games per arm, on top of the two payment fixes): 31 slower / 34
+faster, net -4, units 0.986x; 30 of the 31 slower games recover at `--depth 8 --budget-ms 0` (the same turn both
+arms), and the 31st (gi1950, T4 -> T5) is T5 on both arms under the non-clairvoyant search (`MTG_NC_SEARCH=1`,
+d8 b0): clear clairvoyance. A second seed (1650001, the whole package -- order + both payment fixes -- against
+the old tree) is 43 slower / 46 faster (-2); its d8 b0 checks are recorded in `mana-completeness-oracle.md` 13.7.
+The order ships ON (the USER's order: -4 alone on seed 1640001; the package nets better on both seeds).
+
 ## STATUS 2026-10-24 ~11:45 UTC -- the keep table is ADOPTED; the value leaf is NOT
 - **Keep table ADOPTED** (`decks/NivMizzetCombo/NivMizzetCombo.keepmodel.exhaustive.*`, fast R30, K=16, gen d1
   b1; 18.4 h, 5.09M rollouts on `cd4048e7e`). VALIDATION PASSED: keep -0.1528t (t -11.7, 4/4 seeds),
@@ -481,7 +523,8 @@ WhiteKnights signature on Silverblade's payload (`9c9adecaa`).
   Tandem Lookout now take that slot (by param), so a plan casts them before its cantrips, an Aura's
   same-plan host moving up with it. Without it the one-turn loop kill was unfindable at d3/d5. Cast order
   is the user's per-deck call; this is the documented design's default (no other deck carries these
-  params), measured as part of the A/B above. TAKEN pending the user.
+  params), measured as part of the A/B above. TAKEN pending the user. **SIGNED OFF 2026-10-31 (USER), amended:**
+  Curiosity / Lookout precede the cantrips only with a Niv in play or earlier in the plan -- see "Cast order".
 - **Q8 update.** The niv-bs agent made Brainstorm's put-back pick ~2x cheaper (lossless) and adopted
   the nested overrun bail; the put-back PRICE (the budget-staged lever) measured worse and is OFF.
 - **Q9 (breakpoint holes un-gated).** Three general search-completeness holes (a card drawn by an
