@@ -519,6 +519,16 @@ struct ColorFeasibility
     int  rf_in[32] = {0};
     int  FilterFeedDeduction(unsigned s, const ManaPool& credit) const;
 
+    // DOMAIN SOURCES under MTG_DOMAIN_WIDEN (Faeburrow Elder / Bloom Tender: one mana of each colour among
+    // your permanents). cover[] / total hold each one's bundle at the board's domain (`dom_mask`); the
+    // colours a same-plan permanent cast adds are opened PER SUBSET in Payable (MTG_DOMAIN_OPEN_EXACT --
+    // see DomainOpenFor). dom_src = the count; 0 = none (or the old open-to-all build), nothing to adjust.
+    int  dom_src  = 0;
+    int  dom_mask = 0;
+    // The copy of this build with `dom_src` domain bundles opened by `pip_open` (coloured pips) and
+    // `gen_open` (generic supply) beyond dom_mask.
+    ColorFeasibility WithDomainOpen(int pip_open, int gen_open) const;
+
     // False only when NO assignment of the available mana to this subset's coloured pips exists.
     // `credit` is the same-turn mana the caller folded on top of the board pool (PoolCredit below).
     // `noncreature_only` scores just the subset's NONCREATURE casts, to pair with the pool built by

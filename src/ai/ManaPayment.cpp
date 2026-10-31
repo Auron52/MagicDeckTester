@@ -4062,33 +4062,113 @@ static void CreditCastOutput(const GameState& state, const std::vector<Action>& 
     }
 }
 
+// A LAND AURA's HOST held back by the payable-order walk (MTG_PO_LAND_AURA_HOLD, see PoLandAuraHoldFor):
+// the host leaves the starting pool and is tapped only when a cast cannot be paid without it, adding
+// the bonus of every Aura of the order that has resolved on it by then.
+struct PoLandAuraHold
+{
+    ManaPool         yield;    // the host's own tap (AvailableManaPool with it minus without it)
+    std::vector<int> auras;    // indices into acts: the order's land-Aura casts naming the host
+    std::vector<ManaPool> bonus;   // per aura, its extra mana in its colour (wild for any / several)
+};
+
+// MTG_PO_LAND_AURA_HOLD (DEFAULT ON; =0 -> the walk ignores a land Aura's bonus, as before). The walk
+// prices an order off the aggregate pool, so a land Aura cast in the order ("enchanted land taps for an
+// additional {G}": Wild Growth) added nothing -- its bonus needs the host to tap AFTER the Aura
+// resolves. Once a producer brought the order into the walk, a given order that the executor pays read
+// as unpayable and was permuted away: Fungus s3003 gi148 T3 {Wild Growth -> Forest, Undercellar
+// Myconid} under Concordant Crossroads (the hasted Myconid is a producer) -- Woodlot pays Wild Growth,
+// Forest + its bonus pay the Myconid; the walk saw 3 mana for 4 and moved the Myconid first, so it
+// tapped itself for Wild Growth and missed the attack the T4 kill needed. The host is held back
+// exactly as PoWidenFirstUnpayable holds the domain sources: tapped only when a cast needs it, with the
+// bonus of every Aura resolved on it by then. One host only (several distinct hosts -> no hold).
+static bool PoLandAuraHoldOn()
+{
+    static const bool env_on = EnvOn("MTG_PO_LAND_AURA_HOLD", true);
+    return heurarm::Flag(heurarm::PO_LAND_AURA_HOLD, env_on);
+}
+
+// The order's single land-Aura host (an own untapped land the casts' enchant_target names), or null.
+static const Permanent* PoLandAuraHoldFor(const GameState& state, const std::vector<Action>& acts,
+                                          const std::vector<int>& order, PoLandAuraHold& la)
+{
+    if (!state.deck_has_land_aura || !PoLandAuraHoldOn()) { return nullptr; }
+    const Permanent* host = nullptr;
+    la.auras.clear();
+    la.bonus.clear();
+    for (int i : order)
+    {
+        const Action& a = acts[i];
+        if (a.kind != Action::Kind::CastFromHand || a.enchant_target <= 0) { continue; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        if (!d || !d->params.is_land_aura || d->params.land_aura_extra_mana <= 0) { continue; }
+        const Permanent* h = nullptr;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index == state.active_player_index && !p.tapped && p.card.IsLand()
+                && p.card.m_number == a.enchant_target) { h = &p; break; }
+        }
+        if (h == nullptr) { continue; }
+        if (host != nullptr && h != host) { return nullptr; }
+        host = h;
+        ManaPool b;
+        const std::vector<Color>& cols = d->params.land_aura_produces;
+        if (cols.size() == 1) { b.Add(cols[0], d->params.land_aura_extra_mana); }
+        else { b.wild += d->params.land_aura_extra_mana; }
+        la.auras.push_back(i);
+        la.bonus.push_back(b);
+    }
+    if (host == nullptr) { return nullptr; }
+    const ManaPool full = AvailableManaPool(state);
+    const ManaPool without = AvailableManaPool(state, host);
+    la.yield = ManaPool{};
+    la.yield.white     = std::max(0, full.white     - without.white);
+    la.yield.blue      = std::max(0, full.blue      - without.blue);
+    la.yield.black     = std::max(0, full.black     - without.black);
+    la.yield.red       = std::max(0, full.red       - without.red);
+    la.yield.green     = std::max(0, full.green     - without.green);
+    la.yield.colorless = std::max(0, full.colorless - without.colorless);
+    la.yield.wild      = std::max(0, full.wild      - without.wild);
+    la.yield.wild_c    = std::max(0, full.wild_c    - without.wild_c);
+    return host;
+}
+
 // The walk behind FirstUnpayablePos, over an explicit starting pool and an optional simulated hand.
-// With `hand` == nullptr it is FirstUnpayablePos exactly (a.cost, no hand tracking).
+// With `hand` == nullptr it is FirstUnpayablePos exactly (a.cost, no hand tracking). With `la` the
+// pool starts WITHOUT the held host (the caller's pool is the held one).
 static int FirstUnpayablePosImpl(const GameState& state, const std::vector<Action>& acts,
                                  const std::vector<int>& order, ManaPool pool,
-                                 std::vector<PoHandCard>* hand)
+                                 std::vector<PoHandCard>* hand, const PoLandAuraHold* la = nullptr)
 {
+    bool held = la != nullptr;
+    ManaPool resolved_bonus;
     for (int pos = 0; pos < static_cast<int>(order.size()); ++pos)
     {
         const Action& a = acts[order[pos]];
+        ManaCost cost = a.cost;
         if (hand != nullptr)
         {
             // Reveal-aware (MTG_PAYABLE_ORDER): price at this position, then the card leaves hand
             // whether it paid mana or not (an alt-cost cast still leaves the hand).
             const bool rop = PoIsRevealCostCast(a);
-            const ManaCost cost = rop ? PoRevealAwareCost(a, *hand) : a.cost;
+            if (rop) { cost = PoRevealAwareCost(a, *hand); }
             PoRemoveFromHand(*hand, a.card_name);
-            if (a.alt_cost) { continue; }
-            if (!pool.CanPay(cost)) { return pos; }
-            PayFromPool(pool, cost);
         }
-        else
+        if (a.alt_cost) { continue; }   // as before: an alt-cost cast is neither paid nor credited
+        if (held && !pool.CanPay(cost))
         {
-            if (a.alt_cost) { continue; }
-            if (!pool.CanPay(a.cost)) { return pos; }
-            PayFromPool(pool, a.cost);
+            pool.AddPool(la->yield);
+            pool.AddPool(resolved_bonus);
+            held = false;
         }
+        if (!pool.CanPay(cost)) { return pos; }
+        PayFromPool(pool, cost);
         CreditCastOutput(state, acts, a, pool);
+        if (held)
+        {
+            for (std::size_t k = 0; k < la->auras.size(); ++k)
+            { if (la->auras[k] == order[pos]) { resolved_bonus.AddPool(la->bonus[k]); } }
+        }
     }
     return -1;
 }
@@ -4266,6 +4346,22 @@ static int ExactOrderWalkImpl(const GameState& state, const std::vector<Action>&
             }
         }
     }
+    // A LAND AURA's host (MTG_PO_LAND_AURA_HOLD; PoLandAuraHoldFor): out of the pool until a cast needs
+    // it, then its tap plus the bonus of every Aura of the order resolved on it by then.
+    PoLandAuraHold la;
+    bool la_held = PoLandAuraHoldFor(state, acts, order, la) != nullptr;
+    ManaPool la_resolved;
+    if (la_held)
+    {
+        pool.white     = std::max(0, pool.white     - la.yield.white);
+        pool.blue      = std::max(0, pool.blue      - la.yield.blue);
+        pool.black     = std::max(0, pool.black     - la.yield.black);
+        pool.red       = std::max(0, pool.red       - la.yield.red);
+        pool.green     = std::max(0, pool.green     - la.yield.green);
+        pool.colorless = std::max(0, pool.colorless - la.yield.colorless);
+        pool.wild      = std::max(0, pool.wild      - la.yield.wild);
+        pool.wild_c    = std::max(0, pool.wild_c    - la.yield.wild_c);
+    }
     // Units of untapped colored_creature_only sources (booked as wild above): {C} for a noncreature cast.
     int cco = 0;
     if (ExactWalkCcoOn())
@@ -4326,6 +4422,13 @@ static int ExactOrderWalkImpl(const GameState& state, const std::vector<Action>&
             const bool creature = d != nullptr && d->card.IsCreature();
             const int  restrict = (!creature && cco > 0) ? std::min(cco, pool.wild) : 0;
             if (restrict > 0) { pool.wild -= restrict; pool.colorless += restrict; }
+            // The held land-Aura host taps now, only because this cast cannot be paid without it.
+            if (la_held && !pool.CanPay(cost))
+            {
+                pool.AddPool(la.yield);
+                pool.AddPool(la_resolved);
+                la_held = false;
+            }
             // A held life-scaled source taps now, only because this cast cannot be paid without it.
             while (scaled_left > 0 && !pool.CanPay(cost))
             {
@@ -4353,6 +4456,11 @@ static int ExactOrderWalkImpl(const GameState& state, const std::vector<Action>&
             cco = std::min(cco, pool.wild);
         }
         CreditCastOutput(state, acts, a, pool);
+        if (la_held)
+        {
+            for (std::size_t k = 0; k < la.auras.size(); ++k)
+            { if (la.auras[k] == order[pos]) { la_resolved.AddPool(la.bonus[k]); } }
+        }
         if (life_scaled) { ++storm_seen; life_gained += WalkCastLifegain(state, a, d, storm_seen); }
         if (d != nullptr)
         {
@@ -5133,13 +5241,24 @@ static void PayableCastOrderCore(const GameState& state, const std::vector<Actio
     // MTG_PAYABLE_ORDER_EXACT extends it to every deck (see PayableOrderExactOn).
     const bool exact = site == 0 && producer_only && extra_wild == 0
                     && (PayableOrderExactOn() || ResolveProvider(state).ExactOrderWalk());
+    // MTG_PO_LAND_AURA_HOLD: the plain walks start without the held host (PoLandAuraHoldFor).
+    // (The exact walk holds the host itself; the bound below credits the bonus for every walk.)
+    thread_local PoLandAuraHold la;
+    const Permanent* la_host = widen_only ? nullptr : PoLandAuraHoldFor(state, acts, order, la);
+    ManaPool la_pool0 = pool0;
+    if (la_host != nullptr && !exact)
+    {
+        la_pool0 = AvailableManaPool(state, la_host);
+        if (extra_wild > 0) { la_pool0.wild += extra_wild; }
+    }
+    const PoLandAuraHold* la_p = (la_host != nullptr && !exact) ? &la : nullptr;
     auto pays = [&](const std::vector<int>& ord) -> bool
     {
         if (widen_only) { return PoWidenFirstUnpayable(acts, ord, pool0, w_dom, w_live) < 0; }
         if (exact) { return ExactOrderFirstUnpayable(state, acts, ord) < 0; }
-        if (producer_only) { return FirstUnpayablePosImpl(state, acts, ord, pool0, nullptr) < 0; }
+        if (producer_only) { return FirstUnpayablePosImpl(state, acts, ord, la_pool0, nullptr, la_p) < 0; }
         hand = hand0;
-        return FirstUnpayablePosImpl(state, acts, ord, pool0, &hand) < 0;
+        return FirstUnpayablePosImpl(state, acts, ord, la_pool0, &hand, la_p) < 0;
     };
     if (pays(order)) { g_po_stats.default_pays[site].fetch_add(1, std::memory_order_relaxed); return; }
 
@@ -5214,6 +5333,7 @@ static void PayableCastOrderCore(const GameState& state, const std::vector<Actio
             else { AddManaCost(total, a.cost); }
         }
         if (widen_only) { bound.wild += w_live * std::popcount(static_cast<unsigned>(w_union)); }
+        if (la_host != nullptr) { for (const ManaPool& b : la.bonus) { bound.AddPool(b); } }
         if (!bound.CanPay(total))
         { g_po_stats.bound_fail[site].fetch_add(1, std::memory_order_relaxed); return; }
     }
@@ -5777,6 +5897,25 @@ static bool RampFeedChargeOn()
     return v;
 }
 
+// MTG_DOMAIN_OPEN_EXACT (DEFAULT ON; =0 restores the all-five domain bundle). See the domain source in
+// BuildColorFeasibility and DomainOpenFor below.
+static bool DomainOpenExactOn()
+{
+    static const bool env_on = EnvOn("MTG_DOMAIN_OPEN_EXACT", true);
+    return heurarm::Flag(heurarm::DOMAIN_OPEN_EXACT, env_on);
+}
+
+// A COLOURED TOKEN widens the domain too, and the per-subset opening reads only cast permanents -- so any
+// card that can make one (on the board, or in the subset) falls back to the all-five bundle.
+static bool MakesColouredToken(const CardParams& p)
+{
+    return !p.created_token_color.empty() || !p.cast_created_token_color.empty()
+        || !p.landfall_token_color.empty() || !p.tap_token_color.empty() || !p.pay_token_color.empty()
+        || !p.fade_token_color.empty() || !p.spore_token_color.empty() || !p.upkeep_token_color.empty()
+        || !p.endstep_token_color.empty() || !p.combat_damage_token_color.empty()
+        || !p.attack_one_or_more_token_color.empty();
+}
+
 ColorFeasibility BuildColorFeasibility(const GameState& state, bool noncreature,
                                        const Permanent* skip, bool pending_auras)
 {
@@ -5983,8 +6122,21 @@ ColorFeasibility BuildColorFeasibility(const GameState& state, bool noncreature,
         // earlier in the SAME plan can widen the set, so open the BUNDLE to all five colours: still
         // one per colour, which is exactly the ceiling reality can reach, and far tighter than the
         // five free choices the old model handed out.
+        //
+        // MTG_DOMAIN_OPEN_EXACT (DEFAULT ON) keeps the bundle at the board's domain here and opens the
+        // widened colours per subset instead (Payable -> DomainOpenFor): a colour only a same-plan cast
+        // can add pays a pip only of ANOTHER cast. The all-five bundle let a lone Jared Carthalion "pay"
+        // his own {R} off a Faeburrow whose domain had no red (FiveColour PHANTOM, mana-oracle 13.7).
         if (def->params.domain_mana)
         {
+            if (widen && DomainOpenExactOn())
+            {
+                add_one_of_each(mask);
+                has_multi = true;          // the per-subset opening is multi-colour
+                ++f.dom_src;
+                f.dom_mask = mask;         // EffectiveProduces of a domain source = the board's domain
+                continue;
+            }
             add_one_of_each(widen ? 0x1F : mask);
             continue;
         }
@@ -6054,6 +6206,20 @@ ColorFeasibility BuildColorFeasibility(const GameState& state, bool noncreature,
     }
     // With no multi-colour source the flat pool holds no `wild` from the board and CanPayFlat is
     // already exact per colour -- running the matching could only reach the same verdict.
+    if (f.dom_src > 0)
+    {
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != active) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d && MakesColouredToken(d->params))
+            {
+                const int rest = 0x1F & ~f.dom_mask;
+                f = f.WithDomainOpen(rest, rest);   // the all-five bundle, exactly
+                break;
+            }
+        }
+    }
     f.usable = has_multi;
     // A land AURA still in HAND becomes supply the moment the plan casts it, which this state-only
     // build cannot see (see PendingLandAuraColorMask -- the presence gate has the same blindness).
@@ -6227,8 +6393,79 @@ MTG_DB_ALWAYS_INLINE bool ColorFeasibility::HallFeasible(const int* masks, const
     }
 }
 
+ColorFeasibility ColorFeasibility::WithDomainOpen(int pip_open, int gen_open) const
+{
+    ColorFeasibility g = *this;
+    g.dom_src = 0;
+    for (unsigned s = 1; s < 32; ++s)
+    { g.cover[s] += dom_src * std::popcount(static_cast<unsigned>(pip_open) & s); }
+    g.total += dom_src * std::popcount(static_cast<unsigned>(gen_open));
+    return g;
+}
+
+// The colours a subset can open on the board's domain sources (MTG_DOMAIN_OPEN_EXACT). A colour X outside
+// the domain is added only by a PERMANENT the subset casts, and the X a domain source then taps for can pay
+// an X pip only of a cast AFTER that permanent -- never the permanent's own (its cost is paid before it
+// resolves). So X is opened for PIPS iff some selected permanent has X and some OTHER selected cast asks
+// for X; for GENERIC supply iff some selected permanent has X at all. A necessary condition both ways
+// (the order is not modelled -- any permanent may come first), so it can only reject what no order pays:
+// a lone Jared Carthalion off a {W,B,G} Faeburrow (his {R} is his own), {Deathrite, Jared} on the same
+// board. `noncreature_only` restricts the DEMAND side as Payable does; every cast still widens.
+static void DomainOpenFor(const std::vector<Action>& cands, const std::vector<int>& sel, int dom_mask,
+                          bool noncreature_only, int& pip_open, int& gen_open)
+{
+    pip_open = gen_open = 0;
+    int perm_n[5] = {0, 0, 0, 0, 0}, perm_last[5] = {-1, -1, -1, -1, -1};
+    for (int j : sel)
+    {
+        const Action& a = cands[static_cast<std::size_t>(j)];
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        if (d && MakesColouredToken(d->params))
+        {
+            pip_open = gen_open = 0x1F & ~dom_mask;   // a token may widen: the all-five bundle
+            return;
+        }
+        if (a.kind != Action::Kind::CastFromHand) { continue; }
+        if (!d || d->card.IsInstant() || d->card.IsSorcery()) { continue; }
+        for (int ci = 0; ci < 5; ++ci)
+        {
+            if ((dom_mask & (1 << ci)) || !d->card.HasColor(static_cast<Color>(ci))) { continue; }
+            ++perm_n[ci];
+            perm_last[ci] = j;
+            gen_open |= (1 << ci);
+        }
+    }
+    if (gen_open == 0) { return; }
+    for (int j : sel)
+    {
+        const Action& a = cands[static_cast<std::size_t>(j)];
+        if (a.kind == Action::Kind::ActivateVial) { continue; }
+        if (noncreature_only && !a.is_noncreature) { continue; }
+        const int flat[5] = { a.cost.white, a.cost.blue, a.cost.black, a.cost.red, a.cost.green };
+        int want = 0;
+        for (int ci = 0; ci < 5; ++ci) { if (flat[ci] > 0) { want |= (1 << ci); } }
+        for (int h = 0; h < a.cost.hybrid_count; ++h)
+        {
+            const int c1 = a.cost.hybrid_pair[h] >> 4, c2 = a.cost.hybrid_pair[h] & 0xF;
+            if (c1 >= 0 && c1 < 5) { want |= (1 << c1); }
+            if (c2 >= 0 && c2 < 5) { want |= (1 << c2); }
+        }
+        for (int ci = 0; ci < 5; ++ci)
+        {
+            if (!(gen_open & (1 << ci)) || !(want & (1 << ci))) { continue; }
+            if (perm_n[ci] >= 2 || perm_last[ci] != j) { pip_open |= (1 << ci); }
+        }
+    }
+}
+
 bool ColorFeasibility::PayablePips(const int pips[5], const ManaPool& credit) const
 {
+    // No subset to read the widening off: the old all-five bundle (MTG_DOMAIN_OPEN_EXACT's build).
+    if (dom_src > 0)
+    {
+        const int rest = 0x1F & ~dom_mask;
+        return WithDomainOpen(rest, rest).PayablePips(pips, credit);
+    }
     // Singleton demands only (a plain W/U/B/R/G pip count -- no hybrid halves, no producers). No
     // single-pip shortcut either: the caller has no presence gate standing in front of this one.
     int masks[5]; int counts[5]; int ndm = 0;
@@ -6242,6 +6479,13 @@ bool ColorFeasibility::Payable(const std::vector<Action>& cands, const std::vect
                                const ManaPool& credit, bool noncreature_only,
                                const ColorDemandIndex* idx) const
 {
+    // MTG_DOMAIN_OPEN_EXACT: open the domain sources by what THIS subset can widen (DomainOpenFor).
+    if (dom_src > 0)
+    {
+        int pip_open = 0, gen_open = 0;
+        DomainOpenFor(cands, sel, dom_mask, noncreature_only, pip_open, gen_open);
+        return WithDomainOpen(pip_open, gen_open).Payable(cands, sel, credit, noncreature_only, idx);
+    }
     // UNIFORM fast path -- identical arithmetic to the general path below, reading the hoisted
     // arrays instead of re-walking 384-byte Actions. With one demand mask the Hall scan has exactly
     // one binding set (see the union argument there), so the whole test is one comparison.

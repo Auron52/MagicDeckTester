@@ -1,0 +1,44 @@
+{
+  "deck": "decks/Fungus/Fungus.cod",
+  "profile": "decks/Fungus/Fungus.profile.json",
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "battlefield": [
+    {
+      "name": "Forest",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Concordant Crossroads",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Hickory Woodlot",
+      "controller": 0,
+      "tapped": false,
+      "depletion_counters": 2
+    }
+  ],
+  "hand": [
+    "Utopia Mycon",
+    "Saproling Burst",
+    "Sporecrown Thallid",
+    "Undercellar Myconid"
+  ],
+  "library_top": [
+    "Wild Growth",
+    "Ancient Tomb",
+    "Saproling Migration"
+  ],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 0,
+  "max_turns": 6,
+  "comment": "Fungus s3003 gi148 T3 (regression d5): under Concordant Crossroads the hasted Undercellar Myconid is a same-turn producer, which brings {Wild Growth -> Forest, Myconid} into the payable-order walk. The walk ignored Wild Growth's bonus, read the given order (Wild Growth first: Woodlot pays it, Forest + the bonus pay the Myconid) as unpayable and moved the Myconid first, so it tapped itself for Wild Growth and missed the attack: T5 instead of T4. MTG_PO_LAND_AURA_HOLD holds the host back until a cast needs it (ManaPayment.cpp PoLandAuraHoldFor).",
+  "expect_win_turn": 4
+}

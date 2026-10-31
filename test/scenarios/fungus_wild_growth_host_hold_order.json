@@ -1,0 +1,57 @@
+{
+  "deck": "decks/Fungus/Fungus.cod",
+  "profile": "decks/Fungus/Fungus.profile.json",
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "battlefield": [
+    {
+      "name": "Forest",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Concordant Crossroads",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Hickory Woodlot",
+      "controller": 0,
+      "tapped": false,
+      "depletion_counters": 2
+    }
+  ],
+  "hand": [
+    "Utopia Mycon",
+    "Saproling Burst",
+    "Sporecrown Thallid",
+    "Undercellar Myconid"
+  ],
+  "library_top": [
+    "Wild Growth",
+    "Ancient Tomb",
+    "Saproling Migration"
+  ],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 0,
+  "max_turns": 3,
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "human_lines": [
+    "cast=Wild Growth;cast=Undercellar Myconid"
+  ],
+  "human_variants": [
+    "Forest"
+  ],
+  "comment": "The line-order half of fungus_wild_growth_host_hold_win.json: the human line {Wild Growth -> Forest, Undercellar Myconid} under Crossroads realises Wild Growth FIRST (paid by Hickory Woodlot), so the hasted Myconid stays untapped and attacks. Before MTG_PO_LAND_AURA_HOLD the payable-order walk permuted it to Myconid first.",
+  "expect_line_order": [
+    "cast Wild Growth",
+    "cast Undercellar Myconid"
+  ],
+  "expect_opponent_life": 18
+}

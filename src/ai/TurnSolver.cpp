@@ -16029,7 +16029,8 @@ static bool SubtypeOnlySubsetPayable(const SubtypeOnlyCtx& sc, const std::vector
 // Hand cards are name-only placeholders with empty masks, so colours are read from the DEFINITION --
 // a raw hand `HasColor()` is always false (see zone-card-placeholder-masks).
 static int SubsetWidensDomainBy(const std::vector<Action>& cands, const std::vector<int>& sel,
-                                int domain_mask, ManaCost& out_widener_costs)
+                                int domain_mask, ManaCost& out_widener_costs,
+                                std::vector<int>* out_wideners = nullptr)
 {
     int add_mask = 0;
     for (int j : sel)
@@ -16046,6 +16047,7 @@ static int SubsetWidensDomainBy(const std::vector<Action>& cands, const std::vec
         if (!mine) { continue; }
         add_mask |= mine;
         AddCostCarryingHybrids(out_widener_costs, c.cost);
+        if (out_wideners) { out_wideners->push_back(j); }
     }
     return add_mask;
 }
@@ -67804,8 +67806,17 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         if (live_scaling > 0)
         {
             ManaCost widener_costs;
-            const int add_mask = SubsetWidensDomainBy(cands, sel, domain_mask, widener_costs);
-            if (add_mask != 0 && pool.CanPay(widener_costs))
+            static thread_local std::vector<int> s_wsel;
+            s_wsel.clear();
+            const int add_mask = SubsetWidensDomainBy(cands, sel, domain_mask, widener_costs, &s_wsel);
+            // ...and payable from it COLOUR-EXACTLY (MTG_DOMAIN_OPEN_EXACT: colour_feas holds the domain
+            // sources at the board's domain, opened only by what the wideners widen for EACH OTHER). The
+            // flat pool books a domain source's bundle as wild, so a lone Jared Carthalion "prepaid" his
+            // own {R} off a {W,B,G} Faeburrow and the credit then handed the colour gate his widened {R}
+            // (FiveColour s1100021 gi20, mana-oracle PHANTOM, 13.7). dom_src is 0 with the lever off.
+            const bool wideners_colour_ok = add_mask == 0 || !colour_feas.usable || colour_feas.dom_src == 0
+                                         || colour_feas.Payable(cands, s_wsel, ManaPool{});
+            if (add_mask != 0 && pool.CanPay(widener_costs) && wideners_colour_ok)
             {
                 ManaPool widen;
                 for (int ci = 0; ci < 5; ++ci)
@@ -68046,7 +68057,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // ascending-cost order casts the cheap widener before the payoff.
         if (!mana_ok && widen_refused && DomainWidenPartialOn())
         {
-            struct Widener { int mask; ManaCost cost; };
+            struct Widener { int mask; ManaCost cost; int j; };
             static thread_local std::vector<Widener> s_wid;
             s_wid.clear();
             for (int j : sel)
@@ -68060,7 +68071,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                     if (c.def->card.HasColor(static_cast<Color>(ci)) && !(domain_mask & (1 << ci)))
                     { mine |= (1 << ci); }
                 }
-                if (mine) { s_wid.push_back({ mine, c.cost }); }
+                if (mine) { s_wid.push_back({ mine, c.cost, j }); }
             }
             // A live domain source that taps AFTER the widener cannot also pay for it: the t sources
             // kept for the widened tap leave the pool before the wideners are priced, and only those t
@@ -68096,6 +68107,15 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                         }
                         const int units = t * std::popcount(static_cast<unsigned>(m));
                         if (units <= best_units || !held.CanPay(wc)) { continue; }
+                        // cost(W) colour-exactly off the board too (the all-credit's twin above).
+                        if (colour_feas.usable && colour_feas.dom_src > 0)
+                        {
+                            static thread_local std::vector<int> s_wj;
+                            s_wj.clear();
+                            for (int b = 0; b < k; ++b)
+                            { if (w & (1u << b)) { s_wj.push_back(s_wid[static_cast<std::size_t>(b)].j); } }
+                            if (!colour_feas.Payable(cands, s_wj, ManaPool{})) { continue; }
+                        }
                         // The held sources tap for the WIDENED domain's colours only, so the rest of
                         // the plan's pips in any other colour come out of `held` too, beside cost(W)
                         // (FiveColour s1100019 gi11 T4: lands pay Oko, the domain sources then make

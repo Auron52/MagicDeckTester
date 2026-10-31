@@ -1054,8 +1054,13 @@ and both win on the base turn under the non-clairvoyant search, so neither is cl
 **Also found: the sac-colour fold is a guess.** `MTG_SAC_COLOR_FOLD` (on-board Lotus / Lotus Bloom) resolves the
 colour at apply from a scarcity score over the accounting pool, which counts a dual land toward both its colours; the
 gi27 trace shows one demand folding to four different colours. Where it guesses wrong the plan drops a cast the
-fanned colour pays -- an APPLY-DROP the oracle can see. The lossless shape is the one the Garth crack now uses (one
-variant per colour, credited exactly so a useless colour dies at the gate).
+fanned colour pays -- an APPLY-DROP the oracle can see. **USER ruling 2026-10-31: NOT a branch per colour** -- *"Lotus
+colour guess should not be a new branch. This is the kind of thing I want to avoid. We spend it when we need it
+targeting the most relevant colour."* So the lossless shape is a DEFERRED colour: the sac mana is credited as
+uncommitted any-colour and its colour is committed at the moment it is spent, to the pip the payment and the rest of
+the line need (the sequence-aware float commit, `CommitFloatChoicesBySeq`, wip/floatseq-land). Owed, after floatseq
+lands: the on-board Lotus / Lotus Bloom fold AND Garth's conjure-and-crack (whose per-colour variants, above, are the
+shape this ruling rejects) both move to it.
 
 ### 13.6 Three more gaps closed (2026-10-30): Crossroads haste, a domain dork's own colours, the partial widen
 
@@ -1109,7 +1114,7 @@ games: FiveColour d3 s2002 gi8 and 2HG d5 gi58 recover at d8 b0. **Open, not rec
 so it passes the bar as clairvoyance (base's T4 needs the T4 Ancient Tomb draw). It is still a signal worth
 chasing: the credited T3 menu is a strict superset (30 -> 36 plans, base's Wild Growth + Myconid line included), yet
 the unlimited clairvoyant search picks Wild Growth + Thallid, so something between the menu and the search's
-evaluation of the new plans is not sound. The same T3 also holds one remaining Crossroads gap: {Wild Growth,
+evaluation of the new plans is not sound. **Resolved 2026-10-31** (13.7, `MTG_PO_LAND_AURA_HOLD`): the exact order walk ignored Wild Growth's bonus and permuted the hasted Myconid first; gi148 is T4 again. The same T3 also holds one remaining Crossroads gap: {Wild Growth,
 Undercellar Myconid, Utopia Mycon}, where the hasted Myconid's own tap pays the Mycon, is still kept off by a gate.
 
 **Deferred: the land-Aura + producer order** (that remaining gap, mechanism traced 2026-10-31). Board Forest +
@@ -1123,7 +1128,7 @@ Auras, then rock_mana producers, then the rest" would admit it -- but the execut
 and its exact order walk (`ExactOrderWalkImpl`) does not model a land Aura's bonus either, so every permutation
 projects unpayable and the given (failing) order is kept: admitting the subset alone would trade this ENUM-GAP for
 an APPLY-DROP. The lockstep fix is the Aura bonus in BOTH walks (the next tap of an untapped host after the Aura
-resolves adds `land_aura_extra_mana`), then the producer domain at site 1 for the enumerator's retry.
+resolves adds `land_aura_extra_mana`), then the producer domain at site 1 for the enumerator's retry. **Half done 2026-10-31:** both walks now hold the Aura's host and credit its bonus (13.7, `MTG_PO_LAND_AURA_HOLD`); the producer domain at site 1 for the enumerator's retry is still owed.
 
 ### 13.7 The ramp-filter {C} feed (2026-10-31)
 
@@ -1138,3 +1143,40 @@ ENUM-GAP 2 -> 0, no new drops. Unit test `test_ramp_filter_c_feed.cpp`.
 Held-out A/B, seed 1540001, every deck holding a ramp filter: TreasureHunt 4,000, Breaching 4,000, NivMizzetCombo
 1,000, Bruna 600, Hinata2 400 per arm. Niv 1 slower / 3 faster (-2), units +0.7%; every other deck 0 / 0. The
 slower game (Niv gi665, T3 -> T4) is T3 on both arms at d8 b0 (identical digest).
+
+**`MTG_PO_LAND_AURA_HOLD`** (DEFAULT ON) -- the 13.6 open item, Fungus regression d5 seed 3003 gi148 (T4 -> T5 at
+d5 and at d8 b0 once the Crossroads haste credit landed). A hasted creature carrying the rock stamp makes a line
+"producer only", so the apply site runs the exact payable-order walk. That walk drew from the flat pool and never
+saw a land Aura's bonus, so it judged the working order {Wild Growth, Undercellar Myconid} unpayable and permuted
+the hasted Myconid first; the Myconid then tapped itself for Wild Growth and missed the attack the T4 kill needs.
+Now the walk (exact and plain, and the bound it reports) holds back the ONE own untapped land the order's land
+Auras name as host (several distinct hosts -> no hold), releases that land's yield plus the bonuses of the Auras
+already resolved onto it the first time a cast cannot pay without it, and adds each Aura's bonus once it resolves
+while the host is still held. gi148 is T4 again at d5 and at d8 b0 (the pre-credit play). Held-out A/B, seed
+1550001, every land-Aura deck: Fungus 6,000, EDF 1,500, Bruna 800, Alchemist 500 per arm -- 0 slower / 0 faster,
+units 0.9998x. Unit test `test_land_aura_order_hold.cpp` (fails with the lever off); scenarios
+`fungus_wild_growth_host_hold_win.json`, `fungus_wild_growth_host_hold_order.json`.
+
+**`MTG_DOMAIN_OPEN_EXACT`** (DEFAULT ON) -- the FiveColour PHANTOM rise in the eg3 census (37 -> 58). The partial
+widen (13.6) let more plans past the odometer, and two old generous reads then admitted plans no payment
+realises (s1100021 gi20 T3: lone Jared Carthalion, and {Deathrite Shaman, Jared}, on Overgrown Tomb, a Deathrite
+with no graveyard land, Island and Faeburrow Elder -- domain {W,B,G}, nothing makes {R}):
+- the colour-exact gate (`ColorFeasibility`) opened a domain source to all five colours. Now each domain source
+  counts as one unit of each colour it makes from the board (`dom_src`, `dom_mask`), and per subset
+  (`DomainOpenFor`) a colour outside that mask opens only for a cast OTHER than the permanent that brings it
+  (a permanent cannot widen the domain for its own cost) -- for pips when another selected cast demands that
+  colour, for generic from any selected permanent's colours. A board permanent that makes coloured tokens keeps
+  the old all-five opening (a token's colour is not modelled per subset).
+- the two widen credits in the subset walk (all-widener and partial) prepaid the wideners off the flat pool, which
+  books a domain source's yield as wild, so Jared "paid" his own {R}. Both now also require the wideners to pass
+  the colour-exact gate from the board alone (`wideners_colour_ok`; the partial widen's chosen set).
+gi20 oracle: PHANTOM 0, MISS 0. Held-out A/B, seed 1560001, FiveColour 5,000 per arm (the only suite deck with a
+domain source): 1 slower / 2 faster (net -1), units 0.970x. The slower game, gi3031 T4 -> T5, is T5 on BOTH arms
+under MTG_NC_SEARCH=1 at d8 b0 (clear clairvoyance); its oracle run on the new arm has 240 gate rejections checked,
+0 payable (no ENUM-GAP, no MISS). Unit test `test_domain_open_exact.cpp` (fails with the lever off).
+Still open: gi3031 T4 {Maelstrom Archangel, Bloom Tender, equip Lightning Greaves} PHANTOM (2 flags, with and
+without the Windswept Heath drop). Without the Greaves equip the subset is rejected; with it the Greaves haste makes
+the freshly cast Bloom Tender a credited producer (the haste-dork credit), and that credit books a DOMAIN dork's
+yield without the colour-exact read, so Archangel's {U} -- which only Tender's domain makes, and only once Archangel
+itself is on the battlefield -- is counted for Archangel's own cost. Fix shape: the haste-dork credit of a domain
+source goes through the same per-subset domain opening (`DomainOpenFor`).
