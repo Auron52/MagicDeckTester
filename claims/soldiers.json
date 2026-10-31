@@ -4,21 +4,16 @@
   "valueleaf": "em:8e0bad0bb01c0bd8b26a"
  },
  "deck": "soldiers",
- "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_soldiers/DECISIONS.txt)",
- "finished": "2026-10-29T22:20:48Z",
- "frozen": "8673e4a57e57ea207c3ec3d9d2eb23cd5bd00468",
- "heartbeat": "2026-10-29T22:14:09Z",
+ "frozen": "90503a7783c32e4cf7622cb3073421ebfcc67752",
+ "heartbeat": "2026-10-31T10:22:03Z",
  "host": "58199181d02e",
- "landed": "ce02942e3353c17147a1dbea6ab343593ef700be",
- "landed_at": "2026-10-29T22:29:52Z",
- "result_branch": "artifact-refresh/soldiers-20261029-2220",
- "run_id": "soldiers-artifact-queue-tool-647f24-20261029T221354",
- "score": 0.0669,
+ "run_id": "soldiers-artifact-queue-tool-647f24-20261031T102203",
+ "score": 0.0,
  "stage": "valueleaf",
  "stages": [
   "valueleaf"
  ],
- "started": "2026-10-29T22:13:54Z",
- "state": "done",
+ "started": "2026-10-31T10:22:03Z",
+ "state": "running",
  "worker": "artifact-queue-tool-647f24"
 }
