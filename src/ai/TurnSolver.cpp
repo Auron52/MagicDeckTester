@@ -8785,6 +8785,13 @@ static bool DomainWidenPartialOn()
     static const bool on = EnvOn("MTG_DOMAIN_WIDEN_PARTIAL", true);
     return heurarm::Flag(heurarm::DOMAIN_WIDEN_PARTIAL, on);
 }
+// MTG_RAMP_FILTER_C_FEED (DEFAULT ON; =0 -> a ramp filter's feed is assumed coloured). See the RAMP-FILTER
+// {C} FEED relabel at EnumeratePlans' flat mana test.
+static bool RampFilterCFeedOn()
+{
+    static const bool on = EnvOn("MTG_RAMP_FILTER_C_FEED", true);
+    return heurarm::Flag(heurarm::RAMP_FILTER_C_FEED, on);
+}
 // MTG_RESERVE_GRANTED_BODIES (DEFAULT ON; =0 -> granted bodies are never held). See the DorkReserve
 // class in BatchPrepayMainCasts: a body that taps for mana only through a grant is held like a dork.
 static bool ReserveGrantedBodiesOn()
@@ -66594,6 +66601,25 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // selection. Zero live scaling sources -> every other deck/state is byte-identical.
     int domain_mask = 0, live_scaling = 0;
     if (DomainWidenEnabled()) { ScalingWidenScan(state, domain_mask, live_scaling); }
+    // Untapped ramp filters on the board (Izzet Signet / Ferrous Lake: "{1}, {T}: add two colours") -- the
+    // RAMP-FILTER {C} FEED relabel below. Plus, per subset, the ramp-filter rocks it casts.
+    int n_ramp_filters = 0;
+    bool any_cast_ramp_filter = false;
+    if (RampFilterCFeedOn())
+    {
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index || p.tapped) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (!d || !d->params.ramp_filter || !CanTapNow(p, state.battlefield)) { continue; }
+            ++n_ramp_filters;
+        }
+        for (const Action& a : cands)
+        {
+            if (a.kind == Action::Kind::CastFromHand && a.def && a.def->params.ramp_filter && a.rock_mana.Total() > 0)
+            { any_cast_ramp_filter = true; break; }
+        }
+    }
     // Same-turn SCALED-DORK GROWTH scan (EnumeratePlans ONLY -- see the credit below). A live
     // scaled mana dork (Priest of Titania / Elvish Archdruid) taps for the CURRENT count of its
     // subtype, so every matching creature this subset casts BEFORE it taps raises the burst by one
@@ -67962,6 +67988,34 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 if (tap_debit[j].Total() <= 0) { continue; }
                 SubtractPoolClamped(eff,    tap_debit[j]);
                 SubtractPoolClamped(eff_nc, tap_debit[j]);
+                credited = true;
+            }
+        }
+        // RAMP-FILTER {C} FEED (MTG_RAMP_FILTER_C_FEED; mana-completeness-oracle.md 13.5). A fed ramp filter is
+        // credited "+1 wild" (AddSourceToPool), which silently assumes the unit that feeds its {1} was
+        // coloured. A {C} can feed it just as well and comes back as two colours, so up to one {C} per
+        // filter is really colour: NivMizzetCombo s1100028 gi27 T6, Generator Servant's {C}{C} crack into
+        // Izzet Signet for {U}{R} pays Niv-Mizzet, Parun's six pips + Brainstorm (7 coloured off a pool the
+        // model read as 6 coloured + {C}{C}). Relabel as wild that can still pay a {C} pip (wild_c), so the
+        // total is unchanged and only colour widens -- never pessimistic.
+        if (n_ramp_filters > 0 || any_cast_ramp_filter)
+        {
+            int n = n_ramp_filters;
+            if (any_cast_ramp_filter)
+            {
+                for (int j : sel)
+                {
+                    const Action& c = cands[static_cast<std::size_t>(j)];
+                    if (c.kind == Action::Kind::CastFromHand && c.def && c.def->params.ramp_filter
+                        && c.rock_mana.Total() > 0) { ++n; }
+                }
+            }
+            const int k  = std::min(eff.colorless, n);
+            const int kn = std::min(eff_nc.colorless, n);
+            if (k > 0 || kn > 0)
+            {
+                eff.colorless    -= k;  eff.wild    += k;  eff.wild_c    += k;
+                eff_nc.colorless -= kn; eff_nc.wild += kn; eff_nc.wild_c += kn;
                 credited = true;
             }
         }

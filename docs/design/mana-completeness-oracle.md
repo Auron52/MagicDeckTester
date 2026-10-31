@@ -878,7 +878,7 @@ the bound cut from the real menu prints no line before `DECISION` but an `early-
 | Giants | 2 | `SubsetPayableSequentialImpl` refuses any non-cast action (an Equip {0}) | the sequential walk's kind filter, `SubsetHasUnmodelledSeqKind`, `OrderPaysSequentiallyImpl` | skip zero-cost non-mana activations | **fixed below** |
 | Goblins | 1 | the colour-presence gate misses a planned sac outlet's colour | `WidenHaveWithSubsetRocks` | the outlet half of `MTG_SUBSET_SAC_COLOR` | **blocked** (below) |
 | NivMizzetCombo | 5 | a mana rock that pays for another rock: the rock credit applies only when the board alone pays every rock | the `pool.CanPay(rock_costs)` guard (both walkers) | an exact sequential rock check from the credited pool | **fixed below** |
-| NivMizzetCombo | 2 | Generator Servant's {C} through Izzet Signet: a {1}-fed ramp filter turns a {C} into coloured mana, under-counted by one per fed filter | the per-subset credits | relabel up to one {C} per fed filter as wild | open |
+| NivMizzetCombo | 2 | Generator Servant's {C} through Izzet Signet: a {1}-fed ramp filter turns a {C} into coloured mana, under-counted by one per fed filter | the per-subset credits | relabel up to one {C} per fed filter as wild | **fixed** (`MTG_RAMP_FILTER_C_FEED`; 13.7) |
 | EDF | 6 | the rescue's scalar ceiling omits the ETB-untap refund (Cloud of Faeries, Peregrine Drake) | `ef-scalar` pre-filter | add the refund | open |
 | EDF | 4 | the odometer gate prices the untap refund off the pre-plan board, missing a same-selection land Aura on the refunded land | `BuildManaGateIndex`, `ManaPruneBound` | scale the Aura bonus by the untappers | open (verified by `MTG_SEL_MANA_GATE=0`) |
 | EDF | 12 | the rescue walk is ONE greedy payment: Aether Hub's energy colour counted as cover, a painland's painless {C} never banked ahead of an untap, a coloured unit that must be banked before the untap, the tap-ahead's host and colour choice | the EDF sequential rescue | "Proposal X": when the greedy walk fails on an untapper subset, the oracle's bounded every-order payment search as the last rescue, its script stored on the plan and replayed by all three apply paths (`RealPayScope`) | open (one mechanism for all five classes) |
@@ -1124,3 +1124,17 @@ and its exact order walk (`ExactOrderWalkImpl`) does not model a land Aura's bon
 projects unpayable and the given (failing) order is kept: admitting the subset alone would trade this ENUM-GAP for
 an APPLY-DROP. The lockstep fix is the Aura bonus in BOTH walks (the next tap of an untapped host after the Aura
 resolves adds `land_aura_extra_mana`), then the producer domain at site 1 for the enumerator's retry.
+
+### 13.7 The ramp-filter {C} feed (2026-10-31)
+
+**`MTG_RAMP_FILTER_C_FEED`** (DEFAULT ON). A fed ramp filter (Izzet Signet, Ferrous Lake, Skycloud Expanse, Mossfire
+Valley: "{1}, {T}: add two") is credited "+1 wild", which assumes the unit that feeds its {1} was coloured. A {C}
+feeds it just as well and comes back as two colours, so up to one {C} per filter -- the untapped ones on the board
+plus the ones the subset casts -- is relabelled as wild that can still pay a {C} pip (`wild_c`). The total is
+unchanged; only colour widens. NivMizzetCombo s1100028 gi27 T6: Generator Servant's {C}{C}, one cracked into Izzet
+Signet for {U}{R}, pays Niv-Mizzet, Parun's six pips + Brainstorm (7 coloured off a pool the model read as 6 + {C}{C});
+ENUM-GAP 2 -> 0, no new drops. Unit test `test_ramp_filter_c_feed.cpp`.
+
+Held-out A/B, seed 1540001, every deck holding a ramp filter: TreasureHunt 4,000, Breaching 4,000, NivMizzetCombo
+1,000, Bruna 600, Hinata2 400 per arm. Niv 1 slower / 3 faster (-2), units +0.7%; every other deck 0 / 0. The
+slower game (Niv gi665, T3 -> T4) is T3 on both arms at d8 b0 (identical digest).
