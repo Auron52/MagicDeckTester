@@ -433,3 +433,21 @@ conditional follow-ups. QC3 and the six raw131117 chunks have queue priority.
 No fixed per-thread cache quota or broader budgeting project is introduced.
 Exact future commands and conditions: `logs/cyclone-completion/prepared/V4-PROTOCOL.md`.
 Preserve old V3 evidence/source guards; no quality carry across this repair.
+
+- Repair committed/pushed as `cee782631`, clean source tree
+  `c45a406437bc13a2db2324fd5d285cd46ec496ba`; V4 helper/protocol29synthetic tests
+  PASS and committed/pushed `2de442520`. Canonical Release incremental complete.
+- Fresh smoke audit `v3/ready-fixed-smoke-audit.md`:150/157 wins files byte-identical
+  to A7; the other7files/73rows match the upstream accepted GT byte-for-byte.
+  Residual7cells/81changed games are exactly the previously reviewed A7 set.
+  Units142cells exact/15differ, total-64942; do not attribute combined upstream/
+  repair unit changes to one cause. Known upstream Niv1082 FD persists; no nonconv.
+  One current-source Gob1064/GI63 d8b0 old-line recovery still owed before accept.
+- Fresh PGO+LTO build session22303 (8workers) started05:04UTC after canonical
+  Release build. Log `v4-preflight/ready-pgo-build.log`; CI41171077254 watched in
+  session69664 (Linux/Windows/parity). No V4 quality or memory input is sealed yet.
+- Viewer reviewer is repinning/sealing six-stage V4 to exactc45 Release; max4light
+  workers may overlap PGO8. Human/native paths do not record/replay AI continuations,
+  so122fresh/585conditional native carry remains justified; no autonomous quality,
+  cost or memory result carries. Strict709 is fully fresh. Root must await all viewer
+  engines finishing before the24worker primary pool.
