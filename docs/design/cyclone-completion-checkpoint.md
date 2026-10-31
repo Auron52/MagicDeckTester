@@ -4,7 +4,54 @@ User scope: finish outstanding changes, re-evaluate, and land/push to the latest
 `phase-1-2-deck-analyzer` with normal tests before mulligan/value generation.
 No changes target `main`. Normal throughput uses all 32 available logical CPUs.
 
-## Operative status — Landing905, 2026-10-31
+## Operative status — follow-up validation, 2026-10-31 13:19 UTC
+
+Shared branch and primary are at `3889a0a11c9ba75d90aa8c2af306fd4f64918e05`;
+its Linux, Windows and parity CI checks all pass. The follow-up is committed
+locally at `496b782356bd9275a8fd64b65769f7ef4bf5ece8` on
+`cyclone-landing2c76` in `.claude/worktrees/cyclone-landing905`.
+Its clean source tree is `89b146d10406063213d9abe41e1cfdf1a616c021`.
+No changes target main; no generation has begun. Primary's unrelated
+`test/ref_bench.json` remains unchanged.
+
+The follow-up fixes a demonstrated cache billing-context defect, exposes the
+existing interactive fetched-shock entry choice, and labels optimistic plans
+as proposals. No fixed per-thread quota or policy default changed. Fresh Release
+build and all 2,420 unit cases / 3,568,115 assertions pass. The failing Hinata
+seed now has identical full physical traces, all decision-unit counters, T6 win
+and 32,120 units under normal, 1KB and disabled plan caches. Actual fetch-entry
+frames validate both choices; proposal-contract frames retain their indices.
+
+Fresh Release smoke (root62647, closed initial rc1) has 154 PASS / 3 FAIL /
+0 NEW: three searched tied play changes, no slower or faster games. Review is
+in progress against the accepted shared3889 baseline, not the older2c baseline.
+Do not accept before that review closes. Evidence:
+`build/scratch/cyclone-finish/landing905-review/followup-release-smoke/`.
+
+Fresh PGO build root90292 is RUNNING, all32 available CPUs, log
+`build/scratch/cyclone-finish/landing905-review/followup-pgo-build.log`.
+Do not launch another heavy engine/build. Source must remain frozen until it
+finishes. Its binary hash is pending; the worktree PGO stamp/binary still belong
+to oldC2 and must not be used for new-source runs. Release SHA is
+`aca52a788964b4b80ab321477595a348221652a749c27c936f57b93362e0e56d`.
+
+After PGO: fresh regression with strict references, compiler parity, and final
+cache/VERIFY stages, then one quiet same-run855 cost measurement. The authoritative
+new packet is `build/scratch/cyclone-finish/v7-905-lean/prepared-89b146d-final/`,
+currently UNSEALED pending actual PGO SHA. Its oldC2 predecessor remains FAILED
+on exact tiny-cache units and is preserved unchanged. New actual15-Claude packet
+`build/scratch/cyclone-finish/claude-sweep-89b146d/` is preparation-only, requiring
+a fresh32-worker AI benchmark and actual PGO SHA before seal/root grant. Its15
+serial clients may overlap only the explicit one-worker memory diagnostic.
+Normal smoke is already measured; use compiler parity rather than repeating it
+solely because PGO completed. Close all new flags and changed-game reviews before
+normal acceptance and shared-branch follow-up push. Re-check latest upstream,
+preserve user files/references, admit Cyclone in all3 tiers only if actual3x gate
+passes, push everything, assess feasibility, then mulligan fast followed by value
+leaf. Optional policy experiments remain pending and are not generation blockers
+unless actual default cost fails admission.
+
+## Prior Landing905 milestones — historical, superseded above
 
 Active integration: `cyclone-landing2c76` in the existing worktree
 `.claude/worktrees/cyclone-landing905`, based on shared-branch commit

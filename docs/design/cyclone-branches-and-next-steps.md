@@ -4,12 +4,14 @@
 > `cyclone-landing2c76` (same Landing905 worktree), based on shared commit `2c76c854e`.
 > Code `e63afece6` has source tree `c2c6d4a03a5c1df9cf72c55bd29940aacff41efc`;
 > it landed on `phase-1-2-deck-analyzer` at `3889a0a11`; primary is up to date.
-> The full local unit suite passes (2,415 cases / 3,567,944 assertions).
-> Fresh PGO and reviewed normal smoke/regression/709-reference checks are complete.
-> Final cache checks and quiet timing continue. A15-game actual Claude sweep found
-> an interactive fetched-shock choice gap and a proposal-contract documentation gap;
-> focused follow-up fixes are being prepared before generation. The optional V5 follow-up was stopped after 2,439 of
-> 5,986 games to prioritize landing; partial results remain preserved and labelled.
+> Follow-up `496b78235` has source `89b146d10406063213d9abe41e1cfdf1a616c021`;
+> all 2,420 unit cases / 3,568,115 assertions pass. Fresh Release smoke has three
+> tied searched play changes under review and no score regressions. New PGO is
+> building at32 workers. The follow-up repairs demonstrated cache billing context,
+> fetched-shock interactive choices, and proposal-contract documentation. Final
+> new-source cache, normal regression, oracle and quiet timing checks remain.
+> The optional V5 follow-up stopped after2,439 of5,986 games; partial results
+> remain preserved and labelled. No artifact generation has begun.
 > Fixed 512 MB per-thread plan/FSL quotas are removed; existing shared RAM-sized
 > budgets retain exact keys and equal hit/miss pricing. Cache budgeting remains a
 > separate project. The approved two-Ulamog bucket merge is now wired through the
