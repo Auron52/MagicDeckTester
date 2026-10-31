@@ -188,6 +188,11 @@ SETUP-only rule filters. Sole causality and absence of another retained T5 line
 are unproved. The narrow proposal retains both roles when ready; it increases
 fan/work and is user-owned, unimplemented and unmeasured. The existing readiness
 predicate establishes feasibility, not dominance over the other put-back role.
+Further inspection finds a second exclusion in that same control line: its
+extra-turn Ponder shuffles a look containing useful Brainsurge without a later
+shuffle source, so SITU's KEEP-only rule filters that action too. Relaxing the
+ready filter alone therefore cannot restore the exact control continuation;
+neither an amended-rule recovery nor absence of another T5 strategy is proved.
 
 
 Re-evaluation and linear landing follow completed checks. Add Cyclone to the
