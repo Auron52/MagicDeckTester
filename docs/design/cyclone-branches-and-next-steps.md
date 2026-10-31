@@ -5,7 +5,7 @@
 > plan-cache policy and the companion per-thread FSL quota were removed. The existing shared,
 > RAM-sized budgets remain, together with exact keys and hit-equals-miss pricing. The user prefers
 > landing Cyclone before the separate cache-budgeting project. No broader cache redesign is being
-> adopted as an implied prerequisite. Two rollout/executor replay defects found during completion
+> adopted as an implied prerequisite. Three rollout/executor replay defects found during completion
 > are fixed and tested. Current implementation, verification and pending measurements are tracked in
 > `cyclone-completion-checkpoint.md`; the branch map and measurements below are historical.
 

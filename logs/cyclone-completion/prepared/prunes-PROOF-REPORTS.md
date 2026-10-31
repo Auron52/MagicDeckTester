@@ -1,21 +1,25 @@
 # Pruning proof reports — prepared without running simulations
 
-Helpers live together in primary `build/scratch/cyclone-finish/`:
-`reconstruct_prunes.py` and `prunes_proofs.py`. No source changes or engine
-runs were made while preparing these reports. Read-only Git calls use
-`GIT_OPTIONAL_LOCKS=0`.
+Use the committed `reconstruct_prunes.py` and `prunes_proofs.py` beside this
+file. Read-only Git calls use `GIT_OPTIONAL_LOCKS=0`. For V4, first follow
+[V4-PROTOCOL.md](V4-PROTOCOL.md), then use the explicit `HELPERS`, `INPUTS`
+and `PRUNES` variables below in the same shell. All commands here are
+preparation or reporting; they do not run the engine. Preserve earlier
+generations and source guards. V3 is incomplete and unadoptable after its
+common ordinary FD; it supplies no V4 quality observations.
 
-Phase C and iso92 metadata were refreshed to clean frozen source tree
-`ce3431d90d7f7ee88b47a791ce61595740f907f0`. Their manifests were preserved;
-pre-freeze metadata is backed up separately. Later docs-only commits do not
-invalidate the source-content hash.
+```bash
+HELPERS=/workspaces/MagicDeckTester/.claude/worktrees/cyclone-ready/logs/cyclone-completion/prepared
+INPUTS=/workspaces/MagicDeckTester/build/scratch/cyclone-finish/v4/final-pgo-inputs
+PRUNES=/workspaces/MagicDeckTester/build/scratch/cyclone-finish/v4/final-prunes
+```
 
 ## iso92: authoritative all-salt and actually-forced-order report
 
 After both forty-salt process modes finish with full traces:
 
 ```
-python3 build/scratch/cyclone-finish/prunes_proofs.py --root build/scratch/cyclone-finish/final-prunes iso92
+python3 "$HELPERS/prunes_proofs.py" --root "$PRUNES" iso92
 ```
 
 This writes `iso92/trace-eligibility-report.json`. The existing
@@ -53,7 +57,7 @@ After the composed primary run completes, link `final-prunes/phasec/wins`
 and `phasec/batch.log` to the primary run's corresponding outputs, then:
 
 ```
-python3 build/scratch/cyclone-finish/prunes_proofs.py --root build/scratch/cyclone-finish/final-prunes movers --traces build/scratch/cyclone-finish/final-pgo-inputs/runs/primary-quality/traces
+python3 "$HELPERS/prunes_proofs.py" --root "$PRUNES" movers --traces "$INPUTS/runs/primary-quality/traces"
 ```
 
 Default arms are the PB/PBCYC, KEEP, SITU, SEED and Ponder contrasts. Each
@@ -97,7 +101,7 @@ After inspecting `movers-review.json`, select actual case IDs for a larger
 whole-game blind pair, using a FRESH output directory:
 
 ```
-python3 build/scratch/cyclone-finish/prunes_proofs.py --root build/scratch/cyclone-finish/final-prunes movers --traces build/scratch/cyclone-finish/final-pgo-inputs/runs/primary-quality/traces --out build/scratch/cyclone-finish/final-prunes/proofs-expanded --expand-cases CASE_ID --salts 40
+python3 "$HELPERS/prunes_proofs.py" --root "$PRUNES" movers --traces "$INPUTS/runs/primary-quality/traces" --out "$PRUNES/proofs-expanded" --expand-cases CASE_ID --salts 40
 ```
 
 Replace `CASE_ID` with the reviewed identifier, or comma-separate several.
@@ -109,7 +113,7 @@ same recovery inputs; do not launch a duplicate copy of those recovery jobs.
 After that manifest completes:
 
 ```
-python3 build/scratch/cyclone-finish/prunes_proofs.py --root build/scratch/cyclone-finish/final-prunes expanded-report --inputs build/scratch/cyclone-finish/final-prunes/proofs-expanded --wins EXPANSION_WINS --traces EXPANSION_TRACES
+python3 "$HELPERS/prunes_proofs.py" --root "$PRUNES" expanded-report --inputs "$PRUNES/proofs-expanded" --wins EXPANSION_WINS --traces EXPANSION_TRACES
 ```
 
 The report shows all paired salt deltas, same-opening/mulligan counts and

@@ -183,7 +183,7 @@ def main():
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--experiment", action="append", choices=["cost", "memory", "pb", "keep", "cast", "payment", "nested", "qc1", "qc3", "verify", "all"])
     ap.add_argument("--chunk", type=int, default=10)
-    ap.add_argument("--threads", type=int, default=4)
+    ap.add_argument("--threads", type=int, default=24)
     ap.add_argument("--cost-flags", default="{}", help="JSON boolean flag map; nonempty means a WHAT-IF cost gate")
     ap.add_argument("--cost-arms", help="optional JSON label->boolean flag-map; overrides --cost-flags, shares one current Hinata control")
     ap.add_argument("--build-mode", choices=["auto", "release", "pgo"], default="auto")
@@ -317,7 +317,7 @@ def main():
                    MTG_FD_ORACLE="1", MTG_FLAG_NONCONV="1")
         # USER steering: keep the original shared RAM-sized pool, with no fixed
         # per-thread quota. Regenerate after the quota-removal patch lands.
-        for threads, cache in ((1, "normal"), (6, "normal"), (12, "normal"),
+        for threads, cache in ((1, "normal"), (6, "normal"), (12, "normal"), (24, "normal"),
                                (6, "tiny"), (12, "tiny"), (6, "unbounded")):
             cfg = dict(env)
             if cache == "tiny":
@@ -329,7 +329,7 @@ def main():
             plan(f"memory_t{threads}_{cache}", path, threads, cfg)
         shapes = emit("memory_cyclone_shapes", [job("cyclone_d3_s107000", cyc, 3, 107000, 200, 10),
                                                 job("cyclone_play_s108000", cyc, 5, 108000, 100, 20)], chunk=False)
-        for threads in (6, 12):
+        for threads in (6, 12, 24):
             plan(f"memory_shapes_t{threads}", shapes, threads, env)
 
     if "pb" in experiments:
@@ -456,7 +456,7 @@ def main():
 
     metadata = dict(worktree=str(root), commit=git(root, "rev-parse", "HEAD"),
                     src_tree=git(root, "rev-parse", "HEAD:src"),
-                    binary=str(binary), binary_mode=build_mode,
+                    binary=str(binary), binary_mode=build_mode, primary_threads=a.threads,
                     binary_sha256=hashlib.sha256(binary.read_bytes()).hexdigest() if binary.is_file() else None,
                     emitted=emitted, warnings=warnings, plans=plans,
                     qc1_sampler_provenance=qc1_sampler_provenance,

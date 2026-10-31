@@ -3,7 +3,7 @@
 
 quality: paired per-game reports for QC/cast/payment/nested (prunes has its own
 reporter), FD/nonconv inventory, ordinary-world diagnostic and slower-game
-recovery manifests. memory: exact wins/digests/units versus primary normal12.
+recovery manifests. memory: exact wins/digests/units versus the stored primary worker count.
 memory-preflight: interim normal t1/t6 overlap; holds for review if FSL binds.
 This script never starts the engine or substitutes missing outcomes.
 """
@@ -21,7 +21,10 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 BASE = next(p for p in HERE.parents
             if (p / 'CLAUDE.md').is_file() and (p / '.git').is_dir())
-DEFAULT = BASE / 'build/scratch/cyclone-finish/final-pgo-inputs'
+DEFAULT = BASE / 'build/scratch/cyclone-finish/v4/final-pgo-inputs'
+_spec = importlib.util.spec_from_file_location('cyclone_protocol', HERE / 'prepared_protocol.py')
+protocol = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(protocol)
 
 
 def read_json(path):
@@ -548,9 +551,35 @@ def memory_preflight(a):
     return 2 if not result['complete'] else 1 if not result['preflight_pass'] else 0
 
 
+def shape_comparisons(cells, normal_runs, expected, primary_threads):
+    comparisons, failures = {}, []
+    pairs = dict.fromkeys(tuple(sorted(pair)) for pair in
+                          ((6, 12), (6, primary_threads), (12, primary_threads)) if pair[0] != pair[1])
+    for left, right in pairs:
+        key = f'normal{left}-vs-normal{right}'
+        row = dict(expected=sum(expected[c] for c in cells), compared=0, differences=[])
+        aa, bb = normal_runs.get(left), normal_runs.get(right)
+        complete = aa is not None and bb is not None
+        for cell in sorted(cells):
+            a = aa['data'].get(cell, {}) if aa else {}
+            b = bb['data'].get(cell, {}) if bb else {}
+            complete = complete and len(a) == len(b) == expected[cell] and set(a) == set(b)
+            for identity in sorted(set(a) & set(b)):
+                row['compared'] += 1
+                changed = [k for k in ('win', 'digest', 'units') if a[identity][k] != b[identity][k]]
+                if changed:
+                    row['differences'].append(dict(cell=cell, seed=identity[0], gi=identity[1], changed=changed))
+        row['exact'] = complete and row['compared'] == row['expected'] and not row['differences']
+        comparisons[key] = row
+        if not row['exact']:
+            failures.append(dict(comparison=key, error='required shape comparison missing, incomplete or different'))
+    return comparisons, failures
+
+
 def memory(a):
     inputs = a.inputs
     plan = read_json(inputs / 'primary-quality-plan.json')
+    primary_threads = protocol.primary_threads(None, plan)
     maps = plan['job_map']
     primary_jobs = read_json(inputs / 'primary-quality.json')['jobs']
     jobs = [j for j in primary_jobs
@@ -560,8 +589,10 @@ def memory(a):
     overrides = dict(x.split('=', 1) for x in a.run)
     stderr_overrides = dict(x.split('=', 1) for x in a.stderr)
     primary_pressure = cache_pressure(a.primary_stderr)
-    result = dict(baseline='primary normal12, chunked', comparisons={}, problems=baseline['problems'], differences=[],
-                  cache_pressure={'primary': primary_pressure}, pressure_failures=[], fidelity={})
+    result = dict(baseline=f'primary normal{primary_threads}, chunked', primary_threads=primary_threads,
+                  comparisons={}, problems=baseline['problems'], differences=[],
+                  cache_pressure={'primary': primary_pressure}, pressure_failures=[], reference_failures=[], fidelity={})
+    normal_runs = {primary_threads: baseline}
     result['problems'] += [dict(variant='primary', error=p) for p in primary_pressure['problems']]
     result['fidelity']['primary'] = memory_diagnostics(a.primary_stderr, plan, primary_jobs, maps)
     result['problems'] += [dict(variant='primary', error=p) for p in result['fidelity']['primary']['problems']]
@@ -609,6 +640,20 @@ def memory(a):
                                                       trial={k: bb[k] for k in ('win', 'digest', 'units')}))
         summary['exact'] = summary['compared'] == summary['expected'] and not any(summary[k] for k in ('win_differences', 'digest_differences', 'unit_differences'))
         result['comparisons'][name] = summary
+        if name in ('memory_t6_both_reference_sets', 'memory_t12_both_reference_sets'):
+            workers = protocol.primary_threads(None, variant)
+            expected_workers = 6 if name.startswith('memory_t6_') else 12
+            if workers != expected_workers:
+                result['reference_failures'].append(dict(variant=name, error='normal reference worker count disagrees with its label'))
+            else:
+                normal_runs[workers] = trial
+            if expected_workers == 12:
+                proven = (workers == 12 and trial['expected'] == baseline['expected']
+                          and summary['exact'] and fidelity['clean'])
+                result['normal12_reference_proven'] = proven
+                if not proven:
+                    result['reference_failures'].append(dict(variant=name,
+                        error='normal12 proof requires both complete reference sets matching primary and clean fidelity'))
     unknown = (set(overrides) | set(stderr_overrides)) - set(result['comparisons'])
     if unknown:
         result['problems'].append(dict(error='unknown --run overrides: ' + str(sorted(unknown))))
@@ -617,12 +662,25 @@ def memory(a):
     if 'tiny12_shared_plan_pressure_proven' not in result:
         result['tiny12_shared_plan_pressure_proven'] = False
         result['pressure_failures'].append(dict(error='required memory_t12_tiny comparison absent from runtime plan'))
+    if 'normal12_reference_proven' not in result:
+        result['normal12_reference_proven'] = False
+        result['reference_failures'].append(dict(error='required independent memory_t12_both_reference_sets comparison absent'))
+    shape_cells = {maps[j['name']]['logical_cell'] for j in jobs
+                   if maps[j['name']]['family'] == 'memory_cyclone_shapes'}
+    if shape_cells:
+        result['shape_comparisons'], shape_failures = shape_comparisons(shape_cells, normal_runs, baseline['expected'], primary_threads)
+        result['reference_failures'] += shape_failures
+    else:
+        result['shape_comparisons'] = {}
     result['fidelity_clean'] = all(d['clean'] for d in result['fidelity'].values())
-    result['proof_pass'] = result['exact'] and result['tiny12_shared_plan_pressure_proven'] and result['fidelity_clean']
+    result['proof_pass'] = (result['exact'] and result['tiny12_shared_plan_pressure_proven']
+                            and result['normal12_reference_proven'] and not result['reference_failures']
+                            and result['fidelity_clean'])
     write_json(a.output / 'memory-report.json', result)
     print(json.dumps(dict(report=str(a.output / 'memory-report.json'), complete=result['complete'], exact=result['exact'],
                           proof_pass=result['proof_pass'], fidelity_clean=result['fidelity_clean'],
                           tiny12_shared_plan_pressure_proven=result['tiny12_shared_plan_pressure_proven'],
+                          normal12_reference_proven=result['normal12_reference_proven'],
                           problems=len(result['problems']), differences=len(result['differences']), comparisons=result['comparisons']), indent=2))
     return 2 if not result['complete'] else 1 if not result['proof_pass'] else 0
 

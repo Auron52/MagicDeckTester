@@ -4,10 +4,11 @@
 Requires freshly generated make_validation_manifests output plus the pruning
 reviewer's phaseC manifest. The quiet cost gate stays separate and receives no
 trace logging. Process-static memory pressure configs also remain independent
-experiments; normal12 reference games live in this primary pool.
+experiments; primary worker count is stored, with normal24 used for V4.
 """
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -18,6 +19,10 @@ FILES = ["qc1_keep_vs_mulligan.json", "qc3_leaf_fidelity.json", "nested_exhausti
          "payment_split.json", "cast_q64_raw.json", "cast_q64_blind.json",
          "memory_invariance.json", "memory_cyclone_shapes.json"]
 
+_spec = importlib.util.spec_from_file_location('cyclone_protocol', Path(__file__).with_name('prepared_protocol.py'))
+protocol = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(protocol)
+
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
@@ -25,7 +30,7 @@ def main():
     ap.add_argument("--prunes", type=Path, required=True)
     ap.add_argument("--worktree", type=Path, required=True)
     ap.add_argument("--bin", type=Path, required=True)
-    ap.add_argument("--threads", type=int, default=12)
+    ap.add_argument("--threads", type=int, help="primary workers; must agree with stored generation metadata")
     ap.add_argument("--seal", action="store_true", help="require clean final source and a current PGO stamp/binary")
     a = ap.parse_args()
     root, out, binary = a.worktree.resolve(), a.inputs.resolve(), a.bin.resolve()
@@ -33,6 +38,9 @@ def main():
         return subprocess.check_output(["git", "-C", str(root), *args], text=True,
                                        env={**os.environ, "GIT_OPTIONAL_LOCKS": "0"}).strip()
     own_plan = json.loads((out / "run-plan.json").read_text())
+    prior_path = out / 'primary-quality-plan.json'
+    prior_plan = json.loads(prior_path.read_text()) if prior_path.exists() else None
+    threads = protocol.primary_threads(a.threads, own_plan, prior_plan)
     if own_plan.get("warnings"):
         raise ValueError("Regenerate inputs after resolving their warnings")
     if own_plan["worktree"] != str(root):
@@ -74,10 +82,8 @@ def main():
             else:
                 chunks.append(j)
             for q in chunks:
-                # Exercise every leaf/first-turn fidelity mode before the large quality pool.
-                # Scheduling only: retain the same cases, flags, seeds and physical game indices.
-                if family == "qc3_leaf_fidelity":
-                    q = dict(q, weight=10000000 - q.get("game_index", 0))
+                # Scheduling only: QC3 plus the six original seed131117 raw chunks.
+                q = protocol.frontload_job(family, q)
                 name = q["name"]
                 if name in maps:
                     raise ValueError(f"Duplicate job name: {name}")
@@ -95,37 +101,31 @@ def main():
     env = {"MTG_PGO": "1", "MTG_DUMP_UNITS": "1", "MTG_SLOW_GAME_MS": "1", "MTG_PLAN_POOL_STATS": "1",
            "MTG_ROLLOUT_STATS": "1", "MTG_FLAG_NONCONV": "1", "MTG_FD_ORACLE": "1",
            "MTG_CYCLE_SEED_PAY_CENSUS": "1"}
-    argv = [str(binary), "--batch", str(manifest), "--threads", str(a.threads),
+    argv = [str(binary), "--batch", str(manifest), "--threads", str(threads),
             "--game-log-dir", str(run_dir / "wins"), "--game-trace-dir", str(run_dir / "traces")]
     plan = dict(sealed=a.seal, cwd=str(root), commit=git("rev-parse", "HEAD"), src_tree=src_tree,
                 src_status=source_status, src_patch_sha256=source_sha,
                 binary=str(binary), binary_sha256=hashlib.sha256(binary.read_bytes()).hexdigest() if binary.is_file() else None,
                 manifest_sha256=hashlib.sha256(text.encode()).hexdigest(),
-                games=sum(j["games"] for j in jobs), jobs=len(jobs), env=env, argv=argv,
+                games=sum(j["games"] for j in jobs), jobs=len(jobs), threads=threads, env=env, argv=argv,
                 unset_before_run=sorted(set(own_plan["unset_before_run"]) | {"MTG_DIAG_PB_T1_ORDER"}),
                 stdout=str(run_dir / "batch.log"), stderr=str(run_dir / "batch.err"), job_map=maps,
                 input_manifest_sha256={str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in sources},
                 analysis="Full traces support per-game root causes; do not read mixed quality-pool timings as the cost gate. Aggregate chunk outcomes by logical cell. Prunes report can read this unique-name shared wins directory through its documented path.")
     (out / "primary-quality-plan.json").write_text(json.dumps(plan, indent=2) + "\n")
-    # One combined six-worker reference pool covers both originally owed
-    # normal6 datasets. Normal12 is already in the primary pool. Tiny6 repeats
-    # tiny12's coverage and is the sole removed redundant cache experiment.
+    # Normal6 and normal12 each run BOTH reference sets in their own process.
+    # Normal24 is in the V4 primary pool; tiny6 remains redundant with tiny12.
     six = out / "memory-six-reference.json"
     six.write_text(json.dumps({"jobs": [
         *json.loads((out / "memory_invariance.json").read_text())["jobs"],
         *json.loads((out / "memory_cyclone_shapes.json").read_text())["jobs"]]}, indent=2) + "\n")
     standalone = {p["name"]: p for p in own_plan["plans"]}
-    other = [standalone[n] for n in ("memory_t1_normal", "memory_t12_tiny", "memory_t6_unbounded")]
-    p6 = dict(standalone["memory_t6_normal"])
-    p6["name"] = "memory_t6_both_reference_sets"
-    p6["argv"] = list(p6["argv"])
-    p6["argv"][p6["argv"].index("--batch") + 1] = str(six)
-    other.insert(1, p6)
+    other = protocol.memory_comparisons(standalone, six)
     cost = [p for p in own_plan["plans"] if p["name"].startswith("cost_gate_")]
     verify = [p for p in own_plan["plans"] if p["name"] == "verify_small"]
     schedule = dict(primary_quality=plan, memory_comparisons=other, quiet_cost=cost, verify_after_main_and_cost=verify,
                     order="Run independent memory comparisons and primary quality on the same frozen PGO source; cost only when every other pool is finished and box is quiet. Data-dependent pruning blind and per-game recovery work follow primary outcomes.",
-                    removed_redundancy="Do not run old pb_phase_c/keep_phase_c: imported12-arm pruning set shares those controls. Normal12 memory and shapes are included in primary; normal6 sets combined into one queue; tiny6 omitted as redundant with tiny12. Do not re-run QC1 sampler:600 complete traces have matching setup/library/cards/deck hashes.")
+                    removed_redundancy=f"Do not run old pb_phase_c/keep_phase_c: imported12-arm pruning set shares controls. Primary normal{threads} includes both memory sets. Normal6 and normal12 each independently reuse the same combined468-game reference manifest; these are process-static proofs, not quality waves. Shapes compare6/12/24 in V4. Tiny6 omitted as redundant with tiny12. Do not re-run QC1 sampler:600 complete traces have matching setup/library/cards/deck hashes.")
     (out / "final-runtime-plan.json").write_text(json.dumps(schedule, indent=2) + "\n")
     families = {}
     for m in maps.values():

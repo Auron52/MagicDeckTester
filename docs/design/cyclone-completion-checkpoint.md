@@ -4,7 +4,7 @@ User scope: finish outstanding changes in `origin/cyclone-analysis:docs/design/c
 
 Working branch/worktree: `cyclone-ready`, `.claude/worktrees/cyclone-ready`, based on phase-1-2 main `2b863538f`. The measured A7 experiment continues unchanged in `cyclone-final`. All original and intermediate branches/worktrees remain intact and pushed. Primary checkout's unrelated `test/ref_bench.json` edit remains untouched.
 
-Current stage (03:48 UTC): integrated source `1e4afaef66d4308e314adf7c9d49d34ed9fa7364`, code commit `29b2c88cc`, is pushed for CI. Local integration builds wait for the one active heavy queue. The measured source A7 (`a7e4708006cef4c7bfc75c89638b2d9feb3eb1a1`) has 2,363 units / 3,566,610 assertions PASS, 150 PASS / 7 audited baseline FAIL / 0 NEW smoke, full V3 viewer PASS, and exact normal1/6 memory preflight. Its 13,142-game V3 quality pool is running; all480 QC3 games completed with zero fidelity warnings. The three new upstream mana capabilities are provably inactive for Cyclone/Hinata/Kitty, including reachable sideboards. A prepared 39-game exact bridge will check carry of A7 quality contrasts after fresh integration builds; timing does not carry. Remaining final gates include fresh smoke/regression, full709 strict +122 affected native refs (585 conditional carry), remaining cache/isolation/conditional pruning proofs and the quiet535-game bottoming-ON cost gate. No mulligan/value generation or proposal adoption before re-evaluation.
+Current stage (05:03 UTC): the Ready integration is based on main `2b863538f`; CI for its previous code commit `29b2c88cc` passed Linux, Windows and parity. A new full recorded-payment-context repair is built and tested locally, awaiting its source commit and fresh PGO. Full units: 2,368 cases / 3,566,895 assertions PASS. Ready smoke: 386 scenarios PASS; 150 PASS / 7 known FAIL / 0 NEW, fresh per-game audit underway. The A7 V3 pool was STOPPED after ordinary fidelity defect seed131117; its partial quality outcomes cannot support adoption. The repair can change play and mulligan trials, so the entire V4 quality/memory set must run fresh. The old upstream-only bridge is superseded and unrun. Remaining gates: V4 full quality, normal1/6/12/24 and pressure proofs, strict709 + affected native122 viewer validation, conditional pruning/isolation, full regression and quiet535-game bottoming-ON cost. No mulligan/value generation or proposal adoption before re-evaluation.
 
 The dated milestones below are historical records; later entries supersede earlier progress and pending-work statements.
 
@@ -397,3 +397,39 @@ native carry comprises59 freshV3 +526 originalA refs. Actual cards/decks/refs an
 frontend/checker bytes are unchanged. No V4 local build/checker has run yet.
 CI for code29b2c88cc is run41165380782; A7 code's Linux/Windows/parity run41160289976
 is already green. Preserve separate source and evidence labels.
+
+## Full replay payment context repair (05:03 UTC)
+
+The agent-owned V3 quality experiment was stopped after ordinary `fd-diverge`
+seed131117/GI117, reproduced in all six raw cast arms. It predicted T4 but replay
+won T5. An inline Remand continuation's Ponder inherited zero mana casts and no
+pending cycle during simulation. Replay derived a new cycle hold from the narrower
+realized records, reserved Cascade Bluffs, spent its last Steam Vents feeder and
+missed the next cycle. No change to the mana heuristic is needed.
+
+Recorded casts and searched cycles now retain the actual full immutable payment
+traits, including explicit zero and explicit absence. One lazy snapshot per live
+scope avoids copying for every recorded spell. Nested scopes can capture the saved
+outer pre-payment context; only owned snapshots escape. Cast scopes cover actual
+payment/resolution/recursion; cycle scopes remain after queued-activation flush.
+Snapshot payloads are conservatively charged to the existing shared cache pools.
+The independent equality audit found all planning equality consumers operate on
+unrecorded candidates; snapshot pointer identity cannot alter admission/folding.
+
+The new physical-source regression failed before the fix (7 failures), passes
+with it and includes a Ponder-only metadata-removal negative control plus explicit
+null and escaped-snapshot lifetime controls. Focused9/605 and full2368/3566895
+PASS. Exact Release preflight seeds107008,127012,131117 all have zero ordinary
+FD/nonconvergence; seed131117 now wins T4. Logs: `v3/fd131117/`,
+`v4-preflight/release-green/`, `ready-fixed-smoke.log` under the shared scratch root.
+The fixed Ready smoke completed150pass/7knownfail/0new and386scenarios; fresh
+byte comparison and mover review are in progress. No GT accepted.
+
+V4 helpers are prepared, not sealed/launched: same1490jobs/13142quality games,
+24workers; separate normal1/6/12 and tiny12/unbounded6 memory processes total1440
+extra games. The independent normal12 covers both reference sets (468games).
+Fixed total15221 includes quiet535, VERIFY24 and iso92two40salt modes, before
+conditional follow-ups. QC3 and the six raw131117 chunks have queue priority.
+No fixed per-thread cache quota or broader budgeting project is introduced.
+Exact future commands and conditions: `logs/cyclone-completion/prepared/V4-PROTOCOL.md`.
+Preserve old V3 evidence/source guards; no quality carry across this repair.

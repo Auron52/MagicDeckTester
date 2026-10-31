@@ -11,29 +11,30 @@ manifests, candidate profiles, traces and logs belong under `build/scratch`,
 not beside decks or in this persistent directory. Launcher and reporter
 resolve that primary checkout even when invoked from this linked worktree.
 
-## Prepare after a source freeze
+## Prepare V4 after a source freeze
 
-The preparation used clean source tree
-`ce3431d90d7f7ee88b47a791ce61595740f907f0`. Preparation is not a PGO freshness
+The current protocol is [V4-PROTOCOL.md](V4-PROTOCOL.md). V3 stopped after
+a common ordinary fidelity divergence and is incomplete and unadoptable. V4
+requires a full refresh on the repaired, clean source. Preparation is not a PGO freshness
 claim: final launch requires a freshly trained PGO binary whose `SRC_TREE`
 stamp matches the current source. Refresh source/data provenance before the
 first launch, never after different code has already produced observations.
 Read-only Git calls disable optional locks.
 
 ```bash
-HELPERS=.claude/worktrees/cyclone-finish/logs/cyclone-completion/prepared
-WORKTREE=.claude/worktrees/cyclone-finish
-INPUTS=build/scratch/cyclone-finish/final-pgo-inputs
-PRUNES=build/scratch/cyclone-finish/final-prunes
+HELPERS=.claude/worktrees/cyclone-ready/logs/cyclone-completion/prepared
+WORKTREE=.claude/worktrees/cyclone-ready
+INPUTS=build/scratch/cyclone-finish/v4/final-pgo-inputs
+PRUNES=build/scratch/cyclone-finish/v4/final-prunes
 python3 "$HELPERS/make_validation_manifests.py" \
   --worktree "$WORKTREE" --bin "$WORKTREE/build/PGO/mtg" --build-mode pgo \
-  --threads 12 --out "$INPUTS" \
+  --threads 24 --out "$INPUTS" \
   --experiment cost --experiment memory --experiment qc1 --experiment qc3 \
   --experiment nested --experiment cast --experiment payment --experiment verify \
   --qc1-traces build/scratch/cyclone-finish/qc1-sampling/traces
 python3 "$HELPERS/compose_final_quality.py" \
   --inputs "$INPUTS" --prunes "$PRUNES/phasec/manifest.json" \
-  --worktree "$WORKTREE" --bin "$WORKTREE/build/PGO/mtg" --threads 12
+  --worktree "$WORKTREE" --bin "$WORKTREE/build/PGO/mtg" --threads 24
 ```
 
 Do not regenerate over measurement inputs in use. On complete runtime-volume
@@ -115,9 +116,9 @@ not require primary result files for these stages. Run sequentially, then
 inspect the independent interim report before launching primary:
 
 ```bash
-python3 "$HELPERS/run_prepared_validation.py" memory6
-python3 "$HELPERS/run_prepared_validation.py" memory1
-python3 "$HELPERS/report_final_results.py" memory-preflight
+python3 "$HELPERS/run_prepared_validation.py" memory6 --worktree "$WORKTREE" --inputs "$INPUTS" --prunes "$PRUNES/phasec/manifest.json" --threads 24
+python3 "$HELPERS/run_prepared_validation.py" memory1 --worktree "$WORKTREE" --inputs "$INPUTS" --prunes "$PRUNES/phasec/manifest.json" --threads 24
+python3 "$HELPERS/report_final_results.py" memory-preflight --inputs "$INPUTS"
 ```
 
 `memory-preflight-report.json` compares only the168 shared logical games
@@ -132,7 +133,7 @@ cannot be attributed solely to the168 shared games. Missing data exits2.
 After fresh PGO and a passing preflight, the primary launch command is:
 
 ```bash
-python3 "$HELPERS/run_prepared_validation.py" primary
+python3 "$HELPERS/run_prepared_validation.py" primary --worktree "$WORKTREE" --inputs "$INPUTS" --prunes "$PRUNES/phasec/manifest.json" --threads 24
 ```
 
 It seals source, profile, manifest and binary provenance, validates the original
@@ -142,9 +143,11 @@ restarts a run, or treats an engine exit as a quality verdict. The caller owns
 progress monitoring. `--dry-run` still seals/checks; it cannot bypass stale PGO.
 
 All stages use this same launcher with stage names `memory1`, `memory6`,
-`memory-tiny12`, `memory-unbounded6`, `cost`, `verify`. Primary uses12 workers.
-Normal12 memory references share primary; other process-static memory
-configurations run separately. No per-thread cache quota is used. Tiny uses a
+`memory12`, `memory-tiny12`, `memory-unbounded6`, `cost`, `verify`. V4 primary
+uses 24 workers, stored consistently in generation and sealed runtime plans.
+Normal6 and normal12 each run both 468 reference games independently; primary
+normal24 contains the same references in chunks. The additional normal12
+process preserves the t12 proof and does not split the quality sample into waves. No per-thread cache quota is used. Tiny uses a
 shared20MiB plan pool; unbounded uses the existing shared-pool control.
 
 Run the separate535-game current Cyclone+Hinata cost batch on a quiet host
@@ -155,8 +158,8 @@ memo, cantrip rank-cache and kill-only checks; automatic checking requires
 actual positive hits/exercise and rejects mismatches.
 
 ```bash
-python3 "$HELPERS/report_final_results.py" quality
-python3 "$HELPERS/report_final_results.py" memory
+python3 "$HELPERS/report_final_results.py" quality --inputs "$INPUTS"
+python3 "$HELPERS/report_final_results.py" memory --inputs "$INPUTS"
 python3 "$HELPERS/reconstruct_prunes.py" --worktree "$WORKTREE" \
   --output "$PRUNES" report phasec
 ```
@@ -172,7 +175,9 @@ unresolved fidelity review exits1. `--allow-partial` labels intersections but
 still fails missing data. It does not duplicate pruning reports.
 
 Memory compares exact per-game wins, digests and units from primary chunks
-against t1/t6/tiny/unbounded runs, reporting every difference. Every run must
+against t1/t6/t12/tiny/unbounded runs, reporting every difference. It also
+requires complete normal12 coverage of both reference sets and exact pairwise
+6/12/24 comparisons of all 300 shape games. Every run must
 have its process-exit plan-pool summary. The tiny12 proof additionally requires
 budget20480KB and positive refused stores; equality without actual pressure
 is inconclusive and exits1. Missing files or exit summaries exit2; drift

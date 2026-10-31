@@ -1,3 +1,7 @@
+> Historical V2 protocol and evidence. These dated commands are not the next launch.
+> Use [V4-PROTOCOL.md](V4-PROTOCOL.md) for the authorized 24-worker full refresh;
+> normal12 is now a separate both-reference-set process. Preserve V2/V3 outputs.
+
 # Frozen-source v2 rerun readiness
 
 Use these authoritative helpers in this directory, not older scratch copies.

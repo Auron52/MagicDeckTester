@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Synthetic parser/report checks only: never starts the engine."""
 import argparse
+import copy
 import contextlib
 import importlib.util
 import io
 import json
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 spec = importlib.util.spec_from_file_location('cyclone_report', Path(__file__).with_name('report_final_results.py'))
@@ -24,6 +26,7 @@ def sibling_module(name):
 
 manifests = sibling_module('make_validation_manifests')
 launcher = sibling_module('run_prepared_validation')
+protocol = sibling_module('prepared_protocol')
 
 
 def pool(budget=20480, refused=3, fsl=0):
@@ -42,6 +45,84 @@ class ReportTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
+
+    def test_primary_workers_resolve_and_reject_stored_mismatches(self):
+        own = {'primary_threads': 24}
+        sealed = {'threads': 24, 'argv': ['mtg', '--threads', '24']}
+        self.assertEqual(protocol.primary_threads(None, own, sealed), 24)
+        self.assertEqual(protocol.primary_threads(24, own, sealed), 24)
+        for explicit, plans in ((12, (own, sealed)), (None, ({'threads': 24, 'argv': ['mtg', '--threads', '12']},)),
+                                (None, ({},)), (0, ())):
+            with self.subTest(explicit=explicit, plans=plans), self.assertRaises(ValueError):
+                protocol.primary_threads(explicit, *plans)
+
+    def test_launcher_passes_stored24_to_seal_without_launching(self):
+        inputs = self.root/'launch-inputs'; inputs.mkdir()
+        report.write_json(inputs/'run-plan.json', dict(primary_threads=24,
+            qc1_sampler_provenance={'recorded': {'inputs': {}}}))
+        primary = dict(threads=24, argv=['mtg', '--threads', '24'])
+        report.write_json(inputs/'primary-quality-plan.json', primary)
+        report.write_json(inputs/'final-runtime-plan.json', {'primary_quality': primary})
+        argv = ['launcher', 'primary', '--worktree', str(self.root), '--inputs', str(inputs),
+                '--prunes', str(self.root/'manifest.json'), '--dry-run']
+        with mock.patch('sys.argv', argv), mock.patch.object(launcher.subprocess, 'run') as called, \
+                contextlib.redirect_stdout(io.StringIO()):
+            launcher.main()
+        seal = called.call_args.args[0]
+        self.assertEqual(seal[seal.index('--threads') + 1], '24')
+        self.assertIn('--seal', seal)
+        with mock.patch('sys.argv', argv + ['--threads', '12']), \
+                mock.patch.object(launcher.subprocess, 'run') as called, self.assertRaises(ValueError):
+            launcher.main()
+        called.assert_not_called()
+
+    def test_frontload_preserves_semantics_and_hits_all_six_known_cast_chunks(self):
+        arms = ('base', 'CO', 'CO_CYC1', 'CO_CYC1_DRAW', 'CO_CYC1_REV_CYCLERS', 'CO_CYC1_MIDDLE')
+        for arm in arms:
+            original = dict(name=arm+'_d3_s131000_off110', seed=131110, game_index=110, games=10,
+                            weight=99989, depth=3, budget_ms=10, flags={'test': True}, profile='same-profile')
+            snapshot = copy.deepcopy(original)
+            prioritized = protocol.frontload_job('cast_q64_raw', original)
+            self.assertGreater(prioritized['weight'], 100000)
+            self.assertEqual({k:v for k,v in prioritized.items() if k != 'weight'},
+                             {k:v for k,v in original.items() if k != 'weight'})
+            self.assertEqual(original, snapshot)
+            self.assertEqual(protocol.frontload_job('cast_q64_blind', original), original)
+        qc3 = dict(seed=127010, game_index=10, games=10, weight=99999)
+        self.assertGreater(protocol.frontload_job('qc3_leaf_fidelity', qc3)['weight'], 100000)
+        shape = dict(seed=107000, game_index=0, games=10, weight=100000)
+        self.assertEqual(protocol.frontload_job('memory_cyclone_shapes', shape), shape)
+        later = dict(seed=131120, game_index=120, games=10, weight=99988)
+        self.assertEqual(protocol.frontload_job('cast_q64_raw', later), later)
+
+    def test_independent_normal12_reuses_both_reference_sets_with12_workers(self):
+        def plan(name, workers):
+            return dict(name=name, argv=['mtg','--batch','core.json','--threads',str(workers)],
+                        env={'unchanged': '1'}, stdout=name+'/batch.log', stderr=name+'/batch.err')
+        names = [('memory_t1_normal',1), ('memory_t6_normal',6), ('memory_t12_normal',12),
+                 ('memory_t24_normal',24), ('memory_t12_tiny',12), ('memory_t6_unbounded',6)]
+        original = {n:plan(n,t) for n,t in names}; snapshot = copy.deepcopy(original)
+        comparisons = protocol.memory_comparisons(original, 'both468.json')
+        self.assertEqual([p['name'] for p in comparisons], ['memory_t1_normal', 'memory_t6_both_reference_sets',
+            'memory_t12_both_reference_sets', 'memory_t12_tiny', 'memory_t6_unbounded'])
+        for p, workers in zip(comparisons[1:3], (6,12)):
+            self.assertEqual(p['argv'][p['argv'].index('--batch')+1], 'both468.json')
+            self.assertEqual(p['argv'][p['argv'].index('--threads')+1], str(workers))
+        self.assertEqual(original, snapshot)
+        comparisons[2]['env']['unchanged'] = 'changed'
+        self.assertEqual(original, snapshot)
+
+    def test_shape_matrix_reports6_12_24_and_detects12_only_difference(self):
+        row = {'win': 4, 'digest': 'same', 'units': 100}
+        runs = {t:{'data': {'shape': {(107008,8):copy.deepcopy(row)}}} for t in (6,12,24)}
+        matrix, failures = report.shape_comparisons({'shape'}, runs, {'shape':1}, 24)
+        self.assertEqual(set(matrix), {'normal6-vs-normal12','normal6-vs-normal24','normal12-vs-normal24'})
+        self.assertFalse(failures)
+        runs[12]['data']['shape'][(107008,8)]['units'] = 101
+        matrix, failures = report.shape_comparisons({'shape'}, runs, {'shape':1}, 24)
+        self.assertTrue(matrix['normal6-vs-normal24']['exact'])
+        self.assertFalse(matrix['normal12-vs-normal24']['exact'])
+        self.assertEqual(len(failures), 2)
 
     def test_inherited_cache_overrides_are_cleared_before_intentional_pins(self):
         hostile = {'MTG_FSL_POOL': '1', 'MTG_FSL_CAP': '1', 'MTG_MEM_BUDGET_MB': '1',
@@ -138,17 +219,23 @@ class ReportTests(unittest.TestCase):
             (primary / (name+'.units')).write_text(f'{off} {100+off}\n')
         measured = dict(name='cyclone_d3_s121000', seed=121000, game_index=0, games=2)
         report.write_json(inputs/'primary-quality.json', dict(jobs=jobs))
-        report.write_json(inputs/'primary-quality-plan.json', dict(job_map=maps, env=FIDELITY_ENV))
+        report.write_json(inputs/'primary-quality-plan.json', dict(job_map=maps, env=FIDELITY_ENV, threads=24))
         report.write_json(inputs/'tiny.json', dict(jobs=[measured]))
         (trial/'cyclone_d3_s121000.wins').write_text('0 4 abcdef0123456789\n1 4 abcdef0123456789\n')
         (trial/'cyclone_d3_s121000.units').write_text('0 100\n1 101\n')
         primary_err = self.root/'primary.err'; primary_err.write_text(pool(budget=100000,refused=0))
         trial_err = self.root/'tiny.err'; trial_err.write_text(pool(budget=budget,refused=refused,fsl=fsl))
+        normal12 = self.root/'normal12'; normal12.mkdir()
+        for path in trial.iterdir():
+            (normal12/path.name).write_bytes(path.read_bytes())
+        normal12_err = self.root/'normal12.err'; normal12_err.write_text(pool(budget=100000, refused=0))
         report.write_json(inputs/'final-runtime-plan.json', dict(memory_comparisons=[dict(
             name='memory_t12_tiny', argv=['mtg','--batch',str(inputs/'tiny.json')],
-            stdout=str(trial/'batch.log'),stderr=str(trial_err), env=FIDELITY_ENV)]))
+            stdout=str(trial/'batch.log'),stderr=str(trial_err), env=FIDELITY_ENV), dict(
+            name='memory_t12_both_reference_sets', argv=['mtg','--batch',str(inputs/'tiny.json'),'--threads','12'],
+            stdout=str(normal12/'batch.log'),stderr=str(normal12_err), env=FIDELITY_ENV)]))
         return argparse.Namespace(inputs=inputs, primary_wins=primary, primary_stderr=primary_err,
-                                  run=['memory_t12_tiny='+str(trial)],stderr=[],output=self.root/'reports')
+                                  run=['memory_t12_tiny='+str(trial), 'memory_t12_both_reference_sets='+str(normal12)],stderr=[],output=self.root/'reports')
 
     def run_memory(self, a):
         with contextlib.redirect_stdout(io.StringIO()):
@@ -159,7 +246,20 @@ class ReportTests(unittest.TestCase):
         rc, result = self.run_memory(self.fixture())
         self.assertEqual(rc, 0)
         self.assertTrue(result['proof_pass'])
+        self.assertEqual(result['baseline'], 'primary normal24, chunked')
+        self.assertTrue(result['normal12_reference_proven'])
         self.assertEqual(result['comparisons']['memory_t12_tiny']['compared'], 2)
+
+    def test_full_memory_cannot_omit_independent_normal12(self):
+        a = self.fixture(); path = a.inputs/'final-runtime-plan.json'
+        schedule = report.read_json(path)
+        schedule['memory_comparisons'] = [schedule['memory_comparisons'][0]]
+        report.write_json(path, schedule)
+        a.run = a.run[:1]
+        rc, result = self.run_memory(a)
+        self.assertEqual(rc, 1)
+        self.assertFalse(result['normal12_reference_proven'])
+        self.assertFalse(result['proof_pass'])
 
     def test_equal_without_binding_is_inconclusive(self):
         rc, result = self.run_memory(self.fixture(refused=0))

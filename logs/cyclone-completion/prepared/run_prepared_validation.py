@@ -12,6 +12,7 @@ The root agent still owns required progress communication and status timers.
 import argparse
 import datetime
 import hashlib
+import importlib.util
 import json
 import os
 import subprocess
@@ -23,6 +24,9 @@ HELPERS = Path(__file__).resolve().parent
 BASE = next(p for p in HELPERS.parents
             if (p / 'CLAUDE.md').is_file() and (p / '.git').is_dir())
 SCRATCH = BASE / 'build/scratch/cyclone-finish'
+_spec = importlib.util.spec_from_file_location('cyclone_protocol', HELPERS / 'prepared_protocol.py')
+protocol = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(protocol)
 
 
 def now():
@@ -42,17 +46,21 @@ def launch_environment(inherited, unset, configured):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument('stage', choices=['primary', 'cost', 'verify', 'memory1', 'memory6', 'memory-tiny12', 'memory-unbounded6'])
-    ap.add_argument('--worktree', type=Path, default=BASE / '.claude/worktrees/cyclone-finish')
-    ap.add_argument('--inputs', type=Path, default=SCRATCH / 'final-pgo-inputs')
-    ap.add_argument('--prunes', type=Path, default=SCRATCH / 'final-prunes/phasec/manifest.json')
+    ap.add_argument('stage', choices=['primary', 'cost', 'verify', 'memory1', 'memory6', 'memory12', 'memory-tiny12', 'memory-unbounded6'])
+    ap.add_argument('--worktree', type=Path, default=BASE / '.claude/worktrees/cyclone-ready')
+    ap.add_argument('--inputs', type=Path, default=SCRATCH / 'v4/final-pgo-inputs')
+    ap.add_argument('--prunes', type=Path, default=SCRATCH / 'v4/final-prunes/phasec/manifest.json')
     ap.add_argument('--bin', type=Path)
+    ap.add_argument('--threads', type=int, help='primary workers; optional when already stored consistently')
     ap.add_argument('--dry-run', action='store_true', help='seal/check then print stage plan without launching')
     a = ap.parse_args()
     root, inputs = a.worktree.resolve(), a.inputs.resolve()
     binary = (a.bin or root / 'build/PGO/mtg').resolve()
     read_env = {**os.environ, 'GIT_OPTIONAL_LOCKS': '0'}
     own = json.loads((inputs / 'run-plan.json').read_text())
+    prior_path = inputs / 'primary-quality-plan.json'
+    prior = json.loads(prior_path.read_text()) if prior_path.exists() else None
+    threads = protocol.primary_threads(a.threads, own, prior)
     sampler = own.get('qc1_sampler_provenance')
     if sampler is None:
         raise ValueError('QC1 sampler provenance absent; regenerate final inputs with original completed sample')
@@ -63,9 +71,11 @@ def main():
     # pruning provenance. The composed manifest must retain its prepared jobs.
     subprocess.run([sys.executable, str(HELPERS / 'compose_final_quality.py'),
                     '--inputs', str(inputs), '--prunes', str(a.prunes.resolve()),
-                    '--worktree', str(root), '--bin', str(binary), '--threads', '12', '--seal'],
+                    '--worktree', str(root), '--bin', str(binary), '--threads', str(threads), '--seal'],
                    check=True, env=read_env)
     schedule = json.loads((inputs / 'final-runtime-plan.json').read_text())
+    if protocol.primary_threads(None, schedule['primary_quality']) != threads:
+        raise ValueError('Sealed primary worker count changed unexpectedly')
     if a.stage == 'primary':
         plan = schedule['primary_quality']
     elif a.stage == 'cost':
@@ -97,6 +107,7 @@ def main():
         plan, = schedule['verify_after_main_and_cost']
     else:
         wanted = {'memory1': 'memory_t1_normal', 'memory6': 'memory_t6_both_reference_sets',
+                  'memory12': 'memory_t12_both_reference_sets',
                   'memory-tiny12': 'memory_t12_tiny', 'memory-unbounded6': 'memory_t6_unbounded'}[a.stage]
         plan, = [p for p in schedule['memory_comparisons'] if p['name'] == wanted]
     if a.dry_run:
