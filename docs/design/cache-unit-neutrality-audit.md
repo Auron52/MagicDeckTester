@@ -513,3 +513,35 @@ tomorrow."*
     run (every suite deck, play and generation shapes).
   - **Choose:** the floor that covers most games outright (e.g. p90-p95). Report how much of the heavy tail's hit
     volume falls into overflow at each candidate size, and confirm the choice in the matched-cost A/B.
+
+## Addendum (2026-10-31): two play-identical speed patches on the breakpoint-continuation lists
+
+Hinata2's mulligan generation runs with two patches that work around the plan pool's unit coupling **without changing
+it**. Both are on origin branch `keepgen-slow-tail-fix` (diagnosis and measurements:
+`docs/design/keepgen-hours-long-rollouts.md` on that branch). Neither has landed on `phase-1-2-deck-analyzer`.
+
+1. **The continuation-list SUMMARY** (`MTG_BP_SUMMARY`, default ON, commit 31298eff3). A list the plan pool REFUSES is
+   summarised, so the wave walker does not re-derive it once per rank.
+2. **The PHANTOM STORE** (`MTG_BP_PHANTOM`, default ON, commit ff7eba4b4). It covers pool THRASH: lists that each fit
+   the pool but not together, which wiped each other through clear-on-full and were each re-derived about 1,925 times.
+   When a summarised list would fit, the serve does the store's own bookkeeping (clear-on-full, pool bytes, map slot,
+   epoch) and inserts a phantom entry that holds no plans. Pool occupancy, and so every later hit and miss, is exactly
+   what it is today.
+
+Measured: units and win turn identical on 492/492 paired replay rollouts; verify ok 219,500, BAD 0; smoke and
+regression 0 play-changed. The thrash rollout went from 15,263 s to 75 s.
+
+**What this means for this project:**
+
+- **Delete the phantom bookkeeping once plan-cache hits charge what a miss costs** (always-pay, or the overflow tier of
+  floor+overflow). After that, pool occupancy no longer moves play, so the summary can serve whatever it holds and
+  nothing needs to copy today's pool behaviour.
+- **Phantom entries hold pool bytes without holding plans.** The pool's byte accounting therefore over-states the memory
+  really used. Do NOT size the floor or the overflow tier from `plancache` occupancy while `MTG_BP_PHANTOM` is on; use
+  RSS, or measure with `MTG_BP_PHANTOM=0`.
+- **The derivations these patches avoid are UNBILLED work** (16-25 ms per unit in the slow rollouts). The patches make
+  them rarer; they do not bill them. Billing them is item 2 of the scope above (`MTG_BP_DERIVE_METER` /
+  `MTG_ENUM_CHARGE`, a USER decision), and it is part of the rebalance.
+- **The replays show the pool coupling directly.** At one thread, the same rollout costs 690 s with a 100 MB pool, more
+  than 4 h at 2.5 GB, and 48 s at 4 GB, with identical units here only because every decision ran to the unit ceiling.
+  The invariance check should include a pool size in the thrash band, not only tiny vs huge.
