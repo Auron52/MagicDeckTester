@@ -9,6 +9,8 @@
  "frozen": "11f93aa0392c01d9dab7a1a2ab39f9b8d1bb2a0b",
  "heartbeat": "2026-10-31T15:56:50Z",
  "host": "58199181d02e",
+ "landed": "b21178838d6719b88762124ddecc2a55001d934e",
+ "landed_at": "2026-10-31T16:09:28Z",
  "result_branch": "artifact-refresh/breachingdragonstorm-20261031-1608",
  "run_id": "breachingdragonstorm-artifact-queue-tool-647f24-20261031T155322",
  "score": 0.0118,
