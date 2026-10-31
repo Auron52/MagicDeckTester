@@ -815,6 +815,71 @@ damage board; node cap `MTG_REAL_PAY_NODES` (600).
   attack is one damage short. The defect is in combat, not mana; the script stays OFF until the USER decides
   (fix the attack rule first, then re-measure).
 
+#### 13.2.1 gi287 root-caused: the script broke COMBAT LOCKSTEP (2026-10-31, branch `wip/dork-hold-script`)
+
+The USER asked: *"we should fix the issue first. Don't we search dork attackers?"* We do, but that was not what
+failed here. The mechanism, from `MTG_REAL_PAY_ATK_TRACE=1` on gi287 (`--seed 1130288 --game-index 287`, play
+settings d7 b40; OFF T6, ON T7):
+
+* T5's plan is *Two-Headed Hellkite + Deathrite #12's drain* (exiling Unite the Coalition, 16 -> 14). The
+  engine's own apply of it taps Breeding Pool for a {G} that FLOATS and then empties at combat. So on the board
+  the search scored -- `[rp-atk] engine-apply board: 9T ... 13 ...` -- the second Deathrite (#13) is the only
+  untapped source when attackers are declared: 1 mana casts nothing in hand (Bloom Tender is {1}{G}, Faeburrow
+  Elder {1}{G}{W}), and `FiveColourProvider::ShouldAttackWith` sends it in. The search's line: 14 -> 8 after combat
+  (`[fsw] T5 ... Two-Headed Hellkite,Deathrite Shaman, after=8 tail=6`), T6's swing exactly lethal.
+* The script pays the same line without Breeding Pool (`script board: 9 ...`). At the REAL declaration Deathrite +
+  Pool make 2 mana, Bloom Tender is castable, and the same provider rule holds Deathrite home. 5 damage, 9 life
+  left, main 2 casts nothing, and T6's total of 8 is under 9, so the lethal exemption does not fire and the hold
+  repeats (only the Hellkite swings). T7.
+* So the combat the executor realised was not the combat the search scored. The search never saw the script's
+  board, since it scores a plan by its own apply, so no searched branch could have decided this.
+
+**Does the searched dork attack cover this hold anyway? No.** `DorkAtkContestedKind` contests (1) a dork the
+collapsed-main TOWER holds (`HoldManaSourceForCollapsedMain`, which holds 0-power dorks only) and (2) an
+attacking dork whose mana the deferred main would spend. A DAMAGE dork held by an archetype's `ShouldAttackWith`
+was explicitly left greedy (*"a ShouldAttackWith decline stays greedy"*). Only FiveColour has such a rule (every
+other provider holds only 0-power bodies), and it fires whenever any hand card is castable.
+
+**Fix 1 -- `MTG_REAL_PAY_ATTACK_PIN` (heurarm `REAL_PAY_ATTACK_PIN`, DEFAULT ON, inert unless the script is on).**
+`PlanPaymentScript` now also returns the scored combat: our creatures on the engine's apply board, each marked
+attacked / not, declared through `RolloutCombatDeclaration`. That is the rollout combat's own pre-declaration body
+(`CombatPreDeclare`, factored out of `SimulateOneCombat`: the pool empties first, which is exactly what the float
+hinges on), read under the plan's own `atk_dork_release` variant. `AIEngine::DeclareAttackers` then declares that
+set for a scripted pre-combat main. A body the scored board did not list keeps the heuristic's verdict. The pin is
+dropped after a breakpoint re-solve or an abandoned script, and it does not apply when an extra combat runs first.
+The saved sources are pure surplus for main 2. This is a lockstep fix (the executor replays the search's
+decision), not a heuristic.
+* gi287 with the script: **T7 -> T6** (`atk-pin-changed=1`).
+* Held-out A/B, seed 1620001, one pooled batch, script ON both arms, pin 0 vs 1: FiveColour 3000, FiveColour 2HG
+  (d5 b40) 400, Anti-Lifegain 1500, Fungus 1500, Prevent Damage 500, Hinata 200, Bruna 200 (the decks whose
+  attack rules read untapped mana) -- **7,300 paired, 0 slower / 0 faster, units 1.000x**, 9 digests moved (44 real
+  declarations changed). Script-vs-engine on FiveColour (seed 1620001): without the pin 0 / 0 with 6 games' digests
+  moved; with it 0 / 0 with 1 moved, so the pin removes most of the script's play divergence.
+* gi287's own seed block (seed 1130001, FiveColour 600, play settings): engine -> script without the pin 1 slower
+  (gi287 6 -> 7) / 0 faster; engine -> script WITH the pin 0 / 0 and the job's aggregate digest identical to the
+  engine arm's (`61402fbdaa9ead00`): on these 600 games the pinned script plays exactly the engine's games.
+* Scenario `test/scenarios/fivecolour_script_attack_pin.json` (gi287's T5 board, `MTG_REAL_PAY_SCRIPT=1`): T6;
+  T7 with `MTG_REAL_PAY_ATTACK_PIN=0`. Unit test `test/unit/test_dork_atk_provider_hold.cpp` pins the float detail
+  (declared on the post-apply board as it stands, a floating {G} lets Bloom Tender be cast and Deathrite is held;
+  `RolloutCombatDeclaration` empties the pool and Deathrite swings) and kind 3's contest/release.
+
+**Fix 2, measured but NOT adopted -- `MTG_DORK_ATK_PROVIDER_HOLD` (heurarm `DORK_ATK_PROVIDER_HOLD`, DEFAULT
+OFF).** This answers the USER's question directly: it makes the searched dork attack contest an ARCHETYPE hold too.
+`DorkAtkContestedKind` returns kind 3 when a non-vigilant, untapped mana dork that would deal >= 1 damage is held
+by the provider's `ShouldAttackWith` (not by the tower or the aura-swap hold), on any board, collapsed main or not.
+The FSLineWin branch then evaluates the release (override 3, which releases only those dorks) beside the natural
+combat, and the executor pins the choice (`Plan::atk_dork_release = 3`). Kind 3 is checked last, so every verdict
+kinds 1 and 2 reach is unchanged. Ties go to the hold, because there the hold is the deck's stated policy (USER
+2026-08-09, *"Deathrite only very rarely wants to attack"*) and a provider may order options. It is inert on every
+deck but FiveColour.
+* FiveColour, seed 1620001, 3000 paired at play settings: **8 slower / 31 faster** (one of the faster is a no-win
+  -> T8), **units 1.35x**. All 8 slower games RECOVER at d8 b0 (`--depth 8 --budget-ms 0 --ignore-play-profile`,
+  both arms equal to the OFF arm's play-settings turn): gi284 5, gi298 4, gi406 4, gi713 5, gi1531 5, gi1539 6,
+  gi1697 5, gi2291 4. Net -22 turns over the games both arms win, plus gi947 (no win -> T8).
+* Not the gi287 fix: with it on, gi287 also wins on T6 with the script, but only because the line changes from T3
+  on. The scored-board hold at T5 is not contested, because Deathrite attacks on the search's board.
+* A trade-off (+35% FiveColour compute for 31:8), so it is the USER's call; it stays OFF until then.
+
 ### 13.3 The adoption call (USER)
 
 `MTG_PAY_REFINE` lands DEFAULT OFF, so default play is byte-identical (smoke 153/153, regression 246/246, 0

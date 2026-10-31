@@ -64246,7 +64246,11 @@ void TurnSolver::LayStagedCardsLast(GameState& state) { MergeStagedToHandEnd(sta
 // ONE combat phase (the body of SimulateCombat below). `additional`: an ADDITIONAL combat (Moraug, Fury of
 // Akoum) -- our creatures untap at its beginning (GameEngine::CombatPhase(additional), lockstep). Leaves the
 // phase and the main-2 head (PostCombatMain, the staged merge) to its caller.
-static void SimulateOneCombat(GameState& state, bool additional)
+// The rollout combat's steps BEFORE the declaration (the pool empties, ETB taps, the legend rule, the
+// beginning-of-combat attach, ...). One body for SimulateOneCombat and RolloutCombatDeclaration below, so a
+// caller asking "which attackers did the search's combat declare on this board" (ManaOracle's
+// MTG_REAL_PAY_ATTACK_PIN) reads the very board the declaration saw.
+static void CombatPreDeclare(GameState& state, bool additional)
 {
     // Mana empties when leaving the pre-combat main phase (CR 500.4): drop any reserve
     // floated this main phase so it cannot fund combat or the post-combat main. Mirrors
@@ -64277,6 +64281,18 @@ static void SimulateOneCombat(GameState& state, bool additional)
     // Mirrors GameEngine::CombatPhase (lockstep, ONE shared body); the human chooser inside is
     // nulled by RevealLogPause, so rollouts always take the provider's pick. Param-gated inert.
     FireBeginCombatAttach(state, active, /*live=*/true);
+}
+
+std::vector<int> RolloutCombatDeclaration(GameState& state)
+{
+    CombatPreDeclare(state, /*additional=*/false);
+    return DeclareAttackerIndices(state);
+}
+
+static void SimulateOneCombat(GameState& state, bool additional)
+{
+    CombatPreDeclare(state, additional);
+    const int active = state.active_player_index;
 
     // Eligible attacker indices BEFORE any token creation (push_back keeps indices stable).
     std::vector<int> atk_idx = DeclareAttackerIndices(state);
@@ -91848,14 +91864,18 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         // narrow searched remainder and costs one extra combat+tail only where it fires. The
         // chosen variant rides the committed line (Plan::atk_dork_release -> executor pin).
         // 0 = not contested; 1 = greedy holds -> search the RELEASE; 2 = greedy attacks with a
-        // mana dork the deferred main would spend -> search the HOLD (MTG_DORK_ATK_HOLD_DIR).
+        // mana dork the deferred main would spend -> search the HOLD (MTG_DORK_ATK_HOLD_DIR);
+        // 3 = an archetype's ShouldAttackWith holds a damage dork -> search its RELEASE
+        // (MTG_DORK_ATK_PROVIDER_HOLD).
         const int  dork_kind      = DorkAtkContestedKind(s);
         const bool dork_contested = (dork_kind != 0);
         // The variant to simulate, and what the COMMITTED plan records so the executor replays it:
         // 0 = natural (no override -- what the default branch below simulated), 1 = forced release,
         // 2 = forced hold. The default branch is always the natural one, hence def_rec == 0.
-        const int  alt_override   = (dork_kind == 2) ? 0 : 1;
-        const int  alt_rec        = (dork_kind == 2) ? 2 : 1;
+        // 3 = an ARCHETYPE hold keeps a damage dork home (MTG_DORK_ATK_PROVIDER_HOLD) -> search
+        // its release under override 3, recorded as 3 so the executor pins the same variant.
+        const int  alt_override   = (dork_kind == 2) ? 0 : (dork_kind == 3 ? 3 : 1);
+        const int  alt_rec        = (dork_kind == 2) ? 2 : (dork_kind == 3 ? 3 : 1);
         // DIG TRACE (MTG_DORK_ATK_TRACE, default off): per-node contested verdict + variant
         // tails, the branch's own [fsw]-style instrument.
         static const bool s_dat = EnvOn("MTG_DORK_ATK_TRACE");
@@ -91945,7 +91965,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             }
         }
         if (fb_fold_free) { ConsumeAt(budget, unitsite::kFsPre); }   // the deferred unit (not folded)
-        int chose_release = -1;   // -1 not contested / 0 natural / 1 release / 2 hold
+        int chose_release = -1;   // -1 not contested / 0 natural / 1 release / 2 hold / 3 provider-hold release
         TurnSolver::SearchLine tail{ max_turns + 1, {} };
         if (edge_tail_elide)
         {
@@ -92016,8 +92036,13 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             // untaps next turn), while a released swing is damage banked past the horizon. So when
             // the alternative IS the release (kind 1) it takes ties (<=), and when the alternative
             // is the HOLD (kind 2) it must be STRICTLY better (<) to displace the attack.
-            const bool alt_wins = (dork_kind == 2) ? (tail_rel.win_turn <  tail.win_turn)
-                                                   : (tail_rel.win_turn <= tail.win_turn);
+            // KIND 3 (an archetype's hold) is STRICT too: there the hold is the deck provider's
+            // stated policy (FiveColour, USER 2026-08-09: "Deathrite only very rarely wants to
+            // attack"), and a provider may ORDER options -- so its verdict is the tie default and the
+            // release has to be measurably better to displace it.
+            const bool alt_wins = (dork_kind == 2 || dork_kind == 3)
+                                      ? (tail_rel.win_turn <  tail.win_turn)
+                                      : (tail_rel.win_turn <= tail.win_turn);
             if (alt_wins)
             { tail = std::move(tail_rel); chose_release = alt_rec; }
         }

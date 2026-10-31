@@ -339,6 +339,7 @@ add_executable(mtg-test
     test/unit/test_ramp_filter_c_feed.cpp
     test/unit/test_land_aura_order_hold.cpp
     test/unit/test_domain_open_exact.cpp
+    test/unit/test_dork_atk_provider_hold.cpp
     test/unit/test_kicker_additional_cost.cpp
     test/unit/test_keep_table.cpp
     test/unit/test_angels_tribal.cpp

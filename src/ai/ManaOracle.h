@@ -29,6 +29,7 @@
 #include "../core/ManaPool.h"
 #include "TurnSolver.h"
 
+#include <atomic>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -209,10 +210,18 @@ namespace manaoracle
     // draws, reveals or casts a card the plan did not name (its continuation is searched on cards no payment could
     // have known), a combo route, an armed damage board. `what` (optional): why. Bounded by MTG_REAL_PAY_NODES
     // applies (default 600).
+    // `attack_pin` (optional, MTG_REAL_PAY_ATTACK_PIN): when a script is returned for a PRE-COMBAT main, the card
+    // numbers of our creatures on the engine's apply board, +n = DECLARED as an attacker there, -n = not -- the
+    // combat the search scored this line with. The script leaves a superset of sources untapped, and an attack heuristic that reads untapped mana
+    // (FiveColourProvider::ShouldAttackWith's hold) can re-decide the combat on that board; the executor replays
+    // this set instead (AIEngine::DeclareAttackers). Left empty with `*attack_pin_ok` false when not computable.
     bool PlanPaymentScript(const GameState& state, const TurnSolver::Plan& plan, bool pre,
-                           std::vector<PayOption>& script, std::string* what = nullptr);
+                           std::vector<PayOption>& script, std::string* what = nullptr,
+                           std::vector<int>* attack_pin = nullptr, bool* attack_pin_ok = nullptr);
     // Serve `script` on the REAL board `s` for the scope's life, as a SAFE hook (Hook::safe): the executor's
     // outermost payments on `s` take its entries in order while they fit, the engine's own payment otherwise.
+    // Real declarations the scored-combat pin changed (MTG_REAL_PAY_ATTACK_PIN; printed with MTG_PAY_REFINE_STATS).
+    extern std::atomic<long long> g_real_pay_atk_pin_changed;
     struct RealPayScope
     {
         Hook  h;

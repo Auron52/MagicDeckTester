@@ -4882,6 +4882,25 @@ static bool HoldForCombatAuraSwap(const GameState& s, const Permanent& p)
     return false;   // holding every one still cannot pay: attack normally
 }
 
+// MTG_DORK_ATK_PROVIDER_HOLD (EngineFlags.h): the SHAPE of a dork whose archetype hold the search may
+// contest -- an untapped, non-vigilant mana dork that can tap now and would deal >= 1 combat damage. The
+// tower (HoldManaSourceForCollapsedMain) only ever holds 0-power dorks, so a damage dork that stays home
+// is held by the provider's ShouldAttackWith (FiveColour: Deathrite / Bloom Tender whenever any hand card
+// is castable) or by the aura-swap hold; the callers exclude the latter. One reader for the contested
+// test (DorkAtkContestedKind) and the release it searches (AttackWith under override 3), so the variant
+// the branch prices is exactly the one the trigger saw.
+static bool ProviderHeldDorkReleasable(const GameState& s, const Permanent& p)
+{
+    if (!DorkAtkSearchEnabled() || !DorkAtkProviderHoldEnabled())   { return false; }
+    if (p.tapped || !p.card.IsCreature())                          { return false; }
+    if (p.controller_index != s.active_player_index)               { return false; }
+    if (p.card.HasKeyword(Keyword::Vigilance))                     { return false; }
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+    if (!d || d->tmpl != CardTemplate::ManaDork)                   { return false; }
+    if (!CanTapNow(p, s.battlefield))                              { return false; }
+    return AttackPowerOf(s, p) >= 1;
+}
+
 bool DecisionProvider::AttackWith(const GameState& s, const Permanent& attacker) const
 {
     // "This creature attacks each combat if able" (Deathbellow Raider, CR 508.1a). A RESTRICTION,
@@ -4896,6 +4915,10 @@ bool DecisionProvider::AttackWith(const GameState& s, const Permanent& attacker)
     }
     if (HoldManaSourceForCollapsedMain(s, attacker)) { return false; }
     if (HoldForCombatAuraSwap(s, attacker)) { return false; }
+    // Searched release of an ARCHETYPE-held damage dork (override 3, MTG_DORK_ATK_PROVIDER_HOLD): the
+    // FSLineWin branch's alternative combat and the executor's pin of it. Placed after the two engine
+    // holds so a tower victim (0-power, never released by override 3) and an aura-swap hold stand.
+    if (g_dork_atk_override == 3 && ProviderHeldDorkReleasable(s, attacker)) { return true; }
     return ShouldAttackWith(s, attacker);
 }
 
@@ -4952,16 +4975,30 @@ static bool Main2SpendsCreatureMana(const GameState& s, int active)
 int DorkAtkContestedKind(const GameState& s)
 {
     if (!DorkAtkSearchEnabled())             { return 0; }
-    if (!TurnSolver::CollapsedMainActive(s)) { return 0; }
+    // The archetype-hold release (kind 3, MTG_DORK_ATK_PROVIDER_HOLD) does not need the collapsed
+    // main: a provider's ShouldAttackWith holds a dork for its mana on any board, and the deferred /
+    // second main spends it either way. Everything else below is the collapsed-main tower's question.
+    const bool collapsed = TurnSolver::CollapsedMainActive(s);
+    const bool prov_hold = DorkAtkProviderHoldEnabled();
+    if (!collapsed && !prov_hold)            { return 0; }
     const DecisionProvider& prov = ResolveProvider(s);
     const int active = s.active_player_index;
     int  natural_attackers = 0;
     int  held_power        = 0;   // released swing power of the held dorks (printed/effective)
     int  held_n            = 0;
     int  atk_dorks         = 0;   // mana dorks the greedy WANTS to swing (the hold direction)
+    int  prov_held         = 0;   // damage dorks an ARCHETYPE hold keeps home (kind 3)
     for (const Permanent& p : s.battlefield)
     {
         if (p.controller_index != active)              { continue; }
+        // Off the collapsed main only kind 3 can fire, and only a mana dork can be its subject: skip
+        // everything else before the eligibility scan (this path runs on every deck's FSLineWin plans).
+        if (!collapsed)
+        {
+            if (p.tapped || !p.card.IsCreature())      { continue; }
+            const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+            if (!pd || pd->tmpl != CardTemplate::ManaDork) { continue; }
+        }
         if (!CanAttackFull(p, s.battlefield, active))  { continue; }
         if (prov.AttackWith(s, p))
         {
@@ -4981,9 +5018,15 @@ int DorkAtkContestedKind(const GameState& s)
             continue;
         }
         // Not attacking naturally: held by the mana hold, or declined by ShouldAttackWith.
-        // Only the mana hold's victims are contested -- a ShouldAttackWith decline (0-power
-        // dork NOT wanted even with mana free) stays greedy.
-        if (!HoldManaSourceForCollapsedMain(s, p))     { continue; }
+        // The mana hold's victims are contested below. A ShouldAttackWith decline of a 0-power
+        // dork (NOT wanted even with mana free) stays greedy; a decline of a DAMAGE dork (an
+        // archetype holding it for its mana -- FiveColour's Deathrite) is contested as kind 3.
+        if (!HoldManaSourceForCollapsedMain(s, p))
+        {
+            if (prov_hold && ProviderHeldDorkReleasable(s, p) && !HoldForCombatAuraSwap(s, p))
+            { ++prov_held; }
+            continue;
+        }
         if (!prov.ShouldAttackWith(s, p))              { continue; }
         ++held_n;
         held_power += p.EffectivePower();
@@ -5001,7 +5044,11 @@ int DorkAtkContestedKind(const GameState& s)
     // HOLD DIRECTION: only worth a branch when the deferred main can actually spend the mana the
     // swing would consume -- that gate is what keeps this from contesting every attacking dork
     // (USER's standing perf bar: "to avoid this becoming much slower").
-    if (atk_dorks > 0 && Main2SpendsCreatureMana(s, active)) { return 2; }
+    if (collapsed && atk_dorks > 0 && Main2SpendsCreatureMana(s, active)) { return 2; }
+    // ARCHETYPE-HOLD RELEASE (MTG_DORK_ATK_PROVIDER_HOLD): checked LAST, so every verdict the two
+    // directions above reach is unchanged and this only turns a former 0 into a searched branch. A
+    // held damage dork's release deals >= 1 by construction (ProviderHeldDorkReleasable).
+    if (prov_held > 0) { return 3; }
     return 0;
 }
 
