@@ -4,6 +4,14 @@ Status: primary complete; follow-up measurements in progress, 2026-10-31. This i
 `cyclone-completion-checkpoint.md`; it does not replace the historical analysis ledger.
 No mulligan or value-leaf generation has started during completion.
 
+The implementation has since been integrated with main `138d2dbea` on
+`cyclone-landing138`, code `a515040de`, source
+`5e96106ee481c9a93859b10ffe5b373b1b2d4f6f`. Linux CI passes; Windows and fresh
+local integration gates remain pending. This merge adds earliest-turn propagation
+to local memo-hit provenance and restores searched-M2 cached latent dependencies.
+Neither changes the shared-budget policy. The measurements below remain labelled
+V5; fresh integrated-source memory, regression and quiet timing are still owed.
+
 ## Implementation and source
 
 All original implementation branches are integrated in `cyclone-current`, based on
@@ -103,6 +111,74 @@ QC1 and nested-exhaust measurements also use PB/NOM2 true. Payment-split
 measurements isolate the split under live PB/NOM2 false. Raw and blinded cast
 arms share PB true and NOM2 false. All have EXTRA and cantrip ordering enabled.
 These contexts are part of each result, not interchangeable shipping claims.
+
+## Completed optional comparisons on V5
+
+Delta is candidate minus its stated control; negative is earlier. Unwon games
+score 9. These are measurements, not adoption or rejection decisions.
+
+| Candidate / control | d3 delta | Play delta | Unit ratios d3 / play |
+|---|---:|---:|---:|
+| PB / live CYCLER | -0.0675 | +0.0050 | 0.238 / 0.233 |
+| KEEP+Myriad / PB+CYCLER | -0.0125 | -0.0350 | 1.014 / 1.014 |
+| KEEP without Myriad / PB+CYCLER | -0.0100 | -0.0300 | 1.014 / 1.014 |
+| SITU / historical base | +0.0100 | +0.0250 | 0.894 / 0.859 |
+| SEED / historical base | -0.0375 | +0.0050 | 0.954 / 0.944 |
+| Ponder / historical base | -0.0450 | +0.0250 | 0.917 / 0.912 |
+| Ponder added to PB+CYCLER | -0.0275 | +0.0200 | 0.808 / 0.852 |
+| Payment split / live split-off | +0.0550 | +0.0500 | 1.157 / 1.149 |
+| Nested exhaust / package exhaust-off | 0.0000 | 0.0000 | 0.941 / 0.958 |
+| Leaf0 / package leaf1 | -0.1000 | -0.0833 | 0.544 / 0.650 |
+| First1/rest0 / package leaf1 | -0.0500 | +0.0667 | 1.153 / 1.397 |
+
+Prunes have 400 d3 / 200 play pairs. Payment and nested have 200 / 100; leaf
+comparisons have 100 / 60. Nested play has one faster and one slower game despite
+its zero net. Every result retains its faster/slower trace inventory. Other than
+the expressly authorized PB condition, these settings remain user-owned.
+
+All 63 slower SITU/SEED cases have recorded-prefix/source classifications: 12
+direct SITU plan exclusions, 42 retained choices/dispositions and nine changed
+London bottoms. The direct exclusions comprise five useful/no-shuffle KEEP-only
+cases, six unavailable-Cyclone/non-Eldrazi-only cases and one ready/SETUP-only
+case. This locates the first divergence; it does not prove full continuation
+causality. Four representative paired d8 probes and the symmetric four-salt
+ensemble are running. No wholesale recovery of all optional candidates is claimed.
+
+SEED's same-score digest audit inspected all 209 changed pairs: 122 have identical
+recorded actions/boards/opening/mulligans/results after only the Curator scry
+source-label alias; 87 retain other differences. Raw digests are preserved.
+Recorded traces do not expose every intermediate hand order or hidden state.
+
+## Why the cast draft changes few games
+
+These comparisons use PB ON / NOM2 OFF; the ordinary and blinded worlds are
+separate. Each has 200 d3 / 100 play pairs.
+
+| Variant / generic order | Ordinary d3 / play delta | Blind d3 / play delta |
+|---|---:|---:|
+| Draft CO | +0.030 / -0.010 | +0.055 / +0.030 |
+| CO+cycle order | +0.030 / -0.010 | +0.060 / +0.050 |
+| Cyclers before draws (REV) | +0.010 / 0.000 | +0.005 / 0.000 |
+| Cyclers after draws, before Song (MIDDLE) | +0.010 / 0.000 | +0.015 / 0.000 |
+| DRAW opt-in | +0.070 / -0.020 | -0.070 / +0.080 |
+
+The draft leaves draw-containing paid-spell sets search-ordered unless DRAW is
+enabled. In the 300 generic-order played traces, 220 games have multi-paid-cast
+draw frames, only six have Song plus a hard-cast cycler in the same frame, and
+none hard-casts an Eldrazi. That limits visible opportunities for the cycler
+tier; this census does not cover every candidate or horizon rollout. Cycle order
+alone changes no win round across the 300 ordinary pairs. REV and MIDDLE are
+win-round and digest-identical there; their small blind difference is inconclusive.
+DRAW is a separate experiment; MIDDLE+DRAW together was not measured.
+
+The shared ordinary REV/MIDDLE loss, GI8 T4→T6, starts in London bottoming:
+generic bottoms Emrakul, all five drafts bottom Myriad, then run short of lands.
+Normal bottoming is part of the whole policy. The existing payoff-tier lever is
+being tested in one new game against its exact already-completed control; its
+role remains a hypothesis. The owed GI110 comparison now has generic/REV/MIDDLE
+T4 versus CO/cycle/DRAW T5 after a different T1 Ponder disposition. Blind GI94
+is DRAW T4 versus the other variants unwon, first differing at T3 development.
+These observations explain changes; they do not establish dominance.
 
 Re-evaluation and linear landing follow completed checks. Add Cyclone to the
 regression matrix only if the actual shipping configuration meets the <=3x
