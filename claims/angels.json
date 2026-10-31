@@ -1,24 +1,19 @@
 {
  "blobs": {
-  "mulligan": "43abe76ffe72cfca7816ed53b15137592e10cbb2",
+  "mulligan": "fb8b9cc7035c1be4389ed15320219c2a0c3548b3",
   "valueleaf": "em:2038500e481e3f714a03"
  },
  "deck": "angels",
- "detail": "mulligan: ADOPTED (new-vs-old 0.0 t, cost 1.000x (se 0.000, 96 seeds), recipe complete)",
- "finished": "2026-10-28T21:09:34Z",
- "frozen": "78694cdf93629aa41d9c9cdc8fec57a91ef9946a",
- "heartbeat": "2026-10-28T20:57:50Z",
+ "frozen": "c18b5e99fe330f78207c39c7027ae5489928fc76",
+ "heartbeat": "2026-10-31T16:18:28Z",
  "host": "58199181d02e",
- "landed": "6199dc396b7c6c304dad2e30005d7e64832e7eee",
- "landed_at": "2026-10-28T21:18:04Z",
- "result_branch": "artifact-refresh/angels-20261028-2109",
- "run_id": "angels-artifact-queue-tool-647f24-20261028T201937",
- "score": 0.0,
- "stage": "mulligan",
+ "run_id": "angels-artifact-queue-tool-647f24-20261031T161828",
+ "score": 0.0055,
+ "stage": "valueleaf",
  "stages": [
-  "mulligan"
+  "valueleaf"
  ],
- "started": "2026-10-28T20:19:37Z",
- "state": "done",
+ "started": "2026-10-31T16:18:28Z",
+ "state": "running",
  "worker": "artifact-queue-tool-647f24"
 }
