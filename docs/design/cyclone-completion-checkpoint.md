@@ -4,7 +4,7 @@ User scope: finish outstanding changes, re-evaluate, and land/push to the latest
 `phase-1-2-deck-analyzer` with normal tests before mulligan/value generation.
 No changes target `main`. Normal throughput uses all 32 available logical CPUs.
 
-## Operative status — follow-up validation, 2026-10-31 13:30 UTC
+## Operative status — follow-up validation, 2026-10-31 13:49 UTC
 
 Shared branch has advanced to `dfcb18cb90ae65aeb4968787550a10b1fb9bc55e` with
 four artifact-only commits for Prevent Damage and Slivers. Their17 files,
@@ -44,18 +44,46 @@ Receipt `build/scratch/cyclone-finish/landing905-review/followup-final-pgo.json`
 Release SHA `aca52a788964b4b80ab321477595a348221652a749c27c936f57b93362e0e56d`.
 Fresh3game Release/PGO parity root47704 DONE0, requested32workers, full physical
 traces/digests/units exact, T4/T5/T4, FD/NONCONV0. No rebuild is needed for data-
-only upstream changes. Full normal PGO regression root22426 is RUNNING32 against
-latestdfcb artifacts/GT with automatic strict709 reference replay/scenarios.
-Evidence `landing905-review/followup-normal-regression/`. No competing heavy run.
+only upstream changes. Full normal PGO regression root22426 CLOSEDinitialrc1:
+246PASS/7FAIL/0NEW,253jobs,72,413/72,414games. All40,000d0 outcomes are exact;
+searched4ties/3one-turnslowers. Strict709passes266ok/442repaired/1beaten, every
+failure category0; both suboptimal games are beaten. The existing Melira bounded
+omission and all3FDtuples/outcomes/digests/units match the accepted prior context;
+NONCONV0. Fresh89b physical equality with oldFD traces is not claimed. Evidence:
+`landing905-review/followup-normal-regression/{strict-complete-audit,closure-fd-review.json}`.
+Seven changed games remain unaccepted.
 
-New authoritative lean packet
-`build/scratch/cyclone-finish/v7-905-lean/prepared-89b146d-final/` is sealed with
-actualPGO SHA; stages not launched yet: memory1(168), memory32(468), tiny32(168),
-unbounded32(168), VERIFY24, quietcost855. HistoricalC2 tiny proof remains FAILED
-and immutable. Fresh actual15-Claude packet
-`build/scratch/cyclone-finish/claude-sweep-89b146d/` needs its fresh32-worker AI
-benchmark, seal and explicit root launch grant. Its15 serial clients may overlap
-only the explicit one-worker memory diagnostic; all other throughput uses32.
+Lean packet `build/scratch/cyclone-finish/v7-905-lean/prepared-89b146d-final/`
+is sealed with actualPGO SHA. Newmemory32 root16862 DONE0/all468games; tiny32
+root35625 DONE0/all168. Early comparator15864 DONE0: all168core wins/digests/units
+EXACT, actual20MiB pressure positive, FD/NONCONV/FSL clean. This is a preliminary
+pair proof, NOT completed four-context invariance. Evidence:
+`landing905-review/memory32-tiny32-early89b/preliminary-memory32-tiny32.json`.
+HistoricalC2 tiny failure is preserved unchanged. Memory1, unbounded32, VERIFY24
+and quietcost855 are unrun on89b.
+
+Root70502 is RUNNING guarded combined controls at
+`landing905-review/followup89-combined-controls/`: three sequential native32-worker
+pools, baselineC2normal10, current89bnormal10+9selectedrecoveries, baselineC2with
+plan memos disabled3. Those32games cover all7regressionchanges plus3smoketies
+without duplicating the older separate smoke packet (still unrun). The3slowers
+are Minotaur3171/GI168, Hinata2HG2023/GI21, MidrangeBurn2HG2016/GI14. Retain exact
+seed/GI, actuald5/profile/life and2HGheads; selected current recoveries are4x/16x
+budget andd8/b0. Full traces, units and cache census will be preserved. No
+reproduction, recovery, legality or uncached-equality conclusion is assumed.
+Independent reviewers have read the actual card definitions and await outputs.
+No competing engine/build should launch while this controller runs.
+
+Fresh actual15-Claude packet `build/scratch/cyclone-finish/claude-sweep-89b146d/`
+still needs fresh32-worker AI benchmark, seal and explicit root launch grant.
+Its15 serial clients may overlap only the explicit one-worker memory diagnostic;
+all other throughput uses32. Candidate CI41205133080/41205848626 are watched in
+root88458/59417, Linux green on first; Windows/parity still pending. No whole-smoke
+repeat is selected: after three tied smoke traces close, filtered acceptance
+bruna/edf/landfall retains newPD/Slivers GT, then standard filtered artifact smoke
+`run_artifact_smoke_89b.py --run --prior-smoke-review-closed` measures8cells/2600games.
+Original fullsmoke320files are preserved under followup-release-smoke/measured-smoke-files.
+
 Close all selected source-bound checks, flags and changed-game reviews, then one
 quiet855 same-run cost measurement. Publish all follow-up/evidence to latest
 phase-1-2 branch, preserving user files/references. Admit Cyclone to all3tiers
