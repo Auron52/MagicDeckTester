@@ -12,7 +12,12 @@ Active integration is `cyclone-landing905`, worktree
 clean source tree is `c2c6d4a03a5c1df9cf72c55bd29940aacff41efc`. The change
 has NOT yet landed on `phase-1-2-deck-analyzer`. Full units: 2,415 cases /
 3,567,944 assertions PASS. Root owns active fresh PGO+LTO build session64102
-at 32 workers; no PGO hash is asserted before completion. Superseded Landing138
+at 32 workers; no PGO hash is asserted before completion. Fresh source CI41193237355
+PASS on Linux, Windows and cross-platform determinism parity (rootwatch81399closed0).
+Local frontend line-build and reference-backup checks PASS. Reference safety scan
+PASS across all 33 worktrees; repeat before session close. Normal smoke/regression
+will run first after PGO to prioritize the shared-branch landing. Cold keep-table
+preparation is still progressing before the training worker pool starts. Superseded Landing138
 PGO was stopped by root; all old source and measurements remain preserved.
 
 The six upstream commits since138 add EDF energy/payment shapes (four default
