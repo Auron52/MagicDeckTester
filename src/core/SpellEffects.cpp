@@ -5168,6 +5168,18 @@ static bool TapForCostBacktrackSolve(GameState& state, const ManaCost& cost, boo
 //     still correct; it just is not memoised.
 namespace {
 inline bool ManaCacheEnabled() { static const bool v = EnvOn("MTG_MANA_CACHE", true); return v; }
+// THE RAMP-FEED SIDE OUTPUT ON A HIT (MTG_MC_FEED_ALT, DEFAULT ON; =0 is the legacy hit, which drops it).
+// MTG_RAMP_FEED_BRANCH runs the DFS twice: a first pass with each ramp filter fed by the fixed pick, and --
+// only when that pass FAILS having met a fixed pick with an alternative (g_bt_ramp_feed_alt, set inside the
+// DFS) -- a widened pass. The first pass's NEGATIVE was cached, but a hit on it returned before any DFS ran,
+// so the flag stayed clear and the widened pass never ran: the same payment PAID on a miss and FAILED on
+// every later hit of the same board. BreachingDragonstorm s2023 gi21 d0 T4: Sakashima's Protege {4}{U}{U}
+// off {U}{U}{R}{R} floating + Mossfire Valley + Ferrous Lake pays only through the widened pass (one {R}
+// into each filter); the executor's own payment missed, paid, and won T4. Under MTG_REAL_PAY_SCRIPT the
+// payment script's probe (PlanPaymentScript's apply of the same plan on a copy) solved that board first,
+// so the executor's payment was a HIT, failed, and the game cast nothing again (unwon). The search had the
+// same hole on every repeated board. A hit now sets the flag the miss would have set.
+inline bool McFeedAltOn() { static const bool v = EnvOn("MTG_MC_FEED_ALT", true); return v; }
 // EVERY source is replayable (2026-08-14). The store gate used to reject any solution that tapped a
 // storage, drip or Deathrite source, on the grounds that a tap-set alone cannot reproduce their side
 // effects. That threw away half the work on a deck that plays one: 49.6% of FiveColour's cache misses
@@ -5246,6 +5258,11 @@ struct ManaCacheEntry
                                            // the entry cannot know which MODE each tap took, and an
                                            // unspent replay would make the Hub an unmetered rainbow
                                            // source (the exact hole its card model warns about)
+    // A NEGATIVE first-pass solve that met a ramp filter's fixed feed pick with an alternative
+    // (g_bt_ramp_feed_alt). That flag is the solve's one SIDE OUTPUT -- it is what tells the public
+    // entry (TapForCostBacktrack) to run the widened second pass -- so a hit must replay it exactly as it
+    // replays the taps. See McFeedAltOn.
+    bool                      feed_alt = false;
 };
 inline thread_local std::unordered_map<std::uint64_t, ManaCacheEntry> g_mana_cache;
 // PER-THREAD BYTE CAP (2026-10-17, Galadriel value-leaf phase C RSS abort). The 500,000-entry bound
@@ -6021,6 +6038,9 @@ static void McVerifyHit(const GameState& state, const ManaCost& cost, bool for_c
 {
     GameState vs = state;
     const bool saved_crack = g_paysac_cracked;
+    // ...and the ramp-feed side output (McFeedAltOn): the fresh solve raises it for itself, compared below.
+    const bool saved_alt = g_bt_ramp_feed_alt;
+    g_bt_ramp_feed_alt = false;
     TapBacktrackMemo vmemo;
     ManaPool vleft, vfull;
     const bool vok = TapForCostBacktrackSolve(vs, cost, for_creature, floating, rp_colors,
@@ -6029,8 +6049,12 @@ static void McVerifyHit(const GameState& state, const ManaCost& cost, bool for_c
                                               untapped_max, reserved_mask,
                                               out_full_pool ? &vfull : nullptr, src_cands);
     g_paysac_cracked = saved_crack;
+    const bool valt = g_bt_ramp_feed_alt;
+    g_bt_ramp_feed_alt = saved_alt;
     g_mcv_checked.fetch_add(1, std::memory_order_relaxed);
     bool same = (vok == e.payable);
+    // A negative whose fresh solve met a ramp-feed alternative must replay that flag (the widened pass hangs on it).
+    if (same && !vok && !g_bt_ramp_feed_branch && valt != (e.feed_alt && McFeedAltOn())) { same = false; }
     if (same && vok)
     {
         if (out_full_pool && !McPoolEq(vfull, e.produced)) { same = false; }
@@ -6154,7 +6178,11 @@ static bool TapForCostBacktrackTop(GameState& state, const ManaCost& cost,
                 McVerifyHit(state, cost, for_creature, floating, rp_colors, fail_memo, out_leftover,
                             tapped_mask, untapped_max, reserved_mask, out_full_pool, src_cands, e);
             }
-            if (!e.payable) { return false; }
+            if (!e.payable)
+            {
+                if (e.feed_alt && !g_bt_ramp_feed_branch && McFeedAltOn()) { g_bt_ramp_feed_alt = true; }
+                return false;
+            }
             const int hit_active = state.active_player_index;
             for (const ManaCacheTap& t : e.taps)
             {
@@ -6266,6 +6294,10 @@ static bool TapForCostBacktrackTop(GameState& state, const ManaCost& cost,
     }
 
     // ---- Run the real solve (preserving the MTG_TAP_STATS outcome accounting) ----
+    // The ramp-feed flag THIS solve raises (McFeedAltOn), for the store: cleared across the solve and
+    // OR-ed back, so the caller's view of g_bt_ramp_feed_alt is exactly what it was without the split.
+    const bool mc_alt_outer = g_bt_ramp_feed_alt;
+    if (mc_active) { g_bt_ramp_feed_alt = false; }
     bool ok;
     if (!tapstats::Enabled())
     {
@@ -6317,6 +6349,9 @@ static bool TapForCostBacktrackTop(GameState& state, const ManaCost& cost,
         (mc_active ? tapstats::g_mc_nodes_miss : tapstats::g_mc_nodes_skip)
             .fetch_add(dn, std::memory_order_relaxed);
     }
+
+    const bool mc_alt_here = g_bt_ramp_feed_alt;
+    if (mc_active) { g_bt_ramp_feed_alt = mc_alt_outer || mc_alt_here; }
 
     // MTG_TAP_TRIM (A/B lever, default OFF): release any creature this solve tapped whose WHOLE
     // contribution still sits unspent in the leftover pool -- the payment provably did not need
@@ -6397,6 +6432,7 @@ static bool TapForCostBacktrackTop(GameState& state, const ManaCost& cost,
         if (g_mana_cache.size() > 500000) { g_mana_cache.clear(); g_mana_cache_bytes = 0; }   // bound cross-rollout growth
         ManaCacheEntry e; e.verify = mk2; e.payable = ok; e.drip_life = 0; e.self_life = 0;
         e.energy_spent = 0;
+        e.feed_alt = !ok && mc_alt_here;
         bool storable = true;
         if (ok)
         {

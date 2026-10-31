@@ -1,0 +1,74 @@
+{
+  "deck": "decks/BreachingDragonstorm/BreachingDragonstorm.cod",
+  "profile": "decks/BreachingDragonstorm/BreachingDragonstorm.profile.json",
+  "turn": 4,
+  "on_the_play": false,
+  "resume_at": "main1",
+  "max_turns": 5,
+  "active_life": 20,
+  "opponent_life": 20,
+  "battlefield": [
+    {
+      "name": "Mossfire Valley",
+      "controller": 0,
+      "tapped": false,
+      "sick": false
+    },
+    {
+      "name": "Dwarven Ruins",
+      "controller": 0,
+      "tapped": false,
+      "sick": false
+    },
+    {
+      "name": "Svyelunite Temple",
+      "controller": 0,
+      "tapped": false,
+      "sick": false
+    }
+  ],
+  "hand": [
+    "Breaching Dragonstorm",
+    "Breaching Dragonstorm",
+    "Creative Technique",
+    "Sakashima's Protege",
+    "Ferrous Lake"
+  ],
+  "library_top": [
+    "Svyelunite Temple",
+    "Call Forth the Tempest",
+    "Boarding Party",
+    "Svyelunite Temple",
+    "Saprazzan Skerry",
+    "Remote Farm",
+    "Mountain",
+    "Peat Bog",
+    "Mountain",
+    "Creative Technique",
+    "Mossfire Valley",
+    "Maelstrom Wanderer",
+    "Mountain",
+    "Annoyed Altisaur",
+    "Mossfire Valley",
+    "Peat Bog",
+    "Ferrous Lake",
+    "Ferrous Lake",
+    "Mountain",
+    "Remote Farm",
+    "Annoyed Altisaur",
+    "Peat Bog",
+    "Breaching Dragonstorm",
+    "Maelstrom Wanderer",
+    "Saprazzan Skerry",
+    "Creative Technique"
+  ],
+  "library_filler": "Boarding Party",
+  "library_size": 40,
+  "depth": 0,
+  "budget_ms": 0,
+  "env": {
+    "MTG_REAL_PAY_SCRIPT": "1"
+  },
+  "expect_win_turn": 4,
+  "_comment": "MTG_MC_FEED_ALT (docs/design/realpay-safe-status.md). BreachingDragonstorm s2023 gi21 d0 T4: Sakashima's Protege {4}{U}{U} off {U}{U}{R}{R} (the two sac lands' cracks) + Mossfire Valley + Ferrous Lake pays only through the backtracker's widened ramp-feed pass. Under MTG_REAL_PAY_SCRIPT the payment script's probe solves the same board first; the executor's payment then HIT the cached first-pass negative, which did not replay the flag that starts the widened pass, so Protege was never cast (unwon). With MTG_MC_FEED_ALT=0 this fixture does not win."
+}

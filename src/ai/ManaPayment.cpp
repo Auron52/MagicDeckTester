@@ -7342,6 +7342,7 @@ struct PayRefineSnap
         gy = s.players[a].graveyard.size();
         ledger = s.pay_ledger;
     }
+    void RestoreAvailable(ManaPool* available) const { if (available != nullptr) { *available = av; } }
     // In place, field by field (the size invariant holds: the caller checked the battlefield did not change size).
     void Restore(GameState& s, ManaPool* available) const
     {
@@ -7505,7 +7506,7 @@ bool manaoracle::ScriptedPay(GameState& state, const ManaCost& cost_in, bool for
                              ManaPool* available, bool honor_legacy_cco)
 {
     Hook& h = *t_hook;
-    if (h.ended) { return false; }
+    if (h.ended && !h.safe) { return false; }   // (a SAFE hook is never ended: it gives up instead -- see below)
     // SAFE (RealPayScope, the real board -- ManaOracle.h): the script's entry only while it fits; else the board
     // is put back and the engine pays, this time and every time after.
     if (h.safe)
@@ -7520,15 +7521,32 @@ bool manaoracle::ScriptedPay(GameState& state, const ManaCost& cost_in, bool for
             t_hook = saved;
             return ok;
         };
+        static const bool s_rpt = EnvOn("MTG_REAL_PAY_TRACE");   // DIG TRACE (default off)
+        if (s_rpt)
+        {
+            std::fprintf(stderr, "[rp-pay] T%d bill=%s next=%zu/%zu abandoned=%d ended=%d entry=%s eng=%d fail=%d bf=%zu\n",
+                         state.turn_number, cost_in.ToString().c_str(), h.next, h.script.size(), h.abandoned ? 1 : 0,
+                         h.ended ? 1 : 0, h.next < h.script.size() ? h.script[h.next].what.c_str() : "-",
+                         h.next < h.script.size() && h.script[h.next].engine ? 1 : 0,
+                         h.next < h.script.size() && h.script[h.next].fail ? 1 : 0, state.battlefield.size());
+        }
         if (h.abandoned || h.next >= h.script.size()) { ++h.next; return engine_pay(); }
         const PayOption& opt = h.script[h.next++];
         h.pay_steps.push_back(t_seq_step);
         if (opt.engine) { return engine_pay(); }
         if (opt.fail || opt.what != cost_in.ToString()) { h.abandoned = true; return engine_pay(); }
+        // The board as this payment found it, to put back if the entry does not pay. A scripted tap may
+        // SACRIFICE (a sac land's crack, a Treasure: ApplyHumanPreTap's SacAction route), which is a zone
+        // change PayRefineSnap's field restore cannot undo -- it once demanded an unchanged battlefield, so a
+        // sacrificing entry was refused AFTER its sacrifice and the engine paid on the mutilated board (lands
+        // gone, their mana floating). So the whole board is copied (real play only, one copy per scripted
+        // payment): the field restore when nothing left the battlefield, the copy when something did. A
+        // sacrificing entry is used like any other -- the replay on the real board verified it (PlanPaymentScript).
         PayRefineSnap before;
         before.Take(state, available);
         const std::size_t n0 = state.battlefield.size();
-        bool ok = PerformPayTaps(state, opt) && state.battlefield.size() == n0;
+        const GameState whole = state;
+        bool ok = PerformPayTaps(state, opt);
         if (ok)
         {
             ManaPool& f = state.floating_mana;
@@ -7552,10 +7570,14 @@ bool manaoracle::ScriptedPay(GameState& state, const ManaCost& cost_in, bool for
                 state.floating_haste_c += opt.stash_haste;
             }
         }
+        if (s_rpt) { std::fprintf(stderr, "[rp-pay]   scripted ok=%d bf=%zu->%zu\n", ok ? 1 : 0, n0, state.battlefield.size()); }
         if (ok) { return true; }
         if (state.battlefield.size() == n0) { before.Restore(state, available); }
+        else                                { state = whole; before.RestoreAvailable(available); }
         h.abandoned = true;
-        return engine_pay();
+        const bool eok = engine_pay();
+        if (s_rpt) { std::fprintf(stderr, "[rp-pay]   engine fallback ok=%d\n", eok ? 1 : 0); }
+        return eok;
     }
     // ENGINE STEP (the rollback census): the engine's own payment, made exactly as an unhooked apply
     // makes it -- the hook stood down and the nest unwound, so it is the normal outermost payment. A

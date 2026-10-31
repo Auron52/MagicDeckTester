@@ -137,10 +137,26 @@ void EngineStepSpan::End(bool ok, bool made)
     h = nullptr;
 }
 
-void ScriptedTapAhead(GameState& state, int count, bool lands_only)
+bool ScriptedTapAhead(GameState& state, int count, bool lands_only)
 {
     Hook& h = *t_hook;
-    if (h.ended || count <= 0) { return; }
+    // SAFE (RealPayScope, the real board): never a frontier and never `ended`. TakeEngineStep already handed an
+    // abandoned or finished script, or a non-tap-ahead entry, to the engine; an entry whose taps do not all go
+    // in puts the WHOLE board back (a tap can sacrifice) and gives up the script, and the caller taps ahead itself.
+    if (h.safe)
+    {
+        if (count <= 0) { return true; }
+        if (h.abandoned || h.next >= h.script.size()) { h.abandoned = true; return false; }
+        const PayOption& opt = h.script[h.next++];
+        h.pay_steps.push_back(t_seq_step);
+        if (opt.engine || opt.fail || opt.what != "tap-ahead") { h.abandoned = true; return false; }
+        const GameState before = state;
+        if (PerformPayTaps(state, opt)) { return true; }
+        state = before;
+        h.abandoned = true;
+        return false;
+    }
+    if (h.ended || count <= 0) { return true; }
     if (h.next >= h.script.size())
     {
         h.ended         = true;
@@ -149,19 +165,20 @@ void ScriptedTapAhead(GameState& state, int count, bool lands_only)
         h.f_cost        = ManaCost{};
         h.f_tapahead    = count;
         h.f_lands_only  = lands_only;
-        return;
+        return true;
     }
     const PayOption& opt = h.script[h.next++];
     h.pay_steps.push_back(t_seq_step);
-    if (opt.fail) { return; }
+    if (opt.fail) { return true; }
     for (std::size_t i = 0; i < opt.taps.size(); ++i)
     {
         const TurnSolver::PreTap& t = opt.taps[i];
         const bool restricted = i < opt.creature_route.size() && opt.creature_route[i] != 0;
         const std::string why = restricted ? OracleCreatureTap(state, t) : ApplyHumanPreTap(state, t);
-        if (!why.empty()) { h.ended = true; h.tap_error = why; return; }
+        if (!why.empty()) { h.ended = true; h.tap_error = why; return true; }
         h.tapped_by_script.push_back(t.num);
     }
+    return true;
 }
 
 namespace
@@ -3250,6 +3267,18 @@ RealPayScope::RealPayScope(GameState& s, std::vector<PayOption> script)
     h.safe   = true;
     saved    = t_hook;
     t_hook   = &h;
+    static const bool s_rpt = EnvOn("MTG_REAL_PAY_TRACE");   // DIG TRACE (default off)
+    if (s_rpt)
+    {
+        std::fprintf(stderr, "[rp-script] T%d %zu entries:\n", s.turn_number, h.script.size());
+        for (const PayOption& o : h.script)
+        {
+            std::string t;
+            for (const TurnSolver::PreTap& x : o.taps) { t += " " + x.name + "#" + std::to_string(x.num) + "/" + std::to_string(x.color); }
+            std::fprintf(stderr, "[rp-script]   %s eng=%d fail=%d stash=%d taps:%s\n", o.what.c_str(), o.engine ? 1 : 0,
+                         o.fail ? 1 : 0, o.stash.Total(), t.c_str());
+        }
+    }
 }
 
 RealPayScope::~RealPayScope()

@@ -58893,15 +58893,15 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // (An oracle ENGINE step -- the rollback census -- runs the heuristic as an unhooked apply does.)
             if (def.params.untap_x_mana_sources)
             {
-                if (oracle_owns && !manaoracle::TakeEngineStep(state, chosen_x))
-                { manaoracle::ScriptedTapAhead(state, chosen_x, /*lands_only=*/false); }
+                if (oracle_owns && !manaoracle::TakeEngineStep(state, chosen_x)
+                    && manaoracle::ScriptedTapAhead(state, chosen_x, /*lands_only=*/false)) {}
                 else
                 { manaoracle::EngineStepScope _es(state, oracle_owns); RitualTapAheadIntoFloat(state, chosen_x); }
             }
             if (def.params.etb_untap_lands > 0)
             {
-                if (oracle_owns && !manaoracle::TakeEngineStep(state, def.params.etb_untap_lands))
-                { manaoracle::ScriptedTapAhead(state, def.params.etb_untap_lands, /*lands_only=*/true); }
+                if (oracle_owns && !manaoracle::TakeEngineStep(state, def.params.etb_untap_lands)
+                    && manaoracle::ScriptedTapAhead(state, def.params.etb_untap_lands, /*lands_only=*/true)) {}
                 else
                 {
                     manaoracle::EngineStepScope _es(state, oracle_owns);
