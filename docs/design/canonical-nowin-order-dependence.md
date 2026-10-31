@@ -1,4 +1,4 @@
-# Canonical no-win sharing is not order-free (found 2026-10-29; fix `MTG_NOWIN_ORDER_EXACT` + `MTG_NOWIN_TWIN_WAVE`; 2026-10-30 rebased onto e3725d76a, the residual churn root-caused, `MTG_NOWIN_TWIN_EST` + `MTG_NOWIN_TWIN_HEQ` added -- all default ON; held-out bar: half (1) met, half (2) NOT met for Alchemist +1 / Hinata +3 per 1,600 -- adoption is the USER's call, see Open)
+# Canonical no-win sharing is not order-free (found 2026-10-29; fix `MTG_NOWIN_ORDER_EXACT` + `MTG_NOWIN_TWIN_WAVE`; 2026-10-30 rebased onto e3725d76a, the residual churn root-caused, `MTG_NOWIN_TWIN_EST` + `MTG_NOWIN_TWIN_HEQ` added -- all default ON; held-out bar: half (1) met, half (2) NOT met for Alchemist +1 / Hinata +3 per 1,600 -- adoption is the USER's call, see Open; 2026-10-31: WHY it is purely negative -- at shipped budgets its only live effect is cost, the canonical key's wrong refutations change no decision -- and `MTG_NOWIN_TWIN_FREE`, the budget-neutral re-search that meets the bar on every measured deck, default OFF, the USER's call)
 
 ## What
 
@@ -470,6 +470,151 @@ cannot act without a finite budget), and new vs canonical has **0 play changes**
 
 The witness (Goblins s1330145 gi144, d8 b0) now wins T3 under BOTH arms on the rebased tree (row above).
 
+## 2026-10-31: why it is purely negative, and `MTG_NOWIN_TWIN_FREE`
+
+The USER, on A/B #3: *"I'm not really sure how to handle as it is kind of unexpected to have it purely negative. We
+should probably dig a bit more."* Branch `wip/nowin-order-exact-3` (the -2 branch rebased onto 85f4546d3; one
+`HeuristicArm.h` slot-tail conflict, both sides kept in order). `MTG_PGO=0`, `MTG_RSS_CAP_GB=12` on every arm; the
+canonical arm is `MTG_NOWIN_ORDER_EXACT=0`, which is the committed tree's behaviour (byte-identical by construction,
+checked on 39 decks x 10 games at the -2 rebase; not re-checked against a separately built origin binary here).
+
+### The answer
+
+At the shipped budgets the order-exact key changes play through ONE channel, its cost. The canonical key's wrong
+refutations do not reach a decision. A change whose only live effect is "the same answers, a little dearer" can only
+move the ladder's start gates one way, so its sign is fixed: slower games, and a faster one only by trajectory luck.
+Four measurements show it.
+
+1. **Every slower game is a budget knife-edge.** 1-3 ms more budget restores each one under the order-exact key, and
+   the canonical arm loses most of them at 1 ms less.
+2. **With the order-exact re-searches made budget-neutral (`MTG_NOWIN_TWIN_FREE`, below), every slower game plays the
+   canonical game BYTE-IDENTICALLY.** Held out (seed 1670001, 6,399 paired games over the seven decks that move), the
+   free arm differs from canonical in 3 games, all Melira, all at the same win turn. The 1,600 Hinata and 1,600
+   Alchemist games are byte-identical.
+3. **The "free exactness" oracle changes no game.** Under `MTG_NOWIN_FSL_VERIFY_PLAY` the canonical arm keeps its
+   sharing, and every WRONG no-win hit is answered by its fresh order-exact search at the cached hit's price. Over 400
+   Hinata games that is 211,556 canonical no-win hits, 108,823 of them cross-order and 256 WRONG (in 25 games). The
+   oracle replaced 257 wrong answers with the right ones and **0 of 400 games changed**. Creature Giving: 58,627
+   hits, 0 WRONG, 0 changed.
+4. **The faster games are trajectory effects too.** Hinata s1630001 gi1024 (A/B #3's one faster game, 6 -> 5): its
+   canonical game has 0 WRONG hits of 1,838 verified, and the canonical arm also plays T5 with
+   `MTG_GAME_LINE_CACHE=0`. The order-exact arm stores fewer game-cache proofs (a node with a twin reuse beneath it
+   is not complete), so its turn-2 search does not take turn 1's entries and finds T5. That is the same game-line-cache
+   budget effect the cache's adoption measured both ways (smoke 2026-10-27: 20 faster, 4 slower). Landfall s1670001
+   gi18 (7 -> 6): the canonical arm also plays T6 at 1 ms LESS budget.
+
+**Why the wrong refutations never bite.** All 513 WRONG hits in the oracle run (both arms) are second-main nodes at
+depth 1-2 (469 at depth 1, 2 at depth 3). Their fresh win lies EXACTLY at the node's cutoff and at or past
+turn + depth, so the horizon LEAF finds it, in one zone order and not the other. The pass context, printed by the new
+WRONG line on 120 more Hinata games (same seed, the canonical arm under the verify): **all 31 WRONG hits are inside the
+value-leaf PROBE with beam recording on** (`probe=1 vrec=1 o1=1`). That pass keeps the INCLUSIVE child cut
+(`FsChildCut`: no strict cut while `g_probe_val_recording` is set; `MTG_PROBE_INCLUSIVE_CUT`). A win at exactly the
+cutoff there TIES an ancestor's best, and the strictly-earlier test throws it away. In `FsChildCut`'s own words, "a
+win at exactly c can never change the root's line". The probe's line is a measurement anyway: its per-depth costs
+and leaves price the escalation, and its beam ranks later passes. So a wrong hit can only nudge an estimate, and over
+800 oracle games none moved a decision. The census agrees: 16 WRONG of 177,068 hits on 39 decks x 40 games, every one
+on Hinata.
+
+### Every changed-direction game, attributed
+
+Shipped settings; `+n` / `-n` = the same game at n ms more / less budget; `free` = `MTG_NOWIN_TWIN_FREE=1`; d8 b0 =
+`--depth 8 --budget-ms 0` (abandon 20M units). Digest-identical cells are marked `=canon`.
+
+| game | canon | new | new +1 / +2 / +3 | canon -1 / +1 / +2 | free | verify (canon game) | d8 b0 canon / new | cause |
+|---|---|---|---|---|---|---|---|---|
+| Alchemist s1630001 gi140 | 6 | 7 | **6** / 6 / 6 | 7 / 6 / 6 | 6 =canon | 0 WRONG of 286 hits | 6 / 6 (10-30) | budget |
+| Hinata s1630001 gi150 | 5 | 6 | 6 / **5** / 5 | 6 / 5 / 5 | 5 =canon | 1 WRONG / 1,363 (oracle still 5) | 5 / 5 (10-30) | budget |
+| Hinata s1630001 gi371 | 5 | 6 | **5** / 5 / 5 | 6 / 5 / 5 | 5 =canon | 0 / 597 | 5 / 5 (10-30) | budget |
+| Hinata s1630001 gi1228 | 6 | 8 | **6** / 6 / 6 | 8 / 6 / 6 | 6 =canon | 0 / 1,753 | 5 / 5 (10-30) | budget |
+| Alchemist s1670001 gi1249 | 6 | 8 | 8 / 8 / **6** | 6 / 6 / 6 | 6 =canon | 0 / 147 | 6 / 6 =same digest | budget |
+| Hinata s1630001 gi1024 (faster) | 6 | 5 | 5 / 5 / 5 | 6 / 6 / 6 | 5 | 0 / 1,838 | -- | game-line-cache trajectory (canon + `MTG_GAME_LINE_CACHE=0`: 5) |
+| Landfall s1670001 gi18 (faster) | 7 | 6 | 7 / 7 / 7 | **6** / 7 / 7 | 7 =canon | 0 / 1,375 | 6 / 6 =same digest | budget (canon at -1 ms: 6) |
+
+Mechanism, read off `MTG_TRACE=search`: the sub-gate re-searches add 1-3% to a pass (Alchemist gi1249: T1 pass 5
+1,065 -> 1,125 units, 17 re-searches + 11 reuses). Both arms commit d5 at T1 without a win in the horizon. The post-ladder
+stage then works from 92 fewer units and picks `Forest + Arbor Elf` (projected T8) where canonical picks `Forest`
+(projected T7). The 10-30 SUB-GATE table above has the same shape on the other four. Under `MTG_NOWIN_TWIN_FREE` the
+pass costs are canonical's to the unit (Hinata gi1024 T1: 63 / 699 / 5,433 / 21,350 in both), and so is the play.
+
+### `MTG_NOWIN_TWIN_FREE` (heurarm `NOWIN_TWIN_FREE`, DEFAULT OFF -- a pricing decision for the USER)
+
+What the measurements leave is a pricing question: what should the order-exact price come out of? The search must
+pay it, because it is the soundness. A lossless proof that a twin's refutation also holds for this order would need
+the refuting search to record every zone-order read and check each one against the query's permutation. Those reads
+sit in the apply engine (trigger loops by position, sacrifice / payment / host tie-breaks; `m_number` alone is read at
+~1,900 sites), in the greedy horizon rollout (every WRONG hit above is one) and in enumeration ranks. A proof is
+therefore neither cheap nor maintainable, and every site it misses reopens the hole. So the refutation is either
+searched or reused. The 10-30 shape searches it when it is cheap (hint <= share x Remaining) and charges the search to
+the budget. That charge is what moves the ladder.
+
+Under the lever a SUB-GATE twin re-search hands the units it spent back to its budget when it ends
+(`nwtwin::FreeScope`, `SearchBudget::Refund`). Two caps apply: the gate threshold it was admitted under, per
+re-search, and `MTG_NOWIN_TWIN_FREE_POOL` (default 0.05) of the budget's limit in all. The leaves it evaluated come
+back off `g_fs_leaf_evals` in proportion, because the emulated ladder's reconstruction and the K-predictor read
+leaves as cost. The game and decision meters keep the work, so the abandon ceilings still bound REAL work. Nested
+re-searches compose. What it is:
+
+* **A re-pricing only.** It admits, skips and reuses nothing; the answer at every node is this order's own search
+  wherever the 10-30 shape searched. The order-exact re-search is priced as the canonical cache hit it replaces.
+* **Inert at an unlimited budget.** The twin gate is never consulted there (and `Refund` refuses an unlimited budget),
+  so `--budget-ms 0` runs exactly the order-exact search, which is the completeness invariant. Below that, more budget
+  means more re-searches (the threshold scales with Remaining) up to the pool. Monotone.
+* **Not unbudgeted-only:** it acts only under a budget, by construction.
+* **Its cost is wall, not depth.** Real work vs canonical (game-meter units, A/B #4): 1.0048x (new: 1.0027x). Wall on
+  this shared box is too noisy to resolve that: on the all-deck sample identical games (same digest, units within
+  0.2%) took 81 s / 175 s / 194 s per 50-game Snow job across the three arms, and A/B #3's per-deck wall ratios span
+  0.85-1.13 for a 1.002x units change. Pooled wall in A/B #4 was canon 6,365 s, new 6,669 s, free 6,731 s. The budget's
+  unit counts rollout turn-steps, so it may understate interior-heavy work like these re-searches. A clean
+  single-tenant wall measurement is still owed.
+
+**Why it is the USER's call and not adopted:** it changes what the budget meters. A soundness re-search no longer
+competes with depth, so a decision does up to 5% more work than its budget names. The alternatives are the doc's Open
+list (accept the residual, a smaller share, larger budgets on the decks that move). Recommended: ON together with the
+rest of the shape. It is the only variant measured here that meets the bar on every deck.
+
+### Held-out A/B #4 (seed 1670001; canonical vs new vs free)
+
+One pooled batch, the seven decks that moved on earlier samples, each at its shipped play setting, paired by
+`seed`/`game_index`, 0 abandoned:
+
+| deck | games | new vs canon: faster / slower / changed / net | free vs canon: faster / slower / changed / net | units new / free |
+|---|---|---|---|---|
+| alchemist | 1600 | 0 / 1 / 1 / **+2** | 0 / 0 / 0 / 0 | 1.0014 / 1.0029 |
+| hinata | 1600 | 0 / 0 / 2 / 0 | 0 / 0 / 0 / 0 | 1.0004 / 1.0021 |
+| elementals | 800 | 0 / 0 / 2 / 0 | 0 / 0 / 0 / 0 | 1.0046 / 1.0040 |
+| melira | 800 | 0 / 0 / 4 / 0 | 0 / 0 / 3 / 0 | 1.0099 / 1.0163 |
+| landfall | 800 | 1 / 0 / 1 / -1 | 0 / 0 / 0 / 0 | 1.0011 / 1.0017 |
+| bruna | 400 | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 | 1.0012 / 1.0015 |
+| vampires | 400 | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 | 1.0093 / 1.0095 |
+| **total** | 6400 | 1 / 1 / 10 / +1 | 0 / 0 / 3 / 0 | 1.0027 / 1.0048 |
+
+The A/B #3 games under the free arm (single-game repros on the rebased tree): Alchemist gi140, Hinata gi150 / gi371 /
+gi1228 all play the canonical digest, and Hinata gi1024 keeps its T5.
+
+**Every deck** (seed 1680001, all 40 suite decks x 200 paired games, three arms in one pooled batch, 0 abandoned):
+new vs canon 0 faster / 0 slower / 4 changed (Galadriel 1, Melira 2, Vampires 1, all at the same win turn), net 0 on
+every deck, units 1.0034x. Free vs canon 0 / 0 / 2 changed (Melira gi183, Vampires gi197, both the same games new
+changed, same win turn), net 0 on every deck, units 1.0051x. The per-deck units of the two arms track each other:
+Critter 1.141 / 1.154, Soldiers 1.082 / 1.067, WhiteKnights 1.041 / 1.042, Angels 1.037 / 1.039; every other deck is
+under 1.04x in both.
+
+**Unlimited budget** (`--depth 8 --budget-ms 0`, abandon 3M, seed 1690001, 8 cheap decks x 3 games): free and new
+match on every digest AND every game's units. The refund never runs without a finite budget.
+
+**The bar for `MTG_NOWIN_TWIN_FREE` vs the committed tree:** (1) it has no slower game in 14,399 held-out games
+(6,399 on the seven decks that move, 8,000 over every deck), so there is nothing to recover; (2) net 0 on every deck.
+**Both halves are met.** The shipped 10-30 shape (FREE off) on the same samples: +2 Alchemist (gi1249, recovers at
+d8 b0) and -1 Landfall in A/B #4, 0 everywhere in the all-deck sample.
+
+### The oracle, `MTG_NOWIN_FSL_VERIFY_PLAY` (heurarm `NOWIN_VERIFY_PLAY`, DIAGNOSTIC, default OFF)
+
+Needs `MTG_NOWIN_FSL_VERIFY=1`. A WRONG no-win hit returns the verify's FRESH answer instead of the cached one. The
+re-search is budget-neutral (its own budget object, every meter restored), so the arm keeps the canonical cost and
+gets exact answers wherever the canonical key was wrong. Compare it with a verify-observe arm on the same games; both
+warm the same memos. Verify-observe vs plain canonical: 1 of 400 Hinata digests differ. `MTG_NOWIN_FSL_VERIFY_PRINT=N`
+raises the WRONG-line print cap (default 4 per job). The WRONG line now also prints the pass context (`probe`, `vrec`,
+`o1`, `fh`, `fv`, `warm`).
+
 ## Unit tests
 
 `test/unit/test_nowin_order_exact.cpp`, through `TurnSolver::TwinNoWinCacheForTest` (searches `first`, then
@@ -503,6 +648,12 @@ descendants' remain, then search `second` twice under a finite budget, same cach
 Each of `MTG_NOWIN_ORDER_EXACT=0`, `MTG_NOWIN_TWIN_WAVE=0`, `MTG_NOWIN_TWIN_EST=0`, `MTG_NOWIN_TWIN_HEQ=0` fails its own
 cases; the full suite is 2168/2168 under the defaults (rebased tree, 2026-10-30).
 
+`MTG_NOWIN_TWIN_FREE` (2026-10-31; the lever is default OFF, so its cases pin the slot): under a budget sized so the gate
+stays SHUT at the root (4,000 x the twin's cost), the twin is searched and charged with the lever off, and searched,
+not a cache hit, with the same answer and **0 units left on the budget** with it on; at an unlimited budget it is
+searched and every unit metered; `SearchBudget::Refund` never exceeds its pool and refunds nothing on an unlimited
+budget. Full suite 2251/2251 under the defaults (rebased onto 85f4546d3, 2026-10-31).
+
 ## Open
 
 * **The USER's decision: adopt or not -- half (2) of the bar is NOT met, and cannot be met soundly as it stands.**
@@ -512,8 +663,10 @@ cases; the full suite is 2168/2168 under the defaults (rebased tree, 2026-10-30)
   **Alchemist +1 / 1,600, Hinata +3 / 1,600** (0 / 1 faster). Before EST + HEQ the same bar read Elementals +5,
   Landfall +5, Melira +1 (10-29 shape, seeds 1490001 + 1530001). What is left is the SUB-GATE mechanism (above): twins
   the gate re-searches because each costs <= share x Remaining, i.e. the soundness price itself, tipping the ladder's
-  quadratic start gate in the games that sit within ~1-2% of it. Removing it means spending LESS on exactness at the
-  shipped budgets, which no re-pricing can do; the shapes that would, all the USER's call:
+  quadratic start gate in the games that sit within ~1-2% of it. **2026-10-31:** a re-pricing CAN remove it: under
+  `MTG_NOWIN_TWIN_FREE` the soundness re-search does not come out of depth, and the shape plays the canonical game in
+  every slower game found so far (held-out A/B #4 above, net 0 on every deck measured). That is option 5 below and the
+  recommended one. The shapes, all the USER's call:
   1. accept the residual (Hinata +3 / Alchemist +1 per 1,600, ~0.002 t / game) as the order-exact price;
   2. the share (`MTG_NOWIN_TWIN_SHARE`, not tuned here by direction): as share -> 0 every twin with a hint is reused at
      any finite budget (canonical cost at shipping, still exact at an unlimited budget, where the gate never opens);
@@ -522,6 +675,23 @@ cases; the full suite is 2168/2168 under the defaults (rebased tree, 2026-10-30)
      become canonical's), then re-search the committed pass with reuse off when budget remains -- exact at an
      unlimited or depth-capped budget, canonical-like whenever the ladder is budget-bound, and it spends on depth
      before within-turn exactness, i.e. NOT turn-complete (the USER's stated preference). Unmeasured.
+  5. **(2026-10-31, recommended) `MTG_NOWIN_TWIN_FREE`**: the sub-gate re-search is priced as the canonical cache hit
+     it replaces (refunded to the budget, capped per re-search and at 5% of the budget in all). It plays the
+     canonical game at the shipped budgets, it is exact at an unlimited budget, and it costs wall instead of depth
+     (real work 1.005x, wall about 1.01-1.06x on a noisy box). Its open question is the pricing itself: a decision
+     does a little more work than its budget names.
+* **Why it was "purely negative" -- answered 2026-10-31** (section above): at the shipped budgets the canonical key's
+  wrong refutations change no decision (oracle: 257 wrong answers replaced on 400 Hinata games, 0 games changed; each
+  hidden win sits exactly at its node's cutoff inside the value-leaf probe's inclusive cut, i.e. a tie the search
+  discards), so cost is the
+  change's only live effect, and cost can only cost. The faster games are trajectory effects.
+* **Hinata s1630001 gi1024's game-line-cache effect** (canonical T6; T5 with `MTG_GAME_LINE_CACHE=0` and under the
+  order-exact key). At T2 the canonical arm's depth-4 pass completes (19.9k units left) with win 6 and the cache-off
+  pass with win 5. 0 of the game's 1,838 no-win hits are WRONG. Under `MTG_GAME_LINE_CACHE_VERIFY` (a different
+  trajectory: it plays fresh answers) there are 852 non-material disagreements and 0 material ones. So no cached
+  answer is wrong, and the pass result still depends on what the cache served: most likely the budget-staged
+  admissions inside the pass (the order-free win wave, rank admission) seeing a different Remaining. Not root-caused;
+  it belongs to `MTG_GAME_LINE_CACHE`, not to this change.
 * **Is the fix still needed on the rebased tree?** The witness no longer reproduces under the canonical key (upstream's
   Lackey fixes removed its site). Yes. The instrument at shipping settings on the rebased tree (seed 1640001, all 39 decks x 40 games per arm,
 `MTG_NOWIN_FSL_VERIFY=1`): canonical **177,068** game-cache no-win hits, 109,926 (62%) cross-order, **16 WRONG** (all
