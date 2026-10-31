@@ -9,6 +9,8 @@
  "frozen": "dfcb18cb90ae65aeb4968787550a10b1fb9bc55e",
  "heartbeat": "2026-10-31T15:24:36Z",
  "host": "58199181d02e",
+ "landed": "11f93aa0392c01d9dab7a1a2ab39f9b8d1bb2a0b",
+ "landed_at": "2026-10-31T15:51:53Z",
  "result_branch": "artifact-refresh/goblins-20261031-1538",
  "run_id": "goblins-artifact-queue-tool-647f24-20261031T125429",
  "score": 0.015,
