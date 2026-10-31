@@ -4,7 +4,7 @@ User scope: finish outstanding changes in `origin/cyclone-analysis:docs/design/c
 
 Working branch/worktree: `cyclone-current`, `.claude/worktrees/cyclone-current`, based on phase-1-2 main `547e6fe8b`. Prior `cyclone-ready` is frozen/pushed at `2c9b15398`, sourcec45; all original/intermediate branches and worktrees remain intact. Primary checkout's unrelated `test/ref_bench.json` edit remains untouched.
 
-Current stage (06:36 UTC): frozen code4a9ed39e5 on main547, clean src8b0bc5ea046ce748c456f7e4aceef4ea11807aa5; fresh PGO2371bc0e0adc3daf2fe65f2fc42139146aaae11e0d9627cf2f1e75d276d630b6. All2396units/3,567,476assertions,388scenarios, three fresh Release/PGO FD parity cases and paired GobGI41 trace audit PASS. Smoke is audited/accepted through harness, all894GTconsistent, zero searched score regressions; known Niv1082 FD persists. Source CI41175135290 PASS Linux/Windows/parity. Fresh V5 viewer PASS with observed709strict/290native and clean guards,417conditionalcarry/4Bruna pins carried. V5 normal6 DONE0/all468 independently audited with positive shared-pool refusal pressure; normal1 is RUNNING86541/PID1816063. V5 inputs1490jobs/13142games sealed and independent auditGO. No primary quality has launched. Next: completed normal1/6 exact preflight, primary24, remaining process-only memory/isolation/conditional proofs, full regression and quiet535 cost. No mulligan/value generation or proposal adoption before re-evaluation.
+Current stage (V5 primary RUNNING): code4a9ed39e5/main547, clean SRC8b0bc5ea046ce748c456f7e4aceef4ea11807aa5; fresh PGO2371bc0e0adc3daf2fe65f2fc42139146aaae11e0d9627cf2f1e75d276d630b6. All2396units/3,567,476assertions,388scenarios, three Release/PGO FD parity cases, paired GobGI41 audit, accepted smoke/894GTconsistency and Linux/Windows/parityCI PASS. V5 viewer709strict/290native PASS with explicit417carry/4Bruna pins. Fresh normal1/6 DONE0 with all168core wins/digests/units exact, FSL0; normal6all468 independently audited with positive shared-pool refusals. Full primary13142games/1490jobs started06:48:20UTC,24workers, root8636/owner1819187/engine1819223. EarlyQC3480+6rawchunks60 complete with zero diagnostics; all6 formerly divergent131117 arms nowT4/exactsame digest. Other blinded forecasts are being classified separately; no ordinaryFD/nonconv/rawambiguity reported as of the latest monitor. No policy adoption from partial outcomes. Remaining: finish primary, process-only normal12/tiny12/unbounded6, isolation/conditional controls/recoveries, full regression and one quiet cost pool, then linear landing and re-evaluation. No mulligan/value generation.
 
 The dated milestones below are historical records; later entries supersede earlier progress and pending-work statements.
 
@@ -685,3 +685,44 @@ complete. Normal1 session86541/PID1816063 isRUNNING; after it completes compare 
 overlap. Remaining normal12/tiny12/unbounded6 are separate process proofs.
 `v5/live-fidelity/live_inventory.py` is prepared,17checksPASS, source/bin/manifest
 pinned and six raw131117chunks+QC3480completion gated; primary isNOTSTARTED.
+
+
+## Full V5 primary launched (06:48 UTC; checkpoint07:02)
+
+Normal1 root86541 finishedDONE0, all168results and units complete. Both independent
+`normal1-vs-normal6-audit.json` and official memory-preflight reportPASS: all168
+core wins/digests/units exact,300six-onlyshapes inventoried, FD/nonconv/FSL0.
+This is interim proof, not a claim of completed12/24/tiny/unbounded comparison.
+
+Root primary8636 launched06:48:20.179UTC; owner1819187/engine1819223,24workers,
+one1490job/13142gamequeue. Source8b/PGO2371unchanged; manifestSHA
+88147138ce26ea240a592fbd52f5958567d93e875f369369771a1a4dda444a67.
+Runtime `v5/final-pgo-inputs/runs/primary-quality/`, launchlog`v5/primary-launch.log`.
+No other heavy or viewer job runs alongside it. At582s,191jobs/1910games were
+complete, CPU2376percent/RSS3.4GiB. All initial priority540games completed by
+06:50:38:QC348jobs/480games and6rawcastchunks60games, zero diagnostic/ambiguity.
+Seed131117/GI117 in all6castarms nowexact117/T4/0cc811b669a24cb0.
+
+Payment reviewer monitors immutable raw-byte diagnostic snapshots every30s.
+Later blind135/136 forecasts are kept distinct from ordinary simulated FD and
+need ordinary-world control review; raw131/132 is a different cohort. Correct
+existing-interface controls use processMTG_SEARCH_BLIND_UNKNOWN=0 and remove/
+disable nonnegative jobblind_salt. This name is not a HeurArm slot; do not add it
+to job.flags. Mixed followups may keep global0 and activate intended blind jobs
+with their nonnegative salts. Matchingseed alone cannot establish identical
+chosen plan/mulligans. No unknownper-job flags or engine changes are needed.
+
+Prunes reviewer monitors720PhaseCchunks and performs diagnostic-only symmetric
+prefix/mover review; no early aggregate/adoption and no oldV3 outcome reuse.
+Complete QC3480family analysis is saved separately; user setting decisions remain
+pending. Historical QC4Ponder profiling is not an unfulfilled mandatory quiet A/B;
+fresh Ponder quality/units are in PhaseC. Optional PBON quiet plan may preserve535
+shipping controls plus160same-seed PBONgames in one695pool if needed for the
+conditional PB performance/3xbar. No sealed primary input is being modified.
+
+V5iso92 runner is prepared/tested10syntheticcases and source/bin/manifest pinned;
+it requires primaryDONE0 and uses two40salt processmodes0/2. Its historical context
+is PBON/CYCLEROFF, not the live PBCYC-vs-CYCLER adoption contrast. No iso engines
+have run. Root must finish this primary before any other heavy memory, isolation,
+regression or timed-cost process. Later controls will be deduplicated in the few
+necessary process-static pools; no unneeded quality repeats or olddata adoption.
