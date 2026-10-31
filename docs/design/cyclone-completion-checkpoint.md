@@ -1,10 +1,12 @@
-# Cyclone completion checkpoint — 2026-10-30
+# Cyclone completion checkpoint — 2026-10-31
 
 User scope: finish outstanding changes in `origin/cyclone-analysis:docs/design/cyclone-branches-and-next-steps.md`, then re-evaluate. Do not start mulligan/value generation before that review.
 
-Working branch/worktree: `cyclone-finish`, `.claude/worktrees/cyclone-finish`, branched from `origin/cyclone-int` (3892d2159), rebasing onto current phase-1-2 6b655b71f. Original backup branches untouched. Primary checkout has an existing unrelated `test/ref_bench.json` edit; preserve it.
+Working branch/worktree: `cyclone-final`, `.claude/worktrees/cyclone-final`, based on main `85f4546d3`. Original backup branches and the intermediate finish/land/portable branches remain intact and pushed. Primary checkout has an existing unrelated `test/ref_bench.json` edit; preserve it.
 
-Current stage: source frozen at `ce3431d90d7f7ee88b47a791ce61595740f907f0` against main930cc5c33. Release and fresh PGO builds complete;2349 units/384 scenarios and full699-reference strict protocol PASS. Full viewer line validation is still running serially. Memory6 finished468games; memory1 counterpart is running. After memory preflight, run final post-rebase smoke before trusting/adopting measurements, then launch prepared12542-game quality pool. No generation before final re-evaluation.
+Current stage (02:54 UTC): source frozen at `a7e4708006cef4c7bfc75c89638b2d9feb3eb1a1`, HEAD `ac10ec517`. Both paid-cycle context and continuation-segment replay fixes are committed. Release full units: 2,363 tests / 3,566,610 assertions PASS. Smoke: 150 PASS / 7 audited baseline FAIL / 0 NEW; all 157 outcomes/digests/work counts match source A. Fresh PGO+LTO is complete. Current viewer checks cover 709 strict references and 59 native suspend-affected references, with an explicit unchanged-path proof carrying 648 earlier native results. V1/V2 simulation queues were superseded by concrete replay defects; their partial results are diagnostic only. Regenerate fresh V3 inputs after PGO, complete the 13,142-game pooled comparisons and remaining memory/VERIFY/isolation/quiet-cost checks, then run regression and re-evaluate. No mulligan/value generation or proposal adoption before that review.
+
+The dated milestones below are historical records; later entries supersede earlier progress and pending-work statements.
 
 Independent reviews found extra required fixes:
 
@@ -297,3 +299,40 @@ that explicit path proof. No profile/value generation or proposal-default adopti
   flags/seeds/globalindices, so mode-specific defects surface before largeprunecollection.
   Newmain validator's suspend reconstruction is fixed;59native refs cover all18 old/new
   selectedsuspendactions, with648 unaffectedoldrefs carried by explicitpath/byte proof.
+
+## Final source PGO and viewer gates (02:50 UTC)
+
+- Final PGO+LTO completed whole-suite training (197 jobs / 5,513 games); source stamp
+  `a7e4708006cef4c7bfc75c89638b2d9feb3eb1a1`, binary SHA256
+  `c8fe5a6cf8fafc5d85a3e85dbf42aef506f1a482bf10bef09d1fcbdc848743d1`.
+- Fresh V3 inputs are sealed at `build/scratch/cyclone-finish/v3/final-pgo-inputs`:
+  13,142 games / 1,490 jobs; manifest SHA256
+  `7072c81a61fae1eca716921949c12a28a1d0ffff10c31fc89a31e8ae42b07b8e`.
+  Independent audit PASS36/36: no preparation warnings, semantic changes or old result paths.
+- Small VERIFY PASS: 141,330,774 verified JUNK hits, 5,453,552 rank-cache hits,
+  6,508 verified kill-only checks, no mismatch. Diagnostic exercise, not a timing A/B.
+- Final viewer PASS: all709 strict references (274ok/434repaired/1beaten), zero drift,
+  gaps or contract failures. Full linebuild4064 lines /707refs PASS; rendered suspend
+  badge10checks PASS; published-index unit checks and capped-cycle pin PASS.
+- Fresh native59 (Midrange10/Dragonstorm39/Landfall10):252accept/2choose/0unsupported,
+  22non-hand skips/2known baseline limits/0REGRESSION;249mana-findable/0lost/0unaudited.
+  These cover every18 selected suspend action; six old cast-signature baseline entries
+  now resolve correctly through suspend reconstruction. Baseline file unchanged.
+- Other648 native refs carry A's prior results only through the sealed reference/apparatus
+  hashes and exact unchanged human/ApplyPlanDirect path proof. This is not a fresh707-native
+  sweep. Filtered pins0/0 are expected; A's4/4 Bruna pin controls remain carried.
+- Root-owned Midrange client fixture PASS:38rest points and exact undo; two existing
+  unreachable seed16 fixture checks remain SKIP. Runtime report and count/provenance proof:
+  `build/scratch/cyclone-finish/v3-viewer/REVIEW_CLASSIFICATION.md` and
+  `classification_status.json`; all raw logs and guards preserved, no viewer jobs active.
+- Reference-safety scan PASS across28 checkouts/worktrees; primary's unrelated
+  `test/ref_bench.json` edit remains untouched. Linux/Windows CI and cross-platform determinism parity PASS (run41160289976).
+- Normal6/1 memory preflight is running on final PGO. Completed normal6 reference cells
+  and the100-game play shape match source A exactly in outcomes/digests/units so far.
+  No final memory/adoption/cost conclusion before the remaining checks complete.
+
+- Final normal6 memory completed468games, zeroFD/nonconv, exactwins/digests/units versus
+  source A in all6 cells. Sharedplanbudget1,027,328KB reached1,027,327KB,8refusedstores,
+  residual0; FSL did notbind. Per-game maximum858,347KB exceeds512MiB and confirms
+  there is no fixedper-threadquota. Normal1 counterpart is nowrunning; no finalt12/tiny
+  proof is claimed yet.

@@ -1,12 +1,13 @@
-# Unpredictable Cyclone: branch map, state and next steps (2026-10-30)
+# Unpredictable Cyclone: branch map, state and next steps (2026-10-31)
 
-> Completion update (2026-10-30): the backup branches have been rebased and integrated on
-> `cyclone-finish` against current main `930cc5c33`; original branch refs remain intact. The fixed 512 MB per-thread
+> Completion update (2026-10-31): the backup branches have been integrated on
+> `cyclone-final` against main `85f4546d3`; original branch refs remain intact. The fixed 512 MB per-thread
 > plan-cache policy and the companion per-thread FSL quota were removed. The existing shared,
 > RAM-sized budgets remain, together with exact keys and hit-equals-miss pricing. The user prefers
 > landing Cyclone before the separate cache-budgeting project. No broader cache redesign is being
-> adopted as an implied prerequisite. Current implementation/verification state is tracked in
-> `cyclone-completion-checkpoint.md`; historical branch measurements below are not final-source results.
+> adopted as an implied prerequisite. Two rollout/executor replay defects found during completion
+> are fixed and tested. Current implementation, verification and pending measurements are tracked in
+> `cyclone-completion-checkpoint.md`; the branch map and measurements below are historical.
 
 
 Standalone hand-off for whoever resumes the Cyclone work. The per-deck ledger, with every measurement, is

@@ -1,5 +1,11 @@
 # Analysis ledger — Unpredictable Cyclone
 
+> Completion work is now on `cyclone-final`, based on main `85f4546d3` (2026-10-31).
+> See [the completion checkpoint](cyclone-completion-checkpoint.md) for current gates and
+> pending measurements. The fixed 512 MB per-thread plan and FSL quotas have been removed;
+> the shared RAM-sized pools remain. Historical branch results below do not establish
+> final-source performance or authorize adopting the pending proposal settings.
+
 Deck: `decks/Unpredictable Cyclone/Unpredictable Cyclone.cod` (U/R, splash B, cycling-into-Eldrazi
 combo): 4 Unpredictable Cyclone, 4 Emrakul, the Aeons Torn, 1 Ulamog, the Ceaseless Hunger,
 1 Ulamog, the Infinite Gyre; cyclers 4 Street Wraith, 4 Curator of Mysteries; selection 4 Brainstorm,
