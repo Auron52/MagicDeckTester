@@ -11,8 +11,10 @@ proposal contract. All2,420 unit cases /3,568,115 assertions pass. The failing
 Hinata seed now matches normal/tiny/disabled plan caches in full traces and all
 work counters; actual fetch-choice and proposal frames pass. Fresh smoke has
 three searched tied play changes and no score changes; their full trace review
-is pending. Fresh PGO is training at32 workers. Fresh normal regression, strict
-references, cache/VERIFY, actual Claude sweep and quiet cost remain. EarlierC2
+is pending. Fresh PGO and three-game compiler parity pass. Full normal regression with
+strict references is running at32workers; cache/VERIFY, actual Claude and quiet
+cost remain. Latestdfcb PD/Slivers artifacts are retained in single-parent
+union4c19ce805 on cyclone-landingdfcb. EarlierC2
 checks below remain historical and do not certify new89b outputs.
 
 The authoritative current commands and stage paths are in

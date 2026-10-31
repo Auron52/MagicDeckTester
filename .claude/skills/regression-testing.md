@@ -237,11 +237,13 @@ it is your job" -- which turned every play change into another overnight run.) A
 heuristic earns adoption -- but as its own pooled batch scoped to the decks that move, sized to the
 effect, not a full overnight tier.
 
-**Scope of the periodic run: the FULL tier.** `--deck=<name>[,<name>]` exists and is
-safe (the aggregate rebuild iterates the full mode arrays, so other decks' keys survive),
-but it only narrows the *promotion* when the RESULTS file itself came from a per-deck
-**run**; `--accept` after a full run promotes every key in `test/results/<mode>.env`
-regardless of `--deck`.
+**Scope of the periodic run: the FULL tier.** `--deck=<name>[,<name>]` narrows a
+run or an acceptance. A filtered acceptance promotes only measured keys for those
+decks, even when `test/results/<mode>.env` came from a full run; both aggregate
+and per-game promotion use the same filter. Unselected decks and modes remain
+unchanged. This was fixed in the harness on2026-10-20; the former warning that a
+full results file bypassed the acceptance filter is obsolete. Always inspect the
+GT diff and retain binding provenance notes after acceptance.
 
 Record *why* you accepted a known regression, in the ground truth itself:
 `bash test/regression.sh --overnight --accept-with-regressions="<note>"` writes an
