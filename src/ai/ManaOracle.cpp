@@ -5,6 +5,7 @@
 #include "EscStats.h"
 #include "HeuristicArm.h"
 #include "ManaPayment.h"
+#include "Combat.h"
 #include "../cards/CardDatabase.h"
 #include "../core/EnvFlags.h"
 #include "../core/GameLogger.h"
@@ -3072,6 +3073,14 @@ bool CoversEngineOutcome(const GameState& state, bool pre, const TurnSolver::Pla
 }
 
 // ---- THE EXECUTOR'S PAYMENT SCRIPT (ManaOracle.h) -------------------------------------------------------
+}   // namespace manaoracle
+// TurnSolver.cpp (next to SimulateOneCombat, sharing its pre-declaration body CombatPreDeclare): the rollout combat's
+// DECLARATION alone, on `state` (mutated -- call on a copy); indices into `state` as it stands afterwards.
+std::vector<int> RolloutCombatDeclaration(GameState& state);
+namespace manaoracle
+{
+// MTG_REAL_PAY_ATTACK_PIN: real declarations the scored-combat pin changed (AIEngine::DeclareAttackers).
+std::atomic<long long> g_real_pay_atk_pin_changed{0};
 namespace
 {
 std::atomic<long long> g_rps_asked{0}, g_rps_dom{0}, g_rps_served{0}, g_rps_abandoned{0}, g_rps_us{0};
@@ -3081,16 +3090,20 @@ struct RpsReport
     {
         static const bool s_on = EnvOn("MTG_PAY_REFINE_STATS");
         if (!s_on) { return; }
-        std::fprintf(stderr, "=== REAL PAY SCRIPT: asked=%lld dominating=%lld served-to-end=%lld abandoned=%lld ms=%lld ===\n",
+        std::fprintf(stderr, "=== REAL PAY SCRIPT: asked=%lld dominating=%lld served-to-end=%lld abandoned=%lld "
+                     "atk-pin-changed=%lld ms=%lld ===\n",
                      g_rps_asked.load(), g_rps_dom.load(), g_rps_served.load(), g_rps_abandoned.load(),
-                     g_rps_us.load() / 1000);
+                     g_real_pay_atk_pin_changed.load(), g_rps_us.load() / 1000);
     }
 } g_rps_report;
 }
 
 bool PlanPaymentScript(const GameState& state, const TurnSolver::Plan& plan, bool pre,
-                       std::vector<PayOption>& script, std::string* what)
+                       std::vector<PayOption>& script, std::string* what,
+                       std::vector<int>* attack_pin, bool* attack_pin_ok)
 {
+    if (attack_pin_ok != nullptr) { *attack_pin_ok = false; }
+    if (attack_pin != nullptr)    { attack_pin->clear(); }
     if (t_hook != nullptr || state.dmg_events_armed || plan.actions.empty()) { return false; }
     for (const Action& x : plan.actions) { if (x.kind == Action::Kind::ComboRoute) { return false; } }
     g_rps_asked.fetch_add(1, std::memory_order_relaxed);
@@ -3180,6 +3193,53 @@ bool PlanPaymentScript(const GameState& state, const TurnSolver::Plan& plan, boo
     }
     if (found && what != nullptr) { *what = "dominates the engine's payment"; }
     if (found) { g_rps_dom.fetch_add(1, std::memory_order_relaxed); }
+    // THE SCORED COMBAT (MTG_REAL_PAY_ATTACK_PIN). The search priced this line on er.st -- the engine's own taps --
+    // and its combat declared the attackers the provider chose THERE. Declared on the script's board instead, an
+    // attack rule that reads untapped mana sees the sources the script saved and can hold a creature the scored
+    // line swung (FiveColour s1130288 gi287 T5: Breeding Pool left untapped -> 2 mana -> Bloom Tender {1}{G} is
+    // castable -> Deathrite Shaman held; the line scored at 8 life realised 9 and the T6 kill slipped to T7). Read
+    // under the plan's own searched dork-combat variant (Plan::atk_dork_release), as the search's combat was.
+    if (found && pre && attack_pin != nullptr)
+    {
+        const int saved_ov = g_dork_atk_override;
+        const int rel = plan.atk_dork_release;
+        if (DorkAtkSearchEnabled() && rel >= 1)
+        { g_dork_atk_override = (rel == 1) ? 1 : (rel == 2 ? 0 : (rel == 3 ? 3 : -1)); }
+        // One entry per creature we control on the scored board: +number = it attacked there, -number = it did
+        // not. A body that is not listed (one a beginning-of-combat effect creates) is left to the heuristic.
+        // Declared the way the search's combat declares (TurnSolver RolloutCombatDeclaration: the pool empties first
+        // -- a float the engine's payment left is gone by the declaration, and the attack rule must not count it).
+        bool ok = er.st.pending_extra_combats == 0;   // an extra combat runs first: the boards part after it
+        GameState cb = er.st;
+        const std::vector<int> atk = ok ? ::RolloutCombatDeclaration(cb) : std::vector<int>{};
+        for (int i = 0; ok && i < static_cast<int>(cb.battlefield.size()); ++i)
+        {
+            const Permanent& q = cb.battlefield[static_cast<std::size_t>(i)];
+            if (q.controller_index != a) { continue; }
+            const bool attacked = std::find(atk.begin(), atk.end(), i) != atk.end();
+            if (!attacked && !q.card.IsCreature() && !q.is_animated) { continue; }
+            if (q.card.m_number == 0) { ok = false; break; }   // an unnumbered body cannot be re-found
+            attack_pin->push_back(attacked ? q.card.m_number : -q.card.m_number);
+        }
+        g_dork_atk_override = saved_ov;
+        static const bool s_rpat = EnvOn("MTG_REAL_PAY_ATK_TRACE");   // DIG TRACE (default off)
+        if (s_rpat)
+        {
+            std::string eb, rb;
+            for (const Permanent& q : er.st.battlefield)
+            { if (q.controller_index == a) { eb += std::to_string(q.card.m_number) + (q.tapped ? "T " : " "); } }
+            Outcome real;
+            if (replay(script, real))
+            {
+                for (const Permanent& q : real.st.battlefield)
+                { if (q.controller_index == a) { rb += std::to_string(q.card.m_number) + (q.tapped ? "T " : " "); } }
+            }
+            std::fprintf(stderr, "[rp-atk] engine-apply board: %s| script board: %s| opp %d\n", eb.c_str(), rb.c_str(),
+                         er.st.players[1 - a].life);
+        }
+        if (!ok) { attack_pin->clear(); }
+        if (attack_pin_ok != nullptr) { *attack_pin_ok = ok; }
+    }
     return found;
 }
 

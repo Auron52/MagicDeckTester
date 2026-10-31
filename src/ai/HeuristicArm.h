@@ -762,6 +762,8 @@ enum Slot : int
     DOMAIN_SELF_COLORS,       // MTG_DOMAIN_SELF_COLORS  a domain mana source (Faeburrow Elder / Bloom Tender) projected from HAND (AddSourceToPool with no permanent: a hasted cast, a same-plan rock credit) counts its OWN colours among "colours among permanents you control" -- it will be one of them when it taps (mana-oracle ENUM-GAP fivecolour: a hasted domain dork's own colours). =0 -> the board's colours only
     DOMAIN_WIDEN_PARTIAL,     // MTG_DOMAIN_WIDEN_PARTIAL  when EnumeratePlans' all-or-nothing domain widen credit is refused (the subset's wideners, PAYOFF included, are not payable from the un-widened pool), try every payable widener SUBSET: only the wideners cast before the scaling source taps need prepaying (mana-oracle ENUM-GAP fivecolour: "SubsetWidensDomainBy is all-or-nothing"). =0 -> the all-widener credit only
     DOMAIN_WIDEN_ORDER,       // MTG_DOMAIN_WIDEN_ORDER  the executor's payable-order walk (apply site) treats a coloured permanent that widens a live domain source's colours (Faeburrow Elder / Bloom Tender) as a PRODUCER: the domain sources are held back until a cast needs them, so an order that casts the widener first is found when the given order does not pay (mana-oracle APPLY-DROP-ORDER fivecolour: Deathrite before the payoff). =0 -> wideners are not producers
+    REAL_PAY_ATTACK_PIN,      // MTG_REAL_PAY_ATTACK_PIN  under MTG_REAL_PAY_SCRIPT, a pre-combat main paid by the oracle's script declares the attackers the SEARCH's apply board declared (ManaOracle PlanPaymentScript attack_pin -> AIEngine::DeclareAttackers): the script leaves more mana untapped, and an attack rule that reads it (FiveColour's Deathrite hold) re-decided the scored combat (s1130288 gi287). =0 -> the attack heuristic re-decides on the script's board
+    DORK_ATK_PROVIDER_HOLD,   // MTG_DORK_ATK_PROVIDER_HOLD  the searched dork attack/hold (MTG_DORK_ATK_SEARCH) also CONTESTS a damage-dealing mana dork an ARCHETYPE's ShouldAttackWith holds for its mana (FiveColour's Deathrite / Bloom Tender hold): the FSLineWin branch evaluates the release and the executor pin honours it (mana-oracle 13.2: FiveColour s1130288 gi287 under MTG_REAL_PAY_SCRIPT). =0 -> only the collapsed-main tower's holds are contested
     COUNT
 };
 
@@ -1468,6 +1470,8 @@ inline const char* Name(int slot)
         "MTG_DOMAIN_SELF_COLORS",
         "MTG_DOMAIN_WIDEN_PARTIAL",
         "MTG_DOMAIN_WIDEN_ORDER",
+        "MTG_REAL_PAY_ATTACK_PIN",
+        "MTG_DORK_ATK_PROVIDER_HOLD",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

@@ -4070,7 +4070,8 @@ inline int BpChainSlotFor(const GameState& s)
 // the FSLineWin branch then evaluates both combat variants. False whenever the flag is off.
 // Searched dork attack/hold trigger. 0 = not contested; 1 = the greedy HOLDS a dork whose release
 // would deal damage (search the RELEASE); 2 = the greedy ATTACKS with a non-vigilance mana dork
-// whose mana the deferred main would spend (search the HOLD). See EngineFlags.h.
+// whose mana the deferred main would spend (search the HOLD); 3 = an archetype ShouldAttackWith
+// holds a damage-dealing mana dork (search its RELEASE, MTG_DORK_ATK_PROVIDER_HOLD). See EngineFlags.h.
 int DorkAtkContestedKind(const GameState& s);
 
 // MTG_EDF_TURN_TRACE (diagnostic, default off): one line per REAL main phase describing the

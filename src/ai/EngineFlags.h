@@ -519,6 +519,21 @@ inline bool RealPayScriptOn()
     return heurarm::Flag(heurarm::REAL_PAY_SCRIPT, env_on);
 }
 
+// MTG_REAL_PAY_ATTACK_PIN (2026-10-31; DEFAULT ON, =0 reverts; inert unless MTG_REAL_PAY_SCRIPT is on): the scripted
+// payment keeps the scored COMBAT. The script pays the same line on a dominating tap set, so the board reaching combat
+// has MORE untapped sources than the board the search scored -- and an attack rule that reads untapped mana re-decides
+// the combat there (FiveColourProvider::ShouldAttackWith holds Deathrite Shaman whenever a hand card is castable).
+// FiveColour s1130288 gi287 T5: the script left Breeding Pool untapped, Deathrite + Pool can cast Bloom Tender, so the
+// hold kept Deathrite home; the line the search scored at 8 life realised 9, and T6's attack was one short (T6 -> T7).
+// Under this lever the executor declares exactly the attackers the search's apply board declared (ManaOracle
+// PlanPaymentScript's attack_pin; AIEngine::DeclareAttackers), so the realised combat is the scored one and the saved
+// sources are pure surplus for the second main.
+inline bool RealPayAttackPinOn()
+{
+    static const bool env_on = EnvOn("MTG_REAL_PAY_ATTACK_PIN", true);
+    return heurarm::Flag(heurarm::REAL_PAY_ATTACK_PIN, env_on);
+}
+
 // MTG_PAY_REFINE_LAZY / MTG_PAY_REFINE_MEMO (2026-10-28; DEFAULT ON): the refine's cost, not its choice -- the
 // supersets that cannot win are not verified, and a repeated refine is read back (ManaOracle.cpp RefinePayment).
 inline bool PayRefineLazyOn()
@@ -1497,9 +1512,12 @@ inline bool DorkAtkSearchEnabled()
 }
 
 // Per-thread combat-variant override for the searched dork attack/hold. -1 = natural (the
-// heuristic hold decides); 1 = RELEASE (held dorks attack). Set ONLY (a) by the FSLineWin
-// branch around the alternate SimulateCombat, and (b) by the executor's DeclareAttackers when
-// the committed line pinned a release -- never ambient, so every other combat is byte-identical.
+// heuristic hold decides); 1 = RELEASE (held dorks attack); 0 = HOLD (the hold direction); 3 =
+// RELEASE the damage dorks an archetype's ShouldAttackWith keeps home (MTG_DORK_ATK_PROVIDER_HOLD).
+// Set ONLY (a) by the FSLineWin branch around the alternate SimulateCombat, (b) by the executor's
+// DeclareAttackers when the committed line pinned a release, and (c) by PlanPaymentScript reading
+// the scored declaration under the plan's variant (MTG_REAL_PAY_ATTACK_PIN) -- never ambient, so
+// every other combat is byte-identical.
 inline thread_local int g_dork_atk_override = -1;
 
 // HOLD DIRECTION of the searched dork attack/hold (default ON inside MTG_DORK_ATK_SEARCH; =0
@@ -1513,6 +1531,23 @@ inline bool DorkAtkHoldDirEnabled()
 {
     static const bool v = EnvOn("MTG_DORK_ATK_HOLD_DIR", true);
     return v;
+}
+
+// MTG_DORK_ATK_PROVIDER_HOLD (heurarm DORK_ATK_PROVIDER_HOLD; DEFAULT OFF pending its A/B, =1 on) -- the RELEASE
+// direction for the OTHER greedy dork hold. DorkAtkContestedKind contested only the collapsed-main
+// tower's victims (HoldManaSourceForCollapsedMain, 0-power dorks by construction); a dork that deals
+// damage but is held by an ARCHETYPE's ShouldAttackWith "for its mana" (FiveColourProvider: Deathrite
+// Shaman / Bloom Tender stay home whenever any hand card is castable off the full pool) was never
+// contested, so the search never priced its swing and the hold was a greedy pick inside the window.
+// Measured case (docs/design/mana-completeness-oracle.md 13.2): FiveColour s1130288 gi287 under
+// MTG_REAL_PAY_SCRIPT -- the script's dominating T5 payment leaves Breeding Pool untapped, the hold
+// then keeps Deathrite home on T6, and the attack is exactly one damage short (T6 -> T7, not recovered
+// at d8 b0). Under this lever such a dork is contested (kind 1) and the release variant (override 1)
+// sends it in; the executor's pin replays the choice. Applies at every budget.
+inline bool DorkAtkProviderHoldEnabled()
+{
+    static const bool env_on = EnvOn("MTG_DORK_ATK_PROVIDER_HOLD", false);
+    return heurarm::Flag(heurarm::DORK_ATK_PROVIDER_HOLD, env_on);
 }
 
 // MTG_ACQ_RESOLVE=1 -- measurement lever (DEFAULT OFF until the adoption A/B is accepted):

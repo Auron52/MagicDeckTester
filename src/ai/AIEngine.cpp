@@ -1042,6 +1042,7 @@ void AIEngine::HandleMulligan(GameState& state, int max_turns)
     m_discard_choice_pin = -1;
     m_vial_choice_pin    = -1;
     m_atk_release_pin    = -1;
+    m_script_atk_pin.clear();
     m_fd_best_win  = max_turns + 1;
     m_fd_best_turn = 0;
 
@@ -1893,6 +1894,8 @@ int AIEngine::RolloutWinTurnFrom(GameState trial, int max_turns,
     m_vial_choice_pin = -1;
     const int saved_atk_pin = m_atk_release_pin;
     m_atk_release_pin = -1;
+    std::vector<int> saved_script_atk_pin = std::move(m_script_atk_pin);
+    m_script_atk_pin.clear();
     GameEngine engine(*this);
     engine.SetStopAfterTurn(m_bottom_turn_cap);   // MTG_BOTTOM_TURN_CUT (0 = off); consumed here
     m_bottom_turn_cap = 0;
@@ -1908,6 +1911,7 @@ int AIEngine::RolloutWinTurnFrom(GameState trial, int max_turns,
     m_discard_choice_pin = saved_discard_pin;
     m_vial_choice_pin    = saved_vial_pin;
     m_atk_release_pin    = saved_atk_pin;
+    m_script_atk_pin     = std::move(saved_script_atk_pin);
     m_in_rollout = false;
     m_logger     = saved;
     return win_turn > 0 ? win_turn : max_turns + 1;
@@ -2866,6 +2870,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // draw) pings before the pass hands the state back. Rollout twin: ApplyPlanDirect's scope.
     DrawTriggerFlushScope _dtf_pass(state);
     m_le_fire_pin = -1;   // a phase whose plan pins nothing fires the provider's count
+    // A pre-combat pass re-decides the board combat will see: a scored-combat pin from an earlier pass is stale.
+    if (is_pre_combat_main && !m_in_rollout) { m_script_atk_pin.clear(); }
     // UNBUDGETED-PLAY LATCH (EngineFlags.h). THE one frame that holds the real play budget, so it
     // is the only honest place to decide "is this decision unbudgeted". Everything the latch arms
     // (today: the leaf table's no-win half) is dead code whenever m_budget_ms > 0, which is what
@@ -4600,7 +4606,24 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     if (g_real_resolution && RealPayScriptOn() && !plan.actions.empty())
     {
         std::vector<manaoracle::PayOption> script;
-        if (manaoracle::PlanPaymentScript(state, plan, is_pre_combat_main, script)) { _real_pay.emplace(state, std::move(script)); }
+        std::vector<int> atk_pin;
+        bool atk_pin_ok = false;
+        const bool want_pin = is_pre_combat_main && !m_in_rollout && RealPayAttackPinOn();
+        if (manaoracle::PlanPaymentScript(state, plan, is_pre_combat_main, script, nullptr,
+                                          want_pin ? &atk_pin : nullptr, want_pin ? &atk_pin_ok : nullptr))
+        {
+            _real_pay.emplace(state, std::move(script));
+            // DIG TRACE (MTG_REAL_PAY_ATK_TRACE, default off): the scored combat a scripted main pinned.
+            static const bool s_rpat = EnvOn("MTG_REAL_PAY_ATK_TRACE");
+            if (s_rpat)
+            {
+                std::string ls;
+                for (int n : atk_pin) { ls += std::to_string(n) + " "; }
+                std::fprintf(stderr, "[rp-atk] T%d pre=%d want=%d ok=%d pin=[%s]\n", state.turn_number,
+                             is_pre_combat_main ? 1 : 0, want_pin ? 1 : 0, atk_pin_ok ? 1 : 0, ls.c_str());
+            }
+            if (atk_pin_ok) { m_script_atk_pin = std::move(atk_pin); }
+        }
     }
 
     // The plan's post-apply STATE pins (the Lackey put, the declare-attackers pins, the Saga target, the
@@ -8328,6 +8351,16 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // candidates were scored with their own sweep / Land's Edge count, installed unconditionally (-1 =
     // the rule) by ApplyPlanDirect's scopes, so the committed plan's values no longer describe the line.
     const TurnSolver::Plan& eom = rs_last ? *rs_last : plan;
+    // The scored-combat pin describes the COMMITTED plan's apply under the whole script. A breakpoint re-solve
+    // replaced the plan, and an abandoned script handed the rest of the payments back to the engine: either way
+    // the board reaching combat is no longer the scripted twin of the scored one, so the heuristic declares.
+    if (!m_script_atk_pin.empty() && (rs_last || !_real_pay || _real_pay->h.abandoned))
+    {
+        static const bool s_rpat = EnvOn("MTG_REAL_PAY_ATK_TRACE");
+        if (s_rpat) { std::fprintf(stderr, "[rp-atk] T%d pin dropped (resolve=%d abandoned=%d)\n", state.turn_number,
+                                   rs_last ? 1 : 0, (_real_pay && _real_pay->h.abandoned) ? 1 : 0); }
+        m_script_atk_pin.clear();
+    }
     {
         ScriptedSweep _ssw_exec(eom.sweep_choice);
         m_le_fire_pin = eom.le_fire_choice;   // Land's Edge fires after TakeTurn returns
@@ -9722,12 +9755,62 @@ std::vector<Permanent*> AIEngine::DeclareAttackers(GameState& state)
     // pin 1 = forced RELEASE (the scored line swung the held dorks); pin 2 = forced HOLD (the
     // scored line kept an attacking dork's mana for the deferred main); pin 0/none = the natural
     // heuristic, which is what the default branch simulated.
+    // pin 3 = forced release of the damage dorks an ARCHETYPE hold kept home
+    // (MTG_DORK_ATK_PROVIDER_HOLD; AttackWith override 3).
     if (pin == 1) { g_dork_atk_override = 1; }
     else if (pin == 2) { g_dork_atk_override = 0; }
+    else if (pin == 3) { g_dork_atk_override = 3; }
     std::vector<Permanent*> attackers;
     for (int idx : DeclareAttackerIndices(state))
     { attackers.push_back(&state.battlefield[idx]); }
-    if (pin == 1 || pin == 2) { g_dork_atk_override = -1; }
+    if (pin == 1 || pin == 2 || pin == 3) { g_dork_atk_override = -1; }
+    // MTG_REAL_PAY_ATTACK_PIN: a scripted pre-combat main declares the SCORED combat (the release pin above is
+    // already folded into it -- PlanPaymentScript read the declaration under the plan's own variant). Every body
+    // the scored board listed takes its verdict from there; one it did not list (made since) keeps the heuristic's.
+    // A listed attacker that cannot attack here means the boards parted: the heuristic's set stands.
+    {
+        static const bool s_rpat = EnvOn("MTG_REAL_PAY_ATK_TRACE");
+        if (s_rpat && !m_in_rollout)
+        {
+            std::string nat;
+            for (const Permanent* p : attackers) { nat += std::to_string(p->card.m_number) + " "; }
+            std::fprintf(stderr, "[rp-atk] T%d declare pinned=%zu natural=[%s]\n", state.turn_number,
+                         m_script_atk_pin.size(), nat.c_str());
+        }
+    }
+    if (!m_in_rollout && !m_script_atk_pin.empty())
+    {
+        std::vector<int> pinned;
+        pinned.swap(m_script_atk_pin);
+        const int active = state.active_player_index;
+        std::vector<Permanent*> out;
+        bool parted = false;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()) && !parted; ++i)
+        {
+            Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+            if (q.controller_index != active || q.card.m_number == 0) { continue; }
+            const int num = q.card.m_number;
+            const bool listed_atk = std::find(pinned.begin(), pinned.end(),  num) != pinned.end();
+            const bool listed_not = std::find(pinned.begin(), pinned.end(), -num) != pinned.end();
+            const bool natural    = std::find(attackers.begin(), attackers.end(), &q) != attackers.end();
+            if (listed_atk)
+            {
+                if (!CanAttackFull(q, state.battlefield, active)) { parted = true; break; }
+                out.push_back(&q);
+            }
+            else if (!listed_not && natural) { out.push_back(&q); }
+        }
+        if (!parted)
+        {
+            // The heuristic's own declaration may hold an unnumbered body: keep it (no pin could name it).
+            for (Permanent* p : attackers) { if (p->card.m_number == 0) { out.push_back(p); } }
+            std::vector<Permanent*> ordered;
+            for (Permanent& q : state.battlefield)
+            { if (std::find(out.begin(), out.end(), &q) != out.end()) { ordered.push_back(&q); } }
+            if (ordered != attackers) { manaoracle::g_real_pay_atk_pin_changed.fetch_add(1, std::memory_order_relaxed); }
+            attackers.swap(ordered);
+        }
+    }
     return attackers;
 }
 

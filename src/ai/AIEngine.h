@@ -446,6 +446,11 @@ private:
     // turn's DeclareAttackers, saved/restored around shared-engine rollouts alongside
     // m_committed_line so a probe/keep playout cannot eat the real game's pin.
     int m_atk_release_pin = -1;
+    // MTG_REAL_PAY_ATTACK_PIN: the SCORED combat of a pre-combat main the executor paid with the mana oracle's
+    // script (ManaOracle PlanPaymentScript's attack_pin): +card number = attacked on the search's apply board,
+    // -number = did not. Written by TakeTurn, consumed by this turn's DeclareAttackers, saved/restored around
+    // shared-engine rollouts like the release pin. Empty = no pin (the heuristic declares).
+    std::vector<int> m_script_atk_pin;
 
     // Oracle (MTG_FD_ORACLE): earliest searched win predicted this game and the turn
     // it was predicted, to flag when a later recompute degrades below it (divergence).
