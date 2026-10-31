@@ -1,8 +1,9 @@
 // The EldraziDisplacerFlicker payment rescues (2026-10-31; docs/design/mana-completeness-oracle.md 13.7).
 //
 // The mana oracle's ENUM-GAP census (EDF, seed 1100001, 20 games) found 14 plans a mana gate kept off the
-// menu that an order and payment realise. They fall in five shapes, one lever each, all DEFAULT ON; each
-// case below pins one shape on the board it was found on and shows the lever is what puts it on the menu:
+// menu that an order and payment realise. They fall in five shapes, one lever each (DEFAULT ON but
+// MTG_EF_SCALAR_REFUND, OFF pending the USER); each case below forces its lever both ways, pins the shape on the
+// board it was found on and shows the lever is what puts it on the menu:
 //   MTG_ENERGY_AURA_PIP          a pip off an Aether Hub whose land Aura pays it keeps the {E} (the deck
 //                                owner's report, viewer seed 3432 T3: Wild Growth paid by the Hub's
 //                                any-colour mode)

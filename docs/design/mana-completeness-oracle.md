@@ -879,9 +879,9 @@ the bound cut from the real menu prints no line before `DECISION` but an `early-
 | Goblins | 1 | the colour-presence gate misses a planned sac outlet's colour | `WidenHaveWithSubsetRocks` | the outlet half of `MTG_SUBSET_SAC_COLOR` | **blocked** (below) |
 | NivMizzetCombo | 5 | a mana rock that pays for another rock: the rock credit applies only when the board alone pays every rock | the `pool.CanPay(rock_costs)` guard (both walkers) | an exact sequential rock check from the credited pool | **fixed below** |
 | NivMizzetCombo | 2 | Generator Servant's {C} through Izzet Signet: a {1}-fed ramp filter turns a {C} into coloured mana, under-counted by one per fed filter | the per-subset credits | relabel up to one {C} per fed filter as wild | open |
-| EDF | 6 | the rescue's scalar ceiling omits the ETB-untap refund (Cloud of Faeries, Peregrine Drake) | `ef-scalar` pre-filter | add the refund | open |
-| EDF | 4 | the odometer gate prices the untap refund off the pre-plan board, missing a same-selection land Aura on the refunded land | `BuildManaGateIndex`, `ManaPruneBound` | scale the Aura bonus by the untappers | open (verified by `MTG_SEL_MANA_GATE=0`) |
-| EDF | 12 | the rescue walk is ONE greedy payment: Aether Hub's energy colour counted as cover, a painland's painless {C} never banked ahead of an untap, a coloured unit that must be banked before the untap, the tap-ahead's host and colour choice | the EDF sequential rescue | "Proposal X": when the greedy walk fails on an untapper subset, the oracle's bounded every-order payment search as the last rescue, its script stored on the plan and replayed by all three apply paths (`RealPayScope`) | open (one mechanism for all five classes) |
+| EDF | 6 | the rescue's scalar ceiling omits the ETB-untap refund (Cloud of Faeries, Peregrine Drake) | `ef-scalar` pre-filter | add the refund | **built, DEFAULT OFF** (`MTG_EF_SCALAR_REFUND`, 13.7: one held-out slower game does not recover; a USER decision) |
+| EDF | 4 | the odometer gate prices the untap refund off the pre-plan board, missing a same-selection land Aura on the refunded land | `BuildManaGateIndex`, `ManaPruneBound` | scale the Aura bonus by the untappers | **fixed** (`MTG_ETB_BOUND_AURA`, 13.7) |
+| EDF | 12 | the rescue walk is ONE greedy payment: Aether Hub's energy colour counted as cover, a painland's painless {C} never banked ahead of an untap, a coloured unit that must be banked before the untap, the tap-ahead's host and colour choice | the EDF sequential rescue | "Proposal X" (the oracle's bounded payment search as the last rescue, its script on the plan) -- NOT built: the shapes on the re-census are three payer rules, each exact, in the shared payer (13.7) | **fixed** for the energy-cover and painland-bank shapes (`MTG_TAPAHEAD_ENERGY_COVER`, `MTG_PAINLAND_TAPAHEAD_CAST_AUTO`); the other shapes did not recur on the 20-game census |
 
 **Oracle false positives** (the plan is not lost; the oracle must learn the rule): Slivers 34 (an apply that silently
 skips a TapForTokenPay / AnimateLand whose source is tapped -- `Clean()` checks casts only); NivMizzetCombo 97
@@ -946,7 +946,7 @@ already has Garth's crack) with the tree after it:
 |---|---|---|---|
 | NivMizzetCombo | 106 | 6 | rock funds rock (4) and {C} through Izzet Signet (2): real |
 | Slivers | 34 | 0 | |
-| EDF | 24 | 19 | the rescue-walk classes A-G (proposal X): real |
+| EDF | 24 | 19 | the rescue-walk classes A-G (proposal X): real -- closed by 13.7 (14 -> 0 on its own 20-game census) |
 | Fungus | 11 | 11 | F1 / F2: real |
 | FiveColour | 9 | 9 | A / B: real |
 | Selesnya | 5 | 0 | (5 HIDDEN-INFO) |
@@ -1124,3 +1124,97 @@ and its exact order walk (`ExactOrderWalkImpl`) does not model a land Aura's bon
 projects unpayable and the given (failing) order is kept: admitting the subset alone would trade this ENUM-GAP for
 an APPLY-DROP. The lockstep fix is the Aura bonus in BOTH walks (the next tap of an untapped host after the Aura
 resolves adds `land_aura_extra_mana`), then the producer domain at site 1 for the enumerator's retry.
+
+### 13.7 The EDF payment shapes and Aether Hub's energy (2026-10-31)
+
+The USER: *"Aether hub's energy is one of the troublesome cases we need fixed. (reported by the deck owner) As with
+everything else we need to implement it correctly, but with a little cost as possible."* The deck owner's report is
+EDF viewer seed 3432 T3: Kitchen untapped, Aether Hub carrying Wild Growth, {E} 1, the line "land=Kitchen; cast Wild
+Growth -> Kitchen" -- *"T3 play costs the energy counter when it absolutely should not. We need it T4 to go off."*
+The Aura's declared host is held while the Aura pays (the RESERVE THE AURA'S OWN HOST rule), so the Hub pays the
+{G}, and the payer took its ANY-COLOUR mode (`[paydbg] cost={G} ok=1 energy 1->0 taps: Aether Hub`) where the Hub's
+free {C} plus Wild Growth's own {G} pays the same pip. Pinned by `test/scenarios/edf_s3432_t3_hub_energy_kept.json`
+(new scenario key `expect_active_energy`).
+
+**Proposal X was not built.** The re-census (EDF, 20 games, seed 1100001, `logs/mana_oracle/edfx0`) put the 14
+ENUM-GAP flags in five shapes, every one a greedy rule in the SHARED payer or a missing term in a bound -- each with
+an exact local fix, in code the executor, the rollout, both walks and the oracle already share, so lockstep holds by
+construction and nothing is stored on a plan. A bounded every-order payment search per failing untapper subset
+would have cost an oracle realisation (hundreds of full applies) on every `ef-walk-fail` of every enumeration -- on
+gi2 T3 alone that is ~40 per enumeration -- against the few-percent bar.
+
+| shape | flags | witness | mechanism | fix (lever) |
+|---|---|---|---|---|
+| an energy-paid colour taken where a free pip exists | (the report) | viewer seed 3432 T3 | `PainlessAuraPipColor` covered painlands only | `MTG_ENERGY_AURA_PIP` |
+| the Hub's energy colour counted as cover | 3 | s1100006 gi5 T2, s1100020 gi19 T3: Kitchen + Aether Hub, {Trace of Abundance, Cloud of Faeries} | `ReservedColorsStillCovered` counted the Hub's {U}; Kitchen banked {G}, Cloud's {U} spent the only {E}, Trace's {R/W} had nothing after the untap | `MTG_TAPAHEAD_ENERGY_COVER` |
+| a painland's painless {C} never banked ahead of an untap | 1 | s1100003 gi2 T3: Brushland + Wild Growth, Mariposa + Trace, {Cloud, Peregrine Drake} | the cast-site painland bank was human-only; Cloud's untaps refunded one land, the Drake a mana short | `MTG_PAINLAND_TAPAHEAD_CAST_AUTO` |
+| the rescue's scalar ceiling omits the untap refund | 4 | s1100006 gi5 T2: Kitchen + Adarkar Wastes, {Trace, Cloud x2} | `ef-scalar` compared four coloured pips with pool 2 + Trace 1 | `MTG_EF_SCALAR_REFUND` (**DEFAULT OFF**, a USER decision -- below) |
+| the odometer's refund misses a same-selection land Aura | 6 | s1100009 gi8 T2 {Wild Growth -> Adarkar, Cloud, Displacer}; s1100005 gi4 T3 (five-cast plans) | `EtbUntapBoundCredit` priced the refund off the pre-plan board | `MTG_ETB_BOUND_AURA` |
+
+* **`MTG_ENERGY_AURA_PIP`** (ManaPayment.cpp `PainlessAuraPipColor`). The painland rule, for an energy-paid colour:
+  the Aura's fixed-colour units cover every pip of that colour this payment owes, and the {C} the free tap leaves
+  over is spent on this payment's generic. For energy a second exact case: the leftover FLOATS while the line that
+  binds this payment (`g_line_unpaid_cost` holds it) owes no further pip of that colour. The two realisations then
+  differ in one floating unit -- `needed` against {C} -- and the {E}; for the rest of the line the {C} pays every pip
+  the coloured unit could (a generic: no pip of that colour is owed) and a {C} pip it could not, and the phase ends
+  with the float either way. Not for a line that casts a breakpoint opener (its continuation re-plans on the float),
+  not outside a line. The witness's T3 line: energy 1 -> 1, the board otherwise the same.
+* **`MTG_TAPAHEAD_ENERGY_COVER`** (SpellEffects.h `ReservedColorsStillCovered`). The ETB-untap tap-ahead commits a
+  dual land's banked unit to the pending cast's own pip unless another untapped source "still covers" it. A Hub's
+  coloured mode is not cover: committing the dual elsewhere does not just move which land pays the pip, it spends
+  the {E}, while the dual's unit pays the same pip for nothing and the Hub's free {C} still pays a generic. Its Aura
+  bonus still counts (it rides the free tap).
+* **`MTG_PAINLAND_TAPAHEAD_CAST_AUTO`** (SpellEffects.h `EtbUntapTapAheadIntoFloat`). The cast-site half of the
+  painland bank in autonomous play too, under its own two guards: `count >= tapped_n + 1` (every tapped land, this
+  one included, comes back with the ETB) and the blanket reserve (a painland that makes a pip of the pending cost
+  stays out; the coverage widening stays human-only). The bank is then free mana: the land ends the step untapped
+  and its painless {C} plus its Aura's bonus float.
+* **`MTG_EF_SCALAR_REFUND`** (TurnSolver.cpp `exec_feas_rescues`; **DEFAULT OFF**). The ceiling already added the same-subset land
+  Aura's bonus as "the one term that genuinely ADDS total mana"; the untap refund is the other -- each same-subset
+  untapper's `EtbUntapLandsCredit` plus the subset's N largest land-Aura bonuses. Computed only when the ceiling
+  would reject; an upper bound, so only the walk decides.
+* **`MTG_ETB_BOUND_AURA`** (TurnSolver.cpp `EtbUntapBoundCredit`, read by `ManaPruneBound` and the selection-exact
+  gate). The refund is the board's top-N yields; a land Aura the same selection casts makes a refunded land yield
+  more. An Aura sits on one land and an untap re-taps each land once, so the N largest land-Aura bonuses among the
+  HAND's cards (a host variant counted once per card) bound the gain; each untapper adds it. An upper bound.
+
+`test/unit/test_edf_pay_rescue.cpp` pins each shape on its witness board and fails with its lever off.
+
+**Measurement.** One pooled `mtg --batch` per round, per-job heurarm flags, every deck at its play settings,
+`MTG_RSS_CAP_GB=12 MTG_PGO=0`, two threads (`build/scratch/edfx/ab1`, `ab2`). Units are the cost measure; the wall
+column of round 2 is contended (another session's batch shared the box) and is quoted only for completeness.
+
+| round | arms | deck | paired | slower | faster | net turns | avg | units | wall |
+|---|---|---|---|---|---|---|---|---|---|
+| seed 1640001 | all five off -> all five on | EDF | 2,000 | 2 | 15 | -13 | 4.0650 -> 4.0585 | 1.012 | 1.029 |
+| seed 1640001 | same | Auras 300, Prevent Damage 300, SelesnyaLifegain 300, Melira Pod 200, Fungus 300, Bruna 100, AccomplishedAlchemist 100 | 1,600 | 0 | 0 | 0 | identical digests | 1.000 | |
+| seed 1650001 | all off -> the four DEFAULT-ON levers (shipped) | EDF | 2,000 | 5 | 14 | -9 | 4.0800 -> 4.0755 | 1.052 | (1.066) |
+| seed 1650001 | all off -> all five | EDF | 2,000 | 5 | 15 | -10 | 4.0800 -> 4.0750 | 1.052 | |
+| seed 1650001 | four -> five (the refund alone) | EDF | 2,000 | 0 | 1 | -1 | | 0.999 | |
+
+Every lever is inert without an Aether Hub (energy), an ETB untapper (the tap-ahead, both bounds) or an untapper and
+a land Aura in one subset, so only EDF moves; the seven other decks holding a painland or a land Aura are
+byte-identical by digest and units.
+
+The slower games, each at `--depth 8 --budget-ms 0 --ignore-play-profile` on both arms:
+* seed 1650001, the shipped set: gi185 4 -> 5, gi340 4 -> 5, gi555 3 -> 4, gi1145 5 -> 6, gi1499 6 -> 7 -- **all recover**
+  (T4, T4, T3, T5, T6 on both arms).
+* seed 1640001 gi1052 T4 -> T5 (all five, and the shipped four alone): recovers (T4 on both arms).
+* seed 1640001 gi552 T3 -> T4 (all five): **does not recover** -- T3 off, T4 on at d8 b0. Bisected by turning one lever
+  off at a time: `MTG_EF_SCALAR_REFUND` alone (with it off the game is T3 at d8 b0 and at play settings). The
+  mechanism, as far as traced: the refund lets far larger untapper subsets reach the walk, every one of them paid by
+  it (18,008 distinct T3 multi-cast plans pushed against 139), and with them the T2 search's per-candidate earliest
+  wins (`MTG_DUMP_EWINS=1 MTG_DUMP_EWINS_TURN=2`) read {Shivan Gorge, Wild Growth -> Gorge, Fertile Ground -> Kitchen}
+  as a T4 win -- the off arm reads it T3 -- although a T3 root search from that exact board (a scenario rebuilt from
+  the game log, every library card in order) finds the kill at every depth 3-8 with the lever on. The search
+  memos were ruled out (`MTG_GAME_LINE_CACHE`, `MTG_FS_NOWIN_CACHE`, `MTG_LABEL_NOWIN_CACHE`, `MTG_SOLVE_MEMO`,
+  `MTG_EXH_LEAF_MEMO`, the enumeration and payment memos all off: still T4). So it is an in-tree defect that a
+  larger exact menu exposes, not a payment the lever gets wrong; the non-clairvoyant check (`MTG_NC_SEARCH=1`, d8
+  b0) was started and stopped unfinished after 25 CPU-minutes per arm. **`MTG_EF_SCALAR_REFUND` therefore ships
+  DEFAULT OFF -- the USER's call**; it closes the four `ef-scalar` flags of the census and measured 0 slower / 1
+  faster on its own on seed 1650001.
+
+**Cost.** EDF units +1.2% (seed 1640001, all five) and +5.2% (seed 1650001, the shipped four); the larger menus are
+where it goes (the T2 refund and Aura bounds admit more subsets, and the walk pays them). The oracle's own cost rose
+far more (applies 5.1 M -> 19.8 M on the 20-game census, one game's decision alone 0.56 h): more plans on the menu
+are more plans to audit -- an oracle-only cost, play identity on/off unchanged.
