@@ -1194,9 +1194,18 @@ Pooled over both seeds: package -8 on 4,000 games; Fix 1 alone +3 on 4,000, ever
 recovering at d8 b0. Fix 1 is a lossless projection fix (it only stops a walk from promising mana that does not
 exist), so its residue on the generic tiers is the budgeted search re-spending, not a lost line.
 The package's 43 second-seed slower games against the bar (`build/scratch/nivorder/d8/run2a.log`, `run2b.log`,
-`nc2.log`): at the time of writing 25 recover at d8 b0; two do not (gi774 T3 -> T4 and gi887 T4 -> T5, the
-package's arm one turn later at d8 b0 too) and are in the non-clairvoyant check (`MTG_NC_SEARCH=1`, d8 b0); the
-remaining 16 (gi877 .. gi1992) are still running at d8 b0 -- late-turn Niv games take an hour or more there.
+`run3a.log`, `run3b.log`, `nc2.log`, `nc887.log`): 40 recover at d8 b0 (gi1659 is T6 on both arms there -- the
+off arm's budgeted T5 does not survive unlimited search either). gi774 (T3 -> T4) is T4 on both arms under
+`MTG_NC_SEARCH=1` at d8 b0: clear clairvoyance. **gi887 (T4 -> T5) fails the bar**: T5 vs T6 under the
+non-clairvoyant search at d8 b0 as well. It is the ORDER's (budgeted: off / feed / feed+haste T4, feed+order and
+the package T5; NC d8 b0: feed+haste T5, feed+order T6). Mechanism (game logs `build/scratch/nivorder/g887/`):
+on T1, one Island, the USER's draw sub-order casts Preordain before Gitaxian Probe, so the {Preordain, Probe}
+plan pays Preordain with the Island and Probe with 2 life, while the generic order (a hand-order tie) cast Probe
+for {U} and Preordain on T2. The draws then come in a different order (the order arm sees Niv-Mizzet, the
+Firemind on T1), and at T4 the search -- non-clairvoyant, unlimited -- takes Izzet Signet + Tandem Lookout in
+main 2 over Signet + Generator Servant, so no Servant crack funds a T5 Firemind. No rules or payment fault: a
+search-valuation choice downstream of a different, legal T1. Surfaced to the USER; the order stays ON (net
+-4 / package -2 and -6 on the two seeds; 1 of 74 slower games fails the bar).
 
 **Census** (Niv, seed 1100001, the same 19 games on both binaries -- gi7, which runs the oracle for over half an
 hour, left out): APPLY-DROP-ORDER **4 -> 0**, APPLY-DROP 37 -> 21, DROP-COVERED 123 -> 87, DOMINATED-HASTE 28 -> 25.
