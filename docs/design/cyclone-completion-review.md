@@ -3,14 +3,17 @@
 Status: integration implementation complete; final validation in progress, 2026-10-31.
 No mulligan or value-leaf generation has started.
 
-Current integration is `cyclone-landing905`, based on
-`phase-1-2-deck-analyzer` commit `90503a778`. Pushed backup code `e3e095a26`
-has source tree `c2c6d4a03a5c1df9cf72c55bd29940aacff41efc`. It has not yet
-landed on the shared branch. Full local units pass: 2,415 cases / 3,567,944
-assertions. Fresh PGO+LTO is building at 32 workers; normal smoke, regression,
-reference replay, final cache validation and quiet timing follow. CI41193237355
-passes on Linux, Windows and cross-platform determinism parity. Local frontend
-line-build and reference-backup checks also pass. No changes target `main`.
+Current integration is `cyclone-landing2c76` in the existing Landing905 worktree,
+based on `phase-1-2-deck-analyzer` commit `2c76c854e`. Pushed backup code
+`e63afece6` retains source tree `c2c6d4a03a5c1df9cf72c55bd29940aacff41efc`
+and the latest upstream artifact/GT updates. It has not yet landed on the shared
+branch. Full local units pass:2,415cases/3,567,944assertions; the repeat after the
+data-only update also passes all2,415cases/3,567,944assertions. PGO+LTO has completed all197jobs/5513games at32workers,
+SHA256 `962bc5a514a3128b6a141bfdc1d2f3b21353ea8fd11572cb4d2fd6055249788d`.
+Normal smoke/regression, reference replay, final cache checks and quiet timing
+follow. Source CI41193237355 passes Linux, Windows and parity; candidate
+CI41195511867 is running. Local frontend line-build/reference-backup pass.
+No changes target `main`.
 
 The newer shared-branch union preserves all 760 heuristic slots, all 914 upstream
 ground-truth/log files and all 729 reference files. Completion also repairs

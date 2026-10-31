@@ -6,19 +6,32 @@ No changes target `main`. Normal throughput uses all 32 available logical CPUs.
 
 ## Operative status — Landing905, 2026-10-31
 
-Active integration is `cyclone-landing905`, worktree
+Active integration: `cyclone-landing2c76` in the existing worktree
 `.claude/worktrees/cyclone-landing905`, based on shared-branch commit
-`90503a778`. Backup code `e3e095a2654b52e5853c378cf7ebe56b072689e0` is pushed;
-clean source tree is `c2c6d4a03a5c1df9cf72c55bd29940aacff41efc`. The change
-has NOT yet landed on `phase-1-2-deck-analyzer`. Full units: 2,415 cases /
-3,567,944 assertions PASS. Root owns active fresh PGO+LTO build session64102
-at 32 workers; no PGO hash is asserted before completion. Fresh source CI41193237355
-PASS on Linux, Windows and cross-platform determinism parity (rootwatch81399closed0).
-Local frontend line-build and reference-backup checks PASS. Reference safety scan
-PASS across all 33 worktrees; repeat before session close. Normal smoke/regression
-will run first after PGO to prioritize the shared-branch landing. Cold keep-table
-preparation is still progressing before the training worker pool starts. Superseded Landing138
-PGO was stopped by root; all old source and measurements remain preserved.
+`2c76c854e7ce593f129c0aced8f6854339dd00c2`. Backup code
+`e63afece6c8a7d0d0081ccefd6a0dda2475b69da` is pushed, single parent2c76;
+clean source remains `c2c6d4a03a5c1df9cf72c55bd29940aacff41efc`.
+It has NOT yet landed on `phase-1-2-deck-analyzer`.
+
+The three latest upstream commits change only Burn's value-play settings,
+accepted Burn ground truth, artifact ledgers and job cost data. All nine files
+are retained exactly. Source, all references and the26 Cyclone/Hinata/Kitty
+apparatus assets are unchanged. The linear union and checkout proof is
+`build/scratch/cyclone-finish/landing905-review/latest2c76-tree-preparation.json`;
+older pushed branches and all33worktrees remain intact.
+
+Fresh PGO+LTO build root64102 DONE0, all197training jobs/5513games at32workers.
+Final PGO SHA256:
+`962bc5a514a3128b6a141bfdc1d2f3b21353ea8fd11572cb4d2fd6055249788d`.
+Receipt: `build/scratch/cyclone-finish/landing905-review/final-pgo.json`.
+PGO trained before the data-only update; its source stamp is exactC2. Runtime
+checks use the newest artifacts in this same checkout, without a second build.
+Initial full units2415cases/3,567,944assertions PASS; repeat after the artifact
+update root60598 also DONE0, same2,415cases/3,567,944assertions. Source CI41193237355 PASS Linux, Windows/parity;
+new candidate CI41195511867 is running (rootwatch12286). Local line-build and
+reference-backup checks PASS. Reference safety PASS across33worktrees; repeat
+before session close. Normal smoke/regression32 run next, before cache/oracle
+stages, with baseline2c76. No whole13koptional-quality repeat is selected.
 
 The six upstream commits since138 add EDF energy/payment shapes (four default
 ON, EF_SCALAR_REFUND defaultOFF), accepted EDF/Landfall GT and MidrangeBurn's
@@ -29,12 +42,12 @@ pool census finds no energy, land-aura, ETB-untapper or painland capability in
 those three active apparatus families; this is source applicability evidence,
 not a substitute for fresh normal tests.
 
-Authoritative UNSEALED final packet:
+Authoritative SEALED final packet:
 `build/scratch/cyclone-finish/v7-905-lean/prepared-c2c6d4a-final`.
-Seal only after actual fresh PGO stamp/hash is available; do not launch older
+Sealed with the actual PGO hash above; no stage launched yet. Do not launch older
 V6/V7 prototypes. Root will run normal smoke and regression at32workers,
 including their scenario/reference gates, then inspect ALL changed per-game
-records and every searched slower case against preserved905ground truth.
+records and every searched slower case against preserved2c76ground truth.
 No acceptance from aggregate scores alone; no automatic13kquality repeat.
 Final cache/quiet tests and linear shared-branch push remain root-owned.
 

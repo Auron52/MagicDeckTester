@@ -1,9 +1,8 @@
 # Landing905 normal smoke/regression audit
 
-Prepared against code `e3e095a2654b52e5853c378cf7ebe56b072689e0`, source
+Prepared against code `e63afece6c8a7d0d0081ccefd6a0dda2475b69da`, source
 `c2c6d4a03a5c1df9cf72c55bd29940aacff41efc`, shared-branch base
-`90503a7783c32e4cf7622cb3073421ebfcc67752`. Root owns PGO build64102 and all
-engine launches. No engine/build was run to prepare this workflow.
+`2c76c854e7ce593f129c0aced8f6854339dd00c2`. PGO build64102 is DONE0; root owns all engine launches. No engine/build was run to prepare this workflow.
 
 The existing ground truth is internally consistent: `python3 test/check_gt_logs.py`
 reports912consistent/0stale/0missing. Preserve the upstream accepted EDF/EDF2HG,
@@ -20,14 +19,14 @@ cd /workspaces/MagicDeckTester/.claude/worktrees/cyclone-landing905
 THREADS=32 bash test/regression.sh --smoke
 python3 logs/cyclone-completion/prepared/audit_normal_regression.py \
   --worktree /workspaces/MagicDeckTester/.claude/worktrees/cyclone-landing905 \
-  --mode smoke --baseline-ref 90503a7783c32e4cf7622cb3073421ebfcc67752 \
+  --mode smoke --baseline-ref 2c76c854e7ce593f129c0aced8f6854339dd00c2 \
   --expected-source c2c6d4a03a5c1df9cf72c55bd29940aacff41efc \
   --output /workspaces/MagicDeckTester/build/scratch/cyclone-finish/landing905-review/normal-audit/smoke
 
 THREADS=32 bash test/regression.sh --regression
 python3 logs/cyclone-completion/prepared/audit_normal_regression.py \
   --worktree /workspaces/MagicDeckTester/.claude/worktrees/cyclone-landing905 \
-  --mode regression --baseline-ref 90503a7783c32e4cf7622cb3073421ebfcc67752 \
+  --mode regression --baseline-ref 2c76c854e7ce593f129c0aced8f6854339dd00c2 \
   --expected-source c2c6d4a03a5c1df9cf72c55bd29940aacff41efc \
   --output /workspaces/MagicDeckTester/build/scratch/cyclone-finish/landing905-review/normal-audit/regression
 ```
@@ -80,7 +79,7 @@ python3 test/explain_game.py MODE KEY GI \
 ```
 
 That command runs engines. An old V5/C45/547 binary does **not** establish a
-905baseline just because a particular key once matched; prove an exact old-side
+2c76baseline just because a particular key once matched; prove an exact old-side
 reproduction or label baseline-trace attribution unresolved. Never accept merely
 to manufacture a baseline snapshot. Final acceptance is through the normal
 harness only after per-game review; user-owned option choices remain user-owned.
