@@ -4,21 +4,16 @@
   "valueleaf": "em:1c9539bbaeade750cc31"
  },
  "deck": "burn",
- "detail": "mulligan: KEPT INCUMBENT -- a fresh table at no-lower settings was not better (new-vs-old 0.002937 t, cost 1.009x (se 0.006, 96 seeds)); incumbent restored",
- "finished": "2026-10-30T16:01:19Z",
- "frozen": "58dcb45053e9fa6aa62da85a92872d6eeff6cdff",
- "heartbeat": "2026-10-30T15:45:27Z",
- "host": "550a08fdc1f3",
- "landed": "2c1a959d5a0103f0f7c2470452118163c4f31a7a",
- "landed_at": "2026-10-30T16:01:44Z",
- "result_branch": "artifact-refresh/burn-20261030-1601",
- "run_id": "burn-artifact-queue-d7d6a5-20261030T154152",
- "score": 0.0986,
- "stage": "mulligan",
+ "frozen": "27cfde912cad79b440af16cbfe5896b374f07aba",
+ "heartbeat": "2026-10-31T10:42:12Z",
+ "host": "58199181d02e",
+ "run_id": "burn-artifact-queue-tool-647f24-20261031T104212",
+ "score": 0.0356,
+ "stage": "valueleaf",
  "stages": [
-  "mulligan"
+  "valueleaf"
  ],
- "started": "2026-10-30T15:41:52Z",
- "state": "rejected",
- "worker": "artifact-queue-d7d6a5"
+ "started": "2026-10-31T10:42:12Z",
+ "state": "running",
+ "worker": "artifact-queue-tool-647f24"
 }
