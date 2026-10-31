@@ -198,11 +198,7 @@ def divergence(a, b):
 
 
 def primary_control(arm, arms):
-    if arm.startswith("pbcyc") and arm != "pbcyc" and "pbcyc" in arms:
-        return "pbcyc"
-    if arm.startswith("pb") and arm != "pb" and "pb" in arms:
-        return "pb"
-    return "base"
+    return rp.primary_control(arm, arms)
 
 
 def mover_inputs(root, traces, output, selected_arms, expand_cases, salts):
