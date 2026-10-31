@@ -9716,6 +9716,9 @@ int main(int argc, char* argv[])
     // starved, naming the games in flight. See src/core/MemBudget.h.
     membudget::StartRssWatchdog("mtg");
     if (argc >= 2 && std::string(argv[1]) == "--list-flags") { PrintFlagRegistry(std::cout); return 0; }
+    // The featurizer version this binary's label dumps write (KeepModel.h kFeaturizerCurrent). Read by
+    // scripts/valueleaf.sh to refuse a queue whose banked rows were dumped under another version.
+    if (argc >= 2 && std::string(argv[1]) == "--featurizer-version") { std::cout << kFeaturizerCurrent << "\n"; return 0; }
     // Arm the colored_creature_only legality audit's exit dump (MTG_CCO_AUDIT); no-op when unset.
     CcoAuditDumper();
     // ...and the backtracker's etb_choose_color legality audit (MTG_ETB_BT_AUDIT); no-op when unset.

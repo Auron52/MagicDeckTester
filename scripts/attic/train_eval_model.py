@@ -4,8 +4,13 @@
 Reads rows emitted by the engine's MTG_DUMP_EVAL_ROWS hook -- one row per candidate plan at each
 real decision:
 
-    # label <feat0> <feat1> ... <featN> seed turn      (header, once)
+    # label <feat0> <feat1> ... <featN> seed turn      (header, once per dumping process)
     <expected_win_turn> <f0> <f1> ... <fN> <seed> <turn>
+
+The header's first token names the FEATURIZER the rows were extracted under (KeepModel.h
+kFeaturizerCurrent): "label" = version 1 (the historical placeholder read), "label:featurizer=N"
+otherwise. The trainer stamps that version into the model it writes (eval_model.featurizer, omitted for
+1), so the engine reads a model's inputs under the semantics it was fitted on. See rows_featurizer.
 
 and fits ridge regression predicting a plan's de-clairvoyed EXPECTED win turn from its
 non-clairvoyant features. It stores NEGATED, fixed-point coefficients so the engine's integer
@@ -45,6 +50,39 @@ def read_rows(path):
     if feat_names is None and X:
         feat_names = ['f%d' % i for i in range(len(X[0]))]
     return feat_names, X, y, groups
+
+
+def rows_featurizer(path):
+    """The featurizer version every header of a rows file names (see the module docstring). Refuses a
+    file whose headers disagree -- rows extracted under two semantics cannot train one model -- and a
+    file with no header at all (nothing says what its columns mean)."""
+    versions = set()
+    with open(path) as f:
+        for line in f:
+            if not line.startswith('#'):
+                continue
+            toks = line[1:].split()
+            tag = toks[0] if toks else ''
+            if tag == 'label':
+                versions.add(1)
+            elif tag.startswith('label:featurizer='):
+                versions.add(int(tag.split('=', 1)[1]))
+            else:
+                raise SystemExit("%s: unrecognised rows header %r" % (path, line.strip()[:80]))
+    if not versions:
+        raise SystemExit("%s: no '# label ...' header -- cannot tell which featurizer the rows used" % path)
+    if len(versions) > 1:
+        raise SystemExit("%s: MIXED featurizer versions %s in one rows file -- rows dumped by binaries that "
+                         "read the features differently; re-dump them under one binary" % (path, sorted(versions)))
+    return versions.pop()
+
+
+def stamp_featurizer(model_obj, featurizer):
+    """Record the rows' featurizer on the MODEL object (written only when not 1, so a version-1 model
+    serializes exactly as before the field existed -- the engine reads absent as 1)."""
+    if featurizer != 1:
+        model_obj["featurizer"] = featurizer
+    return model_obj
 
 
 def within_center(X, y, groups):
@@ -134,7 +172,7 @@ def rmse(X, y, coefs, intercept):
     return math.sqrt(s / len(X))
 
 
-def write_sidecar(path, feat_names, coefs, intercept, negate=True):
+def write_sidecar(path, feat_names, coefs, intercept, negate=True, featurizer=1):
     """Fixed-point coefs. negate=True (RANKER): store -coef so Score()=-predicted_win_turn (higher =
     better plan). negate=False (VALUE model): store +coef so Score()=+predicted_win_turn (the search
     reads the leaf Score directly as a win turn, lower = better)."""
@@ -144,6 +182,7 @@ def write_sidecar(path, feat_names, coefs, intercept, negate=True):
         q = int(round(sign * c * SCALE))
         if q != 0:
             obj["coefs"][name] = q
+    stamp_featurizer(obj, featurizer)
     with open(path, 'w') as f:
         json.dump({"eval_model": obj}, f, indent=2)
         f.write('\n')
@@ -229,6 +268,7 @@ def main():
               file=sys.stderr)
 
     feat_names, X, y, groups = read_rows(args.rows)
+    featurizer = rows_featurizer(args.rows)
     n, d = len(X), (len(X[0]) if X else 0)
     print("rows=%d features=%d decisions=%d label[min/mean/max]=%.2f/%.2f/%.2f"
           % (n, d, len(set(groups)), min(y), sum(y) / n, max(y)), file=sys.stderr)
@@ -278,7 +318,7 @@ def main():
             if abs(c) > 1e-4:
                 print("    %-24s %+.4f" % (name, c), file=sys.stderr)
         if args.out:
-            obj = write_sidecar(args.out, feat_names, coefs, intercept)
+            obj = write_sidecar(args.out, feat_names, coefs, intercept, featurizer=featurizer)
             print("wrote %s (%d nonzero coefs, fixed-point x%d)"
                   % (args.out, len(obj["coefs"]), SCALE), file=sys.stderr)
         return
@@ -293,7 +333,8 @@ def main():
             print("    %-22s %+.4f" % (name, c), file=sys.stderr)
 
     if args.out:
-        obj = write_sidecar(args.out, feat_names, coefs, intercept, negate=not args.value)
+        obj = write_sidecar(args.out, feat_names, coefs, intercept, negate=not args.value,
+                            featurizer=featurizer)
         print("wrote %s (%d nonzero coefs, fixed-point x%d, %s)"
               % (args.out, len(obj["coefs"]), SCALE, "VALUE=win-turn" if args.value else "ranker"),
               file=sys.stderr)

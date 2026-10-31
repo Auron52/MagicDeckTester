@@ -150,7 +150,11 @@ def main():
     args = ap.parse_args()
 
     feat_names, X, y, groups = _tm.read_rows(args.rows)
+    # The featurizer the rows were extracted under (their header). Stamped into the model below, so the
+    # leaf goes live reading its inputs exactly as it was trained on them (KeepModel.h kFeaturizerCurrent).
+    featurizer = _tm.rows_featurizer(args.rows)
     n, d = len(X), len(X[0])
+    print("featurizer=%d (from the rows header)" % featurizer, file=sys.stderr)
     print("rows=%d features=%d decisions=%d" % (n, d, len(set(groups))), file=sys.stderr)
 
     # Optional warm start: fit the linear ranker and initialise F to its (goodness) score, so trees
@@ -262,7 +266,8 @@ def main():
                 coefs_obj[name] = q
     intercept = int(round(reg_intercept * SCALE))   # regression: mean-win-turn init; ranking: 0
     if args.out:
-        obj = {"eval_model": {"intercept": intercept, "coefs": coefs_obj, "trees": jtrees}}
+        obj = {"eval_model": _tm.stamp_featurizer(
+            {"intercept": intercept, "coefs": coefs_obj, "trees": jtrees}, featurizer)}
         with open(args.out, "w") as f:
             json.dump(obj, f)
             f.write("\n")

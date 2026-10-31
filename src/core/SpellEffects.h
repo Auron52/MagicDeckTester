@@ -113,7 +113,9 @@ inline bool PlaceholderManaOn()       // float-colour commit weighs the hand's r
     static const bool e = EnvOn("MTG_PLACEHOLDER_MANA", false);
     return heurarm::Flag(heurarm::PLACEHOLDER_MANA, e);
 }
-inline bool PlaceholderFeaturesOn()   // learned-model featurizers -- a USER decision: the shipped models were fitted on the placeholder read
+// Learned-model featurizers: an EXPERIMENT OVERRIDE (ON = every model reads the definition, whatever its
+// sidecar's "featurizer" names). The read is otherwise chosen PER MODEL (KeepModel.h kFeaturizerCurrent).
+inline bool PlaceholderFeaturesOn()
 {
     static const bool e = EnvOn("MTG_PLACEHOLDER_FEATURES", false);
     return heurarm::Flag(heurarm::PLACEHOLDER_FEATURES, e);

@@ -144,6 +144,34 @@ inline KeepScore ScoreFromJsonObj(const KeepModel& km, const nlohmann::json& sc)
     return s;
 }
 
+// A learned model's FEATURIZER version (KeepModel.h kFeaturizerCurrent), read off the MODEL object
+// itself (`eval_model` / `keep_model`), never the sidecar's top level, so it cannot detach from the
+// model it describes when a pipeline copies one model into another sidecar (valueleaf.sh phase B
+// merges only eval_model). Absent = 1, the historical placeholder read every pre-2026-10-31 model was
+// fitted on. An unknown version is FATAL rather than read as 1: an older binary scoring a newer model
+// under the old rules is exactly the train/serve skew the field exists to rule out.
+inline int ModelFeaturizerFromJson(const nlohmann::json& m, const char* what)
+{
+    if (!m.is_object() || !m.contains("featurizer")) { return kFeaturizerPlaceholder; }
+    const nlohmann::json& v = m["featurizer"];
+    const int f = v.is_number_integer() ? v.get<int>() : -1;
+    if (!FeaturizerKnown(f))
+    {
+        std::cerr << "[profload] FATAL: " << what << " names featurizer " << v.dump()
+                  << ", which this binary does not know (it knows " << kFeaturizerPlaceholder << ".."
+                  << kFeaturizerCurrent << "). Refusing to read the model's inputs under the wrong"
+                     " semantics -- rebuild from a tree that knows it.\n";
+        std::exit(2);
+    }
+    return f;
+}
+// Written only when it is not 1, so every model fitted on the historical read serializes exactly as
+// it did before the field existed.
+inline void ModelFeaturizerToJson(nlohmann::json& m, int featurizer)
+{
+    if (featurizer != kFeaturizerPlaceholder) { m["featurizer"] = featurizer; }
+}
+
 inline nlohmann::json KeepModelToJsonObj(const KeepModel& km)
 {
     using json = nlohmann::json;
@@ -208,6 +236,7 @@ inline nlohmann::json KeepModelToJsonObj(const KeepModel& km)
         for (const KeepScore& s : km.leaf_scores) { ls.push_back(ScoreToJsonObj(km, s)); }
         m["leaf_scores"] = ls;
     }
+    ModelFeaturizerToJson(m, km.featurizer);
     return m;
 }
 
@@ -215,6 +244,7 @@ inline KeepModel KeepModelFromJsonObj(const nlohmann::json& m)
 {
     using json = nlohmann::json;
     KeepModel km;
+    km.featurizer = ModelFeaturizerFromJson(m, "keep_model");
     if (m.contains("key_pieces"))
     {
         for (const json& v : m["key_pieces"]) { km.key_pieces.push_back(v.get<std::string>()); }
@@ -1135,6 +1165,7 @@ inline nlohmann::json EvalModelToJsonObj(const MidGameEvaluator& e)
         }
         m["trees"] = std::move(trees);
     }
+    ModelFeaturizerToJson(m, e.featurizer);
     return m;
 }
 
@@ -1148,6 +1179,9 @@ inline MidGameEvaluator EvalModelFromJsonObj(const nlohmann::json& j)
     // Neither part present -> the EMPTY model (inert; heuristic ranking), never an all-zero "active"
     // model that would silently re-tiebreak plans.
     if (!has_coefs && !has_trees) { return e; }
+    // Which semantics the model's inputs mean (see ModelFeaturizerFromJson). Stored ON the evaluator, so
+    // every featurize-and-score site passes the model's own version -- per deck, per thread, no global.
+    e.featurizer = ModelFeaturizerFromJson(m, "eval_model");
     e.intercept = m.value("intercept", 0LL);
     if (has_coefs)
     {

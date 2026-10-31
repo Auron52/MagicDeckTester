@@ -551,6 +551,19 @@ static const char* s_eval_rows_path = std::getenv("MTG_DUMP_EVAL_ROWS");
 // is the training target for the value model that replaces the search's horizon rollout with the
 // searched result. Shares the same K-reshuffle loop as the eval dump. See learned-d0-policy.md.
 static const char* s_value_rows_path = std::getenv("MTG_DUMP_VALUE_ROWS");
+// The rows header's first token names the FEATURIZER the rows were extracted under: every label dump
+// writes kFeaturizerCurrent (whatever the live sidecar's model reads -- a GENERATOR fits the next model on
+// the current read), and the trainers (scripts/attic/train_eval_model.py rows_featurizer) stamp it into
+// the model they write, so a leaf goes live with the semantics it was trained on. The token is "label"
+// for featurizer 1 (the historical header) and "label:featurizer=N" otherwise; every rows reader takes
+// the feature names as tokens [1:-2] and discards this one, so no reader changes. A mixed file (two
+// headers that differ) is refused by scripts/valueleaf.sh phase_split.
+static std::string RowsHeaderLabel()
+{
+    return kFeaturizerCurrent == kFeaturizerPlaceholder
+         ? std::string("# label")
+         : "# label:featurizer=" + std::to_string(kFeaturizerCurrent);
+}
 // MTG_VALUE_LABEL_BNB: DEFAULT ON; =0 disables. The value row consumes ONLY report.earliest (the MIN
 // over candidates), so carrying the running incumbent as the cross-candidate cutoff is lossless for
 // that label while cutting the work -- the same bound FSLineTail already carries between siblings.
@@ -879,13 +892,13 @@ static void EmitEvalRows(const GameState& state, int max_turns, bool second_main
         {
             if (!v_header)
             {
-                v_out << "# label";
+                v_out << RowsHeaderLabel();
                 for (int i = 0; i < static_cast<int>(MidGameFeature::Count); ++i)
                 { v_out << ' ' << MidGameFeatureName(static_cast<MidGameFeature>(i)); }
                 v_out << " seed turn\n";
                 v_header = true;
             }
-            const std::vector<int> feat = ExtractMidGameFeatures(state, MidGamePlanSummary{});
+            const std::vector<int> feat = ExtractMidGameFeatures(state, MidGamePlanSummary{}, kFeaturizerCurrent);
             v_out << (static_cast<double>(earliest_sum) / earliest_n);
             for (int vv : feat) { v_out << ' ' << vv; }
             v_out << ' ' << state.game_seed << ' ' << state.turn_number << '\n';
@@ -911,7 +924,7 @@ static void EmitEvalRows(const GameState& state, int max_turns, bool second_main
     }
     if (!s_header)
     {
-        s_out << "# label";
+        s_out << RowsHeaderLabel();
         for (int i = 0; i < static_cast<int>(MidGameFeature::Count); ++i)
         { s_out << ' ' << MidGameFeatureName(static_cast<MidGameFeature>(i)); }
         s_out << " seed turn\n";
@@ -924,7 +937,7 @@ static void EmitEvalRows(const GameState& state, int max_turns, bool second_main
         names.insert(names.end(), a.sac.begin(), a.sac.end());
         MidGamePlanSummary sum  = SummarizePlanByNames(names, !a.land.empty());
         sum.baseline_eval       = TurnSolver::PlanBaselineEval(state, names);  // lockstep w/ the ranking seam
-        const std::vector<int>   feat = ExtractMidGameFeatures(state, sum);
+        const std::vector<int>   feat = ExtractMidGameFeatures(state, sum, kFeaturizerCurrent);
         s_out << (static_cast<double>(a.sum) / a.count);
         for (int v : feat) { s_out << ' ' << v; }
         s_out << ' ' << state.game_seed << ' ' << state.turn_number << '\n';
