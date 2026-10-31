@@ -28057,6 +28057,21 @@ static thread_local bool g_devseq_latent_hit = false;
 static thread_local unsigned long long g_devseq_latent_n = 0;   // every latent record, ever (a node's subtree test)
 static thread_local int  g_devseq_two_pass = 0;   // inside a two-pass FullSearchLine (a nested one runs plain)
 static thread_local int  g_devseq_latent_min_turn = INT_MAX;   // the earliest turn a latent occurrence was met at
+// MTG_DEV_SEQ_DIRTY_READ (DEFAULT ON; =0 restores the old marking): a first-pass node that READS a dirty node's memo
+// answer is dirty itself. Before, only a node whose own walk met a latent occurrence was marked (g_devseq_latent_n
+// moved under it), so a node that answered from a dirty node's entry -- a transposition, reached by another path --
+// rested on that node's ONE-DEVIATION answer and yet was carried into the second pass as a full-tree answer and filed
+// in the game-line cache under the full-tree tag, where a later decision reads it (333 such nodes over the 41-case
+// suite manifest's 22,718 first passes, 2026-10-31). Within the decision the win turn survived -- the dirty node is
+// re-walked on its own path -- but the cross-decision entry could hand a later root the smaller tree's answer, a line
+// unfindable there at any budget. The read now counts as meeting a latent occurrence (the reader's subtree does hold
+// one: the dirty node's), so the reader is erased before the second pass, re-walked there, and filed under
+// gamelc::SupTag by the first pass. The earliest-latent scope (DvsMltFrame) already inherited the dirty node's turn.
+static bool DvsDirtyReadOn()
+{
+    static const bool v = EnvOn("MTG_DEV_SEQ_DIRTY_READ", true);
+    return heurarm::Flag(heurarm::BP_DEV_SEQ_DIRTY_READ, v);
+}
 // The first pass's line memo, carried into the second (see FullSearchLine): the ladder takes it in place of a fresh
 // one, and every node whose walk met a latent occurrence names its keys in g_devseq_dirty so the carry drops them.
 struct FSLineCache;
@@ -90287,13 +90302,17 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         key_win = key;
         if (s_split_keys && CanonSimKeyOn()) { Fold(key_win, FsOrderSig(state)); }
         // MTG_DEV_SEQ_TAIL_SKIP: a first-pass read of a dirty node's answer depends on its latent occurrences too.
+        // MTG_DEV_SEQ_DIRTY_READ: ...and makes the reader DIRTY (see DvsDirtyReadOn).
         if (lc->dvs_mode == 1 && !lc->dvs_dirty.empty())
         {
+            bool dvs_read_dirty = false;
             for (const TranspositionTable::Key* dk : { &key, &key_win })
             {
                 const auto di = lc->dvs_dirty.find(*dk);
-                if (di != lc->dvs_dirty.end()) { g_devseq_latent_min_turn = std::min(g_devseq_latent_min_turn, di->second); }
+                if (di != lc->dvs_dirty.end())
+                { g_devseq_latent_min_turn = std::min(g_devseq_latent_min_turn, di->second); dvs_read_dirty = true; }
             }
+            if (dvs_read_dirty && DvsDirtyReadOn()) { g_devseq_latent_hit = true; ++g_devseq_latent_n; }
         }
         // MTG_GAME_LINE_CACHE: an answer an earlier decision of this game computed (see gamelc).
         if (gamelc::On() && g_fsline_nest > 0)
@@ -93667,7 +93686,8 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             g_devseq_dirty      = &dirty;
             const bool dvs_ts   = DvsTailSkipOn();
             g_devseq_dirty_meta = dvs_ts ? &dirty_meta : nullptr;
-            carry.dvs_mode      = dvs_ts ? 1 : 0;   // MTG_DEV_SEQ_TAIL_SKIP: record (see DvsTailGate)
+            // MTG_DEV_SEQ_TAIL_SKIP records, and MTG_DEV_SEQ_DIRTY_READ reads the dirty-node map this mode keeps.
+            carry.dvs_mode      = (dvs_ts || DvsDirtyReadOn()) ? 1 : 0;
             line1 = FullSearchLine(state, depth, max_turns, second_main, tt, budget, &c1);
             carry.dvs_mode      = 0;
             g_devseq_dirty_meta = meta_prev;

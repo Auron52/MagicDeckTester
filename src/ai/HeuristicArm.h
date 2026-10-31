@@ -772,6 +772,7 @@ enum Slot : int
     REAL_PAY_ATTACK_PIN,      // MTG_REAL_PAY_ATTACK_PIN  under MTG_REAL_PAY_SCRIPT, a pre-combat main paid by the oracle's script declares the attackers the SEARCH's apply board declared (ManaOracle PlanPaymentScript attack_pin -> AIEngine::DeclareAttackers): the script leaves more mana untapped, and an attack rule that reads it (FiveColour's Deathrite hold) re-decided the scored combat (s1130288 gi287). =0 -> the attack heuristic re-decides on the script's board
     DORK_ATK_PROVIDER_HOLD,   // MTG_DORK_ATK_PROVIDER_HOLD  the searched dork attack/hold (MTG_DORK_ATK_SEARCH) also CONTESTS a damage-dealing mana dork an ARCHETYPE's ShouldAttackWith holds for its mana (FiveColour's Deathrite / Bloom Tender hold): the FSLineWin branch evaluates the release and the executor pin honours it (mana-oracle 13.2: FiveColour s1130288 gi287 under MTG_REAL_PAY_SCRIPT). =0 -> only the collapsed-main tower's holds are contested
     BP_DEV_SEQ_TAIL_SKIP,     // MTG_DEV_SEQ_TAIL_SKIP  MTG_BP_DEV_SEQ's second pass (root cut R-1) skips what cannot change within its window: a dirty node's TAIL whose first-pass walk was complete under a cutoff at least as loose, found nothing by the cut and met no latent occurrence by it (DvsTailGate), a dirty NODE whose complete walk met latent occurrences only past the root cut (kept, not erased: FslEraseDirty), and a main-1 plan whose latent-free apply leaves nothing the walker reads and whose tail is skippable (its apply skipped too). Identities within the window: 41 suite cases byte-identical, units 0.9906x, Melira 0.939x (the lever's +26.8% -> +19.1%). =0 -> the full second-pass re-walk
+    BP_DEV_SEQ_DIRTY_READ,    // MTG_DEV_SEQ_DIRTY_READ  MTG_BP_DEV_SEQ's first pass marks a node DIRTY when it reads a dirty node's memo answer (a transposition onto a node whose walk met a latent occurrence), not only when its own walk meets one: such a node rested on a one-deviation answer, yet was carried into the second pass and filed in the game-line cache as a full-tree answer. =0 -> only a node whose own walk met a latent occurrence is dirty
     COUNT
 };
 
@@ -1488,6 +1489,7 @@ inline const char* Name(int slot)
         "MTG_REAL_PAY_ATTACK_PIN",
         "MTG_DORK_ATK_PROVIDER_HOLD",
         "MTG_DEV_SEQ_TAIL_SKIP",
+        "MTG_DEV_SEQ_DIRTY_READ",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

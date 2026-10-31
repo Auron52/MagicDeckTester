@@ -495,13 +495,23 @@ the search lost the T3 kill at `--depth 8 --budget-ms 0` (seed 1343448 gi3447 is
     1.8k of Goblins' 17.5k main-2 compound EMPTY arms do reach new states. (c) Re-applying a dirty node's main-1 base
     plans where wave-0 variants depend on them: skipping such an apply would un-fire the wave-0 collapses and ArmNew
     declines that their variants rely on, so it would cost more than it saves.
-  * **A completeness gap found on the way (not fixed: it changes play, so it is the USER's call).** A first-pass node
+  * **A completeness gap found on the way -- FIXED the same day by `MTG_DEV_SEQ_DIRTY_READ` (below).** A first-pass node
     that met no latent occurrence itself but READ a dirty node's memo answer is not marked dirty: it is carried into
     the second pass as a full-tree answer, and filed in the game-line cache under the full-tree tag, although it rests
     on a smaller-tree answer. Within one decision the win turn survives (the dirty node is re-walked on its own path),
     but the game-line entry can hand a later decision the smaller tree's answer. `MTG_DEV_SEQ_STATS` counts these
     nodes ("clean nodes that read a dirty answer"): 333 over the 41 cases' 22,718 first passes, so rare. The fix is to treat such a read as dirtying (the earliest-latent
     scope already propagates it), at the price of more second-pass work.
+* **`MTG_DEV_SEQ_DIRTY_READ` (2026-10-31; heurarm `BP_DEV_SEQ_DIRTY_READ`, default ON; `=0` restores the old marking).**
+  A first-pass node that reads a dirty node's memo answer (its key is in the carry's dirty map, `FSLineCache::dvs_dirty`)
+  now counts as meeting a latent occurrence (`++g_devseq_latent_n`): its subtree does hold one, the dirty node's. So it is
+  erased before the second pass and re-walked there, and the first pass files it under `gamelc::SupTag`, never the
+  full-tree tag. The carry keeps the dirty map whenever this lever or `MTG_DEV_SEQ_TAIL_SKIP` is on. Measured on the
+  HELD-OUT seed 1640001, same 41-case manifest, fix off vs on in one pooled batch (tail skip on in both): **0 games moved
+  of 18,117, every digest identical**, units 0.99999x overall (146,600,189 -> 146,600,030; Melira 0.9999x, FiveColour
+  1.0001x, every other deck 1.0000x). With `MTG_DEV_SEQ_STATS` on Melira + FiveColour the clean nodes that read a
+  dirty answer go 62 -> 0 and the dirty nodes 5,573 -> 5,595. No slower game, so nothing to recover; the Goblins d8 b0
+  witnesses (gi144, gi3447, gi2586) stay T3. mtg-test 2260/2260, scenarios 351/351.
 
 ### 6.2 Smaller things seen, not changed
 
