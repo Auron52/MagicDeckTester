@@ -336,3 +336,31 @@ that explicit path proof. No profile/value generation or proposal-default adopti
   residual0; FSL did notbind. Per-game maximum858,347KB exceeds512MiB and confirms
   there is no fixedper-threadquota. Normal1 counterpart is nowrunning; no finalt12/tiny
   proof is claimed yet.
+
+## V3 preflight closed; quality queue active (03:15 UTC)
+
+- Final normal1/6 preflight PASS: all168 shared games exactly equal in win turn,
+  digest and work units; noFD/nonconv or FSLbinding. Normal6's300 additional shape
+  games also match source A exactly. Report: `v3/final-pgo-inputs/reports/memory-preflight-report.json`.
+- Four final smoke controls completed/reviewed on the frozen PGO binary. Goblins2HG
+  seed1064/GI63 atd8b0 recovers exact `63 4 13a9211a976e729a`; opening/mulligan/full
+  turn arrays match the preserved old recovery. Three d0 sanity traces are plausible:
+  empty-search Anti Mire; empty-search Fluctuator Tutor thenT8 double-Stinger lethal;
+  PD own-life loss is correctly unwon, with the explicit sticky-loss sentinel.
+- All157 final smoke results are byte-identical to source A. Snow's15 changed
+  fingerprints each match prior fresh-main controls. PD has45 additional digest-only
+  identities beyond the historical four-game whiff audit; no precise cause is claimed
+  for those45. Final smoke audit and reviewed artifact hashes:
+  `v3/final-smoke-audit.md`, `v3/regression-controls/final-controls.reviewed-provenance.json`.
+  No GT has been accepted yet.
+- PrimaryV3 began03:02:53UTC: launcher1663237, engine1663268,12workers, tool session60061.
+  Runtime status/logs: `v3/final-pgo-inputs/runs/primary-quality/`.
+  First heartbeat:12/12busy, RSS1.9GB. The whole480-game QC3 cohort completed by165s,
+  zeroFD/nonconv/leafwarnings; all three leaf/first-turn modes exercised. At634s the
+  pool had1650 completedgames; only blinded-cast forecast diagnostics, no ordinary
+  FD/nonconv. These forecasts still require their paired ordinary-world review.
+- Primary remains one13,142-game/1490-job queue. Independent reviewer monitors exact
+  attribution; no adoption or whole-pool quality verdict from partial data. Conditional
+  pruning manifests may be prepared once all720PhaseCjobs are complete; no follow-up
+  engine runs overlap this pool. Then remaining tiny12/unbounded6/iso92, conditional
+  blind/recovery proofs, full regression and quiet535-game bottoming-ON cost gate.
