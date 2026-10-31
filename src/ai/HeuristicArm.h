@@ -831,6 +831,7 @@ enum Slot : int
     SHADOWBORN_FREE_INTENT_TAKE, // MTG_SHADOWBORN_FREE_INTENT_TAKE  Shadowborn Apostle INT-9: a ripple-revealed (FREE) creature-sacrificing spell (Diabolic Intent) is TAKEN iff an expendable victim exists (a Harpy token, or Apostles on the battlefield + in hand beyond one activation's six) and, for a tutor, the USER table has a non-fallback pick. DEFAULT OFF = never take one (USER 2026-11-03: "I'm considering whether we should just never cast it"); the measured alternative arm, pending the USER
     RAMP_FILTER_FEED_ORDER,   // MTG_RAMP_FILTER_FEED_ORDER  the order walks behind the payable-order decider (ExactOrderWalkImpl / FirstUnpayablePosImpl) HOLD a same-plan ramp-filter rock's net +1 (Izzet Signet: "{1},{T}: Add {U}{R}") until the pool has a unit to feed its {1}. It was credited at once, so "Signet off two Islands, then Sol Ring" read as payable off the unfed Signet, the decider kept that order and both apply worlds dropped the Sol Ring (mana-oracle APPLY-DROP-ORDER NivMizzetCombo). =0 -> the unconditional credit
     SERVANT_HASTE_KEEP,       // MTG_SERVANT_HASTE_KEEP  a noncreature payment keeps Generator Servant's haste-tagged {C} floating for a LATER creature cast in the same line (g_line_haste_takers), tapping other sources instead, when that payment still pays and the rest of the line stays payable on the board it leaves. It drained them first, so 'crack the Servant, Signet, hasty Niv-Mizzet' lost the haste at any budget (NivMizzetCombo cast-order draft p5; viewer references). =0 -> the drain-first payment
+    NIV_CAST_ORDER,           // MTG_NIV_CAST_ORDER  the USER's NivMizzetCombo cast order (2026-10-31): Sol Ring > Izzet Signet > the Nivs > Curiosity on a Niv > Lookout with a Niv > Brainstorm > Ponder > Preordain > Gitaxian Probe > Remand > [no Niv: Curiosity > Lookout] > Generator Servant, binding inside cantrip plans, with the cantrip-first VALUE hoist of Curiosity / Lookout conditional on a Niv. =0 -> the generic tiers
     COUNT
 };
 
@@ -1606,6 +1607,7 @@ inline const char* Name(int slot)
         "MTG_SHADOWBORN_FREE_INTENT_TAKE",
         "MTG_RAMP_FILTER_FEED_ORDER",
         "MTG_SERVANT_HASTE_KEEP",
+        "MTG_NIV_CAST_ORDER",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
