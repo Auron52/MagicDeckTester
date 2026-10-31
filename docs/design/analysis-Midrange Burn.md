@@ -1,27 +1,16 @@
 # Midrange Burn analysis
 
 Deck: `decks/Midrange Burn/Midrange Burn.cod` (60 cards, mono-red with Fiery Islet).
-Started 2026-10-29. Implementation and the original-branch full verifier pass
-are complete. The original-branch b20 cost gate passed at 2.95x Hinata. The required
-horizon leaf check completed 18 blocks and both its aggregate and unlimited-
-budget preservation gates pass; keep default ON. The authored cleanup-discard
-policy was approved and adopted on 2026-10-30 behind a default-on, reversible
-Midrange-only flag. Its paired seeded tiers are non-inferior overall; the one
-persistent slower game is documented below.
-Exhaustive mulligan-profile and value-leaf generation was paused on 2026-10-30
-while another container used the box. A new shared
-passive-opponent land pattern passed a full smoke A/B. A targeted fold of burn
-spells against inert passive creatures restored the 20 ms two-headed play
-setting under the integrated-branch cost gate: 1.21x Hinata (limit 3x),
-with a 6.0133 two-headed regression average. The current branch has accepted
-Midrange Burn smoke and regression baselines (11 keys); overnight ground truth
-has not yet been recorded here.
-The final discard-rule full unit suite passed 2,230 cases and 3,556,777
-assertions; all 349 scenarios passed. The final integrated verifier passed every
-blocking gate, including 15/15 card coverage, field and cost audits, viewer
-wiring, mismatch checks, play invariants, and suite membership.
-Chronological checkpoints below include superseded intermediate states; this
-opening status is current.
+Started 2026-10-29. Implementation, card coverage, viewer wiring, the discard
+policy, cast ordering, Rift Bolt multi-suspend, and the passive opponent's
+nonbasic-land pattern are complete. The exhaustive 14-bucket mulligan table is
+adopted, and the saved ten references have zero search shortfalls. The value-leaf
+screen selected a cheaper leafless search shape at the built-in depth-5, 20 ms
+play setting; the learned model remains staged because it costs more search work.
+Smoke, regression, and the Burn-only overnight ground truth have been accepted
+for the shipped shape. The full strict viewer replay passes 699 references with
+no play drift or enumeration gaps. Chronological checkpoints below include
+superseded intermediate states; this opening status is current.
 
 On 2026-10-31 the first ten hand-played references were preserved on the shared
 branch. The shipped search, with each recorded mulligan and bottom forced, tied
@@ -49,8 +38,37 @@ same-hand play digests differed under table bottoming, but all four exactly
 matched the static baseline with lookahead bottoming restored, confirming
 bottoming-method search residue rather than an in-game table effect. Only
 Midrange Burn's overnight ground truth was accepted; the full-suite run also
-found unrelated stale keys that need their own large-change audit. The value
-leaf is next.
+found unrelated stale keys that need their own large-change audit.
+
+## Value-leaf and search-shape screen (2026-10-31)
+
+The value-leaf driver labeled 10,837 positions from 2,500 games, trained a
+model (held-out RMSE 0.5050), and completed all 52 paired matrix cells at 400
+games each. The risk gate passed. On eight paired seeds and 8,000 games per arm,
+the learned leaf improved average turn-to-win by 0.00800 but used 1.217x the
+baseline search units. It remains staged as a quality/cost tradeoff. The
+leafless final-depth single-pass shape improved by 0.00387 turns at 0.955x
+search units, so the driver adopted it as
+`decks/Midrange Burn/Midrange Burn.value.json` with `ladder=single`, `leaf=none`,
+and `alpha=relaxed`. The 200-job play-setting grid kept the built-in depth-5,
+20 ms setting; no other setting passed the cheaper-and-not-worse rule. No
+escalation-skip allowance applies to this single-pass shape.
+
+With the selected shape, the search still tied all nine winning hand-played
+references and won the one human loss, for zero shortfalls. Strict viewer replay
+passed 699 references (273 exact, 425 repaired, one beaten, zero drift/gaps).
+Burn-only smoke and regression were rebaselined after the per-game audit. One
+2HG smoke game and one 2HG regression game slowed at 20 ms; both recovered to
+their old result at higher budgets. On the overnight searched rows, the
+loss-penalized average moved 4.37313 to 4.37229 over 6,006 single-player games
+and 5.82355 to 5.81765 over 680 2HG games. The audit found 75 faster and 65
+slower searched games; 61 slowdowns recovered at higher budget, while four
+persisted. The net improvement and complete reference match support adopting
+this shape. Only Burn's overnight keys were accepted; unrelated full-suite
+ground truth remains untouched. After rebasing onto the three subsequent
+search-engine commits, the Burn smoke, regression (7/7 rows, full strict
+699-reference replay), and overnight (18/18 rows) checks all passed without
+any changed Burn game; the ten hand-played references still had zero shortfalls.
 
 ## Search cost and cost-choice audit (2026-10-30)
 

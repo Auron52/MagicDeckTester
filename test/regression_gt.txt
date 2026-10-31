@@ -10,9 +10,9 @@
 
 # --- smoke ---
 midrangeburn_smoke_d0_s1001=5.2510/9e5cd29ce09f769b
-midrangeburn_smoke_d3_s1001=4.5000/a41db6c3f04db0c7
-midrangeburn_smoke_d5_s1001=4.4400/a1e4112bf34bf444
-midrangeburn2hg_smoke_d5_s1001=5.7200/fdd0875cdb235e8c
+midrangeburn_smoke_d3_s1001=4.5000/6693204da7693b41
+midrangeburn_smoke_d5_s1001=4.4400/f4c364e91457f880
+midrangeburn2hg_smoke_d5_s1001=5.7600/70d97af185417b31
 fungusv3_smoke_d0_s1001=5.2450/c1ddece5a55e2df4
 fungusv3_smoke_d3_s1001=4.4600/7c3b478beb7cebd5
 fungusv3_smoke_d5_s1001=4.5314/9439236508fb9c5b
@@ -417,10 +417,10 @@ elementals_regression_d3_s2002=4.3600/ca6c8fdbc261ce0a
 elementals_regression_d5_s2002=4.2800/5d9f2fc1c26c6064
 elementals_regression_d5_s3003=4.2400/3f82dd296f144188
 midrangeburn_regression_d0_s2002=5.2170/531db6d75a635ad0
-midrangeburn_regression_d3_s2002=4.5733/728e0338eec75de2
-midrangeburn_regression_d5_s2002=4.4400/fe1c99874fba4421
-midrangeburn_regression_d5_s3003=4.2800/49e10032b789e0c3
-midrangeburn2hg_regression_d5_s2002=5.9733/a435ee9b5b4bd64f
+midrangeburn_regression_d3_s2002=4.5467/3eebd67c8cfe2750
+midrangeburn_regression_d5_s2002=4.4333/ba999bfc3828dbb3
+midrangeburn_regression_d5_s3003=4.2733/ecdc58112064d976
+midrangeburn2hg_regression_d5_s2002=5.9200/f130e13084e612e6
 
 # --- overnight ---
 midrangeburn_overnight_d3_s30041=4.3333/af5954b2ad5cceef
@@ -913,15 +913,15 @@ midrangeburn_overnight_d0_s4004=5.2240/2f4a0621a34e3f63
 midrangeburn_overnight_d0_s6006=5.2090/6e14bbf52f54850d
 midrangeburn_overnight_d0_s8008=5.1705/82c5f6b399ea13e8
 midrangeburn_overnight_d0_s10010=5.1865/968016313d654edd
-midrangeburn_overnight_d3_s4004=4.3520/0e6649ed2ec7354d
-midrangeburn_overnight_d3_s5005=4.3610/6ba4828270b9146e
-midrangeburn_overnight_d3_s6006=4.4210/fe6ff58aeea67f9c
-midrangeburn_overnight_d3_s7007=4.3410/e3c3941bd3715e8f
-midrangeburn_overnight_d5_s4004=4.3820/263215e1c74291ad
-midrangeburn_overnight_d5_s5005=4.3560/ef23bb815930c604
-midrangeburn_overnight_d5_s6006=4.4620/be726e9e2e99d9e0
-midrangeburn_overnight_d5_s7007=4.3280/c2cd8a377fc1bd28
-midrangeburn2hg_overnight_d5_s4004=5.9118/fb9e34df59f592b5
-midrangeburn2hg_overnight_d5_s5005=5.6824/9b61c5d096606ea5
-midrangeburn2hg_overnight_d5_s6006=5.9471/304cae9352e27890
-midrangeburn2hg_overnight_d5_s7007=5.7529/5f2d12b9ee9dbf6a
+midrangeburn_overnight_d3_s4004=4.3490/6b63c3a7367a8abe
+midrangeburn_overnight_d3_s5005=4.3570/39dc1b0498333265
+midrangeburn_overnight_d3_s6006=4.4240/44442aea32d586c0
+midrangeburn_overnight_d3_s7007=4.3440/17309b8956b0681c
+midrangeburn_overnight_d5_s4004=4.3820/c409f2170a24e050
+midrangeburn_overnight_d5_s5005=4.3580/a9691ee4c3412c47
+midrangeburn_overnight_d5_s6006=4.4560/130fef74faedb9ec
+midrangeburn_overnight_d5_s7007=4.3240/1343b79ca0e775ef
+midrangeburn2hg_overnight_d5_s4004=5.9176/1fc18329abfe46e9
+midrangeburn2hg_overnight_d5_s5005=5.6706/fa1a2c5d3b2361cc
+midrangeburn2hg_overnight_d5_s6006=5.9471/5af862db465aec58
+midrangeburn2hg_overnight_d5_s7007=5.7353/ba151827c11d8a55
