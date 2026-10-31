@@ -7,12 +7,11 @@
 > Follow-up source `89b146d10406063213d9abe41e1cfdf1a616c021` is now on
 > `cyclone-landingdfcb` at `4c19ce805`, based on latest shared `dfcb18cb9`.
 > New PD/Slivers artifacts and all accepted upstream GT are retained exactly.
-> All2,420 unit cases /3,568,115 assertions pass. PGO, compiler parity and normal
-> smoke/regression/strict709 references are reviewed and accepted. Three new
-> one-turn slowdowns match old uncached play and all recover with more search.
-> Normal/tiny cache168pairs match exactly; remaining one-worker proof and fresh
-> actual15Claude sweep are active. Filtered new-artifact smoke, quiet timing,
-> final shared push and admission still precede artifact generation.
+> All2,420 unit cases, normal tests/strict709 references, platform parity,
+> cache invariance and15 actual Claude games have completed reviewed validation.
+> Quiet855 cost FAILS admission: current13.69xHinata, PB3.52x, PB+KEEP/Myriad3.55x.
+> No policy is adopted; no suite admission or artifact generation has begun.
+> Land the tested follow-up/evidence first, then optimize the measured bottleneck.
 > Follow-up fixes repair cache billing context, fetched-shock choices and the
 > proposal contract. V5 optional work remains partial (2,439/5,986), preserved.
 > Fixed 512 MB per-thread plan/FSL quotas are removed; existing shared RAM-sized

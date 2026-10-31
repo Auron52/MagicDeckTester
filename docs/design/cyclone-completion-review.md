@@ -1,33 +1,40 @@
 # Cyclone completion review
 
-Status: integrated code is landed; focused follow-up validation is in progress,
-2026-10-31. No mulligan or value-leaf generation has started.
+Status: follow-up implementation and validation complete; generation is blocked
+by measured cost, 2026-10-31. Nothing targets main.
 
-The shared branch is atdfcb18cb9; primary remains acceptedC2 integration3889.
-Follow-up branch cyclone-landingdfcb retains all latestPD/Slivers artifacts and
-has clean source89b146d10406063213d9abe41e1cfdf1a616c021. All2,420unitcases pass;
-freshPGO20de8d519c6c7c8494925d5170ff91ed06f5b4fcde4fd1bc04d1325113bb5e80
-and three-game full-trace compiler parity pass. Normal smoke/regression have
-completed physical reviews and normal harness acceptance (initialrc1/accept0).
-Exactly10GTkeys moved; unrelated/latestupstream/overnight results are retained.
+Latest shared artifacts from dfcb18cb9 are retained on cyclone-landingdfcb.
+Frozen source is89b146d10406063213d9abe41e1cfdf1a616c021; PGO SHA256 is
+20de8d519c6c7c8494925d5170ff91ed06f5b4fcde4fd1bc04d1325113bb5e80.
+All2,420 unit cases, normal smoke/regression with physical reviews, strict709
+references, both suboptimal references, compiler/platform parity,972 cache
+instances, positive VERIFY and15 genuine Claude games pass their reviewed gates.
+All normal acceptance statuses preserve original measured exits; the Claude
+controller's single read-only command audit is closed separately with original
+exit2/raw files retained. Three necessary billing-fix slowdowns all match old
+uncached play and recover prior win turns with more search. All10 changed GT
+keys are explained; latest artifacts, unrelated results and overnight GT remain.
 
-Smoke has three legal ties and no score changes. Regression has four legal ties
-and three one-turn slowdowns; all three new normal games match oldC2 without
-plan memos in full physical JSON and totalunits. All9higher-budget/d8b0 probes
-recover prior winturn, with legal actual lines. Pooled census cannot uniquely
-attribute individual hits. All40,000d0 outcomes are exact. Strict709 and both
-suboptimal references pass; knownFD3 are unchanged, NONCONV0. Independent source
-review and actual fetched-entry/proposal tests pass. No fixedper-threadquota or
-optionalpolicy default changed.
+The final uncontended855-game cost comparison fails the existing3x Hinata bar:
 
-Normal32/tiny32 cache outcomes/digests/units match all168cores under positive
-pressure; unbounded32 and VERIFY have completed. The one-worker run and fresh
-actual15-Claude sweep are active together; no competing32-worker batch. Full
-four-context report, updated-artifact filtered smoke, quiet855 cost, final push,
-all3tier admission and measured feasibility precede artifact generation. No
-mulligan/valueleaf generation has begun; nothing targets main. Current exact
-commands/status are in cyclone-completion-checkpoint.md. EarlierC2 checks below
-are historical and do not certify new89b outcomes.
+| Configuration | Worst ms/game | Hinata ratio |
+|---|---:|---:|
+| Current defaults |27,923.650|13.687x|
+| PB plans |7,176.500|3.518x|
+| PB + KEEP_AMEND + KEEP_MYRIAD |7,243.300|3.550x|
+
+Same-run Hinata is2,040.213ms/game. These are summed per-game wall durations,
+not actual CPU measurements. All855 games and86 chunks validate; the host was
+quiet and no competing process was observed. The coarse descriptive intervals
+do not change the point-estimate gate. No candidate policy is adopted.
+
+No mulligan or value-leaf generation has started. Cyclone is in no suite tier
+until it qualifies for all three. The tested integration and evidence are being
+landed first; exact performance work follows. Engine-free source analysis is
+examining pure enumeration memo reuse and unnecessary human-menu label work,
+with no claimed speedup or source change yet. All optional policy choices remain
+user-owned. See cyclone-completion-checkpoint.md for active work and
+cyclone-pending-policy-experiments.md for preserved optional experiments.
 
 ## Accepted C2 integration — historical validation
 

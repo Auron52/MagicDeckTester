@@ -4,73 +4,83 @@ User scope: finish outstanding changes, re-evaluate, and land/push to the latest
 `phase-1-2-deck-analyzer` with normal tests before mulligan/value generation.
 No changes target `main`. Normal throughput uses all 32 available logical CPUs.
 
-## Operative status — follow-up validation, 2026-10-31 14:01 UTC
+## Operative status — validation complete; cost blocks generation, 2026-10-31 14:24 UTC
 
-Active branch `cyclone-landingdfcb` in existing `.claude/worktrees/cyclone-landing905`
-is a single-parent union4c19ce805 on latest shared `dfcb18cb90ae65aeb4968787550a10b1fb9bc55e`.
-The four new PD/Slivers artifact commits and all17files were retained exactly;
-source89b and26 Cyclone/Hinata/Kitty apparatus files are unchanged. Older pushed
-branches/worktrees remain intact. Primary is still acceptedC2 integration3889;
-its unrelated `test/ref_bench.json` remains byte-exact. Nothing targets main.
-No mulligan or value-leaf generation has begun.
+Working branch: `cyclone-landingdfcb`, existing Landing905 worktree. Its linear
+base is latest shared `dfcb18cb90ae65aeb4968787550a10b1fb9bc55e`; all new Prevent
+Damage and Slivers artifacts/GT are retained. Primary is fast-forwarded to dfcb
+with the user's unrelated `test/ref_bench.json` preserved byte for byte. No
+changes target main. Follow-up code/normal GT are backed up at5269dc4ab; the
+final evidence bundle and shared-branch push are the next integration actions.
 
-Follow-up source `89b146d10406063213d9abe41e1cfdf1a616c021` repairs demonstrated
-cache billing context, fetched-shock choices and optimistic proposal labels.
-No per-thread quota, provenance weakening or optional policy default changed.
-All2,420unitcases/3,568,115assertions, focused real fetched-entry/proposal frames,
-independent source review and actual123021 normal/tiny/disabled-cache proof PASS.
-PGO root90292 DONE0,197trainingjobs/5513games,32workers. Actual mtg SHA:
-`20de8d519c6c7c8494925d5170ff91ed06f5b4fcde4fd1bc04d1325113bb5e80`.
-ReleaseSHA `aca52a788964b4b80ab321477595a348221652a749c27c936f57b93362e0e56d`.
-Fresh three-game32worker compiler parity47704 passes full physical traces,
-digests/units/T4-T5-T4, zero diagnostics. No source rebuild for artifact-only delta.
+Frozen source: `89b146d10406063213d9abe41e1cfdf1a616c021`.
+PGO mtg SHA256: `20de8d519c6c7c8494925d5170ff91ed06f5b4fcde4fd1bc04d1325113bb5e80`.
+All source, binary and26 Cyclone/Hinata/Kitty runtime assets are guarded. No
+fixed per-thread quota, optional policy default or provenance weakening changed.
+The necessary billing-context repair, fetched-shock choices and proposal labels
+have independent source review and focused production-path tests.
 
-Normal tests are CLOSED and REVIEWED/ACCEPTED. Release smoke62647 initialrc1:
-154PASS/3FAIL/0NEW,51,675games,390scenariosPASS, three legal searched ties, no score
-changes. PGO fullreg22426 initialrc1:246PASS/7FAIL/0NEW,253jobs/72,413actual of72,414;
-all40,000d0 exact, four legal searched ties and three one-turn slowdowns (+3turns).
-Strict709passes266ok/442repaired/1beaten/allfailure0; both suboptimal games beaten.
-Known bounded Melira omission and all3FD tuples/wins/digests/units match accepted
-prior context; NONCONV0. No fresh89b equality with oldFD full traces is claimed.
+Completed validation:
 
-Combined native controls70502 DONE0/all32games: oldnormal10 and newnormal10
-reproduce measured rows; old no-plan3 EXACTLY match newnormal in full physical
-JSON (only deckId/runId excluded) and deterministic total units. All9recoveries
-(4x/16x/d8b0) recover original win turn. Minotaur3171/GI168 and Burn2016/GI14
-recover exactold physical lines; Hinata2HG2023/GI21 has an independently checked
-legal alternateT5. All7tied traces have card/source/payer/zone reviews. Pooled
-u_sites census is contended and cannot attribute a specific cache hit; no such
-claim is made. Verdicts under `landing905-review/followup89-combined-controls/`.
-Root83825 normalaccept DONE0: exactly3smoke+7reg GTkeys changed; all other keys,
-latestPD/Slivers and overnight retained. Initialrc1 and actualaccept0 are preserved
-in `landing905-review/normal-accept89b/closure.json`. Binding earlier notes carried.
-After active work closes, run standard filtered artifact smoke8cells/2600games:
-`run_artifact_smoke_89b.py --run --prior-smoke-review-closed`, then inspect/accept
-with same pd,pd2hg,slivers,slivers2hg filter. Oldfullsmoke320files are preserved.
+- All2,420 unit cases /3,568,115 assertions pass. Fresh PGO, three-game full-trace
+  Release/PGO parity, Linux/Windows CI and cross-platform parity pass.
+- Full smoke and regression completed physical review and normal acceptance:
+  exactly3 smoke and7 regression GT keys moved; all unrelated/upstream/overnight
+  keys retained. Regression's three one-turn slowdowns (+3 turns) match oldC2
+  with plan memos disabled in full physical JSON and total units. All9 selected
+  higher-budget/d8b0 probes regain the old win turn through legal actual lines.
+  Pooled per-decision census is contended; no unique per-hit cause is claimed.
+- All40,000 d0 results are exact. All390 scenarios, strict709 references and both
+  suboptimal references pass. Known FD3 and the bounded Melira omission are
+  unchanged; NONCONV0. Full aggregate/per-game GT consistency:912/0stale/0missing.
+- Latest-artifact filtered smoke passes all8 cases /2,600 games with no outcome
+  or digest changes; standard filtered acceptance preserves all GT values/notes.
+- All972 cache-validation instances complete: shared core168 wins/digests/units
+  match at1/32 workers, tiny20MiB with positive pressure, and unbounded pool.
+  VERIFY has positive junk/rank/kill-only exercise and no mismatches/FSL issue.
+- All15 actual native Claude Sonnet5 games validate,560 frames across11 types,
+  zero reported flags/earlier-win candidates. Original controller exit2 is kept:
+  one exact read-only cat needed audit. Separate recovery validates its native
+  persisted output byte-for-byte, all10 negative guards pass, and all1,931 original
+  files remain unchanged. No model/engine replay or substituted model.
+- Reference safety passes all34 checkouts/worktrees. All older branches and
+  evidence, including failed historicalC2 tiny-cache proof, remain preserved.
 
-Authoritative sealed packet `build/scratch/cyclone-finish/v7-905-lean/prepared-89b146d-final/`:
-memory32 root16862 DONE0/all468; tiny32 root35625 DONE0/all168; unbounded32 root90207
-DONE0/all168; VERIFY24 root33126 DONE0, positive junk/rank/kill-only exercise and
-no mismatches (`landing905-review/followup-verify-report/`). Early normal32/tiny
-comparison15864 passes all168wins/digests/units with actual20MiB positive pressure
-and noFD/NONCONV/FSL issue. Full four-context proof awaits memory1 root52540,
-RUNNING since13:57,168games/oneworker (explicit invariance-debug exception).
-HistoricalC2 tiny failure remains preserved. Quiet855 has NOT RUN.
+The sole quiet855 timing run is DONE0, all86 chunks/855 games validated, no
+competitors. Start load0.425 and active CPU0.10; requested32 workers. Metric is
+summed per-game steady-clock wall time, not measured CPU time or makespan.
+Same-run Hinata worst searched cell:2,040.213ms/game.
 
-Fresh15AIbenchmark25158 DONE0 (source89b/PGO20de/fulltraces/zero diagnostics).
-Actual15nativeClaudeSonnet5 sweep84856 is RUNNING since13:57 in
-`build/scratch/cyclone-finish/claude-sweep-89b146d/`, sealed with actualPGO and
-explicitrootgrant. No oldC2 answers/choices/outcomes carried. This iterative
-15seed repeat is correctness verification, not an independent quality sample.
-Only this sweep's15serial clients and memory1 may overlap (max16engines); no
-32-worker batch, build or generation may launch until both close. Close all new
-flags from actual native events. Then full4context report, filtered artifactsmoke,
-reference safety, final evidence archive and one quiet855 same-run Hinata cost.
-Candidate CI41205133080/41205848626 watched in root88458/59417; Linux green onfirst,
-Windows/parity pending. Push all follow-up/code/GT/proofs to latest phase-1-2,
-nevermain. Admit Cyclone in all3tiers only if actual shippingcost<=3xHinata;
-push membership/GT, measure feasibility, then solitary mulligan fast→valueleaf.
-Optional policy choices remain pending; no historical partial verdict is adopted.
+| Configuration | Worst searched ms/game | Hinata ratio | Existing3x gate |
+|---|---:|---:|---|
+| Current defaults |27,923.650|13.687x|FAIL|
+| PB plans |7,176.500|3.518x|FAIL|
+| PB + KEEP_AMEND + KEEP_MYRIAD |7,243.300|3.550x|FAIL|
+
+No configuration qualifies; no policy was adopted. Cyclone remains outside ALL
+three suite tiers. No override, mulligan generation or value-leaf generation has
+run. Descriptive intervals and small paired cost-cohort outcomes are in
+`landing905-review/followup-cost-report/`; they do not authorize policy adoption
+or replace the held-out V5 quality history.
+
+All runtime controllers are CLOSED; none is running. Root is landing the tested
+integration/evidence on phase-1-2 first, then investigating exact performance
+improvements before admission. Prunes/payment reviewers are doing engine-free
+source/counter analysis, with no source edits or new policy batch. Current
+hypotheses concern pure enumeration-cost memo reuse and avoidable human-menu
+label construction; neither is an implemented or measured speedup. Preserve the
+frozen89b baseline. No broad cache-budget redesign or fixed per-thread quotas.
+After actual optimization passes quality/cost gates: add all3 suite tiers, push
+all changes, measure feasibility, then use standard solitary mulligan fast and
+value-leaf drivers in that order. User-owned policy choices remain open.
+
+Evidence root: `build/scratch/cyclone-finish/landing905-review/`.
+Authoritative sealed run packet: `v7-905-lean/prepared-89b146d-final/`.
+Full memory: `followup-memory-report/`; VERIFY: `followup-verify-report/`;
+normal review/acceptance: `normal-accept89b/`; cost: `followup-cost-report/`;
+actual Claude audit: sibling `claude-sweep-89b146d-parser-recovery/`.
+Final archive is being assembled under `logs/cyclone-completion/verified-89b/`.
+Do not rerun the stopped optional5,986-game batch or older unselected prototypes.
 
 ## Prior Landing905 milestones — historical, superseded above
 
