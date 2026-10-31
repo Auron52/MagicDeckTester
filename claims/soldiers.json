@@ -9,6 +9,8 @@
  "frozen": "90503a7783c32e4cf7622cb3073421ebfcc67752",
  "heartbeat": "2026-10-31T10:25:21Z",
  "host": "58199181d02e",
+ "landed": "27cfde912cad79b440af16cbfe5896b374f07aba",
+ "landed_at": "2026-10-31T10:40:50Z",
  "result_branch": "artifact-refresh/soldiers-20261031-1040",
  "run_id": "soldiers-artifact-queue-tool-647f24-20261031T102203",
  "score": 0.0,
