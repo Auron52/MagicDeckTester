@@ -260,3 +260,30 @@ red/green physical-payment regression+exactFDcontrol, then fresh final integrati
 (including its std::popcount portability fix). Live viewerA source stays untouched; it has now
 completed699strict and697nativevalidate with exactlyv1's clean totals/mana2945/4pins; queued
 crosschecks remain. Its two Kitty alignment skips are baseline limitations, not new regressions.
+
+## Replay segments fixed on final integration (02:15UTC)
+
+Active implementation checkout is now `.claude/worktrees/cyclone-final`, branchcyclone-final,
+based on currentmain85f4546d3. Originalfinish/land/portable branches remain pushed intact.
+The one integration conflict kept BOTH protocol helpers (published candidate-index remapping
+and extra-turn `_tkey`); no GT conflicts. Current main already includes portablepopcount.
+
+Two realTakeTurn regressions were added before the fix. Old behavior failed5/151assertions:
+wrong physical BloodCrypt/Steam taps for consecutive and gapped ordinal sections, plus a
+WirewoodLodge untap delayed until after the next section's Bonesplitter. Catch-all now invokes
+the existing replay_segment machinery perremaining ordinal, including gaps, instead of merging
+allremaining records into one inferred context. Green7focusedtests/413assertions PASS;
+full2363units/3,566,610assertions PASS. ExactFD127012 nowactual/predictedT5,0FD/nonconv,
+89312units. FD107008 stillactual/predictedT4,1,099,992units. Niv1082 stillits pre-existing
+FD6vs5/6682units (general segment fix does not resolve that separate issue).
+
+V2viewer finished all12stages:699strictPASS;697nativevalidatePASS withv1's exact3287accept,
+285choose/1unsupported/420non-hand/10knownbaselinefail/0regression;mana2945/0lost/0unaudited;
+4pinsPASS. Interactive/stateless parityPASS. Only two rawnonzero stages are fullyclassified
+(upstreamFiveColourprefix change, byte-identical5manualtap trace failures); three reachability
+SKIPs matchv1. Rootclient/save/review/refsafetyfixturesallPASS. Fullv2evidence is historical
+sourceD113; final gates will cover currentmain's tennew Midrange refs and changed checker/UI.
+Costreviewer is adding the minimal missing suspend-verb reconstruction to nativevalidator,
+then targetingMidrange/Dragonstorm/Landfall suspend cases; autonomous segmentfix does notrun
+in the nativehuman ApplyPlanDirect validator, so unchanged old coverage can be carried with
+that explicit path proof. No profile/value generation or proposal-default adoption.

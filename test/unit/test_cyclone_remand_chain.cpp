@@ -755,3 +755,118 @@ TEST_CASE("Cyclone recorded seed: real TakeTurn replays the owner's payment cont
     CHECK(OnBfRC(old, "Treasure Token"));
     CHECK(sources(old) != sources(roll));
 }
+
+
+TEST_CASE("Cyclone catch-all: separate recorded sections retain their own physical payment")
+{
+    EnsureCardsRC();
+    heurarm::Clear();
+    GameState initial = BaseRC({ "Cascade Bluffs", "Island", "Mountain", "Blood Crypt", "Steam Vents" },
+                               { "Brainsurge", kWraith, kWraith, kWraith },
+                               { "Mountain", "Island", "Mountain", "Island", kCurator });
+    PutRC(initial, kCyclone, 30);
+    PutRC(initial, "Emrakul, the Aeons Torn", 31);
+    Action surge;
+    surge.kind = Action::Kind::CastFromHand;
+    surge.card_name = "Brainsurge";
+    surge.def = &DefRC("Brainsurge");
+    surge.cost = EffectiveSpellCost(*surge.def, initial, 1);
+    surge.card_mv = surge.def->card.m_mana_cost.ManaValue();
+    surge.rec_mana_casts = 1;
+    surge.rec_bp_ord = 0;
+    auto replay = [](GameState state, const TurnSolver::Plan& plan)
+    {
+        AIEngine engine(MulliganProfile::DefaultProfile(), 3, 10);
+        MtgTestSeam::CommitPhasePlan(engine, plan, true);
+        engine.TakeTurn(state, true, ResolveAllRC);
+        return state;
+    };
+    // This is the real deferred-cantrip record shape: a cast-only section,
+    // followed by a separately selected root cycle. Three Wraiths ensure the
+    // two Brainsurge putbacks cannot remove every legal cycling seed.
+    TurnSolver::Plan first;
+    first.land_decided = true;
+    first.breakpoint_actions.push_back(surge);
+    const GameState after_first = replay(initial, first);
+    REQUIRE(after_first.battlefield[2].tapped); // Brainsurge spends Mountain's generic mana
+    REQUIRE(std::any_of(after_first.players[0].hand.begin(), after_first.players[0].hand.end(),
+                        [](const Card& c) { return c.m_name.str() == kWraith; }));
+    TurnSolver::Plan seed = SeedPlanRC(kWraith, kCycFcTake);
+    seed.bp_choice = TurnSolver::kBpEmptyChoice;
+    seed.bp_all = true;
+    GameState expected = after_first;
+    TurnSolver::ApplyPlanWithRecordsForTest(expected, seed, true);
+    REQUIRE(seed.breakpoint_actions.size() == 1);
+    REQUIRE(seed.breakpoint_actions[0].kind == Action::Kind::DigDraw);
+    REQUIRE(seed.breakpoint_actions[0].rec_bp_ord == 0);
+    REQUIRE(seed.breakpoint_actions[0].rec_cycle_traits != nullptr);
+    REQUIRE(expected.players[0].life == 18);
+    REQUIRE(expected.spells_cast_this_turn == 2); // paid Brainsurge and actual Cyclone free cast
+    REQUIRE(expected.battlefield.size() == initial.battlefield.size() + 1);
+    // A gap must still replay the later section exactly once. The cast record
+    // is ordinal 0; a generated standalone cycle is relabelled as the next
+    // main-level section, like ApplyPlanDirect's main_bp_ord + 1 stamp.
+    for (const int cycle_ord : { 1, 3 })
+    {
+        INFO("cycle section ordinal ", cycle_ord);
+        TurnSolver::Plan combined = first;
+        Action dig = seed.breakpoint_actions[0];
+        dig.rec_bp_ord = cycle_ord;
+        combined.breakpoint_actions.push_back(dig);
+        const GameState actual = replay(initial, combined);
+        CheckSameRC(OfRC(expected, kCurator), OfRC(actual, kCurator));
+        REQUIRE(actual.battlefield.size() == expected.battlefield.size());
+        for (std::size_t i = 0; i < expected.battlefield.size(); ++i)
+        {
+            INFO("physical permanent ", expected.battlefield[i].card.m_number);
+            CHECK(actual.battlefield[i].card.m_number == expected.battlefield[i].card.m_number);
+            CHECK(actual.battlefield[i].card.m_name == expected.battlefield[i].card.m_name);
+            CHECK(actual.battlefield[i].tapped == expected.battlefield[i].tapped);
+        }
+    }
+}
+
+
+TEST_CASE("Cyclone catch-all: earlier section activations precede the next section's casts")
+{
+    EnsureCardsRC();
+    heurarm::Clear();
+    GameState initial = BaseRC({ "Wirewood Lodge", "Forest" }, { "Bonesplitter" });
+    PutRC(initial, "Llanowar Elves", 70);
+    initial.battlefield.back().tapped = true;
+    const CardDefinition& lodge = DefRC("Wirewood Lodge");
+    REQUIRE(lodge.params.untap_creature_cost.has_value());
+    Action untap;
+    untap.kind = Action::Kind::UntapCreature;
+    untap.card_name = "Wirewood Lodge";
+    untap.hand_index = -1;
+    untap.sac_source_id = initial.battlefield[0].card.m_number;
+    untap.cost = *lodge.params.untap_creature_cost;
+    untap.is_noncreature = true;
+    untap.rec_bp_ord = 0;
+    Action cast;
+    cast.kind = Action::Kind::CastFromHand;
+    cast.card_name = "Bonesplitter";
+    cast.def = &DefRC("Bonesplitter");
+    cast.cost = EffectiveSpellCost(*cast.def, initial, 1);
+    cast.card_mv = cast.def->card.m_mana_cost.ManaValue();
+    cast.rec_mana_casts = 1;
+    cast.rec_bp_ord = 2; // also exercises an empty section between the two
+    TurnSolver::Plan plan;
+    plan.land_decided = true;
+    plan.breakpoint_actions = { untap, cast };
+    GameState actual = initial;
+    AIEngine engine(MulliganProfile::DefaultProfile(), 3, 10);
+    MtgTestSeam::CommitPhasePlan(engine, plan, true);
+    engine.TakeTurn(actual, true, ResolveAllRC);
+    // Only this order can pay both: Forest pays Lodge, Lodge untaps the Elf,
+    // then that Elf pays Bonesplitter. Casting first strands the Lodge untap.
+    REQUIRE(OnBfRC(actual, "Bonesplitter"));
+    REQUIRE(actual.battlefield.size() == initial.battlefield.size() + 1);
+    for (std::size_t i = 0; i < initial.battlefield.size(); ++i)
+    {
+        CHECK(actual.battlefield[i].card.m_number == initial.battlefield[i].card.m_number);
+        CHECK(actual.battlefield[i].tapped);
+    }
+    CHECK(actual.spells_cast_this_turn == 1);
+}
