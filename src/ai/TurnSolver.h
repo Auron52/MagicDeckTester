@@ -2638,7 +2638,8 @@ public:
     // EMPTY child from the snapshot. Returns false when the apply did not pend. `at_capture` is the line's
     // unpaid-cost hold where the full apply stopped; `at_resume` the hold the resumed apply ran under.
     static bool BpResumeLineHoldForTest(const GameState& state, const Plan& plan, bool is_pre_combat,
-                                        ManaCost& at_capture, ManaCost& at_resume);
+                                        ManaCost& at_capture, ManaCost& at_resume,
+                                        GameState* complete_state = nullptr, GameState* resumed_state = nullptr);
     // MTG_BP_PO_W0_FOLD test hook (the playout wave-0 identity; see the pofold namespace in
     // TurnSolver.cpp). Applies `base` and then each of `variants` (all carrying bp_base = 0) INSIDE A
     // PLAYOUT, exactly as SolveWithLookahead's candidate loop does: the base apply is measured (its

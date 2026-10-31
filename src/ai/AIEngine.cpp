@@ -8906,6 +8906,7 @@ AIEngine::DigOutcome AIEngine::PerformDigFull(GameState& state, const std::strin
     Player& ap = state.ActivePlayer();
     const CardDefinition* sd = CardDatabase::Instance().Lookup(source);
     if (!sd) { return DigOutcome::Failed; }
+    std::optional<CycleSeedResolvedScope> _cycle_resolved;
 
     if (is_sacrifice)
     {
@@ -8956,6 +8957,7 @@ AIEngine::DigOutcome AIEngine::PerformDigFull(GameState& state, const std::strin
         // TapForCost may have moved the hand (a payment that mutates zones): re-find the copy.
         it = std::find_if(ap.hand.begin(), ap.hand.end(), [&source](const Card& c) { return c.m_name == source; });
         if (it == ap.hand.end()) { return DigOutcome::Failed; }
+        _cycle_resolved.emplace(*sd);   // paid seed stays released through the draw/free cast
         PayCyclingLife(state, state.active_player_index, *sd);
         if (m_logger) { m_logger->LogDiscard(it->m_number, it->m_name); }
         {   // THE SHARED DISCARD HOOK (Vampires A1): cycling's "discard this" is a COST, so a madness
