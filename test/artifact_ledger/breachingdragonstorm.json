@@ -1,0 +1,25 @@
+{
+ "deck": "breachingdragonstorm",
+ "_doc": "artifact refresh verdicts -- scripts/artifact_queue.py (LEDGER_DIR)",
+ "entries": [
+  {
+   "run_id": "breachingdragonstorm-artifact-queue-tool-647f24-20261031T155322",
+   "kind": "valueleaf",
+   "verdict": "kept-incumbent",
+   "ident": "em:431d3f80483d739b6631",
+   "frozen": "11f93aa0392c01d9dab7a1a2ab39f9b8d1bb2a0b",
+   "src_tree": "89b146d10406063213d9abe41e1cfdf1a616c021",
+   "date": "2026-10-31",
+   "worker": "artifact-queue-tool-647f24",
+   "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_breachingdragonstorm/DECISIONS.txt)",
+   "decisions": [
+    "    VERDICT arm=d6b20 adopt=0 delta=+0.00000 t=+0.00 cost=1.049x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.05x) with quality no better (+0.00000) -- not an improvement",
+    "    VERDICT arm=d6b30 adopt=0 delta=+0.00000 t=+0.00 cost=1.051x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.05x) with quality no better (+0.00000) -- not an improvement",
+    "    VERDICT arm=d6b40 adopt=0 delta=+0.00000 t=+0.00 cost=1.051x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.05x) with quality no better (+0.00000) -- not an improvement",
+    "    PICK arm=none why=no candidate is cheaper than live with quality not notably worse",
+    "",
+    "=== 2026-10-31T16:08:49  PHASE E.6: no allowance for breachingdragonstorm -- no ladder escalations in 1200 games (single-path or trust-dominated); fleet default R = 0"
+   ]
+  }
+ ]
+}
