@@ -8581,10 +8581,13 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     }
     if (!staged_break && fd_plan_committed && !plan.breakpoint_actions.empty())
     {
-        std::vector<Action> rest;
+        // Each ordinal is a separate applied continuation. Combining the remaining
+        // records derives payer traits from later sections and delays earlier acts.
+        // Reuse the normal trigger path, including empty ordinals between sections.
+        int last_ord = rec_seg_next - 1;
         for (const Action& r : plan.breakpoint_actions)
-        { if (r.rec_bp_ord >= rec_seg_next) { rest.push_back(r); } }
-        if (!rest.empty()) { replay_recorded(rest); }
+        { last_ord = std::max(last_ord, r.rec_bp_ord); }
+        while (rec_seg_next <= last_ord) { replay_segment(); }
         bp_replayed = true;
     }
 
