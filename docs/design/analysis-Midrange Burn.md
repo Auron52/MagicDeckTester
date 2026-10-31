@@ -34,8 +34,13 @@ enumerator already retains and executes that line. Equivalence discovery found
 **15 card names and 14 buckets**, merging only Chain Lightning with Lightning
 Bolt. The measured mulligan-setting screen selected depth 1 and a 1 ms budget
 (0.15x the built-in play cost while clearing its fidelity floor) and recorded
-the 14-bucket contract. Next are the fast exhaustive mulligan profile and,
-after its validation, the value leaf.
+the 14-bucket contract. The fast exhaustive profile completed with 56,656
+entries at effective R=30 and passed its acceptance gate: keep -0.3565 turns,
+blind bottoming -0.0488 turns versus the prior policies. Smoke and regression
+ground-truth changes were attributed to mulligan count, bottom choice, or
+bottomed-card order with zero unexplained play changes; both tiers were
+accepted. With the profile active, the ten references still show zero search
+shortfalls. The value leaf is next.
 
 ## Search cost and cost-choice audit (2026-10-30)
 

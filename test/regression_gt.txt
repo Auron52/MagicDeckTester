@@ -9,10 +9,10 @@
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
 # --- smoke ---
-midrangeburn_smoke_d0_s1001=5.6710/9f6f53ef87fe3ed6
-midrangeburn_smoke_d3_s1001=4.8000/68a131a17391174c
-midrangeburn_smoke_d5_s1001=4.6200/ab8d95fc63291945
-midrangeburn2hg_smoke_d5_s1001=6.0800/781b169e14254303
+midrangeburn_smoke_d0_s1001=5.2510/9e5cd29ce09f769b
+midrangeburn_smoke_d3_s1001=4.5000/a41db6c3f04db0c7
+midrangeburn_smoke_d5_s1001=4.4400/a1e4112bf34bf444
+midrangeburn2hg_smoke_d5_s1001=5.7200/fdd0875cdb235e8c
 fungusv3_smoke_d0_s1001=5.2450/c1ddece5a55e2df4
 fungusv3_smoke_d3_s1001=4.4600/7c3b478beb7cebd5
 fungusv3_smoke_d5_s1001=4.5314/9439236508fb9c5b
@@ -168,8 +168,8 @@ elementals_smoke_d3_s1001=4.4600/92003b3289a67020
 elementals_smoke_d5_s1001=4.3360/6ae2c4ad1da84992
 
 # --- regression ---
-midrangeburn_regression_d3_s30021=4.6667/e59c3b1a76e37774
-midrangeburn_regression_d5_s30021=4.6667/8378f9604239ce12
+midrangeburn_regression_d3_s30021=4.0000/02b6ee67bad9be24
+midrangeburn_regression_d5_s30021=4.0000/02b6ee67bad9be24
 alchemist_regression_d3_s30211=5.0000/3d84efedeea45474
 alchemist_regression_d5_s30211=5.0000/3d84efedeea45474
 angels_regression_d3_s30001=4.7000/e4110a8265b08758
@@ -416,11 +416,11 @@ elementals_regression_d0_s2002=5.6150/bf3d79e38c9750a8
 elementals_regression_d3_s2002=4.3600/ca6c8fdbc261ce0a
 elementals_regression_d5_s2002=4.2800/5d9f2fc1c26c6064
 elementals_regression_d5_s3003=4.2400/3f82dd296f144188
-midrangeburn_regression_d0_s2002=5.7250/b77f5b7022df6c73
-midrangeburn_regression_d3_s2002=4.4800/0d949e43dd8fd0d9
-midrangeburn_regression_d5_s2002=4.5800/d9cc5a3111694520
-midrangeburn_regression_d5_s3003=4.4533/b0289c4d5542a939
-midrangeburn2hg_regression_d5_s2002=5.9600/13407487df996e3e
+midrangeburn_regression_d0_s2002=5.2170/531db6d75a635ad0
+midrangeburn_regression_d3_s2002=4.5733/728e0338eec75de2
+midrangeburn_regression_d5_s2002=4.4400/fe1c99874fba4421
+midrangeburn_regression_d5_s3003=4.2867/3d2962fca56b6fa9
+midrangeburn2hg_regression_d5_s2002=5.9733/a435ee9b5b4bd64f
 
 # --- overnight ---
 alchemist_overnight_d3_s30101=4.8000/e3ed67adcd562587
