@@ -39,6 +39,18 @@ the default. `scripts/analyze_deck.py` rebuilds via the same multi-config `build
 optimized); the regression harness expects a pre-built binary at `build/Release/mtg` — build it with
 `./build.sh` first.
 
+## Long-running agent work
+
+A shell job finishing does not, by itself, resume an agent conversation. When a
+requested workflow has dependent stages (for example, generate a mulligan table,
+validate and commit it, then generate a value leaf), keep the agent turn active,
+watch the job to completion, and carry out the remaining stages. If the agent
+cannot stay active, arrange and verify an explicit continuation in the same
+conversation when a scheduling tool is available. Otherwise tell the user
+plainly that completion will not wake the agent, where to check the job, and
+which work remains. Starting a background command is not completion of its
+dependent workflow.
+
 ## Repository Conventions
 
 - **THE PLAY SERVER MUST NEVER, EVER RUN FROM A TEMPORARY FOLDER (user directive, 2026-10-05).**
