@@ -16,7 +16,7 @@ The current docs-only branch HEAD may advance without changing this source.
 V5pool1530/5986closed at09:28:59, all1025freshordinarycontrols complete with
 ordinaryFD/nonconv/ambiguity0. All4952salted jobs have exact existing primary
 ordinary-context coverage, so no duplicate control wave is needed. QP5deepGI57
-isT6/T6; GI254 isBASE T5/SITU T6 and does not recover atd8b0. Prunes reviewer
+isT6/T6; GI254 isBASE T5/SITU T6. SITU DOES recover originalrawBASE T6; the paireddeepcontrol also improves, leavinga+1deepgap. Prunes reviewer
 is investigating source/prefix causality; no SITU adoption/rejection or source
 amendment is implied. Root mapped agentnamespacePID28 to hostPID1847269 via
 NSpid; the actualpooluses~24CPUs andsame24GBRAM/1003MiBsharedplanbudget asprimary.

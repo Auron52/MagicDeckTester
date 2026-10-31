@@ -180,6 +180,16 @@ T4 versus CO/cycle/DRAW T5 after a different T1 Ponder disposition. Blind GI94
 is DRAW T4 versus the other variants unwon, first differing at T3 development.
 These observations explain changes; they do not establish dominance.
 
+The selected SITU GI254 probe has raw control/candidate T6/T7 and deep T5/T6:
+original-control-turn recovery passes, while the paired deep gap remains +1.
+Its deep runs first diverge at T1 Ponder cast/hold, with the same kept hand.
+The control's later T5 winning line uses a non-Eldrazi put-back that the ready
+SETUP-only rule filters. Sole causality and absence of another retained T5 line
+are unproved. The narrow proposal retains both roles when ready; it increases
+fan/work and is user-owned, unimplemented and unmeasured. The existing readiness
+predicate establishes feasibility, not dominance over the other put-back role.
+
+
 Re-evaluation and linear landing follow completed checks. Add Cyclone to the
 regression matrix only if the actual shipping configuration meets the <=3x
 same-run Hinata cost gate. Report any remaining gap; do not invent an override
