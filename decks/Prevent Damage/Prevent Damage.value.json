@@ -2,7 +2,11 @@
  "value_play": {
   "mull_gen_depth": 2,
   "mull_gen_budget_ms": 3,
-  "expected_buckets": 19
+  "expected_buckets": 19,
+  "target_depth": 6,
+  "budget_ms": 20,
+  "enabled": true,
+  "note": "E.7 play-setting stage 2026-10-31: d6b20 adopted over the built-in default (no enabled block) (d5/20); the cheapest of 1 passing arm(s) (0.98x vs live, delta -0.00125)"
  },
  "value_leaf_table": {
   "metric": "loss_penalized_avg_win_turn",
