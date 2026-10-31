@@ -213,3 +213,50 @@ referencebackup6.405s. No persistent viewer was started and no user reference ch
   First79completedgames have0FD/0nonconv; observedVmHWM1,418,080KB. First24playreference
   avg5.2917/digesta653af4cfb6f7151,43,422,021units. No result-invariance claim until
   full168pair comparison against the separately rerun memory1 process.
+
+## Shared-cache preflight passed; primary in progress (01:37UTC)
+
+V2 memory6 DONE468games and memory1 DONE168games, both0FD/0nonconv. Strict preflight
+report PASS: all168 paired per-game wins/digests/units EXACT,0differences/0problems,
+FSLdidnotbind. Memory6 sharedplanbudget1,027,328KB reached1,027,325KB and refused4stores;
+per-game plan-cache max858,347KB, already above the rejected512MiB quota. Poolpressure
+was real, with neutral refusal reporting. Primary11958 started01:37:19UTC on frozen
+sourceD113/PGOd74,13,142games/1490jobs. At450s:1010recordedgames,94blind forecasts,
+0ordinaryCycloneFD/0nonconv/0ambiguousattention; observedVmHWM2,961,308KB.
+
+CI41152959238: LinuxPASS; WindowscompileFAIL due five unportable __builtin_popcount calls
+from imported upstreamb5412dbd8, not the cycle-context changes. Complete archive log is
+scratch/final-v2-ci-failed-archive.log (individualjob Azure download failed twice; archive
+fallback succeeded). Upstream already fixed exactly those five calls in26d381105 via
+std::popcount; isolated persistent cyclone-portable worktree/branch934c57284 carries that
+fix, source09dcd682405659b10ae780d29d1c06ebce54e11a, CI41155602357running. The active
+measurement/viewer checkout stays frozenD113. The replacement has identical population-count
+semantics on Linux; never relabel old provenance as the other tree. Final integration/cost/
+regression must include the portability fix. BackupfinishCI41151364956PASS bothOS+parity.
+
+Originmain has meanwhile advanced to85f4546d3 (portablecount fix, new Midrange references,
+published replay-index preservation, multiple-suspend viewer fix, contractdocs). Preserve
+pushed histories; integrate currentmain later on another fresh branch, assess applicability
+of those changes to the measured autoplay pool, and run required final integration gates.
+Do not change the frozen live source or apply proposal defaults while this run is active.
+
+## New common replay bug; v2 comparison superseded (01:53UTC)
+
+QC3leaf0 seed127012/globalGI12 exposed ordinary FD predicted5/actual6, provenT4,leaf_estnone.
+Both sourceD113 and frozenv1CE reproduce it with identical actualJSON+121diagnosticlines;
+current89312units/old89314. Concrete difference: extraT5 Brainsurge alone was simulated
+under mid_turn_casts0, while end-of-main replay merged ordinal0Brainsurge with ordinal1
+rootCuratorDig, inferred mid_turn_casts1, and tapped different lands. Actual then cannot
+cycle for another extra turn. This is a real common engine-context bug, not an oracle label.
+
+Primaryv2 agent-initiated composite A/B was stopped at982.34s, with partial outputs retained
+and marked SUPERSEDED-BY-FD127012.md. The initial600s cancellation guard was too broad:
+CLAUDE.md explicitly permits stopping an A/B the agent chose to launch at any age; the user
+never requested this particular13142-game queue. No permission question was needed.
+No partial aggregate/adoption evidence will be reused as final-source results.
+
+Next: narrow catch-all fix to preserve remaining rec_bp_ord segments via existing replay_segment,
+red/green physical-payment regression+exactFDcontrol, then fresh final integration on currentmain
+(including its std::popcount portability fix). Live viewerA source stays untouched; it has now
+completed699strict and697nativevalidate with exactlyv1's clean totals/mana2945/4pins; queued
+crosschecks remain. Its two Kitty alignment skips are baseline limitations, not new regressions.
