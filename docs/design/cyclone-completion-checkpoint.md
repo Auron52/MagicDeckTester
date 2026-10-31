@@ -4,7 +4,7 @@ User scope: finish outstanding changes in `origin/cyclone-analysis:docs/design/c
 
 Working branch/worktree: `cyclone-current`, `.claude/worktrees/cyclone-current`, based on phase-1-2 main `547e6fe8b`. Prior `cyclone-ready` is frozen/pushed at `2c9b15398`, sourcec45; all original/intermediate branches and worktrees remain intact. Primary checkout's unrelated `test/ref_bench.json` edit remains untouched.
 
-Current stage (post-547 integration): all106 prior Ready commits are preserved on their pushed branch; their final source/tests/docs/reference changes are applied as a new linear aggregate on main547, with upstream GT/job_cost retained byte-for-byte. Conflicts resolved; all751 heuristic enum/name pairs align, all729 Ready reference files are retained exactly, and full-tree integration audit has zero unexpected differences. Initial Release build87089 completed the552-byte Plan assertion but failed on one automatically merged stale hand-card identifier; repaired to stable hand_card_number. No build is active. Independent review found a generic new DEV_SEQ local-FSL-cache provenance gap; focused regression/repair is being drafted before measurements. No V4 primary quality ever launched. Old sourcec45 evidence remains historical: full2368units/386scenarios, accepted audited smoke, exact4PGOcontrols, normal6all468, strict709/native122/4pins, and Linux/Windows/parity CI41171077254 PASS. Its normal1 probe was STOPPED when upstream advanced; no final c45 thread/memory adoption verdict. New integrated source requires fresh gates, PGO and V5 quality/memory/cost. No mulligan/value generation or proposal adoption before re-evaluation.
+Current stage (06:09 UTC): integrated source is committed/pushed as4a9ed39e5 on main547, clean src8b0bc5ea046ce748c456f7e4aceef4ea11807aa5. Canonical Release SHA b61ca8af7ab87abcff7e3bb49f75bf4bddbd298cd955f0638b513abed2a380da. Local-FSL provenance fix passed RED2fail→GREEN4assertions; all2396units/3,567,476assertions and388scenariosPASS. Fresh smoke26197DONE1:150PASS/7familiarFAIL/0NEW, no searched slower games; sole new searched fingerprint Gob2HG GI41 needs paired T3 trace review before acceptance. Niv1082 is the only known FD, nonconv0. Fresh PGO82887 is RUNNING (8workers, stage2 suite training); source CI41175135290 watched58802. V5 viewer is sealed/RUNNING under reviewer session86237, strict709/native290 with417conditional carry. No V5 quality/memory input has been generated. Old c45 normal6/viewer/CI evidence remains historical, normal1STOPPED and no V4 quality ever launched. Exact547 baseline checkout is being prepared solely for one Gob2HG tie audit; no baseline build/engine runs yet. No mulligan/value generation or proposal adoption before re-evaluation.
 
 The dated milestones below are historical records; later entries supersede earlier progress and pending-work statements.
 
@@ -598,3 +598,40 @@ Reference safety scan passed all30checkouts/worktrees. Root will freeze/push the
 integrated source after these unit/scenario gates, audit completed smoke, then
 canonical Release update and fresh PGO before V5 generation/measurement. Hold GT
 acceptance while the future V5 viewer runs, avoiding the prior broad-guard bridge.
+
+
+## Frozen integrated source and fresh V5 start (06:09 UTC)
+
+Code4a9ed39e5 is pushed with clean SRC8b0bc5ea046ce748c456f7e4aceef4ea11807aa5.
+Source/test/reference integration is a single new linear aggregate on547; all
+original106Ready commits remain pushed on2c9. Canonical postcommit Release update
+completed without source relinking; actual binarySHA
+b61ca8af7ab87abcff7e3bb49f75bf4bddbd298cd955f0638b513abed2a380da.
+
+Full smoke26197 completed150PASS/7familiarFAIL/0NEW,388scenariosPASS. Against
+latest upstream GT,81changed rows:9searched ties, d0two slower/three faster/67ties.
+Eight Snow searched ties retain exact c45/prior-main controls. Gob2HG seed1042/GI41
+is the only new searched fingerprint (stillT3); current trace decision detail and
+exact547 baseline are owed before accept. GI63 now exactly equals upstream GT,
+so its old slower-game recovery debt is obsolete. Against c45,146/157wins files
+are exact; ten of eleven changed cells are entirely identical to accepted22544GT;
+the remaining Gob cell differs only atGI41. Unit changes are reported without
+isolated attribution. Audit: `v5-current-review/current-smoke-audit.md`.
+Known upstream Niv1082 is the only FD; nonconv0. No GT accepted in this checkout.
+
+PGO session82887 is RUNNING,8workers; log `v5-current-review/current-pgo-build.log`;
+stage2 trains197jobs/5513games. CI41175135290 is watched by session58802.
+V5 viewer reviewer sealed and launched session86237 on exact code/SRC/ReleaseSHA:
+strict709 andnative290fresh,417conditional carry and c45Bruna4/4pins carried.
+Outputs `v5-viewer/status.json` and logs. Root holds GT/test-input mutations until
+this viewer finishes. No server/socket fixture or oldV4 mutation.
+
+Independent V5 auditors are bound to approved SRC8b0bc through
+`v5-current-review/v5-approved-source.json`; full source/binary arguments remain
+mandatory. PGO hash is pending, never guessed.8synthetic testsPASS. No V5 runtime
+inputs have been generated/sealed. All quality/memory/cost will be fresh.
+A persistent detached `cyclone-baseline547` checkout is being prepared for the one
+GI41 audit, SRC3c20824b0fdbd1f5b31041c1d713f1f47ccbe494. Build only its optimized
+mtg target after the one active PGO heavy process finishes, then compare one game
+per source using the original shipped-row manifest (no explicit depth override;
+profile suppliesd7/b60, life30/two heads). This is not another suite or broad A/B.
