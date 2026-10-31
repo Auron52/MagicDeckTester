@@ -4983,6 +4983,100 @@ int Inversions(const std::vector<int>& perm, const std::vector<int>& rank_of)
 }
 }   // namespace
 
+// MTG_DOMAIN_WIDEN_ORDER (DEFAULT ON; =0 -> wideners are not producers). A coloured permanent cast
+// this turn widens "each colour among permanents you control", so each live domain source (Faeburrow
+// Elder / Bloom Tender) taps for one more mana per new colour -- the enumerator's widen credit
+// (all-widener or PARTIAL) admits plans that pay only when the widener resolves BEFORE the domain
+// source taps. The payable-order walk did not know that: FiveColour s1100001 gi0 T3 {Two-Headed
+// Hellkite, Deathrite} was admitted, the executor kept Hellkite first (paid with Faeburrow's 2), and
+// Deathrite was dropped (mana-oracle APPLY-DROP-ORDER; the order Deathrite > Hellkite pays). APPLY
+// SITE ONLY, and only for an order no other producer admits, so every other order is byte-identical.
+static bool DomainWidenOrderOn()
+{
+    static const bool env_on = EnvOn("MTG_DOMAIN_WIDEN_ORDER", true);
+    return heurarm::Flag(heurarm::DOMAIN_WIDEN_ORDER, env_on);
+}
+
+// Own untapped domain sources that can tap now (TurnSolver's ScalingWidenScan, mirrored) and the
+// board's domain colours.
+static void PoWidenScan(const GameState& state, int& dom_mask, int& live)
+{
+    dom_mask = 0;
+    live = 0;
+    const int active = state.active_player_index;
+    for (Color c : DomainColors(state, active)) { dom_mask |= (1 << static_cast<int>(c)); }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != active || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d || !d->params.domain_mana) { continue; }
+        if (!CanTapNow(p, state.battlefield) || !GraveyardFuelLive(state, active, *d)) { continue; }
+        ++live;
+    }
+}
+
+// The colours a cast adds to the domain (0 for a non-permanent / no new colour).
+static int PoWidenMask(const Action& a, int dom_mask)
+{
+    if (a.kind != Action::Kind::CastFromHand || a.alt_cost) { return 0; }
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    if (!d || d->card.IsInstant() || d->card.IsSorcery()) { return 0; }
+    int m = 0;
+    for (int ci = 0; ci < 5; ++ci)
+    {
+        if (d->card.HasColor(static_cast<Color>(ci)) && !(dom_mask & (1 << ci))) { m |= (1 << ci); }
+    }
+    return m;
+}
+
+// Book `units` per domain colour of `live` domain sources the way AddSourceToPool does (one colour ->
+// that colour, several -> wild); `sign` -1 takes them back out (clamped).
+static void PoDomainYield(ManaPool& pool, int dom_mask, int live, int sign)
+{
+    const int n = __builtin_popcount(static_cast<unsigned>(dom_mask));
+    if (live <= 0 || n <= 0) { return; }
+    if (n == 1)
+    {
+        for (int ci = 0; ci < 5; ++ci)
+        {
+            if (!(dom_mask & (1 << ci))) { continue; }
+            int* f = nullptr;
+            switch (static_cast<Color>(ci))
+            {
+                case Color::White: f = &pool.white; break;
+                case Color::Blue:  f = &pool.blue;  break;
+                case Color::Black: f = &pool.black; break;
+                case Color::Red:   f = &pool.red;   break;
+                case Color::Green: f = &pool.green; break;
+                default: break;
+            }
+            if (f) { *f = (sign > 0) ? *f + live : std::max(0, *f - live); }
+        }
+        return;
+    }
+    if (sign > 0) { pool.wild += live * n; } else { pool.wild = std::max(0, pool.wild - live * n); }
+}
+
+// The walk with the live domain sources HELD BACK: they leave the starting pool and are tapped (all
+// of them, at the domain as it stands then) only when a cast cannot be paid without them; a widening
+// cast before that point raises their yield. Returns the first unpayable position, or -1.
+static int PoWidenFirstUnpayable(const std::vector<Action>& acts, const std::vector<int>& order,
+                                 ManaPool pool, int dom_mask, int live)
+{
+    PoDomainYield(pool, dom_mask, live, -1);
+    bool held = true;
+    for (int pos = 0; pos < static_cast<int>(order.size()); ++pos)
+    {
+        const Action& a = acts[order[pos]];
+        if (a.alt_cost) { continue; }
+        if (!pool.CanPay(a.cost) && held) { PoDomainYield(pool, dom_mask, live, +1); held = false; }
+        if (!pool.CanPay(a.cost)) { return pos; }
+        PayFromPool(pool, a.cost);
+        dom_mask |= PoWidenMask(a, dom_mask);
+    }
+    return -1;
+}
+
 static void PayableCastOrderCore(const GameState& state, const std::vector<Action>& acts,
                                  std::vector<int>& order, const std::vector<InternedName>* hand_exits,
                                  int extra_wild, int site)
@@ -5000,6 +5094,19 @@ static void PayableCastOrderCore(const GameState& state, const std::vector<Actio
     {
         for (int i : order) { if (PoCreditedProducer(state, acts, acts[i])) { any = true; break; } }
         producer_only = any;
+    }
+    // MTG_DOMAIN_WIDEN_ORDER: an order no other producer admits, holding a cast that widens a live
+    // domain source -- walked with the sources held back (PoWidenFirstUnpayable).
+    bool widen_only = false;
+    int w_dom = 0, w_live = 0, w_union = 0;
+    if (!any && site == 0 && DomainWidenOrderOn())
+    {
+        PoWidenScan(state, w_dom, w_live);
+        if (w_live > 0)
+        {
+            for (int i : order) { w_union |= PoWidenMask(acts[i], w_dom); }
+            widen_only = any = (w_union != 0);
+        }
     }
     if (!any) { return; }
     if (PayableOrderDynamicDeclineOn() && PoDynamicDiscount(state, acts, order)) { return; }
@@ -5028,6 +5135,7 @@ static void PayableCastOrderCore(const GameState& state, const std::vector<Actio
                     && (PayableOrderExactOn() || ResolveProvider(state).ExactOrderWalk());
     auto pays = [&](const std::vector<int>& ord) -> bool
     {
+        if (widen_only) { return PoWidenFirstUnpayable(acts, ord, pool0, w_dom, w_live) < 0; }
         if (exact) { return ExactOrderFirstUnpayable(state, acts, ord) < 0; }
         if (producer_only) { return FirstUnpayablePosImpl(state, acts, ord, pool0, nullptr) < 0; }
         hand = hand0;
@@ -5105,6 +5213,7 @@ static void PayableCastOrderCore(const GameState& state, const std::vector<Actio
             }
             else { AddManaCost(total, a.cost); }
         }
+        if (widen_only) { bound.wild += w_live * __builtin_popcount(static_cast<unsigned>(w_union)); }
         if (!bound.CanPay(total))
         { g_po_stats.bound_fail[site].fetch_add(1, std::memory_order_relaxed); return; }
     }

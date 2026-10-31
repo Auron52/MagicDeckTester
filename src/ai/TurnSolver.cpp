@@ -8771,6 +8771,20 @@ static bool GrantCastCreditOn()
     static const bool on = EnvOn("MTG_GRANT_CAST_CREDIT", true);
     return heurarm::Flag(heurarm::GRANT_CAST_CREDIT, on);
 }
+// MTG_HASTE_DORK_CAST_CREDIT (DEFAULT ON; =0 -> creatures never carry the rock credit). See the hasted
+// creature branch of the same-turn rock stamp in CollectActions.
+static bool HasteDorkCastCreditOn()
+{
+    static const bool on = EnvOn("MTG_HASTE_DORK_CAST_CREDIT", true);
+    return heurarm::Flag(heurarm::HASTE_DORK_CAST_CREDIT, on);
+}
+// MTG_DOMAIN_WIDEN_PARTIAL (DEFAULT ON; =0 -> the all-widener credit only). See the PARTIAL DOMAIN
+// WIDEN rescue at EnumeratePlans' flat mana test.
+static bool DomainWidenPartialOn()
+{
+    static const bool on = EnvOn("MTG_DOMAIN_WIDEN_PARTIAL", true);
+    return heurarm::Flag(heurarm::DOMAIN_WIDEN_PARTIAL, on);
+}
 // MTG_RESERVE_GRANTED_BODIES (DEFAULT ON; =0 -> granted bodies are never held). See the DorkReserve
 // class in BatchPrepayMainCasts: a body that taps for mana only through a grant is held like a dork.
 static bool ReserveGrantedBodiesOn()
@@ -36126,6 +36140,23 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         if (RockRampEnumEnabled() && def.params.mana_rock && !def.card.IsCreature()
             && !def.params.enters_tapped)
         { AddSourceToPool(a.rock_mana, state, def); }
+        // ...UNLESS the creature will have HASTE the moment it enters (CR 302.6): its own keyword, or a
+        // haste lord we control that covers it (Concordant Crossroads, a Goblin Warchief for a Goblin
+        // dork) -- HasHasteFromLords, the predicate CanTapNow asks of the permanent once it is there.
+        // Then it taps the turn it is cast exactly like a rock, and the casts after it may be funded by
+        // that tap: "Undercellar Myconid, then Sporecrown Thallid off the Myconid" under Crossroads was
+        // priced as if the Myconid made nothing (mana-oracle ENUM-GAP fungusv3 / fivecolour). Riding
+        // rock_mana gives it the rock's discipline everywhere (a producer never funds its own cost; the
+        // payable-order walk hoists it ahead of what it funds; the scratch walks put it on their board,
+        // where CanTapNow sees the same lord). A lord cast in the SAME plan is not credited (the board's
+        // lords only). Deathrite-style fuel-gated mana is left out, as HasteUnlockedManaOf leaves it out.
+        // MTG_HASTE_DORK_CAST_CREDIT=0 -> creatures never carry the credit.
+        else if (RockRampEnumEnabled() && HasteDorkCastCreditOn() && def.card.IsCreature()
+                 && (def.tmpl == CardTemplate::ManaDork || def.params.mana_rock)
+                 && !def.params.enters_tapped && !def.params.gy_land_exile_mana
+                 && (def.card.HasKeyword(Keyword::Haste)
+                     || HasHasteFromLords(def.card, state.battlefield, state.active_player_index)))
+        { AddSourceToPool(a.rock_mana, state, def); }
         // ETB TREASURE (Corsair Captain; MTG_ETB_TREASURE_SPEND -- see EtbTreasureSpendOn): the
         // Treasure its enter trigger makes is fresh-hold EXEMPT, so it is same-turn mana exactly like
         // a cast rock's first tap -- one WILD per Treasure, arriving only once the maker resolves.
@@ -45581,11 +45612,34 @@ static inline bool ManaGateWouldHelp(const std::vector<Action>& cands, const Gam
     return false;
 }
 
+// The domain WIDEN gain one cast can add (consider()'s widen credit, all-widener or PARTIAL): live
+// domain sources x the colours this permanent adds to the domain. Summed over a selection it is >= the
+// credit's live x |union|, so the gate stays an upper bound. 0 without a live domain source.
+static int WidenBoundGain(const Action& a, int domain_mask, int live)
+{
+    if (live <= 0 || a.kind != Action::Kind::CastFromHand || !a.def) { return 0; }
+    if (a.def->card.IsInstant() || a.def->card.IsSorcery()) { return 0; }
+    int n = 0;
+    for (int ci = 0; ci < 5; ++ci)
+    {
+        if (a.def->card.HasColor(static_cast<Color>(ci)) && !(domain_mask & (1 << ci))) { ++n; }
+    }
+    return live * n;
+}
+
 static bool BuildManaGateIndex(const ManaPool& pool, const std::vector<Action>& cands,
                                const std::vector<int>& independent, ManaGateIndex& out,
                                const GameState* etb_state = nullptr)
 {
-    if (!ManaGateWouldHelp(cands, etb_state)) { return false; }
+    // Enumerator only (`etb_state` set), the same asymmetry as the ETB-untap term.
+    int w_dom = 0, w_live = 0;
+    if (etb_state && DomainWidenEnabled() && DomainWidenPartialOn()) { ScalingWidenScan(*etb_state, w_dom, w_live); }
+    bool w_help = false;
+    if (w_live > 0)
+    {
+        for (const Action& a : cands) { if (WidenBoundGain(a, w_dom, w_live) > 0) { w_help = true; break; } }
+    }
+    if (!w_help && !ManaGateWouldHelp(cands, etb_state)) { return false; }
 
     const int m = static_cast<int>(cands.size());
     out.term.assign(m, ManaGateTerm{});
@@ -45606,7 +45660,8 @@ static bool BuildManaGateIndex(const ManaPool& pool, const std::vector<Action>& 
         // shipped consider() mint credit had no term in either bound, so the subset it exists to
         // admit ({Gold Rush, Fists} = 4 on a 3-mana pool) died at the odometer unpriced.
         t.gain = a.ritual_float + a.rock_mana.Total() + a.mint_gain + MintHeroismBonus(a, hero, hero_bodies)
-               + EtbUntapBoundCredit(etb_state, a) + LandAuraBoundCredit(a);
+               + EtbUntapBoundCredit(etb_state, a) + LandAuraBoundCredit(a)
+               + WidenBoundGain(a, w_dom, w_live);
         t.gy   = (a.def && a.def->params.ritual_float_gy_self_bonus) ? 1 : 0;
         t.block = ((a.def && (a.def->params.affinity_for_subtype
                               || !a.def->params.reduces_spell_color.empty()
@@ -67719,6 +67774,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // rollout validates the line, and Solve's d0 greedy has none (the Medallion precedent).
         // The executor realises it by casting in ascending-cost order, which puts a cheap widener
         // before the payoff it unlocks (verified on the fixture).
+        bool widen_refused = false;   // the all-widener credit was refused (PARTIAL DOMAIN WIDEN below)
         if (live_scaling > 0)
         {
             ManaCost widener_costs;
@@ -67744,6 +67800,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 // credit belongs to BOTH pools -- same split HasteUnlockedManaOf makes.
                 eff.AddPool(widen); eff_nc.AddPool(widen); credited = true;
             }
+            else if (add_mask != 0) { widen_refused = true; }
         }
         // Same-turn SCALED-DORK GROWTH credit. Every creature of a live scaled dork's subtype this
         // subset casts raises that dork's eventual one-tap burst by 1 -- provided the dork taps
@@ -67919,6 +67976,122 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             && !SubtypeOnlySubsetPayable(sub_only, cands, sel, credited ? eff : pool,
                                          credited ? eff_nc : pool_noncreature))
         { mana_ok = false; }
+        // PARTIAL DOMAIN WIDEN (MTG_DOMAIN_WIDEN_PARTIAL; mana-completeness-oracle.md 13.5). The widen
+        // credit above is all-or-nothing: SubsetWidensDomainBy counts EVERY colour-adding permanent
+        // cast, the PAYOFF included, so a subset whose payoff is itself a new colour asks the
+        // un-widened pool to prepay the payoff too, and the credit drops to zero (FiveColour s1100001
+        // gi0 T3: Birds pays Deathrite's {B/G}, Black joins the domain, Faeburrow taps {W}{G}{B} and
+        // Cosmic Spider-Man is paid -- 6 mana from a pool of 5 + 1, refused because 6 > 5). Only the
+        // wideners cast BEFORE the scaling source taps need prepaying. So when the flat test fails
+        // after a refused all-widener credit, try every payable widener SUBSET W -- the rock rule
+        // unchanged: cost(W) payable from the un-credited pool -- crediting widen(W) = live x
+        // |colours(W) \ domain|. widen(W) <= widen(all) per colour, so a subset the all-credit
+        // accepts is untouched: this only rescues. Among the passing W, the largest widen is kept
+        // (`eff` is read downstream, and the all-credit is the same optimistic shape). EnumeratePlans
+        // only, never Solve (the Medallion precedent: the rollout validates the line); the executor's
+        // ascending-cost order casts the cheap widener before the payoff.
+        if (!mana_ok && widen_refused && DomainWidenPartialOn())
+        {
+            struct Widener { int mask; ManaCost cost; };
+            static thread_local std::vector<Widener> s_wid;
+            s_wid.clear();
+            for (int j : sel)
+            {
+                const Action& c = cands[static_cast<std::size_t>(j)];
+                if (c.kind != Action::Kind::CastFromHand || !c.def) { continue; }
+                if (c.def->card.IsInstant() || c.def->card.IsSorcery()) { continue; }
+                int mine = 0;
+                for (int ci = 0; ci < 5; ++ci)
+                {
+                    if (c.def->card.HasColor(static_cast<Color>(ci)) && !(domain_mask & (1 << ci)))
+                    { mine |= (1 << ci); }
+                }
+                if (mine) { s_wid.push_back({ mine, c.cost }); }
+            }
+            // A live domain source that taps AFTER the widener cannot also pay for it: the t sources
+            // kept for the widened tap leave the pool before the wideners are priced, and only those t
+            // earn the widen (t = live first, so the largest credit wins). One domain colour books as
+            // that colour, several as wild (AddSourceToPool) -- the yield comes off the same field.
+            const int k = static_cast<int>(s_wid.size());
+            const int n_dom = __builtin_popcount(static_cast<unsigned>(domain_mask));
+            int best_mask = 0, best_units = 0, best_t = 0;
+            if (k >= 2 && k <= 12)   // a 1-widener subset IS the refused all-credit
+            {
+                for (int t = live_scaling; t >= 1; --t)
+                {
+                    ManaPool held = pool;
+                    if (n_dom == 1)
+                    {
+                        for (int ci = 0; ci < 5; ++ci)
+                        {
+                            if (!(domain_mask & (1 << ci))) { continue; }
+                            ManaPool y; y.Add(static_cast<Color>(ci), t);
+                            SubtractPoolClamped(held, y);
+                        }
+                    }
+                    else if (n_dom > 1) { held.wild = std::max(0, held.wild - t * n_dom); }
+                    for (unsigned w = 1; w + 1 < (1u << k); ++w)
+                    {
+                        int m = 0;
+                        ManaCost wc;
+                        for (int b = 0; b < k; ++b)
+                        {
+                            if (!(w & (1u << b))) { continue; }
+                            m |= s_wid[static_cast<std::size_t>(b)].mask;
+                            AddCostCarryingHybrids(wc, s_wid[static_cast<std::size_t>(b)].cost);
+                        }
+                        const int units = t * __builtin_popcount(static_cast<unsigned>(m));
+                        if (units <= best_units || !held.CanPay(wc)) { continue; }
+                        // The held sources tap for the WIDENED domain's colours only, so the rest of
+                        // the plan's pips in any other colour come out of `held` too, beside cost(W)
+                        // (FiveColour s1100019 gi11 T4: lands pay Oko, the domain sources then make
+                        // G/W/U and Hellkite's {B}{R} is stranded). A necessary condition: hybrids
+                        // are left out, which only loosens it.
+                        {
+                            const int ex = domain_mask | m;
+                            ManaCost need = wc;
+                            if (!(ex & (1 << static_cast<int>(Color::White)))) { need.white += std::max(0, combined.white - wc.white); }
+                            if (!(ex & (1 << static_cast<int>(Color::Blue))))  { need.blue  += std::max(0, combined.blue  - wc.blue); }
+                            if (!(ex & (1 << static_cast<int>(Color::Black)))) { need.black += std::max(0, combined.black - wc.black); }
+                            if (!(ex & (1 << static_cast<int>(Color::Red))))   { need.red   += std::max(0, combined.red   - wc.red); }
+                            if (!(ex & (1 << static_cast<int>(Color::Green)))) { need.green += std::max(0, combined.green - wc.green); }
+                            ManaPool held_eff = eff;
+                            if (n_dom == 1)
+                            {
+                                for (int ci = 0; ci < 5; ++ci)
+                                {
+                                    if (!(domain_mask & (1 << ci))) { continue; }
+                                    ManaPool y; y.Add(static_cast<Color>(ci), t);
+                                    SubtractPoolClamped(held_eff, y);
+                                }
+                            }
+                            else if (n_dom > 1) { held_eff.wild = std::max(0, held_eff.wild - t * n_dom); }
+                            if (!held_eff.CanPay(need)) { continue; }
+                        }
+                        ManaPool widen;
+                        for (int ci = 0; ci < 5; ++ci)
+                        {
+                            if (m & (1 << ci)) { widen.Add(static_cast<Color>(ci), t); }
+                        }
+                        ManaPool e = eff, e_nc = eff_nc;
+                        e.AddPool(widen); e_nc.AddPool(widen);
+                        if (!(e.CanPay(combined) && e_nc.CanPay(noncreature_combined))) { continue; }
+                        if (big_only.live && !BigOnlySubsetPayable(big_only, cands, sel, e, e_nc)) { continue; }
+                        if (sub_only.live && !SubtypeOnlySubsetPayable(sub_only, cands, sel, e, e_nc)) { continue; }
+                        best_mask = m; best_units = units; best_t = t;
+                    }
+                }
+            }
+            if (best_mask != 0)
+            {
+                ManaPool widen;
+                for (int ci = 0; ci < 5; ++ci)
+                {
+                    if (best_mask & (1 << ci)) { widen.Add(static_cast<Color>(ci), best_t); }
+                }
+                eff.AddPool(widen); eff_nc.AddPool(widen); credited = true; mana_ok = true;
+            }
+        }
         // FRESH-SPEND AT THE BASE (MTG_MINT_CREDIT_EXACT; see the mint block above): unpayable in
         // the doctrine world, payable with the subset's own magnetless mint -> credit it and TAG the
         // plan as the released-hold variant. The payability decision is made here so every gate
@@ -68708,6 +68881,28 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // the credit and the scalar bound must move together, or the bound rejects the very subset the
     // credit exists to rescue BEFORE consider() ever sees it). Upper bound: every matching creature
     // candidate landing before every live dork taps. 0 for every deck without a live scaled dork.
+    // Same-turn SCALING SOURCE widening (the widen credit in consider(), all-widener or PARTIAL): a
+    // coloured permanent cast this turn makes each live domain source tap for one more mana per new
+    // colour. Upper bound: live x |union of the cands' colours missing from the domain|. Without it
+    // the odometer cut the very subsets the credit exists to admit before consider() could price them
+    // (FiveColour s1100001 gi0 T3: {Cosmic Spider-Man, Deathrite} = 6 against bound 5 -- Deathrite
+    // adds Black, Faeburrow taps one more). 0 for every deck without a live domain source.
+    int widen_bound = 0;
+    if (live_scaling > 0 && DomainWidenPartialOn())
+    {
+        int miss = 0;
+        for (const Action& a : cands)
+        {
+            if (a.kind != Action::Kind::CastFromHand || !a.def) { continue; }
+            if (a.def->card.IsInstant() || a.def->card.IsSorcery()) { continue; }
+            for (int ci = 0; ci < 5; ++ci)
+            {
+                if (a.def->card.HasColor(static_cast<Color>(ci)) && !(domain_mask & (1 << ci)))
+                { miss |= (1 << ci); }
+            }
+        }
+        widen_bound = live_scaling * __builtin_popcount(static_cast<unsigned>(miss));
+    }
     int growth_bound = 0;
     for (const DorkGrowthGroup& dg : dork_growth)
     {
@@ -68744,7 +68939,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         : ManaPruneBound(pool, cands,
                          // + the spectacle plan credit's most-forgiven mana (0 unless it is live).
                          haste_unlock_bound + metalcraft_bound + waiver_bound + growth_bound
-                             + spec_ctx.bound_credit,
+                             + widen_bound + spec_ctx.bound_credit,
                          // ETB-untap refund, ENUMERATOR ONLY -- the same asymmetry the extra_credit
                          // terms above already have (Solve passes none). Its consumer is the
                          // MTG_EDF_SEQ_ETB rescue in eval_and_push, which Solve::consider

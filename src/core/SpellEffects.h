@@ -83,6 +83,13 @@ inline bool PlaceholderSnowOn()       // Snow winless certificate's gain bound s
     static const bool e = EnvOn("MTG_PLACEHOLDER_SNOW", true);
     return heurarm::Flag(heurarm::PLACEHOLDER_SNOW, e);
 }
+// MTG_DOMAIN_SELF_COLORS (DEFAULT ON; =0 -> the board's colours only): a domain source projected from
+// hand counts its own colours (AddSourceToPool).
+inline bool DomainSelfColorsOn()
+{
+    static const bool e = EnvOn("MTG_DOMAIN_SELF_COLORS", true);
+    return heurarm::Flag(heurarm::DOMAIN_SELF_COLORS, e);
+}
 // Tectonic Giant's default-keep MV. ON since the keep / mode axis covers a Giant the plan casts and every
 // attacking copy (MTG_TECTONIC_CAST_AXIS / MTG_TECTONIC_ORDINALS): with the axis in, ON vs OFF measured 0 / 0
 // over 6,000 held-out Giants games and 0 slower / 1 faster over 3,000 2HG (docs/design/analysis-Giants.md).
@@ -37306,8 +37313,25 @@ inline void AddSourceToPool(ManaPool& pool, const GameState& state, const CardDe
     // Crediting it wild is what made four Hearts read as four any-colour sources -- the
     // over-permissive model this replaces. `perm` is null for a rock projected from HAND, which
     // correctly keeps the full menu (no choice has been made yet).
-    const std::vector<Color>& prod =
-        EffectiveProducesFor(state, state.active_player_index, def, perm);
+    const std::vector<Color>* prodp =
+        &EffectiveProducesFor(state, state.active_player_index, def, perm);
+    // A DOMAIN source projected from HAND (no permanent: a hasted cast, a same-plan rock credit) is
+    // one of "the permanents you control" by the time it taps, so its OWN colours are in its domain
+    // (Faeburrow Elder taps for {G}{W} on a board of Islands). DomainColors reads the battlefield
+    // only, so the projection lost them (mana-oracle ENUM-GAP fivecolour: a hasted domain dork's own
+    // colours). A source already on the battlefield is in DomainColors already, so the union is a
+    // no-op there. MTG_DOMAIN_SELF_COLORS=0 -> the board's colours only.
+    if (def.params.domain_mana && perm == nullptr && DomainSelfColorsOn())
+    {
+        static thread_local std::vector<Color> dom_self;
+        bool have[5] = { false, false, false, false, false };
+        for (Color c : *prodp) { const int ci = static_cast<int>(c); if (ci >= 0 && ci < 5) { have[ci] = true; } }
+        for (int ci = 0; ci < 5; ++ci) { if (def.card.HasColor(static_cast<Color>(ci))) { have[ci] = true; } }
+        dom_self.clear();
+        for (int ci = 0; ci < 5; ++ci) { if (have[ci]) { dom_self.push_back(static_cast<Color>(ci)); } }
+        prodp = &dom_self;
+    }
+    const std::vector<Color>& prod = *prodp;
     // Domain source (Faeburrow / Bloom Tender): one mana of EACH colour among your permanents
     // from a single tap -- the yield is the dynamic colour count, ignoring the static amount.
     // Credited as wild like a Karoo (the one-of-each nuance is exact at tap time in tap_source).

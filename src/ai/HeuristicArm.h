@@ -758,6 +758,10 @@ enum Slot : int
     RESERVE_GRANTED_BODIES,   // MTG_RESERVE_GRANTED_BODIES  the whole-turn prepay's creature hold class (BatchPrepayMainCasts' DorkReserve) includes an attack-capable body that taps for mana only through a GRANT (Badger's Saprolings and Fungus cards), exactly like a mana dork. =0 -> granted bodies are never held
     HOLD_PARTIAL_DEPL,        // MTG_HOLD_PARTIAL_DEPL  the prepay's partial creature rungs come AHEAD of the [depletion] last resort, each as a pair (remaining creatures + depletion held, then released); they sat after it, which a depletion land on the board made unreachable (each holds a superset of [depletion]). =0 -> the old order
     GRANT_CAST_CREDIT,        // MTG_GRANT_CAST_CREDIT  a same-plan Brightcap Badger cast carries Action::rock_mana = one {G} per body already on board its grant would unlock, so the plan's later casts may be funded by them (mana-oracle ENUM-GAP fungusv3 s1100024 gi23 T3). =0 -> no credit
+    HASTE_DORK_CAST_CREDIT,   // MTG_HASTE_DORK_CAST_CREDIT  a creature mana source cast THIS turn that will have haste the moment it enters (its own keyword, or a haste lord we control that covers it -- Concordant Crossroads) carries Action::rock_mana like a cast mana rock, so the plan's later casts may be funded by its tap (mana-oracle ENUM-GAP fungusv3 / fivecolour: "Crossroads' blanket haste does not unlock the plan's own dorks"). =0 -> creatures never carry the rock credit
+    DOMAIN_SELF_COLORS,       // MTG_DOMAIN_SELF_COLORS  a domain mana source (Faeburrow Elder / Bloom Tender) projected from HAND (AddSourceToPool with no permanent: a hasted cast, a same-plan rock credit) counts its OWN colours among "colours among permanents you control" -- it will be one of them when it taps (mana-oracle ENUM-GAP fivecolour: a hasted domain dork's own colours). =0 -> the board's colours only
+    DOMAIN_WIDEN_PARTIAL,     // MTG_DOMAIN_WIDEN_PARTIAL  when EnumeratePlans' all-or-nothing domain widen credit is refused (the subset's wideners, PAYOFF included, are not payable from the un-widened pool), try every payable widener SUBSET: only the wideners cast before the scaling source taps need prepaying (mana-oracle ENUM-GAP fivecolour: "SubsetWidensDomainBy is all-or-nothing"). =0 -> the all-widener credit only
+    DOMAIN_WIDEN_ORDER,       // MTG_DOMAIN_WIDEN_ORDER  the executor's payable-order walk (apply site) treats a coloured permanent that widens a live domain source's colours (Faeburrow Elder / Bloom Tender) as a PRODUCER: the domain sources are held back until a cast needs them, so an order that casts the widener first is found when the given order does not pay (mana-oracle APPLY-DROP-ORDER fivecolour: Deathrite before the payoff). =0 -> wideners are not producers
     COUNT
 };
 
@@ -1460,6 +1464,10 @@ inline const char* Name(int slot)
         "MTG_RESERVE_GRANTED_BODIES",
         "MTG_HOLD_PARTIAL_DEPL",
         "MTG_GRANT_CAST_CREDIT",
+        "MTG_HASTE_DORK_CAST_CREDIT",
+        "MTG_DOMAIN_SELF_COLORS",
+        "MTG_DOMAIN_WIDEN_PARTIAL",
+        "MTG_DOMAIN_WIDEN_ORDER",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

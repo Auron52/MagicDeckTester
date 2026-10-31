@@ -871,10 +871,10 @@ the bound cut from the real menu prints no line before `DECISION` but an `early-
 | deck | flags | mechanism | where | fix | status |
 |---|---|---|---|---|---|
 | FiveColour | 6 | Garth's conjured Black Lotus cannot be cracked in the plan that conjures it | Garth emission (CollectActions) | conjure-and-crack variant | **fixed below** |
-| FiveColour | 8 | `SubsetWidensDomainBy` is all-or-nothing: a subset holding several domain wideners gets no widen when not all of them are payable | the domain widen credit | try the payable widener subsets when the flat gate fails | open |
-| FiveColour | 1 | `HasteUnlockedManaOf` misses a hasted domain dork's own colours | the haste-unlock credit | add them | open |
+| FiveColour | 8 | `SubsetWidensDomainBy` is all-or-nothing: a subset holding several domain wideners gets no widen when not all of them are payable | the domain widen credit, AND (the real first cut) the odometer's total-mana bounds, which had no widen term | **fixed** (`MTG_DOMAIN_WIDEN_PARTIAL` + `MTG_DOMAIN_WIDEN_ORDER`; below) |
+| FiveColour | 1 | `HasteUnlockedManaOf` misses a hasted domain dork's own colours | the haste-unlock credit | add them | **fixed** (`MTG_DOMAIN_SELF_COLORS`: `AddSourceToPool` with no permanent counts the source's own colours) |
 | Fungus | 3 | a same-plan mana GRANT (Brightcap Badger) is not credited | the rock/grant credit | credit the granted bodies | **fixed** (`MTG_GRANT_CAST_CREDIT`; `badger-grant-defined-fungi-backtracker-gap.md`) |
-| Fungus, FiveColour | 8 | Concordant Crossroads' blanket haste does not unlock the plan's own dorks | the rock-credit stamp | credit them | open |
+| Fungus, FiveColour | 8 | Concordant Crossroads' blanket haste does not unlock the plan's own dorks | the rock-credit stamp | credit them | **fixed** (`MTG_HASTE_DORK_CAST_CREDIT`: a hasted creature mana source cast this turn carries `rock_mana`) |
 | Giants | 2 | `SubsetPayableSequentialImpl` refuses any non-cast action (an Equip {0}) | the sequential walk's kind filter, `SubsetHasUnmodelledSeqKind`, `OrderPaysSequentiallyImpl` | skip zero-cost non-mana activations | **fixed below** |
 | Goblins | 1 | the colour-presence gate misses a planned sac outlet's colour | `WidenHaveWithSubsetRocks` | the outlet half of `MTG_SUBSET_SAC_COLOR` | **blocked** (below) |
 | NivMizzetCombo | 5 | a mana rock that pays for another rock: the rock credit applies only when the board alone pays every rock | the `pool.CanPay(rock_costs)` guard (both walkers) | an exact sequential rock check from the credited pool | **fixed below** |
@@ -1056,3 +1056,58 @@ colour at apply from a scarcity score over the accounting pool, which counts a d
 gi27 trace shows one demand folding to four different colours. Where it guesses wrong the plan drops a cast the
 fanned colour pays -- an APPLY-DROP the oracle can see. The lossless shape is the one the Garth crack now uses (one
 variant per colour, credited exactly so a useless colour dies at the gate).
+
+### 13.6 Three more gaps closed (2026-10-30): Crossroads haste, a domain dork's own colours, the partial widen
+
+**Concordant Crossroads** (`MTG_HASTE_DORK_CAST_CREDIT`, DEFAULT ON). A creature mana source cast this turn that
+will have haste the moment it enters -- its own keyword, or a haste lord we control that covers it
+(`HasHasteFromLords`, CR 302.6) -- now carries `Action::rock_mana` like a cast mana rock, so the plan's later casts
+may be funded by its tap. Fungus s1100027 gi26 T3: Forest + Undercellar Myconid + Sporecrown Thallid, the Myconid's
+{W} paying the Thallid under Crossroads, was off the menu (25 plans -> 28; MISS 1 -> 0).
+
+**A domain dork's own colours** (`MTG_DOMAIN_SELF_COLORS`, DEFAULT ON). `AddSourceToPool` with no permanent (a
+hasted cast from hand, a same-plan rock credit) priced a Faeburrow Elder / Bloom Tender at the board's colours
+only; it will be one of "the permanents you control" when it taps, so its own colours now count.
+
+**The partial widen** (`MTG_DOMAIN_WIDEN_PARTIAL` + `MTG_DOMAIN_WIDEN_ORDER`, DEFAULT ON). The triage blamed the
+all-or-nothing `SubsetWidensDomainBy` credit, and that was half of it. The FIRST cut was earlier: neither total-mana
+bound at the odometer (`ManaPruneBound`'s extra credit, `BuildManaGateIndex`'s per-action gain) had a widen term,
+so FiveColour s1100001 gi0 T3 {Cosmic Spider-Man, Deathrite} = 6 died against a bound of 5 before `consider()` saw
+it. Four pieces, each needed:
+1. **Bounds:** `widen_bound` = live x |union of the cands' new colours| on the scalar bound; `WidenBoundGain`
+   (live x the action's new colours) per gate term. Both are upper bounds.
+2. **Partial credit:** when the all-widener credit is refused (the payoff is itself a widener, so the whole subset
+   would have to be prepaid), try every proper widener subset W. The t domain sources that tap AFTER the widener
+   leave the pool before W is priced -- they cannot pay for it and then tap again widened -- and only they earn the
+   widen (a first version without this hold-back took the census's PHANTOM count from 9 to 111). A necessary
+   condition on top: the rest of the plan's pips in colours the widened domain cannot make come out of the held
+   pool too (gi11 T4: lands pay Oko, the domain sources then make G/W/U and Hellkite's {B}{R} is stranded).
+3. **Order:** the executor's payable-order walk (apply site, only for an order no other producer admits) treats
+   a widener as a producer: the domain sources are held back until a cast needs them. Without it the admitted
+   plans dropped the widener (APPLY-DROP-ORDER 9 -> 0 on the 19-game census).
+4. The all-widener credit is unchanged (byte-identical wherever it fires).
+
+19-game FiveColour census (seed 1100001): ENUM-GAP 6 -> 0, PHANTOM 9 -> 17. The PHANTOMs that remain are single
+casts or one-widener subsets, which the partial path never touches -- the pre-existing over-admission shapes
+(gi8's lone Jared, 7 flags, is identical in base). One new APPLY-DROP (gi6 T4, Mana Cannons + Jared, 7 flags) is
+payer-level: the plan is payable but the per-cast payer taps Faeburrow for Cannons before the widen; the line-level
+payment script (`MTG_REAL_PAY_SCRIPT`) is the mechanism for that class.
+
+**Held-out A/B** (one pooled batch per measurement, per-job heurarm flags):
+- seed 1520001, Fungus 6,000 + FiveColour 2,000 per arm. Crossroads credit: Fungus 0 slower / 7 faster (-7),
+  FiveColour byte-identical. Own colours: FiveColour 1 slower (gi1178 T4 -> T5: a turn-1 fetch reshuffles the
+  library; T4 on both arms at d8 b0, T5 on both under the non-clairvoyant search), Fungus byte-identical.
+- seed 1530001, FiveColour 5,000 per arm. Own colours: 0 slower / 1 faster. Partial widen + order: 3 slower /
+  7 faster (-4), units +3.5%. All of them: 3 slower / 8 faster (-5), units +4.0%. The three slower games all
+  recover at d8 b0 (gi402 T4, gi174 T5, gi3068 T5 on both arms; gi174 is T6 on both non-clairvoyant).
+Only FiveColour holds a domain source (Faeburrow Elder, Bloom Tender), so the two domain levers move no other deck.
+
+Tiers: smoke and regression accepted for Fungus / FiveColour / FiveColour 2HG only (every other deck byte-identical
+on smoke; Snow d0/d3/d5 and PD d0 were already red on origin with the same digests). Regression searched slower
+games: FiveColour d3 s2002 gi8 and 2HG d5 gi58 recover at d8 b0. **Open, not recovered:** Fungus d5 s3003 gi148
+(T4 -> T5, the Crossroads credit) is T4 -> T5 at d8 b0 too, and T5 on both arms under the non-clairvoyant search,
+so it passes the bar as clairvoyance (base's T4 needs the T4 Ancient Tomb draw). It is still a signal worth
+chasing: the credited T3 menu is a strict superset (30 -> 36 plans, base's Wild Growth + Myconid line included), yet
+the unlimited clairvoyant search picks Wild Growth + Thallid, so something between the menu and the search's
+evaluation of the new plans is not sound. The same T3 also holds one remaining Crossroads gap: {Wild Growth,
+Undercellar Myconid, Utopia Mycon}, where the hasted Myconid's own tap pays the Mycon, is still kept off by a gate.
