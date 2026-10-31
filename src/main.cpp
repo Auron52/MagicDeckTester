@@ -8454,6 +8454,8 @@ static void WriteGameLog(const std::filesystem::path& dir, const std::string& na
 //                                    // at the end -- removal a passive opponent never notices
 //     "expect_active_life": 20,      // optional: pin OUR life (incidental lifegain / pain taps) --
 //                                    // the only assertion that sees a rider-only illegal cast
+//     "expect_active_energy": 1,     // optional: pin OUR {E} at the end (an Aether Hub any-colour tap
+//                                    // spent where a free payment existed -- invisible to every other check)
 //     "validate_line": "land=X;cast=A;cast=B",   // optional: run TurnSolver::CheckLine on this board
 //     "expect_verdict": "accept",    // ... and fail unless the verdict matches (default "accept").
 //     "expect_reason_contains": "...", // ... and (optional) unless its reason contains this.
@@ -9375,6 +9377,22 @@ static int RunScenario(const std::filesystem::path& scenario_path)
             return 1;
         }
         std::cout << "scenario: PASS (active_life " << exp << ")\n";
+    }
+
+    // Optional OWN-ENERGY assertion: what the line spent of our {E} (Aether Hub's "{T}, Pay {E}: Add one mana of any
+    // color"). A payment that spends the energy where a free one exists changes neither life nor the win turn of a
+    // short fixture -- the deck owner's EDF seed 3432 report (Wild Growth's {G} off the Hub's any-colour mode) is
+    // visible only here.
+    if (j.contains("expect_active_energy"))
+    {
+        const int exp = j.at("expect_active_energy").get<int>();
+        const int got = state.players[0].energy_counters;
+        if (got != exp)
+        {
+            std::cout << "scenario: FAIL expected active_energy " << exp << ", got " << got << "\n";
+            return 1;
+        }
+        std::cout << "scenario: PASS (active_energy " << exp << ")\n";
     }
 
     // Optional ATTACHMENT assertion: {"<aura or equipment name>": "<host name>"}. Pins WHICH

@@ -83,6 +83,22 @@ inline bool PlaceholderSnowOn()       // Snow winless certificate's gain bound s
     static const bool e = EnvOn("MTG_PLACEHOLDER_SNOW", true);
     return heurarm::Flag(heurarm::PLACEHOLDER_SNOW, e);
 }
+// MTG_TAPAHEAD_ENERGY_COVER (2026-10-31; DEFAULT ON, =0 -> an energy-paid colour counts as cover): the ETB-untap
+// tap-ahead's coverage question (ReservedColorsStillCovered) does not count an ENERGY-paid colour (Aether Hub's "{T},
+// Pay {E}: Add one mana of any color") as a source still covering the pending pip. See the note at that function.
+inline bool TapAheadEnergyCoverOn()
+{
+    static const bool e = EnvOn("MTG_TAPAHEAD_ENERGY_COVER", true);
+    return heurarm::Flag(heurarm::TAPAHEAD_ENERGY_COVER, e);
+}
+// MTG_PAINLAND_TAPAHEAD_CAST_AUTO (2026-10-31; DEFAULT ON, =0 -> human play only): the cast-site half of the
+// painland tap-ahead (a painland banks its PAINLESS {C} ahead of an ETB untap that gives it back) in autonomous play
+// too, under the same budget and reserve guards. See the note in EtbUntapTapAheadIntoFloat.
+inline bool PainlandTapAheadCastAutoOn()
+{
+    static const bool e = EnvOn("MTG_PAINLAND_TAPAHEAD_CAST_AUTO", true);
+    return heurarm::Flag(heurarm::PAINLAND_TAPAHEAD_CAST_AUTO, e);
+}
 // MTG_DOMAIN_SELF_COLORS (DEFAULT ON; =0 -> the board's colours only): a domain source projected from
 // hand counts its own colours (AddSourceToPool).
 inline bool DomainSelfColorsOn()
@@ -32524,6 +32540,16 @@ inline bool ReservedColorsStillCovered(const GameState& state, int controller,
             bool makes = false;
             for (Color c : EffectiveProduces(state, controller, *qd, false))
             { if (static_cast<int>(c) == ci) { makes = true; break; } }
+            // AN ENERGY-PAID COLOUR IS NOT FREE COVER (MTG_TAPAHEAD_ENERGY_COVER, default ON). The question here is
+            // "does committing the candidate's unit elsewhere only move WHICH land pays the pip?", and for an Aether
+            // Hub it does not: its coloured mode spends the {E}, a game-long resource, where the candidate's unit
+            // pays the same pip for nothing and the Hub's free {C} still pays a generic one. EDF seed 1100006 gi5
+            // T2 (Kitchen + an Aether Hub played this turn, {Trace of Abundance, Cloud of Faeries}, Cloud first):
+            // the Hub "covered" Cloud's {U}, so Kitchen banked {G}, the {U} spent the only {E}, and Trace's {R/W}
+            // after the untap had nothing -- refused, where Kitchen's {U} + the Hub's {C} pays Cloud and the {E}
+            // pays Trace (mana-oracle ENUM-GAP; seed 1100020 gi19 T3 the same). The Hub's land Aura bonus still
+            // counts below: it rides the free {C} tap.
+            if (makes && qd->params.energy_per_colored_tap > 0 && TapAheadEnergyCoverOn()) { makes = false; }
             // A land Aura's bonus rides the host's tap in the AURA's colour, so it is supply too
             // (Fertile Ground / Trace of Abundance: any colour).
             if (!makes && q.card.IsLand()
@@ -32979,10 +33005,19 @@ inline void EtbUntapTapAheadIntoFloat(GameState& state, int controller, int coun
         }
         // A tap_self_damage_any_mode land (Ancient Tomb) has no painless {C}: its {C}{C} hurts, so it
         // stays out of the tap-ahead like every painful source.
+        // ...AND AT A CAST SITE IN AUTONOMOUS PLAY TOO (MTG_PAINLAND_TAPAHEAD_CAST_AUTO, default ON; 2026-10-31). Under
+        // its two guards the bank is free mana: `count >= tapped_n + 1` means every tapped land -- this one included --
+        // is untapped again by the ETB, whatever order the untap picks, and `!reserve_overlap` (the blanket form; the
+        // coverage widening stays human-only) keeps a painland that could make a pip of the pending cost out. The land
+        // ends the step untapped and its painless {C} plus its Aura's bonus float. EDF seed 1100003 gi2 T3: Brushland
+        // + Wild Growth and Mariposa + Trace of Abundance, {Cloud of Faeries, Peregrine Drake}: Brushland was never
+        // banked, Cloud's two untaps refunded one land, and the Drake was a mana short -- refused (mana-oracle
+        // ENUM-GAP), where banking it pays both. The seed-1 stranding this scope was guarding is the reserve guard's.
         bool pain_c = false;
         if (q.tap_self_damage > 0 && !q.tap_self_damage_any_mode && PainlandCModeEnabled() && s_pain_tapahead
             && ((g_in_blink_loop && (HumanPlayActive() || s_pain_loop_auto))
-                || (HumanPlayActive() && s_pain_cast && count >= tapped_n + 1 && !reserve_overlap)))
+                || ((HumanPlayActive() || PainlandTapAheadCastAutoOn())
+                    && s_pain_cast && count >= tapped_n + 1 && !reserve_overlap)))
         {
             for (Color c : q.produces)
             { if (c == Color::Colorless) { pain_c = true; break; } }

@@ -773,6 +773,11 @@ enum Slot : int
     DORK_ATK_PROVIDER_HOLD,   // MTG_DORK_ATK_PROVIDER_HOLD  the searched dork attack/hold (MTG_DORK_ATK_SEARCH) also CONTESTS a damage-dealing mana dork an ARCHETYPE's ShouldAttackWith holds for its mana (FiveColour's Deathrite / Bloom Tender hold): the FSLineWin branch evaluates the release and the executor pin honours it (mana-oracle 13.2: FiveColour s1130288 gi287 under MTG_REAL_PAY_SCRIPT). =0 -> only the collapsed-main tower's holds are contested
     BP_DEV_SEQ_TAIL_SKIP,     // MTG_DEV_SEQ_TAIL_SKIP  MTG_BP_DEV_SEQ's second pass (root cut R-1) skips what cannot change within its window: a dirty node's TAIL whose first-pass walk was complete under a cutoff at least as loose, found nothing by the cut and met no latent occurrence by it (DvsTailGate), a dirty NODE whose complete walk met latent occurrences only past the root cut (kept, not erased: FslEraseDirty), and a main-1 plan whose latent-free apply leaves nothing the walker reads and whose tail is skippable (its apply skipped too). Identities within the window: 41 suite cases byte-identical, units 0.9906x, Melira 0.939x (the lever's +26.8% -> +19.1%). =0 -> the full second-pass re-walk
     BP_DEV_SEQ_DIRTY_READ,    // MTG_DEV_SEQ_DIRTY_READ  MTG_BP_DEV_SEQ's first pass marks a node DIRTY when it reads a dirty node's memo answer (a transposition onto a node whose walk met a latent occurrence), not only when its own walk meets one: such a node rested on a one-deviation answer, yet was carried into the second pass and filed in the game-line cache as a full-tree answer. =0 -> only a node whose own walk met a latent occurrence is dirty
+    ENERGY_AURA_PIP,          // MTG_ENERGY_AURA_PIP  a coloured pip off an ENERGY-paid colour (Aether Hub) whose land Aura already pays it taps the free {C} face and keeps the {E}: when the leftover is spent on this payment's generic, or floats while the line binding the payment owes no further pip of that colour (EDF viewer seed 3432 T3: Wild Growth's {G} paid by the Hub's any-colour mode, energy 1 -> 0, the T4 go-off lost). Only EldraziDisplacerFlicker runs Aether Hub. Default ON; =0 -> the energy-paid coloured tap
+    TAPAHEAD_ENERGY_COVER,    // MTG_TAPAHEAD_ENERGY_COVER  the ETB-untap tap-ahead's coverage test (ReservedColorsStillCovered) does not count an ENERGY-paid colour (Aether Hub) as a source still covering the pending pip, so a free dual commits its banked unit to the pip and the {E} is kept (EDF seed 1100006 gi5 T2: Kitchen banked {G}, Cloud's {U} spent the only {E}, Trace of Abundance's {R/W} had nothing; ENUM-GAP). Default ON; =0 -> energy counts as cover
+    PAINLAND_TAPAHEAD_CAST_AUTO, // MTG_PAINLAND_TAPAHEAD_CAST_AUTO  the cast-site painland tap-ahead (a painland banks its painless {C} + Aura bonus ahead of an ETB untap that gives it back, under the budget and reserve guards) runs in autonomous play too (was human-only): EDF seed 1100003 gi2 T3 {Cloud of Faeries, Peregrine Drake} a mana short with Brushland never banked (ENUM-GAP). Default ON; =0 -> human-only
+    EF_SCALAR_REFUND,         // MTG_EF_SCALAR_REFUND  the sequential rescue's scalar ceiling (ef-scalar) counts the same-subset ETB untappers' refund (EtbUntapLandsCredit + the subset's largest land-Aura bonuses) as supply (EDF seed 1100006 gi5 T2 {Trace of Abundance, Cloud of Faeries x2}: ENUM-GAP). Upper bound. Default ON; =0 -> no refund term
+    ETB_BOUND_AURA,           // MTG_ETB_BOUND_AURA  the odometer bounds' ETB-untap refund (EtbUntapBoundCredit, both ManaPruneBound and the selection-exact gate) adds the N largest land-Aura bonuses in hand: a same-selection Aura on a refunded land yields again (EDF seed 1100009 gi8 T2 {Wild Growth -> Adarkar, Cloud, Displacer} cut at the odometer; ENUM-GAP). Upper bound. Default ON; =0 -> the board-only refund
     COUNT
 };
 
@@ -1490,6 +1495,11 @@ inline const char* Name(int slot)
         "MTG_DORK_ATK_PROVIDER_HOLD",
         "MTG_DEV_SEQ_TAIL_SKIP",
         "MTG_DEV_SEQ_DIRTY_READ",
+        "MTG_ENERGY_AURA_PIP",
+        "MTG_TAPAHEAD_ENERGY_COVER",
+        "MTG_PAINLAND_TAPAHEAD_CAST_AUTO",
+        "MTG_EF_SCALAR_REFUND",
+        "MTG_ETB_BOUND_AURA",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
