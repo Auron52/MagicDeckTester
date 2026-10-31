@@ -46,6 +46,11 @@ BASE.update(MTG_CYCLONE_CANTRIP_ORDER=True,
             MTG_CYCLONE_BUCKET_KEEPNEED=False,
             MTG_CYCLONE_DISCARD_ELDRAZI2_SHUFFLE_EARLY=False)
 
+PROCESS_CACHE_OVERRIDES = {
+    "MTG_FSL_POOL", "MTG_FSL_CAP", "MTG_MEM_BUDGET_MB",
+    "MTG_PLAN_CACHE_EXACT_KEY", "MTG_BP_DERIVE_ISOLATE", "MTG_CACHE_HIT_CHARGE",
+}
+
 
 def git(root, *args):
     return subprocess.check_output(["git", "-C", str(root), *args], text=True,
@@ -308,7 +313,8 @@ def main():
                 job("kitty_d3_s124000", (files["kittyv3"], profiles["kittyv3"]), 3, 124000, 48, 10)]
         path = emit("memory_invariance", jobs, chunk=False)
         env = dict(MTG_PLAN_POOL_STATS="1", MTG_PLAN_CACHE_EXACT_KEY="1",
-                   MTG_BP_DERIVE_ISOLATE="1", MTG_CACHE_HIT_CHARGE="1")
+                   MTG_BP_DERIVE_ISOLATE="1", MTG_CACHE_HIT_CHARGE="1",
+                   MTG_FD_ORACLE="1", MTG_FLAG_NONCONV="1")
         # USER steering: keep the original shared RAM-sized pool, with no fixed
         # per-thread quota. Regenerate after the quota-removal patch lands.
         for threads, cache in ((1, "normal"), (6, "normal"), (12, "normal"),
@@ -353,6 +359,7 @@ def main():
         common = dict(CYCLONE_PB_PLANS=True, CYCLONE_CYCLER_RULE=True)
         arms = {"base": flags(**common), "CO": flags(**common, CYCLONE_CAST_ORDER=True),
                 "CO_CYC1": flags(**common, CYCLONE_CAST_ORDER=True, CYCLONE_CYCLE_ORDER=True),
+                "CO_CYC1_DRAW": flags(**common, CYCLONE_CAST_ORDER=True, CYCLONE_CYCLE_ORDER=True, CYCLONE_ORDER_DRAW_TURNS=True),
                 "CO_CYC1_REV_CYCLERS": flags(**common, CYCLONE_CAST_ORDER=True, CYCLONE_CYCLE_ORDER=True, CYCLONE_CO_REV_CYCLERS=True),
                 "CO_CYC1_MIDDLE": flags(**common, CYCLONE_CAST_ORDER=True, CYCLONE_CYCLE_ORDER=True, CYCLONE_CO_CYCLERS_BEFORE_SONG=True)}
         for blind, cells in ((False, ((3, 131000, 200, 10), (5, 132000, 100, 20))),
@@ -453,7 +460,7 @@ def main():
                     binary_sha256=hashlib.sha256(binary.read_bytes()).hexdigest() if binary.is_file() else None,
                     emitted=emitted, warnings=warnings, plans=plans,
                     qc1_sampler_provenance=qc1_sampler_provenance,
-                    unset_before_run=sorted(set(BASE) | {"MTG_BOTTOM_ROLLOUTS", "MTG_EXHAUSTIVE_PROFILE", "MTG_EXHAUSTIVE_BOTTOM",
+                    unset_before_run=sorted(set(BASE) | PROCESS_CACHE_OVERRIDES | {"MTG_BOTTOM_ROLLOUTS", "MTG_EXHAUSTIVE_PROFILE", "MTG_EXHAUSTIVE_BOTTOM",
                                       "MTG_PLAN_CACHE_KB", "MTG_PLAN_CACHE_THREAD_KB", "MTG_PLAN_CACHE_PER_THREAD", "MTG_FSL_PER_THREAD",
                                       "MTG_SEARCH_BLIND_UNKNOWN", "MTG_SEARCH_BLIND_SALT", "MTG_SHUFFLE_SALT_OPENING", "MTG_FD_LEAF_DEPTH",
                                       "MTG_FLAG_NONCONV", "MTG_FD_ORACLE", "MTG_CYCLE_SEED_PAY_CENSUS",

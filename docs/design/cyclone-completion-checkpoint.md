@@ -101,3 +101,48 @@ Shared-budget removal was rebased to `e9135d9ef`. Original9db23420e is a histori
 - New memory-preflight reporter requires all168 shared games plus the300 shape inventory and explicit FSL review if it binds.14 synthetic reporter tests PASS. Persistent scripts updated; helper/docs changes are pending a commit.
 - Next: after memory1, report memory-preflight; run fresh-source PGO smoke (post second rebase), audit per-game changes before any GT acceptance. Initial7known mismatches are from the6b baseline; current main9368 continuation-key fold may alter them. Then main12542-game pool, iso9240salt process modes0/2, data-dependent symmetric blind/movers/recoveries, remaining memorytiny12/unbounded6, smallVERIFY, quiet final cost, full regression+audit and linear landing as appropriate.
 - Viewer98998 still in full validate stage05 (~32min) with no failure emitted; serial reference alignment and successful validations are buffered. Stage06 sampled layers pending. Release/source hashes unchanged; only this lightweight checker overlaps heavy build/batch.
+
+## Blocking fidelity repair (2026-10-31 shortly after00UTC)
+
+- Memory1/6 preflight PASS: all168 shared per-game wins/digests/units exact; FSL0 binds;6-only300shapes inventoried. New post-rebase PGO smoke completed146PASS/7previouslyauditedFAIL/4NEW, no unexpected engine drift. Expected upstream MRange/TH changes only; noGTaccepted.
+- Primary enlarged to13142games/1490jobs by restoring owed Q60DRAW arm (newfour searched information orders), preserving separateQ64rank5/rank55. All noncast/runtime files hash-unchanged. PBCYC reporting now compares liveCYCLER baseline; Myriad-only contrasts also added without moregames.
+- Primary launcher39321 started23:52:46UTC, engine1487121; root sentSIGINT at23:58(~5m30) within allowedfirst10min defect window. STOPPED/-2 confirmed. Ordinary simulated FDseed107008/GI8 predictedT4 but actualT5, leaf_estnone. Old memory6 actualdigest/unit matches, notthread drift. Other FD warnings were blinded-future forecasts. All old results preserved+markedINVALIDATED-BY-FD107008.md; no aggregate/adoption verdicts.
+- Two isolated PGO reproductions in scratch/fd107008 confirm. Initial hypothesis (not established): already-paid Curator seed hold may re-arm only in rollout due temporary same-name hit inHAND; executor hit is onSTACK. Rollout pays Remandgeneric fromMountain, leavesUforanothercycle/Emr; executor spendsblue and leavesMountain. Calendar/extra-turn counters are consistent; payment causes loss of extra turn.
+- Focused physical-source regression was added and failed old engine exactlyone of50assertions (allzones/counts matched, landtap identities differ). Applied CycleSeedResolvedScope repair in ManaPayment.h plus executor/rollout/human sites: copycurrenttraits, clearonlymatching paidseeddef/pips/floor throughresolution; nested newPlanTraitsScope still supersedesit. Added nested-seed/pending-Lodge behavior regression. SourceUNCOMMITTED, greenbuild34708 running, logpaid-seed-green-build.log. Next: focused/fullunits,384scenarios, sameFDcase no-divergence, then freshPGO/newv2manifests/reruns. No source writes byreviewers.
+- Before-fix PGO preserved at scratch/paid-seed-before-pgo/mtg withsrc/deckslinks.
+- Viewer oldsource gates01--05PASS, fullvalidate697refs3,287accept/285choose/1unsupported/420nonhand skips/10baselinev1fail/0regression; mana2945yes/0NO/0unaudited. Stage06 sandboxedworkerfailedsocket/clientfixtures; rootunrestrictedretries bothPASS: saveparity18.474s, client274.526s. Manualtap5assertiondiagnostic leakage identicalbefore/final; Kittys31gi30twoalignment skips identicalbefore/final, actualprotocolWinT6passes. Interactiveparityand51sampleprotocolalsoPASS. No userreferencechanges/serverstart/permissionprompts.
+- Originmain advanced to03688a120 via2Midrange-onlycommits. Newprovider Fireblast/Lavamancer hooks areguarded bycardparams absent inCyclone/Hinata/Kitty, so do not mutate thisfrozen experiment. Preserve pushedcyclone-finish history; laterlinearintegration viafreshunpublishedlandingbranch/cherry-pickifneeded, notrewritingpushedrefs.
+
+- Follow-up: paid-seed clearing alone does NOT fix FD107008 or the physical-source test. Disabling existing MTG_SCARCE_COLOR_HOLD makes the focused test pass; disabling NeedsTap does not. Main rollout PlanTraits scope closes before root cycle while executor traits remain live, and site-4 continuations also lack a fresh scope. Existing-BP_TRACE-guarded actual payer diagnostics are applied temporarily; build44567 is in progress. No cause/fix claim until measured context and green reproducer.
+
+## Measured cycle-context repair (00:33UTC)
+
+The initial paid-seed-only explanation was incomplete. Actual BP-trace payer observers in
+`fd107008/payctx-r1` show rollout Remand has `traits=null, mid=0`; executor has live
+`mid=1, mana_casts=0`. Both have `seed=none, actmask=0` under the draft paid-seed repair.
+The provider's existing scarce-colour rank therefore pays different physical lands:
+rollout spends Steam Vents+Mountain; executor spends Steam Vents+Watery Grave.
+
+Root now saves the exact original pre-cast traits, restores them only around the trailing
+searched seed (including capture/resume snapshots), and installs the site-4 continuation's
+own traits before precasts through its nested seed and activations. Consumed-seed clearing
+remains necessary to prevent a temporary same-name free hit from resurrecting the old hold.
+No heuristic/ranking change or cache policy change is part of this correction.
+
+Focused source/payment tests PASS2/2,103assertions. Full units PASS2351/2351,
+3,566,171assertions. Original ordinary seed107008/globalGI8 now predicts and executes T4
+without FD/nonconv: per-game digest758163c5936e1ab8,1,099,992units, actual extraT4 attack25.
+The searched legal line differs: Song+Song+Cyclone, cycle spareCyclone into secondCyclone,
+cycleCurator into Emrakul, cycleWraith into Ulamog, then extra-turn attack. Diagnostic
+payer patch has been removed; clean optimized rebuild46115 in progress. Prefix-resume
+behavior regression is being added before committing/freshPGO. Previous v1 measurements
+remain invalid as final-source baselines; v2 must use fresh directories and diagnostics.
+
+- Prefix-resume and site-4 behavior regressions now PASS: focused4cases/209assertions.
+  The site-4 ritual/cycle fixture also passes with scarce-colour ranking disabled; disabling
+  activation-line holding too reproduces the stranded cycle (4failed assertions), so the
+  test observes a real colored reservation rather than only counting spells/sources.
+  Original full2351unit/384scenario gates preceded the two added regression cases; production
+  repair is unchanged except the optional state outputs on the existing test-only resume hook.
+  Next integration target is current mainca9132b9d (four new commits after930); preserve the
+  pushed finish branch and replay onto a fresh landing branch without rebasing pushed commits.

@@ -29,6 +29,17 @@ def now():
     return datetime.datetime.now(datetime.timezone.utc).isoformat()
 
 
+def launch_environment(inherited, unset, configured):
+    env = dict(inherited)
+    for key in unset:
+        env.pop(key, None)
+    # Intentional memory pins and tiny/unbounded capacities apply only after
+    # inherited process settings have been cleared.
+    env.update(configured)
+    env['GIT_OPTIONAL_LOCKS'] = '0'
+    return env
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('stage', choices=['primary', 'cost', 'verify', 'memory1', 'memory6', 'memory-tiny12', 'memory-unbounded6'])
@@ -116,11 +127,7 @@ def main():
     for flag in ('--game-log-dir', '--game-trace-dir'):
         if flag in argv:
             Path(argv[argv.index(flag) + 1]).mkdir(parents=True, exist_ok=True)
-    env = dict(os.environ)
-    for key in schedule['primary_quality']['unset_before_run']:
-        env.pop(key, None)
-    env.update(plan['env'])
-    env['GIT_OPTIONAL_LOCKS'] = '0'
+    env = launch_environment(os.environ, schedule['primary_quality']['unset_before_run'], plan['env'])
     record = dict(stage=a.stage, name=plan['name'] if 'name' in plan else 'primary-quality',
                   owner_pid=os.getpid(), started=now(), argv=argv, env=plan['env'],
                   input_manifest=argv[argv.index('--batch') + 1],
