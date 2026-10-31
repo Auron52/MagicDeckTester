@@ -4,7 +4,7 @@ User scope: finish outstanding changes in `origin/cyclone-analysis:docs/design/c
 
 Working branch/worktree: `cyclone-ready`, `.claude/worktrees/cyclone-ready`, based on phase-1-2 main `2b863538f`. The measured A7 experiment continues unchanged in `cyclone-final`. All original and intermediate branches/worktrees remain intact and pushed. Primary checkout's unrelated `test/ref_bench.json` edit remains untouched.
 
-Current stage (05:17 UTC): Ready is based on main `2b863538f`, with repair commit `cee782631` and clean source `c45a406437bc13a2db2324fd5d285cd46ec496ba`. Fresh PGO+LTO is complete (SHA `d8045e46f8a2c008bb8805c0dbd2d75fb289ef7f55efae94090edc5fb0691c6b`). Full units: 2,368 cases / 3,566,895 assertions PASS. All386 smoke scenarios passed; the150PASS/7knownFAIL/0NEW smoke was fully audited and accepted through the harness, GT894/894consistent. Four final-PGO fidelity/recovery controls pass exact traces/wins/units. The sealed V4 inputs passed independent audit. Normal6 memory is RUNNING (session25954, engine1726473); viewer strict709 is RUNNING (owner viewer reviewer/session15678), native122 follows. CI41171077254 is still running. A7 V3 was STOPPED after ordinary FD131117; its partial quality outcomes cannot support adoption. Full V4 quality/memory is fresh; the old upstream-only bridge is superseded and unrun. Remaining gates: V4 full quality, normal1/6/12/24 and pressure proofs, viewer completion, conditional pruning/isolation, full regression and quiet535-game bottoming-ON cost. No mulligan/value generation or proposal adoption before re-evaluation.
+Current stage (05:28 UTC): Ready is based on main `2b863538f`, with repair commit `cee782631` and clean source `c45a406437bc13a2db2324fd5d285cd46ec496ba`. Fresh PGO+LTO is complete (SHA `d8045e46f8a2c008bb8805c0dbd2d75fb289ef7f55efae94090edc5fb0691c6b`). Full units: 2,368 cases / 3,566,895 assertions PASS. All386 smoke scenarios passed; the150PASS/7knownFAIL/0NEW smoke was fully audited and accepted through the harness, GT894/894consistent. Four final-PGO fidelity/recovery controls pass exact traces/wins/units. The sealed V4 inputs passed independent audit. Normal6 memory is DONE0/all468games independently audited; normal1 is RUNNING (session67177, engine1744180). Viewer strict709 has a derived PASS from its complete raw output; native122 resumed under session26357 after an exact harmless-GT-file bridge. CI41171077254 is still running. A7 V3 was STOPPED after ordinary FD131117; its partial quality outcomes cannot support adoption. Full V4 quality/memory is fresh; the old upstream-only bridge is superseded and unrun. Remaining gates: V4 full quality, normal1/6/12/24 and pressure proofs, viewer completion, conditional pruning/isolation, full regression and quiet535-game bottoming-ON cost. No mulligan/value generation or proposal adoption before re-evaluation.
 
 The dated milestones below are historical records; later entries supersede earlier progress and pending-work statements.
 
@@ -480,3 +480,31 @@ It contains468games (core168+shapes300), with FD/NONCONV/units enabled and the
 restored shared RAM budgets. Normal1 and interim exact comparison follow; no
 primary quality has launched. Viewer4 may overlap; primary24 waits until its
 engines finish. Final cost535 remains separate/quiet, with bottoming always ON.
+
+
+## Normal6 complete; normal1 and native continuation (05:28 UTC)
+
+Normal6 session25954 finished05:26:01UTC/DONE0. Independent audit verifies all468
+unique wins/digests/unit rows and exact sealed source/binary/argv/environment.
+No FD/nonconv; FSL did not bind. Shared plan pool: budget1,027,328KB,
+hiwater1,027,327KB, refused18, residual0. Per-game max871,014KB (~850.6MiB);
+activity stats cover458games, result coverage independently all468. Evidence:
+`v4-protocol-audit/normal6-artifact-audit.json`. Normal1 root session67177,
+engine1744180 is RUNNING; independent168-game comparison follows completion.
+
+Viewer strict raw output completed709refs:273ok/435repaired/1beaten, zero gating
+failures. The post-stage broad input guard then detected smoke acceptance: exactly
+7smoke.wins, job_cost.tsv and regression_gt.txt. Every old/new hash matches the
+accepted commit and its parent; no checker consumes those files, meaningful source/
+binary/viewer/ref/deck/apparatus/helper inputs are unchanged. Original STOPPED
+status/raw logs are preserved. Child numeric return was not persisted before the
+guard; `STRICT_EXIT_PROOF.md` derives return0 from every unique row, zero failures
+and the exact checker's terminal code. `REVIEWED_GT_BRIDGE.json` records the
+limited harmless-file bridge; the global guard remains unchanged. Freshly sealed
+native-only122/4pin continuation is RUNNING as viewer session26357 at
+`v4-viewer/native-resume/`; no static/strict repeat.
+
+The source staysc45 and PGOd804 throughout acceptance/checkpoint commits. Runtime
+sealing may update documentary HEAD metadata while retaining identical source,
+binary, semantic inputs and primary manifestdd91. No V4 quality has launched;
+all previous V3 partial outcomes remain unusable for adoption.
