@@ -9,6 +9,8 @@
  "frozen": "8e8fa8e44e21f140b441549fe538a26fc7fc1273",
  "heartbeat": "2026-10-31T12:28:58Z",
  "host": "58199181d02e",
+ "landed": "dfcb18cb90ae65aeb4968787550a10b1fb9bc55e",
+ "landed_at": "2026-10-31T12:53:03Z",
  "result_branch": "artifact-refresh/slivers_vial-20261031-1242",
  "run_id": "slivers_vial-artifact-queue-tool-647f24-20261031T122526",
  "score": 0.0164,
