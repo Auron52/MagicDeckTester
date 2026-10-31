@@ -3385,6 +3385,14 @@ public:
     // Firemind cast. See the .cpp.
     bool SacForManaOnlyIfNeeded(const GameState& s, const std::vector<Action>& cands,
                                 const std::vector<int>& sel, int j) const override;
+    // The USER's cast order (2026-10-31; MTG_NIV_CAST_ORDER, DEFAULT ON). See the definition's header.
+    int  CastOrderRank(const GameState& s, const CardDefinition& def) const override;
+    int  CastOrderActionRank(const GameState& s, const Action& a, int rank) const override;
+    bool CastOrderTotalByName() const override;
+    bool OrderOpaqueCastsByRank() const override;
+    void ArrangeCastOrder(const GameState& s, const std::vector<Action>& actions,
+                          std::vector<int>& order) const override;
+    std::optional<MainPhase> MainPhaseOverride(const GameState& s, const CardDefinition& def) const override;
 };
 
 // Galadriel (Galadriel of Lothlorien + 52 scry lands + Sol Ring, Crackle with Power as the finisher;

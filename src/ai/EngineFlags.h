@@ -851,6 +851,16 @@ inline bool PrepayFloatPoolOn()
     return heurarm::Flag(heurarm::PREPAY_FLOAT_POOL, env_on);
 }
 
+// MTG_NIV_CAST_ORDER -- DEFAULT ON; =0 restores the generic tiers for NivMizzetCombo. The USER's cast order
+// (2026-10-31): NivMizzetComboProvider's CastOrderRank / CastOrderActionRank / ArrangeCastOrder /
+// OrderOpaqueCastsByRank / CastOrderTotalByName / MainPhaseOverride, and the Niv condition on the cantrip-first
+// VALUE hoist (MayPrecedeCantrip, TurnSolver.cpp). One shared reader, so the provider and the enumeration agree.
+inline bool NivCastOrderOn()
+{
+    static const bool env_on = EnvOn("MTG_NIV_CAST_ORDER", true);
+    return heurarm::Flag(heurarm::NIV_CAST_ORDER, env_on);
+}
+
 // MTG_SERVANT_HASTE_KEEP -- DEFAULT ON; =0 restores the drain-first payment (a noncreature cast spends
 // Generator Servant's haste-tagged {C} even when a later creature in the same line could take the haste).
 // See g_line_haste_takers (ManaPayment.h). Shared payer, so executor, rollout and human play agree.

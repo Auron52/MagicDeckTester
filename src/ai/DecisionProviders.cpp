@@ -54016,6 +54016,141 @@ bool NivMizzetComboProvider::SacForManaOnlyIfNeeded(const GameState& s, const st
     return true;
 }
 
+// =============================================================================================
+// THE USER's NivMizzetCombo CAST ORDER (MTG_NIV_CAST_ORDER, EngineFlags.h; USER 2026-10-31, reviewing
+// build/scratch/castorder/drafts/NivMizzetCombo.md -- "Otherwise it looks sensible", with one change:
+// Brainstorm FIRST among the draws, "then you can pitch junk using the preordain and ponder"):
+//
+//   land (searched, no pin) -> Sol Ring -> Izzet Signet -> Niv-Mizzet, the Firemind / Niv-Mizzet, Parun
+//   (name tie) -> Curiosity when its host is a Niv -> Tandem Lookout when a Niv is on the battlefield or
+//   earlier in the plan -> Brainstorm -> Ponder -> Preordain -> Gitaxian Probe -> Remand (with its target,
+//   ranked as the last draw) -> [no Niv: Curiosity -> Tandem Lookout] -> Generator Servant (cast).
+//
+// Rulings that came with it: Q1 the order binds inside cantrip (order-opaque) plans too
+// (OrderOpaqueCastsByRank); Q2 the cantrip-first VALUE hoist of Curiosity / Lookout holds only with a Niv on
+// the battlefield or earlier in the plan (MayPrecedeCantrip, TurnSolver.cpp, reads the same lever); Q4 both
+// Nivs, Curiosity and Lookout are main-1 cards (MainPhaseOverride -- advisory: this deck opts into neither the
+// main-phase filter nor condemnation, so it moves only the --cast-order-report and the MTG_ORDER_M1_FIRST
+// tie-break). Ranked by card PARAMS (NivRoleOf's own tests), never names; a card the table does not know
+// keeps the generic rank, and the name breaks every remaining tie (CastOrderTotalByName).
+// =============================================================================================
+namespace
+{
+bool NivOnOwnBattlefield(const GameState& s)
+{
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != s.active_player_index) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.draw_trigger_damage > 0) { return true; }
+    }
+    return false;
+}
+bool NivIsNivCast(const Action& a)
+{
+    if (a.kind != Action::Kind::CastFromHand) { return false; }
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    return d != nullptr && d->params.draw_trigger_damage > 0;
+}
+}   // namespace
+
+int NivMizzetComboProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
+{
+    if (!NivCastOrderOn()) { return DeckProvider::CastOrderRank(s, def); }
+    const CardParams& p = def.params;
+    if (p.mana_rock && !def.card.IsCreature()) { return p.ramp_filter ? 5 : 4; }   // Sol Ring, then the Signet
+    if (p.draw_trigger_damage > 0)        { return 8; }                            // either Niv (name tie)
+    // Curiosity's host and the Lookout's partner are plan facts: the card-level rank is the board's answer,
+    // and CastOrderActionRank (the host) / ArrangeCastOrder (a Niv cast earlier in the plan) refine it.
+    if (p.aura_damage_trigger_draw)       { return NivOnOwnBattlefield(s) ? 9 : 22; }
+    if (p.soulbond_damage_trigger_draw)   { return NivOnOwnBattlefield(s) ? 10 : 23; }
+    if (p.put_back_from_hand > 0)         { return 12; }                           // Brainstorm
+    if (p.cast_reorder > 0)               { return 13; }                           // Ponder
+    if (p.cast_scry > 0)                  { return 14; }                           // Preordain
+    if (p.counters_target_spell_to_hand)  { return 16; }                           // Remand
+    if (p.draw > 0)                       { return 15; }                           // Gitaxian Probe
+    if (p.sac_for_mana_grants_haste)      { return 24; }                           // Generator Servant
+    return DeckProvider::CastOrderRank(s, def);
+}
+
+int NivMizzetComboProvider::CastOrderActionRank(const GameState& s, const Action& a, int rank) const
+{
+    if (!NivCastOrderOn() || a.kind != Action::Kind::CastFromHand) { return rank; }
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    if (d == nullptr) { return rank; }
+    // The Remand rider ranks as the LAST draw when its target X is itself a draw ("Ponder + Remand": Parun
+    // draws twice, Remand draws, Ponder returns). On a non-draw X it keeps X's slot: a Remand on a Niv returns
+    // Curiosity's host to hand, and which line wants that is the search's.
+    if (!a.remand_by.empty() && NivIsDraw(NivRoleOf(d))) { return 16; }
+    // Curiosity: slot 9 exactly when its HOST is a Niv -- on the battlefield, or a Niv this plan casts (the
+    // host is named by its card number, the hand card's for a same-plan host).
+    if (d->params.aura_damage_trigger_draw && a.enchant_target > 0)
+    {
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.card.m_number != a.enchant_target) { continue; }
+            const CardDefinition* hd = CardDatabase::Instance().LookupCached(p.card);
+            return (hd != nullptr && hd->params.draw_trigger_damage > 0) ? 9 : 22;
+        }
+        for (const Card& c : s.ActivePlayer().hand)
+        {
+            if (c.m_number != a.enchant_target) { continue; }
+            const CardDefinition* hd = CardDatabase::Instance().LookupCached(c);
+            return (hd != nullptr && hd->params.draw_trigger_damage > 0) ? 9 : 22;
+        }
+        return 22;
+    }
+    return rank;
+}
+
+bool NivMizzetComboProvider::CastOrderTotalByName() const { return NivCastOrderOn(); }
+bool NivMizzetComboProvider::OrderOpaqueCastsByRank() const { return NivCastOrderOn(); }
+
+void NivMizzetComboProvider::ArrangeCastOrder(const GameState& s, const std::vector<Action>& actions,
+                                              std::vector<int>& order) const
+{
+    // "Tandem Lookout when a Niv is ... earlier in the plan": a Lookout the board ranked 23 (no Niv out) moves
+    // to slot 10 when the plan casts a Niv (which ranks 8, so it is earlier). Stable, so the comparator's name
+    // ties are kept.
+    if (!NivCastOrderOn() || order.size() < 2) { return; }
+    bool niv_cast = false, late_lookout = false;
+    for (int i : order)
+    {
+        const Action& a = actions[static_cast<std::size_t>(i)];
+        if (NivIsNivCast(a)) { niv_cast = true; continue; }
+        if (a.kind != Action::Kind::CastFromHand) { continue; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        if (d != nullptr && d->params.soulbond_damage_trigger_draw && CastOrderKeyOf(s, a) >= 23 * 4)
+        { late_lookout = true; }
+    }
+    if (!niv_cast || !late_lookout) { return; }
+    std::stable_sort(order.begin(), order.end(), [&](int x, int y)
+    {
+        auto key = [&](int i)
+        {
+            const Action& a = actions[static_cast<std::size_t>(i)];
+            int k = CastOrderKeyOf(s, a);
+            if (a.kind == Action::Kind::CastFromHand)
+            {
+                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                if (d != nullptr && d->params.soulbond_damage_trigger_draw && k >= 23 * 4) { k = 10 * 4 + (k % 4); }
+            }
+            return k;
+        };
+        return key(x) < key(y);
+    });
+}
+
+std::optional<DecisionProvider::MainPhase> NivMizzetComboProvider::MainPhaseOverride(const GameState& s,
+                                                                                    const CardDefinition& def) const
+{
+    if (!NivCastOrderOn()) { return DeckProvider::MainPhaseOverride(s, def); }
+    const CardParams& p = def.params;
+    if (p.draw_trigger_damage > 0 || p.aura_damage_trigger_draw || p.soulbond_damage_trigger_draw)
+    { return MainPhase::Main1; }
+    return DeckProvider::MainPhaseOverride(s, def);
+}
+
 // ---- Abiding Grace dominance folds (see the declaration in DecisionProviders.h) ----------------------
 bool GraceReturnDominatesOn()
 {

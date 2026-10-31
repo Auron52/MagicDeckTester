@@ -22,6 +22,7 @@
 #include "ai/AIEngine.h"
 #include "ai/Combat.h"
 #include "ai/DecisionProviders.h"
+#include "ai/HeuristicArm.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
 #include "core/EffectHandler.h"
@@ -725,40 +726,50 @@ TEST_CASE("Cantrip-first carries a hoisted Aura's SAME-PLAN host with it (search
     // Curiosity goes ahead of Preordain. Its host here is cast in the SAME plan (a Generator Servant
     // from hand): the Servant must move up with it, or Curiosity would come first, have no legal target
     // (AuraSpellCastLegal) and never be cast -- the line would be in no plan at all.
-    GameState s = FreshNiv(40);
-    PutNiv(s, "Island", 50);
-    PutNiv(s, "Island", 51);
-    PutNiv(s, "Mountain", 52);
-    PutNiv(s, "Mountain", 53);
-    s.players[0].hand.push_back(CardNiv("Generator Servant", 12));
-    s.players[0].hand.push_back(CardNiv("Curiosity", 10));
-    s.players[0].hand.push_back(CardNiv("Preordain", 11));
-    const bool saved_searched = g_searched_play;
-    TurnSolver::SetSearchedPlay(true);
-    const long long before = g_enchant_retargets.load();
-    bool found = false;
-    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
+    // USER 2026-10-31 (the Niv cast order, MTG_NIV_CAST_ORDER, Q2): the hoist holds only when Curiosity's
+    // host is a Niv -- on a Servant, with no Niv anywhere, it waits behind the cantrip. The host still
+    // comes first either way, and the Aura still lands on it.
+    for (const bool niv_order : { false, true })
     {
-        int servant = -1, curiosity = -1, preordain = -1;
-        for (std::size_t i = 0; i < p.actions.size(); ++i)
+        INFO("MTG_NIV_CAST_ORDER=" << niv_order);
+        heurarm::t_arm[heurarm::NIV_CAST_ORDER] = niv_order ? 1 : 0;
+        GameState s = FreshNiv(niv_order ? 41 : 40);
+        PutNiv(s, "Island", 50);
+        PutNiv(s, "Island", 51);
+        PutNiv(s, "Mountain", 52);
+        PutNiv(s, "Mountain", 53);
+        s.players[0].hand.push_back(CardNiv("Generator Servant", 12));
+        s.players[0].hand.push_back(CardNiv("Curiosity", 10));
+        s.players[0].hand.push_back(CardNiv("Preordain", 11));
+        const bool saved_searched = g_searched_play;
+        TurnSolver::SetSearchedPlay(true);
+        const long long before = g_enchant_retargets.load();
+        bool found = false;
+        for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
         {
-            const Action& a = p.actions[i];
-            if (a.kind != Action::Kind::CastFromHand) { continue; }
-            if (a.card_name.str() == "Generator Servant") { servant = static_cast<int>(i); }
-            if (a.card_name.str() == "Curiosity" && a.enchant_target == 12) { curiosity = static_cast<int>(i); }
-            if (a.card_name.str() == "Preordain") { preordain = static_cast<int>(i); }
+            int servant = -1, curiosity = -1, preordain = -1;
+            for (std::size_t i = 0; i < p.actions.size(); ++i)
+            {
+                const Action& a = p.actions[i];
+                if (a.kind != Action::Kind::CastFromHand) { continue; }
+                if (a.card_name.str() == "Generator Servant") { servant = static_cast<int>(i); }
+                if (a.card_name.str() == "Curiosity" && a.enchant_target == 12) { curiosity = static_cast<int>(i); }
+                if (a.card_name.str() == "Preordain") { preordain = static_cast<int>(i); }
+            }
+            if (servant < 0 || curiosity < 0 || preordain < 0) { continue; }
+            found = true;
+            CHECK(servant < curiosity);     // the host first...
+            if (niv_order) { CHECK(preordain < curiosity); }   // ...no Niv: the payoff waits for the cantrip
+            else           { CHECK(curiosity < preordain); }   // ...and the payoff still ahead of the cantrip
+            GameState r = s;
+            TurnSolver::ApplyPlan(r, p, true);
+            bool attached = false;
+            for (const Permanent& q : r.battlefield) { if (q.card.m_number == 10 && q.aura_attached_to == 12) { attached = true; } }
+            CHECK(attached);
         }
-        if (servant < 0 || curiosity < 0 || preordain < 0) { continue; }
-        found = true;
-        CHECK(servant < curiosity);     // the host first...
-        CHECK(curiosity < preordain);   // ...and the payoff still ahead of the cantrip
-        GameState r = s;
-        TurnSolver::ApplyPlan(r, p, true);
-        bool attached = false;
-        for (const Permanent& q : r.battlefield) { if (q.card.m_number == 10 && q.aura_attached_to == 12) { attached = true; } }
-        CHECK(attached);
+        CHECK(found);
+        CHECK(g_enchant_retargets.load() == before);
+        TurnSolver::SetSearchedPlay(saved_searched);
+        heurarm::t_arm[heurarm::NIV_CAST_ORDER] = -1;
     }
-    CHECK(found);
-    CHECK(g_enchant_retargets.load() == before);
-    TurnSolver::SetSearchedPlay(saved_searched);
 }

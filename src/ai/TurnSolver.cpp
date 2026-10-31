@@ -29202,7 +29202,28 @@ static bool IsPlainCantrip(const Action& a)
 //                    of the Great Revel, which damages the CASTER (a punisher, opposite polarity);
 //                    such a card needs a payoff-polarity param, and its check goes here too.
 // Where neither applies, cantrip-first is a strict dominance improvement.
-static bool MayPrecedeCantrip(const Action& a)
+// `niv_ctx`: MTG_NIV_CAST_ORDER's Q2 ruling (USER 2026-10-31) -- Curiosity / Tandem Lookout go ahead of the
+// cantrips only when a Niv is in play or earlier in the plan (`niv_out`: a Niv on the battlefield or cast by
+// this plan; `niv_host`: this Curiosity's host is such a Niv). nullptr = the unconditional hoist.
+struct NivHoistCtx { bool niv_out = false; const GameState* state = nullptr; const std::vector<Action>* acts = nullptr; };
+static bool CuriosityHostIsNiv(const NivHoistCtx& c, const Action& a)
+{
+    if (a.enchant_target <= 0 || c.state == nullptr) { return false; }
+    for (const Permanent& p : c.state->battlefield)
+    {
+        if (p.card.m_number != a.enchant_target) { continue; }
+        const CardDefinition* hd = CardDatabase::Instance().LookupCached(p.card);
+        return hd != nullptr && hd->params.draw_trigger_damage > 0;
+    }
+    for (const Card& hc : c.state->ActivePlayer().hand)
+    {
+        if (hc.m_number != a.enchant_target) { continue; }
+        const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+        return hd != nullptr && hd->params.draw_trigger_damage > 0;
+    }
+    return false;
+}
+static bool MayPrecedeCantrip(const Action& a, const NivHoistCtx* niv_ctx = nullptr)
 {
     if (a.ritual_float > 0)                  { return true; }   // ritual / accelerant float
     if (a.rock_mana.Total() > 0)             { return true; }   // same-turn mana rock
@@ -29227,9 +29248,12 @@ static bool MayPrecedeCantrip(const Action& a)
     // onto Niv, then Preordain" -- absent from every SEARCHED plan list (cantrip-first is depth-gated, so
     // only d0 still held it): the cantrip's draw resolved before any watcher was out, and the breakpoint
     // re-solve after it cannot take that draw back.
-    if (d->params.draw_trigger_damage > 0 || d->params.cast_trigger_instant_sorcery_draw > 0
-        || d->params.aura_damage_trigger_draw || d->params.soulbond_damage_trigger_draw)
+    if (d->params.draw_trigger_damage > 0 || d->params.cast_trigger_instant_sorcery_draw > 0)
     { return true; }
+    if (d->params.aura_damage_trigger_draw)
+    { return niv_ctx == nullptr || CuriosityHostIsNiv(*niv_ctx, a); }
+    if (d->params.soulbond_damage_trigger_draw)
+    { return niv_ctx == nullptr || niv_ctx->niv_out; }
     return false;
 }
 
@@ -29239,12 +29263,33 @@ static void ApplyCantripFirstOrder(const GameState& state, std::vector<Action>& 
     bool any = false;
     for (const Action& a : acts) { if (IsPlainCantrip(a)) { any = true; break; } }
     if (!any) { return; }   // no cantrip in this plan -> untouched
+    // MTG_NIV_CAST_ORDER (EngineFlags.h): the Curiosity / Lookout hoist is conditional on a Niv.
+    std::optional<NivHoistCtx> niv_ctx;
+    if (NivCastOrderOn())
+    {
+        NivHoistCtx c;
+        c.state = &state;
+        c.acts  = &acts;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index) { continue; }
+            const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+            if (pd != nullptr && pd->params.draw_trigger_damage > 0) { c.niv_out = true; break; }
+        }
+        for (const Action& a : acts)
+        {
+            if (c.niv_out) { break; }
+            if (a.kind == Action::Kind::CastFromHand && a.def != nullptr && a.def->params.draw_trigger_damage > 0)
+            { c.niv_out = true; }
+        }
+        niv_ctx = c;
+    }
     std::vector<Action> pre, cantrips, rest;
     pre.reserve(acts.size()); cantrips.reserve(acts.size()); rest.reserve(acts.size());
     for (Action& a : acts)
     {
         if      (IsPlainCantrip(a))    { cantrips.push_back(std::move(a)); }
-        else if (MayPrecedeCantrip(a)) { pre.push_back(std::move(a)); }
+        else if (MayPrecedeCantrip(a, niv_ctx ? &*niv_ctx : nullptr)) { pre.push_back(std::move(a)); }
         else                           { rest.push_back(std::move(a)); }
     }
     // A creature Aura hoisted as a VALUE payoff (Curiosity) keeps its SAME-PLAN HOST ahead of it: the
