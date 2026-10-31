@@ -414,7 +414,7 @@ phase D re-derives the H-dependent settings under the worst-case shift C0's pair
 play setting moves, phase E plays that `leafOFF` sidecar against the staged one on the A/B seeds; ON
 ships unless notably worse. Evidence: `docs/design/snow-matrix-leaf-fidelity.md`.
 
-## The three traps that cost real time
+## The traps that cost real time
 
 **1. Sidecar PRESENCE activates the hybrid — `enabled: false` is not off.** The engine resolves
 strictly `<stem>.value.json`. A model you decided NOT to adopt must be committed under a different
@@ -439,6 +439,18 @@ FIRST model, i.e. exactly the case the sweep is most needed for. Fixed: the arms
 and carry `budget_ms` (an enabled block owns the budget too; omit it and it resolves to 0, confounding
 depth with a resource change), plus a `dflt` arm running the staged model as-is so the sweep also
 answers "is an adopted play policy worth it at all?"
+
+**4. The FEATURIZER travels with the model (USER 2026-10-31).** `eval_model.featurizer` names the feature
+semantics the leaf was fitted on: absent = 1 (the historical placeholder read, where a hand / library land
+was not a land), 2 = the definition read. The engine reads each model's inputs under its own version, so a
+fleet can hold both while leaves are regenerated deck by deck. The generator always fits on the current one
+(`mtg --featurizer-version`): phase A's rows header names it (`# label:featurizer=2`), the trainer stamps it
+into the staged model, phase B refuses a model whose stamp differs from its rows, and `check_featurizer`
+refuses to resume a queue whose banked rows name another version. **A queue from before 2026-10-31 (rows
+headed plain `# label`) therefore aborts with a `mv` line: move `logs/vlq_<key>` and the staged sidecar
+aside and re-run.** Without that guard a completed old queue's done-markers would hand the old-read leaf
+straight back. Never hand-add or edit the field in a shipped sidecar: it changes what that leaf's inputs
+mean. Design: `docs/design/placeholder-card-reads.md`, "The featurizer version".
 
 **There is no deck registry to edit.** `scripts/deck_registry.py` discovers `decks/*/` and derives
 every path from the folder — decklist, profile, live sidecar, staged sidecar, row seed base. The

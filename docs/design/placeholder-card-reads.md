@@ -33,7 +33,7 @@ a field off it, and all 402 call sites of those helpers; then each candidate rea
 | `MTG_PLACEHOLDER_ECHO` (OFF) | `DecisionProviders.cpp:15995` | Goblins echo "no gas": every hand cost `{0}`, so the clause fired only on a spell-less hand |
 | `MTG_PLACEHOLDER_TECTONIC` (ON since 3b93a11f2's axis) | `SpellEffects.h:18566-67` | Tectonic Giant's default kept card (highest MV) tied every card at 0 -> lowest card number |
 | `MTG_PLACEHOLDER_MANA` (OFF) | `SpellEffects.h:23903, 31338` | the float-colour commit weighed hand pips that were all 0 -> the first-listed colour always |
-| `MTG_PLACEHOLDER_FEATURES` (OFF) | `KeepModel.cpp:407-410, 516-517` | ExtractMidGameFeatures: lands_in_hand / hand_creatures / lib_lands / lib_creatures counted only def-built cards; hand_castable_now counted a placeholder land as a castable MV-0 spell |
+| per-model `featurizer` (sidecar; `MTG_PLACEHOLDER_FEATURES` = override) | `KeepModel.cpp:407-410, 516-517` | ExtractMidGameFeatures: lands_in_hand / hand_creatures / lib_lands / lib_creatures counted only def-built cards; hand_castable_now counted a placeholder land as a castable MV-0 spell |
 | | `KeepModel.cpp:71`, `KeepModelTrainer.cpp:189-190` | keep-model subtype_density always 0; the trainer never constructed the feature |
 | no lever (non-play) | `AIEngine.cpp:407` | human cast-order error never showed the real cost |
 | | `AIEngine.cpp:4408` | a land-drop census counter (diagnostic) |
@@ -100,10 +100,47 @@ Hinata gi148 / gi203 RECOVER. TWELVE DO NOT, and each is in a decision the searc
     (2HG) -- no measurable effect.
   * `MTG_PLACEHOLDER_MANA` (+ `MTG_FLOAT_COMMIT_NET`): unblocked by a SEQUENCE-aware commit (the colours the
     rest of the applying line spends, in order), not a pip total.
-  * `MTG_PLACEHOLDER_FEATURES`: a USER decision. The shipped value leaves and keep models were fitted on
-    the placeholder values, so turning it on moves their inputs without a refit. Options: turn it on
-    together with regenerating the leaves, or record the featurizer semantics in each sidecar so each
-    deck reads the semantics its model was fitted on.
+  * ~~`MTG_PLACEHOLDER_FEATURES`~~: RESOLVED by per-model versioning (USER 2026-10-31: *"proceed with the
+    approach you mentioned and we'll set up the queue to redo just the value-leaf for each deck"*). See the
+    next section. Regeneration onto the corrected read is PENDING per deck.
+
+## The featurizer version (2026-10-31)
+
+Each learned model records the featurizer semantics it was FITTED on, so every deck reads what its own model
+was trained on and leaves move onto the corrected read one deck at a time.
+
+* **The field.** `"featurizer"` on the MODEL object: `eval_model.featurizer` in a `<deck>.value.json` /
+  `.eval.json`, `keep_model.featurizer` in a profile. `1` = the historical placeholder read; `2` = the
+  definition read (`ZoneCard`). **Absent = 1**, which is every model shipped before this change (39 live value
+  sidecars and 12 under archived `v<N>-` folders), so default play is byte-identical. It is read off the model object only, never the sidecar's
+  top level, so it cannot detach from its model when `valueleaf.sh` phase B merges `eval_model` alone into a
+  copy of the live sidecar. A version the binary does not know is FATAL at load (`[profload] FATAL`, exit 2).
+  Writers omit it for 1. Constants: `KeepModel.h` `kFeaturizerPlaceholder` / `kFeaturizerDefinition` /
+  `kFeaturizerCurrent` (= 2).
+* **Where it is read.** `EvalModelFromJsonObj` / `KeepModelFromJsonObj` (`MulliganProfileIO.h`) store it on the
+  `MidGameEvaluator` / `KeepModel`. `ExtractMidGameFeatures(state, plan, featurizer)` has no default: the value
+  leaf (`FSLineWin`, the rollout horizon) passes `vm->featurizer` / `state.m_value_model->featurizer`, the
+  learned plan ranking passes `ev.featurizer`, the escalation gate and its dump pass the value model's. The
+  version travels with the model object through every rollout thread; there is no global. The keep model's
+  `subtype_density` reads under `KeepModel::featurizer`.
+* **The generators.** The label dumps (`MTG_DUMP_VALUE_ROWS`, `MTG_DUMP_EVAL_ROWS`) always extract under
+  `kFeaturizerCurrent`, whatever the live sidecar reads, and name it in the rows header's first token
+  (`# label:featurizer=2 ...`; plain `# label` = 1; every rows reader discards that token).
+  `train_eval_gbdt.py` / `train_eval_model.py` (`rows_featurizer`) stamp the rows' version into the model,
+  refusing a file whose headers disagree. `valueleaf.sh` checks the chain: `check_featurizer` refuses a queue
+  whose banked rows name another version than `mtg --featurizer-version` (archive it, never mix), phase_split
+  refuses a rows file with two different headers, and phase B refuses a staged model whose `featurizer`
+  differs from its rows'. The keep-model trainer (`MTG_KEEP_MODEL=1`, default off) also fits on the
+  definition read and stamps 2.
+* **`MTG_PLACEHOLDER_FEATURES`** is now an EXPERIMENT OVERRIDE: `=1` forces the definition read for every
+  model whatever its sidecar names (the old global flip). Unset / `=0` = each model's own version.
+* **Keep artifacts.** The exhaustive keep tables (`*.keepmodel.exhaustive.*`) do not read these features at
+  all. The three profiles with a `keep_model` (Anti-Lifegain, Hinata2, burn) have no `subtype_density`
+  spec (under the placeholder read the trainer never built one), so they are unaffected either way, and read
+  as featurizer 1.
+* **Pending.** Every shipped leaf is still featurizer 1. A deck moves to 2 when `valueleaf.sh run` regenerates
+  its leaf on a tree containing this change (the artifact queue: `artifact_queue.py mark <deck> valueleaf`).
+  An earlier `logs/vlq_<deck>` queue must be moved aside first (the queue worker does this itself).
 
 ## NO-GREEDY finding: echo and the other upkeep picks are not searched
 
