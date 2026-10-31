@@ -1,0 +1,19 @@
+{
+ "blobs": {
+  "mulligan": "1b6d2b15c0dbfbb79653cb9a2fa234f5f1adc2b2",
+  "valueleaf": "em:628a8814600307ca8e3f"
+ },
+ "deck": "knights",
+ "frozen": "b21178838d6719b88762124ddecc2a55001d934e",
+ "heartbeat": "2026-10-31T16:10:52Z",
+ "host": "58199181d02e",
+ "run_id": "knights-artifact-queue-tool-647f24-20261031T161052",
+ "score": 0.0093,
+ "stage": "valueleaf",
+ "stages": [
+  "valueleaf"
+ ],
+ "started": "2026-10-31T16:10:52Z",
+ "state": "running",
+ "worker": "artifact-queue-tool-647f24"
+}
