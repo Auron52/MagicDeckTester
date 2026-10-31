@@ -33980,7 +33980,8 @@ inline bool TreasurePaySourceEnabled()
 // direction: a payable cast fails rather than an unpayable one resolving.
 inline bool SacOutletPayEnabled()
 {
-    static const bool env_on = EnvOn("MTG_SAC_OUTLET_PAY");
+    // DEFAULT ON 2026-10-31 (USER: "2 we should turn on"). =0 restores the searched SacForMana model.
+    static const bool env_on = EnvOn("MTG_SAC_OUTLET_PAY", true);
     return heurarm::Flag(heurarm::SAC_OUTLET_PAY, env_on);
 }
 
