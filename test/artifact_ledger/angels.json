@@ -84,6 +84,25 @@
     "budget": null
    },
    "detail": "mulligan: ADOPTED (new-vs-old 0.0 t, cost 1.000x (se 0.000, 96 seeds), recipe complete)"
+  },
+  {
+   "run_id": "angels-artifact-queue-tool-647f24-20261031T161828",
+   "kind": "valueleaf",
+   "verdict": "kept-incumbent",
+   "ident": "em:2038500e481e3f714a03",
+   "frozen": "c18b5e99fe330f78207c39c7027ae5489928fc76",
+   "src_tree": "89b146d10406063213d9abe41e1cfdf1a616c021",
+   "date": "2026-10-31",
+   "worker": "artifact-queue-tool-647f24",
+   "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_angels/DECISIONS.txt)",
+   "decisions": [
+    "    VERDICT arm=d7b20 adopt=0 delta=+0.00000 t=+0.00 cost=0.988x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=byte-identical to the baseline: the arm is not engaging",
+    "    VERDICT arm=d7b30 adopt=0 delta=-0.00013 t=-1.00 cost=1.022x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.02x) with quality better (-0.00013) -- a TRADE, the user's call",
+    "    VERDICT arm=d7b40 adopt=0 delta=-0.00013 t=-1.00 cost=1.013x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.01x) with quality better (-0.00013) -- a TRADE, the user's call",
+    "    PICK arm=none why=no candidate is cheaper than live with quality not notably worse",
+    "",
+    "=== 2026-10-31T16:24:43  PHASE E.6: no allowance for angels -- no ladder escalations in 1200 games (single-path or trust-dominated); fleet default R = 0"
+   ]
   }
  ]
 }
