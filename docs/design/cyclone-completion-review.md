@@ -29,10 +29,11 @@ quiet and no competing process was observed. The coarse descriptive intervals
 do not change the point-estimate gate. No candidate policy is adopted.
 
 No mulligan or value-leaf generation has started. Cyclone is in no suite tier
-until it qualifies for all three. The tested integration and evidence are being
-landed first; exact performance work follows. Engine-free source analysis is
-examining pure enumeration memo reuse and unnecessary human-menu label work,
-with no claimed speedup or source change yet. All optional policy choices remain
+until it qualifies for all three. The tested integration and evidence landed at08d816495. A32-game diagnostic
+profile reproduced measured behavior exactly and points toward repeated plan
+application and state-key work; labels and charge bookkeeping are small sampled
+exposures. No optimization or speedup is claimed. The concrete follow-up is
+cyclone-cost-optimization-next-steps.md. All optional policy choices remain
 user-owned. See cyclone-completion-checkpoint.md for active work and
 cyclone-pending-policy-experiments.md for preserved optional experiments.
 

@@ -66,18 +66,17 @@ run. Descriptive intervals and small paired cost-cohort outcomes are in
 `landing905-review/followup-cost-report/`; they do not authorize policy adoption
 or replace the held-out V5 quality history.
 
-All validation controllers are CLOSED. Performance profiling root22112 is now
-RUNNING on the frozen89b PGO: profile89-first16-live-pb/run.py --run, one32-worker
-queue, first16 matched live/PB identities from the measured worst cell. perf
-uses cycles:u at49Hz with8192-byte DWARF stacks. This measures pooled function/
-instruction attribution only; it cannot separate live/PB shares by worker and
-its timings are not a new cost gate. No source/policy change has been made.
-Shared08d CI41210350829 is watched in root52367; exact candidate code already
-passes both platform runs. Source reviewers identify unused human-label work,
-shared telemetry contention and cautiously bounded pure enumeration memo work
-as unmeasured opportunities. General free/billed reuse and general mode2 charge
-replay are NOT proven safe; retain contextbit64 and all provenance/cut guards.
-Preserve the frozen89b baseline. No broad cache-budget redesign/per-thread quota.
+All validation and profiling controllers are CLOSED; no local engine, build or
+generation is running. Profile22112 reproduced all32 selected live/PB games
+exactly and collected18,086 samples. The data points toward repeated plan
+application/payment/putback/key work. Labels, telemetry sites and direct charge
+bookkeeping are small measured exposures; do not treat them as the gate solution.
+Callchain ancestors are incomplete, so inclusive percentages are not a complete
+cost partition. No optimization has been implemented or speedup claimed.
+The self-contained follow-up is `cyclone-cost-optimization-next-steps.md`.
+Shared08d CI41210350829 is watched in root52367; exact candidate source already
+passes Linux, Windows and parity. Preserve frozen89b and contextbit64. No broad
+cache-budget redesign, new quota, policy adoption or suite override occurred.
 After actual optimization passes quality/cost gates: add all3 suite tiers, push
 all changes, measure feasibility, then use standard solitary mulligan fast and
 value-leaf drivers in that order. User-owned policy choices remain open.
@@ -87,7 +86,8 @@ Authoritative sealed run packet: `v7-905-lean/prepared-89b146d-final/`.
 Full memory: `followup-memory-report/`; VERIFY: `followup-verify-report/`;
 normal review/acceptance: `normal-accept89b/`; cost: `followup-cost-report/`;
 actual Claude audit: sibling `claude-sweep-89b146d-parser-recovery/`.
-Final archive is being assembled under `logs/cyclone-completion/verified-89b/`.
+Final archive is committed under `logs/cyclone-completion/verified-89b/`
+(3,332 files; compressed4.1MB).
 Do not rerun the stopped optional5,986-game batch or older unselected prototypes.
 
 ## Prior Landing905 milestones — historical, superseded above
