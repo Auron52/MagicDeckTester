@@ -287,3 +287,13 @@ Costreviewer is adding the minimal missing suspend-verb reconstruction to native
 then targetingMidrange/Dragonstorm/Landfall suspend cases; autonomous segmentfix does notrun
 in the nativehuman ApplyPlanDirect validator, so unchanged old coverage can be carried with
 that explicit path proof. No profile/value generation or proposal-default adoption.
+
+- Final integration Release smoke40304 completed150PASS/7knownFAIL/0NEW,312s batchmakespan.
+  ALL157case outcomes/digests/units exactlyequalsourceA's PGO smoke (compiler timing excluded).
+  No new changed game; prior7GTmismatch audits retain exact fingerprints. Only Niv's proven
+  pre-existing FD remains; nonconv0. GT894/894consistent; candidate-remap unitsPASS; changed
+  linebuild suitePASS includingtwo-suspend-copy cap. No GT accepted yet.
+- Next composite scheduling front-loads all480 QC3 fidelity cases, preservingexactgames,
+  flags/seeds/globalindices, so mode-specific defects surface before largeprunecollection.
+  Newmain validator's suspend reconstruction is fixed;59native refs cover all18 old/new
+  selectedsuspendactions, with648 unaffectedoldrefs carried by explicitpath/byte proof.
