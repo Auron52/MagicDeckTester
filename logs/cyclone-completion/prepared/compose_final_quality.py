@@ -74,6 +74,10 @@ def main():
             else:
                 chunks.append(j)
             for q in chunks:
+                # Exercise every leaf/first-turn fidelity mode before the large quality pool.
+                # Scheduling only: retain the same cases, flags, seeds and physical game indices.
+                if family == "qc3_leaf_fidelity":
+                    q = dict(q, weight=10000000 - q.get("game_index", 0))
                 name = q["name"]
                 if name in maps:
                     raise ValueError(f"Duplicate job name: {name}")
