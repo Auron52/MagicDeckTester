@@ -4,9 +4,12 @@
   "valueleaf": "em:71c8696d5192fbe47e51"
  },
  "deck": "goblins",
+ "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_goblins/DECISIONS.txt)",
+ "finished": "2026-10-31T15:38:26Z",
  "frozen": "dfcb18cb90ae65aeb4968787550a10b1fb9bc55e",
  "heartbeat": "2026-10-31T15:24:36Z",
  "host": "58199181d02e",
+ "result_branch": "artifact-refresh/goblins-20261031-1538",
  "run_id": "goblins-artifact-queue-tool-647f24-20261031T125429",
  "score": 0.015,
  "stage": "valueleaf",
@@ -14,6 +17,6 @@
   "valueleaf"
  ],
  "started": "2026-10-31T12:54:29Z",
- "state": "running",
+ "state": "done",
  "worker": "artifact-queue-tool-647f24"
 }
