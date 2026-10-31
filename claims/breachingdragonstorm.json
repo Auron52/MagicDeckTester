@@ -4,9 +4,12 @@
   "valueleaf": "em:431d3f80483d739b6631"
  },
  "deck": "breachingdragonstorm",
+ "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_breachingdragonstorm/DECISIONS.txt)",
+ "finished": "2026-10-31T16:08:57Z",
  "frozen": "11f93aa0392c01d9dab7a1a2ab39f9b8d1bb2a0b",
  "heartbeat": "2026-10-31T15:56:50Z",
  "host": "58199181d02e",
+ "result_branch": "artifact-refresh/breachingdragonstorm-20261031-1608",
  "run_id": "breachingdragonstorm-artifact-queue-tool-647f24-20261031T155322",
  "score": 0.0118,
  "stage": "valueleaf",
@@ -14,6 +17,6 @@
   "valueleaf"
  ],
  "started": "2026-10-31T15:53:22Z",
- "state": "running",
+ "state": "done",
  "worker": "artifact-queue-tool-647f24"
 }
