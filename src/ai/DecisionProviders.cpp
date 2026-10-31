@@ -31620,26 +31620,25 @@ bool CycloneCantripOrderOn()
     static const bool on = EnvOn("MTG_CYCLONE_CANTRIP_ORDER", true);   // DEFAULT ON (an ORDER; inert at unlimited budget)
     return heurarm::Flag(heurarm::CYCLONE_CANTRIP_ORDER, on);
 }
-// THE PLAN-LEVEL HARD PRUNES (USER design 2026-10-28; HeuristicArm.h for the statements). All DEFAULT OFF: lossy,
-// the USER adopts (the cycler rule, adopted 2026-10-29, is read further up). Each needs the scored order
-// (MTG_CYCLONE_CANTRIP_ORDER, or the put-back RULE) to have a fan to cut.
-// MTG_CYCLONE_PB_PLANS stays DEFAULT OFF (2026-10-29): bar (2) holds for d5 gi179 (clairvoyance, isolated T1 test) but
-// NOT for d3 gi92 -- with two Eldrazi and no go-off this turn, JUNK's Emrakul-first order is worse given what the player
-// knows (the lesser Eldrazi on top measured -0.44, se 0.22). The order amendment is owed (ledger "Hard prunes + known-top
-// blind test", QP2).
+// THE PLAN-LEVEL HARD PRUNES (USER design 2026-10-28; HeuristicArm.h for the statements).
+// The three plan cuts default ON after the measured Cyclone admission screen. Each needs the scored
+// order (MTG_CYCLONE_CANTRIP_ORDER, or the put-back rule) to have a fan to cut.
+// The earlier two-Eldrazi JUNK order lost a known-information line (d3 gi92): with no go-off this
+// turn, putting Emrakul on top redraws it too early. CycJunkPick now puts the lesser Eldrazi first;
+// the two-plan rule keeps only JUNK and the best reachable SETUP choice, never a mere re-ranking.
 bool CyclonePbPlansOn()
 {
-    static const bool on = EnvOn("MTG_CYCLONE_PB_PLANS");
+    static const bool on = EnvOn("MTG_CYCLONE_PB_PLANS", true);   // DEFAULT ON; =0 restores the full fan
     return heurarm::Flag(heurarm::CYCLONE_PB_PLANS, on);
 }
 bool CyclonePonderPlansOn()
 {
-    static const bool on = EnvOn("MTG_CYCLONE_PONDER_PLANS");
+    static const bool on = EnvOn("MTG_CYCLONE_PONDER_PLANS", true);   // DEFAULT ON; =0 restores the full fan
     return heurarm::Flag(heurarm::CYCLONE_PONDER_PLANS, on);
 }
 bool CycloneSeedPlansOn()
 {
-    static const bool on = EnvOn("MTG_CYCLONE_SEED_PLANS");
+    static const bool on = EnvOn("MTG_CYCLONE_SEED_PLANS", true);   // DEFAULT ON; =0 restores the scry pin
     return heurarm::Flag(heurarm::CYCLONE_SEED_PLANS, on);
 }
 // MTG_CYCLONE_PB_PLAIN_RANK (measurement handle, DEFAULT OFF): the JUNK put-back's fulfilment reads the plain shared

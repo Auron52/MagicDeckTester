@@ -448,6 +448,7 @@ std::vector<std::pair<int, int>> SeedOnlyPinsSf(const std::vector<TurnSolver::Pl
 
 TEST_CASE("Sound fold Q36: a seed-only walk equal to an earlier sibling's is not emitted")
 {
+    ArmScopeSf _seed(heurarm::CYCLONE_SEED_PLANS, 0);   // inspect the full j pin fan
     // Top: Toxic Deluge (a noncreature), then Emrakul. j = 0: the walk passes the Deluge (bottomed) and hits Emrakul;
     // j = 1: Curator bottoms the Deluge, the walk hits Emrakul at once. Same hit, same library after, same bottom set.
     {

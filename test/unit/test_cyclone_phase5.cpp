@@ -149,6 +149,7 @@ TEST_CASE("Cyclone phase 5: the cycle-seed pin fold drops only unreadable pins, 
 {
     EnsureCards5();
     heurarm::Clear();
+    ArmScope5 _seed(heurarm::CYCLONE_SEED_PLANS, 0);   // this fold needs the full j pin fan
     // The fold, not the cycler rule, is under test: the rule (default ON since 2026-10-29) would keep the Street Wraith
     // for the Cyclone in hand and remove the Wraith seeds this fixture counts.
     ArmScope5 _cyc(heurarm::CYCLONE_CYCLER_RULE, 0);

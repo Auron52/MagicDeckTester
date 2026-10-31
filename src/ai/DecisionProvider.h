@@ -2818,6 +2818,9 @@ public:
     // provider that overrides it says so (true). Read where a proof needs "no post-combat main ever opens" without a
     // state to ask (the rollout kill-only turn's no-m2 parity, TurnSolver KillOnlyNoM2Parity).
     virtual bool MayOpenRestrictedSecondMain() const { return false; }
+    // Opt in to the proven no-second-main kill-only parity without enabling it for every deck.
+    // TurnSolver still checks the deck flags above before using the shortcut.
+    virtual bool LeafKillOnlyNoM2OptIn() const { return false; }
     virtual bool RestrictedSecondMainAdmits(const GameState& s, const Action& a) const
     { (void)s; (void)a; return true; }
 

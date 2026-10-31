@@ -183,7 +183,7 @@ TEST_CASE("Leaf kill-only: a full-horizon rollout and a deck without a searched 
 TEST_CASE("Leaf kill-only NOM2: a deck on which no post-combat main can open arms the scope and agrees with the full solve")
 {
     EnsureCardsLoaded();
-    ArmScope nom2(heurarm::LEAF_KILL_ONLY_NOM2, 1);   // DEFAULT OFF pending the fleet A/B
+    ArmScope nom2(heurarm::LEAF_KILL_ONLY_NOM2, 1);   // Exercise the parity proof on this generic test board.
     for (int opp : { 20, 2 })
     {
         CAPTURE(opp);
@@ -204,7 +204,7 @@ TEST_CASE("Leaf kill-only NOM2: a deck on which no post-combat main can open arm
 TEST_CASE("Leaf kill-only EXTRA: an extra-turn deck arms the scope; an Emrakul cast whose extra turn kills is still found")
 {
     EnsureCardsLoaded();
-    ArmScope nom2(heurarm::LEAF_KILL_ONLY_NOM2, 1);   // Cyclone plays no second main: both levers are needed here
+    ArmScope nom2(heurarm::LEAF_KILL_ONLY_NOM2, 1);   // This synthetic board does not detect a Cyclone provider.
     auto board = [](int opp)
     {
         GameState s = Fresh(opp);

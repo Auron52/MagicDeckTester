@@ -3493,6 +3493,7 @@ public:
                "whether 'this turn' is the turn or the ROUND (the USER's rounds win-turn metric: an extra "
                "turn untaps and attacks before the opponent's next turn)." }; }
     const char* Name() const override { return "Cyclone"; }
+    bool LeafKillOnlyNoM2OptIn() const override { return true; }
     // TutorSearchWidth -- a COVERAGE fix, not a heuristic (the LandfallElementals / Pirates precedent):
     // Long-Term Plans can find ANY card (~22 distinct names in the list) and the generic candidate list
     // is in LIBRARY (= shuffle) order, so the base width 6 left most names -- Emrakul among them, as the
@@ -3584,7 +3585,7 @@ public:
                        const TopDispositionView& view, int& plan_out) const override;
     int  CantripFanCap(const GameState& s, bool putback) const override;
     bool CantripPlansActive(const GameState& s, bool putback) const override;
-    // MTG_CYCLONE_SEED_PLANS (DEFAULT OFF): the cycle seeds' Curator scry pin -> the walk-aware scry below.
+    // MTG_CYCLONE_SEED_PLANS (DEFAULT ON): the cycle seeds' Curator scry pin -> the walk-aware scry below.
     bool CycleScryPinHeuristic(const GameState& s) const override;
     // MTG_CYCLONE_CYCLER_RULE (DEFAULT ON since 2026-10-29): which creature cycler a plan's cycle seed uses (CycloneCyclerRuleApply).
     bool CycleSeedAdmissionSets(const GameState& s, std::vector<std::string>& if_replacer_out,

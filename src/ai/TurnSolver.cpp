@@ -88245,10 +88245,10 @@ inline bool LeafKillOnlyExtraOn()
     static const bool v = EnvOn("MTG_LEAF_KILL_ONLY_EXTRA", true);
     return heurarm::Flag(heurarm::LEAF_KILL_ONLY_EXTRA, v);
 }
-// MTG_LEAF_KILL_ONLY_NOM2 -- DEFAULT OFF pending the fleet A/B; =1 extends the kill-only turn to decks that never play
-// a second main. SOUND (the verify below is 0 mismatches), but it reaches every such deck, and under a budget the units it
-// frees are re-spent: smoke (2026-10-29) moved 21 of 149 configs (searched: 1 slower / 4 faster / 39 same-score digest
-// changes). Adopting it fleet-wide is a play change measured per moving deck -- the USER's call (ledger QC2).
+// MTG_LEAF_KILL_ONLY_NOM2 -- by default only providers that opt in (Cyclone) use the shortcut;
+// =0 disables it and =1 enables it for every eligible deck. SOUND (the verify below is 0 mismatches),
+// but fleet-wide adoption changes budget re-spend: smoke (2026-10-29) moved 21 of 149 configs
+// (searched: 1 slower / 4 faster / 39 same-score digest changes). Keep other decks at their old default.
 // The identity's one parity requirement is that a candidate's own evaluation and the rollout's replay of the pick run
 // the same turn: the same apply, the same combat and the same post-combat main. The gate asked for a SEARCHED second
 // main because then both worlds solve it through the same memoised solve (the rollout's Dig-only m2 would have no
@@ -88256,15 +88256,17 @@ inline bool LeafKillOnlyExtraOn()
 // not searched (`second_main` / uses_second_main false), no Jorn untap, no Omnitool dig, no extra-combat source, and
 // a provider without a restricted main 2 (MayOpenRestrictedSecondMain). Deck constants only, so the answer cannot
 // differ between the two worlds of one game.
-inline bool LeafKillOnlyNoM2On()
+inline bool LeafKillOnlyNoM2On(const GameState& s)
 {
-    static const bool v = EnvOn("MTG_LEAF_KILL_ONLY_NOM2", false);
-    return heurarm::Flag(heurarm::LEAF_KILL_ONLY_NOM2, v);
+    static const bool all_decks = EnvOn("MTG_LEAF_KILL_ONLY_NOM2");
+    static const bool disabled = !EnvOn("MTG_LEAF_KILL_ONLY_NOM2", true);
+    return heurarm::Flag(heurarm::LEAF_KILL_ONLY_NOM2,
+                          all_decks || (!disabled && ResolveProvider(s).LeafKillOnlyNoM2OptIn()));
 }
 inline bool KillOnlyNoM2Parity(const GameState& s, bool second_main)
 {
     return !second_main && !s.uses_second_main && !s.deck_has_attack_untap && !s.deck_has_attack_dig_hand
-        && !s.deck_has_extra_combat && !ResolveProvider(s).MayOpenRestrictedSecondMain() && LeafKillOnlyNoM2On();
+        && !s.deck_has_extra_combat && !ResolveProvider(s).MayOpenRestrictedSecondMain() && LeafKillOnlyNoM2On(s);
 }
 // At a kill-only skip site, after the candidate's whole turn: true = it cannot change the rollout's answer.
 inline bool KillOnlySkippable(const GameState& after_turn)

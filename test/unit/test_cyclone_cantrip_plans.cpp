@@ -10,7 +10,8 @@
 //   * MTG_CYCLONE_PONDER_PLANS: Ponder = the best KEEP order and the SHUFFLE (the scored fan's ranks 0-1).
 //   * MTG_CYCLONE_CANTRIP_SITUATIONAL: no Cyclone available (hand, battlefield, a KNOWN library position, Ponder's look)
 //     -> JUNK only / SHUFFLE only; ready to go off (k <= 1, a cycle, an Eldrazi, a Cyclone) -> SETUP only.
-//   * All three DEFAULT OFF: with them off the fan is the full scored order (the ORDER test file pins it).
+//   * PB and Ponder DEFAULT ON; SITUATIONAL stays OFF. With the plan prunes off the fan is the
+//     full scored order (the ORDER test file pins it).
 //   * The fast path and the reference enumeration agree rank for rank with the levers on.
 #include <doctest/doctest.h>
 
@@ -347,7 +348,8 @@ TEST_CASE("Cyclone cantrip plans: Ponder's SITUATIONAL layer -- one plan only wh
     // USER 2026-10-28: "Sometimes you want to draw that useful card and then fetch-shuffle the rest away rather than using
     // ponder shuffle ... I'm fine with it being searched a chunk of the time."
     ArmP arm;
-    arm.Set(heurarm::CYCLONE_CANTRIP_ORDER, 1).Set(heurarm::CYCLONE_CANTRIP_SITUATIONAL, 1);
+    arm.Set(heurarm::CYCLONE_CANTRIP_ORDER, 1).Set(heurarm::CYCLONE_CANTRIP_SITUATIONAL, 1)
+       .Set(heurarm::CYCLONE_PONDER_PLANS, 0);   // this test isolates the situational layer
     DrawAfterP da(1);
     auto plans = [](const std::vector<TopDisposition>& fan) { bool k = false, sh = false; for (const TopDisposition& d : fan) { (d.shuffle ? sh : k) = true; } return std::make_pair(k, sh); };
     SUBCASE("every revealed card expendable while a piece is missing (no Cyclone) -> the SHUFFLE only")

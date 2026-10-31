@@ -533,7 +533,9 @@ TEST_CASE("Cyclone phase 3: Curator's scry resolves BEFORE the walk -- bottom a 
 TEST_CASE("Cyclone phase 3: the searched cycle action -- one seed per distinct cycler, with its pins")
 {
     EnsureCards3();
+    struct RestoreArm { heurarm::Arm saved = heurarm::t_arm; ~RestoreArm() { heurarm::t_arm = saved; } } restore;
     heurarm::Clear();
+    heurarm::t_arm[static_cast<int>(heurarm::CYCLONE_SEED_PLANS)] = 0;   // inspect the full j pin fan
     GameState s = Base3(2, { kHunger, kEmrakul, kCurator });
     Put3(s, kCyclone, 30);
     Put3(s, kCurator, 31);
