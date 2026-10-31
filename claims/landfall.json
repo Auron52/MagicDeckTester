@@ -1,0 +1,19 @@
+{
+ "blobs": {
+  "mulligan": "b7039c655a5051c0aa855a57b94cce4f561b9705",
+  "valueleaf": "em:91db3b1009aa782c745e"
+ },
+ "deck": "landfall",
+ "frozen": "ac0213a434388532aabce8ae0f01515b98743b4e",
+ "heartbeat": "2026-10-31T21:47:13Z",
+ "host": "58199181d02e",
+ "run_id": "landfall-artifact-queue-tool-647f24-20261031T214713",
+ "score": 0.0021,
+ "stage": "valueleaf",
+ "stages": [
+  "valueleaf"
+ ],
+ "started": "2026-10-31T21:47:13Z",
+ "state": "running",
+ "worker": "artifact-queue-tool-647f24"
+}
