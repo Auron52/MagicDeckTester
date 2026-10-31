@@ -12,6 +12,18 @@ from pathlib import Path
 spec = importlib.util.spec_from_file_location('cyclone_report', Path(__file__).with_name('report_final_results.py'))
 report = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(report)
+FIDELITY_ENV = {'MTG_FD_ORACLE': '1', 'MTG_FLAG_NONCONV': '1'}
+
+
+def sibling_module(name):
+    spec = importlib.util.spec_from_file_location(name, Path(__file__).with_name(name + '.py'))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+manifests = sibling_module('make_validation_manifests')
+launcher = sibling_module('run_prepared_validation')
 
 
 def pool(budget=20480, refused=3, fsl=0):
@@ -30,6 +42,61 @@ class ReportTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
+
+    def test_inherited_cache_overrides_are_cleared_before_intentional_pins(self):
+        hostile = {'MTG_FSL_POOL': '1', 'MTG_FSL_CAP': '1', 'MTG_MEM_BUDGET_MB': '1',
+                   'MTG_PLAN_CACHE_EXACT_KEY': '0', 'MTG_BP_DERIVE_ISOLATE': '0',
+                   'MTG_CACHE_HIT_CHARGE': '0', 'MTG_PLAN_CACHE_KB': '1', 'PATH': '/test/bin'}
+        unset = manifests.PROCESS_CACHE_OVERRIDES | {'MTG_PLAN_CACHE_KB'}
+        clean = launcher.launch_environment(hostile, unset, FIDELITY_ENV)
+        self.assertFalse(set(hostile).intersection(clean) - {'PATH'})
+        self.assertEqual(clean['PATH'], '/test/bin')
+        for capacity in ('20480', '0'):
+            with self.subTest(capacity=capacity):
+                pins = dict(FIDELITY_ENV, MTG_PLAN_CACHE_KB=capacity,
+                            MTG_PLAN_CACHE_EXACT_KEY='1', MTG_BP_DERIVE_ISOLATE='1', MTG_CACHE_HIT_CHARGE='1')
+                configured = launcher.launch_environment(hostile, unset, pins)
+                for key, value in pins.items():
+                    self.assertEqual(configured[key], value)
+                self.assertNotIn('MTG_FSL_POOL', configured)
+                self.assertNotIn('MTG_MEM_BUDGET_MB', configured)
+        self.assertEqual(hostile['MTG_CACHE_HIT_CHARGE'], '0')
+
+    def test_cast_draw_compares_against_base_and_cyc1_in_both_cells(self):
+        arms=('base','CO','CO_CYC1','CO_CYC1_DRAW','CO_CYC1_REV_CYCLERS','CO_CYC1_MIDDLE')
+        for family in ('cast_q64_raw','cast_q64_blind'):
+            suffixes=('_d3_s131000','_d5_s132000') if family.endswith('raw') else ('_d3_s135000','_d5_s136000')
+            names={arm+suffix for arm in arms for suffix in suffixes}
+            pairs=report.cast_comparisons(family,names)
+            self.assertEqual(len(pairs),16)
+            for suffix in suffixes:
+                self.assertIn((family,'base'+suffix,'CO_CYC1_DRAW'+suffix),pairs)
+                self.assertIn((family,'CO_CYC1'+suffix,'CO_CYC1_DRAW'+suffix),pairs)
+                self.assertIn((family,'CO_CYC1'+suffix,'CO_CYC1_REV_CYCLERS'+suffix),pairs)
+                self.assertIn((family,'CO_CYC1'+suffix,'CO_CYC1_MIDDLE'+suffix),pairs)
+
+    def test_selected_input_directory_owns_all_default_report_paths(self):
+        selected = self.root/'v2-inputs'
+        primary = selected/'runs/primary-quality'
+        for mode in ('quality', 'memory', 'memory-preflight'):
+            a = report.parse_args([mode, '--inputs', str(selected)])
+            self.assertEqual(a.output, selected/'reports')
+            if mode == 'quality':
+                self.assertEqual((a.wins, a.traces, a.stderr),
+                                 (primary/'wins', primary/'traces', primary/'batch.err'))
+            elif mode == 'memory':
+                self.assertEqual((a.primary_wins, a.primary_stderr), (primary/'wins', primary/'batch.err'))
+
+    def test_explicit_report_path_overrides_survive_selected_inputs(self):
+        override = self.root/'separate-wins'
+        a = report.parse_args(['quality', '--inputs', str(self.root/'v2'),
+                               '--wins', str(override), '--output', str(self.root/'review')])
+        self.assertEqual(a.wins, override)
+        self.assertEqual(a.output, self.root/'review')
+        self.assertEqual(a.traces, self.root/'v2/runs/primary-quality/traces')
+        a = report.parse_args(['memory', '--inputs', str(self.root/'v2'),
+                               '--primary-stderr', str(self.root/'actual.err')])
+        self.assertEqual(a.primary_stderr, self.root/'actual.err')
 
     def test_pressure_count_and_fsl_are_separate(self):
         path = self.root / 'stderr'
@@ -64,13 +131,14 @@ class ReportTests(unittest.TestCase):
         jobs, maps = [], {}
         for off in range(2):
             name = f'cyclone_d3_s121000_off{off}'
-            jobs.append(dict(name=name, seed=121000+off, game_index=off, games=1))
+            jobs.append(dict(name=name, seed=121000+off, game_index=off, games=1,
+                             deck='decks/Unpredictable Cyclone/Unpredictable Cyclone.cod'))
             maps[name] = dict(family='memory_invariance', logical_cell='cyclone_d3_s121000')
             (primary / (name+'.wins')).write_text(f'{off} 4 abcdef0123456789\n')
             (primary / (name+'.units')).write_text(f'{off} {100+off}\n')
         measured = dict(name='cyclone_d3_s121000', seed=121000, game_index=0, games=2)
         report.write_json(inputs/'primary-quality.json', dict(jobs=jobs))
-        report.write_json(inputs/'primary-quality-plan.json', dict(job_map=maps))
+        report.write_json(inputs/'primary-quality-plan.json', dict(job_map=maps, env=FIDELITY_ENV))
         report.write_json(inputs/'tiny.json', dict(jobs=[measured]))
         (trial/'cyclone_d3_s121000.wins').write_text('0 4 abcdef0123456789\n1 4 abcdef0123456789\n')
         (trial/'cyclone_d3_s121000.units').write_text('0 100\n1 101\n')
@@ -78,7 +146,7 @@ class ReportTests(unittest.TestCase):
         trial_err = self.root/'tiny.err'; trial_err.write_text(pool(budget=budget,refused=refused,fsl=fsl))
         report.write_json(inputs/'final-runtime-plan.json', dict(memory_comparisons=[dict(
             name='memory_t12_tiny', argv=['mtg','--batch',str(inputs/'tiny.json')],
-            stdout=str(trial/'batch.log'),stderr=str(trial_err))]))
+            stdout=str(trial/'batch.log'),stderr=str(trial_err), env=FIDELITY_ENV)]))
         return argparse.Namespace(inputs=inputs, primary_wins=primary, primary_stderr=primary_err,
                                   run=['memory_t12_tiny='+str(trial)],stderr=[],output=self.root/'reports')
 
@@ -149,7 +217,7 @@ class ReportTests(unittest.TestCase):
             ('memory_t1_normal',a.inputs/'tiny.json',self.root/'trial',self.root/'primary.err'),
             ('memory_t6_both_reference_sets',a.inputs/'six.json',six,self.root/'tiny.err')):
             variants.append(dict(name=name,argv=['mtg','--batch',str(manifest)],
-                                 stdout=str(wins/'batch.log'),stderr=str(err)))
+                                 stdout=str(wins/'batch.log'),stderr=str(err), env=FIDELITY_ENV))
         report.write_json(a.inputs/'final-runtime-plan.json',dict(memory_comparisons=variants))
         for path in (a.inputs/'primary-quality.json',a.inputs/'primary-quality-plan.json'):
             path.unlink()
@@ -195,6 +263,65 @@ class ReportTests(unittest.TestCase):
         rc,result=self.run_preflight(a)
         self.assertEqual(rc,2)
         self.assertFalse(result['complete'])
+
+    def test_preflight_all_ordinary_fd_records_block_even_leaf_estimate(self):
+        a = self.preflight_fixture()
+        for leaf in ('none', '4'):
+            with self.subTest(leaf=leaf):
+                (self.root/'tiny.err').write_text(pool(refused=0) +
+                    f'[fd-diverge] job=cyclone_shapes seed=107000 gi=0 predicted_win=4 leaf_est={leaf}\n')
+                rc, result = self.run_preflight(a)
+                self.assertEqual(rc, 1)
+                self.assertTrue(result['observed_exact'])
+                self.assertFalse(result['preflight_pass'])
+                self.assertFalse(result['fidelity_clean'])
+                self.assertEqual(len(result['fidelity']['memory_t6_both_reference_sets']['fatal']), 1)
+
+    def test_preflight_nonconv_without_attribution_also_blocks(self):
+        a = self.preflight_fixture()
+        (self.root/'tiny.err').write_text(pool(refused=0) + '[nonconv] malformed diagnostic\n')
+        rc, result = self.run_preflight(a)
+        self.assertEqual(rc, 1)
+        self.assertFalse(result['fidelity_clean'])
+
+    def test_preflight_disabled_diagnostics_are_incomplete_not_clean(self):
+        a = self.preflight_fixture()
+        path = a.inputs/'final-runtime-plan.json'
+        schedule = report.read_json(path)
+        schedule['memory_comparisons'][0]['env'].pop('MTG_FD_ORACLE')
+        report.write_json(path, schedule)
+        rc, result = self.run_preflight(a)
+        self.assertEqual(rc, 2)
+        self.assertFalse(result['complete'])
+        self.assertFalse(result['preflight_pass'])
+
+    def test_full_memory_cannot_pass_equal_outcomes_with_ordinary_fd(self):
+        a = self.fixture()
+        (self.root/'tiny.err').write_text(pool() + '[fd-diverge] seed=121000 gi=0 leaf_est=none\n')
+        rc, result = self.run_memory(a)
+        self.assertEqual(rc, 1)
+        self.assertTrue(result['exact'])
+        self.assertFalse(result['proof_pass'])
+        self.assertFalse(result['fidelity_clean'])
+
+    def test_mixed_primary_fidelity_separates_blind_and_memory_records(self):
+        jobs = [dict(name='ordinary', seed=100, game_index=0, games=1,
+                     deck='decks/Unpredictable Cyclone/Unpredictable Cyclone.cod'),
+                dict(name='blind', seed=200, game_index=0, games=1, blind_salt=1,
+                     deck='decks/Unpredictable Cyclone/Unpredictable Cyclone.cod')]
+        maps = {'ordinary': {'family': 'memory_invariance'}, 'blind': {'family': 'cast_q64_blind'}}
+        path = self.root/'primary-diagnostics.err'
+        path.write_text('[fd-diverge] job=blind seed=200 gi=0 predicted_win=4 leaf_est=none\n')
+        inventory = report.memory_diagnostics(path, {'env': FIDELITY_ENV}, jobs, maps)
+        self.assertTrue(inventory['clean'])
+        self.assertEqual(inventory['items'][0]['classification'], 'blind_forecast_requires_ordinary_world_control')
+        path.write_text(path.read_text() + '[fd-diverge] job=ordinary seed=100 gi=0 predicted_win=4 leaf_est=4\n')
+        inventory = report.memory_diagnostics(path, {'env': FIDELITY_ENV}, jobs, maps)
+        self.assertFalse(inventory['clean'])
+        self.assertEqual(len(inventory['fatal']), 1)
+        self.assertEqual(inventory['fatal'][0]['classification'], 'leaf_estimate_warning')
+        path.write_text('[fd-diverge] unparsed\n')
+        self.assertFalse(report.memory_diagnostics(path, {'env': FIDELITY_ENV}, jobs, maps)['clean'])
 
 
 if __name__ == '__main__':

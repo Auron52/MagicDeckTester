@@ -149,6 +149,18 @@ def phase_arm(job):
     return job["name"].removeprefix("phasec_").split("_d", 1)[0]
 
 
+def primary_control(arm, arms):
+    # CYCLER_RULE already ships ON: PBCYC-vs-CYCLER is the PB adoption
+    # contrast. Historical all-off/PB comparisons remain useful attribution.
+    if arm == "pbcyc" and "cycler" in arms:
+        return "cycler"
+    if arm.startswith("pbcyc") and arm != "pbcyc" and "pbcyc" in arms:
+        return "pbcyc"
+    if arm.startswith("pb") and arm != "pb" and "pb" in arms:
+        return "pb"
+    return "base"
+
+
 def provenance(worktree):
     unmerged = git(worktree, "diff", "--name-only", "--diff-filter=U")
     if unmerged:
@@ -303,11 +315,20 @@ def phase_report(output):
                 controls.append("pbcyc")
             elif arm.startswith("pb") and arm != "pb" and "pb" in arms:
                 controls.append("pb")
+            live_control = primary_control(arm, arms)
+            if live_control not in controls:
+                controls.append(live_control)
+            # Isolate MYRIAD from the shared KEEP_AMEND change with existing
+            # paired data; retain each combined amendment's PB/PBCYC rows too.
+            myriad_control = {"pba": "pbanomyr", "pbcyca": "pbcycanomyr"}.get(arm)
+            if myriad_control in arms and myriad_control not in controls:
+                controls.append(myriad_control)
             for control in controls:
                 deltas = paired(samples[control], samples[arm])
                 key = f"{arm}-vs-{control}_d{depth}"
                 results[key] = {
                     **brief(deltas.values()),
+                    "primary_comparison": control == live_control,
                     "baseline_avg": statistics.mean(score(v) for v in samples[control].values()),
                     "arm_avg": statistics.mean(score(v) for v in samples[arm].values()),
                     "units_ratio": units[arm] / units[control] if units[arm] is not None and units[control] else None,
@@ -393,12 +414,10 @@ def main():
                     if not key.startswith(arm + "-vs-") or not key.endswith(f"_d{depth}"):
                         continue
                     control = key.split("-vs-", 1)[1].rsplit("_d", 1)[0]
-                    # An amendment's scientific control is PB or PBCYC, not the
-                    # original all-off arm; do not repeat its blind comparison
-                    # against base as though it were an independent adoption test.
-                    if arm.startswith("pbcyc") and arm != "pbcyc" and "pbcyc" in arms and control != "pbcyc":
-                        continue
-                    if arm.startswith("pb") and not arm.startswith("pbcyc") and arm != "pb" and "pb" in arms and control != "pb":
+                    # Use the LIVE control for admission decisions. In particular
+                    # PB adoption is PBCYC-vs-CYCLER, because CYCLER already ships.
+                    # Keep historical comparisons in raw reporting only.
+                    if control != primary_control(arm, arms):
                         continue
                     indices = list(range(count)) if args.all_games else sorted(result["slower_gi"] + result["faster_gi"])
                     for gi in indices:

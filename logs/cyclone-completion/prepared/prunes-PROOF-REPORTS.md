@@ -57,10 +57,20 @@ python3 build/scratch/cyclone-finish/prunes_proofs.py --root build/scratch/cyclo
 ```
 
 Default arms are the PB/PBCYC, KEEP, SITU, SEED and Ponder contrasts. Each
-amendment uses its PB/PBCYC control. Selection is symmetric: every raw
+amendment uses its PB/PBCYC control. **PBCYC uses CYCLER as its live PB
+adoption control**, because CYCLER_RULE already ships ON; the historical
+PBCYC-versus-base/PB rows remain raw attribution only. The same shared
+control selection governs the default conditional blind pool and recovery
+builder, with no additional baseline games. Selection is symmetric: every raw
 SLOWER and FASTER outcome mover is listed. It is explicitly conditional on
 those movers, not a deck-wide effect. All expected Phase C chunks must be
 complete; traces must match the actual seed/index and recorded result.
+
+Raw reporting additionally isolates MYRIAD with `pba - pbanomyr` and
+`pbcyca - pbcycanomyr` at both depths. The default mover/recovery controls
+remain combined amendment-versus-PB/PBCYC; those secondary Myriad contrasts
+can guide a separately reviewed conditional case without changing the
+primary adoption comparison or adding baseline simulations.
 
 Outputs under `final-prunes/proofs/`:
 

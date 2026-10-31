@@ -241,6 +241,18 @@ def diagnostics(stderr, jobs, maps, actual):
                 attribution_note='Nonconv has seed only, so repeated-arm seeds remain candidate sets. FD gi is local to its batch chunk, not global. An ambiguous diagnostic appears in each possible family inventory; do not sum those as distinct events. Blind forecasts are not declared executor defects without ordinary-world reproduction.')
 
 
+def cast_comparisons(family, names):
+    comparisons = []
+    for base in sorted(n for n in names if n.startswith('base_')):
+        suffix = base[len('base'):]
+        arms = [n for n in names if n != base and n.endswith(suffix)]
+        comparisons += [(family, base, arm) for arm in sorted(arms)]
+        cyc = 'CO_CYC1' + suffix
+        comparisons += [(family, cyc, arm) for arm in sorted(arms)
+                        if arm.startswith(('CO_CYC1_DRAW_', 'CO_CYC1_MIDDLE_', 'CO_CYC1_REV_CYCLERS_'))]
+    return comparisons
+
+
 def quality(a):
     inputs, out = a.inputs, a.output
     jobs = read_json(inputs / 'primary-quality.json')['jobs']
@@ -264,12 +276,7 @@ def quality(a):
         result['cells'][family] = {name: aggregate(data[name], expected[name]) for name in sorted(names)}
     comparisons = []
     for family in ('cast_q64_raw', 'cast_q64_blind'):
-        for base in sorted(n for n in family_cells[family] if n.startswith('base_')):
-            suffix = base[len('base'):]
-            arms = [n for n in family_cells[family] if n != base and n.endswith(suffix)]
-            comparisons += [(family, base, arm) for arm in sorted(arms)]
-            cyc = 'CO_CYC1' + suffix
-            comparisons += [(family, cyc, arm) for arm in sorted(arms) if arm.startswith(('CO_CYC1_MIDDLE_', 'CO_CYC1_REV_CYCLERS_'))]
+        comparisons += cast_comparisons(family, family_cells[family])
     for family in ('payment_split', 'nested_exhaustion'):
         comparisons += [(family, old, 'on' + old[len('off'):]) for old in sorted(family_cells[family]) if old.startswith('off_')]
     for old in sorted(n for n in family_cells['qc3_leaf_fidelity'] if n.startswith('qc3_leaf1_')):
@@ -424,6 +431,43 @@ def cache_pressure(path):
     return result
 
 
+def memory_diagnostics(path, plan, jobs=None, maps=None):
+    """Strict ordinary-world fidelity gate, independent of outcome equality.
+
+    Standalone memory processes contain no blind arms: every FD/nonconv record,
+    including a leaf-estimate warning, requires review. For the mixed primary
+    pool, use attribution to select memory records; blind forecasts in other
+    families remain the quality reporter's separate ordinary-control obligation.
+    """
+    path = Path(path)
+    result = dict(stderr=str(path), items=[], fatal=[], problems=[])
+    for key in ('MTG_FD_ORACLE', 'MTG_FLAG_NONCONV'):
+        if plan.get('env', {}).get(key) != '1':
+            result['problems'].append('fidelity diagnostic was not enabled in recorded plan: ' + key)
+    if not path.is_file():
+        result['problems'].append('missing fidelity stderr: ' + str(path))
+        result['clean'] = False
+        return result
+    if jobs is None:
+        for number, line in enumerate(path.read_text(errors='replace').splitlines(), 1):
+            if '[fd-diverge]' in line or '[nonconv]' in line:
+                fields = dict(re.findall(r'(\w+)=([^\s]+)', line))
+                result['items'].append(dict(line=number, raw=line, fields=fields,
+                    kind='fd-diverge' if '[fd-diverge]' in line else 'nonconv',
+                    classification='BLOCKING_memory_ordinary_fidelity_diagnostic'))
+        result['fatal'] = list(result['items'])
+    else:
+        inventory = diagnostics(path, jobs, maps, Repros())
+        result['items'] = inventory['items']
+        for item in inventory['items']:
+            families = item.get('families', [])
+            if not families or set(families) & {'memory_invariance', 'memory_cyclone_shapes'}:
+                result['fatal'].append(item)
+        result['scope'] = 'Mixed primary pool: all memory-attributed or unattributed diagnostics block; other families remain in quality inventory.'
+    result['clean'] = not result['problems'] and not result['fatal']
+    return result
+
+
 def memory_preflight(a):
     """Compare the planned t1/t6 overlap without reading any primary results."""
     names = ('memory_t1_normal', 'memory_t6_both_reference_sets')
@@ -432,7 +476,7 @@ def memory_preflight(a):
     overrides = dict(x.split('=', 1) for x in a.run)
     stderr_overrides = dict(x.split('=', 1) for x in a.stderr)
     result = dict(scope='Interim normal t1 versus t6 shared games only; no t12/tiny or full memory proof.',
-                  runs={}, cache_pressure={}, cells={}, six_only_cells={}, differences=[], problems=[])
+                  runs={}, cache_pressure={}, fidelity={}, cells={}, six_only_cells={}, differences=[], problems=[])
     missing = sorted(set(names) - set(variants))
     if missing:
         result.update(complete=False, observed_exact=False, preflight_pass=False)
@@ -453,6 +497,9 @@ def memory_preflight(a):
         pressure = cache_pressure(stderr_overrides.get(name, variant['stderr']))
         result['cache_pressure'][name] = pressure
         result['problems'] += [dict(variant=name, error=p) for p in pressure['problems']]
+        fidelity = memory_diagnostics(stderr_overrides.get(name, variant['stderr']), variant)
+        result['fidelity'][name] = fidelity
+        result['problems'] += [dict(variant=name, error=p) for p in fidelity['problems']]
     one, six = (loaded[name] for name in names)
     shared = set(one['data']) & set(six['data'])
     result['shared_expected'] = sum(one['expected'].values())
@@ -489,13 +536,15 @@ def memory_preflight(a):
     result['observed_exact'] = result['complete'] and not result['differences'] and result['shared_compared'] == result['shared_expected']
     result['fsl_review_required'] = any((p['fsl_refused_stores'] or 0) > 0 for p in result['cache_pressure'].values())
     result['determinism_review_required'] = result['fsl_review_required'] or any(p['fsl_warnings'] for p in result['cache_pressure'].values())
-    result['preflight_pass'] = result['observed_exact'] and not result['determinism_review_required']
+    result['fidelity_clean'] = all(d['clean'] for d in result['fidelity'].values())
+    result['preflight_pass'] = result['observed_exact'] and not result['determinism_review_required'] and result['fidelity_clean']
     result['warning_scope'] = 'Refusal counts are process-wide: t6 includes its extra shapes and cannot attribute FSL pressure solely to the shared168 games.'
     write_json(a.output / 'memory-preflight-report.json', result)
     print(json.dumps(dict(report=str(a.output / 'memory-preflight-report.json'), complete=result['complete'],
         observed_exact=result['observed_exact'], shared_compared=result['shared_compared'], shared_expected=result['shared_expected'],
         six_only_expected=result['six_only_expected'], fsl_review_required=result['fsl_review_required'],
-        preflight_pass=result['preflight_pass'], differences=len(result['differences']), problems=len(result['problems'])), indent=2))
+        preflight_pass=result['preflight_pass'], fidelity_clean=result['fidelity_clean'],
+        differences=len(result['differences']), problems=len(result['problems'])), indent=2))
     return 2 if not result['complete'] else 1 if not result['preflight_pass'] else 0
 
 
@@ -503,7 +552,8 @@ def memory(a):
     inputs = a.inputs
     plan = read_json(inputs / 'primary-quality-plan.json')
     maps = plan['job_map']
-    jobs = [j for j in read_json(inputs / 'primary-quality.json')['jobs']
+    primary_jobs = read_json(inputs / 'primary-quality.json')['jobs']
+    jobs = [j for j in primary_jobs
             if maps[j['name']]['family'] in ('memory_invariance', 'memory_cyclone_shapes')]
     baseline = load_cells(jobs, a.primary_wins, maps)
     schedule = read_json(inputs / 'final-runtime-plan.json')
@@ -511,8 +561,10 @@ def memory(a):
     stderr_overrides = dict(x.split('=', 1) for x in a.stderr)
     primary_pressure = cache_pressure(a.primary_stderr)
     result = dict(baseline='primary normal12, chunked', comparisons={}, problems=baseline['problems'], differences=[],
-                  cache_pressure={'primary': primary_pressure}, pressure_failures=[])
+                  cache_pressure={'primary': primary_pressure}, pressure_failures=[], fidelity={})
     result['problems'] += [dict(variant='primary', error=p) for p in primary_pressure['problems']]
+    result['fidelity']['primary'] = memory_diagnostics(a.primary_stderr, plan, primary_jobs, maps)
+    result['problems'] += [dict(variant='primary', error=p) for p in result['fidelity']['primary']['problems']]
     for variant in schedule['memory_comparisons']:
         name = variant['name']
         manifest = Path(variant['argv'][variant['argv'].index('--batch') + 1])
@@ -523,6 +575,9 @@ def memory(a):
         pressure = cache_pressure(stderr_overrides.get(name, variant['stderr']))
         result['cache_pressure'][name] = pressure
         result['problems'] += [dict(variant=name, error=p) for p in pressure['problems']]
+        fidelity = memory_diagnostics(stderr_overrides.get(name, variant['stderr']), variant)
+        result['fidelity'][name] = fidelity
+        result['problems'] += [dict(variant=name, error=p) for p in fidelity['problems']]
         if name == 'memory_t12_tiny':
             pp = pressure['plan_pool']
             proven = pp is not None and pp['budget_kb'] == 20480 and pp['refused_stores'] > 0 and not pressure['problems']
@@ -562,37 +617,56 @@ def memory(a):
     if 'tiny12_shared_plan_pressure_proven' not in result:
         result['tiny12_shared_plan_pressure_proven'] = False
         result['pressure_failures'].append(dict(error='required memory_t12_tiny comparison absent from runtime plan'))
-    result['proof_pass'] = result['exact'] and result['tiny12_shared_plan_pressure_proven']
+    result['fidelity_clean'] = all(d['clean'] for d in result['fidelity'].values())
+    result['proof_pass'] = result['exact'] and result['tiny12_shared_plan_pressure_proven'] and result['fidelity_clean']
     write_json(a.output / 'memory-report.json', result)
     print(json.dumps(dict(report=str(a.output / 'memory-report.json'), complete=result['complete'], exact=result['exact'],
-                          proof_pass=result['proof_pass'], tiny12_shared_plan_pressure_proven=result['tiny12_shared_plan_pressure_proven'],
+                          proof_pass=result['proof_pass'], fidelity_clean=result['fidelity_clean'],
+                          tiny12_shared_plan_pressure_proven=result['tiny12_shared_plan_pressure_proven'],
                           problems=len(result['problems']), differences=len(result['differences']), comparisons=result['comparisons']), indent=2))
     return 2 if not result['complete'] else 1 if not result['proof_pass'] else 0
 
 
-def main():
+def parse_args(argv=None):
     ap = argparse.ArgumentParser(description=__doc__)
     sub = ap.add_subparsers(dest='mode', required=True)
     q = sub.add_parser('quality')
     q.add_argument('--inputs', type=Path, default=DEFAULT)
-    q.add_argument('--wins', type=Path, default=DEFAULT / 'runs/primary-quality/wins')
-    q.add_argument('--traces', type=Path, default=DEFAULT / 'runs/primary-quality/traces')
-    q.add_argument('--stderr', type=Path, default=DEFAULT / 'runs/primary-quality/batch.err')
-    q.add_argument('--output', type=Path, default=DEFAULT / 'reports')
+    q.add_argument('--wins', type=Path)
+    q.add_argument('--traces', type=Path)
+    q.add_argument('--stderr', type=Path)
+    q.add_argument('--output', type=Path)
     q.add_argument('--allow-partial', action='store_true', help='labelled partial/intersection metrics; still nonzero for missing data')
     m = sub.add_parser('memory')
     m.add_argument('--inputs', type=Path, default=DEFAULT)
-    m.add_argument('--primary-wins', type=Path, default=DEFAULT / 'runs/primary-quality/wins')
-    m.add_argument('--primary-stderr', type=Path, default=DEFAULT / 'runs/primary-quality/batch.err')
+    m.add_argument('--primary-wins', type=Path)
+    m.add_argument('--primary-stderr', type=Path)
     m.add_argument('--run', action='append', default=[], metavar='PLAN_NAME=WINS_DIR')
     m.add_argument('--stderr', action='append', default=[], metavar='PLAN_NAME=STDERR_FILE')
-    m.add_argument('--output', type=Path, default=DEFAULT / 'reports')
+    m.add_argument('--output', type=Path)
     p = sub.add_parser('memory-preflight', help='normal t1/t6 overlap only; requires review if FSL binds')
     p.add_argument('--inputs', type=Path, default=DEFAULT)
     p.add_argument('--run', action='append', default=[], metavar='PLAN_NAME=WINS_DIR')
     p.add_argument('--stderr', action='append', default=[], metavar='PLAN_NAME=STDERR_FILE')
-    p.add_argument('--output', type=Path, default=DEFAULT / 'reports')
-    a = ap.parse_args()
+    p.add_argument('--output', type=Path)
+    a = ap.parse_args(argv)
+    primary = a.inputs / 'runs/primary-quality'
+    if a.output is None:
+        a.output = a.inputs / 'reports'
+    if a.mode == 'quality':
+        for key, filename in (('wins', 'wins'), ('traces', 'traces'), ('stderr', 'batch.err')):
+            if getattr(a, key) is None:
+                setattr(a, key, primary / filename)
+    elif a.mode == 'memory':
+        if a.primary_wins is None:
+            a.primary_wins = primary / 'wins'
+        if a.primary_stderr is None:
+            a.primary_stderr = primary / 'batch.err'
+    return a
+
+
+def main():
+    a = parse_args()
     return {'quality': quality, 'memory': memory, 'memory-preflight': memory_preflight}[a.mode](a)
 
 
