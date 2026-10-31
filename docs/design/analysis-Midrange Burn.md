@@ -8,8 +8,8 @@ budget preservation gates pass; keep default ON. The authored cleanup-discard
 policy was approved and adopted on 2026-10-30 behind a default-on, reversible
 Midrange-only flag. Its paired seeded tiers are non-inferior overall; the one
 persistent slower game is documented below.
-The user has paused exhaustive mulligan-profile and value-leaf generation while
-another container uses the box; neither is part of this push. A new shared
+Exhaustive mulligan-profile and value-leaf generation was paused on 2026-10-30
+while another container used the box. A new shared
 passive-opponent land pattern passed a full smoke A/B. A targeted fold of burn
 spells against inert passive creatures restored the 20 ms two-headed play
 setting under the integrated-branch cost gate: 1.21x Hinata (limit 3x),
@@ -22,6 +22,20 @@ blocking gate, including 15/15 card coverage, field and cost audits, viewer
 wiring, mismatch checks, play invariants, and suite membership.
 Chronological checkpoints below include superseded intermediate states; this
 opening status is current.
+
+On 2026-10-31 the first ten hand-played references were preserved on the shared
+branch. The shipped search, with each recorded mulligan and bottom forced, tied
+all nine human wins and won the one human loss on turn 7: **zero shortfalls**.
+All ten replay exactly after correcting the reference checker's one-based
+graveyard-candidate index mapping; the full strict sweep passed 699 references
+with zero play drifts or enumeration gaps. The viewer now queues two Rift Bolt
+suspends in one plan, while a directed search test confirmed that the autonomous
+enumerator already retains and executes that line. Equivalence discovery found
+**15 card names and 14 buckets**, merging only Chain Lightning with Lightning
+Bolt. The measured mulligan-setting screen selected depth 1 and a 1 ms budget
+(0.15x the built-in play cost while clearing its fidelity floor) and recorded
+the 14-bucket contract. Next are the fast exhaustive mulligan profile and,
+after its validation, the value leaf.
 
 ## Search cost and cost-choice audit (2026-10-30)
 
