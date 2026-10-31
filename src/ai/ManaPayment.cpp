@@ -4018,10 +4018,60 @@ static void PoRemoveFromHand(std::vector<PoHandCard>& hand, const InternedName& 
     { if (hand[i].name == n) { hand.erase(hand.begin() + static_cast<long>(i)); return; } }
 }
 
+// MTG_RAMP_FILTER_FEED_ORDER (DEFAULT ON; =0 -> a same-plan ramp-filter rock is credited at once).
+// A cast ramp-filter rock (Izzet Signet, "{1}, {T}: Add {U}{R}") carries Action::rock_mana = +1 wild,
+// its NET gain once something else pays its {1} (AddSourceToPool's ramp_filter branch, which tests the
+// BOARD for a feeder). The order walks below credited it right after the Signet's own payment, whether or
+// not anything was left to feed it. NivMizzetCombo (mana-oracle APPLY-DROP-ORDER): T2 on two Islands with
+// the Signet ahead of Sol Ring in plan order -- the walk paid the Signet with both Islands and then Sol
+// Ring out of the unfed Signet's +1, so "Signet, Sol Ring" read as payable, the payable-order decider kept
+// it, and both apply worlds cast the Signet and dropped the Sol Ring. The only paying order is Sol Ring
+// first (its {C}{C} pays the Signet, the Island feeds it). USER 2026-10-31: "There is nothing wrong with
+// Sol Ring going first or paying for the Signet." With the lever on, the walk HOLDS a filter rock's
+// credit until the pool holds a unit to feed it (a later cast's output -- Sol Ring's {C}{C} -- included),
+// so the Signet-first order projects unpayable and the decider's nearest payable permutation (Sol Ring
+// first) is realised -- by the executor and the rollout alike, since both order through
+// ApplyPayableCastOrder. It only TIGHTENS the walk where the credit was a phantom: whenever a unit is left
+// after the filter's payment the credit lands at once, exactly as before, and the aggregate bound in
+// PayableCastOrderCore keeps the unconditional credit (it must stay a necessary condition).
+static bool RampFilterFeedOrderOn()
+{
+    static const bool env_on = EnvOn("MTG_RAMP_FILTER_FEED_ORDER", true);   // DEFAULT ON; =0 disables
+    return heurarm::Flag(heurarm::RAMP_FILTER_FEED_ORDER, env_on);
+}
+
+namespace
+{
+// The held credits of the ramp-filter rocks cast so far in one walk (see RampFilterFeedOrderOn).
+struct FilterFeedHold
+{
+    bool on = RampFilterFeedOrderOn();
+    int  n  = 0;
+    const ManaPool* held[8];
+    // Takes `a`'s rock credit into the hold when `a` is a cast ramp-filter rock; false -> credit as usual.
+    bool Take(const Action& a)
+    {
+        if (!on || n >= 8 || a.alt_cost || a.kind != Action::Kind::CastFromHand || a.rock_mana.Total() <= 0)
+        { return false; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        if (d == nullptr || !d->params.ramp_filter || !d->params.mana_rock || d->card.IsCreature()) { return false; }
+        held[n++] = &a.rock_mana;
+        return true;
+    }
+    // Feed the held filters off whatever the pool holds: one unit pays a filter's {1} and comes back
+    // as its two, so a fed filter can feed the next.
+    void Release(ManaPool& pool)
+    {
+        while (n > 0 && pool.Total() > 0) { pool.AddPool(*held[--n]); }
+    }
+};
+}   // namespace
+
 // What a cast PRODUCES for the casts after it -- the credit half of FirstUnpayablePos's walk,
-// factored out so MTG_PAYABLE_ORDER's aggregate bound credits exactly the same terms.
+// factored out so MTG_PAYABLE_ORDER's aggregate bound credits exactly the same terms. `skip_rock`:
+// leave the rock_mana term out (a ramp filter's held credit, FilterFeedHold).
 static void CreditCastOutput(const GameState& state, const std::vector<Action>& acts, const Action& a,
-                             ManaPool& pool)
+                             ManaPool& pool, bool skip_rock = false)
 {
     // Credit what this cast PRODUCES, so the rest of the line is projected against the mana it
     // will actually have. Same two terms the enumeration's subset math credits (Action carries
@@ -4037,7 +4087,7 @@ static void CreditCastOutput(const GameState& state, const std::vector<Action>& 
                                : (d ? d->params.ritual_float_color : std::string());
         AddColorToPool(pool, col, a.ritual_float);
     }
-    if (a.rock_mana.Total() > 0) { pool.AddPool(a.rock_mana); }
+    if (a.rock_mana.Total() > 0 && !skip_rock) { pool.AddPool(a.rock_mana); }
     // Treasures minted by the cast (Gold Rush) are same-turn mana through the deferred
     // breakpoint re-solve (real SacForMana candidates), so the projection credits them as
     // wild -- BASE count only (a magnet fan-out mints one per copy, but the fan width is a
@@ -4068,6 +4118,7 @@ static int FirstUnpayablePosImpl(const GameState& state, const std::vector<Actio
                                  const std::vector<int>& order, ManaPool pool,
                                  std::vector<PoHandCard>* hand)
 {
+    FilterFeedHold feed;   // MTG_RAMP_FILTER_FEED_ORDER
     for (int pos = 0; pos < static_cast<int>(order.size()); ++pos)
     {
         const Action& a = acts[order[pos]];
@@ -4088,7 +4139,8 @@ static int FirstUnpayablePosImpl(const GameState& state, const std::vector<Actio
             if (!pool.CanPay(a.cost)) { return pos; }
             PayFromPool(pool, a.cost);
         }
-        CreditCastOutput(state, acts, a, pool);
+        CreditCastOutput(state, acts, a, pool, feed.Take(a));
+        feed.Release(pool);
     }
     return -1;
 }
@@ -4289,6 +4341,7 @@ static int ExactOrderWalkImpl(const GameState& state, const std::vector<Action>&
     ManaCost future{};
     for (int i : order) { if (!acts[i].alt_cost) { AddManaCost(future, acts[i].cost); } }
     future.generic = 0;
+    FilterFeedHold feed;   // MTG_RAMP_FILTER_FEED_ORDER
     for (int pos = 0; pos < static_cast<int>(order.size()); ++pos)
     {
         const Action& a = acts[order[pos]];
@@ -4331,6 +4384,7 @@ static int ExactOrderWalkImpl(const GameState& state, const std::vector<Action>&
             {
                 const int x = std::max(1, life_gained);
                 pool.Add(WalkBurstColour(pool, cost, future, x), x);
+                feed.Release(pool);   // the burst can feed a held ramp filter
                 --scaled_left;
                 if (scaled_early != nullptr && pos <= last_life_pos) { *scaled_early = true; }
             }
@@ -4352,7 +4406,8 @@ static int ExactOrderWalkImpl(const GameState& state, const std::vector<Action>&
             { cco = std::max(0, cco - (wild_before - pool.wild)); }
             cco = std::min(cco, pool.wild);
         }
-        CreditCastOutput(state, acts, a, pool);
+        CreditCastOutput(state, acts, a, pool, feed.Take(a));
+        feed.Release(pool);
         if (life_scaled) { ++storm_seen; life_gained += WalkCastLifegain(state, a, d, storm_seen); }
         if (d != nullptr)
         {
