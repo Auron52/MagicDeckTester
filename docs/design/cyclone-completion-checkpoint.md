@@ -8,6 +8,33 @@ based on main `138d2dbea`. V5 remains frozen/pushed separately on
 source label. All original/intermediate branches and worktrees remain intact.
 Primary checkout's unrelated `test/ref_bench.json` edit remains untouched.
 
+Latest milestone (09:30UTC): merged code `a515040de`, SRC
+`5e96106ee481c9a93859b10ffe5b373b1b2d4f6f`, is committed/pushed. CI41186126592
+PASS Linux, Windows and cross-platform determinism parity; rootwatch50736closed0.
+Local build/PGO/runtime gates remain pending until the active V5 engine lease ends.
+The current docs-only branch HEAD may advance without changing this source.
+V5pool1530/5986closed at09:28:59, all1025freshordinarycontrols complete with
+ordinaryFD/nonconv/ambiguity0. All4952salted jobs have exact existing primary
+ordinary-context coverage, so no duplicate control wave is needed. QP5deepGI57
+isT6/T6; GI254 isBASE T5/SITU T6 and does not recover atd8b0. Prunes reviewer
+is investigating source/prefix causality; no SITU adoption/rejection or source
+amendment is implied. Root mapped agentnamespacePID28 to hostPID1847269 via
+NSpid; the actualpooluses~24CPUs andsame24GBRAM/1003MiBsharedplanbudget asprimary.
+Payment owns session35734 and all V5 engines until explicit lease release.
+
+Authoritative UNSEALED final-source packet:
+`build/scratch/cyclone-finish/v6-integration/prepared-5e96106-v3`, instructions
+`v6-integration/README.md`; earlier prototypes remain unsealed/superseded.
+Eight stages only:1908freshmemorycontexts(1/6/12/24core,6/12/24shapes,tiny12,
+unbounded6),VERIFY24,quiet855. All future stages require actual fresh PGO SHA
+and source stamp; docsHEAD does not invalidate the frozen execution metadata.
+Separate unsealed three-case Release/PGO parity preparation is at
+`build/scratch/cyclone-finish/landing138-review/preflight/`; after fresh binaries,
+seal `run-preparation.json` from its UNSEALEDtemplate with actual binary hashes.
+No V6 engine/build has run. Full-tree audit plus post-M2delta audit show no
+unexpected changes,729refs exact and upstreamGT912consistent. Referencesafety
+scanner across all32worktrees remains required before session close.
+
 Current integration status (08:42UTC): UNBUILT merged source, with only manual
 source conflicts in HeuristicArm/TurnSolver. All755enum/name pairs unique and
 both previous ordered mappings retained. Main's tail-skip metadata and the
