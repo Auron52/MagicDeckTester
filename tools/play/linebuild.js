@@ -53,6 +53,19 @@
     return plan.filter(p => p.name === name && p.kind !== 'land' && p.kind !== 'le'
                                             && p.kind !== 'pretap').length;
   }
+  // One suspend badge represents every real hand copy of a name. Add copies until all are
+  // allocated; the next click takes back the most recently queued suspend. Count ordinary casts
+  // too, since a copy cannot be both cast and suspended, and exclude staged exile copies because
+  // suspend is available only from hand.
+  function toggleSuspend(decision, plan, name) {
+    const realCopies = handCounts(decision)[name] || 0;
+    const suspends = plan.filter(p => p.kind === 'suspend' && p.name === name).length;
+    if (suspends < realCopies && plannedCount(plan, name) < castableCount(decision, name))
+      return plan.concat({ name, kind: 'suspend' });
+    const i = plan.map(p => p.kind === 'suspend' && p.name === name).lastIndexOf(true);
+    if (i < 0) return plan;
+    return plan.filter((_, j) => j !== i);
+  }
   function leCount(plan) { return plan.filter(p => p.kind === 'le').length; }
 
   // How many lands may still be discarded to Land's Edge: lands in hand minus the one taken by a
@@ -846,6 +859,7 @@
   }
 
   return { planLand, planLands, landDropsLeft, handCounts, stagedCounts, castableCount, plannedCount,
+           toggleSuspend,
            leCount, leMax, encodeLine, encodeSegments, dropFirstSegment, queueCard, isSacOut, lineVerb,
            toggleKicker,
            offersLandAfter, topLandOffered, landPosition, karooPositionsOffered,

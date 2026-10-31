@@ -2865,6 +2865,7 @@ function renderHand() {
     const chN    = canCh ? channelCountFor(c.name) : 0;
     const canSu  = !!suspendSources()[c.name];         // suspendable from hand -- badge to exile it
     const suN    = canSu ? suspendCountFor(c.name) : 0;
+    const suCanAdd = suN < total && plannedCount(c.name) < LB.castableCount(S.decision, c.name);
     const advNm  = adventureSources()[c.name] || null;  // adventure half available -- badge to cast it
     const advN   = advNm ? adventureCountFor(c.name) : 0;
     // Kicker on offer -- badge to PAY it. Membership, not truthiness: a 0-mana kicker is a legal
@@ -2891,7 +2892,7 @@ function renderHand() {
       (canCh?`<span class="landface" data-channel="${esc(c.name)}" title="${channelSources()[c.name]==='transmute'?'TRANSMUTE — discard '+esc(c.name)+' to search your library for a card with the same mana value (you pick it when it resolves)':'CHANNEL — discard '+esc(c.name)+' from hand to use its ability instead of casting it'}${chN?' (click again to take it back)':''}">⚡ ${channelSources()[c.name]==='transmute'?'transmute':'channel'}${chN>1?` ×${chN}`:''}</span>`:'')+
       // Suspend: the same shape as channel -- another way to play THIS card, which the ordinary
       // cast gesture would silently take instead.
-      (canSu?`<span class="landface" data-suspend="${esc(c.name)}" title="SUSPEND — exile ${esc(c.name)} from hand with time counters instead of casting it${suN?' (click again to take it back)':''}">⌛ suspend${suN>1?` ×${suN}`:''}</span>`:'')+
+      (canSu?`<span class="landface" data-suspend="${esc(c.name)}" title="SUSPEND — exile ${esc(c.name)} from hand with time counters instead of casting it${suCanAdd?' (click to queue another copy)':suN?' (click to take back one copy)':' (all copies are already queued)'}">⌛ suspend${suN>1?` ×${suN}`:''}</span>`:'')+
       // Adventure: the same shape again, and the reason it is REQUIRED rather than a convenience is
       // that both modes are casts of this very card -- the thumb's own click already casts the
       // creature, so without this badge the adventure half has no gesture at all.
@@ -2958,14 +2959,16 @@ function renderHand() {
       renderBoard(); };
     b.ondblclick = e => { e.stopPropagation(); e.preventDefault(); };
   });
-  // Suspend badge: same toggle contract as the channel badge above.
+  // Suspend badge: queue each real hand copy before a further click takes one back.
   row.querySelectorAll('.landface[data-suspend]').forEach(b => {
     b.onclick = e => { e.stopPropagation(); e.preventDefault();
       const nm = b.dataset.suspend;
-      const i = S.plan.map(p => p.kind === 'suspend' && p.name === nm).lastIndexOf(true);
-      if (i >= 0) { S.plan.splice(i, 1); flashHint(`Took back ${nm}'s suspend.`); }
-      else { S.plan.push({ name: nm, kind: 'suspend' });
-             flashHint(`Suspending ${nm} — it is exiled with time counters and arrives later. Commit the phase to resolve it.`); }
+      const before = suspendCountFor(nm);
+      S.plan = LB.toggleSuspend(S.decision, S.plan, nm);
+      if (suspendCountFor(nm) < before) flashHint(`Took back one ${nm} suspend.`);
+      else if (suspendCountFor(nm) > before)
+        flashHint(`Suspending ${nm} — it is exiled with time counters and arrives later. Commit the phase to resolve it.`);
+      else flashHint(`All copies of ${nm} are already queued.`);
       renderBoard(); };
     b.ondblclick = e => { e.stopPropagation(); e.preventDefault(); };
   });

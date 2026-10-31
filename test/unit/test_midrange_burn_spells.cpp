@@ -668,6 +668,32 @@ TEST_CASE("midrange burn: a second Bolt and reduced Incinerator are enumerated w
     CHECK(found);
 }
 
+TEST_CASE("midrange burn: autonomous and human plan enumeration keep two Rift Bolt suspends")
+{
+    GameState s; s.active_player_index = 0; s.turn_number = 2;
+    static const MidrangeBurnProvider provider; s.m_provider = &provider;
+    MBPut(s, "Mountain", 10); MBPut(s, "Mountain", 11);
+    s.players[0].hand = {MBCard("Rift Bolt", 20), MBCard("Rift Bolt", 21)};
+    const auto plans = TurnSolver::EnumerateMainPlans(s, true);
+    const TurnSolver::Plan* both = nullptr;
+    for (const auto& p : plans)
+    {
+        int suspends = 0;
+        for (const auto& a : p.actions)
+            if (a.kind == Action::Kind::Suspend && a.card_name == "Rift Bolt")
+                ++suspends;
+        if (suspends == 2) { both = &p; break; }
+    }
+    REQUIRE(both != nullptr);
+    TurnSolver::LineSpec line;
+    line.suspends = {"Rift Bolt", "Rift Bolt"};
+    const auto match = TurnSolver::CheckLine(s, true, line, &plans);
+    CHECK(match.verdict == TurnSolver::LineCheck::Verdict::Accept);
+    TurnSolver::ApplyPlan(s, *both, true);
+    CHECK(s.players[0].hand.empty());
+    CHECK(s.players[0].suspended_cards.size() == 2);
+}
+
 TEST_CASE("midrange burn: an offered Bolt and Skewer bundle labels any dropped cast")
 {
     GameState s; s.active_player_index = 0; s.turn_number = 2;

@@ -412,6 +412,35 @@ function checkKickerToken() {
   return fails;
 }
 
+function checkMultipleSuspends() {
+  const fails = [];
+  const decision = { me: { hand: [
+    { name: 'Rift Bolt', kind: 'nonpermanent' },
+    { name: 'Rift Bolt', kind: 'nonpermanent' },
+    { name: 'Rift Bolt', kind: 'nonpermanent', is_staged: true },
+  ] } };
+  let plan = [];
+  plan = LB.toggleSuspend(decision, plan, 'Rift Bolt');
+  plan = LB.toggleSuspend(decision, plan, 'Rift Bolt');
+  if (plan.length !== 2 || LB.encodeLine(plan) !== 'suspend=Rift Bolt;suspend=Rift Bolt')
+    fails.push(`two copies did not queue in one line: ${LB.encodeLine(plan)}`);
+  plan = LB.toggleSuspend(decision, plan, 'Rift Bolt');
+  if (plan.length !== 1 || plan[0].kind !== 'suspend')
+    fails.push('third click did not take back one suspend');
+  plan = [{ name: 'Rift Bolt', kind: 'nonpermanent' }];
+  plan = LB.toggleSuspend(decision, plan, 'Rift Bolt');
+  plan = LB.toggleSuspend(decision, plan, 'Rift Bolt');
+  if (plan.length !== 3 || plan.filter(p => p.kind === 'suspend').length !== 2)
+    fails.push('a staged cast incorrectly consumed a real hand copy needed for suspend');
+  const twoReal = { me: { hand: decision.me.hand.slice(0, 2) } };
+  plan = [{ name: 'Rift Bolt', kind: 'nonpermanent' }];
+  plan = LB.toggleSuspend(twoReal, plan, 'Rift Bolt');
+  plan = LB.toggleSuspend(twoReal, plan, 'Rift Bolt');
+  if (plan.length !== 1 || plan[0].kind !== 'nonpermanent')
+    fails.push('suspend used a copy already queued as a cast, or removed that cast');
+  return fails;
+}
+
 // The BONUS LAND DROP path (viewer issue #7). A Scale the Heights / Explore grant makes
 // me.land_drops_left > 1, and the engine's Plan still carries ONE land -- so a two-land turn is
 // committed as consecutive SEGMENTS. Both halves of that live here (queueCard must ADD rather than
@@ -1118,10 +1147,14 @@ function main() {
   kickFails.forEach(m => console.log(`  FAIL  kicker: ${m}`));
   console.log(`Viewer kicker: ${kickFails.length ? 'WRONG' : 'cast=+kicked= per kicked copy; the badge toggles in place and never over-queues'} ` +
               `(${kickFails.length} FAIL)`);
+  const suspendFails = checkMultipleSuspends();
+  suspendFails.forEach(m => console.log(`  FAIL  suspend: ${m}`));
+  console.log(`Viewer suspend: ${suspendFails.length ? 'WRONG' : 'two copies queue in one line, capped by real hand copies'} ` +
+              `(${suspendFails.length} FAIL)`);
   return (fail + dimFails.length + landFails.length + sacFails.length + verbFails.length
           + mixFails.length + hostFails.length + stackFails.length + macroFails.length
           + tapFails.length + topFails.length + posFails.length + kickFails.length
-          + karooFails.length + seqFails.length + shrinkFails.length + segFails.length) ? 1 : 0;
+          + suspendFails.length + karooFails.length + seqFails.length + shrinkFails.length + segFails.length) ? 1 : 0;
 }
 
 process.exit(main());
