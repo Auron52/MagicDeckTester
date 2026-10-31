@@ -1,12 +1,15 @@
 # Unpredictable Cyclone: branch map, state and next steps (2026-10-31)
 
 > Completion update (2026-10-31): the backup branches have been integrated on
-> `cyclone-ready` against main `2b863538f`; original branch refs remain intact. The fixed 512 MB per-thread
+> `cyclone-current` against main `547e6fe8b`; original and intermediate branch refs remain intact. The fixed 512 MB per-thread
 > plan-cache policy and the companion per-thread FSL quota were removed. The existing shared,
 > RAM-sized budgets remain, together with exact keys and hit-equals-miss pricing. The user prefers
 > landing Cyclone before the separate cache-budgeting project. No broader cache redesign is being
 > adopted as an implied prerequisite. Three rollout/executor replay defects found during completion
-> are fixed and tested. Current implementation, verification and pending measurements are tracked in
+> are fixed and tested, along with a latent-discovery provenance defect in the local FSL cache. Fresh
+> source-matching V5 measurements are running; earlier stopped runs do not establish adoption results.
+> Mulligan and value-leaf generation wait until the requested re-evaluation. Current implementation,
+> verification and pending measurements are tracked in
 > `cyclone-completion-checkpoint.md`; the branch map and measurements below are historical.
 
 
