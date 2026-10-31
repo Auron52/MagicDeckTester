@@ -851,6 +851,15 @@ inline bool PrepayFloatPoolOn()
     return heurarm::Flag(heurarm::PREPAY_FLOAT_POOL, env_on);
 }
 
+// MTG_SERVANT_HASTE_KEEP -- DEFAULT ON; =0 restores the drain-first payment (a noncreature cast spends
+// Generator Servant's haste-tagged {C} even when a later creature in the same line could take the haste).
+// See g_line_haste_takers (ManaPayment.h). Shared payer, so executor, rollout and human play agree.
+inline bool ServantHasteKeepOn()
+{
+    static const bool env_on = EnvOn("MTG_SERVANT_HASTE_KEEP", true);
+    return heurarm::Flag(heurarm::SERVANT_HASTE_KEEP, env_on);
+}
+
 // MTG_RAMP_FEED_ROUTE -- DEFAULT ON; =0 restores the feed-blind greedy. The shared per-cast payer
 // re-pays a cast whose greedy spent the last feeder of an untapped ramp filter, routing that feeder
 // through the filter, when only the routed board still pays the rest of the line (RampFeedRouteRepay,

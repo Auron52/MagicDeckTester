@@ -6401,6 +6401,32 @@ thread_local std::vector<int> g_plan_reserved_sources;
 thread_local ManaCost g_line_unpaid_cost;
 thread_local bool     t_scarce_held_only = false;   // see ScarceHeldOnlyScope (ManaPayment.h)
 thread_local bool     g_line_opens_unseen = false;   // see ManaPayment.h (LineOpensUnseenScope)
+thread_local int      g_line_haste_takers = 0;       // see ManaPayment.h (LineHasteTakersScope)
+
+// TakeHasteFloatForCreatureSpell's condition on a bill: a {C} pip, or a non-snow generic pip.
+static bool BillTakesHasteUnit(const ManaCost& c)
+{
+    return c.colorless > 0 || c.generic > static_cast<int>(c.snow_pips);
+}
+
+int LineHasteTakerCount(const std::vector<Action>& acts)
+{
+    if (!ServantHasteKeepOn()) { return 0; }
+    int n = 0;
+    for (const Action& a : acts)
+    {
+        if (a.kind != Action::Kind::CastFromHand || a.bestow || a.alt_cost || a.free_cast) { continue; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        if (d != nullptr && d->card.IsCreature() && BillTakesHasteUnit(a.cost)) { ++n; }
+    }
+    return n;
+}
+
+void NoteLineHasteTakerCast(const CardDefinition& def, bool bestow, const ManaCost& bill)
+{
+    if (g_line_haste_takers > 0 && def.card.IsCreature() && !bestow && BillTakesHasteUnit(bill))
+    { --g_line_haste_takers; }
+}
 thread_local ManaCost g_act_line_paid;      // see ManaPayment.h (ActLinePassScope / ActLinePayScope)
 thread_local ManaCost g_act_line_current;
 
@@ -7032,6 +7058,84 @@ static bool RampFeedRouteRepay(const GameState& state, const ManaCost& cost_in, 
     return fire;
 }
 
+// MTG_SERVANT_HASTE_KEEP (see g_line_haste_takers, ManaPayment.h): how many of Generator Servant's haste-tagged
+// {C} this NONCREATURE payment should leave floating for the line's later creature casts -- 0 = pay as usual.
+// Decided on scratch boards before the real payment, the RampFeedRouteRepay shape: the plain payment must
+// actually spend a tagged unit the line's creatures could take, the payment with those units set aside must
+// succeed, and the rest of the line must still be payable on the board it leaves (its tagged units back in the
+// float, this cast's own untapped rock on the board). Anything else keeps the plain payment, so this can only
+// move a payment the rest of the line survives.
+namespace
+{
+// Sets `k` tagged {C} aside from the float (and from the executor's accounting pool) for one payment.
+struct HasteUnitsAside
+{
+    GameState& s;
+    ManaPool*  av;
+    int        k;
+    HasteUnitsAside(GameState& st, ManaPool* available, int n) : s(st), av(available), k(n)
+    {
+        s.floating_mana.colorless -= k;
+        s.floating_haste_c        -= k;
+        if (av != nullptr) { av->colorless -= k; }
+    }
+    ~HasteUnitsAside()
+    {
+        s.floating_mana.colorless += k;
+        s.floating_haste_c        += k;
+        if (av != nullptr) { av->colorless += k; }
+    }
+};
+}   // namespace
+
+static int HasteKeepUnits(const GameState& state, const ManaCost& cost_in, ManaPool* available, bool honor_legacy_cco)
+{
+    const int units = HasteFloatUnits(state);
+    const int need  = std::min(units, g_line_haste_takers);   // one tagged unit hastes one creature
+    if (need <= 0) { return 0; }
+    TapPrefChooser* const tap_pref = g_play_tap_pref_chooser;
+    RevealLogPause _quiet;
+    g_play_tap_pref_chooser = tap_pref;   // the pause's destructor restores the same pointer
+    // The plain payment: does it spend a tagged unit the line's creatures could take?
+    {
+        RampScratch a(state);
+        ManaPool av_a = available ? *available : ManaPool{};
+        if (!TapForCostSharedDiag(a.Board(), cost_in, /*for_creature=*/false, available ? &av_a : nullptr,
+                                  honor_legacy_cco))
+        { return 0; }
+        if (HasteFloatUnits(a.Board()) >= need) { return 0; }
+    }
+    const ManaCost later = RampLaterBill(cost_in);
+    const CardDefinition* rock = nullptr;
+    if (const Card* pc = PayingSpellCard())
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(*pc);
+        if (d != nullptr && d->params.mana_rock && !d->card.IsCreature() && !d->params.enters_tapped) { rock = d; }
+    }
+    // Just the units the creatures take first (the least change to the payment), then every tagged unit
+    // (the {C} then also serves the rest of the line -- NivMizzetCombo s1100013 gi12 T4: the Signet off
+    // Sandstone Needle's {R}{R}, the {C}{C} for Tandem Lookout and the Signet's feed).
+    const int tries[2] = { need, units };
+    for (int t = 0; t < 2; ++t)
+    {
+        const int k = tries[t];
+        if (t == 1 && k == tries[0]) { break; }
+        if (available != nullptr && available->colorless < k) { continue; }   // the accounting pool books the float
+        RampScratch b(state);
+        ManaPool av_b = available ? *available : ManaPool{};
+        bool paid;
+        {
+            HasteUnitsAside _aside(b.Board(), available ? &av_b : nullptr, k);
+            paid = TapForCostSharedDiag(b.Board(), cost_in, /*for_creature=*/false, available ? &av_b : nullptr,
+                                        honor_legacy_cco);
+        }
+        if (!paid) { continue; }
+        if (later.ManaValue() > 0 && !RampLaterPayable(b.Board(), later, rock)) { continue; }
+        return k;
+    }
+    return 0;
+}
+
 // ---- MTG_PAY_REFINE: the cheapest payment of the same bill out of the same taps --------------------------
 //
 // THE DEFECT (the mana oracle census, 39 decks x 30 games, seed 1100001). Every DOMINATED flag -- a payment of a
@@ -7218,6 +7322,13 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
     if (t_pay_nest == 1 && !t_ramp_route && RampFeedRouteOn()
         && RampFeedRouteRepay(state, cost_in, for_creature, available, honor_legacy_cco))
     { _ramp_route.emplace(); }
+    // MTG_SERVANT_HASTE_KEEP (see HasteKeepUnits): a noncreature payment of an applying line leaves the tagged
+    // {C} its later creature casts can take. Off, outside a line, with no tagged {C}, or for a creature / an
+    // ability payment: a counter test and out.
+    int haste_keep = 0;
+    if (t_pay_nest == 1 && !_ramp_route && !for_creature && g_line_haste_takers > 0 && state.floating_haste_c > 0
+        && PayingAbilitySource() == nullptr && !manaoracle::t_float_only && ServantHasteKeepOn())
+    { haste_keep = HasteKeepUnits(state, cost_in, available, honor_legacy_cco); }
     // MTG_PAY_REFINE (above): the board as this payment found it, for the dominance check once it has committed.
     // (The oracle's own copy never gets here -- its payments returned through ScriptedPay above -- and its
     // float-only probes, like the refine's own, are skipped.)
@@ -7226,7 +7337,17 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
     std::optional<PayRefineSnap> refine_pre;
     if (refine) { refine_pre.emplace(); refine_pre->Take(state, available); }
     bool ok;
-    if (!state.dmg_events_armed)
+    if (haste_keep > 0)
+    {
+        {
+            HasteUnitsAside _aside(state, available, haste_keep);
+            ok = TapForCostSharedDiag(state, cost_in, for_creature, available, honor_legacy_cco);
+        }
+        // The trial paid on an identical board, so this cannot fail; if it ever does, pay as usual.
+        if (!ok) { ok = TapForCostSharedDiag(state, cost_in, for_creature, available, honor_legacy_cco); }
+        if (ok && state.dmg_events_armed && t_pay_nest == 1) { dmgev::FlushDamageEvents(state); }
+    }
+    else if (!state.dmg_events_armed)
     { ok = TapForCostSharedDiag(state, cost_in, for_creature, available, honor_legacy_cco); }
     else
     {

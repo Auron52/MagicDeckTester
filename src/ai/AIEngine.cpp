@@ -7441,6 +7441,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // ...and whether the line casts a breakpoint opener (g_line_opens_unseen), seeded at the same point
     // and from the same actions as ApplyPlanDirect's scope (lockstep).
     LineOpensUnseenScope _lou(LineOpensUnseenCasts(state, plan.actions));
+    // ...and the creature casts that can take Generator Servant's haste (MTG_SERVANT_HASTE_KEEP), same seed.
+    LineHasteTakersScope _lht(LineHasteTakerCount(plan.actions));
     // Plan::land_search_act_slot == 0 -- lockstep twin of ApplyPlanDirect's pre-cast pass: the plan's
     // land-search activations run now, through the ONE shared body, at the same point relative to the
     // line hold above (installed first in both worlds) and the plan-traits scope below (installed
@@ -9354,6 +9356,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
         // the executor twin of apply_one's take (TakeHasteFloatForCreatureSpell). `effective` stays
         // the full bill for the line-hold accounting below. A bestowed cast is an Aura spell.
         ManaCost pay_bill = effective;
+        NoteLineHasteTakerCast(*def, bestow, effective);   // MTG_SERVANT_HASTE_KEEP (rollout twin: apply_one)
         haste_from_mana = def->card.IsCreature() && !bestow && TakeHasteFloatForCreatureSpell(state, pay_bill);
         bool paid_ok;
         {

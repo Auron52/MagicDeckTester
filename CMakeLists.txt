@@ -471,6 +471,7 @@ add_executable(mtg-test
     test/unit/test_garth_lotus_crack.cpp
     test/unit/test_rock_seq_credit.cpp
     test/unit/test_rock_feed_order.cpp
+    test/unit/test_servant_haste_keep.cpp
     test/unit/test_seq_free_attach.cpp
     test/unit/test_echo_staged_gas.cpp
     test/unit/test_echo_axis.cpp

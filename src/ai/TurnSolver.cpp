@@ -9686,6 +9686,7 @@ static bool SubsetPayableAsExecutedImpl(const GameState& state, const std::vecto
     GameState& cp = _scratch.Board();
     LineUnpaidCostScope _luc(LineCastCostTotal(acts));
     LineOpensUnseenScope _lou(LineOpensUnseenCasts(cp, acts));
+    LineHasteTakersScope _lht(0);   // a walk: no cast-site count-down (MTG_SERVANT_HASTE_KEEP)
     PlanTraits traits;
     if (PlanTraitsWanted()) { traits = TurnSolver::ComputePlanTraits(cp, acts); }
     PlanTraitsScope _traits_scope(PlanTraitsWanted() ? &traits : nullptr);
@@ -10021,6 +10022,7 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
         if (!a.free_cast && !a.alt_cost) { AddManaCost(_walk_total, a.cost); }
     }
     LineUnpaidCostScope _luc(_walk_total);
+    LineHasteTakersScope _lht(0);   // a walk: no cast-site count-down (MTG_SERVANT_HASTE_KEEP)
     // ...and whether the walked order casts a breakpoint opener (the twin of both apply paths' scope).
     LineOpensUnseenScope _lou([&]
     {
@@ -10584,6 +10586,7 @@ static bool OrderPrepaysWholeTurnImpl(const GameState& state, const std::vector<
     GameState& cp = _scratch.Board();
     LineUnpaidCostScope _luc(LineCastCostTotal(sub));
     LineOpensUnseenScope _lou(LineOpensUnseenCasts(cp, sub));
+    LineHasteTakersScope _lht(0);   // a walk: no cast-site count-down (MTG_SERVANT_HASTE_KEEP)
     PlanTraits traits;
     if (PlanTraitsWanted()) { traits = TurnSolver::ComputePlanTraits(cp, sub); }
     PlanTraitsScope _traits_scope(PlanTraitsWanted() ? &traits : nullptr);
@@ -56529,6 +56532,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // ...and whether this line casts a breakpoint opener, so the hold above is incomplete (see
     // g_line_opens_unseen). Same scope, same nesting: a continuation's nested apply binds its own.
     LineOpensUnseenScope _lou(LineOpensUnseenCasts(state, plan.actions));
+    // ...and the creature casts that can take Generator Servant's haste (MTG_SERVANT_HASTE_KEEP), same seed
+    // as the executor's (AIEngine::TakeTurn).
+    LineHasteTakersScope _lht(LineHasteTakerCount(plan.actions));
     // What the human's REMAINING QUEUE wants (docs/design/viewer-line-macros.md). Unlike the hold
     // above it is not derived from this plan's costs -- the continuation is in the NEXT committed
     // segment, which this process cannot see, so the viewer declares it. 0 for every plan that
@@ -58445,6 +58451,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // A bestowed cast is an Aura spell (CR 702.103b), not a creature spell. No-op while no
             // tagged {C} floats -> byte-identical.
             ManaCost pay_bill = ec;
+            NoteLineHasteTakerCast(def, bestow, ec);   // MTG_SERVANT_HASTE_KEEP (executor twin: CastSpellFromHand)
             cast_haste_from_mana = is_creature && !bestow && TakeHasteFloatForCreatureSpell(state, pay_bill);
             bool paid_ok;
             {
@@ -104346,6 +104353,7 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
         ManaCost line_total{};
         for (std::size_t k : order) { if (!pending[k].alt_free) { AddManaCost(line_total, costs[k]); } }
         LineUnpaidCostScope _luc(line_total);
+        LineHasteTakersScope _lht(0);   // a walk: no cast-site count-down (MTG_SERVANT_HASTE_KEEP)
         std::vector<int> act_src;   // battlefield number of each board activation, in pending order
         for (const BoardActivation& ba : board_acts) { act_src.push_back(ba.src ? ba.src->card.m_number : 0); }
         std::size_t first_act = pending.size() - board_acts.size();
@@ -105011,6 +105019,7 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
         for (const PendingCast& pc : pending)
         { if (!pc.alt_free) { AddManaCost(_pend_total, pc.full_cost); } }
         LineUnpaidCostScope _luc(_pend_total);
+        LineHasteTakersScope _lht(0);   // a walk: no cast-site count-down (MTG_SERVANT_HASTE_KEEP)
         std::vector<bool> paid(pending.size(), false);
         bool spec = s.opponent_lost_life_this_turn;
         size_t left = pending.size();

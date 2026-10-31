@@ -828,6 +828,40 @@ private:
     bool m_prev;
 };
 
+// ---- GENERATOR SERVANT'S HASTE GOES TO THE LINE'S CREATURE (MTG_SERVANT_HASTE_KEEP) -------------------------
+// The Servant's two {C} are haste-tagged (GameState::floating_haste_c): "If any of that mana is spent on a
+// creature spell, it gains haste." The payer drains floating mana before it taps anything, so a NONCREATURE
+// cast ahead of the creature in the same line (Izzet Signet, then Niv-Mizzet, the Firemind) spent the tagged
+// {C}{C} and the creature lost its haste -- the line "crack the Servant, Signet off two Islands, hasty
+// Firemind attacks" was unrealisable at any budget, in the search, the executor and the viewer alike
+// (NivMizzetCombo cast-order draft, probe p5; the USER hit it saving references). The fix is line-level and
+// exact: while the applying line still holds a creature cast that would take a tagged unit
+// (g_line_haste_takers), a noncreature payment that would spend one is tried with up to that many tagged
+// units set aside; it is taken only if it pays AND the rest of the line (g_line_unpaid_cost net of this
+// payment) is still payable on the board it leaves -- otherwise the plain payment stands. Both apply
+// worlds seed the count from their action list beside the line hold (ApplyPlanDirect -- the rollout and
+// human play -- and AIEngine::TakeTurn), and both cast sites count a creature cast down as it is paid
+// (NoteLineHasteTakerCast), so the payer, which both worlds share, decides identically. Every walk that
+// binds its own line hold binds 0 here (its payments are not cast-site payments), so a nested walk never
+// reads an outer apply's count.
+extern thread_local int g_line_haste_takers;
+// The creature casts in `acts` that would take a tagged {C} (a non-bestowed creature hand cast whose bill
+// has a {C} or non-snow generic pip -- TakeHasteFloatForCreatureSpell's condition). 0 with the lever off.
+int LineHasteTakerCount(const std::vector<Action>& acts);
+// A cast site's count-down: `def` is being cast now with bill `bill`; a creature that qualifies leaves the
+// count (paid or dropped, it is no longer ahead of anything).
+void NoteLineHasteTakerCast(const CardDefinition& def, bool bestow, const ManaCost& bill);
+class LineHasteTakersScope
+{
+public:
+    explicit LineHasteTakersScope(int n) : m_prev(g_line_haste_takers) { g_line_haste_takers = n; }
+    ~LineHasteTakersScope() { g_line_haste_takers = m_prev; }
+    LineHasteTakersScope(const LineHasteTakersScope&)            = delete;
+    LineHasteTakersScope& operator=(const LineHasteTakersScope&) = delete;
+private:
+    int m_prev;
+};
+
 // (The post-spell greedy mana sinks AnimateLandsShared / ActivateTapTokensShared were deleted
 // 2026-09-30 -- see the note at their old definition in ManaPayment.cpp.)
 
