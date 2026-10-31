@@ -1,6 +1,6 @@
 # Cyclone completion review
 
-Status: measurements in progress, 2026-10-31. This is the concise review alongside
+Status: primary complete; follow-up measurements in progress, 2026-10-31. This is the concise review alongside
 `cyclone-completion-checkpoint.md`; it does not replace the historical analysis ledger.
 No mulligan or value-leaf generation has started during completion.
 
@@ -52,15 +52,21 @@ fleet-wide zero divergence follows from the Cyclone checks.
 
 ## Measurements and decisions still open
 
-The primary frozen-source pool has 1,490 jobs / 13,142 games with 24 workers.
-Partial families are not adoption evidence. Remaining process-only checks cover
+The primary frozen-source pool completed all 1,490 jobs / 13,142 games with 24
+workers, exit 0 at 08:17:10 UTC. Its complete result reader reports zero input
+problems and zero ordinary FD/non-convergence/ambiguous diagnostics. The 1,025
+blinded forecast warnings have separately prepared, unrun ordinary controls;
+their mere presence is neither an executor defect nor proof of fidelity.
+All 7,200 Phase C trace/result identities pass independent audit. Remaining process-only checks cover
 normal 12 threads, pressure at a 20 MiB shared pool, unbounded capacity, complete
 shape equality and the small cache VERIFY run. Full regression, diagnostic
 controls, put-back isolation/recovery classification and quiet timing are owed.
 
-The quiet timing plan is one 695-game pool: the original 535 shipping/Hinata
-controls plus 160 matched PB-ON Cyclone games, with Hinata controls shared once.
-It measures both settings without adopting PB. Mixed-pool primary wall times
+The quiet timing plan is one 855-game pool: the original 535 shipping/Hinata
+controls plus 160 matched PB-ON Cyclone games and 160 PB+KEEP_AMEND+KEEP_MYRIAD
+games, with Hinata controls shared once. The last package was added after the
+completed quality results below; the prepared 695-game plan remains unrun.
+It measures the settings without adopting a candidate. Mixed-pool primary wall times
 are not cost-gate evidence.
 
 PB adoption is conditionally authorized only if d3 and d5 each have paired net
@@ -70,6 +76,15 @@ The live Phase C contrast changes only PB, with NOM2 false. Other policy choices
 remain user-owned, including KEEP amendments, curve checking, leaf fidelity,
 NOM2, nested exhaust, cast/cycle order and payment-split settings.
 
+The completed live contrast is -0.0675 turns at d3 (400 games, SE 0.03256,
+60 faster/40 slower) and +0.005 at d5 (200 games, SE 0.03978, 23 faster/25
+slower). The latter is one total turn worse, so PB alone fails the authorized
+automatic-adoption bar. Its unit ratios are 0.2376/0.2334; primary wall timings
+are not quiet cost evidence. Adding the measured KEEP/Myriad amendment to PB
+improves by another 0.0125/0.035 turns, yielding -0.080/-0.030 versus live
+CYCLER. That is a candidate for user choice, not an authorized automatic flip
+or a zero-lost-line finding.
+
 QC3 is complete but conditional on its measured package (including NOM2 true):
 leaf0 versus leaf1 averages improve by 0.100 turns at d3 and 0.0833 at d5, with
 unit ratios 0.544 and 0.650, but both faster and slower games occur. This is no
@@ -77,6 +92,12 @@ dominance or adoption claim. QC1's 97 selected hands out of 600 compare normal
 policy with curve_check:none; this is a conditional proxy, not a tested exact
 cycler-counting implementation or deck-wide benefit. The 94 one-land-only
 hands are a separate unmeasured stratum.
+
+QC1's 70 selected hands with creature cyclers improve by 0.6286 turns (SE
+0.1680, 36 faster/14 slower), with units ratio 0.0962. The 27 without cyclers
+worsen by 0.1852 (SE 0.2671). All 194 measured initial-hand/keep handshakes pass.
+This supports a restricted cycler-aware rule as future user choice; disabling
+the entire curve check is not established as a deck-wide improvement.
 
 QC1 and nested-exhaust measurements also use PB/NOM2 true. Payment-split
 measurements isolate the split under live PB/NOM2 false. Raw and blinded cast

@@ -4,7 +4,22 @@ User scope: finish outstanding changes in `origin/cyclone-analysis:docs/design/c
 
 Working branch/worktree: `cyclone-current`, `.claude/worktrees/cyclone-current`, based on phase-1-2 main `547e6fe8b`. Prior `cyclone-ready` is frozen/pushed at `2c9b15398`, sourcec45; all original/intermediate branches and worktrees remain intact. Primary checkout's unrelated `test/ref_bench.json` edit remains untouched.
 
-Current stage (V5 primary RUNNING): code4a9ed39e5/main547, clean SRC8b0bc5ea046ce748c456f7e4aceef4ea11807aa5; fresh PGO2371bc0e0adc3daf2fe65f2fc42139146aaae11e0d9627cf2f1e75d276d630b6. All2396units/3,567,476assertions,388scenarios, three Release/PGO FD parity cases, paired GobGI41 audit, accepted smoke/894GTconsistency and Linux/Windows/parityCI PASS. V5 viewer709strict/290native PASS with explicit417carry/4Bruna pins. Fresh normal1/6 DONE0 with all168core wins/digests/units exact, FSL0; normal6all468 independently audited with positive shared-pool refusals. Full primary13142games/1490jobs started06:48:20UTC,24workers, root8636/owner1819187/engine1819223. EarlyQC3480+6rawchunks60 complete with zero diagnostics; all6 formerly divergent131117 arms nowT4/exactsame digest. Other blinded forecasts are being classified separately; no ordinaryFD/nonconv/rawambiguity reported as of the latest monitor. No policy adoption from partial outcomes. Remaining: finish primary, process-only normal12/tiny12/unbounded6, isolation/conditional controls/recoveries, full regression and one quiet cost pool, then linear landing and re-evaluation. No mulligan/value generation.
+Prior frozen-stage summary (superseded by current status above): code4a9ed39e5/main547, clean SRC8b0bc5ea046ce748c456f7e4aceef4ea11807aa5; fresh PGO2371bc0e0adc3daf2fe65f2fc42139146aaae11e0d9627cf2f1e75d276d630b6. All2396units/3,567,476assertions,388scenarios, three Release/PGO FD parity cases, paired GobGI41 audit, accepted smoke/894GTconsistency and Linux/Windows/parityCI PASS. V5 viewer709strict/290native PASS with explicit417carry/4Bruna pins. Fresh normal1/6 DONE0 with all168core wins/digests/units exact, FSL0; normal6all468 independently audited with positive shared-pool refusals. Full primary13142games/1490jobs started06:48:20UTC,24workers, root8636/owner1819187/engine1819223. EarlyQC3480+6rawchunks60 complete with zero diagnostics; all6 formerly divergent131117 arms nowT4/exactsame digest. Other blinded forecasts are being classified separately; no ordinaryFD/nonconv/rawambiguity reported as of the latest monitor. No policy adoption from partial outcomes. Remaining: finish primary, process-only normal12/tiny12/unbounded6, isolation/conditional controls/recoveries, full regression and one quiet cost pool, then linear landing and re-evaluation. No mulligan/value generation.
+
+Current status (08:21UTC): primary DONE0 at08:17:10, all1490jobs/13142games;
+PhaseC all720chunks/7200trace identities independently audited. Official quality
+report complete/probs0; zero ordinaryFD/nonconv/rawambiguity,1025blindforecast
+warnings with1025ordinarycontrols PREPARED/UNRUN. Root memory12 session21798,
+owner1838576/engine1838626 is the only heavy run. Source8b/PGO2371 unchanged.
+Normal24final core168 EXACT vsnormal1/6 and shapes300 EXACT vsnormal6, FSL0;
+primary sharedplanrefusals17565. PB live d3−.0675/d5+.005(+1total) FAILS the
+conditional automatic-flip bar; no flip. Measured PB+KEEP/Myriad gives
+−.080/−.030 versus live CYCLER, user-owned choice. Final quiet pool expanded
+to855 (original535 +160PB +160PB+KEEP/Myriad); cost reviewer preparing a new
+separate guarded directory, old535/695 stay UNRUN. Remaining: normal12/tiny12/
+unbounded6, VERIFY, iso92two40, selected exact-deduplicated diagnostic/causal
+followups, full regression+audit/normalaccept, quiet855, linearlanding/review.
+All other policy adoption choices remain user-owned; no artifact generation.
 
 The dated milestones below are historical records; later entries supersede earlier progress and pending-work statements.
 
