@@ -4,9 +4,12 @@
   "valueleaf": "em:628a8814600307ca8e3f"
  },
  "deck": "knights",
+ "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_knights/DECISIONS.txt)",
+ "finished": "2026-10-31T16:16:30Z",
  "frozen": "b21178838d6719b88762124ddecc2a55001d934e",
  "heartbeat": "2026-10-31T16:11:09Z",
  "host": "58199181d02e",
+ "result_branch": "artifact-refresh/knights-20261031-1616",
  "run_id": "knights-artifact-queue-tool-647f24-20261031T161052",
  "score": 0.0093,
  "stage": "valueleaf",
@@ -14,6 +17,6 @@
   "valueleaf"
  ],
  "started": "2026-10-31T16:10:52Z",
- "state": "running",
+ "state": "done",
  "worker": "artifact-queue-tool-647f24"
 }
