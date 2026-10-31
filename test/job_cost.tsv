@@ -169,7 +169,7 @@ bruna_smoke_d0_s1001	1
 bruna_smoke_d3_s1001	11806
 bruna_smoke_d5_s1001	15631
 burn2hg_smoke_d3_s1001	11885
-burn2hg_smoke_d5_s1001	23205
+burn2hg_smoke_d5_s1001	21880
 burn_overnight_d0_s10010	1
 burn_overnight_d0_s4004	1
 burn_overnight_d0_s6006	1
@@ -188,12 +188,12 @@ burn_regression_d0_s2002	1
 burn_regression_d3_s2002	3397
 burn_regression_d3_s30001	4906
 burn_regression_d3_s3003	3195
-burn_regression_d5_s2002	2091
-burn_regression_d5_s30001	2201
-burn_regression_d5_s3003	2244
+burn_regression_d5_s2002	2010
+burn_regression_d5_s30001	1457
+burn_regression_d5_s3003	2179
 burn_smoke_d0_s1001	1
 burn_smoke_d3_s1001	3818
-burn_smoke_d5_s1001	2030
+burn_smoke_d5_s1001	1976
 colossus2hg_smoke_d3_s1001	7474
 colossus2hg_smoke_d5_s1001	6910
 colossus_overnight_d0_s10010	1
