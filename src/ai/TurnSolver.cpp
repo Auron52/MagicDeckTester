@@ -69032,7 +69032,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             // rejected here and never reaches the walk that would have paid it. Optimistic on
             // purpose -- the ceiling is a cheap pre-filter and the walk is the arbiter, which is the
             // same division of labour the Hinata generic term relies on.
-            // ...and the ETB-UNTAP REFUND is the other (MTG_EF_SCALAR_REFUND, default ON; =0 -> no refund term). An
+            // ...and the ETB-UNTAP REFUND is the other (MTG_EF_SCALAR_REFUND, DEFAULT OFF pending the USER -- see its
+            // reader in EngineFlags.h for the held-out game it did not recover; =1 -> on). An
             // untapper's ETB gives back up to N lands, each worth at most its yield on this board plus a same-subset
             // land Aura that could ride it (EtbUntapLandsCredit + the subset's N largest Aura bonuses) -- new total
             // mana exactly like `aura_bonus`, so a ceiling without it rejects chains whose coloured pips the refunds

@@ -1228,14 +1228,18 @@ inline bool SeqEtbUntapEnabled()
     return heurarm::Flag(heurarm::EDF_SEQ_ETB, env_on);
 }
 
-// MTG_EF_SCALAR_REFUND (2026-10-31; DEFAULT ON, =0 -> the refund is not on the supply side): the sequential rescue's
-// scalar ceiling (`ef-scalar`, TurnSolver.cpp exec_feas_rescues) counts each same-subset ETB untapper's refund --
-// EtbUntapLandsCredit plus the subset's largest land-Aura bonuses -- as supply, like the land Aura's own bonus. An
-// upper bound, so it only lets more subsets reach the walk that decides them. Only EldraziDisplacerFlicker holds an
+// MTG_EF_SCALAR_REFUND (2026-10-31; DEFAULT OFF pending the USER, =1 -> on): the sequential rescue's scalar ceiling
+// (`ef-scalar`, TurnSolver.cpp exec_feas_rescues) counts each same-subset ETB untapper's refund -- EtbUntapLandsCredit
+// plus the subset's largest land-Aura bonuses -- as supply, like the land Aura's own bonus. An upper bound, so it only
+// lets more subsets reach the walk that decides them (exact: every plan it admits the walk pays). OFF because it
+// failed the adoption bar: held out (seed 1640001, 2,000 EDF games) its one slower game, gi552 T3 -> T4, does not
+// recover at --depth 8 --budget-ms 0 -- with only this lever on, the T2 search rates {Wild Growth -> Shivan Gorge,
+// Fertile Ground -> Kitchen} a T4 win in-tree although the T3 root finds the kill from that board (the larger menu
+// exposes a search defect; docs/design/mana-completeness-oracle.md 13.7). Only EldraziDisplacerFlicker holds an
 // etb_untap_lands card.
 inline bool EfScalarRefundOn()
 {
-    static const bool env_on = EnvOn("MTG_EF_SCALAR_REFUND", true);
+    static const bool env_on = EnvOn("MTG_EF_SCALAR_REFUND", false);
     return heurarm::Flag(heurarm::EF_SCALAR_REFUND, env_on);
 }
 
