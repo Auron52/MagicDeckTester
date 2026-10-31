@@ -5491,6 +5491,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         int rec_mc = 0, rec_pt = 0;
         for (const Action& a : recs)
         {
+            // Cycle metadata belongs to that step, not the surrounding record section.
+            if (a.rec_cycle_traits) { continue; }
             rec_mc = std::max(rec_mc, a.rec_mana_casts);
             if (rec_pt == 0 && a.rec_pump_target != 0) { rec_pt = a.rec_pump_target; }
         }
@@ -5610,6 +5612,12 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 // The record carries the step's REALISED pins (a searched cycle seed: Curator's scry j in
                 // devour_count, Cyclone's free cast in ponder_keep; -1 / -1 for every legacy dig), and a
                 // replaced draw's free cast is resolved before the nested records replay.
+                // A searched step retains its owner's exact payment context. A record list can
+                // be a strict subset of that plan, so deriving from the list alone loses casts,
+                // pending activation holds and even an explicit zero pump target. Scope only
+                // this cycle; its nested continuation installs/replays its own context below.
+                PlanTraitsScope cycle_scope(a.rec_cycle_traits ? a.rec_cycle_traits.get() : CurrentPlanTraits());
+                TapKeepLastScope cycle_keep(a.rec_cycle_traits ? a.rec_pump_target : g_tap_keep_last_card);
                 PerformDigFull(state, a.card_name, a.dig_sacrifice, a.devour_count, a.ponder_keep, resolve_stack,
                                a.seed_pay_split);
             }

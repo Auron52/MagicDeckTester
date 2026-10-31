@@ -694,3 +694,64 @@ TEST_CASE("Cyclone site 4: a continuation protects its own colored cycle seed wh
     CHECK(applied.spells_cast_this_turn == 3);   // free Wraith, Song, free Curator
     for (std::size_t i = 0; i < 4; ++i) { CHECK(applied.battlefield[i].tapped); }
 }
+
+
+TEST_CASE("Cyclone recorded seed: real TakeTurn replays the owner's payment context")
+{
+    EnsureCardsRC();
+    heurarm::Clear();
+    ArmScope arm(2, -1);
+    GameState initial = BaseRC({ "Steam Vents", "Island", "Watery Grave", "Mountain" },
+                               { "Bonesplitter", "Bonesplitter", kCurator, kRemand },
+                               { "Brainsurge", kCurator, kCurator, "Ponder" });
+    PutRC(initial, kCyclone, 30);
+    PutRC(initial, "Treasure Token", 70);
+    initial.battlefield.back().is_token = true;
+    // These two paid casts establish mana_casts=2 without spending any source
+    // needed for the later cycle/Remand. A DigDraw-only replay derives zero.
+    initial.floating_mana.colorless = 2;
+    TurnSolver::Plan recorded = SeedPlanRC(kCurator, kCycFcTakeRemand);
+    Action equipment;
+    equipment.kind = Action::Kind::CastFromHand;
+    equipment.card_name = "Bonesplitter";
+    equipment.def = &DefRC("Bonesplitter");
+    equipment.cost = EffectiveSpellCost(*equipment.def, initial, 1);
+    equipment.card_mv = equipment.def->card.m_mana_cost.ManaValue();
+    recorded.actions.insert(recorded.actions.begin(), 2, equipment);
+    recorded.bp_choice = TurnSolver::kBpEmptyChoice;
+    recorded.bp_all = true;
+    GameState roll = initial;
+    TurnSolver::ApplyPlanWithRecordsForTest(roll, recorded, true);
+    const auto dig = std::find_if(recorded.breakpoint_actions.begin(), recorded.breakpoint_actions.end(),
+                                  [](const Action& a) { return a.kind == Action::Kind::DigDraw; });
+    REQUIRE(dig != recorded.breakpoint_actions.end());
+    REQUIRE(dig->rec_cycle_traits != nullptr);
+    REQUIRE(dig->rec_cycle_traits->mana_casts == 2);
+    CHECK_FALSE(OnBfRC(roll, "Treasure Token"));
+    auto replay = [&](const TurnSolver::Plan& plan)
+    {
+        GameState state = initial;
+        AIEngine engine(MulliganProfile::DefaultProfile(), 3, 10);
+        MtgTestSeam::CommitPhasePlan(engine, plan, true);
+        engine.TakeTurn(state, true, ResolveAllRC);
+        return state;
+    };
+    const GameState exec = replay(recorded);
+    CheckSameRC(OfRC(roll, kCurator), OfRC(exec, kCurator));
+    CHECK_FALSE(OnBfRC(exec, "Treasure Token"));
+    auto sources = [](const GameState& state)
+    {
+        std::vector<std::pair<int, bool>> out;
+        for (const Permanent& p : state.battlefield)
+        { if (p.card.IsLand()) { out.emplace_back(p.card.m_number, p.tapped); } }
+        return out;
+    };
+    CHECK(sources(exec) == sources(roll));
+    // The old path is a real control: without the recorded context, replay's
+    // derived zero-cast traits arm OneShotHoldMask and preserve the Treasure.
+    TurnSolver::Plan legacy = recorded;
+    for (Action& a : legacy.breakpoint_actions) { a.rec_cycle_traits.reset(); }
+    const GameState old = replay(legacy);
+    CHECK(OnBfRC(old, "Treasure Token"));
+    CHECK(sources(old) != sources(roll));
+}

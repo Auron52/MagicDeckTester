@@ -146,3 +146,33 @@ remain invalid as final-source baselines; v2 must use fresh directories and diag
   repair is unchanged except the optional state outputs on the existing test-only resume hook.
   Next integration target is current mainca9132b9d (four new commits after930); preserve the
   pushed finish branch and replay onto a fresh landing branch without rebasing pushed commits.
+
+## Recorded-cycle context follow-up (source WIP on cyclone-land)
+
+Replay review found the root snapshot restore alone is incomplete: actual TakeTurn normally
+replays root DigDraw records inside a fresh record-list scope. That list can omit the owner's
+already-paid casts (e.g. mana_casts2 becomes0), changing the existing one-shot hold even with
+mid_turn_casts correctly true. The low-level PerformDigFull test bypassed that wrapper.
+
+Each recorded searched cycle now carries an immutable shared PlanTraits snapshot taken from
+its owner before payment, plus the exact pump hold. Replay installs it around that cycle only;
+its nested records regain their own context. The surrounding record-section scan ignores this
+per-cycle metadata. Allocations happen only when recording an apply (including evaluated FSL
+candidates, not merely the final committed line); enumerated actions remain null. New payload
+heap is included conservatively in existing shared byte accounting; there is no new quota.
+A generated-records→CommitPhasePlan→actual TakeTurn regression with two paid Bonesplitters,
+Curator/Remand and a Treasure has an explicit metadata-removed control. Build91590 is underway;
+AIEngine scan isolation and payload accounting were edited only after their TUs completed and
+require a canonical follow-up build before trusting results. No v2 measurement launched yet.
+
+## v2 source freeze gates (00:57UTC)
+
+Canonical follow-up build30479 completed, including the record-scan isolation and recursive
+new-payload accounting. All2360unit cases /3,566,447assertions PASS. All384scenarios PASS.
+The five focused context/payment cases PASS262assertions, including the real TakeTurn
+metadata-removed control. Original seed107008/globalGI8 remains a legal actual/predictedT4,
+per-game758163c5936e1ab8 and1,099,992units, with zeroFD/nonconv. Source is integrated on
+current mainca9132b9d via fresh cyclone-land; pushed cyclone-finish remains intact at4aaf2e47f.
+GT consistency894/894, no stale/missing logs. New source-matching PGO and v2 viewer full sweeps
+are next; PGO smoke must pass/audit before any v2 measurement is trusted. Previous v1 runtime
+outcomes are not reused as v2 baseline/adoption evidence. No profile/value-leaf generation.
