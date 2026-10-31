@@ -70,7 +70,9 @@ Measured held out (seed 1640001, 2,000 Niv games per arm, on top of the two paym
 faster, net -4, units 0.986x; 30 of the 31 slower games recover at `--depth 8 --budget-ms 0` (the same turn both
 arms), and the 31st (gi1950, T4 -> T5) is T5 on both arms under the non-clairvoyant search (`MTG_NC_SEARCH=1`,
 d8 b0): clear clairvoyance. A second seed (1650001, the whole package -- order + both payment fixes -- against
-the old tree) is 43 slower / 46 faster (-2); its d8 b0 checks are recorded in `mana-completeness-oracle.md` 13.7.
+the old tree) is 43 slower / 46 faster (-2); its d8 b0 checks are recorded in `mana-completeness-oracle.md` 13.7: one game, gi887 (T4 -> T5), fails the bar
+(T5 vs T6 under the non-clairvoyant search at d8 b0) -- the Preordain-before-Probe sub-order changes the T1 line
+and the draw sequence; open, surfaced to the USER.
 The order ships ON (the USER's order: -4 alone on seed 1640001; the package nets better on both seeds).
 
 ## STATUS 2026-10-24 ~11:45 UTC -- the keep table is ADOPTED; the value leaf is NOT
