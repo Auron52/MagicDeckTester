@@ -8,6 +8,17 @@ Current stage (V5 primary RUNNING): code4a9ed39e5/main547, clean SRC8b0bc5ea046c
 
 The dated milestones below are historical records; later entries supersede earlier progress and pending-work statements.
 
+Latest read-only progress (07:40UTC): primary761/1490closedjobs,7598/13142games,
+PhaseC307/720;24workers remain busy. All168normal24core outcomes/digests/units
+exact against normal1/6, an interim comparison pending primaryDONE and remaining
+memory variants. Selected final quiet timing is one695-game pool, preserving
+all535shipping/Hinata controls and adding160matched PB-ON games; candidate timing
+is evidence for re-evaluation, not adoption. Separate guarded launcher prepared
+at `build/scratch/cyclone-finish/v5-analysis/optional-cost-pb695/run_quiet_pb695.py`.
+Run only in root context after primary/memory/VERIFY/regression/selected controls
+close; never also run the535pool. The concise shared report is
+`docs/design/cyclone-completion-review.md`.
+
 Independent reviews found extra required fixes:
 
 - KEEP_AMEND reads library size/land count but CantripOrderKey omits them. Add both inputs with a same-board/different-library unit and rank-cache VERIFY run.

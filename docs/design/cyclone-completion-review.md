@@ -78,6 +78,11 @@ policy with curve_check:none; this is a conditional proxy, not a tested exact
 cycler-counting implementation or deck-wide benefit. The 94 one-land-only
 hands are a separate unmeasured stratum.
 
+QC1 and nested-exhaust measurements also use PB/NOM2 true. Payment-split
+measurements isolate the split under live PB/NOM2 false. Raw and blinded cast
+arms share PB true and NOM2 false. All have EXTRA and cantrip ordering enabled.
+These contexts are part of each result, not interchangeable shipping claims.
+
 Re-evaluation and linear landing follow completed checks. Add Cyclone to the
 regression matrix only if the actual shipping configuration meets the <=3x
 same-run Hinata cost gate. Report any remaining gap; do not invent an override
