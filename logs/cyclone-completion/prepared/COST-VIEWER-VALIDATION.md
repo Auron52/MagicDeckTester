@@ -40,9 +40,20 @@ Do not regenerate over measurement inputs in use. On complete runtime-volume
 loss, first reconstruct pruning Phase C using its helper, then reconstruct
 the QC1 sample below, then run the commands above. The default twelve-arm
 Phase C contains shared controls, Ponder and PBCYC+Ponder; do not add the old
-separate PB/KEEP pools again. The composed primary has 12,542 games with the
+separate PB/KEEP pools again. The composed primary has 13,142 games with the
 original 97-hand QC1 cohort. A changed selected cohort must be explained,
 not forced to have the old count.
+
+Cast raw/blind each contain six arms: base, CO, CO_CYC1, CO_CYC1_DRAW,
+CO_CYC1_REV_CYCLERS and CO_CYC1_MIDDLE (1,800 games per pool). DRAW enables
+`MTG_CYCLONE_ORDER_DRAW_TURNS` on CO_CYC1 and is measured afresh after the
+four searched information orders fix; historical DRAW outcomes are obsolete.
+The reporter compares DRAW against both base and CYC1. REV_CYCLERS keeps the
+rank5 diagnostic, while MIDDLE independently enables rank55 before Song;
+all arms pin both other interventions OFF. The Q60 cast-only refresh added600
+primary games, preserving all existing cast jobs plus every noncast manifest,
+profile copy/link and existing runtime output. Its before/after hash audit
+is in runtime storage at `build/scratch/cyclone-finish/cast-q60-refresh-audit.json`.
 
 ## Preserve QC1 sample identity
 
