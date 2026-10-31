@@ -373,6 +373,12 @@ function main() {
                                   verb: 'auraswap', inCombat: !!a.in_combat }]);
           return;
         }
+        // Suspend pays its alternate cost from hand; rebuilding it as a normal
+        // cast asks CheckLine to pay a different bill (Rift Bolt is {R}, not {2}{R}).
+        if (a && a.verb === 'suspend' && !vialFlag[i]) {
+          built = built.concat([{ name: nm, kind: 'suspend' }]);
+          return;
+        }
         const hc = hand.find(c => c.name === nm);
         built = LB.queueCard(d, built, nm, vialFlag[i] ? 'vial' : hc.kind);
       });

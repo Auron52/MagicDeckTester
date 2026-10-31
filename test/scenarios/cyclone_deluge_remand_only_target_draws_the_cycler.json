@@ -1,0 +1,67 @@
+{
+  "_comment": [
+    "Round 5, main 1, land drop made, Unpredictable Cyclone out, five untapped lands (Watery Grave, 4 Island),",
+    "opponent at 15. Hand: Toxic Deluge, Remand. Library top: Street Wraith, Island, Emrakul. Toxic Deluge is",
+    "goldfish_inert (never cast on its own). As a REMAND-ONLY target (ceiling 3 + MTG_CYCLONE_REMAND_INERT=1):",
+    "cast Deluge ({2}{B}, X = 0 life), Remand it ({1}{U}) -- Deluge back to hand, Remand draws the Wraith; cycle it",
+    "(2 life) -> the walk casts Emrakul free -> extra turn, 15 in the air: round 5.",
+    "With the switch ON the line is found: round 5."
+  ],
+  "deck": "decks/Unpredictable Cyclone/Unpredictable Cyclone.cod",
+  "env": {
+    "MTG_CYCLONE_REMAND_MAX_MV": "3",
+    "MTG_CYCLONE_REMAND_INERT": "1"
+  },
+  "turn": 5,
+  "on_the_play": true,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "active_life": 20,
+  "opponent_life": 15,
+  "battlefield": [
+    {
+      "name": "Unpredictable Cyclone",
+      "controller": 0
+    },
+    {
+      "name": "Watery Grave",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Island",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Island",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Island",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Island",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Toxic Deluge",
+    "Remand"
+  ],
+  "library_top": [
+    "Street Wraith",
+    "Island",
+    "Emrakul, the Aeons Torn"
+  ],
+  "library_filler": "Island",
+  "library_size": 30,
+  "depth": 2,
+  "budget_ms": 100,
+  "max_turns": 7,
+  "expect_win_turn": 5
+}

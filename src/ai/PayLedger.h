@@ -71,8 +71,8 @@ inline bool Produces(const GameState& s, int active, const CardDefinition& d, co
 inline void Record(const GameState& s, int active, const Permanent& tapped,
                    const CardDefinition& def, Color col, bool generic)
 {
-    if (s.turn_number != t_turn || active != t_player)
-    { t_entries.clear(); t_turn = s.turn_number; t_player = active; }
+    if (s.TurnSeq() != t_turn || active != t_player)
+    { t_entries.clear(); t_turn = s.TurnSeq(); t_player = active; }
     Entry e; e.source_num = tapped.card.m_number; e.produced = col; e.generic = generic;
     for (const Permanent& q : s.battlefield)
     {
@@ -101,7 +101,7 @@ inline const Permanent* FindPerm(const GameState& s, int active, int num)
 // untapped now? Writes a one-line explanation to `why`.
 inline bool WouldRescue(const GameState& s, int active, const ManaCost& cost, std::string& why)
 {
-    if (s.turn_number != t_turn || active != t_player) { why = "no ledger this turn"; return false; }
+    if (s.TurnSeq() != t_turn || active != t_player) { why = "no ledger this turn"; return false; }
     // Untapped supply per colour (a multi-colour source counts toward each -- optimistic, so a
     // colour read as covered here may still be short; that only UNDER-counts rescues).
     int supply[5] = { 0, 0, 0, 0, 0 };

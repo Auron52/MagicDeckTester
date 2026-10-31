@@ -62,6 +62,7 @@ thread_local BounceChooser* g_play_treasurify_chooser = nullptr;
 thread_local RummageChooser* g_play_rummage_chooser = nullptr;
 thread_local LackeyChooser*  g_play_lackey_chooser = nullptr;
 thread_local FreeCastChooser* g_play_free_cast_chooser = nullptr;
+thread_local const FreeCastPaidInfo* g_play_free_cast_paid = nullptr;
 thread_local MadnessChooser* g_play_madness_chooser = nullptr;   // Vampires A1 madness
 thread_local DemonstrateChooser* g_play_demonstrate_chooser = nullptr;
 thread_local TutorChooser*   g_play_tutor_chooser  = nullptr;
@@ -78,7 +79,10 @@ thread_local int g_play_cur_main_ordinal = -1;
 thread_local StorageHoldChooser* g_play_storage_hold_chooser = nullptr;
 thread_local std::vector<std::pair<int, std::string>>* g_play_draw_sink = nullptr;
 thread_local std::vector<PlayEvent>* g_play_event_sink = nullptr;
+thread_local int g_play_extra_turns_taken = 0;
 thread_local std::vector<std::string>* g_play_dropped_cast_sink = nullptr;
+thread_local std::vector<std::string>*       g_play_dropped_reason_sink = nullptr;   // see GameLogger.h (Q37)
+thread_local const std::vector<std::string>* g_play_dropped_reason_pair = nullptr;
 thread_local bool g_human_play_suppressed = false;
 thread_local bool g_unpruned_suppressed   = false;   // see GameLogger.h (hand-back pruning switch)
 // Live only inside the COMBO OFF verify / apply -- see ComboOffFinishScope in GameLogger.h.
@@ -324,6 +328,15 @@ void GameLogger::StartGame(const std::string& run_id, int game_number,
     m_digest       = FNV_OFFSET;   // reset the running play digest for this game
 }
 
+void GameLogger::StartPhase(int turn, const std::string& phase, int extra)
+{
+    StartPhase(turn, phase);
+    if (extra <= 0) { return; }
+    FoldStr("X"); FoldInt(extra);
+    if (m_digest_only) { return; }
+    m_current.extra_turn = extra;
+}
+
 void GameLogger::StartPhase(int turn, const std::string& phase)
 {
     FoldStr("P"); FoldInt(turn); FoldStr(phase);
@@ -524,6 +537,67 @@ void GameLogger::LogDraw(int card_num, const std::string& card_name)
     m_current.actions.push_back(std::move(a));
 }
 
+void GameLogger::NotePutBack(const std::string& source, const std::vector<int>& nums,
+                             const std::vector<std::string>& names)
+{
+    if (m_digest_only || !m_in_phase) { return; }   // log only: nothing here touches the digest
+    if (!m_pb_source.empty()) { FlushPutBack({}); }  // a second put-back before a flush: keep both
+    m_pb_source = source;
+    m_pb_nums   = nums;
+    m_pb_names  = names;
+}
+
+std::vector<std::string> GameLogger::ActionLines() const
+{
+    std::vector<std::string> out;
+    for (const PhaseEntry& pe : m_phases)
+    {
+        for (const Action& a : pe.actions)
+        {
+            std::string l = "T" + std::to_string(pe.turn) + " " + pe.phase + " " + a.type + " " + a.card_name;
+            if (!a.looked_at_names.empty())
+            {
+                l += ":";
+                for (std::size_t i = 0; i < a.looked_at_names.size(); ++i) { l += (i ? ", " : " ") + a.looked_at_names[i]; }
+            }
+            out.push_back(std::move(l));
+        }
+    }
+    return out;
+}
+
+void GameLogger::FlushPutBack(const std::vector<int>& hand_before_nums)
+{
+    if (m_pb_source.empty()) { return; }
+    if (!m_digest_only && m_in_phase)
+    {
+        // The cards drawn by this resolution and put straight back: in no hand-diff DRAW line, so logged here.
+        if (!hand_before_nums.empty())
+        {
+            for (std::size_t i = 0; i < m_pb_nums.size(); ++i)
+            {
+                if (std::find(hand_before_nums.begin(), hand_before_nums.end(), m_pb_nums[i]) != hand_before_nums.end())
+                { continue; }
+                Action d;
+                d.type      = "DRAW";
+                d.card_num  = m_pb_nums[i];
+                d.card_name = i < m_pb_names.size() ? m_pb_names[i] : std::string();
+                m_current.actions.push_back(std::move(d));
+            }
+        }
+        Action a;
+        a.type            = "REVEAL";
+        a.card_name       = m_pb_source + " (put back)";
+        a.looked_at       = m_pb_nums;
+        a.looked_at_names = m_pb_names;
+        a.kept            = m_pb_nums;   // top first: the first is drawn first
+        m_current.actions.push_back(std::move(a));
+    }
+    m_pb_source.clear();
+    m_pb_nums.clear();
+    m_pb_names.clear();
+}
+
 void GameLogger::LogDiscard(int card_num, const std::string& card_name)
 {
     if (!m_in_phase) { return; }
@@ -557,6 +631,7 @@ void GameLogger::CommitPhase(int player_life, int opp_life,
                               int library_top)
 {
     if (!m_in_phase) { return; }
+    FlushPutBack({});   // a put-back no ResolveStack flushed (log only)
     // MTG_DUMP_CARDS availability, taken from the HAND SNAPSHOT rather than from draw events.
     // Draw events are not enough: a card put into hand by a spell is logged only when the engine's
     // draw-spell reconciliation recognises the source (`params.draw`/`etb_dig_count`), and Ancestral
@@ -667,6 +742,7 @@ void GameLogger::WriteToFile(const std::filesystem::path& path) const
     {
         json entry;
         entry["turn"]  = pe.turn;
+        if (pe.extra_turn > 0) { entry["extraTurn"] = pe.extra_turn; }   // only in an extra turn (byte-identical else)
         entry["phase"] = pe.phase;
 
         json actions_arr = json::array();

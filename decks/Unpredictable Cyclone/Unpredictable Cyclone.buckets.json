@@ -1,0 +1,11 @@
+{
+  "merge": [
+    {
+      "cards": [
+        "Ulamog, the Ceaseless Hunger",
+        "Ulamog, the Infinite Gyre"
+      ],
+      "why": "User-approved Cyclone mulligan bucket merge recorded in docs/design/cyclone-branches-and-next-steps.md. Only these two Ulamogs are forced together; all other groups remain automatic. Confirm the resulting bucket count by discovery before generation."
+    }
+  ]
+}

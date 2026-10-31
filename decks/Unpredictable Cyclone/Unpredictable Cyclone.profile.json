@@ -1,0 +1,92 @@
+{
+  "card_scores": {
+    "Blood Crypt": [
+      -0.15706699346405184
+    ],
+    "Brainstorm": [
+      0.021510128913443616,
+      -0.07481481481481467
+    ],
+    "Brainsurge": [
+      -0.2156858006042297,
+      -0.11631419939577015
+    ],
+    "Cascade Bluffs": [
+      0.06450063321542387
+    ],
+    "Curator of Mysteries": [
+      0.008958110653025209,
+      -0.2627118644067794
+    ],
+    "Emrakul, the Aeons Torn": [
+      -0.049406424581005304
+    ],
+    "Island": [
+      0.1782329251922059,
+      -0.22394540942928032
+    ],
+    "Long-Term Plans": [
+      -0.17333333333333378
+    ],
+    "Mountain": [
+      0.04859612974031524,
+      -0.19836049947574175
+    ],
+    "Myriad Landscape": [
+      -0.0524475524475525
+    ],
+    "Ponder": [
+      0.38918439716312037,
+      0.2648176291793316
+    ],
+    "Remand": [
+      -0.33053388761735647,
+      -0.1509856816766968
+    ],
+    "Scalding Tarn": [
+      0.25226241073235567,
+      -0.1165168341265641
+    ],
+    "Seething Song": [
+      0.42971433679398263
+    ],
+    "Steam Vents": [
+      0.017466304687311585
+    ],
+    "Street Wraith": [
+      0.31402040212095894,
+      -0.33029966703662517
+    ],
+    "Toxic Deluge": [
+      -0.27853788033489835
+    ],
+    "Ulamog, the Ceaseless Hunger": [
+      -0.22663043478260914
+    ],
+    "Ulamog, the Infinite Gyre": [
+      -0.5916078770136455
+    ],
+    "Unpredictable Cyclone": [
+      0.26327035817639377,
+      0.1475726074375734
+    ],
+    "Watery Grave": [
+      0.06686554060121175
+    ],
+    "Xander's Lounge": [
+      -0.0038807189542486853
+    ]
+  },
+  "hand_score_threshold": -1e+18,
+  "mulligan": {
+    "bottom_order": "count_first",
+    "curve_check": "two_drop",
+    "max_lands": 5,
+    "min_color_sources": {},
+    "min_lands": 1,
+    "min_playable": 0,
+    "required_pieces": [],
+    "stop_at": 4
+  },
+  "version": 1
+}
