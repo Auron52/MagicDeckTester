@@ -762,6 +762,11 @@ enum Slot : int
     DOMAIN_SELF_COLORS,       // MTG_DOMAIN_SELF_COLORS  a domain mana source (Faeburrow Elder / Bloom Tender) projected from HAND (AddSourceToPool with no permanent: a hasted cast, a same-plan rock credit) counts its OWN colours among "colours among permanents you control" -- it will be one of them when it taps (mana-oracle ENUM-GAP fivecolour: a hasted domain dork's own colours). =0 -> the board's colours only
     DOMAIN_WIDEN_PARTIAL,     // MTG_DOMAIN_WIDEN_PARTIAL  when EnumeratePlans' all-or-nothing domain widen credit is refused (the subset's wideners, PAYOFF included, are not payable from the un-widened pool), try every payable widener SUBSET: only the wideners cast before the scaling source taps need prepaying (mana-oracle ENUM-GAP fivecolour: "SubsetWidensDomainBy is all-or-nothing"). =0 -> the all-widener credit only
     DOMAIN_WIDEN_ORDER,       // MTG_DOMAIN_WIDEN_ORDER  the executor's payable-order walk (apply site) treats a coloured permanent that widens a live domain source's colours (Faeburrow Elder / Bloom Tender) as a PRODUCER: the domain sources are held back until a cast needs them, so an order that casts the widener first is found when the given order does not pay (mana-oracle APPLY-DROP-ORDER fivecolour: Deathrite before the payoff). =0 -> wideners are not producers
+    ENERGY_AURA_PIP,          // MTG_ENERGY_AURA_PIP  a coloured pip off an ENERGY-paid colour (Aether Hub) whose land Aura already pays it taps the free {C} face and keeps the {E}: when the leftover is spent on this payment's generic, or floats while the line binding the payment owes no further pip of that colour (EDF viewer seed 3432 T3: Wild Growth's {G} paid by the Hub's any-colour mode, energy 1 -> 0, the T4 go-off lost). Only EldraziDisplacerFlicker runs Aether Hub. Default ON; =0 -> the energy-paid coloured tap
+    TAPAHEAD_ENERGY_COVER,    // MTG_TAPAHEAD_ENERGY_COVER  the ETB-untap tap-ahead's coverage test (ReservedColorsStillCovered) does not count an ENERGY-paid colour (Aether Hub) as a source still covering the pending pip, so a free dual commits its banked unit to the pip and the {E} is kept (EDF seed 1100006 gi5 T2: Kitchen banked {G}, Cloud's {U} spent the only {E}, Trace of Abundance's {R/W} had nothing; ENUM-GAP). Default ON; =0 -> energy counts as cover
+    PAINLAND_TAPAHEAD_CAST_AUTO, // MTG_PAINLAND_TAPAHEAD_CAST_AUTO  the cast-site painland tap-ahead (a painland banks its painless {C} + Aura bonus ahead of an ETB untap that gives it back, under the budget and reserve guards) runs in autonomous play too (was human-only): EDF seed 1100003 gi2 T3 {Cloud of Faeries, Peregrine Drake} a mana short with Brushland never banked (ENUM-GAP). Default ON; =0 -> human-only
+    EF_SCALAR_REFUND,         // MTG_EF_SCALAR_REFUND  the sequential rescue's scalar ceiling (ef-scalar) counts the same-subset ETB untappers' refund (EtbUntapLandsCredit + the subset's largest land-Aura bonuses) as supply (EDF seed 1100006 gi5 T2 {Trace of Abundance, Cloud of Faeries x2}: ENUM-GAP). Upper bound. Default ON; =0 -> no refund term
+    ETB_BOUND_AURA,           // MTG_ETB_BOUND_AURA  the odometer bounds' ETB-untap refund (EtbUntapBoundCredit, both ManaPruneBound and the selection-exact gate) adds the N largest land-Aura bonuses in hand: a same-selection Aura on a refunded land yields again (EDF seed 1100009 gi8 T2 {Wild Growth -> Adarkar, Cloud, Displacer} cut at the odometer; ENUM-GAP). Upper bound. Default ON; =0 -> the board-only refund
     COUNT
 };
 
@@ -1468,6 +1473,11 @@ inline const char* Name(int slot)
         "MTG_DOMAIN_SELF_COLORS",
         "MTG_DOMAIN_WIDEN_PARTIAL",
         "MTG_DOMAIN_WIDEN_ORDER",
+        "MTG_ENERGY_AURA_PIP",
+        "MTG_TAPAHEAD_ENERGY_COVER",
+        "MTG_PAINLAND_TAPAHEAD_CAST_AUTO",
+        "MTG_EF_SCALAR_REFUND",
+        "MTG_ETB_BOUND_AURA",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

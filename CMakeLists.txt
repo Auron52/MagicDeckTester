@@ -456,6 +456,7 @@ add_executable(mtg-test
     test/unit/test_edf_route_board_deploy.cpp
     test/unit/test_edf_goff_verify.cpp
     test/unit/test_edf_tapahead_pending_pip.cpp
+    test/unit/test_edf_pay_rescue.cpp
     test/unit/test_edf_aura_payer_as_executed.cpp
     test/unit/test_dig_searched_choice.cpp
     test/unit/test_th_held_drop.cpp

@@ -1,0 +1,56 @@
+{
+  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "profile": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json",
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "energy_counters": 1,
+  "battlefield": [
+    {
+      "name": "Kitchen",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Aether Hub",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Wild Growth",
+      "controller": 0,
+      "tapped": false,
+      "equips": "Aether Hub"
+    }
+  ],
+  "hand": [
+    "Kitchen",
+    "Wild Growth",
+    "Cloud of Faeries",
+    "Eldrazi Displacer"
+  ],
+  "library_top": [
+    "Peregrine Drake"
+  ],
+  "library_filler": "Conservatory",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 0,
+  "max_turns": 3,
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "human_lines": [
+    "land=Kitchen;cast=Wild Growth"
+  ],
+  "human_variants": [
+    "Kitchen #1"
+  ],
+  "expect_line_order": [
+    "land Kitchen",
+    "cast Wild Growth"
+  ],
+  "_comment": "EDF viewer seed 3432 T3, the deck owner's report (USER: 'T3 play costs the energy counter when it absolutely should not. We need it T4 to go off.'). Kitchen untapped, Aether Hub carrying Wild Growth, {E} 1; the human line plays the second Kitchen and Wild Growth onto the untapped Kitchen. The host is held while the Aura pays, so the Hub pays the {G}: its free {C} plus Wild Growth's {G} does it and the {E} stays (MTG_ENERGY_AURA_PIP; docs/design/mana-completeness-oracle.md 13.7). The payer used to take the Hub's any-colour mode, energy 1 -> 0.",
+  "expect_active_energy": 1
+}

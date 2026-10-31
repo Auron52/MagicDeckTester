@@ -45367,6 +45367,39 @@ static void ProbeSeqReject(const GameState& state, const std::vector<Action>& ca
 // the refund never touches a payment: the flat pool, the per-colour gates and the sequential walk
 // all still price the Drake's own cast against the pre-cast board, and the sequential walk fires the
 // untap only AFTER that payment. Optimism in the bound, exactness in the payment.
+// MTG_ETB_BOUND_AURA (2026-10-31; DEFAULT ON, =0 -> the refund priced off the pre-plan board only). The refund above is
+// the top-N yields of the lands ON THE BOARD, and a land Aura the same selection casts makes a refunded land yield
+// more: Cloud of Faeries untaps the Adarkar Wastes that Wild Growth was just cast on, and its next tap brings the {G}
+// again. EDF seed 1100009 gi8 T2 (Adarkar Wastes, Brushland played; {Wild Growth -> Adarkar, Cloud of Faeries,
+// Eldrazi Displacer} = 6): pool 2 + Wild Growth 1 + Cloud's refund 2 = 5, cut at the odometer (mana-oracle ENUM-GAP,
+// verified by MTG_SEL_MANA_GATE=0), where Adarkar's second tap with the Aura's {G} pays the Displacer. An Aura sits
+// on one land and an untap re-taps each land at most once, so the N largest land-Aura bonuses among the HAND's
+// cards (every Aura this turn can cast, a host variant counted once per card) bound what N refunded lands can gain:
+// still an upper bound, so it can only loosen. Each untapper adds it -- a second untap re-taps the same host.
+static bool EtbBoundAuraOn()
+{
+    static const bool env_on = EnvOn("MTG_ETB_BOUND_AURA", true);
+    return heurarm::Flag(heurarm::ETB_BOUND_AURA, env_on);
+}
+static int EtbUntapAuraRefundBound(const GameState& state, int n)
+{
+    if (n <= 0 || !EtbBoundAuraOn() || !state.deck_has_land_aura) { return 0; }
+    int top[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+    int k = 0;
+    for (const Card& c : state.ActivePlayer().hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr || !d->params.is_land_aura || d->params.land_aura_extra_mana <= 0) { continue; }
+        // keep the n (<= 8) largest bonuses, descending
+        int v = d->params.land_aura_extra_mana;
+        const int cap = std::min(n, 8);
+        for (int i = 0; i < cap; ++i) { if (i >= k || v > top[i]) { std::swap(v, top[i]); } }
+        k = std::min(cap, k + 1);
+    }
+    int sum = 0;
+    for (int i = 0; i < k; ++i) { sum += top[i]; }
+    return sum;
+}
 static int EtbUntapBoundCredit(const GameState* etb_state, const Action& a)
 {
     if (etb_state == nullptr || a.def == nullptr) { return 0; }
@@ -45377,7 +45410,7 @@ static int EtbUntapBoundCredit(const GameState* etb_state, const Action& a)
     if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::ActivateVial) { return 0; }
     const int n = a.def->params.etb_untap_lands;
     if (n <= 0) { return 0; }
-    return EtbUntapLandsCredit(*etb_state, n);
+    return EtbUntapLandsCredit(*etb_state, n) + EtbUntapAuraRefundBound(*etb_state, n);
 }
 
 // A LAND AURA is same-turn mana the bound cannot see either, and its absence here is what actually
@@ -68292,8 +68325,35 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             // rejected here and never reaches the walk that would have paid it. Optimistic on
             // purpose -- the ceiling is a cheap pre-filter and the walk is the arbiter, which is the
             // same division of labour the Hinata generic term relies on.
-            if (static_cast<int>((credited ? eff : pool).Total()) + aura_bonus
-                < combined.ManaValue() - combined.generic)
+            // ...and the ETB-UNTAP REFUND is the other (MTG_EF_SCALAR_REFUND, default ON; =0 -> no refund term). An
+            // untapper's ETB gives back up to N lands, each worth at most its yield on this board plus a same-subset
+            // land Aura that could ride it (EtbUntapLandsCredit + the subset's N largest Aura bonuses) -- new total
+            // mana exactly like `aura_bonus`, so a ceiling without it rejects chains whose coloured pips the refunds
+            // pay. EDF seed 1100006 gi5 T2 (Kitchen + Adarkar Wastes, {Trace of Abundance, Cloud of Faeries x2}):
+            // four coloured pips against pool 2 + Trace 1, rejected here, where each Cloud's two untaps pay the next
+            // cast (mana-oracle ENUM-GAP). Computed only when the ceiling would reject; still an upper bound.
+            int ef_ceiling = static_cast<int>((credited ? eff : pool).Total()) + aura_bonus;
+            const int ef_pips = combined.ManaValue() - combined.generic;
+            if (ef_ceiling < ef_pips && EfScalarRefundOn())
+            {
+                std::vector<int> sub_aura;
+                for (int j : sel)
+                {
+                    const Action& c = cands[j];
+                    if (c.def && c.def->params.is_land_aura && c.def->params.land_aura_extra_mana > 0)
+                    { sub_aura.push_back(c.def->params.land_aura_extra_mana); }
+                }
+                std::sort(sub_aura.begin(), sub_aura.end(), std::greater<int>());
+                for (int j : sel)
+                {
+                    const Action& c = cands[j];
+                    const int n = (c.def && c.kind == Action::Kind::CastFromHand) ? c.def->params.etb_untap_lands : 0;
+                    if (n <= 0) { continue; }
+                    ef_ceiling += EtbUntapLandsCredit(state, n);
+                    for (int i = 0; i < n && i < static_cast<int>(sub_aura.size()); ++i) { ef_ceiling += sub_aura[i]; }
+                }
+            }
+            if (ef_ceiling < ef_pips)
             { if (s_dbg_seq) { std::fprintf(stderr, "[dbgseq] scalar reject\n"); }
               _ct.label = "ef-scalar"; return false; }
             if (SubsetPayableSequential(state, cands, sel)) { exec_feas = 1; }

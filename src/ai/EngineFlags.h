@@ -427,6 +427,23 @@ inline bool PainlessAuraPipOn()
     return heurarm::Flag(heurarm::PAINLESS_AURA_PIP, env_on);
 }
 
+// MTG_ENERGY_AURA_PIP (2026-10-31; DEFAULT ON, =0 -> the energy-paid coloured tap) -- the PainlessAuraPipColor
+// rule for an ENERGY-paid colour (Aether Hub): a coloured pip off a Hub whose land Aura already pays it taps the
+// free {C} face, and the {E} is kept. The deck owner's report, EDF viewer seed 3432 T3: Kitchen + Aether Hub
+// carrying Wild Growth, {E} 1, "land=Kitchen; cast=Wild Growth -> Kitchen": the host is held while the Aura
+// pays, the payer took the Hub's ANY-COLOUR mode for the {G} (energy 1 -> 0) and floated Wild Growth's {G},
+// where the Hub's free {C} plus the same {G} pays it and keeps the energy the T4 go-off needs. Two exact
+// cases (ManaPayment.cpp PainlessAuraPipColor): the leftover is spent on this payment's generic (the
+// painland rule's own test), or it is left floating while the line binding this payment owes no further pip
+// of that colour -- then the floating {C} pays everything the floating {G} could for the rest of the line
+// (generic, and a {C} pip the {G} cannot), and the phase ends with the float either way. Not for a line that
+// casts a breakpoint opener (its continuation re-plans on the float) nor outside a line. One reader.
+inline bool EnergyAuraPipOn()
+{
+    static const bool env_on = EnvOn("MTG_ENERGY_AURA_PIP", true);
+    return heurarm::Flag(heurarm::ENERGY_AURA_PIP, env_on);
+}
+
 // MTG_PAY_SHRINK (2026-10-27; DEFAULT ON, =0 -> the backtracker's first covering tap set) -- the per-cast
 // payer's give-back: when its backtracker fallback tapped more sources than the bill has mana points,
 // re-solve with each one held back (most flexible first) and keep it untapped if the bill still pays from
@@ -1194,6 +1211,17 @@ inline bool SeqEtbUntapEnabled()
 {
     static const bool env_on = EnvOn("MTG_EDF_SEQ_ETB", true);
     return heurarm::Flag(heurarm::EDF_SEQ_ETB, env_on);
+}
+
+// MTG_EF_SCALAR_REFUND (2026-10-31; DEFAULT ON, =0 -> the refund is not on the supply side): the sequential rescue's
+// scalar ceiling (`ef-scalar`, TurnSolver.cpp exec_feas_rescues) counts each same-subset ETB untapper's refund --
+// EtbUntapLandsCredit plus the subset's largest land-Aura bonuses -- as supply, like the land Aura's own bonus. An
+// upper bound, so it only lets more subsets reach the walk that decides them. Only EldraziDisplacerFlicker holds an
+// etb_untap_lands card.
+inline bool EfScalarRefundOn()
+{
+    static const bool env_on = EnvOn("MTG_EF_SCALAR_REFUND", true);
+    return heurarm::Flag(heurarm::EF_SCALAR_REFUND, env_on);
 }
 
 // MTG_EDF_AURA_RANGE -- part 2 of the USER-approved EldraziDisplacerFlicker cast-order package

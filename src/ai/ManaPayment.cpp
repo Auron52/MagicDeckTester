@@ -1377,24 +1377,46 @@ static bool RestrictedMayHoldForAttack(const GameState& state, int active, const
 // left out, since it could have paid a later pip of another colour), and the payment still owes at
 // least as many generic pips as the tap leaves over, so the {C} is spent where the coloured unit would
 // have been. PayWithPain (a deck whose own damage is useful) keeps the coloured tap.
+//
+// AN ENERGY-PAID COLOUR (MTG_ENERGY_AURA_PIP, EnergyAuraPipOn; default ON): Aether Hub's "{T}, Pay {E}: Add one
+// mana of any color" under the same Aura is the same swap with the {E} in place of the life point, and its
+// "{T}: Add {C}" is free. The deck owner's report (EDF viewer seed 3432 T3, Kitchen + Aether Hub carrying Wild
+// Growth, {E} 1, "land=Kitchen; cast=Wild Growth -> Kitchen"): the host is held while the Aura pays, so the Hub
+// paid Wild Growth's {G} through its any-colour mode -- energy 1 -> 0 -- and floated Wild Growth's {G}, where
+// {C} plus that {G} pays the same pip. A payment with no generic pip leaves the unit FLOATING, so the painland
+// test (spent on the generic) refuses it; for energy a second exact case is taken: the line that binds this
+// payment (g_line_unpaid_cost holds it) owes no further pip of `needed` (LineOwedAfterOwnPips). The two
+// realisations then differ in one floating unit -- `needed` against {C} -- plus the {E}: for the rest of the line
+// the {C} pays every pip the `needed` unit could (a generic; never a `needed` pip, none is owed) and a {C} pip
+// it could not, and the phase ends with the float either way. Not for a line that casts a breakpoint opener
+// (g_line_opens_unseen: its continuation re-plans on the float), and not outside a line (nothing says what
+// the float is for). Energy is game-long; a coloured unit floated past the line is gone at the phase's end.
 static Color PainlessAuraPipColor(const GameState& state, int active, const Permanent& p,
-                                  const CardDefinition& def, Color needed, const int nd_left[7])
+                                  const CardDefinition& def, Color needed, const int nd_left[7],
+                                  const ManaCost& cost_in)
 {
     const int ni = static_cast<int>(needed);
-    if (!PainlessAuraPipOn() || ni < 0 || ni > 4 || def.params.tap_self_damage <= 0 || def.params.tap_self_damage_any_mode
-        || !PainlandCModeEnabled() || !state.deck_has_land_aura)
-    { return needed; }
+    if (ni < 0 || ni > 4 || !state.deck_has_land_aura) { return needed; }
+    const bool pain = PainlessAuraPipOn() && def.params.tap_self_damage > 0 && !def.params.tap_self_damage_any_mode
+                   && PainlandCModeEnabled();
+    const bool energy = !pain && EnergyAuraPipOn() && def.params.energy_per_colored_tap > 0 && EnergyCModeEnabled()
+                     && def.params.tap_self_damage <= 0
+                     && state.players[active].energy_counters >= def.params.energy_per_colored_tap;
+    if (!pain && !energy) { return needed; }
     bool has_c = false;
     for (Color c : def.params.produces) { if (c == Color::Colorless) { has_c = true; break; } }
-    if (!has_c || LandAuraBonus(state, p) <= 0 || dmgev::PayWithPain(state, active)) { return needed; }
+    if (!has_c || LandAuraBonus(state, p) <= 0 || (pain && dmgev::PayWithPain(state, active))) { return needed; }
     ManaPool bonus;
     LandAuraAddToPoolOfLand(bonus, state, p);
     const int by_colour[5] = { bonus.white, bonus.blue, bonus.black, bonus.red, bonus.green };
     const int k = by_colour[ni];
     if (k < nd_left[ni]) { return needed; }
     const int spare = 1 + bonus.Total() - nd_left[ni];
-    if (nd_left[6] < spare) { return needed; }
-    return Color::Colorless;
+    if (nd_left[6] >= spare) { return Color::Colorless; }
+    if (!energy || g_line_opens_unseen || g_line_unpaid_cost.ManaValue() < cost_in.ManaValue()) { return needed; }
+    int later[5];
+    LineOwedAfterOwnPips(later);
+    return later[ni] == 0 ? Color::Colorless : needed;
 }
 
 static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, bool for_creature,
@@ -2716,7 +2738,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                 const Color gen_pick = BurstPendingActColour(state, *bdef, prod, floating,
                                                              LineDemandAnyPipColor(state, prod, floating, prod[0]));
                 tap_source(bp, *bdef, any ? DripLandAnyPipColor(state, active, *bdef, gen_pick)
-                                          : PainlessAuraPipColor(state, active, bp, *bdef, needed, nd_left));
+                                          : PainlessAuraPipColor(state, active, bp, *bdef, needed, nd_left, cost_in));
                 return true;
             }
             if (best_kind == 3)
