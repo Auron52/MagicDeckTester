@@ -51,6 +51,17 @@ plainly that completion will not wake the agent, where to check the job, and
 which work remains. Starting a background command is not completion of its
 dependent workflow.
 
+## CPU concurrency
+
+**Use the maximum concurrency the machine supports by default** (USER,
+2026-10-31). Respect the available CPU affinity and machine limits; do not reserve
+cores or carry forward an arbitrary smaller worker cap. On this machine that is
+32 logical CPUs. Smaller counts are for rare, explicit purposes such as debugging
+memory behavior, verifying thread invariance, or investigating a race. Record the
+reason and actual worker count for those exceptions. A question about CPU use is
+not permission to cancel an existing run; fixed worker settings change on the next
+launch unless the user requests a restart.
+
 ## Repository Conventions
 
 - **THE PLAY SERVER MUST NEVER, EVER RUN FROM A TEMPORARY FOLDER (user directive, 2026-10-05).**

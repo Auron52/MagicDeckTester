@@ -5,7 +5,7 @@
 #include "AIEngine.h"
 #include "ContPinScope.h"
 #include "DecisionProviders.h"
-#include "EscStats.h"   // escstats::t_job / t_gi: the [fd-diverge] line names its batch job + game
+#include "EscStats.h"   // escstats::t_job / t_gi: fidelity diagnostics name their batch job + game
 #include "Dominance.h"   // ModelFeatureMask (stamped onto GameState::m_model_feat_mask)
 #include "ManaPayment.h"
 #include "ManaOracle.h"   // MTG_MANA_ORACLE: the real-decision audit hook
@@ -1017,11 +1017,12 @@ void AIEngine::OnGameEnd(const GameState& state, int win_turn)
                   << " proven_at_turn=" << m_fd_best_turn
                   // SIMULATED vs PREDICTED: leaf_est == predicted_win means the "verified" win was the
                   // value leaf's guess landing inside the horizon, which fd_verified cannot tell apart
-                  // from a real simulated win. "none" => the leaf claimed no win, so the divergence is a
-                  // genuine commit-the-line replay failure.
+                  // from a real simulated win. "none" => the leaf claimed no win, so the divergence is an
+                  // ordinary-world replay failure; a blinded forecast still needs its ordinary control.
                   << " leaf_est="
                   << (m_fd_best_leafest == LLONG_MAX ? std::string("none")
                                                      : std::to_string(m_fd_best_leafest))
+                  << " blind_salt=" << gamesetup::BlindSearchSalt()
                   << (m_fd_best_leafest == static_cast<long long>(m_fd_best_win)
                           ? "  [WIN WAS A LEAF ESTIMATE, NOT SIMULATED]" : "")
                   << "\n";
@@ -1836,7 +1837,10 @@ void AIEngine::FlagNonConvergence(const GameState& state, const TurnSolver::Plan
        << " turn=" << turn
        << " verified_win_now=" << committed_win
        << " EXCEEDS earlier verified_win=" << m_nonconv_best_win
-       << " proven_at_turn=" << m_nonconv_best_turn;
+       << " proven_at_turn=" << m_nonconv_best_turn
+       << " job=" << (escstats::t_job ? escstats::t_job : "-")
+       << " gi=" << escstats::t_gi
+       << " blind_salt=" << gamesetup::BlindSearchSalt();
 
     os << " | hand=";
     bool first = true;

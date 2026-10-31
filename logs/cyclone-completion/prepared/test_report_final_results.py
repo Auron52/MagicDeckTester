@@ -423,6 +423,39 @@ class ReportTests(unittest.TestCase):
         path.write_text('[fd-diverge] unparsed\n')
         self.assertFalse(report.memory_diagnostics(path, {'env': FIDELITY_ENV}, jobs, maps)['clean'])
 
+    def test_nonconv_job_identity_distinguishes_same_seed_worlds_and_still_requires_review(self):
+        jobs = [dict(name='ordinary', seed=110193, game_index=193, games=1,
+                     deck='decks/Unpredictable Cyclone/Unpredictable Cyclone.cod'),
+                dict(name='blind', seed=110193, game_index=193, games=1, blind_salt=3,
+                     deck='decks/Unpredictable Cyclone/Unpredictable Cyclone.cod')]
+        maps = {'ordinary': {'family': 'phasec'}, 'blind': {'family': 'conditional_blind'}}
+        path = self.root/'nonconv.err'
+        for name, salt, expected in [('blind', 3, 'blind_nonconv_requires_review'),
+                                     ('ordinary', -1, 'ordinary_nonconv_requires_review')]:
+            with self.subTest(name=name):
+                path.write_text('[nonconv] seed=110193 turn=7 verified_win_now=8 '
+                                'EXCEEDS earlier verified_win=7 proven_at_turn=6 '
+                                f'job={name} gi=0 blind_salt={salt} | hand=Island | plan=(idle)\n')
+                result = report.diagnostics(path, jobs, maps, report.Repros())
+                item, = result['items']
+                self.assertEqual(item['attribution'], 'exact')
+                self.assertEqual([j['job'] for j in item['candidate_jobs']], [name])
+                self.assertEqual(item['candidate_jobs'][0]['gi'], 193)
+                self.assertEqual(item['classification'], expected)
+                self.assertEqual(len(result['attention']), 1)
+
+    def test_fd_optional_blind_salt_keeps_existing_prefix_attribution(self):
+        job = dict(name='ordinary', seed=110193, game_index=193, games=1,
+                   deck='decks/Unpredictable Cyclone/Unpredictable Cyclone.cod')
+        path = self.root/'fd.err'
+        for suffix in ('', ' blind_salt=-1'):
+            with self.subTest(suffix=suffix):
+                path.write_text('[fd-diverge] seed=110193 job=ordinary gi=0 realized_win=6 '
+                                f'predicted_win=5 proven_at_turn=4 leaf_est=none{suffix}\n')
+                result = report.diagnostics(path, [job], {'ordinary': {'family': 'phasec'}}, report.Repros())
+                self.assertEqual(result['items'][0]['attribution'], 'exact')
+                self.assertEqual(len(result['attention']), 1)
+
 
 if __name__ == '__main__':
     unittest.main()

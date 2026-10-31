@@ -190,7 +190,7 @@ def diagnostics(stderr, jobs, maps, actual):
             items.append(item)
             counts[item['classification']] += 1
             continue
-        if kind == 'fd-diverge' and fields.get('job') in by_name:
+        if fields.get('job') in by_name:
             job = by_name[fields['job']]
             try:
                 local = int(fields['gi'])
@@ -212,14 +212,16 @@ def diagnostics(stderr, jobs, maps, actual):
         definite_leaf = kind == 'fd-diverge' and fields.get('leaf_est') is not None and fields.get('leaf_est') == fields.get('predicted_win')
         true_simulated = kind == 'fd-diverge' and fields.get('leaf_est') == 'none'
         cyclone = candidates and all('Unpredictable Cyclone' in j['deck'] for j, _ in candidates)
-        if item['blind_status'] == 'blind':
+        if kind == 'nonconv':
+            classification = ('ordinary_nonconv_requires_review' if item['blind_status'] == 'ordinary'
+                              else 'blind_nonconv_requires_review' if item['blind_status'] == 'blind'
+                              else 'ambiguous_nonconv_requires_isolated_control')
+        elif item['blind_status'] == 'blind':
             classification = 'blind_forecast_requires_ordinary_world_control'
         elif definite_leaf:
             classification = 'leaf_estimate_warning'
         elif item['blind_status'] == 'ordinary' and cyclone and true_simulated:
             classification = 'BLOCKING_ordinary_cyclone_simulated_fd_divergence'
-        elif kind == 'nonconv':
-            classification = 'ordinary_nonconv_requires_review' if item['blind_status'] == 'ordinary' else 'ambiguous_nonconv_requires_isolated_control'
         else:
             classification = 'fd_diagnostic_requires_review'
         item['classification'] = classification
