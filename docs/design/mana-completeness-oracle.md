@@ -1111,3 +1111,16 @@ chasing: the credited T3 menu is a strict superset (30 -> 36 plans, base's Wild 
 the unlimited clairvoyant search picks Wild Growth + Thallid, so something between the menu and the search's
 evaluation of the new plans is not sound. The same T3 also holds one remaining Crossroads gap: {Wild Growth,
 Undercellar Myconid, Utopia Mycon}, where the hasted Myconid's own tap pays the Mycon, is still kept off by a gate.
+
+**Deferred: the land-Aura + producer order** (that remaining gap, mechanism traced 2026-10-31). Board Forest +
+Hickory Woodlot (pool 3) under Crossroads; {Wild Growth -> Forest, Undercellar Myconid, Utopia Mycon} = 5. The flat
+gate credits the hasted Myconid (rock rule, +1) but never the land Aura (its bonus is a sequencing question, priced
+only by `SubsetPayableSequential`), so it reads 4 < 5 and falls to the walk. The walk pays the CastOrderRank order
+Wild Growth, Mycon, Myconid and is one {G} short; the only payable order is Wild Growth, Myconid, Mycon (the Aura
+before its host taps, the producer before the cast it funds). None of the walk's retries produces it: the payable
+order at site 1 admits makers / reveal casts only, the untapper hoist is human-play only. A retry ordered "land
+Auras, then rock_mana producers, then the rest" would admit it -- but the executor must realise the same order,
+and its exact order walk (`ExactOrderWalkImpl`) does not model a land Aura's bonus either, so every permutation
+projects unpayable and the given (failing) order is kept: admitting the subset alone would trade this ENUM-GAP for
+an APPLY-DROP. The lockstep fix is the Aura bonus in BOTH walks (the next tap of an untapped host after the Aura
+resolves adds `land_aura_extra_mana`), then the producer domain at site 1 for the enumerator's retry.
