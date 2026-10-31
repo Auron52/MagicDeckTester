@@ -8,8 +8,8 @@ No changes target `main`. Normal throughput uses all 32 available logical CPUs.
 
 Working branch: `cyclone-landingdfcb`, existing Landing905 worktree. Its linear
 base is latest shared `dfcb18cb90ae65aeb4968787550a10b1fb9bc55e`; all new Prevent
-Damage and Slivers artifacts/GT are retained. Primary is fast-forwarded to dfcb
-with the user's unrelated `test/ref_bench.json` preserved byte for byte. No
+Damage and Slivers artifacts/GT are retained. Primary has the landed08d code and canonical binaries, with the user's unrelated
+`test/ref_bench.json` preserved byte for byte. No
 changes target main. Follow-up code/normal GT are backed up at5269dc4ab; the
 final evidence bundle and tested integration LANDED on phase-1-2 at
 `08d816495ab054db887fa16b007e0f18f171de8d`. Primary is fast-forwarded to08d with

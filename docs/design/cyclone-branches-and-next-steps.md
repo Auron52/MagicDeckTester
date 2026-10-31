@@ -1,30 +1,33 @@
 # Unpredictable Cyclone: branch map, state and next steps (2026-10-31)
 
-> Completion update (2026-10-31): all implementation branches are integrated on
-> `cyclone-landing2c76` (same Landing905 worktree), based on shared commit `2c76c854e`.
-> Code `e63afece6` has source tree `c2c6d4a03a5c1df9cf72c55bd29940aacff41efc`;
-> it landed on `phase-1-2-deck-analyzer` at `3889a0a11`; primary is up to date.
-> Follow-up source `89b146d10406063213d9abe41e1cfdf1a616c021` is now on
-> `cyclone-landingdfcb` at `4c19ce805`, based on latest shared `dfcb18cb9`.
-> New PD/Slivers artifacts and all accepted upstream GT are retained exactly.
-> All2,420 unit cases, normal tests/strict709 references, platform parity,
-> cache invariance and15 actual Claude games have completed reviewed validation.
-> Quiet855 cost FAILS admission: current13.69xHinata, PB3.52x, PB+KEEP/Myriad3.55x.
-> No policy is adopted; no suite admission or artifact generation has begun.
-> Land the tested follow-up/evidence first, then optimize the measured bottleneck.
-> Follow-up fixes repair cache billing context, fetched-shock choices and the
-> proposal contract. V5 optional work remains partial (2,439/5,986), preserved.
-> Fixed 512 MB per-thread plan/FSL quotas are removed; existing shared RAM-sized
-> budgets retain exact keys and equal hit/miss pricing. Cache budgeting remains a
-> separate project. The approved two-Ulamog bucket merge is now wired through the
-> generation policy and tested; actual post-discovery K is still unmeasured.
-> User order: finish normal tests, push everything to `phase-1-2-deck-analyzer`,
-> then assess feasibility and run mulligan generation followed by value-leaf.
-> No changes target `main`. Use all 32 logical CPUs for normal throughput.
-> See `cyclone-completion-checkpoint.md` for current runs and
-> `cyclone-pending-policy-experiments.md` for preserved optional work.
-> The branch map and original measurements below are historical.
-
+> Completion update (2026-10-31): all implementation branches and focused
+> follow-up fixes have landed on `phase-1-2-deck-analyzer`. Code integration
+> `08d816495` has source `89b146d10406063213d9abe41e1cfdf1a616c021`;
+> subsequent checkpoint commits only document results. Latest upstream PD and
+> Slivers artifacts are retained. Nothing targets `main`.
+>
+> All 2,420 unit cases / 3,568,115 assertions, normal smoke/regression reviews,
+> 709 strict references, both suboptimal references, compiler/platform parity,
+> four cache contexts and 15 actual Claude games completed reviewed validation.
+> Three billing-fix one-turn slowdowns match old uncached play and all recover
+> their prior winning turn with more search. Known upstream diagnostics remain
+> explicitly labelled; original measured exits and later audits are preserved.
+>
+> Quiet timing FAILS the existing 3x Hinata gate: current defaults 13.69x,
+> PB plans 3.52x, and PB+KEEP/Myriad 3.55x. No policy is adopted, no suite tier
+> is added, and no mulligan or value-leaf generation has begun. The measured
+> performance follow-up is `cyclone-cost-optimization-next-steps.md`.
+>
+> Fixed 512 MB per-thread plan/FSL quotas are removed. Existing shared RAM-sized
+> budgets remain; no broad cache-budget redesign is a prerequisite. Use all
+> 32 logical CPUs normally. The approved two-Ulamog bucket merge is implemented;
+> actual generation bucket count/settings remain unmeasured.
+>
+> Validation evidence is committed in `logs/cyclone-completion/verified-89b/`.
+> See `cyclone-completion-checkpoint.md` for current state and
+> `cyclone-pending-policy-experiments.md` for preserved optional work. The stopped
+> V5 follow-up remains partial at 2,439/5,986 games. The original map below is
+> historical, not the current landing checklist.
 
 Standalone hand-off for whoever resumes the Cyclone work. The per-deck ledger, with every measurement, is
 `docs/design/analysis-Unpredictable Cyclone.md`. Each agent branch carries its own section of it, so read the copy on the
