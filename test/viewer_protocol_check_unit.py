@@ -105,5 +105,17 @@ jd = [{"decision": {"type": "jitte", "turn": 6, "max_count": 2, "mid_step": True
 chk(v.side_channel_args(jd) == ["--jitte", "6:-1,7:1"], "jitte frames rebuild --jitte, -1 kept")
 chk(v.flatten_choices(jd) == [], "a jitte answer takes no --choices slot")
 
+# 6. Grim Lavamancer's graveyard-cost prompt publishes indices 1..N; 0 is decline.
+#    The replay must not turn a recorded index 1 into list position 0, which declines the
+#    activation and moves Midrange Burn seed 1 from a turn-4 win to turn 5.
+recorded = [{"index": 1, "name": "Chain Lightning"}, {"index": 2, "name": "Rift Bolt"}]
+chk(v.remap_candidate_index(1, recorded, recorded) == 1,
+    "a one-based candidate keeps index 1 when its name is still there")
+reordered = [{"index": 1, "name": "Rift Bolt"}, {"index": 2, "name": "Chain Lightning"}]
+chk(v.remap_candidate_index(1, recorded, reordered) == 2,
+    "a reordered candidate maps to its published index, not its list position")
+chk(v.remap_candidate_index(0, recorded, reordered) == 0,
+    "the reserved decline index remains 0")
+
 print("FAIL (%d)" % len(fails) if fails else "PASS")
 sys.exit(1 if fails else 0)

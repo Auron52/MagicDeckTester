@@ -690,6 +690,28 @@ def replay(deck, prof, seed, gi, choices, force=None, extra=None, max_turns=8, v
     return p.returncode, p.stdout + p.stderr
 
 
+def remap_candidate_index(choice, recorded, current):
+    """Re-anchor a candidate by name while retaining its published choice index.
+
+    Some prompts reserve 0 for decline and publish candidates at indices 1..N. Their list
+    positions are not the values --choices consumes. Keep the old index when its card is still
+    there, and use the new candidate's index when the provider reordered the list.
+    """
+    if choice < 0:
+        return choice
+    rec_by_idx = {c.get("index", i): c.get("name") for i, c in enumerate(recorded)}
+    name = rec_by_idx.get(choice)
+    if name is None:
+        return choice
+    cur_by_idx = {c.get("index", i): c.get("name") for i, c in enumerate(current)}
+    if cur_by_idx.get(choice) == name:
+        return choice
+    for i, c in enumerate(current):
+        if c.get("name") == name:
+            return c.get("index", i)
+    return choice
+
+
 REQUIRED_DECISION_KEYS = {"decision_index", "type", "turn"}
 
 
@@ -1971,17 +1993,11 @@ def walk_reference(path, collect=None, valve=None, pin_lines=False):
                 # when the name still sits there (or the frame has no names), and -1 (decline)
                 # stays a sentinel. A recorded name that is no longer offered falls back to the
                 # verbatim index, i.e. exactly the old behaviour, and the drift test decides.
-                cur_names = [c.get("name") for c in dec["candidates"]]
-                ref_by_idx = {c.get("index"): c.get("name") for c in rd["candidates"]}
                 for x in rec_list:
                     x = int(x)
-                    nm = ref_by_idx.get(x)
-                    if x < 0 or nm is None or (0 <= x < len(cur_names) and cur_names[x] == nm) \
-                            or nm not in cur_names:
-                        resolved.append(x)
-                        continue
-                    q = cur_names.index(nm)
-                    shifted.append(f"{frame_ident(dec)} {x}->{q}")
+                    q = remap_candidate_index(x, rd["candidates"], dec["candidates"])
+                    if q != x:
+                        shifted.append(f"{frame_ident(dec)} {x}->{q}")
                     resolved.append(q)
             else:
                 resolved += [int(x) for x in rec_list]
