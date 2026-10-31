@@ -1,0 +1,19 @@
+{
+ "blobs": {
+  "mulligan": "a8c2b2cb364ad53567deb2dad9b1ca5e547b7905",
+  "valueleaf": "em:e51b96bdd73c6618f1d6"
+ },
+ "deck": "slivers_vial",
+ "frozen": "8e8fa8e44e21f140b441549fe538a26fc7fc1273",
+ "heartbeat": "2026-10-31T12:25:26Z",
+ "host": "58199181d02e",
+ "run_id": "slivers_vial-artifact-queue-tool-647f24-20261031T122526",
+ "score": 0.0164,
+ "stage": "valueleaf",
+ "stages": [
+  "valueleaf"
+ ],
+ "started": "2026-10-31T12:25:26Z",
+ "state": "running",
+ "worker": "artifact-queue-tool-647f24"
+}
