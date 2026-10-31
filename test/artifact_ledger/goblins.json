@@ -62,6 +62,25 @@
     "budget": null
    },
    "detail": "mulligan: KEPT INCUMBENT -- a fresh table at no-lower settings was not better (new-vs-old 6.2e-05 t, cost 0.979x (se 0.003, 96 seeds)); incumbent restored -- a TRADE (worse but CHEAPER): reported for the USER"
+  },
+  {
+   "run_id": "goblins-artifact-queue-tool-647f24-20261031T125429",
+   "kind": "valueleaf",
+   "verdict": "kept-incumbent",
+   "ident": "em:71c8696d5192fbe47e51",
+   "frozen": "dfcb18cb90ae65aeb4968787550a10b1fb9bc55e",
+   "src_tree": "c2c6d4a03a5c1df9cf72c55bd29940aacff41efc",
+   "date": "2026-10-31",
+   "worker": "artifact-queue-tool-647f24",
+   "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_goblins/DECISIONS.txt)",
+   "decisions": [
+    "    VERDICT arm=emul_d8b60 adopt=0 delta=+0.00062 t=+1.05 cost=1.057x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.06x) with quality no better (+0.00062) -- not an improvement",
+    "    VERDICT arm=emul_d8b90 adopt=0 delta=-0.00025 t=-0.40 cost=1.243x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.24x) with quality better (-0.00025) -- a TRADE, the user's call",
+    "    VERDICT arm=emul_d8b120 adopt=0 delta=-0.00088 t=-1.31 cost=1.392x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.39x) with quality better (-0.00088) -- a TRADE, the user's call",
+    "    PICK arm=none why=no candidate is cheaper than live with quality not notably worse",
+    "",
+    "=== 2026-10-31T15:38:17  PHASE E.6: no allowance for goblins -- no ladder escalations in 1200 games (single-path or trust-dominated); fleet default R = 0"
+   ]
   }
  ]
 }
