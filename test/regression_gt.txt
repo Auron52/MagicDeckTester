@@ -1,9 +1,8 @@
-# Regression ground truth -- commit 350e6a9bc  date 2026-10-31
+# Regression ground truth -- commit d926e2ba4  date 2026-10-31
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-10-27): Overnight rebaseline 2026-10-27 on af6bfce94 (PGO, 22m20s): the USER Hinata floor (keep-table decks >= Hinata's play-row games: edf/landfall/melira/niv/pd/snow + 2hg), the USER adoptions (LandfallElementals staged b20, NivMizzetCombo emulnl b20) and upstream MTG_PAY_SHRINK default ON + mana oracle. Overlapping games: searched 185 faster / 28 slower, d0 50 / 46; classify 24 churn / 4 PERSISTS (edf s5005 gi328 draws diverge T3; elementals s5005 gi399, s7007 gi376 and niv s4004 gi151 on the adopted shapes, measured better held out).
 # accepted-with-regressions (overnight, 2026-10-28): Bruna TUTOR FIT (USER 2026-10-11) + keep table ADOPTED (see the smoke note). TUTOR FIT alone, table absent: searched 4 slower / 3 faster (all 4 PERSIST at 4x/16x and pass a Glittering Wish / Open the Armory before diverging; net +1 turn over 2,000 d5 games), d0 net faster. With the table: d5 s4004-7007 4.956->4.806 / 5.030->4.852 / 4.936->4.790 / 5.120->4.808, d3 s4004 5.104->4.696, d0 -0.26..-0.29 on all 4 seeds; backstop d3/d5 s30231 (3 games) 3.667->4.333 = 1 game, different mulligan count. Attribution 5176 mull-count + 928 bottom + 25 bottom-order; the 5 d5 'unexplained' games (same hand and bottom, play differs) are the lookahead bottoming's residue, not a table leak: each reproduces singly and matches the table-off digest with the table keeping and MTG_EXHAUSTIVE_BOTTOM=0. Units/game 3.8-5.3x lower.
 # accepted-with-regressions (regression, 2026-10-29): AccomplishedAlchemist + Giants d4 -> d5 (USER depth-5 floor 2026-10-29): 1 slower alchemist s2002 gi127 5->6 = churn (5 at 4x/16x), 1 faster; refs 689 0 drift.
-# accepted-with-regressions (smoke, 2026-10-31): MTG_PO_LAND_AURA_HOLD + MTG_DOMAIN_OPEN_EXACT: FiveColour d0 5.491->5.456 (gi703 5->6 greedy d0, net faster); d3/d5/2HG d5 and Fungus d0 same avg, play-only. Held-out A/B FC 5000 1s/2f (gi3031 NC clairvoyance), FC2HG 2000 0s/2f, land-Aura decks 8800 0/0.
 # accepted-with-regressions (regression, 2026-10-31): MTG_PO_LAND_AURA_HOLD + MTG_DOMAIN_OPEN_EXACT: searched 1 slower (FC d3 s2002 gi39 4->5, T1 fetch/shuffle divergence; T4 on both arms at d8 b0) / 1 faster; d0 2 slower / 24 faster; FC d0 5.545->5.521, FC d3 4.747->4.760, Fungus d0 5.314->5.312, d5 s3003 4.560->4.556. Midrange_Burn reference drift is origin's (fixed c4f8f3092), not this change.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -32,7 +31,7 @@ knights_smoke_d5_s1001=4.3846/3eac45778696cd40
 whiteknights_smoke_d0_s1001=4.5830/1f86383d17efda44
 whiteknights_smoke_d3_s1001=4.1600/a89caf65bd1917e1
 whiteknights_smoke_d5_s1001=4.1323/73be1445b1781acf
-antilife_smoke_d0_s1001=4.8920/8e113fb832283efa
+antilife_smoke_d0_s1001=4.8920/995cc1d99883e68f
 antilife_smoke_d3_s1001=4.0533/3912f6af513f3c1c
 antilife_smoke_d5_s1001=4.2246/5f36ed7da40370f9
 hinata_smoke_d0_s1001=6.7830/780989093156f2ff
@@ -86,7 +85,7 @@ angels_smoke_d5_s1001=4.6154/db3aaecbcbf4a950
 hinata2hg_smoke_d5_s1001=5.8000/f15b7a78af009ccb
 antilife2hg_smoke_d5_s1001=3.9500/49c23071b58c8731
 minotaur2hg_smoke_d5_s1001=5.3300/e4cd44da8730235a
-goblins2hg_smoke_d5_s1001=4.0400/a339d6bf71f6a613
+goblins2hg_smoke_d5_s1001=4.0533/b7d263d3908321f5
 knights2hg_smoke_d5_s1001=5.0933/910e9cf21b958db0
 whiteknights2hg_smoke_d5_s1001=4.6400/49a4ea985e62b143
 fivecolour2hg_smoke_d5_s1001=5.3800/c919484f548cddb9
@@ -111,7 +110,7 @@ soldiers2hg_smoke_d5_s1001=4.9800/5b7a2068cacdb969
 colossus2hg_smoke_d5_s1001=4.1200/8a40a0fa77bdc602
 elementals2hg_smoke_d5_s1001=4.9600/f9843463fa3336d7
 pd2hg_smoke_d5_s1001=5.5200/a2d47da6e85c4c5e
-fluctuator_smoke_d0_s1001=4.9870/e90097562a6fc611
+fluctuator_smoke_d0_s1001=4.9890/be5c8e1237eb4e12
 fluctuator_smoke_d3_s1001=3.4400/6829317419f20f11
 fluctuator_smoke_d5_s1001=3.5371/35cd309bdedda5be
 giants_smoke_d0_s1001=6.0330/ac033f026198e3c8
@@ -127,7 +126,7 @@ selesnyav22hg_smoke_d5_s1001=4.7400/ca4cc10ddf8cac87
 soldiers_smoke_d0_s1001=4.4200/21bee969c8c43707
 soldiers_smoke_d3_s1001=4.2800/04013b8b10c1dcb1
 soldiers_smoke_d5_s1001=4.2457/be23baaba6574a46
-pd_smoke_d0_s1001=7.3010/24086862cc53d9d6
+pd_smoke_d0_s1001=7.2980/e2aeb5cb8a905e71
 pd_smoke_d3_s1001=5.3600/3b653f23129083e8
 pd_smoke_d5_s1001=5.5100/2e09e01ab0178d63
 bruna2hg_smoke_d5_s1001=5.2800/67815150ef1aa4f3
@@ -138,9 +137,9 @@ edf2hg_smoke_d5_s1001=3.9600/f47b64fd1d9400ed
 edf_smoke_d0_s1001=5.3070/843783cbf628b5b0
 edf_smoke_d3_s1001=4.0000/fb06be7ce155e8ed
 edf_smoke_d5_s1001=4.1300/275cf209d9556c15
-snow_smoke_d0_s1001=6.1300/589bf86103368c03
-snow_smoke_d3_s1001=5.7600/8858c7d906f05bab
-snow_smoke_d5_s1001=5.7440/2314f2e10617aa33
+snow_smoke_d0_s1001=6.1300/b7b2200cd612c515
+snow_smoke_d3_s1001=5.7600/f36d4ce93c929921
+snow_smoke_d5_s1001=5.7440/fceb7ba27dfe318d
 landfall_smoke_d0_s1001=7.4400/491b7768132c02f9
 landfall_smoke_d3_s1001=6.0400/58324bd991e0aabe
 landfall_smoke_d5_s1001=5.7300/da7a3c448b447317

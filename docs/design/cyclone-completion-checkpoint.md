@@ -4,7 +4,7 @@ User scope: finish outstanding changes in `origin/cyclone-analysis:docs/design/c
 
 Working branch/worktree: `cyclone-ready`, `.claude/worktrees/cyclone-ready`, based on phase-1-2 main `2b863538f`. The measured A7 experiment continues unchanged in `cyclone-final`. All original and intermediate branches/worktrees remain intact and pushed. Primary checkout's unrelated `test/ref_bench.json` edit remains untouched.
 
-Current stage (05:03 UTC): the Ready integration is based on main `2b863538f`; CI for its previous code commit `29b2c88cc` passed Linux, Windows and parity. A new full recorded-payment-context repair is built and tested locally, awaiting its source commit and fresh PGO. Full units: 2,368 cases / 3,566,895 assertions PASS. Ready smoke: 386 scenarios PASS; 150 PASS / 7 known FAIL / 0 NEW, fresh per-game audit underway. The A7 V3 pool was STOPPED after ordinary fidelity defect seed131117; its partial quality outcomes cannot support adoption. The repair can change play and mulligan trials, so the entire V4 quality/memory set must run fresh. The old upstream-only bridge is superseded and unrun. Remaining gates: V4 full quality, normal1/6/12/24 and pressure proofs, strict709 + affected native122 viewer validation, conditional pruning/isolation, full regression and quiet535-game bottoming-ON cost. No mulligan/value generation or proposal adoption before re-evaluation.
+Current stage (05:17 UTC): Ready is based on main `2b863538f`, with repair commit `cee782631` and clean source `c45a406437bc13a2db2324fd5d285cd46ec496ba`. Fresh PGO+LTO is complete (SHA `d8045e46f8a2c008bb8805c0dbd2d75fb289ef7f55efae94090edc5fb0691c6b`). Full units: 2,368 cases / 3,566,895 assertions PASS. All386 smoke scenarios passed; the150PASS/7knownFAIL/0NEW smoke was fully audited and accepted through the harness, GT894/894consistent. Four final-PGO fidelity/recovery controls pass exact traces/wins/units. The sealed V4 inputs passed independent audit. Normal6 memory is RUNNING (session25954, engine1726473); viewer strict709 is RUNNING (owner viewer reviewer/session15678), native122 follows. CI41171077254 is still running. A7 V3 was STOPPED after ordinary FD131117; its partial quality outcomes cannot support adoption. Full V4 quality/memory is fresh; the old upstream-only bridge is superseded and unrun. Remaining gates: V4 full quality, normal1/6/12/24 and pressure proofs, viewer completion, conditional pruning/isolation, full regression and quiet535-game bottoming-ON cost. No mulligan/value generation or proposal adoption before re-evaluation.
 
 The dated milestones below are historical records; later entries supersede earlier progress and pending-work statements.
 
@@ -451,3 +451,32 @@ Preserve old V3 evidence/source guards; no quality carry across this repair.
   so122fresh/585conditional native carry remains justified; no autonomous quality,
   cost or memory result carries. Strict709 is fully fresh. Root must await all viewer
   engines finishing before the24worker primary pool.
+
+## Fresh V4 freeze and smoke acceptance (05:17 UTC)
+
+PGO22303 completed suite training197jobs/5513games and final LTO successfully.
+Four-job PGO preflight69620 completed05:13:44UTC with zeroFD/nonconv: all three
+repaired cases match Release wins/digests/units/fullJSON exactly; Gob1064/GI63
+recovers63/T4/13a9211a976e729a/467units and the exact old full trace. Independent
+review `v4-preflight/pgo-final/VERDICT.md` closes the final-source recovery debt.
+
+`bash test/regression.sh --smoke --accept` promoted the reviewed existing run,
+without rerunning it. Seven mismatching files/81games are the known A7 set with
+current-source controls; other changes match accepted upstream GT. All894 GT
+entries are consistent. The known upstream Niv1082 ordinary FD remains documented;
+it is not a new Cyclone effect. Four inherited play-row budget warnings also remain
+outside this change (Critter40vs20; Soldiers30vs20, standard and2HG).
+
+V4 sealed manifest SHA `dd91b56c6f59c84a1c83a8dcbdf2c7736eef0c7ca63432ec7042b76ad4cd9177`,
+1490jobs/13142games/24workers. Independent audit confirms exact semantic identity
+against V3's planned inputs (not outcomes), moved assets equal by bytes, only6raw
+known-FD scheduling priorities changed, QC1 exact97original hands, correct live
+controls/environment and all five independent memory processes. Evidence:
+`v4-protocol-audit/sealed-v4-audit.json`. All V4 runtime inputs under `v4/` are fresh.
+
+Normal6 launched05:15:33UTC via the prepared launcher: root session25954,
+owner1726424/engine1726473; status/logs `v4/final-pgo-inputs/runs/memory_t6_normal/`.
+It contains468games (core168+shapes300), with FD/NONCONV/units enabled and the
+restored shared RAM budgets. Normal1 and interim exact comparison follow; no
+primary quality has launched. Viewer4 may overlap; primary24 waits until its
+engines finish. Final cost535 remains separate/quiet, with bottoming always ON.
