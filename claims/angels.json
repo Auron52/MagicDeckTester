@@ -4,9 +4,12 @@
   "valueleaf": "em:2038500e481e3f714a03"
  },
  "deck": "angels",
+ "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_angels/DECISIONS.txt)",
+ "finished": "2026-10-31T16:24:51Z",
  "frozen": "c18b5e99fe330f78207c39c7027ae5489928fc76",
  "heartbeat": "2026-10-31T16:18:47Z",
  "host": "58199181d02e",
+ "result_branch": "artifact-refresh/angels-20261031-1624",
  "run_id": "angels-artifact-queue-tool-647f24-20261031T161828",
  "score": 0.0055,
  "stage": "valueleaf",
@@ -14,6 +17,6 @@
   "valueleaf"
  ],
  "started": "2026-10-31T16:18:28Z",
- "state": "running",
+ "state": "done",
  "worker": "artifact-queue-tool-647f24"
 }
