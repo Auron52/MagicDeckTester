@@ -5033,7 +5033,7 @@ static int PoWidenMask(const Action& a, int dom_mask)
 // that colour, several -> wild); `sign` -1 takes them back out (clamped).
 static void PoDomainYield(ManaPool& pool, int dom_mask, int live, int sign)
 {
-    const int n = __builtin_popcount(static_cast<unsigned>(dom_mask));
+    const int n = std::popcount(static_cast<unsigned>(dom_mask));
     if (live <= 0 || n <= 0) { return; }
     if (n == 1)
     {
@@ -5213,7 +5213,7 @@ static void PayableCastOrderCore(const GameState& state, const std::vector<Actio
             }
             else { AddManaCost(total, a.cost); }
         }
-        if (widen_only) { bound.wild += w_live * __builtin_popcount(static_cast<unsigned>(w_union)); }
+        if (widen_only) { bound.wild += w_live * std::popcount(static_cast<unsigned>(w_union)); }
         if (!bound.CanPay(total))
         { g_po_stats.bound_fail[site].fetch_add(1, std::memory_order_relaxed); return; }
     }
