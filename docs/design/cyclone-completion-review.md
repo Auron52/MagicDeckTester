@@ -1,9 +1,31 @@
 # Cyclone completion review
 
-Status: implementation and normal test review complete; final analysis/cost checks in progress, 2026-10-31.
-No mulligan or value-leaf generation has started.
+Status: integrated code is landed; focused follow-up validation is in progress,
+2026-10-31. No mulligan or value-leaf generation has started.
 
-The linear candidate is `cyclone-landing2c76` in the Landing905 worktree, based on
+The shared branch and primary are at `3889a0a11`. Follow-up `496b78235`, source
+`89b146d10406063213d9abe41e1cfdf1a616c021`, is pushed on the backup branch
+`cyclone-landing2c76` with checkpoint `d727b40cc`. It repairs the demonstrated
+plan-cache billing context, fetched-shock interactive choice, and optimistic
+proposal contract. All2,420 unit cases /3,568,115 assertions pass. The failing
+Hinata seed now matches normal/tiny/disabled plan caches in full traces and all
+work counters; actual fetch-choice and proposal frames pass. Fresh smoke has
+three searched tied play changes and no score changes; their full trace review
+is pending. Fresh PGO is training at32 workers. Fresh normal regression, strict
+references, cache/VERIFY, actual Claude sweep and quiet cost remain. EarlierC2
+checks below remain historical and do not certify new89b outputs.
+
+The authoritative current commands and stage paths are in
+`cyclone-completion-checkpoint.md`. Generation follows final reviewed tests,
+actual same-run3x Hinata admission, all3suite tiers and a full shared-branch push.
+No fixed per-thread cache quota or optional policy default changed. Nothing
+targets main.
+
+## Accepted C2 integration — historical validation
+
+The linear integration landed at `3889a0a11` on `phase-1-2-deck-analyzer`;
+primary is up to date with matching canonical binaries. The working branch is
+`cyclone-landing2c76` in the Landing905 worktree, based on
 shared `phase-1-2-deck-analyzer` commit `2c76c854e`. Source is
 `c2c6d4a03a5c1df9cf72c55bd29940aacff41efc`; final PGO+LTO SHA256 is
 `962bc5a514a3128b6a141bfdc1d2f3b21353ea8fd11572cb4d2fd6055249788d`.

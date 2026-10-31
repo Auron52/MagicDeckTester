@@ -412,6 +412,7 @@ add_executable(mtg-test
     test/unit/test_lfe_enum_fixes.cpp
     test/unit/test_courser.cpp
     test/unit/test_land_search.cpp
+    test/unit/test_fetched_land_entry.cpp
     test/unit/test_land_search_gaps.cpp
     test/unit/test_tutor_fail_to_find.cpp
     test/unit/test_colossus_cast_order.cpp

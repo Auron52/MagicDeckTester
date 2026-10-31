@@ -1089,3 +1089,30 @@ TEST_CASE("payment: the painless {C} is not taken where it would strand a pip or
     // {G} alone: no generic pip spends the {C}, so it would float {C} where the coloured tap floats {G}.
     CHECK(PainAuraLife(PainAuraBoard({}), Cost(0, 0, 0, 0, 0, /*g=*/1), -1) == 19);
 }
+
+// The plan cache may be hot from a derivation outside CanonWaveBillScope, where odometer
+// visits are free. Inside that scope they consume actual SearchBudget units: a hot lookup
+// must do the same work as a cold computation, not only produce a different key bit.
+extern std::vector<long long> CanonBillPlanCacheForTest(const GameState& state);
+TEST_CASE("plan cache: a free warm entry cannot skip canon-wave enumeration billing")
+{
+    EnsureCards();
+    GameState state = MakeBoard({"Island", "Island"});
+    state.battlefield[0].card.m_number = 1;
+    state.battlefield[1].card.m_number = 2;
+    const CardDefinition* d = CardDatabase::Instance().Lookup("Ornithopter of Paradise");
+    REQUIRE(d != nullptr);
+    Card card = d->card;
+    card.m_number = 77;
+    state.players[0].hand.push_back(card);
+    const auto r = CanonBillPlanCacheForTest(state);
+    REQUIRE(r.size() == 8);
+    CHECK(r[0] == 0);       // the real derivation was free before billing was armed
+    CHECK(r[1] == 1);       // the production store really warmed the plan cache
+    CHECK(r[2] == 0);       // legacy-key negative control demonstrably skips all billing
+    CHECK(r[4] > 0);        // the real cold derivation reaches charged odometer visits
+    CHECK(r[3] == r[4]);    // hot-after-free equals cold computation, in exact units
+    CHECK(r[5] > 0);
+    CHECK(r[5] == r[6]);
+    CHECK(r[7] == 1);       // same actual plans, not a branch removal or order substitution
+}

@@ -41516,9 +41516,27 @@ inline void EnterLand(GameState& state, const CardDefinition& def, int card_numb
                       bool resolve_full_etb = false, bool fire_landfall = true,
                       LandEntryTap entry_tap = LandEntryTap::Natural)
 {
-    bool tapped = (entry_tap == LandEntryTap::ForcedTapped || entry_tap == LandEntryTap::PreDecidedTapped)
-                ? true
-                : entry_tap == LandEntryTap::PreDecidedUntapped ? false : LandEntersTapped(state, def);
+    bool tapped;
+    if (entry_tap != LandEntryTap::Natural)
+    {
+        // The putting effect (or an already-paid simultaneous-entry pass) owns this decision.
+        // A forced-tapped shock cannot buy untapped entry by paying its own optional cost.
+        tapped = entry_tap != LandEntryTap::PreDecidedUntapped;
+    }
+    else if (g_play_land_entry_chooser != nullptr && !g_tap_speculating && LandEntryHasChoice(state, def))
+    {
+        // A fetched shock still has its own "as it enters" choice (Cyclone oracle seed1900008).
+        // The hand-drop chooser is downstream of its fetch early-return, so it never sees this
+        // entry. Reuse that chooser/payment contract here. RevealLogPause nulls the hook in every
+        // search/preview scope; with no live hook the old autonomous path below is unchanged.
+        const bool heuristic_untapped = !LandWouldEnterTapped(state, def);
+        const bool untapped = (*g_play_land_entry_chooser)(
+            state, state.active_player_index, def.card.m_name.str(),
+            def.params.etb_pay_life_to_untap, def.params.etb_untap_reveal_subtypes, heuristic_untapped);
+        if (untapped) { ApplyLandUntapPayment(state, def); }
+        tapped = !untapped;
+    }
+    else { tapped = LandEntersTapped(state, def); }
     Permanent perm;
     perm.card              = def.card;
     if (card_number >= 0) { perm.card.m_number = card_number; }

@@ -86482,7 +86482,10 @@ static void FoldPhysicalCards(TranspositionTable::Key& k, const GameState& state
     mix(0x11B6);
     mix((TurnSolver::InRolloutPlayout() ? 1u : 0u) | (TurnSolver::InD0Runner() ? 2u : 0u)
         | (TurnSolver::DecisionRootOpen() ? 4u : 0u) | (TurnSolver::DecisionBudget() != nullptr ? 8u : 0u)
-        | (decisionwork::Armed() ? 16u : 0u) | (g_greedy_charge_budget != nullptr ? 32u : 0u));
+        | (decisionwork::Armed() ? 16u : 0u) | (g_greedy_charge_budget != nullptr ? 32u : 0u)
+        // A canon-wave enumeration bills every odometer visit even when MTG_ENUM_CHARGE is off.
+        // A free list derived outside that subtree must not skip this work on a cache hit inside it.
+        | (g_cw_bill_budget != nullptr ? 64u : 0u));
     // An unarmed list cannot skip armed meter-only work or a weighted greedy walk.
     Fold(k, 0x9417C0);
     Fold(k, h);
@@ -112136,6 +112139,49 @@ void TurnSolver::TraceAuraHostProof(const GameState& state, bool is_pre_combat, 
           static_cast<unsigned long long>(state.game_seed), state.turn_number, is_pre_combat ? 1 : 0,
           worse ? "worse" : (ties > 0 ? "tie" : "heur"), took.c_str(), inc.lethal ? 1 : 0, inc.dmg,
           top.c_str(), best.lethal ? 1 : 0, best.dmg, combos);
+}
+
+// Production cache/billing regression hook. The caller supplies a cheap real board; every
+// lookup below goes through BpEnumEntryFor and its actual derivation/EnumChargeScope. The
+// legacy negative control deliberately passes the FREE context's already-built key while
+// billing is active; production always builds its key in the active context.
+std::vector<long long> CanonBillPlanCacheForTest(const GameState& state)
+{
+    TurnSolver::ClearPerGameCaches();
+    struct ClearOnExit { ~ClearOnExit() { TurnSolver::ClearPerGameCaches(); } } clear;
+    SearchBudget budget(1000000);
+    DecisionBudgetScope root(true, &budget, state.turn_number);
+    TranspositionTable::Key free_key;
+    if (!BpEnumBuildKey(state, /*pre=*/true, &free_key)) { return { -1 }; }
+    const long long u0 = budget.Used();
+    (void)BpEnumEntryFor(state, /*pre=*/true, &free_key);
+    const long long warm = budget.Used() - u0;
+    const bool stored = bpcache::t_plans.find(free_key) != bpcache::t_plans.end();
+    long long legacy = 0, hot = 0, cold = 0;
+    std::vector<TurnSolver::Plan> hot_plans, cold_plans;
+    {
+        CanonWaveBillScope billing(true, &budget);
+        const long long before = budget.Used();
+        // Bypass only the context-sensitive key build: this is the pre-fix false hit.
+        (void)BpEnumEntryFor(state, /*pre=*/true, &free_key);
+        legacy = budget.Used() - before;
+    }
+    {
+        CanonWaveBillScope billing(true, &budget);
+        const long long before = budget.Used();
+        hot_plans = BpEnumEntryFor(state, /*pre=*/true, nullptr)->View().Materialised();
+        hot = budget.Used() - before;
+    }
+    TurnSolver::ClearPerGameCaches();
+    {
+        CanonWaveBillScope billing(true, &budget);
+        const long long before = budget.Used();
+        cold_plans = BpEnumEntryFor(state, /*pre=*/true, nullptr)->View().Materialised();
+        cold = budget.Used() - before;
+    }
+    return { warm, stored ? 1LL : 0LL, legacy, hot, cold,
+             static_cast<long long>(hot_plans.size()), static_cast<long long>(cold_plans.size()),
+             enummemo::SamePlans(hot_plans, cold_plans) ? 1LL : 0LL };
 }
 
 // MTG_LEAF_KILL_ONLY test hook (see TurnSolver.h).
