@@ -3878,6 +3878,7 @@ public:
     int CastOrderRank(const GameState& s, const CardDefinition& def) const override;
     bool OrderOpaqueCastsByRank() const override;
     bool OffersSpellBounceTarget(const GameState& s, const CardDefinition& def) const override;
+    std::vector<int> KickedIslandizeTargets(const GameState& s, int controller) const override;
     void CopyCreatureCandidates(const GameState& s, const CardDefinition& def,
                                 std::vector<int>& targets) const override;
     std::vector<int> CleanupDiscardCandidates(

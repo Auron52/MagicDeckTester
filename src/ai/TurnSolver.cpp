@@ -37588,18 +37588,17 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 a.kicked         = true;
                 if (kdef->params.kicked_etb_target_land_island)
                 {
-                    bool any = false;
-                    for (const Permanent& land : state.battlefield)
+                    // Human play sees every rules-legal land target. Only a deck provider
+                    // may narrow the autonomous choice (Merfolk needs one opponent Island).
+                    const std::vector<int> targets = HumanPlayActive()
+                        ? GenericProvider().KickedIslandizeTargets(state, state.active_player_index)
+                        : ResolveProvider(state).KickedIslandizeTargets(state, state.active_player_index);
+                    for (int target : targets)
                     {
-                        if (!land.card.IsLand()) { continue; }
                         Action v = a;
-                        v.enchant_target = land.card.m_number;
+                        v.enchant_target = target;
                         actions.push_back(std::move(v));
-                        any = true;
                     }
-                    // A kicked Tide Shaper is legal with no land; the ETB trigger simply
-                    // cannot be put on the stack because it has no target.
-                    if (!any) { actions.push_back(std::move(a)); }
                 }
                 else { actions.push_back(std::move(a)); }
             }
@@ -59991,6 +59990,25 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             perm.controller_index  = state.active_player_index;
             perm.owner_index       = state.active_player_index;
             perm.entered_this_turn = true;
+            // Lockstep with AIEngine's Vial put: the copy replacement applies to
+            // a put as well as to a cast, before the new permanent enters.
+            if (copt->params.enter_as_copy_of_entrant || copt->params.enter_as_copy_of_creature)
+            {
+                const int src_bi = ChooseCopyEntrantIndex(state, state.active_player_index, 0, *copt);
+                if (src_bi >= 0)
+                {
+                    perm.card          = state.battlefield[src_bi].card;
+                    perm.card.m_number = hand_it->m_number;
+                    if (copt->params.enter_as_copy_of_creature)
+                    { perm.card.m_subtypes.push_back("Illusion"); }
+                    perm.copy_printed_name = copt->card.m_name;
+                    EmitPlayEvent(state.turn_number, "copy",
+                                  "\xF0\x9F\xAA\x9E " + copt->card.m_name.str()
+                                  + " enters as a copy of " + perm.card.m_name.str());
+                }
+            }
+            const CardDefinition* entered_def = CardDatabase::Instance().LookupCached(perm.card);
+            if (entered_def && entered_def->params.enters_tapped) { perm.tapped = true; }
             state.battlefield.push_back(perm);
             ap.hand.erase(hand_it);
             state.battlefield[vi].tapped = true;  // access by index — push_back may reallocate
@@ -60014,15 +60032,15 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // Guarded by name in case the cascade moved it: the trigger still resolves, with no
             // `self` on the battlefield to exclude (not reachable by any current card). Lockstep twin:
             // AIEngine's deploy_via_vial.
-            if (copt->params.etb_dig_count > 0)
+            if (entered_def && entered_def->params.etb_dig_count > 0)
             {
                 const Permanent* self_p =
                     (entrant_slot < static_cast<int>(state.battlefield.size())
-                     && state.battlefield[entrant_slot].card.m_name == copt->card.m_name)
+                     && state.battlefield[entrant_slot].card.m_name == entered_def->card.m_name)
                         ? &state.battlefield[entrant_slot] : nullptr;
-                PerformEtbDig(state, state.active_player_index, copt->params, self_p);
+                PerformEtbDig(state, state.active_player_index, entered_def->params, self_p);
             }
-            if (copt->card.HasSupertype(Supertype::Legendary))
+            if (perm.card.HasSupertype(Supertype::Legendary))
             {
                 EnforceLegendRule(state, state.active_player_index);
             }
