@@ -112,6 +112,12 @@ At the pinned discovery settings (400 probes, depth 5, threshold 0.01, horizon 8
 
 The nearest split is Botanical Sanctum versus Waterlogged Grove at mean absolute turn distance 0.0175, above the 0.01 merge threshold. The 12-bucket maximum-size-seven space is C(18,7) = 31,824 hands before deck multiplicities and play/draw branching.
 
+### Exhaustive mulligan profile (2026-11-01)
+
+`scripts/mullgen.sh run decks/Merfolk fast` completed and validated the 12-bucket keep and bottoming profile. The setting screen selected depth 1, 1 ms (fidelity 1.0000 against the chosen floor 0.990). Paired adoption tests favored exhaustive keeps over static by 0.1985 turns (4/4 seed pairs) and blind exhaustive bottoming over lookahead by 0.0300 turns (6/6 seed pairs). The generated profile is live at `decks/Merfolk/Merfolk.keepmodel.exhaustive.profile.json`.
+
+The profile's regression run had 78 faster searched games and 15 slower; the smoke run had 40 faster searched games and five slower. The new smoke averages were d0 4.4960, d3 4.1800, d5 4.1700, down from 4.6840, 4.4400, and 4.4200 respectively. Strict viewer replay in the regression run checked 709 references with zero play drift, board divergence, or enumeration gaps. The Merfolk smoke and regression ground truth were accepted for the adopted policy. The value-leaf stage follows this frozen mulligan profile.
+
 ## Claude-play sweep
 
 One independent Claude/Sonnet game (seed 470000) completed and matched the search's turn-4 win. It found no legality or state-delta issue; its one command warning came from an obsolete explicit `--lookahead-bottoming` CLI flag, which is automatic at searched depth. The other 14 distinct-seed agents could not play: the Claude CLI returned its weekly usage limit. **UN-RUN remainder: 14/15 games.** Do not record `flags: 0 unresolved` or treat the sweep as passed. Re-run the remaining Claude oracle games when the external limit resets; `verify_deck.py` intentionally reports `claude_sweep: SKIP` until then. No Codex model was substituted for Claude.
