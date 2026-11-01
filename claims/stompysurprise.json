@@ -4,9 +4,12 @@
   "valueleaf": "em:3c8810899f8702105439"
  },
  "deck": "stompysurprise",
+ "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_stompysurprise/DECISIONS.txt)",
+ "finished": "2026-11-01T19:07:17Z",
  "frozen": "bc74eb6384ed9a3dfc3eaa00ba6efe4247962556",
  "heartbeat": "2026-11-01T18:57:04Z",
  "host": "58199181d02e",
+ "result_branch": "artifact-refresh/stompysurprise-20261101-1907",
  "run_id": "stompysurprise-artifact-queue-tool-647f24-20261101T185646",
  "score": 0.0,
  "stage": "valueleaf",
@@ -14,6 +17,6 @@
   "valueleaf"
  ],
  "started": "2026-11-01T18:56:46Z",
- "state": "running",
+ "state": "done",
  "worker": "artifact-queue-tool-647f24"
 }
