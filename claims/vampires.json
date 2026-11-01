@@ -4,9 +4,12 @@
   "valueleaf": "em:27e0e460528b3073e0fd"
  },
  "deck": "vampires",
+ "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_vampires/DECISIONS.txt)",
+ "finished": "2026-11-01T07:02:43Z",
  "frozen": "a2fa79c830b1415a984c656af88e285f9b0b093d",
  "heartbeat": "2026-11-01T07:02:12Z",
  "host": "58199181d02e",
+ "result_branch": "artifact-refresh/vampires-20261101-0702",
  "run_id": "vampires-artifact-queue-tool-647f24-20261101T064305",
  "score": 0.0001,
  "stage": "valueleaf",
@@ -14,6 +17,6 @@
   "valueleaf"
  ],
  "started": "2026-11-01T06:43:05Z",
- "state": "running",
+ "state": "done",
  "worker": "artifact-queue-tool-647f24"
 }
