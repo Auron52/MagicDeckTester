@@ -4,9 +4,12 @@
   "valueleaf": "em:2550e4f625f80f336c21"
  },
  "deck": "fluctuator",
+ "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_fluctuator/DECISIONS.txt)",
+ "finished": "2026-11-01T10:06:13Z",
  "frozen": "6f67ae41973637824615cd8458ec087dd9640074",
  "heartbeat": "2026-11-01T09:49:59Z",
  "host": "58199181d02e",
+ "result_branch": "artifact-refresh/fluctuator-20261101-1006",
  "run_id": "fluctuator-artifact-queue-tool-647f24-20261101T094941",
  "score": 0.0,
  "stage": "valueleaf",
@@ -14,6 +17,6 @@
   "valueleaf"
  ],
  "started": "2026-11-01T09:49:41Z",
- "state": "running",
+ "state": "done",
  "worker": "artifact-queue-tool-647f24"
 }
