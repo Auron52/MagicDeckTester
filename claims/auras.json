@@ -4,9 +4,12 @@
   "valueleaf": "em:8f9467f9f125c2b4d1b1"
  },
  "deck": "auras",
+ "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_auras/DECISIONS.txt)",
+ "finished": "2026-11-01T08:01:20Z",
  "frozen": "1d895c50f15651e14f91c7e2fa15ee9564be53e7",
  "heartbeat": "2026-11-01T07:53:37Z",
  "host": "58199181d02e",
+ "result_branch": "artifact-refresh/auras-20261101-0801",
  "run_id": "auras-artifact-queue-tool-647f24-20261101T075318",
  "score": 0.0,
  "stage": "valueleaf",
@@ -14,6 +17,6 @@
   "valueleaf"
  ],
  "started": "2026-11-01T07:53:18Z",
- "state": "running",
+ "state": "done",
  "worker": "artifact-queue-tool-647f24"
 }
