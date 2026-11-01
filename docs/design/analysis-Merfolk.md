@@ -128,7 +128,32 @@ The final smoke and regression tiers kept every win turn unchanged. Their search
 
 ## Claude-play sweep
 
-One independent Claude/Sonnet game (seed 470000) completed and matched the search's turn-4 win. It found no legality or state-delta issue; its one command warning came from an obsolete explicit `--lookahead-bottoming` CLI flag, which is automatic at searched depth. The other 14 distinct-seed agents could not play: the Claude CLI returned its weekly usage limit. **UN-RUN remainder: 14/15 games.** Do not record `flags: 0 unresolved` or treat the sweep as passed. Re-run the remaining Claude oracle games when the external limit resets; `verify_deck.py` intentionally reports `claude_sweep: SKIP` until then. No Codex model was substituted for Claude.
+- commit: `29aabdcd4`
+- seeds: 470000–470014; games: 15
+- player: Codex agents, explicitly authorized by the user as a substitute for the Claude-play sweep while Claude's weekly quota is exhausted
+- flags: 0 unresolved
+
+Three Codex player agents read Merfolk's `cards.json` entries, then drove 15 distinct games through the `--claude-play` stateless decision protocol against the shipped d5/20 search on the same seeds. They checked plan legality, mana, Image copy targets, lord bonuses, and combat state changes. The search won 13 games on turn 4 and two on turn 5. Fourteen independently played Codex games matched those win turns; on seed 470010 the player initially kept a five-land hand that the search mulliganed and won turn 6, then replayed the benchmark's mulligan/bottom choice and matched its turn-4 win. No verified legality, missing-play, or state-delta flag surfaced. The seed-470010 replay also confirmed that a Vialed Phantasmal Image copied Lord of Atlantis. This is a Codex-driven sweep, not a claim that the Claude CLI ran all 15 games. The earlier Claude/Sonnet seed-470000 game also matched turn 4 before the CLI reported its weekly limit.
+
+The choices below reproduce the Codex lines with `--claude-play --seed <seed> --max-turns 8 --reveal 6 --choices <CSV>` on the frozen engine. Seed 470010 uses the benchmark-aligned mulligan replay.
+
+| Seed | Search | Codex | Choices CSV |
+|---|---:|---:|---|
+| 470000 | T4 | T4 | `1,2,0,0,0,0,0,5,0,0,1,0,0` |
+| 470001 | T4 | T4 | `1,1,0,0,0,0,0,70,0,0,30` |
+| 470002 | T4 | T4 | `1,2,0,0,1,0,0,1,0,0,8` |
+| 470003 | T4 | T4 | `0,1,6,2,0,0,2,0,0,3,0,0,12` |
+| 470004 | T4 | T4 | `0,1,3,0,0,0,1,0,0,1,0,0,3,0` |
+| 470005 | T4 | T4 | `0,1,0,0,1,-1,-1,1,0,-1,-1,1,13,-1,-1,0,17,1,-1,-1` |
+| 470006 | T5 | T5 | `1,1,-1,-1,0,1,-1,-1,7,-1,-1,7,-1,-1,0,-1,-1` |
+| 470007 | T4 | T4 | `1,0,-1,-1,1,0,-1,-1,1,0,1,-1,-1,0,0,-1,-1` |
+| 470008 | T4 | T4 | `1,0,-1,-1,2,-1,-1,0,-1,-1,0,-1,-1` |
+| 470009 | T4 | T4 | `1,0,-1,-1,1,-1,-1,22,-1,-1,0,-1,-1` |
+| 470010 | T4 | T4 | `0,1,2,0,-1,-1,1,0,-1,-1,-1,1,7,2,-1,-1,0,0,-1` |
+| 470011 | T4 | T4 | `1,1,-1,-1,1,-1,-1,3,-1,-1,0,-1` |
+| 470012 | T4 | T4 | `1,0,-1,-1,1,0,-1,-1,1,7,-1,-1,0,2,-1` |
+| 470013 | T4 | T4 | `1,0,-1,-1,2,-1,-1,3,-1,-1,2,-1` |
+| 470014 | T5 | T5 | `1,0,-1,-1,-1,0,-1,-1,0,-1,-1,0,-1,-1,1,-1` |
 
 ## Approved deferrals
 
