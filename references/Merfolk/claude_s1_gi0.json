@@ -1,0 +1,298 @@
+{
+  "seed": 1, "game_index": 0, "win_turn": 4, "won": true,
+  "mulligan": { "count": 0, "bottom": [] }, "karoo_float": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1,
+  "decisions": [
+    { "chosen": 1, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 15, "name": "Kumena's Speaker" }, { "num": 23, "name": "Master of the Pearl Trident" }, { "num": 10, "name": "Island" }, { "num": 57, "name": "Waterlogged Grove" }, { "num": 11, "name": "Island" }, { "num": 27, "name": "Merfolk Mistbinder" }, { "num": 35, "name": "Secluded Courtyard" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "cast_order": ["**", "land=Secluded Courtyard", "cast=Kumena's Speaker"], "decision": {
+  "decision_index": 1,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 1, "card": "Merfolk Mistbinder" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 10, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 11, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 15, "name": "Kumena's Speaker", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Master of the Pearl Trident", "cost": "{U}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Merfolk Mistbinder", "cost": "{U}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 28, "name": "Merfolk Mistbinder", "cost": "{U}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 35, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "num": 57, "name": "Waterlogged Grove", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 600000, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Waterlogged Grove; cast: Kumena's Speaker", "land": "Waterlogged Grove", "casts": ["Kumena's Speaker"], "actions": [{ "card": "Kumena's Speaker" }] },
+    { "index": 1, "summary": "land=Secluded Courtyard; cast: Kumena's Speaker", "land": "Secluded Courtyard", "casts": ["Kumena's Speaker"], "actions": [{ "card": "Kumena's Speaker" }] },
+    { "index": 2, "summary": "land=Waterlogged Grove; cast: (nothing)", "land": "Waterlogged Grove", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Island; cast: (nothing)", "land": "Island", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=Secluded Courtyard; cast: (nothing)", "land": "Secluded Courtyard", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 12,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 2,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Kumena's Speaker", "idx": 4, "num": 15, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Secluded Courtyard", "idx": 3, "num": 35, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 10, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 11, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 23, "name": "Master of the Pearl Trident", "cost": "{U}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Merfolk Mistbinder", "cost": "{U}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 28, "name": "Merfolk Mistbinder", "cost": "{U}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Waterlogged Grove", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 600000, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 3,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Kumena's Speaker", "idx": 4, "num": 15, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Secluded Courtyard", "idx": 3, "num": 35, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 10, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 11, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 23, "name": "Master of the Pearl Trident", "cost": "{U}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Merfolk Mistbinder", "cost": "{U}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 28, "name": "Merfolk Mistbinder", "cost": "{U}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Waterlogged Grove", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 600000, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 3, "cast_order": ["**", "land=Island", "cast=Merfolk Mistbinder"], "decision": {
+  "decision_index": 4,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 2, "card": "Vodalian Hexcatcher" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Kumena's Speaker", "idx": 4, "num": 15, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Secluded Courtyard", "idx": 3, "num": 35, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 10, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 11, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 23, "name": "Master of the Pearl Trident", "cost": "{U}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Merfolk Mistbinder", "cost": "{U}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 28, "name": "Merfolk Mistbinder", "cost": "{U}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Vodalian Hexcatcher", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Waterlogged Grove", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 600000, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Waterlogged Grove; cast: Master of the Pearl Trident", "land": "Waterlogged Grove", "casts": ["Master of the Pearl Trident"], "actions": [{ "card": "Master of the Pearl Trident" }] },
+    { "index": 1, "summary": "land=Waterlogged Grove; cast: Merfolk Mistbinder", "land": "Waterlogged Grove", "casts": ["Merfolk Mistbinder"], "actions": [{ "card": "Merfolk Mistbinder" }] },
+    { "index": 2, "summary": "land=Island; cast: Master of the Pearl Trident", "land": "Island", "casts": ["Master of the Pearl Trident"], "actions": [{ "card": "Master of the Pearl Trident" }] },
+    { "index": 3, "summary": "land=Island; cast: Merfolk Mistbinder", "land": "Island", "casts": ["Merfolk Mistbinder"], "actions": [{ "card": "Merfolk Mistbinder" }] },
+    { "index": 4, "summary": "land=Waterlogged Grove; cast: Vodalian Hexcatcher", "land": "Waterlogged Grove", "casts": ["Vodalian Hexcatcher"], "actions": [{ "card": "Vodalian Hexcatcher" }] },
+    { "index": 5, "summary": "land=Island; cast: Vodalian Hexcatcher", "land": "Island", "casts": ["Vodalian Hexcatcher"], "actions": [{ "card": "Vodalian Hexcatcher" }] },
+    { "index": 6, "summary": "land=Waterlogged Grove; cast: (nothing)", "land": "Waterlogged Grove", "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=Island; cast: (nothing)", "land": "Island", "casts": [], "actions": [] },
+    { "index": 8, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 24,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Island", "idx": 5, "num": 10, "tapped": true, "is_land": true }, { "name": "Kumena's Speaker", "idx": 4, "num": 15, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Merfolk Mistbinder", "idx": 6, "num": 27, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Secluded Courtyard", "idx": 3, "num": 35, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 11, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 23, "name": "Master of the Pearl Trident", "cost": "{U}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 28, "name": "Merfolk Mistbinder", "cost": "{U}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Vodalian Hexcatcher", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Waterlogged Grove", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 600000, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": false,
+  "events": [{ "turn": 2, "kind": "combat", "text": "⚔ attacked: Kumena's Speaker (3) — 3 to opponent (20→17)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Island", "idx": 5, "num": 10, "tapped": true, "is_land": true }, { "name": "Kumena's Speaker", "idx": 4, "num": 15, "tapped": true, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Merfolk Mistbinder", "idx": 6, "num": 27, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Secluded Courtyard", "idx": 3, "num": 35, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 11, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 23, "name": "Master of the Pearl Trident", "cost": "{U}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 28, "name": "Merfolk Mistbinder", "cost": "{U}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Vodalian Hexcatcher", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Waterlogged Grove", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 600000, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 2, "cast_order": ["**", "land=Island", "cast=Master of the Pearl Trident"], "decision": {
+  "decision_index": 7,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 3, "card": "Sink into Stupor" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Island", "idx": 5, "num": 10, "is_land": true, "taps": "U" }, { "name": "Kumena's Speaker", "idx": 4, "num": 15, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Merfolk Mistbinder", "idx": 6, "num": 27, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Secluded Courtyard", "idx": 3, "num": 35, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 11, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 23, "name": "Master of the Pearl Trident", "cost": "{U}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 28, "name": "Merfolk Mistbinder", "cost": "{U}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Sink into Stupor", "cost": "{1}{U}{U}", "mv": 3, "kind": "nonpermanent", "mdfc_land_back": "Soporific Springs" }, { "num": 53, "name": "Vodalian Hexcatcher", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Waterlogged Grove", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 600000, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Waterlogged Grove; cast: Master of the Pearl Trident", "land": "Waterlogged Grove", "casts": ["Master of the Pearl Trident"], "actions": [{ "card": "Master of the Pearl Trident" }] },
+    { "index": 1, "summary": "land=Waterlogged Grove; cast: Merfolk Mistbinder", "land": "Waterlogged Grove", "casts": ["Merfolk Mistbinder"], "actions": [{ "card": "Merfolk Mistbinder" }] },
+    { "index": 2, "summary": "land=Island; cast: Master of the Pearl Trident", "land": "Island", "casts": ["Master of the Pearl Trident"], "actions": [{ "card": "Master of the Pearl Trident" }] },
+    { "index": 3, "summary": "land=Island; cast: Merfolk Mistbinder", "land": "Island", "casts": ["Merfolk Mistbinder"], "actions": [{ "card": "Merfolk Mistbinder" }] },
+    { "index": 4, "summary": "land=Sink into Stupor -> Soporific Springs (back face); cast: Master of the Pearl Trident", "land": "Sink into Stupor", "casts": ["Master of the Pearl Trident"], "actions": [{ "card": "Master of the Pearl Trident" }] },
+    { "index": 5, "summary": "land=Sink into Stupor -> Soporific Springs (back face); cast: Merfolk Mistbinder", "land": "Sink into Stupor", "casts": ["Merfolk Mistbinder"], "actions": [{ "card": "Merfolk Mistbinder" }] },
+    { "index": 6, "summary": "land=none; cast: Master of the Pearl Trident", "land": null, "casts": ["Master of the Pearl Trident"], "actions": [{ "card": "Master of the Pearl Trident" }] },
+    { "index": 7, "summary": "land=none; cast: Merfolk Mistbinder", "land": null, "casts": ["Merfolk Mistbinder"], "actions": [{ "card": "Merfolk Mistbinder" }] },
+    { "index": 8, "summary": "land=Waterlogged Grove; cast: Vodalian Hexcatcher", "land": "Waterlogged Grove", "casts": ["Vodalian Hexcatcher"], "actions": [{ "card": "Vodalian Hexcatcher" }] },
+    { "index": 9, "summary": "land=Island; cast: Vodalian Hexcatcher", "land": "Island", "casts": ["Vodalian Hexcatcher"], "actions": [{ "card": "Vodalian Hexcatcher" }] },
+    { "index": 10, "summary": "land=Sink into Stupor -> Soporific Springs (back face); cast: Vodalian Hexcatcher", "land": "Sink into Stupor", "casts": ["Vodalian Hexcatcher"], "actions": [{ "card": "Vodalian Hexcatcher" }] },
+    { "index": 11, "summary": "land=none; cast: Vodalian Hexcatcher", "land": null, "casts": ["Vodalian Hexcatcher"], "actions": [{ "card": "Vodalian Hexcatcher" }] },
+    { "index": 12, "summary": "land=Waterlogged Grove; cast: (nothing)", "land": "Waterlogged Grove", "casts": [], "actions": [] },
+    { "index": 13, "summary": "land=Island; cast: (nothing)", "land": "Island", "casts": [], "actions": [] },
+    { "index": 14, "summary": "land=Sink into Stupor -> Soporific Springs (back face); cast: (nothing)", "land": "Sink into Stupor", "casts": [], "actions": [] },
+    { "index": 15, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 24,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Island", "idx": 5, "num": 10, "tapped": true, "is_land": true }, { "name": "Island", "idx": 7, "num": 11, "tapped": true, "is_land": true }, { "name": "Kumena's Speaker", "idx": 4, "num": 15, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Master of the Pearl Trident", "idx": 8, "num": 23, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Merfolk Mistbinder", "idx": 6, "num": 27, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Secluded Courtyard", "idx": 3, "num": 35, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 28, "name": "Merfolk Mistbinder", "cost": "{U}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Sink into Stupor", "cost": "{1}{U}{U}", "mv": 3, "kind": "nonpermanent", "mdfc_land_back": "Soporific Springs" }, { "num": 53, "name": "Vodalian Hexcatcher", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Waterlogged Grove", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 600000, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Kumena's Speaker (4), Merfolk Mistbinder (3) — 7 to opponent (17→10)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Island", "idx": 5, "num": 10, "tapped": true, "is_land": true }, { "name": "Island", "idx": 7, "num": 11, "tapped": true, "is_land": true }, { "name": "Kumena's Speaker", "idx": 4, "num": 15, "tapped": true, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Master of the Pearl Trident", "idx": 8, "num": 23, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Merfolk Mistbinder", "idx": 6, "num": 27, "tapped": true, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Secluded Courtyard", "idx": 3, "num": 35, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 28, "name": "Merfolk Mistbinder", "cost": "{U}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Sink into Stupor", "cost": "{1}{U}{U}", "mv": 3, "kind": "nonpermanent", "mdfc_land_back": "Soporific Springs" }, { "num": 53, "name": "Vodalian Hexcatcher", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Waterlogged Grove", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 10, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 600000, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 7, "cast_order": ["**", "cast=Merfolk Mistbinder", "land=Waterlogged Grove", "cast=Phantasmal Image"], "decision": {
+  "decision_index": 10,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 4, "card": "Phantasmal Image" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Island", "idx": 5, "num": 10, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 7, "num": 11, "is_land": true, "taps": "U" }, { "name": "Kumena's Speaker", "idx": 4, "num": 15, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Master of the Pearl Trident", "idx": 8, "num": 23, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Merfolk Mistbinder", "idx": 6, "num": 27, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Secluded Courtyard", "idx": 3, "num": 35, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 28, "name": "Merfolk Mistbinder", "cost": "{U}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 31, "name": "Phantasmal Image", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Sink into Stupor", "cost": "{1}{U}{U}", "mv": 3, "kind": "nonpermanent", "mdfc_land_back": "Soporific Springs" }, { "num": 53, "name": "Vodalian Hexcatcher", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Waterlogged Grove", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 10, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 600000, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Waterlogged Grove; cast: Merfolk Mistbinder, Vodalian Hexcatcher", "land": "Waterlogged Grove", "casts": ["Merfolk Mistbinder", "Vodalian Hexcatcher"], "cast_order_canonical": ["Merfolk Mistbinder", "Vodalian Hexcatcher"], "actions": [{ "card": "Merfolk Mistbinder" }, { "card": "Vodalian Hexcatcher" }] },
+    { "index": 1, "summary": "land=Waterlogged Grove; cast: Vodalian Hexcatcher, Merfolk Mistbinder", "land": "Waterlogged Grove", "casts": ["Vodalian Hexcatcher", "Merfolk Mistbinder"], "cast_order_canonical": ["Vodalian Hexcatcher", "Merfolk Mistbinder"], "actions": [{ "card": "Vodalian Hexcatcher" }, { "card": "Merfolk Mistbinder" }] },
+    { "index": 2, "summary": "land=Sink into Stupor -> Soporific Springs (back face); cast: Merfolk Mistbinder, Vodalian Hexcatcher", "land": "Sink into Stupor", "casts": ["Merfolk Mistbinder", "Vodalian Hexcatcher"], "cast_order_canonical": ["Merfolk Mistbinder", "Vodalian Hexcatcher"], "actions": [{ "card": "Merfolk Mistbinder" }, { "card": "Vodalian Hexcatcher" }] },
+    { "index": 3, "summary": "land=Sink into Stupor -> Soporific Springs (back face); cast: Vodalian Hexcatcher, Merfolk Mistbinder", "land": "Sink into Stupor", "casts": ["Vodalian Hexcatcher", "Merfolk Mistbinder"], "cast_order_canonical": ["Vodalian Hexcatcher", "Merfolk Mistbinder"], "actions": [{ "card": "Vodalian Hexcatcher" }, { "card": "Merfolk Mistbinder" }] },
+    { "index": 4, "summary": "land=Waterlogged Grove; cast: Merfolk Mistbinder", "land": "Waterlogged Grove", "casts": ["Merfolk Mistbinder"], "actions": [{ "card": "Merfolk Mistbinder" }] },
+    { "index": 5, "summary": "land=Waterlogged Grove; cast: Merfolk Mistbinder, Phantasmal Image → Merfolk Mistbinder #1", "land": "Waterlogged Grove", "casts": ["Merfolk Mistbinder", "Phantasmal Image"], "cast_order_canonical": ["Merfolk Mistbinder", "Phantasmal Image"], "actions": [{ "card": "Merfolk Mistbinder" }, { "card": "Phantasmal Image", "enchant_target": 27, "enchant_target_name": "Merfolk Mistbinder", "enchant_target_label": "Merfolk Mistbinder #1" }] },
+    { "index": 6, "summary": "land=Waterlogged Grove; cast: Phantasmal Image → Merfolk Mistbinder #1, Merfolk Mistbinder", "land": "Waterlogged Grove", "casts": ["Phantasmal Image", "Merfolk Mistbinder"], "cast_order_canonical": ["Phantasmal Image", "Merfolk Mistbinder"], "actions": [{ "card": "Phantasmal Image", "enchant_target": 27, "enchant_target_name": "Merfolk Mistbinder", "enchant_target_label": "Merfolk Mistbinder #1" }, { "card": "Merfolk Mistbinder" }] },
+    { "index": 7, "summary": "land=Waterlogged Grove; cast: Merfolk Mistbinder, Phantasmal Image → Master of the Pearl Trident", "land": "Waterlogged Grove", "casts": ["Merfolk Mistbinder", "Phantasmal Image"], "cast_order_canonical": ["Merfolk Mistbinder", "Phantasmal Image"], "actions": [{ "card": "Merfolk Mistbinder" }, { "card": "Phantasmal Image", "enchant_target": 23, "enchant_target_name": "Master of the Pearl Trident" }] },
+    { "index": 8, "summary": "land=Waterlogged Grove; cast: Phantasmal Image → Master of the Pearl Trident, Merfolk Mistbinder", "land": "Waterlogged Grove", "casts": ["Phantasmal Image", "Merfolk Mistbinder"], "cast_order_canonical": ["Phantasmal Image", "Merfolk Mistbinder"], "actions": [{ "card": "Phantasmal Image", "enchant_target": 23, "enchant_target_name": "Master of the Pearl Trident" }, { "card": "Merfolk Mistbinder" }] },
+    { "index": 9, "summary": "land=Waterlogged Grove; cast: Merfolk Mistbinder, Phantasmal Image → Kumena's Speaker", "land": "Waterlogged Grove", "casts": ["Merfolk Mistbinder", "Phantasmal Image"], "cast_order_canonical": ["Merfolk Mistbinder", "Phantasmal Image"], "actions": [{ "card": "Merfolk Mistbinder" }, { "card": "Phantasmal Image", "enchant_target": 15, "enchant_target_name": "Kumena's Speaker" }] },
+    { "index": 10, "summary": "land=Waterlogged Grove; cast: Phantasmal Image → Kumena's Speaker, Merfolk Mistbinder", "land": "Waterlogged Grove", "casts": ["Phantasmal Image", "Merfolk Mistbinder"], "cast_order_canonical": ["Phantasmal Image", "Merfolk Mistbinder"], "actions": [{ "card": "Phantasmal Image", "enchant_target": 15, "enchant_target_name": "Kumena's Speaker" }, { "card": "Merfolk Mistbinder" }] },
+    { "index": 11, "summary": "land=Waterlogged Grove; cast: Merfolk Mistbinder, Phantasmal Image → opponent's creature", "land": "Waterlogged Grove", "casts": ["Merfolk Mistbinder", "Phantasmal Image"], "cast_order_canonical": ["Merfolk Mistbinder", "Phantasmal Image"], "actions": [{ "card": "Merfolk Mistbinder" }, { "card": "Phantasmal Image" }] },
+    { "index": 12, "summary": "land=Waterlogged Grove; cast: Phantasmal Image → opponent's creature, Merfolk Mistbinder", "land": "Waterlogged Grove", "casts": ["Phantasmal Image", "Merfolk Mistbinder"], "cast_order_canonical": ["Phantasmal Image", "Merfolk Mistbinder"], "actions": [{ "card": "Phantasmal Image" }, { "card": "Merfolk Mistbinder" }] },
+    { "index": 13, "summary": "land=Sink into Stupor -> Soporific Springs (back face); cast: Merfolk Mistbinder", "land": "Sink into Stupor", "casts": ["Merfolk Mistbinder"], "actions": [{ "card": "Merfolk Mistbinder" }] },
+    { "index": 14, "summary": "land=Sink into Stupor -> Soporific Springs (back face); cast: Merfolk Mistbinder, Phantasmal Image → Merfolk Mistbinder #1", "land": "Sink into Stupor", "casts": ["Merfolk Mistbinder", "Phantasmal Image"], "cast_order_canonical": ["Merfolk Mistbinder", "Phantasmal Image"], "actions": [{ "card": "Merfolk Mistbinder" }, { "card": "Phantasmal Image", "enchant_target": 27, "enchant_target_name": "Merfolk Mistbinder", "enchant_target_label": "Merfolk Mistbinder #1" }] },
+    { "index": 15, "summary": "land=Sink into Stupor -> Soporific Springs (back face); cast: Phantasmal Image → Merfolk Mistbinder #1, Merfolk Mistbinder", "land": "Sink into Stupor", "casts": ["Phantasmal Image", "Merfolk Mistbinder"], "cast_order_canonical": ["Phantasmal Image", "Merfolk Mistbinder"], "actions": [{ "card": "Phantasmal Image", "enchant_target": 27, "enchant_target_name": "Merfolk Mistbinder", "enchant_target_label": "Merfolk Mistbinder #1" }, { "card": "Merfolk Mistbinder" }] },
+    { "index": 16, "summary": "land=Sink into Stupor -> Soporific Springs (back face); cast: Merfolk Mistbinder, Phantasmal Image → Master of the Pearl Trident", "land": "Sink into Stupor", "casts": ["Merfolk Mistbinder", "Phantasmal Image"], "cast_order_canonical": ["Merfolk Mistbinder", "Phantasmal Image"], "actions": [{ "card": "Merfolk Mistbinder" }, { "card": "Phantasmal Image", "enchant_target": 23, "enchant_target_name": "Master of the Pearl Trident" }] },
+    { "index": 17, "summary": "land=Sink into Stupor -> Soporific Springs (back face); cast: Phantasmal Image → Master of the Pearl Trident, Merfolk Mistbinder", "land": "Sink into Stupor", "casts": ["Phantasmal Image", "Merfolk Mistbinder"], "cast_order_canonical": ["Phantasmal Image", "Merfolk Mistbinder"], "actions": [{ "card": "Phantasmal Image", "enchant_target": 23, "enchant_target_name": "Master of the Pearl Trident" }, { "card": "Merfolk Mistbinder" }] },
+    { "index": 18, "summary": "land=Sink into Stupor -> Soporific Springs (back face); cast: Merfolk Mistbinder, Phantasmal Image → Kumena's Speaker", "land": "Sink into Stupor", "casts": ["Merfolk Mistbinder", "Phantasmal Image"], "cast_order_canonical": ["Merfolk Mistbinder", "Phantasmal Image"], "actions": [{ "card": "Merfolk Mistbinder" }, { "card": "Phantasmal Image", "enchant_target": 15, "enchant_target_name": "Kumena's Speaker" }] },
+    { "index": 19, "summary": "land=Sink into Stupor -> Soporific Springs (back face); cast: Phantasmal Image → Kumena's Speaker, Merfolk Mistbinder", "land": "Sink into Stupor", "casts": ["Phantasmal Image", "Merfolk Mistbinder"], "cast_order_canonical": ["Phantasmal Image", "Merfolk Mistbinder"], "actions": [{ "card": "Phantasmal Image", "enchant_target": 15, "enchant_target_name": "Kumena's Speaker" }, { "card": "Merfolk Mistbinder" }] },
+    { "index": 20, "summary": "land=Sink into Stupor -> Soporific Springs (back face); cast: Merfolk Mistbinder, Phantasmal Image → opponent's creature", "land": "Sink into Stupor", "casts": ["Merfolk Mistbinder", "Phantasmal Image"], "cast_order_canonical": ["Merfolk Mistbinder", "Phantasmal Image"], "actions": [{ "card": "Merfolk Mistbinder" }, { "card": "Phantasmal Image" }] },
+    { "index": 21, "summary": "land=Sink into Stupor -> Soporific Springs (back face); cast: Phantasmal Image → opponent's creature, Merfolk Mistbinder", "land": "Sink into Stupor", "casts": ["Phantasmal Image", "Merfolk Mistbinder"], "cast_order_canonical": ["Phantasmal Image", "Merfolk Mistbinder"], "actions": [{ "card": "Phantasmal Image" }, { "card": "Merfolk Mistbinder" }] },
+    { "index": 22, "summary": "land=none; cast: Merfolk Mistbinder", "land": null, "casts": ["Merfolk Mistbinder"], "actions": [{ "card": "Merfolk Mistbinder" }] },
+    { "index": 23, "summary": "land=Waterlogged Grove; cast: Vodalian Hexcatcher", "land": "Waterlogged Grove", "casts": ["Vodalian Hexcatcher"], "actions": [{ "card": "Vodalian Hexcatcher" }] },
+    { "index": 24, "summary": "land=Waterlogged Grove; cast: Phantasmal Image → Merfolk Mistbinder #1, Vodalian Hexcatcher", "land": "Waterlogged Grove", "casts": ["Phantasmal Image", "Vodalian Hexcatcher"], "cast_order_canonical": ["Phantasmal Image", "Vodalian Hexcatcher"], "actions": [{ "card": "Phantasmal Image", "enchant_target": 27, "enchant_target_name": "Merfolk Mistbinder", "enchant_target_label": "Merfolk Mistbinder #1" }, { "card": "Vodalian Hexcatcher" }] },
+    { "index": 25, "summary": "land=Waterlogged Grove; cast: Vodalian Hexcatcher, Phantasmal Image → Merfolk Mistbinder #1", "land": "Waterlogged Grove", "casts": ["Vodalian Hexcatcher", "Phantasmal Image"], "cast_order_canonical": ["Vodalian Hexcatcher", "Phantasmal Image"], "actions": [{ "card": "Vodalian Hexcatcher" }, { "card": "Phantasmal Image", "enchant_target": 27, "enchant_target_name": "Merfolk Mistbinder", "enchant_target_label": "Merfolk Mistbinder #1" }] },
+    { "index": 26, "summary": "land=Waterlogged Grove; cast: Phantasmal Image → Master of the Pearl Trident, Vodalian Hexcatcher", "land": "Waterlogged Grove", "casts": ["Phantasmal Image", "Vodalian Hexcatcher"], "cast_order_canonical": ["Phantasmal Image", "Vodalian Hexcatcher"], "actions": [{ "card": "Phantasmal Image", "enchant_target": 23, "enchant_target_name": "Master of the Pearl Trident" }, { "card": "Vodalian Hexcatcher" }] },
+    { "index": 27, "summary": "land=Waterlogged Grove; cast: Vodalian Hexcatcher, Phantasmal Image → Master of the Pearl Trident", "land": "Waterlogged Grove", "casts": ["Vodalian Hexcatcher", "Phantasmal Image"], "cast_order_canonical": ["Vodalian Hexcatcher", "Phantasmal Image"], "actions": [{ "card": "Vodalian Hexcatcher" }, { "card": "Phantasmal Image", "enchant_target": 23, "enchant_target_name": "Master of the Pearl Trident" }] },
+    { "index": 28, "summary": "land=Waterlogged Grove; cast: Phantasmal Image → Kumena's Speaker, Vodalian Hexcatcher", "land": "Waterlogged Grove", "casts": ["Phantasmal Image", "Vodalian Hexcatcher"], "cast_order_canonical": ["Phantasmal Image", "Vodalian Hexcatcher"], "actions": [{ "card": "Phantasmal Image", "enchant_target": 15, "enchant_target_name": "Kumena's Speaker" }, { "card": "Vodalian Hexcatcher" }] },
+    { "index": 29, "summary": "land=Waterlogged Grove; cast: Vodalian Hexcatcher, Phantasmal Image → Kumena's Speaker", "land": "Waterlogged Grove", "casts": ["Vodalian Hexcatcher", "Phantasmal Image"], "cast_order_canonical": ["Vodalian Hexcatcher", "Phantasmal Image"], "actions": [{ "card": "Vodalian Hexcatcher" }, { "card": "Phantasmal Image", "enchant_target": 15, "enchant_target_name": "Kumena's Speaker" }] },
+    { "index": 30, "summary": "land=Waterlogged Grove; cast: Phantasmal Image → opponent's creature, Vodalian Hexcatcher", "land": "Waterlogged Grove", "casts": ["Phantasmal Image", "Vodalian Hexcatcher"], "cast_order_canonical": ["Phantasmal Image", "Vodalian Hexcatcher"], "actions": [{ "card": "Phantasmal Image" }, { "card": "Vodalian Hexcatcher" }] },
+    { "index": 31, "summary": "land=Waterlogged Grove; cast: Vodalian Hexcatcher, Phantasmal Image → opponent's creature", "land": "Waterlogged Grove", "casts": ["Vodalian Hexcatcher", "Phantasmal Image"], "cast_order_canonical": ["Vodalian Hexcatcher", "Phantasmal Image"], "actions": [{ "card": "Vodalian Hexcatcher" }, { "card": "Phantasmal Image" }] },
+    { "index": 32, "summary": "land=Sink into Stupor -> Soporific Springs (back face); cast: Vodalian Hexcatcher", "land": "Sink into Stupor", "casts": ["Vodalian Hexcatcher"], "actions": [{ "card": "Vodalian Hexcatcher" }] },
+    { "index": 33, "summary": "land=Sink into Stupor -> Soporific Springs (back face); cast: Phantasmal Image → Merfolk Mistbinder #1, Vodalian Hexcatcher", "land": "Sink into Stupor", "casts": ["Phantasmal Image", "Vodalian Hexcatcher"], "cast_order_canonical": ["Phantasmal Image", "Vodalian Hexcatcher"], "actions": [{ "card": "Phantasmal Image", "enchant_target": 27, "enchant_target_name": "Merfolk Mistbinder", "enchant_target_label": "Merfolk Mistbinder #1" }, { "card": "Vodalian Hexcatcher" }] },
+    { "index": 34, "summary": "land=Sink into Stupor -> Soporific Springs (back face); cast: Vodalian Hexcatcher, Phantasmal Image → Merfolk Mistbinder #1", "land": "Sink into Stupor", "casts": ["Vodalian Hexcatcher", "Phantasmal Image"], "cast_order_canonical": ["Vodalian Hexcatcher", "Phantasmal Image"], "actions": [{ "card": "Vodalian Hexcatcher" }, { "card": "Phantasmal Image", "enchant_target": 27, "enchant_target_name": "Merfolk Mistbinder", "enchant_target_label": "Merfolk Mistbinder #1" }] },
+    { "index": 35, "summary": "land=Sink into Stupor -> Soporific Springs (back face); cast: Phantasmal Image → Master of the Pearl Trident, Vodalian Hexcatcher", "land": "Sink into Stupor", "casts": ["Phantasmal Image", "Vodalian Hexcatcher"], "cast_order_canonical": ["Phantasmal Image", "Vodalian Hexcatcher"], "actions": [{ "card": "Phantasmal Image", "enchant_target": 23, "enchant_target_name": "Master of the Pearl Trident" }, { "card": "Vodalian Hexcatcher" }] },
+    { "index": 36, "summary": "land=Sink into Stupor -> Soporific Springs (back face); cast: Vodalian Hexcatcher, Phantasmal Image → Master of the Pearl Trident", "land": "Sink into Stupor", "casts": ["Vodalian Hexcatcher", "Phantasmal Image"], "cast_order_canonical": ["Vodalian Hexcatcher", "Phantasmal Image"], "actions": [{ "card": "Vodalian Hexcatcher" }, { "card": "Phantasmal Image", "enchant_target": 23, "enchant_target_name": "Master of the Pearl Trident" }] },
+    { "index": 37, "summary": "land=Sink into Stupor -> Soporific Springs (back face); cast: Phantasmal Image → Kumena's Speaker, Vodalian Hexcatcher", "land": "Sink into Stupor", "casts": ["Phantasmal Image", "Vodalian Hexcatcher"], "cast_order_canonical": ["Phantasmal Image", "Vodalian Hexcatcher"], "actions": [{ "card": "Phantasmal Image", "enchant_target": 15, "enchant_target_name": "Kumena's Speaker" }, { "card": "Vodalian Hexcatcher" }] },
+    { "index": 38, "summary": "land=Sink into Stupor -> Soporific Springs (back face); cast: Vodalian Hexcatcher, Phantasmal Image → Kumena's Speaker", "land": "Sink into Stupor", "casts": ["Vodalian Hexcatcher", "Phantasmal Image"], "cast_order_canonical": ["Vodalian Hexcatcher", "Phantasmal Image"], "actions": [{ "card": "Vodalian Hexcatcher" }, { "card": "Phantasmal Image", "enchant_target": 15, "enchant_target_name": "Kumena's Speaker" }] },
+    { "index": 39, "summary": "land=Sink into Stupor -> Soporific Springs (back face); cast: Phantasmal Image → opponent's creature, Vodalian Hexcatcher", "land": "Sink into Stupor", "casts": ["Phantasmal Image", "Vodalian Hexcatcher"], "cast_order_canonical": ["Phantasmal Image", "Vodalian Hexcatcher"], "actions": [{ "card": "Phantasmal Image" }, { "card": "Vodalian Hexcatcher" }] },
+    { "index": 40, "summary": "land=Sink into Stupor -> Soporific Springs (back face); cast: Vodalian Hexcatcher, Phantasmal Image → opponent's creature", "land": "Sink into Stupor", "casts": ["Vodalian Hexcatcher", "Phantasmal Image"], "cast_order_canonical": ["Vodalian Hexcatcher", "Phantasmal Image"], "actions": [{ "card": "Vodalian Hexcatcher" }, { "card": "Phantasmal Image" }] },
+    { "index": 41, "summary": "land=none; cast: Vodalian Hexcatcher", "land": null, "casts": ["Vodalian Hexcatcher"], "actions": [{ "card": "Vodalian Hexcatcher" }] },
+    { "index": 42, "summary": "land=Waterlogged Grove; cast: Phantasmal Image → Merfolk Mistbinder #1", "land": "Waterlogged Grove", "casts": ["Phantasmal Image"], "actions": [{ "card": "Phantasmal Image", "enchant_target": 27, "enchant_target_name": "Merfolk Mistbinder", "enchant_target_label": "Merfolk Mistbinder #1" }] },
+    { "index": 43, "summary": "land=Waterlogged Grove; cast: Phantasmal Image → Master of the Pearl Trident", "land": "Waterlogged Grove", "casts": ["Phantasmal Image"], "actions": [{ "card": "Phantasmal Image", "enchant_target": 23, "enchant_target_name": "Master of the Pearl Trident" }] },
+    { "index": 44, "summary": "land=Waterlogged Grove; cast: Phantasmal Image → Kumena's Speaker", "land": "Waterlogged Grove", "casts": ["Phantasmal Image"], "actions": [{ "card": "Phantasmal Image", "enchant_target": 15, "enchant_target_name": "Kumena's Speaker" }] },
+    { "index": 45, "summary": "land=Waterlogged Grove; cast: Phantasmal Image → opponent's creature", "land": "Waterlogged Grove", "casts": ["Phantasmal Image"], "actions": [{ "card": "Phantasmal Image" }] },
+    { "index": 46, "summary": "land=Sink into Stupor -> Soporific Springs (back face); cast: Phantasmal Image → Merfolk Mistbinder #1", "land": "Sink into Stupor", "casts": ["Phantasmal Image"], "actions": [{ "card": "Phantasmal Image", "enchant_target": 27, "enchant_target_name": "Merfolk Mistbinder", "enchant_target_label": "Merfolk Mistbinder #1" }] },
+    { "index": 47, "summary": "land=Sink into Stupor -> Soporific Springs (back face); cast: Phantasmal Image → Master of the Pearl Trident", "land": "Sink into Stupor", "casts": ["Phantasmal Image"], "actions": [{ "card": "Phantasmal Image", "enchant_target": 23, "enchant_target_name": "Master of the Pearl Trident" }] },
+    { "index": 48, "summary": "land=Sink into Stupor -> Soporific Springs (back face); cast: Phantasmal Image → Kumena's Speaker", "land": "Sink into Stupor", "casts": ["Phantasmal Image"], "actions": [{ "card": "Phantasmal Image", "enchant_target": 15, "enchant_target_name": "Kumena's Speaker" }] },
+    { "index": 49, "summary": "land=Sink into Stupor -> Soporific Springs (back face); cast: Phantasmal Image → opponent's creature", "land": "Sink into Stupor", "casts": ["Phantasmal Image"], "actions": [{ "card": "Phantasmal Image" }] },
+    { "index": 50, "summary": "land=none; cast: Phantasmal Image → Merfolk Mistbinder #1", "land": null, "casts": ["Phantasmal Image"], "actions": [{ "card": "Phantasmal Image", "enchant_target": 27, "enchant_target_name": "Merfolk Mistbinder", "enchant_target_label": "Merfolk Mistbinder #1" }] },
+    { "index": 51, "summary": "land=none; cast: Phantasmal Image → Master of the Pearl Trident", "land": null, "casts": ["Phantasmal Image"], "actions": [{ "card": "Phantasmal Image", "enchant_target": 23, "enchant_target_name": "Master of the Pearl Trident" }] },
+    { "index": 52, "summary": "land=none; cast: Phantasmal Image → Kumena's Speaker", "land": null, "casts": ["Phantasmal Image"], "actions": [{ "card": "Phantasmal Image", "enchant_target": 15, "enchant_target_name": "Kumena's Speaker" }] },
+    { "index": 53, "summary": "land=none; cast: Phantasmal Image → opponent's creature", "land": null, "casts": ["Phantasmal Image"], "actions": [{ "card": "Phantasmal Image" }] },
+    { "index": 54, "summary": "land=Waterlogged Grove; cast: (nothing)", "land": "Waterlogged Grove", "casts": [], "actions": [] },
+    { "index": 55, "summary": "land=Sink into Stupor -> Soporific Springs (back face); cast: (nothing)", "land": "Sink into Stupor", "casts": [], "actions": [] },
+    { "index": 56, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 96,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 11,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "events": [{ "turn": 4, "kind": "copy", "text": "🪞 Phantasmal Image enters as a copy of Master of the Pearl Trident" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 19, "battlefield": [{ "name": "Island", "idx": 5, "num": 10, "tapped": true, "is_land": true }, { "name": "Island", "idx": 7, "num": 11, "tapped": true, "is_land": true }, { "name": "Kumena's Speaker", "idx": 4, "num": 15, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Master of the Pearl Trident", "idx": 8, "num": 23, "is_land": false, "power": 5, "toughness": 5 }, { "name": "Master of the Pearl Trident", "idx": 11, "num": 31, "printed": "Phantasmal Image", "is_land": false, "power": 5, "toughness": 5 }, { "name": "Merfolk Mistbinder", "idx": 6, "num": 27, "is_land": false, "power": 5, "toughness": 5 }, { "name": "Merfolk Mistbinder", "idx": 9, "num": 28, "is_land": false, "power": 5, "toughness": 5 }, { "name": "Secluded Courtyard", "idx": 3, "num": 35, "tapped": true, "is_land": true }, { "name": "Waterlogged Grove", "idx": 10, "num": 57, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 43, "name": "Sink into Stupor", "cost": "{1}{U}{U}", "mv": 3, "kind": "nonpermanent", "mdfc_land_back": "Soporific Springs" }, { "num": 53, "name": "Vodalian Hexcatcher", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 10, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 600000, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 4, "kind": "combat", "text": "⚔ attacked: Kumena's Speaker (6), Merfolk Mistbinder (5), Master of the Pearl Trident (5) — 16 to opponent (10→-6)" }
+  ]
+}
