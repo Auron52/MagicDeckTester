@@ -1,25 +1,19 @@
 {
  "blobs": {
-  "mulligan": "361043d4872fdfbbe6e0819561cc8a6d50b58186",
+  "mulligan": "0a470f57c0d4f0a5bd8cb29d1fc7f67bf8867897",
   "valueleaf": "em:cd4ea61210c92d881361"
  },
  "deck": "critterlifegain",
- "detail": "mulligan: ADOPTED (new-vs-old -0.00224 t, cost 0.985x (se 0.005, 96 seeds), recipe complete); valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_critterlifegain/DECISIONS.txt)",
- "finished": "2026-10-29T21:36:40Z",
- "frozen": "eb63129d7da558acec5d222c6bbfbfc2bf3d1e31",
- "heartbeat": "2026-10-29T21:31:23Z",
+ "frozen": "bf266736e38eef68d31d3bbc84cf8d03c0b02db0",
+ "heartbeat": "2026-11-01T09:31:47Z",
  "host": "58199181d02e",
- "landed": "19e4afba9f50d0654214d893649ac0f451052a8f",
- "landed_at": "2026-10-29T21:45:45Z",
- "result_branch": "artifact-refresh/critterlifegain-20261029-2136",
- "run_id": "critterlifegain-artifact-queue-tool-647f24-20261029T210950",
- "score": 0.0811,
+ "run_id": "critterlifegain-artifact-queue-tool-647f24-20261101T093147",
+ "score": 0.0,
  "stage": "valueleaf",
  "stages": [
-  "mulligan",
   "valueleaf"
  ],
- "started": "2026-10-29T21:09:50Z",
- "state": "done",
+ "started": "2026-11-01T09:31:47Z",
+ "state": "running",
  "worker": "artifact-queue-tool-647f24"
 }
