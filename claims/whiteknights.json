@@ -1,0 +1,19 @@
+{
+ "blobs": {
+  "mulligan": "fe06108a6bda5f6c6167574bf69918a3e2b834c2",
+  "valueleaf": "em:c9569041949a2873c26e"
+ },
+ "deck": "whiteknights",
+ "frozen": "8e81153ad29e0d3b2f89d2337f52eda4625427df",
+ "heartbeat": "2026-11-01T06:15:02Z",
+ "host": "58199181d02e",
+ "run_id": "whiteknights-artifact-queue-tool-647f24-20261101T061502",
+ "score": 0.001,
+ "stage": "valueleaf",
+ "stages": [
+  "valueleaf"
+ ],
+ "started": "2026-11-01T06:15:02Z",
+ "state": "running",
+ "worker": "artifact-queue-tool-647f24"
+}
