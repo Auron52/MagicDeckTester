@@ -9,6 +9,8 @@
  "frozen": "1d895c50f15651e14f91c7e2fa15ee9564be53e7",
  "heartbeat": "2026-11-01T07:53:37Z",
  "host": "58199181d02e",
+ "landed": "3096f13be5e2570ea34beffc2d5880234bda1a7d",
+ "landed_at": "2026-11-01T08:01:52Z",
  "result_branch": "artifact-refresh/auras-20261101-0801",
  "run_id": "auras-artifact-queue-tool-647f24-20261101T075318",
  "score": 0.0,
