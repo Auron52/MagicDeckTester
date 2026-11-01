@@ -1,0 +1,25 @@
+{
+ "deck": "landfall",
+ "_doc": "artifact refresh verdicts -- scripts/artifact_queue.py (LEDGER_DIR)",
+ "entries": [
+  {
+   "run_id": "landfall-artifact-queue-tool-647f24-20261031T214713",
+   "kind": "valueleaf",
+   "verdict": "kept-incumbent",
+   "ident": "em:91db3b1009aa782c745e",
+   "frozen": "ac0213a434388532aabce8ae0f01515b98743b4e",
+   "src_tree": "89b146d10406063213d9abe41e1cfdf1a616c021",
+   "date": "2026-11-01",
+   "worker": "artifact-queue-tool-647f24",
+   "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_landfall/DECISIONS.txt)",
+   "decisions": [
+    "    VERDICT arm=d6b20 adopt=0 delta=-0.00237 t=-3.49 cost=1.015x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.02x) with quality better (-0.00237) -- a TRADE, the user's call",
+    "    VERDICT arm=d6b30 adopt=0 delta=-0.01625 t=-8.70 cost=1.219x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.22x) with quality better (-0.01625) -- a TRADE, the user's call",
+    "    VERDICT arm=d6b40 adopt=0 delta=-0.02562 t=-13.30 cost=1.397x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.40x) with quality better (-0.02562) -- a TRADE, the user's call",
+    "    PICK arm=none why=no candidate is cheaper than live with quality not notably worse",
+    "",
+    "=== 2026-11-01T02:45:07  PHASE E.6: no allowance for landfall -- no ladder escalations in 1200 games (single-path or trust-dominated); fleet default R = 0"
+   ]
+  }
+ ]
+}
