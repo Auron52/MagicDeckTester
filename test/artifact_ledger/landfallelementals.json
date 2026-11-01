@@ -1,0 +1,25 @@
+{
+ "deck": "landfallelementals",
+ "_doc": "artifact refresh verdicts -- scripts/artifact_queue.py (LEDGER_DIR)",
+ "entries": [
+  {
+   "run_id": "landfallelementals-artifact-queue-tool-647f24-20261101T101738",
+   "kind": "valueleaf",
+   "verdict": "kept-incumbent",
+   "ident": "em:999144bc225dbb0e942a",
+   "frozen": "dfe3ad8cb533bb5f6ad0529e1b632f7ac52698cc",
+   "src_tree": "83b1f17308cff28f24934c82e9c113000a08992f",
+   "date": "2026-11-01",
+   "worker": "artifact-queue-tool-647f24",
+   "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_landfallelementals/DECISIONS.txt)",
+   "decisions": [
+    "    VERDICT arm=d6b40 adopt=0 delta=-0.02025 t=-8.18 cost=1.243x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.24x) with quality better (-0.02025) -- a TRADE, the user's call",
+    "    PICK arm=d6b20 why=the cheapest of 1 passing arm(s) (1.00x vs live, delta -0.00063)",
+    "    next: commit it with the deck's smoke + regression GT re-accepted (it changes play).",
+    "",
+    "=== 2026-11-01T11:21:13  PHASE E.6: no allowance for landfallelementals -- headroom 2.9% < 4%; fleet default R = 0",
+    "    probe 1200 g (seed 7100000): 676 ladder escalations, headroom 2.9% of all work, fitted vector [112.3, 65.8, 28.8, 0.0, 0.0] (n/depth 676/116/27/5/0) projects -2.3%"
+   ]
+  }
+ ]
+}
