@@ -4,9 +4,12 @@
   "valueleaf": "em:e9ea4e2f6fb6212c7fbf"
  },
  "deck": "creature_giving",
+ "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_creature_giving/DECISIONS.txt)",
+ "finished": "2026-11-01T09:19:45Z",
  "frozen": "3096f13be5e2570ea34beffc2d5880234bda1a7d",
  "heartbeat": "2026-11-01T09:00:39Z",
  "host": "58199181d02e",
+ "result_branch": "artifact-refresh/creature_giving-20261101-0919",
  "run_id": "creature_giving-artifact-queue-tool-647f24-20261101T080323",
  "score": 0.0,
  "stage": "valueleaf",
@@ -14,6 +17,6 @@
   "valueleaf"
  ],
  "started": "2026-11-01T08:03:23Z",
- "state": "running",
+ "state": "done",
  "worker": "artifact-queue-tool-647f24"
 }
