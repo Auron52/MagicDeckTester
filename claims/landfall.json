@@ -4,9 +4,12 @@
   "valueleaf": "em:91db3b1009aa782c745e"
  },
  "deck": "landfall",
+ "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_landfall/DECISIONS.txt)",
+ "finished": "2026-11-01T02:45:15Z",
  "frozen": "ac0213a434388532aabce8ae0f01515b98743b4e",
  "heartbeat": "2026-11-01T02:27:08Z",
  "host": "58199181d02e",
+ "result_branch": "artifact-refresh/landfall-20261101-0245",
  "run_id": "landfall-artifact-queue-tool-647f24-20261031T214713",
  "score": 0.0021,
  "stage": "valueleaf",
@@ -14,6 +17,6 @@
   "valueleaf"
  ],
  "started": "2026-10-31T21:47:13Z",
- "state": "running",
+ "state": "done",
  "worker": "artifact-queue-tool-647f24"
 }
