@@ -9,6 +9,8 @@
  "frozen": "bc74eb6384ed9a3dfc3eaa00ba6efe4247962556",
  "heartbeat": "2026-11-01T18:57:04Z",
  "host": "58199181d02e",
+ "landed": "caf0599e45eff1f5a0c8a8a56a1c24d124f35350",
+ "landed_at": "2026-11-01T19:07:54Z",
  "result_branch": "artifact-refresh/stompysurprise-20261101-1907",
  "run_id": "stompysurprise-artifact-queue-tool-647f24-20261101T185646",
  "score": 0.0,
