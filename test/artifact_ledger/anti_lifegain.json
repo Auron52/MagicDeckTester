@@ -38,6 +38,25 @@
     "",
     "=== 2026-10-30T16:24:19  PHASE E.6: no allowance for anti_lifegain -- no ladder escalations in 1200 games (single-path or trust-dominated); fleet default R = 0"
    ]
+  },
+  {
+   "run_id": "anti_lifegain-artifact-queue-tool-647f24-20261101T072208",
+   "kind": "valueleaf",
+   "verdict": "adopted",
+   "ident": "em:98a816fffc6ca33a3e86",
+   "frozen": "270ea2e4725332e264ac16d576f32b6dd3ec2022",
+   "src_tree": "83b1f17308cff28f24934c82e9c113000a08992f",
+   "date": "2026-11-01",
+   "worker": "artifact-queue-tool-647f24",
+   "detail": "valueleaf: ADOPTED (live sidecar's eval_model replaced)",
+   "decisions": [
+    "    VERDICT arm=emul_d6b20 adopt=0 delta=-0.00050 t=-0.68 cost=1.122x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.12x) with quality better (-0.00050) -- a TRADE, the user's call",
+    "    VERDICT arm=emul_d6b30 adopt=0 delta=-0.00138 t=-1.72 cost=1.304x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.30x) with quality better (-0.00138) -- a TRADE, the user's call",
+    "    VERDICT arm=emul_d6b40 adopt=0 delta=-0.00250 t=-2.89 cost=1.507x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.51x) with quality better (-0.00250) -- a TRADE, the user's call",
+    "    PICK arm=none why=no candidate is cheaper than live with quality not notably worse",
+    "",
+    "=== 2026-11-01T07:36:44  PHASE E.6: no allowance for anti_lifegain -- no ladder escalations in 1200 games (single-path or trust-dominated); fleet default R = 0"
+   ]
   }
  ]
 }
