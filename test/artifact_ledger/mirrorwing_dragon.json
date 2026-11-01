@@ -38,6 +38,25 @@
     "=== 2026-10-25T02:37:01  PHASE E.6: no allowance for mirrorwing_dragon -- no ladder escalations in 1200 games (single-path or trust-dominated); fleet default R = 0",
     "    the live sidecar's existing escalation_skip_r = 70.5 is KEPT -- it was measured against the leaf live when it was set; if this run installed a new leaf it is stale: USER, keep or remove it."
    ]
+  },
+  {
+   "run_id": "mirrorwing_dragon-artifact-queue-tool-647f24-20261101T062234",
+   "kind": "valueleaf",
+   "verdict": "kept-incumbent",
+   "ident": "em:e650fa5b1a96f6292645",
+   "frozen": "353542341e47eb1c21098df7676bbfeedab68b15",
+   "src_tree": "83b1f17308cff28f24934c82e9c113000a08992f",
+   "date": "2026-11-01",
+   "worker": "artifact-queue-tool-647f24",
+   "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_mirrorwing_dragon/DECISIONS.txt)",
+   "decisions": [
+    "    VERDICT arm=d7b30 adopt=0 delta=-0.00100 t=-2.37 cost=1.118x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.12x) with quality better (-0.00100) -- a TRADE, the user's call",
+    "    VERDICT arm=d7b40 adopt=0 delta=-0.00237 t=-5.16 cost=1.202x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.20x) with quality better (-0.00237) -- a TRADE, the user's call",
+    "    PICK arm=none why=no candidate is cheaper than live with quality not notably worse",
+    "",
+    "=== 2026-11-01T06:40:57  PHASE E.6: no allowance for mirrorwing_dragon -- no ladder escalations in 1200 games (single-path or trust-dominated); fleet default R = 0",
+    "    the live sidecar's existing escalation_skip_r = 70.5 is KEPT -- it was measured against the leaf live when it was set; if this run installed a new leaf it is stale: USER, keep or remove it."
+   ]
   }
  ]
 }
