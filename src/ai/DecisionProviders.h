@@ -3654,6 +3654,8 @@ public:
     CertStance Certificate() const override
     { return { CertState::NotAssessed, "NOT ASSESSED. Check the Image/lord attack clock and Vial timing before proving a winless turn." }; }
     const char* Name() const override { return "Merfolk"; }
+    int CastOrderRank(const GameState& s, const CardDefinition& def) const override;
+    bool OrderOpaqueCastsByRank() const override;
     void CopyCreatureCandidates(const GameState& s, const CardDefinition& def,
                                 std::vector<int>& targets) const override;
     std::vector<int> CleanupDiscardCandidates(

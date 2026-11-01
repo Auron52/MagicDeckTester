@@ -22950,6 +22950,28 @@ const DecisionProvider& DefaultProvider()
     return g_generic;
 }
 
+static bool MerfolkCastOrderEnabled()
+{
+    static const bool on = EnvOn("MTG_MERFOLK_CAST_ORDER", true); // DEFAULT ON; =0 -> generic cast order
+    return on;
+}
+
+int MerfolkProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
+{
+    // Silvergill must see another Merfolk still in hand for its reveal cost.
+    // A lord cast earlier in the same plan is then a live Image copy target.
+    if (MerfolkCastOrderEnabled() && def.card.m_name == "Silvergill Adept") { return 0; }
+    if (MerfolkCastOrderEnabled() && def.card.m_name == "Phantasmal Image") { return 1000; }
+    return DeckProvider::CastOrderRank(s, def);
+}
+
+bool MerfolkProvider::OrderOpaqueCastsByRank() const
+{
+    // Silvergill and Spreading Seas draw, making their sets order-opaque.
+    // The same Image-last order must govern those sets too.
+    return MerfolkCastOrderEnabled();
+}
+
 void MerfolkProvider::CopyCreatureCandidates(const GameState& s, const CardDefinition& def,
                                              std::vector<int>& targets) const
 {
