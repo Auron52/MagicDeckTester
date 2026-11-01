@@ -168,9 +168,9 @@ elementals_smoke_d0_s1001=5.6110/03fed2d66e5a6893
 elementals_smoke_d3_s1001=4.4600/15877bad8bb35b68
 elementals_smoke_d5_s1001=4.3360/0de4bca09ab94ef0
 
-merfolk_smoke_d0_s1001=4.6840/3fc11ece3e8be284
-merfolk_smoke_d3_s1001=4.4400/6e49f485fdb727ed
-merfolk_smoke_d5_s1001=4.4200/9f3e1d29a618f03c
+merfolk_smoke_d0_s1001=4.4960/e9b4322db7865929
+merfolk_smoke_d3_s1001=4.1800/f6d42e88400ef7bd
+merfolk_smoke_d5_s1001=4.1700/762e7f0c8c2e0917
 merfolk2hg_smoke_d3_s1001=5.0200/7964fe014ae8bb15
 # --- regression ---
 cyclone_regression_d3_s30031=5.3333/0bda8499e912c855
@@ -434,10 +434,10 @@ midrangeburn_regression_d5_s2002=4.4333/ba999bfc3828dbb3
 midrangeburn_regression_d5_s3003=4.2733/ecdc58112064d976
 midrangeburn2hg_regression_d5_s2002=5.9333/ff2c389975b3330d
 
-merfolk_regression_d0_s2002=4.6320/a53f1f4749d3eba6
-merfolk_regression_d3_s2002=4.3867/5b68356fe79e90be
-merfolk_regression_d5_s2002=4.3933/59bc9a699f4e41e5
-merfolk_regression_d5_s3003=4.3467/e48ddeb5f318d326
+merfolk_regression_d0_s2002=4.4450/8ef0370788e04854
+merfolk_regression_d3_s2002=4.2133/3844dd6262e39628
+merfolk_regression_d5_s2002=4.1800/b7bea91408c21de9
+merfolk_regression_d5_s3003=4.1267/3407cdf37dcca8fd
 # --- overnight ---
 cyclone_overnight_d3_s30051=5.0000/8c00f4fc85f4b21a
 cyclone_overnight_d5_s30051=5.0000/3b4f7adf5b66853f
