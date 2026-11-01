@@ -4,9 +4,12 @@
   "valueleaf": "em:c9569041949a2873c26e"
  },
  "deck": "whiteknights",
+ "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_whiteknights/DECISIONS.txt)",
+ "finished": "2026-11-01T06:20:33Z",
  "frozen": "8e81153ad29e0d3b2f89d2337f52eda4625427df",
  "heartbeat": "2026-11-01T06:15:22Z",
  "host": "58199181d02e",
+ "result_branch": "artifact-refresh/whiteknights-20261101-0620",
  "run_id": "whiteknights-artifact-queue-tool-647f24-20261101T061502",
  "score": 0.001,
  "stage": "valueleaf",
@@ -14,6 +17,6 @@
   "valueleaf"
  ],
  "started": "2026-11-01T06:15:02Z",
- "state": "running",
+ "state": "done",
  "worker": "artifact-queue-tool-647f24"
 }
