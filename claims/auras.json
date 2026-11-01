@@ -1,26 +1,19 @@
 {
  "blobs": {
-  "mulligan": "c636616c0eea2698312292deff701fcebd7622e1",
+  "mulligan": "12e1a5d6acef4a14489cb089629878b9840542f7",
   "valueleaf": "em:8f9467f9f125c2b4d1b1"
  },
  "deck": "auras",
- "detail": "mulligan: TRADE -- quality not worse (new-vs-old -0.002531 t) but the new table costs MORE (cost 1.118x (se 0.011, 96 seeds)): the USER's call; left live on the result branch, NOT landed; valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_auras/DECISIONS.txt)",
- "finished": "2026-10-30T00:44:10Z",
- "frozen": "ce02942e3353c17147a1dbea6ab343593ef700be",
- "heartbeat": "2026-10-30T00:37:29Z",
+ "frozen": "1d895c50f15651e14f91c7e2fa15ee9564be53e7",
+ "heartbeat": "2026-11-01T07:53:18Z",
  "host": "58199181d02e",
- "land_note": "HELD for the USER: mulligan: TRADE -- quality not worse (new-vs-old -0.002531 t) but the new table costs MORE (cost 1.118x (se 0.011, 96 seeds)): the USER's call; left live on the result branch, NOT landed",
- "landed": "e355d036614f8926d6b1184cc8485ed8246b1d0e",
- "landed_at": "2026-10-30T02:40:49Z",
- "result_branch": "artifact-refresh/auras-20261030-0043",
- "run_id": "auras-artifact-queue-tool-647f24-20261029T223109",
- "score": 0.0651,
+ "run_id": "auras-artifact-queue-tool-647f24-20261101T075318",
+ "score": 0.0,
  "stage": "valueleaf",
  "stages": [
-  "mulligan",
   "valueleaf"
  ],
- "started": "2026-10-29T22:31:09Z",
- "state": "done",
+ "started": "2026-11-01T07:53:18Z",
+ "state": "running",
  "worker": "artifact-queue-tool-647f24"
 }
