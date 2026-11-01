@@ -1,26 +1,19 @@
 {
  "blobs": {
-  "mulligan": "6e666e311916ae55345d4a56e469d19d5f562c3b",
+  "mulligan": "1694cbffd071cab904a6bb3f83ba7ed74fac5478",
   "valueleaf": "em:e9ea4e2f6fb6212c7fbf"
  },
  "deck": "creature_giving",
- "detail": "mulligan: ADOPTED (new-vs-old -0.012156 t, cost 0.968x (se 0.007, 32 seeds), recipe fast); valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_creature_giving/DECISIONS.txt)",
- "finished": "2026-10-30T15:24:23Z",
- "frozen": "226ef40b260e4c4e62e8b9b4cacb043bd8b6d40c",
- "heartbeat": "2026-10-30T15:22:11Z",
- "host": "550a08fdc1f3",
- "land_note": "build failed in the landing worktree -- left for an agent",
- "landed": "58dcb45053e9fa6aa62da85a92872d6eeff6cdff",
- "landed_at": "2026-10-30T15:40:02Z",
- "result_branch": "artifact-refresh/creature_giving-20261030-1524",
- "run_id": "creature_giving-artifact-queue-d7d6a5-20261030T073618",
- "score": 0.3379,
+ "frozen": "3096f13be5e2570ea34beffc2d5880234bda1a7d",
+ "heartbeat": "2026-11-01T08:03:23Z",
+ "host": "58199181d02e",
+ "run_id": "creature_giving-artifact-queue-tool-647f24-20261101T080323",
+ "score": 0.0,
  "stage": "valueleaf",
  "stages": [
-  "mulligan",
   "valueleaf"
  ],
- "started": "2026-10-30T07:36:18Z",
- "state": "done",
- "worker": "artifact-queue-d7d6a5"
+ "started": "2026-11-01T08:03:23Z",
+ "state": "running",
+ "worker": "artifact-queue-tool-647f24"
 }
