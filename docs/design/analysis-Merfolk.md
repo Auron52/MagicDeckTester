@@ -5,12 +5,12 @@ Deck: `decks/Merfolk/Merfolk.cod` (60 cards, no sideboard). Analysis opened 2026
 ## Standing constraints
 
 - The repository's `CLAUDE.md`, `.claude/skills/analyze-deck.md`, MTG rules, and MTG AI guidance apply.
-- The user reports a mulligan-profile run in another container. Finish research and implementation first; notify the user before CPU-heavy builds or simulation batches.
+- The user initially reported a mulligan-profile run in another container, then confirmed the CPU was available before Merfolk's heavy runs.
 - The new deck needs its own provider before measurement. Search narrowing belongs only in a reviewed provider. Cast order, discard buckets, and other user-owned decisions remain for user review.
 - No new exhaustive mulligan profile is part of this analysis; Stage 4 generates a baseline profile only.
 - User instruction during integration: Phantasmal Image should try to copy a Merfolk lord when available, preferring a 2/2 lord. Add a Merfolk-scoped provider heuristic after the card set is implemented, then measure it against the unmodified candidate order/full search before shipping.
 
-`MerfolkProvider::CopyCreatureCandidates` stably orders legal Image copy targets as own printed 2/2 Merfolk lords, other own Merfolk lords, then other creatures. It does not remove search or viewer choices. Search and resolution integration are complete; outcome measurement is pending.
+`MerfolkProvider::CopyCreatureCandidates` stably orders legal Image copy targets as own printed 2/2 Merfolk lords, other own Merfolk lords, then other creatures. It does not remove search or viewer choices. Search and resolution integration and the paired outcome measurement are complete (see Image preference A/B below).
 `MTG_MERFOLK_IMAGE_LORD_FIRST=0` restores the ordinary target order for an A/B check; default is on to follow the user's requested preference.
 
 The user later specified the cast order: after the land drop, Silvergill Adept goes early while another Merfolk remains in hand to reveal, and Phantasmal Image goes last so a lord cast in the same plan can be copied. Other spells need no deck-specific ranking. `MerfolkProvider::CastOrderRank` supplies those two ranks, including order-opaque draw sets via `OrderOpaqueCastsByRank` (Silvergill Adept and Spreading Seas). `MTG_MERFOLK_CAST_ORDER=0` restores the generic order for A/B measurement. A targeted rank test passes. At seed 570000, 200 paired games at each d3/b10 and d5/b20 cell had no win-turn changes (both 4.4150), but play digests changed: d3 `146ef1934bed2e8a` → `1fc86bc49bb7a5dd`, d5 `2167221ef93b4ed4` → `d1c60cdf41c666ba`.
@@ -27,30 +27,29 @@ Three research agents fetched Scryfall's live card records. One integrator owns 
 The static and runtime passes report 17/17 card definitions, zero missing, and no unmodeled viewer choices. A targeted live Scryfall cost audit compared all 11 newly added costed cards and found 11/11 mana costs correct.
 The Scryfall field snapshot was refreshed for those 11 cards; the targeted field audit passed all hard fields (cost, P/T, types, keywords). Its six Oracle-text advisories are the explicit bracket notes on Lord of Atlantis, Master of the Pearl Trident, Vodalian Hexcatcher, Phantasmal Image, Cosi's Trickster, and Sink into Stupor.
 
-Stage-2 integration and read-only review are complete. Silvergill's optional `{3}` is represented as a synthesized paid cast face while the printed hand card remains MV 2 for Aether Vial; Image copy targets remain all legal search/viewer choices; Tide and Seas use a live Island replacement that reaches payer and subtype checks; Sink bounces an opponent nonland permanent. `git diff --check`, JSON parse, viewer audit, viewer JavaScript syntax, build, and the unit suite passed.
+Stage-2 integration and read-only review are complete. Silvergill's optional `{3}` is represented as a synthesized paid cast face while the printed hand card remains MV 2 for Aether Vial; Image copy targets remain all legal search/viewer choices; Tide and Seas use a live Island replacement that reaches payer and subtype checks; Sink returns a target spell or opponent nonland permanent. `git diff --check`, JSON parse, viewer audit, viewer JavaScript syntax, build, and the unit suite passed.
 Review initially suspected a Tide Shaper target gap when a land is played earlier in the same plan. Source tracing resolved that concern for this deck: `EnumeratePlansWithLandUncached` plays the selected land into a copied state before enumerating spell actions, so both Tide and Spreading Seas see the new land and its stable ID. A separate review found Sink's target legality missed hexproof; the shared search, resolution, viewer, and free-cast paths now check target legality.
 
 | Card group | Important implementation work |
 |---|---|
-| Four Merfolk lords | Other-Merfolk bonuses are modeled. Lord of Atlantis's symmetric grant, islandwalk, Hexcatcher's flash and sacrifice-to-counter ability are provisionally inert under this opponent. |
+| Four Merfolk lords | Other-Merfolk bonuses are modeled. Lord of Atlantis's symmetric grant, islandwalk, Hexcatcher's flash and sacrifice-to-counter ability are omitted with user approval under this opponent. |
 | Silvergill Adept | Reveal another Merfolk or pay {3} as an additional cast cost; ETB draw. Vial bypasses cast cost. |
-| Phantasmal Image | Choose any creature to copy, preserve its Illusion type, or decline the copy. Its sacrifice-on-target trigger is provisionally inert for this list. |
+| Phantasmal Image | Choose any creature to copy, preserve its Illusion type, or decline the copy. Its sacrifice-on-target trigger is omitted with user approval for this list. |
 | Tide Shaper | Kicker {1}, kicked land target and lasting Island effect, bonus while an opponent controls an Island. |
-| Cosi's Trickster | Its opponent-shuffle trigger is provisionally inert because the opponent shuffles only before permanents exist. |
+| Cosi's Trickster | Its opponent-shuffle trigger is omitted with user approval because the opponent shuffles only before permanents exist. |
 | Kumena's Speaker | +1/+1 while another Merfolk or an Island is controlled. |
 | Spreading Seas | Draw on ETB; enchanted land becomes an Island, losing old land subtypes and printed abilities while attached. |
-| Sink into Stupor // Soporific Springs | MDFC land's pay-3-life or enter-tapped choice; front targets a live opponent nonland permanent and bounces it. Spell targeting is provisionally inert because the passive opponent never casts. |
+| Sink into Stupor // Soporific Springs | MDFC land's pay-3-life or enter-tapped choice. The front targets and returns an opponent nonland permanent or any spell on the stack. The viewer offers both legal target kinds. `MerfolkProvider::OffersSpellBounceTarget` excludes spell targets from autonomous search by default, per user direction; `MTG_MERFOLK_SINK_SPELL=1` or `MTG_UNPRUNED=1` restores that branch. Generic search retains it. |
 
 ### Provisional questions and modeling decisions
 
-- Islandwalk does not change combat against this passive opponent because it never blocks. Any omitted islandwalk grant must be marked **PROVISIONAL** and shown to the user for sign-off.
-- Cosi's Trickster appears unable to see an in-game opponent shuffle under the passive opponent model. A skipped trigger must be marked **PROVISIONAL**, with the exact reachability proof recorded.
-- Vodalian Hexcatcher's counter ability needs care: the opponent does not cast, but targeting one's own noncreature spell to sacrifice a Merfolk is theoretically legal. Check whether that can change this deck's result before any **PROVISIONAL** simplification.
+- On 2026-11-01 the user approved omitting islandwalk, Lord of Atlantis's symmetric buff, Hexcatcher's flash and sacrifice counter, Image's sacrifice when targeted, and Cosi's opponent-shuffle trigger under the passive opponent. The passive opponent never blocks, casts spells, targets creatures, or shuffles after setup. Countering our own noncreature spell with Hexcatcher sacrifices a Merfolk and has no death payoff in this list.
+- The same decision explicitly required Sink's spell-target mode to work in the viewer while remaining excluded by the Merfolk search heuristic. A legal stack spell is returned to hand on resolution (including one that cannot be countered); copies cease to exist. No passive-opponent goldfish presents such a target, so the main search results remain comparable.
 - The opponent does have spawned creatures in ordinary games; it is incorrect to assume its battlefield is empty. Recheck every targeting and land-type simplification against that setup.
 
 ## Remaining gates
 
-Horizon tie-break verdict and final assumptions disclosure remain pending. Static Stage 3 coverage is 17/17 full, with zero missing or partial cards. The offline field audit reports 658 checked definitions, zero hard mismatches. All 2,278 unit cases pass after the land-link zero-sentinel fix and the explicit Merfolk provider pin.
+Horizon tie-break verdict and the 14 remaining Claude games remain pending. Static Stage 3 coverage is 17/17 full, with zero missing or partial cards. The offline field audit reports 658 checked definitions, zero hard mismatches. The full unit suite passes, including Sink's spell-return test and its provider gate.
 
 ## Stage 4 — baseline and provider
 
@@ -61,7 +60,7 @@ The discard evidence run saw zero real cleanup discards in 400 games but 6,097 r
 
 The user supplied the rule after that baseline: retain at least one one-drop and three lords or Phantasmal Images when available. Keep at most three total land/Vial sources until two are on the battlefield, then up to four total; with two down, that leaves five creature slots in a seven-card hand. Count battlefield cards first. A Vial in hand fills a source slot only at turn-one cleanup when no Vial is already down. Sink into Stupor counts as a land only when ordinary lands do not fill the source target; otherwise it sheds before other cards. Spreading Seas is retained only after all creatures and source needs, never over a creature. Within the lord group, Image improves when an existing lord can be copied, then printed 2/2 lords. The exact ranking is in `MerfolkProvider::CleanupDiscardShedOrder`; `MTG_MERFOLK_BUCKET_DISCARD=0` restores generic discard. A targeted unit test passes all 18 assertions, including the Sink MDFC route, Seas below creatures, the board-netted source quota, and turn-one Vial.
 
-A paired 200-game-per-cell A/B at seed 570000 gave identical win turns and play digests at d3/b10 (4.4150, digest `146ef1934bed2e8a`) and d5/b20 (4.4150, digest `2167221ef93b4ed4`) for bucket on versus generic. Changed games: zero of 400. Full unit and smoke/regression replay are in progress.
+A paired 200-game-per-cell A/B at seed 570000 gave identical win turns and play digests at d3/b10 (4.4150, digest `146ef1934bed2e8a`) and d5/b20 (4.4150, digest `2167221ef93b4ed4`) for bucket on versus generic. Changed games: zero of 400. Full unit and smoke/regression replay passed for the bucket change.
 
 ## Suite admission and measured play
 
@@ -78,10 +77,14 @@ The user-requested provider orders own printed 2/2 Merfolk lords first, then oth
 The first viewer sweep reported a Sink target hard miss. This was an auditor false positive: its summary substring test counted `land=Sink into Stupor -> Soporific Springs` as casting Sink's targeted front. The auditor now counts actual chosen cast actions and recognizes the two MDFC routes separately. A targeted 40-game seed-search verified Springs' `land_entry` in game index 2 and Sink's spell `target` in game index 18; the full runtime viewer sweep then passed.
 The paired 200-game depth block gives d0 4.6800, d3/b10 4.3800, d5/b20 4.3800. The only turn-7 win in that block was seed 450068/game index 8: two mulligans left a one-land keep, the second land arrived on turn 4, and a tenfold search budget (b200) still won turn 7. This is an opening-hand constraint, not play-budget starvation.
 
+### Sink spell-target follow-up (2026-11-01)
+
+After the user approved the other passive-opponent deferrals but requested Sink's spell mode, `bounce_target_spell` was added to the card definition and the shared stack-target resolver. A Sink cast can choose a spell on the stack, including our own; it returns the spell card to its controller's hand even if the spell cannot be countered, while a spell copy ceases to exist. The human target chooser presents stack spells as selectable options beside opponent nonland permanents, and the viewer shows stack spells as buttons. Generic autonomous search enumerates every stack-spell target; `MerfolkProvider::OffersSpellBounceTarget` prunes only that deck's branch by default. A focused unit test covers resolution and the provider gate. The full unit suite, JSON parse, viewer JavaScript parse, coverage (17/17), static viewer audit, runtime viewer audit (16-game sweep plus forced Sink seed 510000/game 29), smoke and regression rows all passed. Both regression modes match committed per-game win turns and play digests exactly, so no baseline changed. Strict viewer replay checked 699 references with zero play drift, board divergence, or enum gaps; both suboptimal references remain beaten. The pre-Sink horizon tie-break run was stopped at about 29,000 paired games when the request arrived, with zero changed win turns; it is not a completed verdict for this source revision.
+
 ## Claude-play sweep
 
 One independent Claude/Sonnet game (seed 470000) completed and matched the search's turn-4 win. It found no legality or state-delta issue; its one command warning came from an obsolete explicit `--lookahead-bottoming` CLI flag, which is automatic at searched depth. The other 14 distinct-seed agents could not play: the Claude CLI returned its weekly usage limit. **UN-RUN remainder: 14/15 games.** Do not record `flags: 0 unresolved` or treat the sweep as passed. Re-run the remaining Claude oracle games when the external limit resets; `verify_deck.py` intentionally reports `claude_sweep: SKIP` until then. No Codex model was substituted for Claude.
 
 ## Approved deferrals
 
-None. Provisional notes above are not approvals.
+On 2026-11-01 the user approved omitting islandwalk, Lord of Atlantis's symmetric buff, Hexcatcher's flash and sacrifice counter, Image's sacrifice when targeted, and Cosi's opponent-shuffle trigger for the passive-opponent analysis. Sink's spell-target mode was explicitly excluded from that approval and is implemented, including the viewer decision surface.

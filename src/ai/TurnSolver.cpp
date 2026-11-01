@@ -34365,7 +34365,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         else if ((t == Targeting::Creature || t == Targeting::Multi
                   || t == Targeting::NonlandPermanent) && !(FixedTargetedBurn(def) && FixedBurnSearchEnabled(state)) && !has_creature_target
                  && !(def.params.bounce_opponent_nonland_permanent
-                      && OpponentNonlandTargetIndex(state, state.active_player_index, 0) >= 0)
+                      && (OpponentNonlandTargetIndex(state, state.active_player_index, 0) >= 0
+                          || (def.params.bounce_target_spell && FirstTargetSpellIndex(state) >= 0)))
                  && !def.params.controller_lifegain_equals_power)
         {
             // Unexpectedly Absent (nonland-permanent tuck): with no opponent creature the
@@ -34390,7 +34391,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 }
                 const bool offer_self = HumanPlayActive()
                     || ResolveProvider(state).OffersTuckRemovalCast(state, def, /*self_target=*/true);
-                if (offer_self && def.params.allow_self_target && any_nonland_permanent)
+                if ((def.params.bounce_target_spell && FirstTargetSpellIndex(state) >= 0)
+                    || (offer_self && def.params.allow_self_target && any_nonland_permanent))
                 { /* fall through: emit */ }
                 else { continue; }
             }
@@ -36638,6 +36640,14 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // land on its own -- the value of doing so is the search's to find, inside the window.
         if (def.params.bounce_opponent_nonland_permanent)
         {
+            // Human play asks once over the full legal set, including spells on the stack.
+            if (HumanPlayActive())
+            {
+                if (OpponentNonlandTargetIndex(state, state.active_player_index, 0) >= 0
+                    || (def.params.bounce_target_spell && FirstTargetSpellIndex(state) >= 0))
+                { actions.push_back(a); }
+                continue;
+            }
             for (const Permanent& target : state.battlefield)
             {
                 if (target.controller_index == state.active_player_index || target.card.IsLand())
@@ -36646,6 +36656,17 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 Action v = a;
                 v.enchant_target = target.card.m_number;
                 actions.push_back(std::move(v));
+            }
+            if (def.params.bounce_target_spell
+                && ResolveProvider(state).OffersSpellBounceTarget(state, def))
+            {
+                for (int si = 0; si < static_cast<int>(state.stack.size()); ++si)
+                {
+                    if (state.stack[si].type != StackEntry::EntryType::Spell) { continue; }
+                    Action v = a;
+                    v.enchant_target = -1 - si; // Sink-only pin: stack index below zero
+                    actions.push_back(std::move(v));
+                }
             }
             continue;
         }
@@ -60491,11 +60512,15 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         }
         else if (def.params.bounce_opponent_nonland_permanent)
         {
-            int ci = OpponentNonlandTargetIndex(state, state.active_player_index, enchant_target);
-            if (g_play_target_chooser && ci >= 0)
+            int ci = enchant_target < 0 ? -1
+                : OpponentNonlandTargetIndex(state, state.active_player_index, enchant_target);
+            int spell_idx = def.params.bounce_target_spell
+                ? (enchant_target < 0 ? -1 - enchant_target : FirstTargetSpellIndex(state)) : -1;
+            if (g_play_target_chooser && (ci >= 0 || spell_idx >= 0))
             {
                 const std::vector<ChosenTarget> picked = (*g_play_target_chooser)(
-                    state, def, state.active_player_index, 1, 0, {{ 1, ci, 0 }});
+                    state, def, state.active_player_index, 1, 0,
+                    {{ ci >= 0 ? 1 : 2, ci >= 0 ? ci : spell_idx, 0 }});
                 if (!picked.empty() && picked[0].kind == 1
                     && picked[0].index >= 0
                     && picked[0].index < static_cast<int>(state.battlefield.size()))
@@ -60504,8 +60529,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     const int legal = OpponentNonlandTargetIndex(state, state.active_player_index, chosen);
                     if (legal >= 0) { ci = legal; }
                 }
+                else if (!picked.empty() && picked[0].kind == 2
+                         && picked[0].index >= 0
+                         && picked[0].index < static_cast<int>(state.stack.size())
+                         && state.stack[picked[0].index].type == StackEntry::EntryType::Spell)
+                { ci = -1; spell_idx = picked[0].index; }
             }
             if (ci >= 0) { BounceOpponentNonlandAt(state, ci); }
+            else if (spell_idx >= 0) { BounceTargetSpellAt(state, spell_idx); }
         }
         else if (def.tmpl == CardTemplate::Removal && def.params.tuck_to_library)
         {

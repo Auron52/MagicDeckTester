@@ -9225,12 +9225,39 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
         {
             if (def->params.bounce_opponent_nonland_permanent)
             {
-                const int idx = OpponentNonlandTargetIndex(state, state.active_player_index,
-                                                           enchant_target);
-                if (idx < 0) { return; }
+                const int idx = enchant_target < 0 ? -1
+                    : OpponentNonlandTargetIndex(state, state.active_player_index, enchant_target);
+                const int spell_idx = def->params.bounce_target_spell
+                    ? (enchant_target < 0 ? -1 - enchant_target : FirstTargetSpellIndex(state)) : -1;
+                if (enchant_target < 0
+                    && (spell_idx >= static_cast<int>(state.stack.size())
+                        || state.stack[spell_idx].type != StackEntry::EntryType::Spell))
+                { return; }
+                if (idx < 0 && spell_idx < 0) { return; }
                 Target t;
-                t.type = Target::Type::Permanent;
+                t.type = idx >= 0 ? Target::Type::Permanent : Target::Type::Spell;
                 t.permanent_index = idx;
+                t.stack_index = spell_idx;
+                if (g_play_target_chooser)
+                {
+                    const std::vector<ChosenTarget> picked = (*g_play_target_chooser)(
+                        state, *def, state.active_player_index, 1, 0,
+                        {{ idx >= 0 ? 1 : 2, idx >= 0 ? idx : spell_idx, 0 }});
+                    if (!picked.empty())
+                    {
+                        if (picked[0].kind == 1 && picked[0].index >= 0
+                            && picked[0].index < static_cast<int>(state.battlefield.size())
+                            && state.battlefield[picked[0].index].controller_index != state.active_player_index
+                            && !state.battlefield[picked[0].index].card.IsLand()
+                            && SpellCanTargetPermanent(state, state.active_player_index,
+                                                       state.battlefield[picked[0].index]))
+                        { t.type = Target::Type::Permanent; t.permanent_index = picked[0].index; }
+                        else if (picked[0].kind == 2 && picked[0].index >= 0
+                                 && picked[0].index < static_cast<int>(state.stack.size())
+                                 && state.stack[picked[0].index].type == StackEntry::EntryType::Spell)
+                        { t.type = Target::Type::Spell; t.stack_index = picked[0].index; }
+                    }
+                }
                 entry.targets.push_back(t);
                 break;
             }

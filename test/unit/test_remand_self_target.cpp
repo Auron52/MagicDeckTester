@@ -521,3 +521,32 @@ TEST_CASE("Remand after a cast restrictor counts TWO casts: {Irencrag Feat, X + 
     }
     CHECK(plain_line);
 }
+
+TEST_CASE("Sink into Stupor returns a target spell from the stack even if it cannot be countered")
+{
+    EnsureCardsLoaded();
+    CHECK(GenericProvider().OffersSpellBounceTarget(Fresh(), Def("Sink into Stupor")));
+    CHECK_FALSE(MerfolkProvider().OffersSpellBounceTarget(Fresh(), Def("Sink into Stupor")));
+    GameState s = Fresh();
+    StackEntry target;
+    target.type = StackEntry::EntryType::Spell;
+    target.source = Def(kUncounterable).card;
+    target.source.m_number = 41;
+    target.controller_index = 1;
+    s.stack.push_back(target);
+    REQUIRE(FirstTargetSpellIndex(s) == 0);
+
+    StackEntry sink;
+    sink.type = StackEntry::EntryType::Spell;
+    sink.source = Def("Sink into Stupor").card;
+    sink.source.m_number = 42;
+    sink.controller_index = 0;
+    Target chosen;
+    chosen.type = Target::Type::Spell;
+    chosen.stack_index = 0;
+    sink.targets.push_back(chosen);
+    REQUIRE(EffectHandler::Resolve(s, sink, Def("Sink into Stupor")));
+    CHECK(s.stack.empty());
+    REQUIRE(s.players[1].hand.size() == 1);
+    CHECK(s.players[1].hand[0].m_number == 41);
+}

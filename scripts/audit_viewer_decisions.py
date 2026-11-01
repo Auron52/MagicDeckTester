@@ -142,6 +142,7 @@ MANIFEST = {
     "enter_as_copy_of_entrant": ("main_phase",        truthy),
     "enter_as_copy_of_creature": ("main_phase",       truthy),
     "bounce_opponent_nonland_permanent": ("target",     truthy),
+    "bounce_target_spell":     ("target",               truthy),  # Sink: spell and permanent options share one target chooser
     "kicked_etb_target_land_island": ("main_phase",     truthy),
     "land_aura_can_target_opponent": ("main_phase",     truthy),
     "reveal_subtype_or_pay": ("main_phase",             truthy),

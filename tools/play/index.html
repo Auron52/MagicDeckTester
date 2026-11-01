@@ -4029,7 +4029,7 @@ async function storeArtifact(v, line) {
 // pick targets/lands IN PLACE (highlighted on the real board), the AI's heuristic pick preselected.
 
 // ---- selection model (target / bounce: in-place board selection) ----
-function tgtKey(t){ return (t.kind==='player'?'p:':'m:')+t.index; }
+function tgtKey(t){ return (t.kind==='player'?'p:':t.kind==='spell'?'s:':'m:')+t.index; }
 // The legal opponent/your face target for a target decision (matched by label), or null.
 function faceTarget(d, who){
   if (!d || (d.type!=='target' && d.type!=='divide')) return null;
@@ -5155,6 +5155,13 @@ function promptPanelHtml(d, dec){
   // exile (its CONTROLLER gains life = its power; a Tainted Remedy flips an opponent's gain to a loss).
   // Either side may be legal: with allow_self_target the option list includes our OWN creatures, so the
   // wording must not say "opponent" (user, 2026-09-18). The options list is the legal set.
+  if (d.source==='Sink into Stupor'){
+    const spells=(d.legal_targets||[]).filter(t=>t.kind==='spell');
+    const buttons=spells.map(t=>`<button data-spell="${t.index}" class="${S.boardSel&&S.boardSel.has(tgtKey(t))?'selected':''}">${esc(t.label)}</button>`).join('');
+    return `<h3>Return a spell or permanent — Sink into Stupor</h3>`+
+      `<div class="sub">Choose a spell on the stack below, or click an opponent nonland permanent on the board.</div>`+
+      `<div class="pbtns">${buttons}<span class="spacer"></span><button id="decconfirm" class="primary" ${n?'':'disabled'}>Confirm</button></div>`;
+  }
   if (d.remove){
     return `<h3>Which creature to exile — ${esc(d.source||'')}</h3>`+
       `<div class="sub">The chosen creature is ${esc(d.remove)} · pick 1. Click one of the listed creatures on the board (labelled with its power/toughness) — these are the legal targets. The AI's pick is preselected.</div>`+
@@ -5195,6 +5202,8 @@ function promptPanelHtml(d, dec){
 }
 function wireDecisionPanel(d, dec){
   const panel=$('decpanel');
+  if (dec==='target' && d.source==='Sink into Stupor')
+    panel.querySelectorAll('button[data-spell]').forEach(b=>b.onclick=()=>toggleSel(d, 's:'+b.dataset.spell, 1));
   if (dec==='scry'||dec==='surveil'||dec==='reorder')
     panel.querySelectorAll('button[data-opt]').forEach(b=>b.onclick=()=>commitLook(d, +b.dataset.opt));
   else if (dec==='vial_charge')

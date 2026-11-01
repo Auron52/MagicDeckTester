@@ -22972,6 +22972,16 @@ bool MerfolkProvider::OrderOpaqueCastsByRank() const
     return MerfolkCastOrderEnabled();
 }
 
+bool MerfolkProvider::OffersSpellBounceTarget(const GameState& s, const CardDefinition& def) const
+{
+    (void)s;
+    if (!def.params.bounce_target_spell) { return true; }
+    // The passive opponent casts no spells. Returning our own spell costs three mana and
+    // another card, with no cast-loop payoff in this list. Viewer choices bypass this hook.
+    static const bool full_spell_targets = EnvOn("MTG_MERFOLK_SINK_SPELL"); // DEFAULT OFF; =1 restores search branch
+    return DecisionUnpruned() || full_spell_targets;
+}
+
 void MerfolkProvider::CopyCreatureCandidates(const GameState& s, const CardDefinition& def,
                                              std::vector<int>& targets) const
 {
