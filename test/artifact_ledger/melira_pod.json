@@ -62,6 +62,25 @@
     "",
     "=== 2026-10-29T18:49:45  PHASE E.6: no allowance for melira_pod -- no ladder escalations in 1200 games (single-path or trust-dominated); fleet default R = 0"
    ]
+  },
+  {
+   "run_id": "melira_pod-artifact-queue-tool-647f24-20261101T113308",
+   "kind": "valueleaf",
+   "verdict": "kept-incumbent",
+   "ident": "em:16d33982d54e8ade3f01",
+   "frozen": "84c79bae7ceb99107cae307f18ce49d70b2e89c9",
+   "src_tree": "83b1f17308cff28f24934c82e9c113000a08992f",
+   "date": "2026-11-01",
+   "worker": "artifact-queue-tool-647f24",
+   "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_melira_pod/DECISIONS.txt)",
+   "decisions": [
+    "    VERDICT arm=d6b120 adopt=0 delta=+0.00000 t=+0.00 cost=1.004x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.00x) with quality no better (+0.00000) -- not an improvement",
+    "    VERDICT arm=d6b180 adopt=0 delta=-0.00162 t=-3.53 cost=1.178x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.18x) with quality better (-0.00162) -- a TRADE, the user's call",
+    "    VERDICT arm=d6b240 adopt=0 delta=-0.00287 t=-3.75 cost=1.322x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.32x) with quality better (-0.00287) -- a TRADE, the user's call",
+    "    PICK arm=none why=no candidate is cheaper than live with quality not notably worse",
+    "",
+    "=== 2026-11-01T18:18:53  PHASE E.6: no allowance for melira_pod -- no ladder escalations in 1200 games (single-path or trust-dominated); fleet default R = 0"
+   ]
   }
  ]
 }
