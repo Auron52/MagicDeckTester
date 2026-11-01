@@ -95,6 +95,44 @@ int ShedPos(const GameState& s, const std::vector<int>& order, const std::string
 
 }   // namespace
 
+TEST_CASE("Merfolk cleanup buckets retain early creature, lords, and board-netted sources")
+{
+    GameState s = MakeState(
+        {"Island", "Botanical Sanctum", "Waterlogged Grove", "Kumena's Speaker",
+         "Lord of Atlantis", "Master of the Pearl Trident", "Phantasmal Image", "Silvergill Adept"},
+        {"Island", "Island"});
+    s.phase = Phase::Ending;
+    const auto order = MerfolkProvider().CleanupDiscardShedOrder(s, nullptr);
+    CHECK(First(s, order) == "Island"); // two board sources allow only two more
+    CHECK(ShedPos(s, order, "Kumena's Speaker") > ShedPos(s, order, "Silvergill Adept"));
+    CHECK(ShedPos(s, order, "Phantasmal Image") > ShedPos(s, order, "Silvergill Adept"));
+
+    GameState early = MakeState(
+        {"Aether Vial", "Island", "Kumena's Speaker", "Lord of Atlantis",
+         "Master of the Pearl Trident", "Merfolk Mistbinder", "Silvergill Adept"},
+        {"Island"});
+    early.turn_number = 1;
+    early.phase = Phase::Ending;
+    const auto turn_one = MerfolkProvider().CleanupDiscardShedOrder(early, nullptr);
+    CHECK(ShedPos(early, turn_one, "Aether Vial") > ShedPos(early, turn_one, "Silvergill Adept"));
+    early.turn_number = 2;
+    const auto turn_two = MerfolkProvider().CleanupDiscardShedOrder(early, nullptr);
+    CHECK(ShedPos(early, turn_two, "Aether Vial") < ShedPos(early, turn_two, "Silvergill Adept"));
+
+    GameState modal = MakeState(
+        {"Botanical Sanctum", "Island", "Sink into Stupor", "Spreading Seas",
+         "Kumena's Speaker", "Lord of Atlantis", "Master of the Pearl Trident",
+         "Silvergill Adept"}, {"Island", "Island"});
+    modal.phase = Phase::Ending;
+    const auto full = MerfolkProvider().CleanupDiscardShedOrder(modal, nullptr);
+    CHECK(First(modal, full) == "Sink into Stupor");
+    CHECK(ShedPos(modal, full, "Spreading Seas") < ShedPos(modal, full, "Silvergill Adept"));
+    modal.players[0].hand.erase(modal.players[0].hand.begin()); // only one ordinary land remains
+    const auto needs_land = MerfolkProvider().CleanupDiscardShedOrder(modal, nullptr);
+    CHECK(ShedPos(modal, needs_land, "Sink into Stupor")
+          > ShedPos(modal, needs_land, "Spreading Seas"));
+}
+
 TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pirates to PiratesProvider")
 {
     EnsureCardsPp();

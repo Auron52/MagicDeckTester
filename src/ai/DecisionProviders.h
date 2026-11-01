@@ -3656,6 +3656,11 @@ public:
     const char* Name() const override { return "Merfolk"; }
     void CopyCreatureCandidates(const GameState& s, const CardDefinition& def,
                                 std::vector<int>& targets) const override;
+    std::vector<int> CleanupDiscardCandidates(
+        const GameState& s, const std::vector<std::string>* required_pieces) const override;
+    std::vector<int> CleanupDiscardShedOrder(
+        const GameState& s, const std::vector<std::string>* required_pieces) const override;
+    bool CleanupDiscardShedStable() const override;
 };
 
 class PiratesProvider : public DeckProvider

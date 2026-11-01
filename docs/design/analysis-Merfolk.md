@@ -51,7 +51,13 @@ Horizon tie-break verdict and final assumptions disclosure remain pending. Stati
 ## Stage 4 — baseline and provider
 
 `analyze_deck.py --no-rebuild --analyzer-seed 1001` generated `Merfolk.profile.json` with 17 card scores and static/default mulligan settings, without an exhaustive keep or bottom table. The cost diagnostic reported `NO_COST_INTERACTIONS`. `provider_audit.py --check` routed Merfolk to `MerfolkProvider`.
-The discard evidence run saw zero real cleanup discards in 400 games but 6,097 rollout sheds, so its verdict was `DISCARD_UNLABELLED`. A paired 150-game-per-arm bound at d3/b10 and d5/b20 gave identical averages and play digests for default versus `MTG_SHED_WORST=1` (d3 4.4067, d5 4.3933). No deck-specific discard rule was adopted.
+The discard evidence run saw zero real cleanup discards in 400 games but 6,097 rollout sheds, so its verdict was `DISCARD_UNLABELLED`. A paired 150-game-per-arm bound at d3/b10 and d5/b20 gave identical averages and play digests for default versus `MTG_SHED_WORST=1` (d3 4.4067, d5 4.3933). This was the pre-bucket baseline.
+
+### User-directed Merfolk cleanup buckets (2026-11-01)
+
+The user supplied the rule after that baseline: retain at least one one-drop and three lords or Phantasmal Images when available. Keep at most three total land/Vial sources until two are on the battlefield, then up to four total; with two down, that leaves five creature slots in a seven-card hand. Count battlefield cards first. A Vial in hand fills a source slot only at turn-one cleanup when no Vial is already down. Sink into Stupor counts as a land only when ordinary lands do not fill the source target; otherwise it sheds before other cards. Spreading Seas is retained only after all creatures and source needs, never over a creature. Within the lord group, Image improves when an existing lord can be copied, then printed 2/2 lords. The exact ranking is in `MerfolkProvider::CleanupDiscardShedOrder`; `MTG_MERFOLK_BUCKET_DISCARD=0` restores generic discard. A targeted unit test passes all 18 assertions, including the Sink MDFC route, Seas below creatures, the board-netted source quota, and turn-one Vial.
+
+A paired 200-game-per-cell A/B at seed 570000 gave identical win turns and play digests at d3/b10 (4.4150, digest `146ef1934bed2e8a`) and d5/b20 (4.4150, digest `2167221ef93b4ed4`) for bucket on versus generic. Changed games: zero of 400. Full unit and smoke/regression replay are in progress.
 
 ## Suite admission and measured play
 
