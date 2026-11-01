@@ -1,0 +1,19 @@
+{
+ "blobs": {
+  "mulligan": "22fbf198ea09c33f4c991cf2846a373b6804c6ca",
+  "valueleaf": "em:27e0e460528b3073e0fd"
+ },
+ "deck": "vampires",
+ "frozen": "a2fa79c830b1415a984c656af88e285f9b0b093d",
+ "heartbeat": "2026-11-01T06:43:05Z",
+ "host": "58199181d02e",
+ "run_id": "vampires-artifact-queue-tool-647f24-20261101T064305",
+ "score": 0.0001,
+ "stage": "valueleaf",
+ "stages": [
+  "valueleaf"
+ ],
+ "started": "2026-11-01T06:43:05Z",
+ "state": "running",
+ "worker": "artifact-queue-tool-647f24"
+}
