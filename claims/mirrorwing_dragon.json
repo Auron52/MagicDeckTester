@@ -4,9 +4,12 @@
   "valueleaf": "em:e650fa5b1a96f6292645"
  },
  "deck": "mirrorwing_dragon",
+ "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_mirrorwing_dragon/DECISIONS.txt)",
+ "finished": "2026-11-01T06:41:04Z",
  "frozen": "353542341e47eb1c21098df7676bbfeedab68b15",
  "heartbeat": "2026-11-01T06:22:51Z",
  "host": "58199181d02e",
+ "result_branch": "artifact-refresh/mirrorwing_dragon-20261101-0640",
  "run_id": "mirrorwing_dragon-artifact-queue-tool-647f24-20261101T062234",
  "score": 0.0004,
  "stage": "valueleaf",
@@ -14,6 +17,6 @@
   "valueleaf"
  ],
  "started": "2026-11-01T06:22:34Z",
- "state": "running",
+ "state": "done",
  "worker": "artifact-queue-tool-647f24"
 }
