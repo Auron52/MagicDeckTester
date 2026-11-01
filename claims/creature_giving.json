@@ -9,6 +9,8 @@
  "frozen": "3096f13be5e2570ea34beffc2d5880234bda1a7d",
  "heartbeat": "2026-11-01T09:00:39Z",
  "host": "58199181d02e",
+ "landed": "bf266736e38eef68d31d3bbc84cf8d03c0b02db0",
+ "landed_at": "2026-11-01T09:30:16Z",
  "result_branch": "artifact-refresh/creature_giving-20261101-0919",
  "run_id": "creature_giving-artifact-queue-tool-647f24-20261101T080323",
  "score": 0.0,
