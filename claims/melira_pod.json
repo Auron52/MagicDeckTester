@@ -1,24 +1,19 @@
 {
  "blobs": {
   "mulligan": "1172355372849beaf94082bc0aff2f1faaeabccb",
-  "valueleaf": "em:0e526f28aba1418057fe"
+  "valueleaf": "em:16d33982d54e8ade3f01"
  },
  "deck": "melira_pod",
- "detail": "valueleaf: ADOPTED (live sidecar's eval_model replaced)",
- "finished": "2026-10-29T18:49:54Z",
- "frozen": "87e57645b09e5d843f02fed504086cc06c953351",
- "heartbeat": "2026-10-29T18:31:46Z",
+ "frozen": "84c79bae7ceb99107cae307f18ce49d70b2e89c9",
+ "heartbeat": "2026-11-01T11:33:08Z",
  "host": "58199181d02e",
- "landed": "bd017c90ce626e441253430db10cdaef21f44005",
- "landed_at": "2026-10-29T19:03:41Z",
- "result_branch": "artifact-refresh/melira_pod-20261029-1849",
- "run_id": "melira_pod-artifact-queue-tool-647f24-20261029T145019",
- "score": 0.3237,
+ "run_id": "melira_pod-artifact-queue-tool-647f24-20261101T113308",
+ "score": 0.0,
  "stage": "valueleaf",
  "stages": [
   "valueleaf"
  ],
- "started": "2026-10-29T14:50:19Z",
- "state": "done",
+ "started": "2026-11-01T11:33:08Z",
+ "state": "running",
  "worker": "artifact-queue-tool-647f24"
 }
