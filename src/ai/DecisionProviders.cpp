@@ -23007,6 +23007,146 @@ void MerfolkProvider::CopyCreatureCandidates(const GameState& s, const CardDefin
                      [&](int a, int b) { return tier(a) < tier(b); });
 }
 
+// USER 2026-11-01: retain one one-drop and three lords/Image, with land/Vial
+// sources capped at three until two are in play, then four total. An unplayed
+// Vial fills a source slot only during turn-one cleanup. The keep order is
+// reversed into a complete shed order; quota overflow goes first.
+static bool MerfolkBucketDiscardEnabled()
+{
+    static const bool on = EnvOn("MTG_MERFOLK_BUCKET_DISCARD", true); // DEFAULT ON; =0 -> generic
+    return on;
+}
+
+std::vector<int> MerfolkProvider::CleanupDiscardShedOrder(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    if (!MerfolkBucketDiscardEnabled())
+    { return DeckProvider::CleanupDiscardCandidates(s, required_pieces); }
+    const Player& ap = s.players[s.active_player_index];
+    const int n = static_cast<int>(ap.hand.size());
+    if (n == 0) { return {}; }
+    int board_sources = 0, board_lords = 0;
+    bool board_one_drop = false, board_vial = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != s.active_player_index) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (p.card.IsLand()) { ++board_sources; }
+        if (p.card.m_name == "Aether Vial") { ++board_sources; board_vial = true; }
+        if (d == nullptr || !p.card.IsCreature()) { continue; }
+        if (d->tmpl == CardTemplate::LordEffect && CardHasSubtype(p.card, "Merfolk"))
+        { ++board_lords; }
+        if (d->card.m_mana_cost.ManaValue() == 1 && CardHasSubtype(p.card, "Merfolk"))
+        { board_one_drop = true; }
+    }
+    std::vector<int> lands, vials, one_drops, lords, others, seas, sinks;
+    lands.reserve(n); one_drops.reserve(n); lords.reserve(n);
+    for (int i = 0; i < n; ++i)
+    {
+        const Card& c = ap.hand[static_cast<std::size_t>(i)];
+        if (c.m_is_staged) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        // Sink's front is a spell in cards.json; its MDFC back is a land drop.
+        if (c.m_name == "Sink into Stupor")
+        { lands.push_back(i); sinks.push_back(i); continue; }
+        if (CleanupDiscardIsLand(c)) { lands.push_back(i); continue; }
+        if (c.m_name == "Aether Vial") { vials.push_back(i); continue; }
+        if (c.m_name == "Spreading Seas") { seas.push_back(i); continue; }
+        if (d == nullptr) { others.push_back(i); continue; }
+        if (c.m_name == "Phantasmal Image" || d->tmpl == CardTemplate::LordEffect)
+        { lords.push_back(i); continue; }
+        if (d->card.IsCreature() && d->card.m_mana_cost.ManaValue() == 1)
+        { one_drops.push_back(i); continue; }
+        others.push_back(i);
+    }
+    auto land_value = [&](int i)
+    {
+        const std::string& name = ap.hand[static_cast<std::size_t>(i)].m_name.str();
+        if (name == "Botanical Sanctum") { return 0; }
+        if (name == "Waterlogged Grove") { return 1; }
+        if (name == "Island") { return 2; }
+        if (name == "Secluded Courtyard") { return 3; }
+        if (name == "Unclaimed Territory") { return 4; }
+        return 5; // Soporific Springs enters tapped or costs life.
+    };
+    std::stable_sort(lands.begin(), lands.end(), [&](int a, int b)
+    { return land_value(a) < land_value(b); });
+    auto one_value = [&](int i)
+    {
+        const std::string& name = ap.hand[static_cast<std::size_t>(i)].m_name.str();
+        if (name == "Kumena's Speaker") { return 0; }
+        if (name == "Tide Shaper") { return 1; }
+        return 2;
+    };
+    std::stable_sort(one_drops.begin(), one_drops.end(), [&](int a, int b)
+    { return one_value(a) < one_value(b); });
+    auto lord_value = [&](int i)
+    {
+        const Card& c = ap.hand[static_cast<std::size_t>(i)];
+        if (c.m_name == "Phantasmal Image") { return board_lords > 0 ? 0 : 2; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        return d != nullptr && d->card.m_power.value_or(0) == 2 ? 1 : 3;
+    };
+    std::stable_sort(lords.begin(), lords.end(), [&](int a, int b)
+    { return lord_value(a) < lord_value(b); });
+    auto other_value = [&](int i)
+    {
+        const std::string& name = ap.hand[static_cast<std::size_t>(i)].m_name.str();
+        return name == "Silvergill Adept" ? 0 : 1;
+    };
+    std::stable_sort(others.begin(), others.end(), [&](int a, int b)
+    { return other_value(a) < other_value(b); });
+
+    std::vector<int> keep;
+    keep.reserve(static_cast<std::size_t>(n));
+    std::vector<char> taken(static_cast<std::size_t>(n), 0);
+    auto take = [&](int i)
+    { if (!taken[static_cast<std::size_t>(i)]) { taken[static_cast<std::size_t>(i)] = 1; keep.push_back(i); } };
+    if (!board_one_drop && !one_drops.empty()) { take(one_drops.front()); }
+    int sources = board_sources;
+    for (int i : lands)
+    {
+        if (sources >= 2) { break; }
+        take(i); ++sources;
+    }
+    int lord_slots = std::max(0, 3 - board_lords);
+    for (int i : lords)
+    {
+        if (lord_slots == 0) { break; }
+        take(i); --lord_slots;
+    }
+    const int source_target = board_sources >= 2 ? 4 : 3;
+    for (int i : lands)
+    {
+        if (sources >= source_target) { break; }
+        if (!taken[static_cast<std::size_t>(i)]) { take(i); ++sources; }
+    }
+    if (s.turn_number == 1 && s.phase == Phase::Ending && !board_vial
+        && sources < source_target && !vials.empty())
+    { take(vials.front()); ++sources; }
+    for (int i : lords) { take(i); }
+    for (int i : one_drops) { take(i); }
+    for (int i : others) { take(i); }
+    for (int i : lands)
+    { if (ap.hand[static_cast<std::size_t>(i)].m_name != "Sink into Stupor") { take(i); } }
+    for (int i : vials) { take(i); }
+    for (int i : seas) { take(i); }
+    for (int i : sinks) { take(i); }
+    std::reverse(keep.begin(), keep.end());
+    return CleanupDiscardRankingWithOrder(s, required_pieces, keep);
+}
+
+std::vector<int> MerfolkProvider::CleanupDiscardCandidates(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    std::vector<int> out = CleanupDiscardShedOrder(s, required_pieces);
+    if (MerfolkBucketDiscardEnabled() && out.size() > 1) { out.resize(1); }
+    return out;
+}
+
+bool MerfolkProvider::CleanupDiscardShedStable() const
+{ return !MerfolkBucketDiscardEnabled(); }
+
 const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
 {
     // Archetype detection by card params (same shape as GoldFishRunner::DeckUsesSecondMain).

@@ -145,7 +145,9 @@ def main():
         sys.exit(f"--games must be <= {SEED_SPACING} (seed spacing) or seed ranges overlap and replay")
     seeds = [args.seed_base + i * SEED_SPACING for i in range(blocks)]
 
-    binary = os.path.join(ROOT, "build/Release/mtg")
+    from engine_bin import engine_bin, pgo_ensure
+    pgo_ensure()
+    binary = engine_bin("mtg")
     if not os.path.exists(binary):
         sys.exit("build/Release/mtg missing -- run ./build.sh first")
     outdir = os.path.join(ROOT, "logs/leaf_tiebreak")
