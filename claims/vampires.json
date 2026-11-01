@@ -9,6 +9,8 @@
  "frozen": "a2fa79c830b1415a984c656af88e285f9b0b093d",
  "heartbeat": "2026-11-01T07:02:12Z",
  "host": "58199181d02e",
+ "landed": "270ea2e4725332e264ac16d576f32b6dd3ec2022",
+ "landed_at": "2026-11-01T07:20:37Z",
  "result_branch": "artifact-refresh/vampires-20261101-0702",
  "run_id": "vampires-artifact-queue-tool-647f24-20261101T064305",
  "score": 0.0001,
