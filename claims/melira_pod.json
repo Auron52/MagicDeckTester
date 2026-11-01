@@ -9,6 +9,8 @@
  "frozen": "84c79bae7ceb99107cae307f18ce49d70b2e89c9",
  "heartbeat": "2026-11-01T18:08:04Z",
  "host": "58199181d02e",
+ "landed": "7baaa627c2eb82b169bbaf1d22f1df99267296bd",
+ "landed_at": "2026-11-01T18:19:33Z",
  "result_branch": "artifact-refresh/melira_pod-20261101-1818",
  "run_id": "melira_pod-artifact-queue-tool-647f24-20261101T113308",
  "score": 0.0,
