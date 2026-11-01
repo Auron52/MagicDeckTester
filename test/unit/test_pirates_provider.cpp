@@ -133,6 +133,27 @@ TEST_CASE("Merfolk cleanup buckets retain early creature, lords, and board-nette
           > ShedPos(modal, needs_land, "Spreading Seas"));
 }
 
+TEST_CASE("Merfolk casts Phantasmal Image after its other spells, including draw sets")
+{
+    EnsureCardsPp();
+    GameState s;
+    const MerfolkProvider provider;
+    const CardDefinition* image = CardDatabase::Instance().Lookup("Phantasmal Image");
+    const CardDefinition* silvergill = CardDatabase::Instance().Lookup("Silvergill Adept");
+    REQUIRE(image != nullptr);
+    REQUIRE(silvergill != nullptr);
+    for (const char* name : {"Lord of Atlantis", "Master of the Pearl Trident",
+                             "Vodalian Hexcatcher", "Spreading Seas"})
+    {
+        const CardDefinition* other = CardDatabase::Instance().Lookup(name);
+        REQUIRE(other != nullptr);
+        CHECK(provider.CastOrderRank(s, *other) < provider.CastOrderRank(s, *image));
+        CHECK(provider.CastOrderRank(s, *silvergill) < provider.CastOrderRank(s, *other));
+    }
+    CHECK(provider.CastOrderRank(s, *silvergill) < provider.CastOrderRank(s, *image));
+    CHECK(provider.OrderOpaqueCastsByRank());
+}
+
 TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pirates to PiratesProvider")
 {
     EnsureCardsPp();
