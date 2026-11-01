@@ -9,6 +9,8 @@
  "frozen": "7baaa627c2eb82b169bbaf1d22f1df99267296bd",
  "heartbeat": "2026-11-01T18:21:25Z",
  "host": "58199181d02e",
+ "landed": "5716d46c1820db442bd1cd407f35b7477599d6c6",
+ "landed_at": "2026-11-01T18:40:24Z",
  "result_branch": "artifact-refresh/minotaur-20261101-1830",
  "run_id": "minotaur-artifact-queue-tool-647f24-20261101T182107",
  "score": 0.0,
