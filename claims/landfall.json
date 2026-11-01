@@ -9,6 +9,8 @@
  "frozen": "ac0213a434388532aabce8ae0f01515b98743b4e",
  "heartbeat": "2026-11-01T02:27:08Z",
  "host": "58199181d02e",
+ "landed": "3c51afa920f9448753cc609aed3279a4f74182c8",
+ "landed_at": "2026-11-01T02:45:50Z",
  "result_branch": "artifact-refresh/landfall-20261101-0245",
  "run_id": "landfall-artifact-queue-tool-647f24-20261031T214713",
  "score": 0.0021,
