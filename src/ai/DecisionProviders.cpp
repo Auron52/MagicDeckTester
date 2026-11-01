@@ -22982,6 +22982,26 @@ bool MerfolkProvider::OffersSpellBounceTarget(const GameState& s, const CardDefi
     return DecisionUnpruned() || full_spell_targets;
 }
 
+std::vector<int> MerfolkProvider::KickedIslandizeTargets(const GameState& s, int controller) const
+{
+    static const bool full_targets = EnvOn("MTG_MERFOLK_TIDE_KICK"); // DEFAULT OFF; =1 restores all legal targets
+    if (DecisionUnpruned() || full_targets)
+    { return DeckProvider::KickedIslandizeTargets(s, controller); }
+
+    // The goldfish opponent does not use mana. One Island is enough for every Tide Shaper
+    // bonus, including an Island made by Spreading Seas or an earlier kicked Shaper.
+    const int opponent = 1 - controller;
+    int first_opponent_land = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != opponent || !p.card.IsLand()) { continue; }
+        if (LandHasSubtypeNow(s, p, "Island")) { return {}; }
+        if (first_opponent_land == 0) { first_opponent_land = p.card.m_number; }
+    }
+    return first_opponent_land == 0 ? std::vector<int>{}
+                                    : std::vector<int>{first_opponent_land};
+}
+
 void MerfolkProvider::CopyCreatureCandidates(const GameState& s, const CardDefinition& def,
                                              std::vector<int>& targets) const
 {

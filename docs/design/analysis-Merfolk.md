@@ -49,7 +49,7 @@ Review initially suspected a Tide Shaper target gap when a land is played earlie
 
 ## Remaining gates
 
-Horizon tie-break verdict and the 14 remaining Claude games remain pending. Static Stage 3 coverage is 17/17 full, with zero missing or partial cards. The offline field audit reports 658 checked definitions, zero hard mismatches. The full unit suite passes, including Sink's spell-return test and its provider gate.
+Horizon tie-break verdict and the 14 remaining Claude games remain pending. Static Stage 3 coverage is 17/17 full, with zero missing or partial cards. The offline field audit reports 658 checked definitions, zero hard mismatches. The full unit suite passes, including Sink's spell-return test and its provider gate. Ten user-played Merfolk references now exercise the deck, including the corrected Vial/Image line.
 
 ## Stage 4 — baseline and provider
 
@@ -80,6 +80,37 @@ The paired 200-game depth block gives d0 4.6800, d3/b10 4.3800, d5/b20 4.3800. T
 ### Sink spell-target follow-up (2026-11-01)
 
 After the user approved the other passive-opponent deferrals but requested Sink's spell mode, `bounce_target_spell` was added to the card definition and the shared stack-target resolver. A Sink cast can choose a spell on the stack, including our own; it returns the spell card to its controller's hand even if the spell cannot be countered, while a spell copy ceases to exist. The human target chooser presents stack spells as selectable options beside opponent nonland permanents, and the viewer shows stack spells as buttons. Generic autonomous search enumerates every stack-spell target; `MerfolkProvider::OffersSpellBounceTarget` prunes only that deck's branch by default. A focused unit test covers resolution and the provider gate. The full unit suite, JSON parse, viewer JavaScript parse, coverage (17/17), static viewer audit, runtime viewer audit (16-game sweep plus forced Sink seed 510000/game 29), smoke and regression rows all passed. Both regression modes match committed per-game win turns and play digests exactly, so no baseline changed. Strict viewer replay checked 699 references with zero play drift, board divergence, or enum gaps; both suboptimal references remain beaten. The pre-Sink horizon tie-break run was stopped at about 29,000 paired games when the request arrived, with zero changed win turns; it is not a completed verdict for this source revision.
+
+### Tide Shaper's kicked target and Spreading Seas (2026-11-01)
+
+The user clarified that a kicked Tide Shaper should be searched only to make one opposing land an Island. `MerfolkProvider::KickedIslandizeTargets` offers the first opposing land only while the opponent has no Island; an Island created by Spreading Seas or an earlier Tide Shaper satisfies the condition. Unkicked Tide Shaper remains available. `MTG_MERFOLK_TIDE_KICK=1` restores the generic all-land search for A/B testing. The human viewer still offers every rules-legal land target, including one's own land. A targeted provider test covers both Island-making effects and the generic candidate set.
+
+### Aether Vial and Phantasmal Image (2026-11-01)
+
+The user's sixth saved game exposed a missing replacement on the direct Aether Vial put path: a Vialed Image entered as a printed 0/0 instead of choosing a creature to copy. Both the real executor and the search rollout now apply the copy choice before Image enters. The human chooser offers every creature or decline, and automatic play uses the Merfolk lord preference. The copied card's printed provenance, Illusion subtype, enters-tapped clause, ETB dig, and legend status are carried through both paths. A focused rollout test passes. In a direct real-executor replay of saved game 6, the new target menu selects Vodalian Hexcatcher and the board shows a Vodalian Hexcatcher with `printed: Phantasmal Image`; the old save is classified `repaired` at the same turn-5 win. The user's tenth reference Vials Image on turns 3 and 4, choosing Lord of Atlantis both times, and replays exactly to a turn-4 win. All ten Merfolk references pass strict intent replay with no play drift or enumeration gap. The viewer pins its engine binary per game, so a game begun before the rebuild retains the old code; restarting a game at decision 0 picks up the rebuilt binary.
+
+The pooled reference benchmark forced each saved mulligan count and bottomed card numbers before letting the shipped search play. It reconstructed all ten hands and matched every win turn: nine T4, one T5, average 4.100 for both human and search, zero shortfalls. Seed 10's ordinary autonomous game kept a different hand and won T5; its T4 reference is a mulligan-policy difference rather than an in-play search miss. The user then confirmed the Vial/Image fix in the latest viewer and completed ten references for the mulligan-profile and value-leaf stages.
+
+### Final play regression and mulligan buckets (2026-11-01)
+
+After the Tide Shaper and Vial/Image changes, the Merfolk smoke and regression tiers had zero slower games. Smoke had seven faster d0 games; regression had eight faster d0 games and two faster searched games. Same-turn play changes reflect the revised choices. Strict viewer protocol replay checked 708 saved references with zero play drift, board divergence, or enumeration gaps. The changed Merfolk ground-truth rows and per-game logs were accepted for both tiers.
+
+At the pinned discovery settings (400 probes, depth 5, threshold 0.01, horizon 8), the 17 distinct cards form 12 buckets. The user approved these buckets:
+
+1. Lord of Atlantis / Master of the Pearl Trident / Merfolk Mistbinder
+2. Botanical Sanctum / Secluded Courtyard / Unclaimed Territory
+3. Island / Sink into Stupor
+4. Aether Vial
+5. Cosi's Trickster
+6. Kumena's Speaker
+7. Phantasmal Image
+8. Silvergill Adept
+9. Spreading Seas
+10. Tide Shaper
+11. Vodalian Hexcatcher
+12. Waterlogged Grove
+
+The nearest split is Botanical Sanctum versus Waterlogged Grove at mean absolute turn distance 0.0175, above the 0.01 merge threshold. The 12-bucket maximum-size-seven space is C(18,7) = 31,824 hands before deck multiplicities and play/draw branching.
 
 ## Claude-play sweep
 

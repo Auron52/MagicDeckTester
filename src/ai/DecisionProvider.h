@@ -2088,6 +2088,19 @@ public:
     virtual bool OffersSpellBounceTarget(const GameState& s, const CardDefinition& def) const
     { (void)s; (void)def; return true; }
 
+    // Kicked Tide Shaper's land targets. Zero represents the legal kicked cast when
+    // no land exists (its ETB target trigger cannot be put on the stack). Generic
+    // search includes every land; deck providers may narrow the autonomous set.
+    virtual std::vector<int> KickedIslandizeTargets(const GameState& s, int controller) const
+    {
+        (void)controller;
+        std::vector<int> out;
+        for (const Permanent& p : s.battlefield)
+        { if (p.card.IsLand()) { out.push_back(p.card.m_number); } }
+        if (out.empty()) { out.push_back(0); }
+        return out;
+    }
+
     // OffersLifegainOpponentTarget -- whether the AUTONOMOUS search enumerates the OPPONENT-target
     // variant of a "target player gains N life" spell (CardParams::cast_lifegain_target_player:
     // Heroes' Reunion, Rest for the Weary). The engine treats the target as a real two-way choice --

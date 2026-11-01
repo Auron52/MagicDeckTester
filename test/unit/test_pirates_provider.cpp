@@ -10,6 +10,7 @@
 #include <doctest/doctest.h>
 
 #include "ai/DecisionProviders.h"
+#include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
 #include "core/GameState.h"
 #include "core/HeuristicDefaults.h"
@@ -152,6 +153,68 @@ TEST_CASE("Merfolk casts Phantasmal Image after its other spells, including draw
     }
     CHECK(provider.CastOrderRank(s, *silvergill) < provider.CastOrderRank(s, *image));
     CHECK(provider.OrderOpaqueCastsByRank());
+}
+
+TEST_CASE("Aether Vial puts Phantasmal Image in as a copy of a Merfolk lord")
+{
+    GameState s = MakeState({"Phantasmal Image"}, {"Aether Vial", "Vodalian Hexcatcher"}, 2);
+    const MerfolkProvider provider;
+    s.m_provider = &provider;
+    const auto plans = TurnSolver::EnumerateMainPlans(s, true);
+    const auto vial = std::find_if(plans.begin(), plans.end(), [](const TurnSolver::Plan& p)
+    {
+        return std::any_of(p.actions.begin(), p.actions.end(), [](const Action& a)
+        { return a.kind == Action::Kind::ActivateVial
+              && a.card_name == "Phantasmal Image"; });
+    });
+    REQUIRE(vial != plans.end());
+    TurnSolver::ApplyPlan(s, *vial, true);
+    const auto copied = std::find_if(s.battlefield.begin(), s.battlefield.end(), [](const Permanent& p)
+    { return p.card.m_number == 1; });
+    REQUIRE(copied != s.battlefield.end());
+    CHECK(copied->card.m_name.str() == "Vodalian Hexcatcher");
+    CHECK(copied->copy_printed_name.str() == "Phantasmal Image");
+    CHECK(CardHasSubtype(copied->card, "Illusion"));
+}
+
+TEST_CASE("Merfolk kicks Tide Shaper only to create the first opposing Island")
+{
+    EnsureCardsPp();
+    GameState s;
+    s.active_player_index = 0;
+    Permanent own;
+    own.card = MakeCardPp("Island", 100);
+    own.controller_index = own.owner_index = 0;
+    s.battlefield.push_back(own);
+    Permanent opponent;
+    opponent.card = MakeCardPp("Botanical Sanctum", 101);
+    opponent.controller_index = opponent.owner_index = 1;
+    s.battlefield.push_back(opponent);
+    opponent.card = MakeCardPp("Waterlogged Grove", 102);
+    s.battlefield.push_back(opponent);
+
+    const MerfolkProvider provider;
+    CHECK(provider.KickedIslandizeTargets(s, 0) == std::vector<int>{101});
+    CHECK(GenericProvider().KickedIslandizeTargets(s, 0) == std::vector<int>{100, 101, 102});
+
+    Permanent seas;
+    seas.card = MakeCardPp("Spreading Seas", 103);
+    seas.controller_index = seas.owner_index = 0;
+    seas.aura_attached_to = 101;
+    s.battlefield.push_back(seas);
+    CHECK(provider.KickedIslandizeTargets(s, 0).empty());
+
+    s.battlefield.pop_back();
+    Permanent shaper;
+    shaper.card = MakeCardPp("Tide Shaper", 104);
+    shaper.controller_index = shaper.owner_index = 0;
+    shaper.islandize_target = 101;
+    s.battlefield.push_back(shaper);
+    CHECK(provider.KickedIslandizeTargets(s, 0).empty());
+
+    s.battlefield.clear();
+    CHECK(provider.KickedIslandizeTargets(s, 0).empty());
+    CHECK(GenericProvider().KickedIslandizeTargets(s, 0) == std::vector<int>{0});
 }
 
 TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pirates to PiratesProvider")
