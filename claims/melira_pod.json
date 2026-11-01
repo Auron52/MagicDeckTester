@@ -4,9 +4,12 @@
   "valueleaf": "em:16d33982d54e8ade3f01"
  },
  "deck": "melira_pod",
+ "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_melira_pod/DECISIONS.txt)",
+ "finished": "2026-11-01T18:19:00Z",
  "frozen": "84c79bae7ceb99107cae307f18ce49d70b2e89c9",
  "heartbeat": "2026-11-01T18:08:04Z",
  "host": "58199181d02e",
+ "result_branch": "artifact-refresh/melira_pod-20261101-1818",
  "run_id": "melira_pod-artifact-queue-tool-647f24-20261101T113308",
  "score": 0.0,
  "stage": "valueleaf",
@@ -14,6 +17,6 @@
   "valueleaf"
  ],
  "started": "2026-11-01T11:33:08Z",
- "state": "running",
+ "state": "done",
  "worker": "artifact-queue-tool-647f24"
 }
