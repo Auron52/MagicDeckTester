@@ -62,6 +62,25 @@
     "",
     "=== 2026-10-30T21:46:13  PHASE E.6: no allowance for treasure_hunt -- no ladder escalations in 1200 games (single-path or trust-dominated); fleet default R = 0"
    ]
+  },
+  {
+   "run_id": "treasure_hunt-artifact-queue-tool-647f24-20261101T190927",
+   "kind": "valueleaf",
+   "verdict": "kept-incumbent",
+   "ident": "em:22c2f0ca0230d32b1c26",
+   "frozen": "caf0599e45eff1f5a0c8a8a56a1c24d124f35350",
+   "src_tree": "83b1f17308cff28f24934c82e9c113000a08992f",
+   "date": "2026-11-01",
+   "worker": "artifact-queue-tool-647f24",
+   "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_treasure_hunt/DECISIONS.txt)",
+   "decisions": [
+    "    VERDICT arm=d6b40 adopt=0 delta=+0.00000 t=+0.00 cost=1.016x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.02x) with quality no better (+0.00000) -- not an improvement",
+    "    VERDICT arm=d6b60 adopt=0 delta=-0.00112 t=-4.97 cost=1.123x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.12x) with quality better (-0.00112) -- a TRADE, the user's call",
+    "    VERDICT arm=d6b80 adopt=0 delta=-0.00137 t=-5.23 cost=1.209x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.21x) with quality better (-0.00137) -- a TRADE, the user's call",
+    "    PICK arm=none why=no candidate is cheaper than live with quality not notably worse",
+    "",
+    "=== 2026-11-01T19:24:20  PHASE E.6: no allowance for treasure_hunt -- no ladder escalations in 1200 games (single-path or trust-dominated); fleet default R = 0"
+   ]
   }
  ]
 }
