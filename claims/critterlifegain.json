@@ -9,6 +9,8 @@
  "frozen": "bf266736e38eef68d31d3bbc84cf8d03c0b02db0",
  "heartbeat": "2026-11-01T09:32:06Z",
  "host": "58199181d02e",
+ "landed": "6f67ae41973637824615cd8458ec087dd9640074",
+ "landed_at": "2026-11-01T09:48:09Z",
  "result_branch": "artifact-refresh/critterlifegain-20261101-0938",
  "run_id": "critterlifegain-artifact-queue-tool-647f24-20261101T093147",
  "score": 0.0,
