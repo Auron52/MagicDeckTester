@@ -98,7 +98,7 @@ After the Tide Shaper and Vial/Image changes, the Merfolk smoke and regression t
 At the pinned discovery settings (400 probes, depth 5, threshold 0.01, horizon 8), the 17 distinct cards form 12 buckets. The user approved these buckets:
 
 1. Lord of Atlantis / Master of the Pearl Trident / Merfolk Mistbinder
-2. Botanical Sanctum / Secluded Courtyard / Unclaimed Territory
+2. GU lands: Botanical Sanctum / Secluded Courtyard / Unclaimed Territory
 3. Island / Sink into Stupor
 4. Aether Vial
 5. Cosi's Trickster
