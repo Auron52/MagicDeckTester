@@ -43,6 +43,25 @@
     "",
     "=== 2026-10-30T00:43:58  PHASE E.6: no allowance for auras -- no ladder escalations in 1200 games (single-path or trust-dominated); fleet default R = 0"
    ]
+  },
+  {
+   "run_id": "auras-artifact-queue-tool-647f24-20261101T075318",
+   "kind": "valueleaf",
+   "verdict": "kept-incumbent",
+   "ident": "em:8f9467f9f125c2b4d1b1",
+   "frozen": "1d895c50f15651e14f91c7e2fa15ee9564be53e7",
+   "src_tree": "83b1f17308cff28f24934c82e9c113000a08992f",
+   "date": "2026-11-01",
+   "worker": "artifact-queue-tool-647f24",
+   "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_auras/DECISIONS.txt)",
+   "decisions": [
+    "    VERDICT arm=d6b20 adopt=0 delta=+0.00000 t=+0.00 cost=0.992x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=byte-identical to the baseline: the arm is not engaging",
+    "    VERDICT arm=d6b30 adopt=0 delta=-0.00013 t=-1.00 cost=1.050x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.05x) with quality better (-0.00013) -- a TRADE, the user's call",
+    "    VERDICT arm=d6b40 adopt=0 delta=-0.00025 t=-1.53 cost=1.069x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.07x) with quality better (-0.00025) -- a TRADE, the user's call",
+    "    PICK arm=none why=no candidate is cheaper than live with quality not notably worse",
+    "",
+    "=== 2026-11-01T08:01:11  PHASE E.6: no allowance for auras -- no ladder escalations in 1200 games (single-path or trust-dominated); fleet default R = 0"
+   ]
   }
  ]
 }
