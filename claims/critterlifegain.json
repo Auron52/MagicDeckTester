@@ -4,9 +4,12 @@
   "valueleaf": "em:cd4ea61210c92d881361"
  },
  "deck": "critterlifegain",
+ "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_critterlifegain/DECISIONS.txt)",
+ "finished": "2026-11-01T09:38:29Z",
  "frozen": "bf266736e38eef68d31d3bbc84cf8d03c0b02db0",
  "heartbeat": "2026-11-01T09:32:06Z",
  "host": "58199181d02e",
+ "result_branch": "artifact-refresh/critterlifegain-20261101-0938",
  "run_id": "critterlifegain-artifact-queue-tool-647f24-20261101T093147",
  "score": 0.0,
  "stage": "valueleaf",
@@ -14,6 +17,6 @@
   "valueleaf"
  ],
  "started": "2026-11-01T09:31:47Z",
- "state": "running",
+ "state": "done",
  "worker": "artifact-queue-tool-647f24"
 }
