@@ -43824,6 +43824,25 @@ inline void ReturnCounteredSpellToHand(GameState& state, int owner, Card card)
     EnterHand(state, owner, std::move(card), HandEntryReason::Countered);
 }
 
+inline int FirstTargetSpellIndex(const GameState& state)
+{
+    for (int i = static_cast<int>(state.stack.size()) - 1; i >= 0; --i)
+    { if (state.stack[static_cast<std::size_t>(i)].type == StackEntry::EntryType::Spell) { return i; } }
+    return -1;
+}
+
+// Sink returns a spell without countering it, including one that can't be countered. A copy
+// disappears when it leaves the stack; a card returns to its owner's hand.
+inline void BounceTargetSpellAt(GameState& state, int index)
+{
+    if (index < 0 || index >= static_cast<int>(state.stack.size())) { return; }
+    const StackEntry target = state.stack[static_cast<std::size_t>(index)];
+    if (target.type != StackEntry::EntryType::Spell) { return; }
+    state.stack.erase(state.stack.begin() + index);
+    if (!target.is_copy)
+    { ReturnCounteredSpellToHand(state, target.controller_index, target.source); }
+}
+
 inline bool FreeCastHasLegalTargets(const GameState& s, int controller, const CardDefinition& d)
 {
     const CardParams& pp = d.params;
@@ -43835,7 +43854,8 @@ inline bool FreeCastHasLegalTargets(const GameState& s, int controller, const Ca
     if (pp.is_aura) { return !LegalEnchantTargets(s, controller, pp).empty(); }
     if (pp.attach_target_equipment) { return AttachSpellCastLegal(s, controller); }
     if (pp.bounce_opponent_nonland_permanent)
-    { return OpponentNonlandTargetIndex(s, controller, 0) >= 0; }
+    { return OpponentNonlandTargetIndex(s, controller, 0) >= 0
+          || (pp.bounce_target_spell && FirstTargetSpellIndex(s) >= 0); }
     if (RemovalSearchesForController(d))
     {
         return RemovalControllerCastLegal(s, controller, 0, HumanPlayActive() || g_play_target_chooser != nullptr);

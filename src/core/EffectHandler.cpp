@@ -890,6 +890,11 @@ void EffectHandler::ResolveRemoval(GameState& state, const StackEntry& entry,
                        ? ConsumeScriptedLandSearchPin() : -1;
     for (const Target& t : entry.targets)
     {
+        if (t.type == Target::Type::Spell && def.params.bounce_target_spell)
+        {
+            BounceTargetSpellAt(state, t.stack_index);
+            continue;
+        }
         if (t.type == Target::Type::Permanent
             && t.permanent_index >= 0
             && t.permanent_index < static_cast<int>(state.battlefield.size()))

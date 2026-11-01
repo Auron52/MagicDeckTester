@@ -801,6 +801,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.sacrifice_land = params.value("sacrifice_land", false);
     p.reveal_subtype_or_pay = params.value("reveal_subtype_or_pay", std::string{});
     p.bounce_opponent_nonland_permanent = params.value("bounce_opponent_nonland_permanent", false);
+    p.bounce_target_spell = params.value("bounce_target_spell", false);
     p.cost_less_per_opponent_noncombat_damage = params.value("cost_less_per_opponent_noncombat_damage", false);
     p.incinerator_damage_trigger = params.value("incinerator_damage_trigger", false);
     p.damage_per_nonbasic_land = params.value("damage_per_nonbasic_land", 0);

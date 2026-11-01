@@ -125,10 +125,11 @@ enum class Step  { Untap, Upkeep, Draw, MainPhase,
 
 struct Target
 {
-    enum class Type { Player, Permanent };
+    enum class Type { Player, Permanent, Spell };
     Type type;
     int  player_index    = -1;
     int  permanent_index = -1;
+    int  stack_index = -1;
 };
 
 struct StackEntry

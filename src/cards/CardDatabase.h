@@ -45,6 +45,7 @@ struct CardParams
     bool sacrifice_land = false;              // additional cost: sacrifice a land (e.g. Shard Volley)
     std::string reveal_subtype_or_pay;         // Silvergill Adept: reveal another card or pay surcharge
     bool bounce_opponent_nonland_permanent = false;
+    bool bounce_target_spell = false;          // Sink into Stupor: return a spell from the stack
     std::optional<ManaCost> spectacle_cost;  // alternate cost when opponent lost life this turn
     std::vector<Color> produces;   // mana colors this card produces
     // Modal double-faced LAND (MDFC Pathway lands, e.g. Branchloft // Boulderloft): the FRONT face

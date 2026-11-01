@@ -2272,6 +2272,11 @@ public:
         return true;
     }
 
+    // Search target for a spell-return effect (Sink into Stupor). Generic search is lossless;
+    // a deck provider may omit this branch. Human play always sees every legal stack spell.
+    virtual bool OffersSpellBounceTarget(const GameState& s, const CardDefinition& def) const
+    { (void)s; (void)def; return true; }
+
     // OffersLifegainOpponentTarget -- whether the AUTONOMOUS search enumerates the OPPONENT-target
     // variant of a "target player gains N life" spell (CardParams::cast_lifegain_target_player:
     // Heroes' Reunion, Rest for the Weary). The engine treats the target as a real two-way choice --

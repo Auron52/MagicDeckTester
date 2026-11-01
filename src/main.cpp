@@ -3657,7 +3657,7 @@ static void WriteDivideDecisionJson(std::ostream& os, const GameState& s, const 
     if (allow_none) { d.Bool("allow_none", true); }
     d.Array("legal_targets", legal.size(), [&](std::size_t i)
     {
-        os << "{ \"kind\": \"" << (legal[i].kind == 0 ? "player" : "permanent")
+        os << "{ \"kind\": \"" << (legal[i].kind == 0 ? "player" : legal[i].kind == 2 ? "spell" : "permanent")
            << "\", \"index\": " << legal[i].index << ", \"label\": "; JsonStr(os, legal_labels[i]);
         os << ", \"default\": " << (i < default_amounts.size() ? default_amounts[i] : 0) << " }";
     });
@@ -3717,7 +3717,7 @@ static void WriteTargetDecisionJson(std::ostream& os, const GameState& s, const 
     d.Board(s);
     d.Array("legal_targets", legal.size(), [&](std::size_t i)
     {
-        os << "{ \"kind\": \"" << (legal[i].kind == 0 ? "player" : "permanent")
+        os << "{ \"kind\": \"" << (legal[i].kind == 0 ? "player" : legal[i].kind == 2 ? "spell" : "permanent")
            << "\", \"index\": " << legal[i].index << ", \"label\": "; JsonStr(os, legal_labels[i]); os << " }";
     });
     d.HeuristicDefault(heuristic_default);
@@ -3726,7 +3726,7 @@ static void WriteTargetDecisionJson(std::ostream& os, const GameState& s, const 
         os << "{ \"index\": " << oi << ", \"label\": "; JsonStr(os, options[oi].label);
         os << ", \"targets\": [";
         for (size_t ti = 0; ti < options[oi].targets.size(); ++ti)
-        { if (ti) os << ", "; os << "{ \"kind\": \"" << (options[oi].targets[ti].kind == 0 ? "player" : "permanent")
+        { if (ti) os << ", "; os << "{ \"kind\": \"" << (options[oi].targets[ti].kind == 0 ? "player" : options[oi].targets[ti].kind == 2 ? "spell" : "permanent")
                                   << "\", \"index\": " << options[oi].targets[ti].index << " }"; }
         os << "] }";
     });
@@ -3746,6 +3746,8 @@ static void WriteTargetDecisionJson(std::ostream& os, const GameState& s, const 
     else if (!pump_desc.empty())
     { d.Note("reply an option index. The chosen creature gets " + pump_desc
              + ". Default = the AI's pick (best attacker)."); }
+    else if (source == "Sink into Stupor")
+    { d.Note("reply an option index -- return the chosen spell on the stack or opponent nonland permanent to its owner's hand. Every legal target is offered."); }
     else if (!remove_desc.empty())
     { d.Note("reply an option index. The chosen creature is " + remove_desc
              + ". Only legal targets are listed. Default = the AI's pick."); }
@@ -6722,6 +6724,16 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
                     legal.push_back({ 1, bi, 0 });
                     legal_labels.push_back(ProtocolPTLabel(p, s) + " (opponent)");
                 }
+                if (def.params.bounce_target_spell)
+                {
+                    for (int si = 0; si < static_cast<int>(s.stack.size()); ++si)
+                    {
+                        const StackEntry& spell = s.stack[si];
+                        if (spell.type != StackEntry::EntryType::Spell) { continue; }
+                        legal.push_back({ 2, si, 0 });
+                        legal_labels.push_back(spell.source.m_name.str() + " (spell on stack)");
+                    }
+                }
             }
             else if (exile_removal && def.params.allow_self_target)
                                      { CollectCreatureTargets(s, controller, legal, legal_labels); }
@@ -6783,7 +6795,15 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
                 : (trick && def.params.trick_up_to_one && max_targets == 1) ? 0
                 : trick   ? std::min(max_targets, std::max(1, static_cast<int>(heuristic.size())))
                 : 1;
-            std::vector<TargetOption> opts = EnumerateTargetSets(legal, legal_labels, max_targets, min_targets);
+            std::vector<TargetOption> opts;
+            if (def.params.bounce_target_spell)
+            {
+                // Sink has exactly one target. Keep every legal spell/permanent visible even
+                // when the general subset enumerator's 256-option cap would truncate a board.
+                for (std::size_t i = 0; i < legal.size(); ++i)
+                { opts.push_back(TargetOption{{legal[i]}, legal_labels[i]}); }
+            }
+            else { opts = EnumerateTargetSets(legal, legal_labels, max_targets, min_targets); }
             // No legal target at all: nothing to ask (min 0 would otherwise offer a lone,
             // pointless "(no target)" confirm for an empty-board up-to-one trick).
             if (opts.empty() || legal.empty()) { return heuristic; }
