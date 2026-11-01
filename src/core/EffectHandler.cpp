@@ -101,7 +101,7 @@ void EffectHandler::EnterBattlefield(GameState& state, const StackEntry& entry,
     // triggers -- so a copy of Breaching Dragonstorm re-fires its exile trigger. Lockstep twin:
     // apply_one's creature-enter branch makes the identical swap.
     const CardDefinition* edef = &def;
-    if (def.params.enter_as_copy_of_entrant)
+    if (def.params.enter_as_copy_of_entrant || def.params.enter_as_copy_of_creature)
     {
         // The searched pick rides entry.enchant_target (reused as the copy-source m_number, the
         // aura/trick precedent; -1 = searched decline, 0 = heuristic).
@@ -111,6 +111,8 @@ void EffectHandler::EnterBattlefield(GameState& state, const StackEntry& entry,
         {
             perm.card          = state.battlefield[src_bi].card;
             perm.card.m_number = entry.source.m_number;
+            if (def.params.enter_as_copy_of_creature)
+            { perm.card.m_subtypes.push_back("Illusion"); }
             // Display provenance: the board now shows the COPIED card's name, so record the
             // printed one (viewer "printed" badge) and narrate the swap in the play history --
             // sink-guarded, so search/autonomous play is byte-identical. Lockstep: apply_one.
@@ -121,6 +123,12 @@ void EffectHandler::EnterBattlefield(GameState& state, const StackEntry& entry,
             const CardDefinition* cd = CardDatabase::Instance().LookupCached(perm.card);
             if (cd) { edef = cd; }
         }
+    }
+    if (!def.params.kicked_base_name.empty())
+    {
+        if (def.params.kicked_etb_target_land_island)
+        { perm.islandize_target = SelectIslandLandTarget(state, entry.enchant_target); }
+        perm.card = UnkickedSpellCard(def, perm.card);
     }
     // Fire Diamond: "This artifact enters tapped." enters_tapped was previously honored only on the
     // land-drop path, so a CAST permanent carrying it entered untapped and was tappable for mana
@@ -294,7 +302,7 @@ bool EffectHandler::Resolve(GameState& state, const StackEntry& entry, const Car
         // ...or the spell may have ENTERED as a legendary (Sakashima's Protege copying
         // Maelstrom Wanderer): the entering card is the copy's, not def's, so gate on the
         // param too. EnforceLegendRule is a no-op without a duplicate.
-        || def.params.enter_as_copy_of_entrant)
+        || def.params.enter_as_copy_of_entrant || def.params.enter_as_copy_of_creature)
     {
         EnforceLegendRule(state, entry.controller_index);
     }
@@ -893,6 +901,13 @@ void EffectHandler::ResolveRemoval(GameState& state, const StackEntry& entry,
             // battlefield vector (appending tokens), which would dangle a held reference.
             TryPumpThenSwordsRedirect(state, entry.controller_index, t.permanent_index, def);
             Permanent& target = state.battlefield[t.permanent_index];
+            if (def.params.bounce_opponent_nonland_permanent)
+            {
+                if (target.controller_index != entry.controller_index && !target.card.IsLand()
+                    && SpellCanTargetPermanent(state, entry.controller_index, target))
+                { BounceOpponentNonlandAt(state, t.permanent_index); }
+                continue;
+            }
             // Tuck removal (Unexpectedly Absent): put the target into its owner's library just
             // beneath the top X cards. A TOKEN (every opponent spawn) ceases to exist instead
             // (CR 111.7) -- faithful, not a simplification; a real card inserts at min(X, size).

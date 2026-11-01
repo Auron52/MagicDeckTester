@@ -412,7 +412,7 @@ static std::string AuraHostLabel(const GameState& s, int m_number)
     int total = 0, ordinal = 0;
     for (const Permanent& p : s.battlefield)
     {
-        if (p.controller_index != s.active_player_index || p.card.m_name.str() != name) { continue; }
+        if (p.card.m_name.str() != name) { continue; }
         ++total;
         if (p.card.m_number == m_number) { ordinal = total; }
     }
@@ -3614,7 +3614,7 @@ static void WriteTargetDecisionJson(std::ostream& os, const GameState& s, const 
     if (!loyalty_desc.empty()) { d.Str("loyalty", loyalty_desc); }
     // A non-empty copy_desc flags this as Sakashima's Protege's enter-as-a-copy choice: the
     // legal set is this-turn ENTRANTS (any permanent, either side), the "(no target)" option is
-    // DECLINE (enter as the printed 3/1), and no damage is dealt.
+    // DECLINE (enter as printed), and no damage is dealt.
     if (!copy_desc.empty())   { d.Str("copy", copy_desc); }
     // A non-empty pump_desc (e.g. "+4/+4") flags this as an own-creature pump rather than damage, so
     // the viewer shows "gets +4/+4" and highlights your creatures instead of "N damage".
@@ -3673,10 +3673,8 @@ static void WriteTargetDecisionJson(std::ostream& os, const GameState& s, const 
              + std::to_string(min_targets) + "-" + std::to_string(max_targets) + " targets. The options "
              "list only illustrates sets; options[heuristic_default] is the AI's pick."); }
     else if (!copy_desc.empty())
-    { d.Note("reply an option index. Sakashima's Protege enters as a COPY of the chosen "
-             "this-turn entrant (any permanent that entered this turn; a Breaching Dragonstorm "
-             "copy re-fires its exile trigger); pick the \"(no target)\" option to decline and "
-             "enter as the printed 3/1. Default = the AI's pick."); }
+    { d.Note("reply an option index. This creature may enter as a copy of a listed permanent; "
+             "pick the (no target) option to decline. Default = the AI's pick."); }
     else
     { d.Note("reply an option index. Each chosen target takes " + std::to_string(per_target)
              + " damage (up to " + std::to_string(max_targets) + " target(s)). Default = the AI's pick (face)."); }
@@ -6386,7 +6384,9 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
             // controller"), so self-targeting gains US life and is a real line in a lifegain deck.
             // Path to Exile (land_search_for_removal_controller): the rider is a LAND SEARCH by the exiled
             // creature's controller -- the Swords life wording would be wrong for it.
-            const std::string remove_desc = !exile_removal ? std::string()
+            const std::string remove_desc = def.params.bounce_opponent_nonland_permanent
+                ? std::string("returned to its owner's hand (tokens cease to exist)")
+                : !exile_removal ? std::string()
                 : def.params.tuck_to_library
                 ? std::string("put into its owner's library just beneath the top X cards (a token ceases to exist); no life gain")
                 : def.params.land_search_for_removal_controller
@@ -6425,9 +6425,12 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
             // land entrant is legal too) -- plus DECLINE (min 0: enter as the printed 3/1). The
             // 5d sweep found the old fall-through to CollectDamageTargets offered faces + stale
             // creatures (silent no-ops) while hiding the real noncreature entrants.
-            const bool copy_entrant = def.params.enter_as_copy_of_entrant;
-            const std::string copy_desc = copy_entrant
-                ? std::string("enters as a copy of the chosen this-turn entrant") : std::string();
+            const bool copy_entrant = def.params.enter_as_copy_of_entrant
+                                   || def.params.enter_as_copy_of_creature;
+            const std::string copy_desc = def.params.enter_as_copy_of_creature
+                ? std::string("enters as a copy of the chosen creature")
+                : copy_entrant ? std::string("enters as a copy of the chosen this-turn entrant")
+                               : std::string();
             // "TARGET PLAYER gains N life" (Heroes' Reunion, Rest for the Weary; ApplyCastLifegain asks
             // at resolution with per_target_damage = the amount): the legal set is BOTH players --
             // human play is never pruned, so the autonomous self-target prune does not apply here.
@@ -6472,7 +6475,9 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
                 for (int bi = 0; bi < static_cast<int>(s.battlefield.size()); ++bi)
                 {
                     const Permanent& p = s.battlefield[bi];
-                    if (!p.entered_this_turn) { continue; }
+                    if (def.params.enter_as_copy_of_creature)
+                    { if (!p.card.IsCreature()) { continue; } }
+                    else if (!p.entered_this_turn) { continue; }
                     // Legend-rule self-destruction warning (user's s3 game, 2026-09-04: both
                     // Protegés copied the Maelstrom Wanderer already in play and silently died).
                     // The choice is LEGAL (CR 704.5j resolves it), so it stays offered -- but the
@@ -6512,6 +6517,17 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
             // Self-targeting removal (user, 2026-09-18): with allow_self_target the human sees BOTH
             // sides -- Swords on our own creature gains US its power in life. CollectCreatureTargets is
             // the existing both-sides collector and already filters shroud on the own side.
+            else if (def.params.bounce_opponent_nonland_permanent)
+            {
+                for (int bi = 0; bi < static_cast<int>(s.battlefield.size()); ++bi)
+                {
+                    const Permanent& p = s.battlefield[bi];
+                    if (p.controller_index == controller || p.card.IsLand()
+                        || !SpellCanTargetPermanent(s, controller, p)) { continue; }
+                    legal.push_back({ 1, bi, 0 });
+                    legal_labels.push_back(ProtocolPTLabel(p, s) + " (opponent)");
+                }
+            }
             else if (exile_removal && def.params.allow_self_target)
                                      { CollectCreatureTargets(s, controller, legal, legal_labels); }
             else if (exile_removal)  { CollectOpponentCreatureTargets(s, controller, legal, legal_labels); }

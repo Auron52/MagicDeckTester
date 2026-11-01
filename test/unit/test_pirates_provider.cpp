@@ -196,6 +196,8 @@ TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pir
         // Midrange Burn is intentionally separate from the low-curve Burn provider:
         // Chandra and Incinerator need their own cast/legend ordering.
         {"Midrange Burn", "MidrangeBurn"},
+        // Image's copy-target policy and Tide/Seas land effects belong to Merfolk's own provider.
+        {"Merfolk", "Merfolk"},
     };
 
     namespace fs = std::filesystem;

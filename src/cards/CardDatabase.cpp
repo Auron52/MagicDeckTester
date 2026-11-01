@@ -278,6 +278,10 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
             kicked.card.m_mana_cost =
                 def.card.m_mana_cost.PlusAdditionalCost(*def.params.kicker_cost);
             kicked.params.kicker_cost.reset();        // CR 601.2b: a kicked spell cannot re-kick
+            // Silvergill Adept uses this summed-cost face for its {3} OR-reveal branch.
+            // The dearer face pays the surcharge and therefore needs no reveal.
+            if (!def.params.reveal_subtype_or_pay.empty())
+            { kicked.params.reveal_subtype_or_pay.clear(); }
             // ...and remember which printed card this face came from, so the resolution tail can
             // file the PRINTED card in the graveyard rather than this face (see UnkickedSpellCard).
             kicked.params.kicked_base_name = def.card.m_name.str();
@@ -793,6 +797,8 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.tough_bonus = params.value("tough_bonus", 0);
     p.targeting      = TargetingFromString(params.value("targeting", std::string("none")));
     p.sacrifice_land = params.value("sacrifice_land", false);
+    p.reveal_subtype_or_pay = params.value("reveal_subtype_or_pay", std::string{});
+    p.bounce_opponent_nonland_permanent = params.value("bounce_opponent_nonland_permanent", false);
     p.cost_less_per_opponent_noncombat_damage = params.value("cost_less_per_opponent_noncombat_damage", false);
     p.incinerator_damage_trigger = params.value("incinerator_damage_trigger", false);
     p.damage_per_nonbasic_land = params.value("damage_per_nonbasic_land", 0);
@@ -984,6 +990,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.shuffle_reveal_freecast    = params.value("shuffle_reveal_freecast",    false);
     p.demonstrate                = params.value("demonstrate",                false);
     p.enter_as_copy_of_entrant   = params.value("enter_as_copy_of_entrant",   false);
+    p.enter_as_copy_of_creature  = params.value("enter_as_copy_of_creature",  false);
     p.damage_opp_creatures_mv_cast = params.value("damage_opp_creatures_mv_cast", false);
     p.damage_all_creatures       = params.value("damage_all_creatures", 0);
     p.self_bounce_on_etb_subtype = params.value("self_bounce_on_etb_subtype", std::string());
@@ -1014,6 +1021,9 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     // --- Knights tribal extensions ---
     p.affects_all_creatures        = params.value("affects_all_creatures", false);
     p.lord_excludes_self           = params.value("lord_excludes_self", false);
+    p.self_pump_if_other_subtype_or_land = params.value("self_pump_if_other_subtype_or_land", std::string{});
+    p.self_pump_if_land_subtype = params.value("self_pump_if_land_subtype", std::string{});
+    p.self_pump_if_opponent_island = params.value("self_pump_if_opponent_island", false);
     p.power_equals_creature_count  = params.value("power_equals_creature_count", false);
     p.toughness_equals_creature_count = params.value("toughness_equals_creature_count", false);
     p.toughness_equals_devotion_color = params.value("toughness_equals_devotion_color", std::string{});
@@ -1523,6 +1533,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.cast_creates_tokens       = params.value("cast_creates_tokens", 0);
     if (params.contains("kicker_cost"))
         p.kicker_cost = ManaCostFromString(params["kicker_cost"].get<std::string>());
+    p.kicked_etb_target_land_island = params.value("kicked_etb_target_land_island", false);
     p.kicked_creates_tokens     = params.value("kicked_creates_tokens", 0);
     p.cast_created_token_power  = params.value("cast_created_token_power", 0);
     p.cast_created_token_toughness = params.value("cast_created_token_toughness", 0);
@@ -1744,6 +1755,8 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     // ---- Flicker combo (see CardParams' block comment for each field's semantics) ----
     p.etb_untap_lands               = params.value("etb_untap_lands", 0);
     p.is_land_aura                  = params.value("is_land_aura", false);
+    p.land_aura_can_target_opponent = params.value("land_aura_can_target_opponent", false);
+    p.land_aura_sets_island         = params.value("land_aura_sets_island", false);
     p.land_aura_extra_mana          = params.value("land_aura_extra_mana", 0);
     p.land_aura_grants_shroud       = params.value("land_aura_grants_shroud", false);
     p.land_aura_host_subtype        = params.value("land_aura_host_subtype", std::string());

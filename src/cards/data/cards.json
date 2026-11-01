@@ -14007,6 +14007,239 @@
      }
     ]
    }
+  },
+  {
+   "name": "Lord of Atlantis",
+   "mana_cost": "{U}{U}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Merfolk"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "Other Merfolk get +1/+1 and have islandwalk. (They can't be blocked as long as defending player controls an Island.) [PARTIAL, PROVISIONAL: islandwalk has no effect against the passive opponent, which never blocks. The symmetric bonus to opposing Merfolk is omitted; the fixed passive opponent has no Merfolk spawns. User sign-off pending.]",
+   "template": "lord_effect",
+   "parameters": {
+    "subtypes_affected": [
+     "Merfolk"
+    ],
+    "power_bonus": 1,
+    "tough_bonus": 1,
+    "lord_excludes_self": true
+   }
+  },
+  {
+   "name": "Master of the Pearl Trident",
+   "mana_cost": "{U}{U}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Merfolk"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "Other Merfolk creatures you control get +1/+1 and have islandwalk. (They can't be blocked as long as defending player controls an Island.) [PARTIAL, PROVISIONAL: islandwalk has no effect against the passive opponent, which never blocks. User sign-off pending.]",
+   "template": "lord_effect",
+   "parameters": {
+    "subtypes_affected": [
+     "Merfolk"
+    ],
+    "power_bonus": 1,
+    "tough_bonus": 1,
+    "lord_excludes_self": true
+   }
+  },
+  {
+   "name": "Vodalian Hexcatcher",
+   "mana_cost": "{1}{U}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Merfolk",
+    "Wizard"
+   ],
+   "keywords": [
+    "Flash"
+   ],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "Flash\nOther Merfolk you control get +1/+1.\nSacrifice a Merfolk: Counter target noncreature spell unless its controller pays {1}. [PARTIAL, PROVISIONAL: the sacrifice/counter ability is omitted in the current goldfish. The opponent never casts spells; countering one of our own noncreature spells by sacrificing a Merfolk can only lose resources in this list, which has no sacrifice/death payoff. Flash timing is unavailable outside main phases in this engine. User sign-off pending.]",
+   "template": "lord_effect",
+   "parameters": {
+    "subtypes_affected": [
+     "Merfolk"
+    ],
+    "power_bonus": 1,
+    "tough_bonus": 1,
+    "lord_excludes_self": true
+   }
+  },
+  {
+   "name": "Merfolk Mistbinder",
+   "mana_cost": "{G}{U}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Merfolk",
+    "Shaman"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "Other Merfolk you control get +1/+1.",
+   "template": "lord_effect",
+   "parameters": {
+    "subtypes_affected": [
+     "Merfolk"
+    ],
+    "power_bonus": 1,
+    "tough_bonus": 1,
+    "lord_excludes_self": true
+   }
+  },
+  {
+   "name": "Silvergill Adept",
+   "mana_cost": "{1}{U}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Merfolk",
+    "Wizard"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 1,
+   "oracle_text": "As an additional cost to cast this spell, reveal a Merfolk card from your hand or pay {3}.\nWhen this creature enters, draw a card.",
+   "template": "vanilla_creature",
+   "parameters": {
+    "etb_self_draw": 1,
+    "reveal_subtype_or_pay": "Merfolk",
+    "kicker_cost": "{3}"
+   }
+  },
+  {
+   "name": "Phantasmal Image",
+   "mana_cost": "{1}{U}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Illusion"
+   ],
+   "keywords": [],
+   "power": 0,
+   "toughness": 0,
+   "oracle_text": "You may have this creature enter as a copy of any creature on the battlefield, except it's an Illusion in addition to its other types and it has \"When this creature becomes the target of a spell or ability, sacrifice it.\" [PARTIAL, PROVISIONAL: the target-trigger sacrifice is unreachable in this Merfolk goldfish: this list has no spell or ability that can target one of its own creatures, and the passive opponent casts and activates nothing. User sign-off pending.]",
+   "template": "custom",
+   "parameters": {
+    "enter_as_copy_of_creature": true
+   }
+  },
+  {
+   "name": "Tide Shaper",
+   "mana_cost": "{U}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Merfolk",
+    "Wizard"
+   ],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "Kicker {1} (You may pay an additional {1} as you cast this spell.)\nWhen this creature enters, if it was kicked, target land becomes an Island for as long as this creature remains on the battlefield.\nThis creature gets +1/+1 as long as an opponent controls an Island.",
+   "template": "vanilla_creature",
+   "parameters": {
+    "kicker_cost": "{1}",
+    "kicked_etb_target_land_island": true,
+    "self_pump_if_opponent_island": true
+   }
+  },
+  {
+   "name": "Cosi's Trickster",
+   "mana_cost": "{U}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Merfolk",
+    "Wizard"
+   ],
+   "keywords": [],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "Whenever an opponent shuffles their library, you may put a +1/+1 counter on this creature. [PARTIAL, PROVISIONAL: the passive opponent never shuffles after game setup, so this trigger cannot fire while this creature is on the battlefield. The setup shuffle occurs before any permanent exists. User sign-off pending.]",
+   "template": "vanilla_creature",
+   "parameters": {}
+  },
+  {
+   "name": "Kumena's Speaker",
+   "mana_cost": "{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Merfolk",
+    "Shaman"
+   ],
+   "keywords": [],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "This creature gets +1/+1 as long as you control another Merfolk or an Island.",
+   "template": "vanilla_creature",
+   "parameters": {
+    "self_pump_if_other_subtype_or_land": "Merfolk",
+    "self_pump_if_land_subtype": "Island"
+   }
+  },
+  {
+   "name": "Spreading Seas",
+   "mana_cost": "{1}{U}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [
+    "Aura"
+   ],
+   "keywords": [
+    "Enchant"
+   ],
+   "oracle_text": "Enchant land\nWhen this Aura enters, draw a card.\nEnchanted land is an Island.",
+   "template": "custom",
+   "parameters": {
+    "is_aura": true,
+    "is_land_aura": true,
+    "land_aura_can_target_opponent": true,
+    "land_aura_sets_island": true,
+    "etb_self_draw": 1
+   }
+  },
+  {
+   "name": "Sink into Stupor",
+   "mana_cost": "{1}{U}{U}",
+   "types": [
+    "Instant"
+   ],
+   "keywords": [],
+   "oracle_text": "Return target spell or nonland permanent an opponent controls to its owner's hand. [PARTIAL, PROVISIONAL: the spell-target half is unreachable against the passive opponent, which casts no spells; the live opponent nonland-permanent half is implemented. User sign-off pending.]",
+   "template": "removal",
+   "parameters": {
+    "mdfc_back_name": "Soporific Springs",
+    "mdfc_back_produces": [
+     "U"
+    ],
+    "mdfc_back_pay_life": 3,
+    "bounce_opponent_nonland_permanent": true,
+   "targeting": "nonland_permanent"
+   }
   }
  ]
 }

@@ -21087,6 +21087,7 @@ namespace
     const EldraziFlickerProvider g_eldrazi_flicker;
     const MeliraPodProvider      g_melira_pod;
     const PiratesProvider        g_pirates;
+    const MerfolkProvider        g_merfolk;
     const PreventDamageProvider  g_prevent_damage;
 }
 
@@ -22949,11 +22950,42 @@ const DecisionProvider& DefaultProvider()
     return g_generic;
 }
 
+void MerfolkProvider::CopyCreatureCandidates(const GameState& s, const CardDefinition& def,
+                                             std::vector<int>& targets) const
+{
+    if (!def.params.enter_as_copy_of_creature) { return; }
+    // DEFAULT ON; =0 restores ordinary battlefield order for the paired A/B.
+    static const bool lord_first = EnvOn("MTG_MERFOLK_IMAGE_LORD_FIRST", true);
+    if (!lord_first) { return; }
+    auto tier = [&](int number) {
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.card.m_number != number) { continue; }
+            if (p.controller_index != s.active_player_index
+                || !CardHasSubtype(p.card, "Merfolk")) { return 2; }
+            const CardDefinition* copied = CardDatabase::Instance().LookupCached(p.card);
+            if (copied == nullptr || copied->tmpl != CardTemplate::LordEffect
+                || copied->params.power_bonus <= 0
+                || std::find(copied->params.subtypes_affected.begin(),
+                             copied->params.subtypes_affected.end(), "Merfolk")
+                       == copied->params.subtypes_affected.end()) { return 2; }
+            // The user's requested preference: a printed 2/2 Merfolk lord first,
+            // then any other Merfolk lord. Every target remains search-visible.
+            return copied->card.m_power.value_or(0) == 2
+                && copied->card.m_toughness.value_or(0) == 2 ? 0 : 1;
+        }
+        return 2;
+    };
+    std::stable_sort(targets.begin(), targets.end(),
+                     [&](int a, int b) { return tier(a) < tier(b); });
+}
+
 const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
 {
     // Archetype detection by card params (same shape as GoldFishRunner::DeckUsesSecondMain).
     // Order matters only if a deck mixed signatures; today each is exclusive (verified).
     bool anti = false, th = false, vial = false, hinata = false, burn = false, dragonstorm = false;
+    bool merfolk = false; // Image, Tide Shaper, and Spreading Seas carry independent gated signatures.
     bool midrange_burn = false;
     bool goblin = false, gift = false, fivec = false, mirrorwing = false, equipment = false;
     bool stompy = false;   // StompySurprise (elf ramp) -- routes to Generic BEFORE the anti check
@@ -23127,6 +23159,10 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
         const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
         if (!def) { continue; }
         const CardParams& p = def->params;
+        // Independent, Merfolk-list-specific mechanics. Do not key on Aether Vial,
+        // creature-type lands, or a generic lord: other tribal decks use those too.
+        if (p.enter_as_copy_of_creature || p.kicked_etb_target_land_island
+            || p.land_aura_sets_island) { merfolk = true; }
         // + A1: Falkenrath Gorger's madness grant KEYED ON THE VAMPIRE SUBTYPE (a madness-granter for
         // another type would be another archetype). madness_cost alone is deliberately NOT a term: it is
         // archetype-NEUTRAL (any madness card -- a Fiery Temper burn list -- carries it), so it would
@@ -23667,6 +23703,8 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // signature is carried by no other deck, so the position is free and no later signature a
     // future Pirates card might trip can capture it first.
     if (pirates)     { return g_pirates; }
+    // Above Vial: its cleanup discard is authored for Slivers, not for this deck.
+    if (merfolk)     { return g_merfolk; }
     // ABOVE everything: this deck's own signature is unambiguous, and its tutor_to_hand would
     // otherwise be read as anti-lifegain (see the flag's comment).
     // LifegainHeliodCombo: a CritterLifegain-shaped list holding one of its own pieces (see the flag).

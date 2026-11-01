@@ -3645,6 +3645,19 @@ public:
 //     ON; =0 restores the generic ranking). docs/design/pirates-discard-policy-proposal.md.
 //   * CastOrderRank -- deliberately NOT overridden: cast order is a USER review per deck, and the
 //     proposals (Malcolm vs Mimic, Buccaneer first, Forerunner first) sit in the ledger unadopted.
+// Merfolk owns a provider so its copy-target policy and routing are reviewable.
+// The root provider already supplies the shared hand-aware Aether Vial charge policy;
+// VialProvider also carries a Slivers-specific discard rule that Merfolk must not inherit.
+class MerfolkProvider : public DeckProvider
+{
+public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed, "NOT ASSESSED. Check the Image/lord attack clock and Vial timing before proving a winless turn." }; }
+    const char* Name() const override { return "Merfolk"; }
+    void CopyCreatureCandidates(const GameState& s, const CardDefinition& def,
+                                std::vector<int>& targets) const override;
+};
+
 class PiratesProvider : public DeckProvider
 {
 public:

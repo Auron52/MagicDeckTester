@@ -1750,6 +1750,12 @@ public:
                                                    const Permanent& source) const
     { (void)s; (void)source; return {}; }
 
+    // Order, without removing, the legal creature-copy targets for a cast of the
+    // given card. The search and human viewer retain every target as a branch.
+    virtual void CopyCreatureCandidates(const GameState& s, const CardDefinition& def,
+                                        std::vector<int>& targets) const
+    { (void)s; (void)def; (void)targets; }
+
     // LifegainCounterTarget -- Heliod, Sun-Crowned's "Whenever you gain life, put a +1/+1 counter
     // on target creature or enchantment you control": WHICH permanent, as a battlefield index, or
     // -1 for the generic default (DefaultLifegainCounterTarget in SpellEffects.h: the highest-power

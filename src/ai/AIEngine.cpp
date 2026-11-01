@@ -3229,7 +3229,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             {
                 if (perm.controller_index != gs.active_player_index || perm.tapped) { continue; }
                 const CardDefinition* d = CardDatabase::Instance().LookupCached(perm.card);
-                if (d && d->params.sacrifice_draw_cost.has_value())
+                if (d && d->params.sacrifice_draw_cost.has_value()
+                    && !LandTypeChangedToIsland(gs, perm))
                 { s.insert(perm.card.m_name.str()); }
             }
             return s;
@@ -8700,7 +8701,8 @@ bool AIEngine::PerformDig(GameState& state, const std::string& source, bool is_s
         {
             const Permanent& p = state.battlefield[i];
             if (p.controller_index == state.active_player_index
-                && !p.tapped && p.card.m_name == source) { idx = i; break; }
+                && !p.tapped && p.card.m_name == source
+                && !LandTypeChangedToIsland(state, p)) { idx = i; break; }
         }
         if (idx < 0) { return false; }
         ManaPool avail = AvailableManaPool(state);
@@ -9000,6 +9002,8 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
             CardDatabase::Instance().Lookup(def->card.m_name.str() + " (Kicked)");
         if (kdef != nullptr) { def = kdef; }
     }
+    if (!CanRevealAdditionalCost(state, state.active_player_index,
+                                 hand_card_number, def->params.reveal_subtype_or_pay)) { return; }
 
     // Irencrag Feat "you can cast only one more spell this turn": mirror TurnSolver::apply_one's
     // execution-time budget in the REAL executor so a replayed line OR the post-Apex staged re-solve
@@ -9219,6 +9223,17 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
         }
         case Targeting::NonlandPermanent:
         {
+            if (def->params.bounce_opponent_nonland_permanent)
+            {
+                const int idx = OpponentNonlandTargetIndex(state, state.active_player_index,
+                                                           enchant_target);
+                if (idx < 0) { return; }
+                Target t;
+                t.type = Target::Type::Permanent;
+                t.permanent_index = idx;
+                entry.targets.push_back(t);
+                break;
+            }
             // Unexpectedly Absent (tuck removal): autonomous target = the LARGEST opponent
             // creature (max board removed; opponent never has noncreature permanents in this
             // sim). No target -> uncastable (the enumeration gate matches; self-tuck lines are

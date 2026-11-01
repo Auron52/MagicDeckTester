@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cockatrice_deck version="1">
+    <deckname></deckname>
+    <comments></comments>
+    <zone name="main">
+        <card number="4" name="Lord of Atlantis"/>
+        <card number="4" name="Master of the Pearl Trident"/>
+        <card number="4" name="Vodalian Hexcatcher"/>
+        <card number="2" name="Sink into Stupor"/>
+        <card number="5" name="Island"/>
+        <card number="4" name="Aether Vial"/>
+        <card number="4" name="Silvergill Adept"/>
+        <card number="4" name="Phantasmal Image"/>
+        <card number="4" name="Tide Shaper"/>
+        <card number="1" name="Cosi's Trickster"/>
+        <card number="2" name="Spreading Seas"/>
+        <card number="4" name="Kumena's Speaker"/>
+        <card number="4" name="Merfolk Mistbinder"/>
+        <card number="4" name="Botanical Sanctum"/>
+        <card number="2" name="Unclaimed Territory"/>
+        <card number="4" name="Secluded Courtyard"/>
+        <card number="4" name="Waterlogged Grove"/>
+    </zone>
+</cockatrice_deck>

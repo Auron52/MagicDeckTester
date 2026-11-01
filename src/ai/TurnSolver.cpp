@@ -34364,6 +34364,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         }
         else if ((t == Targeting::Creature || t == Targeting::Multi
                   || t == Targeting::NonlandPermanent) && !(FixedTargetedBurn(def) && FixedBurnSearchEnabled(state)) && !has_creature_target
+                 && !(def.params.bounce_opponent_nonland_permanent
+                      && OpponentNonlandTargetIndex(state, state.active_player_index, 0) >= 0)
                  && !def.params.controller_lifegain_equals_power)
         {
             // Unexpectedly Absent (nonland-permanent tuck): with no opponent creature the
@@ -35590,7 +35592,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // what the 5f pruned-vs-unpruned A/B compares against.
             std::vector<int> aura_hosts =
                 LegalEnchantTargets(state, state.active_player_index, def.params);
-            if (def.params.is_land_aura && !HumanPlayActive()
+            if (def.params.is_land_aura && !def.params.land_aura_can_target_opponent
+                && !HumanPlayActive()
                 && !DecisionUnpruned(UnprunedGate::LandAuraHost))
             {
                 std::vector<int> narrowed =
@@ -35795,7 +35798,22 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 a.is_noncreature = !kdef->card.IsCreature();
                 a.card_mv        = kdef->card.m_mana_cost.ManaValue();
                 a.kicked         = true;
-                actions.push_back(std::move(a));
+                if (kdef->params.kicked_etb_target_land_island)
+                {
+                    bool any = false;
+                    for (const Permanent& land : state.battlefield)
+                    {
+                        if (!land.card.IsLand()) { continue; }
+                        Action v = a;
+                        v.enchant_target = land.card.m_number;
+                        actions.push_back(std::move(v));
+                        any = true;
+                    }
+                    // A kicked Tide Shaper is legal with no land; the ETB trigger simply
+                    // cannot be put on the stack because it has no target.
+                    if (!any) { actions.push_back(std::move(a)); }
+                }
+                else { actions.push_back(std::move(a)); }
             }
         }
 
@@ -35945,11 +35963,20 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // enumeration time (a Wanderer cast earlier in this very plan) via the apply-time
         // heuristic. The plan signature folds enchant_target, so the dedup keeps every variant
         // distinct (lossless -- core invariant).
-        if (def.params.enter_as_copy_of_entrant)
+        if (def.params.enter_as_copy_of_entrant || def.params.enter_as_copy_of_creature)
         {
+            std::vector<int> copy_targets;
             for (int bi = 0; bi < static_cast<int>(state.battlefield.size()); ++bi)
             {
-                if (!state.battlefield[bi].entered_this_turn) { continue; }
+                if (def.params.enter_as_copy_of_creature)
+                { if (!state.battlefield[bi].card.IsCreature()) { continue; } }
+                else if (!state.battlefield[bi].entered_this_turn) { continue; }
+                copy_targets.push_back(state.battlefield[bi].card.m_number);
+            }
+            if (def.params.enter_as_copy_of_creature && state.m_provider)
+            { state.m_provider->CopyCreatureCandidates(state, def, copy_targets); }
+            for (int target_number : copy_targets)
+            {
                 Action a;
                 a.kind           = Action::Kind::CastFromHand;
                 a.card_name      = ap.hand[i].m_name;
@@ -35957,7 +35984,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 a.cost           = EffectiveCost(def, state);
                 a.eval           = EvalCard(def, state);
                 a.card_mv        = def.card.m_mana_cost.ManaValue();
-                a.enchant_target = state.battlefield[bi].card.m_number;
+                a.enchant_target = target_number;
                 actions.push_back(std::move(a));
             }
             {
@@ -35968,7 +35995,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 a.cost           = EffectiveCost(def, state);
                 a.eval           = EvalCard(def, state);
                 a.card_mv        = def.card.m_mana_cost.ManaValue();
-                a.enchant_target = -1;   // decline: enter as the printed 3/1
+                a.enchant_target = -1;   // decline: enter as the printed card
                 actions.push_back(std::move(a));
             }
         }
@@ -36609,6 +36636,19 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         //     over both sides (apply_one's Removal branch), so nothing is asked twice.
         // eval 0: the playout beyond the horizon (and the d0 runner) never trades a body for a TAPPED
         // land on its own -- the value of doing so is the search's to find, inside the window.
+        if (def.params.bounce_opponent_nonland_permanent)
+        {
+            for (const Permanent& target : state.battlefield)
+            {
+                if (target.controller_index == state.active_player_index || target.card.IsLand())
+                { continue; }
+                if (!SpellCanTargetPermanent(state, state.active_player_index, target)) { continue; }
+                Action v = a;
+                v.enchant_target = target.card.m_number;
+                actions.push_back(std::move(v));
+            }
+            continue;
+        }
         if (def.tmpl == CardTemplate::Removal && RemovalSearchesForController(def))
         {
             const int me = state.active_player_index;
@@ -37022,7 +37062,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // variant, no branch. Deciding at resolution (vs at enumeration) measured strictly better
             // -- the top of library reflects this turn's earlier cantrips by then -- and at the SAME
             // fd-diverge as the searched 2-variant baseline (no lockstep regression).
-            actions.push_back(std::move(a));   // a.ponder_keep stays -1
+            if (CanRevealAdditionalCost(state, state.active_player_index,
+                                        ap.hand[i].m_number, def.params.reveal_subtype_or_pay))
+            { actions.push_back(std::move(a)); }   // Silvergill requires another Merfolk in hand
             // PLANESWALKER cast + same-turn LOYALTY ACTIVATION as extra cast variants (provider-
             // gated; see DecisionProvider::SearchesWalkerCastActivation). They share hand_index
             // with the plain cast (mutually exclusive), carry loyalty_ability (already folded
@@ -56282,6 +56324,7 @@ static bool HumanTwinPermanents(const GameState* state, int x, int y)
         && a.paired_with == b.paired_with && a.damage == b.damage
         && a.temp_power_bonus == b.temp_power_bonus && a.temp_tough_bonus == b.temp_tough_bonus
         && a.equipped_to == b.equipped_to && a.aura_attached_to == b.aura_attached_to
+        && a.islandize_target == b.islandize_target
         && a.pending_death_trigger == b.pending_death_trigger
         && a.charge_counters == b.charge_counters && a.verse_counters == b.verse_counters
         && a.lore_counters == b.lore_counters && a.storage_counters == b.storage_counters
@@ -58809,6 +58852,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (kopt != nullptr) { opt = kopt; }
         }
         const CardDefinition& def = *opt;
+        if (it != ap.hand.end() && !CanRevealAdditionalCost(state, state.active_player_index,
+                it->m_number, def.params.reveal_subtype_or_pay)) { return; }
 
         // Irencrag Feat "you can cast only one more spell this turn": once a restrictor has resolved, the
         // turn-scoped budget counts down; at 0 no further spell may be cast -- hand OR staged (an Apex-of-
@@ -60051,7 +60096,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // Lockstep twin of EnterBattlefield's swap: the COPIED card drives enters-tapped
             // and, below, the enter triggers (a copy of Breaching Dragonstorm re-fires its
             // exile trigger through FireOwnEtbTriggers).
-            if (def.params.enter_as_copy_of_entrant)
+            if (def.params.enter_as_copy_of_entrant || def.params.enter_as_copy_of_creature)
             {
                 const int src_bi = ChooseCopyEntrantIndex(state, state.active_player_index,
                                                           enchant_target, def);
@@ -60059,6 +60104,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 {
                     perm.card          = state.battlefield[src_bi].card;
                     perm.card.m_number = cast_number;
+                    if (def.params.enter_as_copy_of_creature)
+                    { perm.card.m_subtypes.push_back("Illusion"); }
                     // Display provenance + history narration (sink-guarded -> rollouts
                     // byte-identical). Lockstep twin: EffectHandler::EnterBattlefield.
                     perm.copy_printed_name = def.card.m_name;
@@ -60068,6 +60115,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     const CardDefinition* cd = CardDatabase::Instance().LookupCached(perm.card);
                     if (cd && cd->params.enters_tapped) { perm.tapped = true; }
                 }
+            }
+            if (!def.params.kicked_base_name.empty())
+            {
+                if (def.params.kicked_etb_target_land_island)
+                { perm.islandize_target = SelectIslandLandTarget(state, enchant_target); }
+                perm.card = UnkickedSpellCard(def, perm.card);
             }
             // DEVOUR (CR 702.81, Mycoloth): an AS-ENTERS replacement, applied in this pre-push
             // window so the fodder is gone and the counters are on before the watchers see the body.
@@ -60174,7 +60227,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // too: a Sakashima's Protege may have ENTERED as a legendary (Maelstrom Wanderer)
             // even though def.card is not -- mirror of the executor's Resolve() gate.
             if (def.card.HasSupertype(Supertype::Legendary)
-                || def.params.enter_as_copy_of_entrant)
+                || def.params.enter_as_copy_of_entrant || def.params.enter_as_copy_of_creature)
             {
                 EnforceLegendRule(state, state.active_player_index);
             }
@@ -60435,6 +60488,24 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // Rolling Earthquake (shared helper -- executor twin in EffectHandler's Custom-spell
             // resolution, lockstep): X to each creature and each player, ONE damage event.
             PerformDamageEachCreatureAndPlayer(state, state.active_player_index, def, chosen_x);
+        }
+        else if (def.params.bounce_opponent_nonland_permanent)
+        {
+            int ci = OpponentNonlandTargetIndex(state, state.active_player_index, enchant_target);
+            if (g_play_target_chooser && ci >= 0)
+            {
+                const std::vector<ChosenTarget> picked = (*g_play_target_chooser)(
+                    state, def, state.active_player_index, 1, 0, {{ 1, ci, 0 }});
+                if (!picked.empty() && picked[0].kind == 1
+                    && picked[0].index >= 0
+                    && picked[0].index < static_cast<int>(state.battlefield.size()))
+                {
+                    const int chosen = state.battlefield[picked[0].index].card.m_number;
+                    const int legal = OpponentNonlandTargetIndex(state, state.active_player_index, chosen);
+                    if (legal >= 0) { ci = legal; }
+                }
+            }
+            if (ci >= 0) { BounceOpponentNonlandAt(state, ci); }
         }
         else if (def.tmpl == CardTemplate::Removal && def.params.tuck_to_library)
         {
@@ -62202,7 +62273,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 {
                     const Permanent& p = state.battlefield[i];
                     if (p.controller_index == state.active_player_index
-                        && !p.tapped && p.card.m_name == a.card_name) { idx = i; break; }
+                        && !p.tapped && p.card.m_name == a.card_name
+                        && !LandTypeChangedToIsland(state, p)) { idx = i; break; }
                 }
                 if (idx < 0) { continue; }
                 state.battlefield[idx].tapped = true;   // {T}: the source can't pay its own cost
@@ -64013,7 +64085,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 {
                     const Permanent& p = state.battlefield[i];
                     if (p.controller_index == state.active_player_index
-                        && !p.tapped && p.card.m_name == src) { idx = i; break; }
+                        && !p.tapped && p.card.m_name == src
+                        && !LandTypeChangedToIsland(state, p)) { idx = i; break; }
                 }
                 if (idx < 0) { break; }
                 state.battlefield[idx].tapped = true;
@@ -72368,7 +72441,8 @@ static void AppendHumanPlayDigPlans(const GameState& state, std::vector<TurnSolv
     {
         if (p.controller_index != state.active_player_index || p.tapped) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        if (!d || !d->params.sacrifice_draw_cost.has_value()) { continue; }
+        if (!d || !d->params.sacrifice_draw_cost.has_value()
+            || LandTypeChangedToIsland(state, p)) { continue; }
         std::string nm = p.card.m_name.str();
         if (!seen.insert("s:" + nm).second) { continue; }
         add_variants(nm, true, d->params.sacrifice_draw_cost.value());
@@ -84321,7 +84395,8 @@ static TranspositionTable::Key BuildSimKeyBase(const GameState& state, int max_t
     bool bf_has_fade = false;
     for (const Permanent& perm : state.battlefield)
     {
-        if (perm.aura_attached_to != 0 || perm.equipped_to != 0) { bf_has_attachment = true; }
+        if (perm.aura_attached_to != 0 || perm.equipped_to != 0
+            || perm.islandize_target != 0) { bf_has_attachment = true; }
         if (perm.fade_counters > 0) { bf_has_fade = true; }
         if (bf_has_attachment && bf_has_fade) { break; }
     }
@@ -84446,6 +84521,7 @@ static TranspositionTable::Key BuildSimKeyBase(const GameState& state, int max_t
             Fold(tk, static_cast<uint64_t>(perm.card.m_number));
             Fold(tk, static_cast<uint64_t>(perm.aura_attached_to));
             Fold(tk, static_cast<uint64_t>(perm.equipped_to));
+            Fold(tk, static_cast<uint64_t>(perm.islandize_target));
         }
         // Until-EOT pump bonuses: coarse drop #2 (combat leftovers; cleanup-reset).
         if (g_simkey_m2coarse == 0)

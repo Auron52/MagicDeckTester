@@ -1,4 +1,4 @@
-# Regression ground truth -- commit e707f3ee3  date 2026-10-31
+# Regression ground truth -- commit 90503a778  date 2026-11-01
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-10-27): Overnight rebaseline 2026-10-27 on af6bfce94 (PGO, 22m20s): the USER Hinata floor (keep-table decks >= Hinata's play-row games: edf/landfall/melira/niv/pd/snow + 2hg), the USER adoptions (LandfallElementals staged b20, NivMizzetCombo emulnl b20) and upstream MTG_PAY_SHRINK default ON + mana oracle. Overlapping games: searched 185 faster / 28 slower, d0 50 / 46; classify 24 churn / 4 PERSISTS (edf s5005 gi328 draws diverge T3; elementals s5005 gi399, s7007 gi376 and niv s4004 gi151 on the adopted shapes, measured better held out).
 # accepted-with-regressions (overnight, 2026-10-28): Bruna TUTOR FIT (USER 2026-10-11) + keep table ADOPTED (see the smoke note). TUTOR FIT alone, table absent: searched 4 slower / 3 faster (all 4 PERSIST at 4x/16x and pass a Glittering Wish / Open the Armory before diverging; net +1 turn over 2,000 d5 games), d0 net faster. With the table: d5 s4004-7007 4.956->4.806 / 5.030->4.852 / 4.936->4.790 / 5.120->4.808, d3 s4004 5.104->4.696, d0 -0.26..-0.29 on all 4 seeds; backstop d3/d5 s30231 (3 games) 3.667->4.333 = 1 game, different mulligan count. Attribution 5176 mull-count + 928 bottom + 25 bottom-order; the 5 d5 'unexplained' games (same hand and bottom, play differs) are the lookahead bottoming's residue, not a table leak: each reproduces singly and matches the table-off digest with the table keeping and MTG_EXHAUSTIVE_BOTTOM=0. Units/game 3.8-5.3x lower.
@@ -9,6 +9,10 @@
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
 # --- smoke ---
+merfolk_smoke_d0_s1001=4.6940/9bb434809c1a0279
+merfolk_smoke_d3_s1001=4.4400/b386d3ba5ac41303
+merfolk_smoke_d5_s1001=4.4200/40c0ce7fb3263de6
+merfolk2hg_smoke_d3_s1001=5.0200/7964fe014ae8bb15
 midrangeburn_smoke_d0_s1001=5.2510/9e5cd29ce09f769b
 midrangeburn_smoke_d3_s1001=4.5000/6693204da7693b41
 midrangeburn_smoke_d5_s1001=4.4400/f4c364e91457f880
@@ -421,6 +425,10 @@ midrangeburn_regression_d3_s2002=4.5467/3eebd67c8cfe2750
 midrangeburn_regression_d5_s2002=4.4333/ba999bfc3828dbb3
 midrangeburn_regression_d5_s3003=4.2733/ecdc58112064d976
 midrangeburn2hg_regression_d5_s2002=5.9200/f130e13084e612e6
+merfolk_regression_d0_s2002=4.6440/de7909b751204fd9
+merfolk_regression_d3_s2002=4.3867/23c32959a623d5d2
+merfolk_regression_d5_s2002=4.3933/c39653d3daacbd38
+merfolk_regression_d5_s3003=4.3600/0fca7335edb7c78b
 
 # --- overnight ---
 midrangeburn_overnight_d3_s30041=4.3333/af5954b2ad5cceef
@@ -925,3 +933,15 @@ midrangeburn2hg_overnight_d5_s4004=5.9176/1fc18329abfe46e9
 midrangeburn2hg_overnight_d5_s5005=5.6706/fa1a2c5d3b2361cc
 midrangeburn2hg_overnight_d5_s6006=5.9471/5af862db465aec58
 midrangeburn2hg_overnight_d5_s7007=5.7353/ba151827c11d8a55
+merfolk_overnight_d0_s4004=4.6390/44bf9bab686f77a8
+merfolk_overnight_d0_s6006=4.6765/47656c3c1d7f2fd3
+merfolk_overnight_d0_s8008=4.6495/5c7e38666981a8db
+merfolk_overnight_d0_s10010=4.6640/02bede052a9988cc
+merfolk_overnight_d3_s4004=4.3625/7c835e3695a5434f
+merfolk_overnight_d3_s5005=4.3750/eb61ccd5f7acd968
+merfolk_overnight_d3_s6006=4.4075/8b78181ee8247961
+merfolk_overnight_d3_s7007=4.3675/5553854bd611bb2a
+merfolk_overnight_d5_s4004=4.3500/0d6a7aa34aac57a3
+merfolk_overnight_d5_s5005=4.3500/b4f078add8d543e7
+merfolk_overnight_d5_s6006=4.4033/f5f91968ee9a98bb
+merfolk_overnight_d5_s7007=4.3833/1daa47a9513cb6eb
