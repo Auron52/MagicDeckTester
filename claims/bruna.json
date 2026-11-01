@@ -4,9 +4,12 @@
   "valueleaf": "em:8da6bbd94cc2f05973c8"
  },
  "deck": "bruna",
+ "detail": "valueleaf: FAILED rc=1",
+ "finished": "2026-11-01T06:13:35Z",
  "frozen": "8e81153ad29e0d3b2f89d2337f52eda4625427df",
  "heartbeat": "2026-11-01T06:08:58Z",
  "host": "58199181d02e",
+ "result_branch": null,
  "run_id": "bruna-artifact-queue-tool-647f24-20261101T043240",
  "score": 0.0012,
  "stage": "valueleaf",
@@ -14,6 +17,6 @@
   "valueleaf"
  ],
  "started": "2026-11-01T04:32:40Z",
- "state": "running",
+ "state": "failed",
  "worker": "artifact-queue-tool-647f24"
 }
