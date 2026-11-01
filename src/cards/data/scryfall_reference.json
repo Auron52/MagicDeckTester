@@ -1202,6 +1202,15 @@
     "toughness": "2",
     "type_line": "Creature — Human Pirate"
   },
+  "Cosi's Trickster": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{U}",
+    "oracle_text": "Whenever an opponent shuffles their library, you may put a +1/+1 counter on this creature.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Merfolk Wizard"
+  },
   "Cosmic Spider-Man": {
     "cmc": 5.0,
     "keywords": [
@@ -3156,6 +3165,15 @@
     "toughness": "3",
     "type_line": "Legendary Creature — Goblin Warrior"
   },
+  "Kumena's Speaker": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{G}",
+    "oracle_text": "This creature gets +1/+1 as long as you control another Merfolk or an Island.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Merfolk Shaman"
+  },
   "Kíli the Resourceful": {
     "cmc": 2.0,
     "keywords": [
@@ -3357,6 +3375,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Instant"
+  },
+  "Lord of Atlantis": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{U}{U}",
+    "oracle_text": "Other Merfolk get +1/+1 and have islandwalk. (They can't be blocked as long as defending player controls an Island.)",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Merfolk"
   },
   "Lord of Lineage": {
     "cmc": 4.0,
@@ -3578,6 +3605,15 @@
     "toughness": "5",
     "type_line": "Creature — Phyrexian Wurm"
   },
+  "Master of the Pearl Trident": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{U}{U}",
+    "oracle_text": "Other Merfolk creatures you control get +1/+1 and have islandwalk. (They can't be blocked as long as defending player controls an Island.)",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Merfolk"
+  },
   "Mavren Fein, Dusk Apostle": {
     "cmc": 3.0,
     "keywords": [],
@@ -3613,6 +3649,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Land"
+  },
+  "Merfolk Mistbinder": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{G}{U}",
+    "oracle_text": "Other Merfolk you control get +1/+1.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Merfolk Shaman"
   },
   "Metallic Mimic": {
     "cmc": 2.0,
@@ -4076,6 +4121,15 @@
     "power": "2",
     "toughness": "3",
     "type_line": "Creature — Drake"
+  },
+  "Phantasmal Image": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{U}",
+    "oracle_text": "You may have this creature enter as a copy of any creature on the battlefield, except it's an Illusion in addition to its other types and it has \"When this creature becomes the target of a spell or ability, sacrifice it.\"",
+    "power": "0",
+    "toughness": "0",
+    "type_line": "Creature — Illusion"
   },
   "Phylath, World Sculptor": {
     "cmc": 6.0,
@@ -5056,6 +5110,15 @@
     "toughness": "2",
     "type_line": "Creature — Human Knight"
   },
+  "Silvergill Adept": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{U}",
+    "oracle_text": "As an additional cost to cast this spell, reveal a Merfolk card from your hand or pay {3}.\nWhen this creature enters, draw a card.",
+    "power": "2",
+    "toughness": "1",
+    "type_line": "Creature — Merfolk Wizard"
+  },
   "Simic Growth Chamber": {
     "cmc": 0.0,
     "keywords": [],
@@ -5073,6 +5136,15 @@
     "power": "1",
     "toughness": "1",
     "type_line": "Creature — Sliver"
+  },
+  "Sink into Stupor": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{1}{U}{U}",
+    "oracle_text": "Return target spell or nonland permanent an opponent controls to its owner's hand.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
   },
   "Siren Stormtamer": {
     "cmc": 1.0,
@@ -5392,6 +5464,17 @@
     "power": "4",
     "toughness": "4",
     "type_line": "Creature — Fungus"
+  },
+  "Spreading Seas": {
+    "cmc": 2.0,
+    "keywords": [
+      "Enchant"
+    ],
+    "mana_cost": "{1}{U}",
+    "oracle_text": "Enchant land\nWhen this Aura enters, draw a card.\nEnchanted land is an Island.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment — Aura"
   },
   "Sram, Senior Edificer": {
     "cmc": 2.0,
@@ -5910,6 +5993,17 @@
     "toughness": null,
     "type_line": "Land — Island Mountain"
   },
+  "Tide Shaper": {
+    "cmc": 1.0,
+    "keywords": [
+      "Kicker"
+    ],
+    "mana_cost": "{U}",
+    "oracle_text": "Kicker {1} (You may pay an additional {1} as you cast this spell.)\nWhen this creature enters, if it was kicked, target land becomes an Island for as long as this creature remains on the battlefield.\nThis creature gets +1/+1 as long as an opponent controls an Island.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Merfolk Wizard"
+  },
   "Timeless Witness": {
     "cmc": 4.0,
     "keywords": [
@@ -6310,6 +6404,17 @@
     "power": "2",
     "toughness": "1",
     "type_line": "Creature — Human Cleric"
+  },
+  "Vodalian Hexcatcher": {
+    "cmc": 2.0,
+    "keywords": [
+      "Flash"
+    ],
+    "mana_cost": "{1}{U}",
+    "oracle_text": "Flash\nOther Merfolk you control get +1/+1.\nSacrifice a Merfolk: Counter target noncreature spell unless its controller pays {1}.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Merfolk Wizard"
   },
   "Voice of Resurgence": {
     "cmc": 2.0,

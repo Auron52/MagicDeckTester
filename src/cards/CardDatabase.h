@@ -43,6 +43,8 @@ struct CardParams
     int tough_bonus  = 0;
     Targeting targeting = Targeting::None;
     bool sacrifice_land = false;              // additional cost: sacrifice a land (e.g. Shard Volley)
+    std::string reveal_subtype_or_pay;         // Silvergill Adept: reveal another card or pay surcharge
+    bool bounce_opponent_nonland_permanent = false;
     std::optional<ManaCost> spectacle_cost;  // alternate cost when opponent lost life this turn
     std::vector<Color> produces;   // mana colors this card produces
     // Modal double-faced LAND (MDFC Pathway lands, e.g. Branchloft // Boulderloft): the FRONT face
@@ -703,6 +705,7 @@ struct CardParams
     // decline when none. Scoped to permanents STILL on the battlefield with entered_this_turn
     // (the entered-and-left set is provably empty in this deck -- see the bracket note).
     bool enter_as_copy_of_entrant = false;
+    bool enter_as_copy_of_creature = false; // Phantasmal Image: any battlefield creature
 
     // Call Forth the Tempest clause 2: "deals damage to each creature your opponents control
     // equal to the total mana value of OTHER spells you've cast this turn." Damage source =
@@ -881,6 +884,9 @@ struct CardParams
     // granting it. Default false keeps the existing "All/your Slivers get +1/+1" lords
     // (which DO buff themselves) byte-identical.
     bool lord_excludes_self = false;
+    std::string self_pump_if_other_subtype_or_land;
+    std::string self_pump_if_land_subtype;
+    bool self_pump_if_opponent_island = false;
 
     // Characteristic-defining ability: this creature's power equals the number of
     // creatures its controller controls (e.g. Adeline, Resplendent Cathar, printed */4).
@@ -3968,6 +3974,7 @@ struct CardParams
     // card with an ordinary cost and needs no kicker awareness at all. Must be a FLAT cost
     // (generic + plain colours); asserted at synthesis. nullopt = no kicker.
     std::optional<ManaCost> kicker_cost;
+    bool kicked_etb_target_land_island = false;
 
     // Set ONLY on a synthesized "<name> (Kicked)" face, naming the printed card it came from. The
     // face exists so the cost and payload resolve without any kicker awareness downstream, but it
@@ -3995,6 +4002,8 @@ struct CardParams
     // EMPTY means "one mana of any colour" (Fertile Ground / Trace of Abundance), credited as
     // wild -- and NOT as wild_c, because "any colour" cannot pay a {C} pip (ManaPool::wild_c).
     bool               is_land_aura         = false;
+    bool               land_aura_can_target_opponent = false;
+    bool               land_aura_sets_island = false;
     int                land_aura_extra_mana = 0;
     std::vector<Color> land_aura_produces;
     // "Enchanted land has shroud" (Trace of Abundance). NOT cosmetic, and not inert just because the

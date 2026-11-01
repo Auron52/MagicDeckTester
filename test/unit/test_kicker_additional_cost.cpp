@@ -186,16 +186,19 @@ TEST_CASE("kicker: inert for every card without a kicker")
     CHECK(CardDatabase::Instance().Lookup("Doubling Season (Kicked)") == nullptr);
     CHECK(CardDatabase::Instance().Lookup("Spore Swarm (Kicked)")     == nullptr);
 
-    // Saproling Migration is the engine's ONLY kicker card. If that stops being true, the
-    // "compared unconditionally" shortcuts taken in LineSpec::kickeds need re-reading, because they
-    // are justified by no saved reference being able to play one.
+    // Saproling Migration, Tide Shaper, and Silvergill Adept's synthesized paid-extra-cost
+    // variant are the three cards using this structural cast-cost machinery. Keep the census
+    // explicit so a new use prompts a review of LineSpec::kickeds comparisons.
     int with_kicker = 0;
     for (const auto& name : CardDatabase::Instance().AllNames())
     {
         const CardDefinition* d = CardDatabase::Instance().Lookup(name);
         if (d != nullptr && d->params.kicker_cost.has_value()) { ++with_kicker; }
     }
-    CHECK(with_kicker == 1);
+    CHECK(with_kicker == 3);
+    CHECK(Def("Saproling Migration").params.kicker_cost.has_value());
+    CHECK(Def("Tide Shaper").params.kicker_cost.has_value());
+    CHECK(Def("Silvergill Adept").params.kicker_cost.has_value());
 }
 
 TEST_CASE("kicker: ManaCost::PlusAdditionalCost adds, and refuses a cost it cannot add")

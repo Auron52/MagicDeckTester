@@ -1872,6 +1872,58 @@ inline Color DripLandAnyPipColor(const GameState& state, int active,
 // True if `controller_index` controls a permanent with the given subtype (e.g. "Forest").
 // Backs the alt-cost condition "If you control a Forest, rather than pay this spell's mana
 // cost ...". Land subtypes (Forest/Plains/...) are stored in the card's m_subtypes.
+inline bool LandTypeChangedToIsland(const GameState& state, const Permanent& land)
+{
+    if (!land.card.IsLand()) { return false; }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.islandize_target != 0 && p.islandize_target == land.card.m_number)
+        { return true; }
+        if (p.aura_attached_to == 0 || p.aura_attached_to != land.card.m_number)
+        { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.land_aura_sets_island) { return true; }
+    }
+    return false;
+}
+
+inline int SelectIslandLandTarget(const GameState& state, int requested)
+{
+    int fallback = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (!p.card.IsLand()) { continue; }
+        if (fallback == 0) { fallback = p.card.m_number; }
+        if (p.card.m_number == requested && requested != 0) { return requested; }
+    }
+    return requested == 0 ? fallback : 0;
+}
+
+inline bool LandHasSubtypeNow(const GameState& state, const Permanent& land,
+                              const std::string& subtype)
+{
+    if (LandTypeChangedToIsland(state, land)) { return subtype == "Island"; }
+    const CardDefinition* def = CardDatabase::Instance().LookupCached(land.card);
+    const SubtypeSet& subs = def ? def->card.m_subtypes : land.card.m_subtypes;
+    for (const std::string& s : subs) { if (s == subtype) { return true; } }
+    return false;
+}
+
+inline bool CanRevealAdditionalCost(const GameState& state, int controller,
+                                    int source_number, const std::string& subtype)
+{
+    if (subtype.empty()) { return true; }
+    for (const Card& c : state.players[controller].hand)
+    {
+        if (c.m_number == source_number) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (!d) { continue; }
+        for (const std::string& s : d->card.m_subtypes)
+        { if (s == subtype) { return true; } }
+    }
+    return false;
+}
+
 inline bool ControlsSubtype(const GameState& state, int controller_index,
                             const std::string& subtype)
 {
@@ -1879,6 +1931,8 @@ inline bool ControlsSubtype(const GameState& state, int controller_index,
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != controller_index) { continue; }
+        if (p.card.IsLand())
+        { if (LandHasSubtypeNow(state, p, subtype)) { return true; } continue; }
         const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
         const SubtypeSet& subs = def ? def->card.m_subtypes : p.card.m_subtypes;
         for (const std::string& s : subs) { if (s == subtype) { return true; } }
@@ -4414,14 +4468,11 @@ inline bool CreatureTargetableByAuraSpell(const Permanent& creature, const GameS
 // Card's own m_subtypes is a light handle -- the ControlsSubtype rule). Empty restriction = "Enchant
 // land" -> every land, so every existing land Aura is byte-identical. Targeting (shroud) is the
 // caller's business: a non-targeting attach (AuraCouldEnchant) ignores it, a cast does not.
-inline bool LandAuraHostOk(const Permanent& land, const CardParams& pp)
+inline bool LandAuraHostOk(const GameState& state, const Permanent& land, const CardParams& pp)
 {
     if (!land.card.IsLand()) { return false; }
     if (pp.land_aura_host_subtype.empty()) { return true; }
-    const CardDefinition* d = CardDatabase::Instance().LookupCached(land.card);
-    const SubtypeSet& subs = d ? d->card.m_subtypes : land.card.m_subtypes;
-    for (const std::string& st : subs) { if (st == pp.land_aura_host_subtype) { return true; } }
-    return false;
+    return LandHasSubtypeNow(state, land, pp.land_aura_host_subtype);
 }
 
 // "An Aura card that COULD enchant it" (Bruna, Light of Alabaster) / the swapped-in half of an Aura
@@ -4434,7 +4485,7 @@ inline bool LandAuraHostOk(const Permanent& land, const CardParams& pp)
 inline bool AuraCouldEnchant(const GameState& state, const CardParams& pp, const Permanent& host)
 {
     if (!pp.is_aura) { return false; }
-    if (pp.is_land_aura) { return LandAuraHostOk(host, pp); }
+    if (pp.is_land_aura) { return LandAuraHostOk(state, host, pp); }
     if (!host.card.IsCreature()) { return false; }
     if (pp.aura_enchant_requires == "another_aura" && !CreatureHasAura(host, state)) { return false; }
     if (pp.aura_enchant_requires == "modified"     && !CreatureIsModified(host, state)) { return false; }
@@ -4597,9 +4648,10 @@ inline std::vector<int> LegalEnchantTargets(const GameState& state, int controll
     {
         for (const Permanent& p : state.battlefield)
         {
-            if (p.controller_index != controller || !p.card.IsLand()) { continue; }
+            if ((!pp.land_aura_can_target_opponent && p.controller_index != controller)
+                || !p.card.IsLand()) { continue; }
             // "Enchant Forest" (Utopia Sprawl): the enchant restriction narrows the host type.
-            if (!LandAuraHostOk(p, pp)) { continue; }
+            if (!LandAuraHostOk(state, p, pp)) { continue; }
             // An Aura spell TARGETS its host (CR 303.4a), so a shrouded land is not a legal one.
             if (LandHasShroud(p, state)) { continue; }
             out.push_back(p.card.m_number);
@@ -4670,16 +4722,17 @@ inline int ResolveEnchantTarget(const GameState& state, int controller, int ench
         // meantime), and the heuristic fallback must not pick an illegal host either. Likewise the
         // enchant restriction (an Island is never a Utopia Sprawl host, searched or fallback).
         for (const Permanent& p : state.battlefield)
-            if (p.controller_index == controller && p.card.IsLand()
+            if ((lpp.land_aura_can_target_opponent || p.controller_index == controller) && p.card.IsLand()
                 && p.card.m_number == enchant_target && !LandHasShroud(p, state)
-                && LandAuraHostOk(p, lpp))
+                && LandAuraHostOk(state, p, lpp))
             { return enchant_target; }
         int lbest = 0, lbest_yield = -1;
         for (const Permanent& p : state.battlefield)
         {
-            if (p.controller_index != controller || !p.card.IsLand()) { continue; }
+            if ((!lpp.land_aura_can_target_opponent && p.controller_index != controller)
+                || !p.card.IsLand()) { continue; }
             if (LandHasShroud(p, state)) { continue; }
-            if (!LandAuraHostOk(p, lpp)) { continue; }
+            if (!LandAuraHostOk(state, p, lpp)) { continue; }
             const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
             if (!d) { continue; }
             const int y = PermanentManaYield(state, p, *d);
@@ -5471,6 +5524,37 @@ inline std::pair<int,int> ComputeLordBonus(
         {
             pb += sdef->params.static_artifact_power;
             tb += sdef->params.static_artifact_tough;
+        }
+        // Kumena's Speaker: one bonus if EITHER condition holds, never one per Merfolk.
+        if (sdef && !sdef->params.self_pump_if_other_subtype_or_land.empty())
+        {
+            bool eligible = false;
+            for (const Permanent& q : battlefield)
+            {
+                if (q.controller_index != controller_index) { continue; }
+                if (q.card.IsLand())
+                {
+                    eligible = LandHasSubtypeNow(state, q, sdef->params.self_pump_if_land_subtype);
+                }
+                else if (self == nullptr || &q != self)
+                {
+                    for (const std::string& st : q.card.m_subtypes)
+                        if (st == sdef->params.self_pump_if_other_subtype_or_land) { eligible = true; }
+                }
+                if (eligible) { break; }
+            }
+            if (eligible) { ++pb; ++tb; }
+        }
+        if (sdef && sdef->params.self_pump_if_opponent_island)
+        {
+            bool eligible = false;
+            for (const Permanent& q : battlefield)
+            {
+                if (q.controller_index == controller_index || !q.card.IsLand()) { continue; }
+                eligible = LandHasSubtypeNow(state, q, "Island");
+                if (eligible) { break; }
+            }
+            if (eligible) { ++pb; ++tb; }
         }
         // Borderland Behemoth: "This creature gets +4/+4 for each other Giant you control" -- the
         // STATIC twin of attack_self_pump_per_other_subtype. Counts BODIES you control carrying
@@ -10265,10 +10349,18 @@ inline int ChooseCopyEntrantIndex(GameState& state, int controller, int copy_tar
 {
     // Searched DECLINE (plan variant enchant_target -1): enter as the printed card.
     if (copy_target < 0) { return -1; }
-    auto legal = [&](int bi) -> bool
+    auto eligible = [&](int bi) -> bool
     {
         const Permanent& q = state.battlefield[bi];
-        if (!q.entered_this_turn) { return false; }
+        if (self_def.params.enter_as_copy_of_creature)
+        { if (!q.card.IsCreature()) { return false; } }
+        else if (!q.entered_this_turn) { return false; }
+        return true;
+    };
+    auto legal = [&](int bi) -> bool
+    {
+        if (!eligible(bi)) { return false; }
+        const Permanent& q = state.battlefield[bi];
         const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
         if (qd && qd->card.HasSupertype(Supertype::Legendary))
         {
@@ -10290,7 +10382,7 @@ inline int ChooseCopyEntrantIndex(GameState& state, int controller, int copy_tar
         for (int bi = 0; bi < static_cast<int>(state.battlefield.size()); ++bi)
         {
             if (state.battlefield[bi].card.m_number == copy_target
-                && state.battlefield[bi].entered_this_turn) { return bi; }
+                && eligible(bi)) { return bi; }
         }
     }
     int best = -1, best_pw = -1;
@@ -10299,6 +10391,18 @@ inline int ChooseCopyEntrantIndex(GameState& state, int controller, int copy_tar
         if (!legal(bi)) { continue; }
         const int pw = state.battlefield[bi].EffectivePower();
         if (pw > best_pw) { best_pw = pw; best = bi; }
+    }
+    if (self_def.params.enter_as_copy_of_creature)
+    {
+        std::vector<int> candidates;
+        for (int bi = 0; bi < static_cast<int>(state.battlefield.size()); ++bi)
+        { if (legal(bi)) { candidates.push_back(state.battlefield[bi].card.m_number); } }
+        ResolveProvider(state).CopyCreatureCandidates(state, self_def, candidates);
+        if (!candidates.empty())
+        {
+            for (int bi = 0; bi < static_cast<int>(state.battlefield.size()); ++bi)
+            { if (state.battlefield[bi].card.m_number == candidates.front()) { best = bi; break; } }
+        }
     }
     if (g_play_target_chooser)  // real human resolution only (nulled in rollouts)
     {
@@ -10312,7 +10416,7 @@ inline int ChooseCopyEntrantIndex(GameState& state, int controller, int copy_tar
         if (picked[0].kind == 1
             && picked[0].index >= 0
             && picked[0].index < static_cast<int>(state.battlefield.size())
-            && state.battlefield[picked[0].index].entered_this_turn)
+            && eligible(picked[0].index))
         { return picked[0].index; }
     }
     return best;
@@ -11581,7 +11685,8 @@ inline int CountControlledLandsWithSubtype(const GameState& state, int controlle
     int n = 0;
     for (const Permanent& p : state.battlefield)
     {
-        if (p.controller_index == controller && p.card.IsLand() && CardHasSubtype(p.card, sub)) { ++n; }
+        if (p.controller_index == controller && p.card.IsLand()
+            && LandHasSubtypeNow(state, p, sub)) { ++n; }
     }
     return n;
 }
@@ -25290,6 +25395,8 @@ inline int PendingLandAuraColorMask(const GameState& state, int* out_units = nul
 
 inline int PermanentManaYield(const GameState& state, const Permanent& perm, const CardDefinition& def)
 {
+    if (LandTypeChangedToIsland(state, perm))
+    { return 1 + LandAuraBonus(state, perm); }
     if (def.params.storage_land) { return perm.storage_counters + LandAuraBonus(state, perm); }
     // Priest of Titania / Elvish Archdruid: yield = live Elf count (state-dependent).
     if (IsScaledManaDork(def))   { return ScaledDorkCount(state, perm.controller_index, def); }
@@ -30905,7 +31012,7 @@ inline int DeployLandAuraFromHand(GameState& state, int controller,
             for (const Permanent& p : state.battlefield)
             {
                 if (p.controller_index != controller || LandHasShroud(p, state)) { continue; }
-                if (LandAuraHostOk(p, d->params)) { host_ok = true; break; }
+                if (LandAuraHostOk(state, p, d->params)) { host_ok = true; break; }
             }
             if (!host_ok) { continue; }
         }
@@ -30948,7 +31055,7 @@ inline int DeployLandAuraFromHand(GameState& state, int controller,
             {
                 if (p.card.m_number != n || p.controller_index != controller) { continue; }
                 if (!p.card.IsLand() || p.tapped || LandHasShroud(p, state)) { break; }
-                if (!LandAuraHostOk(p, best_d->params)) { break; }   // "Enchant Forest"
+                if (!LandAuraHostOk(state, p, best_d->params)) { break; }   // "Enchant Forest"
                 host = n;
                 break;
             }
@@ -37126,6 +37233,11 @@ inline const std::vector<Color>& EffectiveProducesFor(const GameState& state, in
                                                       const CardDefinition& def,
                                                       const Permanent* perm, bool in_hand)
 {
+    if (perm != nullptr && LandTypeChangedToIsland(state, *perm))
+    {
+        static const std::vector<Color> kIslandBlue{ Color::Blue };
+        return kIslandBlue;
+    }
     // (A colour-choosing LAND AURA -- Utopia Sprawl -- is not a mana source of its own: its colour rides
     // the host's tap through LandAuraProducesFor, so it never resolves here.)
     if (perm != nullptr && def.params.etb_choose_color && perm->chosen_color >= 0
@@ -37158,6 +37270,7 @@ inline const std::vector<Color>& ProducesForPayment(const GameState& state, int 
                                                     const Permanent* perm = nullptr)
 {
     const std::vector<Color>& base = EffectiveProducesFor(state, controller, def, perm);
+    if (perm != nullptr && LandTypeChangedToIsland(state, *perm)) { return base; }
     if (!def.params.colored_creature_only || for_creature) { return base; }
     // D12: Secluded Courtyard's clause also covers activated abilities of creature sources.
     if (def.params.colored_creature_ability_ok && PayingCreatureAbility()) { return base; }
@@ -37908,7 +38021,8 @@ inline bool AnyUntappedFilterSource(const GameState& state)
 inline void AddSourceToPool(ManaPool& pool, const GameState& state, const CardDefinition& def,
                             int yield_override, const Permanent* perm)
 {
-    if (!dmgev::CanPayManaTapLife(state, state.active_player_index, def)) { return; }
+    if (!(perm != nullptr && LandTypeChangedToIsland(state, *perm))
+        && !dmgev::CanPayManaTapLife(state, state.active_player_index, def)) { return; }
     // SNOW provenance choke point (see ManaPool::snow_units): every unit this source adds is
     // tagged snow iff the DEFINITION's card is snow -- def.card carries real supertype masks
     // even when `perm` is null (a pending rock projected from hand, where the ZoneCard
@@ -37932,6 +38046,7 @@ inline void AddSourceToPool(ManaPool& pool, const GameState& state, const CardDe
     // the ramp_filter branch's own, below. Ramp filter + land aura appears only in the Bruna list,
     // so every other deck is byte-identical.
     const bool ramp_unfed = aura_bonus > 0 && def.params.ramp_filter
+        && !(perm != nullptr && LandTypeChangedToIsland(state, *perm))
         && !HasUntappedRampFeeder(state)
         && !(FloatFeedsRampFilterEnabled() && FloatLeftoverManaEnabled() && state.floating_mana.Total() > 0);
     if (aura_bonus > 0 && !ramp_unfed)
@@ -37943,6 +38058,10 @@ inline void AddSourceToPool(ManaPool& pool, const GameState& state, const CardDe
         if (!perm->card.IsLand() && UntapLandHostCount(state, *perm) > 1) { pool.wild += aura_bonus; }
         else { LandAuraAddToPool(pool, state, *perm); }
     }
+    // A type-setting effect replaces the land's printed mana abilities with the Island
+    // inherent ability. The attached Aura's extra mana was credited immediately above.
+    if (perm != nullptr && LandTypeChangedToIsland(state, *perm))
+    { pool.Add(Color::Blue); return; }
     if (def.params.is_filter)
     {
         if (HasUntappedNonFilterSourceProducing(state, def.params.produces)) { ++pool.wild; }
@@ -38919,7 +39038,8 @@ inline std::string SelectDigSource(const GameState& state, const ManaPool& pool,
     {
         if (p.controller_index != state.active_player_index || p.tapped) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        if (!d || !d->params.sacrifice_draw_cost.has_value()) { continue; }
+        if (!d || !d->params.sacrifice_draw_cost.has_value()
+            || LandTypeChangedToIsland(state, p)) { continue; }
         if (!pool.CanPay(d->params.sacrifice_draw_cost.value())) { continue; }
         out_is_sac = true;
         return p.card.m_name;
@@ -38942,7 +39062,8 @@ inline bool HasAnyDigSource(const GameState& state)
     {
         if (p.controller_index != state.active_player_index || p.tapped) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        if (d && d->params.sacrifice_draw_cost.has_value()) { return true; }
+        if (d && d->params.sacrifice_draw_cost.has_value()
+            && !LandTypeChangedToIsland(state, p)) { return true; }
     }
     return false;
 }
@@ -42609,6 +42730,12 @@ inline int SourceMaxNetLive(const GameState& state, const Permanent& pp, const C
                             const std::vector<std::pair<int, int>>* aura_fold = nullptr,
                             std::uint64_t reserved_mask = 0)
 {
+    if (LandTypeChangedToIsland(state, pp))
+    {
+        const int aura = (aura_fold && (pp.card.IsLand() || aura_fold->empty()))
+            ? LandAuraBonusFolded(*aura_fold, pp) : LandAuraBonus(state, pp);
+        return 1 + aura;
+    }
     int b = SourceMaxNet(pp, dd);
     // Scaled LAND (Three Tree City): N of a chosen colour, N = creatures you control, minus its feeder.
     if (IsScaledManaLand(dd))
@@ -42655,6 +42782,13 @@ inline int SourceMaxNetLive(const GameState& state, const Permanent& pp, const C
 inline void SourceColorCapLive(const GameState& state, const Permanent& pp, const CardDefinition& dd,
                                std::uint8_t& mask, int& amt, std::uint64_t reserved_mask = 0)
 {
+    if (LandTypeChangedToIsland(state, pp))
+    {
+        amt = 1 + LandAuraBonus(state, pp);
+        mask = static_cast<std::uint8_t>((1u << static_cast<int>(Color::Blue))
+            | (LandAuraColorMask(state, pp) & 0x1F));
+        return;
+    }
     constexpr std::uint8_t kAll = (1u << static_cast<int>(Color::White))
                                 | (1u << static_cast<int>(Color::Blue))
                                 | (1u << static_cast<int>(Color::Black))
@@ -42845,6 +42979,10 @@ inline dmgev::PayFloor PaymentDamageFloor(const GameState& state, const ManaCost
                                          const ManaPool& floating, bool barbs, int barb_total,
                                          std::uint64_t reserved_mask = 0)
 {
+    // A type-changing effect removes printed pain abilities. The damage optimizer's
+    // exact table is built from printed text, so use the safe zero lower bound.
+    for (const Permanent& p : state.battlefield)
+    { if (p.card.IsLand() && LandTypeChangedToIsland(state, p)) { return { 0, false, 0 }; } }
     // The scan-based bound, only on the paths that fall back to it (an exact DP answer dominates it).
     auto lbf = [&]() -> dmgev::PayFloor
     { return { PaymentDamageLowerBound(state, cost, floating, barbs, barb_total), false, 0 }; };
@@ -43638,6 +43776,45 @@ inline bool CastableOnItsOwn(const CardDefinition& d)
     return !d.params.goldfish_inert && !d.params.counters_target_spell_to_hand;
 }
 
+inline int OpponentNonlandTargetIndex(const GameState& state, int caster, int target_number)
+{
+    int fallback = -1;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+        if (p.controller_index == caster || p.card.IsLand()) { continue; }
+        if (!SpellCanTargetPermanent(state, caster, p)) { continue; }
+        if (fallback < 0) { fallback = i; }
+        if (target_number > 0 && p.card.m_number == target_number) { return i; }
+    }
+    return target_number > 0 ? -1 : fallback;
+}
+
+inline void BounceOpponentNonlandAt(GameState& state, int index)
+{
+    if (index < 0 || index >= static_cast<int>(state.battlefield.size())) { return; }
+    const Permanent p = state.battlefield[static_cast<std::size_t>(index)];
+    const int num = p.card.m_number;
+    state.battlefield.erase(state.battlefield.begin() + index);
+    if (!p.is_token)
+    {
+        Card returned = p.card;
+        if (!p.copy_printed_name.empty())
+        {
+            const CardDefinition* printed = CardDatabase::Instance().Lookup(p.copy_printed_name.str());
+            if (printed) { returned = printed->card; returned.m_number = num; }
+        }
+        EnterHand(state, p.owner_index, returned, HandEntryReason::Bounce);
+    }
+    for (Permanent& q : state.battlefield)
+    {
+        if (q.aura_attached_to == num) { q.aura_attached_to = 0; }
+        if (q.equipped_to == num) { q.equipped_to = 0; }
+    }
+    RefreshDevotionCreatures(state);
+    RefreshReconfigureCreatures(state);
+}
+
 // "...put it into its owner's hand instead of into that player's graveyard." The card is a NEW
 // object (CR 400.7): a staged (exiled, expiring) copy that was cast comes back a plain hand card.
 inline void ReturnCounteredSpellToHand(GameState& state, int owner, Card card)
@@ -43657,6 +43834,8 @@ inline bool FreeCastHasLegalTargets(const GameState& s, int controller, const Ca
     if (pp.counters_target_spell_to_hand) { return false; }
     if (pp.is_aura) { return !LegalEnchantTargets(s, controller, pp).empty(); }
     if (pp.attach_target_equipment) { return AttachSpellCastLegal(s, controller); }
+    if (pp.bounce_opponent_nonland_permanent)
+    { return OpponentNonlandTargetIndex(s, controller, 0) >= 0; }
     if (RemovalSearchesForController(d))
     {
         return RemovalControllerCastLegal(s, controller, 0, HumanPlayActive() || g_play_target_chooser != nullptr);

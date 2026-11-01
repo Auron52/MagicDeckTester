@@ -1,0 +1,80 @@
+{
+  "card_scores": {
+    "Aether Vial": [
+      0.038295406658238385,
+      -0.23571428571428577
+    ],
+    "Botanical Sanctum": [
+      0.0007486631016044853,
+      -0.24712475276536505
+    ],
+    "Cosi's Trickster": [
+      0.1539224000264321
+    ],
+    "Island": [
+      -0.055758702094530044,
+      -0.11162790697674385
+    ],
+    "Kumena's Speaker": [
+      0.3546198928507778,
+      -0.09428252906513812
+    ],
+    "Lord of Atlantis": [
+      0.07384862353304822,
+      -0.10081008100810074
+    ],
+    "Master of the Pearl Trident": [
+      0.09362177728327747,
+      0.011613085965160863
+    ],
+    "Merfolk Mistbinder": [
+      0.10288311999042943,
+      -0.03377110694183916
+    ],
+    "Phantasmal Image": [
+      0.017404208064310644,
+      -0.2620723125454987
+    ],
+    "Secluded Courtyard": [
+      0.0392863352717292,
+      -0.07648999497955966
+    ],
+    "Silvergill Adept": [
+      -0.04347168833412507,
+      -0.07770681265206836
+    ],
+    "Sink into Stupor": [
+      -0.2522425347979542
+    ],
+    "Spreading Seas": [
+      -0.22038641734731979
+    ],
+    "Tide Shaper": [
+      0.2398348977040463,
+      0.06981366459627303
+    ],
+    "Unclaimed Territory": [
+      0.029513343799058234
+    ],
+    "Vodalian Hexcatcher": [
+      0.011626940852677237,
+      -0.09438775510204067
+    ],
+    "Waterlogged Grove": [
+      0.0006353328541290892,
+      -0.10106850117096045
+    ]
+  },
+  "hand_score_threshold": -1e+18,
+  "mulligan": {
+    "bottom_order": "count_first",
+    "curve_check": "two_drop",
+    "max_lands": 5,
+    "min_color_sources": {},
+    "min_lands": 1,
+    "min_playable": 0,
+    "required_pieces": [],
+    "stop_at": 4
+  },
+  "version": 1
+}

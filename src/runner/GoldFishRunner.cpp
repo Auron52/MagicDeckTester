@@ -1915,11 +1915,15 @@ GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed, int gam
     static constexpr int kNonbasics[10] = {0, 2, 1, 3, 2, 0, 3, 1, 2, 3};
     const int pattern_index = game_index >= 0 ? game_index % 10 : static_cast<int>(seed % 10);
     const int nonbasics = kNonbasics[pattern_index];
+    const bool merfolk_land_targets = std::any_of(deck.mainboard.begin(), deck.mainboard.end(),
+        [](const Card& c) { return c.m_name == "Tide Shaper" || c.m_name == "Spreading Seas"
+                                  || c.m_name == "Sink into Stupor"; });
     for (int i = 0; i < 3; ++i)
     {
         Card land;
         land.m_name = i < nonbasics ? "Opponent Nonbasic Land" : "Opponent Basic Land";
         land.RehashName();
+        if (merfolk_land_targets) { land.m_number = 600000 + i; }
         land.AddType(CardType::Land);
         if (i >= nonbasics) { land.AddSupertype(Supertype::Basic); }
         Permanent perm;

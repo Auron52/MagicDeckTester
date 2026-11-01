@@ -3699,6 +3699,17 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
     // Set up once at the top-level call and threaded down; disabled when the bitmask won't fit --
     // which is a bound on the SOURCE count, not the board size (see the gate below).
     const bool top_level = (fail_memo == nullptr);
+    bool island_type_effect = false;
+    if (top_level)
+    {
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.islandize_target != 0) { island_type_effect = true; break; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d && d->params.land_aura_sets_island && p.aura_attached_to != 0)
+            { island_type_effect = true; break; }
+        }
+    }
 
     // Structural mana-source list (the controller's BasicLand / ManaDork / mana_rock permanents +
     // their cached def), enumerated ONCE at the top-level call and threaded to every node. The
@@ -3774,6 +3785,7 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
         t_bt_acf_board = false;
         for (const auto& sc : s_src_cands_buf)
         { if (sc.second->params.any_color_filter) { t_bt_acf_board = true; break; } }
+        if (island_type_effect) { t_bt_acf_board = false; }
     }
 
     // Does the memo's 64-bit tapped-set bitmask fit? It indexes SOURCES (by position in the list
@@ -3877,7 +3889,7 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
         // built, never after. The verdict is cached into flow_* and reused by the prune block further
         // down, so enabling this costs no extra max-flow.
         g_flow_order_live = false;
-        if (fail_memo && FlowPruneEnabled() && FlowOrderEnabled())
+        if (!island_type_effect && fail_memo && FlowPruneEnabled() && FlowOrderEnabled())
         {
             flow_done = true;
             flow_infeasible = TapFlowInfeasible(state, cost, for_creature, floating, rp_colors,
@@ -4315,7 +4327,7 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
     // A/B hatch for the decoupling itself: MTG_FLOW_PRUNE_MEMO_GATED=1 restores the old
     // (memo-gated) behaviour from ONE binary, so the fix can be measured without two builds.
     static const bool s_memo_gated = EnvOn("MTG_FLOW_PRUNE_MEMO_GATED");
-    if (top_level && (fail_memo || !s_memo_gated) && FlowPruneEnabled())
+    if (top_level && !island_type_effect && (fail_memo || !s_memo_gated) && FlowPruneEnabled())
     {
         bool bailed = flow_bailed;
         const bool infeasible = flow_done
@@ -4409,6 +4421,18 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
         if (state.battlefield[i].tapped) { continue; }
         if (reserved_mask & (1ull << i)) { continue; }   // reservation audit: this source is held (not tappable)
         const CardDefinition* def = cand.second;   // hoisted: controller==active filter + LookupCached done once
+        // CR 305.7: an Islandized land loses its printed rules text, including all
+        // alternate mana modes, restrictions and tap costs. Use a plain blue source
+        // for this payment branch; its live attached Aura bonus remains on the permanent.
+        std::optional<CardDefinition> island_def;
+        if (LandTypeChangedToIsland(state, state.battlefield[i]))
+        {
+            island_def.emplace(*def);
+            island_def->params = CardParams{};
+            island_def->params.produces = { Color::Blue };
+            island_def->tmpl = CardTemplate::BasicLand;
+            def = &*island_def;
+        }
         const bool is_src = (def->tmpl == CardTemplate::BasicLand)
                          || (def->tmpl == CardTemplate::ManaDork && CanTapNow(state.battlefield[i], state.battlefield))
                          || def->params.mana_rock
@@ -4434,7 +4458,12 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
         {
             bool dup = false;
             for (int j = s_dup_of_buf[ci]; j >= 0; j = s_dup_of_buf[j])
-            { if (!state.battlefield[cands[j].first].tapped) { dup = true; break; } }
+            {
+                if (!state.battlefield[cands[j].first].tapped
+                    && LandTypeChangedToIsland(state, state.battlefield[i])
+                       == LandTypeChangedToIsland(state, state.battlefield[cands[j].first]))
+                { dup = true; break; }
+            }
             if (dup)
             {
                 if (tapstats::Enabled()) { tapstats::g_dup_skips.fetch_add(1, std::memory_order_relaxed); }
@@ -6180,7 +6209,17 @@ static bool TapForCostBacktrackTop(GameState& state, const ManaCost& cost,
     int mc_nsrc = 0;
     static const bool s_mc_bf_gate = EnvOn("MTG_MANA_CACHE_BF_GATE");
     // Everything about the call SHAPE, which is all that can be known before the scan.
-    const bool mc_shape = ManaCacheEnabled() && rp_colors == nullptr
+    bool island_mana_effect = false;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.islandize_target != 0) { island_mana_effect = true; break; }
+        const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+        if (pd && pd->params.land_aura_sets_island && p.aura_attached_to != 0)
+        { island_mana_effect = true; break; }
+    }
+    // The cache descriptor stores printed mana modes. Island text replacement changes
+    // those modes dynamically, so take the exact payer until its key records live types.
+    const bool mc_shape = !island_mana_effect && ManaCacheEnabled() && rp_colors == nullptr
                     && (McLeftoverShape()
                         || (out_full_pool != nullptr && out_leftover == nullptr && floating.Total() == 0));
     std::uint64_t mk1 = 0, mk2 = 0, pre_tapped = 0; bool mc_active = false;

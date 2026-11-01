@@ -34,6 +34,7 @@ declare -A DECK_FILE=(
   [slivers]=decks/slivers_vial/slivers_vial.txt
   [burn]=decks/burn/burn.txt
   [midrangeburn]="decks/Midrange Burn/Midrange Burn.cod"
+  [merfolk]=decks/Merfolk/Merfolk.cod
   [th]=decks/treasure_hunt/treasure_hunt.txt
   [knights]=decks/Knights/Knights.cod
   [whiteknights]=decks/WhiteKnights/WhiteKnights.cod
@@ -87,6 +88,7 @@ declare -A DECK_PROF=(
   [slivers]=decks/slivers_vial/slivers_vial.profile.json
   [burn]=decks/burn/burn.profile.json
   [midrangeburn]="decks/Midrange Burn/Midrange Burn.profile.json"
+  [merfolk]=decks/Merfolk/Merfolk.profile.json
   [th]=decks/treasure_hunt/treasure_hunt.profile.json
   [knights]=decks/Knights/Knights.profile.json
   [whiteknights]=decks/WhiteKnights/WhiteKnights.profile.json
@@ -152,6 +154,11 @@ declare -A DECK_PROF=(
 # into turn 11 -- legal but volatile), and slivers actively spins on its heavy tail. The
 # deeper/generous budgets live in OVERNIGHT instead. See search-perf-investigation memory.
 SMOKE_CASES=(
+  # Merfolk: provisional pre-keep-table ENTRY set; cost gate decides admission.
+  "merfolk     0 1001 1000 0"
+  "merfolk     3 1001   50 10"
+  "merfolk     5 1001  100 20"
+  "merfolk2hg  3 1001   50 10"
   # Midrange Burn: pre-keep-table ENTRY sizing, using Hinata's conservative game counts.
   # Admission requires the same-run <=3x Hinata cost verdict and mode-budget fit.
   # Chandra's per-opponent damage makes 2HG a relevant play row, not just a canary.
@@ -995,6 +1002,11 @@ REGRESSION_CASES=(
   "midrangeburn     5 2002  150 20"
   "midrangeburn     5 3003  150 20"
   "midrangeburn2hg  5 2002   75 20"
+  # Merfolk: provisional pre-keep-table ENTRY set; most searched games use play settings.
+  "merfolk 0 2002 1000 0"
+  "merfolk 3 2002   75 10"
+  "merfolk 5 2002  150 20"
+  "merfolk 5 3003  150 20"
 
 )
 
@@ -1739,5 +1751,18 @@ OVERNIGHT_CASES=(
   "midrangeburn2hg  5  5005  170 20"
   "midrangeburn2hg  5  6006  170 20"
   "midrangeburn2hg  5  7007  170 20"
+  # Merfolk: pre-keep-table overnight ENTRY set (Hinata's shape).
+  "merfolk 0  4004 2000 0"
+  "merfolk 0  6006 2000 0"
+  "merfolk 0  8008 2000 0"
+  "merfolk 0 10010 2000 0"
+  "merfolk 3  4004  400 10"
+  "merfolk 3  5005  400 10"
+  "merfolk 3  6006  400 10"
+  "merfolk 3  7007  400 10"
+  "merfolk 5  4004  300 20"
+  "merfolk 5  5005  300 20"
+  "merfolk 5  6006  300 20"
+  "merfolk 5  7007  300 20"
 
 )

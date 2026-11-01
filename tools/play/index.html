@@ -2792,7 +2792,7 @@ function renderPlanbar() {
     // Saproling Migration chips are otherwise indistinguishable and the human cannot see which of
     // them they just paid four extra mana for -- nor spot that the badge toggled the wrong one.
     const tag = (p.kind==='vial'?' ⚡':p.kind==='retrace'?' ↩':act)
-              + (p.kicked?' ⊕ kicked':'')
+              + (p.kicked?(p.name==='Silvergill Adept'?' ⊕ pay {3}':' ⊕ kicked'):'')
               + (p.targetName?` → ${esc(p.targetName)}`:'');
     // An attachment chip -- an Aura (legal enchant targets) or a queued EQUIP -- is draggable onto a
     // creature to (re)aim it. Same .aura affordance for both: it is the same gesture.
@@ -2933,7 +2933,7 @@ function renderHand() {
       // cast (see the handler), which is why it reads "kicked" rather than naming a second spell.
       // ⊕ is the glyph because kicker is an ADDITIONAL cost (CR 601.2b) -- it adds, it does not
       // replace -- and because ⚡/🗺/⌛ are taken by channel, adventure and suspend on this same thumb.
-      (canKick?`<span class="landface" data-kick="${esc(c.name)}" title="KICKER — pay ${esc(c.name)}'s additional cost${kickMv[c.name]?` (+${kickMv[c.name]} mana)`:''} for the bigger effect. An ordinary click casts it UNKICKED; this toggles the kicker on the queued cast${kickN?', click again to take the kicker back':''}">⊕ kicked${kickMv[c.name]?` (+${kickMv[c.name]})`:''}${kickN>1?` ×${kickN}`:''}</span>`:'')+
+      (canKick?`<span class="landface" data-kick="${esc(c.name)}" title="${c.name==='Silvergill Adept'?'PAY INSTEAD — pay {3} rather than reveal a Merfolk card':`KICKER — pay ${esc(c.name)}'s additional cost${kickMv[c.name]?` (+${kickMv[c.name]} mana)`:''} for the bigger effect`}. This toggles the paid cast${kickN?', click again to take it back':''}">⊕ ${c.name==='Silvergill Adept'?'pay {3}':`kicked${kickMv[c.name]?` (+${kickMv[c.name]})`:''}`}${kickN>1?` ×${kickN}`:''}</span>`:'')+
       (total>1?`<span class="pip">×${total}</span>`:'')+(q?`<span class="qct">${q}</span>`:'')+
       `<em>${esc(c.name)}${c.cost?` <span style="color:var(--muted)">${esc(c.cost)}</span>`:''}</em></span>`;
   }
@@ -3030,6 +3030,12 @@ function renderHand() {
       const paid = mv ? ` (+${mv} mana)` : '';
       const r = LB.toggleKicker(S.plan, nm, kd);
       S.plan = r.plan;
+      if (nm === 'Silvergill Adept') {
+        flashHint(r.action === 'kicked' ? 'Paying {3} instead of revealing a Merfolk card.'
+                  : r.action === 'unkicked' ? 'Using the reveal option for Silvergill Adept.'
+                  : 'Casting Silvergill Adept with the {3} pay-instead cost.');
+        renderBoard(); return;
+      }
       flashHint(r.action === 'kicked'   ? `Paying ${nm}'s kicker${paid} — the queued cast is now KICKED.`
               : r.action === 'unkicked' ? `Took the kicker back off ${nm} — casting it unkicked.`
               :                           `Casting ${nm} with its kicker paid${paid}.`);

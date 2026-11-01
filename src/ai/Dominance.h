@@ -200,7 +200,12 @@
 // comparator works at -- so a state still carrying one is not at a clean boundary. Also folded into
 // TurnSolver's BuildSimKey and every per-permanent sim key, gated on set, because it decides mid-turn
 // whether a body survives the turn.
-static_assert(sizeof(Permanent) == 304,
+// 304 -> 312 (2026-11-01, Merfolk): Permanent gained `islandize_target`, Tide Shaper's
+// persistent link to a land that becomes an Island while Shaper remains. Classification:
+// EXACT-MATCH attachment wiring, like aura_attached_to: the target's identity affects mana,
+// land subtypes, and creature bonuses. Fold it with the stable permanent id below and treat any
+// such link as a wired board. It is also folded in TurnSolver's mid-turn state key.
+static_assert(sizeof(Permanent) == 312,
               "Permanent changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 // The point of CounterList: this is what makes the erase path a memmove. If a future field breaks
@@ -1295,7 +1300,8 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     bool wired = false;
     for (const Permanent& p : s.battlefield)
     {
-        if (p.aura_attached_to != 0 || p.equipped_to != 0) { wired = true; break; }
+        if (p.aura_attached_to != 0 || p.equipped_to != 0 || p.islandize_target != 0)
+        { wired = true; break; }
     }
 
     std::vector<DomPerm> mine, others;
@@ -1380,6 +1386,7 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
             mfold(static_cast<std::uint64_t>(p.card.m_number));
             mfold(static_cast<std::uint64_t>(p.aura_attached_to));
             mfold(static_cast<std::uint64_t>(p.equipped_to));
+            mfold(static_cast<std::uint64_t>(p.islandize_target));
         }
 
         // Directional axes. Sum the generic counter vector by type first (a permanent may carry

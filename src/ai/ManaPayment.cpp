@@ -440,6 +440,29 @@ void TapSourceIntoFloat(GameState& state, int active, Permanent& p, const CardDe
                         Color col, ManaPool& floating, ManaPool* available, bool for_creature,
                         const std::vector<int>* aura_colors)
 {
+    if (LandTypeChangedToIsland(state, p))
+    {
+        p.tapped = true;
+        if (payledger::On() && g_real_resolution)
+        { payledger::Record(state, active, p, def, Color::Blue, payledger::t_cur_pip_any); }
+        if (PayRollbackOn())
+        { state.pay_ledger.Push(state.turn_number, active, p.card.m_number,
+                                static_cast<int>(Color::Blue), payledger::t_cur_pip_any); }
+        if (state.dmg_events_armed) { dmgev::ArmedManaTap(state, active, p, 0); }
+        floating.Add(Color::Blue);
+        if (available) { available->Add(Color::Blue, -1); }
+        ManaPool bonus;
+        LandAuraAddToPool(bonus, state, p, aura_colors);
+        floating.AddPool(bonus);
+        if (available)
+        {
+            available->white -= bonus.white; available->blue -= bonus.blue;
+            available->black -= bonus.black; available->red -= bonus.red;
+            available->green -= bonus.green; available->colorless -= bonus.colorless;
+            available->wild -= bonus.wild;
+        }
+        return;
+    }
     if (!dmgev::CanPayManaTapLife(state, active, def)) { return; }
     CcoAuditTap(def, col, for_creature);   // legality audit (MTG_CCO_AUDIT); inert when off
     // TEMP DIAGNOSTIC (MTG_TAPDBG, default off): every real tap with source, colour and energy.
@@ -1753,6 +1776,8 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     bool restricted_in_float = false;
     auto usable = [&](const Permanent& p, const CardDefinition& def) -> bool
     {
+        if (LandTypeChangedToIsland(state, p))
+        { return !paying_snow || def.card.HasSupertype(Supertype::Snow); }
         if (!dmgev::CanPayManaTapLife(state, active, def)) { return false; }
         if (paying_snow && !def.card.HasSupertype(Supertype::Snow)) { return false; }
         if (feeding && (def.params.creature_mana_only || BigSpellOnlySource(def.params))) { return false; }
@@ -2095,6 +2120,15 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                     if (!p.tapped && GrantReaches(mana_grant, p)
                         && GrantedBodyCanTap(mana_grant, p, state.battlefield))
                     { def = &GrantFaceFor(mana_grant, p); }
+                }
+                std::optional<CardDefinition> island_def;
+                if (def != nullptr && LandTypeChangedToIsland(state, p))
+                {
+                    island_def.emplace(*def);
+                    island_def->params = CardParams{};
+                    island_def->params.produces = { Color::Blue };
+                    island_def->tmpl = CardTemplate::BasicLand;
+                    def = &*island_def;
                 }
                 // DO NOT BAIL ON A MISSING DEFINITION HERE. TAPPING needs one (the produces list,
                 // the filter params); EATING does not -- the outlet is the permission and the body is
@@ -2841,7 +2875,8 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
         {
             if (p.controller_index != active || p.tapped) { continue; }
             const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
-            if (!def || IsManaConversionSource(def->params) || !usable(p, *def)) { continue; }
+            if (!def || (IsManaConversionSource(def->params)
+                && !LandTypeChangedToIsland(state, p)) || !usable(p, *def)) { continue; }
             // ProducesForPayment (RP-aware; identity for every non-colored_creature_only source).
             // NOTE: the pre-unification executor read EffectiveProduces here -- the unfixed twin of
             // the 6bb2791 coloured-pip fix, reachable only under MTG_TAP_LEGACY (see ManaPayment.h).
@@ -2877,6 +2912,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                 if (p.controller_index != active || p.tapped) { continue; }
                 const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
                 if (!def || !(def->params.is_filter || def->params.any_color_filter)
+                    || LandTypeChangedToIsland(state, p)
                     || def->params.filter_no_free_colorless   // Astrolabe: no free {C} mode
                     || !usable(p, *def)) { continue; }
                 TapConversionSource(state, p);   // shared with the human pre-tap (see its header)
@@ -2895,7 +2931,8 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
         {
             if (p.controller_index != active || p.tapped) { continue; }
             const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
-            if (!def || !def->params.is_filter || !usable(p, *def)) { continue; }
+            if (!def || !def->params.is_filter || LandTypeChangedToIsland(state, p)
+                || !usable(p, *def)) { continue; }
             if (restricted_in_float) { continue; }   // its feed would consume creature-only units
             Color out;
             if (any)
@@ -2954,7 +2991,8 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
             {
                 if (p.controller_index != active || p.tapped) { continue; }
                 const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
-                if (!def || !def->params.ramp_filter || !usable(p, *def)) { continue; }
+                if (!def || !def->params.ramp_filter || LandTypeChangedToIsland(state, p)
+                    || !usable(p, *def)) { continue; }
                 if (!any)
                 {
                     bool match = false;
@@ -9033,6 +9071,13 @@ HumanPreTapOffer HumanPreTapOfferFor(const GameState& state, const Permanent& p)
     // BuildNonCreaturePool for what the per-permanent form costs on a 364-permanent board.
     const CardDefinition* def = ManaDefOf(state, p, LiveManaGrant(state, active));
     if (def == nullptr) { o.why_not = "it is not a mana source"; return o; }
+    if (LandTypeChangedToIsland(state, p))
+    {
+        o.route = HumanPreTapOffer::Route::Plain;
+        o.free_faces = "U";
+        o.note = "{T}: Add {U}";
+        return o;
+    }
     const CardParams& q = def->params;
     if (!dmgev::CanPayManaTapLife(state, active, *def))
     { o.why_not = "you cannot pay its life cost"; return o; }

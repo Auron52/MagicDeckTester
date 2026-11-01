@@ -675,6 +675,7 @@ struct Permanent
     // toughness/lifelink grant is applied to the creature with this m_number at the combat sites
     // (AuraBonusFor / CreatureHasLifelink, SpellEffects.h). Copied with the permanent.
     int       aura_attached_to     = 0;
+    int       islandize_target    = 0; // Tide Shaper: linked land id while this creature remains
     CounterList counters;   // was std::vector<Counter>; see CounterList above for why
     // ---- COLD: per-card resources and display state; never touched by a whole-board walk -----------
     // Accumulated "when this creature dies this turn" damage owed to its controller from delayed

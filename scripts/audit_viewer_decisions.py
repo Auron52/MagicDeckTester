@@ -140,6 +140,12 @@ MANIFEST = {
     # blink/trick precedent); a cascade-flipped Protege additionally asks via the board-click
     # `target` chooser at resolution (ChooseCopyEntrantIndex).
     "enter_as_copy_of_entrant": ("main_phase",        truthy),
+    "enter_as_copy_of_creature": ("main_phase",       truthy),
+    "bounce_opponent_nonland_permanent": ("target",     truthy),
+    "kicked_etb_target_land_island": ("main_phase",     truthy),
+    "land_aura_can_target_opponent": ("main_phase",     truthy),
+    "reveal_subtype_or_pay": ("main_phase",             truthy),
+    "kicker_cost": ("main_phase",                        truthy),
     "has_replicate":              ("replicate",       truthy),   # Hatchery Sliver's own replicate
     "grants_replicate_to_subtypes": ("replicate",     truthy),   # + grants it to Sliver spells
     "etb_bounce_land":       ("bounce",               truthy),
@@ -1543,6 +1549,10 @@ INERT_PARAMS = {
     "nth_spell_investigate": "Pirates: mandatory investigate on the Nth spell (Malcolm); the Clue crack surfaces as a main_phase SacDraw plan action via the Clue Token def",
     "reveal_or_pay_subtype": "Pirates: Daring Buccaneer 'reveal a Pirate card from your hand or pay {2}' -- auto-REVEAL whenever possible because paying is STRICTLY DOMINATED (revealing is free; the passive opponent gains nothing from the information; nothing in the engine reads revealed cards or mana spent). WHICH Pirate is revealed is inert (it stays in hand). A human who wants the {2} line can still reach it by casting the last other Pirate first (every cast is priced live). DISCLOSED in 6a",
     "reveal_or_pay_cost": "Pirates: Daring Buccaneer's pay-instead amount ({2}) -- a printed constant of the additional cost, charged automatically only when no reveal is possible; no choice",
+    "land_aura_sets_island": "Spreading Seas: automatic continuous land-type effect while attached; host choice is surfaced by land_aura_can_target_opponent",
+    "self_pump_if_land_subtype": "Kumena's Speaker: automatic static self-buff condition; no player choice",
+    "self_pump_if_opponent_island": "Tide Shaper: automatic static self-buff condition; no player choice",
+    "self_pump_if_other_subtype_or_land": "Kumena's Speaker: automatic static self-buff condition; no player choice",
     # ---- Prevent Damage (2026-09-27, phase I1) -- the damage-event / lifegain-replacement core ----
     "tap_self_damage_any_mode": "Ancient Tomb: the pain applies to its ONLY mana ability ({C}{C}) -- a land property read by the payment, no choice (same class as tap_self_damage)",
     "noncreature_damage_lifegain": "Tamanoa: automatic 'whenever a noncreature source you control deals damage, you gain that much life' trigger -- no target, no may, no mode",
@@ -2092,7 +2102,13 @@ def pick_toward(d, target_lc):
         plans = d.get("plans", [])
         if not plans:
             return -1
-        want = [p for p in plans if target_lc in p.get("summary", "").lower()]
+        # MDFC land lines name the FRONT in `land=<front> -> <back>`, but they do not cast
+        # that front. Prefer a real action carrying the card before falling back to the
+        # summary for land-only choices.
+        want = [p for p in plans if any(target_lc == str(a.get("card", "")).lower()
+                                        for a in p.get("actions", []))]
+        if not want:
+            want = [p for p in plans if target_lc in p.get("summary", "").lower()]
         pool = want or plans
         return max(pool, key=lambda p: len(p.get("summary", "")))["index"]
     return pick(d)
@@ -2131,13 +2147,17 @@ def verify_card(deck, prof, card_name, expected_types, base_seed, budget, max_tu
     """
     target_lc = card_name.lower()
     want = set(expected_types)
+    card = next((c for c in load_deck_cards(deck)[0] if c.get("name", "").lower() == target_lc), {})
+    back_lc = str((card.get("parameters") or {}).get("mdfc_back_name") or "").lower()
     covered, cover_src, first_hit = set(), set(), {}
     cast_seen_anywhere = False
+    route_seen = set()
     drawn_games = 0             # games where the card was ever in hand (distinguishes NOT_FORCED reasons)
     for gi in range(budget):
         choices, jitte, guard = [], [], 0
         observed = set()            # (type, source_lc)
         cast_here = False
+        land_back_here = False
         in_hand_here = False
         seen_states = set()         # repeat-state pass rule; see run_sweep
         while guard < 220:
@@ -2172,21 +2192,33 @@ def verify_card(deck, prof, card_name, expected_types, base_seed, budget, max_tu
                     seen_states.add(key)
             if t == "main_phase" and isinstance(choice, int) and choice >= 0:
                 for pl in d.get("plans", []):
-                    if pl.get("index") == choice and target_lc in pl.get("summary", "").lower():
+                    if pl.get("index") != choice:
+                        continue
+                    if any(target_lc == str(a.get("card", "")).lower()
+                           for a in pl.get("actions", [])):
                         cast_here = True
-                        break
+                    if (back_lc and pl.get("summary", "").lower().startswith("land=" + target_lc)
+                            and back_lc in pl.get("summary", "").lower()):
+                        land_back_here = True
+                    break
             push_choice(choices, choice)
         if in_hand_here:
             drawn_games += 1
-        if cast_here:
+        if cast_here or land_back_here:
             cast_seen_anywhere = True
+            if cast_here: route_seen |= want - {"land_entry"}
+            if land_back_here: route_seen.add("land_entry")
             for (t, s) in observed:
                 if t not in want:
+                    continue
+                if back_lc and t == "land_entry" and (not land_back_here or back_lc not in s):
+                    continue
+                if back_lc and t == "target" and (not cast_here or target_lc not in s):
                     continue
                 if t not in covered:
                     first_hit[t] = gi
                 covered.add(t)
-                if target_lc in s:
+                if target_lc in s or (t == "land_entry" and back_lc and back_lc in s):
                     cover_src.add(t)
             if covered >= want:
                 return ("VERIFIED", {"seed": base_seed, "game_index": gi,
@@ -2195,6 +2227,10 @@ def verify_card(deck, prof, card_name, expected_types, base_seed, budget, max_tu
                                      "first_seen": first_hit})
     if cast_seen_anywhere:
         missing = sorted(want - covered)
+        if back_lc and not set(missing) <= route_seen:
+            return ("NOT_FORCED", {"note": "MDFC face needed for " + ", ".join(missing)
+                                    + " was not played in the seed search", "missing": missing,
+                                    "covered": sorted(covered)})
         return ("HARD_MISS", {"note": "card was cast but these expected decisions never surfaced: "
                                       + ", ".join(missing),
                               "missing": missing, "covered": sorted(covered)})
@@ -2328,7 +2364,10 @@ def run_sweep(deck, prof, base_seed, n_games, max_turns, mana_names=frozenset())
             if d.get("type") == "main_phase" and isinstance(choice, int) and choice >= 0:
                 for pl in d.get("plans", []):
                     if pl.get("index") == choice:
-                        cast_text.append(pl.get("summary", "").lower())
+                        # `land=Sink into Stupor -> Soporific Springs` is a land play,
+                        # not a cast of Sink's targeted front face. Count only actions.
+                        cast_text.append(" ".join(str(a.get("card", "")).lower()
+                                                  for a in pl.get("actions", [])))
                         break
             push_choice(choices, choice)
         if guard >= GUARD:
