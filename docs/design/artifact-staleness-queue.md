@@ -271,3 +271,19 @@ What to build, so that only the in-between needs the USER:
 - No USER sign-off is owed for an adoption that is better overall -- average quality better and performance not
   worse (USER 2026-10-26). Report the numbers as done; only a trade-off goes to the USER. Keep tables and value leaves
   alike; for a leaf the performance half matters more.
+
+## 2026-11-02: first-time decks are opt-in
+
+The USER wants to be able to put a first-time deck into the queue, but explicitly **not** to have every
+missing artifact appear automatically: some first generations are prohibitively slow until the deck is
+optimized. `mark <deck> mulligan|valueleaf <why>` is the deliberate insertion. Unmarked missing artifacts
+do not create status items or jobs. A missing leaf cannot run ahead of a keep table: it needs a shipped
+table or an explicit mulligan mark, and the deck job runs the two stages in that order. First-time
+mulligan runs default to `fast` like `mullgen.sh`; `recipe_overrides` can choose `complete` deliberately.
+
+The worker distinguishes first-version keep and confounded-bottoming validation from regeneration's
+old-vs-new validation. A rejected first version is quarantined and records `not-adopted` so the mark is
+answered instead of launching the same expensive attempt again. A paused first version with a complete
+candidate resumes at validation rather than misreading its candidate as an incumbent. The tool still
+does not import a journal from a separate checkout or enforce overnight time windows; those are separate
+operational choices for Cyclone's current run.

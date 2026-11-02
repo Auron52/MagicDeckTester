@@ -81,6 +81,28 @@ checkout, started 2026-10-24 13:06 UTC, first job StompySurprise).
 
 ## Joining from a new machine
 
+### First-time artifacts are explicit jobs
+
+The queue does not discover missing artifacts automatically. To add a deck with no shipped keep table,
+make a conscious cost and readiness decision, then run `python3 scripts/artifact_queue.py mark
+<deck> mulligan "<why>"`. A missing value leaf likewise needs its own `valueleaf` mark. If both are
+marked, the worker runs mulligan first and value leaf only after the mulligan stage succeeds. A
+first-time value leaf without a shipped or marked keep table is blocked. The first-time mulligan recipe
+defaults to `fast`, matching `mullgen.sh`; set `recipe_overrides.<deck>` to `complete` in
+`scripts/artifact_queue.json` only when that cost is deliberate. Commit and push the mark/config to the
+tool branch, then check `explain <deck>` and `run --dry-run` before starting a worker. Removing the mark
+removes an unstarted first-time job.
+
+First-time mulligan validation uses the driver's keep and confounded-bottoming A/Bs. Regenerations
+continue to use old-vs-new. If a first-time run is paused after generating its candidate, the worker
+resumes with `mullgen.sh validate`; it does not mistake that candidate for an incumbent. A validation
+failure records a `not-adopted` verdict and leaves the table quarantined. These jobs still freeze in
+the worker's own worktree: the queue does not import a journal from a separately running generator.
+
+The worker waits for an idle box before a job, but does not automatically stop at the end of an
+overnight window. `stop` waits for the current job to finish; `pause` preserves its journal and claim
+for a later `start` on the same checkout. Arrange the pause at the desired window boundary.
+
 1. **A persistent checkout** (the worker refuses a temp root) with push access to origin, on
    `artifact-queue-tool` until it lands.
 2. **One worker per box, and nothing else generating.** Generations are strictly serial (CLAUDE.md). Before
