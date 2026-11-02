@@ -18,6 +18,7 @@ struct ContPinScope
     std::optional<ScriptedTutor>      tutor;
     std::optional<ScriptedSacLand>    sac;
     std::optional<ScriptedLandSearch> land_search;
+    std::optional<IncineratorPinScope> incinerator;
     std::optional<ScriptedLookTop>    look_top;     // the continuation's Risen Reef looks / trigger orders
     std::optional<ScriptedPutBounce>  put_bounce;   // the continuation's Genesis Wave put Karoo
     std::optional<ScriptedPutBack>    putback;      // the continuation's Brainstorm put-back
@@ -32,6 +33,7 @@ struct ContPinScope
         if (p->tutor      >= 0) { tutor.emplace(p->tutor); }
         if (!p->sac.empty())    { sac.emplace(p->sac); }
         if (!p->land_search.empty()) { land_search.emplace(p->land_search); }
+        if (!p->incinerator_targets.empty()) { incinerator.emplace(p->incinerator_targets); }
         if (!p->look_top.empty())    { look_top.emplace(p->look_top); }
         if (p->put_bounce >= 1)      { put_bounce.emplace(p->put_bounce); }
         if (p->putback >= 0)         { putback.emplace(p->putback); }
@@ -54,6 +56,7 @@ inline ContPins ContPinsOf(const TurnSolver::Plan& p)
     c.sac        = p.sac_pins;
     c.land_search = p.land_search_pins;
     c.look_top    = p.look_top_pins;
+    c.incinerator_targets = p.incinerator_targets;
     c.put_bounce  = PutBouncePinOf(p.bounce_choice, p.land_decided, p.land_to_play);
     c.putback     = p.putback_choice;
     return c;

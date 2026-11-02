@@ -16,7 +16,7 @@ there, so depth alone is the wrong axis.
 
 WHAT IT MEASURES. ONE pooled batch over every deck: the live sidecar as it stands (`live`, the baseline: its enabled
 block, or the built-in d5 / 20 when it has none) against a grid of ENABLED blocks around the current setting --
-target_depth {d-1, d, d+1} (>= 3) x budget_ms {b, 1.5b, 2b}. Each arm is built on the sidecar route (the live sidecar
+target_depth {d-1, d, d+1} (>= 5) x budget_ms {b, 1.5b, 2b}. Each arm is built on the sidecar route (the live sidecar
 plus the block: exactly the file that would be installed) in a variant deck folder whose other files are symlinks to
 the real ones, so every arm shares the keep table's cache entry (the cache is keyed by the canonical path). 8
 held-out seeds x 1000 paired games per arm, the leaf-adoption A/B's size. The arm whose depth and budget equal
@@ -49,6 +49,11 @@ particularly well, but that is primarily where you have trust" -- a budget that 
 decision on the leaf, so it can cost LESS (the trust-depth rule, slivers d5 b10 vs b3); otherwise a dearer arm is
 reported as a TRADE.
 
+NEVER BELOW DEPTH 5 (USER 2026-10-29: "It should be depth 5 minimum for play settings."). The grid used to reach
+d3; with the cost-first rule it moved AccomplishedAlchemist (2026-10-22) and Giants (2026-10-25) to d4/20 at 0.99x
+and 0.94x units, and picked d4/60 for Melira Pod (2026-10-29, +0.0011 t at 0.97x, not landed). Depths below the
+floor are clamped to it, so a live setting below d5 is measured only against d5+ arms.
+
 WHAT IT DECIDES: the leaf adoption's rule (USER 2026-10-11), through scripts/vlq_adopt_pick.py unchanged. ADOPT the
 CHEAPEST arm (work units, never wall-clock) whose quality is NOT NOTABLY WORSE than live (not: delta > 0.002 turns at
 paired t > +2); a passing arm that is notably better than that one wins instead. A dearer-but-better arm is a TRADE:
@@ -80,6 +85,7 @@ DEFAULT_PLAY = (5, 20)          # MulliganProfile::BuiltinDefaultPlay(): what a 
 SEEDS = [7_505_000 + 10_000 * i for i in range(8)]
 GAMES = 1000
 TOL = 0.002
+MIN_DEPTH = 5                   # USER 2026-10-29: "It should be depth 5 minimum for play settings."
 GEN_KEYS = ("mull_gen_depth", "mull_gen_budget_ms", "expected_buckets")
 PICK = os.path.join(HERE, 'vlq_adopt_pick.py')
 
@@ -96,7 +102,7 @@ def current(vp):
 
 
 def grid(d0, b0):
-    depths = sorted({d for d in (d0 - 1, d0, d0 + 1) if d >= 3})
+    depths = sorted({max(d, MIN_DEPTH) for d in (d0 - 1, d0, d0 + 1)})     # never below d5 (module doc)
     budgets = sorted({b0, round(1.5 * b0), 2 * b0}) if b0 > 0 else [0]      # never below b0 (module doc)
     return [(d, b) for d in depths for b in budgets]
 

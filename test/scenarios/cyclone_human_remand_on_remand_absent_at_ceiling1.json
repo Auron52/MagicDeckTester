@@ -1,0 +1,70 @@
+{
+  "deck": "decks/Unpredictable Cyclone/Unpredictable Cyclone.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "active_life": 20,
+  "opponent_life": 20,
+  "battlefield": [
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Island",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Island",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Island",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Island",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Seething Song",
+    "Remand",
+    "Remand"
+  ],
+  "library_top": [
+    "Street Wraith"
+  ],
+  "library_filler": "Island",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 50,
+  "max_turns": 4,
+  "_comment": [
+    "The same declared Remand-on-Remand line at the SHIPPED ceiling 1: no plan casts two Remands (Remand has no",
+    "cast of its own and the chain is not offered), so the line is rules-legal but not in the menu (legal_not_enumerated)."
+  ],
+  "env": {
+    "MTG_HUMAN_PLAY": "1",
+    "MTG_CYCLONE_REMAND_MAX_MV": "1"
+  },
+  "validate_line": "cast=Seething Song;cast=Remand;cast=Remand",
+  "expect_verdict": "legal_not_enumerated",
+  "expect_no_win": true
+}

@@ -1,0 +1,84 @@
+{
+  "_comment": [
+    "Unpredictable Cyclone phase 2: Emrakul hard-cast on round 3 (15 Islands) grants an extra turn",
+    "(EXTRA TURNS DO NOT COUNT TOWARD THE TURN COUNT, USER 2026-10-26). Opponent at 30: the extra",
+    "turn's attack (15, summoning sickness ended at its untap) + round 4's attack (15) kill -> the",
+    "win is reported as ROUND 4 (five turns taken). Without the extra turn the kill is round 5."
+  ],
+  "deck": "decks/Unpredictable Cyclone/Unpredictable Cyclone.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 30,
+  "battlefield": [
+    {
+      "name": "Island",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    }
+  ],
+  "hand": [
+    "Emrakul, the Aeons Torn"
+  ],
+  "library_filler": "Island",
+  "library_size": 30,
+  "depth": 2,
+  "budget_ms": 100,
+  "max_turns": 5,
+  "expect_win_turn": 4
+}

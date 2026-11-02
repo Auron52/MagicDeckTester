@@ -258,7 +258,7 @@ static_assert(std::is_trivially_copyable_v<Permanent>,
 // cast, and Build() compares only END-OF-TURN states -- so two end-of-turn siblings differing only in
 // it have identical futures. (Mid-turn identity keys are another matter: TurnSolver's BuildSimKey
 // folds its vanished-land residual, gated on a same-turn reader in hand.)
-static_assert(sizeof(Player) == 200,
+static_assert(sizeof(Player) == 208,
               "Player changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 // 688 -> 696 (2026-09-01): ManaPool gained `wild_c`, and GameState embeds one as floating_mana.
@@ -515,7 +515,60 @@ static_assert(sizeof(Player) == 200,
 // The NivMizzetCombo / banked-hold fields and the Vampires fields above each fit the padding against 1136
 // on parallel branches; together they overflow it by one alignment step: 1152, measured on the rebased
 // tree, 2026-10-20. No new field -- every one is classified above.
-static_assert(sizeof(GameState) == 1152,
+// +0 bytes (2026-10-27, LifegainHeliodCombo / Martyr of Sands): `deck_reads_life_total` (a bool in the last
+// byte of padding after pending_extra_combats). Classification: DECK CONSTANT, stamped once in
+// StampDeckTraits; it only keeps a self-only lifegain sac outlet on the autonomous menu -- nothing to fold.
+// +0 bytes (2026-10-27, LifegainHeliodCombo / Walking Ballista): `deck_has_counter_ping` (a bool in the
+// padding after deck_has_attack_attach, before m_provider -- measured 1152 unchanged). Classification: DECK
+// CONSTANT, stamped once in StampDeckTraits; gates CounterPingFinish / the CounterPingReach projection /
+// the Heliod bump scan -- nothing to fold.
+// +0 bytes (2026-10-27, LifegainHeliodCombo / Abiding Grace): `deck_has_endstep_reanimate` (a bool) and
+// `scripted_grace_choice` (an int16_t), both in the padding after deck_has_counter_ping, before m_provider
+// (measured with gdb ptype /o: a 3-byte hole at 1093). Classification: the bool is a DECK CONSTANT stamped
+// once in StampDeckTraits that only skips provably-empty end-step walks -- nothing to fold; the pin is
+// FUTURE-DETERMINING (set by the turn's plan apply, consumed at THIS turn's end step), FOLDED in Build()
+// value-gated beside the saga pin (and in BuildDedupKey's pending pins).
+// +0 bytes (2026-10-27, LifegainHeliodCombo / Emeria, the Sky Ruin): `scripted_upkeep_gy_reanimate` (an
+// int16_t) and `deck_has_upkeep_reanimate` (a bool), both in the 4-byte hole after m_discard_protect
+// (measured with gdb ptype /o: 1124 / 1126, total 1152 unchanged). Classification: the pin is
+// FUTURE-DETERMINING (set by the turn's plan apply, consumed at the NEXT turn's upkeep -- live across the
+// turn boundary, the scripted_upkeep_land_search class), FOLDED in Build() value-gated (and in
+// BuildDedupKey's pending pins); the bool is a DECK CONSTANT stamped once in StampDeckTraits that only
+// skips provably-empty upkeep walks -- nothing to fold.
+// +0 bytes (2026-10-28, the payment refine's untapper rule): `deck_has_mana_untapper` (a bool, in the bool padding
+// after deck_has_look_top_watcher). Classification: a DECK CONSTANT stamped once in StampDeckTraits -- identical
+// across every pair of states Build() compares, nothing to fold. It decides whether the payment refine may trade a
+// floated unit for a released source (ManaOracle.cpp RefinePayment); the refine memo keys it in its context bits.
+// +0 bytes (2026-10-29, the Tectonic cast route): `deck_has_attack_modal` (a bool in the 2-byte hole after
+// deck_creature_pip_colors, before m1_hand_turn -- beside the deck_has_* run before m_provider it cost +8,
+// measured 1160). Classification: a DECK CONSTANT stamped once in StampDeckTraits that only skips the Tectonic
+// axis's provably-empty cast-route scan -- nothing to fold. (The same change PACKS scripted_tectonic_mode /
+// _keep per trigger ordinal -- SpellEffects.h TectonicModePinAt; same ints, still FOLDED raw in Build().)
+// +0 bytes (2026-10-29, the searched echo): `deck_has_echo` (a bool) and `scripted_echo` (an int16_t), both in
+// the 3-byte hole after scripted_fb_hold (measured with gdb ptype /o: 941 / 942, total 1152 unchanged).
+// Classification: the bool is a DECK CONSTANT stamped once in StampDeckTraits that only skips the echo axis's
+// provably-empty plan walk -- nothing to fold; the pin is FUTURE-DETERMINING (set by the turn's plan apply,
+// consumed at the NEXT upkeep), FOLDED in Build() value-gated (and in BuildDedupKey's pending pins).
+// +0 bytes (2026-10-29, the Lackey cast route): `deck_has_combat_put` (a bool, the last byte of the deck_has_attack_modal hole).
+// Classification: DECK CONSTANT, nothing to fold. (scripted_cheat_choice is now PACKED per damaging-Lackey
+// trigger -- SpellEffects.h LackeyRankAt; same int, still FOLDED raw in Build().)
+// +0 bytes (2026-10-29, the searched Defense of the Heart put list): `scripted_doth_put` (an int32_t, in the 4-byte
+// hole after floating_haste_c: 772) and `deck_has_sac_tutor` (a bool, in the 1-byte hole after deck_has_draw_ping:
+// 825), measured with gdb ptype /o, total 1152 unchanged. Classification: the bool is a DECK CONSTANT stamped once
+// in StampDeckTraits that only skips the boundary fan's provably-empty battlefield walk -- nothing to fold; the pin
+// is FUTURE-DETERMINING (set by the turn's plan apply, consumed at the NEXT upkeep), FOLDED in Build() value-gated
+// (and in BuildDedupKey's pending pins and BuildBreakpointKey).
+// Midrange Burn adds noncombat-damage tracking and its pending triggers; see the
+// matching fields folded in Build() below before changing this size assertion.
+// +16 bytes on the current-main layout (2026-10-30, measured 1216 -> 1232): ten one-byte fields beside
+// pending_extra_combats. Classification: `pending_extra_turns`, `extra_turns_taken`, `in_extra_turn` are
+// FUTURE-DETERMINING (an owed extra turn; the turns-taken count every same-turn stamp reads through
+// TurnSeq) -- FOLDED in Build(), value-gated (both counts 0 for every deck without an extra-turn card).
+// `deck_has_extra_turn`, `deck_has_gy_shuffle`, `deck_has_annihilator`, `deck_has_cast_target_trigger` are
+// DECK CONSTANTS stamped once in StampDeckTraits -- nothing to fold. `gy_shuffle_batch` /
+// `pending_gy_shuffles[2]` are 0 outside one simultaneous event (GyShuffleBatch), never live at a
+// snapshot -- nothing to fold.
+static_assert(sizeof(GameState) == 1232,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 
@@ -766,6 +819,13 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     auto fold = [&e](std::uint64_t v) { e = Mix(e, v); };
 
     fold(static_cast<std::uint64_t>(s.turn_number));
+    // EXTRA TURNS: pending / taken / in_extra_turn are exact-match (more pending is never worse, but the
+    // simple sound choice is equality). Value-gated: every deck without an extra-turn card keeps its key.
+    if (s.pending_extra_turns != 0 || s.extra_turns_taken != 0)
+    {
+        fold(0xE77E000ull + static_cast<std::uint64_t>(s.pending_extra_turns) * 0x10000ull
+             + static_cast<std::uint64_t>(s.extra_turns_taken) * 2ull + (s.in_extra_turn ? 1u : 0u));
+    }
     fold(static_cast<std::uint64_t>(s.active_player_index));
     fold(static_cast<std::uint64_t>(s.priority_player_index));
     fold(static_cast<std::uint64_t>(s.phase));
@@ -791,7 +851,7 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     // every other deck and every non-dig turn keeps its exact prior key. XOR so trigger order, which
     // is not a property of the position, cannot split two equivalent states.
     if (s.deck_has_attack_dig_hand && s.combat_hand[0] != 0
-        && s.combat_hand_turn == static_cast<std::int16_t>(s.turn_number))
+        && s.combat_hand_turn == static_cast<std::int16_t>(s.TurnSeq()))
     {
         std::uint64_t mix = 0xD16A100ull;
         for (std::uint8_t slot : s.combat_hand)
@@ -800,6 +860,15 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     }
     fold(s.on_the_play ? 1u : 0u);
     fold(s.opponent_lost_life_this_turn ? 1u : 0u);
+    if (s.deck_tracks_noncombat_damage)
+    {
+        fold(0x1C1DE); fold(s.noncombat_damage_received_this_turn[0]);
+        fold(s.noncombat_damage_received_this_turn[1]);
+        for (const auto& e : s.pending_incinerator_damage)
+        { fold(e.source.m_number); fold(e.source.m_name_hash); fold(e.controller); fold(e.damaged_player); fold(e.amount); }
+        fold(s.noncombat_trigger_depth);
+    }
+
     fold(static_cast<std::uint64_t>(s.vial_target_mv));
     fold(s.deck_feeds_combat ? 1u : 0u);
     fold(s.search_count);
@@ -851,6 +920,16 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     // keeps a pinned rank 0 distinguishable from "no pin".
     if (s.scripted_saga_target >= 0)
     { fold(static_cast<std::uint64_t>(s.scripted_saga_target) + 1u); }
+    // Abiding Grace's packed end-step pin: FUTURE-DETERMINING (set during the turn's apply, consumed at
+    // THIS turn's end step), value-gated with its own domain tag so every deck without the card keeps
+    // its exact key.
+    if (s.scripted_grace_choice >= 0)
+    { fold(0x6EACE0000ull + static_cast<std::uint64_t>(s.scripted_grace_choice)); }
+    // Emeria's packed next-upkeep pin: FUTURE-DETERMINING across the turn boundary (set during the turn's
+    // apply, consumed at the NEXT upkeep), value-gated with its own domain tag so every deck without the
+    // card keeps its exact key.
+    if (s.scripted_upkeep_gy_reanimate >= 0)
+    { fold(0xE3E41A0000ull + static_cast<std::uint64_t>(s.scripted_upkeep_gy_reanimate)); }
     // LAND SEARCH pins (core/LandSearch.h): Primeval Titan's attack-trigger pick (consumed at this
     // turn's declare-attackers) and Search for Tomorrow's off-suspend pick (consumed at the NEXT
     // upkeep -- live across exactly this boundary, the scripted_vial_charge class). Both
@@ -873,6 +952,18 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     // Bloodline Keeper's in-combat transform mask (Vampires B): the same class, its own domain tag.
     if (s.scripted_combat_transform >= 0)
     { fold(0x1A61000000ull + static_cast<std::uint64_t>(s.scripted_combat_transform)); }
+    // The searched echo pin (Plan::echo_choice): FUTURE-DETERMINING across the turn boundary (set during the
+    // turn's apply, consumed at the NEXT upkeep -- the scripted_upkeep_gy_reanimate class), value-gated with
+    // its own domain tag so every deck without an echo card keeps its exact key.
+    if (s.scripted_echo >= 0)
+    { fold(0xEC40000000ull + static_cast<std::uint64_t>(s.scripted_echo)); }
+    // The searched Defense of the Heart put list (Plan::doth_put_choice): the same class -- set by the turn's apply,
+    // consumed at the NEXT upkeep -- value-gated with its own domain tag so every deck without the card keeps its key.
+    if (s.scripted_doth_put >= 0)
+    { fold(0xD0E700000000ull + static_cast<std::uint64_t>(s.scripted_doth_put)); }
+    // Moraug's queued additional combats (GameState::pending_extra_combats): future-determining, value-gated.
+    if (s.pending_extra_combats != 0)
+    { fold(0xE7C0000ull + static_cast<std::uint64_t>(s.pending_extra_combats)); }
     // Deliberate top-stack marker + the identity of what was stacked. SAME CLASSIFICATION AS
     // scripted_vial_charge directly above, and for the same structural reason: written during a
     // turn's apply (PerformTutor's to-top placement) and READ AT THE NEXT TURN'S UPKEEP
@@ -1024,6 +1115,8 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
         // the game, future-determining (every creature we ever play is bigger), and NOT droppable
         // despite being monotone, because dominance here is an EQUALITY key rather than an ordering.
         // Folded only when nonzero -> byte-identical for every deck with no emblem source.
+        if (p.emblem_spell_cast_damage > 0)
+        { fold(0xC4AD2ull); fold(static_cast<std::uint64_t>(p.emblem_spell_cast_damage)); }
         if (p.emblem_team_pump > 0)
         { fold(0xE3B1Eull); fold(static_cast<std::uint64_t>(p.emblem_team_pump)); }
         fold(static_cast<std::uint64_t>(p.poison_counters));
@@ -1276,6 +1369,11 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
         if (p.storied_draw_used_this_turn)      { mfold(0x57091ull); }
         // Stromkirk Condemned's "activate only once each turn" (Vampires A2): exact-match, gated on SET.
         if (p.once_per_turn_used)               { mfold(0x0CE7Aull); }
+        // Scythecat Cub's "second time this turn" bits: exact-match, gated on SET (the same shape).
+        if (p.landfall_resolved_once)           { mfold(0x5C7C1ull); }
+        if (p.landfall_resolved_twice)          { mfold(0x5C7C2ull); }
+        // Moraug's per-turn attack count: exact-match, gated on nonzero (it changes the creature's power).
+        if (p.AttacksThisTurn() != 0)           { mfold(0xA77C0ull + static_cast<std::uint64_t>(p.AttacksThisTurn())); }
         if (wired)
         {
             mfold(0xA77Aull);

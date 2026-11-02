@@ -1,0 +1,50 @@
+{
+  "_comment": [
+    "Unpredictable Cyclone phase 3: a cycle seed in a mid-turn CONTINUATION -- Brainstorm draws the Street",
+    "Wraith, then the Wraith is cycled the same turn. Round 3, main 1, Cyclone + three Islands, Brainstorm in",
+    "hand; the library top is Street Wraith, Island, Island, Emrakul. Brainstorm draws the Wraith and two Islands",
+    "and puts two back; the breakpoint's continuation cycles the Wraith (a seed the root enumeration could not",
+    "see: the Wraith was not in hand), the walk passes the lands to Emrakul -> free cast, extra turn, 15 damage:",
+    "the 15-life opponent dies in ROUND 3. Without continuation seeds the Wraith cycles next round (round 4)."
+  ],
+  "deck": "decks/Unpredictable Cyclone/Unpredictable Cyclone.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "active_life": 20,
+  "opponent_life": 15,
+  "battlefield": [
+    {
+      "name": "Unpredictable Cyclone",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    }
+  ],
+  "hand": [
+    "Brainstorm"
+  ],
+  "library_top": [
+    "Street Wraith",
+    "Island",
+    "Island",
+    "Emrakul, the Aeons Torn"
+  ],
+  "library_filler": "Island",
+  "library_size": 30,
+  "depth": 2,
+  "budget_ms": 100,
+  "max_turns": 5,
+  "expect_win_turn": 3
+}

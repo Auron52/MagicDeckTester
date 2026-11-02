@@ -1,0 +1,58 @@
+{
+  "deck": "decks/Goblins/Goblins.cod",
+  "env": {
+    "MTG_SAC_OUTLET_PAY": "1"
+  },
+  "turn": 4,
+  "on_the_play": false,
+  "active_life": 20,
+  "opponent_life": 18,
+  "library_top": [
+    "Mountain",
+    "Skirk Prospector",
+    "Lightning Bolt",
+    "Krenko, Mob Boss",
+    "Mountain",
+    "Cavern of Souls",
+    "Goblin Matron",
+    "Mountain",
+    "Goblin Chieftain"
+  ],
+  "library_filler": "Mountain",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 0,
+  "max_turns": 9,
+  "_comment": "Goblins s4113005 gi3004 T4 (wip/sacpay, MTG_SAC_OUTLET_PAY on). Muxus off four Mountains plus two sacrificed Goblins puts Skirk Prospector, Krenko and Goblin Matron; Matron finds Goblin Chieftain, and BREAKPOINT SITE 9's searched continuation VIALS the Chieftain in (haste and +1/+1 for the team): Muxus swings as a 9/9 beside Skirk, Krenko, Matron and the Chieftain, 19 damage. The executor's site-9 twin (AIEngine::TakeTurn, pe_cont_order) held CastFromHand only, so the Vial put was dropped, the main-2 solve Vialed the Chieftain after combat and the proven T4 kill realised T5. Asserts the realised T4. Runs with MTG_SAC_OUTLET_PAY=1 (the T4 Muxus is paid by eating Goblin King and Skirk; the lever's OFF arm finds T5 here).",
+  "battlefield": [
+    {
+      "name": "Mountain",
+      "tapped": false
+    },
+    {
+      "name": "Mountain",
+      "tapped": false
+    },
+    {
+      "name": "Mountain",
+      "tapped": false
+    },
+    {
+      "name": "Aether Vial",
+      "charge_counters": 2
+    },
+    {
+      "name": "Skirk Prospector",
+      "sick": false
+    },
+    {
+      "name": "Goblin King",
+      "sick": false
+    }
+  ],
+  "hand": [
+    "Muxus, Goblin Grandee",
+    "Mountain"
+  ],
+  "expect_win_turn": 4
+}

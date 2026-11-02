@@ -155,6 +155,12 @@ static TutorAskResult AskHumanTutorPick(GameState& state, int controller_index,
     // A REGROWTH is a TARGETED spell, not "you may search": its target was chosen as it was cast
     // (CR 601.2c), so there is nothing to decline -- a -1 takes the default (or the first card).
     if (picked < 0 && pp.tutor_from_graveyard) { picked = def >= 0 ? def : 0; }
+    // Long-Term Plans' "search your library for A CARD" names no quality, so a non-empty library
+    // always yields one (CR 701.19b lets a search fail only for a card "with a stated quality"):
+    // a -1 takes the default, like the regrowth above. Scoped to the position tutor (the only such
+    // card new here); Gamble's -1 keeps its recorded fail-to-find semantics (references replay it).
+    if (picked < 0 && pp.tutor_library_position > 1 && pp.tutor_types.empty())
+    { picked = def >= 0 ? def : 0; }
     if (picked < 0) { return TutorAskResult::Declined; }   // -1 = decline the optional search
     // Out of range keeps the CALLER's current pick rather than declining -- the exact prior
     // semantics of this path. Unreachable from the shipped harness (the --choices reader validates
@@ -164,8 +170,9 @@ static TutorAskResult AskHumanTutorPick(GameState& state, int controller_index,
     return TutorAskResult::Chosen;
 }
 
-// Execute a tutor (Idyllic / Enlightened): fetch `target_name` from the library and move it to
-// hand (to_hand) or the top of the library (to_top). When target_name is empty, fall back to
+// Execute a tutor (Idyllic / Enlightened / Long-Term Plans): fetch `target_name` from the library and
+// move it to hand (to_hand), the top of the library (to_top) or N-th from the top
+// (tutor_library_position, after the shuffle). When target_name is empty, fall back to
 // the heuristic's top candidate (TutorCandidates) -- so any path that doesn't carry a searched
 // choice still plays the heuristic. The library is treated as already shuffled (the remaining
 // order past the tutored card is a goldfish-irrelevant simplification that keeps the real game
@@ -214,6 +221,8 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
         {
             taped_name = (*routetape::t_tutor_play)[routetape::t_tutor_pos++];
             if (taped_name == routetape::NoneName()) { return; }
+            if (taped_name == routetape::WhiffShuffledName())
+            { WhiffShuffle(state, controller_index, "tutor"); return; }
             taped = true;
         }
         else { routetape::t_miss = true; }
@@ -235,7 +244,15 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
     {
         std::vector<std::string> cands;
         { routetape::Suspend _rts; cands = LiveTutorCandidates(state, controller_index, pp); }   // not the link's own
-        if (cands.empty()) { return; }
+        // Nothing legal to find. A required library search still shuffles (CR 701.19b; the fetch fix of
+        // 2026-10-27, Q14) -- HumanFailToFindShuffles is exactly "a library was searched": not a "you MAY
+        // search" (that one declines), not a wish (sideboard) or a regrowth (graveyard).
+        if (cands.empty())
+        {
+            if (HumanFailToFindShuffles(pp))
+            { tape_rec.name = routetape::WhiffShuffledName(); WhiffShuffle(state, controller_index, "tutor"); }
+            return;
+        }
         want = cands.front();
         // "You MAY search" declined by the SEARCH (kTutorDeclineChoice). Checked BEFORE the clamp
         // below, which would otherwise fold the sentinel onto the last candidate. Gated on
@@ -394,7 +411,12 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
         for (int i = 0; i < static_cast<int>(ap.library.size()); ++i)
         { if (ap.library[i].m_name == want) { idx = i; break; } }
     }
-    if (idx < 0) { return; }   // chosen target no longer present (search/real drift guard)
+    if (idx < 0)   // chosen target no longer present (search/real drift guard): a fail-to-find
+    {
+        if (HumanFailToFindShuffles(pp))
+        { tape_rec.name = routetape::WhiffShuffledName(); WhiffShuffle(state, controller_index, "tutor"); }
+        return;
+    }
     Card c = wish ? ap.sideboard[idx] : regrow ? ap.graveyard[static_cast<std::size_t>(idx)]
                                                : ap.library[idx];
     const int         fetched_num  = c.m_number;   // capture before the move into hand/library
@@ -421,8 +443,19 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
         ap.library.insert(ap.library.begin(), std::move(c));
         // Intentional top-stack marker (see GameState::top_stacked_turn): the USER's gate for
         // every top-consumer model -- deliberate stacks only, never a coincidental known top.
-        state.top_stacked_turn        = state.turn_number;
+        state.top_stacked_turn        = state.TurnSeq();
         state.top_stacked_card_number = fetched_num;   // identity, so a consumed stack self-invalidates
+    }
+    else if (pp.tutor_library_position > 1)
+    {
+        // Long-Term Plans: "then shuffle and put that card third from the top" -- AFTER the search
+        // shuffle above. Ruling: "If there are fewer than 3 cards in your library, put the card on
+        // the bottom", which is exactly this clamp (index N-1, or the end of a shorter library).
+        // NOT a top stack: top_stacked_turn stays unset, so no next-draw consumer arms on it (the
+        // top is a shuffled card). Shared by both worlds, so lockstep by construction.
+        const std::size_t at = std::min<std::size_t>(
+            static_cast<std::size_t>(pp.tutor_library_position - 1), ap.library.size());
+        ap.library.insert(ap.library.begin() + static_cast<std::ptrdiff_t>(at), std::move(c));
     }
 
     // Record WHAT was searched up so the replay viewer shows it (real play only -- the reveal
@@ -435,7 +468,12 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
         EmitReveal(state.turn_number, source_name + (regrow ? " (returned from graveyard)"
                                                             : " (searched)"),
                    { fetched_num }, { fetched_name }, { fetched_num }, {},
-                   /*dispositions*/ { pp.tutor_to_top ? "to top" : "to hand" });
+                   /*dispositions*/ { pp.tutor_to_top ? std::string("to top")
+                                      : pp.tutor_library_position == 2 ? std::string("2nd from top")
+                                      : pp.tutor_library_position == 3 ? std::string("3rd from top")
+                                      : pp.tutor_library_position > 3
+                                          ? std::to_string(pp.tutor_library_position) + "th from top"
+                                          : std::string("to hand") });
     }
 
     // Gamble: "then discard a card at random." Deterministic so the rollout and the real executor
@@ -464,7 +502,7 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
     if (pp.discard_random_after_tutor && pp.tutor_to_hand && !ap.hand.empty())
     {
         uint64_t mix = state.game_seed * 0x9E3779B97F4A7C15ull
-                     + (static_cast<uint64_t>(state.turn_number) + 1) * 0xD1B54A32D192ED03ull
+                     + (static_cast<uint64_t>(state.TurnSeq()) + 1) * 0xD1B54A32D192ED03ull
                      + (state.search_count + 1) * 0xCA5A826395121157ull
                      + ap.hand.size();
         mix ^= mix >> 30; mix *= 0xBF58476D1CE4E5B9ull;
@@ -889,6 +927,10 @@ void PerformGenesisWave(GameState& state, int controller, int x, const std::stri
         if (d != nullptr && d->params.enters_with_plus_counters > 0)
         { enters_with_shift = DoublerShift(state, controller, /*for_tokens=*/false); break; }
     }
+    // ONE event for every trigger pass below: a token made while it resolves (a Scute Swarm copy from the
+    // first land's landfall) did not exist when the Wave's lands entered -- it neither triggers for them nor
+    // is a target of their triggers (LandfallSimultaneousScope; the target snapshot below says the same).
+    LandfallSimultaneousScope lf_event(state);
     for (int i = 0; i < static_cast<int>(revealed.size()); ++i)
     {
         if (!put_flag[static_cast<std::size_t>(i)]) { continue; }
@@ -2479,9 +2521,9 @@ void FireAttackEquipDigHand(GameState& state, int controller, const std::vector<
         // line the search never evaluated.
         if (took > 0 && took <= 0xFF && controller == state.active_player_index)
         {
-            if (state.combat_hand_turn != static_cast<std::int16_t>(state.turn_number))
+            if (state.combat_hand_turn != static_cast<std::int16_t>(state.TurnSeq()))
             {
-                state.combat_hand_turn = static_cast<std::int16_t>(state.turn_number);
+                state.combat_hand_turn = static_cast<std::int16_t>(state.TurnSeq());
                 state.combat_hand.fill(0);
             }
             for (std::uint8_t& slot : state.combat_hand)
@@ -2552,7 +2594,7 @@ void ResolveExpressiveIteration(GameState& state)
     {
         Card s = cards[exile_idx];
         s.m_is_staged     = true;
-        s.m_staged_expiry = state.turn_number;   // this turn only (vs turn+1 for Light Up / Soulfire)
+        s.m_staged_expiry = state.TurnSeq();   // this turn only (vs turn+1 for Light Up / Soulfire)
         kept_nums.push_back(s.m_number);
         EnterHand(state, state.active_player_index, std::move(s),
                   HandEntryReason::Stage);                    // [exile_idx] -> exiled, playable now
@@ -3072,6 +3114,7 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
         if (!is_src) { continue; }
         if (!RestrictedManaUsable(def->params, for_creature, 2)) { continue; }
         if (!StorageSourceLive(state.battlefield[i], *def)) { continue; }
+        if (!dmgev::CanPayManaTapLife(state, active, *def)) { continue; }
         if (!GraveyardFuelLive(state, active, *def)) { continue; }
         if (!ManaSubtypeGateLive(state, active, *def)) { continue; }   // Arbor Elf: no Forest = dead
         // PAINLESS-FIRST PASS (see BtPainlessMode): the oracle prices exactly the sources the restricted
@@ -3563,6 +3606,18 @@ static bool AcfInteriorEnabled()
     return v;
 }
 
+// MTG_GRANT_DEFINED_PAY (DEFAULT ON; =0 -> tokens + equip hosts only). Brightcap Badger's grant reaches
+// Fungus / Saproling CARDS with no mana ability (Thallid, Sporecrown Thallid, Shroofus Sproutsire,
+// Utopia Mycon) as well as definition-less tokens. The greedy payer and the bounds always tapped them;
+// the tap backtracker's source list and ManaCacheKey admitted only the tokens (and, since Paradise
+// Mantle, equip hosts), so a payment that needed a Thallid's granted {G} failed in the backtracker
+// while the greedy found it. docs/design/badger-grant-defined-fungi-backtracker-gap.md.
+static bool GrantDefinedPayOn()
+{
+    static const bool on = EnvOn("MTG_GRANT_DEFINED_PAY", true);
+    return heurarm::Flag(heurarm::GRANT_DEFINED_PAY, on);
+}
+
 static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
                                 bool for_creature, ManaPool floating,
                                 const std::vector<Color>* rp_colors,
@@ -3694,12 +3749,24 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
                 if (!GrantReaches(grant, p) || !GrantedBodyCanTap(grant, p, state.battlefield)) { continue; }
                 if (granted_taken >= granted_cap) { continue; }
                 ++granted_taken;
-                s_src_cands_buf.push_back({ i, &GrantedManaFace(grant.color) });
+                s_src_cands_buf.push_back({ i, &GrantFaceFor(grant, p) });
                 continue;
             }
             if (d->tmpl == CardTemplate::BasicLand || d->tmpl == CardTemplate::ManaDork
                 || d->params.mana_rock || IsPaySacSource(*d))   // §2a
             { s_src_cands_buf.push_back({ i, d }); }
+            else if (GrantDefinedPayOn()
+                     ? (GrantReaches(grant, p) && GrantedBodyCanTap(grant, p, state.battlefield))
+                     : (EquipGrantReaches(grant, p) && GrantedBodyCanTap(grant, p, state.battlefield)))
+            {
+                // A REAL creature card with no mana ability of its own that a grant reaches: Paradise
+                // Mantle's host (the any-colour face), or a Fungus / Saproling CARD under Brightcap
+                // Badger (Thallid, Sporecrown Thallid, Shroofus Sproutsire, Utopia Mycon -- the grant's
+                // second population, see ManaDefOf). Uncapped -- these are distinct cards, not
+                // interchangeable tokens. Lockstep with ManaCacheKey below and with the greedy payer
+                // (ManaPayment.cpp), which has always tapped them.
+                s_src_cands_buf.push_back({ i, &GrantFaceFor(grant, p) });
+            }
         }
         src_cands = &s_src_cands_buf;
         // Arm the interior feasibility cut (below) for this payment: a filter on the board, fresh count.
@@ -4349,6 +4416,7 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
         if (!is_src) { continue; }
         if (!RestrictedManaUsable(def->params, for_creature, 3)) { continue; }
         if (!StorageSourceLive(state.battlefield[i], *def)) { continue; }   // uncharged storage: no mana
+        if (!dmgev::CanPayManaTapLife(state, active, *def)) { continue; }
         if (!GraveyardFuelLive(state, active, *def)) { continue; }   // Deathrite: no gy land = no mana
         if (!ManaSubtypeGateLive(state, active, *def)) { continue; }   // Arbor Elf: no Forest = no mana
         // PAINLESS-FIRST PASS (MTG_PAY_PAIN_LAST; see BtPainlessMode): while the restricted pass runs, a
@@ -5138,6 +5206,18 @@ static bool TapForCostBacktrackSolve(GameState& state, const ManaCost& cost, boo
 //     still correct; it just is not memoised.
 namespace {
 inline bool ManaCacheEnabled() { static const bool v = EnvOn("MTG_MANA_CACHE", true); return v; }
+// THE RAMP-FEED SIDE OUTPUT ON A HIT (MTG_MC_FEED_ALT, DEFAULT ON; =0 is the legacy hit, which drops it).
+// MTG_RAMP_FEED_BRANCH runs the DFS twice: a first pass with each ramp filter fed by the fixed pick, and --
+// only when that pass FAILS having met a fixed pick with an alternative (g_bt_ramp_feed_alt, set inside the
+// DFS) -- a widened pass. The first pass's NEGATIVE was cached, but a hit on it returned before any DFS ran,
+// so the flag stayed clear and the widened pass never ran: the same payment PAID on a miss and FAILED on
+// every later hit of the same board. BreachingDragonstorm s2023 gi21 d0 T4: Sakashima's Protege {4}{U}{U}
+// off {U}{U}{R}{R} floating + Mossfire Valley + Ferrous Lake pays only through the widened pass (one {R}
+// into each filter); the executor's own payment missed, paid, and won T4. Under MTG_REAL_PAY_SCRIPT the
+// payment script's probe (PlanPaymentScript's apply of the same plan on a copy) solved that board first,
+// so the executor's payment was a HIT, failed, and the game cast nothing again (unwon). The search had the
+// same hole on every repeated board. A hit now sets the flag the miss would have set.
+inline bool McFeedAltOn() { static const bool v = EnvOn("MTG_MC_FEED_ALT", true); return v; }
 // EVERY source is replayable (2026-08-14). The store gate used to reject any solution that tapped a
 // storage, drip or Deathrite source, on the grounds that a tap-set alone cannot reproduce their side
 // effects. That threw away half the work on a deck that plays one: 49.6% of FiveColour's cache misses
@@ -5216,6 +5296,11 @@ struct ManaCacheEntry
                                            // the entry cannot know which MODE each tap took, and an
                                            // unspent replay would make the Hub an unmetered rainbow
                                            // source (the exact hole its card model warns about)
+    // A NEGATIVE first-pass solve that met a ramp filter's fixed feed pick with an alternative
+    // (g_bt_ramp_feed_alt). That flag is the solve's one SIDE OUTPUT -- it is what tells the public
+    // entry (TapForCostBacktrack) to run the widened second pass -- so a hit must replay it exactly as it
+    // replays the taps. See McFeedAltOn.
+    bool                      feed_alt = false;
 };
 inline thread_local std::unordered_map<std::uint64_t, ManaCacheEntry> g_mana_cache;
 // PER-THREAD BYTE CAP (2026-10-17, Galadriel value-leaf phase C RSS abort). The 500,000-entry bound
@@ -5477,7 +5562,15 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
             // No new hash TERM is needed: the granted bodies simply enter the hashed sequence,
             // carrying the synthetic face's stable pointer below.
             if (!GrantReaches(grant, p) || !GrantedBodyCanTap(grant, p, state.battlefield)) { continue; }
-            d = &GrantedManaFace(grant.color);
+            d = &GrantFaceFor(grant, p);
+        }
+        else if (!IsBaselineManaSource(*d) && !IsPaySacSource(*d)
+                 && (GrantDefinedPayOn() ? GrantReaches(grant, p) : EquipGrantReaches(grant, p))
+                 && GrantedBodyCanTap(grant, p, state.battlefield))
+        {
+            // A granted real card (Paradise Mantle's host, a Badger-granted Fungus card) --
+            // lockstep with the backtracker's source list above.
+            d = &GrantFaceFor(grant, p);
         }
         if (!(d->tmpl == CardTemplate::BasicLand || d->tmpl == CardTemplate::ManaDork
               || d->params.mana_rock || IsPaySacSource(*d))) { continue; }   // §2a
@@ -5514,6 +5607,13 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
         { if (canon) { mix(dh, a); } else { mix(h1, a); mix(h2, b); } };
         if (!canon) { mix(h1, static_cast<std::uint64_t>(i)); mix(h2, static_cast<std::uint64_t>(i) * 0x9E3779B97F4A7C15ull); }
         smix(di, di ^ 0xD1B54A32D192ED03ull);
+        // A life-cost source's eligibility changes with life, and cached self-life deltas
+        // must never replay a payment that was affordable only on another board.
+        if (d->params.tap_is_life_payment)
+        {
+            const std::uint64_t life = static_cast<std::uint64_t>(state.players[active].life);
+            smix(0x11FEC057ull ^ life, 0x11FEC057ull + life);
+        }
         smix(p.tapped ? 1ull : 2ull, p.tapped ? 3ull : 5ull);
         // SCALED MANA DORK YIELD (Priest of Titania / Elvish Archdruid: the live Elf count; Accomplished
         // Alchemist: life gained this turn). The DFS taps it for ScaledDorkCount, and the untap-burst
@@ -5976,6 +6076,9 @@ static void McVerifyHit(const GameState& state, const ManaCost& cost, bool for_c
 {
     GameState vs = state;
     const bool saved_crack = g_paysac_cracked;
+    // ...and the ramp-feed side output (McFeedAltOn): the fresh solve raises it for itself, compared below.
+    const bool saved_alt = g_bt_ramp_feed_alt;
+    g_bt_ramp_feed_alt = false;
     TapBacktrackMemo vmemo;
     ManaPool vleft, vfull;
     const bool vok = TapForCostBacktrackSolve(vs, cost, for_creature, floating, rp_colors,
@@ -5984,8 +6087,12 @@ static void McVerifyHit(const GameState& state, const ManaCost& cost, bool for_c
                                               untapped_max, reserved_mask,
                                               out_full_pool ? &vfull : nullptr, src_cands);
     g_paysac_cracked = saved_crack;
+    const bool valt = g_bt_ramp_feed_alt;
+    g_bt_ramp_feed_alt = saved_alt;
     g_mcv_checked.fetch_add(1, std::memory_order_relaxed);
     bool same = (vok == e.payable);
+    // A negative whose fresh solve met a ramp-feed alternative must replay that flag (the widened pass hangs on it).
+    if (same && !vok && !g_bt_ramp_feed_branch && valt != (e.feed_alt && McFeedAltOn())) { same = false; }
     if (same && vok)
     {
         if (out_full_pool && !McPoolEq(vfull, e.produced)) { same = false; }
@@ -6109,7 +6216,11 @@ static bool TapForCostBacktrackTop(GameState& state, const ManaCost& cost,
                 McVerifyHit(state, cost, for_creature, floating, rp_colors, fail_memo, out_leftover,
                             tapped_mask, untapped_max, reserved_mask, out_full_pool, src_cands, e);
             }
-            if (!e.payable) { return false; }
+            if (!e.payable)
+            {
+                if (e.feed_alt && !g_bt_ramp_feed_branch && McFeedAltOn()) { g_bt_ramp_feed_alt = true; }
+                return false;
+            }
             const int hit_active = state.active_player_index;
             for (const ManaCacheTap& t : e.taps)
             {
@@ -6221,6 +6332,10 @@ static bool TapForCostBacktrackTop(GameState& state, const ManaCost& cost,
     }
 
     // ---- Run the real solve (preserving the MTG_TAP_STATS outcome accounting) ----
+    // The ramp-feed flag THIS solve raises (McFeedAltOn), for the store: cleared across the solve and
+    // OR-ed back, so the caller's view of g_bt_ramp_feed_alt is exactly what it was without the split.
+    const bool mc_alt_outer = g_bt_ramp_feed_alt;
+    if (mc_active) { g_bt_ramp_feed_alt = false; }
     bool ok;
     if (!tapstats::Enabled())
     {
@@ -6272,6 +6387,9 @@ static bool TapForCostBacktrackTop(GameState& state, const ManaCost& cost,
         (mc_active ? tapstats::g_mc_nodes_miss : tapstats::g_mc_nodes_skip)
             .fetch_add(dn, std::memory_order_relaxed);
     }
+
+    const bool mc_alt_here = g_bt_ramp_feed_alt;
+    if (mc_active) { g_bt_ramp_feed_alt = mc_alt_outer || mc_alt_here; }
 
     // MTG_TAP_TRIM (A/B lever, default OFF): release any creature this solve tapped whose WHOLE
     // contribution still sits unspent in the leftover pool -- the payment provably did not need
@@ -6352,6 +6470,7 @@ static bool TapForCostBacktrackTop(GameState& state, const ManaCost& cost,
         if (g_mana_cache.size() > 500000) { g_mana_cache.clear(); g_mana_cache_bytes = 0; }   // bound cross-rollout growth
         ManaCacheEntry e; e.verify = mk2; e.payable = ok; e.drip_life = 0; e.self_life = 0;
         e.energy_spent = 0;
+        e.feed_alt = !ok && mc_alt_here;
         bool storable = true;
         if (ok)
         {

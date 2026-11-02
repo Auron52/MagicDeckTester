@@ -542,6 +542,8 @@ static Keyword KeywordFromString(const std::string& s)
     if (s == "Landfall")      { return Keyword::Landfall; }   // inert ability-word tag; landfall_* params
     if (s == "Reconfigure")   { return Keyword::Reconfigure; } // tag; mechanic is param-modelled (reconfigure_cost)
     if (s == "Madness")       { return Keyword::Madness; }    // inert tag; param-modelled (madness_cost)
+    if (s == "Landwalk")      { return Keyword::Landwalk; }   // inert evasion tag; nothing blocks
+    if (s == "Swampwalk")     { return Keyword::Swampwalk; }  // inert evasion tag; nothing blocks
     throw std::runtime_error("Unknown keyword: " + s);
 }
 
@@ -793,6 +795,11 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.tough_bonus = params.value("tough_bonus", 0);
     p.targeting      = TargetingFromString(params.value("targeting", std::string("none")));
     p.sacrifice_land = params.value("sacrifice_land", false);
+    p.cost_less_per_opponent_noncombat_damage = params.value("cost_less_per_opponent_noncombat_damage", false);
+    p.incinerator_damage_trigger = params.value("incinerator_damage_trigger", false);
+    p.damage_per_nonbasic_land = params.value("damage_per_nonbasic_land", 0);
+    p.chain_lightning_copy = params.value("chain_lightning_copy", false);
+    p.sacrifice_mountains_alternative = params.value("sacrifice_mountains_alternative", false);
     if (params.contains("spectacle_cost"))
     {
         p.spectacle_cost = ManaCostFromString(params["spectacle_cost"].get<std::string>());
@@ -858,15 +865,19 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.landfall_token_color     = params.value("landfall_token_color", std::string());
     for (const std::string& s : params.value("landfall_token_keywords", json::array()))
         p.landfall_token_keywords.push_back(s);
+    p.landfall_copy_self_at_lands = params.value("landfall_copy_self_at_lands", 0);   // Scute Swarm
     p.landfall_counters_each         = params.value("landfall_counters_each", 0);
     p.landfall_counters_each_subtype = params.value("landfall_counters_each_subtype", std::string());
     p.landfall_target_counters       = params.value("landfall_target_counters", 0);
     p.landfall_target_subtype        = params.value("landfall_target_subtype", std::string());
+    p.landfall_target_any_creature   = params.value("landfall_target_any_creature", false);     // Scythecat Cub
+    p.landfall_target_second_doubles = params.value("landfall_target_second_doubles", false);   // Scythecat Cub
     p.landfall_lifegain              = params.value("landfall_lifegain", 0);
     p.landfall_quest_counters        = params.value("landfall_quest_counters", 0);
     p.landfall_double_self_counters  = params.value("landfall_double_self_counters", false);   // Mossborn Hydra
     p.landfall_self_pump_power       = params.value("landfall_self_pump_power", 0);
     p.landfall_self_pump_toughness   = params.value("landfall_self_pump_toughness", 0);
+    p.landfall_additional_combat     = params.value("landfall_additional_combat", false);      // Moraug
     p.etb_tokens_per_land            = params.value("etb_tokens_per_land", 0);
     p.etb_tokens_per_land_basic_only = params.value("etb_tokens_per_land_basic_only", false);
     // Courser of Kruphix's two static clauses (CardParams' LIBRARY TOP block).
@@ -932,6 +943,13 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.devour           = params.value("devour", 0);
     // "This creature enters with N +1/+1 counters on it" (Mossborn Hydra) -- see CardParams.
     p.enters_with_plus_counters = params.value("enters_with_plus_counters", 0);
+    // Walking Ballista -- see CardParams.
+    p.enters_with_x_plus_counters = params.value("enters_with_x_plus_counters", false);
+    if (params.contains("self_counter_cost"))
+        p.self_counter_cost = ManaCostFromString(params["self_counter_cost"].get<std::string>());
+    p.remove_counter_ping_damage = params.value("remove_counter_ping_damage", 0);
+    // "Each creature you control gets +1/+0 for each time it has attacked this turn" (Moraug) -- see CardParams.
+    p.attack_count_team_power = params.value("attack_count_team_power", false);
     if (params.contains("tap_token_cost"))
         p.tap_token_cost = ManaCostFromString(params["tap_token_cost"].get<std::string>());
     p.tap_token_power     = params.value("tap_token_power", 0);
@@ -980,9 +998,16 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.etb_surveil      = params.value("etb_surveil", 0);
     p.scry_reveal_land_to_battlefield = params.value("scry_reveal_land_to_battlefield", false);
     p.tap_self_damage  = params.value("tap_self_damage", 0);
+    p.tap_is_life_payment = params.value("tap_is_life_payment", false);
     p.tap_self_damage_any_mode = params.value("tap_self_damage_any_mode", false);
     if (params.contains("cycling_cost"))
         p.cycling_cost = ManaCostFromString(params["cycling_cost"].get<std::string>());
+    // Street Wraith's "Cycling--Pay 2 life": the life part of the cycling cost. The mana part stays in
+    // cycling_cost (`""` for a life-only cycle), which every cycle site keys on -- a life cost with no
+    // cycling_cost would be read by nothing, so it is a data error, not a silent no-op.
+    p.cycling_life_cost = params.value("cycling_life_cost", 0);
+    if (p.cycling_life_cost > 0 && !p.cycling_cost.has_value())
+        throw std::runtime_error("cycling_life_cost requires cycling_cost (use \"\" for a life-only cycle)");
     if (params.contains("sacrifice_draw_cost"))
         p.sacrifice_draw_cost = ManaCostFromString(params["sacrifice_draw_cost"].get<std::string>());
     p.enters_tapped_with_depletion = params.value("enters_tapped_with_depletion", 0);
@@ -1148,6 +1173,11 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.destroy_all_enchantments  = params.value("destroy_all_enchantments", false);
     p.tutor_to_hand             = params.value("tutor_to_hand", false);
     p.tutor_to_top              = params.value("tutor_to_top", false);
+    p.tutor_library_position    = params.value("tutor_library_position", 0);
+    if (p.tutor_library_position != 0
+        && (p.tutor_library_position < 2 || p.tutor_to_hand || p.tutor_to_top))
+        throw std::runtime_error("tutor_library_position must be >= 2 (1 is tutor_to_top) and cannot "
+                                 "combine with tutor_to_hand / tutor_to_top");
     p.tutor_optional            = params.value("tutor_optional", false);
     for (const std::string& s : params.value("tutor_types", json::array()))
         p.tutor_types.push_back(s);
@@ -1202,6 +1232,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.equip_tough_bonus         = params.value("equip_tough_bonus", 0);
     p.equip_grants_lifelink     = params.value("equip_grants_lifelink", false);
     p.equip_grants_vigilance    = params.value("equip_grants_vigilance", false);
+    p.equip_grants_tap_mana_any = params.value("equip_grants_tap_mana_any", false);
     p.equip_min_power           = params.value("equip_min_power", 0);
     p.equip_sacrifices_prior_host = params.value("equip_sacrifices_prior_host", false);
     p.equip_scale_power_per_equipment = params.value("equip_scale_power_per_equipment", 0);
@@ -1269,6 +1300,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.tuck_to_library           = params.value("tuck_to_library", false);
     p.allow_self_target         = params.value("allow_self_target", false);
     p.gy_land_exile_mana        = params.value("gy_land_exile_mana", false);
+    p.tap_graveyard_exile_damage = params.value("tap_graveyard_exile_damage", 0);
     p.gy_exile_instant_sorcery_drain = params.value("gy_exile_instant_sorcery_drain", 0);
     p.gy_exile_creature_lifegain     = params.value("gy_exile_creature_lifegain", 0);
     if (params.contains("gy_exile_grow_cost"))
@@ -1340,6 +1372,12 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
         p.ping_all_cost = ManaCostFromString(params["ping_all_cost"].get<std::string>());
     p.ping_all_amount                     = params.value("ping_all_amount", 0);
     p.endstep_sac_if_no_creatures         = params.value("endstep_sac_if_no_creatures", false);
+    p.endstep_modal_lifegain              = params.value("endstep_modal_lifegain", 0);
+    p.endstep_modal_reanimate_mv          = params.value("endstep_modal_reanimate_mv", -1);
+    p.upkeep_gy_reanimate                 = params.value("upkeep_gy_reanimate", false);
+    p.upkeep_gy_reanimate_land_subtype    = params.value("upkeep_gy_reanimate_land_subtype", std::string());
+    p.upkeep_gy_reanimate_land_threshold  = params.value("upkeep_gy_reanimate_land_threshold", 0);
+    p.upkeep_gy_reanimate_may             = params.value("upkeep_gy_reanimate_may", false);
     p.x_damage_each_creature_and_player   = params.value("x_damage_each_creature_and_player", false);
     p.tutor_max_mv_is_lands               = params.value("tutor_max_mv_is_lands", false);
     p.shuffles_self_into_library_on_resolve =
@@ -1390,6 +1428,8 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.land_search_to_hand             = params.value("land_search_to_hand", 0);
     p.land_search_tapped              = params.value("land_search_tapped", false);
     p.land_search_optional            = params.value("land_search_optional", false);
+    p.land_search_subtype_id          = SubtypeRegistry::Instance().Intern(
+                                            params.value("land_search_subtype", std::string()));
     p.land_search_on_resolve          = params.value("land_search_on_resolve", false);
     p.land_search_on_enter_or_attack  = params.value("land_search_on_enter_or_attack", false);
     p.land_search_for_removal_controller = params.value("land_search_for_removal_controller", false);
@@ -1709,6 +1749,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.sac_outlet_excludes_self      = params.value("sac_outlet_excludes_self", false);
     p.sac_outlet_self_only          = params.value("sac_outlet_self_only", false);
     p.sac_outlet_lifegain           = params.value("sac_outlet_lifegain", 0);
+    p.sac_outlet_lifegain_per_revealed_color = params.value("sac_outlet_lifegain_per_revealed_color", std::string());
     p.sac_outlet_destroy_nonbasic_land = params.value("sac_outlet_destroy_nonbasic_land", false);
     if (params.contains("bestow_cost"))
         p.bestow_cost = ManaCostFromString(params["bestow_cost"].get<std::string>());
@@ -1735,6 +1776,16 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.reduces_cycling_activation    = params.value("reduces_cycling_activation", 0);
     p.cycle_trigger_damage_each_opponent =
         params.value("cycle_trigger_damage_each_opponent", 0);
+    // Unpredictable Cyclone onboarding (2026-10-26): parsed for CycloneProvider's routing signature;
+    // phase 2 wired cast_trigger_extra_turns; phase 3 wires the replacement + the watcher.
+    p.cycle_draw_exile_shared_type_freecast = params.value("cycle_draw_exile_shared_type_freecast", false);
+    p.cast_trigger_extra_turns              = params.value("cast_trigger_extra_turns", 0);
+    p.cycle_or_discard_trigger_scry         = params.value("cycle_or_discard_trigger_scry", 0);
+    // Phase 2 (2026-10-27): the Eldrazi.
+    p.cast_trigger_exile_target_permanents  = params.value("cast_trigger_exile_target_permanents", 0);
+    p.cast_trigger_destroy_target_permanents = params.value("cast_trigger_destroy_target_permanents", 0);
+    p.annihilator                           = params.value("annihilator", 0);
+    p.put_into_graveyard_shuffles_graveyard = params.value("put_into_graveyard_shuffles_graveyard", false);
     p.cost_less_per_cycle_or_discard = params.value("cost_less_per_cycle_or_discard", 0);
     p.reanimate_creature_max_mv      = params.value("reanimate_creature_max_mv", 0);
     if (params.contains("other_creature_etb_counter_cost"))

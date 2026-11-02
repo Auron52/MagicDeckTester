@@ -165,8 +165,10 @@
    "types": [
     "Instant"
    ],
-   "keywords": [],
-   "oracle_text": "Searing Blaze deals 1 damage to target player and 1 damage to target creature that player controls. Landfall — If a land entered the battlefield under your control this turn, Searing Blaze deals 3 damage to that player and 3 damage to that creature instead.",
+   "keywords": [
+    "Landfall"
+   ],
+   "oracle_text": "Searing Blaze deals 1 damage to target player or planeswalker and 1 damage to target creature that player or that planeswalker's controller controls.\nLandfall — If you had a land enter the battlefield under your control this turn, Searing Blaze deals 3 damage to that player or planeswalker and 3 damage to that creature instead.",
    "template": "direct_damage",
    "parameters": {
     "damage": 1,
@@ -804,6 +806,7 @@
      "R"
     ],
     "tap_self_damage": 1,
+    "tap_is_life_payment": true,
     "sacrifice_draw_cost": "{1}"
    }
   },
@@ -1623,7 +1626,7 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for a Forest or Plains card, put it onto the battlefield, then shuffle. [Resolved by PerformFetch: pulls a chosen library land (FetchCandidates colour heuristic), that land enters resolving its own shock/tapped choice, pay 1 life, fetchland to graveyard. Keeps a W/B/R/G `produces` ONLY so a copy in HAND counts as a flexible colour source for fixing heuristics; it never taps for mana (never reaches the battlefield). Library order/thinning past the fetched card not modelled (goldfish-irrelevant).]",
+   "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for a Forest or Plains card, put it onto the battlefield, then shuffle. [Resolved by PerformFetch: pulls a chosen library land (FetchCandidates colour heuristic), that land enters resolving its own shock/tapped choice, pay 1 life, fetchland to graveyard. Keeps a W/B/R/G `produces` ONLY so a copy in HAND counts as a flexible colour source for fixing heuristics; it never taps for mana (never reaches the battlefield). 'Then shuffle' IS modelled (PerformFetch ends with ShuffleAfterSearch, deterministic and lockstep), and a fail-to-find still shuffles (CR 701.19b, WhiffShuffle).]",
    "template": "basic_land",
    "parameters": {
     "produces": [
@@ -1646,7 +1649,7 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for a Plains or Swamp card, put it onto the battlefield, then shuffle. [Resolved by PerformFetch: pulls a chosen library land (FetchCandidates colour heuristic), that land enters resolving its own shock/tapped choice, pay 1 life, fetchland to graveyard. Keeps a W/B/R/G `produces` ONLY so a copy in HAND counts as a flexible colour source for fixing heuristics; it never taps for mana (never reaches the battlefield). Library order/thinning past the fetched card not modelled (goldfish-irrelevant).]",
+   "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for a Plains or Swamp card, put it onto the battlefield, then shuffle. [Resolved by PerformFetch: pulls a chosen library land (FetchCandidates colour heuristic), that land enters resolving its own shock/tapped choice, pay 1 life, fetchland to graveyard. Keeps a W/B/R/G `produces` ONLY so a copy in HAND counts as a flexible colour source for fixing heuristics; it never taps for mana (never reaches the battlefield). 'Then shuffle' IS modelled (PerformFetch ends with ShuffleAfterSearch, deterministic and lockstep), and a fail-to-find still shuffles (CR 701.19b, WhiffShuffle).]",
    "template": "basic_land",
    "parameters": {
     "produces": [
@@ -1669,7 +1672,7 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for a Swamp or Mountain card, put it onto the battlefield, then shuffle. [Resolved by PerformFetch: pulls a chosen library land (FetchCandidates colour heuristic), that land enters resolving its own shock/tapped choice, pay 1 life, fetchland to graveyard. Keeps a W/B/R/G `produces` ONLY so a copy in HAND counts as a flexible colour source for fixing heuristics; it never taps for mana (never reaches the battlefield). Library order/thinning past the fetched card not modelled (goldfish-irrelevant).]",
+   "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for a Swamp or Mountain card, put it onto the battlefield, then shuffle. [Resolved by PerformFetch: pulls a chosen library land (FetchCandidates colour heuristic), that land enters resolving its own shock/tapped choice, pay 1 life, fetchland to graveyard. Keeps a W/B/R/G `produces` ONLY so a copy in HAND counts as a flexible colour source for fixing heuristics; it never taps for mana (never reaches the battlefield). 'Then shuffle' IS modelled (PerformFetch ends with ShuffleAfterSearch, deterministic and lockstep), and a fail-to-find still shuffles (CR 701.19b, WhiffShuffle).]",
    "template": "basic_land",
    "parameters": {
     "produces": [
@@ -1692,7 +1695,7 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for a Mountain or Forest card, put it onto the battlefield, then shuffle. [Resolved by PerformFetch: pulls a chosen library land (FetchCandidates colour heuristic), that land enters resolving its own shock/tapped choice, pay 1 life, fetchland to graveyard. Keeps a W/B/R/G `produces` ONLY so a copy in HAND counts as a flexible colour source for fixing heuristics; it never taps for mana (never reaches the battlefield). Library order/thinning past the fetched card not modelled (goldfish-irrelevant).]",
+   "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for a Mountain or Forest card, put it onto the battlefield, then shuffle. [Resolved by PerformFetch: pulls a chosen library land (FetchCandidates colour heuristic), that land enters resolving its own shock/tapped choice, pay 1 life, fetchland to graveyard. Keeps a W/B/R/G `produces` ONLY so a copy in HAND counts as a flexible colour source for fixing heuristics; it never taps for mana (never reaches the battlefield). 'Then shuffle' IS modelled (PerformFetch ends with ShuffleAfterSearch, deterministic and lockstep), and a fail-to-find still shuffles (CR 701.19b, WhiffShuffle).]",
    "template": "basic_land",
    "parameters": {
     "produces": [
@@ -2054,7 +2057,7 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "Look at the top three cards of your library, then put them back in any order. You may shuffle.\nDraw a card. [Modelled as cast_reorder 3 then draw 1 (NOT scry -- Ponder cannot bottom cards). It is all-or-nothing: keep all three on top in best order (draw the best; the other two stay on top and you are stuck drawing them next), OR shuffle them all away and draw fresh. ReorderTopOrShuffle keeps when at least one of the top three is wanted, else shuffles (deterministic, lockstep). This removes the over-powered selective-bottom the old Scry 3 model granted.]",
+   "oracle_text": "Look at the top three cards of your library, then put them back in any order. You may shuffle.\nDraw a card. [Modelled as cast_reorder 3 then draw 1 (NOT scry -- Ponder cannot bottom cards): keep all three on top in a chosen order and draw the first, OR shuffle the library and draw fresh (ReorderTopOrShuffle, shared by the executor and the rollout; the shuffle is the deterministic ShuffleAfterSearch, so the search knows the post-shuffle library -- the engine-wide known-library simplification). The DISPOSITION is SEARCHED: the Ponder order axis (TurnSolver PonderOrderAxis, under MTG_PONDER_AXIS, default ON) fans one plan variant per disposition -- every order of the looked-at cards plus the shuffle, 3! + 1 = 7 with three cards (TopDispositionCandidates; index 0 is the provider's default = the base plan, its duplicate dropped) -- pinned through g_scripted_reorder_choice and consumed at the reorder itself, so an earlier scry look in the same plan cannot eat it. ONE Ponder is varied per plan; a second Ponder in the same plan resolves by the provider's default disposition (generic: wanted cards first by ScryKeepOnTop, shuffle only when none is wanted). A deck provider may narrow the fan only by its own rule -- ReorderKeepShuffleOnly (keep-in-the-rule's-order vs shuffle) or ReorderSingleCandidate (the rule's pick alone); the generic provider does neither. HUMAN PLAY: no plan fan; the `reorder` decision (g_play_top_chooser) at resolution offers every order and the shuffle.]",
    "template": "draw_spell",
    "parameters": {
     "draw": 1,
@@ -2116,7 +2119,7 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "Counter target spell. If that spell is countered this way, put it into its owner's hand instead of into that player's graveyard.\nDraw a card. [MODELLED as a SELF-TARGETED Remand: the passive opponent never casts, so the only legal target (CR 115.1, 'target spell' is any spell) is one of YOUR OWN spells on the stack. counters_target_spell_to_hand: Remand is never offered as a cast of its own (no target, CR 601.2c); it rides the hand cast of another spell X as one combined plan action (Action::remand_by), costing X's cost plus {1}{U} (Hinata, Dawn-Crowned's per-target discount applies to Remand's one target -- discount_max_targets 1). X's cast-time effects all happen (storm, cast triggers -- e.g. Niv-Mizzet, Parun draws on BOTH casts -- prowess, Phyrexian life), then Remand is cast (its own cast triggers fire) and resolves first: X returns to its owner's hand instead of resolving, and Remand draws a card (the draw-spell path; template draw_spell, draw 1) -- whose cantrip breakpoint lets the same turn recast X. A spell that can't be countered (cant_be_countered) resolves normally after Remand draws. The search branches over every legal target. NOT modelled (disclosed gaps, docs/design/remand-self-target.md): Remand on another Remand (a chain); Remand on a free / alternative-cost / sacrifice-land cast, on a cascade or demonstrate spell, on an untap ritual, a replicate creature or a Natural Order sacrifice; a cascade/free-cast walk casting Remand on the spell that cast it. Instant timing collapses to the main phase (PROVISIONAL: with no opponent spells there is nothing to answer in combat or at end of turn).]",
+   "oracle_text": "Counter target spell. If that spell is countered this way, put it into its owner's hand instead of into that player's graveyard.\nDraw a card. [MODELLED as a SELF-TARGETED Remand: the passive opponent never casts, so the only legal target (CR 115.1, 'target spell' is any spell) is one of YOUR OWN spells on the stack. counters_target_spell_to_hand: Remand is never offered as a cast of its own (no target, CR 601.2c); it rides the hand cast of another spell X as one combined plan action (Action::remand_by), costing X's cost plus {1}{U} (Hinata, Dawn-Crowned's per-target discount applies to Remand's one target -- discount_max_targets 1). X's cast-time effects all happen (storm, cast triggers -- e.g. Niv-Mizzet, Parun draws on BOTH casts -- prowess, Phyrexian life), then Remand is cast (its own cast triggers fire) and resolves first: X returns to its owner's hand instead of resolving, and Remand draws a card (the draw-spell path; template draw_spell, draw 1) -- whose cantrip breakpoint lets the same turn recast X. A spell that can't be countered (cant_be_countered) resolves normally after Remand draws. The search branches over every legal target. REMAND-ON-REMAND (2026-10-28, opt-in per deck: DecisionProvider::AdmitRemandOnRemand, default off; Unpredictable Cyclone at MTG_CYCLONE_REMAND_MAX_MV >= 2): Remand A on any spell X, Remand B on A -- B resolves first, A returns to hand, B draws, X resolves normally (Action::remand_chain_by; X may be any rider-eligible spell whose own resolution opens no breakpoint other than a plain cantrip's). NOT modelled (disclosed gaps, docs/design/remand-self-target.md): a longer Remand chain; Remand on a free cast OTHER than an Unpredictable Cyclone walk's hit (that one IS modelled since 2026-10-27: the cycle seed's searched take-and-Remand pin, both worlds -- a counterable hit returns to hand, a cant_be_countered Emrakul resolves and Remand only cantrips; a deck provider may refuse it per hit, AdmitRemandOnFreeCast), on an alternative-cost / sacrifice-land cast, on a cascade or demonstrate spell, on an untap ritual, a replicate creature or a Natural Order sacrifice; a cascade/free-cast walk casting Remand on the spell that cast it. Instant timing collapses to the main phase (PROVISIONAL: with no opponent spells there is nothing to answer in combat or at end of turn).]",
    "template": "draw_spell",
    "parameters": {
     "draw": 1,
@@ -3796,7 +3799,7 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for a Forest or Island card, put it onto the battlefield, then shuffle. [Resolved by PerformFetch: pulls a chosen library land (FetchCandidates colour heuristic), that land enters resolving its own shock/tapped choice, pay 1 life, fetchland to graveyard. Keeps a W/U/B/R/G `produces` ONLY so a copy in HAND counts as a flexible colour source for fixing heuristics (this deck's Forest/Island-typed targets reach all five colours via its duals); it never taps for mana (never reaches the battlefield).]",
+   "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for a Forest or Island card, put it onto the battlefield, then shuffle. [Resolved by PerformFetch: pulls a chosen library land (FetchCandidates colour heuristic), that land enters resolving its own shock/tapped choice, pay 1 life, fetchland to graveyard. Keeps a W/U/B/R/G `produces` ONLY so a copy in HAND counts as a flexible colour source for fixing heuristics (this deck's Forest/Island-typed targets reach all five colours via its duals); it never taps for mana (never reaches the battlefield). 'Then shuffle' IS modelled (PerformFetch ends with ShuffleAfterSearch, deterministic and lockstep), and a fail-to-find still shuffles (CR 701.19b, WhiffShuffle).]",
    "template": "basic_land",
    "parameters": {
     "produces": [
@@ -3868,7 +3871,7 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for a Swamp or Forest card, put it onto the battlefield, then shuffle. [Resolved by PerformFetch: pulls a chosen library land (FetchCandidates colour heuristic), that land enters resolving its own shock/tapped choice, pay 1 life, fetchland to graveyard. Keeps a W/U/B/R/G `produces` ONLY so a copy in HAND counts as a flexible colour source for fixing heuristics (FiveColour's Swamp/Forest-typed targets -- Stomping Ground, Overgrown Tomb, Breeding Pool, Godless Shrine, Blood Crypt, Jetmir's Garden, Zagoth Triome -- reach all five colours); it never taps for mana (never reaches the battlefield). Library order/thinning past the fetched card not modelled (goldfish-irrelevant).]",
+   "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for a Swamp or Forest card, put it onto the battlefield, then shuffle. [Resolved by PerformFetch: pulls a chosen library land (FetchCandidates colour heuristic), that land enters resolving its own shock/tapped choice, pay 1 life, fetchland to graveyard. Keeps a W/U/B/R/G `produces` ONLY so a copy in HAND counts as a flexible colour source for fixing heuristics (FiveColour's Swamp/Forest-typed targets -- Stomping Ground, Overgrown Tomb, Breeding Pool, Godless Shrine, Blood Crypt, Jetmir's Garden, Zagoth Triome -- reach all five colours); it never taps for mana (never reaches the battlefield). 'Then shuffle' IS modelled (PerformFetch ends with ShuffleAfterSearch, deterministic and lockstep), and a fail-to-find still shuffles (CR 701.19b, WhiffShuffle).]",
    "template": "basic_land",
    "parameters": {
     "produces": [
@@ -3892,7 +3895,7 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for an Island or Mountain card, put it onto the battlefield, then shuffle. [Resolved by PerformFetch: pulls a chosen library land (FetchCandidates colour heuristic), that land enters resolving its own shock/tapped choice, pay 1 life, fetchland to graveyard. Keeps a W/U/B/R/G `produces` ONLY so a copy in HAND counts as a flexible colour source for fixing heuristics (FiveColour's Island/Mountain-typed targets -- Steam Vents, Stomping Ground, Blood Crypt, Breeding Pool, Jetmir's Garden, Zagoth Triome, basic Island/Mountain -- reach all five colours); it never taps for mana (never reaches the battlefield). Library order/thinning past the fetched card not modelled (goldfish-irrelevant).]",
+   "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for an Island or Mountain card, put it onto the battlefield, then shuffle. [Resolved by PerformFetch: pulls a chosen library land (FetchCandidates colour heuristic), that land enters resolving its own shock/tapped choice, pay 1 life, fetchland to graveyard. Keeps a W/U/B/R/G `produces` ONLY so a copy in HAND counts as a flexible colour source for fixing heuristics (FiveColour's Island/Mountain-typed targets -- Steam Vents, Stomping Ground, Blood Crypt, Breeding Pool, Jetmir's Garden, Zagoth Triome, basic Island/Mountain -- reach all five colours); it never taps for mana (never reaches the battlefield). 'Then shuffle' IS modelled: PerformFetch ends with ShuffleAfterSearch (CR 701.19; deterministic and lockstep in both worlds, ON by default -- MTG_NO_SEARCH_SHUFFLE is the opt-out), so the fetched land thins the library and cards a Brainstorm-style put-back left on top are shuffled away; the search sees the post-shuffle order (the engine-wide known-library simplification). A fail-to-find (no Island or Mountain card left, or the chosen target already gone) pays the life and STILL shuffles (CR 701.19b; USER 2026-10-27: 'Scalding Tarn sacrificing and finding nothing should indeed allow for a shuffle' -- WhiffShuffle, SpellEffects.h; before that date a whiff returned before the shuffle).]",
    "template": "basic_land",
    "parameters": {
     "produces": [
@@ -4187,7 +4190,7 @@
     "Bolas"
    ],
    "keywords": [],
-   "oracle_text": "+3: Destroy target noncreature permanent.\n-2: Gain control of target creature.\n-9: Nicol Bolas, Planeswalker deals 7 damage to target player or planeswalker. That player or that planeswalker's controller discards seven cards, then sacrifices seven permanents. [Enters L5. +3 implemented FAITHFULLY. The ability REQUIRES a target, and with a permanent-less opponent the only legal ones were ours -- destroying our own land is a real cost the search rightly declined, and since -9 is unreachable from loyalty 5 without two +3s that left this EIGHT-mana walker inert BY CONSTRUCTION (USER 2026-08-16). FiveColourProvider::OpponentPlaysLands now gives the passive opponent lands (same hook HinataProvider uses), so +3 resolves to THEIR noncreature permanent first: free loyalty ramp, and their lands are inert props so nothing else changes. AUTO-RESOLVED fallback if they have none (disclosed): most-replaceable own permanent -- token, else land, else other noncreature non-walker. -2 NOW ENUMERATED; its old premise was FALSE. The note used to call it a pure loyalty sink because the only targets are spawn tokens that never attack/block -- true of a spawn the OPPONENT controls, false of one we have TAKEN (USER 2026-08-16), and pattern 8 spawns a 6/6. Target is SEARCHED via the shared elk_target parameter. Required new machinery: Permanent::gained_control_this_turn, because CanAttackFull gated summoning sickness on entered_this_turn alone and spawns are created with entered_this_turn = false (treated as already present), so flipping controller_index would have let a stolen creature attack THE SAME TURN. CR 302.6 ties sickness to how long you have CONTROLLED the permanent -- the Oko case in mirror image (there the engine was too restrictive, here too permissive). Eval prices the swing from NEXT turn (ExpectedAttacks-1), never as immediate damage. -9: 7 face damage implemented; discard-7/sac-7 riders inert vs a hand-less opponent (user-approved). Legend rule engine-enforced (x2).]",
+   "oracle_text": "+3: Destroy target noncreature permanent.\n-2: Gain control of target creature.\n-9: Nicol Bolas, Planeswalker deals 7 damage to target player or planeswalker. That player or that planeswalker's controller discards seven cards, then sacrifices seven permanents. [Enters L5. +3 implemented FAITHFULLY. The ability REQUIRES a target, and with a permanent-less opponent the only legal ones were ours -- destroying our own land is a real cost the search rightly declined, and since -9 is unreachable from loyalty 5 without two +3s that left this EIGHT-mana walker inert BY CONSTRUCTION (USER 2026-08-16). GoldFishRunner::SetupGame now gives every passive opponent lands, so +3 resolves to THEIR noncreature permanent first: free loyalty ramp, and their lands are inert props so nothing else changes. AUTO-RESOLVED fallback if they have none (disclosed): most-replaceable own permanent -- token, else land, else other noncreature non-walker. -2 NOW ENUMERATED; its old premise was FALSE. The note used to call it a pure loyalty sink because the only targets are spawn tokens that never attack/block -- true of a spawn the OPPONENT controls, false of one we have TAKEN (USER 2026-08-16), and pattern 8 spawns a 6/6. Target is SEARCHED via the shared elk_target parameter. Required new machinery: Permanent::gained_control_this_turn, because CanAttackFull gated summoning sickness on entered_this_turn alone and spawns are created with entered_this_turn = false (treated as already present), so flipping controller_index would have let a stolen creature attack THE SAME TURN. CR 302.6 ties sickness to how long you have CONTROLLED the permanent -- the Oko case in mirror image (there the engine was too restrictive, here too permissive). Eval prices the swing from NEXT turn (ExpectedAttacks-1), never as immediate damage. -9: 7 face damage implemented; discard-7/sac-7 riders inert vs a hand-less opponent (user-approved). Legend rule engine-enforced (x2).]",
    "template": "custom",
    "parameters": {
     "loyalty_start": 5,
@@ -4888,6 +4891,26 @@
     "is_equipment": true,
     "equip_cost_generic": 1,
     "equip_power_bonus": 1
+   }
+  },
+  {
+   "name": "Paradise Mantle",
+   "mana_cost": "{0}",
+   "types": [
+    "Artifact"
+   ],
+   "subtypes": [
+    "Equipment"
+   ],
+   "keywords": [
+    "Equip"
+   ],
+   "oracle_text": "Equipped creature has \"{T}: Add one mana of any color.\"\nEquip {1} [FULLY MODELED. The grant is a STATIC layer-6 grant of an activated MANA ability (CR 605.1a) to the host, resolved at the same chokepoint as Brightcap Badger's subtype grant (LiveManaGrant / ManaDefOf / GrantFaceFor, SpellEffects.h): the host taps as a synthetic any-colour ManaDork face (the Birds of Paradise shape) at every payment site -- the greedy payer, the tap backtracker's source list, ManaCacheKey, and the castability ceilings -- so it is credited exactly like a mana dork. {T} cost: the host must be untapped and not summoning-sick (CR 302.6) unless it has haste from any source (Skateboard's equip haste counts), via GrantedBodyCanTap/CanTapNow. Tapping the host for mana taps the creature, so it cannot then attack -- the search weighs that like any dork. The Equipment's own tapped state is irrelevant (static grant). Two Mantles on one host grant one ability (deduplicated). Its role in Kitty is the 0-drop role first: a free artifact toward Puresteel's metalcraft, a Sram draw on cast, a Puresteel draw on enter, one more Equipment for Golem-Skin Gauntlets / Adelbert to count; equip {1} drops to {0} under metalcraft and is bypassed by Sigarda's Aid's attach. Any-colour is inert in mono-W (W only).]",
+   "template": "custom",
+   "parameters": {
+    "is_equipment": true,
+    "equip_cost_generic": 1,
+    "equip_grants_tap_mana_any": true
    }
   },
   {
@@ -8460,7 +8483,7 @@
    "keywords": [],
    "power": 3,
    "toughness": 3,
-   "oracle_text": "When this creature enters, you may search your library for a creature card with mana value 1 or less, reveal it, put it into your hand, then shuffle.\nSacrifice this creature: Your opponents can't cast noncreature spells this turn. [ETB SINGLE-tutor to HAND (Ranger of Eos's params minus etb_tutor_hand_count, which selects the multi path at >1): tutor_to_hand + tutor_types Creature + tutor_max_mv 1 + tutor_shuffle_after. Legal pool in this deck is exactly Soul Warden / Soul's Attendant / Serra Ascendant / Ocelot Pride (every other creature is MV>=2; the archived v1 list had no Ocelot Pride); WHICH one is a searched main_phase plan variant (tutor axis, width 6 >= 4 candidates, so all four are scored; plan-less paths take the first library match, disclosed). 'You may' is ALWAYS taken when a legal target exists -- declining is legal but never right with four castable {W} bodies; the only theoretical cost is the post-search shuffle, disclosed (same treatment as Ranger of Eos). The fetched card lands in HAND and IS castable in the same phase (2026-09-08): the creature-ETB tutor arms the same deferred acquisition re-solve (MTG_ACQ_RESOLVE) a tutor SPELL does, in the rollout as well as the depth-0 executor (only the executor half existed before, so at every searched depth the fetch waited a turn: 0 of 7 spare-mana fetches cast same-turn -> 6 of 7). Guarded by test/scenarios/critter_ranger_captain_fetch_same_turn.json. Clause 2: the effect ('opponents can't cast noncreature spells') is INERT -- the passive goldfish opponent never casts a spell of any kind -- but the SACRIFICE is real and is modelled: sac_creature_outlet + sac_outlet_self_only (the cost is 'Sacrifice this creature', so the source is the ONLY legal victim), with no payload params, so the activation's whole effect is the death event routed through OnCreatureDies. This is the deck's only way to kill its own creature, which matters solely because Daxos, Blessed by the Sun turns it into a lifegain event (-> Pridemate / Voice / Archangel of Thune / Heliod counters). Emitted to the search only when such a payoff is live (SelfSacHasDeathPayoff); with none on board the sac is strictly dominated (loses a 3/3, changes nothing else) so omitting it is lossless. Human play always sees it. A Ranger-Captain cast THIS turn with Daxos out can also sac in the phase it landed: breakpoint site 9 (post-entry activation, TurnSolver::PostEntryActivationPending) re-decides the phase after a permanent with a live, affordable activation enters. Sac timing: the engine plays first main only, so the search sacs pre-combat and forgoes that turn's 3 damage -- a small disclosed under-rating (the Goblins DeferSacOutletPreCombat gap).] [Soldiers (2026-10-04): there the MV<=1 pool is Champion of the Parish / Esper Sentinel / Recruitment Officer; no card in that 60 pays off a death, so the sacrifice is strictly dominated and not emitted to the search (human play still sees it).]",
+   "oracle_text": "When this creature enters, you may search your library for a creature card with mana value 1 or less, reveal it, put it into your hand, then shuffle.\nSacrifice this creature: Your opponents can't cast noncreature spells this turn. [ETB SINGLE-tutor to HAND (Ranger of Eos's params minus etb_tutor_hand_count, which selects the multi path at >1): tutor_to_hand + tutor_types Creature + tutor_max_mv 1 + tutor_shuffle_after. Legal pool in the CritterLifegain list is exactly Soul Warden / Soul's Attendant / Serra Ascendant / Ocelot Pride (every other creature is MV>=2; the archived v1 list had no Ocelot Pride); in LifegainHeliodCombo it is Soul Warden / Soul's Attendant / Serra Ascendant / Martyr of Sands / Walking Ballista (Ballista's {X}{X} is mana value 0 in the library, CR 202.3e -- the fetched Ballista is then cast for any X). WHICH one is a searched main_phase plan variant (tutor axis, width 6 >= 5 candidates, so all are scored; plan-less paths take the first library match, disclosed). 'You may' is ALWAYS taken when a legal target exists -- declining is legal but never right with four castable {W} bodies; the only theoretical cost is the post-search shuffle, disclosed (same treatment as Ranger of Eos). The fetched card lands in HAND and IS castable in the same phase (2026-09-08): the creature-ETB tutor arms the same deferred acquisition re-solve (MTG_ACQ_RESOLVE) a tutor SPELL does, in the rollout as well as the depth-0 executor (only the executor half existed before, so at every searched depth the fetch waited a turn: 0 of 7 spare-mana fetches cast same-turn -> 6 of 7). Guarded by test/scenarios/critter_ranger_captain_fetch_same_turn.json. Clause 2: the effect ('opponents can't cast noncreature spells') is INERT -- the passive goldfish opponent never casts a spell of any kind -- but the SACRIFICE is real and is modelled: sac_creature_outlet + sac_outlet_self_only (the cost is 'Sacrifice this creature', so the source is the ONLY legal victim), with no payload params, so the activation's whole effect is the death event routed through OnCreatureDies. This is the deck's only way to kill its own creature, which matters solely because Daxos, Blessed by the Sun turns it into a lifegain event (-> Pridemate / Voice / Archangel of Thune / Heliod counters). Emitted to the search only when such a payoff is live (SelfSacHasDeathPayoff); with none on board the sac is strictly dominated (loses a 3/3, changes nothing else) so omitting it is lossless. Human play always sees it. A Ranger-Captain cast THIS turn with Daxos out can also sac in the phase it landed: breakpoint site 9 (post-entry activation, TurnSolver::PostEntryActivationPending) re-decides the phase after a permanent with a live, affordable activation enters. Sac timing: the engine plays first main only, so the search sacs pre-combat and forgoes that turn's 3 damage -- a small disclosed under-rating (the Goblins DeferSacOutletPreCombat gap).] [Soldiers (2026-10-04): there the MV<=1 pool is Champion of the Parish / Esper Sentinel / Recruitment Officer; no card in that 60 pays off a death, so the sacrifice is strictly dominated and not emitted to the search (human play still sees it).]",
    "template": "custom",
    "parameters": {
     "tutor_to_hand": true,
@@ -12204,6 +12227,81 @@
    }
   },
   {
+   "name": "Scythecat Cub",
+   "mana_cost": "{1}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Cat"
+   ],
+   "keywords": [
+    "Trample",
+    "Landfall"
+   ],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "Trample\nLandfall — Whenever a land you control enters, put a +1/+1 counter on target creature you control. If this is the second time this ability has resolved this turn, double the number of +1/+1 counters on that creature instead. [Added 2026-10-23 as a Landfall SCREENING candidate (USER: \"maybe even Scythecat Cub\"; not in the shipped list). NOTHING DEFERRED. LANDFALL: landfall_target_counters 1 + landfall_target_any_creature -- one +1/+1 counter on TARGET creature we control (an animated land included; shroud excluded, CR 702.18b), dispatched by the ONE landfall chokepoint, OnLandEntered, once per land played or put. THE TARGET is chosen as the trigger is put on the stack (CR 603.3d), so a token made by another trigger of the same land event (a Baloths Beast, a Scute Swarm copy) is not legal (LandfallSimultaneousScope's token floor; Genesis Wave's target snapshot). WHICH creature: the legal set is identity-folded (LandfallTargetFoldKey) and ordered by the provider -- LandfallCounterTargetOrder for a put (a body that can attack now first, then the highest power) -- and under LandfallProvider the front class IS the target (LandfallCounterTargetIsPick, the USER's Phylath rule of 2026-10-20, applied to the Cub PROVISIONALLY); with MTG_LANDFALL_TARGET_PICK=0 the search branches the rank (Plan::landfall_target_choice / combat_landfall_target_choice). THE DOUBLING: landfall_target_second_doubles -- PER OBJECT, the watcher's Permanent::landfall_resolved_once / _twice bits (reset at our untap step in both worlds) mark its SECOND resolution this turn, which DOUBLES the target's +1/+1 counters instead (DoublePlusCounters, CR 701.10e: put as many as it has -- a 'put', so a counter doubler applies; Scryfall ruling 2024-11-08), its target ordered by LandfallDoubleTargetOrder (attack-now first, then the MOST +1/+1 counters, then power); the first and third-and-later resolutions put the counter. A trigger removed for want of a target never resolved and is not counted. TRIGGER ORDER (CR 603.3b, ours): a payload that doubles counters this time (this second resolution, Mossborn Hydra's own) resolves AFTER the land's other landfall triggers, a dominance (2(c+a) >= 2c+a; counters never hurt against the passive goldfish). DISCLOSED SIMPLIFICATION: a simultaneous put of several lands resolves land by land, so a THIRD-or-later +1 inside one such event cannot be moved before an earlier land's doublings (under-credits, never over). HUMAN PLAY picks on the board over every legal creature (the `target` decision through g_play_loyalty_chooser, the Phylath shape). TRAMPLE is INERT (the goldfish never blocks) and carried for faithfulness.]",
+   "template": "custom",
+   "parameters": {
+    "landfall_target_counters": 1,
+    "landfall_target_any_creature": true,
+    "landfall_target_second_doubles": true
+   }
+  },
+  {
+   "name": "Scute Swarm",
+   "mana_cost": "{2}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Insect"
+   ],
+   "keywords": [
+    "Landfall"
+   ],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "Landfall — Whenever a land you control enters, create a 1/1 green Insect creature token. If you control six or more lands, create a token that's a copy of this creature instead. [Added 2026-10-23 as a Landfall SCREENING candidate (USER: \"Let's add ... Scute Swarm\"; not in the shipped list). NOTHING DEFERRED. LANDFALL: landfall_creates_tokens 1 + landfall_token_power/toughness 1/1, subtypes [Insect], colour G -- dispatched by the ONE landfall chokepoint, OnLandEntered (core/SpellEffects.h), once per land entering under our control, played or put. THE COPY CLAUSE: landfall_copy_self_at_lands 6 -- the condition is part of the EFFECT (no intervening 'if'), so it is read AT RESOLUTION: with six or more lands we control the payload is instead ONE token that is a COPY of this creature, through CreateTokenCopyOfCard (the copy-token funnel: Doubling Season, the universal enter cascade). A copy takes the COPIABLE values (CR 707.2) -- Permanent::card, i.e. a Scute Swarm, or whatever a copy effect made the source -- never its counters, damage or until-EOT effects (Scryfall ruling 2020-09-25); it carries the ability, so the swarm DOUBLES per landfall from six lands on. The copy enters SUMMONING SICK. SIMULTANEITY: a copy made while a multi-land put resolves (Primeval Titan's two lands, a land search's battlefield picks, Genesis Wave) did not exist when those lands entered and neither triggers for them nor is a target of their triggers (LandfallSimultaneousScope: the token floor of the event) -- N swarms on Titan's two lands become 3N, not 4N. Last-known information (the source gone before resolution) is unreachable against the passive goldfish. MANDATORY, no target, no choice -- nothing to surface in the viewer. SEARCH: the trigger sets CardDefinition::landfall_watcher, so LandfallProvider ranks it cast-order tier 1 and the searched land-drop timing offers 'cast the Swarm, THEN play the land'. 5i discard: a THREAT, ranked after Mossborn Hydra and Scythecat Cub on exact ties (PROVISIONAL -- the USER's call). Not a Plant, Elemental or Beast: no other payload in the pool reads it.]",
+   "template": "custom",
+   "parameters": {
+    "landfall_creates_tokens": 1,
+    "landfall_token_power": 1,
+    "landfall_token_toughness": 1,
+    "landfall_token_subtypes": [
+     "Insect"
+    ],
+    "landfall_token_color": "G",
+    "landfall_copy_self_at_lands": 6
+   }
+  },
+  {
+   "name": "Moraug, Fury of Akoum",
+   "mana_cost": "{4}{R}{R}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Minotaur",
+    "Warrior"
+   ],
+   "keywords": [
+    "Landfall"
+   ],
+   "power": 6,
+   "toughness": 6,
+   "oracle_text": "Each creature you control gets +1/+0 for each time it has attacked this turn.\nLandfall — Whenever a land you control enters, if it's your main phase, there's an additional combat phase after this phase. At the beginning of that combat, untap all creatures you control. [Added 2026-10-23 as a Landfall SCREENING candidate (USER: \"Let's add Moraug, Fury of Akoum\"; not in the shipped list). STATIC (clause 1): attack_count_team_power -- each creature we control gets +1/+0 per time it was DECLARED as an attacker this turn (Permanent::AttacksThisTurn, bumped at declare-attackers in both worlds by NoteAttacksDeclared, reset at our untap step), times the copies we control, read in ComputeLordBonus (layer 7c) so every combat-damage and power read sees it; attacks made before Moraug arrived count and the bonus stops when it leaves; the first attack of a turn already counts for that combat (Scryfall rulings 2020-09-25). A token put onto the battlefield attacking was never declared (CR 508.4). The count saturates at 7 (three bits): an eighth attack follows seven unblocked ones by the same creature, worth at least 1+...+7 = 28 -- the passive opponent is dead first (a 30-life 2HG team is the disclosed exception). LANDFALL (clause 2): landfall_additional_combat -- the intervening 'if it's your main phase' (CR 603.4) reads GameState::phase, kept faithful in both worlds for a deck with the card (the rollout stamps Combat / Ending / Beginning: Primeval Titan's attack fetch and an upkeep Search for Tomorrow queue nothing). Each trigger queues ONE additional combat (GameState::pending_extra_combats) after the main phase it resolved in, with NO main phase after it: from main 1 the additional combats run BEFORE the regular combat, from main 2 after it and before the end step (GameEngine::RunTurnFrom / TurnSolver SimulateCombat + RunPostMain2ExtraCombats, lockstep). AT THE BEGINNING of each additional combat every creature we control untaps (UntapOwnCreaturesForCombat); the regular combat does not untap -- so a main-1 land adds no attack and a main-2 land adds one (rulings). Every attack trigger fires in every combat (Primeval Titan's fetch: the packed attack-pick stream runs across the combats and the search fans it for them, up to its five ordinals -- DISCLOSED cap). SECOND MAIN (2c-bis): while Moraug is OUR permanent the post-combat main is live (ExtraCombatSecondMainLive, beside Jorn's per-turn gate) with its FULL menu, the main-2 land drop is live and a land held since main 1 may be played there (the USER's newly-arrived-lands rule is exempted for it -- PROVISIONAL, surfaced). Attacking is the standing all-out exemption against the passive goldfish, per combat. LEGENDARY: the legend rule applies. NO CHOICE beyond those, so the viewer needs no new decision (bucket A); each additional combat is logged as its own COMBAT phase.]",
+   "template": "custom",
+   "parameters": {
+    "attack_count_team_power": true,
+    "landfall_additional_combat": true
+   }
+  },
+  {
    "name": "Avenger of Zendikar",
    "mana_cost": "{5}{G}{G}",
    "types": [
@@ -12485,7 +12583,7 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "This land enters tapped.\n{T}: Add {C}.\n{2}, {T}, Sacrifice this land: Search your library for up to two basic land cards that share a land type, put them onto the battlefield tapped, then shuffle. [Enters tapped (enters_tapped); taps for {C} (produces [C]). '{2}, {T}, Sacrifice this land' is the searched SacLandSearch activation (land_search_activation_cost {2}): the {T} is paid BEFORE the mana half, so it can never pay its own {2}, and the activation-line hold keeps an earlier cast in the same plan from tapping it for mana. Puts up to two basic land cards SHARING A LAND TYPE (two Forests or two Mountains here) onto the battlefield tapped: PerformLandSearch places both, then resolves their own enter triggers, then shuffles ONCE; each is a landfall event through EnterLand. WHICH land type = the in-plan land-search pin over the maximal picks; the human picks each land at resolution (`tutor_etb`; the second prompt offers only basics sharing a type with the first; -1 stops at one). 'Up to two' collapsed for the search to as many as the library allows (dominance; ruling 2018-03-16 lets you take one -- PROVISIONAL). Instant-speed timing collapsed to our main phase's trailing pass (PROVISIONAL, inert vs the passive opponent: see Evolving Wilds).]",
+   "oracle_text": "This land enters tapped.\n{T}: Add {C}.\n{2}, {T}, Sacrifice this land: Search your library for up to two basic land cards that share a land type, put them onto the battlefield tapped, then shuffle. [Enters tapped (enters_tapped); taps for {C} (produces [C]). '{2}, {T}, Sacrifice this land' is the searched SacLandSearch activation (land_search_activation_cost {2}): the {T} is paid BEFORE the mana half, so it can never pay its own {2}, and the activation-line hold keeps an earlier cast in the same plan from tapping it for mana. Puts up to two basic land cards SHARING A LAND TYPE (e.g. two Forests, or two Mountains) onto the battlefield tapped: PerformLandSearch places both, then resolves their own enter triggers, then shuffles ONCE; each is a landfall event through EnterLand. WHICH land type = the in-plan land-search pin over the maximal picks; the human picks each land at resolution (`tutor_etb`; the second prompt offers only basics sharing a type with the first; -1 stops at one). 'Up to two' collapsed for the search to as many as the library allows (dominance; ruling 2018-03-16 lets you take one -- PROVISIONAL). Instant-speed timing collapsed to our main phase's trailing pass (PROVISIONAL, inert vs the passive opponent: see Evolving Wilds).]",
    "template": "basic_land",
    "parameters": {
     "produces": [
@@ -13585,6 +13683,551 @@
     "tap_target_pump_power": 1,
     "tap_target_pump_tough": 0,
     "tap_target_pump_grants_trample": true
+   }
+  },
+  {
+   "name": "Harrow",
+   "mana_cost": "{2}{G}",
+   "types": [
+    "Instant"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "As an additional cost to cast this spell, sacrifice a land.\nSearch your library for up to two basic land cards, put them onto the battlefield, then shuffle. [sacrifice_land = the shared additional-cost path, paid at CAST before the search (CR 601.2h): AIEngine's cast path and apply_one's pre-search payment, so a land the search puts is never a victim and both worlds rank the SAME board. WHICH land = the searched sac pin (Plan::sac_pins) over the provider's SacrificeLandCandidates (tapped first), the human picking at the viewer (g_play_sacrifice_chooser); the payment taps the victim first where it can (SacLandPayVictim), i.e. the usual tap-it-then-sacrifice-it. land_search_on_resolve + count 2 + basic_only, UNTAPPED: PerformLandSearch puts both basics through EnterLand -- two landfalls -- then ONE shuffle; untapped basics are LAND-PUT CREDITED (LandSearchCreditGroups), so their mana funds the same main phase. 'Up to two' is collapsed for the search to as many as the library allows (dominance, as Rampant Growth; PROVISIONAL); the human picks each land at resolution (two `tutor_etb` prompts) and may stop early. INSTANT: cast in our main phases, which against the passive goldfish reaches every line an instant-speed cast does -- its landfall counters land before attackers are declared either way, a combat cast could not trigger Moraug's main-phase-only extra combat, and there is no opponent turn to cast it in (PROVISIONAL).]",
+   "template": "custom",
+   "parameters": {
+    "sacrifice_land": true,
+    "land_search_on_resolve": true,
+    "land_search_count": 2,
+    "land_search_basic_only": true
+   }
+  },
+  {
+   "name": "Explosive Vegetation",
+   "mana_cost": "{3}{G}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Search your library for up to two basic land cards, put them onto the battlefield tapped, then shuffle. [land_search_on_resolve + count 2 + basic_only + tapped: PerformLandSearch puts both basics TAPPED through EnterLand(LandEntryTap::ForcedTapped) -- two landfalls, no shock life -- then ONE shuffle: Khalni Heart Expedition's crack as a spell. WHICH basics = the in-plan land-search pin over the provider-ordered LandSearchPicks; 'up to two' collapsed to as many as the library allows (dominance, as Rampant Growth; PROVISIONAL); the human picks each land at resolution (two `tutor_etb` prompts) and may stop early.]",
+   "template": "custom",
+   "parameters": {
+    "land_search_on_resolve": true,
+    "land_search_count": 2,
+    "land_search_basic_only": true,
+    "land_search_tapped": true
+   }
+  },
+  {
+   "name": "Nature's Lore",
+   "mana_cost": "{1}{G}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Search your library for a Forest card, put that card onto the battlefield, then shuffle. [land_search_on_resolve + count 1 + land_search_subtype Forest: 'a Forest card' is the Forest LAND SUBTYPE off the definition (LandSearchLegal), so a basic Forest or a nonbasic Forest (a Stomping Ground) qualifies and a Mountain does not; NOT basic-only. The land enters by its OWN entry rule (untapped for a basic; a shock land's pay-or-tap, a tapland tapped) through EnterLand -- a landfall -- then ONE shuffle. An untapped basic is LAND-PUT CREDITED, so it funds the same main phase (a nonbasic pick withdraws the credit -- fail toward not crediting). WHICH Forest = the in-plan land-search pin; the human picks at resolution (`tutor_etb`). 'May fail to find' is not offered to the search (dominance, as Rampant Growth; PROVISIONAL).]",
+   "template": "custom",
+   "parameters": {
+    "land_search_on_resolve": true,
+    "land_search_count": 1,
+    "land_search_subtype": "Forest"
+   }
+  },
+  {
+   "name": "Skyshroud Claim",
+   "mana_cost": "{3}{G}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Search your library for up to two Forest cards, put them onto the battlefield, then shuffle. [land_search_on_resolve + count 2 + land_search_subtype Forest: two 'Forest cards' -- the Forest LAND SUBTYPE off the definition, basic or not (Nature's Lore's filter) -- each entering by its own entry rule (untapped for a basic) through EnterLand: two landfalls, then ONE shuffle. Untapped basics are LAND-PUT CREDITED (both fund the same main phase). 'Up to two' collapsed to as many as the library allows (dominance; PROVISIONAL); the human picks each land at resolution (two `tutor_etb` prompts) and may stop early.]",
+   "template": "custom",
+   "parameters": {
+    "land_search_on_resolve": true,
+    "land_search_count": 2,
+    "land_search_subtype": "Forest"
+   }
+  },
+  {
+   "name": "Martyr of Sands",
+   "mana_cost": "{W}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Human",
+    "Cleric"
+   ],
+   "keywords": [],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "{1}, Reveal X white cards from your hand, Sacrifice this creature: You gain three times X life. [A self-only sacrifice outlet (sac_creature_outlet + sac_outlet_self_only, the Brindle Boar / Ranger-Captain of Eos shape: the source is the only legal victim) with mana cost sac_creature_cost {1}. Payload: sac_outlet_lifegain 3 PER revealed card of colour sac_outlet_lifegain_per_revealed_color \"W\" (SacOutletLifegainAmount), X read at ACTIVATION, before the sacrifice (CR 601.2b/h via 602.2b). Colour is the card's own mask from its mana-cost pips (CR 105.2 / 202.2): lands (Plains, Emeria) and Walking Ballista ({X}{X}) are colourless and never count; Martyr is on the battlefield, so it never counts itself. X = MAX is a SOUND DOMINANCE, not a heuristic: revealing costs and tells nothing against the passive opponent, the gain is ONE life-gain event whatever X is (CR 119.10; X = 0 gains 0 = no event, just a death), and every life reader in the pool is monotone in life (Heliod / Pridemate / Voice count events; Serra Ascendant's 30-life +5/+5 and Ajani's 0 want more life). Human play is asked for X (the x_value decision, reveal kind; default = max). The enumerator offers it while the gain is read (SacOutletLifegainRead: a lifegain watcher on board, or the deck stamp deck_reads_life_total -- Serra Ascendant / Ajani's 0 read the TOTAL, which persists across turns) or while the death pays (SelfSacHasDeathPayoff); human play always sees it. No {T}: usable the turn it enters (CR 302.6). The sacrifice is a real death into the graveyard, where Abiding Grace (MV 1) and Emeria can return it. Timing: it is a main-phase activation whose POSITION among the plan's casts is SEARCHED (2026-10-27, TurnSolver::RevealOutletSlot): the trailing pass (after every cast, so X counts the hand left after them and every gain watcher cast first sees the event), before every cast (X counts the whole hand), or right after the k-th 'whenever you gain life' cast -- the only points that can differ (moving it earlier past a white non-watcher cast only adds to X; past anything else it changes nothing). Human play sequences it anywhere in the line; instant-speed / opponent's-turn activation is not modelled -- inert vs the goldfish (the hand only grows into our main phase, and Grace's end-step return needs it gone before our end step), PROVISIONAL pending the user's sign-off. Activating before combat forgoes its 1-power attack that turn (no post-combat main; the Ranger-Captain disclosure).]",
+   "template": "custom",
+   "parameters": {
+    "sac_creature_outlet": true,
+    "sac_outlet_self_only": true,
+    "sac_creature_cost": "{1}",
+    "sac_outlet_lifegain": 3,
+    "sac_outlet_lifegain_per_revealed_color": "W"
+   }
+  },
+  {
+   "name": "Walking Ballista",
+   "mana_cost": "{X}{X}",
+   "types": [
+    "Artifact",
+    "Creature"
+   ],
+   "subtypes": [
+    "Construct"
+   ],
+   "keywords": [],
+   "power": 0,
+   "toughness": 0,
+   "oracle_text": "This creature enters with X +1/+1 counters on it.\n{4}: Put a +1/+1 counter on this creature.\nRemove a +1/+1 counter from this creature: It deals 1 damage to any target. [ENTERS WITH X (enters_with_x_plus_counters): an AS-ENTERS replacement (CR 614.1c) applied in the pre-push window of BOTH creature-enter sites (EffectHandler::EnterBattlefield / TurnSolver apply_one), reading the cast's chosen_x (CR 107.3m) through PutPlusCounters (a put, CR 122.6: a counter doubler doubles it). Any non-cast entry (an Emeria return) has X = 0. MANA VALUE is 0 everywhere but the stack (CR 202.3e): a legal Ranger-Captain of Eos fetch (tutor_max_mv 1), NOT a legal Abiding Grace return (mana value exactly 1). {X} is no coloured pip: no devotion to white for Heliod, and colourless for Martyr of Sands' reveal. X is a SEARCHED axis over every legal X 0..max (GenericProvider::XCandidates). X = 0 is not dominated: the 0/0 still ENTERS, so Soul Warden / Soul's Attendant / Auriok Champion each fire a life-gain event, and then it dies to the toughness SBA (CR 704.5f) BEFORE those triggers resolve (CR 704.3) -- recorded as a doomed entrant, skipped by every trigger's target list (Heliod's counter can never land on it) and killed in both worlds at the enter-cascade drain points (DrainPendingZeroToughness). {4} (self_counter_cost, PermAbilityMode::PayCounterSelf): no {T}, repeatable, legal while summoning-sick (CR 302.6); a put via PutPlusCounters; the counter is NOT a life-gain event. PING (remove_counter_ping_damage 1, PermAbilityMode::CounterPing): target chosen first, the counter removed as the COST, an inline toughness/lethal-damage SBA check before resolution (ruling 2: damage marked on it limits the pings), then 1 damage with the source's last-known lifelink (CR 608.2h / 702.15b) -> ONE GainLife per ping (Heliod / Pridemate / Voice fire there). HELIOD LOOP (PermAbilityMode::PingLoop): with Heliod (lifegain_target_own_counter) on our battlefield, the Ballista lifelinked and holding >= 2 counters, each ping gains 1 and Heliod's counter goes back on the Ballista -- unbounded, a real kill executed ping by ping until the opponent is dead. ONE action whose cost is what the loop still needs (Heliod's {1}{W} grant if it lacks lifelink, one {4} if it holds exactly one counter), emitted only while live, so choosing it is a proven win this turn, never a forced pick. Heliod's counter is pinned to the Ballista inside the loop (sound: the loop is the kill); outside it, a Heliod counter that would take a one-counter Ballista into a LIVE loop goes on the Ballista (LifegainHeliodComboProvider::LifegainCounterTarget, MTG_LHC_BUMP_TARGET; the never-worse argument is in the hook's comment). With exactly 1 counter the Ballista dies paying it, before the gain: Heliod's counter lands elsewhere. POST-COMBAT FINISH (CounterPingFinish, both worlds, right after combat damage): pings are instant-speed, so an attacking Ballista can still remove every counter after damage -- fired ONLY when it wins (a no-mana live loop, or the counters alone cover the opponent's remaining life). AUTONOMOUS PING TARGETS (engine, SOUND folds only -- CollectCounterPingOffers): the opponent's face, plus a creature only at the ping count that KILLS it and only when that death pays (an own creature with a death payoff -- in this list Abiding Grace for mana value exactly 1 or Emeria returning it for re-entry life events; an opposing one only beside an opponent-creature-dies watcher); a live loop supersedes every single ping. DECK-POOL NARROWING (LifegainHeliodComboProvider::CounterPingCounts, MTG_LHC_PING_PRUNE, PROVISIONAL, disclosed 6a): a main-phase face ping is offered only when lifelinked and some card reads the gain -- nothing in this pool reads opponent life loss or damage events, so a non-lethal ping is weakly dominated by deferring it to the kill turn, where the finish fires it. Pings in the opponent's turn are unmodelled (no priority window; dominated by deferral). Our own face and planeswalkers are human-play only (planeswalkers are absent from the human target list: legal, never useful). The finish is skipped in human play (the human pings in main 2).]",
+   "template": "custom",
+   "parameters": {
+    "enters_with_x_plus_counters": true,
+    "self_counter_cost": "{4}",
+    "remove_counter_ping_damage": 1
+   }
+  },
+  {
+   "name": "Abiding Grace",
+   "mana_cost": "{2}{W}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "At the beginning of your end step, choose one —\n• You gain 1 life.\n• Return target creature card with mana value 1 from your graveyard to the battlefield. [MODAL END-STEP TRIGGER, one per copy, resolved by the SHARED PerformEndStepAbidingGrace, called last in GameEngine::EndStep and in the rollout's SimulateEndAndStartNextTurn (lockstep), after the intervening-if end-step triggers (Ocelot Pride, Pyrohemia), which were checked as the step began (CR 603.4). MODE + TARGET ARE SEARCHED: Plan::grace_choice -> GameState::scripted_grace_choice, a packed rank per trigger ordinal (4 bits each, battlefield order) into GraceOptions, built at each trigger's resolution. Same shape as the saga-target state pin. -1 = each list's front (the provider default), which applies only beyond the horizon. Over-range ranks clamp. Two copies are two triggers, each with its own mode (CR 603.3b). MODE 2 is legal only with a target (CR 603.3c); with none, the gain mode is the only option and nothing is asked. TARGETS: fixed as the trigger goes on the stack (CR 603.3d), i.e. the graveyard as it stood at the beginning of the end step (SnapshotEndStepGraceTargets, taken before the step's other effects). Read off the DEFINITION (ZoneCard): a creature card whose mana value is EXACTLY 1, with {X} = 0 off the stack (CR 202.3e), so Walking Ballista is never a target. Tokens in the graveyard vector are excluded by id. Copies of one card are one option to the search. Each trigger's list holds only the snapshot cards still in the graveyard, so a later trigger never re-targets the card an earlier one returned: that pick would only fizzle (CR 608.2b). That is a modelling simplification: choices are made at each resolution, with the earlier ones known. RETURN: ResolveGyReanimate, which erases the card from the graveyard and runs PutCardOntoBattlefield under GraveyardEnterScope (the universal enter cascade: every Soul Warden / Soul's Attendant / Auriok Champion fires), then the legend rule and the doomed-0/0 drain. entered_this_turn at our end step clears at our next untap, so the body attacks next turn (CR 302.6). GAIN: one GainLife(1) event (CR 119.10). {W} is devotion to white for Heliod. Default ORDER (GraceOptions/GyReturnOrder, ordering only): returns by name, then gain. A lifegain deck provider may apply LifegainGraceFolds (MTG_GRACE_RETURN_DOMINATES): return-dominates-gain with an unconditional enter-lifegain watcher out, and behaviourally identical candidates folded (Soul Warden == Soul's Attendant). HUMAN PLAY: the `gy_return_one` decision (every legal graveyard copy as an image plus a 'Gain 1 life' button).]",
+   "template": "custom",
+   "parameters": {
+    "endstep_modal_lifegain": 1,
+    "endstep_modal_reanimate_mv": 1
+   }
+  },
+  {
+   "name": "Emeria, the Sky Ruin",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "This land enters tapped.\nAt the beginning of your upkeep, if you control seven or more Plains, you may return target creature card from your graveyard to the battlefield.\n{T}: Add {W}. [Enters tapped via enters_tapped; {T}: Add {W} via produces. The upkeep trigger is modelled faithfully by PerformUpkeepGyReanimate, called in lockstep from GameEngine::UpkeepTail and the rollout's SimulateEndAndStartNextTurn. INTERVENING IF (CR 603.4): it counts LANDS you control with the Plains subtype (basic or not; Emeria itself has no land subtype), when the upkeep begins AND again at resolution. TARGETS are the creature CARDS in your graveyard when the trigger goes on the stack (CR 603.3d); a token in the graveyard vector is never one (CR 111.7); with none the trigger is removed. WHICH card -- or declining ('you may') -- is a SEARCHED choice: Plan::upkeep_gy_reanimate_choice, decided in the previous turn's main phase and pinned on GameState::scripted_upkeep_gy_reanimate until this upkeep (the Search for Tomorrow upkeep_land_search_choice shape); a rank into the resolution-time list of distinct creature-card names ordered by the provider's GyReturnOrder, plus a decline code. Beyond the search horizon the unpinned front is returned (the permitted playout policy). Human play: the gy_return_one decision (one graveyard card per copy, alt 'Return nothing'). The returned creature enters through the full enter cascade (Soul Warden / Auriok Champion fire, Ranger-Captain of Eos tutors again), is summoning sick (CR 302.6), a legendary one meets the legend rule, and a returned Walking Ballista enters as a 0/0 and dies (CR 107.3m / 704.5f). MTG_EMERIA_AXIS=0 is an A/B kill switch for the search axis only.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "W"
+    ],
+    "enters_tapped": true,
+    "upkeep_gy_reanimate": true,
+    "upkeep_gy_reanimate_land_subtype": "Plains",
+    "upkeep_gy_reanimate_land_threshold": 7,
+    "upkeep_gy_reanimate_may": true
+   }
+  },
+  {
+   "name": "Grim Lavamancer",
+   "mana_cost": "{R}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Human",
+    "Wizard"
+   ],
+   "keywords": [],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "{R}, {T}, Exile two cards from your graveyard: This creature deals 2 damage to any target.",
+   "template": "vanilla_creature",
+   "parameters": {
+    "tap_graveyard_exile_damage": 2,
+    "targeting": "any"
+   }
+  },
+  {
+   "name": "Chain Lightning",
+   "mana_cost": "{R}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Chain Lightning deals 3 damage to any target. Then that player or that permanent's controller may pay {R}{R}. If the player does, they may copy this spell and may choose a new target for that copy.",
+   "template": "direct_damage",
+   "parameters": {
+    "damage": 3,
+    "targeting": "any",
+    "chain_lightning_copy": true
+   }
+  },
+  {
+   "name": "Rift Bolt",
+   "mana_cost": "{2}{R}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [
+    "Suspend"
+   ],
+   "oracle_text": "Rift Bolt deals 3 damage to any target.\nSuspend 1—{R} (Rather than cast this card from your hand, you may pay {R} and exile it with a time counter on it. At the beginning of your upkeep, remove a time counter. When the last is removed, you may cast it without paying its mana cost.)",
+   "template": "direct_damage",
+   "parameters": {
+    "damage": 3,
+    "targeting": "any",
+    "suspend_time_counters": 1,
+    "suspend_cost": "{R}"
+   }
+  },
+  {
+   "name": "Skewer the Critics",
+   "mana_cost": "{2}{R}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Spectacle {R} (You may cast this spell for its spectacle cost rather than its mana cost if an opponent lost life this turn.)\nSkewer the Critics deals 3 damage to any target.",
+   "template": "direct_damage",
+   "parameters": {
+    "damage": 3,
+    "targeting": "any",
+    "spectacle_cost": "{R}"
+   }
+  },
+  {
+   "name": "Price of Progress",
+   "mana_cost": "{1}{R}",
+   "types": [
+    "Instant"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Price of Progress deals damage to each player equal to twice the number of nonbasic lands that player controls.",
+   "template": "direct_damage",
+   "parameters": {
+    "damage_per_nonbasic_land": 2
+   }
+  },
+  {
+   "name": "Fireblast",
+   "mana_cost": "{4}{R}{R}",
+   "types": [
+    "Instant"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "You may sacrifice two Mountains rather than pay this spell's mana cost.\nFireblast deals 4 damage to any target.",
+   "template": "direct_damage",
+   "parameters": {
+    "damage": 4,
+    "targeting": "any",
+    "sacrifice_mountains_alternative": true
+   }
+  },
+  {
+   "name": "Magma Jet",
+   "mana_cost": "{1}{R}",
+   "types": [
+    "Instant"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Magma Jet deals 2 damage to any target. Scry 2.",
+   "template": "direct_damage",
+   "parameters": {
+    "damage": 2,
+    "targeting": "any",
+    "cast_scry": 2
+   }
+  },
+  {
+   "name": "Chandra's Incinerator",
+   "mana_cost": "{5}{R}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Elemental"
+   ],
+   "keywords": [
+    "Trample"
+   ],
+   "oracle_text": "This spell costs {X} less to cast, where X is the total amount of noncombat damage dealt to your opponents this turn.\nTrample\nWhenever a source you control deals noncombat damage to an opponent, this creature deals that much damage to target creature or planeswalker that player controls.",
+   "power": 6,
+   "toughness": 6,
+   "template": "vanilla_creature",
+   "parameters": {
+    "cost_less_per_opponent_noncombat_damage": true,
+    "incinerator_damage_trigger": true
+   }
+  },
+  {
+   "name": "Chandra, Torch of Defiance",
+   "mana_cost": "{2}{R}{R}",
+   "types": [
+    "Planeswalker"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Chandra"
+   ],
+   "keywords": [],
+   "oracle_text": "+1: Exile the top card of your library. You may cast that card. If you don't, Chandra deals 2 damage to each opponent.\n+1: Add {R}{R}.\n−3: Chandra deals 4 damage to target creature.\n−7: You get an emblem with \"Whenever you cast a spell, this emblem deals 5 damage to any target.\"",
+   "template": "custom",
+   "parameters": {
+    "loyalty_start": 4,
+    "loyalty_abilities": [
+     {
+      "delta": 1,
+      "effect": "exile_top_cast_or_damage",
+      "amount": 2
+     },
+     {
+      "delta": 1,
+      "effect": "add_red_mana",
+      "amount": 2
+     },
+     {
+      "delta": -3,
+      "effect": "damage_target_creature",
+      "amount": 4
+     },
+     {
+      "delta": -7,
+      "effect": "emblem_spell_cast_damage",
+      "amount": 5
+     }
+    ]
+   }
+  },
+  {
+   "name": "Watery Grave",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [
+    "Island",
+    "Swamp"
+   ],
+   "keywords": [],
+   "oracle_text": "({T}: Add {U} or {B}.)\nAs this land enters, you may pay 2 life. If you don't, it enters tapped.",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "U",
+     "B"
+    ],
+    "etb_pay_life_to_untap": 2
+   }
+  },
+  {
+   "name": "Xander's Lounge",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [
+    "Island",
+    "Swamp",
+    "Mountain"
+   ],
+   "keywords": [],
+   "oracle_text": "({T}: Add {U}, {B}, or {R}.)\nThis land enters tapped.\nCycling {3} ({3}, Discard this card: Draw a card.)",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "U",
+     "B",
+     "R"
+    ],
+    "enters_tapped": true,
+    "cycling_cost": "{3}"
+   }
+  },
+  {
+   "name": "Brainsurge",
+   "mana_cost": "{2}{U}",
+   "types": [
+    "Instant"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Draw four cards, then put two cards from your hand on top of your library in any order. [draw_spell draw 4 + put_back_from_hand 2 -- Brainstorm's machinery, which is generic in the draw count: the shared ResolvePutBackFromHand (SpellEffects.h) runs INSIDE the resolution in both worlds (EffectHandler::ResolveDrawSpell, TurnSolver apply_one's DrawSpell branch), right after the four draws and before anything else -- the draw breakpoint, and every 'whenever you draw' trigger, which waits for the spell to finish resolving (CR 603.3). WHICH two and in WHAT order is SEARCHED (Plan::putback_choice): one plan variant per PutBackCandidates candidate -- every distinct ordered selection of hand cards, drawn or already held (ruling), identical copies folded -- PROVIDER-ORDERED by PutBackRanking and NOT width-capped; PutBackAxisWidth sizes the fan off draw 4. Inside a breakpoint continuation the pin rides ContPins. ONE put-back is pinned per plan: a second put-back spell in the same plan (a Brainstorm, another Brainsurge) takes the provider default there (the Ponder axis's shape) -- a known limitation that matters more in a deck chaining both. HUMAN PLAY: the `dig` chooser is asked twice ('Brainsurge (put back: top)', then '(put back: second)'); mandatory, -1 takes the default. INSTANT TIMING (PROVISIONAL fold, Brainstorm's argument): cast only in a main phase with an empty stack. Against a passive opponent an upkeep cast is weakly dominated by the main-phase one, an opponent's-turn cast equals a cast at the end of our own turn (a post-combat main), and 'in response' windows hold only our own spells. One residual difference, disclosed: an opponent's-turn cast happens AFTER our cleanup, so a hand pushed above seven (Brainsurge nets +1 card) keeps the extra card instead of discarding it.]",
+   "template": "draw_spell",
+   "parameters": {
+    "draw": 4,
+    "put_back_from_hand": 2
+   }
+  },
+  {
+   "name": "Street Wraith",
+   "mana_cost": "{3}{B}{B}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Wraith"
+   ],
+   "keywords": [
+    "Landwalk",
+    "Swampwalk"
+   ],
+   "power": 3,
+   "toughness": 4,
+   "oracle_text": "Swampwalk (This creature can't be blocked as long as defending player controls a Swamp.)\nCycling—Pay 2 life. (Pay 2 life, Discard this card: Draw a card.) [Cycling modelled as cycling_cost \"\" (no mana) + cycling_life_cost 2: probed and paid at EVERY cycle site (executor PerformDig, the rollout dig loop, the human-play dig action, the SelectDigSource affordability filters and the viewer's offer probe) through CyclingLifePayable / PayCyclingLife, in lockstep with the mana half. Offered only while life > 2: paying to exactly 0 is legal (CR 119.4) but loses at the next state-based check, before the cycling draw resolves (CR 704.5a), so it is dominated -- a sound prune, the same in human play. Life is paid as life LOSS, not damage. 2HG pays from the team's shared life. Swampwalk (and its Landwalk umbrella tag) is INERT: landwalk only restricts blocks (CR 702.14) and the goldfish opponent never blocks -- PROVISIONAL.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "cycling_cost": "",
+    "cycling_life_cost": 2
+   }
+  },
+  {
+   "name": "Unpredictable Cyclone",
+   "mana_cost": "{3}{R}{R}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "If a cycling ability of another nonland card would cause you to draw a card, instead exile cards from the top of your library until you exile a card that shares a card type with the cycled card. You may cast that card without paying its mana cost. Then put the exiled cards that weren't cast this way on the bottom of your library in a random order.\nCycling {2} ({2}, Discard this card: Draw a card.) [cycle_draw_exile_shared_type_freecast: a REPLACEMENT of the cycling draw (no stack, CR 614.1a), applied at all three cycle sites (the executor's PerformDig, the human-play dig, the rollout's dig chain) through one shared walk (SpellEffects.h WalkExileUntilSharedType / BottomInRandomOrder), AFTER the cycle's own triggers (Curator of Mysteries' scry resolves first and sets up the walk). The walk stops at the first card sharing ANY card type with the cycled card (types only; Scryfall ruling 2020-04-17), so a cycled creature walks to the next creature. The hit may be cast without paying its mana cost -- a real CAST (storm count, cast triggers: Emrakul's extra turn, the Ulamogs' targets) -- and a land hit, a hit with no legal target or a hit a cast restrictor forbids is not cast. TAKE / DECLINE / TAKE-AND-REMAND is SEARCHED (the cycle action's free-cast pin); declining is offered only where the deck's provider cannot prove taking dominant (CycloneProvider::FreeCastTakeDominated: a forced own-target Ulamog, a legend-rule Emrakul). Everything not cast -- the walked cards and a declined or uncastable hit -- goes to the bottom in a REAL random order (a common-random-numbers keyed sort, both worlds); a whole-library whiff is therefore a shuffle with no draw (ruling). Two Cyclones: one replacement applies to a given draw (CR 616.1); the instances are identical. 'another nonland card': a cycled LAND draws normally, and a Cyclone cycled from hand while one is out walks to the next enchantment; this card's own cycling {2} with no Cyclone out is an ordinary draw. X = 0 is moot (no X spell in the pool). Instant-speed cycling on the opponent's turn collapses to our main phases (PROVISIONAL, ledger Q7).]",
+   "template": "custom",
+   "parameters": {
+    "cycling_cost": "{2}",
+    "cycle_draw_exile_shared_type_freecast": true
+   }
+  },
+  {
+   "name": "Curator of Mysteries",
+   "mana_cost": "{2}{U}{U}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Sphinx"
+   ],
+   "keywords": [
+    "Flying"
+   ],
+   "power": 4,
+   "toughness": 4,
+   "oracle_text": "Flying\nWhenever you cycle or discard another card, scry 1.\nCycling {U} ({U}, Discard this card: Draw a card.) [Watcher modelled by cycle_or_discard_trigger_scry: ONE trigger per discard event per Curator on the battlefield (Scryfall ruling 2017-04-18: cycling is a discard, so a cycle triggers once), fired by the shared discard hook (DiscardCardFromHand) for every non-cycle discard -- the cleanup discard -- and by the three cycle sites themselves for a cycle, where it resolves BEFORE the cycling draw (it goes on the stack above the cycling ability), so it sets up an Unpredictable Cyclone walk. 'another card' is structural: a Curator cycled from HAND is not on the battlefield and cannot trigger itself; it does trigger a second Curator that is. A cycle's N scry-1 triggers fold EXACTLY to 'bottom the top j, j = 0..N' and j is SEARCHED (the cycle action's scry pin); a non-cycle discard's scry is the provider's ScryKeepOnTop (an in-window heuristic for the rare cleanup-discard case -- disclosed in the Cyclone ledger); the human scries each trigger in the viewer. Flying is inert against the never-blocking goldfish opponent.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "cycling_cost": "{U}",
+    "cycle_or_discard_trigger_scry": 1
+   }
+  },
+  {
+   "name": "Emrakul, the Aeons Torn",
+   "mana_cost": "{15}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Eldrazi"
+   ],
+   "keywords": [
+    "Flying"
+   ],
+   "power": 15,
+   "toughness": 15,
+   "oracle_text": "This spell can't be countered.\nWhen you cast this spell, take an extra turn after this one.\nFlying, protection from spells that are one or more colors, annihilator 6\nWhen Emrakul is put into a graveyard from anywhere, its owner shuffles their graveyard into their library. [Can't be countered: cant_be_countered (inert against the passive opponent; its reader is the self-targeted Remand, which may target Emrakul and draws, Emrakul resolving anyway). Cast trigger: cast_trigger_extra_turns 1 -- pushed above the spell at EVERY cast (EffectHandler::PushCastTriggers for hand casts and PushFreeCast's free casts -- cascade, Unpredictable Cyclone -- and the rollout's inline twin in apply_one), so it resolves first, and two casts give two extra turns. An extra turn is a full turn of ours (untap clears summoning sickness, so an Emrakul cast this turn attacks in it; upkeep; draw; a new land drop; mains; combat; end; cleanup); the passive opponent takes no turn before it (no notional upkeep or draw, no scheduled spawn). EXTRA TURNS DO NOT COUNT TOWARD THE TURN COUNT (USER ruling 2026-10-26): GameState::turn_number is the ROUND, so the reported win turn and every search comparison are in rounds; an extra turn costs no search ply (depth counts rounds), so it is always searched inside the window. Flying inert (no blockers). Annihilator 6: the annihilator param -- at declare attackers the defending player sacrifices six permanents, oldest first (the opponent's choice, a fixed rule); LIVE, because the goldfish opponent's scheduled spawns (8 of 10 games) are the Ulamogs' preferred targets. Protection from spells that are one or more colors: NOT modelled, PROVISIONAL inert -- nothing in a goldfish game targets, damages, enchants or blocks Emrakul with a colored spell in the Cyclone list (Remand targets the SPELL on the stack, where a permanent's protection does not function; the Ulamog triggers are colorless abilities); cross-deck caveat: a future deck's colored own-target spell (a pump, Soulfire's own targets, an Aura) would wrongly be allowed to target it. Graveyard trigger: put_into_graveyard_shuffles_graveyard -- a TRIGGER (not Progenitus's replacement): Emrakul reaches the graveyard first, then its owner shuffles the WHOLE graveyard, Emrakul included, into the library (search-salted shuffle), after the whole event that moved it (the cleanup discard, a legend-rule batch); fired from the shared discard hook and every creature death (legend rule, Ulamog the Infinite Gyre's destroy, sacrifice). Exile is not a graveyard (Ulamog the Ceaseless Hunger's exile does not trigger it). Legend rule modelled (keep the oldest: the copies differ only in summoning sickness, and the doomed one fires the same graveyard shuffle).]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "cant_be_countered": true,
+    "cast_trigger_extra_turns": 1,
+    "annihilator": 6,
+    "put_into_graveyard_shuffles_graveyard": true
+   }
+  },
+  {
+   "name": "Ulamog, the Ceaseless Hunger",
+   "mana_cost": "{10}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Eldrazi"
+   ],
+   "keywords": [
+    "Indestructible"
+   ],
+   "power": 10,
+   "toughness": 10,
+   "oracle_text": "When you cast this spell, exile two target permanents.\nIndestructible\nWhenever Ulamog attacks, defending player exiles the top twenty cards of their library. [Cast trigger: cast_trigger_exile_target_permanents 2 -- MANDATORY, fires at every cast (hand casts, free casts); the two targets are DISTINCT (CR 115.3) and chosen as the trigger is put on the stack (CR 603.3d) from EVERY permanent on the battlefield, either side (the spell itself is on the stack, not a target): the goldfish opponent's scheduled spawns when present, otherwise our own permanents (lands, Unpredictable Cyclone, creatures) -- forced. With fewer than two legal permanents the trigger is removed (CR 603.3d). SEARCHED: Plan::cast_trigger_target_choice ranks the options (multisets of identity-folded permanents, two identical Islands being one option) in DecisionProvider::CastTriggerTargetOrder's order -- ORDER only, opponent permanents first; the human picks on the board (the target decision, one pick at a time; a forced pick is not prompted). Re-checked on resolution (CR 608.2b): a target that left is skipped, the other is still exiled. Exile ignores indestructible and is not a graveyard (no Emrakul shuffle); a token exiled ceases to exist. Indestructible modelled (destroy does nothing; -X/-X and 0 toughness still kill). Attack trigger NOT modelled, PROVISIONAL inert: the opponent is dealt a library only for decks that touch it (DeckTouchesOpponentZones), and even with a 53-card library Ulamog's 10 power kills a 20-life opponent on its 2nd attack while the exile needs a 3rd attack plus their draw; at 2HG's 30 life the 3rd attack is lethal by damage in the same combat. Legend rule modelled (one copy in the list).]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "cast_trigger_exile_target_permanents": 2
+   }
+  },
+  {
+   "name": "Ulamog, the Infinite Gyre",
+   "mana_cost": "{11}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Eldrazi"
+   ],
+   "keywords": [
+    "Indestructible"
+   ],
+   "power": 10,
+   "toughness": 10,
+   "oracle_text": "When you cast this spell, destroy target permanent.\nIndestructible\nAnnihilator 4 (Whenever this creature attacks, defending player sacrifices four permanents of their choice.)\nWhen Ulamog is put into a graveyard from anywhere, its owner shuffles their graveyard into their library. [Cast trigger: cast_trigger_destroy_target_permanents 1 -- MANDATORY, every cast (hand and free casts); one target chosen as the trigger is put on the stack (CR 603.3d) from every permanent, either side (an opponent spawn when present, else ours -- forced); removed with no legal target. SEARCHED via Plan::cast_trigger_target_choice (provider ORDER only: the opponent's permanents first, then our own indestructible ones -- a legal no-op); the human picks on the board (target), a forced pick is not prompted. Destroy respects indestructible (targeting an indestructible permanent is legal and does nothing); a destroyed creature dies through OnCreatureDies (an Emrakul target fires its graveyard shuffle). Indestructible modelled (-X/-X and 0 toughness still kill). Annihilator 4: the annihilator param (LIVE: it removes opponent spawns the Ulamog cast triggers would otherwise target; the opponent sacrifices oldest first, a fixed rule -- their choice, not ours). Graveyard trigger: put_into_graveyard_shuffles_graveyard (see Emrakul): reached by the cleanup discard (it cannot be destroyed). Legend rule modelled (one copy in the list).]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "cast_trigger_destroy_target_permanents": 1,
+    "annihilator": 4,
+    "put_into_graveyard_shuffles_graveyard": true
+   }
+  },
+  {
+   "name": "Long-Term Plans",
+   "mana_cost": "{2}{U}",
+   "types": [
+    "Instant"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Search your library for a card, then shuffle and put that card third from the top. [tutor_library_position 3 -- NOT tutor_to_top: about 30 provider sites read that param as 'the found card is the next draw', and it alone sets the anti-lifegain routing signature. Every generic tutor site asks IsLibraryTutor() (CardDatabase.h). Resolution is the shared PerformTutor (executor EffectHandler + rollout apply_one, lockstep by construction): remove the chosen card, shuffle the library (the deterministic CRN ShuffleAfterSearch -- the engine-wide known-library simplification, so the search sees the two cards that land above it), then insert it at index min(2, library size) -- with fewer than 3 cards left it goes to the bottom (ruling). Not a top stack (top_stacked_turn stays unset: the top is a shuffled card). Any card is legal (empty tutor_types). The TARGET is SEARCHED: Plan::tutor_choice / tutor_target plan variants over the provider's TutorCandidates (the generic every-legal-name list), TutorSearchWidth wide (CycloneProvider: 32, so every distinct name is reachable). The line it serves: put Emrakul third from the top, then Brainstorm / Brainsurge draw into it, Ponder sees it, Curator's cycle scry or a cycle digs to it, or an Unpredictable Cyclone walk reaches it (unless a creature lands above it). HUMAN PLAY: picks at resolution from every legal name (the `tutor` chooser, HumanPlayDefersTutorTarget); the search is mandatory ('a card' has no stated quality), so a -1 takes the default. INSTANT TIMING (USER-approved fold, 2026-10-27: 'All spells are cast at sorcery speed here'): cast in a main phase with an empty stack.]",
+   "template": "custom",
+   "parameters": {
+    "tutor_library_position": 3
+   }
+  },
+  {
+   "name": "Toxic Deluge",
+   "mana_cost": "{2}{B}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "As an additional cost to cast this spell, pay X life.\nAll creatures get -X/-X until end of turn. [Goldfish-inert (USER ruling 2026-10-27: 'I wouldn't cast Toxic Deluge, personally. That is fine to prune, just like the do-nothing-in-goldfish cards'). The passive opponent's spawned tokens are never a threat, so the only real use is against our OWN creatures -- killing an Emrakul or an Ulamog, the Infinite Gyre to shuffle the graveyard back into the library -- and the USER rules that out: 'You can argue that getting the shuffle and card back in the library is useful, but it's not worth losing your threat on board.' So it is never cast (the Memory Lapse precedent: TurnSolver skips a goldfish_inert cast) and the pay-X-life cost and the -X/-X sweep are NOT modelled. A dead card in hand that can still be bottomed, discarded, put back by Brainstorm / Brainsurge, or walked past by a Cyclone (it is a sorcery, not a creature). REMAND-ONLY TARGET (2026-10-28, opt-in: DecisionProvider::AdmitRemandOnlyCast, keyed on goldfish_inert; Unpredictable Cyclone at ceiling >= 3 with MTG_CYCLONE_REMAND_INERT=1, default off): it may be cast ONLY with a Remand riding it -- it never resolves (back to hand), so X = 0 life is paid and the sweep is never realised.]",
+   "template": "custom",
+   "parameters": {
+    "goldfish_inert": true
    }
   }
  ]

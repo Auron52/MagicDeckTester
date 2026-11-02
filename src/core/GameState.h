@@ -225,8 +225,12 @@ struct StackEntry
                            // time (CR 601.2i), so the exile walk + free cast resolve first
         EtbExileFreeCast,  // Breaching Dragonstorm's enter trigger (exile until nonland,
                            // may free-cast if MV <= etb_exile_free_cast_max_mv, else to hand)
-        Demonstrate        // Creative Technique's cast trigger (may copy the spell; the copy
+        Demonstrate,       // Creative Technique's cast trigger (may copy the spell; the copy
                            // is pushed above the original and resolves first)
+        ExtraTurn,         // Emrakul's "take an extra turn after this one" (one per instance)
+        CastExileTargets,  // Ulamog CH's "exile two target permanents": targets chosen at PUSH
+                           // (CR 603.3d), stored as m_numbers in targets[i].permanent_index
+        CastDestroyTarget  // Ulamog IG's "destroy target permanent": same target storage
     };
     TriggerKind         trigger_kind = TriggerKind::None;  // meaningful on EntryType::Triggered
     bool                is_copy     = false;  // demonstrate copy: resolves its payload but was
@@ -260,8 +264,21 @@ struct PayRollbackLedger
     void NoteUntapEffect(int t, int p) { Stamp(t, p); untap_effect = true; }
 };
 
+struct IncineratorDamageTrigger
+{
+    Card source;
+    int controller = 0;
+    int damaged_player = 1;
+    int amount = 0;
+};
+
 struct GameState
 {
+    bool deck_tracks_noncombat_damage = false;
+    std::array<int, 2> noncombat_damage_received_this_turn{};
+    std::vector<IncineratorDamageTrigger> pending_incinerator_damage;
+    int noncombat_trigger_depth = 0;
+
     std::array<Player, 2>    players;
     PayRollbackLedger        pay_ledger;
     int                      active_player_index   = 0;
@@ -292,7 +309,8 @@ struct GameState
     // every such plan applied to the FIRST spawn whatever it promised, and the viewer printed them
     // all as "#0". A base of their own so the token ids above are untouched; both spawn sites draw
     // from it in the same order (lockstep). Orchard Spirits are real tokens and use the counter above.
-    int                      next_opp_spawn_number = 500000;
+    static constexpr int     kFirstOppSpawnNumber  = 500000;   // a spawn is a TOKEN (is_token is not set on it)
+    int                      next_opp_spawn_number = kFirstOppSpawnNumber;
     int                      consecutive_passes           = 0;
     int                      turn_number                  = 0;
     bool                     player_lost_on_draw          = false;
@@ -359,6 +377,109 @@ struct GameState
     // hand-source steal scan. Deck constants: never folded into any key.
     bool                     deck_has_transform           = true;
     bool                     deck_has_tap_steal           = true;
+    // MORAUG, FURY OF AKOUM (2026-10-23), in the same padding (sizeof(GameState) unchanged):
+    //   deck_has_extra_combat -- DECK CONSTANT (StampDeckTraits): the list holds a landfall_additional_combat
+    //     or attack_count_team_power card. Gates the rollout's faithful phase stamps (Combat / Ending /
+    //     Beginning -- the intervening "if it's your main phase" reads GameState::phase) and the per-attack
+    //     count (Permanent::NoteAttackDeclared). DEFAULT FALSE: an unstamped state behaves exactly as before
+    //     (it neither counts attacks nor queues a combat -- the watcher's queue below is gated on it too).
+    //   pending_extra_combats -- the ADDITIONAL COMBATS queued by this main phase's landfall triggers and not
+    //     yet run. FUTURE-DETERMINING and flips mid-turn: folded value-gated into the sim key and the dominance
+    //     key. Drained by the combat that follows the main phase (the main-1 queue before the regular combat,
+    //     the main-2 queue before the end step), so it is 0 at every turn boundary. Saturates at 255.
+    bool                     deck_has_extra_combat        = false;
+    std::uint8_t             pending_extra_combats        = 0;
+    // Deck stamp (StampDeckTraits): does anything in this deck read our LIFE TOTAL (not the gain
+    // events)? Serra Ascendant's life_threshold_pump_life, a life-above-start anthem, a
+    // life-above-start activation restriction, Ajani, Strength of the Pride's 0. Life persists across
+    // turns, so a gain now feeds such a card cast LATER -- which is why this is a deck stamp and not a
+    // board scan. Read only by SacOutletLifegainRead, to keep a self-only lifegain sac outlet (Martyr
+    // of Sands, Brindle Boar) on the autonomous menu. DEFAULT TRUE, the safe direction for a gate that
+    // only ever keeps an option open: a path that builds a GameState without stamping traits (the
+    // scenario harness) keeps the outlet. Placed in the last byte of the padding after
+    // pending_extra_combats (sizeof(GameState) unchanged, measured). A deck constant: never folded.
+    bool                     deck_reads_life_total = true;
+    // EXTRA TURNS (Emrakul, the Aeons Torn -- CardParams::cast_trigger_extra_turns; Unpredictable Cyclone
+    // phase 2, 2026-10-27). USER RULING 2026-10-26: *"Importantly, extra turns do not count toward the
+    // turn count."* So `turn_number` stays the ROUND (how many turns the opponent has been given; every
+    // win-turn, cutoff, horizon and max_turns read is in rounds and needs no edit), and an extra turn
+    // does NOT advance it. The fields:
+    //   pending_extra_turns -- extra turns granted (a resolved cast trigger) and not yet taken. Consumed
+    //     one per turn transition (GameEngine::RunTurnFrom / TurnSolver's SimulateEndAndStartNextTurn,
+    //     lockstep). FUTURE-DETERMINING: folded value-gated into the sim key and the dominance key.
+    //   extra_turns_taken -- extra turns begun so far this game. TurnSeq() below = turns taken.
+    //   in_extra_turn -- the CURRENT turn is an extra turn (the opponent took no turn before it: no
+    //     notional draw, no scheduled spawn). Display (viewer "Turn N (extra k)") + the spawn gate.
+    //   deck_has_extra_turn -- DECK CONSTANT (StampDeckTraits): the mainboard holds a
+    //     cast_trigger_extra_turns card. Gates the TurnSeq key fold and switches OFF the turn-edge prunes
+    //     that assume "the next turn is round+1" (FslEdgeNoReach, the rollout kill-only turn, the winless
+    //     certificate, the edge-tail elides). DEFAULT FALSE: every other deck keeps them.
+    // Every other deck: pending == extra_turns_taken == 0 forever, so TurnSeq() == turn_number and every
+    // site moved to TurnSeq() is byte-identical by construction.
+    bool                     deck_has_extra_turn          = false;
+    bool                     in_extra_turn                = false;
+    std::uint8_t             pending_extra_turns          = 0;
+    std::uint8_t             extra_turns_taken            = 0;
+    // GRAVEYARD-SHUFFLE TRIGGER (CardParams::put_into_graveyard_shuffles_graveyard: Emrakul, Ulamog the
+    // Infinite Gyre). DECK CONSTANT (StampDeckTraits, main + sideboard): FireGraveyardEntryTriggers'
+    // scan runs only while set, so every other deck pays one bool test per graveyard entry. DEFAULT
+    // FALSE (only StampDeckTraits sets it; a unit test that wants the trigger sets it by hand).
+    bool                     deck_has_gy_shuffle          = false;
+    // ANNIHILATOR (CardParams::annihilator: Emrakul 6, Ulamog the Infinite Gyre 4). DECK CONSTANT
+    // (StampDeckTraits, main + sideboard): the declare-attackers scan (both worlds) runs only while
+    // set. DEFAULT FALSE.
+    bool                     deck_has_annihilator         = false;
+    // TARGETED CAST TRIGGERS (CardParams::cast_trigger_exile_target_permanents /
+    // cast_trigger_destroy_target_permanents: the Ulamogs). DECK CONSTANT (StampDeckTraits, mainboard):
+    // gates AppendSubdecisionAxes' cast-trigger-target axis scan (a per-plan action walk) so every other
+    // deck pays one bool test per enumeration. DEFAULT FALSE.
+    bool                     deck_has_cast_target_trigger = false;
+    // UNPREDICTABLE CYCLONE (CardParams::cycle_draw_exile_shared_type_freecast; phase 3, 2026-10-27).
+    // DECK CONSTANT (StampDeckTraits, MAINBOARD -- it replaces a draw, a behaviour): CycleDrawReplacer's
+    // battlefield scan at the three cycle sites runs only while set, so every other deck pays one bool
+    // test per cycle. DEFAULT FALSE (only StampDeckTraits sets it; a unit test sets it by hand).
+    bool                     deck_has_cycle_draw_replacement = false;
+    // CURATOR OF MYSTERIES (CardParams::cycle_or_discard_trigger_scry). DECK CONSTANT (StampDeckTraits,
+    // main + sideboard -- it only gates a scan that would find nothing): DiscardScryTriggers' battlefield
+    // scan at every discard and cycle runs only while set. DEFAULT FALSE.
+    bool                     deck_has_discard_scry_watcher = false;
+    // Graveyard-shuffle trigger BATCHING (FireGraveyardEntryTriggers / GyShuffleBatch, SpellEffects.h):
+    // a trigger fired inside one simultaneous event (the cleanup discard, a legend-rule SBA batch) waits
+    // until the event completes, so its shuffle takes EVERY card that moved with it (CR 603.2 / 603.3:
+    // triggers are put on the stack after the event). Open-batch depth + per-owner pending count. Both 0
+    // at every point a key is built (a batch never spans a decision), so never folded.
+    std::uint8_t             gy_shuffle_batch             = 0;
+    std::uint8_t             pending_gy_shuffles[2]       = { 0, 0 };
+    // TURNS TAKEN (regular + extra). The SAME-TURN identity reads ("is this stamp from THIS turn?":
+    // m1_hand_turn, m2_stage_turn, combat_hand_turn, staged expiries, suspend arrivals, pay ledger,
+    // search pins, shuffle salts, the T1 draw skip) use this, never turn_number, so a stamp written in
+    // the regular turn of a round is stale inside that round's extra turn.
+    int TurnSeq() const { return turn_number + static_cast<int>(extra_turns_taken); }
+    // TERMINATION BACKSTOP for extra-turn chains (both worlds): a game / rollout / search node whose
+    // turns taken exceed 4x the round horizon is ended as a no-win. Unreachable in practice (every extra
+    // turn needs a cast Emrakul, and each Emrakul attack is 15 damage), but Emrakul's graveyard shuffle
+    // plus the legend rule can return it to the library, so in principle a chain recurs, and depth
+    // counted in ROUNDS would not bound it at an unlimited budget. Value-gated on extra_turns_taken:
+    // false for every deck that never takes an extra turn.
+    bool TurnSeqCapped(int max_turns) const
+    { return extra_turns_taken != 0 && TurnSeq() > 4 * max_turns; }
+    // THE TURN COUNTER STEP, shared by both worlds' turn transition (GameEngine::RunTurnFrom's NewTurn
+    // entry, TurnSolver's SimulateEndAndStartNextTurn) so they cannot drift: a pending extra turn is
+    // taken now and the ROUND does not advance; otherwise the next round begins.
+    void AdvanceTurnCounter()
+    {
+        if (pending_extra_turns > 0)
+        {
+            --pending_extra_turns;
+            if (extra_turns_taken < 255) { ++extra_turns_taken; }
+            in_extra_turn = true;
+        }
+        else
+        {
+            ++turn_number;
+            in_extra_turn = false;
+        }
+    }
     // Turn the active player last STACKED the top of their library with a tutor-to-top
     // (Worldly Tutor). -1 = never. The USER's intentionality gate for top-consumer models
     // (MTG_TOP_RESOLVE, 2026-08-21): a consumer decision may read the top ONLY when the stack
@@ -419,6 +540,21 @@ struct GameState
     // byte-identical. Folded into BuildSimKey / BuildBreakpointKey when non-zero (two mid-turn
     // states that differ only in which {C} is hasty play differently).
     int                      floating_haste_c = 0;
+    // THE SEARCHED DEFENSE OF THE HEART PUT LIST (Plan::doth_put_choice, MTG_DOTH_AXIS, 2026-10-29). Defense of
+    // the Heart's upkeep trigger ("search your library for up to two creature cards, put those cards onto the
+    // battlefield") resolves at the NEXT upkeep, after this turn's plan apply and the turn boundary, so the
+    // search's answer rides the STATE (the scripted_echo / scripted_upkeep_gy_reanimate shape): -1 = unpinned
+    // (every trigger takes the provider's SacTutorPutList); else a RANK per trigger ordinal (kDothPinRankBits
+    // each, ordinal 0 lowest) into that trigger's resolution-time option list (DecisionProvider::
+    // SacTutorPutOptions -- the provider's own pick is rank 0), plus how many ordinals the pin COVERS (bits
+    // kDothPinCoverShift..): an ordinal past the cover takes the provider's pick (SpellEffects.h, DothPin*).
+    // Written by the plan apply (TurnSolver::WritePostApplyStatePins, both worlds, write-when-set) and
+    // consumed + cleared by the NEXT upkeep in both worlds (PerformUpkeepSacTutor, called from
+    // GameEngine::UpkeepTail and the rollout's SimulateEndAndStartNextTurn) -- so it SURVIVES the turn
+    // boundary and is never cleared with the per-turn pins. FUTURE-DETERMINING: folded value-gated in
+    // dominance::Build(), BuildDedupKey's pending pins and BuildBreakpointKey. An int32 in the 4-byte hole
+    // before floating_bigspell_pp (gdb ptype /o: 772; sizeof(GameState) unchanged).
+    std::int32_t             scripted_doth_put = -1;
     const struct CardParams* floating_bigspell_pp = nullptr;
     // STORM counter: number of spells cast THIS TURN (by the active player -- the only caster in
     // the goldfish). Incremented by exactly 1 at every shared cast site (AIEngine::CastSpellFromHand,
@@ -545,6 +681,11 @@ struct GameState
     // partially built GameState) keeps the scan and stays correct, it just does not skip work.
     // Erring the other way would silently drop mana the board really has.
     bool                     deck_has_mana_grant        = true;   // granted_tap_mana_subtypes in the list
+    // Paradise Mantle's equip-borne grant (CardParams::equip_grants_tap_mana_any). Kept apart from
+    // deck_has_mana_grant only so LiveManaGrant's early `break` stays valid for the Badger decks:
+    // an equip grant can sit anywhere on the board, so its walk cannot stop at the first Badger.
+    // Defaults TRUE for the same reason as deck_has_mana_grant (an unstamped state stays correct).
+    bool                     deck_has_equip_mana_grant  = true;   // equip_grants_tap_mana_any in the list
     // Same shape once more, for the SPELL-COST REDUCERS: Ruby Medallion (reduces_spell_color),
     // Goblin Warchief / Dragonspeaker Shaman / Stinkdrinker Daredevil / Cid (reduces_spell_subtype),
     // Urza's Incubator (chooses_creature_type) and Ragemonger (reduces_subtype_colored_*).
@@ -748,6 +889,17 @@ struct GameState
     // from the param, mainboard + sideboard, Garth holding it open, so a clear bit PROVES no look-top
     // trigger can be recorded (dead-code elimination, no lever). DEFAULT TRUE == walk.
     bool                     deck_has_look_top_watcher       = true;  // Risen Reef
+    // AND 2026-10-28 -- a SAME-PHASE MANA UNTAPPER: a card that can untap a tapped mana source while
+    // its float still stands (Cloud of Faeries / Peregrine Drake etb_untap_lands, Reality Spasm
+    // untap_x_mana_sources, Arbor Elf's Forest untap, Wirewood Lodge, Staff of Domination's creature
+    // untap, Galvanic Alchemist's soulbond untap, Seedcradle Witch). Read by the payment refine
+    // (MTG_PAY_REFINE, ManaOracle.cpp): with such a card in the deck, an untapped source does NOT
+    // dominate the same source tapped plus the mana it floated -- the untap refunds the tapped one
+    // and the float stays -- so the refine may not trade a floated unit for a released source.
+    // Stamped from the params, mainboard + sideboard (Garth's six fixed copies untap nothing, so he does
+    // not hold it open). DEFAULT TRUE == no trade, so an unstamped GameState (the scenario harness, a
+    // unit test) only ever errs safe.
+    bool                     deck_has_mana_untapper          = true;
     // AND 2026-10-17 -- the NIV-MIZZET DRAW/DAMAGE LOOP (CardParams::draw_trigger_damage,
     // cast_trigger_instant_sorcery_draw, aura_damage_trigger_draw, soulbond_damage_trigger_draw).
     // Gates ResolveDrawTriggers' flush (called after every draw-producing resolution in both worlds)
@@ -757,6 +909,12 @@ struct GameState
     // lever). DEFAULT TRUE == run the flush (an unstamped GameState -- the scenario harness, a unit
     // test -- keeps every trigger), the only-err-true rule.
     bool                     deck_has_draw_ping              = true;
+    // Does the deck hold an upkeep SAC-TUTOR (CardParams::upkeep_sac_tutor_creatures: Defense of the Heart)?
+    // DECK CONSTANT, stamped by StampDeckTraits (mainboard + sideboard, Garth holding it open); gates the
+    // searched put-list fan (MTG_DOTH_AXIS) so every deck without one never walks its battlefield for a
+    // trigger at a turn boundary. DEFAULT TRUE (an unstamped state -- a unit test -- keeps the walk). In the
+    // 1-byte hole before draw_trigger_mark (gdb ptype /o: 825; sizeof(GameState) unchanged).
+    bool                     deck_has_sac_tutor              = true;
     // The draw-trigger WATERMARK: how many of the ACTIVE player's cards_drawn_this_turn have already
     // had their "whenever you draw" triggers resolved. ResolveDrawTriggers processes exactly the
     // draws in (draw_trigger_mark, cards_drawn_this_turn] and advances it, which makes every flush
@@ -916,6 +1074,24 @@ struct GameState
     // with the combat pins at both turn starts, folded value-gated into the dominance key and the post-apply
     // dedup key.
     std::int8_t              scripted_fb_hold = -1;
+    // Does the deck hold an ECHO card (CardParams::echo_cost: Mogg War Marshal, Stingscourger)? DECK
+    // CONSTANT, stamped by StampDeckTraits; gates the searched-echo axis (AppendSubdecisionAxes) so a deck
+    // without one never walks its plans for echo casts. Defaults TRUE (an unstamped state keeps the walk).
+    // In the 3-byte hole after scripted_fb_hold, with the pin below (sizeof(GameState) unchanged).
+    bool                     deck_has_echo = true;
+    // THE SEARCHED ECHO PIN (Plan::echo_choice, MTG_ECHO_AXIS, 2026-10-29). Echo's pay-vs-decline is decided
+    // at the NEXT upkeep, after this turn's plan apply and the turn boundary, so it rides the STATE (the
+    // scripted_upkeep_gy_reanimate shape): -1 = unpinned (every obligation takes the provider's
+    // PayEchoToKeep); else bits 0..7 are an INVERT mask over that upkeep's echo obligations by ordinal
+    // (battlefield order) and bits 8..11 how many ordinals the pin COVERS -- an ordinal it covers whose bit is
+    // set does the opposite of the provider, every other one follows it (EchoPinInverts, SpellEffects.h).
+    // Written by the plan apply (TurnSolver::WritePostApplyStatePins, both worlds, write-when-set: a main-2
+    // plan with nothing new to decide leaves main 1's pin standing) and consumed + cleared by the NEXT upkeep
+    // in both worlds (AIEngine::ResolveEchoUpkeep via GameEngine::UpkeepTail; the rollout's echo block) -- so
+    // it must SURVIVE the turn boundary and is never cleared with the per-turn pins. FUTURE-DETERMINING:
+    // folded value-gated in dominance::Build(), BuildDedupKey's pending pins and BuildBreakpointKey (the axis
+    // reads the inherited coverage).
+    std::int16_t             scripted_echo = -1;
     // ORDER-CONDEMNATION snapshot (USER model, 2026-08-19: the search decides what to cast,
     // "limited to what our order allows" -- a Main1-classified card the pre-combat decision
     // passed on is CONDEMNED for the rest of the turn; "main 2 should not re-litigate the whole
@@ -941,6 +1117,17 @@ struct GameState
     // ladder, for any state not built through StampDeckTraits. Sits in the padding after
     // m1_hand_n, so sizeof(GameState) does not move.
     std::uint8_t                  deck_creature_pip_colors = 0x1F;
+    // A MODAL ATTACK TRIGGER in the deck (CardParams::attack_trigger_modal, Tectonic Giant; StampDeckTraits): the
+    // deck_has_* presence gate of the Tectonic axis's CAST route (AppendSubdecisionAxes: the hand / library
+    // scan for a modal creature a plan could bring into combat), so a clear bit PROVES that scan finds
+    // nothing. DEFAULT TRUE == scan (an unstamped GameState keeps it), the only-err-true rule. In the two bytes
+    // of padding before m1_hand_turn (a bool beside the deck_has_* run before m_provider cost
+    // sizeof(GameState) +8, measured). A deck constant: never folded into any key.
+    bool                          deck_has_attack_modal = true;
+    // ...and a COMBAT-DAMAGE PUT trigger (CardParams::combat_damage_puts_subtype_from_hand, Goblin Lackey), the
+    // last byte of the same hole: gates the Lackey axis's cast route's library scan (a Lackey a breakpoint
+    // continuation could draw and cast). Same DEFAULT TRUE rule; a deck constant, never folded.
+    bool                          deck_has_combat_put = true;
     int                           m1_hand_turn = -1;
     // COMBAT HAND ARRIVALS -- card numbers that entered the active player's hand DURING COMBAT this
     // turn (today: Adaptive Omnitool's attack_dig_hand_count, fired at declare-attackers). These are
@@ -1025,7 +1212,10 @@ struct GameState
     // would be destroyed before the trigger ever fires. Living on the state also means it rides
     // every rollout deep-copy for free, so each plan variant carries its own pick.
     // Consumed by the first cheat trigger and reset at the start of each turn, so it cannot leak
-    // into a later combat.
+    // into a later combat. PACKED PER DAMAGING-LACKEY TRIGGER under MTG_LACKEY_ORDINALS (SpellEffects.h
+    // LackeyRankAt; ordinal 0 keeps the historical rank, so a single-trigger value reads exactly as before):
+    // each trigger reads ordinal 0 and shifts the rest down; MTG_LACKEY_PIN_FOLD spends whatever is left at
+    // the end of combat damage.
     int                      scripted_cheat_choice = -1;
     // Searched SURTLAND FLINGER victim (Plan::fling_victim_choice): the CARD NUMBER of the
     // creature this turn's first fling sacrifices, -2 = DECLINE ("you may sacrifice"), -1 = the
@@ -1039,13 +1229,18 @@ struct GameState
     // Searched TECTONIC GIANT attack-trigger MODE (Plan::tectonic_mode_choice): 0 = "3 damage to
     // each opponent", 1 = "exile the top two, play one", -1 = the provider default. Same
     // state-pin shape and lifetime as scripted_fling_victim -- decided in the main phase,
-    // consumed at declare-attackers. Consumed and cleared by the FIRST modal trigger of a
-    // combat; a second attacking copy takes the default (the lackey_choice convention).
+    // consumed at declare-attackers. PACKED PER TRIGGER ORDINAL (MTG_TECTONIC_ORDINALS, 2026-10-29; the
+    // encoding is SpellEffects.h TectonicModePinAt -- ordinal 0 keeps the historical 0 / 1, so a
+    // single-trigger value reads exactly as before): the k-th modal trigger of the combat reads ordinal k,
+    // and the combat spends the whole pin (MTG_TECTONIC_PIN_FOLD: whether or not a trigger fired). With
+    // MTG_TECTONIC_ORDINALS=0, the historical convention: consumed and cleared by the FIRST modal trigger,
+    // a second attacking copy on the default.
     int                      scripted_tectonic_mode = -1;
     // Searched TECTONIC GIANT mode-B KEEP (Plan::tectonic_keep_choice): the index into the two
     // exiled cards that gets staged into hand. -1 = the ranked default (highest mana value).
-    // Same state-pin shape, lifetime and first-trigger-consumes convention as the mode above;
-    // out of range for the cards actually exiled (a short library) falls back to the default.
+    // Same state-pin shape, lifetime and per-ordinal packing as the mode above (TectonicKeepPinAt;
+    // ordinal 0 keeps the historical index); out of range for the cards actually exiled (a short
+    // library) falls back to the default.
     int                      scripted_tectonic_keep = -1;
     // Searched BRUNA, LIGHT OF ALABASTER gather subset (Plan::bruna_gather_choice): which entry of
     // the provider's ranked BrunaGatherCandidates subset list the attack trigger takes. -1 = the
@@ -1166,6 +1361,25 @@ struct GameState
     // Raubahn at every enumeration node / every projection, so a clear bit PROVES both scans find
     // nothing. Same DEFAULT TRUE rule.
     bool                     deck_has_attack_attach            = true;
+    // ...and a COUNTER PINGER (CardParams::remove_counter_ping_damage, Walking Ballista), same padding:
+    // gates CounterPingFinish (the post-combat-damage lethal finish, both worlds), the projection's
+    // CounterPingReach term and the Heliod bump rule's board scan, so a clear bit PROVES all three find
+    // nothing. Same DEFAULT TRUE rule (an unstamped GameState -- the scenario harness -- keeps them).
+    // A deck constant: never folded.
+    bool                     deck_has_counter_ping             = true;
+    // ...and an END-STEP REANIMATOR (CardParams::endstep_modal_reanimate_mv, Abiding Grace), same
+    // padding: gates PerformEndStepAbidingGrace's walk at both end-step sites and the plan axis's
+    // consumer scan, so a clear bit PROVES both find nothing. Same DEFAULT TRUE rule. A deck constant:
+    // never folded.
+    bool                     deck_has_endstep_reanimate        = true;
+    // Searched ABIDING GRACE END-STEP PIN (Plan::grace_choice): PACKED per trigger ordinal
+    // (kGracePinBits bits each, low first), each a RANK into that trigger's GraceOptions; -1 = unpinned
+    // (every trigger takes its list's front). Written during a turn's apply (WritePostApplyStatePins,
+    // both worlds) and consumed + cleared by THIS turn's end step (PerformEndStepAbidingGrace), and
+    // also cleared at both turn starts so it cannot leak. FUTURE-DETERMINING: folded value-gated in
+    // dominance::Build() and BuildDedupKey's pending pins. An int16_t in the padding before m_provider
+    // (an int here would cost +8).
+    std::int16_t             scripted_grace_choice             = -1;
     // Non-owning pointer to the deck's decision heuristics (set in GoldFishRunner::SetupGame,
     // propagated through every deep copy). Never folded into BuildSimKey. nullptr -> callers
     // use DefaultProvider() (see DecisionProviders.h), so a raw GameState stays valid.
@@ -1195,6 +1409,20 @@ struct GameState
     // it exactly like m_required_pieces. Default All = the established behaviour, so a raw
     // GameState and every deck that does not set the field are unchanged. See DiscardPolicy.h.
     DiscardProtectScope m_discard_protect = DiscardProtectScope::All;
+    // Searched EMERIA UPKEEP PIN (Plan::upkeep_gy_reanimate_choice): PACKED per trigger ordinal
+    // (kUpkeepReanimatePinBits bits each, low first), each a RANK into that trigger's resolution-time
+    // option list (GyReanimateCandidateNames) or kUpkeepReanimateDecline; -1 = unpinned (every trigger
+    // returns its list's front). Written during a turn's apply (WritePostApplyStatePins, both worlds)
+    // and consumed + cleared by the NEXT turn's upkeep (PerformUpkeepGyReanimate) -- so, like
+    // scripted_upkeep_land_search, it must SURVIVE the turn boundary and is never cleared with the
+    // per-turn pins. FUTURE-DETERMINING: folded value-gated in dominance::Build() and BuildDedupKey's
+    // pending pins. An int16_t in the 4-byte hole after m_discard_protect (gdb ptype /o, 2026-10-27).
+    std::int16_t             scripted_upkeep_gy_reanimate = -1;
+    // ...and an UPKEEP GRAVEYARD REANIMATOR in the deck (CardParams::upkeep_gy_reanimate, Emeria), same
+    // hole: gates PerformUpkeepGyReanimate's walk at both upkeep sites and the plan axis's consumer
+    // scan, so a clear bit PROVES both find nothing. DEFAULT TRUE (an unstamped GameState -- the
+    // scenario harness -- keeps the walks). A deck constant: never folded.
+    bool                     deck_has_upkeep_reanimate    = true;
     // Non-owning pointer to the deck's learned mid-game PLAY evaluator (MulliganProfile::eval_model),
     // stamped in AIEngine::HandleMulligan and propagated through every deep copy. Ranks NON-lethal
     // turn-plans in TurnSolver::Solve (the d0 decision + every rollout leaf) when MTG_EVAL_MODEL is
@@ -1240,11 +1468,11 @@ struct GameState
         }
         if (top_land_number > 0 && top_land_number < 128)
         { m1start_hand_mask[top_land_number >> 6] |= (1ULL << (top_land_number & 63)); }
-        m1start_hand_turn = turn_number;
+        m1start_hand_turn = TurnSeq();
     }
     bool HeldSinceMain1(const Card& c) const
     {
-        if (m1start_hand_turn != turn_number || c.m_number < 0 || c.m_number >= 128) { return false; }
+        if (m1start_hand_turn != TurnSeq() || c.m_number < 0 || c.m_number >= 128) { return false; }
         return (m1start_hand_mask[c.m_number >> 6] >> (c.m_number & 63)) & 1ULL;
     }
 };

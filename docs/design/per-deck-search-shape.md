@@ -12,6 +12,13 @@ sidecars and `src/`:
 What did change: since a0c78a6e (2026-10-15), `valueleaf.sh` phase E screens the leafless shapes on
 every value-leaf run (see "IN THE PIPELINE").
 
+**Counterexample on record (2026-10-24, PARKED): NivMizzetCombo.** Every leafless shape costs more than the
+rollout ladder there (NLESC 1.54x, NLFIT 1.59x, emulnl 1.01-1.27x, reserved single pass 1.05x). Niv commits
+depth 1 on 45% of decisions, and its leafless passes cannot prove a win on turns 1-3. The USER holds that a
+leafless shape up to the final rollout should still replace the ladder. The measurements, root causes and
+the proposed shape are in `niv-rollout-ladder-vs-leafless-shapes.md`. So "a new deck ships
+`{ladder: escalation, leaf: none}` from day one" below is not yet true for every deck.
+
 Standalone record of the 2026-09-09/10 shape work: what each shape is, how a deck selects one, what the
 screen measured, and what is adopted. The per-session narrative is in `analysis-Melira Pod.md` (09i-10a).
 

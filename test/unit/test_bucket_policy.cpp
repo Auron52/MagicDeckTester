@@ -116,6 +116,98 @@ TEST_CASE("bucket policy: a ruling with no reason is rejected")
     CHECK_THROWS_AS(LoadBucketPolicy(deck), std::runtime_error);
 }
 
+TEST_CASE("bucket policy: comma full names merge distinct Ulamogs after discovery")
+{
+    const auto deck = WritePolicy("ulamogs", R"({
+      "merge": [{"cards": ["Ulamog, the Ceaseless Hunger", "Ulamog, the Infinite Gyre"],
+                 "why": "user-approved Cyclone bucket ruling"}]
+    })");
+    const BucketPolicy pol = LoadBucketPolicy(deck);
+    const std::vector<std::string> names = {
+        "Ulamog, the Ceaseless Hunger", "Ulamog, the Infinite Gyre", "Emrakul, the Aeons Torn",
+        "Island", "Watery Grave", "Mountain"
+    };
+    CHECK_NOTHROW(ValidateBucketPolicy(pol, names));
+    const std::string spec = pol.MergeSpec();
+    CHECK(nlohmann::json::parse(spec) == nlohmann::json::array({pol.merge[0].cards}));
+    // Feed raw discovery classes through the actual production post-pass. It must preserve
+    // an unrelated automatic group and Emrakul's separate class, not flatten every Eldrazi.
+    EquivReport eq;
+    eq.classes = {{{names[0]}, {1}}, {{names[1]}, {2}}, {{names[2]}, {3}},
+                  {{names[3], names[4]}, {4}}, {{names[5]}, {5}}};
+    std::ostringstream log;
+    ApplyBucketMergeSpec(eq, spec, log);
+    REQUIRE(eq.classes.size() == 4);
+    CHECK(eq.classes[0].members == pol.merge[0].cards);
+    CHECK(eq.classes[0].signature == std::vector<int>{1});
+    CHECK(eq.classes[1].members == std::vector<std::string>{names[2]});
+    CHECK(eq.classes[2].members == std::vector<std::string>{names[3], names[4]});
+    CHECK(eq.classes[3].members == std::vector<std::string>{names[5]});
+    CHECK(log.str().empty());
+    // A cached raw discovery result takes the same post-pass; repeated merges are idempotent.
+    ApplyBucketMergeSpec(eq, spec, log);
+    CHECK(eq.classes.size() == 4);
+}
+
+TEST_CASE("bucket policy: structured merges compose with legacy environment groups")
+{
+    BucketPolicy pol;
+    pol.merge = {{{"A, first", "A, second"}, "distinct full names"},
+                 {{"P", "Q"}, "ordinary group"}};
+    EquivReport eq;
+    eq.classes = {{{"A, first"}, {}}, {{"A, second"}, {}}, {{"P"}, {}},
+                  {{"Q"}, {}}, {{"R"}, {}}, {{"Untouched"}, {}}};
+    std::ostringstream log;
+    // main.cpp appends the env spec with a semicolon, including overlapping merge groups.
+    ApplyBucketMergeSpec(eq, pol.MergeSpec() + "; Q, R ; missing ", log);
+    REQUIRE(eq.classes.size() == 3);
+    CHECK(eq.classes[0].members == std::vector<std::string>{"A, first", "A, second"});
+    CHECK(eq.classes[1].members == std::vector<std::string>{"P", "Q", "R"});
+    CHECK(eq.classes[2].members == std::vector<std::string>{"Untouched"});
+    CHECK(log.str().find("card not found: 'missing'") != std::string::npos);
+}
+
+TEST_CASE("bucket policy: legacy unique prefixes and comma-free wire stay compatible")
+{
+    EquivReport eq;
+    eq.classes = {{{"Karrthus, Tyrant of Jund"}, {}}, {{"Lathliss, Dragon Queen"}, {}},
+                  {{"Other"}, {}}};
+    std::ostringstream log;
+    ApplyBucketMergeSpec(eq, " Karrthus, Lathliss ; missing ", log);
+    REQUIRE(eq.classes.size() == 2);
+    CHECK(eq.classes[0].members == std::vector<std::string>{
+        "Karrthus, Tyrant of Jund", "Lathliss, Dragon Queen"});
+    CHECK(eq.classes[1].members == std::vector<std::string>{"Other"});
+    CHECK(log.str().find("card not found: 'missing'") != std::string::npos);
+}
+
+TEST_CASE("bucket policy: structured full names never fall back to ambiguous prefixes")
+{
+    EquivReport eq;
+    eq.classes = {{{"Ulamog, the Ceaseless Hunger"}, {}},
+                  {{"Ulamog, the Infinite Gyre"}, {}}};
+    std::ostringstream log;
+    CHECK_THROWS_AS(ApplyBucketMergeSpec(eq, R"([["Ulamog","Ulamog, the Infinite Gyre"]])", log),
+                    std::runtime_error);
+    CHECK(eq.classes.size() == 2);
+    CHECK_THROWS_AS(ApplyBucketMergeSpec(eq, R"([["Ulamog, the Infinite Gyre"]])", log),
+                    std::runtime_error);
+    CHECK_THROWS_AS(ApplyBucketMergeSpec(eq, R"([["Ulamog, the Infinite Gyre",3]])", log),
+                    std::runtime_error);
+    CHECK_THROWS_AS(ApplyBucketMergeSpec(eq, R"([["A","B"]]trailing)", log), std::runtime_error);
+}
+
+TEST_CASE("bucket policy: the shipped Cyclone ruling names only the approved Ulamog pair")
+{
+    const std::filesystem::path deck = "decks/Unpredictable Cyclone/Unpredictable Cyclone.cod";
+    if (!std::filesystem::exists(deck)) { return; }
+    const BucketPolicy pol = LoadBucketPolicy(deck);
+    REQUIRE(pol.merge.size() == 1);
+    CHECK(pol.keep_apart.empty());
+    CHECK(pol.merge[0].cards == std::vector<std::string>{
+        "Ulamog, the Ceaseless Hunger", "Ulamog, the Infinite Gyre"});
+}
+
 TEST_CASE("bucket policy: a one-card group is rejected")
 {
     // A group of one expresses nothing and is almost certainly a typo for a real pairing.

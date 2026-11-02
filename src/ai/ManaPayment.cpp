@@ -7,17 +7,21 @@
 #include "EngineFlags.h"
 #include "PayLedger.h"            // MTG_PAY_ROLLBACK_AUDIT: the rollback's count-only instrument
 #include "PayRollback.h"          // MTG_PAY_ROLLBACK: the rollback itself (ledger on the state)
+#include "ManaOracle.h"           // MTG_MANA_ORACLE: the scripted-payment hook (null unless the oracle runs)
 #include "../cards/CardDatabase.h"
 #include "../core/SpellEffects.h"
 #include "../core/GameLogger.h"   // g_real_resolution (TEMP MTG_TAPDBG diagnostic)
 
 #include <algorithm>
+#include <array>
+#include <chrono>
 #include <bit>          // std::popcount (the ramp-filter feed charge; MSVC has no __builtin_popcount)
 #include <atomic>
 #include <cstdio>
 #include <cstring>   // std::strchr -- the pre-tap colour alphabet lookup
 #include <deque>     // PaySnapScratch's stable-address pool
 #include <functional>
+#include <initializer_list>   // ManaCostDigest packs byte fields
 #include <optional>    // TapForCostShared's MTG_RAMP_FEED_ROUTE scope
 #include <vector>
 
@@ -388,6 +392,9 @@ static void VerifyPaySnapRestore(const std::vector<Permanent>& now,
         // change: it can only turn a silent divergence into a loud one.
         if (a.lifegain_counters_used_this_turn != b.lifegain_counters_used_this_turn) { fail(i, "lifegain_counters_used"); }
         if (a.once_per_turn_used != b.once_per_turn_used) { fail(i, "once_per_turn_used"); }
+        if (a.landfall_resolved_once != b.landfall_resolved_once)   { fail(i, "landfall_resolved_once"); }
+        if (a.landfall_resolved_twice != b.landfall_resolved_twice) { fail(i, "landfall_resolved_twice"); }
+        if (a.AttacksThisTurn() != b.AttacksThisTurn())             { fail(i, "attacks_this_turn"); }
         if (a.storied_draw_used_this_turn != b.storied_draw_used_this_turn) { fail(i, "storied_draw_used"); }
         if (a.ice_counters != b.ice_counters)         { fail(i, "ice_counters"); }
         if (a.age_counters != b.age_counters)         { fail(i, "age_counters"); }
@@ -433,6 +440,7 @@ void TapSourceIntoFloat(GameState& state, int active, Permanent& p, const CardDe
                         Color col, ManaPool& floating, ManaPool* available, bool for_creature,
                         const std::vector<int>* aura_colors)
 {
+    if (!dmgev::CanPayManaTapLife(state, active, def)) { return; }
     CcoAuditTap(def, col, for_creature);   // legality audit (MTG_CCO_AUDIT); inert when off
     // TEMP DIAGNOSTIC (MTG_TAPDBG, default off): every real tap with source, colour and energy.
     { static const bool s_tapdbg = EnvOn("MTG_TAPDBG");
@@ -446,7 +454,7 @@ void TapSourceIntoFloat(GameState& state, int active, Permanent& p, const CardDe
     { payledger::Record(state, active, p, def, col, payledger::t_cur_pip_any); }
     // Rollback ledger (MTG_PAY_ROLLBACK, both worlds): the committed tap, on the state.
     if (PayRollbackOn())
-    { state.pay_ledger.Push(state.turn_number, active, p.card.m_number, static_cast<int>(col), payledger::t_cur_pip_any); }
+    { state.pay_ledger.Push(state.TurnSeq(), active, p.card.m_number, static_cast<int>(col), payledger::t_cur_pip_any); }
     // CRACK FLAG: a pay-sac source (Treasure / Eldrazi Spawn) is SACRIFICED, not left tapped, and
     // the erase is deferred to CommitPaySacSacrifices -- which uses this flag to skip its whole
     // battlefield walk on the overwhelmingly common board that cracked nothing. Set here because
@@ -495,8 +503,13 @@ void TapSourceIntoFloat(GameState& state, int active, Permanent& p, const CardDe
         bool has_c_mode = false;
         for (Color pc : EffectiveProducesFor(state, active, def, &p))
         { if (pc == Color::Colorless) { has_c_mode = true; break; } }
-        if (!(col == Color::Colorless && has_c_mode))
-        { state.players[active].life -= def.params.tap_self_damage; }
+        // The same predicate as the armed branch. A tap_self_damage_any_mode land (Ancient Tomb's
+        // "{T}: Add {C}{C}. This land deals 2 damage to you.") hurts in its {C} mode too: that {C}
+        // is its only ability, not a painland's separate painless one. Before 2026-10-27 this branch
+        // tested `col == Colorless && has_c_mode` alone, so the payment and the pre-tap took the
+        // Tomb for free while the search's plan application charged it (the mana oracle's Fungus
+        // DOMINATED-LIFE "+2 life", docs/design/mana-completeness-oracle.md section 7.1).
+        state.players[active].life -= dmgev::PainForTap(def, col, has_c_mode);
     }
     // Grove of the Burnwillows: the COLOURED tap ({R}/{G}) makes the opponent gain 1 (-> 1 damage
     // with Tainted Remedy out). A `col == Colorless` tap is the painless "{T}: Add {C}" mode --
@@ -1354,6 +1367,59 @@ static bool RestrictedMayHoldForAttack(const GameState& state, int active, const
     return general >= cost_left.ManaValue() + owed_later;
 }
 
+// A COLOURED PIP OFF A PAINLAND WHOSE LAND AURA PAYS IT (MTG_PAINLESS_AURA_PIP, PainlessAuraPipOn; default
+// ON, =0 the historical coloured tap). EDF, viewer seeds 3000-4000: in 724 of 1,001 games the payer took a
+// painland's damaging colour for a pip the land's own Aura already pays -- Living Wish {1}{G} off
+// Brushland + Wild Growth tapped Brushland for {G} (1 damage) and spent the Wild Growth {G} on the
+// generic, where the painless {C} and the same {G} pay the same two pips. The mana oracle reports it as
+// DOMINATED-LIFE (the same board a life short), and it is the auto-tap a viewer player corrects by hand.
+// Taken only where the swap reaches nothing but the life total: the Aura's FIXED-colour units of
+// `needed` cover every `needed` pip this payment still owes (nd_left counts this one; a wild unit is
+// left out, since it could have paid a later pip of another colour), and the payment still owes at
+// least as many generic pips as the tap leaves over, so the {C} is spent where the coloured unit would
+// have been. PayWithPain (a deck whose own damage is useful) keeps the coloured tap.
+//
+// AN ENERGY-PAID COLOUR (MTG_ENERGY_AURA_PIP, EnergyAuraPipOn; default ON): Aether Hub's "{T}, Pay {E}: Add one
+// mana of any color" under the same Aura is the same swap with the {E} in place of the life point, and its
+// "{T}: Add {C}" is free. The deck owner's report (EDF viewer seed 3432 T3, Kitchen + Aether Hub carrying Wild
+// Growth, {E} 1, "land=Kitchen; cast=Wild Growth -> Kitchen"): the host is held while the Aura pays, so the Hub
+// paid Wild Growth's {G} through its any-colour mode -- energy 1 -> 0 -- and floated Wild Growth's {G}, where
+// {C} plus that {G} pays the same pip. A payment with no generic pip leaves the unit FLOATING, so the painland
+// test (spent on the generic) refuses it; for energy a second exact case is taken: the line that binds this
+// payment (g_line_unpaid_cost holds it) owes no further pip of `needed` (LineOwedAfterOwnPips). The two
+// realisations then differ in one floating unit -- `needed` against {C} -- plus the {E}: for the rest of the line
+// the {C} pays every pip the `needed` unit could (a generic; never a `needed` pip, none is owed) and a {C} pip
+// it could not, and the phase ends with the float either way. Not for a line that casts a breakpoint opener
+// (g_line_opens_unseen: its continuation re-plans on the float), and not outside a line (nothing says what
+// the float is for). Energy is game-long; a coloured unit floated past the line is gone at the phase's end.
+static Color PainlessAuraPipColor(const GameState& state, int active, const Permanent& p,
+                                  const CardDefinition& def, Color needed, const int nd_left[7],
+                                  const ManaCost& cost_in)
+{
+    const int ni = static_cast<int>(needed);
+    if (ni < 0 || ni > 4 || !state.deck_has_land_aura) { return needed; }
+    const bool pain = PainlessAuraPipOn() && def.params.tap_self_damage > 0 && !def.params.tap_self_damage_any_mode
+                   && PainlandCModeEnabled();
+    const bool energy = !pain && EnergyAuraPipOn() && def.params.energy_per_colored_tap > 0 && EnergyCModeEnabled()
+                     && def.params.tap_self_damage <= 0
+                     && state.players[active].energy_counters >= def.params.energy_per_colored_tap;
+    if (!pain && !energy) { return needed; }
+    bool has_c = false;
+    for (Color c : def.params.produces) { if (c == Color::Colorless) { has_c = true; break; } }
+    if (!has_c || LandAuraBonus(state, p) <= 0 || (pain && dmgev::PayWithPain(state, active))) { return needed; }
+    ManaPool bonus;
+    LandAuraAddToPoolOfLand(bonus, state, p);
+    const int by_colour[5] = { bonus.white, bonus.blue, bonus.black, bonus.red, bonus.green };
+    const int k = by_colour[ni];
+    if (k < nd_left[ni]) { return needed; }
+    const int spare = 1 + bonus.Total() - nd_left[ni];
+    if (nd_left[6] >= spare) { return Color::Colorless; }
+    if (!energy || g_line_opens_unseen || g_line_unpaid_cost.ManaValue() < cost_in.ManaValue()) { return needed; }
+    int later[5];
+    LineOwedAfterOwnPips(later);
+    return later[ni] == 0 ? Color::Colorless : needed;
+}
+
 static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, bool for_creature,
                                      std::uint64_t reserved_mask, ManaPool* available,
                                      bool honor_legacy_cco)
@@ -1538,6 +1604,17 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
         SpendFloatingTowardCost(state.floating_mana, cost);
         cost.generic += fgh;
     }
+    // MANA ORACLE's float-only payment (ManaOracle.h): whatever the floating pools did not cover, the
+    // oracle's script did not pay for -- fail atomically instead of tapping. Nothing has been tapped
+    // yet, so returning the four pools is the whole restore. False on every thread but the oracle's.
+    if (manaoracle::t_float_only && cost.ManaValue() > 0)
+    {
+        state.floating_mana          = reserve_pre;
+        state.floating_creature_mana = cre_reserve_pre;
+        state.floating_bigspell_mana = big_reserve_pre;
+        state.floating_haste_c       = haste_reserve_pre;
+        return false;
+    }
     // Publish this payment's coloured need (net of floating) for the sole-colour-provider rank
     // tier -- see PayNeedScope in SpellEffects.h. RAII: dead again the instant this payment ends.
     PayNeedScope _pns(cost.white, cost.blue, cost.black, cost.red, cost.green, cost.ManaValue());
@@ -1637,12 +1714,20 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     // `def` is NULLABLE: a TOKEN has no CardDefinition, and on this deck the fodder IS tokens (see
     // IsSacPayFodder). Requiring one here is what made the §2b payment source unable to eat the very
     // bodies MTG_SAC_OUTLET_PAY suppresses the searched actions for.
+    // The capped fodder attempts (g_pay_fodder_cap, see the fodder-last block in TapForCostSharedImpl):
+    // set once per pip, before the selection loop, from the bodies this payment has already marked.
+    bool fodder_capped = false;
     auto fodder_ok = [&](const Permanent& p, const CardDefinition* def) -> bool
     {
-        if (!sac_outlet.valid()) { return false; }
+        if (!sac_outlet.valid() || fodder_capped) { return false; }
         // The creature THIS cast is about to sacrifice as a cost is already spent (see
         // g_pay_sac_victim below); eating it too would spend one body twice.
         if (g_pay_sac_victim != 0 && p.card.m_number == g_pay_sac_victim) { return false; }
+        // An activation's own source and baked victim (PaySacSpareScope): eating either would leave
+        // the ability nothing to resolve from or nothing to sacrifice.
+        if (p.card.m_number != 0
+            && (p.card.m_number == g_pay_sac_spare[0] || p.card.m_number == g_pay_sac_spare[1]))
+        { return false; }
         // Snow-pip restriction: with no definition we cannot prove the body is snow, so refuse --
         // the pessimistic direction (a payable cast fails, never an unpayable one resolving).
         if (paying_snow && !(def != nullptr && def->card.HasSupertype(Supertype::Snow))
@@ -1668,6 +1753,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     bool restricted_in_float = false;
     auto usable = [&](const Permanent& p, const CardDefinition& def) -> bool
     {
+        if (!dmgev::CanPayManaTapLife(state, active, def)) { return false; }
         if (paying_snow && !def.card.HasSupertype(Supertype::Snow)) { return false; }
         if (feeding && (def.params.creature_mana_only || BigSpellOnlySource(def.params))) { return false; }
         if (reserved_mask)   // reservation audit: a held source is not tappable this attempt
@@ -1973,6 +2059,13 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
             // O(board^2) -- measured at +48% CPU on Fungus candidate B before this hoist. Empty
             // whenever MTG_SAC_VICTIM_DOOMED is off, so the default path does not even scan.
             const std::vector<int> pay_doomed = DoomedTokenCreators(state);
+            if (g_pay_fodder_cap >= 0 && sac_outlet.valid())
+            {
+                int eaten = 0;
+                for (const Permanent& q : state.battlefield)
+                { if (q.controller_index == active && q.pay_sac_eaten) { ++eaten; } }
+                fodder_capped = eaten >= g_pay_fodder_cap;
+            }
             int dh_ncand = 0;   // MTG_PAY_DEPLETION_HOLD: candidates this pip compared (>1 -> an alternative exists)
             for (int i = 0; i < bn; ++i)
             {
@@ -2001,7 +2094,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                 {
                     if (!p.tapped && GrantReaches(mana_grant, p)
                         && GrantedBodyCanTap(mana_grant, p, state.battlefield))
-                    { def = &GrantedManaFace(mana_grant.color); }
+                    { def = &GrantFaceFor(mana_grant, p); }
                 }
                 // DO NOT BAIL ON A MISSING DEFINITION HERE. TAPPING needs one (the produces list,
                 // the filter params); EATING does not -- the outlet is the permission and the body is
@@ -2146,8 +2239,11 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                 // abilities of Elementals" -- usable() admitted it, so SubtypeAbilityManaOk passed):
                 // Incandescent Soulstoke's put {1}{R} spends Elemental-only mana first for the same
                 // reason. Only Smokebraider carries mana_only_subtype_abilities.
-                if ((for_creature || def->params.mana_only_subtype_abilities)
-                    && def->params.creature_mana_only && kind == 1
+                // `kind == 1` FIRST: a §2b fodder candidate (kind 5) may be a TOKEN with no definition
+                // at all (def == nullptr), so reading def->params before the kind test segfaulted the
+                // moment MTG_SAC_OUTLET_PAY ate a Goblin token for a non-creature payment.
+                if (kind == 1 && (for_creature || def->params.mana_only_subtype_abilities)
+                    && def->params.creature_mana_only
                     && CreatureOnlyFirstEnabled()
                     && !(def->card.IsCreature() && restricted_hold_ok
                          && SacPayFodderCostsAttack(state, p))) { rank = -500; }
@@ -2286,7 +2382,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                 ++dh_ncand;
                 if (nddbg)
                 { std::fprintf(stderr, "[nddbg]   cand %s kind=%d rank=%d harm=%d hold=%d dep=%d sur=%d\n",
-                               def->card.m_name.str().c_str(), kind, rank, harm, hold, dep, sur); }
+                               p.card.m_name.str().c_str(), kind, rank, harm, hold, dep, sur); }
                 // "FIRST HAND, THEN DECK" (USER): harm's WHOLE pips (certain demand: the hand, the
                 // board, a pump sink) outrank the ladder; its FRACTION (the library reveal's
                 // expectation, pips / library size) only breaks a rank tie. Compared raw, a 2/64
@@ -2428,7 +2524,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
             if (best_i < 0) { return false; }
             if (nddbg)
             { std::fprintf(stderr, "[nddbg]   -> %s kind=%d rank=%d key=(%d %d %d %d)\n",
-                           CardDatabase::Instance().LookupCached(state.battlefield[best_i].card)->card.m_name.str().c_str(),
+                           state.battlefield[best_i].card.m_name.str().c_str(),
                            best_kind, best_rank, best_key[0], best_key[1], best_key[2], best_key[3]); }
             // Needs-based order: the chosen source leaves the supply for this payment's later pips.
             if (nd_live && nd_ready && (best_kind == 1 || best_kind == 3))
@@ -2660,7 +2756,8 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                 const std::vector<Color>& prod = pay_produces(*bdef, &bp);
                 const Color gen_pick = BurstPendingActColour(state, *bdef, prod, floating,
                                                              LineDemandAnyPipColor(state, prod, floating, prod[0]));
-                tap_source(bp, *bdef, any ? DripLandAnyPipColor(state, active, *bdef, gen_pick) : needed);
+                tap_source(bp, *bdef, any ? DripLandAnyPipColor(state, active, *bdef, gen_pick)
+                                          : PainlessAuraPipColor(state, active, bp, *bdef, needed, nd_left, cost_in));
                 return true;
             }
             if (best_kind == 3)
@@ -2961,6 +3058,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     const int life_pre = state.players[active].life;
     const int opp_pre = state.players[1 - active].life;
     const bool oll_pre = state.opponent_lost_life_this_turn;
+    auto oll_pre_noncombat = NoncombatStateSnapshot(state);
     // Deathrite: a tap may exile a graveyard land; failed attempts must put it back.
     PaySnapScratch<Card> _gy_pre_scratch;
     std::vector<Card>&   gy_pre = _gy_pre_scratch.Buf();
@@ -3214,20 +3312,121 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     state.players[active].life = life_pre;
     state.players[active].graveyard = gy_pre;
     state.players[1 - active].life     = opp_pre;
-    state.opponent_lost_life_this_turn = oll_pre;
+    state.opponent_lost_life_this_turn = oll_pre; oll_pre_noncombat.Restore(state);
     if (s_energy_refund) { state.players[active].energy_counters = energy_pre; }   // Aether Hub {E} (see energy_pre)
     // SNOW guard for the backtracking fallbacks: the backtracker is snow-BLIND (it assigns any
     // source to any pip), which is exact when every untapped source is snow (the Snow deck --
     // its complete fallback is preserved) and could construct an illegal {S} assignment on a
     // MIXED manabase -- there it is skipped (pessimistic-safe: a payable cast the greedy missed
     // fails instead of resolving illegally; disclosed in the ledger). Inert for snow_pips == 0.
-    auto snow_backtrack_ok = [&]() -> bool { return !snow_strict; };
+    // ...and not inside the CAPPED fodder attempts (g_pay_fodder_cap): the backtracker never sees fodder,
+    // so here it would re-run, on the same board and mask, the fodder-free solve that already failed.
+    auto snow_backtrack_ok = [&]() -> bool { return !snow_strict && g_pay_fodder_cap < 0; };
     ManaPool bt_leftover;
     if (tapstats::Enabled()) { tapstats::g_site_percast.fetch_add(1, std::memory_order_relaxed); }
+    const PayRollbackLedger ledger_pre = state.pay_ledger;   // (the give-back below re-solves from here)
     if (snow_backtrack_ok()
         && TapForCostBacktrack(state, cost, for_creature, ManaPool{}, nullptr, nullptr, &bt_leftover,
                                /*tapped_mask=*/0, /*untapped_max=*/-1, reserved_mask))
-    { commit_leftover(bt_leftover); CommitPaySacSacrifices(state, active); return true; }
+    {
+        // GIVE BACK WHAT THE PAYMENT DID NOT NEED (MTG_PAY_SHRINK). The backtracker takes the FIRST tap
+        // set its DFS finds, walking sources in candidate order and trying "tap" before "skip", so it can
+        // tap a source that adds nothing to this bill: EDF viewer seed 3000 T4 paid Training Grounds' {U}
+        // with Conservatory ({G}/{W} -- useless for {U}) AND the Fertile Ground host whose bonus made the
+        // {U}, and Eldrazi Displacer's {2}{W} then had no {W} (the mana oracle's rollback census: depth 1;
+        // 512 of EDF's 689 lost lines on seeds 3000-4000 are depth 1). The whole-turn prepay has had this
+        // pass since 2026-08-26 (MTG_PREPAY_SHRINK); this is the per-cast payer's. Same rule: only when the
+        // payment tapped more sources than the bill has mana points, candidates most-flexible first, each
+        // re-solved with that source held back and kept back if the bill still pays from the REST of the
+        // first payment's taps -- never bought with life or energy (unarmed boards; pain-last's guard).
+        if (PayShrinkOn())
+        {
+            const int nb = static_cast<int>(std::min(bf_pre.size(), state.battlefield.size()));
+            std::vector<int> cand;
+            int newly = 0;
+            // A GIVE-BACK, never a swap: every source the payment did NOT tap stays held through the
+            // re-solves, so a re-solve can only pay with a SUBSET of the first payment's taps. (Holding back
+            // one source alone let the re-solve reach for another -- a mana creature that then could not
+            // attack -- and the depth-0 runner measured 9 slower / 4 faster on smoke.)
+            std::uint64_t untouched = 0;
+            int drip_useful = -1;   // -1 unknown, else 0/1 (lazily: no drip land -> never asked)
+            for (int i = 0; i < nb && i < 64; ++i)
+            {
+                const Permanent& bp = state.battlefield[static_cast<std::size_t>(i)];
+                if (!bf_pre[static_cast<std::size_t>(i)].tapped && !bp.tapped) { untouched |= 1ull << i; }
+                if (!bp.tapped || bf_pre[static_cast<std::size_t>(i)].tapped || bp.controller_index != active) { continue; }
+                ++newly;
+                // A drip land (Grove of the Burnwillows) tapped while lifegain hurts the opponent already
+                // dealt its point: giving it back refunds that -- the prepay shrink's exception, verbatim.
+                const CardDefinition* d = bp.def_absent ? nullptr : CardDatabase::Instance().LookupCached(bp.card);
+                if (d != nullptr && d->params.tap_opponent_lifegain > 0)
+                {
+                    if (drip_useful < 0) { drip_useful = ResolveProvider(state).OpponentLifegainUseful(state, active) ? 1 : 0; }
+                    if (drip_useful == 1) { continue; }
+                }
+                cand.push_back(i);
+            }
+            if (nb <= 64 && newly > cost.ManaValue() && !cand.empty())
+            {
+                auto flex = [&](int i) -> int
+                {
+                    const Permanent& bp = state.battlefield[static_cast<std::size_t>(i)];
+                    const CardDefinition* d = bp.def_absent ? nullptr : CardDatabase::Instance().LookupCached(bp.card);
+                    return d != nullptr ? static_cast<int>(d->params.produces.size()) : 0;
+                };
+                std::stable_sort(cand.begin(), cand.end(), [&](int a, int b) { return flex(a) > flex(b); });
+                const bool pain_guard = PayPainLastOn() && !state.dmg_events_armed;
+                std::vector<Permanent> best_bf = state.battlefield;
+                std::vector<Card>      best_gy = state.players[active].graveyard;
+                int               best_life   = state.players[active].life;
+                int               best_opp    = state.players[1 - active].life;
+                bool              best_oll    = state.opponent_lost_life_this_turn;
+    auto best_oll_noncombat = NoncombatStateSnapshot(state);
+                int               best_e      = state.players[active].energy_counters;
+                PayRollbackLedger best_ledger = state.pay_ledger;
+                ManaPool          best_lo     = bt_leftover;
+                std::uint64_t hold = 0;
+                for (int i : cand)
+                {
+                    RestorePayFields(state.battlefield, bf_pre);
+                    state.players[active].life         = life_pre;
+                    state.players[active].graveyard    = gy_pre;
+                    state.players[1 - active].life     = opp_pre;
+                    state.opponent_lost_life_this_turn = oll_pre; oll_pre_noncombat.Restore(state);
+                    if (s_energy_refund) { state.players[active].energy_counters = energy_pre; }
+                    state.pay_ledger   = ledger_pre;
+                    g_pay_remaining_mv = pay_full_mv;
+                    ManaPool lo2;
+                    const std::uint64_t trial = hold | (1ull << i);
+                    if (TapForCostBacktrack(state, cost, for_creature, ManaPool{}, nullptr, nullptr, &lo2,
+                                            /*tapped_mask=*/0, /*untapped_max=*/-1, reserved_mask | untouched | trial)
+                        && !(pain_guard && state.players[active].life < best_life)
+                        && !(pain_guard && PayEnergyLastOn() && state.players[active].energy_counters < best_e))
+                    {
+                        hold        = trial;
+                        best_bf     = state.battlefield;
+                        best_gy     = state.players[active].graveyard;
+                        best_life   = state.players[active].life;
+                        best_opp    = state.players[1 - active].life;
+                        best_oll    = state.opponent_lost_life_this_turn; best_oll_noncombat = NoncombatStateSnapshot(state);
+                        best_e      = state.players[active].energy_counters;
+                        best_ledger = state.pay_ledger;
+                        best_lo     = lo2;
+                    }
+                }
+                // The last re-solve may have failed or been refused: put the best payment back wholesale.
+                state.battlefield                  = std::move(best_bf);
+                state.players[active].graveyard    = std::move(best_gy);
+                state.players[active].life         = best_life;
+                state.players[1 - active].life     = best_opp;
+                state.opponent_lost_life_this_turn = best_oll; best_oll_noncombat.Restore(state);
+                state.players[active].energy_counters = best_e;
+                state.pay_ledger                   = best_ledger;
+                bt_leftover                        = best_lo;
+            }
+        }
+        commit_leftover(bt_leftover); CommitPaySacSacrifices(state, active); return true;
+    }
     // Floating-fed filter retry: a filter / ramp-filter land (Ferrous Lake {1},{T}: Add {U}{R}) can be
     // FED by turn-scoped floating (a ritual's output, a depletion over-tap). SpendFloatingTowardCost
     // above spent that floating on the cost DIRECTLY, stranding the filter (no feeder left) -- so the
@@ -3243,7 +3442,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
         state.players[active].life  = life_pre;
         state.players[active].graveyard = gy_pre;
         state.players[1 - active].life     = opp_pre;   // same drip rollback as above
-        state.opponent_lost_life_this_turn = oll_pre;
+        state.opponent_lost_life_this_turn = oll_pre; oll_pre_noncombat.Restore(state);
         if (s_energy_refund) { state.players[active].energy_counters = energy_pre; }   // Aether Hub {E} (see energy_pre)
         ManaPool bt2_leftover;
         if (tapstats::Enabled()) { tapstats::g_site_percast_filter.fetch_add(1, std::memory_order_relaxed); }
@@ -3268,7 +3467,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     state.players[active].life         = life_pre;
     state.players[active].graveyard    = gy_pre;
     state.players[1 - active].life     = opp_pre;
-    state.opponent_lost_life_this_turn = oll_pre;
+    state.opponent_lost_life_this_turn = oll_pre; oll_pre_noncombat.Restore(state);
     if (s_energy_refund) { state.players[active].energy_counters = energy_pre; }   // Aether Hub {E} (see energy_pre)
     state.floating_mana                = reserve_pre;   // payment failed -> return the reserve untouched
     state.floating_creature_mana       = cre_reserve_pre;
@@ -3527,6 +3726,11 @@ ManaCost EffectiveSpellCost(const CardDefinition& def, const GameState& state, i
         cost.generic = std::max(0, cost.generic
                                    - def.params.cost_less_per_cycle_or_discard * events);
     }
+    if (def.params.cost_less_per_opponent_noncombat_damage)
+    {
+        cost.generic = std::max(0, cost.generic
+            - state.noncombat_damage_received_this_turn[1 - state.active_player_index]);
+    }
     // Hinata's per-target cost reduction (fixed-cost spells; {X} spells apply it at the X-cost
     // sites where the whole generic, incl. X, is known -- CastSpellFromHand / apply_one).
     if (!def.card.m_mana_cost.has_x)
@@ -3674,8 +3878,8 @@ void NoteMain2StagerCast(GameState& state, const CardDefinition& def)
     if (!ResolveProvider(state).RestrictsMain2Casts()) { return; }
     // The FIRST main-2 stager owns the snapshot: a second Light Up later in the same main is itself
     // "played off" the first, and what it exiles is new either way.
-    if (state.m2_stage_turn == state.turn_number) { return; }
-    state.m2_stage_turn = state.turn_number;
+    if (state.m2_stage_turn == state.TurnSeq()) { return; }
+    state.m2_stage_turn = state.TurnSeq();
     state.m2_prestaged_mask[0] = 0;
     state.m2_prestaged_mask[1] = 0;
     auto mark = [&](const Card& c)
@@ -3901,33 +4105,113 @@ static void CreditCastOutput(const GameState& state, const std::vector<Action>& 
     }
 }
 
+// A LAND AURA's HOST held back by the payable-order walk (MTG_PO_LAND_AURA_HOLD, see PoLandAuraHoldFor):
+// the host leaves the starting pool and is tapped only when a cast cannot be paid without it, adding
+// the bonus of every Aura of the order that has resolved on it by then.
+struct PoLandAuraHold
+{
+    ManaPool         yield;    // the host's own tap (AvailableManaPool with it minus without it)
+    std::vector<int> auras;    // indices into acts: the order's land-Aura casts naming the host
+    std::vector<ManaPool> bonus;   // per aura, its extra mana in its colour (wild for any / several)
+};
+
+// MTG_PO_LAND_AURA_HOLD (DEFAULT ON; =0 -> the walk ignores a land Aura's bonus, as before). The walk
+// prices an order off the aggregate pool, so a land Aura cast in the order ("enchanted land taps for an
+// additional {G}": Wild Growth) added nothing -- its bonus needs the host to tap AFTER the Aura
+// resolves. Once a producer brought the order into the walk, a given order that the executor pays read
+// as unpayable and was permuted away: Fungus s3003 gi148 T3 {Wild Growth -> Forest, Undercellar
+// Myconid} under Concordant Crossroads (the hasted Myconid is a producer) -- Woodlot pays Wild Growth,
+// Forest + its bonus pay the Myconid; the walk saw 3 mana for 4 and moved the Myconid first, so it
+// tapped itself for Wild Growth and missed the attack the T4 kill needed. The host is held back
+// exactly as PoWidenFirstUnpayable holds the domain sources: tapped only when a cast needs it, with the
+// bonus of every Aura resolved on it by then. One host only (several distinct hosts -> no hold).
+static bool PoLandAuraHoldOn()
+{
+    static const bool env_on = EnvOn("MTG_PO_LAND_AURA_HOLD", true);
+    return heurarm::Flag(heurarm::PO_LAND_AURA_HOLD, env_on);
+}
+
+// The order's single land-Aura host (an own untapped land the casts' enchant_target names), or null.
+static const Permanent* PoLandAuraHoldFor(const GameState& state, const std::vector<Action>& acts,
+                                          const std::vector<int>& order, PoLandAuraHold& la)
+{
+    if (!state.deck_has_land_aura || !PoLandAuraHoldOn()) { return nullptr; }
+    const Permanent* host = nullptr;
+    la.auras.clear();
+    la.bonus.clear();
+    for (int i : order)
+    {
+        const Action& a = acts[i];
+        if (a.kind != Action::Kind::CastFromHand || a.enchant_target <= 0) { continue; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        if (!d || !d->params.is_land_aura || d->params.land_aura_extra_mana <= 0) { continue; }
+        const Permanent* h = nullptr;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index == state.active_player_index && !p.tapped && p.card.IsLand()
+                && p.card.m_number == a.enchant_target) { h = &p; break; }
+        }
+        if (h == nullptr) { continue; }
+        if (host != nullptr && h != host) { return nullptr; }
+        host = h;
+        ManaPool b;
+        const std::vector<Color>& cols = d->params.land_aura_produces;
+        if (cols.size() == 1) { b.Add(cols[0], d->params.land_aura_extra_mana); }
+        else { b.wild += d->params.land_aura_extra_mana; }
+        la.auras.push_back(i);
+        la.bonus.push_back(b);
+    }
+    if (host == nullptr) { return nullptr; }
+    const ManaPool full = AvailableManaPool(state);
+    const ManaPool without = AvailableManaPool(state, host);
+    la.yield = ManaPool{};
+    la.yield.white     = std::max(0, full.white     - without.white);
+    la.yield.blue      = std::max(0, full.blue      - without.blue);
+    la.yield.black     = std::max(0, full.black     - without.black);
+    la.yield.red       = std::max(0, full.red       - without.red);
+    la.yield.green     = std::max(0, full.green     - without.green);
+    la.yield.colorless = std::max(0, full.colorless - without.colorless);
+    la.yield.wild      = std::max(0, full.wild      - without.wild);
+    la.yield.wild_c    = std::max(0, full.wild_c    - without.wild_c);
+    return host;
+}
+
 // The walk behind FirstUnpayablePos, over an explicit starting pool and an optional simulated hand.
-// With `hand` == nullptr it is FirstUnpayablePos exactly (a.cost, no hand tracking).
+// With `hand` == nullptr it is FirstUnpayablePos exactly (a.cost, no hand tracking). With `la` the
+// pool starts WITHOUT the held host (the caller's pool is the held one).
 static int FirstUnpayablePosImpl(const GameState& state, const std::vector<Action>& acts,
                                  const std::vector<int>& order, ManaPool pool,
-                                 std::vector<PoHandCard>* hand)
+                                 std::vector<PoHandCard>* hand, const PoLandAuraHold* la = nullptr)
 {
+    bool held = la != nullptr;
+    ManaPool resolved_bonus;
     for (int pos = 0; pos < static_cast<int>(order.size()); ++pos)
     {
         const Action& a = acts[order[pos]];
+        ManaCost cost = a.cost;
         if (hand != nullptr)
         {
             // Reveal-aware (MTG_PAYABLE_ORDER): price at this position, then the card leaves hand
             // whether it paid mana or not (an alt-cost cast still leaves the hand).
             const bool rop = PoIsRevealCostCast(a);
-            const ManaCost cost = rop ? PoRevealAwareCost(a, *hand) : a.cost;
+            if (rop) { cost = PoRevealAwareCost(a, *hand); }
             PoRemoveFromHand(*hand, a.card_name);
-            if (a.alt_cost) { continue; }
-            if (!pool.CanPay(cost)) { return pos; }
-            PayFromPool(pool, cost);
         }
-        else
+        if (a.alt_cost) { continue; }   // as before: an alt-cost cast is neither paid nor credited
+        if (held && !pool.CanPay(cost))
         {
-            if (a.alt_cost) { continue; }
-            if (!pool.CanPay(a.cost)) { return pos; }
-            PayFromPool(pool, a.cost);
+            pool.AddPool(la->yield);
+            pool.AddPool(resolved_bonus);
+            held = false;
         }
+        if (!pool.CanPay(cost)) { return pos; }
+        PayFromPool(pool, cost);
         CreditCastOutput(state, acts, a, pool);
+        if (held)
+        {
+            for (std::size_t k = 0; k < la->auras.size(); ++k)
+            { if (la->auras[k] == order[pos]) { resolved_bonus.AddPool(la->bonus[k]); } }
+        }
     }
     return -1;
 }
@@ -4105,6 +4389,22 @@ static int ExactOrderWalkImpl(const GameState& state, const std::vector<Action>&
             }
         }
     }
+    // A LAND AURA's host (MTG_PO_LAND_AURA_HOLD; PoLandAuraHoldFor): out of the pool until a cast needs
+    // it, then its tap plus the bonus of every Aura of the order resolved on it by then.
+    PoLandAuraHold la;
+    bool la_held = PoLandAuraHoldFor(state, acts, order, la) != nullptr;
+    ManaPool la_resolved;
+    if (la_held)
+    {
+        pool.white     = std::max(0, pool.white     - la.yield.white);
+        pool.blue      = std::max(0, pool.blue      - la.yield.blue);
+        pool.black     = std::max(0, pool.black     - la.yield.black);
+        pool.red       = std::max(0, pool.red       - la.yield.red);
+        pool.green     = std::max(0, pool.green     - la.yield.green);
+        pool.colorless = std::max(0, pool.colorless - la.yield.colorless);
+        pool.wild      = std::max(0, pool.wild      - la.yield.wild);
+        pool.wild_c    = std::max(0, pool.wild_c    - la.yield.wild_c);
+    }
     // Units of untapped colored_creature_only sources (booked as wild above): {C} for a noncreature cast.
     int cco = 0;
     if (ExactWalkCcoOn())
@@ -4165,6 +4465,13 @@ static int ExactOrderWalkImpl(const GameState& state, const std::vector<Action>&
             const bool creature = d != nullptr && d->card.IsCreature();
             const int  restrict = (!creature && cco > 0) ? std::min(cco, pool.wild) : 0;
             if (restrict > 0) { pool.wild -= restrict; pool.colorless += restrict; }
+            // The held land-Aura host taps now, only because this cast cannot be paid without it.
+            if (la_held && !pool.CanPay(cost))
+            {
+                pool.AddPool(la.yield);
+                pool.AddPool(la_resolved);
+                la_held = false;
+            }
             // A held life-scaled source taps now, only because this cast cannot be paid without it.
             while (scaled_left > 0 && !pool.CanPay(cost))
             {
@@ -4192,6 +4499,11 @@ static int ExactOrderWalkImpl(const GameState& state, const std::vector<Action>&
             cco = std::min(cco, pool.wild);
         }
         CreditCastOutput(state, acts, a, pool);
+        if (la_held)
+        {
+            for (std::size_t k = 0; k < la.auras.size(); ++k)
+            { if (la.auras[k] == order[pos]) { la_resolved.AddPool(la.bonus[k]); } }
+        }
         if (life_scaled) { ++storm_seen; life_gained += WalkCastLifegain(state, a, d, storm_seen); }
         if (d != nullptr)
         {
@@ -4822,11 +5134,105 @@ int Inversions(const std::vector<int>& perm, const std::vector<int>& rank_of)
 }
 }   // namespace
 
-static void PayableCastOrderCore(const GameState& state, const std::vector<Action>& acts,
+// MTG_DOMAIN_WIDEN_ORDER (DEFAULT ON; =0 -> wideners are not producers). A coloured permanent cast
+// this turn widens "each colour among permanents you control", so each live domain source (Faeburrow
+// Elder / Bloom Tender) taps for one more mana per new colour -- the enumerator's widen credit
+// (all-widener or PARTIAL) admits plans that pay only when the widener resolves BEFORE the domain
+// source taps. The payable-order walk did not know that: FiveColour s1100001 gi0 T3 {Two-Headed
+// Hellkite, Deathrite} was admitted, the executor kept Hellkite first (paid with Faeburrow's 2), and
+// Deathrite was dropped (mana-oracle APPLY-DROP-ORDER; the order Deathrite > Hellkite pays). APPLY
+// SITE ONLY, and only for an order no other producer admits, so every other order is byte-identical.
+static bool DomainWidenOrderOn()
+{
+    static const bool env_on = EnvOn("MTG_DOMAIN_WIDEN_ORDER", true);
+    return heurarm::Flag(heurarm::DOMAIN_WIDEN_ORDER, env_on);
+}
+
+// Own untapped domain sources that can tap now (TurnSolver's ScalingWidenScan, mirrored) and the
+// board's domain colours.
+static void PoWidenScan(const GameState& state, int& dom_mask, int& live)
+{
+    dom_mask = 0;
+    live = 0;
+    const int active = state.active_player_index;
+    for (Color c : DomainColors(state, active)) { dom_mask |= (1 << static_cast<int>(c)); }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != active || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d || !d->params.domain_mana) { continue; }
+        if (!CanTapNow(p, state.battlefield) || !GraveyardFuelLive(state, active, *d)) { continue; }
+        ++live;
+    }
+}
+
+// The colours a cast adds to the domain (0 for a non-permanent / no new colour).
+static int PoWidenMask(const Action& a, int dom_mask)
+{
+    if (a.kind != Action::Kind::CastFromHand || a.alt_cost) { return 0; }
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    if (!d || d->card.IsInstant() || d->card.IsSorcery()) { return 0; }
+    int m = 0;
+    for (int ci = 0; ci < 5; ++ci)
+    {
+        if (d->card.HasColor(static_cast<Color>(ci)) && !(dom_mask & (1 << ci))) { m |= (1 << ci); }
+    }
+    return m;
+}
+
+// Book `units` per domain colour of `live` domain sources the way AddSourceToPool does (one colour ->
+// that colour, several -> wild); `sign` -1 takes them back out (clamped).
+static void PoDomainYield(ManaPool& pool, int dom_mask, int live, int sign)
+{
+    const int n = std::popcount(static_cast<unsigned>(dom_mask));
+    if (live <= 0 || n <= 0) { return; }
+    if (n == 1)
+    {
+        for (int ci = 0; ci < 5; ++ci)
+        {
+            if (!(dom_mask & (1 << ci))) { continue; }
+            int* f = nullptr;
+            switch (static_cast<Color>(ci))
+            {
+                case Color::White: f = &pool.white; break;
+                case Color::Blue:  f = &pool.blue;  break;
+                case Color::Black: f = &pool.black; break;
+                case Color::Red:   f = &pool.red;   break;
+                case Color::Green: f = &pool.green; break;
+                default: break;
+            }
+            if (f) { *f = (sign > 0) ? *f + live : std::max(0, *f - live); }
+        }
+        return;
+    }
+    if (sign > 0) { pool.wild += live * n; } else { pool.wild = std::max(0, pool.wild - live * n); }
+}
+
+// The walk with the live domain sources HELD BACK: they leave the starting pool and are tapped (all
+// of them, at the domain as it stands then) only when a cast cannot be paid without them; a widening
+// cast before that point raises their yield. Returns the first unpayable position, or -1.
+static int PoWidenFirstUnpayable(const std::vector<Action>& acts, const std::vector<int>& order,
+                                 ManaPool pool, int dom_mask, int live)
+{
+    PoDomainYield(pool, dom_mask, live, -1);
+    bool held = true;
+    for (int pos = 0; pos < static_cast<int>(order.size()); ++pos)
+    {
+        const Action& a = acts[order[pos]];
+        if (a.alt_cost) { continue; }
+        if (!pool.CanPay(a.cost) && held) { PoDomainYield(pool, dom_mask, live, +1); held = false; }
+        if (!pool.CanPay(a.cost)) { return pos; }
+        PayFromPool(pool, a.cost);
+        dom_mask |= PoWidenMask(a, dom_mask);
+    }
+    return -1;
+}
+
+static bool PayableCastOrderCoreImpl(const GameState& state, const std::vector<Action>& acts,
                                  std::vector<int>& order, const std::vector<InternedName>* hand_exits,
                                  int extra_wild, int site)
 {
-    if (order.size() < 2) { return; }
+    if (order.size() < 2) { return false; }
     bool any = false;
     for (int i : order)
     { if (IsFundingProducerCast(acts[i]) || PoIsRevealCostCast(acts[i])) { any = true; break; } }
@@ -4840,8 +5246,21 @@ static void PayableCastOrderCore(const GameState& state, const std::vector<Actio
         for (int i : order) { if (PoCreditedProducer(state, acts, acts[i])) { any = true; break; } }
         producer_only = any;
     }
-    if (!any) { return; }
-    if (PayableOrderDynamicDeclineOn() && PoDynamicDiscount(state, acts, order)) { return; }
+    // MTG_DOMAIN_WIDEN_ORDER: an order no other producer admits, holding a cast that widens a live
+    // domain source -- walked with the sources held back (PoWidenFirstUnpayable).
+    bool widen_only = false;
+    int w_dom = 0, w_live = 0, w_union = 0;
+    if (!any && site == 0 && DomainWidenOrderOn())
+    {
+        PoWidenScan(state, w_dom, w_live);
+        if (w_live > 0)
+        {
+            for (int i : order) { w_union |= PoWidenMask(acts[i], w_dom); }
+            widen_only = any = (w_union != 0);
+        }
+    }
+    if (!any) { return false; }
+    if (PayableOrderDynamicDeclineOn() && PoDynamicDiscount(state, acts, order)) { return false; }
     g_po_stats.domain[site].fetch_add(1, std::memory_order_relaxed);
 
     ManaPool pool0 = AvailableManaPool(state);   // already includes the turn-scoped float
@@ -4865,14 +5284,26 @@ static void PayableCastOrderCore(const GameState& state, const std::vector<Actio
     // MTG_PAYABLE_ORDER_EXACT extends it to every deck (see PayableOrderExactOn).
     const bool exact = site == 0 && producer_only && extra_wild == 0
                     && (PayableOrderExactOn() || ResolveProvider(state).ExactOrderWalk());
+    // MTG_PO_LAND_AURA_HOLD: the plain walks start without the held host (PoLandAuraHoldFor).
+    // (The exact walk holds the host itself; the bound below credits the bonus for every walk.)
+    thread_local PoLandAuraHold la;
+    const Permanent* la_host = widen_only ? nullptr : PoLandAuraHoldFor(state, acts, order, la);
+    ManaPool la_pool0 = pool0;
+    if (la_host != nullptr && !exact)
+    {
+        la_pool0 = AvailableManaPool(state, la_host);
+        if (extra_wild > 0) { la_pool0.wild += extra_wild; }
+    }
+    const PoLandAuraHold* la_p = (la_host != nullptr && !exact) ? &la : nullptr;
     auto pays = [&](const std::vector<int>& ord) -> bool
     {
+        if (widen_only) { return PoWidenFirstUnpayable(acts, ord, pool0, w_dom, w_live) < 0; }
         if (exact) { return ExactOrderFirstUnpayable(state, acts, ord) < 0; }
-        if (producer_only) { return FirstUnpayablePosImpl(state, acts, ord, pool0, nullptr) < 0; }
+        if (producer_only) { return FirstUnpayablePosImpl(state, acts, ord, la_pool0, nullptr, la_p) < 0; }
         hand = hand0;
-        return FirstUnpayablePosImpl(state, acts, ord, pool0, &hand) < 0;
+        return FirstUnpayablePosImpl(state, acts, ord, la_pool0, &hand, la_p) < 0;
     };
-    if (pays(order)) { g_po_stats.default_pays[site].fetch_add(1, std::memory_order_relaxed); return; }
+    if (pays(order)) { g_po_stats.default_pays[site].fetch_add(1, std::memory_order_relaxed); return true; }
 
     // Order-free necessary condition: every cast at its cheapest (reveal granted) against the pool
     // plus EVERY producer's output. A sequential payment implies this aggregate one, so failing it
@@ -4944,8 +5375,10 @@ static void PayableCastOrderCore(const GameState& state, const std::vector<Actio
             }
             else { AddManaCost(total, a.cost); }
         }
+        if (widen_only) { bound.wild += w_live * std::popcount(static_cast<unsigned>(w_union)); }
+        if (la_host != nullptr) { for (const ManaPool& b : la.bonus) { bound.AddPool(b); } }
         if (!bound.CanPay(total))
-        { g_po_stats.bound_fail[site].fetch_add(1, std::memory_order_relaxed); return; }
+        { g_po_stats.bound_fail[site].fetch_add(1, std::memory_order_relaxed); return false; }
     }
 
     // (1) The maker hoist (ApplyEtbTreasureFundingOrder's order), judged reveal-aware.
@@ -4957,7 +5390,7 @@ static void PayableCastOrderCore(const GameState& state, const std::vector<Actio
     {
         order.swap(hoisted);
         g_po_stats.hoist[site].fetch_add(1, std::memory_order_relaxed);
-        return;
+        return true;
     }
 
     // (2) Nearest payable permutation. Work in POSITIONS of the given order (0..n-1).
@@ -5016,10 +5449,41 @@ static void PayableCastOrderCore(const GameState& state, const std::vector<Actio
         {
             order = trial;
             g_po_stats.perm[site].fetch_add(1, std::memory_order_relaxed);
-            return;
+            return true;
         }
     }
     g_po_stats.none[site].fetch_add(1, std::memory_order_relaxed);
+    return false;
+}
+
+// THE ORDER-LEVEL HALF OF "FODDER IS THE LAST SOURCE" (MTG_SAC_OUTLET_PAY; the payment-level half is the
+// fodder-last block in TapForCostSharedImpl). Both apply worlds realise a plan's casts in the order this
+// decider returns: the given order when it projects payable, else the nearest payable permutation. With a
+// sac-for-mana outlet live, AvailableManaPool credits every legal body as a mana, so an order that can be
+// paid only by EATING one projects payable and is kept -- while a different order of the SAME casts pays
+// from the board alone. Fungus s4245015 gi5014 (2HG) T3: Forest, Sporecrown Thallid then Brightcap Badger
+// (off the adventure) -- Thallid first spends the Forest's {G}, the Badger's {G} has no source until its own
+// grant is live, and Utopia Mycon eats a Saproling for it; Badger first pays off Hickory Woodlot + Ancient
+// Tomb, and its grant taps Mycon and the Saprolings for the Thallid. The OFF arm (no fodder in the pool)
+// read Thallid-first as unpayable and took Badger-first; the ON arm kept Thallid-first, lost the Saproling
+// and the T5 kill (T6). So the decider first looks for a payable order judged WITHOUT fodder (the OFF arm's
+// decider exactly, PayFodderOffScope), and only when no order of these casts pays from the board alone does
+// it judge with the bodies credited. Inert with the lever off or no outlet live.
+static void PayableCastOrderCore(const GameState& state, const std::vector<Action>& acts,
+                                 std::vector<int>& order, const std::vector<InternedName>* hand_exits,
+                                 int extra_wild, int site)
+{
+    if (!g_pay_fodder_off && order.size() >= 2 && LiveSacPayOutlet(state, state.active_player_index).valid())
+    {
+        std::vector<int> nf = order;
+        bool found;
+        {
+            const PayFodderOffScope _fo;
+            found = PayableCastOrderCoreImpl(state, acts, nf, hand_exits, extra_wild, site);
+        }
+        if (found) { order.swap(nf); return; }
+    }
+    (void)PayableCastOrderCoreImpl(state, acts, order, hand_exits, extra_wild, site);
 }
 
 // Does cast `c` satisfy a dependent Theft's same-plan target of name `nm`? `equipment` selects which
@@ -5507,6 +5971,25 @@ static bool RampFeedChargeOn()
     return v;
 }
 
+// MTG_DOMAIN_OPEN_EXACT (DEFAULT ON; =0 restores the all-five domain bundle). See the domain source in
+// BuildColorFeasibility and DomainOpenFor below.
+static bool DomainOpenExactOn()
+{
+    static const bool env_on = EnvOn("MTG_DOMAIN_OPEN_EXACT", true);
+    return heurarm::Flag(heurarm::DOMAIN_OPEN_EXACT, env_on);
+}
+
+// A COLOURED TOKEN widens the domain too, and the per-subset opening reads only cast permanents -- so any
+// card that can make one (on the board, or in the subset) falls back to the all-five bundle.
+static bool MakesColouredToken(const CardParams& p)
+{
+    return !p.created_token_color.empty() || !p.cast_created_token_color.empty()
+        || !p.landfall_token_color.empty() || !p.tap_token_color.empty() || !p.pay_token_color.empty()
+        || !p.fade_token_color.empty() || !p.spore_token_color.empty() || !p.upkeep_token_color.empty()
+        || !p.endstep_token_color.empty() || !p.combat_damage_token_color.empty()
+        || !p.attack_one_or_more_token_color.empty();
+}
+
 ColorFeasibility BuildColorFeasibility(const GameState& state, bool noncreature,
                                        const Permanent* skip, bool pending_auras)
 {
@@ -5713,8 +6196,21 @@ ColorFeasibility BuildColorFeasibility(const GameState& state, bool noncreature,
         // earlier in the SAME plan can widen the set, so open the BUNDLE to all five colours: still
         // one per colour, which is exactly the ceiling reality can reach, and far tighter than the
         // five free choices the old model handed out.
+        //
+        // MTG_DOMAIN_OPEN_EXACT (DEFAULT ON) keeps the bundle at the board's domain here and opens the
+        // widened colours per subset instead (Payable -> DomainOpenFor): a colour only a same-plan cast
+        // can add pays a pip only of ANOTHER cast. The all-five bundle let a lone Jared Carthalion "pay"
+        // his own {R} off a Faeburrow whose domain had no red (FiveColour PHANTOM, mana-oracle 13.7).
         if (def->params.domain_mana)
         {
+            if (widen && DomainOpenExactOn())
+            {
+                add_one_of_each(mask);
+                has_multi = true;          // the per-subset opening is multi-colour
+                ++f.dom_src;
+                f.dom_mask = mask;         // EffectiveProduces of a domain source = the board's domain
+                continue;
+            }
             add_one_of_each(widen ? 0x1F : mask);
             continue;
         }
@@ -5784,6 +6280,20 @@ ColorFeasibility BuildColorFeasibility(const GameState& state, bool noncreature,
     }
     // With no multi-colour source the flat pool holds no `wild` from the board and CanPayFlat is
     // already exact per colour -- running the matching could only reach the same verdict.
+    if (f.dom_src > 0)
+    {
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != active) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d && MakesColouredToken(d->params))
+            {
+                const int rest = 0x1F & ~f.dom_mask;
+                f = f.WithDomainOpen(rest, rest);   // the all-five bundle, exactly
+                break;
+            }
+        }
+    }
     f.usable = has_multi;
     // A land AURA still in HAND becomes supply the moment the plan casts it, which this state-only
     // build cannot see (see PendingLandAuraColorMask -- the presence gate has the same blindness).
@@ -5957,8 +6467,79 @@ MTG_DB_ALWAYS_INLINE bool ColorFeasibility::HallFeasible(const int* masks, const
     }
 }
 
+ColorFeasibility ColorFeasibility::WithDomainOpen(int pip_open, int gen_open) const
+{
+    ColorFeasibility g = *this;
+    g.dom_src = 0;
+    for (unsigned s = 1; s < 32; ++s)
+    { g.cover[s] += dom_src * std::popcount(static_cast<unsigned>(pip_open) & s); }
+    g.total += dom_src * std::popcount(static_cast<unsigned>(gen_open));
+    return g;
+}
+
+// The colours a subset can open on the board's domain sources (MTG_DOMAIN_OPEN_EXACT). A colour X outside
+// the domain is added only by a PERMANENT the subset casts, and the X a domain source then taps for can pay
+// an X pip only of a cast AFTER that permanent -- never the permanent's own (its cost is paid before it
+// resolves). So X is opened for PIPS iff some selected permanent has X and some OTHER selected cast asks
+// for X; for GENERIC supply iff some selected permanent has X at all. A necessary condition both ways
+// (the order is not modelled -- any permanent may come first), so it can only reject what no order pays:
+// a lone Jared Carthalion off a {W,B,G} Faeburrow (his {R} is his own), {Deathrite, Jared} on the same
+// board. `noncreature_only` restricts the DEMAND side as Payable does; every cast still widens.
+static void DomainOpenFor(const std::vector<Action>& cands, const std::vector<int>& sel, int dom_mask,
+                          bool noncreature_only, int& pip_open, int& gen_open)
+{
+    pip_open = gen_open = 0;
+    int perm_n[5] = {0, 0, 0, 0, 0}, perm_last[5] = {-1, -1, -1, -1, -1};
+    for (int j : sel)
+    {
+        const Action& a = cands[static_cast<std::size_t>(j)];
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        if (d && MakesColouredToken(d->params))
+        {
+            pip_open = gen_open = 0x1F & ~dom_mask;   // a token may widen: the all-five bundle
+            return;
+        }
+        if (a.kind != Action::Kind::CastFromHand) { continue; }
+        if (!d || d->card.IsInstant() || d->card.IsSorcery()) { continue; }
+        for (int ci = 0; ci < 5; ++ci)
+        {
+            if ((dom_mask & (1 << ci)) || !d->card.HasColor(static_cast<Color>(ci))) { continue; }
+            ++perm_n[ci];
+            perm_last[ci] = j;
+            gen_open |= (1 << ci);
+        }
+    }
+    if (gen_open == 0) { return; }
+    for (int j : sel)
+    {
+        const Action& a = cands[static_cast<std::size_t>(j)];
+        if (a.kind == Action::Kind::ActivateVial) { continue; }
+        if (noncreature_only && !a.is_noncreature) { continue; }
+        const int flat[5] = { a.cost.white, a.cost.blue, a.cost.black, a.cost.red, a.cost.green };
+        int want = 0;
+        for (int ci = 0; ci < 5; ++ci) { if (flat[ci] > 0) { want |= (1 << ci); } }
+        for (int h = 0; h < a.cost.hybrid_count; ++h)
+        {
+            const int c1 = a.cost.hybrid_pair[h] >> 4, c2 = a.cost.hybrid_pair[h] & 0xF;
+            if (c1 >= 0 && c1 < 5) { want |= (1 << c1); }
+            if (c2 >= 0 && c2 < 5) { want |= (1 << c2); }
+        }
+        for (int ci = 0; ci < 5; ++ci)
+        {
+            if (!(gen_open & (1 << ci)) || !(want & (1 << ci))) { continue; }
+            if (perm_n[ci] >= 2 || perm_last[ci] != j) { pip_open |= (1 << ci); }
+        }
+    }
+}
+
 bool ColorFeasibility::PayablePips(const int pips[5], const ManaPool& credit) const
 {
+    // No subset to read the widening off: the old all-five bundle (MTG_DOMAIN_OPEN_EXACT's build).
+    if (dom_src > 0)
+    {
+        const int rest = 0x1F & ~dom_mask;
+        return WithDomainOpen(rest, rest).PayablePips(pips, credit);
+    }
     // Singleton demands only (a plain W/U/B/R/G pip count -- no hybrid halves, no producers). No
     // single-pip shortcut either: the caller has no presence gate standing in front of this one.
     int masks[5]; int counts[5]; int ndm = 0;
@@ -5972,6 +6553,13 @@ bool ColorFeasibility::Payable(const std::vector<Action>& cands, const std::vect
                                const ManaPool& credit, bool noncreature_only,
                                const ColorDemandIndex* idx) const
 {
+    // MTG_DOMAIN_OPEN_EXACT: open the domain sources by what THIS subset can widen (DomainOpenFor).
+    if (dom_src > 0)
+    {
+        int pip_open = 0, gen_open = 0;
+        DomainOpenFor(cands, sel, dom_mask, noncreature_only, pip_open, gen_open);
+        return WithDomainOpen(pip_open, gen_open).Payable(cands, sel, credit, noncreature_only, idx);
+    }
     // UNIFORM fast path -- identical arithmetic to the general path below, reading the hoisted
     // arrays instead of re-walking 384-byte Actions. With one demand mask the Hall scan has exactly
     // one binding set (see the union argument there), so the whole test is one comparison.
@@ -6074,8 +6662,375 @@ thread_local std::vector<int> g_plan_reserved_sources;
 
 // Line-scoped unpaid cost (see the header). Zero unless a plan application set it.
 thread_local ManaCost g_line_unpaid_cost;
+thread_local bool     t_scarce_held_only = false;   // see ScarceHeldOnlyScope (ManaPayment.h)
 thread_local bool     g_line_opens_unseen = false;   // see ManaPayment.h (LineOpensUnseenScope)
 thread_local ManaCost g_act_line_paid;      // see ManaPayment.h (ActLinePassScope / ActLinePayScope)
+thread_local bool g_cycle_seed_paying = false;   // see ManaPayment.h (CycleSeedPayScope)
+thread_local std::int32_t g_seed_pay_split = 0;
+thread_local std::uint64_t g_seed_pay_hold = 0;   // see ManaPayment.h (SeedPaySplitScope)
+
+// ---- THE SEED PAYMENT SPLIT (MTG_CYCLE_SEED_PAY_SPLIT; ManaPayment.h for the shape, ledger Q61) ----------------
+bool SeedPaySplitOn()
+{
+    static const bool on = EnvOn("MTG_CYCLE_SEED_PAY_SPLIT");   // DEFAULT OFF (measured first); =1 -> the searched split
+    return heurarm::Flag(heurarm::CYCLE_SEED_PAY_SPLIT, on);
+}
+
+namespace
+{
+constexpr int kSigSpecial = 1 << 6;   // plain colour masks are <=63; special keys are 64 + stable card number
+constexpr int kSeedSourceUnsupported = -2;
+constexpr int kSplitMaxGeneric = 3;   // the packed multiset holds up to 3 units (Xander's Lounge's {3})
+
+// This axis covers one-unit, unrestricted lands. A filter with a free {C} tap is also one unit for
+// an all-generic payment: its fed mode consumes one feeder and produces two, the same net amount.
+// A special source keeps its stable card identity; two lands with different non-mana abilities must
+// never merge merely because their colour menus match. Unsupported source mechanics retain the
+// ordinary payer; this is not a claim to enumerate every mana allocation on an arbitrary board.
+int SeedPaySourceColors(const Permanent& p)
+{
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+    if (d == nullptr) { return 0; }
+    int mask = 0;
+    for (Color c : d->params.produces) { mask |= 1 << static_cast<int>(c); }
+    if (d->params.is_filter && !d->params.filter_no_free_colorless) { mask |= 1 << static_cast<int>(Color::Colorless); }
+    return mask;
+}
+int SeedPaySourceSig(const Permanent& p, int me)
+{
+    if (p.controller_index != me || p.tapped || p.def_absent) { return -1; }
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+    if (d == nullptr || !d->params.fetch_land_types.empty()) { return -1; }
+    const CardParams& q = d->params;
+    if (q.produces.empty()) { return -1; }
+    if (!d->card.IsLand() || d->tmpl != CardTemplate::BasicLand || q.produces_amount != 1
+        || q.ramp_filter || q.any_color_filter || q.filter_no_free_colorless
+        || q.storage_land || q.enters_tapped_with_depletion > 0
+        || q.creature_mana_only || q.colored_creature_only || q.mana_only_spell_min_mv > 0
+        || q.domain_mana || q.mana_colors_of_graveyard_legends || q.gy_land_exile_mana
+        || !q.mana_requires_land_subtype.empty() || q.tap_self_damage > 0 || q.tap_opponent_lifegain > 0
+        || q.energy_per_colored_tap > 0 || p.is_animated)
+    { return kSeedSourceUnsupported; }
+    if (q.is_filter || q.land_search_activation_cost.has_value() || q.sacrifice_draw_cost.has_value())
+    {
+        // One byte per source, with zero as the terminator: keys 65..254 cover stable numbers 1..190.
+        // Never truncate a larger number into another source's identity.
+        if (p.card.m_number <= 0 || p.card.m_number > 190) { return kSeedSourceUnsupported; }
+        return kSigSpecial + p.card.m_number;
+    }
+    return SeedPaySourceColors(p);
+}
+
+// The coloured pips the cards still in hand need, per colour (the max over cards, mana cost and cycling cost),
+// with the seed's own copy excluded (it is the card being cycled; a second copy still counts).
+void SeedHandDemand(const GameState& state, int me, const CardDefinition& seed_def, int demand[5])
+{
+    for (int c = 0; c < 5; ++c) { demand[c] = 0; }
+    bool skipped_seed = false;
+    for (const Card& c : state.players[static_cast<std::size_t>(me)].hand)
+    {
+        if (!skipped_seed && c.m_name == seed_def.card.m_name) { skipped_seed = true; continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr || d->params.goldfish_inert) { continue; }
+        auto take = [&](const ManaCost& m)
+        {
+            const int pip[5] = { m.white, m.blue, m.black, m.red, m.green };
+            for (int k = 0; k < 5; ++k) { demand[k] = std::max(demand[k], pip[k]); }
+        };
+        if (!d->card.IsLand()) { take(d->card.m_mana_cost); }
+        if (d->params.cycling_cost.has_value()) { take(*d->params.cycling_cost); }
+    }
+}
+}   // namespace
+
+namespace
+{
+// Six concrete floating colours, at most three units: C(6+3,3) = 84 multisets, including empty.
+// Its ordinal fits the unused high byte of the existing int32 pin; low three bytes stay source
+// tokens. No Action growth and no truncation of a colour count into another allocation.
+const std::vector<ManaPool>& SeedFloatPatterns()
+{
+    static const std::vector<ManaPool> patterns = []
+    {
+        std::vector<ManaPool> out(1);
+        ManaPool use;
+        const auto rec = [&](auto&& self, int first, int left) -> void
+        {
+            if (left == 0) { out.push_back(use); return; }
+            for (int c = first; c < 6; ++c)
+            {
+                use.Add(static_cast<Color>(c), 1);
+                self(self, c, left - 1);
+                use.Add(static_cast<Color>(c), -1);
+            }
+        };
+        for (int n = 1; n <= kSplitMaxGeneric; ++n) { rec(rec, 0, n); }
+        return out;
+    }();
+    return patterns;
+}
+std::array<int, 6> SeedFloatCounts(const ManaPool& f)
+{ return { f.white, f.blue, f.black, f.red, f.green, f.colorless }; }
+bool SeedFloatContains(const ManaPool& have, const ManaPool& need)
+{
+    const auto h = SeedFloatCounts(have), n = SeedFloatCounts(need);
+    for (int c = 0; c < 6; ++c) { if (h[c] < n[c]) { return false; } }
+    return true;
+}
+ManaPool SeedFloatSubtract(const ManaPool& have, const ManaPool& used)
+{
+    ManaPool left = have;
+    const auto u = SeedFloatCounts(used);
+    for (int c = 0; c < 6; ++c) { left.Add(static_cast<Color>(c), -u[c]); }
+    return left;
+}
+
+// Sources collected before the plan's casts can become tapped, and those casts can create
+// FLOAT before its cycle seed pays. Enumerating only the initial float would lose Song->cycle
+// lines. This is an overestimate of colours possible by the payment point; a pin requiring float
+// not actually present fails there. In the supported Cyclone pool only Song and Cascade Bluffs
+// add float: Song's concrete ritual colour and the filter's concrete output menu cover them.
+bool SeedPotentialFloat(const GameState& state, int me, ManaPool& potential)
+{
+    const ManaPool& actual = state.floating_mana;
+    if (actual.wild != 0 || actual.snow_units != 0 || state.floating_haste_c != 0) { return false; }
+    potential = actual;
+    const auto admit = [&](Color c)
+    {
+        const auto have = SeedFloatCounts(potential);
+        potential.Add(c, std::max(0, kSplitMaxGeneric - have[static_cast<int>(c)]));
+    };
+    for (const Card& c : state.players[static_cast<std::size_t>(me)].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr || d->params.ritual_floating_mana <= 0) { continue; }
+        const std::string& col = d->params.ritual_float_color;
+        const std::string letters = "WUBRGC";
+        const auto at = letters.find(col);
+        if (col.size() != 1 || at == std::string::npos) { return false; }   // a WILD producer is outside this axis
+        admit(static_cast<Color>(at));
+    }
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != me || q.tapped || q.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+        if (d != nullptr && d->params.is_filter)
+        { for (Color c : d->params.produces) { admit(c); } }
+    }
+    return true;
+}
+
+bool SeedSplitSources(const GameState& state, int me, std::int32_t split, std::uint64_t& hold)
+{
+    hold = 0;
+    if (split == 0) { return true; }
+    const int n = static_cast<int>(state.battlefield.size());
+    if (n > 64) { return false; }
+    std::uint64_t chosen = 0;
+    for (int byte = 0; byte < 3; ++byte)
+    {
+        const int want = static_cast<int>((static_cast<std::uint32_t>(split) >> (8 * byte)) & 0xFFu) - 1;
+        if (want < 0) { break; }
+        int pick = -1;
+        for (int i = 0; i < n; ++i)
+        {
+            if (chosen & (1ull << i)) { continue; }
+            if (SeedPaySourceSig(state.battlefield[static_cast<std::size_t>(i)], me) == want) { pick = i; break; }
+        }
+        if (pick < 0) { return false; }
+        chosen |= 1ull << pick;
+    }
+    for (int i = 0; i < n; ++i)
+    {
+        const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+        if (q.controller_index == me && !q.tapped && !(chosen & (1ull << i))) { hold |= 1ull << i; }
+    }
+    return true;
+}
+}   // namespace
+
+// Observational Q61 census. DEFAULT OFF; no arm slot because it does not change a decision.
+namespace seedpaycensus
+{
+inline bool On() { static const bool on = EnvOn("MTG_CYCLE_SEED_PAY_CENSUS"); return on; }
+inline std::atomic<unsigned long long> calls{0}, enabled{0}, eligible{0}, emitted{0}, fans{0};
+inline std::array<std::atomic<unsigned long long>, 17> widths{};   // 0..15, 16+
+struct Call
+{
+    bool on = On(), active, supported = false;
+    std::size_t width = 0;
+    explicit Call(bool active_in) : active(active_in)
+    { if (on) { calls.fetch_add(1, std::memory_order_relaxed); } }
+    ~Call()
+    {
+        if (!on) { return; }
+        if (active) { enabled.fetch_add(1, std::memory_order_relaxed); }
+        if (!supported) { return; }
+        eligible.fetch_add(1, std::memory_order_relaxed);
+        emitted.fetch_add(static_cast<unsigned long long>(width), std::memory_order_relaxed);
+        if (width > 1) { fans.fetch_add(1, std::memory_order_relaxed); }
+        widths[std::min<std::size_t>(width, widths.size() - 1)].fetch_add(1, std::memory_order_relaxed);
+    }
+};
+struct Dump
+{
+    ~Dump()
+    {
+        if (calls.load(std::memory_order_relaxed) == 0) { return; }
+        std::fprintf(stderr, "[q61-seed-pay-fan] calls=%llu enabled=%llu eligible=%llu emitted=%llu fans=%llu widths={",
+                     calls.load(), enabled.load(), eligible.load(), emitted.load(), fans.load());
+        bool comma = false;
+        for (std::size_t i = 0; i < widths.size(); ++i)
+        {
+            const auto n = widths[i].load(std::memory_order_relaxed);
+            if (n == 0) { continue; }
+            std::fprintf(stderr, "%s%zu%s:%llu", comma ? "," : "", i, i + 1 == widths.size() ? "+" : "", n);
+            comma = true;
+        }
+        std::fprintf(stderr, "}\n");
+    }
+};
+inline Dump dump;
+}   // namespace seedpaycensus
+
+std::vector<std::int32_t> SeedPaySplits(const GameState& state, int me, const ManaCost& cost,
+                                        const CardDefinition& seed_def)
+{
+    std::vector<std::int32_t> out;
+    const bool enabled = SeedPaySplitOn();
+    seedpaycensus::Call census(enabled);
+    if (!enabled) { return out; }
+    if (!cost.IsFlat() || cost.colorless != 0 || cost.white + cost.blue + cost.black + cost.red + cost.green != 0
+        || cost.generic <= 0 || cost.generic > kSplitMaxGeneric || state.battlefield.size() > 64) { return out; }
+    ManaPool potential_float;
+    if (!SeedPotentialFloat(state, me, potential_float)) { return out; }
+    for (const Permanent& q : state.battlefield)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+        if (d != nullptr && (d->params.is_land_aura || !d->params.granted_tap_mana_subtypes.empty()
+                            || d->params.equip_grants_tap_mana_any)) { return out; }
+    }
+    // Source key, available count, colour menu. Special sources have distinct stable identities.
+    struct Class { int key, count, colors; };
+    std::vector<Class> cls;
+    for (const Permanent& q : state.battlefield)
+    {
+        const int sig = SeedPaySourceSig(q, me);
+        if (sig == kSeedSourceUnsupported) { return out; }
+        if (sig < 0) { continue; }
+        auto at = std::find_if(cls.begin(), cls.end(), [&](const Class& k) { return k.key == sig; });
+        if (at == cls.end()) { cls.push_back({ sig, 1, SeedPaySourceColors(q) }); }
+        else { ++at->count; }
+    }
+    std::sort(cls.begin(), cls.end(), [](const Class& x, const Class& y) { return x.key < y.key; });
+    census.supported = true;
+    if (cls.size() < 2 && potential_float.Total() == 0) { return out; }   // historical one-class identity fold
+    const int K = static_cast<int>(cls.size());
+    struct Split { std::vector<int> use; int float_code; };
+    std::vector<Split> kept;
+    std::vector<int> use(K, 0);
+    const auto subset = [](int x, int y) { return x != y && (x & y) == x; };
+    const auto dominated = [&]()
+    {
+        for (int b = 0; b < K; ++b)
+        {
+            if (use[b] == 0 || cls[b].key >= kSigSpecial) { continue; }
+            for (int a = 0; a < K; ++a)
+            {
+                if (cls[a].key >= kSigSpecial || !subset(cls[a].key, cls[b].key)) { continue; }
+                if (cls[a].count - use[a] >= 1) { return true; }
+            }
+        }
+        return false;
+    };
+    const auto& patterns = SeedFloatPatterns();
+    for (int fc = 0; fc < static_cast<int>(patterns.size()); ++fc)
+    {
+        const ManaPool& f = patterns[static_cast<std::size_t>(fc)];
+        if (f.Total() > cost.generic || !SeedFloatContains(potential_float, f)) { continue; }
+        const auto rec = [&](auto&& self, int k, int left) -> void
+        {
+            if (k == K)
+            {
+                if (left == 0 && !dominated()) { kept.push_back({ use, fc }); }
+                return;
+            }
+            for (int u = 0; u <= std::min(left, cls[k].count); ++u)
+            { use[k] = u; self(self, k + 1, left - u); }
+            use[k] = 0;
+        };
+        rec(rec, 0, cost.generic - f.Total());
+    }
+    // The hand-demand order reads BOTH resources left: source colours and unspent actual float.
+    // Potential future float affects admission, never the certainty of this order's demand estimate.
+    int demand[5];
+    SeedHandDemand(state, me, seed_def, demand);
+    const auto shortfall = [&](const Split& sp)
+    {
+        const auto have = SeedFloatCounts(state.floating_mana);
+        const auto used = SeedFloatCounts(patterns[static_cast<std::size_t>(sp.float_code)]);
+        int left[5];
+        for (int c = 0; c < 5; ++c) { left[c] = std::max(0, have[c] - used[c]); }
+        for (int k = 0; k < K; ++k)
+        { for (int c = 0; c < 5; ++c) { if (cls[k].colors & (1 << c)) { left[c] += cls[k].count - sp.use[k]; } } }
+        int score = 0;
+        for (int c = 0; c < 5; ++c) { score += std::max(0, demand[c] - left[c]); }
+        return score;
+    };
+    const auto specials = [&](const Split& sp)
+    { int n = 0; for (int k = 0; k < K; ++k) { if (cls[k].key >= kSigSpecial) { n += sp.use[k]; } } return n; };
+    std::stable_sort(kept.begin(), kept.end(), [&](const Split& x, const Split& y)
+    {
+        const int sx = shortfall(x), sy = shortfall(y);
+        if (sx != sy) { return sx < sy; }
+        const int px = specials(x), py = specials(y);
+        if (px != py) { return px < py; }
+        // Equal demand: consume already-floating mana before tapping more sources.
+        return patterns[static_cast<std::size_t>(x.float_code)].Total() > patterns[static_cast<std::size_t>(y.float_code)].Total();
+    });
+    for (const Split& sp : kept)
+    {
+        std::uint32_t packed = static_cast<std::uint32_t>(sp.float_code) << 24;
+        int byte = 0;
+        for (int k = 0; k < K; ++k)
+        { for (int u = 0; u < sp.use[k]; ++u) { packed |= static_cast<std::uint32_t>(cls[k].key + 1) << (8 * byte++); } }
+        out.push_back(static_cast<std::int32_t>(packed));
+    }
+    census.width = out.size();
+    return out;
+}
+
+std::uint64_t SeedPaySplitHoldMask(const GameState& state, int me, std::int32_t split)
+{
+    std::uint64_t hold = 0;
+    return SeedSplitSources(state, me, split, hold) ? hold : 0;
+}
+
+SeedPaySplitScope::SeedPaySplitScope(GameState& state, int me, std::int32_t split)
+    : m_prev(g_seed_pay_hold), m_prev_split(g_seed_pay_split)
+{
+    if (split == 0) { g_seed_pay_hold = 0; g_seed_pay_split = 0; return; }
+    const auto code = static_cast<std::uint32_t>(split) >> 24;
+    const auto& patterns = SeedFloatPatterns();
+    std::uint64_t hold = 0;
+    if (code >= patterns.size() || !SeedSplitSources(state, me, split, hold)
+        || state.floating_mana.wild != 0 || state.floating_mana.snow_units != 0 || state.floating_haste_c != 0
+        || !SeedFloatContains(state.floating_mana, patterns[code]))
+    { m_valid = false; return; }
+    m_held_float = SeedFloatSubtract(state.floating_mana, patterns[code]);
+    state.floating_mana = patterns[code];
+    m_state = &state;
+    g_seed_pay_hold = hold;
+    g_seed_pay_split = split;
+}
+SeedPaySplitScope::~SeedPaySplitScope()
+{
+    // The payer restores its exposed pool on failure. Reuniting the unexposed pool therefore
+    // restores the original float on failure and preserves every unused unit on success.
+    if (m_state != nullptr) { m_state->floating_mana.AddPool(m_held_float); }
+    g_seed_pay_hold = m_prev;
+    g_seed_pay_split = m_prev_split;
+}
 thread_local ManaCost g_act_line_current;
 
 void AddManaCost(ManaCost& dst, const ManaCost& add)
@@ -6130,6 +7085,53 @@ std::size_t CastAndResolveRemand(GameState& state, int controller, const CardDef
     // merely cantripped off would ping for a draw made before it entered. Idempotent (watermark).
     if (state.deck_has_draw_ping) { ResolveDrawTriggers(state); }
     return before;
+}
+
+const CardDefinition* RemandChainLive(const GameState& state, int controller, const InternedName& a_name,
+                                      const InternedName& b_name, int x_number)
+{
+    if (a_name.empty() || b_name.empty()) { return nullptr; }
+    if (state.casts_remaining_this_turn >= 0 && state.casts_remaining_this_turn < 3) { return nullptr; }
+    const CardDefinition* ad = CardDatabase::Instance().Lookup(a_name.str());
+    const CardDefinition* bd = CardDatabase::Instance().Lookup(b_name.str());
+    if (ad == nullptr || bd == nullptr || !ad->params.counters_target_spell_to_hand
+        || !bd->params.counters_target_spell_to_hand) { return nullptr; }
+    int na = 0, nb = 0;
+    for (const Card& hc : state.players[controller].hand)
+    {
+        if (hc.m_number == x_number) { continue; }
+        if (hc.m_name == a_name) { ++na; }
+        if (hc.m_name == b_name && !(a_name == b_name)) { ++nb; }
+    }
+    const bool live = (a_name == b_name) ? na >= 2 : (na >= 1 && nb >= 1);
+    return live ? ad : nullptr;
+}
+
+std::size_t CastAndResolveRemandChain(GameState& state, int controller, const CardDefinition& a_def,
+                                      const CardDefinition& b_def, bool post_combat,
+                                      Card* a_out, Card* b_out)
+{
+    Player& p = state.players[controller];
+    auto rit = p.hand.end();
+    for (auto c = p.hand.begin(); c != p.hand.end(); ++c)
+    {
+        if (c->m_name != a_def.card.m_name) { continue; }
+        if (rit == p.hand.end()) { rit = c; continue; }
+        if (c->m_is_staged && (!rit->m_is_staged || c->m_staged_expiry < rit->m_staged_expiry)) { rit = c; }
+    }
+    if (rit == p.hand.end()) { return p.hand.size(); }   // both callers verified two copies before paying
+    const Card a_card = *rit;
+    p.hand.erase(rit);
+    if (a_out != nullptr) { *a_out = a_card; }
+    // A's per-cast block (CastAndResolveRemand's, same order): A is cast targeting X.
+    ++state.spells_cast_this_turn;
+    state.mv_cast_this_turn += a_def.card.m_mana_cost.ManaValue();
+    if (post_combat) { NoteMain2StagerCast(state, a_def); }
+    if (state.casts_remaining_this_turn > 0) { --state.casts_remaining_this_turn; }
+    FireOnCastTriggers(state, a_def);
+    FireProwess(state, a_def);
+    // B targets A and resolves first: A to hand, B draws.
+    return CastAndResolveRemand(state, controller, b_def, post_combat, /*countered=*/true, a_card, b_out);
 }
 
 void SubManaCost(ManaCost& dst, const ManaCost& paid)
@@ -6395,10 +7397,11 @@ static std::uint64_t PayloadReserveMask(const GameState& state)
 // SCARCE-COLOR HOLD (MTG_SCARCE_COLOR_HOLD -- see ScarceColorHoldEnabled in SpellEffects.h for the
 // mw326 trace). While a plan apply is paying ONE cast of a multi-cast plan, hold every untapped
 // source that is a SCARCE provider of a colour the plan's OTHER casts still need: if the untapped
-// providers of colour c number no more than the plan's remaining c-pips beyond this payment's own
+// providers of colour c number no more than the line's remaining c-pips beyond this payment's own
 // cost, every one of them will be needed, so this payment must route around them if it can. The
-// remaining-need estimate is conservative (already-paid casts still count -- an over-hold costs one
-// extra solve attempt, never a cast, by the held-first/unrestricted-retry contract). Unlike the
+// remaining need is the line hold (g_line_unpaid_cost) when one is live, else the plan's pip totals,
+// which still count already-paid casts -- an over-hold costs one extra solve attempt, never a cast,
+// by the held-first/unrestricted-retry contract. Unlike the
 // whole-turn prepay this also protects the shapes the prepay DECLINES -- mw326's joint cost is only
 // payable via the mid-turn mint, so the prepay fails up front and only this per-cast hold can keep
 // the greedy from burning the lone {R} land on a colour-flexible cost.
@@ -6409,18 +7412,28 @@ static std::uint64_t ScarceColorHoldMask(const GameState& state, const ManaCost&
     // the prepay-declined multi-cast class, which has NO motivating case yet -- and the held-out
     // mirrorwing A/B of the combined lever ran net-worse, so the unproven half must be
     // independently measurable (and stays off) until a case motivates it.
-    static const bool s_mask_on = EnvOn("MTG_SCARCE_COLOR_MASK");
-    if (!s_mask_on) { return 0; }
+    // A MOTIVATING CASE NOW EXISTS (2026-10-28, the mana oracle on EDF smoke s1009 T3): {Cloud of Faeries, Wild
+    // Growth onto Mariposa Military Base} off Mariposa, Yavimaya Coast and a fresh Brushland. Wild Growth's {G} took
+    // the Coast -- the board's only {U}, battlefield order breaking a tie with Brushland's {G} -- and Cloud of
+    // Faeries was dropped. Behind heurarm SCARCE_COLOR_MASK so the A/B runs both arms in one batch.
+    if (!ScarceColorMaskOn()) { return 0; }
     const PlanTraits* pt = CurrentPlanTraits();
     if (!pt || pt->mana_casts < 2) { return 0; }
     const int n = static_cast<int>(state.battlefield.size());
     if (n > 64) { return 0; }                    // bitmask limit, matching ReservableSpecialMask
-    // Pips the plan's OTHER casts need, beyond this payment's own cost.
+    // Pips the REST of the line still owes, beyond this payment's own cost: the line hold (g_line_unpaid_cost, bound
+    // by both plan-apply paths and decremented as each cast lands) when one is live, else the plan's pip totals
+    // (which still count the casts already paid -- an over-hold, never a refusal).
     const int cur[5] = { cost.white, cost.blue, cost.black, cost.red, cost.green };
+    const ManaCost& lu = g_line_unpaid_cost;
+    const bool line_live = (lu.white + lu.blue + lu.black + lu.red + lu.green + lu.generic + lu.colorless) > 0;
+    const int owed[5] = { line_live ? lu.white : pt->cast_pips[0], line_live ? lu.blue : pt->cast_pips[1],
+                          line_live ? lu.black : pt->cast_pips[2], line_live ? lu.red : pt->cast_pips[3],
+                          line_live ? lu.green : pt->cast_pips[4] };
     int need[5]; bool any = false;
     for (int c = 0; c < 5; ++c)
     {
-        need[c] = pt->cast_pips[c] - cur[c];
+        need[c] = owed[c] - cur[c];
         if (need[c] > 0) { any = true; }
     }
     if (!any) { return 0; }
@@ -6497,13 +7510,23 @@ static bool TapForCostSharedDiag(GameState& state, const ManaCost& cost_in, bool
 //
 // HUMAN PLAY TOO, on ActLineHoldMask's argument: the human CHOSE a line holding both casts, so paying it in
 // a way that drops one is not a tap-order preference being overridden, it is the line not being executed.
-// The route fires only where the plain payment would have dropped a later cast of that line, so a replayed
-// reference moves only if its recorded line itself lost a cast to this hole; its --tap-pref preference is
-// consulted by the trials exactly as by the real payment.
+// Its --tap-pref preference is consulted by the trials exactly as by the real payment.
+//
+// ...AND IN HUMAN PLAY THE STRAND ALONE FIRES IT (2026-10-27). A human builds a phase as several lines, and
+// the next one is often a card this line DRAWS, so "the rest of the line" is empty exactly where it matters.
+// NivMizzetCombo s4_gi3 T4 (promoting the search's game): Island, Spirebluff Canal, Cascade Bluffs and an
+// Izzet Signet up; the line {Brainstorm, Izzet Signet} paid Brainstorm with the Island and the Signet with
+// the Canal + the Bluffs' {C}, leaving the old Signet untapped with nothing to feed it. Brainstorm had drawn a
+// second Signet, and the next line could not cast it: one land through the old Signet pays the {2} and leaves
+// the other land to feed the new one, which is what the search did. A stranded ramp filter is dead mana for
+// the rest of the turn, so the routed payment leaves the same sources minus the feeder and plus one more
+// untapped source -- never less mana. It is still taken only when it does not strand a filter itself and
+// pays whatever the line still owes. Human play only (HumanPlayActive: false in every rollout and every
+// autonomous game), so batch play and ground truth do not move.
 
 // A warm per-thread scratch board pool (PayScratch's shape in TurnSolver.cpp): the trials copy-ASSIGN into
-// a reused GameState, so their zone vectors reuse capacity. A deque, so a nested trial (none today) could
-// never relocate a board an outer frame holds.
+// a reused GameState, so their zone vectors reuse capacity. A deque, so a nested trial could never relocate a
+// board an outer frame holds. (PayRefineAfter's pre-payment board comes from the same pool.)
 namespace
 {
 struct RampScratch
@@ -6539,9 +7562,9 @@ ManaCost RampLaterBill(const ManaCost& cost_in)
 // The cheap gate. A ramp filter of ours is untapped and could be fed now, and this payment needs at least
 // as many taps as there are feeders (a payment of n mana taps at most n sources, so with more feeders than
 // that one always survives).
-bool RampFeedRoutePrecheck(const GameState& s, const ManaCost& cost_in, const ManaCost& later)
+bool RampFeedRoutePrecheck(const GameState& s, const ManaCost& cost_in, const ManaCost& later, bool human)
 {
-    if (later.ManaValue() <= 0) { return false; }
+    if (later.ManaValue() <= 0 && !human) { return false; }
     const int need = cost_in.ManaValue() - static_cast<int>(s.floating_mana.Total());
     if (need <= 0) { return false; }
     const int active = s.active_player_index;
@@ -6638,7 +7661,11 @@ static bool RampFeedRouteRepay(const GameState& state, const ManaCost& cost_in, 
                                ManaPool* available, bool honor_legacy_cco)
 {
     const ManaCost later = RampLaterBill(cost_in);
-    if (!RampFeedRoutePrecheck(state, cost_in, later)) { return false; }
+    // HUMAN PLAY: the strand alone decides (see the block above RampScratch). The engine's own line is
+    // the whole phase, so "the rest of the line" is everything the turn will cast; a human's line is one
+    // step, and what comes next -- often a card this line draws -- is invisible to the payment.
+    const bool human = HumanPlayActive();
+    if (!RampFeedRoutePrecheck(state, cost_in, later, human)) { return false; }
     g_rr_trial.fetch_add(1, std::memory_order_relaxed);
     // The cast being paid, if it is a mana rock that enters untapped (Izzet Signet, Sol Ring).
     const CardDefinition* rock = nullptr;
@@ -6662,8 +7689,11 @@ static bool RampFeedRouteRepay(const GameState& state, const ManaCost& cost_in, 
     // Short of MANA, not of a route: the routed trial leaves the same amount (the filter's +1 the bound
     // already credits on the greedy board becomes the routed board's floating unit), so it cannot pay
     // what this board cannot either -- no second trial.
-    bool a_short = false;
-    if (RampLaterPayable(a.Board(), later, rock, &a_short) || a_short) { return false; }
+    if (!human)
+    {
+        bool a_short = false;
+        if (RampLaterPayable(a.Board(), later, rock, &a_short) || a_short) { return false; }
+    }
     g_rr_routed.fetch_add(1, std::memory_order_relaxed);
     RampScratch b(state);
     ManaPool av_b = available ? *available : ManaPool{};
@@ -6672,10 +7702,179 @@ static bool RampFeedRouteRepay(const GameState& state, const ManaCost& cost_in, 
         RampRouteScope _route;
         ok_b = TapForCostSharedDiag(b.Board(), cost_in, for_creature, available ? &av_b : nullptr, honor_legacy_cco);
     }
-    const bool fire = ok_b && RampLaterPayable(b.Board(), later, rock);
+    const bool fire = ok_b && !RampFilterStranded(state, b.Board())
+                   && (later.ManaValue() <= 0 || RampLaterPayable(b.Board(), later, rock));
     if (fire) { g_rr_fired.fetch_add(1, std::memory_order_relaxed); }
     return fire;
 }
+
+// ---- MTG_PAY_REFINE: the cheapest payment of the same bill out of the same taps --------------------------
+//
+// THE DEFECT (the mana oracle census, 39 decks x 30 games, seed 1100001). Every DOMINATED flag -- a payment of a
+// plan that leaves strictly fewer resources than another payment of it -- taps a SUBSET of the engine's own
+// sources: that is what dominating means when a tapped source is a resource. The engine's greedy taps one source
+// per pip in rank order and the backtracker takes the first covering set, so a payment can carry a tap the bill
+// did not need (Angels: Plains then Remote Farm for Giada's {1}{W}, a {W} floating away; Dragons: Mountain, Mind
+// Stone and Gruul Turf for Urza's Incubator's {3}) or pay on a face that costs something the same taps need not
+// spend (Melira Pod: Llanowar Wastes' {G}, 1 life, where its {C} pays and another tap covers the {G}).
+// MTG_PAY_SHRINK gives back only on the backtracker path and only past one source per mana point, so a
+// two-mana land never triggers it.
+//
+// THE REPAIR is a dominance check, not a preference. Once an outermost payment has committed, if it cost life,
+// energy or a haste-tagged {C} on a noncreature bill, or left mana floating off two or more taps, the mana oracle
+// enumerates the minimal payments of the SAME bill on a board where only the sources this payment tapped are
+// untapped (RefinePayment), makes each on a copy of the real board, and keeps the one that dominates: a subset of
+// the taps, no less life, energy or haste {C}, and the sources it gives back able to make again every unit the
+// engine's payment left floating. That payment is then made instead -- the board restored field by field (no
+// GameState reassignment: callers hold references into the battlefield), its taps through the manual-tap routes,
+// the bill paid float-only. A source the engine's payment did not tap is never touched, so nothing about the rest
+// of the turn is guessed. Skipped where a field-wise restore is not exact: a sacrificed source (Treasure,
+// Generator Servant), a graveyard the payment touched (Deathrite), an opponent's life it moved (Grove drip), an
+// armed damage board, the oracle's own copies and its float-only probes.
+namespace
+{
+thread_local bool t_pay_refining = false;
+std::atomic<long long> g_refine_seen{0}, g_refine_trig{0}, g_refine_found{0}, g_refine_fail{0}, g_refine_us{0};
+struct RefineStatsReport
+{
+    ~RefineStatsReport()
+    {
+        static const bool s_on = EnvOn("MTG_PAY_REFINE_STATS");
+        if (!s_on) { return; }
+        std::fprintf(stderr, "=== PAY REFINE: payments=%lld triggered=%lld refined=%lld commit_failed=%lld ms=%lld ===\n",
+                     g_refine_seen.load(), g_refine_trig.load(), g_refine_found.load(), g_refine_fail.load(),
+                     g_refine_us.load() / 1000);
+    }
+} g_refine_stats_report;
+
+int FloatTotal(const GameState& s)
+{
+    return s.floating_mana.Total() + s.floating_creature_mana.Total() + s.floating_bigspell_mana.Total();
+}
+
+struct PayRefineSnap
+{
+    std::vector<PermPaySnap> bf;
+    std::vector<int>         charge;
+    ManaPool                 fm, fcm, fbm;
+    int                      fhc = 0;
+    ManaPool                 av;
+    int                      life = 0, opp_life = 0, energy = 0;
+    bool                     oll = false;
+    std::size_t              gy = 0;
+    PayRollbackLedger        ledger;
+
+    void Take(const GameState& s, const ManaPool* available)
+    {
+        const int a = s.active_player_index;
+        SnapPayFields(s.battlefield, bf);
+        charge.resize(s.battlefield.size());
+        for (std::size_t i = 0; i < s.battlefield.size(); ++i) { charge[i] = s.battlefield[i].charge_counters; }
+        fm = s.floating_mana; fcm = s.floating_creature_mana; fbm = s.floating_bigspell_mana;
+        fhc = s.floating_haste_c;
+        av = available != nullptr ? *available : ManaPool{};
+        life = s.players[a].life; opp_life = s.players[1 - a].life; energy = s.players[a].energy_counters;
+        oll = s.opponent_lost_life_this_turn;
+        gy = s.players[a].graveyard.size();
+        ledger = s.pay_ledger;
+    }
+    void RestoreAvailable(ManaPool* available) const { if (available != nullptr) { *available = av; } }
+    // In place, field by field (the size invariant holds: the caller checked the battlefield did not change size).
+    void Restore(GameState& s, ManaPool* available) const
+    {
+        const int a = s.active_player_index;
+        RestorePayFields(s.battlefield, bf);
+        for (std::size_t i = 0; i < s.battlefield.size() && i < charge.size(); ++i) { s.battlefield[i].charge_counters = charge[i]; }
+        s.floating_mana = fm; s.floating_creature_mana = fcm; s.floating_bigspell_mana = fbm;
+        s.floating_haste_c = fhc;
+        if (available != nullptr) { *available = av; }
+        s.players[a].life = life; s.players[1 - a].life = opp_life; s.players[a].energy_counters = energy;
+        s.opponent_lost_life_this_turn = oll;
+        s.pay_ledger = ledger;
+    }
+};
+
+void PayRefineAfter(GameState& state, const ManaCost& cost_in, bool for_creature, ManaPool* available,
+                    bool honor_legacy_cco, const PayRefineSnap& pre)
+{
+    g_refine_seen.fetch_add(1, std::memory_order_relaxed);
+    const int a = state.active_player_index;
+    if (state.battlefield.size() != pre.bf.size() || state.players[a].graveyard.size() != pre.gy
+        || state.players[1 - a].life != pre.opp_life || state.opponent_lost_life_this_turn != pre.oll)
+    { return; }
+    int newly = 0;
+    for (std::size_t i = 0; i < state.battlefield.size(); ++i)
+    {
+        const Permanent& p = state.battlefield[i];
+        if (p.controller_index == a && p.tapped && !pre.bf[i].tapped) { ++newly; }
+    }
+    if (newly == 0) { return; }
+    const ManaPool fm_pre = pre.fm;
+    const int float_pre = fm_pre.Total() + pre.fcm.Total() + pre.fbm.Total();
+    const bool spent = state.players[a].life < pre.life || state.players[a].energy_counters < pre.energy
+                    || (!for_creature && state.floating_haste_c < pre.fhc);
+    const bool surplus = newly >= 2 && FloatTotal(state) > float_pre;
+    if (!spent && !surplus) { return; }
+    g_refine_trig.fetch_add(1, std::memory_order_relaxed);
+    static const bool s_clock = EnvOn("MTG_PAY_REFINE_STATS");
+    struct Clock
+    {
+        bool on;
+        std::chrono::steady_clock::time_point t0;
+        explicit Clock(bool o) : on(o) { if (on) { t0 = std::chrono::steady_clock::now(); } }
+        ~Clock()
+        {
+            if (!on) { return; }
+            g_refine_us.fetch_add(std::chrono::duration_cast<std::chrono::microseconds>(
+                                      std::chrono::steady_clock::now() - t0).count(), std::memory_order_relaxed);
+        }
+    } clock(s_clock);
+    RampScratch before_scr(state);   // the warm scratch board (a copy-assign, not a fresh copy per trigger)
+    GameState& before = before_scr.Board();
+    pre.Restore(before, nullptr);
+    manaoracle::PayOption opt;
+    {
+        t_pay_refining = true;
+        const bool found = manaoracle::RefinePayment(before, state, cost_in, for_creature, PayingCreatureAbility(), opt);
+        t_pay_refining = false;
+        if (!found) { return; }
+    }
+    g_refine_found.fetch_add(1, std::memory_order_relaxed);
+    // Make it on the real board: back to the pre-payment fields, the option's taps, the bill float-only.
+    PayRefineSnap made;
+    made.Take(state, available);
+    pre.Restore(state, available);
+    t_pay_refining = true;
+    bool ok = manaoracle::PerformPayTaps(state, opt) && state.battlefield.size() == pre.bf.size();
+    if (ok)
+    {
+        ManaPool& f = state.floating_mana;
+        const ManaPool& st = opt.stash;
+        ok = f.white >= st.white && f.blue >= st.blue && f.black >= st.black && f.red >= st.red
+          && f.green >= st.green && f.colorless >= st.colorless && state.floating_haste_c >= opt.stash_haste;
+        if (ok)
+        {
+            f.white -= st.white; f.blue -= st.blue; f.black -= st.black; f.red -= st.red; f.green -= st.green;
+            f.colorless -= st.colorless;
+            state.floating_haste_c -= opt.stash_haste;
+            f.snow_units = std::min(f.snow_units, f.Total());
+            manaoracle::t_float_only = true;
+            ok = TapForCostSharedDiag(state, cost_in, for_creature, available, honor_legacy_cco);
+            manaoracle::t_float_only = false;
+            f.white += st.white; f.blue += st.blue; f.black += st.black; f.red += st.red; f.green += st.green;
+            f.colorless += st.colorless;
+            state.floating_haste_c += opt.stash_haste;
+        }
+    }
+    t_pay_refining = false;
+    if (!ok && state.battlefield.size() == made.bf.size())
+    {
+        // Verified on a copy, refused here: an oracle/payer disagreement. Keep the engine's own payment.
+        g_refine_fail.fetch_add(1, std::memory_order_relaxed);
+        made.Restore(state, available);
+    }
+}
+} // namespace
 
 bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creature,
                       ManaPool* available, bool honor_legacy_cco)
@@ -6684,12 +7883,25 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
     // audit below wants the OUTERMOST failure, the same depth-1 notion the damage flush uses.
     ++t_pay_nest;
     struct NestGuard { ~NestGuard() { --t_pay_nest; } } nest_guard;
+    // MANA ORACLE (MTG_MANA_ORACLE, ManaOracle.h): the oracle's OWN state copy pays from its script --
+    // the taps it chose, then float-only. Null on every thread unless the oracle is mid-apply, and
+    // keyed on the state object, so every other payment (search, play, a probe on a scratch copy)
+    // takes the path below untouched.
+    if (manaoracle::t_hook != nullptr && t_pay_nest == 1 && &state == manaoracle::t_hook->target)
+    { return manaoracle::ScriptedPay(state, cost_in, for_creature, available, honor_legacy_cco); }
     // MTG_RAMP_FEED_ROUTE (see RampFeedRouteRepay): the outermost payment of an applying line, decided
     // before it is made. Off, outside a line, or with no ramp filter up: a board scan and out.
     std::optional<RampRouteScope> _ramp_route;
     if (t_pay_nest == 1 && !t_ramp_route && RampFeedRouteOn()
         && RampFeedRouteRepay(state, cost_in, for_creature, available, honor_legacy_cco))
     { _ramp_route.emplace(); }
+    // MTG_PAY_REFINE (above): the board as this payment found it, for the dominance check once it has committed.
+    // (The oracle's own copy never gets here -- its payments returned through ScriptedPay above -- and its
+    // float-only probes, like the refine's own, are skipped.)
+    const bool refine = t_pay_nest == 1 && !t_pay_refining && !manaoracle::t_float_only && !state.dmg_events_armed
+                     && g_seed_pay_split == 0 && PayRefineOn();
+    std::optional<PayRefineSnap> refine_pre;
+    if (refine) { refine_pre.emplace(); refine_pre->Take(state, available); }
     bool ok;
     if (!state.dmg_events_armed)
     { ok = TapForCostSharedDiag(state, cost_in, for_creature, available, honor_legacy_cco); }
@@ -6717,7 +7929,160 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
         // so the re-pay is undone too (its own taps were restored by the failure path above).
         if (!ok) { payroll::UndoLast(state); }
     }
+    if (ok && refine_pre) { PayRefineAfter(state, cost_in, for_creature, available, honor_legacy_cco, *refine_pre); }
     return ok;
+}
+
+// MANA ORACLE -- one scripted payment on the oracle's own copy (ManaOracle.h). The script entry's taps
+// go in through ApplyHumanPreTap (the engine's own mechanic per source), its set-aside units leave the
+// general float for the duration, and the payment is then made FLOAT-ONLY through the normal pipeline,
+// so the payer drains exactly what the script put in reach and can tap nothing of its own choosing.
+// Past the end of the script is the FRONTIER: capture the board and the bill, fail, end the probe.
+bool manaoracle::ScriptedPay(GameState& state, const ManaCost& cost_in, bool for_creature,
+                             ManaPool* available, bool honor_legacy_cco)
+{
+    Hook& h = *t_hook;
+    if (h.ended && !h.safe) { return false; }   // (a SAFE hook is never ended: it gives up instead -- see below)
+    // SAFE (RealPayScope, the real board -- ManaOracle.h): the script's entry only while it fits; else the board
+    // is put back and the engine pays, this time and every time after.
+    if (h.safe)
+    {
+        auto engine_pay = [&]() -> bool
+        {
+            Hook* const saved = t_hook;
+            t_hook = nullptr;
+            --t_pay_nest;
+            const bool ok = TapForCostShared(state, cost_in, for_creature, available, honor_legacy_cco);
+            ++t_pay_nest;
+            t_hook = saved;
+            return ok;
+        };
+        static const bool s_rpt = EnvOn("MTG_REAL_PAY_TRACE");   // DIG TRACE (default off)
+        if (s_rpt)
+        {
+            std::fprintf(stderr, "[rp-pay] T%d bill=%s next=%zu/%zu abandoned=%d ended=%d entry=%s eng=%d fail=%d bf=%zu\n",
+                         state.turn_number, cost_in.ToString().c_str(), h.next, h.script.size(), h.abandoned ? 1 : 0,
+                         h.ended ? 1 : 0, h.next < h.script.size() ? h.script[h.next].what.c_str() : "-",
+                         h.next < h.script.size() && h.script[h.next].engine ? 1 : 0,
+                         h.next < h.script.size() && h.script[h.next].fail ? 1 : 0, state.battlefield.size());
+        }
+        if (h.abandoned || h.next >= h.script.size()) { ++h.next; return engine_pay(); }
+        const PayOption& opt = h.script[h.next++];
+        h.pay_steps.push_back(t_seq_step);
+        if (opt.engine) { return engine_pay(); }
+        if (opt.fail || opt.what != cost_in.ToString()) { h.abandoned = true; return engine_pay(); }
+        // The board as this payment found it, to put back if the entry does not pay. A scripted tap may
+        // SACRIFICE (a sac land's crack, a Treasure: ApplyHumanPreTap's SacAction route), which is a zone
+        // change PayRefineSnap's field restore cannot undo -- it once demanded an unchanged battlefield, so a
+        // sacrificing entry was refused AFTER its sacrifice and the engine paid on the mutilated board (lands
+        // gone, their mana floating). So the whole board is copied (real play only, one copy per scripted
+        // payment): the field restore when nothing left the battlefield, the copy when something did. A
+        // sacrificing entry is used like any other -- the replay on the real board verified it (PlanPaymentScript).
+        PayRefineSnap before;
+        before.Take(state, available);
+        const std::size_t n0 = state.battlefield.size();
+        const GameState whole = state;
+        bool ok = PerformPayTaps(state, opt);
+        if (ok)
+        {
+            ManaPool& f = state.floating_mana;
+            const ManaPool& st = opt.stash;
+            ok = f.white >= st.white && f.blue >= st.blue && f.black >= st.black && f.red >= st.red
+              && f.green >= st.green && f.colorless >= st.colorless && state.floating_haste_c >= opt.stash_haste;
+            if (ok)
+            {
+                f.white -= st.white; f.blue -= st.blue; f.black -= st.black; f.red -= st.red; f.green -= st.green;
+                f.colorless -= st.colorless;
+                state.floating_haste_c -= opt.stash_haste;
+                f.snow_units = std::min(f.snow_units, f.Total());
+                Hook* const saved = t_hook;
+                t_hook       = nullptr;
+                t_float_only = true;
+                ok = TapForCostSharedDiag(state, cost_in, for_creature, available, honor_legacy_cco);
+                t_float_only = false;
+                t_hook       = saved;
+                f.white += st.white; f.blue += st.blue; f.black += st.black; f.red += st.red; f.green += st.green;
+                f.colorless += st.colorless;
+                state.floating_haste_c += opt.stash_haste;
+            }
+        }
+        if (s_rpt) { std::fprintf(stderr, "[rp-pay]   scripted ok=%d bf=%zu->%zu\n", ok ? 1 : 0, n0, state.battlefield.size()); }
+        if (ok) { return true; }
+        if (state.battlefield.size() == n0) { before.Restore(state, available); }
+        else                                { state = whole; before.RestoreAvailable(available); }
+        h.abandoned = true;
+        const bool eok = engine_pay();
+        if (s_rpt) { std::fprintf(stderr, "[rp-pay]   engine fallback ok=%d\n", eok ? 1 : 0); }
+        return eok;
+    }
+    // ENGINE STEP (the rollback census): the engine's own payment, made exactly as an unhooked apply
+    // makes it -- the hook stood down and the nest unwound, so it is the normal outermost payment. A
+    // failure drops the cast and the apply goes on, as it does in search; the first one is recorded.
+    if (h.next < h.script.size() ? h.script[h.next].engine : h.all_engine)
+    {
+        const std::size_t step = h.next++;
+        h.pay_steps.push_back(t_seq_step);
+        bool ok;
+        {
+            EngineStepScope es(state, true);
+            Hook* const saved = t_hook;
+            t_hook = nullptr;
+            --t_pay_nest;
+            ok = TapForCostShared(state, cost_in, for_creature, available, honor_legacy_cco);
+            ++t_pay_nest;
+            t_hook = saved;
+        }
+        if (!ok && h.first_fail < 0) { h.first_fail = static_cast<int>(step); }
+        return ok;
+    }
+    if (h.next >= h.script.size())
+    {
+        h.ended          = true;
+        h.frontier       = true;
+        if (h.f_state != nullptr) { *h.f_state = state; }
+        h.f_cost         = cost_in;
+        h.f_for_creature = for_creature;
+        h.f_creature_ability = PayingCreatureAbility();
+        // ...and the spell it pays for (the cast site's scope), so the table can keep a subtype restriction.
+        h.f_has_spell = PayingSpellCard() != nullptr;
+        if (h.f_has_spell) { h.f_spell = *PayingSpellCard(); }
+        return false;
+    }
+    const PayOption& opt = h.script[h.next++];
+    h.pay_steps.push_back(t_seq_step);
+    if (opt.fail) { return false; }   // the oracle found no payment here: dropped, as the engine drops it
+    for (std::size_t i = 0; i < opt.taps.size(); ++i)
+    {
+        const TurnSolver::PreTap& t = opt.taps[i];
+        const bool restricted = i < opt.creature_route.size() && opt.creature_route[i] != 0;
+        const std::string why = restricted ? OracleCreatureTap(state, t) : ApplyHumanPreTap(state, t);
+        if (!why.empty()) { h.ended = true; h.tap_error = why; return false; }
+        h.tapped_by_script.push_back(t.num);
+    }
+    ManaPool& f = state.floating_mana;
+    const ManaPool& st = opt.stash;
+    if (f.white < st.white || f.blue < st.blue || f.black < st.black || f.red < st.red
+        || f.green < st.green || f.colorless < st.colorless || state.floating_haste_c < opt.stash_haste)
+    { h.ended = true; h.tap_error = "set-aside exceeds the floating pool"; return false; }
+    f.white -= st.white; f.blue -= st.blue; f.black -= st.black; f.red -= st.red; f.green -= st.green;
+    f.colorless -= st.colorless;
+    state.floating_haste_c -= opt.stash_haste;
+    f.snow_units = std::min(f.snow_units, f.Total());
+    bool ok;
+    {
+        Hook* const saved = t_hook;
+        t_hook       = nullptr;
+        t_float_only = true;
+        ok = TapForCostSharedDiag(state, cost_in, for_creature, available, honor_legacy_cco);
+        t_float_only = false;
+        t_hook       = saved;
+    }
+    f.white += st.white; f.blue += st.blue; f.black += st.black; f.red += st.red; f.green += st.green;
+    f.colorless += st.colorless;
+    state.floating_haste_c += opt.stash_haste;
+    if (!ok) { h.ended = true; h.tap_error = "scripted payment did not pay " + cost_in.ToString(); return false; }
+    if (state.dmg_events_armed) { dmgev::FlushDamageEvents(state); }
+    return true;
 }
 
 static bool TapForCostSharedDiag(GameState& state, const ManaCost& cost_in, bool for_creature,
@@ -6865,7 +8230,19 @@ std::uint64_t ActLineHoldMask(const GameState& state, const ManaCost& cost)
     if (!pt) { return 0; }
     const int cab_total = pt->act_pips_cab[0] + pt->act_pips_cab[1] + pt->act_pips_cab[2]
                         + pt->act_pips_cab[3] + pt->act_pips_cab[4];
-    if (pt->act_src_count == 0 && cab_total == 0
+    // THE CYCLE SEED's pips (PlanTraits::cycle_seed_pips): owed while the cycler is still in hand and
+    // the seed is not the payment being made right now (CycleSeedPayScope).
+    int seed_need[5] = { 0, 0, 0, 0, 0 };
+    if (pt->cycle_seed_def != nullptr && !g_cycle_seed_paying)
+    {
+        int copies = 0;
+        for (const Card& c : state.players[state.active_player_index].hand)
+        { if (!c.m_is_staged && c.m_name == pt->cycle_seed_def->card.m_name) { ++copies; } }
+        if (copies >= pt->cycle_seed_hand_floor && copies > 0)
+        { for (int c = 0; c < 5; ++c) { seed_need[c] = pt->cycle_seed_pips[c]; } }
+    }
+    const int seed_total = seed_need[0] + seed_need[1] + seed_need[2] + seed_need[3] + seed_need[4];
+    if (pt->act_src_count == 0 && cab_total == 0 && seed_total == 0
         && pt->act_pips[0] + pt->act_pips[1] + pt->act_pips[2]
          + pt->act_pips[3] + pt->act_pips[4] == 0) { return 0; }
     const int n = static_cast<int>(state.battlefield.size());
@@ -6917,6 +8294,13 @@ std::uint64_t ActLineHoldMask(const GameState& state, const ManaCost& cost)
         if (all < 0) { all = 0; }
         need_cab[c] = std::min(all, pt->act_pips_cab[c]);
         need[c] = all - need_cab[c];
+        // The seed's pips, net of whatever float the activations above did not already claim. Kept
+        // apart from `all` so a deck without a seed computes exactly what it always did.
+        if (seed_need[c] > 0)
+        {
+            const int float_spare = std::max(0, float_left - std::max(0, pt->act_pips[c] + pt->act_pips_cab[c] - paid[c]));
+            need[c] += std::max(0, seed_need[c] - float_spare);
+        }
         if (need[c] > 0 || need_cab[c] > 0) { any_pip = true; }
     }
 
@@ -7110,6 +8494,21 @@ static bool LineFloatTapFirstPlan(const GameState& state, const ManaCost& cost_i
         }
     }
     const bool unseen_guard = unseen && !known_short;
+    // THE RESERVE ALREADY COVERS THE LINE (MTG_LINE_FLOAT_COVERED). The colour test below keeps a source that
+    // makes an owed colour off the spare list because a later pip may need it for that colour. When the reserve
+    // left after this payment's own pips holds every coloured pip the line still owes (a wild unit covers any),
+    // no later pip needs a source for its colour and the test refuses for nothing: the source pays this
+    // generic, the owed float stays, and the named line is exactly as payable. NivMizzetCombo seed 1180522
+    // gi521 T2: Sol Ring's {1} spent the floating {U} with Cascade Bluffs untapped (Bluffs makes {U} only by
+    // filtering a {U}/{R}, and that {U} was the only feed), and Tandem Lookout's {U} had nothing. The unseen
+    // guard is untouched: it guards creature-only-colour lands, whose clause below still applies.
+    bool float_covers = false;
+    if (LineFloatCoveredOn())
+    {
+        int short_units = 0;
+        for (int ci = 0; ci < 5; ++ci) { short_units += std::max(0, later[ci] - rp[ci]); }
+        float_covers = short_units <= r_pips.wild;
+    }
     // Colours an unrestricted untapped source other than `self` can make (for a later creature pip).
     auto other_makes = [&](int self, int ci) -> bool
     {
@@ -7138,7 +8537,7 @@ static bool LineFloatTapFirstPlan(const GameState& state, const ManaCost& cost_i
                && d->params.enters_tapped_with_depletion == 0 && !d->params.creature_mana_only
                && !PaySacSpendableNow(state, p, *d);
         if (ok) { for (const Counter& c : p.counters) { if (c.type == Counter::Type::Depletion) { ok = false; break; } } }
-        if (ok)
+        if (ok && !float_covers)
         {
             for (Color c : ProducesForPayment(state, active, *d, for_creature, &p))
             { const int ci = colour_idx(c); if (ci >= 0 && later[ci] > 0) { ok = false; break; } }
@@ -7222,6 +8621,7 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
         const int  la  = state.players[a].life;
         const int  lo  = state.players[1 - a].life;
         const bool oll = state.opponent_lost_life_this_turn;
+    auto oll_noncombat = NoncombatStateSnapshot(state);
         auto restore = [&]()
         {
             RestorePayFields(state.battlefield, bf_snap);
@@ -7235,7 +8635,7 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
             state.players[a].graveyard         = gy_snap;
             state.players[a].life              = la;
             state.players[1 - a].life          = lo;
-            state.opponent_lost_life_this_turn = oll;
+            state.opponent_lost_life_this_turn = oll; oll_noncombat.Restore(state);
         };
         if (TapForCostShared(state, cost_in.ExpandHybrids(0), for_creature,
                              available, honor_legacy_cco)) { return true; }
@@ -7252,16 +8652,106 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
         return false;
     }
 
+    // §2b FODDER IS THE LAST SOURCE OF THE WHOLE PAYMENT, not merely the last rank of the greedy
+    // (MTG_SAC_OUTLET_PAY). The greedy ranks a body behind every real source, but the complete
+    // backtracker -- the only route to a CONVERSION source's fed mode (Three Tree City's "{2},{T}: add
+    // one {R} per Goblin", a filter, a ramp filter) -- runs only when the greedy FAILS, and with bodies
+    // on the board the greedy no longer fails: it eats. Goblins s4113506 gi3505 T3 main 2, two
+    // Siege-Gang Commanders, twelve Goblins, two Mountains and Three Tree City, team at 11: six shots
+    // cost {12}; the Mountains fed into the City make twelve {R} and the six shots kill with six Goblins
+    // left over (the lever's OFF arm, T3). With fodder in reach the greedy paid Mountains + the City's
+    // {C} + NINE eaten Goblins, leaving three victims -- three shots, 5 life left, T4. The payment
+    // contract the lever was revived for (USER 2026-10-30: "only spend as much as the line requires")
+    // is that a body is eaten only when the board cannot pay without one. So: the FULL payer (greedy,
+    // hold rungs, backtracker) first, with no fodder in reach (g_pay_fodder_off -- the OFF arm's payer
+    // exactly), and only if that fails, the payer with fodder. Not a preference: a payment that eats
+    // nothing leaves every body the fodder one would have eaten and taps sources the fodder payment
+    // would ALSO have had to leave for a later cost, and a tapped source untaps next turn while an
+    // eaten body does not; a death that pays keeps the payer off altogether (SacOutletEatHasValue), so
+    // an eaten body never buys anything a tapped source does not. A failed attempt restores everything
+    // it touched (same snapshot as the hybrid split above), the executor's accounting pool included.
+    // Inert with the lever off or no outlet live (one null test).
+    if (!g_pay_fodder_off && g_pay_fodder_cap < 0 && LiveSacPayOutlet(state, state.active_player_index).valid())
+    {
+        const int a = state.active_player_index;
+        PaySnapScratch<PermPaySnap> _bf_snap_scratch;
+        std::vector<PermPaySnap>&   bf_snap = _bf_snap_scratch.Buf();
+        SnapPayFields(state.battlefield, bf_snap);
+        std::vector<Permanent> bf_snap_full;
+        if (g_pay_snap_verify) { bf_snap_full = state.battlefield; }
+        const ManaPool               fm_snap  = state.floating_mana;
+        const ManaPool               fcm_snap = state.floating_creature_mana;
+        const ManaPool               fbm_snap = state.floating_bigspell_mana;
+        const int                    fhc_snap = state.floating_haste_c;
+        const ManaPool               av_snap  = available ? *available : ManaPool{};
+        PaySnapScratch<Card>         _gy_snap_scratch;
+        std::vector<Card>&           gy_snap = _gy_snap_scratch.Buf();
+        gy_snap = state.players[a].graveyard;
+        const int  la  = state.players[a].life;
+        const int  lo  = state.players[1 - a].life;
+        const bool oll = state.opponent_lost_life_this_turn;
+        auto restore = [&]()
+        {
+            RestorePayFields(state.battlefield, bf_snap);
+            if (g_pay_snap_verify) { VerifyPaySnapRestore(state.battlefield, bf_snap_full, "impl.fodderlast"); }
+            state.floating_mana                = fm_snap;
+            state.floating_creature_mana       = fcm_snap;
+            state.floating_bigspell_mana       = fbm_snap;
+            state.floating_haste_c             = fhc_snap;
+            if (available) { *available = av_snap; }
+            state.players[a].graveyard         = gy_snap;
+            state.players[a].life              = la;
+            state.players[1 - a].life          = lo;
+            state.opponent_lost_life_this_turn = oll;
+        };
+        int fodder_free_ub = 0;
+        {
+            const PayFodderOffScope _fo;
+            if (TapForCostSharedImpl(state, cost_in, for_creature, available, honor_legacy_cco)) { return true; }
+            restore();
+            fodder_free_ub = UntappedManaUpperBound(state, for_creature, 0);
+        }
+        // ...AND THEN AS FEW BODIES AS THE PAYMENT CAN BE MADE WITH. The greedy's per-pip needs order prices
+        // a land as scarcer than an abundant body, so left alone it eats bodies for the coloured pips and
+        // leaves lands up: Goblins s4154256 gi4255 T5 main 2 (five Mountains, Skirk, Siege-Gang and three
+        // tapped tokens, team at 5), three shots {3}{R}{R}{R} -- the greedy ate THREE tokens for the {R}s,
+        // paid the generic with three Mountains and left two up, so two victims remained, two shots, 1 life
+        // left (T6; the OFF arm floats one Goblin and kills, T5). A body eaten instead of a tapped land is a
+        // body lost for the rest of the turn (an attacker, a victim, the next cost's fodder) for mana the
+        // land would have made anyway. So the payment is retried with at most k bodies, k rising from the
+        // fewest the fodder-free supply could possibly leave owed, and the first k that pays is taken. Each
+        // attempt is the full payer (hold rungs, then unrestricted); the backtracker is skipped inside
+        // (g_pay_fodder_cap) because it never sees fodder. The last k is every body there is, i.e. the old
+        // uncapped payment, so nothing payable before is refused now.
+        const SacPayOutlet so = LiveSacPayOutlet(state, a);
+        const int bodies = SacPayFodderCount(state, a, so);
+        const int per    = so.valid() ? std::max(1, so.def->params.sac_outlet_add_mana_amount) : 1;
+        const int owed   = cost_in.ManaValue() - state.floating_mana.Total() - fodder_free_ub;
+        // Clamped to the bodies there are, so the last attempt is always the uncapped one (the bound above
+        // ignores the restricted reserves, which can only make `owed` too high, never too low).
+        for (int k = std::min(bodies, std::max(1, (owed + per - 1) / per)); k <= bodies; ++k)
+        {
+            {
+                const PayFodderCapScope _cap(k);
+                if (TapForCostSharedImpl(state, cost_in, for_creature, available, honor_legacy_cco)) { return true; }
+            }
+            restore();
+        }
+        return false;   // no body, or not even all of them: the fodder-free attempt was the whole payer
+    }
+
     // `act_hold` is split out of the fold ONLY so MTG_ACT_DROP_AUDIT can price the lever (see
     // g_act_pay_calls in GameLogger.h): the extra solve a failed held attempt buys is the whole cost
     // question, and attributing it needs to know whether this mask was rmask's sole contributor.
     // The value folded in is identical, and with the audit off nothing below it executes.
     const std::uint64_t act_hold = ActLineHoldMask(state, cost_in);
+    const std::uint64_t scarce   = ScarceColorHoldMask(state, cost_in);
     const std::uint64_t rmask = ReservableSpecialMask(state) | PlanReserveMask(state)
                               | OneShotHoldMask(state) | PayloadReserveMask(state)
-                              | ScarceColorHoldMask(state, cost_in)
+                              | scarce
                               | LineColorlessHoldMask(state, cost_in)
-                              | act_hold;
+                              | act_hold
+                              | g_seed_pay_hold;   // THE SEED PAYMENT SPLIT (SeedPaySplitScope; 0 unless a seed pins one)
     if (ActDropAuditOn())
     {
         g_act_pay_calls.fetch_add(1, std::memory_order_relaxed);
@@ -7293,6 +8783,7 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
         const int  la  = state.players[a].life;
         const int  lo  = state.players[1 - a].life;
         const bool oll = state.opponent_lost_life_this_turn;
+    auto oll_noncombat = NoncombatStateSnapshot(state);
         if (TapForCostSharedOnce(state, cost_in, for_creature, mask, available, honor_legacy_cco))
         { return true; }
         RestorePayFields(state.battlefield, bf_snap);
@@ -7306,7 +8797,7 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
         state.players[a].graveyard         = gy_snap;
         state.players[a].life              = la;
         state.players[1 - a].life          = lo;
-        state.opponent_lost_life_this_turn = oll;
+        state.opponent_lost_life_this_turn = oll; oll_noncombat.Restore(state);
         return false;
     };
     // MTG_LINE_FLOAT_TAP_FIRST (see LineFloatTapFirstPlan): one held attempt that keeps the line's owed
@@ -7325,12 +8816,27 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
     if (rmask != 0)
     {
         if (held_attempt(rmask, "impl.rmask")) { return true; }
+        // A land Aura's host is held by the caller (ScarceHeldOnlyScope): let it release the host before the
+        // scarce providers are spent.
+        if (t_scarce_held_only && scarce != 0) { return false; }
         // Fell through: this payment now costs a SECOND full solve. Attribute it (audit only).
         if (ActDropAuditOn() && act_hold != 0)
         {
             g_act_hold_retry.fetch_add(1, std::memory_order_relaxed);
             if (rmask == act_hold) { g_act_solo_retry.fetch_add(1, std::memory_order_relaxed); }
         }
+    }
+    // The seed's searched payment must survive other SOFT reservations. If their union made
+    // the requested allocation fail, retry its hold alone before releasing it. Otherwise a
+    // reserved Myriad/filter can silently turn distinct searched pins into the same greedy tap.
+    if (g_seed_pay_hold != 0 && g_seed_pay_hold != rmask
+        && held_attempt(g_seed_pay_hold, "impl.seed-split")) { return true; }
+    if (g_seed_pay_split != 0)
+    {
+        // A zero hold means every source was selected (or none exists). It still needs one
+        // attempt, with exactly the float exposed by SeedPaySplitScope.
+        if (g_seed_pay_hold == 0 && held_attempt(0, "impl.seed-split-all")) { return true; }
+        return false;   // source/float allocations are searched pins, never soft preferences
     }
     // PUMP-TARGET NARROW RUNG (MTG_MINT_CREDIT_EXACT). The whole-turn prepay's reserve ladder
     // retreats from "hold every dork" to "hold the projected pump target alone" before it
@@ -7528,6 +9034,8 @@ HumanPreTapOffer HumanPreTapOfferFor(const GameState& state, const Permanent& p)
     const CardDefinition* def = ManaDefOf(state, p, LiveManaGrant(state, active));
     if (def == nullptr) { o.why_not = "it is not a mana source"; return o; }
     const CardParams& q = def->params;
+    if (!dmgev::CanPayManaTapLife(state, active, *def))
+    { o.why_not = "you cannot pay its life cost"; return o; }
     // The payer's own source test (`usable()`'s template half): a land, a dork, a rock -- a filter
     // among them is a CONVERSION source -- or, outside those templates, a sacrifice-for-mana source.
     const bool tmpl_src   = def->tmpl == CardTemplate::BasicLand || def->tmpl == CardTemplate::ManaDork
@@ -7697,8 +9205,12 @@ std::vector<std::string> HumanPreTapFedFaces(const GameState& state, const Perma
 std::vector<HumanPreTapAura>
 HumanPreTapAuraFaces(const GameState& state, const Permanent& p)
 {
+    return HumanPreTapAuraFaces(state, p, HumanPreTapOfferFor(state, p));
+}
+std::vector<HumanPreTapAura>
+HumanPreTapAuraFaces(const GameState& state, const Permanent& p, const HumanPreTapOffer& offer)
+{
     std::vector<HumanPreTapAura> out;
-    const HumanPreTapOffer offer = HumanPreTapOfferFor(state, p);
     if (offer.free_faces.empty() && offer.fed_faces.empty()) { return out; }
     for (const Permanent* a : AnyColorLandAuras(state, p))
     { out.push_back({ a->card.m_name.str(), a->card.m_number, "WUBRG" }); }
@@ -7836,7 +9348,7 @@ std::string ApplyHumanPreTap(GameState& state, const TurnSolver::PreTap& t)
     // made it for them by crediting `wild`. Every rejection below reports its reason verbatim, for
     // the same reason the face's do: this fallback exists because a silently-made mana choice is
     // the defect, so a silently-DROPPED one would be the same defect wearing a different hat.
-    const std::vector<HumanPreTapAura> auras = HumanPreTapAuraFaces(state, *found);
+    const std::vector<HumanPreTapAura> auras = HumanPreTapAuraFaces(state, *found, offer);
     if (!t.aura_colors.empty())
     {
         if (auras.empty())
@@ -7960,4 +9472,68 @@ std::string ApplyHumanPreTap(GameState& state, const TurnSolver::PreTap& t)
                      f.white, f.blue, f.black, f.red, f.green, f.colorless, f.wild, haste.c_str());
     }
     return std::string();
+}
+
+// ManaCostDigest (ManaPayment.h): every field of the cost, in declaration order.
+std::uint64_t ManaCostDigest(const ManaCost& c)
+{
+    std::uint64_t h = 0xC057C057ULL;
+    auto mix = [&](std::uint64_t v) { h ^= v + 0x9E3779B97F4A7C15ULL + (h << 6) + (h >> 2); h *= 0xBF58476D1CE4E5B9ULL; };
+    // Packed two 32-bit counts to a word, the byte-sized metadata eight to a word: four mixes, not twenty.
+    auto two = [](int x, int y)
+    { return (static_cast<std::uint64_t>(static_cast<std::uint32_t>(x)) << 32) | static_cast<std::uint32_t>(y); };
+    auto bytes = [](std::initializer_list<std::uint8_t> v)
+    { std::uint64_t w = 0; for (std::uint8_t b : v) { w = (w << 8) | b; } return w; };
+    mix(two(c.generic, c.white)); mix(two(c.blue, c.black)); mix(two(c.red, c.green));
+    mix(two(c.colorless, c.x_pips));
+    mix(bytes({ static_cast<std::uint8_t>(c.has_x ? 1 : 0), c.twobrid_count, c.hybrid_count, c.hybrid_pair[0],
+                c.hybrid_pair[1], c.hybrid_pair[2], c.hybrid_pair[3], c.phyrexian_count }));
+    mix(bytes({ c.phyrexian_color[0], c.phyrexian_color[1], c.twobrid_color[0], c.twobrid_color[1], c.twobrid_color[2],
+                static_cast<std::uint8_t>(c.snow_pips) }));
+    return h;
+}
+
+// PayContextDigest (ManaPayment.h). Folded field by field; a pointer context folds what it points at.
+std::uint64_t PayContextDigest()
+{
+    std::uint64_t h = 0xC0471E57ULL;
+    auto mix = [&](std::uint64_t v) { h ^= v + 0x9E3779B97F4A7C15ULL + (h << 6) + (h >> 2); h *= 0xBF58476D1CE4E5B9ULL; };
+    auto cost = [&](const ManaCost& c) { mix(ManaCostDigest(c)); };
+    cost(g_line_unpaid_cost);
+    cost(g_act_line_paid);
+    cost(g_act_line_current);
+    mix((g_line_opens_unseen ? 1u : 0u) | (t_scarce_held_only ? 2u : 0u) | (t_ramp_route ? 4u : 0u)
+        | (HumanPlayActive() ? 8u : 0u) | (LineGenericOrderLive() ? 16u : 0u) | (g_hold_colorless_for_pips ? 32u : 0u)
+        | (g_snow_pay_strict ? 64u : 0u) | (g_hold_colorless_in_payment ? 128u : 0u) | (g_in_blink_loop ? 256u : 0u)
+        | (g_tap_speculating ? 512u : 0u) | (g_pay_need_live ? 1024u : 0u) | (g_paysac_cracked ? 2048u : 0u));
+    if (g_cycle_seed_paying) { mix(0x4359434C45534545ull); }
+    if (g_seed_pay_split != 0) { mix(0x5345454450415948ull); mix(static_cast<std::uint32_t>(g_seed_pay_split)); mix(g_seed_pay_hold); }
+    mix(static_cast<std::uint32_t>(t_float_generic_hold));
+    mix(static_cast<std::uint32_t>(g_human_untap_need));
+    mix(static_cast<std::uint32_t>(g_pay_remaining_mv));
+    mix(static_cast<std::uint32_t>(g_pay_full_mv));
+    mix(static_cast<std::uint32_t>(g_tap_keep_last_card));
+    mix(static_cast<std::uint32_t>(g_pain_sweep_defer));
+    mix(static_cast<std::uint32_t>(g_pay_sac_victim));
+    if ((g_pay_sac_spare[0] | g_pay_sac_spare[1]) != 0)   // §2b PaySacSpareScope; unset -> digest unchanged
+    { mix((static_cast<std::uint64_t>(static_cast<std::uint32_t>(g_pay_sac_spare[0])) << 32)
+          | static_cast<std::uint32_t>(g_pay_sac_spare[1])); }
+    for (int i = 0; i < 5; ++i)
+    {
+        mix(static_cast<std::uint32_t>(g_pay_own_line_pips[i]));
+        mix(static_cast<std::uint32_t>(g_pay_colored_need[i]));
+    }
+    if (g_generic_spend_budget != nullptr)
+    { mix(0xB06E7); for (int i = 0; i < 5; ++i) { mix(static_cast<std::uint32_t>(g_generic_spend_budget[i])); } }
+    if (g_untap_loop_owed != nullptr) { mix(0x0BED); cost(*g_untap_loop_owed); }
+    mix(g_plan_reserved_sources.size());
+    for (int n : g_plan_reserved_sources) { mix(static_cast<std::uint32_t>(n)); }
+    if (g_etb_untap_priority != nullptr)
+    { mix(0xE7B); for (int n : *g_etb_untap_priority) { mix(static_cast<std::uint32_t>(n)); } }
+    // The arm eight slots to a word (~590 slots: a byte at a time was most of this digest's cost).
+    const heurarm::Arm& arm = heurarm::t_arm;
+    std::size_t i = 0;
+    for (; i + 8 <= arm.size(); i += 8) { std::uint64_t w; std::memcpy(&w, arm.data() + i, 8); mix(w); }
+    if (i < arm.size()) { std::uint64_t w = 0; std::memcpy(&w, arm.data() + i, arm.size() - i); mix(w); }
+    return h;
 }

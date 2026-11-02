@@ -1,0 +1,86 @@
+{
+ "deck": "treasure_hunt",
+ "_doc": "artifact refresh verdicts -- scripts/artifact_queue.py (LEDGER_DIR)",
+ "entries": [
+  {
+   "run_id": "treasure_hunt-artifact-queue-d7d6a5-20261029T165858",
+   "kind": "valueleaf",
+   "verdict": "kept-incumbent",
+   "ident": "em:22c2f0ca0230d32b1c26",
+   "frozen": "5b88c1a04b95f442eb678d87c3381cb99ffb7a47",
+   "src_tree": "da525a17659a9ffd767c0bfd84eb77d74a38a284",
+   "date": "2026-10-29",
+   "worker": "artifact-queue-d7d6a5",
+   "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_treasure_hunt/DECISIONS.txt)",
+   "decisions": [
+    "    VERDICT arm=d6b30 adopt=0 delta=-0.00238 t=-5.66 cost=1.126x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.13x) with quality better (-0.00238) -- a TRADE, the user's call",
+    "    VERDICT arm=d6b40 adopt=0 delta=-0.00400 t=-5.13 cost=1.212x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.21x) with quality better (-0.00400) -- a TRADE, the user's call",
+    "    PICK arm=d6b20 why=the cheapest of 1 passing arm(s) (1.00x vs live, delta -0.00038)",
+    "    next: commit it with the deck's smoke + regression GT re-accepted (it changes play).",
+    "",
+    "=== 2026-10-29T17:17:09  PHASE E.6: no allowance for treasure_hunt -- no ladder escalations in 1200 games (single-path or trust-dominated); fleet default R = 0"
+   ]
+  },
+  {
+   "run_id": "treasure_hunt-artifact-queue-tool-647f24-20261030T135317",
+   "kind": "mulligan",
+   "verdict": "trade",
+   "ident": "e5acdc35d8cbd9b02a9c851d0092c42cd5f4e02c",
+   "frozen": "ad28dda1b9ed4858ddf06f5f595325ddc8ddc146",
+   "src_tree": "da525a17659a9ffd767c0bfd84eb77d74a38a284",
+   "date": "2026-10-30",
+   "worker": "artifact-queue-tool-647f24",
+   "delta": -0.020406,
+   "cost": [
+    1.0326923335223837,
+    0.00905978285863152,
+    32
+   ],
+   "settings": {
+    "recipe": "complete",
+    "env": {},
+    "depth": null,
+    "budget": null
+   },
+   "detail": "mulligan: TRADE -- quality not worse (new-vs-old -0.020406 t) but the new table costs MORE (cost 1.033x (se 0.009, 32 seeds)): the USER's call; left live on the result branch, NOT landed"
+  },
+  {
+   "run_id": "treasure_hunt-artifact-queue-tool-647f24-20261030T211345",
+   "kind": "valueleaf",
+   "verdict": "kept-incumbent",
+   "ident": "em:22c2f0ca0230d32b1c26",
+   "frozen": "6b655b71fbd2150b8830ea70780236b09fa1eba1",
+   "src_tree": "bcf643fb8ae863d139677d266eacbe772d459dee",
+   "date": "2026-10-30",
+   "worker": "artifact-queue-tool-647f24",
+   "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_treasure_hunt/DECISIONS.txt)",
+   "decisions": [
+    "    VERDICT arm=d7b60 adopt=0 delta=-0.00125 t=-5.00 cost=1.124x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.12x) with quality better (-0.00125) -- a TRADE, the user's call",
+    "    VERDICT arm=d7b80 adopt=0 delta=-0.00150 t=-4.58 cost=1.220x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.22x) with quality better (-0.00150) -- a TRADE, the user's call",
+    "    PICK arm=d5b40 why=the cheapest of 1 passing arm(s) (0.99x vs live, delta +0.00000)",
+    "    next: commit it with the deck's smoke + regression GT re-accepted (it changes play).",
+    "",
+    "=== 2026-10-30T21:46:13  PHASE E.6: no allowance for treasure_hunt -- no ladder escalations in 1200 games (single-path or trust-dominated); fleet default R = 0"
+   ]
+  },
+  {
+   "run_id": "treasure_hunt-artifact-queue-tool-647f24-20261101T190927",
+   "kind": "valueleaf",
+   "verdict": "kept-incumbent",
+   "ident": "em:22c2f0ca0230d32b1c26",
+   "frozen": "caf0599e45eff1f5a0c8a8a56a1c24d124f35350",
+   "src_tree": "83b1f17308cff28f24934c82e9c113000a08992f",
+   "date": "2026-11-01",
+   "worker": "artifact-queue-tool-647f24",
+   "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_treasure_hunt/DECISIONS.txt)",
+   "decisions": [
+    "    VERDICT arm=d6b40 adopt=0 delta=+0.00000 t=+0.00 cost=1.016x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.02x) with quality no better (+0.00000) -- not an improvement",
+    "    VERDICT arm=d6b60 adopt=0 delta=-0.00112 t=-4.97 cost=1.123x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.12x) with quality better (-0.00112) -- a TRADE, the user's call",
+    "    VERDICT arm=d6b80 adopt=0 delta=-0.00137 t=-5.23 cost=1.209x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.21x) with quality better (-0.00137) -- a TRADE, the user's call",
+    "    PICK arm=none why=no candidate is cheaper than live with quality not notably worse",
+    "",
+    "=== 2026-11-01T19:24:20  PHASE E.6: no allowance for treasure_hunt -- no ladder escalations in 1200 games (single-path or trust-dominated); fleet default R = 0"
+   ]
+  }
+ ]
+}

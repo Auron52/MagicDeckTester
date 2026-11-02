@@ -147,6 +147,12 @@ void EffectHandler::EnterBattlefield(GameState& state, const StackEntry& entry,
     // through PutPlusCounters, so Doubling Season doubles them (CR 121.6/614.1c -- counters a
     // permanent ENTERS WITH are doubled, the planeswalker double-loyalty ruling). Lockstep with
     // TurnSolver's apply_one creature-enter branch.
+    // WALKING BALLISTA: "This creature enters with X +1/+1 counters on it" -- an AS-ENTERS replacement
+    // (CR 614.1c) reading the X of THIS cast (CR 107.3m), in the same pre-push window as devour, through
+    // PutPlusCounters (a put, CR 122.6). The stack entry records a positive chosen_x only, so X = 0
+    // enters as the printed 0/0 (FireEtbWatchers records it doomed). Lockstep twin: apply_one.
+    if (edef->params.enters_with_x_plus_counters && entry.chosen_x.value_or(0) > 0)
+    { PutPlusCounters(state, perm, *entry.chosen_x); }
     std::vector<DevourDeath> devoured;
     if (edef->params.devour > 0 && entry.devour_count.value_or(0) > 0)
     {
@@ -236,6 +242,9 @@ void EffectHandler::MoveToGraveyard(GameState& state, const StackEntry& entry)
 
 bool EffectHandler::Resolve(GameState& state, const StackEntry& entry, const CardDefinition& def)
 {
+    // Own-death decks may pay their last life to activate a mana source. The
+    // game ends at the priority boundary, before the paid spell/trigger resolves.
+    if (state.own_death_live && SelfHasLost(state)) { return false; }
     // THE EXECUTOR'S SPELL-RESOLUTION FLUSH for the Niv draw/damage loop (SpellEffects.h, "NIV-MIZZET
     // DRAW/DAMAGE LOOP"): every draw this resolution made pings once it has FINISHED (CR 603.3) --
     // after Brainstorm's put-back, Ponder's reorder. Rollout twin: apply_one's flush. One bool test
@@ -315,6 +324,9 @@ bool EffectHandler::Resolve(GameState& state, const StackEntry& entry, const Car
     // twin: apply_one's DrainPendingSelfBounces calls. No-op (empty check) for every deck
     // without the param.
     DrainPendingSelfBounces(state);
+    // ...and a Walking Ballista that entered at 0 toughness (X = 0) dies now (CR 704.5f), its enter
+    // watchers having already fired. Rollout twin: apply_one's DrainPendingZeroToughness calls.
+    DrainPendingZeroToughness(state);
     // ...and any look-top trigger (Risen Reef) a WATCHER-ONLY entry recorded (a token / conjure made by
     // this resolution -- every full enter already drained at its own FireOwnEtbTriggers exit). Same
     // safety argument. Rollout twin: apply_one's drains. One empty() test without a look-top watcher.
@@ -468,7 +480,7 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
                                       entry.land_put_credit.Total() > 0 ? &entry.land_put_credit
                                                                         : nullptr);
                 }
-                if (def.params.tutor_to_hand || def.params.tutor_to_top)
+                if (IsLibraryTutor(def.params))
                 {
                     // Fetch the searched target carried on the stack entry (empty -> the
                     // heuristic's top pick), matching the rollout's ApplyPlanDirect.
@@ -556,7 +568,7 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
                 {
                     Player& imp = state.players[entry.controller_index];
                     const int expiry = def.params.impulse_expiry_this_turn
-                                     ? state.turn_number : state.turn_number + 1;
+                                     ? state.TurnSeq() : state.TurnSeq() + 1;
                     std::vector<Card> exiled = DrawTopAsImpulseStaged(
                         state, entry.controller_index, def.params.impulse_exile, expiry);
                     for (Card& ec : exiled)
@@ -698,6 +710,7 @@ void EffectHandler::ResolveManaDork(GameState& state, const StackEntry& entry,
 void EffectHandler::ResolveDirectDamage(GameState& state, const StackEntry& entry,
                                          const CardDefinition& def)
 {
+    NoncombatTriggerScope noncombat_scope(state);
     // An {X} burn deals its chosen X (carried on the stack entry; CR 202.3). A fixed-damage
     // burn uses params.damage, with the landfall boost if a land entered this turn.
     int damage;
@@ -743,11 +756,28 @@ void EffectHandler::ResolveDirectDamage(GameState& state, const StackEntry& entr
         damage = entry.crackle_targets.value();
     }
 
-    for (const Target& t : entry.targets)
+    int chain_hit_controller = -1;
+    if (def.params.damage_per_nonbasic_land > 0)
+    { ResolveNonbasicLandDamage(state, entry.controller_index, def.params.damage_per_nonbasic_land); }
+    FixedBurnPin fixed_burn_pin;
+    if (FixedTargetedBurn(def) && DecodeFixedBurnPin(entry.tutor_target, fixed_burn_pin))
+    {
+        chain_hit_controller = BurnTargetController(state, entry.controller_index, fixed_burn_pin.first);
+        if (!ResolveFixedBurnPin(state, entry.controller_index, def, fixed_burn_pin, damage))
+        {
+            // CR 608.2b: with every target illegal, none of the spell resolves,
+            // including Magma Jet's scry. Casting still happened; the spell goes to graveyard.
+            MoveToGraveyard(state, entry);
+            return;
+        }
+    }
+    else for (const Target& t : entry.targets)
     {
         if (t.type == Target::Type::Player)
         {
+            chain_hit_controller = t.player_index;
             state.players[t.player_index].life -= damage;
+            RecordNoncombatDamageToPlayer(state, entry.controller_index, t.player_index, damage);
             if (t.player_index != entry.controller_index && damage > 0)
             {
                 state.opponent_lost_life_this_turn = true;
@@ -759,6 +789,14 @@ void EffectHandler::ResolveDirectDamage(GameState& state, const StackEntry& entr
                 && t.permanent_index < static_cast<int>(state.battlefield.size()))
             {
                 Permanent& target = state.battlefield[t.permanent_index];
+                chain_hit_controller = target.controller_index;
+                if (target.card.HasType(CardType::Planeswalker))
+                {
+                    target.loyalty -= damage;
+                    for (Counter& c : target.counters)
+                    { if (c.type == Counter::Type::Loyalty) { c.count = target.loyalty; } }
+                    continue;
+                }
                 const int before = target.damage;
                 target.damage += damage;
 
@@ -817,6 +855,9 @@ void EffectHandler::ResolveDirectDamage(GameState& state, const StackEntry& entr
         }
     }
 
+    ContinueChainLightning(state, def, chain_hit_controller);
+    if (def.params.cast_scry > 0)
+    { ScryTop(state, def.params.cast_scry, def.card.m_name); }
     MoveToGraveyard(state, entry);
 }
 
@@ -897,6 +938,22 @@ void EffectHandler::ResolveDrawSpell(GameState& state, const StackEntry& entry,
     Player& controller = state.players[entry.controller_index];
     int n = def.params.draw;
 
+    // THE BLIND RESOLUTION CHOOSER (blind mode only; null otherwise => byte-identical): the put-back's pair /
+    // Ponder's order is decided here, after the draw / the look, against what the resolution reveals.
+    if (g_blind_draw_chooser != nullptr && !def.params.expressive_iteration && !def.params.stages_cards
+        && (def.params.put_back_from_hand > 0 || def.params.cast_reorder > 0))
+    {
+        BlindDrawSpellChooser* ch = g_blind_draw_chooser;
+        g_blind_draw_chooser = nullptr;   // the chooser's own trial resolutions take their pins
+        const int r = ch->Choose(state, entry, def);
+        g_blind_draw_chooser = ch;
+        if (r >= 0)
+        {
+            if (def.params.put_back_from_hand > 0) { g_scripted_putback_choice = r; }
+            else                                   { g_scripted_reorder_choice = r; }
+        }
+    }
+
     // Expressive Iteration: look 3 -> 1 hand / 1 exiled-staged-this-turn / 1 bottom (its own model,
     // not the normal draw/scry path). Mirrors the rollout's apply_one DrawSpell branch (lockstep).
     if (def.params.expressive_iteration)
@@ -909,12 +966,12 @@ void EffectHandler::ResolveDrawSpell(GameState& state, const StackEntry& entry,
     // Scry-then-draw (Preordain): bottom the unwanted, reorder the rest, before drawing.
     if (def.params.cast_scry > 0) { ScryTop(state, def.params.cast_scry, def.card.m_name); }
     // Reorder-or-shuffle-then-draw (Ponder): keep all on top in best order, or shuffle away.
-    if (def.params.cast_reorder > 0) { ReorderTopOrShuffle(state, def.params.cast_reorder, def.card.m_name, entry.ponder_keep.value_or(-1)); }
+    if (def.params.cast_reorder > 0) { ReorderTopOrShuffle(state, def.params.cast_reorder, def.card.m_name, entry.ponder_keep.value_or(-1), def.params.draw); }
 
     if (def.params.stages_cards)
     {
         // Cards go to a staged exile zone; playable until end of the player's next turn.
-        int expiry = state.turn_number + 1;
+        int expiry = state.TurnSeq() + 1;
         for (int i = 0; i < n && !controller.library.empty(); ++i)
         {
             StagedCard sc;
@@ -1036,6 +1093,45 @@ void EffectHandler::PushCastTriggers(GameState& state, const CardDefinition& def
         te.controller_index = controller;
         state.stack.push_back(std::move(te));
     }
+    // Emrakul, the Aeons Torn: "When you cast this spell, take an extra turn after this one." One entry per
+    // granted turn. Lockstep twin: apply_one's inline cast-trigger block. 0 for every other card.
+    for (int i = 0; i < def.params.cast_trigger_extra_turns; ++i)
+    {
+        StackEntry te;
+        te.type             = StackEntry::EntryType::Triggered;
+        te.trigger_kind     = StackEntry::TriggerKind::ExtraTurn;
+        te.source           = def.card;
+        te.controller_index = controller;
+        state.stack.push_back(std::move(te));
+    }
+    // The Ulamogs' TARGETED cast triggers: targets chosen NOW, as the trigger is put on the stack (CR
+    // 603.3d), by the shared chooser (the searched rank policy); fewer legal targets than it needs ->
+    // removed (not pushed). Lockstep twin: apply_one's inline block (same chooser, same board).
+    const int n_exile   = def.params.cast_trigger_exile_target_permanents;
+    const int n_destroy = def.params.cast_trigger_destroy_target_permanents;
+    for (int which = 0; which < 2; ++which)
+    {
+        const int  n       = which == 0 ? n_exile : n_destroy;
+        const bool destroy = which == 1;
+        if (n <= 0) { continue; }
+        const std::vector<int> nums =
+            ChooseCastTriggerTargets(state, controller, n, destroy, def.card.m_name.str());
+        if (nums.empty()) { continue; }
+        StackEntry te;
+        te.type             = StackEntry::EntryType::Triggered;
+        te.trigger_kind     = destroy ? StackEntry::TriggerKind::CastDestroyTarget
+                                      : StackEntry::TriggerKind::CastExileTargets;
+        te.source           = def.card;
+        te.controller_index = controller;
+        for (int num : nums)
+        {
+            Target t;
+            t.type            = Target::Type::Permanent;
+            t.permanent_index = num;   // the target's m_number (re-found on resolution, CR 608.2b)
+            te.targets.push_back(t);
+        }
+        state.stack.push_back(std::move(te));
+    }
     if (def.params.cascade_max_mv > 0)
     {
         // One entry per instance ("Cascade, cascade" = 2 -- cascade_count). The instances are
@@ -1073,6 +1169,15 @@ bool EffectHandler::PushFreeCast(GameState& state, const Card& card, int control
     e.source           = def->card;
     e.source.m_number  = card.m_number;   // preserve per-copy ID
     e.controller_index = controller;
+    // Free targeted burn needs the same cast-time target selection as a hand cast.
+    // Otherwise its empty stack-entry targets resolve no damage while the rollout's
+    // recursive apply_one chooses a real target. Prepare before counting/firing CAST.
+    if (FixedTargetedBurn(*def))
+    {
+        FixedBurnPin pin;
+        if (!PrepareFixedBurnPin(state, controller, *def, "", pin)) { return false; }
+        e.tutor_target = EncodeFixedBurnPin(pin);
+    }
 
     // A free cast IS a cast (CR 601.2 / 702.85a): count it and fire cast-time abilities
     // exactly as CastSpellFromHand does -- lockstep with the rollout's apply_one free-cast
@@ -1090,8 +1195,11 @@ bool EffectHandler::PushFreeCast(GameState& state, const Card& card, int control
                 : std::min(state.casts_remaining_this_turn, def->params.max_casts_after);
     }
     state.stack.push_back(std::move(e));
+    if (state.own_death_live && SelfHasLost(state)) { return true; }
     FireOnCastTriggers(state, *def);
     FireProwess(state, *def);
+    FlushNoncombatTriggersAtPriorityBoundary(state);
+    if (state.own_death_live && SelfHasLost(state)) { return true; }
     // ...including the free spell's OWN cast triggers, so cascade chains nest naturally.
     PushCastTriggers(state, *def, controller);
     return true;
@@ -1108,6 +1216,17 @@ bool EffectHandler::ResolveTriggered(GameState& state, const StackEntry& entry,
             ResolveEtbExileFreeCast(state, entry, def); return true;
         case StackEntry::TriggerKind::Demonstrate:
             ResolveDemonstrate(state, entry, def);      return true;
+        case StackEntry::TriggerKind::ExtraTurn:
+            ResolveCastTriggerExtraTurn(state, entry.source.m_name.str()); return true;
+        case StackEntry::TriggerKind::CastExileTargets:
+        case StackEntry::TriggerKind::CastDestroyTarget:
+        {
+            std::vector<int> nums;
+            for (const Target& t : entry.targets) { nums.push_back(t.permanent_index); }
+            ResolveCastTriggerTargets(state, entry.controller_index, entry.source.m_name.str(), nums,
+                                      entry.trigger_kind == StackEntry::TriggerKind::CastDestroyTarget);
+            return true;
+        }
         default:                                        return true;
     }
 }

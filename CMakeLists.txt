@@ -141,6 +141,7 @@ add_library(mtg-core STATIC
     src/ai/DecisionProviders.cpp
     src/ai/TurnSolver.cpp
     src/ai/ManaPayment.cpp
+    src/ai/ManaOracle.cpp
     src/ai/PlanContext.cpp
     src/ai/LandPlay.cpp
     src/ai/Combat.cpp
@@ -293,6 +294,7 @@ unset(CMAKE_POLICY_VERSION_MINIMUM)
 enable_testing()
 add_executable(mtg-test
     test/unit/test_mana_payment.cpp
+    test/unit/test_mana_oracle.cpp
     test/unit/test_counter_list.cpp
     test/unit/test_kitty_discard.cpp
     test/unit/test_bucket_policy.cpp
@@ -308,10 +310,13 @@ add_executable(mtg-test
     test/unit/test_provider_prunes.cpp
     test/unit/test_m2_land_drop.cpp
     test/unit/test_staged_lockstep.cpp
+    test/unit/test_sac_mana_act_demand.cpp
+    test/unit/test_sac_outlet_pay.cpp
     test/unit/test_bp_resume_line_hold.cpp
     test/unit/test_rollout_land_act_color.cpp
     test/unit/test_opponent_deck.cpp
     test/unit/test_breaching_clauses.cpp
+    test/unit/test_midrange_burn_permanents.cpp
     test/unit/test_edf_blink_target.cpp
     test/unit/test_edf_d0_play.cpp
     test/unit/test_critter_lifegain.cpp
@@ -328,6 +333,13 @@ add_executable(mtg-test
     test/unit/test_restrictor_order.cpp
     test/unit/test_hinata_cast_order.cpp
     test/unit/test_fungus_revision.cpp
+    test/unit/test_paradise_mantle.cpp
+    test/unit/test_badger_grant_sites.cpp
+    test/unit/test_domain_widen_partial.cpp
+    test/unit/test_ramp_filter_c_feed.cpp
+    test/unit/test_land_aura_order_hold.cpp
+    test/unit/test_domain_open_exact.cpp
+    test/unit/test_dork_atk_provider_hold.cpp
     test/unit/test_kicker_additional_cost.cpp
     test/unit/test_keep_table.cpp
     test/unit/test_angels_tribal.cpp
@@ -335,6 +347,7 @@ add_executable(mtg-test
     test/unit/test_keyword_mask.cpp
     test/unit/test_pirates.cpp
     test/unit/test_vial_target_from_decklist.cpp
+    test/unit/test_passive_opponent_lands.cpp
     test/unit/test_pirates_provider.cpp
     test/unit/test_etb_dig_breakpoint.cpp
     test/unit/test_etb_treasure_spend.cpp
@@ -390,6 +403,8 @@ add_executable(mtg-test
     test/unit/test_mycotyrant.cpp
     test/unit/test_landfall.cpp
     test/unit/test_mossborn_hydra.cpp
+    test/unit/test_scute_cub.cpp
+    test/unit/test_moraug.cpp
     test/unit/test_kessig_wolf_run.cpp
     test/unit/test_landfall_self_payoffs.cpp
     test/unit/test_galadriel.cpp
@@ -397,10 +412,14 @@ add_executable(mtg-test
     test/unit/test_lfe_enum_fixes.cpp
     test/unit/test_courser.cpp
     test/unit/test_land_search.cpp
+    test/unit/test_fetched_land_entry.cpp
     test/unit/test_land_search_gaps.cpp
     test/unit/test_tutor_fail_to_find.cpp
     test/unit/test_colossus_cast_order.cpp
     test/unit/test_giants_discard.cpp
+    test/unit/test_tectonic_axis.cpp
+    test/unit/test_lackey_axis.cpp
+    test/unit/test_combat_stable_sources.cpp
     test/unit/test_antilife_tutor.cpp
     test/unit/test_fluctuator_discard.cpp
     test/unit/test_fluctuator_order.cpp
@@ -410,6 +429,7 @@ add_executable(mtg-test
     test/unit/test_auras_restricted_new_creature.cpp
     test/unit/test_equip_one_host_ds_gate.cpp
     test/unit/test_eldrazi_flicker_discard.cpp
+    test/unit/test_midrange_burn_spells.cpp
     test/unit/test_burn_discard.cpp
     test/unit/test_burn_cast_order.cpp
     test/unit/test_creature_giving_discard.cpp
@@ -422,6 +442,7 @@ add_executable(mtg-test
     test/unit/test_angels_discard.cpp
     test/unit/test_angels_cast_order.cpp
     test/unit/test_critterlifegain_discard.cpp
+    test/unit/test_lhc_rules.cpp
     test/unit/test_critterlifegain_cast_order.cpp
     test/unit/test_fungus_discard.cpp
     test/unit/test_selesnyalifegain_discard.cpp
@@ -435,15 +456,21 @@ add_executable(mtg-test
     test/unit/test_edf_prospective_null.cpp
     test/unit/test_edf_untap_credit.cpp
     test/unit/test_edf_prepay_energy.cpp
+    test/unit/test_prepay_colours.cpp
+    test/unit/test_line_generic.cpp
+    test/unit/test_pay_refine.cpp
     test/unit/test_edf_aura_payer.cpp
     test/unit/test_edf_route_board_deploy.cpp
     test/unit/test_edf_goff_verify.cpp
     test/unit/test_edf_tapahead_pending_pip.cpp
+    test/unit/test_edf_pay_rescue.cpp
     test/unit/test_edf_aura_payer_as_executed.cpp
     test/unit/test_dig_searched_choice.cpp
     test/unit/test_th_held_drop.cpp
     test/unit/test_freecast_x_zero.cpp
     test/unit/test_bp_wave_empty.cpp
+    test/unit/test_bp_dev_seq.cpp
+    test/unit/test_dev_seq_tail_skip.cpp
     test/unit/test_edf_cast_order.cpp
     test/unit/test_speaker_of_the_heavens.cpp
     test/unit/test_path_to_exile.cpp
@@ -451,6 +478,13 @@ add_executable(mtg-test
     test/unit/test_niv_draw_trigger.cpp
     test/unit/test_sulfur_falls_probe.cpp
     test/unit/test_generator_servant.cpp
+    test/unit/test_garth_lotus_crack.cpp
+    test/unit/test_rock_seq_credit.cpp
+    test/unit/test_seq_free_attach.cpp
+    test/unit/test_echo_staged_gas.cpp
+    test/unit/test_echo_axis.cpp
+    test/unit/test_doth_axis.cpp
+    test/unit/test_placeholder_reads.cpp
     test/unit/test_manual_tap_sources.cpp
     test/unit/test_niv_payment_holes.cpp
     test/unit/test_brainstorm.cpp
@@ -461,6 +495,21 @@ add_executable(mtg-test
     test/unit/test_lfe_fury.cpp
     test/unit/test_lfe_fixpay.cpp
     test/unit/test_lfe_integration.cpp
+    test/unit/test_cyclone_phase1.cpp
+    test/unit/test_cyclone_phase2.cpp
+    test/unit/test_cyclone_phase3.cpp
+    test/unit/test_cyclone_phase4.cpp
+    test/unit/test_cyclone_phase5.cpp
+    test/unit/test_cyclone_stage5.cpp
+    test/unit/test_cyclone_cantrip_order.cpp
+    test/unit/test_cyclone_remand_chain.cpp
+    test/unit/test_cyclone_refs.cpp
+    test/unit/test_cyclone_sound_folds.cpp
+    test/unit/test_known_library.cpp
+    test/unit/test_cyclone_cantrip_plans.cpp
+    test/unit/test_spell_copy_id.cpp
+    test/unit/test_cyclone_discard_buckets.cpp
+    test/unit/test_cyclone_cast_order.cpp
 )
 target_link_libraries(mtg-test PRIVATE mtg-core doctest::doctest)
 # Precompiled header for the unit tests ONLY (the engine binaries are untouched, so codegen and determinism

@@ -1,0 +1,69 @@
+{
+  "_comment": [
+    "THE SURPLUS CYCLONE (cast/cycle order item 4, 2026-10-29): the SEARCH can cycle the surplus Unpredictable Cyclone BEFORE",
+    "casting the other one in the same turn. After the first Cyclone resolves, cycling the second walks to the next ENCHANTMENT",
+    "(there is none) and draws nothing, so the only round-3 kill is: cycle Cyclone #1 as a PLAIN draw (finds the Street Wraith on",
+    "top), cast Cyclone #2, cycle the Wraith -> the walk casts Emrakul (extra turn, 15 flying) -> the 15-life opponent dies in",
+    "ROUND 3. A cycle seed runs after its plan's casts, so the line is a SEED-ONLY plan whose site-4 re-solve casts the Cyclone",
+    "and cycles the Wraith. FOUR Mountains: with three Mountains + four Islands the same line is NOT found at any budget (b0",
+    "included) -- the seed's {2} is paid before the continuation exists and the payer spends Mountains, so the continuation",
+    "cannot pay {R}{R} (ledger Q61). No lever needed here."
+  ],
+  "deck": "decks/Unpredictable Cyclone/Unpredictable Cyclone.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "active_life": 20,
+  "opponent_life": 15,
+  "battlefield": [
+    {
+      "name": "Mountain",
+      "controller": 0
+    },
+    {
+      "name": "Mountain",
+      "controller": 0
+    },
+    {
+      "name": "Mountain",
+      "controller": 0
+    },
+    {
+      "name": "Mountain",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    }
+  ],
+  "hand": [
+    "Unpredictable Cyclone",
+    "Unpredictable Cyclone"
+  ],
+  "library_top": [
+    "Street Wraith",
+    "Emrakul, the Aeons Torn"
+  ],
+  "library_filler": "Island",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 20,
+  "max_turns": 4,
+  "expect_win_turn": 3,
+  "expect_log_sequence": [
+    "MAIN_1 DISCARD Unpredictable Cyclone",
+    "MAIN_1 DRAW Street Wraith",
+    "MAIN_1 CAST_SPELL Unpredictable Cyclone",
+    "cycled Street Wraith"
+  ]
+}

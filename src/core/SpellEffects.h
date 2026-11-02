@@ -28,6 +28,7 @@
 #include <type_traits>
 #include <atomic>
 #include <chrono>    // ShedStats::CostScope -- pricing the shed path, not just counting it
+#include <charconv>  // fixed-burn pins are decoded in the plan-subset hot path
 #include <cstdio>
 #include <cstdlib>
 #include <limits>
@@ -57,6 +58,194 @@ inline const Card& ZoneCard(const Card& c)
 {
     const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
     return d ? d->card : c;
+}
+
+// The 2026-10-29 placeholder audit's levers (HeuristicArm.h PLACEHOLDER_*; docs/design/placeholder-card-reads.md):
+// every site it found reading a hand / library / graveyard card's own (empty) characteristics reads
+// ZoneCard instead when its lever is on, one lever per logical group so an A/B can isolate each; =0 is
+// always the historical placeholder read. Each reader is the ONE reader of its lever, and every site it
+// gates is a single function both worlds call (a provider hook, a SpellEffects primitive) or a
+// search-shape gate the executor does not have, so the executor and the rollout cannot disagree.
+//
+// DEFAULT ON -- met the adoption bar on held-out seeds (no slower game that does not recover):
+inline bool PlaceholderProviderOn()   // Mirrorwing / Landfall / Stompy cleanup discard, Prevent Damage quake X
+{
+    static const bool e = EnvOn("MTG_PLACEHOLDER_PROVIDER", true);
+    return heurarm::Flag(heurarm::PLACEHOLDER_PROVIDER, e);
+}
+inline bool PlaceholderSearchOn()     // search-shape gates (m2 land arrival, Karoo bounce "land in hand")
+{
+    static const bool e = EnvOn("MTG_PLACEHOLDER_SEARCH", true);
+    return heurarm::Flag(heurarm::PLACEHOLDER_SEARCH, e);
+}
+inline bool PlaceholderSnowOn()       // Snow winless certificate's gain bound sees the snow permanents
+{
+    static const bool e = EnvOn("MTG_PLACEHOLDER_SNOW", true);
+    return heurarm::Flag(heurarm::PLACEHOLDER_SNOW, e);
+}
+// MTG_TAPAHEAD_ENERGY_COVER (2026-10-31; DEFAULT ON, =0 -> an energy-paid colour counts as cover): the ETB-untap
+// tap-ahead's coverage question (ReservedColorsStillCovered) does not count an ENERGY-paid colour (Aether Hub's "{T},
+// Pay {E}: Add one mana of any color") as a source still covering the pending pip. See the note at that function.
+inline bool TapAheadEnergyCoverOn()
+{
+    static const bool e = EnvOn("MTG_TAPAHEAD_ENERGY_COVER", true);
+    return heurarm::Flag(heurarm::TAPAHEAD_ENERGY_COVER, e);
+}
+// MTG_PAINLAND_TAPAHEAD_CAST_AUTO (2026-10-31; DEFAULT ON, =0 -> human play only): the cast-site half of the
+// painland tap-ahead (a painland banks its PAINLESS {C} ahead of an ETB untap that gives it back) in autonomous play
+// too, under the same budget and reserve guards. See the note in EtbUntapTapAheadIntoFloat.
+inline bool PainlandTapAheadCastAutoOn()
+{
+    static const bool e = EnvOn("MTG_PAINLAND_TAPAHEAD_CAST_AUTO", true);
+    return heurarm::Flag(heurarm::PAINLAND_TAPAHEAD_CAST_AUTO, e);
+}
+// MTG_DOMAIN_SELF_COLORS (DEFAULT ON; =0 -> the board's colours only): a domain source projected from
+// hand counts its own colours (AddSourceToPool).
+inline bool DomainSelfColorsOn()
+{
+    static const bool e = EnvOn("MTG_DOMAIN_SELF_COLORS", true);
+    return heurarm::Flag(heurarm::DOMAIN_SELF_COLORS, e);
+}
+// Tectonic Giant's default-keep MV. ON since the keep / mode axis covers a Giant the plan casts and every
+// attacking copy (MTG_TECTONIC_CAST_AXIS / MTG_TECTONIC_ORDINALS): with the axis in, ON vs OFF measured 0 / 0
+// over 6,000 held-out Giants games and 0 slower / 1 faster over 3,000 2HG (docs/design/analysis-Giants.md).
+inline bool PlaceholderTectonicOn()
+{
+    static const bool e = EnvOn("MTG_PLACEHOLDER_TECTONIC", true);
+    return heurarm::Flag(heurarm::PLACEHOLDER_TECTONIC, e);
+}
+// Goblins echo "no gas" cost read. ON since echo is a SEARCHED decision (MTG_ECHO_AXIS): PayEchoToKeep only
+// orders pay vs decline, and with the axis in, ON vs OFF measured 0 / 0 over 8,000 held-out Goblins games and
+// 4,000 goblins2hg (docs/design/searched-echo.md).
+inline bool PlaceholderEchoOn()
+{
+    static const bool e = EnvOn("MTG_PLACEHOLDER_ECHO", true);
+    return heurarm::Flag(heurarm::PLACEHOLDER_ECHO, e);
+}
+// DEFAULT OFF -- each corrects a read, but the heuristic the correct read switches on loses games in an
+// UNSEARCHED decision, so the slower games do not recover at d8 b0. Each read site says what unblocks it.
+inline bool PlaceholderManaOn()       // float-colour commit weighs the hand's real pips (blocked on a sequence-aware commit)
+{
+    static const bool e = EnvOn("MTG_PLACEHOLDER_MANA", false);
+    return heurarm::Flag(heurarm::PLACEHOLDER_MANA, e);
+}
+// Learned-model featurizers: an EXPERIMENT OVERRIDE (ON = every model reads the definition, whatever its
+// sidecar's "featurizer" names). The read is otherwise chosen PER MODEL (KeepModel.h kFeaturizerCurrent).
+inline bool PlaceholderFeaturesOn()
+{
+    static const bool e = EnvOn("MTG_PLACEHOLDER_FEATURES", false);
+    return heurarm::Flag(heurarm::PLACEHOLDER_FEATURES, e);
+}
+// ZoneCard when the group's lever is on, else the card itself (the historical placeholder read).
+inline const Card& ZoneCardIf(bool on, const Card& c) { return on ? ZoneCard(c) : c; }
+
+// MTG_TECTONIC_PIN_FOLD (HeuristicArm.h TECTONIC_PIN_FOLD; DEFAULT ON, =0 restores the pre-fold behaviour
+// byte-identically): Tectonic Giant's two state pins (scripted_tectonic_mode / _keep) are COMBAT pins. The ONE
+// reader: ApplyAttackModalTriggers (both worlds) consumes them whether or not a trigger fired, and the search's
+// fan-out / combat-pin fold (TurnSolver.cpp) read the same switch, so the executor and the rollout cannot
+// disagree about when a pin dies.
+inline bool TectonicPinFoldOn()
+{
+    static const bool e = EnvOn("MTG_TECTONIC_PIN_FOLD", true);
+    return heurarm::Flag(heurarm::TECTONIC_PIN_FOLD, e);
+}
+// MTG_FLING_PIN_FOLD (HeuristicArm.h FLING_PIN_FOLD; DEFAULT ON, =0 restores the pre-fold behaviour byte-identically):
+// Surtland Flinger's victim pin (scripted_fling_victim) is a COMBAT pin, the Tectonic shape. The ONE reader:
+// FireAttackSacFling (both worlds) spends it whether or not a fling fired, and the search's fan-out / combat-pin
+// fold read the same switch.
+inline bool FlingPinFoldOn()
+{
+    static const bool e = EnvOn("MTG_FLING_PIN_FOLD", true);
+    return heurarm::Flag(heurarm::FLING_PIN_FOLD, e);
+}
+// MTG_LACKEY_PIN_FOLD (HeuristicArm.h LACKEY_PIN_FOLD; DEFAULT ON, =0 byte-identical to before): Goblin Lackey's
+// put pin (scripted_cheat_choice) is a COMBAT pin, the Tectonic shape. Read by ResolveCombatDamage (Combat.cpp,
+// both worlds), which spends it at the end of combat damage whether or not a put fired, and by the search's
+// combat-pin fold.
+inline bool LackeyPinFoldOn()
+{
+    static const bool e = EnvOn("MTG_LACKEY_PIN_FOLD", true);
+    return heurarm::Flag(heurarm::LACKEY_PIN_FOLD, e);
+}
+// MTG_LACKEY_ORDINALS (HeuristicArm.h LACKEY_ORDINALS; DEFAULT ON, =0 byte-identical to before): the put pin is
+// PACKED per damaging-Lackey trigger, ordinal 0 in bits 0-3 as the historical rank (15 = unpinned), ordinal
+// k >= 1 in bits 4k..4k+3 as rank + 1 (0 = unpinned); -1 = nothing pinned. So every value the single-trigger
+// axis ever wrote reads exactly as before. Each trigger reads ordinal 0 and SHIFTS the rest down
+// (LackeyPinShift) -- the two damage steps of a first-strike combat then need no shared counter. Read by
+// FireCombatDamageCheatIntoPlay (both worlds) and the search's fan-out.
+constexpr int kLackeyMaxOrdinals = 4;
+constexpr int kLackeyMaxRank     = 14;
+inline bool LackeyOrdinalsOn()
+{
+    static const bool e = EnvOn("MTG_LACKEY_ORDINALS", true);
+    return heurarm::Flag(heurarm::LACKEY_ORDINALS, e);
+}
+// MTG_LACKEY_DECLINE (HeuristicArm.h LACKEY_DECLINE; DEFAULT ON): the rank that DECLINES the put ("you MAY put a
+// Goblin permanent card"). The axis caps its put ranks at kLackeyMaxRank - 1 (it sizes at most kLackeyMaxRank
+// candidates), so kLackeyMaxRank is never a put rank and packs like any other (ordinal 0: 14; ordinal k: 15). Read by
+// FireCombatDamageCheatIntoPlay under MTG_LACKEY_ORDINALS only -- the axis emits it only there.
+constexpr int kLackeyDeclineRank = kLackeyMaxRank;
+inline bool LackeyDeclineOn()
+{
+    static const bool e = EnvOn("MTG_LACKEY_DECLINE", true);
+    return heurarm::Flag(heurarm::LACKEY_DECLINE, e);
+}
+// MTG_COMBAT_STABLE_SOURCES (HeuristicArm.h COMBAT_STABLE_SOURCES; DEFAULT ON -- a rules fix, the slot exists for the
+// paired A/B only): the combat-damage triggers resolve each damaging source by IDENTITY rather than by a battlefield
+// position captured before an earlier trigger could REMOVE a permanent. Read by FireCombatDamageCheatIntoPlay and by
+// Combat.cpp's two damage-step shapes (both worlds). =0 -> the stale positions, byte-identical to before.
+inline bool CombatStableSourcesOn()
+{
+    static const bool e = EnvOn("MTG_COMBAT_STABLE_SOURCES", true);
+    return heurarm::Flag(heurarm::COMBAT_STABLE_SOURCES, e);
+}
+// The battlefield position of the permanent `controller` controls with card number `num`, trying `hint` first; -1 if
+// it is gone. An UNNUMBERED permanent (num 0 -- a hand-built test board) cannot be re-found, so it keeps `hint` while
+// that is in range: the pre-identity behaviour, and the only one available.
+inline int RefindPermanentByNumber(const GameState& state, int controller, int num, int hint)
+{
+    const int n = static_cast<int>(state.battlefield.size());
+    if (num == 0) { return (hint >= 0 && hint < n) ? hint : -1; }
+    if (hint >= 0 && hint < n)
+    {
+        const Permanent& h = state.battlefield[static_cast<std::size_t>(hint)];
+        if (h.card.m_number == num && h.controller_index == controller) { return hint; }
+    }
+    for (int i = 0; i < n; ++i)
+    {
+        const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+        if (q.card.m_number == num && q.controller_index == controller) { return i; }
+    }
+    return -1;
+}
+// The pinned rank of ordinal `k`, or -1 = unpinned (CombatCheatCandidates' front).
+inline int LackeyRankAt(int packed, int k)
+{
+    if (packed < 0 || k < 0 || k >= kLackeyMaxOrdinals) { return -1; }
+    const int f = (packed >> (4 * k)) & 15;
+    if (k == 0) { return f == 15 ? -1 : f; }
+    return f - 1;
+}
+// Pack per-ordinal ranks (each -1 = unpinned, else <= kLackeyMaxRank); all-unpinned packs to -1.
+inline int LackeyPackRanks(const int* ranks, int n)
+{
+    int v = 0; bool any = false;
+    for (int k = 0; k < n && k < kLackeyMaxOrdinals; ++k)
+    {
+        const int r = ranks[k];
+        if (r >= 0) { any = true; }
+        const int f = (k == 0) ? (r >= 0 ? r : 15) : (r >= 0 ? r + 1 : 0);
+        v |= f << (4 * k);
+    }
+    return any ? v : -1;
+}
+// After ordinal 0's trigger: ordinals 1.. move down one.
+inline int LackeyPinShift(int packed)
+{
+    int r[kLackeyMaxOrdinals];
+    for (int k = 0; k + 1 < kLackeyMaxOrdinals; ++k) { r[k] = LackeyRankAt(packed, k + 1); }
+    r[kLackeyMaxOrdinals - 1] = -1;
+    return LackeyPackRanks(r, kLackeyMaxOrdinals);
 }
 
 // A/B opt-out (default ON): retain leftover / over-produced mana (depletion + filter
@@ -641,6 +830,19 @@ inline bool MaybeReplaceGraveyardWithLibraryShuffle(GameState& state, int contro
 enum class DiscardDest : std::uint8_t { Graveyard, LibraryShuffle, MadnessExile };
 inline DiscardDest DiscardCardFromHand(GameState& state, int controller, int hand_idx,
                                        std::vector<MadnessPending>* mq, const std::string& cause);
+// Curator of Mysteries' watcher, fired by DiscardCardFromHand for every discard that is not a cycle (the
+// cycle sites fire it themselves, once, with the searched pin -- see CycleDiscardScope). Defined with the
+// Cyclone block further down.
+inline int  DiscardScryTriggers(const GameState& state, int controller);
+inline void ResolveDiscardScryTriggers(GameState& state, int controller, int n, int j_pin);
+// The cycle sites discard through the shared DiscardCardFromHand, whose own watcher hook must then stand
+// down (the cycle fires the trigger ONCE, with its searched pin, through ResolveDiscardScryTriggers). Scoped.
+inline thread_local int g_cycle_discard_scope = 0;
+struct CycleDiscardScope
+{
+    CycleDiscardScope()  { ++g_cycle_discard_scope; }
+    ~CycleDiscardScope() { --g_cycle_discard_scope; }
+};
 
 // The CALLER-OWNED madness payer (the g_etb_optional_payer idiom: no core resolution effect taps on its
 // own, because the executor keeps its own payment accounting). `pay(state, cost)` pays `cost` on `state`
@@ -899,6 +1101,85 @@ inline int SelectCleanupDiscardIndex(const GameState& state,
 inline std::vector<std::string> HasteKeywords(bool haste)
 { return haste ? std::vector<std::string>{"Haste"} : std::vector<std::string>{}; }
 
+
+inline void CounterPingKillAt(GameState& state, std::size_t i, const char* why);
+inline void FlushIncineratorDamageTriggers(GameState& state);
+inline void RecordNoncombatDamageToPlayer(GameState& state, int source_controller,
+                                          int damaged_player, int amount);
+struct NoncombatTriggerScope
+{
+    explicit NoncombatTriggerScope(GameState& s) : state(s), tracked(s.deck_tracks_noncombat_damage)
+    { if (tracked) { ++state.noncombat_trigger_depth; } }
+    ~NoncombatTriggerScope()
+    { if (tracked && --state.noncombat_trigger_depth == 0) { FlushIncineratorDamageTriggers(state); } }
+    GameState& state;
+    bool tracked;
+};
+
+// Manual mana-payment probes historically snapshot the spectacle flag/lives rather
+// than the full GameState. This companion snapshot preserves the new resource and queue.
+struct NoncombatStateSnapshot
+{
+    bool enabled;
+    std::array<int, 2> received{};
+    std::vector<IncineratorDamageTrigger> pending;
+    int depth = 0;
+    explicit NoncombatStateSnapshot(const GameState& s) : enabled(s.deck_tracks_noncombat_damage)
+    {
+        if (enabled) { received = s.noncombat_damage_received_this_turn;
+            pending = s.pending_incinerator_damage; depth = s.noncombat_trigger_depth; }
+    }
+    void Restore(GameState& s) const
+    {
+        if (enabled) { s.noncombat_damage_received_this_turn = received;
+            s.pending_incinerator_damage = pending; s.noncombat_trigger_depth = depth; }
+    }
+};
+
+inline thread_local const std::vector<int>* g_incinerator_pins = nullptr;
+inline thread_local std::size_t g_incinerator_pin_cursor = 0;
+using IncineratorTargetProbe = std::function<void(const std::vector<int>&)>;
+inline thread_local IncineratorTargetProbe* g_incinerator_target_probe = nullptr;
+inline thread_local const std::vector<int>* g_incinerator_probe_owner = nullptr;
+inline thread_local int g_incinerator_probe_fan_depth = -1;
+// Probe ownership follows the plan vector, not just a thread-wide callback. A nested
+// continuation searches its own targets and cannot add speculative events to its parent.
+struct IncineratorTargetProbeScope
+{
+    IncineratorTargetProbe* old_probe = g_incinerator_target_probe;
+    const std::vector<int>* old_owner = g_incinerator_probe_owner;
+    int old_depth = g_incinerator_probe_fan_depth;
+    IncineratorTargetProbeScope(IncineratorTargetProbe& probe, const std::vector<int>& owner, int depth)
+    { g_incinerator_target_probe = &probe; g_incinerator_probe_owner = &owner;
+      g_incinerator_probe_fan_depth = depth; }
+    ~IncineratorTargetProbeScope()
+    { g_incinerator_target_probe = old_probe; g_incinerator_probe_owner = old_owner;
+      g_incinerator_probe_fan_depth = old_depth; }
+};
+struct IncineratorPinScope
+{
+    const std::vector<int>* old;
+    std::size_t cursor;
+    IncineratorTargetProbe* old_probe;
+    const std::vector<int>* old_probe_owner;
+    int old_probe_depth;
+    explicit IncineratorPinScope(const std::vector<int>& pins)
+        : old(g_incinerator_pins), cursor(g_incinerator_pin_cursor),
+          old_probe(g_incinerator_target_probe), old_probe_owner(g_incinerator_probe_owner),
+          old_probe_depth(g_incinerator_probe_fan_depth)
+    {
+        g_incinerator_pins = &pins; g_incinerator_pin_cursor = 0;
+        if (g_incinerator_target_probe && g_incinerator_probe_owner != &pins)
+        { g_incinerator_target_probe = nullptr; g_incinerator_probe_owner = nullptr;
+          g_incinerator_probe_fan_depth = -1; }
+    }
+    ~IncineratorPinScope()
+    {
+        g_incinerator_pins = old; g_incinerator_pin_cursor = cursor;
+        g_incinerator_target_probe = old_probe; g_incinerator_probe_owner = old_probe_owner;
+        g_incinerator_probe_fan_depth = old_probe_depth;
+    }
+};
 // Forward declaration: CreateToken is defined further down but used by FireOnCastTriggers.
 inline void CreateToken(GameState&, int, int, int, const std::vector<std::string>&,
                         const std::string& = std::string(),
@@ -1024,6 +1305,25 @@ inline void EtbUntapTapAheadIntoFloat(GameState&, int controller, int count,
                                       int reserve_color_mask = 0,
                                       const ManaCost* pending_cost = nullptr,
                                       const ManaCost* line_cost = nullptr);                   // defined below
+// DIAGNOSTIC (read only by the mana oracle, MTG_MANA_ORACLE): how many engine TAP-AHEADS -- lands
+// tapped into the float ahead of an untap effect, a heuristic choice of which ones -- this thread has
+// run. The oracle drives the cast-site tap-aheads itself; a count that moves under one of its applies
+// is a tap-ahead it did not choose, so it reports that outcome UNMODELED. No game logic reads it.
+inline thread_local long long g_tap_ahead_calls = 0;
+// DIAGNOSTIC (read only by the mana oracle), the same shape: how many untap EFFECTS this thread has
+// resolved with a real CHOICE of what comes back -- more tapped candidates than the count, and not all
+// the same card. Which ones return is a heuristic (yield order) the oracle does not branch on, so a
+// count that moves under one of its applies marks that outcome UNMODELED. No game logic reads it.
+inline thread_local long long g_untap_choice_calls = 0;
+inline void NoteUntapChoice(const GameState& state, const std::vector<int>& candidate_bis, int count)
+{
+    if (static_cast<int>(candidate_bis.size()) <= count) { return; }
+    for (int bi : candidate_bis)
+    {
+        if (state.battlefield[bi].card.m_name.str() != state.battlefield[candidate_bis[0]].card.m_name.str())
+        { ++g_untap_choice_calls; return; }
+    }
+}
 inline int  EtbUntapLandsCredit(const GameState&, int count);                                // defined below
 // Live {C}-pip activation sink on our board + a source's own (unfed) colours -- both defined below,
 // both read by EtbUntapLands's human-play tie-break above their definitions.
@@ -1110,6 +1410,21 @@ inline void LineOwedAfterOwnPips(int out[5])
     const ManaCost& lu = g_line_unpaid_cost;
     const int owed[5] = { lu.white, lu.blue, lu.black, lu.red, lu.green };
     for (int i = 0; i < 5; ++i) { out[i] = std::max(0, owed[i] - g_pay_own_line_pips[i]); }
+}
+
+// THE GATE OF THE THREE LINE-AWARE GENERIC ORDERS (the float drain's surplus-first order, ConsumeFloatingAny's and
+// LineDemandAnyPipColor's): human play, where they began (USER, EDF seed 9 gi=8 T4 / seed 6 T4, 2026-09-10), or the
+// autonomous lever MTG_AUTO_LINE_GENERIC (EngineFlags.h). Each order reads g_line_unpaid_cost, which every plan apply
+// binds (rollouts included) and is zero elsewhere, so outside a line they keep the historical WUBRG order either way.
+// NOT for an autonomous line that casts a breakpoint opener (g_line_opens_unseen, ManaPayment.h): its named casts are
+// a lower bound on what the turn will owe, and the continuation re-solves on whatever the opener reveals.
+// TreasureHunt regression s3003 gi96 T4 (T4 -> T6 at every budget and at d8 b0): the line {Treasure Hunt, Treasure
+// Hunt} kept the second Hunt's {U} and spent the {R} on the first's generic; the first Hunt revealed Land's Edge
+// {1}{R}{R}, the kill, and the continuation could not pay it. Such a line keeps the historical order.
+extern thread_local bool g_line_opens_unseen;   // ManaPayment.cpp (see ManaPayment.h); false outside a line
+inline bool LineGenericOrderLive()
+{
+    return HumanPlayActive() || (AutoLineGenericOn() && !g_line_opens_unseen);
 }
 
 // Colours the human's REMAINING QUEUED line declared it still wants (a bitmask over
@@ -1865,6 +2180,104 @@ inline void ShuffleAfterSearch(GameState& state, int controller_index)
     ++state.search_count;
 }
 
+// A FAIL-TO-FIND library search ("search your library for ..., then shuffle" that finds nothing: no legal
+// card left, or the chosen card gone). The search still happened and the printed shuffle is unconditional
+// (CR 701.19b), so the library is shuffled exactly as on a find. Before 2026-10-27 every fetch-shaped path
+// returned BEFORE its shuffle on a whiff, so a whiffing Scalding Tarn left the known top in place (ledger
+// Q14, USER: "Scalding Tarn sacrificing and finding nothing should indeed allow for a shuffle"). Called by
+// PerformFetch, PerformLandTutorToBattlefield, PerformTutorToBattlefield and PerformTutor -- every one shared
+// by the executor and the rollout, so lockstep by construction. NOT for a declined "you MAY search" (no
+// search, no shuffle) or a wish / regrowth (no library searched).
+//   MTG_LEGACY_WHIFF_NO_SHUFFLE=1 restores the old early return (an isolation lever, the MTG_LEGACY_SHUFFLE
+//   precedent: =1 makes a whiff skip the shuffle, so a game that moves between the two arms moved BECAUSE
+//   of a whiff). MTG_WHIFF_TRACE=1 prints each REAL-resolution whiff (never the search's) to stderr.
+inline void WhiffShuffle(GameState& state, int controller_index, const char* what)
+{
+    static const bool s_legacy = EnvOn("MTG_LEGACY_WHIFF_NO_SHUFFLE");
+    if (s_legacy) { return; }
+    ShuffleAfterSearch(state, controller_index);
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "ability",
+                      std::string(what) + ": searched the library, found nothing -- library shuffled");
+    }
+    static const bool s_trace = EnvOn("MTG_WHIFF_TRACE");
+    if (s_trace && g_real_resolution)
+    {
+        std::fprintf(stderr, "[whiff-shuffle] %s seed=%llu T%d search_count=%llu\n", what,
+                     static_cast<unsigned long long>(state.game_seed), state.turn_number,
+                     static_cast<unsigned long long>(state.search_count));
+    }
+}
+
+// ---- GRAVEYARD-SHUFFLE TRIGGER (Emrakul, the Aeons Torn; Ulamog, the Infinite Gyre) -----------------
+// "When <this> is put into a graveyard from anywhere, its owner shuffles their graveyard into their
+// library." CardParams::put_into_graveyard_shuffles_graveyard. A TRIGGER (CR 603.6a), so the card is in
+// the graveyard first and the WHOLE graveyard, the card included, goes into the library; and it resolves
+// AFTER the event that moved it -- a simultaneous event (the cleanup discard to seven, a legend-rule SBA
+// batch) is wrapped in a GyShuffleBatch, so the shuffle takes every card that moved with it, and two
+// triggers from one event shuffle twice (the second an empty-graveyard shuffle, still performed).
+// THE ENTRY HOOK is FireGraveyardEntryTriggers, called right after the push at the graveyard-entry sites:
+// DiscardCardFromHand (every real discard, both worlds) and OnCreatureDies (every death: legend rule,
+// destroy, sacrifice, SBA). NOT hooked (disclosed): the stack -> graveyard move (EffectHandler::
+// MoveToGraveyard / apply_one's instant-sorcery line -- a creature spell reaches it only when countered,
+// and the two carriers are uncounterable (Emrakul) or Remanded to HAND (Gyre)), and library -> graveyard
+// mills / surveils (no carrier deck mills itself). A future carrier that can take those routes must add
+// the call there. Shuffled through ShuffleAfterSearch (the search-salted CRN shuffle), so the search
+// cannot foresee the post-shuffle order. Token cards are not moved into the library (a token in a
+// graveyard ceases to exist, CR 111.7). Gated on GameState::deck_has_gy_shuffle: one bool test per
+// graveyard entry for every other deck.
+inline void PerformGraveyardShuffle(GameState& state, int owner)
+{
+    Player& pl = state.players[owner];
+    int moved = 0;
+    for (Card& c : pl.graveyard)
+    {
+        if (c.m_number >= GameState::kFirstTokenNumber) { continue; }   // a token ceases to exist
+        pl.library.push_back(std::move(c));
+        ++moved;
+    }
+    pl.graveyard.clear();
+    ShuffleAfterSearch(state, owner);
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "trigger",
+                      "\xF0\x9F\x94\x80 graveyard shuffled into the library (" + std::to_string(moved)
+                      + " card" + (moved == 1 ? "" : "s") + ")");
+    }
+}
+inline void FireGraveyardEntryTriggers(GameState& state, int owner, const Card& c)
+{
+    if (!state.deck_has_gy_shuffle) { return; }
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+    if (d == nullptr || !d->params.put_into_graveyard_shuffles_graveyard) { return; }
+    if (owner < 0 || owner > 1) { return; }
+    if (state.gy_shuffle_batch > 0)
+    {
+        if (state.pending_gy_shuffles[owner] < 255) { ++state.pending_gy_shuffles[owner]; }
+        return;
+    }
+    PerformGraveyardShuffle(state, owner);
+}
+struct GyShuffleBatch
+{
+    GameState& s;
+    const bool on;
+    explicit GyShuffleBatch(GameState& st) : s(st), on(st.deck_has_gy_shuffle)
+    { if (on) { ++s.gy_shuffle_batch; } }
+    ~GyShuffleBatch()
+    {
+        if (!on) { return; }
+        if (--s.gy_shuffle_batch != 0) { return; }
+        for (int o = 0; o < 2; ++o)
+        {
+            while (s.pending_gy_shuffles[o] > 0) { --s.pending_gy_shuffles[o]; PerformGraveyardShuffle(s, o); }
+        }
+    }
+    GyShuffleBatch(const GyShuffleBatch&) = delete;
+    GyShuffleBatch& operator=(const GyShuffleBatch&) = delete;
+};
+
 // ---- LAND SEARCH: the pin + the forward declarations (bodies in src/core/LandSearch.h) ----------
 // Declared this early because the fire sites are spread through this header -- the instant/sorcery
 // resolution (EffectHandler / apply_one), the own-ETB cascade (Primeval Titan), the off-suspend cast
@@ -1878,6 +2291,7 @@ struct LandSearchSpec
     int  to_hand         = 0;      // how many picks go to HAND (the rest: battlefield)
     bool tapped          = false;  // battlefield entries forced tapped
     bool optional        = false;  // "you MAY search" -- human-only decline
+    std::uint16_t subtype = 0;     // "a <Subtype> card" (Nature's Lore: Forest) -- SubtypeRegistry id; 0 = any
 };
 inline LandSearchSpec LandSearchSpecOf(const CardParams& p)
 {
@@ -1888,6 +2302,7 @@ inline LandSearchSpec LandSearchSpecOf(const CardParams& p)
     s.to_hand         = p.land_search_to_hand;
     s.tapped          = p.land_search_tapped;
     s.optional        = p.land_search_optional;
+    s.subtype         = p.land_search_subtype_id;
     return s;
 }
 
@@ -2188,7 +2603,7 @@ inline bool HumanPlayDefersTutorTarget(const CardDefinition& def)
 {
     static const bool s_on = EnvOn("MTG_PLAY_TUTOR_FAN_COLLAPSE", true);   // DEFAULT ON; =0 disables
     if (!s_on || !HumanPlayActive()) { return false; }
-    if (!(def.params.tutor_to_hand || def.params.tutor_to_top)) { return false; }
+    if (!IsLibraryTutor(def.params)) { return false; }   // incl. Long-Term Plans (an instant)
     if (def.params.etb_tutor_hand_count > 1) { return false; }   // Ranger of Eos: no cast-time axis
     // A PERMANENT fetches from its ETB, not from a spell resolution -> no `human_repick` frame.
     if (def.card.HasType(CardType::Creature)     || def.card.HasType(CardType::Land)
@@ -2822,7 +3237,12 @@ inline void PerformTutorToBattlefield(GameState& state, int controller, const Ca
     // A FAIL-TO-FIND cast (the enumerator's kTutorDeclineTarget variant of an X-capped put: "may
     // fail to find", CR 701.19b) puts nothing -- no provider fill, no resolution re-ask. Returns
     // where an empty search already returns (put_names empty below), so the two agree.
-    if (preferred.size() == 1 && preferred.front() == kTutorDeclineTarget) { return; }
+    // ...but a fail-to-find still SEARCHED, so a "then shuffle" card shuffles (2026-10-27, Q14/Q28).
+    if (preferred.size() == 1 && preferred.front() == kTutorDeclineTarget)
+    {
+        if (pp.tutor_shuffle_after) { WhiffShuffle(state, controller, "tutor to battlefield"); }
+        return;
+    }
     struct ResolveScope
     {
         bool prev;
@@ -3080,7 +3500,15 @@ inline void PerformTutorToBattlefield(GameState& state, int controller, const Ca
             { put_names.push_back(nm); --it->second; }
         }
     }
-    if (put_names.empty()) { return; }
+    // Nothing to put: a fail-to-find. A searching card still shuffles ("then shuffle" is unconditional,
+    // CR 701.19b) -- Dragonstorm with no Dragon left, a Natural Order with no green creature. Bilbo's
+    // caller (ApplyPermAbility) keeps its own once-per-activation guard on search_count, which this
+    // satisfies. The explicit kTutorDeclineTarget fail-to-find above shuffles the same way.
+    if (put_names.empty())
+    {
+        if (pp.tutor_shuffle_after) { WhiffShuffle(state, controller, "tutor to battlefield"); }
+        return;
+    }
 
     // Put each named Dragon: find+remove the first library copy, enter it (preserving its per-copy
     // number), fire FireEtbWatchers. Re-find per put -- erase shifts library indices, and FireEtbWatchers
@@ -4459,10 +4887,230 @@ void PerformLightPawsAttach(GameState& state, int controller, int cast_aura_mv,
 //     include cast_trigger_subtype (Worthy Knight: cast a Knight -> 1/1 Human token).
 //   - draw_on_aura_cast: Kor Spiritdancer draws a card when you cast an Aura spell.
 // Aether Vial deployment is NOT a cast, so it never reaches here -- correct (CR 601.2).
+inline void RecordNoncombatDamageToPlayer(GameState& state, int source_controller,
+                                          int damaged_player, int amount)
+{
+    if (!state.deck_tracks_noncombat_damage || amount <= 0 || damaged_player < 0 || damaged_player >= 2)
+    { return; }
+    // The cost reduction counts damage from ANY source; the trigger requires our source.
+    state.noncombat_damage_received_this_turn[damaged_player] += amount;
+    if (source_controller != damaged_player)
+    {
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != source_controller) { continue; }
+            const auto* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d && d->params.incinerator_damage_trigger)
+            { state.pending_incinerator_damage.push_back({p.card, source_controller, damaged_player, amount}); }
+        }
+    }
+    if (state.noncombat_trigger_depth == 0) { FlushIncineratorDamageTriggers(state); }
+}
+
+inline void FlushIncineratorDamageTriggers(GameState& state)
+{
+    if (state.noncombat_trigger_depth != 0 || state.pending_incinerator_damage.empty()) { return; }
+    // State-based actions precede putting these triggered abilities on the stack. A creature
+    // killed by Searing Blaze itself is already gone when Incinerator's target is chosen.
+    ++state.noncombat_trigger_depth;
+    for (std::size_t i = state.battlefield.size(); i-- > 0;)
+    {
+        const Permanent& p = state.battlefield[i];
+        if ((p.card.IsCreature() || p.is_animated) && p.damage > 0
+            && p.damage >= LethalToughness(p, state) && !p.card.HasKeyword(Keyword::Indestructible))
+        { CounterPingKillAt(state, i, "lethal damage before Incinerator trigger"); }
+    }
+    --state.noncombat_trigger_depth;
+    // Sources are copied into the queue: a trigger exists independently after its source leaves.
+    auto pending = std::move(state.pending_incinerator_damage);
+    state.pending_incinerator_damage.clear();
+    for (const auto& event : pending)
+    {
+        if (state.players[event.controller].life <= 0 || state.players[event.damaged_player].life <= 0)
+        { break; } // the game ends at SBAs before any new trigger may resolve
+        std::vector<int> legal;
+        ResolveProvider(state).IncineratorTargetCandidates(state, event.damaged_player, event.amount, legal);
+        if (legal.empty()) { continue; } // mandatory trigger has no legal target
+        const std::size_t ordinal = g_incinerator_pin_cursor++;
+        if (g_incinerator_target_probe) { (*g_incinerator_target_probe)(legal); }
+        int id = legal.front();
+        if (g_incinerator_pins && ordinal < g_incinerator_pins->size())
+        {
+            const int pin = (*g_incinerator_pins)[ordinal];
+            if (std::find(legal.begin(), legal.end(), pin) != legal.end()) { id = pin; }
+        }
+        const auto* def = CardDatabase::Instance().LookupCached(event.source);
+        if (!def) { continue; }
+        if (g_play_target_chooser)
+        {
+            int bi = -1;
+            for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+            { if (state.battlefield[i].card.m_number == id) { bi = i; break; } }
+            if (bi < 0) { continue; }
+            auto chosen = (*g_play_target_chooser)(state, *def, event.controller, 1, event.amount, {{1, bi, 0}});
+            if (chosen.size() == 1 && chosen[0].kind == 1 && chosen[0].index >= 0
+                && chosen[0].index < static_cast<int>(state.battlefield.size()))
+            { id = state.battlefield[chosen[0].index].card.m_number; }
+        }
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            Permanent& p = state.battlefield[i];
+            if (p.card.m_number != id || p.controller_index != event.damaged_player) { continue; }
+            if (CreatureHasShroud(p, state) || p.card.HasKeyword(Keyword::Hexproof)) { break; }
+            bool dead = false;
+            if (p.card.HasType(CardType::Planeswalker))
+            {
+                p.loyalty -= event.amount;
+                for (Counter& c : p.counters)
+                { if (c.type == Counter::Type::Loyalty) { c.count = p.loyalty; } }
+                dead = p.loyalty <= 0;
+            }
+            else if (p.card.IsCreature() || p.is_animated)
+            {
+                const int before = p.damage;
+                p.damage += event.amount;
+                ApplyBurnToCreature(state, p, before, 0, event.controller);
+                dead = p.damage >= LethalToughness(p, state) && !p.card.HasKeyword(Keyword::Indestructible);
+            }
+            else { break; }
+            if (dead)
+            {
+                CounterPingKillAt(state, static_cast<std::size_t>(i), "Incinerator triggered damage");
+            }
+            break;
+        }
+    }
+}
+
+// A spell cast during another effect still gets a priority boundary for its cast
+// triggers before that spell resolves. Preserve the outer effect's batching depth:
+// flushing here must not leave its RAII scope with an unbalanced counter.
+inline void FlushNoncombatTriggersAtPriorityBoundary(GameState& state)
+{
+    if (!state.deck_tracks_noncombat_damage || state.pending_incinerator_damage.empty()
+        || (state.own_death_live && SelfHasLost(state))) { return; }
+    struct RestoreDepth
+    {
+        GameState& state; int saved;
+        ~RestoreDepth() { state.noncombat_trigger_depth = saved; }
+    } restore{state, state.noncombat_trigger_depth};
+    state.noncombat_trigger_depth = 0;
+    FlushIncineratorDamageTriggers(state);
+}
+
+// A paid cast during a resolving loyalty ability. The host routes the exact interned spell
+// action through its normal cast path; probe=true operates on a copy with all UI/logging paused.
+using PaidExileCastFn = std::function<bool(GameState&, int, const Card&, const std::string&, bool)>;
+constexpr int kAbilitySelfTarget = -1;
+inline thread_local const PaidExileCastFn* g_paid_exile_cast = nullptr;
+inline thread_local bool g_paid_exile_cast_prompt = false;
+struct PaidExileCastOption { Card card; std::string encoded; std::string cost_label; };
+std::vector<PaidExileCastOption> CollectChandraPaidCastOptions(const GameState&, int, const Card&);
+bool ChandraPaidCastOptionPayable(const GameState&, int, const Card&, const std::string&);
+inline thread_local const std::vector<std::string>* g_paid_exile_cast_labels = nullptr;
+
+inline thread_local int g_graveyard_exile_cost_prompt = 0;
+struct PaidExileCastScope
+{
+    const PaidExileCastFn* saved;
+    explicit PaidExileCastScope(const PaidExileCastFn* host) : saved(g_paid_exile_cast) { g_paid_exile_cast = host; }
+    ~PaidExileCastScope() { g_paid_exile_cast = saved; }
+};
+inline void RecordNoncombatDamageToPlayer(GameState&, int source_controller, int damaged_player, int amount);
+inline bool DealPermanentAbilityDamage(GameState&, int, const CardDefinition&, int, int, bool = true);
+inline void ResolveChandraExileCast(GameState& state, int controller, const CardDefinition& source,
+                                     const std::string& cast_option, bool take)
+{
+    auto& library = state.players[controller].library;
+    bool cast = false;
+    if (!library.empty())
+    {
+        const Card card = library.DrawTop();
+        state.exile.push_back(card);
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(card);
+        std::string selected_option = cast_option;
+        bool payable = d && !d->card.IsLand() && g_paid_exile_cast && !selected_option.empty()
+                    && (*g_paid_exile_cast)(state, controller, card, selected_option, true);
+        if (d && !d->card.IsLand() && g_paid_exile_cast && g_play_free_cast_chooser)
+        {
+            // Resolve cost choices only AFTER the library card is exiled and public. Each
+            // candidate has an option index; equal card names must not collapse cost variants.
+            const auto options = CollectChandraPaidCastOptions(state, controller, card);
+            payable = !options.empty();
+            if (payable)
+            {
+                std::vector<Card> cards;
+                std::vector<std::string> labels;
+                int suggested = -1;
+                for (std::size_t i = 0; i < options.size(); ++i)
+                {
+                    cards.push_back(options[i].card); labels.push_back(options[i].cost_label);
+                    if (take && options[i].encoded == selected_option) { suggested = static_cast<int>(i); }
+                }
+                struct PaidPromptScope {
+                    bool saved = g_paid_exile_cast_prompt;
+                    const std::vector<std::string>* labels = g_paid_exile_cast_labels;
+                    explicit PaidPromptScope(const std::vector<std::string>& values)
+                    { g_paid_exile_cast_prompt = true; g_paid_exile_cast_labels = &values; }
+                    ~PaidPromptScope() { g_paid_exile_cast_prompt = saved; g_paid_exile_cast_labels = labels; }
+                } paid_prompt(labels);
+                const int picked = (*g_play_free_cast_chooser)(state, controller, source.card.m_name.str(),
+                                                              cards, suggested, {});
+                take = picked >= 0 && picked < static_cast<int>(options.size());
+                if (take) { selected_option = options[static_cast<std::size_t>(picked)].encoded; }
+            }
+            else { take = false; }
+        }
+        if (payable && take)
+        {
+            // The cast host receives the original exiled card, not a draw/hand-entry event.
+            for (auto it = state.exile.end(); it != state.exile.begin(); )
+            { --it; if (it->m_number == card.m_number && it->m_name == card.m_name) { state.exile.erase(it); break; } }
+            cast = (*g_paid_exile_cast)(state, controller, card, selected_option, false);
+            if (!cast) { state.exile.push_back(card); }
+        }
+        if (g_play_event_sink)
+        { EmitPlayEvent(state.turn_number, "exile", source.card.m_name.str() + ": " + card.m_name.str()
+                       + (cast ? " cast during resolution" : " stays exiled")); }
+    }
+    if (!cast)
+    {
+        const int before = state.players[1 - controller].life;
+        for (int head = 0; head < gamesetup::OpponentHeads(); ++head)
+        { DealPermanentAbilityDamage(state, controller, source, 2, 0, false); }
+        if (g_play_event_sink != nullptr && !g_tap_speculating)
+        { EmitPlayEvent(state.turn_number, "damage", source.card.m_name.str()
+            + ": exiled card not cast; " + std::to_string(before - state.players[1 - controller].life)
+            + " damage to opponent"); }
+    }
+}
+
 inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def)
 {
     int mv = cast_def.card.m_mana_cost.ManaValue();
     int active = state.active_player_index;
+    const int emblem_damage = state.players[active].emblem_spell_cast_damage;
+    if (emblem_damage > 0)
+    {
+        CardDefinition emblem;
+        emblem.card.Rename("Chandra emblem");
+        emblem.params.targeting = Targeting::Any;
+        for (int remaining = emblem_damage; remaining > 0; remaining -= 5)
+        {
+          {
+              NoncombatTriggerScope emblem_resolution(state);
+              const int amount = std::min(5, remaining);
+              const int target = ResolveProvider(state).SpellCastEmblemTarget(state, active, amount);
+              DealPermanentAbilityDamage(state, active, emblem, amount, target);
+          }
+          FlushNoncombatTriggersAtPriorityBoundary(state);
+          if (state.own_death_live && SelfHasLost(state)) { return; }
+        }
+    }
+
+    // Emblems are separate triggered abilities. Their Incinerator triggers resolve
+    // before the next emblem/cast-trigger resolution; keep the remaining scan stable.
+    NoncombatTriggerScope noncombat_triggers(state);
 
     // Token specs are collected first: CreateToken push_backs onto the battlefield, which
     // would invalidate a range-for over it. Iterate the original size by index, then create.
@@ -4505,15 +5153,17 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def)
                 // event per trigger source per cast. "That player" is the caster (the active player);
                 // the opponent casts nothing, so the to_opp half is never reached in a goldfish.
                 const bool to_me = p.controller_index == active;
-                dmgev::DealDamageEvent(state, p.controller_index, p.card.IsCreature(),
+                const int actual_dealt = dmgev::DealDamageEvent(state, p.controller_index, p.card.IsCreature(),
                                        /*combat=*/false,
                                        to_me ? def->params.on_cast_trigger_damage : 0,
                                        to_me ? 0 : def->params.on_cast_trigger_damage,
                                        /*to_creatures_total=*/0, def->card.m_name.str().c_str());
+                RecordNoncombatDamageToPlayer(state, p.controller_index, active, actual_dealt);
             }
             else
             {
                 state.players[active].life -= def->params.on_cast_trigger_damage;
+                RecordNoncombatDamageToPlayer(state, p.controller_index, active, def->params.on_cast_trigger_damage);
             }
         }
 
@@ -4526,6 +5176,7 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def)
             const int before = state.players[1 - active].life;
             const int dmg = cast_def.card.ColorCount();
             state.players[1 - active].life -= dmg;
+            RecordNoncombatDamageToPlayer(state, p.controller_index, 1 - active, dmg);
             state.opponent_lost_life_this_turn = true;
             if (g_play_event_sink)
             {
@@ -4560,6 +5211,7 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def)
             state.battlefield[i].verse_counters += 1;
             const int dmg = state.battlefield[i].verse_counters;
             state.players[1 - active].life -= dmg;
+            RecordNoncombatDamageToPlayer(state, p.controller_index, 1 - active, dmg);
             state.opponent_lost_life_this_turn = true;
             // Play-viewer history: Aria's verse damage as a "damage" event (nulled by RevealLogPause
             // during search -> byte-identical). Reports the counter count driving the damage.
@@ -4998,6 +5650,22 @@ inline std::pair<int,int> ComputeLordBonus(
     // can remove either. Gated on nonzero, so every deck with no emblem source is byte-identical.
     const int emblems = state.players[controller_index].emblem_team_pump;
     if (emblems > 0) { pb += emblems; tb += emblems; }
+
+    // "Each creature you control gets +1/+0 for each time it has attacked this turn" (Moraug, Fury of Akoum;
+    // CardParams::attack_count_team_power). The creature's OWN count (Permanent::AttacksThisTurn, set only for a
+    // deck with the card), times the sources we control NOW -- attacks made before the source arrived count, and
+    // the bonus stops when it leaves (Scryfall ruling 2020-09-25). One byte test on every other creature.
+    if (self != nullptr && self->AttacksThisTurn() > 0)
+    {
+        int sources = 0;
+        for (const Permanent& q : battlefield)
+        {
+            if (q.controller_index != controller_index || q.def_absent) { continue; }
+            const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+            if (qd != nullptr && qd->params.attack_count_team_power) { ++sources; }
+        }
+        pb += sources * self->AttacksThisTurn();
+    }
 
     // CONDITIONAL anthem (Neheb, the Worthy: "As long as you have one or fewer cards in hand,
     // Minotaurs you control get +2/+0"). Deliberately NOT folded into process_lord above: the
@@ -6469,6 +7137,81 @@ inline void GainLife(GameState& state, int player, int amount)
     FireLifegainWatchers(state, player, amount);
 }
 
+// ---- WALKING BALLISTA: the pieces the lifegain-counter target needs (defined with the Ballista block
+// beside ApplyPermAbility) ------------------------------------------------------------------------------
+// THE HELIOD PIN: inside the Heliod + Ballista loop (RunPingLoop) every life-gain event's Heliod counter
+// goes back on the pinging Ballista -- the loop IS the kill, so it overrides the provider, the default
+// and the human chooser (the loop is the human's choice already; asking 20 times would be noise).
+// Sound, not a greedy pick: the loop runs only while PingLoopLiveNow, i.e. it wins this turn.
+// 0 = no pin (every other path), so FireLifegainWatchers is byte-identical outside the loop.
+inline thread_local int g_lifegain_counter_target_pin = 0;
+struct LifegainCounterTargetPinScope
+{
+    int prev;
+    explicit LifegainCounterTargetPinScope(int num) : prev(g_lifegain_counter_target_pin)
+    { g_lifegain_counter_target_pin = num; }
+    ~LifegainCounterTargetPinScope() { g_lifegain_counter_target_pin = prev; }
+    LifegainCounterTargetPinScope(const LifegainCounterTargetPinScope&)            = delete;
+    LifegainCounterTargetPinScope& operator=(const LifegainCounterTargetPinScope&) = delete;
+};
+// DOOMED ENTRANTS (CR 704.5f / 704.3): an X = 0 Walking Ballista enters as its printed 0/0. Its enter
+// triggers DO trigger (Soul Warden gains), but the toughness SBA puts it into the graveyard BEFORE they
+// are put on the stack -- so no trigger can ever target it or save it. This engine resolves enter
+// watchers INLINE inside FireEtbWatchers, so the entrant is recorded here (m_number) and every target
+// list of a trigger that resolves inside the cascade skips it (DoomedEntrant); DrainPendingZeroToughness
+// then kills it at the points the other pending queues drain (both worlds, lockstep), because callers
+// of the cascade hold battlefield slot indices an erase would shift. Recorded ONLY for an
+// enters_with_x_plus_counters entrant, so every other deck's queue stays empty (byte-identical); the
+// general 0-toughness entrant is the same rule and a follow-up, not a rider on this card.
+inline thread_local std::vector<int> g_pending_zero_toughness;
+// LEGEND-RULE LOSER (MTG_LEGEND_SBA_FIRST, HeuristicArm.h). The legend rule is a state-based action
+// (CR 704.5j), and SBAs are performed BEFORE any triggered ability goes on the stack (CR 704.3), so
+// the copy the legend rule removes is gone before an enter trigger RESOLVES -- it cannot see the
+// life Soul Warden gains for its own entry, and it cannot be that trigger's target. The engine runs
+// the enter cascade inline and calls EnforceLegendRule only after it (EffectHandler::Resolve's note:
+// ETB code holds the entrant's battlefield slot, so the erase cannot move earlier). Inside that
+// window the duplicate is therefore treated exactly like a 0-toughness entrant: dead to every
+// trigger's watcher and target list, killed at the usual sweep. Computed from the board (no queue,
+// so nothing goes stale across search branches): `q` is a loser iff a same-name legendary
+// permanent of the same controller is on the battlefield and LegendKeepIndex -- the SAME choice
+// EnforceLegendRule will make -- keeps another copy. A board outside the window never holds two.
+// LifegainHeliodCombo claude-play sweep seed 95005: a redundant second Heliod, Sun-Crowned saw
+// every enter-lifegain event, 4 events -> 6 counters. Also CritterLifegain (Heliod x2).
+inline bool LegendRuleLoser(const Permanent& q, const GameState& state)
+{
+    if (!q.card.HasSupertype(Supertype::Legendary)) { return false; }
+    static const bool s_env = EnvOn("MTG_LEGEND_SBA_FIRST", true);
+    if (!heurarm::Flag(heurarm::LEGEND_SBA_FIRST, s_env)) { return false; }
+    const int n = static_cast<int>(state.battlefield.size());
+    auto same = [&](const Permanent& p)
+    {
+        return p.controller_index == q.controller_index && p.card.HasSupertype(Supertype::Legendary)
+            && p.card.m_name_hash == q.card.m_name_hash && p.card.m_name.str() == q.card.m_name.str();
+    };
+    int copies = 0;
+    for (int i = 0; i < n; ++i) { if (same(state.battlefield[i])) { ++copies; } }
+    if (copies < 2) { return false; }
+    std::vector<int> dup;
+    int self = -1;
+    for (int i = 0; i < n; ++i)
+    {
+        const Permanent& p = state.battlefield[i];
+        if (!same(p)) { continue; }
+        if (p.card.m_number == q.card.m_number) { self = i; }
+        dup.push_back(i);
+    }
+    if (self < 0) { return false; }
+    const int keep = ResolveProvider(state).LegendKeepIndex(state, q.controller_index, dup);
+    return keep != self;
+}
+inline bool DoomedEntrant(const Permanent& q, const GameState& state)
+{
+    if (LegendRuleLoser(q, state)) { return true; }
+    if (g_pending_zero_toughness.empty()) { return false; }
+    if (std::find(g_pending_zero_toughness.begin(), g_pending_zero_toughness.end(), q.card.m_number)
+        == g_pending_zero_toughness.end()) { return false; }
+    return LethalToughness(q, state) <= 0;   // re-verified: a stale record never hides a live body
+}
 // Heliod's counter TARGET (autonomous default): the creature whose extra +1 converts to face
 // damage SOONEST -- an attacker that can still swing THIS turn (the gain is precombat and the
 // body is attack-eligible), else the highest-power own creature (it attacks next turn); ties to
@@ -6479,12 +7222,17 @@ inline void GainLife(GameState& state, int player, int amount)
 inline int DefaultLifegainCounterTarget(const GameState& state, int controller)
 {
     const bool precombat = (state.battlefield_at_combat < 0);
+    // MTG_LG_TARGET_COMBAT_POWER (HeuristicArm.h): rank by the power combat will deal, lords and
+    // conditional statics included (Serra Ascendant's +5/+5), not the counters-only EffectivePower.
+    static const bool s_env_combat_power = EnvOn("MTG_LG_TARGET_COMBAT_POWER", true);
+    const bool combat_power = heurarm::Flag(heurarm::LG_TARGET_COMBAT_POWER, s_env_combat_power);
     int best = -1, best_key = -1;
     int fallback = -1;   // an own enchantment (a non-creature Heliod) when no own creature exists
     for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
     {
         const Permanent& q = state.battlefield[i];
         if (q.controller_index != controller) { continue; }
+        if (DoomedEntrant(q, state)) { continue; }   // a 0/0 entrant is already dead (CR 704.3)
         if (!q.card.IsCreature())
         {
             if (q.card.IsEnchantment() && fallback < 0) { fallback = i; }
@@ -6492,7 +7240,7 @@ inline int DefaultLifegainCounterTarget(const GameState& state, int controller)
         }
         const bool swings_now = precombat && !q.tapped
                              && CanAttackFull(q, state.battlefield, controller);
-        const int key = (swings_now ? 1000 : 0) + q.EffectivePower();
+        const int key = (swings_now ? 1000 : 0) + (combat_power ? CombatPowerOf(q, state) : q.EffectivePower());
         if (key > best_key) { best_key = key; best = i; }
     }
     return best >= 0 ? best : fallback;
@@ -6661,6 +7409,8 @@ inline void FireLifegainWatchers(GameState& state, int player, int amount)
     for (int i = 0; i < n; ++i)
     {
         if (state.battlefield[i].controller_index != player) { continue; }
+        // The copy the legend rule removes is gone before this gain happens (LegendRuleLoser).
+        if (LegendRuleLoser(state.battlefield[i], state)) { continue; }
         const CardDefinition* wd = CardDatabase::Instance().LookupCached(state.battlefield[i].card);
         if (!wd) { continue; }
         const CardParams& wp = wd->params;
@@ -6732,6 +7482,7 @@ inline void FireLifegainWatchers(GameState& state, int player, int amount)
                     Permanent& c = state.battlefield[j];
                     if (c.controller_index != player || !c.card.IsCreature()) { continue; }
                     if (!LifegainCounterSubtypeOk(wp, c.card)) { continue; }
+                    if (DoomedEntrant(c, state)) { continue; }   // a 0/0 entrant is already dead (CR 704.3)
                     AddPlusCounters(c, per);
                     AnnihilateCounters(c);
                 }
@@ -6760,14 +7511,29 @@ inline void FireLifegainWatchers(GameState& state, int player, int amount)
         // heuristic's pick preselected -- the loyalty-target chooser's shape (board click).
         if (wp.lifegain_target_own_counter)
         {
-            int pick = ResolveProvider(state).LifegainCounterTarget(state, player);
+            // The Heliod + Ballista loop's pin (RunPingLoop): the counter goes back on the pinging
+            // Ballista, ahead of the provider, the default and the human chooser. -1 when unpinned or
+            // when the pinned body is gone (it died paying its last counter) -> the normal pick.
+            int pinned = -1;
+            if (g_lifegain_counter_target_pin != 0)
+            {
+                for (int j = 0; j < n; ++j)
+                {
+                    const Permanent& c = state.battlefield[j];
+                    if (c.controller_index == player && c.card.m_number == g_lifegain_counter_target_pin
+                        && c.card.IsCreature() && !DoomedEntrant(c, state)) { pinned = j; break; }
+                }
+            }
+            int pick = pinned;
+            if (pick < 0) { pick = ResolveProvider(state).LifegainCounterTarget(state, player); }
             if (pick < 0 || pick >= n) { pick = DefaultLifegainCounterTarget(state, player); }
-            if (g_play_loyalty_chooser != nullptr)
+            if (g_play_loyalty_chooser != nullptr && pinned < 0)
             {
                 std::vector<int> legal;
                 for (int j = 0; j < n; ++j)
                 {
                     const Permanent& c = state.battlefield[j];
+                    if (DoomedEntrant(c, state)) { continue; }   // already dead (CR 704.3)
                     if (c.controller_index == player
                         && (c.card.IsCreature() || c.card.IsEnchantment())) { legal.push_back(j); }
                 }
@@ -7696,8 +8462,44 @@ struct ScriptedLandfallTarget
 // memo key while live (TurnSolver's ACTIVE SCRIPTED PINS block), since a live pin steers resolution.
 inline int LandfallTargetPinFor(const GameState& state)
 {
-    return g_landfall_target_pin_turn == state.turn_number ? g_landfall_target_pin : -1;
+    return g_landfall_target_pin_turn == state.TurnSeq() ? g_landfall_target_pin : -1;
 }
+
+// SIMULTANEOUS LAND ENTRY -- the TOKEN FLOOR of the event (Scute Swarm, 2026-10-23). A put of several
+// lands at once (Primeval Titan's two, a land search's battlefield picks, Genesis Wave) is ONE event: every
+// landfall trigger it causes is put on the stack together, by the watchers that were on the battlefield
+// WHEN THE LANDS ENTERED, with their targets chosen then (CR 603.2 / 603.3d / 603.6a). The engine resolves
+// the event land by land, so a permanent MADE by an earlier land's trigger would otherwise be on the
+// battlefield for a later land's -- a Scute Swarm copy triggering for lands that entered before it
+// existed (N swarms -> 4N instead of 3N on Titan's two lands), a Rampaging Baloths Beast offered to
+// Scythecat Cub's target. The scope records next_token_number as the event begins; FireLandfallTriggers
+// then neither collects a TOKEN watcher numbered at or above it nor offers such a token as a target. With
+// no scope the floor is next_token_number at the trigger walk itself (a single land's own cascade), which
+// excludes exactly the tokens its earlier payloads made. INNERMOST WINS (save / restore): a Titan put by a
+// Wave starts its own event. Byte-identical for every deck without a TOKEN landfall watcher or a targeted
+// trigger that could see a mid-event token: no other payload makes a watcher, and none makes a Plant.
+//
+// THE FLOOR is next_token_number, raised past any token ALREADY on the battlefield with a higher number:
+// the engine numbers every token it makes from next_token_number, but a board stamped by hand (the
+// scenario harness, a unit test, a reference replay) can hold tokens numbered above it, and those existed
+// before the event -- never "made after it".
+inline int LandfallTokenFloorNow(const GameState& state)
+{
+    int f = state.next_token_number;
+    for (const Permanent& q : state.battlefield)
+    { if (q.is_token && q.card.m_number >= f) { f = q.card.m_number + 1; } }
+    return f;
+}
+inline thread_local int g_landfall_event_token_floor = -1;
+struct LandfallSimultaneousScope
+{
+    int saved;
+    explicit LandfallSimultaneousScope(const GameState& state)
+        : saved(g_landfall_event_token_floor) { g_landfall_event_token_floor = LandfallTokenFloorNow(state); }
+    ~LandfallSimultaneousScope() { g_landfall_event_token_floor = saved; }
+    LandfallSimultaneousScope(const LandfallSimultaneousScope&) = delete;
+    LandfallSimultaneousScope& operator=(const LandfallSimultaneousScope&) = delete;
+};
 
 // IDENTITY FOLD for a landfall counter target -- SOUND, the USER's "identical in all state" bar (the
 // FoldInterchangeableCreatureAuraHosts precedent). Two candidates whose keys are EQUAL are the same
@@ -7723,7 +8525,9 @@ inline bool LandfallTargetFoldKey(const GameState& state, const Permanent& p, st
         || p.quest_counters != 0 || p.hone_counters != 0)                         { return false; }
     if (p.storage_hold_this_turn || p.loyalty_activated_this_turn
         || p.colored_cast_lifegain_used_this_turn || p.storied_draw_used_this_turn
-        || p.lifegain_counters_used_this_turn || p.once_per_turn_used)            { return false; }
+        || p.lifegain_counters_used_this_turn || p.once_per_turn_used
+        || p.landfall_resolved_once || p.landfall_resolved_twice
+        || p.AttacksThisTurn() != 0)                                              { return false; }
     if (p.chosen_color != -1 || p.garth_chosen_mask != 0 || p.chosen_keyword_mask != 0
         || p.chosen_subtype_id != 0 || p.linked_exile_number != 0)                { return false; }
     if (!static_cast<const std::string&>(p.copy_printed_name).empty())           { return false; }
@@ -7802,10 +8606,18 @@ inline void LandfallTargetLinks(const GameState& state, std::vector<int>& out)
 //   * HUMAN PLAY re-asks over the FULL legal set (never the folded list) through the shared
 //     board-click `target` decision (g_play_loyalty_chooser -- the Saga-chapter-target shape), with
 //     the engine's pick preselected. Nulled by RevealLogPause, so autonomous play is untouched.
+//
+//   * SCYTHECAT CUB (2026-10-23): landfall_target_any_creature makes the legal set every CREATURE we control
+//     (an animated land included); landfall_target_second_doubles makes the watcher's SECOND resolution this
+//     turn double the target's +1/+1 counters instead (DoublePlusCounters, CR 701.10e), its target ordered
+//     by LandfallDoubleTargetOrder. `src_number` is the watcher's per-copy number (its resolution bits);
+//     `token_floor` excludes a token made after the land event began (LandfallSimultaneousScope).
 inline void ResolveLandfallTargetCounters(GameState& state, int controller, const std::string& src_name,
-                                          const CardParams& wp, const std::vector<int>* target_snapshot)
+                                          const CardParams& wp, const std::vector<int>* target_snapshot,
+                                          int src_number, int token_floor)
 {
     const std::string& sub = wp.landfall_target_subtype;
+    const bool any_creature = wp.landfall_target_any_creature;
     // The subtype by INTERNED ID (CardHasSubtypeId: a card's subtypes are interned at load, so a name
     // the registry does not know is on no card -- kNone matches nothing, as the string test would).
     const uint16_t sub_id = SubtypeRegistry::Instance().Id(sub);
@@ -7824,9 +8636,12 @@ inline void ResolveLandfallTargetCounters(GameState& state, int controller, cons
     {
         const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
         if (q.controller_index != controller) { continue; }
-        if (!(sub_id != SubtypeRegistry::kNone && CardHasSubtypeId(q.card, sub_id)) && !q.AnimatedAllTypes()) { continue; }
+        if (any_creature)
+        { if (!q.card.IsCreature() && !q.is_animated) { continue; } }   // "target creature you control"
+        else if (!(sub_id != SubtypeRegistry::kNone && CardHasSubtypeId(q.card, sub_id)) && !q.AnimatedAllTypes()) { continue; }
         if ((q.card.IsCreature() || q.is_animated)
             && std::find(shrouded.begin(), shrouded.end(), q.card.m_number) != shrouded.end()) { continue; }
+        if (q.is_token && q.card.m_number >= token_floor) { continue; }   // made after the land entered
         if (target_snapshot != nullptr
             && std::find(target_snapshot->begin(), target_snapshot->end(), q.card.m_number)
                    == target_snapshot->end()) { continue; }
@@ -7850,7 +8665,19 @@ inline void ResolveLandfallTargetCounters(GameState& state, int controller, cons
         }
         reps.push_back(i);
     }
-    ResolveProvider(state).LandfallCounterTargetOrder(state, controller, reps);
+    // Scythecat Cub: is THIS resolution the watcher's second this turn (its per-object bits)?
+    bool doubling = false;
+    if (wp.landfall_target_second_doubles)
+    {
+        for (const Permanent& w : state.battlefield)
+        {
+            if (w.card.m_number != src_number || w.controller_index != controller) { continue; }
+            doubling = w.landfall_resolved_once && !w.landfall_resolved_twice;
+            break;
+        }
+    }
+    if (doubling) { ResolveProvider(state).LandfallDoubleTargetOrder(state, controller, reps); }
+    else          { ResolveProvider(state).LandfallCounterTargetOrder(state, controller, reps); }
     if (reps.empty()) { reps.push_back(legal.front()); }   // a provider may restrict, never empty
     int pick = reps.front();
     const int pin = LandfallTargetPinFor(state);
@@ -7865,23 +8692,42 @@ inline void ResolveLandfallTargetCounters(GameState& state, int controller, cons
         int def_opt = 0;
         for (int k = 0; k < static_cast<int>(legal.size()); ++k)
         { if (legal[static_cast<std::size_t>(k)] == pick) { def_opt = k; break; } }
-        const std::string prompt = "given " + std::to_string(wp.landfall_target_counters)
-                                 + " +1/+1 counters (permanently)";
+        const std::string prompt = doubling
+            ? std::string("its +1/+1 counters doubled (permanently)")
+            : "given " + std::to_string(wp.landfall_target_counters) + " +1/+1 counter"
+              + (wp.landfall_target_counters == 1 ? "" : "s") + " (permanently)";
         const int chosen = (*g_play_loyalty_chooser)(state, controller, src_name + " (landfall)",
                                                      prompt, legal, def_opt);
         if (chosen >= 0 && chosen < static_cast<int>(legal.size()))
         { pick = legal[static_cast<std::size_t>(chosen)]; }
     }
     Permanent& t = state.battlefield[static_cast<std::size_t>(pick)];
-    PutPlusCounters(state, t, wp.landfall_target_counters);
+    const int before = PlusCountersOn(t);
+    if (doubling) { DoublePlusCounters(state, t); }
+    else          { PutPlusCounters(state, t, wp.landfall_target_counters); }
     AnnihilateCounters(t);   // CR 704.5r -- a no-op unless the body carries -1/-1 counters
     if (g_play_event_sink && !g_tap_speculating)
     {
         EmitPlayEvent(state.turn_number, "trigger",
-                      "\xF0\x9F\x8C\x8D " + src_name + " (landfall): +"
-                      + std::to_string(wp.landfall_target_counters) + "/+"
-                      + std::to_string(wp.landfall_target_counters) + " counters on "
-                      + t.card.m_name.str());
+                      "\xF0\x9F\x8C\x8D " + src_name + " (landfall): "
+                      + (doubling
+                         ? "doubles the +1/+1 counters on " + t.card.m_name.str() + " ("
+                           + std::to_string(before) + " \xE2\x86\x92 " + std::to_string(PlusCountersOn(t)) + ")"
+                         : "+" + std::to_string(wp.landfall_target_counters) + "/+"
+                           + std::to_string(wp.landfall_target_counters) + " counters on "
+                           + t.card.m_name.str()));
+    }
+    // The resolution is COUNTED (a trigger removed for want of a target returned above, uncounted).
+    // Re-found by number: no put above moves the battlefield, but the lookup costs nothing next to it.
+    if (wp.landfall_target_second_doubles)
+    {
+        for (Permanent& w : state.battlefield)
+        {
+            if (w.card.m_number != src_number || w.controller_index != controller) { continue; }
+            if (w.landfall_resolved_once) { w.landfall_resolved_twice = true; }
+            else                          { w.landfall_resolved_once  = true; }
+            break;
+        }
     }
 }
 
@@ -7894,14 +8740,36 @@ inline void FireLandfallTriggers(GameState& state, int controller, int land_numb
     // battlefield (reallocating it) and a watcher must not be found twice or skipped. Battlefield order
     // is the CR 603.3b order (the controller orders their own simultaneous triggers; the house
     // convention used by every other watcher family).
+    //
+    // TOKEN FLOOR (LandfallSimultaneousScope): a token numbered at or above it was made after this land
+    // event began -- by an earlier land of the same simultaneous put, or by this cascade -- so it neither
+    // triggers for this land (a Scute Swarm copy) nor is a legal target of its triggers.
+    //
+    // DOUBLINGS LAST (CR 603.3b, the controller's order; a DOMINANCE, not a heuristic): a watcher whose
+    // payload this time DOUBLES +1/+1 counters (Mossborn Hydra's own; Scythecat Cub's second resolution
+    // this turn) resolves after every other watcher of this land, so each counter the others put is
+    // doubled with the rest: 2(c+a) >= 2c+a for every creature, counters never hurt against the passive
+    // goldfish (the Avenger "may" argument below), and two doublings commute. Stable, so each group keeps
+    // battlefield order. A board with no doubling watcher -- or with one that every payload commutes with
+    // (a Hydra beside Plants: no other payload puts a counter on it) -- reaches the same board.
+    // Outside a scope nothing on the battlefield is newer than this walk, so no watcher is excluded and the
+    // floor (for the targets) is LandfallTokenFloorNow's, computed in the same walk.
+    const bool in_event = g_landfall_event_token_floor >= 0;
+    int token_floor = in_event ? g_landfall_event_token_floor : state.next_token_number;
     std::vector<int> watchers;
+    std::vector<int> late_watchers;
     for (const Permanent& w : state.battlefield)
     {
+        if (!in_event && w.is_token && w.card.m_number >= token_floor) { token_floor = w.card.m_number + 1; }
         if (w.controller_index != controller || w.def_absent) { continue; }
+        if (in_event && w.is_token && w.card.m_number >= token_floor) { continue; }
         const CardDefinition* wd = CardDatabase::Instance().LookupCached(w.card);
         if (wd == nullptr || !wd->landfall_watcher) { continue; }
-        watchers.push_back(w.card.m_number);
+        const bool late = wd->params.landfall_double_self_counters
+            || (wd->params.landfall_target_second_doubles && w.landfall_resolved_once && !w.landfall_resolved_twice);
+        (late ? late_watchers : watchers).push_back(w.card.m_number);
     }
+    watchers.insert(watchers.end(), late_watchers.begin(), late_watchers.end());
     // GRAVEYARD watchers (Bloodghast; CardDefinition::gy_landfall_watcher), snapshotted by per-copy
     // number AT THE MOMENT OF ENTRY: the ability functions only from the graveyard (CR 113.6k) and only
     // for a copy already there when the land enters (Scryfall ruling 2009-10-01) -- one that arrives
@@ -7941,7 +8809,32 @@ inline void FireLandfallTriggers(GameState& state, int controller, int land_numb
         // Tokens (Rampaging Baloths' 4/4 Beast, Omnath's 5/5 Elemental). MANDATORY in the current
         // Oracle text of both. One event of N tokens through the token chokepoint (Doubling Season,
         // the enter cascade). Each enters summoning sick, so a landfall token cannot attack this turn.
-        if (wp.landfall_creates_tokens > 0)
+        //
+        // Scute Swarm (landfall_copy_self_at_lands): with N+ lands we control AT RESOLUTION, a token that
+        // is a COPY of this creature instead -- its copiable values (Permanent::card, CR 707.2), taken by
+        // VALUE first because the put reallocates the battlefield. The copy enters sick through the
+        // universal cascade (CreateTokenCopyOfCard: Doubling Season, the enter watchers) and carries the
+        // ability, but did not exist when this land entered, so it does not trigger for it.
+        const bool copy_self = wp.landfall_creates_tokens > 0 && wp.landfall_copy_self_at_lands > 0
+            && [&]
+               {
+                   int lands = 0;
+                   for (const Permanent& q : state.battlefield)
+                   { if (q.controller_index == controller && q.card.IsLand()) { ++lands; } }
+                   return lands >= wp.landfall_copy_self_at_lands;
+               }();
+        if (copy_self)
+        {
+            const Card src = state.battlefield[static_cast<std::size_t>(wi)].card;
+            for (int k = 0; k < wp.landfall_creates_tokens; ++k) { CreateTokenCopyOfCard(state, controller, src); }
+            if (log)
+            {
+                EmitPlayEvent(state.turn_number, "trigger",
+                              "\xF0\x9F\x8C\x8D " + wname + " (landfall: " + land_name
+                              + "): create a token copy of " + src.m_name.str());
+            }
+        }
+        else if (wp.landfall_creates_tokens > 0)
         {
             CreateTokens(state, controller, wp.landfall_creates_tokens, wp.landfall_token_power,
                          wp.landfall_token_toughness, wp.landfall_token_subtypes,
@@ -7996,9 +8889,10 @@ inline void FireLandfallTriggers(GameState& state, int controller, int land_numb
             }
         }
 
-        // "Put N +1/+1 counters on target <subtype> you control" (Phylath) -- searched target.
-        if (wp.landfall_target_counters > 0 && !wp.landfall_target_subtype.empty())
-        { ResolveLandfallTargetCounters(state, controller, wname, wp, target_snapshot); }
+        // "Put N +1/+1 counters on target <subtype> you control" (Phylath) / "...on target creature you
+        // control" (Scythecat Cub, doubling on its second resolution this turn) -- searched target.
+        if (DefHasTargetedLandfall(wp))
+        { ResolveLandfallTargetCounters(state, controller, wname, wp, target_snapshot, num, token_floor); }
 
         // "You gain N life" (Courser of Kruphix) -- one life-gain EVENT through the shared hook.
         if (wp.landfall_lifegain > 0)
@@ -8091,6 +8985,25 @@ inline void FireLandfallTriggers(GameState& state, int controller, int land_numb
                                   + std::to_string(before + added) + ")");
                 }
                 break;
+            }
+        }
+
+        // "If it's your main phase, there's an additional combat phase after this phase" (Moraug, Fury of
+        // Akoum). The intervening "if" (CR 603.4) reads GameState::phase -- OUR turn, a MAIN phase -- which both
+        // worlds keep faithful for a deck with the card (deck_has_extra_combat: the rollout stamps Combat /
+        // Ending / Beginning too). A land Primeval Titan's attack fetches, or one entering in the upkeep, queues
+        // nothing. The queue is drained by the combat after this phase (GameState::pending_extra_combats).
+        if (wp.landfall_additional_combat && state.deck_has_extra_combat
+            && controller == state.active_player_index
+            && (state.phase == Phase::PreCombatMain || state.phase == Phase::PostCombatMain))
+        {
+            if (state.pending_extra_combats < 255) { ++state.pending_extra_combats; }
+            if (log)
+            {
+                EmitPlayEvent(state.turn_number, "trigger",
+                              "\xF0\x9F\x8C\x8D " + wname + " (landfall: " + land_name
+                              + "): an additional combat phase after this main phase ("
+                              + std::to_string(static_cast<int>(state.pending_extra_combats)) + " queued)");
             }
         }
     }
@@ -8196,6 +9109,14 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index,
                               e.card.m_name.str() + " enters with " + std::to_string(PlusCountersOn(e))
                               + " +1/+1 counter" + (PlusCountersOn(e) == 1 ? "" : "s"));
             }
+        }
+        // Walking Ballista with X = 0 (or put onto the battlefield, X = 0 by CR 107.3m): a 0/0 that the
+        // toughness SBA kills before any of its enter triggers resolve. Record it so those triggers do
+        // not target it, and so DrainPendingZeroToughness kills it in both worlds (see the queue).
+        if (ed != nullptr && ed->params.enters_with_x_plus_counters && e.card.IsCreature()
+            && LethalToughness(e, state) <= 0)
+        {
+            g_pending_zero_toughness.push_back(e.card.m_number);
         }
     }
     if (tokenstats::On())
@@ -10650,10 +11571,26 @@ inline void FireLeavesBattlefieldTriggers(GameState& state, int controller, cons
                                             d->params.ltb_return_max_power, left.m_name.str());
 }
 
+// "Lands you control with subtype `sub`" -- a LAND-type count. Deliberately not
+// CountControlledSubtypePermanents: that one counts an all-creature-types animation as every subtype,
+// which is wrong for a LAND type (Plains is not a creature type). Emeria, the Sky Ruin's
+// intervening if (PerformUpkeepGyReanimate) and SelfSacHasDeathPayoff's Emeria clause read it.
+inline int CountControlledLandsWithSubtype(const GameState& state, int controller, const std::string& sub)
+{
+    if (sub.empty()) { return 0; }
+    int n = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index == controller && p.card.IsLand() && CardHasSubtype(p.card, sub)) { ++n; }
+    }
+    return n;
+}
+
 // Would sacrificing `source_id` (an own creature) produce ANYTHING on death? True iff a
 // controller-side permanent carries a death watcher that would fire for it (Daxos's
 // own_creature_dies_lifegain; a subtype-keyed dies_watch_subtype matching the source; an LTB
-// return watcher), or the source itself persists. Read by the autonomous enumerator to drop a
+// return watcher; a graveyard reanimator that can bring the card back -- Abiding Grace for its exact
+// mana value, Emeria, the Sky Ruin), or the source itself persists. Read by the autonomous enumerator to drop a
 // self-only sac outlet with no payload (Ranger-Captain of Eos) while it is a strictly dominated
 // no-op -- a lossless dominated-action removal, not a heuristic; human play never consults it.
 // Lives beside OnCreatureDies so the two cannot drift.
@@ -10675,6 +11612,45 @@ inline bool SelfSacHasDeathPayoff(const GameState& state, int controller, int so
         if (wp.ltb_return_creatures > 0)       { return true; }
         if (!wp.dies_watch_subtype.empty() && CardHasSubtype(src->card, wp.dies_watch_subtype)) { return true; }
     }
+    // A GRAVEYARD REANIMATOR makes the death a real trade-off rather than a no-op: the card comes back
+    // through the enter cascade (Ranger-Captain of Eos re-tutors, Soul Warden & co. fire). Only a CARD
+    // returns (a token ceases to exist, CR 111.7), and only a creature card. Conservative in the TRUE
+    // direction -- this only keeps an option open, never removes one.
+    if (!src->is_token && src->card.m_number < GameState::kFirstTokenNumber && ZoneCard(src->card).IsCreature()
+        && (state.deck_has_endstep_reanimate || state.deck_has_upkeep_reanimate))
+    {
+        const Player& me = state.players[static_cast<std::size_t>(controller)];
+        const int src_mv = ZoneCard(src->card).m_mana_cost.ManaValue();
+        const bool drop_left = me.lands_played_this_turn < 1 + me.bonus_land_drops_this_turn;
+        // Emeria, the Sky Ruin: on our battlefield, or in hand with a land drop left -- AND the land
+        // count could reach its threshold by our next upkeep (this turn's drop, plus slack for a deck
+        // that can search lands onto the battlefield).
+        auto emeria_live = [&](const CardParams& ep)
+        {
+            if (!ep.upkeep_gy_reanimate) { return false; }
+            const int reach = CountControlledLandsWithSubtype(state, controller, ep.upkeep_gy_reanimate_land_subtype)
+                            + (drop_left ? 1 : 0) + (state.deck_has_land_search ? 3 : 0);
+            return ep.upkeep_gy_reanimate_land_threshold <= 0 || reach >= ep.upkeep_gy_reanimate_land_threshold;
+        };
+        for (const Permanent& w : state.battlefield)
+        {
+            if (w.controller_index != controller || w.card.m_number == source_id || w.def_absent) { continue; }
+            const CardDefinition* wd = CardDatabase::Instance().LookupCached(w.card);
+            if (!wd) { continue; }
+            // Abiding Grace: its end-step mode returns a creature card of EXACTLY this mana value.
+            if (wd->params.endstep_modal_reanimate_mv >= 0 && wd->params.endstep_modal_reanimate_mv == src_mv)
+            { return true; }
+            if (emeria_live(wd->params)) { return true; }
+        }
+        if (drop_left)
+        {
+            for (const Card& c : me.hand)
+            {
+                const CardDefinition* hd = CardDatabase::Instance().LookupCached(c);
+                if (hd != nullptr && hd->card.IsLand() && emeria_live(hd->params)) { return true; }
+            }
+        }
+    }
     return false;
 }
 
@@ -10688,7 +11664,7 @@ inline bool SelfSacHasDeathPayoff(const GameState& state, int controller, int so
 inline bool SacOutletLifegainRead(const GameState& state, int controller)
 {
     if (state.deck_reads_lifegain_in_play || state.deck_endstep_lifegain_max_threshold > 0
-        || state.dmg_events_armed) { return true; }
+        || state.dmg_events_armed || state.deck_reads_life_total) { return true; }
     for (const Permanent& q : state.battlefield)
     {
         if (q.controller_index != controller) { continue; }
@@ -10705,6 +11681,32 @@ inline bool SacOutletLifegainRead(const GameState& state, int controller)
     return false;
 }
 
+// Martyr of Sands' X: the number of cards of `col` in `controller`'s hand, read off each card's
+// DEFINITION (its colour mask comes from its mana-cost pips: lands -- Plains, Emeria -- and Walking
+// Ballista's {X}{X} are colourless, CR 105.2 / 202.2).
+inline int CountHandCardsOfColor(const GameState& state, int controller, const std::string& col)
+{
+    int n = 0;
+    for (const Card& c : state.players[controller].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (CardHasColorNamed(d ? d->card : c, col)) { ++n; }
+    }
+    return n;
+}
+
+// The life a self-only lifegain outlet gains if activated NOW: Brindle Boar's flat amount, or Martyr
+// of Sands' per-revealed-card amount times the maximum X (the sound reveal-everything dominance --
+// see CardParams::sac_outlet_lifegain_per_revealed_color). One definition for the executor, the
+// rollout and the scoring sites.
+inline int SacOutletLifegainAmount(const GameState& state, int controller, const CardParams& p)
+{
+    if (p.sac_outlet_lifegain <= 0) { return 0; }
+    if (p.sac_outlet_lifegain_per_revealed_color.empty()) { return p.sac_outlet_lifegain; }
+    return p.sac_outlet_lifegain
+         * CountHandCardsOfColor(state, controller, p.sac_outlet_lifegain_per_revealed_color);
+}
+
 // The self-only outlet's dominated-no-op gate (both TurnSolver sites): sacrificing THIS creature is an
 // option iff its death pays (SelfSacHasDeathPayoff) or its own payload does -- Brindle Boar's life
 // gain while something reads it. Lossless: with neither, the activation only removes our own body.
@@ -10715,7 +11717,8 @@ inline bool SelfSacOutletUseful(const GameState& state, int controller, int sour
     {
         if (p.controller_index != controller || p.card.m_number != source_id) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        return d && d->params.sac_outlet_lifegain > 0 && SacOutletLifegainRead(state, controller);
+        return d && SacOutletLifegainAmount(state, controller, d->params) > 0
+                 && SacOutletLifegainRead(state, controller);
     }
     return false;
 }
@@ -10791,6 +11794,9 @@ inline void OnCreatureDies(GameState& state, int dead_controller, const Card& de
             }
         }
     }
+    // "Put into a graveyard from anywhere -> its owner shuffles their GRAVEYARD into their library"
+    // (Emrakul / Ulamog the Infinite Gyre): the death site pushed the card first. Deck-gated (one bool).
+    FireGraveyardEntryTriggers(state, dead_controller, dead_card);
 
     // Persist (Kitchen Finks / Murderous Redcap): "When this creature dies, if it had no -1/-1
     // counters on it, return it to the battlefield under its owner's control with a -1/-1 counter
@@ -10889,7 +11895,7 @@ inline void OnCreatureDies(GameState& state, int dead_controller, const Card& de
             if (ok)
             {
                 c.m_is_staged     = true;
-                c.m_staged_expiry = state.turn_number + (wp.dies_impulse_expiry_next_turn ? 1 : 0);
+                c.m_staged_expiry = state.TurnSeq() + (wp.dies_impulse_expiry_next_turn ? 1 : 0);
                 EnterHand(state, dead_controller, std::move(c), HandEntryReason::Stage);
             }
         }
@@ -10950,8 +11956,17 @@ inline int GarthNameBit(const std::string& name)
     return -1;
 }
 
+inline void ApplySacForMana(GameState& state, int controller, int sac_source_id,
+                            const std::string& color, int amount, int victim_id);
+
+// `lotus_crack_color` (Black Lotus only; empty = keep the Lotus): the CONJURE-AND-CRACK variant.
+// Black Lotus is a noncreature artifact, so the copy can pay its own {T} the moment it lands, and
+// "{T}, Sacrifice: add three mana of any one colour" is a mana ability -- a player who conjures it
+// mid-turn cracks it into the very casts it was conjured for. The colour is the caller's (the plan's
+// own float colour, TurnSolver::GarthLotusCrackColor), so every apply world cracks the same way.
 inline void ApplyGarthActivate(GameState& state, int controller, int garth_id,
-                               const std::string& name, int braingeyser_x)
+                               const std::string& name, int braingeyser_x,
+                               const std::string& lotus_crack_color = std::string())
 {
     DrawTriggerFlushScope _dtf(state);   // the Niv loop: this effect's draws ping AFTER it resolves
     const int bit = GarthNameBit(name);
@@ -10991,8 +12006,11 @@ inline void ApplyGarthActivate(GameState& state, int controller, int garth_id,
         perm.owner_index       = controller;
         perm.entered_this_turn = true;
         perm.is_token          = true;   // a conjured copy ceases to exist in other zones anyway
+        const int copy_id      = perm.card.m_number;
         state.battlefield.push_back(perm);
         FireEtbWatchers(state, controller, static_cast<int>(state.battlefield.size()) - 1);
+        if (name == "Black Lotus" && !lotus_crack_color.empty())
+        { ApplySacForMana(state, controller, copy_id, lotus_crack_color, cd->params.sac_for_mana_amount, 0); }
     }
     else if (name == "Braingeyser")
     {
@@ -11072,6 +12090,10 @@ inline std::string LoyaltyAbilityText(const CardParams::LoyaltyAbilityParam& ab)
         ab.effect == "counters_up_to_two"      ? "put +1/+1 counters" :
         ab.effect == "regrow_multicolored"     ? "return a multicolored card" :
         ab.effect == "destroy_own_noncreature" ? "destroy a noncreature permanent" :
+        ab.effect == "exile_top_cast_or_damage" ? "exile top; cast paying its cost or deal 2 to each opponent" :
+        ab.effect == "add_red_mana"             ? "add {R}{R}" :
+        ab.effect == "damage_target_creature"   ? "deal 4 damage to target creature" :
+        ab.effect == "emblem_spell_cast_damage" ? "emblem: each spell cast deals 5 damage to any target" :
         ab.effect == "face_damage"             ? (std::to_string(ab.amount) + " damage") :
         ab.effect == "food_token"              ? "create a Food token" :
         ab.effect == "elk_transform"           ? "turn a permanent into a 3/3 Elk" :
@@ -11108,8 +12130,9 @@ inline std::string LoyaltyActionLabel(const std::string& walker_name, int abilit
 }
 
 inline void ApplyLoyaltyAbility(GameState& state, int controller, int walker_id, int ability_index,
-                                int elk_target = 0)
+                                int elk_target = 0, const std::string& cast_option = std::string(), bool cast_take = false)
 {
+    NoncombatTriggerScope noncombat_triggers(state);
     DrawTriggerFlushScope _dtf(state);   // the Niv loop: this effect's draws ping AFTER it resolves
     int wi = -1;
     const CardDefinition* d = nullptr;
@@ -11128,6 +12151,14 @@ inline void ApplyLoyaltyAbility(GameState& state, int controller, int walker_id,
         || ability_index >= static_cast<int>(d->params.loyalty_abilities.size())) { return; }
     const CardParams::LoyaltyAbilityParam& ab = d->params.loyalty_abilities[ability_index];
     Permanent& w = state.battlefield[wi];
+    if (ab.effect == "damage_target_creature")
+    {
+        bool legal = false;
+        for (const Permanent& p : state.battlefield)
+        { if ((p.card.IsCreature() || p.is_animated)
+              && (g_play_loyalty_chooser != nullptr || p.card.m_number == elk_target)) { legal = true; break; } }
+        if (!legal) { return; }
+    }
     if (ab.delta < 0 && w.loyalty < -ab.delta) { return; }   // can't pay the cost
     w.loyalty += ab.delta;
     w.loyalty_activated_this_turn = true;
@@ -11506,9 +12537,8 @@ inline void ApplyLoyaltyAbility(GameState& state, int controller, int walker_id,
         // land is a real cost the search rightly declined. Since -9 is unreachable from loyalty 5
         // without two +3s, that made an EIGHT-mana walker inert BY CONSTRUCTION (USER, 2026-08-16:
         // "you need a target to use the ability and destroying your own stuff is bad").
-        // FiveColourProvider::OpponentPlaysLands now gives the passive opponent lands, so the
-        // faithful play is available and this resolves to THEIR permanent first: free loyalty ramp,
-        // and their lands are inert props so nothing else about the game changes.
+        // Shared game setup gives the passive opponent lands, so the faithful play is available
+        // and this resolves to THEIR permanent first: free loyalty ramp.
         int pick = -1;
         // Pass 1 -- an OPPONENT noncreature permanent (the real MTG play, and free).
         for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
@@ -11592,6 +12622,23 @@ inline void ApplyLoyaltyAbility(GameState& state, int controller, int walker_id,
             got.gained_control_this_turn = true;
             got.tapped                   = false;
         }
+    }
+    else if (ab.effect == "exile_top_cast_or_damage")
+    { ResolveChandraExileCast(state, controller, *d, cast_option, cast_take); }
+    else if (ab.effect == "add_red_mana")
+    { state.floating_mana.red += ab.amount; }
+    else if (ab.effect == "emblem_spell_cast_damage")
+    { state.players[controller].emblem_spell_cast_damage += ab.amount; }
+    else if (ab.effect == "damage_target_creature")
+    {
+        int pick = -1;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        { if (state.battlefield[i].card.m_number == elk_target) { pick = i; break; } }
+        pick = human_target(ab_sign, "dealt 4 damage", [](const Permanent& p) {
+            return p.card.IsCreature() || p.is_animated;
+        }, pick);
+        if (pick >= 0)
+        { DealPermanentAbilityDamage(state, controller, *d, ab.amount, state.battlefield[pick].card.m_number, false); }
     }
     else if (ab.effect == "face_damage")
     {
@@ -12656,6 +13703,439 @@ inline void ApplyGraveyardExileGrow(GameState& state, int controller, int source
     }
 }
 
+
+// Stable content identity, independent of worker/game history. Card names contain no newline.
+inline std::string GraveyardDamageFuelSpec(std::string a, std::string b)
+{
+    if (b < a) { std::swap(a, b); }
+    return a + "\n" + b;
+}
+inline std::vector<int> GraveyardDamageFuelSlots(const GameState& s, int controller, const std::string& spec)
+{
+    const auto split = spec.find('\n');
+    if (split == std::string::npos) { return {}; }
+    const auto names = std::make_pair(spec.substr(0, split), spec.substr(split + 1));
+    const auto& gy = s.players[controller].graveyard;
+    int first = -1;
+    for (int i = 0; i < static_cast<int>(gy.size()); ++i)
+    {
+        if (gy[i].m_name.str() != names.first) { continue; }
+        first = i; break;
+    }
+    if (first < 0) { return {}; }
+    for (int i = 0; i < static_cast<int>(gy.size()); ++i)
+    { if (i != first && gy[i].m_name.str() == names.second) { return {first, i}; } }
+    return {};
+}
+inline void CounterPingKillAt(GameState&, std::size_t, const char*);
+// A shared ANY-target primitive. Target pins: 0 opponent, kAbilitySelfTarget self, every other signed id a permanent.
+inline bool DealPermanentAbilityDamage(GameState& s, int controller, const CardDefinition& d,
+                                       int amount, int target, bool ask_human)
+{
+    if (ask_human && g_play_target_chooser != nullptr)
+    {
+        std::vector<ChosenTarget> heur{ {0, 1 - controller, 0} };
+        if (target == kAbilitySelfTarget) { heur[0].index = controller; }
+        if (target != 0 && target != kAbilitySelfTarget)
+        {
+            for (int i = 0; i < static_cast<int>(s.battlefield.size()); ++i)
+            { if (s.battlefield[i].card.m_number == target) { heur = {{1, i, 0}}; break; } }
+        }
+        const auto got = (*g_play_target_chooser)(s, d, controller, 1, amount, heur);
+        if (got.size() != 1) { return false; }
+        if (got[0].kind == 0) { target = got[0].index == controller ? kAbilitySelfTarget : 0; }
+        else if (got[0].index >= 0 && got[0].index < static_cast<int>(s.battlefield.size()))
+        { target = s.battlefield[got[0].index].card.m_number; }
+        else { return false; }
+    }
+    if (target == 0 || target == kAbilitySelfTarget)
+    {
+        const bool self = target == kAbilitySelfTarget;
+        int actual_dealt = amount;
+        if (s.dmg_events_armed)
+        { actual_dealt = dmgev::DealDamageEvent(s, controller, d.card.IsCreature(), false,
+                                 self ? amount : 0, self ? 0 : amount, 0, d.card.m_name.str().c_str()); }
+        else
+        {
+            s.players[self ? controller : 1 - controller].life -= amount;
+            if (!self) { s.opponent_lost_life_this_turn = true; }
+        }
+        RecordNoncombatDamageToPlayer(s, controller, self ? controller : 1 - controller, actual_dealt);
+        return true;
+    }
+    for (std::size_t i = 0; i < s.battlefield.size(); ++i)
+    {
+        Permanent& p = s.battlefield[i];
+        if (p.card.m_number != target) { continue; }
+        if (p.card.HasType(CardType::Planeswalker))
+        {
+            p.loyalty -= amount;
+            for (Counter& c : p.counters)
+            { if (c.type == Counter::Type::Loyalty) { c.count = p.loyalty; } }
+            if (p.loyalty <= 0)
+            {
+                s.players[p.owner_index].graveyard.push_back(p.card);
+                s.battlefield.erase(s.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
+            }
+            return true;
+        }
+        if (!p.card.IsCreature() && !p.is_animated) { return false; }
+        const int before = p.damage;
+        p.damage += amount;
+        ApplyBurnToCreature(s, p, before, 0, controller);
+        if (p.damage >= LethalToughness(p, s) && !p.card.HasKeyword(Keyword::Indestructible))
+        { CounterPingKillAt(s, i, "lethal ability damage"); }
+        return true;
+    }
+    return false;
+}
+
+// Fixed targeted burn uses stable target ids in tutor_target (already a lossless plan axis).
+// 0 = opponent, -1 = self, positive = permanent id; a second target is Blaze's creature.
+inline bool FixedBurnSearchEnabled(const GameState& s)
+{
+    return HumanPlayActive() || DecisionUnpruned(UnprunedGate::FixedBurnTarget)
+        || ResolveProvider(s).SearchesFixedBurnTargets();
+}
+inline bool FixedTargetedBurn(const CardDefinition& d)
+{
+    return d.tmpl == CardTemplate::DirectDamage && !d.card.m_mana_cost.has_x
+        && !d.params.damage_divided && !d.params.damage_equals_top_mv
+        && (d.params.targeting == Targeting::Any || d.params.targeting == Targeting::Multi);
+}
+struct FixedBurnPin { int first = 0; int second = -2; int paired_controller = -1; };
+inline thread_local int g_paired_burn_stage = 0;
+inline thread_local int g_paired_burn_controller = -1;
+inline bool BurnPermanentTargetLegal(const GameState& s, int caster, const Permanent& p)
+{
+    if (CreatureHasShroud(p, s)) { return false; }
+    if (p.controller_index != caster && p.card.HasKeyword(Keyword::Hexproof)) { return false; }
+    return p.card.IsCreature() || p.is_animated || p.card.HasType(CardType::Planeswalker);
+}
+inline int BurnTargetController(const GameState& s, int caster, int target)
+{
+    if (target <= 0) { return target == -1 ? caster : 1 - caster; }
+    for (const Permanent& p : s.battlefield)
+    { if (p.card.m_number == target) { return p.controller_index; } }
+    return -1;
+}
+inline std::string EncodeFixedBurnPin(const FixedBurnPin& p)
+{
+    return "@burn/" + std::to_string(p.first) + "/" + std::to_string(p.second)
+        + "/" + std::to_string(p.paired_controller);
+}
+inline bool DecodeFixedBurnPin(const std::string& str, FixedBurnPin& p)
+{
+    const auto at = str.find("@burn/");
+    if (at == std::string::npos) { return false; }
+    const char* cur = str.data() + at + 6;
+    const char* end = str.data() + str.size();
+    int first = 0, second = -2, controller = -1;
+    auto read = [&](int& value, bool needs_slash)
+    {
+        const auto [next, ec] = std::from_chars(cur, end, value);
+        if (ec != std::errc{} || next == cur || (needs_slash && (next == end || *next != '/')))
+        { return false; }
+        cur = next + (needs_slash ? 1 : 0);
+        return true;
+    };
+    if (!read(first, true) || !read(second, true) || !read(controller, false)) { return false; }
+    p = {first, second, controller};
+    return true;
+}
+inline std::string FixedBurnCostPrefix(const std::string& token)
+{
+    if (token.rfind("@burn/", 0) == 0) { return {}; }
+    return token.substr(0, token.find("|@burn/"));
+}
+inline std::string FixedBurnPinLabel(const GameState& s, int caster, const FixedBurnPin& pin)
+{
+    auto label = [&](int target) -> std::string
+    {
+        if (target == 0) { return "opponent"; }
+        if (target == -1) { return "you"; }
+        for (const Permanent& p : s.battlefield)
+        { if (p.card.m_number == target) { return p.card.m_name.str(); } }
+        for (const Card& c : s.players[caster].hand)
+        { if (c.m_number == target) { return c.m_name.str(); } }
+        return "chosen permanent";
+    };
+    std::string result = label(pin.first);
+    if (pin.second != -2) { result += " + " + label(pin.second); }
+    return result;
+}
+inline std::string WithFixedBurnPin(const std::string& token, const FixedBurnPin& p)
+{
+    const auto at = token.find("|@burn/");
+    const std::string prefix = token.substr(0, at);
+    if (prefix.empty() || prefix.rfind("@burn/", 0) == 0) { return EncodeFixedBurnPin(p); }
+    return prefix + "|" + EncodeFixedBurnPin(p);
+}
+inline std::vector<FixedBurnPin> FixedBurnCandidates(const GameState& s, int caster,
+                                                    const CardDefinition& d, bool pending = false)
+{
+    std::vector<FixedBurnPin> out;
+    std::vector<std::pair<int, int>> creatures, walkers;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (!BurnPermanentTargetLegal(s, caster, p)) { continue; }
+        if (p.card.IsCreature() || p.is_animated) { creatures.push_back({p.card.m_number, p.controller_index}); }
+        if (p.card.HasType(CardType::Planeswalker)) { walkers.push_back({p.card.m_number, p.controller_index}); }
+    }
+    // A plan may cast the target first. The cast-time legality check rejects variants whose
+    // required permanent never entered; omitting these here would silently steal same-plan lines.
+    if (pending)
+    {
+        for (const Card& c : s.players[caster].hand)
+        {
+            const CardDefinition* hd = CardDatabase::Instance().LookupCached(c);
+            if (!hd) { continue; }
+            if (hd->card.IsCreature()) { creatures.push_back({c.m_number, caster}); }
+            if (hd->card.HasType(CardType::Planeswalker)) { walkers.push_back({c.m_number, caster}); }
+        }
+    }
+    if (d.params.targeting == Targeting::Multi)
+    {
+        for (const auto& c : creatures)
+        {
+            out.push_back({c.second == caster ? -1 : 0, c.first, c.second});
+            for (const auto& w : walkers)
+            { if (w.second == c.second) { out.push_back({w.first, c.first, c.second}); } }
+        }
+    }
+    else
+    {
+        out.push_back({0, -2, -1}); out.push_back({-1, -2, -1});
+        for (const auto& c : creatures) { out.push_back({c.first, -2, -1}); }
+        for (const auto& w : walkers)
+        {
+            bool seen = false;
+            for (const auto& p : out) { if (p.first == w.first) { seen = true; break; } }
+            if (!seen) { out.push_back({w.first, -2, -1}); }
+        }
+    }
+    // Blaze can target our own surviving Swiftspear without landfall to buy a
+    // prowess attack when the goldfish opponent has no creature. Keep its axis.
+    if (d.params.targeting != Targeting::Multi
+        && !HumanPlayActive() && !DecisionUnpruned(UnprunedGate::FixedBurnTarget)
+        && ResolveProvider(s).PrunesOwnFixedBurnTargets())
+    {
+        out.erase(std::remove_if(out.begin(), out.end(), [&](const FixedBurnPin& pin)
+        {
+            if (pin.first == -1) { return true; }
+            if (pin.first <= 0) { return false; }
+            if (BurnTargetController(s, caster, pin.first) == caster) { return true; }
+            // Pending same-plan targets can still be in hand.
+            for (const Card& c : s.players[caster].hand)
+            { if (c.m_number == pin.first) { return true; } }
+            return false;
+        }), out.end());
+    }
+    if (s.opponent_spawns != nullptr && !HumanPlayActive()
+        && !DecisionUnpruned(UnprunedGate::FixedBurnTarget)
+        && ResolveProvider(s).PrunesPassiveBurnTargets())
+    {
+        int best_spawn = -1, best_survival = -1;
+        bool only_passive_spawns = true;
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index == caster || (!p.card.IsCreature() && !p.is_animated)) { continue; }
+            const std::string name = p.card.m_name.str();
+            if (p.card.m_number < 500000 || !name.ends_with(" Creature"))
+            { only_passive_spawns = false; break; }
+            const int survival = p.card.m_toughness.value_or(0) - p.damage;
+            if (survival > best_survival)
+            { best_survival = survival; best_spawn = p.card.m_number; }
+        }
+        if (only_passive_spawns && best_spawn > 0)
+        {
+            out.erase(std::remove_if(out.begin(), out.end(), [&](const FixedBurnPin& pin)
+            {
+                if (d.params.targeting == Targeting::Multi)
+                {
+                    // With an inert enemy target available, damaging our own
+                    // creature cannot improve Blaze's face damage or cast
+                    // triggers and can remove an attacker.
+                    return pin.first == -1
+                        || (pin.first == 0 && pin.second > 0 && pin.second != best_spawn);
+                }
+                for (const Permanent& p : s.battlefield)
+                { if (p.card.m_number == pin.first && p.controller_index != caster && p.card.IsCreature())
+                    { return true; } }
+                return false;
+            }), out.end());
+        }
+    }
+    return out;
+}
+inline ChosenTarget BurnChoiceForPin(const GameState& s, int caster, int target)
+{
+    if (target <= 0) { return {0, target == -1 ? caster : 1 - caster, 0}; }
+    for (int i = 0; i < static_cast<int>(s.battlefield.size()); ++i)
+    { if (s.battlefield[i].card.m_number == target) { return {1, i, 0}; } }
+    return {1, -1, 0};
+}
+inline int BurnPinForChoice(const GameState& s, int caster, const ChosenTarget& t)
+{
+    if (t.kind == 0) { return t.index == caster ? -1 : 0; }
+    return t.index >= 0 && t.index < static_cast<int>(s.battlefield.size())
+        ? s.battlefield[t.index].card.m_number : -3;
+}
+inline bool PrepareFixedBurnPin(const GameState& s, int caster, const CardDefinition& d,
+                               const std::string& token, FixedBurnPin& selected)
+{
+    const auto legal = FixedBurnCandidates(s, caster, d);
+    if (legal.empty()) { return false; }
+    const bool pinned = DecodeFixedBurnPin(token, selected);
+    if (!pinned) { selected = legal.front(); }
+    // Human decisions use the existing target protocol twice, with a filtered second set.
+    if (g_play_target_chooser)
+    {
+        const int old_stage = g_paired_burn_stage, old_ctrl = g_paired_burn_controller;
+        g_paired_burn_stage = d.params.targeting == Targeting::Multi ? 1 : 0;
+        // Searing Blaze's landfall amount is already fixed at this cast. Show
+        // that amount in both target prompts, rather than its printed base 1.
+        const int prompt_damage = d.params.landfall_damage > 0
+            && LandEnteredUnderControlThisTurn(s, caster)
+            ? d.params.landfall_damage : d.params.damage;
+        auto got = (*g_play_target_chooser)(s, d, caster, 1, prompt_damage,
+                                          {BurnChoiceForPin(s, caster, selected.first)});
+        if (!got.empty()) { selected.first = BurnPinForChoice(s, caster, got.front()); }
+        if (d.params.targeting == Targeting::Multi)
+        {
+            selected.paired_controller = BurnTargetController(s, caster, selected.first);
+            for (const auto& p : legal)
+            { if (p.first == selected.first) { selected.second = p.second; break; } }
+            g_paired_burn_stage = 2; g_paired_burn_controller = selected.paired_controller;
+            got = (*g_play_target_chooser)(s, d, caster, 1, prompt_damage,
+                                          {BurnChoiceForPin(s, caster, selected.second)});
+            if (!got.empty()) { selected.second = BurnPinForChoice(s, caster, got.front()); }
+        }
+        g_paired_burn_stage = old_stage; g_paired_burn_controller = old_ctrl;
+    }
+    for (const auto& p : legal)
+    { if (p.first == selected.first && p.second == selected.second
+          && p.paired_controller == selected.paired_controller) { return true; } }
+    return false;
+}
+inline bool ResolveFixedBurnPin(GameState& s, int caster, const CardDefinition& d,
+                                const FixedBurnPin& p, int damage)
+{
+    // Legality is checked independently: losing the creature does not counter the player/walker hit.
+    auto hit = [&](int target, bool creature_only) -> bool
+    {
+        if (target <= 0)
+        {
+            if (!creature_only && (target == 0 || target == -1))
+            { DealPermanentAbilityDamage(s, caster, d, damage, target, false); return true; }
+            return false;
+        }
+        for (const Permanent& q : s.battlefield)
+        {
+            if (q.card.m_number != target) { continue; }
+            if (!BurnPermanentTargetLegal(s, caster, q)) { return false; }
+            if (creature_only && ((!q.card.IsCreature() && !q.is_animated)
+                                 || q.controller_index != p.paired_controller)) { return false; }
+            if (!creature_only && d.params.targeting == Targeting::Multi
+                && !q.card.HasType(CardType::Planeswalker)) { return false; }
+            DealPermanentAbilityDamage(s, caster, d, damage, target, false);
+            return true;
+        }
+        return false;
+    };
+    // Creature first keeps an immediate opponent-damage watcher from consuming that
+    // creature between the two components of Blaze's simultaneous damage event.
+    bool resolved = false;
+    if (d.params.targeting == Targeting::Multi) { resolved = hit(p.second, true); }
+    return hit(p.first, false) || resolved;
+}
+
+// Select TARGET then both non-targeting exile costs, validate, pay mana, tap/exile, resolve.
+// The payer is the host's existing unified mana payment; one helper serves real and rollout games.
+inline bool ApplyGraveyardDamageAbility(GameState& s, int controller, int source_id,
+                                        const std::string& fuel_spec, int target, const MadnessPayFn& payer)
+{
+    NoncombatTriggerScope noncombat_triggers(s);
+    const CardDefinition* d = nullptr;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.card.m_number != source_id || p.controller_index != controller || p.tapped) { continue; }
+        d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d || d->params.tap_graveyard_exile_damage <= 0 || !CanTapNow(p, s.battlefield)) { return false; }
+        break;
+    }
+    if (!d) { return false; }
+    auto slots = GraveyardDamageFuelSlots(s, controller, fuel_spec);
+    auto& gy = s.players[controller].graveyard;
+    if (slots.size() != 2 && gy.size() < 2) { return false; }
+    // Resolve the any-target chooser before costs by using the same target encoding as Ballista.
+    if (g_play_target_chooser != nullptr)
+    {
+        const std::vector<ChosenTarget> heur{{0, 1 - controller, 0}};
+        const auto got = (*g_play_target_chooser)(s, *d, controller, 1, d->params.tap_graveyard_exile_damage, heur);
+        if (got.size() != 1) { return false; }
+        if (got[0].kind == 0) { target = got[0].index == controller ? kAbilitySelfTarget : 0; }
+        else if (got[0].index >= 0 && got[0].index < static_cast<int>(s.battlefield.size()))
+        { target = s.battlefield[got[0].index].card.m_number; }
+        else { return false; }
+    }
+    if (g_play_gy_return_one_chooser != nullptr)
+    {
+        slots.clear();
+        for (int pick = 0; pick < 2; ++pick)
+        {
+            std::vector<Card> menu;
+            std::vector<int> legal;
+            for (int i = 0; i < static_cast<int>(gy.size()); ++i)
+            {
+                if (!slots.empty() && i == slots[0]) { continue; }
+                menu.push_back(gy[i]); legal.push_back(i);
+            }
+            struct CostPromptScope {
+                int saved = g_graveyard_exile_cost_prompt;
+                explicit CostPromptScope(int number) { g_graveyard_exile_cost_prompt = number; }
+                ~CostPromptScope() { g_graveyard_exile_cost_prompt = saved; }
+            } cost_prompt(pick + 1);
+            const int got = (*g_play_gy_return_one_chooser)(s, controller,
+                d->card.m_name.str(), "", menu, 1);
+            if (got < 1 || got > static_cast<int>(legal.size())) { return false; }
+            slots.push_back(legal[static_cast<std::size_t>(got - 1)]);
+        }
+    }
+    if (slots.size() != 2) { return false; }
+    if (target != 0 && target != kAbilitySelfTarget)
+    {
+        bool legal = false;
+        for (const Permanent& p : s.battlefield)
+        { if (p.card.m_number == target && (p.card.IsCreature() || p.is_animated || p.card.HasType(CardType::Planeswalker))) { legal = true; break; } }
+        if (!legal) { return false; }
+    }
+    const Card first = gy[slots[0]], second = gy[slots[1]];
+    ManaCost cost; cost.red = 1;
+    if (!payer(s, cost)) { return false; }
+    for (Permanent& p : s.battlefield)
+    { if (p.card.m_number == source_id) { p.tapped = true; break; } }
+    std::sort(slots.begin(), slots.end(), std::greater<int>());
+    for (int i : slots) { gy.erase(gy.begin() + i); }
+    s.exile.push_back(first); s.exile.push_back(second);
+    const int before_life = s.players[target == kAbilitySelfTarget ? controller : 1 - controller].life;
+    std::string target_name = target == 0 ? "opponent" : target == kAbilitySelfTarget ? "you" : "permanent";
+    if (target > 0)
+    { for (const Permanent& p : s.battlefield)
+      { if (p.card.m_number == target) { target_name = p.card.m_name.str(); break; } } }
+    const bool dealt = DealPermanentAbilityDamage(
+        s, controller, *d, d->params.tap_graveyard_exile_damage, target, false);
+    if (dealt && g_play_event_sink != nullptr && !g_tap_speculating)
+    {
+        const int amount = target <= 0
+            ? before_life - s.players[target == kAbilitySelfTarget ? controller : 1 - controller].life
+            : d->params.tap_graveyard_exile_damage;
+        EmitPlayEvent(s.turn_number, "damage", d->card.m_name.str() + ": "
+            + std::to_string(amount) + " damage to " + target_name);
+    }
+    return true;
+}
+
 inline void ApplyGraveyardExileAbility(GameState& state, int controller, int source_id, int mode)
 {
     Permanent* src = nullptr;
@@ -12746,7 +14226,7 @@ inline int GyReturnRandomPick(const GameState& state, const std::vector<Card>& g
         return x.m_name.str() < y.m_name.str();
     });
     uint64_t mix = static_cast<uint64_t>(state.game_seed) * 0x9E3779B97F4A7C15ull
-                 + (static_cast<uint64_t>(state.turn_number) + 1) * 0xD1B54A32D192ED03ull
+                 + (static_cast<uint64_t>(state.TurnSeq()) + 1) * 0xD1B54A32D192ED03ull
                  + static_cast<uint64_t>(elig.size()) * 0xCA5A826395121157ull
                  + 0x46E9C4AFull;   // domain tag: a stream distinct from Gamble's
     mix ^= mix >> 30; mix *= 0xBF58476D1CE4E5B9ull;
@@ -13729,6 +15209,283 @@ inline void ResolveEtbDestroyMandatory(GameState& state, int controller, int sou
     (void)source_id;
 }
 
+// ---- TARGETED CAST TRIGGERS (Ulamog, the Ceaseless Hunger: exile two; Ulamog, the Infinite Gyre: ----
+// destroy one). CardParams::cast_trigger_exile_target_permanents / cast_trigger_destroy_target_permanents.
+// "When you cast this spell, exile two target permanents" / "destroy target permanent": MANDATORY, and the
+// targets are chosen as the trigger is PUT ON THE STACK (CR 603.3d -> 601.2c), from every permanent on the
+// battlefield, either side (CR 115.1: "target permanent" has no controller qualifier, so OUR permanents
+// are legal -- and FORCED when the opponent has too few); the same object cannot be chosen twice for one
+// "target" word (CR 115.3), so N targets are N DISTINCT permanents; fewer than N legal targets -> the
+// trigger is removed from the stack (603.3d). The spell itself is on the stack, not a permanent, so it is
+// never a target. Shroud (equip_grants_shroud) is honoured; Emrakul's protection is from colored SPELLS and
+// these are colorless abilities, so it is a legal target.
+//
+//   * ONE SHARED CHOOSER (ChooseCastTriggerTargets), called by the executor's push site
+//     (EffectHandler::PushCastTriggers) and the rollout's inline cast block (apply_one) -- lockstep: in
+//     both worlds nothing happens between the push and the resolution in a goldfish, so the two pick the
+//     same targets on the same board.
+//   * BRANCHING: the legal set is identity-folded into classes (CastTriggerTargetFoldKey -- the Phylath
+//     LandfallTargetFoldKey "identical in all state" fold, plus the controller); the provider ORDERS the
+//     class representatives (DecisionProvider::CastTriggerTargetOrder -- order only, never a prune: an
+//     opponent token first by default, but exiling our own land can be right); the OPTIONS are the
+//     multisets of N classes respecting each class's size, in lexicographic provider order (two identical
+//     Islands are ONE option); and the SEARCH chooses the option rank (Plan::cast_trigger_target_choice
+//     -> ScriptedCastTriggerTarget, a whole-turn policy keyed on GameState::TurnSeq, clamped). Rank 0 is
+//     the default for every path with no plan (the d0 runner, rollout turns beyond the horizon). NOT the
+//     auto-resolved EtbDestroyTargetPick shape: that is a provider's top candidate, unbranched.
+//   * HUMAN PLAY re-asks over the FULL legal set (never the folded list) through the shared board-click
+//     `target` decision (g_play_loyalty_chooser), one pick at a time for N targets (the Terastodon
+//     "target n of K" shape), each pick preselected to the engine's option; a forced pick (legal == picks
+//     left) is not prompted. Nulled by RevealLogPause, so autonomous play is untouched.
+//   * RESOLUTION (ResolveCastTriggerTargets) re-checks each target (CR 608.2b): one that left is skipped,
+//     the rest still happen. Exile ignores indestructible and is not a graveyard (no Emrakul shuffle;
+//     LTB triggers fire); destroy skips an indestructible target (legal, no effect) and a destroyed
+//     creature dies through OnCreatureDies (+ FireOppCreatureDies for the opponent's).
+inline thread_local int g_cast_trigger_target_pin      = -1;
+inline thread_local int g_cast_trigger_target_pin_turn = -1;
+struct ScriptedCastTriggerTarget
+{
+    int saved, saved_turn;
+    bool active;
+    ScriptedCastTriggerTarget(int k, int turn_seq)
+        : saved(g_cast_trigger_target_pin), saved_turn(g_cast_trigger_target_pin_turn), active(k >= 0)
+    {
+        if (active) { g_cast_trigger_target_pin = k; g_cast_trigger_target_pin_turn = turn_seq; }
+    }
+    ~ScriptedCastTriggerTarget()
+    { if (active) { g_cast_trigger_target_pin = saved; g_cast_trigger_target_pin_turn = saved_turn; } }
+    ScriptedCastTriggerTarget(const ScriptedCastTriggerTarget&) = delete;
+    ScriptedCastTriggerTarget& operator=(const ScriptedCastTriggerTarget&) = delete;
+};
+// The policy live for THIS turn, or -1 (the provider's front). Keyed on TurnSeq: a pin from the regular
+// turn of a round is stale inside that round's extra turn.
+inline int CastTriggerTargetPinFor(const GameState& state)
+{ return g_cast_trigger_target_pin_turn == state.TurnSeq() ? g_cast_trigger_target_pin : -1; }
+
+// How many N-target options the classes (sizes `counts`) give: multisets of size n with each class used at
+// most counts[i] times. Exact; used by the axis to size its width.
+inline long long CastTriggerOptionCount(const std::vector<int>& counts, int n, std::size_t from = 0)
+{
+    if (n == 0) { return 1; }
+    long long total = 0;
+    for (std::size_t i = from; i < counts.size(); ++i)
+    {
+        for (int take = 1; take <= std::min(n, counts[i]); ++take)
+        { total += CastTriggerOptionCount(counts, n - take, i + 1); }
+    }
+    return total;
+}
+// The identity fold for a cast-trigger target (sound): LandfallTargetFoldKey's "identical in all state"
+// key, plus the CONTROLLER (that key mixes the owner only). false -> a singleton class.
+inline bool CastTriggerTargetFoldKey(const GameState& state, const Permanent& p, std::uint64_t& key,
+                                     const std::vector<int>* linked)
+{
+    if (!LandfallTargetFoldKey(state, p, key, linked)) { return false; }
+    key ^= 0xC7A6E7ull * (static_cast<std::uint64_t>(p.controller_index) + 1);
+    key *= 0x9E3779B97F4A7C15ull;
+    return true;
+}
+// The legal set, folded and ORDERED: `classes[c]` = the battlefield indices of class c (ascending), the
+// classes in the provider's order.
+inline void CastTriggerTargetClasses(const GameState& state, int controller, bool destroy,
+                                     std::vector<std::vector<int>>& classes)
+{
+    classes.clear();
+    std::vector<int> linked;
+    LandfallTargetLinks(state, linked);
+    std::vector<std::uint64_t> keys;   // parallel to classes; 0 = singleton
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+        if ((q.card.IsCreature() || q.is_animated) && CreatureHasShroud(q, state)) { continue; }
+        std::uint64_t k = 0;
+        const bool foldable = CastTriggerTargetFoldKey(state, q, k, &linked);
+        bool placed = false;
+        if (foldable)
+        {
+            for (std::size_t c = 0; c < classes.size(); ++c)
+            { if (keys[c] == k && k != 0) { classes[c].push_back(i); placed = true; break; } }
+        }
+        if (!placed) { classes.push_back({ i }); keys.push_back(foldable ? k : 0); }
+    }
+    if (classes.size() < 2) { return; }
+    std::vector<int> reps;
+    reps.reserve(classes.size());
+    for (const auto& c : classes) { reps.push_back(c.front()); }
+    ResolveProvider(state).CastTriggerTargetOrder(state, controller, destroy, reps);
+    std::vector<std::vector<int>> ordered;
+    ordered.reserve(classes.size());
+    for (int r : reps)
+    {
+        for (const auto& c : classes) { if (c.front() == r) { ordered.push_back(c); break; } }
+    }
+    if (ordered.size() == classes.size()) { classes.swap(ordered); }   // a provider must not add/drop
+}
+// The option of rank `rank` (clamped), as battlefield indices; empty when fewer than n legal targets.
+inline std::vector<int> CastTriggerTargetOption(const std::vector<std::vector<int>>& classes, int n, int rank)
+{
+    std::vector<int> counts;
+    for (const auto& c : classes) { counts.push_back(static_cast<int>(c.size())); }
+    const long long total = CastTriggerOptionCount(counts, n);
+    if (n <= 0 || total <= 0) { return {}; }
+    long long r = std::max(0, rank);
+    if (r >= total) { r = total - 1; }
+    // Walk the lexicographic order: at class i, taking `take` members (largest share first is NOT the
+    // order -- the order is "smallest next class index first", i.e. take as many of the FRONT class as the
+    // multiset allows before moving on, which makes option 0 the front-loaded pick).
+    std::vector<int> out;
+    int left = n;
+    std::size_t from = 0;
+    while (left > 0)
+    {
+        bool advanced = false;
+        for (std::size_t i = from; i < classes.size() && !advanced; ++i)
+        {
+            for (int take = std::min(left, counts[i]); take >= 1; --take)
+            {
+                const long long block = CastTriggerOptionCount(counts, left - take, i + 1);
+                if (r < block)
+                {
+                    for (int t = 0; t < take; ++t) { out.push_back(classes[i][static_cast<std::size_t>(t)]); }
+                    left -= take;
+                    from = i + 1;
+                    advanced = true;
+                    break;
+                }
+                r -= block;
+            }
+        }
+        if (!advanced) { return {}; }   // unreachable for r < total
+    }
+    return out;
+}
+// THE SHARED CHOOSER. Returns the chosen permanents' m_numbers (n of them), or empty = the trigger is
+// removed (fewer than n legal targets). `src_name` / `destroy` word the human prompt.
+inline std::vector<int> ChooseCastTriggerTargets(const GameState& state, int controller, int n, bool destroy,
+                                                 const std::string& src_name)
+{
+    std::vector<std::vector<int>> classes;
+    CastTriggerTargetClasses(state, controller, destroy, classes);
+    std::size_t legal_n = 0;
+    for (const auto& c : classes) { legal_n += c.size(); }
+    if (n <= 0 || legal_n < static_cast<std::size_t>(n))
+    {
+        if (n > 0 && g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "trigger",
+                          src_name + ": fewer than " + std::to_string(n)
+                          + " legal targets -- the trigger is removed");
+        }
+        return {};
+    }
+    std::vector<int> pick = CastTriggerTargetOption(classes, n, CastTriggerTargetPinFor(state));
+    if (static_cast<int>(pick.size()) != n) { return {}; }
+    // HUMAN PLAY: one board-click per target over the FULL legal set (every permanent not yet picked).
+    if (g_play_loyalty_chooser)
+    {
+        std::vector<int> all;
+        for (const auto& c : classes) { all.insert(all.end(), c.begin(), c.end()); }
+        std::sort(all.begin(), all.end());
+        std::vector<int> chosen;
+        for (int j = 0; j < n; ++j)
+        {
+            std::vector<int> legal;
+            for (int i : all) { if (std::find(chosen.begin(), chosen.end(), i) == chosen.end()) { legal.push_back(i); } }
+            const int left = n - j;
+            int dflt_idx = 0;
+            {
+                // The engine's option, minus what the human already took: its first remaining member.
+                int want = -1;
+                for (int i : pick) { if (std::find(chosen.begin(), chosen.end(), i) == chosen.end()) { want = i; break; } }
+                for (int k = 0; k < static_cast<int>(legal.size()); ++k) { if (legal[k] == want) { dflt_idx = k; break; } }
+            }
+            int c = dflt_idx;
+            if (static_cast<int>(legal.size()) > left)   // a forced pick is not a choice (CR 601.2c)
+            {
+                const std::string what = std::string(destroy ? "destroyed" : "exiled")
+                    + " (target permanent " + std::to_string(j + 1) + " of " + std::to_string(n) + " -- mandatory)";
+                const int got = (*g_play_loyalty_chooser)(state, controller, src_name, what, legal, dflt_idx);
+                if (got >= 0 && got < static_cast<int>(legal.size())) { c = got; }
+            }
+            chosen.push_back(legal[static_cast<std::size_t>(c)]);
+        }
+        pick = chosen;
+    }
+    std::vector<int> nums;
+    for (int i : pick) { nums.push_back(state.battlefield[static_cast<std::size_t>(i)].card.m_number); }
+    return nums;
+}
+inline int SweepOrphanedAuras(GameState& state);   // defined below
+inline void ResolveCastTriggerTargets(GameState& state, int controller, const std::string& src_name,
+                                      const std::vector<int>& numbers, bool destroy)
+{
+    GyShuffleBatch _gyb(state);   // simultaneous destroys: an Emrakul's graveyard shuffle waits for both
+    for (int num : numbers)
+    {
+        int bi = -1;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        { if (state.battlefield[static_cast<std::size_t>(i)].card.m_number == num) { bi = i; break; } }
+        if (bi < 0) { continue; }   // CR 608.2b: the target left -- skipped, the rest still happen
+        Permanent& q = state.battlefield[static_cast<std::size_t>(bi)];
+        const Card dead = q.card;
+        const int  dead_ctrl = q.controller_index;
+        const int  dead_owner = q.owner_index;
+        const bool was_creature = q.card.IsCreature();
+        // A scheduled opponent spawn is a token too (its Permanent does not carry is_token).
+        const bool was_token = q.is_token || q.card.m_number >= GameState::kFirstOppSpawnNumber;
+        const int  m1 = MinusCountersOn(q);
+        if (destroy && q.card.HasKeyword(Keyword::Indestructible))
+        {
+            if (g_play_event_sink && !g_tap_speculating)
+            {
+                EmitPlayEvent(state.turn_number, "trigger",
+                              src_name + ": " + dead.m_name.str() + " is indestructible -- nothing happens");
+            }
+            continue;
+        }
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "trigger",
+                          std::string(destroy ? "\xF0\x9F\x92\x80 " : "\xF0\x9F\x8C\x8C ") + src_name
+                          + (destroy ? ": destroys " : ": exiles ")
+                          + (dead_ctrl == controller ? std::string("your ") : std::string("the opponent's "))
+                          + dead.m_name.str());
+        }
+        if (destroy) { state.players[dead_owner].graveyard.push_back(dead); }
+        else if (!was_token) { state.exile.push_back(dead); }   // a token ceases to exist (CR 111.7)
+        state.battlefield.erase(state.battlefield.begin() + bi);
+        for (Permanent& o : state.battlefield)
+        {
+            if (o.equipped_to      == dead.m_number) { o.equipped_to      = 0; }
+            if (o.aura_attached_to == dead.m_number) { o.aura_attached_to = 0; }
+        }
+        if (destroy && was_creature)
+        {
+            OnCreatureDies(state, dead_ctrl, dead, was_token, m1);
+            if (dead_ctrl != controller) { FireOppCreatureDies(state, dead_ctrl); }
+        }
+        else
+        {
+            if (destroy) { FireGraveyardEntryTriggers(state, dead_owner, dead); }
+            FireLeavesBattlefieldTriggers(state, dead_ctrl, dead);
+            RefreshDevotionCreatures(state);
+            RefreshReconfigureCreatures(state);
+        }
+    }
+    SweepOrphanedAuras(state);   // an Aura on an exiled / destroyed host (CR 704.5m)
+}
+// "When you cast this spell, take an extra turn after this one" (Emrakul): resolving the trigger.
+inline void ResolveCastTriggerExtraTurn(GameState& state, const std::string& src_name)
+{
+    if (state.pending_extra_turns < 255) { ++state.pending_extra_turns; }
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "trigger",
+                      "\xE2\x8F\xB3 " + src_name + ": take an extra turn after this one ("
+                      + std::to_string(static_cast<int>(state.pending_extra_turns)) + " pending)");
+    }
+}
+
 // Foundation Breaker: "When this creature enters, you MAY destroy target artifact or enchantment."
 // The OPTIONAL twin of the mandatory resolver above: same legal set over BOTH sides (an artifact or
 // an enchantment -- Metallic Mimic is an artifact creature, the source itself is neither), but the
@@ -14126,8 +15883,19 @@ inline std::vector<int> FlingVictimCandidates(const GameState& state, int contro
 // find_by_id): snapshot card numbers, re-derive indices by id. It also gives the
 // "a sacrificed attacker stops dealing combat damage" rule for free -- the dead id is simply not
 // found and drops out of the vector.
+inline void FireAttackSacFlingImpl(GameState& state, int controller, std::vector<int>& attacker_indices);
 inline void FireAttackSacFling(GameState& state, int controller,
                                std::vector<int>& attacker_indices)
+{
+    FireAttackSacFlingImpl(state, controller, attacker_indices);
+    // THIS combat's pin, spent whether or not a fling fired (no Flinger attacked, nothing to sacrifice): a
+    // pinned variant whose fling never fired then leaves combat in its base plan's state, which is what
+    // MTG_COMBAT_PIN_FOLD compares (TurnSolver.cpp PlanHasCombatPin). MTG_FLING_PIN_FOLD=0: it rides on to the
+    // turn start, as before.
+    if (FlingPinFoldOn()) { state.scripted_fling_victim = -1; }
+}
+inline void FireAttackSacFlingImpl(GameState& state, int controller,
+                                   std::vector<int>& attacker_indices)
 {
     if (attacker_indices.empty()) { return; }
     const int bf0 = static_cast<int>(state.battlefield.size());
@@ -14513,7 +16281,7 @@ inline bool ApplyRevealTopDeploy(GameState& state, int controller)
 // for -- so it stays out rather than grow the change. Stamping it there is the follow-up.
 inline const CardDefinition* UpkeepRevealTopCandidate(const GameState& state, int controller)
 {
-    if (state.top_stacked_turn != state.turn_number - 1) { return nullptr; }
+    if (state.top_stacked_turn != state.TurnSeq() - 1) { return nullptr; }
     if (state.top_stacked_card_number < 0) { return nullptr; }
     if (controller < 0 || controller >= static_cast<int>(state.players.size())) { return nullptr; }
     const Player& ap = state.players[controller];
@@ -14707,7 +16475,7 @@ inline void ApplyUntapCreature(GameState& state, int controller, int source_id,
 {
     // Mana-payment rollback (src/ai/PayRollback.h): an untap EFFECT fired this turn, so a
     // retroactive re-pay can no longer assume "untapped now" means "untapped then".
-    state.pay_ledger.NoteUntapEffect(state.turn_number, state.active_player_index);
+    state.pay_ledger.NoteUntapEffect(state.TurnSeq(), state.active_player_index);
     int src = -1, best = -1, best_yield = -1;
     for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
     {
@@ -14866,8 +16634,22 @@ inline std::vector<ManaCost> MadnessCostsFor(const GameState& state, int owner, 
     return out;
 }
 
+inline DiscardDest DiscardCardFromHandImpl(GameState& state, int controller, int hand_idx,
+                                           std::vector<MadnessPending>* mq, const std::string& cause);
 inline DiscardDest DiscardCardFromHand(GameState& state, int controller, int hand_idx,
                                        std::vector<MadnessPending>* mq, const std::string& cause)
+{
+    // Curator of Mysteries: "Whenever you cycle or discard another card, scry 1." Counted at the event (the
+    // watchers on the battlefield when the card is discarded), resolved once the card has reached its zone.
+    // A CYCLE's discard stands down here: its site fires the trigger itself with the searched pin.
+    // Deck-gated: n == 0 for every deck without the watcher (one bool test).
+    const int scry_n = g_cycle_discard_scope == 0 ? DiscardScryTriggers(state, controller) : 0;
+    const DiscardDest dest = DiscardCardFromHandImpl(state, controller, hand_idx, mq, cause);
+    if (scry_n > 0) { ResolveDiscardScryTriggers(state, controller, scry_n, -1); }
+    return dest;
+}
+inline DiscardDest DiscardCardFromHandImpl(GameState& state, int controller, int hand_idx,
+                                           std::vector<MadnessPending>* mq, const std::string& cause)
 {
     Player& pl = state.players[controller];
     Card c = pl.hand[static_cast<std::size_t>(hand_idx)];
@@ -14895,6 +16677,7 @@ inline DiscardDest DiscardCardFromHand(GameState& state, int controller, int han
     }
     if (MaybeReplaceGraveyardWithLibraryShuffle(state, controller, c)) { return DiscardDest::LibraryShuffle; }
     pl.graveyard.push_back(c);
+    FireGraveyardEntryTriggers(state, controller, c);   // Emrakul's graveyard shuffle (deck-gated)
     return DiscardDest::Graveyard;
 }
 
@@ -15596,6 +17379,98 @@ inline bool DeathOfWouldPay(const GameState& state, int controller, const Perman
     return false;
 }
 
+// DOES EATING A BODY THROUGH THIS SAC-FOR-MANA OUTLET BUY ANYTHING BESIDES THE MANA? (§2b, the
+// MTG_SAC_OUTLET_PAY carve-out.) With the lever on, a repeatable sac-for-mana outlet's searched action
+// is replaced by the payment source -- which eats a body ONLY when a cost needs its mana. That is
+// lossless exactly when the death itself is worth nothing: then a sacrifice whose mana goes unspent is
+// a body thrown away, and every sacrifice whose mana IS spent the payer makes on demand. When the
+// death pays -- Pashalik Mons pings on every Goblin death, Rundvelt Hordemaster impulse-exiles, Mogg
+// War Marshal leaves a token, a persist body comes back, a sacrifice watcher pumps -- a line may sac
+// purely for the death with the mana unused, and only the searched action can say that. So the
+// enumerator keeps the searched action wherever this is true (the payer stays live beside it).
+//
+// CONSERVATIVE IN THE TRUE DIRECTION, by construction: a false positive keeps the searched action
+// (today's menu, plus the payer -- never fewer lines); a false negative is the only error that could
+// hide a line, so every death-side mechanism OnCreatureDies / SacrificePermanentAt can fire for an
+// own creature is admitted: the death watchers DeathOfWouldPay and SelfSacHasDeathPayoff read (any
+// subtype-keyed watcher, payload or not), Daxos-style "another creature dies" lifegain, LTB returns,
+// a sacrifice watcher, persist, a self-death trigger, and a graveyard reanimator deck stamp.
+// ONE pass over the controller's permanents plus one over the fodder, never a per-body board walk
+// (a Fungus board holds hundreds of Saprolings).
+inline bool SacOutletEatHasValue(const GameState& state, int controller, const CardParams& op)
+{
+    if (state.deck_has_endstep_reanimate || state.deck_has_upkeep_reanimate) { return true; }
+    const CardDatabase& db = CardDatabase::Instance();
+    const std::string& need_sub = op.sac_creature_requires_subtype;
+    // Subtype-keyed watchers on the board: (subtype, watcher id, fires for itself).
+    struct SubW { const std::string* sub; int id; bool self; };
+    SubW subw[8]; int nsub = 0; bool many_sub = false;
+    for (const Permanent& w : state.battlefield)
+    {
+        if (w.controller_index != controller || w.def_absent) { continue; }
+        const CardDefinition* wd = db.LookupCached(w.card);
+        if (wd == nullptr) { continue; }
+        const CardParams& wp = wd->params;
+        if (wp.sacrifice_watch_pump_power > 0)  { return true; }   // "whenever you sacrifice"
+        if (wp.own_creature_dies_lifegain > 0)  { return true; }   // Daxos: any creature's death
+        if (wp.ltb_return_creatures > 0)        { return true; }
+        if (!wp.dies_watch_subtype.empty())
+        {
+            // A watcher keyed on the outlet's OWN fodder subtype (Pashalik / Rundvelt on Goblins,
+            // Slimefoot on Saprolings) pays for every body the outlet can eat -- including the ones
+            // the plan has not made yet (Slimefoot's {4} Saproling, eaten in the same line: the
+            // fungusb_slimefoot_onboard_token_sac_ping fixture), so it decides without a body.
+            if (need_sub.empty() || wp.dies_watch_subtype == need_sub) { return true; }
+            if (nsub < 8) { subw[nsub++] = SubW{ &wp.dies_watch_subtype, w.card.m_number,
+                                                 wp.dies_watch_includes_self }; }
+            else          { many_sub = true; }
+        }
+    }
+    if (many_sub) { return true; }
+    // A creature CARD in hand the plan may cast and then sacrifice for its own death (persist, a
+    // self-death trigger): the body does not exist yet, so the board pass below cannot see it.
+    for (const Card& hc : state.players[static_cast<std::size_t>(controller)].hand)
+    {
+        const CardDefinition* hd = db.LookupCached(hc);
+        if (hd == nullptr) { continue; }
+        const CardParams& hp = hd->params;
+        // A WATCHER in hand the line may cast before it sacrifices (Pashalik / Rundvelt): the decision
+        // must not flip mid-line from "the death is worthless" to "it pays" when the watcher lands.
+        if (!hp.dies_watch_subtype.empty() && (need_sub.empty() || hp.dies_watch_subtype == need_sub))
+        { return true; }
+        if (hp.own_creature_dies_lifegain > 0 || hp.sacrifice_watch_pump_power > 0) { return true; }
+        if (!hd->card.IsCreature()) { continue; }
+        if (!need_sub.empty() && !CardHasSubtype(hd->card, need_sub)) { continue; }
+        if (hp.persist || hp.ltb_return_creatures > 0) { return true; }
+        const bool pays = hp.dies_trigger_damage > 0 || hp.dies_trigger_creates_tokens > 0
+                       || hp.dies_trigger_self_gain > 0 || hp.dies_trigger_impulse_exile;
+        if (pays && hp.dies_watch_includes_self) { return true; }
+    }
+    for (const Permanent& v : state.battlefield)
+    {
+        if (v.controller_index != controller || !v.card.IsCreature()) { continue; }
+        if (!need_sub.empty() && !CardHasSubtype(v.card, need_sub)) { continue; }
+        for (int k = 0; k < nsub; ++k)
+        {
+            if (!CardHasSubtype(v.card, *subw[k].sub)) { continue; }
+            if (v.card.m_number != subw[k].id || subw[k].self) { return true; }
+        }
+        if (v.def_absent) { continue; }   // a definition-less token carries no death text of its own
+        const CardDefinition* vd = db.LookupCached(v.card);
+        if (vd == nullptr) { continue; }
+        const CardParams& vp = vd->params;
+        if (vp.persist && MinusCountersOn(v) == 0) { return true; }
+        // Its OWN death pays (Mogg War Marshal's token, Tukatongue's refund): DeathOfWouldPay's
+        // self-only branch, on the body's own params.
+        const bool pays = vp.dies_trigger_damage > 0 || vp.dies_trigger_creates_tokens > 0
+                       || vp.dies_trigger_self_gain > 0 || vp.dies_trigger_impulse_exile;
+        if (pays && vp.dies_watch_includes_self) { return true; }
+        if (vp.ltb_return_creatures > 0) { return true; }
+    }
+    return false;
+}
+
+
 // Apply a signed until-end-of-turn P/T change to one creature and run the toughness SBA inline,
 // routing any resulting death through OnCreatureDies so every death watcher fires.
 //
@@ -15718,6 +17593,38 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
         }
     }
     if (!op) { return; }
+    // LIFE payload amount, fixed at ACTIVATION (Martyr of Sands' X is announced and the cards revealed
+    // as the cost is paid, CR 601.2b/h via 602.2b) -- so it is read here, before the sacrifice and
+    // before anything below touches the hand. Brindle Boar: the flat amount. Martyr: per-card x the
+    // maximum X autonomously (the sound reveal-everything dominance); human play is asked for X.
+    int sac_gain_at_cost = SacOutletLifegainAmount(state, controller, *op);
+    if (!op->sac_outlet_lifegain_per_revealed_color.empty() && op->sac_outlet_lifegain > 0
+        && g_play_x_value_chooser != nullptr)
+    {
+        const int per = op->sac_outlet_lifegain;
+        const int max_x = sac_gain_at_cost / per;
+        std::string src_nm;
+        for (const Permanent& p : state.battlefield)
+        { if (p.card.m_number == source_id) { src_nm = p.card.m_name.str(); break; } }
+        // target 2 = "reveal X, gain per*X" (the x_value emitter's reveal kind); the lethal_x slot
+        // carries the per-card life.
+        int xv = (*g_play_x_value_chooser)(state, controller, src_nm, 2, max_x, max_x, per);
+        if (xv < 0 || xv > max_x) { xv = max_x; }
+        sac_gain_at_cost = per * xv;
+        // The chooser may have reallocated nothing, but re-read `op` defensively (same pointer
+        // discipline as the rest of this function).
+        op = nullptr;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index == controller && p.card.m_number == source_id)
+            {
+                const CardDefinition* od = CardDatabase::Instance().LookupCached(p.card);
+                if (od && od->params.sac_creature_outlet) { op = &od->params; }
+                break;
+            }
+        }
+        if (!op) { return; }
+    }
     // ---- SAME-LINE FODDER, value-outlet twin (MTG_SAC_FODDER_VALUE_OUTLET) -----------------------
     // The mana twin lives in ApplySacForMana; this is the same fusion for an outlet whose payload is
     // a draw or damage rather than mana (Psychotrope Thallid, Deathspore, Vitaspore). It MUST sit
@@ -15832,7 +17739,7 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
                        + (pump_from_victim ? victim_lki_power : 0),
               self_pt  = op->sac_outlet_self_pump_toughness;
     const int ndraw = op->sac_outlet_draw;   // Psychotrope Thallid
-    const int sac_gain = op->sac_outlet_lifegain;   // Brindle Boar
+    const int sac_gain = sac_gain_at_cost;   // Brindle Boar's flat amount / Martyr of Sands' 3X
     const std::vector<std::string> tsub = op->sac_outlet_token_subtypes;
     // History visibility (seed-6 play-test): without this the viewer showed only the persist
     // RETURN and the ETB ping per loop iteration -- returns stacking up with no cause. Emit the
@@ -17747,6 +19654,61 @@ inline void ApplyBattleCry(GameState& state, int controller,
     }
 }
 
+// ---- ANNIHILATOR N (CR 702.86; Emrakul 6, Ulamog the Infinite Gyre 4) ---------------------------
+// "Whenever this creature attacks, defending player sacrifices N permanents." Applied at declare
+// attackers in BOTH worlds (GameEngine::CombatPhase / TurnSolver::SimulateCombat, right after battle
+// cry -- lockstep, ONE shared helper). The sacrifice is the DEFENDING player's choice, not ours, so a
+// fixed deterministic rule is legitimate under the no-greedy rule (it is not a decision of the player
+// the search plays): the passive opponent sacrifices in battlefield order, oldest first. Its permanents
+// are the scheduled vanilla spawns (PopulateOpponentSpawns, 8 of 10 games), each an equally good future
+// target for our Ulamog triggers, so the rule cannot bias our play. Each sacrificed creature dies
+// through SacrificePermanentAt (graveyard, death watchers) + FireOppCreatureDies. `attacker_indices` is
+// REMAPPED in place across the erases (a spawn sits at a lower battlefield index than a creature we
+// cast later). Gated on GameState::deck_has_annihilator: one bool test per combat elsewhere.
+inline void ApplyAnnihilator(GameState& state, int controller, std::vector<int>& attacker_indices)
+{
+    if (!state.deck_has_annihilator || attacker_indices.empty()) { return; }
+    int total = 0;
+    std::string names;
+    for (int idx : attacker_indices)
+    {
+        if (idx < 0 || idx >= static_cast<int>(state.battlefield.size())) { continue; }
+        const Permanent& a = state.battlefield[static_cast<std::size_t>(idx)];
+        if (a.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(a.card);
+        if (d == nullptr || d->params.annihilator <= 0) { continue; }
+        total += d->params.annihilator;
+        if (!names.empty()) { names += ", "; }
+        names += a.card.m_name.str();
+    }
+    if (total <= 0) { return; }
+    const int defender = 1 - controller;
+    int sacrificed = 0;
+    std::string gone;
+    for (int k = 0; k < total; ++k)
+    {
+        int victim = -1;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            if (state.battlefield[static_cast<std::size_t>(i)].controller_index == defender) { victim = i; break; }
+        }
+        if (victim < 0) { break; }   // fewer permanents than N: they sacrifice all they have
+        const bool was_creature = state.battlefield[static_cast<std::size_t>(victim)].card.IsCreature();
+        if (!gone.empty()) { gone += ", "; }
+        gone += state.battlefield[static_cast<std::size_t>(victim)].card.m_name.str();
+        SacrificePermanentAt(state, defender, victim);
+        for (int& ai : attacker_indices) { if (ai > victim) { --ai; } }
+        if (was_creature) { FireOppCreatureDies(state, defender); }
+        ++sacrificed;
+    }
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "trigger",
+                      "\xF0\x9F\x8C\x80 annihilator " + std::to_string(total) + " (" + names + "): the opponent sacrifices "
+                      + (sacrificed == 0 ? std::string("nothing (no permanents)") : gone));
+    }
+}
+
 // ---- Two-Headed Hellkite: "Whenever this creature attacks, draw two cards." ---------------------
 // Self-only attack-trigger draw (CardParams::attack_draw_cards), applied once per attacking copy at
 // declare-attackers alongside ApplyAttackSelfPumps, in BOTH worlds (GameEngine::CombatPhase executor
@@ -18018,13 +19980,87 @@ inline void ApplyAttackTriggerDamage(GameState& state, int controller,
 // branch's DEFAULT. That default is "take the damage if it alone is lethal, otherwise take the
 // cards" -- deliberately simple, because the axis is what makes the real decision; a cleverer
 // static rule would just be a narrowing wearing a heuristic's clothes.
+//
+// PER-TRIGGER ORDINALS (MTG_TECTONIC_ORDINALS, DEFAULT ON; 2026-10-29). Both pins are PACKED by the ORDINAL of
+// the modal trigger within this combat (the k-th attacking modal creature, in declare order), so a second
+// attacking copy's mode and keep are searched too instead of taking the default -- Giants s1350001 gi103 T5,
+// one Giant on the battlefield and a second cast with Lightning Greaves: 3 + 3 + 7 combat was exactly lethal
+// at 12, and only the first trigger could be pinned to the damage. Which copy holds which ordinal does not
+// matter (every copy's trigger is the same), only the ordered sequence of choices. The encoding keeps every
+// value the single-trigger axis ever wrote:
+//   MODE: ordinal 0 in bits 0-1 as 0 = damage, 1 = impulse, 2 = unpinned (the historical 0 / 1); ordinal
+//         k >= 1 in bits 2k..2k+1 as 0 = unpinned, 1 = damage, 2 = impulse.
+//   KEEP: ordinal 0 in bits 0-2 as the exiled index (the historical value), 7 = unpinned; ordinal k >= 1 in
+//         bits 3k..3k+2 as 0 = unpinned, j + 1 = index j.
+// -1 = nothing pinned, as before. MTG_TECTONIC_ORDINALS=0: the historical "first trigger consumes the mode,
+// first mode-B trigger consumes the keep" convention, every later copy on the default.
+constexpr int kTectonicMaxOrdinals = 4;
+inline bool TectonicOrdinalsOn()
+{
+    static const bool e = EnvOn("MTG_TECTONIC_ORDINALS", true);
+    return heurarm::Flag(heurarm::TECTONIC_ORDINALS, e);
+}
+// The pinned mode of ordinal `k` (0 damage / 1 impulse), or -1 = unpinned.
+inline int TectonicModePinAt(int packed, int k)
+{
+    if (packed < 0 || k < 0 || k >= kTectonicMaxOrdinals) { return -1; }
+    const int f = (packed >> (2 * k)) & 3;
+    if (k == 0) { return f <= 1 ? f : -1; }
+    return f == 0 ? -1 : f - 1;
+}
+// The pinned exiled index of ordinal `k`, or -1 = unpinned (the ranked default).
+inline int TectonicKeepPinAt(int packed, int k)
+{
+    if (packed < 0 || k < 0 || k >= kTectonicMaxOrdinals) { return -1; }
+    const int f = (packed >> (3 * k)) & 7;
+    if (k == 0) { return f == 7 ? -1 : f; }
+    return f - 1;
+}
+// Pack per-ordinal choices (each -1 = unpinned) into the two ints above; all-unpinned packs to -1.
+inline int TectonicPackModes(const int* modes, int n)
+{
+    int v = 0; bool any = false;
+    for (int k = 0; k < n && k < kTectonicMaxOrdinals; ++k)
+    {
+        const int m = modes[k];
+        if (m >= 0) { any = true; }
+        const int f = (k == 0) ? (m >= 0 ? m : 2) : (m >= 0 ? m + 1 : 0);
+        v |= f << (2 * k);
+    }
+    return any ? v : -1;
+}
+inline int TectonicPackKeeps(const int* keeps, int n)
+{
+    int v = 0; bool any = false;
+    for (int k = 0; k < n && k < kTectonicMaxOrdinals; ++k)
+    {
+        const int j = keeps[k];
+        if (j >= 0) { any = true; }
+        const int f = (k == 0) ? (j >= 0 ? j : 7) : (j >= 0 ? j + 1 : 0);
+        v |= f << (3 * k);
+    }
+    return any ? v : -1;
+}
+
+inline int ResolveAttackModalModeDefault(const CardDefinition& d, int opp_life)
+{
+    const int dmg = d.params.attack_trigger_damage_each_opponent;
+    if (dmg > 0 && opp_life <= dmg) { return 0; }
+    return (d.params.attack_trigger_impulse_exile > 0) ? 1 : 0;
+}
 inline int ResolveAttackModalMode(const GameState& state, int controller,
                                   const CardDefinition& d)
 {
     if (state.scripted_tectonic_mode >= 0) { return state.scripted_tectonic_mode; }
-    const int dmg = d.params.attack_trigger_damage_each_opponent;
-    if (dmg > 0 && state.players[1 - controller].life <= dmg) { return 0; }
-    return (d.params.attack_trigger_impulse_exile > 0) ? 1 : 0;
+    return ResolveAttackModalModeDefault(d, state.players[1 - controller].life);
+}
+// ...the ordinal form (MTG_TECTONIC_ORDINALS): the pin of the k-th modal trigger of this combat, else the
+// default against `opp_life` (the life that trigger will see).
+inline int ResolveAttackModalModeAt(const GameState& state, const CardDefinition& d, int k, int opp_life)
+{
+    const int pin = TectonicModePinAt(state.scripted_tectonic_mode, k);
+    if (pin >= 0) { return pin; }
+    return ResolveAttackModalModeDefault(d, opp_life);
 }
 
 // Projection twin of ApplyAttackTriggerDamage for PendingAttackDamage's const fast path. Must
@@ -18073,12 +20109,39 @@ inline int CountAttackTriggerDamageAny(
 // Fire the modal attack trigger for every attacking Tectonic Giant, in BOTH worlds, at
 // declare-attackers (before the damage loop, so a lethal mode-A trigger ends the game before
 // combat damage and a mode-B land reaches hand in time for the post-combat main).
+inline void ApplyAttackModalTriggersImpl(GameState& state, int controller,
+                                         const std::vector<int>& attacker_indices);
 inline void ApplyAttackModalTriggers(GameState& state, int controller,
                                      const std::vector<int>& attacker_indices)
+{
+    ApplyAttackModalTriggersImpl(state, controller, attacker_indices);
+    // THIS combat's pins, consumed whether or not a trigger fired (the Bruna / Raubahn convention): no Giant
+    // attacked (never cast, no haste, attack declined). No trigger resolves off them before the next turn start
+    // clears them; what this changes is that a pinned variant whose trigger never fired now leaves combat in its
+    // base plan's state, by construction -- which is what MTG_COMBAT_PIN_FOLD compares (TurnSolver.cpp,
+    // PlanHasCombatPin) -- and that a later attack projection from this turn (the next turn's lethal reads)
+    // resolves the DEFAULT mode instead of a spent pin. MTG_TECTONIC_PIN_FOLD=0: the pins ride on to the turn
+    // start, as before.
+    if (TectonicPinFoldOn()) { state.scripted_tectonic_mode = -1; state.scripted_tectonic_keep = -1; }
+}
+inline void ApplyAttackModalTriggersImpl(GameState& state, int controller,
+                                         const std::vector<int>& attacker_indices)
 {
     if (attacker_indices.empty()) { return; }
     const int bf_size = static_cast<int>(state.battlefield.size());
     Player& ap = state.players[controller];
+    // MTG_TECTONIC_ORDINALS: the k-th modal trigger reads ordinal k of both pins; they are spent once the loop
+    // is over (below), not by the first trigger.
+    const bool ordinals = TectonicOrdinalsOn();
+    const int  mode_pins = state.scripted_tectonic_mode;
+    const int  keep_pins = state.scripted_tectonic_keep;
+    int ordinal = 0;
+    bool fired = false;
+    struct SpendPins
+    {
+        GameState& s; const bool& on; const bool& fired;
+        ~SpendPins() { if (on && fired) { s.scripted_tectonic_mode = -1; s.scripted_tectonic_keep = -1; } }
+    } spend_pins{ state, ordinals, fired };
     for (int idx : attacker_indices)
     {
         if (idx < 0 || idx >= bf_size) { continue; }
@@ -18087,8 +20150,19 @@ inline void ApplyAttackModalTriggers(GameState& state, int controller,
         const CardDefinition* d = CardDatabase::Instance().LookupCached(self.card);
         if (!d || !d->params.attack_trigger_modal) { continue; }
 
-        int mode = ResolveAttackModalMode(state, controller, *d);
-        if (state.scripted_tectonic_mode >= 0) { state.scripted_tectonic_mode = -1; }  // consumed
+        const int k = ordinal++;
+        fired = true;
+        int mode = 0;
+        if (ordinals)
+        {
+            const int pin = TectonicModePinAt(mode_pins, k);
+            mode = pin >= 0 ? pin : ResolveAttackModalModeDefault(*d, state.players[1 - controller].life);
+        }
+        else
+        {
+            mode = ResolveAttackModalMode(state, controller, *d);
+            if (state.scripted_tectonic_mode >= 0) { state.scripted_tectonic_mode = -1; }  // consumed
+        }
         if (g_play_attack_mode_chooser != nullptr)   // real human resolution only
         {
             const int pick = (*g_play_attack_mode_chooser)(
@@ -18125,25 +20199,64 @@ inline void ApplyAttackModalTriggers(GameState& state, int controller,
         { examined.push_back(ap.library.DrawTop()); }
         if (examined.empty()) { continue; }
 
-        // Default pick: the highest mana value, tie-break lower card number (deterministic).
-        // DISCLOSED NARROWING: unlike the MODE, which card to keep is not yet a searched axis --
-        // see docs/design/analysis-Giants.md. The human path DOES surface it (the `dig` chooser
-        // below), so this default binds only the autonomous search.
+        // Default pick: the highest mana value, tie-break lower card number (deterministic). Only a
+        // DEFAULT: inside the search window the keep is SEARCHED (Plan::tectonic_keep_choice, one per
+        // trigger ordinal -- MTG_TECTONIC_ORDINALS) for every modal creature that can attack this combat,
+        // on the battlefield or cast by the plan (MTG_TECTONIC_CAST_AXIS), so this binds the playout beyond
+        // the horizon, the base plan's own resolution, and an unpinned later ordinal; the human path
+        // surfaces it (the `dig` chooser below).
+        // THE MV READ (MTG_PLACEHOLDER_TECTONIC, DEFAULT ON). An exiled library card is a name-only
+        // placeholder whose own m_mana_cost is {0}, so the historical read (=0) ties every card at 0 and keeps
+        // the lower card number. The definition MV makes "highest MV" real. It shipped OFF first: on held-out
+        // seed 1350001 it lost 4 Giants games / won none, NONE recovering at d8 b0, because the searched keep
+        // was only fanned out for a Giant on the battlefield at the plan's root -- a Giant CAST this turn
+        // (hasted by Lightning Greaves) attacked under this default alone, and highest-MV kept a Stinkdrinker
+        // Daredevil over the Mountain the turn needed (seed 1350104 gi103, T5 -> T6). The axis now covers a
+        // Giant the plan casts and every attacking copy (MTG_TECTONIC_CAST_AXIS / MTG_TECTONIC_ORDINALS), so
+        // this is only the branch default: with the axis in, ON vs OFF was 0 / 0 over 6,000 held-out Giants
+        // games, 0 slower / 1 faster over 3,000 2HG, and gi103 / 118 / 421 / 976 play 5 / 5 / 7 / 5 at d8 b0
+        // either way (docs/design/analysis-Giants.md, docs/design/placeholder-card-reads.md).
+        const bool def_cost = PlaceholderTectonicOn();
         std::size_t best = 0;
         for (std::size_t k = 1; k < examined.size(); ++k)
         {
-            const int mv_k = examined[k].m_mana_cost.ManaValue();
-            const int mv_b = examined[best].m_mana_cost.ManaValue();
+            const int mv_k = ZoneCardIf(def_cost, examined[k]).m_mana_cost.ManaValue();
+            const int mv_b = ZoneCardIf(def_cost, examined[best]).m_mana_cost.ManaValue();
             if (mv_k > mv_b
                 || (mv_k == mv_b && examined[k].m_number < examined[best].m_number))
             { best = k; }
         }
+        // MTG_TECTONIC_KEEP_LAND (DEFAULT OFF; a measured amendment; reads nothing unless
+        // MTG_PLACEHOLDER_TECTONIC is on): with NO land in hand, the default keeps an exiled LAND instead --
+        // a guaranteed land drop this turn's second main or next turn. Before the cast axis it recovered
+        // gi103 but measured 3 slower / 2 faster over seed 1350001 (one no-win became a T7 win), two of the
+        // three not recovering at d8 b0; with the axis in it measured 0 / 0 (Giants) and 0 slower / 1 faster
+        // (2HG) on top of the MV read -- no measurable effect, so it stays OFF.
+        static const bool s_keep_land = EnvOn("MTG_TECTONIC_KEEP_LAND", false);
+        if (def_cost && heurarm::Flag(heurarm::TECTONIC_KEEP_LAND, s_keep_land))
+        {
+            bool hand_land = false;
+            for (const Card& h : ap.hand)
+            { if (!h.m_is_staged && ZoneCard(h).IsLand()) { hand_land = true; break; } }
+            if (!hand_land)
+            {
+                for (std::size_t k = 0; k < examined.size(); ++k)
+                { if (ZoneCard(examined[k]).IsLand()) { best = k; break; } }
+            }
+        }
         // SEARCHED KEEP (Plan::tectonic_keep_choice): overrules the ranked default above. Range
         // is checked against `examined`, not against attack_trigger_impulse_exile: a library with
         // one card left exiles one, and an out-of-range pin must fall back to the default rather
-        // than index off the end. Consumed and cleared by the FIRST modal trigger of a combat, so
-        // a second attacking copy takes the default -- the same convention the mode pin uses.
-        if (state.scripted_tectonic_keep >= 0)
+        // than index off the end. MTG_TECTONIC_ORDINALS: the k-th modal trigger reads ordinal k.
+        // Off: consumed and cleared by the FIRST mode-B trigger of a combat, so a second attacking
+        // copy takes the default -- the historical convention.
+        if (ordinals)
+        {
+            // Ordinal k's keep (MTG_TECTONIC_ORDINALS); the pins are spent after the loop.
+            const int pin = TectonicKeepPinAt(keep_pins, k);
+            if (pin >= 0 && pin < static_cast<int>(examined.size())) { best = static_cast<std::size_t>(pin); }
+        }
+        else if (state.scripted_tectonic_keep >= 0)
         {
             if (state.scripted_tectonic_keep < static_cast<int>(examined.size()))
             { best = static_cast<std::size_t>(state.scripted_tectonic_keep); }
@@ -18166,7 +20279,7 @@ inline void ApplyAttackModalTriggers(GameState& state, int controller,
             if (k != best) { state.exile.push_back(examined[k]); continue; }
             Card c = examined[k];
             c.m_is_staged     = true;
-            c.m_staged_expiry = state.turn_number
+            c.m_staged_expiry = state.TurnSeq()
                               + (d->params.attack_trigger_impulse_expiry_next_turn ? 1 : 0);
             // m_impulse_no_land deliberately NOT set: the card says "you may PLAY that card".
             ap.hand.push_back(std::move(c));
@@ -18187,11 +20300,20 @@ inline int CountAttackTriggerModalDamage(const GameState& state, int controller,
                                          const std::vector<const Permanent*>& attackers)
 {
     int total = 0;
+    // MTG_TECTONIC_ORDINALS: the k-th modal attacker resolves ordinal k (the combat's order -- the attacker
+    // lists are both built in battlefield order), and an unpinned one defaults against the life the earlier
+    // triggers left, as it does in combat. Off: every copy read the FIRST trigger's pin.
+    const bool ordinals = TectonicOrdinalsOn();
+    int k = 0;
     for (const Permanent* atk : attackers)
     {
+        if (ordinals && atk->controller_index != controller) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(atk->card);
         if (!d || !d->params.attack_trigger_modal) { continue; }
-        if (ResolveAttackModalMode(state, controller, *d) != 0) { continue; }
+        const int mode = ordinals
+            ? ResolveAttackModalModeAt(state, *d, k++, state.players[1 - controller].life - total)
+            : ResolveAttackModalMode(state, controller, *d);
+        if (mode != 0) { continue; }
         total += d->params.attack_trigger_damage_each_opponent * gamesetup::OpponentHeads();
     }
     return total;
@@ -18418,13 +20540,12 @@ inline void FireCombatDamageCheatIntoPlay(GameState& state, int controller,
 {
     if (damaging_attacker_indices.empty()) { return; }
     Player& ap = state.players[controller];
-    for (int idx : damaging_attacker_indices)
+    const bool stable = CombatStableSourcesOn();
+    // ONE trigger's resolution. `sd` is its source's definition and `src_name` the source's name, both taken when the
+    // trigger is identified -- the trigger does not need its source afterwards (CR 113.7a: once triggered, an ability
+    // exists independently of its source), so nothing below reads the source permanent.
+    auto resolve_one = [&](const CardDefinition* sd, InternedName src_name)
     {
-        if (idx < 0 || idx >= static_cast<int>(state.battlefield.size())) { continue; }
-        const Permanent& src = state.battlefield[idx];
-        if (src.controller_index != controller) { continue; }
-        const CardDefinition* sd = CardDatabase::Instance().LookupCached(src.card);
-        if (!sd || sd->params.combat_damage_puts_subtype_from_hand.empty()) { continue; }
         const std::vector<std::string>& want = sd->params.combat_damage_puts_subtype_from_hand;
 
         // A "permanent card" = anything that is not an instant/sorcery. Must carry a matching subtype.
@@ -18468,7 +20589,28 @@ inline void FireCombatDamageCheatIntoPlay(GameState& state, int controller,
                          pd ? pd->card.m_name.str().c_str() : "-",
                          pd ? pd->card.m_mana_cost.ManaValue() : -1);
         }
-        if (ranked.empty()) { continue; }   // "may": nothing matching to put -> decline
+        // MTG_LACKEY_ORDINALS: THIS trigger's rank is ordinal 0 of the packed pin, and the rest move down for the
+        // next damaging Lackey -- taken before the empty-list decline, so ordinal k is always the k-th trigger.
+        int ord_rank = -1;
+        const bool lackey_ordinals = LackeyOrdinalsOn();
+        if (lackey_ordinals)
+        {
+            ord_rank = LackeyRankAt(state.scripted_cheat_choice, 0);
+            state.scripted_cheat_choice = LackeyPinShift(state.scripted_cheat_choice);
+        }
+        if (ranked.empty()) { return; }   // "may": nothing matching to put -> decline
+        // MTG_LACKEY_DECLINE: the searched DECLINE of this trigger's "may" (the axis orders it after every put rank).
+        if (lackey_ordinals && ord_rank == kLackeyDeclineRank)
+        {
+            // MTG_LACKEY_PREF (DIAGNOSTIC, no play change): a REAL resolution that declined with candidates in hand.
+            static const bool s_pref_decline = EnvOn("MTG_LACKEY_PREF");
+            if (s_pref_decline && g_real_resolution)
+            {
+                std::fprintf(stderr, "[lackey-decline] turn=%d cands=%d front=%s\n", state.turn_number,
+                             static_cast<int>(cand_hand.size()), ap.hand[ranked.front()].m_name.str().c_str());
+            }
+            return;
+        }
         int best = ranked.front();
         // SEARCHED pick: the main-phase plan may have pinned an index into `ranked`
         // (Plan::lackey_choice -> GameState::scripted_cheat_choice). Clamped rather than dropped --
@@ -18476,12 +20618,19 @@ inline void FireCombatDamageCheatIntoPlay(GameState& state, int controller,
         // same plan can shrink it, leaving a pinned index past the end. Clamping makes that variant
         // a duplicate of the last (identical state -> the search tie-breaks to the first, which is
         // the provider's pick) instead of a silent decline.
-        if (state.scripted_cheat_choice >= 0)
+        if (lackey_ordinals)
         {
-            const std::size_t k = static_cast<std::size_t>(state.scripted_cheat_choice);
-            best = ranked[std::min(k, ranked.size() - 1)];
+            if (ord_rank >= 0) { best = ranked[std::min(static_cast<std::size_t>(ord_rank), ranked.size() - 1)]; }
         }
-        state.scripted_cheat_choice = -1;   // consumed by this trigger
+        else
+        {
+            if (state.scripted_cheat_choice >= 0)
+            {
+                const std::size_t k = static_cast<std::size_t>(state.scripted_cheat_choice);
+                best = ranked[std::min(k, ranked.size() - 1)];
+            }
+            state.scripted_cheat_choice = -1;   // consumed by this trigger
+        }
         // MTG_LACKEY_PREF: DIAGNOSTIC (no play change). Logs the REVEALED PREFERENCE of the search --
         // the candidate set that was actually available and the card the chosen plan actually put --
         // for REAL resolutions only (g_real_resolution; every rollout scope clears it). Run with a
@@ -18567,9 +20716,9 @@ inline void FireCombatDamageCheatIntoPlay(GameState& state, int controller,
                 candidates.push_back(ap.hand[cand_hand[ci]]);
                 if (cand_hand[ci] == best) { heur_ci = ci; }
             }
-            int picked = (*g_play_lackey_chooser)(state, controller, src.card.m_name.str(),
+            int picked = (*g_play_lackey_chooser)(state, controller, src_name.str(),
                                                   candidates, heur_ci);
-            if (picked == -1) { continue; }                                   // human declined the put
+            if (picked == -1) { return; }                                     // human declined the put
             if (picked >= 0 && picked < static_cast<int>(cand_hand.size()))
             { best = cand_hand[picked]; }                                     // else out-of-range -> heuristic
         }
@@ -18583,18 +20732,11 @@ inline void FireCombatDamageCheatIntoPlay(GameState& state, int controller,
         perm.controller_index  = controller;
         perm.owner_index       = controller;
         perm.entered_this_turn = true;
-        // `src` is a REFERENCE INTO state.battlefield, and the push_back below can REALLOCATE that
-        // vector -- after which any later read of `src` is a use-after-free. InternedName holds a
-        // const std::string* into the global registry, so the stale read yields a WILD pointer that
-        // is then dereferenced: usually the freed block still holds the old pointer and the game
-        // plays correctly (which is why ground truth is stable), but under a different allocator
-        // state it is garbage or a crash. Caught by ASAN 2026-08-25 at the EmitReveal below, on
-        // Goblin Lackey (the only card with combat_damage_puts_subtype_from_hand). Copy the name out
-        // BEFORE the vector is touched -- InternedName is trivially copyable (a pointer), so this is
-        // free and byte-identical. Do NOT use `src` past this point.
-        const InternedName src_name = src.card.m_name;
+        // The source's name was copied out when the trigger was identified (`src_name`): a reference into
+        // state.battlefield would dangle across the push_back below, which can REALLOCATE the vector (caught by
+        // ASAN 2026-08-25 at the EmitReveal below, when this loop still held one).
         state.battlefield.push_back(perm);
-        const int slot = static_cast<int>(state.battlefield.size()) - 1;
+        int slot = static_cast<int>(state.battlefield.size()) - 1;
         // Report WHAT was cheated in. A Lackey put moves a card from a HIDDEN zone (hand) to a public
         // one, exactly like a tutor fetch, so it rides the same reveal channel -- otherwise the only
         // record is the viewer's own click label, which means an AI-resolved game, a rendered log and
@@ -18613,16 +20755,68 @@ inline void FireCombatDamageCheatIntoPlay(GameState& state, int controller,
                        /*dispositions*/ { "\xE2\x86\x92 battlefield (from hand)" });
         }
         FireEtbWatchers(state, controller, slot);   // in case a put permanent is ever a Dragon
-        FireOwnEtbTriggers(state, controller, slot);   // fire the put permanent's own ETB triggers
+        // MTG_COMBAT_STABLE_SOURCES: an enter watcher can remove an EARLIER permanent (a ping that kills an opposing
+        // creature), shifting the put permanent off `slot` -- re-find it by its card number before each read.
+        if (stable) { slot = RefindPermanentByNumber(state, controller, raw.m_number, slot); }
+        if (slot >= 0) { FireOwnEtbTriggers(state, controller, slot); }   // the put permanent's own ETB triggers
+        // ...and again after its own ETB: Goblin Chainwhirler's "1 damage to each creature your opponents control"
+        // kills an earlier opposing 1/1, so `slot` named the permanent AFTER it (or ran off the end).
+        if (stable) { slot = RefindPermanentByNumber(state, controller, raw.m_number, slot); }
         // Legend rule (CR 704.5j) -- a STATE-BASED action, checked continuously, so it must run the
         // moment the duplicate enters. It was missing here: the other put path (a Vial deploy) does
         // enforce it, but this put resolves in the COMBAT-DAMAGE step, i.e. AFTER the combat-start
         // enforcement in GameEngine::CombatPhase / SimulateCombat. A second Muxus or Krenko cheated
         // in by Lackey therefore survived until the NEXT turn's combat start, giving a free extra
         // body and double-counting any static buff for a full turn cycle.
-        if (state.battlefield[slot].card.HasSupertype(Supertype::Legendary))
+        if (slot >= 0 && slot < static_cast<int>(state.battlefield.size())
+            && state.battlefield[static_cast<std::size_t>(slot)].card.HasSupertype(Supertype::Legendary))
         { EnforceLegendRule(state, controller); }
+    };
+
+    if (!stable)
+    {
+        // =0: the historical loop over POSITIONS captured before any put (byte-identical) -- a put whose enter
+        // cascade removes an earlier permanent shifts every later position, so a later Lackey's trigger is dropped
+        // (its position names a non-Lackey) or fires for whatever now sits there.
+        for (int idx : damaging_attacker_indices)
+        {
+            if (idx < 0 || idx >= static_cast<int>(state.battlefield.size())) { continue; }
+            const Permanent& src = state.battlefield[idx];
+            if (src.controller_index != controller) { continue; }
+            const CardDefinition* sd = CardDatabase::Instance().LookupCached(src.card);
+            if (!sd || sd->params.combat_damage_puts_subtype_from_hand.empty()) { continue; }
+            resolve_one(sd, src.card.m_name);
+        }
+        return;
     }
+    // MTG_COMBAT_STABLE_SOURCES (default): every Lackey trigger is identified FIRST, while the positions are still the
+    // ones the damage step recorded -- they all trigger on the same combat-damage event (CR 603.2, 510.2) -- and only
+    // then do they resolve, one at a time. A put's enter cascade (Goblin Chainwhirler's ETB killing the opponent's 1/1
+    // at position 0, a legend-rule removal) then cannot shift a later trigger onto a different permanent: the witness
+    // is Goblins seed 1330145 gi144, where Lackey#10's stale position named Siege-Gang Commander and its trigger was
+    // silently dropped in one zone order and fired in the other. The counting pass keeps every deck without a put
+    // source allocation-free.
+    int n_trig = 0;
+    for (int idx : damaging_attacker_indices)
+    {
+        if (idx < 0 || idx >= static_cast<int>(state.battlefield.size())) { continue; }
+        const Permanent& src = state.battlefield[static_cast<std::size_t>(idx)];
+        if (src.controller_index != controller) { continue; }
+        const CardDefinition* sd = CardDatabase::Instance().LookupCached(src.card);
+        if (sd && !sd->params.combat_damage_puts_subtype_from_hand.empty()) { ++n_trig; }
+    }
+    if (n_trig == 0) { return; }
+    std::vector<std::pair<const CardDefinition*, InternedName>> trig;
+    trig.reserve(static_cast<std::size_t>(n_trig));
+    for (int idx : damaging_attacker_indices)
+    {
+        if (idx < 0 || idx >= static_cast<int>(state.battlefield.size())) { continue; }
+        const Permanent& src = state.battlefield[static_cast<std::size_t>(idx)];
+        if (src.controller_index != controller) { continue; }
+        const CardDefinition* sd = CardDatabase::Instance().LookupCached(src.card);
+        if (sd && !sd->params.combat_damage_puts_subtype_from_hand.empty()) { trig.emplace_back(sd, src.card.m_name); }
+    }
+    for (const auto& t : trig) { resolve_one(t.first, t.second); }
 }
 
 // Consume `cost` from a flat ManaPool (assumes pool.CanPay(cost) is true). Colored pips are paid
@@ -18925,10 +21119,176 @@ inline int ApplyFirebreathing(GameState& state, int controller,
 // spells_cast_this_turn increment will live, so an off-suspend arrival automatically counts +1 toward
 // storm. Suspending (paying {0}) and sacrificing are NOT casts and do NOT come through here. The card
 // enters as its permanent; a Dragon fires FireEtbWatchers (Lotus Bloom is a colourless artifact -> no-op).
+// One ordinary, single-target burn resolution. Used by suspend and Chain copies, which
+// are not hand-cast actions. The callback is shared with all existing burn targeting.
+inline int ResolveSingleTargetBurn(GameState& state, int controller, const CardDefinition& def)
+{
+    NoncombatTriggerScope noncombat_scope(state);
+    FixedBurnPin pin;
+    if (!PrepareFixedBurnPin(state, controller, def, "", pin)) { return -1; }
+    const int damaged_controller = BurnTargetController(state, controller, pin.first);
+    ResolveFixedBurnPin(state, controller, def, pin, def.params.damage);
+    return damaged_controller;
+}
+
+// The passive opponent never exercises this optional payment. A human who targeted
+// themselves/their permanent still receives ALL three choices: pay, copy, new target.
+// A copy is not cast: no storm, prowess, Eidolon or Steam-Kin triggers are fired.
+bool TapForCostDirect(GameState& state, const ManaCost& cost_in, bool for_creature);
+inline void ContinueChainLightning(GameState& state, const CardDefinition& def, int damaged_controller)
+{
+    if (!def.params.chain_lightning_copy) { return; }
+    const int active = state.active_player_index;
+    ManaCost rr; rr.red = 2;
+    while (damaged_controller == active && g_play_free_cast_chooser)
+    {
+        ManaPool pool = AvailableManaPool(state, nullptr);
+        if (!FloatLeftoverManaEnabled()) { pool.AddPool(state.floating_mana); }
+        if (!pool.CanPay(rr) || state.players[active].life <= 0) { break; }
+        const std::vector<Card> offered = {def.card};
+        const std::vector<std::string> walked;
+        if ((*g_play_free_cast_chooser)(state, active, "Chain Lightning (pay {R}{R})",
+                                        offered, -1, walked) < 0) { break; }
+        if (!TapForCostDirect(state, rr, false)) { break; }
+        if ((*g_play_free_cast_chooser)(state, active, "Chain Lightning (copy spell)",
+                                        offered, -1, walked) < 0) { break; }
+        damaged_controller = ResolveSingleTargetBurn(state, active, def);
+        // The copy finishes resolving before its next optional payment continuation;
+        // copied Chain Lightning itself includes this same continuation.
+    }
+}
+
+// Shared executor/rollout Price of Progress payload: no targets; count each side independently.
+inline int NonbasicLandDamage(const GameState& state, int controller, int multiplier)
+{
+    int n = 0;
+    for (const Permanent& p : state.battlefield)
+    { if (p.controller_index == controller && p.card.IsLand() && !IsBasicLandCard(p.card)) { ++n; } }
+    return n * multiplier;
+}
+
+inline void ResolveNonbasicLandDamage(GameState& state, int controller, int multiplier)
+{
+    NoncombatTriggerScope noncombat_scope(state);
+    for (int who = 0; who < static_cast<int>(state.players.size()); ++who)
+    {
+        const int amount = NonbasicLandDamage(state, who, multiplier);
+        state.players[who].life -= amount;
+        RecordNoncombatDamageToPlayer(state, controller, who, amount);
+        if (who != controller && amount > 0) { state.opponent_lost_life_this_turn = true; }
+    }
+}
+
+// Fireblast's alternative is pinned by STABLE card numbers in tutor_target, so a prior
+// sacrifice/land entry cannot redirect its payment to another Mountain. Free casts without
+// this marker (cascade etc.) do not pay the alternative cost.
+inline bool IsFireblastAlternative(const CardDefinition& def, const std::string& pin)
+{ return def.params.sacrifice_mountains_alternative && pin.compare(0, 10, "fireblast:") == 0; }
+
+inline std::vector<int> FireblastMountains(const GameState& state, int controller)
+{
+    std::vector<int> out;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& p = state.battlefield[i];
+        if (p.controller_index == controller && p.card.IsLand() && CardHasSubtype(p.card, "Mountain"))
+        { out.push_back(i); }
+    }
+    return out;
+}
+
+inline bool PayFireblastAlternative(GameState& state, int controller, const std::string& pin)
+{
+    auto lands = FireblastMountains(state, controller);
+    if (lands.size() < 2) { return false; }
+    const std::size_t comma = pin.find(',', 10);
+    if (comma == std::string::npos) { return false; }
+    const int first = std::atoi(pin.c_str() + 10);
+    const int second = std::atoi(pin.c_str() + comma + 1);
+    int a = -1, b = -1;
+    for (int i : lands)
+    {
+        if (state.battlefield[i].card.m_number == first) { a = i; }
+        if (state.battlefield[i].card.m_number == second) { b = i; }
+    }
+    if (a < 0 || b < 0 || a == b) { return false; }
+    if (g_play_sacrifice_chooser)
+    {
+        int defidx = static_cast<int>(std::find(lands.begin(), lands.end(), a) - lands.begin());
+        int k = (*g_play_sacrifice_chooser)(state, controller, "Fireblast (first Mountain)", lands, defidx);
+        if (k >= 0 && k < static_cast<int>(lands.size())) { a = lands[k]; }
+        lands.erase(std::find(lands.begin(), lands.end(), a));
+        auto it = std::find(lands.begin(), lands.end(), b);
+        defidx = it == lands.end() ? 0 : static_cast<int>(it - lands.begin());
+        k = (*g_play_sacrifice_chooser)(state, controller, "Fireblast (second Mountain)", lands, defidx);
+        b = k >= 0 && k < static_cast<int>(lands.size()) ? lands[k] : lands[defidx];
+    }
+    // A player may tap basic Mountains for mana while casting Fireblast, before
+    // paying its sacrifice cost. Both chosen lands are about to leave play, so
+    // floating their {R} is always useful and costs nothing in this goldfish.
+    // Do it only for human play: autonomous plans already allocate their mana
+    // before this payment, and their rollout/executor costs must stay in lockstep.
+    if (g_play_sacrifice_chooser)
+    {
+        for (int i : {a, b})
+        {
+            Permanent& p = state.battlefield[i];
+            if (p.tapped || p.card.m_name != "Mountain") { continue; }
+            p.tapped = true;
+            ++state.floating_mana.red;
+            if (g_play_event_sink)
+            { EmitPlayEvent(state.turn_number, "mana", "Mountain: float {R} before Fireblast sacrifice"); }
+        }
+    }
+    // Choose BOTH before mutation: atomic payment; remove high index first.
+    if (a < b) { std::swap(a, b); }
+    for (int i : {a, b})
+    {
+        state.players[state.battlefield[i].owner_index].graveyard.push_back(state.battlefield[i].card);
+        state.battlefield.erase(state.battlefield.begin() + i);
+        FireSacrificeWatchers(state, controller);
+    }
+    return true;
+}
+
 inline void CastOffSuspend(GameState& state, int controller, const Card& card)
 {
     const CardDefinition* def = CardDatabase::Instance().LookupCached(card);
     if (!def) { return; }
+    auto strand = [&]()
+    {
+        SuspendedCard declined; declined.card = card; declined.arrive_turn = -1;
+        state.players[controller].suspended_cards.push_back(std::move(declined));
+    };
+    if (state.casts_remaining_this_turn == 0) { strand(); return; }
+    FixedBurnPin suspended_burn_pin;
+    if (def->tmpl == CardTemplate::DirectDamage)
+    {
+        bool take = ResolveProvider(state).TakeFreeCast(state, controller, *def);
+        if (g_play_free_cast_chooser)
+        {
+            const std::vector<Card> offered = {card};
+            const std::vector<std::string> walked;
+            take = (*g_play_free_cast_chooser)(state, controller, card.m_name.str() + " (suspend)",
+                                              offered, take ? 0 : -1, walked) >= 0;
+        }
+        if (!take)
+        {
+            strand();
+            return; // remains exiled without time counters; never offered again
+        }
+        // Targets are part of CAST, before any on-cast trigger can remove them.
+        // Keep stable IDs across those triggers; do not re-target at resolution.
+        if (!PrepareFixedBurnPin(state, controller, *def, "", suspended_burn_pin))
+        { strand(); return; }
+    }
+    if (state.casts_remaining_this_turn > 0) { --state.casts_remaining_this_turn; }
+    if (def->params.max_casts_after >= 0)
+    {
+        state.casts_remaining_this_turn = state.casts_remaining_this_turn < 0
+            ? def->params.max_casts_after
+            : std::min(state.casts_remaining_this_turn, def->params.max_casts_after);
+    }
     // STORM counter (Dragonstorm): casting off suspend IS a spell cast (CR 702.62e) -> count it here,
     // the single shared arrival path (executor GameEngine::UpkeepStep + rollout
     // SimulateEndAndStartNextTurn, both after the turn-start reset). A Lotus Bloom arriving on the same
@@ -18952,6 +21312,16 @@ inline void CastOffSuspend(GameState& state, int controller, const Card& card)
         {
             EmitPlayEvent(state.turn_number, "suspend",
                           "\xE2\x8C\x9B " + card.m_name.str() + " -- cast off suspend");
+        }
+        if (def->tmpl == CardTemplate::DirectDamage)
+        {
+            FireOnCastTriggers(state, *def);
+            FireProwess(state, *def);
+            FlushNoncombatTriggersAtPriorityBoundary(state);
+            // Cast triggers resolve ABOVE the spell. Lethal Eidolon damage ends the game
+            // before Rift Bolt may resolve, even if its three damage would have won.
+            if (state.players[controller].life > 0)
+            { ResolveFixedBurnPin(state, controller, *def, suspended_burn_pin, def->params.damage); }
         }
         if (def->params.land_search_on_resolve && def->params.land_search_count > 0)
         {
@@ -18986,7 +21356,9 @@ inline void ApplySuspend(GameState& state, int controller, const std::string& na
     Player& pl = state.players[controller];
     for (auto it = pl.hand.begin(); it != pl.hand.end(); ++it)
     {
-        if (it->m_name != name) { continue; }
+        // Suspend is an alternative to casting FROM HAND; staged exile permission
+        // cannot supply it, even when an equal-named actual hand copy exists.
+        if (it->m_name != name || it->m_is_staged) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(*it);
         if (!d || d->params.suspend_time_counters <= 0) { continue; }
         // THE SUSPEND COST (Search for Tomorrow's "Suspend 2--{G}"), paid HERE so every apply site --
@@ -18999,7 +21371,7 @@ inline void ApplySuspend(GameState& state, int controller, const std::string& na
         { return; }
         SuspendedCard sc;
         sc.card        = *it;
-        sc.arrive_turn = state.turn_number + d->params.suspend_time_counters;
+        sc.arrive_turn = state.TurnSeq() + d->params.suspend_time_counters;
         pl.suspended_cards.push_back(std::move(sc));
         if (g_play_event_sink)   // nulled during search/rollout -> byte-identical
         {
@@ -19266,7 +21638,7 @@ inline void ProcessSuspendArrivals(GameState& state, int controller)
     pl.suspended_cards.clear();
     for (SuspendedCard& sc : snap)
     {
-        if (sc.arrive_turn <= state.turn_number) { CastOffSuspend(state, controller, sc.card); }
+        if (sc.arrive_turn >= 0 && sc.arrive_turn <= state.TurnSeq()) { CastOffSuspend(state, controller, sc.card); }
         else                                     { remaining.push_back(std::move(sc)); }
     }
     // Re-attach anything an arrival's cascade may have added, plus the not-yet-arrived remainder.
@@ -19479,13 +21851,42 @@ inline void UntapSnowPermanents(GameState& state, int controller)
 {
     // Mana-payment rollback (src/ai/PayRollback.h): an untap EFFECT fired this turn, so a
     // retroactive re-pay can no longer assume "untapped now" means "untapped then".
-    state.pay_ledger.NoteUntapEffect(state.turn_number, state.active_player_index);
+    state.pay_ledger.NoteUntapEffect(state.TurnSeq(), state.active_player_index);
     const bool ice_grants = AnyIceCounters(state) && IceGrantsSnow(state);
     for (Permanent& p : state.battlefield)
     {
         if (p.controller_index != controller || !p.tapped) { continue; }
         if (p.card.HasSupertype(Supertype::Snow) || (ice_grants && p.ice_counters > 0))
         { p.tapped = false; }
+    }
+}
+
+// ---- MORAUG, FURY OF AKOUM (2026-10-23): the additional combat's two shared bodies -------------------------
+// "At the beginning of that combat, untap all creatures you control." A delayed trigger of the ADDITIONAL
+// combat only (the regular combat does not untap -- Scryfall ruling 2020-09-25), resolved at its beginning,
+// before attackers are declared, in BOTH worlds (GameEngine::CombatPhase(additional) and TurnSolver's
+// SimulateOneCombat(additional)). Every creature we control, sick or not (an untapped sick creature still
+// cannot attack); an animated land is a creature. An untap EFFECT for the payment-rollback ledger.
+inline void UntapOwnCreaturesForCombat(GameState& state, int controller)
+{
+    state.pay_ledger.NoteUntapEffect(state.TurnSeq(), state.active_player_index);
+    for (Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller || !p.tapped) { continue; }
+        if (p.card.IsCreature() || p.is_animated) { p.tapped = false; }
+    }
+}
+// "...for each time it has attacked this turn": one more declared attack on each DECLARED attacker (CR 508.1;
+// called before any token joins the list, CR 508.4), both worlds at declare-attackers. Only for a deck with an
+// attack-count reader (deck_has_extra_combat), so every other deck's permanents never carry a count.
+inline void NoteAttacksDeclared(GameState& state, int controller, const std::vector<int>& declared)
+{
+    if (!state.deck_has_extra_combat) { return; }
+    for (int i : declared)
+    {
+        if (i < 0 || i >= static_cast<int>(state.battlefield.size())) { continue; }
+        Permanent& a = state.battlefield[static_cast<std::size_t>(i)];
+        if (a.controller_index == controller) { a.NoteAttackDeclared(); }
     }
 }
 
@@ -19553,7 +21954,7 @@ inline bool UntapSecondMainLive(const GameState& state)
 inline bool DigSecondMainLive(const GameState& state)
 {
     if (!state.deck_has_attack_dig_hand) { return false; }   // deck constant: no cost for other decks
-    if (state.combat_hand_turn != static_cast<std::int16_t>(state.turn_number)
+    if (state.combat_hand_turn != static_cast<std::int16_t>(state.TurnSeq())
         || state.combat_hand[0] == 0) { return false; }
     // heurarm-slotted rather than a bare `static const bool`, and that is required rather than
     // stylistic: the A/B that prices this must run BOTH arms inside ONE pooled `mtg --batch`, which
@@ -19572,8 +21973,9 @@ inline bool DigSecondMainLive(const GameState& state)
         for (const Card& c : ap.hand)
         {
             if (c.m_number != num) { continue; }
-            // case 2 / case 3: a land is only worth a phase while the drop is still open.
-            if (c.IsLand()) { if (drop_open) { return true; } break; }
+            // case 2 / case 3: a land is only worth a phase while the drop is still open. Land-ness
+            // off the DEFINITION (MTG_PLACEHOLDER_SEARCH; the arrival is a name-only placeholder).
+            if (ZoneCardIf(PlaceholderSearchOn(), c).IsLand()) { if (drop_open) { return true; } break; }
             const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
             // case 1. NOTE the deliberate absence of an AFFORDABILITY test: an unaffordable
             // Equipment opens a phase that enumerates nothing and costs only the empty harvest. The
@@ -19810,6 +22212,76 @@ inline void PerformUpkeepFading(GameState& state)
     }
 }
 
+// ---- THE SEARCHED ECHO PIN (Plan::echo_choice -> GameState::scripted_echo; MTG_ECHO_AXIS) -------------
+// Echo (CR 702.29): "At the beginning of your upkeep, if this came under your control since your last
+// upkeep, sacrifice it unless you pay its echo cost." Pay vs decline is a real decision (Mogg War Marshal:
+// a live attacker vs a summoning-sick token and the mana; Stingscourger: a 2/1 vs four mana), and the right
+// answer depends on the turn the upkeep opens -- its draw, its land drop -- which the provider's upkeep-time
+// judgement cannot see. So the SEARCH decides it: the plan of the turn before carries the pin, and the
+// provider's PayEchoToKeep only ORDERS the two answers (the unpinned / "follow" plan is the provider's
+// choice and comes first; its clone inverts it).
+//
+// Encoding: -1 = no pin. Else bits 0..7 = INVERT mask by obligation ordinal (the order the upkeep meets
+// them: battlefield order among the active player's permanents with an unresolved echo), bits 8..11 = how
+// many ordinals the pin COVERS (a main-2 plan extends main 1's cover with the obligations that arose
+// since -- a Goblin Lackey put, a main-2 cast -- instead of re-branching the ones main 1 decided).
+// An ordinal past the cover follows the provider: that is the playout policy beyond the horizon (a plan
+// the greedy playout made carries no pin), and never in the window, where every plan that can leave an
+// obligation gets the axis. The cap (kEchoPinMaxOrd) is far above any list (the suite's echo decks hold
+// two echo cards); an obligation past it would follow the provider.
+constexpr int kEchoPinMaxOrd     = 8;
+constexpr int kEchoPinCountShift = 8;
+inline int  EchoPinCount(int pin) { return pin < 0 ? 0 : (pin >> kEchoPinCountShift) & 0xF; }
+inline int  EchoPinMask(int pin)  { return pin < 0 ? 0 : pin & 0xFF; }
+inline int  EchoPinPack(int count, int mask) { return (count << kEchoPinCountShift) | (mask & 0xFF); }
+inline bool EchoPinInverts(int pin, int ordinal)
+{ return ordinal >= 0 && ordinal < EchoPinCount(pin) && ((EchoPinMask(pin) >> ordinal) & 1) != 0; }
+// The active player's echo obligations still to come due: permanents with an echo cost whose first upkeep
+// has not resolved it yet. The same predicate both upkeep loops walk, in the same order.
+inline bool IsPendingEchoObligation(const GameState& s, const Permanent& p)
+{
+    if (p.controller_index != s.active_player_index || p.echo_resolved) { return false; }
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+    return d != nullptr && d->params.echo_cost.has_value();
+}
+inline int PendingEchoObligations(const GameState& s)
+{
+    int n = 0;
+    for (const Permanent& p : s.battlefield) { if (IsPendingEchoObligation(s, p)) { ++n; } }
+    return n;
+}
+// THE COVER CENSUS (never read by play; printed under MTG_ECHO_AXIS_STATS=1). Every obligation either rides
+// the pin's cover (searched) or takes the provider's answer. UNCOVERED_IN_WINDOW: the provider answered
+// while the innermost search frame still had depth (greedywindow::InWindow) -- a host whose enumeration
+// missed the axis; the no-greedy invariant's instrument, the madness counter's twin, MUST read 0 outside
+// the disclosed residual (docs/design/searched-echo.md). REAL_*: the executor's own upkeeps in a searched
+// game (the executor's frame is closed there, so the window test cannot see them): an uncovered one means
+// the previous turn's last plan came from a path that carries no pin.
+inline std::atomic<long long> g_echo_obligations{0}, g_echo_covered{0}, g_echo_inverted{0};
+inline std::atomic<long long> g_echo_uncovered_in_window{0}, g_echo_uncovered_beyond{0};
+inline std::atomic<long long> g_echo_real_obligations{0}, g_echo_real_uncovered{0};
+inline void NoteEchoCover(int pin, int ordinal)
+{
+    g_echo_obligations.fetch_add(1, std::memory_order_relaxed);
+    if (ordinal < EchoPinCount(pin))
+    {
+        g_echo_covered.fetch_add(1, std::memory_order_relaxed);
+        if (EchoPinInverts(pin, ordinal)) { g_echo_inverted.fetch_add(1, std::memory_order_relaxed); }
+    }
+    else if (!HumanPlayActive() && greedywindow::InWindow(0))
+    { g_echo_uncovered_in_window.fetch_add(1, std::memory_order_relaxed); }
+    else { g_echo_uncovered_beyond.fetch_add(1, std::memory_order_relaxed); }
+}
+// THE ONE pay-vs-decline both upkeep loops (AIEngine::ResolveEchoUpkeep, the rollout's echo block) use for
+// the obligation at `ordinal`: the provider's answer, inverted where the pin says so. Affordability stays
+// each world's own gate (both sacrifice when the cost cannot be paid), exactly as before.
+inline bool EchoUpkeepWantsPay(const GameState& s, const Permanent& p, int ordinal, int pin)
+{
+    NoteEchoCover(pin, ordinal);
+    const bool provider = ResolveProvider(s).PayEchoToKeep(s, p);
+    return provider != EchoPinInverts(pin, ordinal);
+}
+
 // Varchild's War-Riders cumulative upkeep (CR 702.24a): +1 age counter, then EITHER the opponent
 // creates age_counters tokens (upkeep_token_* spec; 1/1 red Survivor) OR we sacrifice it. WHICH is
 // the provider's call (DecisionProvider::PaysCumulativeUpkeep; default pay -- weakly dominant vs the
@@ -19861,17 +22333,251 @@ inline void PerformUpkeepCumulativeGifts(GameState& state)
     }
 }
 
+// ---- Dwarven Hold's upkeep HOLD (storage_charge_mode "upkeep_if_tapped"), ONE function for both worlds ----------
+// "You may choose not to untap Dwarven Hold during your untap step. At the beginning of your upkeep, if Dwarven Hold
+// is tapped, put a storage counter on it." Modelled as a pre-draw commitment: a HOLD flags the land not-live for the
+// turn (StorageSourceLive), so it is never tapped for mana and banks its counter at end of turn. The autonomous
+// answer is the provider's (StorageLandHold; base false = never hold, the historical behaviour), a human chooser
+// overrides it in real play.
+//
+// It used to live only in the executor (GameEngine::UpkeepTail): the rollout never asked, and never cleared the
+// flag at its untap either. That was lockstep only because the base answers false and nothing overrides it -- an
+// override would have split the two worlds (the search pricing a land the real game holds, or the reverse) and a
+// held land would have stayed held for every later simulated turn. Now both worlds call THIS at the same point of
+// the upkeep (first thing after the Vial charges: GameEngine::UpkeepTail, the rollout's SimulateEndAndStartNextTurn),
+// and both untap steps clear the flag. Byte-identical while no provider holds: nothing sets the flag.
+inline void PerformUpkeepStorageHolds(GameState& state)
+{
+    for (Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index) { continue; }
+        if (p.tapped || p.storage_counters <= 0) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d || !d->params.storage_land || d->params.storage_charge_mode != "upkeep_if_tapped")
+        { continue; }
+        bool hold = ResolveProvider(state).StorageLandHold(
+            state, state.active_player_index, *d, p.storage_counters);
+        if (g_play_storage_hold_chooser)   // human play only; nulled during search (RevealLogPause)
+        { hold = (*g_play_storage_hold_chooser)(state, p, p.storage_counters); }
+        if (hold) { p.storage_hold_this_turn = true; }
+    }
+}
+
+// ---- THE SEARCHED DEFENSE OF THE HEART PUT LIST (Plan::doth_put_choice -> GameState::scripted_doth_put;
+// MTG_DOTH_AXIS) ---------------------------------------------------------------------------------------------
+// Defense of the Heart: "At the beginning of your upkeep, if an opponent controls three or more creatures,
+// sacrifice this enchantment, search your library for up to two creature cards, put those cards onto the
+// battlefield, then shuffle." WHICH creatures, and in what ENTER order, is a genuine multi-option decision
+// (Hunted Phantasm's gift before or after Massacre Wurm's sweep, a second Suture Priest now vs a Phantasm's
+// burst, the Wurm now vs saved for a bigger board), and both worlds used to take it from the provider's
+// closed-form pick (SacTutorPutList) -- at the executor's real upkeep and at every simulated turn boundary the
+// search crossed with depth left: an in-window greedy pick (CLAUDE.md NO GREEDY). Now the SEARCH decides it
+// where it crosses the boundary (TurnSolver.cpp, BoundaryFan) and the plan of the turn before carries the
+// answer; the provider only ORDERS the menu (its own pick first) and restricts it by proven folds.
+//
+// Encoding: -1 = no pin. Else bits 0..27 hold a RANK per trigger ordinal (kDothPinRankBits each, ordinal 0
+// lowest; an ordinal is the trigger's position in this upkeep's resolution order) into that trigger's
+// resolution-time menu (DecisionProvider::SacTutorPutOptions: rank 0 = the provider's pick), and bits 28..30
+// how many ordinals the pin COVERS. An ordinal past the cover takes the provider's pick: that is the playout
+// policy beyond the horizon (a plan the greedy playout made carries no pin) and the d0 runner's -- never the
+// window's, where every crossing with an uncovered trigger is fanned. A rank past the menu's end clamps to the
+// last entry (cannot happen in lockstep: the menu is a function of the upkeep state both worlds share).
+constexpr int kDothPinRankBits   = 7;
+constexpr int kDothPinRankMask   = (1 << kDothPinRankBits) - 1;          // ranks 0..127
+constexpr int kDothPinMaxOrd     = 4;                                    // 4 copies of the card, 4 ordinals
+constexpr int kDothPinCoverShift = kDothPinRankBits * kDothPinMaxOrd;    // 28
+inline int DothPinCover(int pin) { return pin < 0 ? 0 : (pin >> kDothPinCoverShift) & 0x7; }
+inline int DothPinRank(int pin, int ordinal)
+{
+    if (ordinal < 0 || ordinal >= DothPinCover(pin)) { return 0; }
+    return (pin >> (kDothPinRankBits * ordinal)) & kDothPinRankMask;
+}
+inline int DothPinPack(int cover, const int* ranks)
+{
+    cover = std::max(0, std::min(cover, kDothPinMaxOrd));
+    int pin = cover << kDothPinCoverShift;
+    for (int j = 0; j < cover; ++j)
+    { pin |= (std::max(0, std::min(ranks[j], kDothPinRankMask))) << (kDothPinRankBits * j); }
+    return pin;
+}
+// Is `d` an upkeep sac-tutor (Defense of the Heart)? The trigger the pin answers.
+inline bool IsUpkeepSacTutor(const CardDefinition* d) { return d != nullptr && d->params.upkeep_sac_tutor_creatures > 0; }
+// The sac-tutors the active player controls -- an UPPER bound on this player's next-upkeep resolutions (each
+// copy resolves at most once; the intervening if can stop it). The boundary fan's liveness test.
+inline int UpkeepSacTutorsOnBattlefield(const GameState& s)
+{
+    if (!s.deck_has_sac_tutor) { return 0; }
+    int n = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != s.active_player_index) { continue; }
+        if (IsUpkeepSacTutor(CardDatabase::Instance().LookupCached(p.card))) { ++n; }
+    }
+    return n;
+}
+
+// THE PROBE: the boundary fan's channel back out of a crossing. The menu is built at the UPKEEP state, which no
+// fan site can see before it crosses, so while a site holds the probe open every resolution records its menu
+// size by ordinal; the site reads it right after the crossing (before anything nested can cross again) and
+// learns how many branches each trigger had. Never read by play.
+struct DothProbe
+{
+    bool on = false;
+    int  n  = 0;                       // resolutions seen (= highest ordinal + 1)
+    int  size[kDothPinMaxOrd] = {};    // each one's menu size (capped at kDothPinRankMask + 1)
+};
+inline thread_local DothProbe g_doth_probe;
+struct DothProbeScope
+{
+    DothProbe saved;
+    DothProbeScope() : saved(g_doth_probe) { g_doth_probe = DothProbe{}; g_doth_probe.on = true; }
+    ~DothProbeScope() { g_doth_probe = saved; }
+    DothProbe Read() const { return g_doth_probe; }
+    DothProbeScope(const DothProbeScope&)            = delete;
+    DothProbeScope& operator=(const DothProbeScope&) = delete;
+};
+
+// THE COVER CENSUS (never read by play; printed under MTG_DOTH_AXIS_STATS=1). Every resolution either rides the
+// pin's cover (searched) or takes the provider's pick. UNCOVERED_IN_WINDOW: the provider answered while the
+// innermost search frame still had depth (greedywindow::InWindow) -- a host that crossed without fanning; the
+// no-greedy invariant's instrument (the echo cover census's twin), MUST read 0. TurnSolver's hook splits it into
+// searched / playout / constant-leaf edge. REAL_*: the executor's own upkeeps in a searched game.
+inline std::atomic<long long> g_doth_resolutions{0}, g_doth_covered{0}, g_doth_off_front{0};
+inline std::atomic<long long> g_doth_uncovered_in_window{0}, g_doth_uncovered_beyond{0};
+inline std::atomic<long long> g_doth_real_resolutions{0}, g_doth_real_uncovered{0};
+inline std::atomic<long long> g_doth_menu_built{0}, g_doth_menu_sum{0}, g_doth_menu_max{0};
+// The census is OFF unless asked for: unlike the rest of the resolution, these shared counters are written by
+// every thread, so they are not touched at all on an ordinary run.
+inline bool DothCensusOn() { static const bool on = EnvOn("MTG_DOTH_AXIS_STATS"); return on; }
+inline void NoteDothCover(int pin, int ordinal)
+{
+    if (!DothCensusOn()) { return; }
+    g_doth_resolutions.fetch_add(1, std::memory_order_relaxed);
+    if (ordinal < DothPinCover(pin))
+    {
+        g_doth_covered.fetch_add(1, std::memory_order_relaxed);
+        if (DothPinRank(pin, ordinal) > 0) { g_doth_off_front.fetch_add(1, std::memory_order_relaxed); }
+    }
+    else if (!HumanPlayActive() && greedywindow::InWindow(0))
+    { g_doth_uncovered_in_window.fetch_add(1, std::memory_order_relaxed); }
+    else { g_doth_uncovered_beyond.fetch_add(1, std::memory_order_relaxed); }
+}
+
+// THE MENU CACHE. A boundary fan crosses ONE pre-boundary state once per menu entry, so every crossing of a fan
+// rebuilds the same menu at the same upkeep state -- measured as ~10% of a Creature Giving game's CPU before this
+// cache. Keyed EXACTLY (no hash) on everything SacTutorPutOptions may read, which is its documented contract
+// (DecisionProvider.h): the provider, the controller, max_puts, the DOTH_FOLDS lever, the closed-form score's
+// inputs (our enter / death drain watchers, each opposing creature's toughness margin in battlefield order) and
+// the library's creature definitions with their counts in first-occurrence order. Per thread, a few entries
+// (a fan's crossings nest deeper fans between them). Pure caching: the menu returned is the one a fresh build
+// returns.
+struct DothMenuCacheEntry
+{
+    std::vector<std::uintptr_t>           key;
+    std::vector<std::vector<std::string>> menu;
+};
+inline thread_local std::array<DothMenuCacheEntry, 8> t_doth_menu_cache;
+inline thread_local unsigned                          t_doth_menu_next = 0;
+inline void DothMenuKey(const GameState& s, int controller, int max_puts, std::vector<std::uintptr_t>& k)
+{
+    k.clear();
+    const DecisionProvider& prov = ResolveProvider(s);
+    k.push_back(reinterpret_cast<std::uintptr_t>(&prov));
+    k.push_back(reinterpret_cast<std::uintptr_t>(prov.Name()));   // a recycled address is not the same provider
+    k.push_back(static_cast<std::uintptr_t>(controller));
+    k.push_back(static_cast<std::uintptr_t>(max_puts));
+    static const bool s_folds_env = EnvOn("MTG_DOTH_FOLDS", true);
+    k.push_back(heurarm::Flag(heurarm::DOTH_FOLDS, s_folds_env) ? 1u : 0u);
+    long long enter = 0, death = 0;
+    std::size_t margins_at = k.size();
+    k.push_back(0); k.push_back(0);   // enter / death drain, filled below
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index == controller)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d) { enter += d->params.opp_creature_enters_life_loss; death += d->params.opp_dies_life_loss; }
+        }
+        else if (p.card.IsCreature() || p.is_animated)
+        { k.push_back(static_cast<std::uintptr_t>(static_cast<std::intptr_t>(p.EffectiveToughness() - p.damage))); }
+    }
+    k[margins_at]     = static_cast<std::uintptr_t>(enter);
+    k[margins_at + 1] = static_cast<std::uintptr_t>(death);
+    k.push_back(~std::uintptr_t{0});   // separator: margins | library
+    const std::size_t lib_at = k.size();
+    for (const Card& lc : s.players[static_cast<std::size_t>(controller)].library)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(lc);
+        if (!d || !d->card.IsCreature()) { continue; }
+        const std::uintptr_t dp = reinterpret_cast<std::uintptr_t>(d);
+        bool found = false;
+        for (std::size_t i = lib_at; i + 1 < k.size(); i += 2) { if (k[i] == dp) { ++k[i + 1]; found = true; break; } }
+        if (!found) { k.push_back(dp); k.push_back(1); }
+    }
+}
+inline const std::vector<std::vector<std::string>>& DothMenuCached(const GameState& s, int controller,
+                                                                   const CardParams& pp, int max_puts)
+{
+    static thread_local std::vector<std::uintptr_t> key;
+    DothMenuKey(s, controller, max_puts, key);
+    for (DothMenuCacheEntry& e : t_doth_menu_cache) { if (!e.menu.empty() && e.key == key) { return e.menu; } }
+    DothMenuCacheEntry& e = t_doth_menu_cache[t_doth_menu_next++ % t_doth_menu_cache.size()];
+    e.key  = key;
+    e.menu = ResolveProvider(s).SacTutorPutOptions(s, controller, pp, max_puts);
+    if (e.menu.empty()) { e.menu.emplace_back(); }   // never empty: entry 0 is the provider's (possibly empty) pick
+    return e.menu;
+}
+
+// THE ONE put list both upkeeps (GameEngine::UpkeepTail and the rollout's SimulateEndAndStartNextTurn, both via
+// PerformUpkeepSacTutor) use for the trigger at `ordinal`: the provider's pick at rank 0, else the rank-th entry
+// of the provider's menu built at THIS state. Rank 0 with no probe open calls SacTutorPutList directly -- the
+// exact pre-axis call, so every unpinned resolution (MTG_DOTH_AXIS=0, the playout, the d0 runner) is unchanged.
+inline std::vector<std::string> DothUpkeepPutList(const GameState& s, int controller, const CardParams& pp,
+                                                  int max_puts, int ordinal, int pin)
+{
+    const int rank = DothPinRank(pin, ordinal);
+    if (rank == 0 && !g_doth_probe.on)
+    { return ResolveProvider(s).SacTutorPutList(s, controller, pp, max_puts); }
+    const std::vector<std::vector<std::string>>& menu = DothMenuCached(s, controller, pp, max_puts);
+    const int sz = std::min(static_cast<int>(menu.size()), kDothPinRankMask + 1);
+    if (DothCensusOn())
+    {
+        g_doth_menu_built.fetch_add(1, std::memory_order_relaxed);
+        g_doth_menu_sum.fetch_add(sz, std::memory_order_relaxed);
+        for (long long cur = g_doth_menu_max.load(std::memory_order_relaxed);
+             sz > cur && !g_doth_menu_max.compare_exchange_weak(cur, sz, std::memory_order_relaxed); ) {}
+    }
+    if (g_doth_probe.on && ordinal >= 0 && ordinal < kDothPinMaxOrd)
+    {
+        g_doth_probe.size[ordinal] = sz;
+        g_doth_probe.n = std::max(g_doth_probe.n, ordinal + 1);
+    }
+    if (sz <= 0) { return {}; }
+    return menu[static_cast<std::size_t>(std::min(rank, sz - 1))];
+}
+
 // Defense of the Heart: "At the beginning of your upkeep, if an opponent controls three or more
 // creatures, sacrifice this enchantment, search your library for up to two creature cards, put
 // those cards onto the battlefield, then shuffle." The intervening-if is checked here (trigger
-// time == resolution time in this engine's upkeep). WHICH creatures + their enter ORDER is the
-// provider's SacTutorPutList (default: closed-form immediate-drain maximisation); a human
-// override rides g_play_sac_tutor_chooser (nulled by RevealLogPause -> search/rollout
-// byte-identical). Each put creature enters through the shared cascades, so a put Hunted
-// Phantasm gifts its Goblins (draining per Suture Priest) and a put Massacre Wurm sweeps.
-inline void PerformUpkeepSacTutor(GameState& state)
+// time == resolution time in this engine's upkeep). WHICH creatures + their enter ORDER is SEARCHED
+// (MTG_DOTH_AXIS, above): the previous turn's plan left GameState::scripted_doth_put, a rank per
+// trigger ordinal into the provider's menu (DothUpkeepPutList); an uncovered trigger takes the
+// provider's SacTutorPutList (default: closed-form immediate-drain maximisation). A human override
+// rides g_play_sac_tutor_chooser (nulled by RevealLogPause -> search/rollout byte-identical). Each put
+// creature enters through the shared cascades, so a put Hunted Phantasm gifts its Goblins (draining
+// per Suture Priest) and a put Massacre Wurm sweeps. `search_note` (the rollout's census split,
+// TurnSolver) and `real_searched` (the executor's upkeep in a searched game) feed MTG_DOTH_AXIS_STATS
+// only. Called IDENTICALLY by both worlds (GameEngine::UpkeepTail, SimulateEndAndStartNextTurn).
+using DothSearchNote = void (*)(const GameState&, int ordinal, int pin);
+inline void PerformUpkeepSacTutor(GameState& state, DothSearchNote search_note = nullptr,
+                                  bool real_searched = false)
 {
     const int active = state.active_player_index;
+    // The searched pin (Plan::doth_put_choice) is CONSUMED by this upkeep whatever it finds, in both worlds,
+    // so a pin whose trigger did not fire (the intervening if failed) cannot leak into the turn it opens.
+    const int doth_pin = state.scripted_doth_put;
+    state.scripted_doth_put = -1;
+    int doth_ord = 0;
     // Snapshot the triggering copies first: resolving one (sacrifice + puts) mutates the
     // battlefield. Two copies both fire if the condition holds for each in turn.
     for (;;)
@@ -19898,9 +22604,17 @@ inline void PerformUpkeepSacTutor(GameState& state)
         ap.graveyard.push_back(state.battlefield[src_index].card);
         state.battlefield.erase(state.battlefield.begin() + src_index);
 
-        // The put-list: provider heuristic, overridable by the human chooser.
+        // The put-list: the searched rank into the provider's menu (the provider's pick when the pin does
+        // not cover this ordinal) -- ONE function in both worlds -- overridable by the human chooser.
+        NoteDothCover(doth_pin, doth_ord);
+        if (search_note != nullptr) { search_note(state, doth_ord, doth_pin); }
+        if (real_searched && DothCensusOn())
+        {
+            g_doth_real_resolutions.fetch_add(1, std::memory_order_relaxed);
+            if (doth_ord >= DothPinCover(doth_pin)) { g_doth_real_uncovered.fetch_add(1, std::memory_order_relaxed); }
+        }
         std::vector<std::string> put_list =
-            ResolveProvider(state).SacTutorPutList(state, active, pp, max_puts);
+            DothUpkeepPutList(state, active, pp, max_puts, doth_ord++, doth_pin);
         if (g_play_sac_tutor_chooser)
         {
             // Candidates = every library creature card (one entry per copy), in library order.
@@ -20691,7 +23405,21 @@ inline void EnforceLegendRule(GameState& state, int controller_index)
     for (const auto& g : groups)
     {
         if (g.second.size() < 2) { continue; }
-        const int keep = ResolveProvider(state).LegendKeepIndex(state, controller_index, g.second);
+        int keep = ResolveProvider(state).LegendKeepIndex(state, controller_index, g.second);
+        // A human chooses which Chandra survives. Reuse the existing board-click
+        // chooser at the real SBA; rollouts have that chooser nulled and use the
+        // provider's deterministic keep. Chandra has no enter/leave watcher that
+        // depends on the provisional LegendRuleLoser check before this SBA.
+        if (g.first == "Chandra, Torch of Defiance" && g_play_sacrifice_chooser != nullptr
+            && controller_index == state.active_player_index)
+        {
+            auto it = std::find(g.second.begin(), g.second.end(), keep);
+            const int default_option = it == g.second.end() ? 0 : static_cast<int>(it - g.second.begin());
+            const int chosen = (*g_play_sacrifice_chooser)(state, controller_index,
+                "Legend rule: choose Chandra to keep", g.second, default_option);
+            if (chosen >= 0 && chosen < static_cast<int>(g.second.size()))
+            { keep = g.second[static_cast<std::size_t>(chosen)]; }
+        }
         // MTG_TRACE=legend: is "keep the original" ever actually WRONG? One copy dies either way and
         // the ETB is already banked before this state-based action runs, so the choice is purely
         // about WHICH BODY survives -- i.e. it can only matter when the copies differ in a way that
@@ -20778,6 +23506,8 @@ inline void EnforceLegendRule(GameState& state, int controller_index)
     SweepOrphanedAuras(state);
     RefreshDevotionCreatures(state);   // a doomed white permanent lowers devotion (Heliod x2)
     RefreshReconfigureCreatures(state);   // reconfigure (Lizard Blades): a departed host frees its piece -- RefreshReconfigureCreatures
+    // One SBA batch: every graveyard-shuffle trigger it fires resolves after ALL the deaths (inert elsewhere).
+    GyShuffleBatch _gyb(state);
     for (const DoomedDeath& dd : doomed_creatures)
     { OnCreatureDies(state, dd.controller, dd.card, dd.token, dd.minus); }
 }
@@ -21777,6 +24507,16 @@ inline bool WantVialCharge(const GameState& state, const Permanent& vial)
     int count_above = 0;   // creatures of any higher MV (includes count_next)
     for (const Card& card : ap.hand)
     {
+        // A STAGED card is impulse-exiled / on an adventure: castable, never Vial-able (the Vial puts
+        // "a creature card from your hand" -- CollectActions' Vial candidates skip it for the same reason).
+        // And the two worlds hold it differently at upkeep: a simulated state keeps it in `hand` with
+        // m_is_staged set, the executor keeps it in Player::staged_cards until TakeTurn merges it -- so
+        // counting it made the rollout charge where the executor held. Goblins s4323206 gi3205 (2HG,
+        // MTG_SAC_OUTLET_PAY on) T4 upkeep: Rundvelt's impulse had staged Goblin Matron (MV 3); the
+        // rollout climbed the Vial at 2 to 3 for it and scored a T4 kill that Vials the Matron-found
+        // Goblin Chieftain at 3, the executor held at 2 for Goblin Piledriver and the Chieftain waited a
+        // turn (T4 proven, T5 realised).
+        if (card.m_is_staged) { continue; }
         const CardDefinition* def = CardDatabase::Instance().LookupCached(card);
         if (!def || !def->card.IsCreature()) { continue; }
         int mv = def->card.m_mana_cost.ManaValue();
@@ -22688,7 +25428,7 @@ inline void StageTopLibraryCard(GameState& state)
     Card c = ap.library.front();
     ap.library.erase(ap.library.begin());
     c.m_is_staged     = true;
-    c.m_staged_expiry = state.turn_number + 1;
+    c.m_staged_expiry = state.TurnSeq() + 1;
     EnterHand(state, state.active_player_index, std::move(c), HandEntryReason::Stage);
 }
 
@@ -23030,7 +25770,7 @@ inline SoulfireResult SoulfireDig(GameState& state, int controller, int own_targ
         mvs.push_back(d ? d->card.m_mana_cost.ManaValue() : c.m_mana_cost.ManaValue());
         if (capture) { flip_nums.push_back(c.m_number); flip_names.push_back(c.m_name); }
         c.m_is_staged     = true;
-        c.m_staged_expiry = state.turn_number + 1;
+        c.m_staged_expiry = state.TurnSeq() + 1;
         EnterHand(state, controller, std::move(c), HandEntryReason::Stage);
     }
 
@@ -23093,15 +25833,24 @@ inline void UntapManaSources(GameState& state, int count)
 {
     // Mana-payment rollback (src/ai/PayRollback.h): an untap EFFECT fired this turn, so a
     // retroactive re-pay can no longer assume "untapped now" means "untapped then".
-    state.pay_ledger.NoteUntapEffect(state.turn_number, state.active_player_index);
+    state.pay_ledger.NoteUntapEffect(state.TurnSeq(), state.active_player_index);
     const int active = state.active_player_index;
+    auto is_src = [&](const Permanent& p)
+    {
+        if (p.controller_index != active || !p.tapped) { return false; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        return d && (d->card.IsLand() || d->tmpl == CardTemplate::ManaDork || d->params.mana_rock);
+    };
+    {
+        std::vector<int> cand;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        { if (is_src(state.battlefield[i])) { cand.push_back(i); } }
+        NoteUntapChoice(state, cand, count);
+    }
     for (int i = 0; i < static_cast<int>(state.battlefield.size()) && count > 0; ++i)
     {
         Permanent& p = state.battlefield[i];
-        if (p.controller_index != active || !p.tapped) { continue; }
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        bool is_src = d && (d->card.IsLand() || d->tmpl == CardTemplate::ManaDork || d->params.mana_rock);
-        if (!is_src) { continue; }
+        if (!is_src(p)) { continue; }
         p.tapped = false;
         --count;
     }
@@ -23357,7 +26106,7 @@ inline void RitualUntapSources(GameState& state, int count)
 {
     // Mana-payment rollback (src/ai/PayRollback.h): an untap EFFECT fired this turn, so a
     // retroactive re-pay can no longer assume "untapped now" means "untapped then".
-    state.pay_ledger.NoteUntapEffect(state.turn_number, state.active_player_index);
+    state.pay_ledger.NoteUntapEffect(state.TurnSeq(), state.active_player_index);
     if (count <= 0) { return; }
     const int active = state.active_player_index;
     std::vector<std::pair<int, int>> tapped;   // (per-tap output, battlefield index)
@@ -23377,6 +26126,11 @@ inline void RitualUntapSources(GameState& state, int count)
                      [](const std::pair<int, int>& a, const std::pair<int, int>& b)
                      { return a.first > b.first; });
     const int n = std::min<int>(static_cast<int>(tapped.size()), count);
+    {
+        std::vector<int> cand;
+        for (const auto& t : tapped) { cand.push_back(t.second); }
+        NoteUntapChoice(state, cand, count);
+    }
     for (int i = 0; i < n; ++i)
     { state.battlefield[tapped[i].second].tapped = false; }
     // Record the REAL game's untap for the prepay ledger (see GameLogger::LogUntapSources).
@@ -23420,13 +26174,29 @@ inline void FloatSourceTapCommitted(GameState& state, int active, const CardDefi
                                    : EffectiveProduces(state, active, d, false);
     if (amt == 1 && prod.size() > 1 && prod.size() < 5)
     {
-        Color best = prod[0]; int best_need = -1;
+        // THE PIP READ (MTG_PLACEHOLDER_MANA, DEFAULT OFF). A hand card's own m_mana_cost is a placeholder
+        // {0}, so the historical read weighs every colour at 0 and prod[0] always wins -- the "need-aware"
+        // commit below has never run. With the definition pips it commits every tap-ahead Mystic Monastery
+        // / Cascade Bluffs to the hand's biggest colour ({R}: Soulfire, Crackle), starving the next Reality
+        // Spasm's {U}{U}: Hinata on seed 1350001 lost 6 games / won 1, four not recovering at d8 b0 -- this
+        // colour is a payment-time choice the search never branches on. OFF until the commit is
+        // SEQUENCE-aware (the colours the rest of the line will spend, in order), not a pip total.
+        // docs/design/placeholder-card-reads.md.
+        const bool def_pips = PlaceholderManaOn();
+        // MTG_FLOAT_COMMIT_NET (DEFAULT OFF; a measured amendment; reads nothing unless MTG_PLACEHOLDER_MANA
+        // is on): the demand is NET of what already floats in that colour, so successive tap-ahead sources
+        // SPREAD across the colours the hand wants instead of every one committing the single biggest
+        // colour. Recovers Hinata seed 1350204 gi203 (T4 -> T5), but over seed 1350001 Hinata was still 5
+        // slower / 2 faster, four not recovering at d8 b0: a pip total, netted or not, is not the sequence.
+        static const bool s_net = EnvOn("MTG_FLOAT_COMMIT_NET", false);
+        const bool net = def_pips && heurarm::Flag(heurarm::FLOAT_COMMIT_NET, s_net);
+        Color best = prod[0]; int best_need = net ? INT_MIN : -1;
         for (Color c : prod)
         {
             int need = 0;
             for (const Card& hc : state.players[active].hand)
             {
-                const ManaCost& mc = hc.m_mana_cost;
+                const ManaCost& mc = ZoneCardIf(def_pips, hc).m_mana_cost;
                 switch (c)
                 {
                     case Color::White: need += mc.white; break;
@@ -23434,6 +26204,19 @@ inline void FloatSourceTapCommitted(GameState& state, int active, const CardDefi
                     case Color::Black: need += mc.black; break;
                     case Color::Red:   need += mc.red;   break;
                     case Color::Green: need += mc.green; break;
+                    default: break;
+                }
+            }
+            if (net)
+            {
+                const ManaPool& fl = state.floating_mana;
+                switch (c)
+                {
+                    case Color::White: need -= fl.white; break;
+                    case Color::Blue:  need -= fl.blue;  break;
+                    case Color::Black: need -= fl.black; break;
+                    case Color::Red:   need -= fl.red;   break;
+                    case Color::Green: need -= fl.green; break;
                     default: break;
                 }
             }
@@ -23470,6 +26253,7 @@ inline void FloatSourceTapCommitted(GameState& state, int active, const CardDefi
 inline void RitualTapAheadIntoFloat(GameState& state, int chosen_x)
 {
     if (!SpasmUntapLiteralOn() || chosen_x <= 0) { return; }
+    ++g_tap_ahead_calls;   // diagnostic (the mana oracle's unscripted-tap check)
     const int active = state.active_player_index;
     auto is_src = [&](const Permanent& p, const CardDefinition& d)
     {
@@ -25416,6 +28200,890 @@ inline bool TransformRestrictionMet(const GameState& state, int controller, cons
            >= pp.transform_min_controlled_count;
 }
 
+// ================================================================================================
+// WALKING BALLISTA (LifegainHeliodCombo, 2026-10-27) -- the counter ping, the Heliod loop, the
+// post-combat lethal finish and the doomed-entrant drain. Shared by both worlds (the rollout's
+// apply_one and the executor's trailing pass reach these through ApplyPermAbility; the finish is
+// called from both combat sites), so the two can never disagree.
+// ================================================================================================
+
+// Remove N +1/+1 counters (a COST -- never doubled, CR 601.2h/602.2b). Keeps the canonical counter
+// storage: an emptied entry is erased, so the sim key of "no counters" never depends on history.
+inline void RemovePlusCounters(Permanent& p, int n)
+{
+    if (n <= 0) { return; }
+    for (Counter& c : p.counters)
+    {
+        if (c.type != Counter::Type::PlusOnePlusOne) { continue; }
+        c.count -= std::min(n, c.count);
+        break;
+    }
+    p.counters.erase(std::remove_if(p.counters.begin(), p.counters.end(),
+                                    [](const Counter& c) { return c.count <= 0; }),
+                     p.counters.end());
+    RefreshCounterThresholdKeywords(p);
+}
+
+// Would the toughness / lethal-damage SBA (CR 704.5f / 704.5g) kill `q` now? The SAME predicate the
+// executor's GameEngine::CheckStateBasedActions applies (LethalToughness, indestructible saves only
+// from damage), so an inline death here is the death the executor would apply.
+inline bool CounterPingSbaDead(const Permanent& q, const GameState& state)
+{
+    if (!q.card.IsCreature()) { return false; }
+    const int t = LethalToughness(q, state);
+    if (t <= 0) { return true; }
+    return q.damage > 0 && q.damage >= t && !q.card.HasKeyword(Keyword::Indestructible);
+}
+
+// Put the creature at battlefield index `i` into the graveyard as an SBA death (the executor's SBA, exactly),
+// then OnCreatureDies. The caller must hold no saved indices.
+inline void CounterPingKillAt(GameState& state, std::size_t i, const char* why)
+{
+    const Permanent q = state.battlefield[i];
+    const int num = q.card.m_number;
+    // EXACTLY GameEngine::CheckStateBasedActions' death: the card -- a token too, the graveyard vector
+    // receives tokens there -- goes to its CONTROLLER's graveyard, and Equipment falls off (CR 301.5c).
+    // An Aura's link is left as that SBA leaves it.
+    state.players[q.controller_index].graveyard.push_back(q.card);
+    state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
+    for (Permanent& e : state.battlefield)
+    {
+        if (e.equipped_to == num) { e.equipped_to = 0; }
+    }
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "death",
+                      "\xE2\x98\xA0 " + q.card.m_name.str() + " dies (" + why + ")");
+    }
+    OnCreatureDies(state, q.controller_index, q.card, q.is_token, MinusCountersOn(q));
+}
+
+// Drain the doomed-entrant queue (g_pending_zero_toughness): each recorded entrant still at 0
+// toughness dies now. Called at the points the other enter-cascade queues drain, in BOTH worlds (the
+// rollout runs no SBA pass, the executor's would run later -- this keeps them on the same instant).
+inline void DrainPendingZeroToughness(GameState& state)
+{
+    if (g_pending_zero_toughness.empty()) { return; }
+    std::vector<int> pend;
+    pend.swap(g_pending_zero_toughness);
+    for (int num : pend)
+    {
+        for (std::size_t i = state.battlefield.size(); i-- > 0; )
+        {
+            if (state.battlefield[i].card.m_number != num) { continue; }
+            if (CounterPingSbaDead(state.battlefield[i], state))
+            { CounterPingKillAt(state, i, "0 toughness"); }
+            break;
+        }
+    }
+}
+
+// ==== GRAVEYARD -> BATTLEFIELD SINGLE-TARGET RETURN: the shared helper set ===========================
+// Abiding Grace's end-step mode 2 ("return target creature card with mana value 1 from your graveyard
+// to the battlefield") and Emeria, the Sky Ruin's upkeep ("you may return target creature card from
+// your graveyard to the battlefield"). One eligibility test, one candidate scan, one resolve -- so the
+// option list the search ranks, the human prompt and the put can never disagree.
+//
+// ELIGIBILITY reads the card's DEFINITION (ZoneCard): a graveyard Card is a name-only placeholder whose
+// own masks are empty (the Unearth / Garth's Regrowth bug class). Mana value is the printed cost with
+// {X} = 0 (CR 202.3e) -- Walking Ballista is MV 0. TOKENS ARE EXCLUDED by id (m_number >=
+// GameState::kFirstTokenNumber): the engine pushes a dead token's Card onto the graveyard vector at
+// most sites, but a token is not a card (CR 111.7) and a ZoneCard type test cannot tell it apart.
+struct GyReanimateFilter
+{
+    int  exact_mv = -1;      // >= 0: mana value must EQUAL this (Abiding Grace: 1)
+    int  max_mv   = -1;      // >= 0: mana value must be <= this
+    bool creature = true;    // creature cards only ("target creature card")
+};
+
+inline bool GyReanimateEligible(const Card& gc, const GyReanimateFilter& f)
+{
+    if (gc.m_number >= GameState::kFirstTokenNumber) { return false; }
+    const Card& c = ZoneCard(gc);
+    if (f.creature && !c.IsCreature()) { return false; }
+    const int mv = c.m_mana_cost.ManaValue();
+    if (f.exact_mv >= 0 && mv != f.exact_mv) { return false; }
+    if (f.max_mv >= 0 && mv > f.max_mv) { return false; }
+    return true;
+}
+
+// Every eligible graveyard card of `controller`, ONE PER COPY, graveyard order (the human prompt's
+// list). `only` (optional) further restricts to card numbers in that set -- the targets that were legal
+// when the trigger was put on the stack (Abiding Grace's beginning-of-end-step snapshot).
+inline std::vector<int> GyReanimateCandidates(const GameState& state, int controller,
+                                              const GyReanimateFilter& f,
+                                              const std::vector<int>* only = nullptr)
+{
+    std::vector<int> out;
+    for (const Card& gc : state.players[static_cast<std::size_t>(controller)].graveyard)
+    {
+        if (!GyReanimateEligible(gc, f)) { continue; }
+        if (only != nullptr && std::find(only->begin(), only->end(), gc.m_number) == only->end()) { continue; }
+        out.push_back(gc.m_number);
+    }
+    return out;
+}
+
+// ONE candidate per distinct NAME (the lowest-numbered copy in graveyard order wins the slot), ordered
+// by the provider's GyReturnOrder (front = default). Two copies of one card are the same object to play
+// -- the SEARCH's list; the human prompt keeps every copy (GyReanimateCandidates).
+inline std::vector<int> GyReanimateCandidateNames(const GameState& state, int controller,
+                                                  const GyReanimateFilter& f,
+                                                  const std::vector<int>* only = nullptr)
+{
+    const std::vector<int> all = GyReanimateCandidates(state, controller, f, only);
+    const std::vector<Card>& gy = state.players[static_cast<std::size_t>(controller)].graveyard;
+    auto name_of = [&](int num) -> InternedName
+    {
+        for (const Card& c : gy) { if (c.m_number == num) { return c.m_name; } }
+        return InternedName();
+    };
+    std::vector<int> out;
+    std::vector<InternedName> seen;
+    for (int num : all)
+    {
+        const InternedName nm = name_of(num);
+        if (std::find(seen.begin(), seen.end(), nm) != seen.end()) { continue; }
+        seen.push_back(nm);
+        out.push_back(num);
+    }
+    ResolveProvider(state).GyReturnOrder(state, controller, out);
+    return out;
+}
+
+// RESOLVE one return: erase `card_number` from `controller`'s graveyard and put it onto the battlefield
+// through the universal enter cascade (PutCardOntoBattlefield: FireEtbWatchers + FireOwnEtbTriggers,
+// so every Soul Warden / Auriok Champion fires), under GraveyardEnterScope (Celes's graveyard-enter
+// watcher), then the legend rule and the doomed-0/0 drain (an Emeria-returned Walking Ballista enters
+// as a 0/0, CR 107.3m / 704.5f). Returns false -- the ability does nothing -- when the card is no longer
+// in the graveyard (its only target is illegal, CR 608.2b).
+inline bool ResolveGyReanimate(GameState& state, int controller, int card_number,
+                               const std::string& source_name)
+{
+    std::vector<Card>& gy = state.players[static_cast<std::size_t>(controller)].graveyard;
+    int gi = -1;
+    for (int i = 0; i < static_cast<int>(gy.size()); ++i)
+    { if (gy[static_cast<std::size_t>(i)].m_number == card_number) { gi = i; break; } }
+    if (gi < 0) { return false; }
+    const Card back = gy[static_cast<std::size_t>(gi)];
+    gy.erase(gy.begin() + gi);
+    bool legendary = false;
+    {
+        GraveyardEnterScope from_gy;
+        const int idx = PutCardOntoBattlefield(state, controller, back, source_name);
+        legendary = idx >= 0 && idx < static_cast<int>(state.battlefield.size())
+                 && state.battlefield[static_cast<std::size_t>(idx)].card.HasSupertype(Supertype::Legendary);
+    }
+    if (legendary) { EnforceLegendRule(state, controller); }
+    DrainPendingZeroToughness(state);
+    return true;
+}
+
+// ==== ABIDING GRACE: "At the beginning of your end step, choose one -- * You gain 1 life. * Return
+// target creature card with mana value 1 from your graveyard to the battlefield." ====================
+//
+// One trigger per Grace we control, resolved here in battlefield order (the order of ours is ours to
+// pick, CR 603.3b; the searched pin ranks each trigger independently, so every ordering of outcomes is
+// reachable). MODE + TARGET ARE SEARCHED: Plan::grace_choice -> GameState::scripted_grace_choice, a
+// PACKED rank per trigger ordinal into GraceOptions, consumed + cleared here (both worlds, lockstep:
+// GameEngine::EndStep and TurnSolver's SimulateEndAndStartNextTurn). Unpinned (-1) = each list's front,
+// the provider default -- the playout policy beyond the horizon. A rank past the list clamps to its last
+// entry (duplicate-not-whiff, the saga rule).
+//
+// LEGAL TARGETS are fixed when the triggers go on the stack (CR 603.3d) -- the beginning of the end
+// step -- so the caller snapshots them (SnapshotEndStepGraceTargets) BEFORE the step's other
+// beginning-of-step effects run (a delayed sacrifice cannot add a target). Mode 2 is offered only with a
+// legal target (CR 603.3c); with none the gain mode is the only choice. Each trigger's list is built at
+// its own resolution from the snapshot cards STILL in the graveyard, so an earlier trigger's return is
+// never re-targeted (that pick would only fizzle, CR 608.2b -- see LifegainGraceFolds' note).
+constexpr int kGracePinBits      = 4;
+constexpr int kGracePinMask      = (1 << kGracePinBits) - 1;
+constexpr int kGraceMaxOrdinals  = 3;   // the int16 pin holds 3 x 4 bits; a 4th+ copy takes its front
+
+inline bool HasEndStepGraceTrigger(const CardParams& p) { return p.endstep_modal_reanimate_mv >= 0; }
+
+inline GyReanimateFilter GraceFilter(const CardParams& p)
+{
+    GyReanimateFilter f;
+    f.exact_mv = p.endstep_modal_reanimate_mv;
+    return f;
+}
+
+// The legal-target snapshot at the beginning of the end step: every graveyard card number that ANY of
+// our Graces could target. Empty (and free) for every deck without the card.
+inline std::vector<int> SnapshotEndStepGraceTargets(const GameState& state)
+{
+    std::vector<int> out;
+    if (!state.deck_has_endstep_reanimate) { return out; }
+    const int me = state.active_player_index;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != me || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || !HasEndStepGraceTrigger(d->params)) { continue; }
+        for (int num : GyReanimateCandidates(state, me, GraceFilter(d->params)))
+        { if (std::find(out.begin(), out.end(), num) == out.end()) { out.push_back(num); } }
+    }
+    return out;
+}
+
+// ONE trigger's option list (kGraceGainOption or a graveyard m_number), in the order the searched rank
+// indexes: the engine's default (returns in GyReturnOrder, then the gain mode), then the provider's
+// GraceOptions (reorder / proven-dominance restrict). `snapshot` = the legal targets (nullptr = the
+// current graveyard, used by the enumerator's width estimate).
+inline std::vector<int> GraceOptions(const GameState& state, int controller, const CardParams& pp,
+                                     const std::vector<int>* snapshot)
+{
+    std::vector<int> opts = GyReanimateCandidateNames(state, controller, GraceFilter(pp), snapshot);
+    if (pp.endstep_modal_lifegain > 0) { opts.push_back(DecisionProvider::kGraceGainOption); }
+    if (opts.size() > 1)
+    {
+        std::vector<int> pv = opts;
+        ResolveProvider(state).GraceOptions(state, controller, pv);
+        if (!pv.empty()) { opts.swap(pv); }
+    }
+    return opts;
+}
+
+inline void PerformEndStepAbidingGrace(GameState& state, const std::vector<int>& snapshot)
+{
+    const int pin = state.scripted_grace_choice;
+    state.scripted_grace_choice = -1;   // consumed by this end step whatever happens below
+    if (!state.deck_has_endstep_reanimate) { return; }
+    const int me = state.active_player_index;
+    // Snapshot the TRIGGERING definitions first: a return push_backs onto the battlefield.
+    std::vector<const CardDefinition*> triggers;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != me || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && HasEndStepGraceTrigger(d->params)) { triggers.push_back(d); }
+    }
+    for (std::size_t j = 0; j < triggers.size(); ++j)
+    {
+        const CardParams& pp = triggers[j]->params;
+        const std::string src = triggers[j]->card.m_name.str();
+        const std::vector<int> opts = GraceOptions(state, me, pp, &snapshot);
+        if (opts.empty()) { continue; }   // no gain mode and no target: the ability is removed (CR 603.3c)
+        int k = 0;
+        if (pin >= 0 && static_cast<int>(j) < kGraceMaxOrdinals)
+        { k = (pin >> (kGracePinBits * static_cast<int>(j))) & kGracePinMask; }
+        k = std::min(k, static_cast<int>(opts.size()) - 1);
+        int choice = opts[static_cast<std::size_t>(k)];
+        // Human play (`gy_return_one`): every legal option, one per graveyard COPY, unfolded. Asked only
+        // when a return is legal; with none the gain mode is the only choice.
+        if (g_play_gy_return_one_chooser != nullptr)
+        {
+            const std::vector<int> per_copy = GyReanimateCandidates(state, me, GraceFilter(pp), &snapshot);
+            if (!per_copy.empty())
+            {
+                std::vector<Card> cards;
+                const std::vector<Card>& gy = state.players[static_cast<std::size_t>(me)].graveyard;
+                for (int num : per_copy)
+                { for (const Card& c : gy) { if (c.m_number == num) { cards.push_back(c); break; } } }
+                int def = 0;
+                if (choice != DecisionProvider::kGraceGainOption)
+                {
+                    for (std::size_t ci = 0; ci < per_copy.size(); ++ci)
+                    { if (per_copy[ci] == choice) { def = static_cast<int>(ci) + 1; break; } }
+                }
+                else if (pp.endstep_modal_lifegain <= 0) { def = 1; }
+                const std::string alt = pp.endstep_modal_lifegain > 0
+                    ? "Gain " + std::to_string(pp.endstep_modal_lifegain) + " life" : std::string();
+                int r = (*g_play_gy_return_one_chooser)(state, me, src, alt, cards, def);
+                if (r < 0 || r > static_cast<int>(per_copy.size())) { r = def; }
+                if (r == 0 && pp.endstep_modal_lifegain <= 0) { r = def; }
+                choice = (r == 0) ? DecisionProvider::kGraceGainOption : per_copy[static_cast<std::size_t>(r - 1)];
+            }
+        }
+        if (choice == DecisionProvider::kGraceGainOption)
+        {
+            if (g_play_event_sink)
+            {
+                EmitPlayEvent(state.turn_number, "trigger",
+                              src + " (end step): you gain " + std::to_string(pp.endstep_modal_lifegain) + " life");
+            }
+            GainLife(state, me, pp.endstep_modal_lifegain);
+        }
+        else
+        {
+            ResolveGyReanimate(state, me, choice, src);
+        }
+    }
+}
+
+// ==== EMERIA, THE SKY RUIN: "At the beginning of your upkeep, if you control seven or more Plains, you
+// may return target creature card from your graveyard to the battlefield." =============================
+//
+// INTERVENING IF (CR 603.4): the trigger exists only if the land count holds as the upkeep begins, and
+// it does nothing if the count no longer holds on resolution -- both are checked here (nothing between
+// the two can move the count in this engine, but the re-check is the rule). The count is LANDS you
+// control with the subtype ("Plains": basic or not); Emeria itself has no land subtype.
+//
+// LEGAL TARGETS are fixed when the triggers go on the stack (CR 603.3d): a snapshot at the top of the
+// upkeep, the Grace snapshot rule. Each trigger's list is built at its own resolution from the snapshot
+// cards STILL in the graveyard (GyReanimateCandidateNames: tokens excluded, ZoneCard-based, one per
+// distinct NAME, ordered by the provider's GyReturnOrder). With no legal target the trigger is removed
+// (CR 603.3d) -- nothing to choose.
+//
+// WHICH CARD (or "you may" decline) IS SEARCHED: Plan::upkeep_gy_reanimate_choice ->
+// GameState::scripted_upkeep_gy_reanimate, a PACKED rank per trigger ordinal (kUpkeepReanimatePinBits
+// each, low first), decided in the PREVIOUS turn's main phase and consumed + cleared here (both worlds,
+// lockstep: GameEngine::UpkeepTail and TurnSolver's SimulateEndAndStartNextTurn). A rank past the list
+// clamps to its last entry (duplicate-not-whiff); kUpkeepReanimateDecline declines. Unpinned (-1) = the
+// list's front: the playout policy beyond the horizon (and every executor upkeep whose previous turn
+// did not branch the axis -- MTG_EMERIA_AXIS=0, or a d0 decision).
+//
+// Several triggers (non-legendary: more than one Emeria) resolve in battlefield order, each re-checking
+// the intervening if and seeing the previous return (a returned card is no longer a target).
+constexpr int kUpkeepReanimatePinBits     = 4;
+constexpr int kUpkeepReanimatePinMask     = (1 << kUpkeepReanimatePinBits) - 1;
+constexpr int kUpkeepReanimateDecline     = kUpkeepReanimatePinMask;   // the "you may" decline code
+constexpr int kUpkeepReanimateMaxRanks    = kUpkeepReanimatePinMask;   // ranks 0..14
+constexpr int kUpkeepReanimateMaxOrdinals = 3;   // the int16 pin holds 3 x 4 bits; a 4th+ copy takes its front
+
+inline bool HasUpkeepGyReanimate(const CardParams& p) { return p.upkeep_gy_reanimate; }
+
+inline bool UpkeepGyReanimateConditionMet(const GameState& state, int controller, const CardParams& p)
+{
+    return p.upkeep_gy_reanimate_land_threshold <= 0
+        || CountControlledLandsWithSubtype(state, controller, p.upkeep_gy_reanimate_land_subtype)
+               >= p.upkeep_gy_reanimate_land_threshold;
+}
+
+// Emeria's target class: any creature card (no mana-value limit).
+inline GyReanimateFilter UpkeepGyReanimateFilter(const CardParams&) { return GyReanimateFilter{}; }
+
+// What the upkeep's beginning fixed (CR 603.3d / 603.4): the sources whose intervening if held as the
+// upkeep began (their DEFINITIONS -- a return push_backs onto the battlefield) and the legal targets.
+// Taken at the TOP of the upkeep, BEFORE any other beginning-of-upkeep trigger resolves (upkeep tokens,
+// Fading, Varchild's gifts, Defense of the Heart, Slumber), by both callers: GameEngine::UpkeepTail and
+// the rollout's SimulateEndAndStartNextTurn (lockstep). Empty and free for every deck without the card.
+struct UpkeepGyReanimateSnapshot
+{
+    std::vector<const CardDefinition*> triggers;
+    std::vector<int>                   targets;
+};
+inline UpkeepGyReanimateSnapshot SnapshotUpkeepGyReanimate(const GameState& state)
+{
+    UpkeepGyReanimateSnapshot snap;
+    if (!state.deck_has_upkeep_reanimate) { return snap; }
+    const int me = state.active_player_index;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != me || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && HasUpkeepGyReanimate(d->params) && UpkeepGyReanimateConditionMet(state, me, d->params))
+        { snap.triggers.push_back(d); }
+    }
+    if (!snap.triggers.empty())
+    { snap.targets = GyReanimateCandidates(state, me, UpkeepGyReanimateFilter(snap.triggers[0]->params)); }
+    return snap;
+}
+
+inline void PerformUpkeepGyReanimate(GameState& state, const UpkeepGyReanimateSnapshot& snap)
+{
+    const int pin = state.scripted_upkeep_gy_reanimate;
+    state.scripted_upkeep_gy_reanimate = -1;   // consumed by this upkeep whatever happens below
+    if (!state.deck_has_upkeep_reanimate) { return; }
+    const int me = state.active_player_index;
+    const std::vector<const CardDefinition*>& triggers = snap.triggers;
+    if (triggers.empty()) { return; }
+    const std::vector<int>& snapshot = snap.targets;
+    for (std::size_t j = 0; j < triggers.size(); ++j)
+    {
+        const CardParams& pp = triggers[j]->params;
+        const std::string src = triggers[j]->card.m_name.str();
+        // CR 603.4: re-check the intervening if on resolution.
+        if (!UpkeepGyReanimateConditionMet(state, me, pp)) { continue; }
+        const GyReanimateFilter f = UpkeepGyReanimateFilter(pp);
+        const std::vector<int> opts = GyReanimateCandidateNames(state, me, f, &snapshot);
+        if (opts.empty()) { continue; }   // no legal target: the trigger is removed (CR 603.3d)
+        int k = 0;
+        if (pin >= 0 && static_cast<int>(j) < kUpkeepReanimateMaxOrdinals)
+        { k = (pin >> (kUpkeepReanimatePinBits * static_cast<int>(j))) & kUpkeepReanimatePinMask; }
+        bool decline = pp.upkeep_gy_reanimate_may && k == kUpkeepReanimateDecline;
+        int choice = decline ? -1 : opts[static_cast<std::size_t>(std::min(k, static_cast<int>(opts.size()) - 1))];
+        // Human play (`gy_return_one`, alt_text "Return nothing"): every legal card, one per graveyard
+        // COPY, unfolded. 0 = decline (only when "may").
+        if (g_play_gy_return_one_chooser != nullptr)
+        {
+            const std::vector<int> per_copy = GyReanimateCandidates(state, me, f, &snapshot);
+            if (!per_copy.empty())
+            {
+                std::vector<Card> cards;
+                const std::vector<Card>& gy = state.players[static_cast<std::size_t>(me)].graveyard;
+                for (int num : per_copy)
+                { for (const Card& c : gy) { if (c.m_number == num) { cards.push_back(c); break; } } }
+                int def = 0;
+                if (!decline)
+                {
+                    for (std::size_t ci = 0; ci < per_copy.size(); ++ci)
+                    { if (per_copy[ci] == choice) { def = static_cast<int>(ci) + 1; break; } }
+                }
+                if (def == 0 && !pp.upkeep_gy_reanimate_may) { def = 1; }
+                const std::string alt = pp.upkeep_gy_reanimate_may ? std::string("Return nothing") : std::string();
+                int r = (*g_play_gy_return_one_chooser)(state, me, src, alt, cards, def);
+                if (r < 0 || r > static_cast<int>(per_copy.size())) { r = def; }
+                if (r == 0 && !pp.upkeep_gy_reanimate_may) { r = def; }
+                decline = (r == 0);
+                choice  = decline ? -1 : per_copy[static_cast<std::size_t>(r - 1)];
+            }
+        }
+        if (decline)
+        {
+            if (g_play_event_sink)
+            {
+                EmitPlayEvent(state.turn_number, "trigger", src + " (upkeep): returned nothing");
+            }
+            continue;
+        }
+        if (g_play_event_sink)
+        {
+            EmitPlayEvent(state.turn_number, "trigger",
+                          src + " (upkeep): " + std::to_string(CountControlledLandsWithSubtype(
+                              state, me, pp.upkeep_gy_reanimate_land_subtype))
+                          + " " + pp.upkeep_gy_reanimate_land_subtype + " -- return a creature card");
+        }
+        ResolveGyReanimate(state, me, choice, src);
+    }
+}
+
+// The ping's TARGET pin: 0 = the opponent's face (the only autonomous target), > 0 = a permanent's
+// m_number, -1 = our own face. Human play picks at resolution instead (g_play_target_chooser).
+inline thread_local int g_counter_ping_target_pin = 0;
+struct CounterPingTargetPinScope
+{
+    int prev;
+    explicit CounterPingTargetPinScope(int t) : prev(g_counter_ping_target_pin) { g_counter_ping_target_pin = t; }
+    ~CounterPingTargetPinScope() { g_counter_ping_target_pin = prev; }
+    CounterPingTargetPinScope(const CounterPingTargetPinScope&)            = delete;
+    CounterPingTargetPinScope& operator=(const CounterPingTargetPinScope&) = delete;
+};
+
+// "Remove a +1/+1 counter from this creature: It deals N damage to any target." One activation:
+// target (CR 602.2b: chosen before the cost) -> COST (remove the counter) -> the SBA check that runs
+// before the ability resolves (a body left at 0 toughness dies here, CR 704.3) -> RESOLUTION with the
+// source's last-known information (CR 608.2h): N damage, and if it had lifelink ONE life-gain event of
+// N (CR 702.15b / 119.10) through the shared GainLife hook -- Heliod / Pridemate / Voice fire there.
+// `quiet` suppresses the per-ping history line (the loop prints one summary). Returns false (nothing
+// paid) when the source is gone or has no counter.
+inline bool ResolveCounterPing(GameState& state, int controller, int source_id, bool ask_human, bool quiet)
+{
+    int si = -1;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& p = state.battlefield[i];
+        if (p.card.m_number == source_id && p.controller_index == controller) { si = i; break; }
+    }
+    if (si < 0) { return false; }
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(state.battlefield[si].card);
+    if (d == nullptr || d->params.remove_counter_ping_damage <= 0) { return false; }
+    if (PlusCountersOn(state.battlefield[si]) <= 0) { return false; }
+    const int  dmg      = d->params.remove_counter_ping_damage;
+    const Card src_card = state.battlefield[si].card;
+    const bool lifelink = CreatureHasLifelink(state.battlefield[si], state);   // last-known information
+
+    // TARGET. kind 0 = player (index), kind 1 = permanent (m_number).
+    int t_kind = 0, t_player = 1 - controller, t_num = 0;
+    if (g_counter_ping_target_pin > 0)       { t_kind = 1; t_num = g_counter_ping_target_pin; }
+    else if (g_counter_ping_target_pin == -1) { t_player = controller; }
+    if (ask_human && g_play_target_chooser != nullptr)
+    {
+        const std::vector<ChosenTarget> heur{ ChosenTarget{ 0, 1 - controller, 0 } };
+        const std::vector<ChosenTarget> got = (*g_play_target_chooser)(state, *d, controller, 1, dmg, heur);
+        if (!got.empty())
+        {
+            if (got[0].kind == 0) { t_kind = 0; t_player = got[0].index; }
+            else if (got[0].index >= 0 && got[0].index < static_cast<int>(state.battlefield.size()))
+            { t_kind = 1; t_num = state.battlefield[got[0].index].card.m_number; }
+        }
+    }
+
+    // COST, then the SBA check before resolution.
+    RemovePlusCounters(state.battlefield[si], 1);
+    if (CounterPingSbaDead(state.battlefield[si], state))
+    { CounterPingKillAt(state, static_cast<std::size_t>(si), "its last +1/+1 counter was removed"); }
+
+    // RESOLUTION. A creature target that left is an illegal target: the ability does nothing (CR 608.2b).
+    bool dealt = false;
+    std::string what;
+    if (t_kind == 0)
+    {
+        // THE SHARED NONCOMBAT DAMAGE PATH: an armed board (Prevent Damage: Purity / Tamanoa) takes the
+        // event through dmgev::DealDamageEvent like every other damage source; otherwise the plain
+        // life change every unarmed noncombat source makes. Ballista is a CREATURE source (no Tamanoa).
+        const bool to_me = (t_player == controller);
+        if (state.dmg_events_armed)
+        {
+            dmgev::DealDamageEvent(state, controller, /*src_is_creature=*/true, /*combat=*/false,
+                                   to_me ? dmg : 0, to_me ? 0 : dmg, /*to_creatures_total=*/0,
+                                   src_card.m_name.str().c_str());
+        }
+        else
+        {
+            state.players[t_player].life -= dmg;
+            if (!to_me) { state.opponent_lost_life_this_turn = true; }
+        }
+        dealt = true;
+        what  = to_me ? std::string("you") : std::string("the opponent");
+    }
+    else
+    {
+        for (std::size_t i = 0; i < state.battlefield.size(); ++i)
+        {
+            Permanent& q = state.battlefield[i];
+            if (q.card.m_number != t_num || !q.card.IsCreature()) { continue; }
+            q.damage += dmg;
+            dealt = true;
+            what  = q.card.m_name.str();
+            if (CounterPingSbaDead(q, state)) { CounterPingKillAt(state, i, "lethal damage"); }
+            break;
+        }
+    }
+    if (dealt && !quiet && g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "damage",
+                      "\xF0\x9F\x8E\xAF " + src_card.m_name.str() + ": removed a +1/+1 counter, "
+                      + std::to_string(dmg) + " damage to " + what
+                      + (t_kind == 0 && t_player != controller
+                             ? " (" + std::to_string(state.players[t_player].life) + " left)" : std::string())
+                      + (lifelink ? " -- lifelink" : ""));
+    }
+    if (dealt && lifelink) { GainLife(state, controller, dmg); }
+    // ...and THE CREATURE-DAMAGE-TO-OPPONENT HOOK the combat path fires (Curiosity / Tandem Lookout
+    // draws), while the source is still on the battlefield to carry them. One bool test for a deck
+    // without the Niv loop (deck_has_draw_ping).
+    if (dealt && t_kind == 0 && t_player != controller && state.deck_has_draw_ping)
+    {
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            if (state.battlefield[i].card.m_number == source_id && state.battlefield[i].controller_index == controller)
+            { OnCreatureDealtDamageToOpponent(state, i, 1); break; }
+        }
+    }
+    return true;
+}
+
+// What the Heliod + Ballista loop still needs from pinger `src`: true iff the loop is STRUCTURALLY
+// possible (an own lifegain_target_own_counter permanent; `src` a live own pinger with >= 1 counter;
+// lifelink already on it OR an own grant source other than `src`; >= 2 counters OR a self_counter_cost
+// top-up), with `extra` = the MANA still to pay (the cheapest grant if it lacks lifelink, plus one {4}
+// if it has exactly one counter). Total-only affordability is the caller's (ActAffordable's rule).
+inline bool PingLoopNeeds(const GameState& state, int controller, const Permanent& src, ManaCost& extra)
+{
+    if (src.controller_index != controller || !src.card.IsCreature()) { return false; }
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(src.card);
+    if (d == nullptr || d->params.remove_counter_ping_damage <= 0) { return false; }
+    if (DoomedEntrant(src, state)) { return false; }
+    const int n = PlusCountersOn(src);
+    if (n <= 0) { return false; }
+    bool heliod = false, have_grant = false;
+    ManaCost grant;
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != controller || q.def_absent) { continue; }
+        const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+        if (qd == nullptr) { continue; }
+        if (qd->params.lifegain_target_own_counter) { heliod = true; }
+        if (qd->params.lifelink_grant_cost.has_value() && q.card.m_number != src.card.m_number)
+        {
+            const ManaCost c = EffectiveActivationCost(state, controller, q.card, *qd->params.lifelink_grant_cost);
+            if (!have_grant || c.ManaValue() < grant.ManaValue()) { grant = c; have_grant = true; }
+        }
+    }
+    if (!heliod) { return false; }
+    extra = ManaCost{};
+    if (!CreatureHasLifelink(src, state))
+    {
+        if (!have_grant) { return false; }
+        extra = grant;
+    }
+    int topup = 0;
+    if (n < 2)
+    {
+        if (!d->params.self_counter_cost.has_value()) { return false; }
+        extra = extra.PlusAdditionalCost(
+            EffectiveActivationCost(state, controller, src.card, *d->params.self_counter_cost));
+        topup = 1;
+    }
+    // It must survive paying one counter at its post-top-up count (damage marked counts, ruling 2).
+    if (LethalToughness(src, state) + topup - 1 <= src.damage) { return false; }
+    return true;
+}
+
+// Total mana available right now (lands/rocks/dorks + the float) -- the ActAffordable total-only rule.
+inline int PingLoopManaTotal(const GameState& state)
+{
+    ManaPool have = AvailableManaPool(state, nullptr);
+    have.AddPool(state.floating_mana);
+    return static_cast<int>(have.Total());
+}
+
+// Is the loop live from `src` with `total` mana available? (A proven kill: the opponent's life is
+// finite and every iteration returns the counter.)
+inline bool PingLoopLiveNow(const GameState& state, int controller, const Permanent& src, int total)
+{
+    if (state.players[1 - controller].life <= 0) { return false; }
+    ManaCost extra;
+    if (!PingLoopNeeds(state, controller, src, extra)) { return false; }
+    return extra.ManaValue() <= total;
+}
+
+// THE HELIOD "BUMP" PICK (read only by LifegainHeliodComboProvider::LifegainCounterTarget, behind
+// MTG_LHC_BUMP_TARGET): the battlefield index of a ONE-counter pinger that this Heliod counter would make
+// loop-live -- lifelink already on it, or the grant affordable from the mana available NOW -- else -1.
+// The argument for why taking it is never worse than the default pick lives with the provider hook.
+inline int PingLoopBumpTarget(const GameState& state, int controller)
+{
+    int total = -1;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& q = state.battlefield[i];
+        if (q.controller_index != controller || q.def_absent || !q.card.IsCreature()) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+        if (d == nullptr || d->params.remove_counter_ping_damage <= 0) { continue; }
+        if (PlusCountersOn(q) != 1 || DoomedEntrant(q, state)) { continue; }
+        // As if the counter were already on it: lifelink + grant only (no {4} top-up -- that is what
+        // this counter replaces).
+        Permanent bumped = q;
+        AddPlusCounters(bumped, 1);
+        ManaCost extra;
+        if (!PingLoopNeeds(state, controller, bumped, extra)) { continue; }
+        if (extra.ManaValue() > 0)
+        {
+            if (total < 0) { total = PingLoopManaTotal(state); }
+            if (extra.ManaValue() > total) { continue; }
+        }
+        return i;
+    }
+    return -1;
+}
+
+// THE LOOP (PermAbilityMode::PingLoop's resolution). The caller has paid PingLoopCostNow -- the grant if it
+// lacks lifelink and the {4} if it holds one counter, priced on this same board a moment ago -- so what
+// this grants and tops up is exactly what was paid (both worlds pay PingLoopCostNow, never the stale plan
+// cost).
+// Grants the lifelink if missing (Heliod's {1}{W}, paid in that cost), tops a one-counter Ballista up
+// with the paid {4}, then pings the opponent's face one real activation at a time with Heliod's counter
+// pinned back on the Ballista, until the opponent is dead. Execution-verified: it stops the moment an
+// iteration fails to return the counter (a premise broke), having dealt exactly the pings it did.
+inline void RunPingLoop(GameState& state, int controller, int source_id)
+{
+    auto find = [&]() -> int
+    {
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            const Permanent& p = state.battlefield[i];
+            if (p.card.m_number == source_id && p.controller_index == controller) { return i; }
+        }
+        return -1;
+    };
+    int si = find();
+    if (si < 0) { return; }
+    const std::string name = state.battlefield[si].card.m_name.str();
+    if (!CreatureHasLifelink(state.battlefield[si], state))
+    {
+        state.battlefield[si].temp_lifelink = true;
+        if (g_play_event_sink && !g_tap_speculating)
+        { EmitPlayEvent(state.turn_number, "ability", "\xE2\x9D\xA4\xEF\xB8\x8F Heliod {1}{W}: " + name
+                                                      + " gains lifelink until end of turn"); }
+    }
+    if (PlusCountersOn(state.battlefield[si]) < 2)
+    {
+        PutPlusCounters(state, state.battlefield[si], 1);
+        if (g_play_event_sink && !g_tap_speculating)
+        { EmitPlayEvent(state.turn_number, "ability", name + " {4}: +1/+1 counter"); }
+    }
+    const int life_before = state.players[1 - controller].life;
+    int pings = 0;
+    {
+        LifegainCounterTargetPinScope pin(source_id);
+        const int saved_target = g_counter_ping_target_pin;
+        g_counter_ping_target_pin = 0;   // the opponent's face
+        while (state.players[1 - controller].life > 0 && pings < 100000)
+        {
+            si = find();
+            if (si < 0) { break; }
+            const int before = PlusCountersOn(state.battlefield[si]);
+            if (!ResolveCounterPing(state, controller, source_id, /*ask_human=*/false, /*quiet=*/true)) { break; }
+            ++pings;
+            si = find();
+            if (si < 0 || PlusCountersOn(state.battlefield[si]) < before) { break; }
+        }
+        g_counter_ping_target_pin = saved_target;
+    }
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "damage",
+                      "\xE2\x99\xBE\xEF\xB8\x8F COMBO -- " + name + " + Heliod: " + std::to_string(pings)
+                      + " lifelinked pings, opponent " + std::to_string(life_before) + " -> "
+                      + std::to_string(state.players[1 - controller].life));
+    }
+}
+
+// ---- THE COUNTER-PING OFFERS (the emission's set, shared by CollectActions, the breakpoint availability
+// mirror and site 9's activation keys so the three cannot drift). One offer = (target, K pings):
+// target 0 = the opponent's face, > 0 = a creature's m_number.
+//
+// The ENGINE applies only SOUND folds here; every deck-pool restriction is the provider's
+// (DecisionProvider::CounterPingCounts, which decides the K set per target -- empty declines):
+//   * the face: always asked, K over 1..counters.
+//   * a CREATURE target is offered only at the K that kills it (fewer pings deal damage that changes
+//     nothing; more cannot land -- the target is gone), and only when that death PAYS: an own creature
+//     whose death fires a payoff (SelfSacHasDeathPayoff -- Daxos, persist, an LTB return, Abiding Grace
+//     for its exact mana value, Emeria), or an opposing one while we hold an opponent-creature-dies
+//     watcher (opp_dies_life_loss). A death that pays nothing is weakly dominated by aiming the same
+//     pings at the face: identical counters spent, identical lifelink gain, and the face damage can
+//     only help. The Ballista itself is never a target (removing its own last counter already kills it).
+//   * a LIVE Heliod loop (PingLoopLiveNow) wins this turn, so every single ping beside it is dominated
+//     (and a ping applied first could take the Ballista below the loop's priced counter count).
+// HUMAN PLAY: one ping per click (the main phase re-prompts), target asked at resolution -- everything.
+// MTG_UNPRUNE=counterping: the provider is bypassed (the generic full K set per target).
+struct CounterPingOffer { int target; int k; };
+inline bool CounterPingCanActivate(const GameState& state, int controller, const Permanent& src)
+{
+    if (src.controller_index != controller || !src.card.IsCreature()) { return false; }
+    return PlusCountersOn(src) > 0 && !DoomedEntrant(src, state);
+}
+inline void CollectCounterPingOffers(const GameState& state, int controller, const Permanent& src, int loop_total,
+                                     std::vector<CounterPingOffer>& out)
+{
+    out.clear();
+    if (!CounterPingCanActivate(state, controller, src)) { return; }
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(src.card);
+    if (d == nullptr || d->params.remove_counter_ping_damage <= 0) { return; }
+    if (HumanPlayActive()) { out.push_back(CounterPingOffer{ 0, 1 }); return; }
+    if (PingLoopLiveNow(state, controller, src, loop_total)) { return; }
+    const int  dmg  = d->params.remove_counter_ping_damage;
+    const int  have = PlusCountersOn(src);
+    const bool open = DecisionUnpruned(UnprunedGate::CounterPing);
+    const DecisionProvider& prov = ResolveProvider(state);
+    auto add = [&](int target, int max_k)
+    {
+        const std::vector<int> ks = open ? prov.DecisionProvider::CounterPingCounts(state, src, target, max_k)
+                                         : prov.CounterPingCounts(state, src, target, max_k);
+        for (int k : ks) { if (k >= 1 && k <= max_k) { out.push_back(CounterPingOffer{ target, k }); } }
+    };
+    add(0, have);
+    bool opp_death_pays = false;
+    for (const Permanent& w : state.battlefield)
+    {
+        if (w.controller_index != controller || w.def_absent) { continue; }
+        const CardDefinition* wd = CardDatabase::Instance().LookupCached(w.card);
+        if (wd != nullptr && wd->params.opp_dies_life_loss > 0) { opp_death_pays = true; break; }
+    }
+    for (const Permanent& q : state.battlefield)
+    {
+        if (!q.card.IsCreature() || q.card.m_number == 0 || q.card.m_number == src.card.m_number) { continue; }
+        if (DoomedEntrant(q, state) || q.card.HasKeyword(Keyword::Indestructible)) { continue; }
+        const int need_dmg = LethalToughness(q, state) - q.damage;
+        if (need_dmg <= 0) { continue; }
+        const int k = (need_dmg + dmg - 1) / dmg;
+        if (k > have) { continue; }
+        const bool pays = (q.controller_index == controller)
+                        ? SelfSacHasDeathPayoff(state, controller, q.card.m_number)
+                        : opp_death_pays;
+        if (pays) { add(q.card.m_number, k); }
+    }
+}
+inline bool CounterPingAnyOffer(const GameState& state, int controller, const Permanent& src, int loop_total)
+{
+    std::vector<CounterPingOffer> offers;
+    CollectCounterPingOffers(state, controller, src, loop_total, offers);
+    return !offers.empty();
+}
+
+// A PingLoop activation's TRUE cost at activation (both worlds pay this, lockstep -- the TapBloodCostNow
+// precedent): PingLoopNeeds' extra mana on the board AS IT IS NOW, so a Ballista that dropped to one
+// counter since the plan was priced pays for its {4}, and one that gained lifelink skips the grant.
+// nullopt = the loop is no longer possible (the liveness check refuses it first).
+inline std::optional<ManaCost> PingLoopCostNow(const GameState& state, int controller, int source_id)
+{
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.card.m_number != source_id || p.controller_index != controller) { continue; }
+        ManaCost extra;
+        if (!PingLoopNeeds(state, controller, p, extra)) { return std::nullopt; }
+        return extra;
+    }
+    return std::nullopt;
+}
+
+// Pay-free sum of what the own pingers can deal this turn by pings alone (every +1/+1 counter, the last
+// one included -- removing it kills the body but the damage still resolves).
+inline int CounterPingReachOnBoard(const GameState& state, int controller)
+{
+    int reach = 0;
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != controller || q.def_absent || !q.card.IsCreature()) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+        if (d == nullptr || d->params.remove_counter_ping_damage <= 0 || DoomedEntrant(q, state)) { continue; }
+        reach += PlusCountersOn(q) * d->params.remove_counter_ping_damage;
+    }
+    return reach;
+}
+
+// THE POST-COMBAT-DAMAGE LETHAL FINISH, called right after combat damage in BOTH worlds
+// (GameEngine::CombatPhase / TurnSolver's combat). Pings are instant-speed, so after combat damage a
+// Ballista that attacked can still remove every counter -- the double dip a single searched main
+// cannot express. Fires ONLY when it WINS this turn: (a) a loop that needs no mana is live, or (b) the
+// pingers' counters alone cover the opponent's remaining life. A sound proven-kill fold, not a greedy
+// pick: any non-lethal non-lifelinked ping is weakly dominated by deferring it (the passive opponent
+// never removes the Ballista), and a lethal one is the best outcome there is. Skipped in human play
+// (the human pings in main 2). Gated on GameState::deck_has_counter_ping.
+inline void CounterPingFinish(GameState& state, int active)
+{
+    if (!state.deck_has_counter_ping || HumanPlayActive()) { return; }
+    if (state.players[1 - active].life <= 0 || state.players[active].life <= 0) { return; }
+    std::vector<int> pingers;
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != active || q.def_absent || !q.card.IsCreature()) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+        if (d != nullptr && d->params.remove_counter_ping_damage > 0) { pingers.push_back(q.card.m_number); }
+    }
+    if (pingers.empty()) { return; }
+    for (int num : pingers)
+    {
+        for (const Permanent& q : state.battlefield)
+        {
+            if (q.card.m_number != num || q.controller_index != active) { continue; }
+            ManaCost extra;
+            if (PingLoopNeeds(state, active, q, extra) && extra.ManaValue() == 0)
+            {
+                RunPingLoop(state, active, num);
+                return;
+            }
+            break;
+        }
+    }
+    if (CounterPingReachOnBoard(state, active) < state.players[1 - active].life) { return; }
+    const int saved_target = g_counter_ping_target_pin;
+    g_counter_ping_target_pin = 0;
+    for (int num : pingers)
+    {
+        while (state.players[1 - active].life > 0
+               && ResolveCounterPing(state, active, num, /*ask_human=*/false, /*quiet=*/false)) {}
+        if (state.players[1 - active].life <= 0) { break; }
+    }
+    g_counter_ping_target_pin = saved_target;
+}
+
+// K counter pings beyond the first (the repeatable CounterPing's K-1, both worlds' repeat dispatch).
+// Counter-bounded like SpendSporeActivations; stops when the source is gone or out of counters.
+inline int SpendCounterPingActivations(GameState& state, int controller, int source_id, int extra)
+{
+    int done = 0;
+    for (int k = 0; k < extra; ++k)
+    {
+        if (!ResolveCounterPing(state, controller, source_id, /*ask_human=*/true, /*quiet=*/false)) { break; }
+        ++done;
+    }
+    return done;
+}
+
 // Is an ActivatePermAbility's source still there and still activatable? Checked BEFORE paying in
 // both worlds, so a stranded activation (its source left, or it got tapped earlier in the same
 // plan) is a clean no-op rather than a paid one -- the UntapCreature discipline.
@@ -25427,6 +29095,14 @@ inline bool PermAbilitySourceLive(const GameState& state, int controller, int so
     for (const Permanent& p : state.battlefield)
     {
         if (p.card.m_number != source_id || p.controller_index != controller) { continue; }
+        // Walking Ballista: the ping's cost is a +1/+1 counter (no counter, no activation), and the Heliod
+        // loop's premise must still hold before its grant / top-up is paid (a stale plan is a no-op).
+        if (mode == PermAbilityMode::CounterPing && PlusCountersOn(p) <= 0) { return false; }
+        if (mode == PermAbilityMode::PingLoop)
+        {
+            ManaCost extra;
+            if (!PingLoopNeeds(state, controller, p, extra)) { return false; }
+        }
         // Bilbo: "Activate only if you have 111 or more life." An activation RESTRICTION, checked
         // when the ability is activated (CR 602.5b) -- i.e. here, before any cost is paid (a
         // painland's pain while paying cannot un-activate it).
@@ -25650,6 +29326,9 @@ inline const char* PermAbilityLabel(PermAbilityMode mode)
                                               return "tap five untapped Vampires: gain control of target creature";
         case PermAbilityMode::TransformSelf:  return "transform it (you control five or more Vampires)";
         case PermAbilityMode::TapTargetPump:  return "target creature gets a pump until end of turn";
+        case PermAbilityMode::PayCounterSelf: return "put a +1/+1 counter on this creature";
+        case PermAbilityMode::CounterPing:    return "remove a +1/+1 counter: 1 damage to any target";
+        case PermAbilityMode::PingLoop:       return "Heliod loop: ping until the opponent is dead";
         default:                              return "activate";
     }
 }
@@ -26023,6 +29702,24 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
             }
             break;
         }
+        case PermAbilityMode::PayCounterSelf:
+        {
+            // Walking Ballista: "{4}: Put a +1/+1 counter on this creature." A put (doubler-aware); not
+            // a life-gain event.
+            PutPlusCounters(state, state.battlefield[idx], 1);
+            if (g_play_event_sink && !g_tap_speculating)
+            {
+                EmitPlayEvent(state.turn_number, "counter", src_name + ": +1/+1 counter ("
+                              + std::to_string(PlusCountersOn(state.battlefield[idx])) + ")");
+            }
+            break;
+        }
+        case PermAbilityMode::CounterPing:
+            ResolveCounterPing(state, controller, source_id, /*ask_human=*/true, /*quiet=*/false);
+            break;
+        case PermAbilityMode::PingLoop:
+            RunPingLoop(state, controller, source_id);
+            break;
         case PermAbilityMode::GrantLifelink:
         {
             // Heliod, Sun-Crowned: "{1}{W}: Another target creature gains lifelink until end of
@@ -26777,6 +30474,9 @@ inline int SpendRepeatActivations(GameState& state, int controller, int source_i
                                       // player" -- the same silent-zero trap as the note above.
                                       : (mode == PermAbilityMode::PingAll)
                                       ? &def.params.ping_all_cost
+                                      // Walking Ballista's "{4}: Put a +1/+1 counter" -- same trap.
+                                      : (mode == PermAbilityMode::PayCounterSelf)
+                                      ? &def.params.self_counter_cost
                                       : &def.params.exile_opponent_top_cost;
     if (!rc->has_value()) { return 0; }
 
@@ -26936,7 +30636,7 @@ inline int SpendSelfUntapRepeats(GameState& state, int controller, int source_id
             state.battlefield[static_cast<std::size_t>(si)].tapped = was_tapped;
             break;
         }
-        if (was_tapped) { state.pay_ledger.NoteUntapEffect(state.turn_number, state.active_player_index); }
+        if (was_tapped) { state.pay_ledger.NoteUntapEffect(state.TurnSeq(), state.active_player_index); }
         ApplyPermAbility(state, controller, source_id, mode);
         ++fired;
     }
@@ -28277,7 +31977,7 @@ inline void EtbUntapLands(GameState& state, int controller, int count, bool log_
 {
     // Mana-payment rollback (src/ai/PayRollback.h): an untap EFFECT fired this turn, so a
     // retroactive re-pay can no longer assume "untapped now" means "untapped then".
-    state.pay_ledger.NoteUntapEffect(state.turn_number, state.active_player_index);
+    state.pay_ledger.NoteUntapEffect(state.TurnSeq(), state.active_player_index);
     if (count <= 0) { return; }
     // Computed ONCE per untap, not per land: the sink is a property of the board, and the scan is
     // O(battlefield). HumanPlayActive() first, so an autonomous game pays a single bool. See the
@@ -28337,6 +32037,11 @@ inline void EtbUntapLands(GameState& state, int controller, int count, bool log_
         tapped.swap(st); is_c.swap(sc);
     }
     const int n = std::min<int>(static_cast<int>(tapped.size()), count);
+    {
+        std::vector<int> cand;
+        for (const auto& t : tapped) { cand.push_back(t.second); }
+        NoteUntapChoice(state, cand, count);
+    }
     // {C}-STARVED PROMOTION -- RESERVE ONE UNTAP SLOT FOR A COLOURLESS SOURCE
     // (human play + live {C} sink only; MTG_UNTAP_C_STARVED=0 restores the tie-break-only order).
     //
@@ -28701,6 +32406,25 @@ inline const CardDefinition& GrantedManaFace(Color c)
     return faces[(i >= 0 && i < 6) ? static_cast<std::size_t>(i) : 4u];   // default green
 }
 
+// Paradise Mantle's face: "{T}: Add one mana of any color." The Birds of Paradise shape (all five
+// colours in `produces`, produces_amount 1 = ONE mana of a chosen colour). A separate stable
+// pointer from the single-colour faces, so ManaCacheKey and the backtracker's dup-collapse never
+// confuse an any-colour host with a Badger-granted {G} body.
+inline const CardDefinition& AnyColorGrantFace()
+{
+    static const CardDefinition face = []
+    {
+        CardDefinition f{};
+        f.tmpl = CardTemplate::ManaDork;
+        f.card.m_name = "(granted {T}: Add one mana of any color)";
+        f.card.RehashName();
+        f.params.produces        = { Color::White, Color::Blue, Color::Black, Color::Red, Color::Green };
+        f.params.produces_amount = 1;
+        return f;
+    }();
+    return face;
+}
+
 inline Color GrantedManaColorOf(const std::string& s)
 {
     if (s == "W") { return Color::White; }
@@ -28725,7 +32449,15 @@ struct ManaGrant
     // def_absent short-circuit). Under Concordant Crossroads -- the very card that makes this grant
     // worth playing -- EVERY fresh token is sick, so that is precisely the hot case.
     bool     blanket_haste = false;
-    bool valid() const { return live; }
+    // PARADISE MANTLE (CardParams::equip_grants_tap_mana_any): the hosts -- card.m_number of each
+    // creature an any-colour-granting Equipment is attached to. A host is a REAL card with its own
+    // definition (Puresteel, Sram...), so this is the grant's "definition but no mana ability"
+    // population, never the token one. Eight is far beyond any reachable board (a 4-of Equipment);
+    // a ninth host is simply not credited -- the pessimistic direction for the executor, and it
+    // cannot happen in a 60-card list with at most four copies.
+    int      n_hosts       = 0;
+    int      hosts[8]      = { 0, 0, 0, 0, 0, 0, 0, 0 };
+    bool valid() const { return live || n_hosts > 0; }
 };
 
 inline ManaGrant LiveManaGrant(const GameState& state, int controller)
@@ -28741,10 +32473,19 @@ inline ManaGrant LiveManaGrant(const GameState& state, int controller)
         // The blanket-haste half of the walk (Concordant Crossroads). Kept here rather than in
         // CanTapNow so the whole question costs ONE battlefield pass per payment.
         if (d->params.grants_haste && d->params.affects_all_creatures) { g.blanket_haste = true; }
+        // Paradise Mantle: an attached any-colour Equipment makes its HOST a mana source. The
+        // Equipment's own state (tapped, etc.) is irrelevant -- it is a static grant (CR 611).
+        if (d->params.equip_grants_tap_mana_any && p.equipped_to != 0 && g.n_hosts < 8)
+        {
+            bool dup = false;   // two Mantles on one host grant the same single ability
+            for (int i = 0; i < g.n_hosts; ++i) { if (g.hosts[i] == p.equipped_to) { dup = true; break; } }
+            if (!dup) { g.hosts[g.n_hosts++] = p.equipped_to; }
+        }
         if (d->params.granted_tap_mana_subtypes.empty())
         {
-            // Both halves found -- nothing later in the walk can change either answer.
-            if (g.live && g.blanket_haste) { break; }
+            // Both halves found -- nothing later in the walk can change either answer. Not so
+            // when an equip grant may sit later on the board: that walk has to finish.
+            if (g.live && g.blanket_haste && !state.deck_has_equip_mana_grant) { break; }
             continue;
         }
         if (g.live) { continue; }   // a second Badger grants the same ability; nothing changes
@@ -28755,19 +32496,36 @@ inline ManaGrant LiveManaGrant(const GameState& state, int controller)
             if (g.n_subs >= 4) { break; }
             g.subs[g.n_subs++] = SubtypeRegistry::Instance().Id(s);
         }
-        if (g.blanket_haste) { break; }
+        if (g.blanket_haste && !state.deck_has_equip_mana_grant) { break; }
     }
     return g;
 }
 
 // Does the grant reach this permanent? Subtypes are read off the permanent's OWN Card, never a
 // CardDefinition -- that is the entire point (see the header comment above).
+// Paradise Mantle's half: is `p` the host of an any-colour-granting Equipment?
+inline bool EquipGrantReaches(const ManaGrant& g, const Permanent& p)
+{
+    if (g.n_hosts == 0 || !p.card.IsCreature()) { return false; }
+    for (int i = 0; i < g.n_hosts; ++i) { if (g.hosts[i] == p.card.m_number) { return true; } }
+    return false;
+}
+
 inline bool GrantReaches(const ManaGrant& g, const Permanent& p)
 {
+    if (EquipGrantReaches(g, p)) { return true; }
     if (!g.live || !p.card.IsCreature()) { return false; }
     for (int i = 0; i < g.n_subs; ++i)
     { if (g.subs[i] != 0 && CardHasSubtypeId(p.card, g.subs[i])) { return true; } }
     return false;
+}
+
+// The synthetic face a granted body taps as. An equip host gets the any-colour face (a superset of
+// any single-colour subtype grant on the same body -- it can only tap once either way).
+inline const CardDefinition& GrantFaceFor(const ManaGrant& g, const Permanent& p)
+{
+    if (EquipGrantReaches(g, p)) { return AnyColorGrantFace(); }
+    return GrantedManaFace(g.color);
 }
 
 // Can a granted body use its {T} right now? CR 302.6 -- the ability is a {T} ability, so a body
@@ -28824,8 +32582,51 @@ inline const CardDefinition* ManaDefOf(const GameState& state, const Permanent& 
     const CardDefinition* d = p.def_absent ? nullptr
                                            : CardDatabase::Instance().LookupCached(p.card);
     if (d != nullptr && IsBaselineManaSource(*d)) { return d; }
-    if (GrantReaches(g, p) && GrantedBodyCanTap(g, p, state.battlefield)) { return &GrantedManaFace(g.color); }
+    if (GrantReaches(g, p) && GrantedBodyCanTap(g, p, state.battlefield)) { return &GrantFaceFor(g, p); }
     return d;
+}
+
+// THE SAME-PLAN GRANT CREDIT (MTG_GRANT_CAST_CREDIT; TurnSolver's CollectActions stamps it on
+// Action::rock_mana). What casting `granter` (Brightcap Badger) THIS turn adds to the casts after it:
+// one unit of the grant's colour per body already on the battlefield that the grant would reach and
+// that can use a {T} ability now -- untapped, not summoning-sick (or hasted), and not already a mana
+// source of its own (a ManaDork Fungus taps for its printed mana either way; it is in the pool already).
+// Zero when a grant is ALREADY live: a second Badger grants the same single ability, so it adds nothing.
+// Bodies the plan itself creates are not credited (sick unless hasted, and their count is a plan fact
+// this pre-plan board cannot see) -- the under-credit is the safe direction for a menu gate.
+inline ManaPool SamePlanGrantCredit(const GameState& state, int controller, const CardDefinition& granter)
+{
+    ManaPool out;
+    if (granter.params.granted_tap_mana_subtypes.empty()) { return out; }
+    ManaGrant g = LiveManaGrant(state, controller);
+    if (g.live) { return out; }
+    g.live  = true;
+    g.color = GrantedManaColorOf(granter.params.granted_tap_mana_color);
+    for (const std::string& sub : granter.params.granted_tap_mana_subtypes)
+    {
+        if (g.n_subs >= 4) { break; }
+        g.subs[g.n_subs++] = SubtypeRegistry::Instance().Id(sub);
+    }
+    int n = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller || p.tapped) { continue; }
+        if (EquipGrantReaches(g, p)) { continue; }   // already a source (Paradise Mantle's host)
+        const CardDefinition* d = p.def_absent ? nullptr : CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && IsBaselineManaSource(*d)) { continue; }
+        if (!GrantReaches(g, p) || !GrantedBodyCanTap(g, p, state.battlefield)) { continue; }
+        ++n;
+    }
+    switch (g.color)
+    {
+        case Color::White:     out.white     += n; break;
+        case Color::Blue:      out.blue      += n; break;
+        case Color::Black:     out.black     += n; break;
+        case Color::Red:       out.red       += n; break;
+        case Color::Colorless: out.colorless += n; break;
+        default:               out.green     += n; break;
+    }
+    return out;
 }
 
 inline int LooseManaCeiling(const GameState& state, int controller)
@@ -29215,6 +33016,16 @@ inline bool ReservedColorsStillCovered(const GameState& state, int controller,
             bool makes = false;
             for (Color c : EffectiveProduces(state, controller, *qd, false))
             { if (static_cast<int>(c) == ci) { makes = true; break; } }
+            // AN ENERGY-PAID COLOUR IS NOT FREE COVER (MTG_TAPAHEAD_ENERGY_COVER, default ON). The question here is
+            // "does committing the candidate's unit elsewhere only move WHICH land pays the pip?", and for an Aether
+            // Hub it does not: its coloured mode spends the {E}, a game-long resource, where the candidate's unit
+            // pays the same pip for nothing and the Hub's free {C} still pays a generic one. EDF seed 1100006 gi5
+            // T2 (Kitchen + an Aether Hub played this turn, {Trace of Abundance, Cloud of Faeries}, Cloud first):
+            // the Hub "covered" Cloud's {U}, so Kitchen banked {G}, the {U} spent the only {E}, and Trace's {R/W}
+            // after the untap had nothing -- refused, where Kitchen's {U} + the Hub's {C} pays Cloud and the {E}
+            // pays Trace (mana-oracle ENUM-GAP; seed 1100020 gi19 T3 the same). The Hub's land Aura bonus still
+            // counts below: it rides the free {C} tap.
+            if (makes && qd->params.energy_per_colored_tap > 0 && TapAheadEnergyCoverOn()) { makes = false; }
             // A land Aura's bonus rides the host's tap in the AURA's colour, so it is supply too
             // (Fertile Ground / Trace of Abundance: any colour).
             if (!makes && q.card.IsLand()
@@ -29405,6 +33216,7 @@ inline void EtbUntapTapAheadIntoFloat(GameState& state, int controller, int coun
                                       const ManaCost* line_cost)
 {
     if (count <= 0) { return; }
+    ++g_tap_ahead_calls;   // diagnostic (the mana oracle's unscripted-tap check)
     // COMBO MODE is scoped to a live loop (g_in_blink_loop), never to a plain ETB-untap cast.
     const bool combo = RefloatComboOn() && g_in_blink_loop;
     // The {C} pip the NEXT activation needs, so step 0 can protect it. Read off the outlet actually
@@ -29667,10 +33479,21 @@ inline void EtbUntapTapAheadIntoFloat(GameState& state, int controller, int coun
                                               pending_cost, p))
             { reserve_overlap = false; }
         }
+        // A tap_self_damage_any_mode land (Ancient Tomb) has no painless {C}: its {C}{C} hurts, so it
+        // stays out of the tap-ahead like every painful source.
+        // ...AND AT A CAST SITE IN AUTONOMOUS PLAY TOO (MTG_PAINLAND_TAPAHEAD_CAST_AUTO, default ON; 2026-10-31). Under
+        // its two guards the bank is free mana: `count >= tapped_n + 1` means every tapped land -- this one included --
+        // is untapped again by the ETB, whatever order the untap picks, and `!reserve_overlap` (the blanket form; the
+        // coverage widening stays human-only) keeps a painland that could make a pip of the pending cost out. The land
+        // ends the step untapped and its painless {C} plus its Aura's bonus float. EDF seed 1100003 gi2 T3: Brushland
+        // + Wild Growth and Mariposa + Trace of Abundance, {Cloud of Faeries, Peregrine Drake}: Brushland was never
+        // banked, Cloud's two untaps refunded one land, and the Drake was a mana short -- refused (mana-oracle
+        // ENUM-GAP), where banking it pays both. The seed-1 stranding this scope was guarding is the reserve guard's.
         bool pain_c = false;
-        if (q.tap_self_damage > 0 && PainlandCModeEnabled() && s_pain_tapahead
+        if (q.tap_self_damage > 0 && !q.tap_self_damage_any_mode && PainlandCModeEnabled() && s_pain_tapahead
             && ((g_in_blink_loop && (HumanPlayActive() || s_pain_loop_auto))
-                || (HumanPlayActive() && s_pain_cast && count >= tapped_n + 1 && !reserve_overlap)))
+                || ((HumanPlayActive() || PainlandTapAheadCastAutoOn())
+                    && s_pain_cast && count >= tapped_n + 1 && !reserve_overlap)))
         {
             for (Color c : q.produces)
             { if (c == Color::Colorless) { pain_c = true; break; } }
@@ -29881,9 +33704,12 @@ inline void EtbUntapTapAheadIntoFloat(GameState& state, int controller, int coun
                 if (need_model) { n = need[static_cast<int>(c)]; }
                 else
                 {
+                    // Hand pips off the DEFINITION under MTG_PLACEHOLDER_MANA (DEFAULT OFF -- see
+                    // FloatSourceTapCommitted for why, and what unblocks it).
+                    const bool def_pips = PlaceholderManaOn();
                     for (const Card& hc : state.players[controller].hand)
                     {
-                        const ManaCost& mc = hc.m_mana_cost;
+                        const ManaCost& mc = ZoneCardIf(def_pips, hc).m_mana_cost;
                         switch (c)
                         {
                             case Color::White: n += mc.white; break;
@@ -30504,6 +34330,24 @@ inline bool TreasurePaySourceEnabled()
 }
 
 // ---- REPEATABLE creature-sac MANA OUTLETS as payment sources (§2b) ---------------------------
+// STATUS 2026-10-30 (wip/sacpay) -- READ THIS FIRST; the 2026-10-01 text below is the history.
+// Default still OFF -- MEASURED, NOT YET ADOPTABLE: net-better summed per deck on 144,000 held-out games
+// (Goblins -71, Fungus -49; every searched cell better-or-neutral at fewer units), but eight slower games
+// do not recover at --depth 8 --budget-ms 0 and are not clairvoyance (the Fungus ones localized to the
+// fodder credit in the GENERAL AvailableManaPool; see the doc). It is no longer only a cost change: the
+// searched count axis's landmarks could not express a spell AND a Siege-Gang shot, or two spells, at any
+// budget, and the payer eats exactly what each cost needs. What changed, all in
+// docs/design/sac-mana-outlet-as-deferred-source.md §"STATUS 2026-10-30":
+//   * two crashes the lever's ON arm hit (a token fodder body's null definition in the payer's
+//     creature-only rank; the executor's CastSpellFromHand holding a hand reference across a payment
+//     whose death triggers reallocate the hand);
+//   * the searched action is KEPT where a death pays (SacOutletEatHasValue) and the payer is OFF there
+//     (LiveSacPayOutlet) -- such a board plays exactly as the OFF arm; kept too where no body exists yet
+//     (the same-line spore fusion), and in human play;
+//   * one set of bodies for mana AND sacrifice costs (PayFodderOverspent), an activation never eats
+//     its own source or victim (PaySacSpareScope), the greedy charges the bodies a plan eats;
+//   * the payer's victim order defers attackers and creature cards cast this turn.
+//
 // MTG_SAC_OUTLET_PAY / heurarm SAC_OUTLET_PAY -- DEFAULT OFF: MEASURED 2026-10-01 and REGRESSING,
 // with the cause located. This is NOT a parked/unmeasured lever and NOT a rejected one -- it is a
 // lever with a known, named defect in front of it. Do not re-derive the measurement; fix the defect.
@@ -30649,7 +34493,8 @@ inline bool TreasurePaySourceEnabled()
 // direction: a payable cast fails rather than an unpayable one resolving.
 inline bool SacOutletPayEnabled()
 {
-    static const bool env_on = EnvOn("MTG_SAC_OUTLET_PAY");
+    // DEFAULT ON 2026-10-31 (USER: "2 we should turn on"). =0 restores the searched SacForMana model.
+    static const bool env_on = EnvOn("MTG_SAC_OUTLET_PAY", true);
     return heurarm::Flag(heurarm::SAC_OUTLET_PAY, env_on);
 }
 
@@ -30661,6 +34506,35 @@ struct SacPayOutlet
     bool valid() const { return def != nullptr; }
 };
 
+// THE FODDER-FREE JUDGEMENT (MTG_SAC_OUTLET_PAY): while set, LiveSacPayOutlet answers "none", so no payment
+// on this thread may eat a body and every pool, bound and hold mask sees exactly the lever's OFF-arm board.
+// Set for the first attempt of a payment (the fodder-last block in TapForCostSharedImpl) and for the first
+// pass of the cast-order decider (PayableCastOrderCore): a body is spent only when neither a payment nor an
+// order of the same casts can do without it.
+inline thread_local bool g_pay_fodder_off = false;
+struct PayFodderOffScope
+{
+    bool prev;
+    PayFodderOffScope() : prev(g_pay_fodder_off) { g_pay_fodder_off = true; }
+    ~PayFodderOffScope() { g_pay_fodder_off = prev; }
+    PayFodderOffScope(const PayFodderOffScope&)            = delete;
+    PayFodderOffScope& operator=(const PayFodderOffScope&) = delete;
+};
+
+// THE CAPPED FODDER ATTEMPTS (TapForCostSharedImpl, after the fodder-free attempt failed): the most bodies
+// this payment may eat. -1 = no cap (outside the fodder-last block). The greedy's pip selection refuses a
+// body once this many are already marked eaten in the payment; the backtracker -- which never sees fodder
+// -- is skipped while it is set, since it is exactly the fodder-free solve the first attempt already ran.
+inline thread_local int g_pay_fodder_cap = -1;
+struct PayFodderCapScope
+{
+    int prev;
+    explicit PayFodderCapScope(int cap) : prev(g_pay_fodder_cap) { g_pay_fodder_cap = cap; }
+    ~PayFodderCapScope() { g_pay_fodder_cap = prev; }
+    PayFodderCapScope(const PayFodderCapScope&)            = delete;
+    PayFodderCapScope& operator=(const PayFodderCapScope&) = delete;
+};
+
 // Scan once per payment (never per source per pip -- that is O(n^2) on a 40-token board, which is
 // exactly the cost this whole strand is trying to remove). state.deck_has_sac_mana_outlet makes it
 // free for every deck that cannot contain one.
@@ -30668,13 +34542,28 @@ inline SacPayOutlet LiveSacPayOutlet(const GameState& state, int controller)
 {
     if (tokenstats::On()) { tokenstats::g_outlet.fetch_add(1, std::memory_order_relaxed); }
     SacPayOutlet out;
-    if (!state.deck_has_sac_mana_outlet || !SacOutletPayEnabled()) { return out; }
+    // HUMAN PLAY KEEPS THE EXPLICIT OUTLET. A human clicks "Sacrifice a Goblin: Add {R}" themselves
+    // (the viewer menu, and every MTG_HUMAN_PLAY validate_line fixture names a `sacout=` step), so the
+    // payer must not eat bodies on the human's behalf; CollectActions keeps the searched action under
+    // the same gate. Rollouts run under HumanPlaySuppress, so a search FROM a human state still uses
+    // the payment model -- the gate only changes what the human's own payments may do.
+    if (!state.deck_has_sac_mana_outlet || g_pay_fodder_off || !SacOutletPayEnabled() || HumanPlayActive()) { return out; }
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != controller || p.pay_sac_eaten) { continue; }
         if (p.def_absent) { continue; }   // see Permanent::def_absent (same `continue`, no call)
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (!d || !IsSacManaOutlet(d->params)) { continue; }
+        // A DEATH THAT PAYS (SacOutletEatHasValue: Pashalik's ping, Rundvelt's impulse, Mogg War
+        // Marshal's token, persist, a watcher in hand) keeps the payer OFF: the board plays exactly as
+        // the lever's OFF arm, searched count axis and all. Two measured reasons the payer cannot run
+        // BESIDE the searched action there: (1) DOUBLE CREDIT -- the searched SacForMana floats a
+        // body's mana and the pool credits the same body as fodder, so a lone Skirk Prospector read as
+        // two mana (Goblins d0 s3950036 gi35 T1: Mogg War Marshal {1}{R} "payable", the prepay ate
+        // Skirk, the cast failed, the outlet was gone); (2) a death that REVEALS (Rundvelt) puts a
+        // library reveal inside a payment where nothing can branch on it -- gi5126 b60 took 36 s /
+        // 3.9 GB that way against 11 s / 0.46 GB off.
+        if (SacOutletEatHasValue(state, controller, d->params)) { return out; }
         // The FIRST live outlet is enough: a deck runs copies of ONE such card (4 Skirk, 2 Mycon),
         // never two different ones, so a second copy changes no colour and no filter.
         out.def = d; out.source_id = p.card.m_number;
@@ -30682,6 +34571,26 @@ inline SacPayOutlet LiveSacPayOutlet(const GameState& state, int controller)
     }
     return out;
 }
+
+// BODIES A PAYMENT MAY NOT EAT, published around an ACTIVATION's own mana payment (the trailing
+// SacCreatureOutlet dispatch, executor and rollout alike): the activation's SOURCE and its baked
+// VICTIM. Siege-Gang Commander's "{1}{R}, Sacrifice a Goblin: 2 damage" paid by eating Goblins through
+// Skirk Prospector must not eat the Siege-Gang (the engine resolves the ability off its source on the
+// battlefield) nor the Goblin the activation is about to sacrifice (a real-card victim gone means the
+// activation no-ops after its mana was spent). Pessimistic in the safe direction -- a body withheld
+// here can only make a payment fail, never let an unpayable one resolve -- and inert unless the
+// §2b payer is live (fodder_ok is the only reader). 0 = none.
+inline thread_local int g_pay_sac_spare[2] = { 0, 0 };
+struct PaySacSpareScope
+{
+    int prev[2];
+    // Published only while the lever is on, so the OFF arm's payment context is untouched.
+    PaySacSpareScope(int a, int b) : prev{ g_pay_sac_spare[0], g_pay_sac_spare[1] }
+    { if (SacOutletPayEnabled()) { g_pay_sac_spare[0] = a; g_pay_sac_spare[1] = b; } }
+    ~PaySacSpareScope() { g_pay_sac_spare[0] = prev[0]; g_pay_sac_spare[1] = prev[1]; }
+    PaySacSpareScope(const PaySacSpareScope&)            = delete;
+    PaySacSpareScope& operator=(const PaySacSpareScope&) = delete;
+};
 
 // Is this permanent legal fodder for `outlet` right now?
 // `def` is NULLABLE and must stay that way. A TOKEN HAS NO CardDefinition -- there is no "Saproling"
@@ -30737,9 +34646,9 @@ inline const std::vector<Color>& SacPayOutletColors(const CardParams& op)
 // else can pay the pip.
 //
 // Within fodder, two terms:
-//   * A BODY THAT WOULD ATTACK is eaten later. USER: "prioritizes saprolings with summoning
-//     sickness" -- a creature that cannot attack this turn costs nothing to eat NOW, so it is the
-//     free one. Same "its tap costs an attack" test AvailableManaPoolNoAttackers uses.
+//   * A BODY THAT WOULD ATTACK -- or a creature CARD this turn's line just cast -- is eaten later.
+//     USER: "prioritizes saprolings with summoning sickness": a token that cannot attack this turn
+//     costs nothing to eat NOW. Same "its tap costs an attack" test AvailableManaPoolNoAttackers uses.
 //   * then the SHARED expendability ranking (SacExpendabilityRank): tokens and self-replacing
 //     bodies first, lords and combo enablers deferred, the outlet itself dead last. One ordering
 //     for the searched victim pick, the devour victim pick and this -- they cannot drift.
@@ -30761,7 +34670,16 @@ inline int SacPayFodderRank(const GameState& state, const Permanent& p, const Sa
 {
     // The caller HOISTS the doomed-creator list: this is called once per candidate body inside a
     // battlefield loop, so computing it here is an O(board^2) pass (measured +48% CPU).
-    return 500 + (SacPayFodderCostsAttack(state, p) ? 10000 : 0)
+    // Two tiers, then the SHARED expendability rank (the searched victim pick's order) inside each.
+    // The FREE tier is a body whose loss costs nothing this turn: it cannot attack (USER: "prioritizes
+    // saprolings with summoning sickness"). EXCEPT a non-token creature that entered THIS turn: that is a
+    // card the line just CAST, and eating it to pay for the next cast throws the first one away --
+    // Goblins d0 s3952530 gi2529 T2 main 2 cast Goblin Matron and Goblin Piledriver and then ate both
+    // to pay for Goblin Chieftain (T3 -> T8). Measured both ways on the 8,000-game d0 cells: dropping
+    // the attack tier altogether (pure CanonicalSacVictim order) cost Fungus +0.022t (28 faster / 153
+    // slower) -- the summoning-sick-Saproling-first rule is worth keeping; this keeps it for tokens only.
+    const bool deferred = SacPayFodderCostsAttack(state, p) || (!p.is_token && p.entered_this_turn);
+    return 500 + (deferred ? 10000 : 0)
                + SacExpendabilityRank(state, p, outlet.source_id, doomed_creators);
 }
 
@@ -31147,9 +35065,20 @@ extern thread_local int g_scripted_freshmode;
 // (PaySacSpendableNow, MintedTreasureSpendable, the two enumeration mint-credit twins) must gate
 // on THIS, not on PaySacFreshHoldEnabled() directly, so the freshmode pin releases all of them
 // together (a site left on the raw flag would price a world the payer then refuses).
+//
+// NEVER IN HUMAN PLAY. The hold is a SEARCH doctrine (the search misprices spend-vs-bank, 73 slower
+// / 31 faster when released), not a game rule: a Treasure is spendable the moment it exists (CR
+// 111.10a). The search's own escape is the FRESH-SPEND axis (a freshmode=1 plan variant), which is
+// host-gated to FSLineWin and `!HumanPlayActive()` -- so with the hold biting in human play a human
+// could NEVER spend a magnetless Gold Rush's Treasure this turn: no menu plan, and even the manual
+// tap fallback (`tap=Treasure Token#..:G`) graded `unsupported` / `legal_not_enumerated`, while the
+// decision JSON offered the Treasure as a clickable tap source. Mirrorwing v2 s4_gi3 T3: the search
+// plays Gold Rush -> crack the mint -> Luxurious Libation X=0 (its T6 win); the viewer could not.
+// HumanPlayActive() is false in rollouts (HumanPlaySuppress), in a --choices-then-auto continuation
+// (HandBackToSearch) and in every autonomous run, so search/GT are byte-identical.
 inline bool FreshHoldActive()
 {
-    return PaySacFreshHoldEnabled() && g_scripted_freshmode != 1;
+    return PaySacFreshHoldEnabled() && g_scripted_freshmode != 1 && !HumanPlayActive();
 }
 
 // CURRENT PAYMENT's coloured need (W,U,B,R,G), published by TapForCostSharedOnce for the
@@ -31806,7 +35735,7 @@ inline int ApplyActivatedUntap(GameState& state, int ctrl, int shape, int source
         ti = find_num(target_id, false);
         if (ti < 0) { break; }
         Permanent& t = state.battlefield[static_cast<std::size_t>(ti)];
-        state.pay_ledger.NoteUntapEffect(state.turn_number, state.active_player_index);
+        state.pay_ledger.NoteUntapEffect(state.TurnSeq(), state.active_player_index);
         t.tapped = false;
         if (shape == kUntapPumpTarget)
         {
@@ -32689,7 +36618,7 @@ inline int ApplyUntapLoop(GameState& state, int ctrl, int shape, int source_id, 
             if (sd && sd->params.self_untap_cost && pay_from_surplus(su))
             {
                 state.battlefield[static_cast<std::size_t>(si)].tapped = false;
-                state.pay_ledger.NoteUntapEffect(state.turn_number, state.active_player_index);
+                state.pay_ledger.NoteUntapEffect(state.TurnSeq(), state.active_player_index);
             }
         }
     }
@@ -33979,6 +37908,7 @@ inline bool AnyUntappedFilterSource(const GameState& state)
 inline void AddSourceToPool(ManaPool& pool, const GameState& state, const CardDefinition& def,
                             int yield_override, const Permanent* perm)
 {
+    if (!dmgev::CanPayManaTapLife(state, state.active_player_index, def)) { return; }
     // SNOW provenance choke point (see ManaPool::snow_units): every unit this source adds is
     // tagged snow iff the DEFINITION's card is snow -- def.card carries real supertype masks
     // even when `perm` is null (a pending rock projected from hand, where the ZoneCard
@@ -34090,8 +38020,25 @@ inline void AddSourceToPool(ManaPool& pool, const GameState& state, const CardDe
     // Crediting it wild is what made four Hearts read as four any-colour sources -- the
     // over-permissive model this replaces. `perm` is null for a rock projected from HAND, which
     // correctly keeps the full menu (no choice has been made yet).
-    const std::vector<Color>& prod =
-        EffectiveProducesFor(state, state.active_player_index, def, perm);
+    const std::vector<Color>* prodp =
+        &EffectiveProducesFor(state, state.active_player_index, def, perm);
+    // A DOMAIN source projected from HAND (no permanent: a hasted cast, a same-plan rock credit) is
+    // one of "the permanents you control" by the time it taps, so its OWN colours are in its domain
+    // (Faeburrow Elder taps for {G}{W} on a board of Islands). DomainColors reads the battlefield
+    // only, so the projection lost them (mana-oracle ENUM-GAP fivecolour: a hasted domain dork's own
+    // colours). A source already on the battlefield is in DomainColors already, so the union is a
+    // no-op there. MTG_DOMAIN_SELF_COLORS=0 -> the board's colours only.
+    if (def.params.domain_mana && perm == nullptr && DomainSelfColorsOn())
+    {
+        static thread_local std::vector<Color> dom_self;
+        bool have[5] = { false, false, false, false, false };
+        for (Color c : *prodp) { const int ci = static_cast<int>(c); if (ci >= 0 && ci < 5) { have[ci] = true; } }
+        for (int ci = 0; ci < 5; ++ci) { if (def.card.HasColor(static_cast<Color>(ci))) { have[ci] = true; } }
+        dom_self.clear();
+        for (int ci = 0; ci < 5; ++ci) { if (have[ci]) { dom_self.push_back(static_cast<Color>(ci)); } }
+        prodp = &dom_self;
+    }
+    const std::vector<Color>& prod = *prodp;
     // Domain source (Faeburrow / Bloom Tender): one mana of EACH colour among your permanents
     // from a single tap -- the yield is the dynamic colour count, ignoring the static amount.
     // Credited as wild like a Karoo (the one-of-each nuance is exact at tap time in tap_source).
@@ -34169,7 +38116,7 @@ inline bool ConsumeFloating(ManaPool& floating, Color c)
 // fall-through). Off everywhere but human play, so every autonomous game is byte-identical.
 //
 // ...AND AMONG THE COLOURS, SURPLUS FIRST while the human's LINE still owes coloured pips
-// (MTG_PAY_LINE_GENERIC_ORDER, default ON, human play only). The WUBRG list above is an arbitrary
+// (MTG_PAY_LINE_GENERIC_ORDER, default ON; human play, or MTG_AUTO_LINE_GENERIC). The WUBRG list above is an arbitrary
 // ranking, and it is the second half of the seed-6 T4 defect: the pool this payment had just built
 // was {U:1, G:2} with `Training Grounds` ({U}) still unpaid in the SAME committed line, and the two
 // generic pips of `Eldrazi Displacer` ({2}{W}) ate the {U} first -- so the {U} had to be re-bought
@@ -34183,8 +38130,8 @@ inline bool ConsumeFloating(ManaPool& floating, Color c)
 // A REORDER, never a refusal: every colour is still tried, so nothing becomes unpayable. Colourless
 // keeps its existing position (first, or last under the {C} hold) -- that tier is already decided by
 // a separate, measured rule and this one only breaks ties among the five colours.
-// `g_line_unpaid_cost` is zero outside a plan application and the gate is HumanPlayActive(), so
-// rollouts and every autonomous game are byte-identical by construction.
+// `g_line_unpaid_cost` is zero outside a plan application and the gate is LineGenericOrderLive() (human play, or
+// the autonomous lever MTG_AUTO_LINE_GENERIC), so with the lever off rollouts and every autonomous game keep WUBRG.
 inline bool ConsumeFloatingAny(ManaPool& floating, Color& took)
 {
     static const Color kCFirst[] = { Color::Colorless, Color::White, Color::Blue,
@@ -34193,7 +38140,7 @@ inline bool ConsumeFloatingAny(ManaPool& floating, Color& took)
                                      Color::Red, Color::Green, Color::Colorless };
     static const bool s_line_order = EnvOn("MTG_PAY_LINE_GENERIC_ORDER", true);   // DEFAULT ON; =0 off
     const ManaCost& lu = g_line_unpaid_cost;
-    if (s_line_order && HumanPlayActive()
+    if (s_line_order && LineGenericOrderLive()
         && (lu.white + lu.blue + lu.black + lu.red + lu.green) > 0)
     {
         // Surplus against what the line owes AFTER this payment's own (already-settled) coloured
@@ -34225,7 +38172,7 @@ inline bool ConsumeFloatingAny(ManaPool& floating, Color& took)
     return false;
 }
 
-// WHICH COLOUR a CHOICE SOURCE takes when it is tapped for a GENERIC pip (human play only;
+// WHICH COLOUR a CHOICE SOURCE takes when it is tapped for a GENERIC pip (human play, or MTG_AUTO_LINE_GENERIC;
 // MTG_PAY_LINE_TAP_COLOR, default ON).
 //
 // The payment's generic tap has always taken `prod[0]` -- the card's first declared colour, i.e.
@@ -34253,7 +38200,7 @@ inline Color LineDemandAnyPipColor(const GameState& state, const std::vector<Col
                                    const ManaPool& payment_float, Color fallback)
 {
     static const bool s_on = EnvOn("MTG_PAY_LINE_TAP_COLOR", true);   // DEFAULT ON; =0 restores prod[0]
-    if (!s_on || prod.size() < 2 || !HumanPlayActive()) { return fallback; }
+    if (!s_on || prod.size() < 2 || !LineGenericOrderLive()) { return fallback; }
     // What the REST of the line owes: this payment's own coloured pips are already paid by the time
     // a generic pip is tapped (see g_pay_own_line_pips) -- counting them made a Forbidden Orchard
     // tap for the {R} Crackle had just paid instead of keeping the {U} the line's Preordain needed.
@@ -34416,7 +38363,7 @@ inline void SpendFloatingTowardCost(ManaPool& reserve, ManaCost& cost, bool keep
             return;
         }
     }
-    // SURPLUS-FIRST GENERIC ORDER (human play only; USER, EDF seed 9 gi=8 T4, 2026-09-10). The
+    // SURPLUS-FIRST GENERIC ORDER (human play, or MTG_AUTO_LINE_GENERIC; USER, EDF seed 9 gi=8 T4, 2026-09-10). The
     // historical order below is WUBRG -- an arbitrary ranking that spent a banked {W} on Cloud of
     // Faeries' generic {1} while three green floated untouched, stranding the Emiel {W}{W} the
     // bank existed for. The user's stated general rule: "with the spend green first, that is
@@ -34426,11 +38373,11 @@ inline void SpendFloatingTowardCost(ManaPool& reserve, ManaCost& cost, bool keep
     // most in surplus, and a scarce demanded colour survives to its own pip. Demand is
     // g_line_unpaid_cost: live during any plan application and bound by the payability walks,
     // zero (-> historical order, byte-identical) everywhere else; autonomous play and rollouts
-    // are excluded by the HumanPlayActive gate besides. MTG_LINE_SURPLUS_GENERIC=0 restores the
-    // WUBRG order in human play too.
+    // take it only under MTG_AUTO_LINE_GENERIC (LineGenericOrderLive). MTG_LINE_SURPLUS_GENERIC=0
+    // restores the WUBRG order everywhere.
     static const bool s_line_surplus = EnvOn("MTG_LINE_SURPLUS_GENERIC", true);
     const ManaCost& _lu = g_line_unpaid_cost;
-    if (s_line_surplus && HumanPlayActive()
+    if (s_line_surplus && LineGenericOrderLive()
         && (_lu.white + _lu.blue + _lu.black + _lu.red + _lu.green) > 0)
     {
         struct Ent { int* res; int surplus; };
@@ -34748,6 +38695,52 @@ inline ManaCost EffectiveCyclingCostFor(const GameState& state, const CardDefini
     return EffectiveCyclingCost(state, state.active_player_index, def.params.cycling_cost.value());
 }
 
+// ---- Life-cost cycling (Street Wraith: "Cycling--Pay 2 life.") ----------------------------------
+// The LIFE half of a cycling cost (CardParams::cycling_life_cost), the companion of the mana half
+// above. Same lockstep contract as EffectiveCyclingCost: every site that probes or pays a cycling cost
+// -- the three payments (executor PerformDig, the rollout dig loop, the human-play DigDraw), the
+// affordability filters (SelectDigSource, FluctuatorProvider::SelectDigSource and its free-cycle
+// predicates) and the human-play offer probe -- calls BOTH, so a filter never admits a cycle the payer
+// then refuses (which would `break` a dig loop silently) and no payer ever cycles for free.
+//
+// Payable only while life > N (CR 119.4 allows paying exactly your life total, but at 0 the player
+// loses at the next state-based check, CR 704.5a, which comes before the cycling draw resolves: the
+// cycle cannot gain anything). A SOUND dominance prune, applied identically in human play (disclosed on
+// the card). 2HG: players[controller].life is the team's shared pool, which is the right total to pay
+// from (CR 810.9). Returns true for every card without a life cost, so every other deck is unchanged.
+inline bool CyclingLifePayable(const GameState& state, int controller, const CardDefinition& def)
+{
+    const int n = def.params.cycling_life_cost;
+    return n <= 0 || state.players[static_cast<std::size_t>(controller)].life > n;
+}
+
+// Mana half affordable from `pool` (on the Fluctuator-reduced cost) AND life half payable. The one
+// probe every affordability filter uses. `def` must carry a cycling_cost.
+inline bool CyclingPayable(const GameState& state, int controller, const CardDefinition& def,
+                           const ManaPool& pool)
+{
+    return CyclingLifePayable(state, controller, def)
+        && pool.CanPay(EffectiveCyclingCost(state, controller, def.params.cycling_cost.value()));
+}
+
+// Pay the life half. Called by each payer AFTER its mana half succeeded and BEFORE the discard (both
+// are costs, CR 602.2b / 601.2h; no observer sits between them). Paying life is life LOSS (CR 119.4 /
+// 119.3), not damage, so no prevention or damage trigger is involved. A no-op without a life cost.
+inline void PayCyclingLife(GameState& state, int controller, const CardDefinition& def)
+{
+    const int n = def.params.cycling_life_cost;
+    if (n <= 0) { return; }
+    Player& pl = state.players[static_cast<std::size_t>(controller)];
+    const int before = pl.life;
+    pl.life -= n;
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "life",
+                      def.card.m_name.str() + " (cycling cost): pay " + std::to_string(n) + " life ("
+                      + std::to_string(before) + "\xE2\x86\x92" + std::to_string(pl.life) + ")");
+    }
+}
+
 // A SATURATED cost-reducer: casting `def` would not reduce any cycling cost the controller can
 // currently use, because a copy already in play has floored them all. Casting it then spends a card
 // AND its mana for literally no change in the game state.
@@ -34916,8 +38909,9 @@ inline std::string SelectDigSource(const GameState& state, const ManaPool& pool,
         if (!d || !d->params.cycling_cost.has_value()) { continue; }
         // P5 -- affordability filter. MUST use the same reduced cost the payer will use
         // (EffectiveCyclingCost), or a Fluctuator-discounted cycle is filtered out here and the
-        // dig loop breaks on a cost it could actually have paid.
-        if (!pool.CanPay(EffectiveCyclingCostFor(state, *d))) { continue; }
+        // dig loop breaks on a cost it could actually have paid; and the same life test, or a
+        // Street Wraith at life <= 2 is picked and the payer's refusal breaks the loop.
+        if (!CyclingPayable(state, state.active_player_index, *d, pool)) { continue; }
         return c.m_name;
     }
     // Sacrifice-to-draw: an untapped land in play (e.g. Fiery Islet) whose cost is affordable.
@@ -35030,12 +39024,133 @@ inline TopDisposition DefaultTopDisposition(const GameState& state, const std::v
     return disp;
 }
 
-// Every engine consumer asks the PROVIDER (DecisionProvider::TopDispositionPick, default above).
-inline TopDisposition HeuristicTopDisposition(const GameState& state, const std::vector<Card>& looked,
-                                              LookKind kind, int keep_decision = -1)
+// ---- THE SCORED CANTRIP ORDER (DecisionProvider::CantripReadinessOf / ScoreTopDisposition) ----------------
+// docs/design/cantrip-search-optimization.md §3.2-3.3. When the provider returns a readiness for a resolution,
+// every candidate of that resolution is scored and the list is STABLE-sorted by score, the existing order
+// being the tie-break -- ONE rule, run inside the shared candidate functions below (the Ponder fan here, the
+// Brainstorm put-back in PutBackCandidates / PutBackPickAt), so the executor, the rollout and human play's
+// default read the same ranks off the same state (the pins are ORDINALS). An ORDER ONLY: the candidate set
+// and its size never change, so the search reaches exactly the same lines at an unlimited budget; under a
+// finite budget it reaches the provider's best-scored lines first (the base plan IS rank 0).
+//
+// How many cards the resolving reorder spell draws right after the look (Ponder: 1) -- set by
+// ReorderTopOrShuffle for the duration of its resolution, read into TopDispositionView::draw_now.
+inline thread_local int g_reorder_draw_after = 0;
+
+// MTG_CANTRIP_ORDER_COST (DIAGNOSTIC, default off; print-only): the scored order's own cost -- resolutions
+// scored, candidates scored and the wall spent (readiness + scoring + sort), printed at exit.
+namespace cantriporder
 {
-    return ResolveProvider(state).TopDispositionPick(state, looked, kind, keep_decision);
+inline bool CostOn() { static const bool v = EnvOn("MTG_CANTRIP_ORDER_COST"); return v; }
+inline std::atomic<long long> g_res{0}, g_cands{0}, g_ns{0};
+struct CostScope
+{
+    std::chrono::steady_clock::time_point t0;
+    bool on;
+    explicit CostScope() : on(CostOn()) { if (on) { t0 = std::chrono::steady_clock::now(); } }
+    void Done(long long cands)
+    {
+        if (!on) { return; }
+        on = false;
+        g_res.fetch_add(1, std::memory_order_relaxed);
+        g_cands.fetch_add(cands, std::memory_order_relaxed);
+        g_ns.fetch_add(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - t0).count(),
+                       std::memory_order_relaxed);
+    }
+};
+struct Report
+{
+    ~Report()
+    {
+        if (!CostOn()) { return; }
+        const long long r = g_res.load(), c = g_cands.load(), ns = g_ns.load();
+        std::fprintf(stderr, "[cantrip-order-cost] scored resolutions=%lld candidates=%lld wall=%.3fs "
+                             "(%.2f us/resolution, %.3f us/candidate)\n",
+                     r, c, static_cast<double>(ns) / 1e9, r ? static_cast<double>(ns) / 1e3 / r : 0.0,
+                     c ? static_cast<double>(ns) / 1e3 / c : 0.0);
+    }
+};
+inline Report g_report;
+
+// THE PER-FAN RANKING CACHE (design item 8; docs/design/cantrip-search-optimization.md §6; a PURE SPEEDUP).
+// Every searched member of a put-back / Ponder fan re-applies the same prefix and so reaches the SAME
+// resolution, where the readiness and the whole fan's scores used to be re-derived (4.07 us per resolution,
+// 8.9% of a Cyclone process's wall). The scores are a pure function of (the provider's inputs -- its
+// DecisionProvider::CantripOrderKey -- and the candidate list), so they are computed once and read back by
+// every later resolution with the same key. The key is compared WORD FOR WORD (a hash only picks the slot),
+// so a hit returns exactly what a recomputation would: play is byte-identical. Per thread, direct-mapped,
+// overwrite on collision; a provider without a key (every deck but Cyclone) never reaches it.
+// MTG_CANTRIP_RANK_CACHE=0 turns it off (A/B); MTG_CANTRIP_RANK_CACHE_VERIFY=1 (diagnostic) recomputes on
+// every hit and aborts on a mismatch.
+inline bool RankCacheOn() { static const bool v = EnvOn("MTG_CANTRIP_RANK_CACHE", true); return v; }
+inline bool RankCacheVerify() { static const bool v = EnvOn("MTG_CANTRIP_RANK_CACHE_VERIFY"); return v; }
+inline std::atomic<long long> g_hits{0}, g_lookups{0};
+struct RankCacheEntry
+{
+    std::uint64_t h = 0;
+    bool used = false;
+    bool ok   = false;                 // the provider scored every candidate (false = the existing order)
+    std::vector<std::uint64_t> key;
+    std::vector<int> val;              // put-back: the sorted permutation; reorder: the score per candidate
+};
+struct RankCache
+{
+    static constexpr std::size_t kSlots = 256;
+    std::array<RankCacheEntry, kSlots> e;
+};
+inline RankCache& Cache() { static thread_local RankCache c; return c; }
+inline std::uint64_t KeyHash(const std::vector<std::uint64_t>& k)
+{
+    std::uint64_t h = 1469598103934665603ull;
+    for (std::uint64_t w : k) { h ^= w + 0x9e3779b97f4a7c15ull + (h << 6) + (h >> 2); h *= 1099511628211ull; }
+    return h;
 }
+// The slot holding `key`, or nullptr (a miss).
+inline const RankCacheEntry* Find(const std::vector<std::uint64_t>& key, std::uint64_t h)
+{
+    if (CostOn()) { g_lookups.fetch_add(1, std::memory_order_relaxed); }
+    const RankCacheEntry& x = Cache().e[h % RankCache::kSlots];
+    if (!x.used || x.h != h || x.key != key) { return nullptr; }
+    if (CostOn()) { g_hits.fetch_add(1, std::memory_order_relaxed); }
+    return &x;
+}
+inline void Store(const std::vector<std::uint64_t>& key, std::uint64_t h, bool ok, const std::vector<int>& val)
+{
+    RankCacheEntry& x = Cache().e[h % RankCache::kSlots];
+    x.used = true; x.h = h; x.ok = ok;
+    x.key.assign(key.begin(), key.end());
+    x.val.assign(val.begin(), val.end());
+}
+struct HitReport
+{
+    ~HitReport()
+    {
+        if (!CostOn()) { return; }
+        std::fprintf(stderr, "[cantrip-rank-cache] lookups=%lld hits=%lld\n", g_lookups.load(), g_hits.load());
+    }
+};
+inline HitReport g_hit_report;
+inline std::uint64_t CardWord(const Card& c)
+{ return static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(&c.m_name.str())); }
+}   // namespace cantriporder
+
+// A reorder disposition written out as a FULL permutation (a provider pick may list only its wanted cards;
+// ApplyTopDisposition keeps the rest on top in look order, so this is the same placement).
+inline TopDisposition CanonicalReorder(const TopDisposition& d, int m)
+{
+    if (d.shuffle) { return d; }
+    TopDisposition c;
+    std::vector<char> seen(static_cast<std::size_t>(m), 0);
+    for (int idx : d.top_order)
+    { if (idx >= 0 && idx < m && !seen[static_cast<std::size_t>(idx)]) { seen[static_cast<std::size_t>(idx)] = 1; c.top_order.push_back(idx); } }
+    for (int i = 0; i < m; ++i) { if (!seen[static_cast<std::size_t>(i)]) { c.top_order.push_back(i); } }
+    return c;
+}
+
+// Defined after EnumerateTopDispositions (the scored Ponder fan needs it). Every engine consumer asks the
+// PROVIDER (DecisionProvider::TopDispositionPick) -- except a reorder the provider SCORES.
+inline TopDisposition HeuristicTopDisposition(const GameState& state, const std::vector<Card>& looked,
+                                              LookKind kind, int keep_decision = -1);
 
 // SEARCH-SCRIPTED disposition (see docs/design/searched-scry-disposition.md). A scry/surveil/reorder
 // resolves INLINE, deep inside a land ETB or a spell resolution, so the plan search cannot branch on
@@ -35300,6 +39415,195 @@ inline std::vector<TopOption> EnumerateTopDispositions(LookKind kind, const std:
     return opts;
 }
 
+// PLAN-LEVEL ADMISSION (DecisionProvider::CantripPlanOf): filter a SCORED order `perm` (candidate indices, best
+// first) to the first -- best-scored -- member of every plan, dropping kCantripPlanDrop candidates and keeping
+// kCantripPlanKeep ones ungrouped. Never leaves it empty (an all-dropped fan keeps its rank 0).
+inline void CantripPlanFilter(std::vector<int>& perm, const std::vector<int>& plan)
+{
+    std::vector<int> out, seen;
+    out.reserve(perm.size());
+    for (int q : perm)
+    {
+        const int pq = plan[static_cast<std::size_t>(q)];
+        if (pq == DecisionProvider::kCantripPlanDrop) { continue; }
+        if (pq == DecisionProvider::kCantripPlanBoth)
+        {
+            const bool seen0 = std::find(seen.begin(), seen.end(), 0) != seen.end();
+            const bool seen1 = std::find(seen.begin(), seen.end(), 1) != seen.end();
+            if (seen0 && seen1) { continue; }
+            if (!seen0) { seen.push_back(0); }
+            if (!seen1) { seen.push_back(1); }
+        }
+        else if (pq >= 0)
+        {
+            if (std::find(seen.begin(), seen.end(), pq) != seen.end()) { continue; }
+            seen.push_back(pq);
+        }
+        out.push_back(q);
+    }
+    if (out.empty() && !perm.empty()) { out.push_back(perm.front()); }
+    perm.swap(out);
+}
+
+// The SCORED Ponder fan, when the provider scores this resolution: the existing list (the provider's pick,
+// then every other order and the shuffle, the pick's duplicate dropped) STABLE-sorted by score, with the
+// SHUFFLE placed at index 0 or 1 -- the USER's rule (2026-10-27): "We can search the shuffle as needed and
+// realistically it probably is safest to do so most of the time", so it always sits beside the best keep
+// order at the head of the fan, and its score only decides which of the two goes first. Returns false (and
+// leaves `out` empty) when the provider does not score it: the caller keeps today's list.
+inline bool ScoredReorderCandidates(const GameState& state, const std::vector<Card>& looked, int keep_decision,
+                                    std::vector<TopDisposition>& out)
+{
+    out.clear();
+    const DecisionProvider& prov = ResolveProvider(state);
+    const int me = state.active_player_index;
+    cantriporder::CostScope cost;
+    const int m = static_cast<int>(looked.size());
+    // The per-fan ranking cache (see cantriporder::RankCache): the provider's inputs + the candidate list + the
+    // looked cards + the library top the shuffle's score reads.
+    std::vector<std::uint64_t> key;   // local: the derivation below calls back into the provider
+    const bool keyed = cantriporder::RankCacheOn() && prov.CantripOrderKey(state, me, key);
+    CantripReadiness rd;
+    std::vector<TopDisposition> base;
+    auto build_base = [&]()
+    {
+        base.push_back(CanonicalReorder(prov.TopDispositionPick(state, looked, LookKind::Reorder, keep_decision), m));
+        const TopDisposition h = base.front();
+        for (const TopOption& o : EnumerateTopDispositions(LookKind::Reorder, looked))
+        {
+            if (o.disp.shuffle == h.shuffle && (h.shuffle || o.disp.top_order == h.top_order)) { continue; }
+            base.push_back(o.disp);
+        }
+    };
+    std::vector<int> score;
+    // The readiness + every candidate's score; false = the provider does not score this resolution.
+    auto derive = [&](std::vector<int>& sc, bool have_rd) -> bool
+    {
+        if (!have_rd && !prov.CantripReadinessOf(state, me, rd)) { return false; }
+        sc.assign(base.size(), 0);
+        for (std::size_t i = 0; i < base.size(); ++i)
+        {
+            TopDispositionView v;
+            v.shuffle  = base[i].shuffle;
+            v.draw_now = g_reorder_draw_after;
+            if (!base[i].shuffle)
+            {
+                for (int idx : base[i].top_order)
+                { if (v.n_top < 8 && idx >= 0 && idx < m) { v.top[v.n_top++] = &looked[static_cast<std::size_t>(idx)]; } }
+            }
+            if (!prov.ScoreTopDisposition(state, me, rd, v, sc[i])) { return false; }
+        }
+        return true;
+    };
+    if (!keyed)
+    {
+        if (!prov.CantripReadinessOf(state, me, rd)) { return false; }
+        build_base();
+        if (!derive(score, true)) { return false; }
+    }
+    else
+    {
+        build_base();
+        key.push_back(0x504F4E44ull);   // "POND"
+        key.push_back(static_cast<std::uint64_t>(g_reorder_draw_after));
+        key.push_back(static_cast<std::uint64_t>(m));
+        for (const Card& c : looked) { key.push_back(cantriporder::CardWord(c)); }
+        key.push_back(static_cast<std::uint64_t>(base.size()));
+        for (const TopDisposition& d : base)
+        {
+            key.push_back((d.shuffle ? 1ull : 0ull) | (static_cast<std::uint64_t>(d.top_order.size()) << 1));
+            for (int idx : d.top_order) { key.push_back(static_cast<std::uint64_t>(static_cast<std::int64_t>(idx))); }
+        }
+        const Player& pl = state.players[static_cast<std::size_t>(me)];
+        const int look = std::min(3, static_cast<int>(pl.library.size()));
+        key.push_back(static_cast<std::uint64_t>(look));
+        for (int i = 0; i < look; ++i) { key.push_back(cantriporder::CardWord(pl.library[static_cast<std::size_t>(i)])); }
+        const std::uint64_t kh = cantriporder::KeyHash(key);
+        if (const cantriporder::RankCacheEntry* hit = cantriporder::Find(key, kh))
+        {
+            if (cantriporder::RankCacheVerify())
+            {
+                std::vector<int> fresh;
+                const bool ok = derive(fresh, false);
+                if (ok != hit->ok || (ok && fresh != hit->val))
+                { std::fprintf(stderr, "[cantrip-rank-cache] VERIFY MISMATCH (reorder)\n"); std::abort(); }
+            }
+            if (!hit->ok) { return false; }
+            score = hit->val;
+        }
+        else
+        {
+            const bool ok = derive(score, false);
+            cantriporder::Store(key, kh, ok, score);
+            if (!ok) { return false; }
+        }
+    }
+    std::vector<std::size_t> keep, shuf;
+    for (std::size_t i = 0; i < base.size(); ++i) { (base[i].shuffle ? shuf : keep).push_back(i); }
+    std::stable_sort(keep.begin(), keep.end(), [&](std::size_t a, std::size_t b) { return score[a] < score[b]; });
+    out.reserve(base.size());
+    for (std::size_t q = 0; q < keep.size(); ++q)
+    {
+        if (q == 0 && !shuf.empty() && score[shuf.front()] < score[keep.front()]) { out.push_back(base[shuf.front()]); }
+        out.push_back(base[keep[q]]);
+        if (q == 0 && !shuf.empty() && !(score[shuf.front()] < score[keep.front()])) { out.push_back(base[shuf.front()]); }
+    }
+    if (keep.empty()) { for (std::size_t i : shuf) { out.push_back(base[i]); } }
+    // PLAN-LEVEL ADMISSION (DecisionProvider::CantripPlanOf; a provider HARD PRUNE): the list above, filtered to
+    // its first member per plan (KEEP's first = the best keep order; the shuffle). Read after the cache: the plan
+    // hook's inputs are the provider's key's plus the looked cards, both in the key above.
+    {
+        std::vector<int> plan(out.size(), DecisionProvider::kCantripPlanKeep);
+        bool planned = !out.empty() && prov.CantripPlansActive(state, false);
+        // The readiness, if the cache hit skipped its derivation (the plan hook may read it).
+        if (planned && keyed && !prov.CantripReadinessOf(state, me, rd)) { planned = false; }
+        for (std::size_t i = 0; i < out.size() && planned; ++i)
+        {
+            TopDispositionView v;
+            v.shuffle  = out[i].shuffle;
+            v.draw_now = g_reorder_draw_after;
+            if (!out[i].shuffle)
+            {
+                for (int idx : out[i].top_order)
+                { if (v.n_top < 8 && idx >= 0 && idx < m) { v.top[v.n_top++] = &looked[static_cast<std::size_t>(idx)]; } }
+            }
+            planned = prov.CantripPlanOf(state, me, rd, v, plan[i]);
+        }
+        if (planned)
+        {
+            std::vector<int> perm(out.size());
+            for (std::size_t i = 0; i < perm.size(); ++i) { perm[i] = static_cast<int>(i); }
+            CantripPlanFilter(perm, plan);
+            std::vector<TopDisposition> kept;
+            kept.reserve(perm.size());
+            for (int i : perm) { kept.push_back(out[static_cast<std::size_t>(i)]); }
+            out.swap(kept);
+        }
+    }
+    cost.Done(static_cast<long long>(base.size()));
+    return true;
+}
+
+// Every engine consumer asks the PROVIDER (DecisionProvider::TopDispositionPick, default above) -- except a
+// reorder the provider SCORES (above), whose default is the scored fan's index 0 (keep_decision 1: its best
+// keep order; 0: the shuffle, unchanged), so the unpinned base plan, the playout and human play's default
+// are rank 0 of the same list the searched pins index.
+inline TopDisposition HeuristicTopDisposition(const GameState& state, const std::vector<Card>& looked,
+                                              LookKind kind, int keep_decision)
+{
+    if (kind == LookKind::Reorder && keep_decision != 0)
+    {
+        std::vector<TopDisposition> scored;
+        if (ScoredReorderCandidates(state, looked, -1, scored) && !scored.empty())
+        {
+            if (keep_decision == 1)
+            { for (const TopDisposition& d : scored) { if (!d.shuffle) { return d; } } }
+            return scored.front();
+        }
+    }
+    return ResolveProvider(state).TopDispositionPick(state, looked, kind, keep_decision);
+}
+
 // The heuristic pick first, then every OTHER legal disposition in EnumerateTopDispositions order.
 // Deduped against the heuristic by top_order + shuffle so candidate 0 is never repeated later.
 inline std::vector<TopDisposition> TopDispositionCandidates(const GameState& state,
@@ -35307,6 +39611,8 @@ inline std::vector<TopDisposition> TopDispositionCandidates(const GameState& sta
                                                             LookKind kind, int keep_decision)
 {
     std::vector<TopDisposition> out;
+    // THE SCORED ORDER (see ScoredReorderCandidates): the same set, provider-sorted.
+    if (kind == LookKind::Reorder && ScoredReorderCandidates(state, looked, keep_decision, out)) { return out; }
     out.push_back(HeuristicTopDisposition(state, looked, kind, keep_decision));
     // COPY, not a reference: the loop below push_backs into `out`, which reallocates and would
     // leave a reference to out.front() dangling -- and the dedup then compares against freed
@@ -35557,11 +39863,18 @@ inline void ScryTop(GameState& state, int n, const std::string& source = "Scry")
 // ScryKeepOnTop only supplies the ORDER (wanted cards first) within the keep branch. Both the
 // rollout and the executor pass the same carried decision -> identical realised library (lockstep).
 inline void ReorderTopOrShuffle(GameState& state, int n, const std::string& source = "Ponder",
-                                int keep_decision = -1)
+                                int keep_decision = -1, int draw_after = 0)
 {
     Player& ap = state.ActivePlayer();
     const int look = std::min(n, static_cast<int>(ap.library.size()));
     if (look <= 0) { return; }
+    // The spell's own draw after the look (Ponder: 1), for the scored order's TopDispositionView::draw_now.
+    struct DrawAfterScope
+    {
+        int saved;
+        explicit DrawAfterScope(int d) : saved(g_reorder_draw_after) { g_reorder_draw_after = d; }
+        ~DrawAfterScope() { g_reorder_draw_after = saved; }
+    } draw_after_scope(draw_after);
 
     std::vector<Card> looked(ap.library.begin(), ap.library.begin() + look);
     // Human play (claude-play) picks the reorder/shuffle; otherwise the searched keep_decision +
@@ -35705,6 +40018,21 @@ inline thread_local int g_scripted_putback_choice = -1;   // -1 = the provider's
 // TurnSolver.cpp); -1 when nothing (or a human) resolved one.
 inline thread_local int g_putback_resolved_w = -1;
 inline thread_local int g_putback_resolved_i = -1;
+// THE BLIND RESOLUTION CHOOSER (the known-respecting clairvoyance test, gamesetup::BlindSearchSalt;
+// default null => byte-identical). Under the blind search a plan's put-back / Ponder pin was chosen against
+// a library the player could not see, so its ordinal names an arbitrary candidate of the REAL resolution.
+// A real player decides those AFTER the draw / the look, so in blind mode the executor (EffectHandler::
+// ResolveDrawSpell, real resolution only) asks this chooser for the rank instead: it evaluates every
+// candidate the resolution offers (the provider's list, prunes included) with a blind search from the
+// state the candidate leaves, and returns the best rank (ties to the lower rank, the provider's order).
+// Returns -1 to leave the plan's pin. Installed by AIEngine only for the real game in blind mode.
+struct BlindDrawSpellChooser
+{
+    virtual ~BlindDrawSpellChooser() = default;
+    virtual int Choose(const GameState& state, const StackEntry& entry, const CardDefinition& def) = 0;
+};
+inline thread_local BlindDrawSpellChooser* g_blind_draw_chooser = nullptr;
+
 struct ScriptedPutBack
 {
     explicit ScriptedPutBack(int k) : saved(g_scripted_putback_choice) { g_scripted_putback_choice = k; }
@@ -35726,7 +40054,7 @@ inline std::uint64_t PutBackClassKey(const GameState& state, const Card& c)
     // The order-condemnation snapshot singles a hand card out BY NUMBER (TurnSolver's
     // HandCastEquivTag makes the same split): a copy in it and a copy drawn since are not
     // interchangeable while it is live. Stale/empty snapshot -> constant term -> every copy folds.
-    if (state.m1_hand_n > 0 && state.m1_hand_turn == state.turn_number)
+    if (state.m1_hand_n > 0 && state.m1_hand_turn == state.TurnSeq())
     {
         bool in_m1 = false;
         for (int i = 0; i < state.m1_hand_n; ++i) { if (state.m1_hand[i] == c.m_number) { in_m1 = true; break; } }
@@ -35755,6 +40083,38 @@ inline int PutBackPerCardDefault(const Player& pl, const std::vector<int>& ranki
     for (int hi : ranking) { offer(hi); }
     for (int hi = 0; hi < hn; ++hi) { offer(hi); }
     return got;
+}
+
+// THE SCORED PUT-BACK ORDER (DecisionProvider::CantripReadinessOf / ScoreTopDisposition; see the scored
+// Ponder fan above): one candidate's score. `idx` = the candidate's hand indices, top first.
+inline bool ScorePutBackCandidate(const GameState& state, int controller, const CantripReadiness& rd,
+                                  const int* idx, int take, int& score)
+{
+    const Player& pl = state.players[controller];
+    TopDispositionView v;
+    v.putback = true;
+    for (int j = 0; j < take && j < 2; ++j)
+    {
+        v.top[j]     = &pl.hand[static_cast<std::size_t>(idx[j])];
+        v.removed[j] = idx[j];
+    }
+    v.n_top = v.n_removed = std::min(take, 2);
+    return ResolveProvider(state).ScoreTopDisposition(state, controller, rd, v, score);
+}
+// The plan of one put-back candidate (DecisionProvider::CantripPlanOf; the same view the scorer read).
+inline bool PlanOfPutBackCandidate(const GameState& state, int controller, const CantripReadiness& rd,
+                                   const int* idx, int take, int& plan)
+{
+    const Player& pl = state.players[controller];
+    TopDispositionView v;
+    v.putback = true;
+    for (int j = 0; j < take && j < 2; ++j)
+    {
+        v.top[j]     = &pl.hand[static_cast<std::size_t>(idx[j])];
+        v.removed[j] = idx[j];
+    }
+    v.n_top = v.n_removed = std::min(take, 2);
+    return ResolveProvider(state).CantripPlanOf(state, controller, rd, v, plan);
 }
 
 // Every distinct ordered selection of min(n, eligible) classes, PROVIDER-ORDERED. Each candidate is a
@@ -35856,6 +40216,35 @@ inline std::vector<std::vector<int>> PutBackCandidates(const GameState& state, i
         { pick.push_back(classes[static_cast<std::size_t>(ci)].members[static_cast<std::size_t>(taken[ci]++)]); }
         out.push_back(std::move(pick));
     }
+    // THE SCORED ORDER (n <= 2; PutBackPickAt's twin): stable by score, the order above the tie-break.
+    if (take <= 2 && out.size() > 1)
+    {
+        CantripReadiness rd;
+        if (ResolveProvider(state).CantripReadinessOf(state, controller, rd))
+        {
+            std::vector<int> score(out.size(), 0);
+            bool all = true;
+            for (std::size_t q = 0; q < out.size() && all; ++q)
+            { all = ScorePutBackCandidate(state, controller, rd, out[q].data(), take, score[q]); }
+            if (all)
+            {
+                std::vector<int> perm(out.size());
+                for (std::size_t q = 0; q < perm.size(); ++q) { perm[q] = static_cast<int>(q); }
+                std::stable_sort(perm.begin(), perm.end(), [&](int a, int b) { return score[static_cast<std::size_t>(a)] < score[static_cast<std::size_t>(b)]; });
+                // PLAN-LEVEL ADMISSION (PutBackPickAt's twin).
+                std::vector<int> plan(out.size(), DecisionProvider::kCantripPlanKeep);
+                bool planned = ResolveProvider(state).CantripPlansActive(state, true);
+                cantripbatch::Scope _cpb;   // one resolution: same state, same readiness (see cantripbatch)
+                for (std::size_t q = 0; q < out.size() && planned; ++q)
+                { planned = PlanOfPutBackCandidate(state, controller, rd, out[q].data(), take, plan[q]); }
+                if (planned) { CantripPlanFilter(perm, plan); }
+                std::vector<std::vector<int>> sorted;
+                sorted.reserve(perm.size());
+                for (int q : perm) { sorted.push_back(std::move(out[static_cast<std::size_t>(q)])); }
+                out.swap(sorted);
+            }
+        }
+    }
     return out;
 }
 
@@ -35881,6 +40270,8 @@ struct PutBackClassScratch   // per-thread, reused: no allocation once warm
 {
     std::vector<std::uint64_t> key;
     std::vector<int> cnt, m0, m1, rank, ord, hand_cls;
+    std::vector<std::array<int, 2>> seq;   // the scored order: every candidate, existing order
+    std::vector<int> score, perm;
 };
 inline PutBackClassScratch& PutBackScratch() { static thread_local PutBackClassScratch s; return s; }
 
@@ -35995,41 +40386,135 @@ inline PutBackPick PutBackPickAt(const GameState& state, int controller, int n, 
         }
     }
     const bool per_card = def_top >= 0;
-    if (take == 1)
+    // THE EXISTING ORDER, walked: candidate q of it -> (top, second) hand indices (second = -1 for take 1).
+    // `emit` returns true to stop. Rank 0 is the per-card default when there is one; then (take 2) the pairs
+    // by a + b ascending, a DESCENDING, the default's own pair skipped.
+    auto walk = [&](auto&& emit)
     {
-        if (!per_card) { out.idx[0] = sc.m0[static_cast<std::size_t>(sc.ord[static_cast<std::size_t>(r)])]; return out; }
-        if (r == 0) { out.idx[0] = sc.m0[static_cast<std::size_t>(def_top)]; return out; }
-        int seen1 = 0;
-        for (int q = 0; q < C; ++q)
+        if (take == 1)
         {
-            const int cq = sc.ord[static_cast<std::size_t>(q)];
-            if (cq == def_top) { continue; }
-            if (++seen1 == r) { out.idx[0] = sc.m0[static_cast<std::size_t>(cq)]; return out; }
+            if (per_card && emit(sc.m0[static_cast<std::size_t>(def_top)], -1)) { return; }
+            for (int q = 0; q < C; ++q)
+            {
+                const int cq = sc.ord[static_cast<std::size_t>(q)];
+                if (per_card && cq == def_top) { continue; }
+                if (emit(sc.m0[static_cast<std::size_t>(cq)], -1)) { return; }
+            }
+            return;
         }
-        return out;   // unreachable: r < count
-    }
-    if (per_card && r == 0)
-    {
-        out.idx[0] = sc.m0[static_cast<std::size_t>(def_top)];
-        out.idx[1] = def_top == def_deep ? sc.m1[static_cast<std::size_t>(def_top)] : sc.m0[static_cast<std::size_t>(def_deep)];
-        return out;
-    }
-    int seen = per_card ? 1 : 0;   // rank 0 is the per-card default; the walk fills ranks 1.. around it
-    for (int s = 0; s <= 2 * (C - 1); ++s)
-    {
-        for (int a = std::min(s, C - 1); a >= std::max(0, s - (C - 1)); --a)
+        if (per_card
+            && emit(sc.m0[static_cast<std::size_t>(def_top)],
+                    def_top == def_deep ? sc.m1[static_cast<std::size_t>(def_top)] : sc.m0[static_cast<std::size_t>(def_deep)]))
+        { return; }
+        for (int s = 0; s <= 2 * (C - 1); ++s)
         {
-            const int b  = s - a;
-            const int ca = sc.ord[static_cast<std::size_t>(a)];
-            if (a == b && sc.cnt[static_cast<std::size_t>(ca)] < 2) { continue; }
-            if (per_card && ca == def_top && sc.ord[static_cast<std::size_t>(b)] == def_deep) { continue; }
-            if (seen++ != r) { continue; }
-            out.idx[0] = sc.m0[static_cast<std::size_t>(ca)];
-            out.idx[1] = a == b ? sc.m1[static_cast<std::size_t>(ca)] : sc.m0[static_cast<std::size_t>(sc.ord[static_cast<std::size_t>(b)])];
+            for (int a = std::min(s, C - 1); a >= std::max(0, s - (C - 1)); --a)
+            {
+                const int b  = s - a;
+                const int ca = sc.ord[static_cast<std::size_t>(a)];
+                if (a == b && sc.cnt[static_cast<std::size_t>(ca)] < 2) { continue; }
+                if (per_card && ca == def_top && sc.ord[static_cast<std::size_t>(b)] == def_deep) { continue; }
+                if (emit(sc.m0[static_cast<std::size_t>(ca)],
+                         a == b ? sc.m1[static_cast<std::size_t>(ca)] : sc.m0[static_cast<std::size_t>(sc.ord[static_cast<std::size_t>(b)])]))
+                { return; }
+            }
+        }
+    };
+    // THE SCORED ORDER (DecisionProvider::CantripReadinessOf / ScoreTopDisposition): every candidate scored,
+    // stable-sorted by score with the existing order as the tie-break -- PutBackCandidates' twin. The same
+    // count; only which candidate sits at which rank moves.
+    if (out.count > 1)
+    {
+        cantriporder::CostScope cost;
+        const DecisionProvider& prov = ResolveProvider(state);
+        // The scored permutation of sc.seq into sc.perm; false = the existing order stands.
+        CantripReadiness rd;
+        auto derive = [&](bool have_rd) -> bool
+        {
+            if (!have_rd && !prov.CantripReadinessOf(state, controller, rd)) { return false; }
+            const std::size_t n_seq = sc.seq.size();
+            sc.score.assign(n_seq, 0);
+            bool all = true;
+            for (std::size_t q = 0; q < n_seq && all; ++q)
+            { all = ScorePutBackCandidate(state, controller, rd, sc.seq[q].data(), take, sc.score[q]); }
+            if (!all || static_cast<int>(n_seq) != out.count) { return false; }
+            sc.perm.resize(n_seq);
+            for (std::size_t q = 0; q < n_seq; ++q) { sc.perm[q] = static_cast<int>(q); }
+            std::stable_sort(sc.perm.begin(), sc.perm.end(),
+                             [&](int a, int b) { return sc.score[static_cast<std::size_t>(a)] < sc.score[static_cast<std::size_t>(b)]; });
+            // PLAN-LEVEL ADMISSION (DecisionProvider::CantripPlanOf; a provider HARD PRUNE): the perm shrinks to the
+            // best member per plan, so the list -- and its count -- is the admitted set in both worlds.
+            {
+                std::vector<int> plan(n_seq, DecisionProvider::kCantripPlanKeep);
+                bool planned = prov.CantripPlansActive(state, true);
+                cantripbatch::Scope _cpb;   // one resolution: same state, same readiness (see cantripbatch)
+                for (std::size_t q = 0; q < n_seq && planned; ++q)
+                { planned = PlanOfPutBackCandidate(state, controller, rd, sc.seq[q].data(), take, plan[q]); }
+                if (planned) { CantripPlanFilter(sc.perm, plan); }
+            }
+            return true;
+        };
+        // The per-fan ranking cache (see cantriporder::RankCache): the provider's inputs + the candidate list.
+        std::vector<std::uint64_t> key;   // local: the derivation below calls back into the provider
+        bool ok = false;
+        if (cantriporder::RankCacheOn()) { key.reserve(96); }
+        if (cantriporder::RankCacheOn() && prov.CantripOrderKey(state, controller, key))
+        {
+            sc.seq.clear();
+            walk([&](int i0, int i1) { sc.seq.push_back({ i0, i1 }); return false; });
+            key.push_back(0x50424B00ull | static_cast<std::uint64_t>(take));   // "PBK" + take
+            key.push_back(static_cast<std::uint64_t>(out.count));
+            key.push_back(static_cast<std::uint64_t>(sc.seq.size()));
+            for (const std::array<int, 2>& pq : sc.seq)
+            { key.push_back((static_cast<std::uint64_t>(static_cast<std::uint32_t>(pq[0])) << 32) | static_cast<std::uint32_t>(pq[1])); }
+            const std::uint64_t kh = cantriporder::KeyHash(key);
+            if (const cantriporder::RankCacheEntry* hit = cantriporder::Find(key, kh))
+            {
+                if (cantriporder::RankCacheVerify())
+                {
+                    const bool fresh_ok = derive(false);
+                    if (fresh_ok != hit->ok || (fresh_ok && sc.perm != hit->val))
+                    { std::fprintf(stderr, "[cantrip-rank-cache] VERIFY MISMATCH (put-back)\n"); std::abort(); }
+                }
+                ok = hit->ok;
+                if (ok) { sc.perm = hit->val; }
+            }
+            else
+            {
+                ok = derive(false);
+                cantriporder::Store(key, kh, ok, ok ? sc.perm : std::vector<int>{});
+            }
+        }
+        else
+        {
+            if (prov.CantripReadinessOf(state, controller, rd))
+            {
+                sc.seq.clear();
+                walk([&](int i0, int i1) { sc.seq.push_back({ i0, i1 }); return false; });
+                ok = derive(true);
+            }
+        }
+        if (ok)
+        {
+            // The admitted count (the plan-level admission may have shortened the scored list) and the rank in it.
+            out.count = static_cast<int>(sc.perm.size());
+            const int ra = std::max(0, std::min(k, out.count - 1));
+            const std::array<int, 2>& pk = sc.seq[static_cast<std::size_t>(sc.perm[static_cast<std::size_t>(ra)])];
+            out.idx[0] = pk[0];
+            out.idx[1] = take == 2 ? pk[1] : -1;
+            cost.Done(static_cast<long long>(sc.seq.size()));
             return out;
         }
     }
-    return out;   // unreachable: r < count
+    int seen = 0;
+    walk([&](int i0, int i1)
+    {
+        if (seen++ != r) { return false; }
+        out.idx[0] = i0;
+        out.idx[1] = i1;
+        return true;
+    });
+    return out;
 }
 
 // HOW MANY candidates PutBackCandidates would produce over an arbitrary multiset of cards -- the
@@ -36221,6 +40706,15 @@ inline void ResolvePutBackFromHand(GameState& state, int controller, int n, cons
     }
     // pick[0] must end on TOP: insert the last first.
     for (std::size_t i = moved.size(); i-- > 0; ) { pl.library.insert(pl.library.begin(), moved[i]); }
+    // The saved game log's put-back record (real resolution only: g_reveal_logger is null in every search
+    // scope). Log only, never folded into the digest -- see GameLogger::NotePutBack.
+    if (g_reveal_logger != nullptr)
+    {
+        std::vector<int> nums;
+        std::vector<std::string> nms;
+        for (const Card& mc : moved) { nums.push_back(mc.m_number); nms.push_back(mc.m_name.str()); }
+        g_reveal_logger->NotePutBack(source, nums, nms);
+    }
     if (g_play_event_sink)   // nulled during search/rollout -> byte-identical
     {
         std::string names;
@@ -37022,9 +41516,27 @@ inline void EnterLand(GameState& state, const CardDefinition& def, int card_numb
                       bool resolve_full_etb = false, bool fire_landfall = true,
                       LandEntryTap entry_tap = LandEntryTap::Natural)
 {
-    bool tapped = (entry_tap == LandEntryTap::ForcedTapped || entry_tap == LandEntryTap::PreDecidedTapped)
-                ? true
-                : entry_tap == LandEntryTap::PreDecidedUntapped ? false : LandEntersTapped(state, def);
+    bool tapped;
+    if (entry_tap != LandEntryTap::Natural)
+    {
+        // The putting effect (or an already-paid simultaneous-entry pass) owns this decision.
+        // A forced-tapped shock cannot buy untapped entry by paying its own optional cost.
+        tapped = entry_tap != LandEntryTap::PreDecidedUntapped;
+    }
+    else if (g_play_land_entry_chooser != nullptr && !g_tap_speculating && LandEntryHasChoice(state, def))
+    {
+        // A fetched shock still has its own "as it enters" choice (Cyclone oracle seed1900008).
+        // The hand-drop chooser is downstream of its fetch early-return, so it never sees this
+        // entry. Reuse that chooser/payment contract here. RevealLogPause nulls the hook in every
+        // search/preview scope; with no live hook the old autonomous path below is unchanged.
+        const bool heuristic_untapped = !LandWouldEnterTapped(state, def);
+        const bool untapped = (*g_play_land_entry_chooser)(
+            state, state.active_player_index, def.card.m_name.str(),
+            def.params.etb_pay_life_to_untap, def.params.etb_untap_reveal_subtypes, heuristic_untapped);
+        if (untapped) { ApplyLandUntapPayment(state, def); }
+        tapped = !untapped;
+    }
+    else { tapped = LandEntersTapped(state, def); }
     Permanent perm;
     perm.card              = def.card;
     if (card_number >= 0) { perm.card.m_number = card_number; }
@@ -37231,9 +41743,13 @@ inline void FireScryWatchers(GameState& state)
 // top FetchCandidates pick) from the library, make it enter the battlefield (resolving the
 // fetched land's own enters-tapped/shock choice), and pay 1 life. The caller is responsible
 // for removing the fetchland from hand, using its land drop, and sending it to the graveyard
-// -- PerformFetch only resolves the search-and-put-into-play. The library order past the
-// fetched card is a goldfish-irrelevant simplification (no shuffle modelled). Shared by the
-// real engine (AIEngine) and the rollout (TurnSolver/ApplyPlanDirect) so both fetch alike.
+// -- PerformFetch only resolves the search-and-put-into-play, then SHUFFLES the library
+// ("... then shuffle": ShuffleAfterSearch, deterministic and lockstep). A FAIL-TO-FIND (no legal
+// target left, or the chosen target gone) still shuffles: the search happened, and the printed
+// shuffle is unconditional (CR 701.19b; USER 2026-10-27: "Scalding Tarn sacrificing and finding
+// nothing should indeed allow for a shuffle"). Before that date a whiff returned before the shuffle.
+// Shared by the real engine (AIEngine) and the rollout (TurnSolver/ApplyPlanDirect) so both fetch
+// alike.
 inline void PerformFetch(GameState& state, int controller_index,
                          const CardParams& fetch_pp, const std::string& target_name = "")
 {
@@ -37251,7 +41767,8 @@ inline void PerformFetch(GameState& state, int controller_index,
     if (want.empty())
     {
         std::vector<std::string> cands = ResolveProvider(state).FetchCandidates(state, controller_index, fetch_pp);
-        if (cands.empty()) { return; }   // whiff: no legal target (life already paid)
+        // Whiff: no legal target (life already paid). The library was still searched -> shuffle.
+        if (cands.empty()) { WhiffShuffle(state, controller_index, "fetch"); return; }
         want = cands.front();
     }
     int idx = -1;
@@ -37259,7 +41776,8 @@ inline void PerformFetch(GameState& state, int controller_index,
     {
         if (ap.library[i].m_name == want) { idx = i; break; }
     }
-    if (idx < 0) { return; }   // chosen target no longer present (search/real drift guard)
+    // Chosen target no longer present (search/real drift guard): finds nothing, still shuffles.
+    if (idx < 0) { WhiffShuffle(state, controller_index, "fetch"); return; }
     Card lc = ap.library[idx];
     ap.library.erase(ap.library.begin() + idx);
     const CardDefinition* def = CardDatabase::Instance().LookupCached(lc);
@@ -37595,7 +42113,8 @@ inline void PerformLandTutorToBattlefield(GameState& state, int controller_index
     {
         std::vector<std::string> cands =
             RankedTutorCandidates(ResolveProvider(state), state, controller_index, pp);
-        if (cands.empty()) { return; }   // whiff: no land left in the library
+        // Whiff: no land left in the library. "...then shuffle" still happens (CR 701.19b).
+        if (cands.empty()) { WhiffShuffle(state, controller_index, "land tutor"); return; }
         want = cands.front();
     }
     int idx = -1;
@@ -37603,12 +42122,14 @@ inline void PerformLandTutorToBattlefield(GameState& state, int controller_index
     {
         if (ap.library[i].m_name == want) { idx = i; break; }
     }
-    if (idx < 0) { return; }   // chosen target no longer present (search/real drift guard)
+    // Chosen target no longer present (search/real drift guard): finds nothing, still shuffles.
+    if (idx < 0) { WhiffShuffle(state, controller_index, "land tutor"); return; }
     Card lc = ap.library[idx];
     if (!lc.IsLand())
     {
         const CardDefinition* pd = CardDatabase::Instance().LookupCached(lc);
-        if (!pd || !pd->card.IsLand()) { return; }   // guard: only a land card may be put
+        // Guard: only a land card may be put -- a fail-to-find, which still shuffles.
+        if (!pd || !pd->card.IsLand()) { WhiffShuffle(state, controller_index, "land tutor"); return; }
     }
     ap.library.erase(ap.library.begin() + idx);
     const CardDefinition* def = CardDatabase::Instance().LookupCached(lc);
@@ -38365,7 +42886,7 @@ inline dmgev::PayFloor PaymentDamageFloor(const GameState& state, const ManaCost
             || pp.any_color_filter || pp.storage_land || pp.domain_mana || IsScaledManaDork(*d)
             || IsScaledManaLand(*d) || pp.untap_creature_cost.has_value()
             || pp.energy_per_colored_tap > 0 || pp.colored_creature_only || pp.creature_mana_only
-            || pp.tap_opponent_lifegain > 0 || pp.gy_land_exile_mana
+            || pp.tap_opponent_lifegain > 0 || pp.gy_land_exile_mana || pp.tap_is_life_payment
             || pp.enters_tapped_with_depletion > 0 || pp.etb_choose_color
             || LandAuraBonus(state, p) > 0)
         { return lbf(); }
@@ -38515,7 +43036,7 @@ inline void PaymentDeferralDP(const GameState& state, const ManaCost& cost, cons
             || pp.any_color_filter || pp.storage_land || pp.domain_mana || IsScaledManaDork(*d)
             || IsScaledManaLand(*d) || pp.untap_creature_cost.has_value()
             || pp.energy_per_colored_tap > 0 || pp.colored_creature_only || pp.creature_mana_only
-            || pp.tap_opponent_lifegain > 0 || pp.gy_land_exile_mana
+            || pp.tap_opponent_lifegain > 0 || pp.gy_land_exile_mana || pp.tap_is_life_payment
             || pp.enters_tapped_with_depletion > 0 || pp.etb_choose_color
             || LandAuraBonus(state, p) > 0)
         { return; }
@@ -38738,7 +43259,7 @@ inline int UntappedManaUpperBound(const GameState& state, bool for_creature,
         if (d == nullptr)
         {
             if (!GrantReaches(grant, p) || !GrantedBodyCanTap(grant, p, state.battlefield)) { continue; }
-            d = &GrantedManaFace(grant.color);
+            d = &GrantFaceFor(grant, p);
         }
         else if (!IsBaselineManaSource(*d) && GrantReaches(grant, p) && GrantedBodyCanTap(grant, p, state.battlefield))
         {
@@ -38752,7 +43273,7 @@ inline int UntappedManaUpperBound(const GameState& state, bool for_creature,
             // and the executor then cast it by tapping the attackers -- T5 predicted, T6 realised.
             // Over-counting is this bound's licence, so fall through with the REAL definition too:
             // the body keeps any credit of its own (e.g. a sacrifice-for-mana face).
-            total += SourceMaxNetLive(state, p, GrantedManaFace(grant.color), aura_fold);
+            total += SourceMaxNetLive(state, p, GrantFaceFor(grant, p), aura_fold);
         }
         const bool is_src = (d->tmpl == CardTemplate::BasicLand)
                          || (d->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
@@ -39160,6 +43681,306 @@ inline bool FreeCastHasLegalTargets(const GameState& s, int controller, const Ca
     }
 }
 
+// ==== UNPREDICTABLE CYCLONE + CURATOR OF MYSTERIES (phase 3 of the Cyclone onboarding, 2026-10-27) ========
+//
+// Unpredictable Cyclone (CardParams::cycle_draw_exile_shared_type_freecast): "If a cycling ability of another
+// nonland card would cause you to draw a card, instead exile cards from the top of your library until you
+// exile a card that shares a card type with the cycled card. You may cast that card without paying its mana
+// cost. Then put the exiled cards that weren't cast this way on the bottom of your library in a random
+// order." A REPLACEMENT (CR 614.1a) of the cycling draw, applied at the three cycle sites (executor
+// AIEngine::PerformDig, the human-play DigDraw pass and the rollout dig loop) through the helpers below;
+// only the CAST is world-specific (EffectHandler::PushFreeCast vs the rollout's apply_one recursion), as
+// for cascade. Scryfall rulings (2020-04-17) bind: card types only (supertypes and subtypes do not count);
+// the walk stops at the first card sharing ANY type; a whole-library whiff puts the library back in a
+// random order and draws nothing; the cast happens during the resolution (timing ignored); X = 0.
+//
+// Curator of Mysteries (CardParams::cycle_or_discard_trigger_scry): "Whenever you cycle or discard another
+// card, scry 1." ONE trigger per event per Curator (ruling 2017-04-18: cycling is a discard, the trigger
+// fires once), resolving BEFORE the cycling draw (it goes on the stack above the cycling ability) -- so it
+// sets up a Cyclone walk. "another": a Curator in HAND cycling cannot trigger itself (it is not on the
+// battlefield); it does trigger a second Curator that is.
+
+// The replacement instance that applies to `cycled`'s cycling draw, or null. CR 616.1: with two Cyclones out
+// only ONE replacement can apply to a given draw; the instances are identical, so which is moot -- the
+// first. "another nonland card": a cycled LAND draws normally, and a Cyclone cycled from hand is "another"
+// (a different object) to the one on the battlefield. Every cycling ability in the engine draws a card, so
+// "would cause you to draw" holds for every cycle. Deck-gated (GameState::deck_has_cycle_draw_replacement).
+inline const CardDefinition* CycleDrawReplacer(const GameState& state, int controller, const CardDefinition& cycled)
+{
+    if (!state.deck_has_cycle_draw_replacement) { return nullptr; }
+    if (cycled.card.IsLand()) { return nullptr; }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.cycle_draw_exile_shared_type_freecast) { return d; }
+    }
+    return nullptr;
+}
+
+// The card-type bits of a DEFINITION card (never a library placeholder, whose type mask is empty), over the
+// card types the ruling names plus Battle and Kindred (both card types, CR 300.1); Land excluded (the cycled
+// card is nonland, so a land can share nothing with it).
+inline unsigned CycleWalkTypeMask(const Card& dc)
+{
+    static constexpr CardType kTypes[] = { CardType::Artifact, CardType::Creature, CardType::Enchantment,
+                                           CardType::Instant, CardType::Planeswalker, CardType::Sorcery,
+                                           CardType::Battle, CardType::Kindred };
+    unsigned m = 0;
+    for (CardType t : kTypes) { if (dc.HasType(t)) { m |= 1u << static_cast<int>(t); } }
+    return m;
+}
+
+// THE WALK. Exile from the top until a card sharing a type with `mask`; the hit is returned removed, the
+// walked non-hits in `rest` (walk order) -- NOT bottomed yet: what goes to the bottom depends on the cast
+// decision (a declined or uncastable hit joins them). A walk that exhausts the library returns have=false
+// with everything in `rest` (ruling: the library goes back in a random order, no draw).
+struct CycleWalk
+{
+    bool                     have = false;
+    Card                     hit;
+    std::vector<Card>        rest;
+    std::vector<int>         seen_nums;
+    std::vector<std::string> seen_names;
+};
+inline void WalkExileUntilSharedType(GameState& state, int controller, unsigned mask, CycleWalk& w)
+{
+    Player& p = state.players[static_cast<std::size_t>(controller)];
+    while (!p.library.empty())
+    {
+        Card c = p.library.DrawTop();
+        const CardDefinition* cd = CardDatabase::Instance().LookupCached(c);
+        w.seen_nums.push_back(c.m_number);
+        w.seen_names.push_back(c.m_name.str());
+        if ((CycleWalkTypeMask(cd != nullptr ? cd->card : c) & mask) != 0)
+        {
+            w.hit  = std::move(c);
+            w.have = true;
+            return;
+        }
+        w.rest.push_back(std::move(c));
+    }
+}
+
+// "...on the bottom of your library in a RANDOM order." Implemented, not deferred (the cascade convention of
+// walk order is NOT reused): the order is observable -- a whole-library whiff IS a shuffle, and a later walk
+// or a long extra-turn chain reaches the bottom pile. A common-random-numbers keyed order
+// (Library::ShuffleByKey's key over (seed, search ordinal, m_number) -- ShuffleAfterSearch's seeding, salt
+// and g_shuffle_eval rule included), then the cards go under the library in that order and the search
+// ordinal advances. ONE helper for every world, called at the same point of the replacement, so the worlds
+// stay lockstep. A batch of fewer than two cards has one order and bumps nothing.
+inline void BottomInRandomOrder(GameState& state, int controller, std::vector<Card>&& cards)
+{
+    Player& p = state.players[static_cast<std::size_t>(controller)];
+    if (cards.size() < 2)
+    {
+        for (Card& c : cards) { p.library.push_back(std::move(c)); }
+        return;
+    }
+    Library tmp;
+    for (Card& c : cards) { tmp.push_back(std::move(c)); }
+    const uint64_t salt = g_shuffle_eval ? state.shuffle_salt_search : state.shuffle_salt;
+    tmp.ShuffleByKey(SaltSeed(SearchShuffleSeed(state.game_seed, state.search_count), salt));
+    for (auto it = tmp.begin(); it != tmp.end(); ++it) { p.library.push_back(std::move(*it)); }
+    ++state.search_count;
+}
+
+// ---- The free cast: take / decline / take-and-Remand ---------------------------------------------------
+// The searched choice rides the DigDraw seed action (Action::ponder_keep, see TurnSolver) and, as REALISED,
+// the recorded DigDraw (the executor replays the record's value). -1 = the provider default (TakeFreeCast).
+// kCycFcTakeRemandChain = take, Remand A on the hit, Remand B on A (the hit resolves, A back to hand, B draws;
+// Remand-on-Remand, USER 2026-10-28; DecisionProvider::AdmitRemandOnRemand).
+enum : int { kCycFcDefault = -1, kCycFcDecline = 0, kCycFcTake = 1, kCycFcTakeRemand = 2, kCycFcTakeRemandChain = 3 };
+
+// THE TAKE-DOMINANCE FOLD (no decline variant, and a decline pin takes) is the PROVIDER's: a restriction
+// justified by a dominance argument about its own deck (DecisionProvider::FreeCastTakeDominated; base false
+// = never folded, every offer is branched -- the sound default). CycloneProvider states its fold there.
+inline bool CycleFreeCastTakeDominated(const GameState& s, int controller, const CardDefinition& hit)
+{
+    return ResolveProvider(s).FreeCastTakeDominated(s, controller, hit);
+}
+
+// The Remand that could answer the free cast: a counters_target_spell_to_hand card in hand whose cost the
+// available mana pays (the cycle's own cost is already paid), admitted by the provider, with a cast left
+// in a restrictor's budget for it. Null = no Remand option.
+inline const CardDefinition* CycleFreeCastRemand(const GameState& s, int controller, const CardDefinition& hit,
+                                                 const ManaPool& pool)
+{
+    if (s.casts_remaining_this_turn == 0) { return nullptr; }
+    if (!ResolveProvider(s).AdmitRemandOnFreeCast(s, controller, hit)) { return nullptr; }
+    for (const Card& c : s.players[static_cast<std::size_t>(controller)].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr || !d->params.counters_target_spell_to_hand) { continue; }
+        if (!pool.CanPay(EffectiveSpellCost(*d, s, 1))) { continue; }
+        return d;
+    }
+    return nullptr;
+}
+
+// REMAND-ON-REMAND on the free cast: two Remand-type copies in hand (A answers the hit, B answers A), BOTH
+// costs payable from `pool`, three casts left in a restrictor's budget (the hit, A, B), and the provider
+// admitting a Remand on A. Deliberately NO AdmitRemandOnFreeCast check: A is countered, so the hit resolves
+// normally whatever it is (USER 2026-10-28: "no ceiling on that target"). Returns A (B through `b_out`, the
+// next Remand-type copy in hand; the two may share a name); null = no chain option.
+inline const CardDefinition* CycleFreeCastRemandChain(const GameState& s, int controller, const ManaPool& pool,
+                                                      const CardDefinition** b_out)
+{
+    if (s.casts_remaining_this_turn >= 0 && s.casts_remaining_this_turn < 3) { return nullptr; }
+    const CardDefinition* a = nullptr;
+    const CardDefinition* b = nullptr;
+    for (const Card& c : s.players[static_cast<std::size_t>(controller)].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr || !d->params.counters_target_spell_to_hand) { continue; }
+        if (a == nullptr) { a = d; continue; }
+        b = d;
+        break;
+    }
+    if (a == nullptr || b == nullptr) { return nullptr; }
+    if (!ResolveProvider(s).AdmitRemandOnRemand(s, controller, *a)) { return nullptr; }
+    ManaCost both = EffectiveSpellCost(*a, s, 1);
+    {
+        const ManaCost bc = EffectiveSpellCost(*b, s, 1);
+        both.generic += bc.generic; both.white += bc.white; both.blue += bc.blue; both.black += bc.black;
+        both.red += bc.red; both.green += bc.green; both.colorless += bc.colorless;
+    }
+    if (!pool.CanPay(both)) { return nullptr; }
+    if (b_out != nullptr) { *b_out = b; }
+    return a;
+}
+
+// The realised choice for one offer, shared by every world (the human chooser overrides it at the human-play
+// site). `castable` = the hit can be cast at all (a nonland card, FreeCastHasLegalTargets, a cast left).
+// `remand` = CycleFreeCastRemand's answer.
+inline int ResolveCycleFreeCastChoice(const GameState& s, int controller, const CardDefinition& hit, bool castable,
+                                      int pin, const CardDefinition* remand, const CardDefinition* chain = nullptr)
+{
+    if (!castable) { return kCycFcDecline; }
+    switch (pin)
+    {
+        case kCycFcDecline:    return CycleFreeCastTakeDominated(s, controller, hit) ? kCycFcTake : kCycFcDecline;
+        case kCycFcTake:       return kCycFcTake;
+        case kCycFcTakeRemand: return remand != nullptr ? kCycFcTakeRemand : kCycFcTake;
+        case kCycFcTakeRemandChain: return chain != nullptr ? kCycFcTakeRemandChain : kCycFcTake;
+        default: break;
+    }
+    return ResolveProvider(s).TakeFreeCast(s, controller, hit) ? kCycFcTake : kCycFcDecline;
+}
+
+// Can the walk's hit be cast? A LAND (an artifact land shares the artifact type) is never cast; a spell
+// with no legal target is not cast (CR 601.2c, the shared FreeCastHasLegalTargets); a cast restrictor with
+// no cast left forbids it.
+inline bool CycleHitCastable(const GameState& s, int controller, const CardDefinition* hd)
+{
+    return hd != nullptr && !hd->card.IsLand() && s.casts_remaining_this_turn != 0
+        && FreeCastHasLegalTargets(s, controller, *hd);
+}
+
+// The viewer / log record of the walk (both sinks; nulled in search). `cast` = the hit was cast.
+inline void EmitCycloneWalk(const GameState& s, const CardDefinition& replacer, const CardDefinition& cycled,
+                            const CycleWalk& w, bool cast)
+{
+    if (!RevealVisible()) { return; }
+    std::vector<int> kept, bottomed;
+    std::vector<std::string> disp;
+    for (int n : w.seen_nums)
+    {
+        const bool is_hit = w.have && n == w.hit.m_number;
+        if (is_hit && cast) { kept.push_back(n); disp.push_back("cast (free)"); }
+        else { bottomed.push_back(n); disp.push_back(is_hit ? "found, not cast: bottom (random order)"
+                                                           : "bottom (random order)"); }
+    }
+    std::string types;
+    const unsigned m = CycleWalkTypeMask(cycled.card);
+    static constexpr std::pair<CardType, const char*> kNm[] = {
+        { CardType::Artifact, "artifact" }, { CardType::Creature, "creature" },
+        { CardType::Enchantment, "enchantment" }, { CardType::Instant, "instant" },
+        { CardType::Planeswalker, "planeswalker" }, { CardType::Sorcery, "sorcery" },
+        { CardType::Battle, "battle" }, { CardType::Kindred, "kindred" } };
+    for (const auto& t : kNm)
+    { if ((m & (1u << static_cast<int>(t.first))) != 0) { types += types.empty() ? t.second : std::string("/") + t.second; } }
+    EmitReveal(s.turn_number, replacer.card.m_name.str() + " (cycled " + cycled.card.m_name.str()
+               + ": exile until " + (types.empty() ? std::string("a shared type") : types) + ")",
+               w.seen_nums, w.seen_names, kept, bottomed, disp);
+}
+
+// ---- Curator of Mysteries' trigger ------------------------------------------------------------------------
+// How many "whenever you cycle or discard another card, scry N" triggers one discard by `controller` fires:
+// one per watcher permanent it controls. Deck-gated (GameState::deck_has_discard_scry_watcher).
+inline int DiscardScryTriggers(const GameState& state, int controller)
+{
+    if (!state.deck_has_discard_scry_watcher) { return 0; }
+    int n = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.cycle_or_discard_trigger_scry > 0) { ++n; }
+    }
+    return n;
+}
+// Every watcher scries exactly 1 (the fold below is exact only then).
+inline bool DiscardScryTriggersAllOne(const GameState& state, int controller)
+{
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.cycle_or_discard_trigger_scry > 1) { return false; }
+    }
+    return true;
+}
+
+// Resolve this discard's watcher triggers. `j_pin` >= 0 = the SEARCHED disposition: N scry-1s on one library
+// fold EXACTLY to "bottom the top j, j = 0..N" (a keep changes nothing; each bottom removes the current
+// top), so a pin of j bottoms the top min(j, N) cards and keeps the rest -- an identity fold, not a
+// narrowing (exact only when every watcher scries 1, which is checked; otherwise each trigger runs ScryTop).
+// -1 = unpinned: each trigger is ScryTop -- the human chooser at a real resolution, else the provider's
+// ScryKeepOnTop (the permitted playout policy beyond the horizon, and the disclosed in-window heuristic for a
+// NON-CYCLE discard -- the cleanup discard -- see the Cyclone ledger). Any land-ETB scry pin in force
+// (g_scripted_top_choice) is set aside for the look, so neither consumes the other's pin.
+inline void ResolveDiscardScryTriggers(GameState& state, int controller, int n, int j_pin)
+{
+    if (n <= 0 || controller != state.active_player_index) { return; }
+    const ScriptedTopChoice _no_pin(-1);
+    if (j_pin >= 0 && DiscardScryTriggersAllOne(state, controller))
+    {
+        Player& ap = state.players[static_cast<std::size_t>(controller)];
+        for (int t = 0; t < n && !ap.library.empty(); ++t)
+        {
+            std::vector<Card> looked(ap.library.begin(), ap.library.begin() + 1);
+            TopDisposition disp;
+            const bool keep = t >= j_pin;
+            if (keep) { disp.top_order.push_back(0); }
+            if (RevealVisible())
+            {
+                std::vector<int> kept, bottomed;
+                (keep ? kept : bottomed).push_back(looked[0].m_number);
+                EmitReveal(state.turn_number, "Curator of Mysteries (scry 1)", { looked[0].m_number },
+                           { looked[0].m_name.str() }, kept, bottomed);
+            }
+            ap.library.erase(ap.library.begin());
+            ApplyTopDisposition(state, looked, disp, LookKind::Scry);
+        }
+        return;
+    }
+    for (const Permanent* w : [&]{
+             std::vector<const Permanent*> ws;
+             for (const Permanent& p : state.battlefield)
+             {
+                 if (p.controller_index != controller) { continue; }
+                 const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+                 if (d != nullptr && d->params.cycle_or_discard_trigger_scry > 0) { ws.push_back(&p); }
+             }
+             return ws; }())
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(w->card);
+        ScryTop(state, d->params.cycle_or_discard_trigger_scry, d->card.m_name.str() + " (scry)");
+    }
+}
+
+
 // The human's default when the plan names no own target: our LOWEST-power legal creature (the cheapest
 // body to trade for a tapped basic), else the opponent target. -1 = nothing legal.
 //
@@ -39231,7 +44052,9 @@ inline std::string RemovalSelfTargetFoldKey(const GameState& s, const Permanent&
         | (p.storied_draw_used_this_turn ? 1048576 : 0)
         | (p.lifegain_counters_used_this_turn ? 2097152 : 0)
         | (p.once_per_turn_used ? 4194304 : 0)   // Stromkirk Condemned's once-each-turn activation
-        | (p.sac_at_end_step ? 8388608 : 0));
+        | (p.sac_at_end_step ? 8388608 : 0)
+        | (p.landfall_resolved_once ? 16777216 : 0) | (p.landfall_resolved_twice ? 33554432 : 0));   // Scythecat Cub
+    if (p.AttacksThisTurn() != 0) { k += "|atk"; add(p.AttacksThisTurn()); }   // Moraug's attack count (gated)
     add(p.damage); add(p.temp_power_bonus); add(p.temp_tough_bonus); add(p.pending_death_trigger);
     add(p.charge_counters); add(p.verse_counters); add(p.lore_counters); add(p.storage_counters);
     add(p.loyalty); add(p.ice_counters); add(p.age_counters); add(p.spore_counters);
@@ -39383,8 +44206,10 @@ inline void TapPainSourcesIfUseful(GameState& state, int ctrl)
         if (pain_useful && has_col)
         { for (Color c : prod) { if (c != Color::Colorless) { col = c; break; } } }
         const int pain = dmgev::PainForTap(*d, col, has_c);
+        if (!dmgev::CanPayManaTapLife(state, ctrl, *d)) { continue; }
+        if (d->params.tap_is_life_payment && nbarb == 0) { continue; }
         if (pain == 0 && nbarb == 0) { continue; }  // nothing to gain from this tap
-        if (!purity)
+        if (!purity || d->params.tap_is_life_payment)
         {
             const int life = state.players[ctrl].life;
             if (life - pain <= 0) { continue; }                  // the SBA before Tamanoa resolves

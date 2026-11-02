@@ -337,6 +337,182 @@ Two designs, both budget-staged so the cross product is a price and never a gate
 Either is a representation change touching every `bp_choice` reader (about 30 sites, three executor
 twins). It is a project, not a lever, so it waits for the USER.
 
+**Design 1 implemented 2026-10-29 as `MTG_BP_DEV_SEQ` (heurarm `BP_DEV_SEQ`, default ON; `=0` restores one
+deviation per apply), SHIPPED SCOPE = the LATENT occurrences only; the full cross product is
+`MTG_BP_DEV_SEQ_ALL` (default OFF, see below).** Found by Goblins seed 1330145 gi144 under `MTG_SUBSET_SAC_OUTLETS`: the T3 kill's
+main 2 needs non-front continuations at two site-9 occurrences (Skirk Prospector's sacrifice bursts, then
+Siege-Gang activations at the re-open). Without the outlets the uniform arm expressed it by luck (rank 1 at
+both); the outlets admitted more continuations ahead of the three-sacrifice burst (rank 1 -> rank 8), and
+the search lost the T3 kill at `--depth 8 --budget-ms 0` (seed 1343448 gi3447 is the same mechanism).
+* `Plan::bp_pre` holds the sequence's earlier entries (a choice per class-on occurrence before `bp_at`, -1 =
+  untargeted); `TurnSolver::BpChoiceAt` is the one reader, used by `bp_searched_plan`, the site-9 re-open,
+  `BpUnbranchedCanon` (an overrun prefix entry is EMPTY, like an overrun target), `ClassifyBpOccurrence`,
+  and the executor's three twins (main site, pod chain, site 9 and its re-open).
+* The walker opens a COMPOUND slot off every variant it hands out, and off every variant a host applied
+  itself (wave-0 ranks and node children in the two FSLine hosts, seeded through
+  `BpWaveWalker::SeedDevSeq`), that reached a LATENT occurrence: site 9's re-open counts its next occurrence
+  only when targeted -- an untargeted re-open applies NOTHING, not the canon -- so one deviation can reach
+  no continuation there at all; the apply reports it (`g_bp_seen_latent`) instead of counting it. At every
+  other class-on occurrence an untargeted one plays the canon, the one-deviation coverage this section
+  describes; `MTG_BP_DEV_SEQ_ALL` opens sequences there too. Compound slots
+  wait in `m_deferred` until every slot of fewer deviations retired (wave = deviation count), so a finite
+  budget spends on exactly what it spent on before first. Searched applies only (a playout's untargeted
+  occurrence is EMPTY). The prefix-resume cache keys a compound slot by the slot, and the cross-node length
+  memo never records one (its list depends on the earlier deviations).
+* **Priced (rebased 2026-10-29 onto the billed canon wave).** A compound variant meets its later occurrences on
+  mid-turn states no other line reached, so its apply derives continuation lists the cache has never seen, and a
+  derivation is an enumeration that bills no unit (`MTG_ENUM_CHARGE` / `MTG_BP_DERIVE_METER`, the open USER
+  decisions for every apply). The first version billed them itself (`DevSeqPriceScope`, one unit per 4 visits);
+  it is gone: a compound hand-out now bills through `MTG_BP_CANON_WAVE`'s `CanonWaveBillScope` exactly as a
+  canon-wave base does (`MTG_BP_CANON_WAVE_W` visits per unit, default 1), nullptr at an unlimited root, so
+  `--budget-ms 0` never pays it.
+* **Two passes (2026-10-29): what bounds the walk at an unlimited budget.** Nothing in the price does, and the
+  compound walk was long there: Goblins seed 1380001 gi2586 at d8 b0 took 19-29 min / 207,741 units with the
+  lever, 1.2 s / 1,351 units without (both win T3). The cost was not duplicate states -- a transposition on the
+  sequence's decision state would have removed ~1.6x -- but ORDER: at turn-3 main-2 nodes with no turn-3 kill the
+  walker built 1,281 compound slots off site-9 lists of up to 874 entries and handed out 206,390 variants, each
+  deriving canon continuations at boards no other line reached (~86% of the time, 59k distinct boards), all before
+  the depth-first search reached the one-deviation turn-3 kill that cuts every one of them. So
+  `TurnSolver::FullSearchLine` now runs iterative deepening on the DEVIATION COUNT, with branch and bound:
+  1. pass 1 with every compound wave suppressed (`g_devseq_suppress`; the walker and the host seeds open none);
+  2. only if pass 1 met a latent occurrence -- the only thing a compound slot is built from, so without one the
+     full tree IS pass 1's tree -- pass 2 over the full tree at pass 1's committed depth, its root cut at pass 1's
+     win turn - 1, keeping its line only if strictly earlier.
+  Every line winning before pass 1's lies inside pass 2's window, so the win turn is the one-pass search's at
+  every budget pass 2 completes. Pass 2 does not repeat pass 1: it takes pass 1's line memo minus every node whose
+  walk met a latent occurrence (`DvsDirty` names the node's keys on exit, `FslEraseDirty` drops them before pass 2;
+  such a node answered for the smaller tree), so it re-walks only the paths to compound slots. A clean node that
+  skipped a dirty subtree (a memo hit, a dedup) is not dirty, and need not be: that subtree's own path was walked
+  and is dirty, so pass 2 re-walks it there. The two caches that outlive a pass keep the passes apart: the
+  game-line cache files a dirty pass-1 node under a second tag (`gamelc::SupTag`) that only a first pass reads,
+  and a hit there counts as meeting a latent occurrence (its subtree holds one); the searched-m2 memo folds the
+  suppression into its key. The first version simply did not store dirty nodes in the game-line cache, and that
+  starved later decisions: Melira seed 1440491 gi490 committed a depth-2 T6 line at T3 where the lever-off arm
+  committed a depth-3 T5 one (pass 1 missed the entries the lever-off search reuses). With the tag, pass 1 reads
+  what the lever-off search would read, plus the full-tree answers earlier second passes stored (gi490 now plays
+  the lever-off arm's game exactly, digest and all).
+  `MTG_DEV_SEQ_VERIFY=1` runs the one-pass search beside the two passes and counts every decision where it wins
+  earlier (`TWO_PASS_LATER`, must read 0 at an unlimited budget); `MTG_DEV_SEQ_STATS=1` prints the pass counts.
+  d8 b0: gi2586 1,469 units (0.85 s, T3), gi144 13,049 (T3; the one-pass search 2,731 -- its compound kill is
+  found early and cuts the rest, where pass 1 must first prove the one-deviation tree only reaches T4), gi3447
+  9,787 (T3; lever off T4).
+* **Why `_ALL` is off (measured 2026-10-29, partial pooled run, outlets on).** It is the whole cross product,
+  and without a breakpoint-level TRANSPOSITION it is intractable on a long chain: the regression tier's
+  unbudgeted backstop abandoned Fluctuator games at the 2,000,000-unit ceiling at d3 AND d5 (seeds 30009,
+  30018; ~5-9 min each, every other backstop row finished), Hinata's backstop units rose 2.4x, and Goblins at
+  its play setting spent +35-39% units (1.7-3.4x wall) over the lever-off arm for -0.0007 / -0.0012 avg (1,500 /
+  4,000 games: 3.7780 -> 3.7773, 3.7765 -> 3.7753). The
+  transposition has to key a decision on the apply's whole RESUME context, not the board: the dig loop's
+  counters and drawn lands, the deferred-site flags, the pin cursors, `g_line_unpaid_cost` -- i.e. a
+  `BpPrefixSnap` at every site, which today exists only at the deferred ones. That is what `_ALL` needs
+  before it can be the default; the one-deviation gap at counted occurrences stays open until then.
+* The `SolveWithLookahead` host seeds its own wave-0 variants too (2026-10-29; `la_dvs_seeds`, read off each
+  variant's own apply and handed to its walker like the FSLine hosts' seeds). A variant whose apply is shared or
+  folded (a combat-pin share, the put-bounce / ETB / ETB-counter folds) is not read: it repeats a sibling's apply,
+  whose seed already covers it.
+* Unit test: `test/unit/test_bp_dev_seq.cpp` (the reader, the compound waves and their order, the latent
+  route, a seeded variant).
+* **Measured (2026-10-29, pooled held-out A/B, play settings, `MTG_PAY_REFINE` on; every suite deck at seed
+  1370001 + Goblins / Fungus 4,000 each at 1380001; arms: c = outlets off, a = `MTG_SUBSET_SAC_OUTLETS` on,
+  p = outlets on + this lever, priced).** a -> p: 11 faster / 6 slower; Melira and LHC moved digests
+  with no win-turn change, every other deck's outcomes are identical. AccomplishedAlchemist 4 / 0
+  (4.8594 -> 4.8281), FiveColour 1 / 0, Goblins 1 / 1, Goblins 4,000 5 / 3, Landfall 0 / 1, EDF 0 / 1
+  (gi452 5 -> 7, the price's budget churn).
+  c -> p: 52 / 11. Every slower game of p vs c wins on c's turn at `--depth 8 --budget-ms 0`. p's units
+  include the new price (Goblins 2.1-5.0x a's, which never bills derivations); wall a -> p 1.1-2.1x on
+  Goblins, flat elsewhere. The unbudgeted backstop moved no row (units +0-2.5%, Melira +34-53%).
+* **Cost fold (2026-10-31): `MTG_DEV_SEQ_TAIL_SKIP` (heurarm `BP_DEV_SEQ_TAIL_SKIP`, default ON; `=0` restores the full
+  second-pass re-walk).** USER 2026-10-31: *"the devseq situation could be okay if it improves quality notably and only
+  costs a little more."* Measured on the stack (`wip/goblins-stack`, 41 suite cases, seed 1580001, play settings), the
+  lever cost x1.077 units for 8 faster / 1 slower; Melira Pod +27% (12.93M -> 16.40M) with **no game moved**.
+  * **Where it went** (`MTG_DEV_SEQ_STATS=1`, which now also prints units per pass, per unit site inside the second
+    pass, per host for compound hand-outs and a hand-out outcome census). On Melira the whole cost was the SECOND
+    PASS (pass 1 = 12.79M, the lever-off tree; pass 2 = 3.48M over 254 of 484 decisions, `pass2_better=0`), and
+    ~70% of pass 2 was not compound lines at all but the RE-WALK of dirty nodes: a node whose subtree met a latent
+    occurrence anywhere is erased from the carry, and its re-walk re-ran every main-1 option's tail -- the main-2
+    loop applying every plan (`fs_main2` 1.52M) after re-applying every main-1 plan (`fs_pre` 0.66M) -- although
+    the latent occurrence sat under one option and the others had walked trees the second pass sees unchanged.
+    The compound hand-outs themselves were 0.66M: 368k of them, only 18k landing on a new state (42k past the
+    end, 33k on a wave-0 / node state, 79k on an ordinary walker hand-out's, 139k on another compound slot's, 7k
+    within their own slot). On Goblins the balance is the other way: pass 2 2.76M, of which compound main-2
+    hand-outs 1.53M (178k hand-outs, 55k fresh; most of their units are the billed derivations of
+    `MTG_BP_CANON_WAVE`'s price, `enum_charge` 1.36M) and the re-walk ~1.1M.
+  * **The folds** (all identities within the second pass's window; the second pass runs under root cut R - 1, R =
+    the first pass's win turn, so every cutoff in it is <= R - 1):
+    1. *Tail skip* (`DvsTailGate`, at the five FSLineTail sites of FSLineWin). The first pass records, per (node,
+       post-combat tail state, combat kind), the tail's cutoff, its answer and the EARLIEST turn at which anything
+       under it met a latent occurrence (or read a dirty node's answer, which carries that node's earliest turn:
+       `DvsMltFrame`), for a COMPLETE tail only (no truncation, no budget bind, no first-win horizon exit, so its
+       answer is the minimum within its cutoff). The second pass skips the same tail under `cut` iff the first
+       pass's cutoff was at least as loose, its answer is later than `cut`, and its earliest latent turn is later
+       than `cut`: re-walking it would be the first pass's walk under a tighter cutoff (any compound line under it
+       starts after `cut` and is cut at once), so its answer is "no win by `cut`", which is what the skip returns.
+    2. *Node keep* (`FslEraseDirty`). A dirty node whose walk was complete, whose earliest latent turn is past the
+       root cut and whose win entry is not a line found past its own cutoff keeps its first-pass entry.
+    3. *Apply skip* (main-1 plan loop). A plan whose apply met no latent occurrence, took no canon record, was not
+       dork-contested, and whose tail is skippable as in 1 is skipped before its unit and its apply; the NSKIP length
+       the walker reads is replayed, and a base plan is skipped only at a node with no wave-0 variant and no fold
+       armed (a fold or collapse that does not fire just evaluates its candidate in full). Its identity across the
+       passes is its static index in the node's list (the id-order hint's rotation undone), guarded by a content hash.
+    What changes is only what lies PAST the window -- values >= R that the second pass discards anyway (`take2` needs
+    < R) and that the game-line cache files as the same refutation either way (a past-cutoff line is stored only as
+    "no win by the cutoff"). Nodes and tails that record per-option values for a later pass (`rec_vals`: the probe's
+    beam / oracle order) are never skipped or kept; `DomActive` disarms all three. At `--budget-ms 0` the second pass
+    returns exactly what it returned; under a budget it spends fewer units, so only downstream budget dynamics could
+    move. Unit test: `test/unit/test_dev_seq_tail_skip.cpp` (the skip predicate's truth table, `=0`).
+  * **Measured (same manifest, same binary, `MTG_DEV_SEQ_TAIL_SKIP` false vs true per job, one pooled batch, 8
+    threads).** Every one of the 41 decks' digests is IDENTICAL (0 moved of 18,117 games); the lever-false arm
+    reproduces the stack binary's digests and units exactly. Units, ratio to the `MTG_BP_DEV_SEQ=0` arm:
+
+    | deck | dev seq off | on (before) | on + fold | before | after | fold / before |
+    |---|---|---|---|---|---|---|
+    | Melira Pod | 12,934,517 | 16,401,303 | 15,399,615 | 1.2680 | 1.1906 | 0.9389 |
+    | Goblins (4,000) | 20,551,327 | 23,582,515 | 23,378,482 | 1.1475 | 1.1376 | 0.9913 |
+    | Goblins 2HG (2,000) | 28,588,666 | 32,341,388 | 32,204,220 | 1.1313 | 1.1265 | 0.9958 |
+    | Landfall | 8,307,689 | 8,811,570 | 8,747,050 | 1.0607 | 1.0529 | 0.9927 |
+    | Minotaur | 746,055 | 780,917 | 780,728 | 1.0467 | 1.0465 | 0.9998 |
+    | Vampires | 1,372,217 | 1,401,638 | 1,398,196 | 1.0214 | 1.0189 | 0.9975 |
+    | FiveColour | 6,199,237 | 6,253,255 | 6,247,051 | 1.0087 | 1.0077 | 0.9990 |
+    | EDF | 903,777 | 826,170 | 825,027 | 0.9141 | 0.9129 | 0.9986 |
+    | **all 41** | 140,465,806 | 151,226,777 | 149,807,183 | 1.0766 | 1.0665 | 0.9906 |
+
+    Wall (core-ms, same batch) 0.97x. Goblins seed 1330145 gi144 / 1343448 gi3447 / 1382587 gi2586 at `--depth 8
+    --budget-ms 0 --ignore-play-profile`: T3 / T3 / T3 with the fold, digests identical to the fold-off arm. Melira's
+    remaining second pass (2.48M): compound hand-outs 0.64M, main-1 re-applies the apply skip may not take 0.56M
+    (bases at nodes with wave-0 variants), and the main-2 loops of the tails that DO hold a latent occurrence inside
+    the window or a compound subtree 0.79M.
+  * **What is left, and why it is not folded here.** Over all 41 cases the remaining second pass is 9.02M units (of
+    the lever's 9.34M); compound hand-outs are 4.50M of it, and the ones that land on an already-reached state cost
+    1.70M (main 1 0.52M of 1.02M, main 2 1.18M of 3.49M -- the rest is the search under the 189k that are new).
+    (a) Compound hand-outs that land on a state some other hand-out
+    already reached (Melira 139k of 368k on ANOTHER compound slot's state, Goblins main 2 59k of 167k): two compound
+    slots of one base plan whose different first deviations converge (activate X then Y vs Y then X). Folding them
+    needs a TRANSPOSITION on the slot's decision state at the latent occurrence -- the board plus the apply's whole
+    resume context there (section windows, deferred-site flags, the re-open's activation snapshot, pin cursors), i.e.
+    a `BpPrefixSnap` at site 9 -- which is the same missing piece `MTG_BP_DEV_SEQ_ALL` needs. A key on the board alone
+    is not provably complete, so it is not done. (b) A compound slot's own EMPTY arm is not the parent's line: it
+    counts the occurrence (bp_searched_plan's section-window reset, `g_bp_fired_last` for the main-2 fixpoint), and
+    1.8k of Goblins' 17.5k main-2 compound EMPTY arms do reach new states. (c) Re-applying a dirty node's main-1 base
+    plans where wave-0 variants depend on them: skipping such an apply would un-fire the wave-0 collapses and ArmNew
+    declines that their variants rely on, so it would cost more than it saves.
+  * **A completeness gap found on the way -- FIXED the same day by `MTG_DEV_SEQ_DIRTY_READ` (below).** A first-pass node
+    that met no latent occurrence itself but READ a dirty node's memo answer is not marked dirty: it is carried into
+    the second pass as a full-tree answer, and filed in the game-line cache under the full-tree tag, although it rests
+    on a smaller-tree answer. Within one decision the win turn survives (the dirty node is re-walked on its own path),
+    but the game-line entry can hand a later decision the smaller tree's answer. `MTG_DEV_SEQ_STATS` counts these
+    nodes ("clean nodes that read a dirty answer"): 333 over the 41 cases' 22,718 first passes, so rare. The fix is to treat such a read as dirtying (the earliest-latent
+    scope already propagates it), at the price of more second-pass work.
+* **`MTG_DEV_SEQ_DIRTY_READ` (2026-10-31; heurarm `BP_DEV_SEQ_DIRTY_READ`, default ON; `=0` restores the old marking).**
+  A first-pass node that reads a dirty node's memo answer (its key is in the carry's dirty map, `FSLineCache::dvs_dirty`)
+  now counts as meeting a latent occurrence (`++g_devseq_latent_n`): its subtree does hold one, the dirty node's. So it is
+  erased before the second pass and re-walked there, and the first pass files it under `gamelc::SupTag`, never the
+  full-tree tag. The carry keeps the dirty map whenever this lever or `MTG_DEV_SEQ_TAIL_SKIP` is on. Measured on the
+  HELD-OUT seed 1640001, same 41-case manifest, fix off vs on in one pooled batch (tail skip on in both): **0 games moved
+  of 18,117, every digest identical**, units 0.99999x overall (146,600,189 -> 146,600,030; Melira 0.9999x, FiveColour
+  1.0001x, every other deck 1.0000x). With `MTG_DEV_SEQ_STATS` on Melira + FiveColour the clean nodes that read a
+  dirty answer go 62 -> 0 and the dirty nodes 5,573 -> 5,595. No slower game, so nothing to recover; the Goblins d8 b0
+  witnesses (gi144, gi3447, gi2586) stay T3. mtg-test 2260/2260, scenarios 351/351.
+
 ### 6.2 Smaller things seen, not changed
 
 * **Executor lockstep gaps -- FIXED (2026-10-15, no lever).** The pod-chain twin (`AIEngine`, site 7)

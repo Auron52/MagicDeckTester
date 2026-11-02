@@ -1,0 +1,24 @@
+{
+ "deck": "snow",
+ "_doc": "artifact refresh verdicts -- scripts/artifact_queue.py (LEDGER_DIR)",
+ "entries": [
+  {
+   "run_id": "snow-artifact-queue-tool-647f24-20261024T160120",
+   "kind": "mulligan",
+   "verdict": "adopted",
+   "ident": "66104e2e9e325551279d41a39362d408fc0d5a12",
+   "frozen": "e0f1f522689c9a7dc829ebdafb9443ab4ecab39a",
+   "src_tree": "841e1e41c85bfade07e8eebfa1d9ccc8f7088eb6",
+   "date": "2026-10-25",
+   "worker": "artifact-queue-tool-647f24",
+   "delta": -0.037,
+   "settings": {
+    "recipe": "fast",
+    "env": {},
+    "depth": null,
+    "budget": null
+   },
+   "detail": "mulligan: ADOPTED (new-vs-old -0.037 t, recipe fast)"
+  }
+ ]
+}

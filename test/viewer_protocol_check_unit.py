@@ -88,5 +88,34 @@ chk(v.find_plan(rec, now2, recorded_index=11) == 1, "the (land, casts) tier keep
 chk(v._strip_copy_labels("land=none; cast: blink #0") == "land=none; cast: blink #0",
     "a legacy 'blink #0' spawn reference is not a copy label")
 
+# 4. engine_default on a FLAGS frame answers flag by flag, never the index as every flag.
+sf = {"type": "target", "random_damage": True, "heuristic_default": 1,
+      "legal_targets": [{"kind": "player", "index": -1}, {"kind": "permanent", "index": 3},
+                        {"kind": "permanent", "index": 5}],
+      "options": [{"targets": [{"kind": "player", "index": -1}]},
+                  {"targets": [{"kind": "player", "index": -1}, {"kind": "permanent", "index": 5}]}]}
+chk([v.engine_default(sf, i)[0] for i in range(3)] == [1, 0, 1], "Soulfire's default = options[hd] as flags")
+dr = {"type": "sac_tutor", "max_puts": 2, "ai_set": [1], "candidates": [{"name": "A"}, {"name": "B"}]}
+chk([v.engine_default(dr, i)[0] for i in range(2)] == [0, 1], "a put-any-subset default = ai_set as flags")
+chk(v.engine_flags({"type": "target", "heuristic_default": 2}) is None, "an ordinary target is an index")
+
+# 5. A recorded Jitte answer rides --jitte, never --choices; -1 ("spend as they arrive") survives.
+jd = [{"decision": {"type": "jitte", "turn": 6, "max_count": 2, "mid_step": True}, "chosen": -1},
+      {"decision": {"type": "jitte", "turn": 7, "max_count": 4, "mid_step": True}, "chosen": 1}]
+chk(v.side_channel_args(jd) == ["--jitte", "6:-1,7:1"], "jitte frames rebuild --jitte, -1 kept")
+chk(v.flatten_choices(jd) == [], "a jitte answer takes no --choices slot")
+
+# 6. Grim Lavamancer's graveyard-cost prompt publishes indices 1..N; 0 is decline.
+#    The replay must not turn a recorded index 1 into list position 0, which declines the
+#    activation and moves Midrange Burn seed 1 from a turn-4 win to turn 5.
+recorded = [{"index": 1, "name": "Chain Lightning"}, {"index": 2, "name": "Rift Bolt"}]
+chk(v.remap_candidate_index(1, recorded, recorded) == 1,
+    "a one-based candidate keeps index 1 when its name is still there")
+reordered = [{"index": 1, "name": "Rift Bolt"}, {"index": 2, "name": "Chain Lightning"}]
+chk(v.remap_candidate_index(1, recorded, reordered) == 2,
+    "a reordered candidate maps to its published index, not its list position")
+chk(v.remap_candidate_index(0, recorded, reordered) == 0,
+    "the reserved decline index remains 0")
+
 print("FAIL (%d)" % len(fails) if fails else "PASS")
 sys.exit(1 if fails else 0)

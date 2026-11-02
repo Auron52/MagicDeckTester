@@ -1,0 +1,24 @@
+{
+  "deck": "decks/LifegainHeliodCombo/LifegainHeliodCombo.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 40,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 50,
+  "max_turns": 3,
+  "lands_played_this_turn": 1,
+  "_comment": "LifegainHeliodCombo (2026-10-27), Abiding Grace: THE RETURN MODE through the universal enter cascade. Grace + Soul Warden + Auriok Champion on the battlefield (both watchers summoning-sick, so no attack moves life), Martyr of Sands (MV 1) in the graveyard, empty hand, land drop used. Opponent at 40 so nothing wins and the turn runs to its end step. Returning Martyr fires Soul Warden AND Auriok Champion: 20 -> 22. The gain mode would read 21; a return that skipped FireEtbWatchers would read 20.",
+  "battlefield": [
+    {"name": "Plains"},
+    {"name": "Abiding Grace"},
+    {"name": "Soul Warden", "sick": true},
+    {"name": "Auriok Champion", "sick": true}
+  ],
+  "graveyard": ["Martyr of Sands"],
+  "hand": [],
+  "expect_no_win": true,
+  "expect_active_life": 22
+}

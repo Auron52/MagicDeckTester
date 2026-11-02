@@ -1,0 +1,411 @@
+{
+  "seed": 6, "game_index": 5, "win_turn": 6, "won": true,
+  "mulligan": { "count": 0, "bottom": [] }, "karoo_float": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1,
+  "decisions": [
+    { "chosen": 1, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 12, "name": "Heliod, Sun-Crowned" }, { "num": 18, "name": "Plains" }, { "num": 7, "name": "Auriok Champion" }, { "num": 3, "name": "Ajani's Pridemate" }, { "num": 42, "name": "Serra Ascendant" }, { "num": 19, "name": "Plains" }, { "num": 13, "name": "Heliod, Sun-Crowned" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Plains", "cast=Serra Ascendant"], "decision": {
+  "decision_index": 1,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 3, "name": "Ajani's Pridemate", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 7, "name": "Auriok Champion", "cost": "{W}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 12, "name": "Heliod, Sun-Crowned", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Heliod, Sun-Crowned", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 18, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 42, "name": "Serra Ascendant", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }] },
+  "plans": [
+    { "index": 0, "summary": "land=Plains; cast: Serra Ascendant", "land": "Plains", "casts": ["Serra Ascendant"], "actions": [{ "card": "Serra Ascendant" }] },
+    { "index": 1, "summary": "land=Plains; cast: (nothing)", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 2,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 1, "num": 18, "tapped": true, "is_land": true }, { "name": "Serra Ascendant", "idx": 2, "num": 42, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 3, "name": "Ajani's Pridemate", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 7, "name": "Auriok Champion", "cost": "{W}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 12, "name": "Heliod, Sun-Crowned", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Heliod, Sun-Crowned", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 3,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 1, "num": 18, "tapped": true, "is_land": true }, { "name": "Serra Ascendant", "idx": 2, "num": 42, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 3, "name": "Ajani's Pridemate", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 7, "name": "Auriok Champion", "cost": "{W}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 12, "name": "Heliod, Sun-Crowned", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Heliod, Sun-Crowned", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "cast_order": ["**", "land=Plains", "cast=Auriok Champion"], "decision": {
+  "decision_index": 4,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 2, "card": "Ajani, Strength of the Pride" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 1, "num": 18, "is_land": true, "taps": "W" }, { "name": "Serra Ascendant", "idx": 2, "num": 42, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 3, "name": "Ajani's Pridemate", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 4, "name": "Ajani, Strength of the Pride", "cost": "{2}{W}{W}", "mv": 4, "kind": "permanent" }, { "num": 7, "name": "Auriok Champion", "cost": "{W}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 12, "name": "Heliod, Sun-Crowned", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Heliod, Sun-Crowned", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }] },
+  "plans": [
+    { "index": 0, "summary": "land=Plains; cast: Ajani's Pridemate", "land": "Plains", "casts": ["Ajani's Pridemate"], "actions": [{ "card": "Ajani's Pridemate" }] },
+    { "index": 1, "summary": "land=Plains; cast: Auriok Champion", "land": "Plains", "casts": ["Auriok Champion"], "actions": [{ "card": "Auriok Champion" }] },
+    { "index": 2, "summary": "land=Plains; cast: (nothing)", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Auriok Champion", "idx": 4, "num": 7, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Plains", "idx": 1, "num": 18, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 3, "num": 19, "tapped": true, "is_land": true }, { "name": "Serra Ascendant", "idx": 2, "num": 42, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 3, "name": "Ajani's Pridemate", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 4, "name": "Ajani, Strength of the Pride", "cost": "{2}{W}{W}", "mv": 4, "kind": "permanent" }, { "num": 12, "name": "Heliod, Sun-Crowned", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Heliod, Sun-Crowned", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 2, "kind": "combat", "text": "⚔ attacked: Serra Ascendant (1) — 1 to opponent (20→19)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 21, "battlefield": [{ "name": "Auriok Champion", "idx": 4, "num": 7, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Plains", "idx": 1, "num": 18, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 3, "num": 19, "tapped": true, "is_land": true }, { "name": "Serra Ascendant", "idx": 2, "num": 42, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 3, "name": "Ajani's Pridemate", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 4, "name": "Ajani, Strength of the Pride", "cost": "{2}{W}{W}", "mv": 4, "kind": "permanent" }, { "num": 12, "name": "Heliod, Sun-Crowned", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Heliod, Sun-Crowned", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0, "life_gained_this_turn": 1 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 7,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 3, "card": "Unexpectedly Absent" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 21, "battlefield": [{ "name": "Auriok Champion", "idx": 4, "num": 7, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Plains", "idx": 1, "num": 18, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 3, "num": 19, "is_land": true, "taps": "W" }, { "name": "Serra Ascendant", "idx": 2, "num": 42, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 3, "name": "Ajani's Pridemate", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 4, "name": "Ajani, Strength of the Pride", "cost": "{2}{W}{W}", "mv": 4, "kind": "permanent" }, { "num": 12, "name": "Heliod, Sun-Crowned", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Heliod, Sun-Crowned", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Ajani's Pridemate", "land": null, "casts": ["Ajani's Pridemate"], "actions": [{ "card": "Ajani's Pridemate" }] },
+    { "index": 1, "summary": "land=none; cast: Unexpectedly Absent (X=0)", "land": null, "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent" }] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "events": [{ "turn": 3, "kind": "trigger", "text": "❤️ life gained: Ajani's Pridemate +1/+1" }, { "turn": 3, "kind": "drain", "text": "💚 Ajani's Pridemate entered — Auriok Champion: you +1 (21→22)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 22, "battlefield": [{ "name": "Ajani's Pridemate", "idx": 5, "num": 3, "is_land": false, "power": 3, "toughness": 3, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "Auriok Champion", "idx": 4, "num": 7, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Plains", "idx": 1, "num": 18, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 3, "num": 19, "tapped": true, "is_land": true }, { "name": "Serra Ascendant", "idx": 2, "num": 42, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 4, "name": "Ajani, Strength of the Pride", "cost": "{2}{W}{W}", "mv": 4, "kind": "permanent" }, { "num": 12, "name": "Heliod, Sun-Crowned", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Heliod, Sun-Crowned", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 51, "land_drops_left": 1, "life_gained_this_turn": 1 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 3, "kind": "trigger", "text": "❤️ life gained: Ajani's Pridemate +1/+1" }, { "turn": 3, "kind": "combat", "text": "⚔ attacked: Serra Ascendant (1), Auriok Champion (1) — 2 to opponent (19→17)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 23, "battlefield": [{ "name": "Ajani's Pridemate", "idx": 5, "num": 3, "is_land": false, "power": 4, "toughness": 4, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 2 }] }, { "name": "Auriok Champion", "idx": 4, "num": 7, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Plains", "idx": 1, "num": 18, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 3, "num": 19, "tapped": true, "is_land": true }, { "name": "Serra Ascendant", "idx": 2, "num": 42, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 4, "name": "Ajani, Strength of the Pride", "cost": "{2}{W}{W}", "mv": 4, "kind": "permanent" }, { "num": 12, "name": "Heliod, Sun-Crowned", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Heliod, Sun-Crowned", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 51, "land_drops_left": 1, "life_gained_this_turn": 2 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 10,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 4, "card": "Ranger-Captain of Eos" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 23, "battlefield": [{ "name": "Ajani's Pridemate", "idx": 5, "num": 3, "is_land": false, "power": 4, "toughness": 4, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 2 }] }, { "name": "Auriok Champion", "idx": 4, "num": 7, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Plains", "idx": 1, "num": 18, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 3, "num": 19, "is_land": true, "taps": "W" }, { "name": "Serra Ascendant", "idx": 2, "num": 42, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 4, "name": "Ajani, Strength of the Pride", "cost": "{2}{W}{W}", "mv": 4, "kind": "permanent" }, { "num": 12, "name": "Heliod, Sun-Crowned", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Heliod, Sun-Crowned", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 40, "name": "Ranger-Captain of Eos", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Unexpectedly Absent (X=0)", "land": null, "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent" }] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 11,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 4, "kind": "trigger", "text": "❤️ life gained: Ajani's Pridemate +1/+1" }, { "turn": 4, "kind": "combat", "text": "⚔ attacked: Serra Ascendant (1), Auriok Champion (1), Ajani's Pridemate (4) — 6 to opponent (17→11)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 24, "battlefield": [{ "name": "Ajani's Pridemate", "idx": 5, "num": 3, "tapped": true, "is_land": false, "power": 5, "toughness": 5, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 3 }] }, { "name": "Auriok Champion", "idx": 4, "num": 7, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Plains", "idx": 1, "num": 18, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 3, "num": 19, "is_land": true, "taps": "W" }, { "name": "Serra Ascendant", "idx": 2, "num": 42, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 4, "name": "Ajani, Strength of the Pride", "cost": "{2}{W}{W}", "mv": 4, "kind": "permanent" }, { "num": 12, "name": "Heliod, Sun-Crowned", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Heliod, Sun-Crowned", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 40, "name": "Ranger-Captain of Eos", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 50, "land_drops_left": 1, "life_gained_this_turn": 1 },
+  "opponent": { "life": 11, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Unexpectedly Absent (X=0)", "land": null, "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent" }] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Plains", "cast=Heliod, Sun-Crowned"], "decision": {
+  "decision_index": 12,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 5, "card": "Plains" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 24, "battlefield": [{ "name": "Ajani's Pridemate", "idx": 5, "num": 3, "is_land": false, "power": 5, "toughness": 5, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 3 }] }, { "name": "Auriok Champion", "idx": 4, "num": 7, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Plains", "idx": 1, "num": 18, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 3, "num": 19, "is_land": true, "taps": "W" }, { "name": "Serra Ascendant", "idx": 2, "num": 42, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 4, "name": "Ajani, Strength of the Pride", "cost": "{2}{W}{W}", "mv": 4, "kind": "permanent" }, { "num": 12, "name": "Heliod, Sun-Crowned", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Heliod, Sun-Crowned", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 20, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 40, "name": "Ranger-Captain of Eos", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 11, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }] },
+  "plans": [
+    { "index": 0, "summary": "land=Plains; cast: Heliod, Sun-Crowned", "land": "Plains", "casts": ["Heliod, Sun-Crowned"], "actions": [{ "card": "Heliod, Sun-Crowned" }] },
+    { "index": 1, "summary": "land=Plains; cast: Ranger-Captain of Eos → Soul Warden", "land": "Plains", "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Soul Warden" }] },
+    { "index": 2, "summary": "land=Plains; cast: Ranger-Captain of Eos → Soul's Attendant", "land": "Plains", "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Soul's Attendant" }] },
+    { "index": 3, "summary": "land=Plains; cast: Ranger-Captain of Eos → Walking Ballista", "land": "Plains", "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Walking Ballista" }] },
+    { "index": 4, "summary": "land=Plains; cast: Ranger-Captain of Eos → Martyr of Sands", "land": "Plains", "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Martyr of Sands" }] },
+    { "index": 5, "summary": "land=Plains; cast: Ranger-Captain of Eos → Serra Ascendant", "land": "Plains", "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Serra Ascendant" }] },
+    { "index": 6, "summary": "land=Plains; cast: Unexpectedly Absent (X=0)", "land": "Plains", "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent" }] },
+    { "index": 7, "summary": "land=Plains; cast: Unexpectedly Absent (X=1)", "land": "Plains", "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent", "x": 1 }] },
+    { "index": 8, "summary": "land=none; cast: Unexpectedly Absent (X=0)", "land": null, "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent" }] },
+    { "index": 9, "summary": "land=Plains; cast: (nothing)", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 10, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 36,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 13,
+  "type": "target",
+  "source": "Heliod, Sun-Crowned (life gained)",
+  "turn": 5,
+  "loyalty": "given a +1/+1 counter",
+  "per_target_damage": 0, "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 25, "battlefield": [{ "name": "Ajani's Pridemate", "idx": 5, "num": 3, "is_land": false, "power": 6, "toughness": 6, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 4 }] }, { "name": "Auriok Champion", "idx": 4, "num": 7, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Heliod, Sun-Crowned", "idx": 7, "num": 12, "is_land": false, "power": 5, "toughness": 5 }, { "name": "Plains", "idx": 1, "num": 18, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 3, "num": 19, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 6, "num": 20, "tapped": true, "is_land": true }, { "name": "Serra Ascendant", "idx": 2, "num": 42, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 4, "name": "Ajani, Strength of the Pride", "cost": "{2}{W}{W}", "mv": 4, "kind": "permanent" }, { "num": 13, "name": "Heliod, Sun-Crowned", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 40, "name": "Ranger-Captain of Eos", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 49, "land_drops_left": 0, "life_gained_this_turn": 1 },
+  "opponent": { "life": 11, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }] },
+  "legal_targets": [{ "kind": "permanent", "index": 2, "label": "Serra Ascendant (1/1) (yours)" }, { "kind": "permanent", "index": 4, "label": "Auriok Champion (1/1) (yours)" }, { "kind": "permanent", "index": 5, "label": "Ajani's Pridemate (6/6) (yours)" }, { "kind": "permanent", "index": 7, "label": "Heliod, Sun-Crowned (5/5) (yours)" }],
+  "heuristic_default": 2,
+  "options": [{ "index": 0, "label": "Serra Ascendant (1/1) (yours)", "targets": [{ "kind": "permanent", "index": 2 }] }, { "index": 1, "label": "Auriok Champion (1/1) (yours)", "targets": [{ "kind": "permanent", "index": 4 }] }, { "index": 2, "label": "Ajani's Pridemate (6/6) (yours)", "targets": [{ "kind": "permanent", "index": 5 }] }, { "index": 3, "label": "Heliod, Sun-Crowned (5/5) (yours)", "targets": [{ "kind": "permanent", "index": 7 }] }],
+  "note": "reply an option index -- the permanent this ability (Heliod, Sun-Crowned (life gained)) targets. It is given a +1/+1 counter. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 14,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "events": [{ "turn": 5, "kind": "trigger", "text": "❤️ life gained: Ajani's Pridemate +1/+1, Heliod, Sun-Crowned → +1/+1 on Ajani's Pridemate" }, { "turn": 5, "kind": "drain", "text": "💚 Heliod, Sun-Crowned entered — Auriok Champion: you +1 (24→25)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 25, "battlefield": [{ "name": "Ajani's Pridemate", "idx": 5, "num": 3, "is_land": false, "power": 7, "toughness": 7, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 5 }] }, { "name": "Auriok Champion", "idx": 4, "num": 7, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Heliod, Sun-Crowned", "idx": 7, "num": 12, "is_land": false, "power": 5, "toughness": 5 }, { "name": "Plains", "idx": 1, "num": 18, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 3, "num": 19, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 6, "num": 20, "tapped": true, "is_land": true }, { "name": "Serra Ascendant", "idx": 2, "num": 42, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 4, "name": "Ajani, Strength of the Pride", "cost": "{2}{W}{W}", "mv": 4, "kind": "permanent" }, { "num": 13, "name": "Heliod, Sun-Crowned", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 40, "name": "Ranger-Captain of Eos", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 49, "land_drops_left": 0, "life_gained_this_turn": 1 },
+  "opponent": { "life": 11, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 15,
+  "type": "target",
+  "source": "Heliod, Sun-Crowned (life gained)",
+  "turn": 5,
+  "loyalty": "given a +1/+1 counter",
+  "per_target_damage": 0, "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 26, "battlefield": [{ "name": "Ajani's Pridemate", "idx": 5, "num": 3, "tapped": true, "is_land": false, "power": 8, "toughness": 8, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 6 }] }, { "name": "Auriok Champion", "idx": 4, "num": 7, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Heliod, Sun-Crowned", "idx": 7, "num": 12, "is_land": false, "power": 5, "toughness": 5 }, { "name": "Plains", "idx": 1, "num": 18, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 3, "num": 19, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 6, "num": 20, "tapped": true, "is_land": true }, { "name": "Serra Ascendant", "idx": 2, "num": 42, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 4, "name": "Ajani, Strength of the Pride", "cost": "{2}{W}{W}", "mv": 4, "kind": "permanent" }, { "num": 13, "name": "Heliod, Sun-Crowned", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 40, "name": "Ranger-Captain of Eos", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 49, "land_drops_left": 0, "life_gained_this_turn": 2 },
+  "opponent": { "life": 2, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }] },
+  "legal_targets": [{ "kind": "permanent", "index": 2, "label": "Serra Ascendant (1/1) (yours)" }, { "kind": "permanent", "index": 4, "label": "Auriok Champion (1/1) (yours)" }, { "kind": "permanent", "index": 5, "label": "Ajani's Pridemate (8/8) (yours)" }, { "kind": "permanent", "index": 7, "label": "Heliod, Sun-Crowned (5/5) (yours)" }],
+  "heuristic_default": 2,
+  "options": [{ "index": 0, "label": "Serra Ascendant (1/1) (yours)", "targets": [{ "kind": "permanent", "index": 2 }] }, { "index": 1, "label": "Auriok Champion (1/1) (yours)", "targets": [{ "kind": "permanent", "index": 4 }] }, { "index": 2, "label": "Ajani's Pridemate (8/8) (yours)", "targets": [{ "kind": "permanent", "index": 5 }] }, { "index": 3, "label": "Heliod, Sun-Crowned (5/5) (yours)", "targets": [{ "kind": "permanent", "index": 7 }] }],
+  "note": "reply an option index -- the permanent this ability (Heliod, Sun-Crowned (life gained)) targets. It is given a +1/+1 counter. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 16,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 5, "kind": "trigger", "text": "❤️ life gained: Ajani's Pridemate +1/+1, Heliod, Sun-Crowned → +1/+1 on Ajani's Pridemate" }, { "turn": 5, "kind": "combat", "text": "⚔ attacked: Serra Ascendant (1), Auriok Champion (1), Ajani's Pridemate (7) — 9 to opponent (11→2)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 26, "battlefield": [{ "name": "Ajani's Pridemate", "idx": 5, "num": 3, "tapped": true, "is_land": false, "power": 9, "toughness": 9, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 7 }] }, { "name": "Auriok Champion", "idx": 4, "num": 7, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Heliod, Sun-Crowned", "idx": 7, "num": 12, "is_land": false, "power": 5, "toughness": 5 }, { "name": "Plains", "idx": 1, "num": 18, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 3, "num": 19, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 6, "num": 20, "tapped": true, "is_land": true }, { "name": "Serra Ascendant", "idx": 2, "num": 42, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 4, "name": "Ajani, Strength of the Pride", "cost": "{2}{W}{W}", "mv": 4, "kind": "permanent" }, { "num": 13, "name": "Heliod, Sun-Crowned", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 40, "name": "Ranger-Captain of Eos", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 49, "land_drops_left": 0, "life_gained_this_turn": 2 },
+  "opponent": { "life": 2, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 13, "cast_order": ["**", "land=Plains", "cast=Ranger-Captain of Eos"], "decision": {
+  "decision_index": 17,
+  "main_ordinal": 6,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 6, "card": "Plains" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 26, "battlefield": [{ "name": "Ajani's Pridemate", "idx": 5, "num": 3, "is_land": false, "power": 9, "toughness": 9, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 7 }] }, { "name": "Auriok Champion", "idx": 4, "num": 7, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Heliod, Sun-Crowned", "idx": 7, "num": 12, "is_land": false, "power": 5, "toughness": 5 }, { "name": "Plains", "idx": 1, "num": 18, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 3, "num": 19, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 6, "num": 20, "is_land": true, "taps": "W" }, { "name": "Serra Ascendant", "idx": 2, "num": 42, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 4, "name": "Ajani, Strength of the Pride", "cost": "{2}{W}{W}", "mv": 4, "kind": "permanent" }, { "num": 13, "name": "Heliod, Sun-Crowned", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 21, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 40, "name": "Ranger-Captain of Eos", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 2, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }] },
+  "plans": [
+    { "index": 0, "summary": "land=Plains; cast: Heliod, Sun-Crowned", "land": "Plains", "casts": ["Heliod, Sun-Crowned"], "actions": [{ "card": "Heliod, Sun-Crowned" }] },
+    { "index": 1, "summary": "land=none; cast: Heliod, Sun-Crowned", "land": null, "casts": ["Heliod, Sun-Crowned"], "actions": [{ "card": "Heliod, Sun-Crowned" }] },
+    { "index": 2, "summary": "land=Plains; cast: Ajani, Strength of the Pride", "land": "Plains", "casts": ["Ajani, Strength of the Pride"], "actions": [{ "card": "Ajani, Strength of the Pride" }] },
+    { "index": 3, "summary": "land=Plains; cast: Unexpectedly Absent (X=0), Heliod, Sun-Crowned: another target creature gains lifelink until end of turn", "land": "Plains", "casts": ["Unexpectedly Absent", "Heliod, Sun-Crowned"], "actions": [{ "card": "Unexpectedly Absent" }, { "card": "Heliod, Sun-Crowned", "src_num": 12, "activate": true, "cost_pips": "W", "activation_cost": "{1}{W}", "act_label": "another target creature gains lifelink until end of turn", "x": 1 }] },
+    { "index": 4, "summary": "land=Plains; cast: Unexpectedly Absent (X=0)", "land": "Plains", "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent" }] },
+    { "index": 5, "summary": "land=Plains; cast: Unexpectedly Absent (X=1)", "land": "Plains", "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent", "x": 1 }] },
+    { "index": 6, "summary": "land=Plains; cast: Unexpectedly Absent (X=2)", "land": "Plains", "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent", "x": 2 }] },
+    { "index": 7, "summary": "land=Plains; cast: Heliod, Sun-Crowned: another target creature gains lifelink until end of turn", "land": "Plains", "casts": ["Heliod, Sun-Crowned"], "actions": [{ "card": "Heliod, Sun-Crowned", "src_num": 12, "activate": true, "cost_pips": "W", "activation_cost": "{1}{W}", "act_label": "another target creature gains lifelink until end of turn", "x": 1 }] },
+    { "index": 8, "summary": "land=none; cast: Unexpectedly Absent (X=0)", "land": null, "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent" }] },
+    { "index": 9, "summary": "land=none; cast: Unexpectedly Absent (X=1)", "land": null, "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent", "x": 1 }] },
+    { "index": 10, "summary": "land=none; cast: Heliod, Sun-Crowned: another target creature gains lifelink until end of turn", "land": null, "casts": ["Heliod, Sun-Crowned"], "actions": [{ "card": "Heliod, Sun-Crowned", "src_num": 12, "activate": true, "cost_pips": "W", "activation_cost": "{1}{W}", "act_label": "another target creature gains lifelink until end of turn", "x": 1 }] },
+    { "index": 11, "summary": "land=Plains; cast: Ranger-Captain of Eos → Soul Warden", "land": "Plains", "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Soul Warden" }] },
+    { "index": 12, "summary": "land=Plains; cast: Ranger-Captain of Eos → Soul's Attendant", "land": "Plains", "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Soul's Attendant" }] },
+    { "index": 13, "summary": "land=Plains; cast: Ranger-Captain of Eos → Walking Ballista", "land": "Plains", "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Walking Ballista" }] },
+    { "index": 14, "summary": "land=Plains; cast: Ranger-Captain of Eos → Martyr of Sands", "land": "Plains", "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Martyr of Sands" }] },
+    { "index": 15, "summary": "land=Plains; cast: Ranger-Captain of Eos → Serra Ascendant", "land": "Plains", "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Serra Ascendant" }] },
+    { "index": 16, "summary": "land=none; cast: Ranger-Captain of Eos → Soul Warden", "land": null, "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Soul Warden" }] },
+    { "index": 17, "summary": "land=none; cast: Ranger-Captain of Eos → Soul's Attendant", "land": null, "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Soul's Attendant" }] },
+    { "index": 18, "summary": "land=none; cast: Ranger-Captain of Eos → Walking Ballista", "land": null, "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Walking Ballista" }] },
+    { "index": 19, "summary": "land=none; cast: Ranger-Captain of Eos → Martyr of Sands", "land": null, "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Martyr of Sands" }] },
+    { "index": 20, "summary": "land=none; cast: Ranger-Captain of Eos → Serra Ascendant", "land": null, "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Serra Ascendant" }] },
+    { "index": 21, "summary": "land=Plains; cast: (nothing)", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 22, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 78,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 18,
+  "type": "target",
+  "source": "Heliod, Sun-Crowned (life gained)",
+  "turn": 6,
+  "loyalty": "given a +1/+1 counter",
+  "per_target_damage": 0, "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 27, "battlefield": [{ "name": "Ajani's Pridemate", "idx": 5, "num": 3, "is_land": false, "power": 10, "toughness": 10, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 8 }] }, { "name": "Auriok Champion", "idx": 4, "num": 7, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Heliod, Sun-Crowned", "idx": 7, "num": 12, "is_land": false, "power": 5, "toughness": 5 }, { "name": "Plains", "idx": 1, "num": 18, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 3, "num": 19, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 6, "num": 20, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 8, "num": 21, "is_land": true, "taps": "W" }, { "name": "Ranger-Captain of Eos", "idx": 9, "num": 40, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Serra Ascendant", "idx": 2, "num": 42, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 4, "name": "Ajani, Strength of the Pride", "cost": "{2}{W}{W}", "mv": 4, "kind": "permanent" }, { "num": 13, "name": "Heliod, Sun-Crowned", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 48, "land_drops_left": 0, "life_gained_this_turn": 1 },
+  "opponent": { "life": 2, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }] },
+  "legal_targets": [{ "kind": "permanent", "index": 2, "label": "Serra Ascendant (1/1) (yours)" }, { "kind": "permanent", "index": 4, "label": "Auriok Champion (1/1) (yours)" }, { "kind": "permanent", "index": 5, "label": "Ajani's Pridemate (10/10) (yours)" }, { "kind": "permanent", "index": 7, "label": "Heliod, Sun-Crowned (5/5) (yours)" }, { "kind": "permanent", "index": 9, "label": "Ranger-Captain of Eos (3/3) (yours)" }],
+  "heuristic_default": 2,
+  "options": [{ "index": 0, "label": "Serra Ascendant (1/1) (yours)", "targets": [{ "kind": "permanent", "index": 2 }] }, { "index": 1, "label": "Auriok Champion (1/1) (yours)", "targets": [{ "kind": "permanent", "index": 4 }] }, { "index": 2, "label": "Ajani's Pridemate (10/10) (yours)", "targets": [{ "kind": "permanent", "index": 5 }] }, { "index": 3, "label": "Heliod, Sun-Crowned (5/5) (yours)", "targets": [{ "kind": "permanent", "index": 7 }] }, { "index": 4, "label": "Ranger-Captain of Eos (3/3) (yours)", "targets": [{ "kind": "permanent", "index": 9 }] }],
+  "note": "reply an option index -- the permanent this ability (Heliod, Sun-Crowned (life gained)) targets. It is given a +1/+1 counter. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 19,
+  "main_ordinal": 7,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "reveals": [{ "turn": 6, "source": "Ranger-Captain of Eos (searched)", "cards": [{ "name": "Walking Ballista", "disposition": "to hand" }] }],
+  "events": [{ "turn": 6, "kind": "trigger", "text": "❤️ life gained: Ajani's Pridemate +1/+1, Heliod, Sun-Crowned → +1/+1 on Ajani's Pridemate" }, { "turn": 6, "kind": "drain", "text": "💚 Ranger-Captain of Eos entered — Auriok Champion: you +1 (26→27)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 27, "battlefield": [{ "name": "Ajani's Pridemate", "idx": 5, "num": 3, "is_land": false, "power": 11, "toughness": 11, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 9 }] }, { "name": "Auriok Champion", "idx": 4, "num": 7, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Heliod, Sun-Crowned", "idx": 7, "num": 12, "is_land": false, "power": 5, "toughness": 5 }, { "name": "Plains", "idx": 1, "num": 18, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 3, "num": 19, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 6, "num": 20, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 8, "num": 21, "is_land": true, "taps": "W" }, { "name": "Ranger-Captain of Eos", "idx": 9, "num": 40, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Serra Ascendant", "idx": 2, "num": 42, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 4, "name": "Ajani, Strength of the Pride", "cost": "{2}{W}{W}", "mv": 4, "kind": "permanent" }, { "num": 13, "name": "Heliod, Sun-Crowned", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }, { "num": 59, "name": "Walking Ballista", "cost": "{X}{X}", "mv": 0, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 47, "land_drops_left": 0, "life_gained_this_turn": 1 },
+  "opponent": { "life": 2, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Ranger-Captain of Eos: sac 1 creature", "land": null, "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "src_num": 40, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 1, "summary": "land=none; cast: Walking Ballista (X=0)", "land": null, "casts": ["Walking Ballista"], "actions": [{ "card": "Walking Ballista" }] },
+    { "index": 2, "summary": "land=none; cast: Walking Ballista (X=0), Ranger-Captain of Eos: sac 1 creature", "land": null, "casts": ["Walking Ballista", "Ranger-Captain of Eos"], "actions": [{ "card": "Walking Ballista" }, { "card": "Ranger-Captain of Eos", "src_num": 40, "activate": true, "sacout": true, "sac_count": 1 }] }
+  ],
+  "plans_hidden": 12,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 20,
+  "type": "target",
+  "source": "Heliod, Sun-Crowned (life gained)",
+  "turn": 6,
+  "loyalty": "given a +1/+1 counter",
+  "per_target_damage": 0, "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 28, "battlefield": [{ "name": "Ajani's Pridemate", "idx": 5, "num": 3, "tapped": true, "is_land": false, "power": 12, "toughness": 12, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 10 }] }, { "name": "Auriok Champion", "idx": 4, "num": 7, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Heliod, Sun-Crowned", "idx": 7, "num": 12, "tapped": true, "is_land": false, "power": 5, "toughness": 5 }, { "name": "Plains", "idx": 1, "num": 18, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 3, "num": 19, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 6, "num": 20, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 8, "num": 21, "is_land": true, "taps": "W" }, { "name": "Ranger-Captain of Eos", "idx": 9, "num": 40, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Serra Ascendant", "idx": 2, "num": 42, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 4, "name": "Ajani, Strength of the Pride", "cost": "{2}{W}{W}", "mv": 4, "kind": "permanent" }, { "num": 13, "name": "Heliod, Sun-Crowned", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }, { "num": 59, "name": "Walking Ballista", "cost": "{X}{X}", "mv": 0, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 47, "land_drops_left": 0, "life_gained_this_turn": 2 },
+  "opponent": { "life": -16, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }] },
+  "legal_targets": [{ "kind": "permanent", "index": 2, "label": "Serra Ascendant (1/1) (yours)" }, { "kind": "permanent", "index": 4, "label": "Auriok Champion (1/1) (yours)" }, { "kind": "permanent", "index": 5, "label": "Ajani's Pridemate (12/12) (yours)" }, { "kind": "permanent", "index": 7, "label": "Heliod, Sun-Crowned (5/5) (yours)" }, { "kind": "permanent", "index": 9, "label": "Ranger-Captain of Eos (3/3) (yours)" }],
+  "heuristic_default": 2,
+  "options": [{ "index": 0, "label": "Serra Ascendant (1/1) (yours)", "targets": [{ "kind": "permanent", "index": 2 }] }, { "index": 1, "label": "Auriok Champion (1/1) (yours)", "targets": [{ "kind": "permanent", "index": 4 }] }, { "index": 2, "label": "Ajani's Pridemate (12/12) (yours)", "targets": [{ "kind": "permanent", "index": 5 }] }, { "index": 3, "label": "Heliod, Sun-Crowned (5/5) (yours)", "targets": [{ "kind": "permanent", "index": 7 }] }, { "index": 4, "label": "Ranger-Captain of Eos (3/3) (yours)", "targets": [{ "kind": "permanent", "index": 9 }] }],
+  "note": "reply an option index -- the permanent this ability (Heliod, Sun-Crowned (life gained)) targets. It is given a +1/+1 counter. Default = the AI's pick."
+}
+}
+  ],
+  "final_events": [
+    { "turn": 6, "kind": "trigger", "text": "❤️ life gained: Ajani's Pridemate +1/+1, Heliod, Sun-Crowned → +1/+1 on Ajani's Pridemate" },
+    { "turn": 6, "kind": "combat", "text": "⚔ attacked: Serra Ascendant (1), Auriok Champion (1), Ajani's Pridemate (11), Heliod, Sun-Crowned (5) — 18 to opponent (2→-16)" }
+  ]
+}

@@ -96,7 +96,9 @@ def load(paths):
                  "reached a budgeted search decision?  A d0/greedy cell emits none by design.")
     rows = []
     for r in csv.DictReader(data_lines, delimiter="\t"):
-        rows.append({k: int(v) for k, v in r.items() if v != ""})
+        # `board` is the one string column (the decision's situation descriptor); everything else is a
+        # counter. Older censuses have no board column, which is fine.
+        rows.append({k: (v if k == "board" else int(v)) for k, v in r.items() if v != "" and k is not None})
     return rows, (gates.pop() if gates else "")
 
 

@@ -13,7 +13,7 @@
     "COUNT axis, the plan-signature fold that keeps three activations from deduping down to one,",
     "the apply loop that pays activations 2 and 3 out of the turn's real mana, opponentdeck's mill",
     "primitive, and the deck-out win check. The opponent is at FULL life, so nothing here can be",
-    "confused with a damage kill: they end on 18 life, i.e. the 2 the Infiltrator's body hit for in combat, nowhere near lethal. The win is the empty library.",
+    "confused with a damage kill: they end on 20 life: the library empties in the first main, and that ends the game before combat (CR 104.3c / 704.5a; GameEngine::RunTurnFrom's main-1 check, 2026-10-28 -- it used to end on 18 after a meaningless Infiltrator swing). The win is the empty library.",
     "",
     "Verified DISCRIMINATING: at opponent_library_size 4 (one more than the mana can reach) the",
     "engine correctly finds no win."
@@ -69,5 +69,5 @@
   "budget_ms": 200,
   "max_turns": 6,
   "expect_win_turn": 4,
-  "expect_opponent_life": 18
+  "expect_opponent_life": 20
 }

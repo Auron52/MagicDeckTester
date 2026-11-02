@@ -154,7 +154,7 @@ std::vector<AnalyzerEngine::GameRecord> AnalyzerEngine::RunForRecords(
             {
                 int gi = next_game.fetch_add(1, std::memory_order_relaxed);
                 if (gi >= num_games) { break; }
-                GameState state = GoldFishRunner::SetupGame(deck, seed + static_cast<uint64_t>(gi));
+                GameState state = GoldFishRunner::SetupGame(deck, seed + static_cast<uint64_t>(gi), gi);
                 records[gi].win_turn     = engine.RunGame(state, max_turns);
                 records[gi].opening_hand = ai.GetKeptOpeningHand();
             }

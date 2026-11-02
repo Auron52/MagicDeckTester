@@ -1,0 +1,24 @@
+{
+  "deck": "decks/LifegainHeliodCombo/LifegainHeliodCombo.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 40,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 50,
+  "max_turns": 3,
+  "lands_played_this_turn": 1,
+  "_comment": "LifegainHeliodCombo (2026-10-27), Abiding Grace: TWO COPIES = two triggers, each its own mode and target. Two Soul Wardens in the graveyard are two legal targets (copies of one card), Auriok Champion (sick) on the battlefield. Trigger 1 returns a Warden (Champion +1 = 21); trigger 2 returns the OTHER Warden (Champion +1, and the first Warden sees it enter +1 = 23). 21 or 22 = the second trigger re-targeted the first's card (fizzle) or gained instead.",
+  "battlefield": [
+    {"name": "Plains"},
+    {"name": "Abiding Grace"},
+    {"name": "Abiding Grace"},
+    {"name": "Auriok Champion", "sick": true}
+  ],
+  "graveyard": ["Soul Warden", "Soul Warden"],
+  "hand": [],
+  "expect_no_win": true,
+  "expect_active_life": 23
+}

@@ -30,6 +30,7 @@ MODE = next((a for a in sys.argv[1:] if not a.startswith("-")), None)
 if MODE not in ("smoke", "regression", "overnight"):
     print("usage: audit_changed_games.py <smoke|regression|overnight> [--old-git]"); sys.exit(2)
 OLD_GIT = "--old-git" in sys.argv
+GT_LOGS = os.environ.get("REGRESSION_GT_LOGS", "test/gt_logs")
 
 
 def read_wins(text):
@@ -65,16 +66,16 @@ def old_side(key):
         r = subprocess.run(["git", "show", f"HEAD~1:test/gt_logs/{key}.wins"],
                            capture_output=True, text=True)
         return read_wins(r.stdout) if r.returncode == 0 else {}
-    p = f"test/gt_logs/{key}.wins"
+    p = f"{GT_LOGS}/{key}.wins"
     return read_wins(open(p).read()) if os.path.exists(p) else {}
 
 
 def new_side(key):
-    p = f"test/gt_logs/{key}.wins" if OLD_GIT else f"test/logs/{MODE}/wins/{key}.wins"
+    p = f"{GT_LOGS}/{key}.wins" if OLD_GIT else f"test/logs/{MODE}/wins/{key}.wins"
     return read_wins(open(p).read()) if os.path.exists(p) else {}
 
 
-keys = sorted(os.path.basename(f)[:-5] for f in glob.glob(f"test/gt_logs/*_{MODE}_*.wins"))
+keys = sorted(os.path.basename(f)[:-5] for f in glob.glob(f"{GT_LOGS}/*_{MODE}_*.wins"))
 if not keys:
     print(f"no committed gt_logs for mode '{MODE}'"); sys.exit(2)
 # Only the cases THIS run played. test/logs/<mode>/wins/ keeps every .wins any earlier run left behind,

@@ -123,11 +123,15 @@ int PrepayEnergyAfter(int arm, bool* accepted)
 
 }   // namespace
 
+// Both tests below are about the rollback of a DECLINED prepay, so they run without MTG_PREPAY_AURA_STAGE,
+// which pays this very batch (the last test).
 TEST_CASE("EDF: a declined prepay gives back the Aether Hub's {E} (MTG_PREPAY_ENERGY_RESTORE)")
 {
     bool acc_on = true, acc_off = true;
+    heurarm::t_arm[heurarm::PREPAY_AURA_STAGE] = 0;
     const int on  = PrepayEnergyAfter(1, &acc_on);
     const int off = PrepayEnergyAfter(0, &acc_off);
+    heurarm::t_arm[heurarm::PREPAY_AURA_STAGE] = -1;
     // The prepay cannot pay both casts off the pre-Trace board, so it declines either way...
     CHECK_FALSE(acc_on);
     CHECK_FALSE(acc_off);
@@ -141,6 +145,7 @@ TEST_CASE("EDF: a declined prepay gives back the Aether Hub's {E} (MTG_PREPAY_EN
 // coloured mode for Trace's {R/W}.
 TEST_CASE("EDF: after a declined prepay Trace of Abundance still pays off the Hub (MTG_PREPAY_ENERGY_RESTORE)")
 {
+    heurarm::t_arm[heurarm::PREPAY_AURA_STAGE] = 0;
     for (int arm : { 1, 0 })
     {
         Board1985 b = Make1985();
@@ -156,4 +161,30 @@ TEST_CASE("EDF: after a declined prepay Trace of Abundance still pays off the Hu
         if (arm == 1) { CHECK(paid); }
         else          { CHECK_FALSE(paid); }
     }
+    heurarm::t_arm[heurarm::PREPAY_AURA_STAGE] = -1;
+}
+
+// MTG_PREPAY_AURA_STAGE, as an apply makes it: Trace is prepaid off Kitchen's {G} and the Hub's coloured mode
+// (the one {E}) with the Coast held, and Displacer pays once Trace is on the Coast -- the Coast's own mana,
+// Wild Growth's {G} and Trace's bonus as the {W}. Five mana from three lands, the bonus only after its Aura.
+TEST_CASE("EDF: the staged prepay pays Trace of Abundance first, and Eldrazi Displacer off the Trace'd Coast (MTG_PREPAY_AURA_STAGE)")
+{
+    Board1985 b = Make1985();
+    const std::vector<Action> line = { CastAction(b.s, "Trace of Abundance", b.coast),
+                                       CastAction(b.s, "Eldrazi Displacer", 0) };
+    CHECK_FALSE(TurnSolver::BatchPrepayMainCasts(b.s, line, /*mint_prefix=*/false, /*hand_demand=*/false,
+                                                 /*allow_partial=*/true));
+    CHECK(b.s.players[0].energy_counters == 0);   // the Hub's {E}, spent on Trace's {R/W}
+    CHECK(b.s.battlefield.size() == 4);           // no stand-in left behind
+    CHECK_FALSE(b.s.battlefield[0].tapped);       // the Coast: Trace's host, left up
+    CHECK(TapForCostDirect(b.s, CardDatabase::Instance().Lookup("Trace of Abundance")->card.m_mana_cost,
+                           /*for_creature=*/false));
+    CHECK(b.s.floating_mana.Total() == 0);
+    Permanent tr;
+    tr.card             = CardDatabase::Instance().Lookup("Trace of Abundance")->card;
+    tr.card.m_number    = 900;
+    tr.aura_attached_to = b.coast;
+    b.s.battlefield.push_back(tr);
+    CHECK(TapForCostDirect(b.s, CardDatabase::Instance().Lookup("Eldrazi Displacer")->card.m_mana_cost,
+                           /*for_creature=*/true));
 }

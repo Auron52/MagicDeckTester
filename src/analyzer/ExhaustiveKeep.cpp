@@ -1,5 +1,6 @@
 #include "../core/EnvFlags.h"
 #include "../core/GameSetup.h"
+#include "../core/MemBudget.h"
 #include "ExhaustiveKeep.h"
 #include "BucketPolicy.h"
 #include "../deck/DeckLoader.h"
@@ -836,7 +837,7 @@ static std::string RolloutConfigDigest(const Decklist& deck, const MulliganProfi
                 digests[gi] = TimedRollout("play-digest",
                     [&]{ return "game gi=" + std::to_string(gi) + " seed=" + std::to_string(seed); },
                     [&]() -> uint64_t {
-                        GameState state = GoldFishRunner::SetupGame(deck, seed);
+                        GameState state = GoldFishRunner::SetupGame(deck, seed, gi);
                         GoldFishRunner::PopulateOpponentSpawns(state, gi);
                         GameLogger dlog(/*digest_only=*/true);
                         dlog.StartGame(std::string(), gi, "d", seed, {});
@@ -908,7 +909,11 @@ static EquivReport BuildEquivalenceClasses(const Decklist& deck, const MulliganP
     const std::string eq_cache_path = !eq_cache_s.empty() ? eq_cache_s : cfg.gen_cache;
     const char*       eq_cache      = eq_cache_path.empty() ? nullptr : eq_cache_path.c_str();
     bool eq_loaded = false;
-    if (eq_cache && *eq_cache && std::filesystem::exists(eq_cache))
+    // MTG_KEEP_BUCKETS_FROM (below) outranks the discovery cache: a cache written by an earlier
+    // re-discovery of the SAME inputs is exactly the drifted bucketing the incumbent is there to
+    // override (Mirrorwing 2026-10-24: the failed run's K=15 cache hit before the incumbent was read).
+    const bool eq_incumbent_set = []{ const char* s = std::getenv("MTG_KEEP_BUCKETS_FROM"); return s && *s; }();
+    if (!eq_incumbent_set && eq_cache && *eq_cache && std::filesystem::exists(eq_cache))
     {
         std::ifstream cf(eq_cache);
         nlohmann::json cj; bool ok = true;
@@ -959,6 +964,82 @@ static EquivReport BuildEquivalenceClasses(const Decklist& deck, const MulliganP
                         << " fingerprint MISMATCH -- re-discovering\n" << std::flush; }
         }
     }
+    // INCUMBENT BUCKETS (MTG_KEEP_BUCKETS_FROM=<keep table .json>, USER 2026-10-24: "we could actually
+    // save the bucketing used"). A REGENERATION re-uses the bucketing of the table it replaces instead of
+    // re-discovering it: discovery is a clustering of integer win-turn deltas, so a play change that is
+    // irrelevant to the keep decision can still split or merge a borderline pair (Mirrorwing 2026-10-24:
+    // Game Trail + Rootbound Crag merged, K 16 -> 15, and the K check refused the run), and on a heavy
+    // deck it is also the slowest phase (Hinata2's ran 4+ h at play depth on 5 of 32 cores). Only the
+    // member lists are read -- nothing downstream of discovery reads a class signature. Accepted ONLY
+    // when the buckets partition this deck's distinct main-deck cards exactly and honour the bucket
+    // policy's keep_apart; anything else (a decklist edit, a new ruling) falls back to discovery, loudly.
+    if (!eq_loaded)
+    {
+        const char* bf = std::getenv("MTG_KEEP_BUCKETS_FROM");
+        if (bf && *bf)
+        {
+            std::set<std::string> deck_names;
+            for (const Card& c : deck.mainboard) { deck_names.insert(c.m_name.str()); }
+            std::string why;
+            EquivReport inc;
+            try
+            {
+                // Keep ONLY the bucket lists while parsing: an incumbent table is the whole keep table
+                // (FiveColour's is 1.8 GB), and a full DOM of it blew past the 20 GB RSS cap
+                // (2026-10-25). Every other key is discarded at its key event, so its subtree is
+                // tokenized but never stored.
+                std::ifstream bfs(bf);
+                const nlohmann::json::parser_callback_t only_buckets =
+                    [](int depth, nlohmann::json::parse_event_t ev, nlohmann::json& parsed)
+                {
+                    if (ev != nlohmann::json::parse_event_t::key) { return true; }
+                    const std::string& k = parsed.get_ref<const std::string&>();
+                    if (depth == 1) { return k == "exhaustive_keep" || k == "buckets"; }
+                    return depth != 2 || k == "buckets";
+                };
+                nlohmann::json bj = nlohmann::json::parse(bfs, only_buckets);
+                const nlohmann::json& ek = bj.contains("exhaustive_keep") ? bj["exhaustive_keep"] : bj;
+                std::set<std::string> seen;
+                for (const auto& jb : ek.at("buckets"))
+                {
+                    EquivClass ec;
+                    ec.members = jb.get<std::vector<std::string>>();
+                    for (const std::string& m : ec.members)
+                    {
+                        if (!deck_names.count(m)) { why = "bucket card '" + m + "' is not in the deck"; }
+                        else if (!seen.insert(m).second) { why = "card '" + m + "' is in two buckets"; }
+                    }
+                    if (cfg.policy != nullptr)
+                        for (std::size_t a = 0; a < ec.members.size(); ++a)
+                            for (std::size_t b = a + 1; b < ec.members.size(); ++b)
+                                if (cfg.policy->MustKeepApart(ec.members[a], ec.members[b]))
+                                { why = "bucket joins keep_apart pair " + ec.members[a] + " / " + ec.members[b]; }
+                    inc.classes.push_back(std::move(ec));
+                }
+                if (why.empty() && seen.size() != deck_names.size())
+                {
+                    for (const std::string& n : deck_names)
+                        if (!seen.count(n)) { why = "deck card '" + n + "' is in no bucket"; break; }
+                }
+                if (why.empty() && inc.classes.empty()) { why = "no buckets"; }
+            }
+            catch (const std::exception& e) { why = std::string("unreadable: ") + e.what(); }
+            if (why.empty())
+            {
+                inc.probes         = cfg.probes;
+                inc.distinct_cards = static_cast<int>(deck_names.size());
+                eq = std::move(inc);
+                eq_loaded = true;
+                std::cerr << "[keepgen] equivalence discovery: INCUMBENT BUCKETS (" << eq.classes.size()
+                          << " buckets from " << bf << ", MTG_KEEP_BUCKETS_FROM) -- skipped\n" << std::flush;
+            }
+            else
+            {
+                std::cerr << "[keepgen] MTG_KEEP_BUCKETS_FROM " << bf << " REJECTED (" << why
+                          << ") -- re-discovering\n" << std::flush;
+            }
+        }
+    }
     if (!eq_loaded)
     {
         std::cerr << "[keepgen] equivalence discovery: " << cfg.probes << " probes, depth " << cfg.equiv_depth
@@ -994,45 +1075,7 @@ static EquivReport BuildEquivalenceClasses(const Decklist& deck, const MulliganP
     // parity is preserved: chunks with the same spec share the fingerprint; a different spec won't pool.
     if (!cfg.force_merge.empty())
     {
-        auto split = [](const std::string& s, char d) {
-            std::vector<std::string> out; std::string cur;
-            for (char c : s) { if (c == d) { if (!cur.empty()) out.push_back(cur); cur.clear(); } else cur += c; }
-            if (!cur.empty()) out.push_back(cur);
-            return out; };
-        auto trim = [](std::string s) {
-            std::size_t a = s.find_first_not_of(" \t"); std::size_t b = s.find_last_not_of(" \t");
-            return (a == std::string::npos) ? std::string() : s.substr(a, b - a + 1); };
-        std::vector<char> removed(eq.classes.size(), 0);
-        for (const std::string& grp : split(cfg.force_merge, ';'))
-        {
-            int keep_cls = -1;
-            for (const std::string& raw : split(grp, ','))
-            {
-                const std::string nm = trim(raw);
-                if (nm.empty()) { continue; }
-                // Match the full member name OR its pre-comma segment, so a card whose name CONTAINS a
-                // comma (e.g. "Karrthus, Tyrant of Jund", "Lathliss, Dragon Queen") is addressable by its
-                // leading name ("Karrthus", "Lathliss") -- the group delimiter is ',' so the full comma
-                // name can't be written literally. Comma-free names still match exactly (unchanged).
-                int found = -1;
-                for (std::size_t c = 0; c < eq.classes.size(); ++c)
-                    if (!removed[c])
-                        for (const std::string& mem : eq.classes[c].members)
-                            if (mem == nm || mem.substr(0, mem.find(',')) == nm)
-                            { found = static_cast<int>(c); break; }
-                if (found < 0) { std::cerr << "[keepgen]   force-merge: card not found: '" << nm << "'\n"; continue; }
-                if (keep_cls < 0) { keep_cls = found; }
-                else if (found != keep_cls)
-                {
-                    for (const std::string& mem : eq.classes[found].members)
-                    { eq.classes[keep_cls].members.push_back(mem); }
-                    removed[found] = 1;
-                }
-            }
-        }
-        std::vector<EquivClass> kept;
-        for (std::size_t c = 0; c < eq.classes.size(); ++c) if (!removed[c]) kept.push_back(eq.classes[c]);
-        eq.classes = std::move(kept);
+        ApplyBucketMergeSpec(eq, cfg.force_merge, std::cerr);
         std::cerr << "[keepgen] force-merge applied: -> " << eq.classes.size() << " buckets\n" << std::flush;
     }
 
@@ -2451,6 +2494,34 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     auto capture_slow = [&](int H, const std::vector<int>& comp, int pd, long long r, uint64_t rs, double ms)
     { Slow().Observe(ms, "keep-rollout", [&]{ return describe_cell(H, comp, pd, r, rs); }); };
 
+    // ---- IN-FLIGHT ROLLOUTS, named on an RSS-cap abort ----------------------------------------------
+    // The slow stream above names a rollout only when it FINISHES, so one that explodes in memory and
+    // trips MTG_RSS_CAP_GB mid-flight left no trace: LandfallElementals 2026-10-23 went 9.6 -> 19.5 GB
+    // in 20 s, about 4 minutes into each of four resumed launches, and the abort named nothing. Every
+    // rollout registers (H, comp, side, r, seed, start) here, and the cap's context printer lists the
+    // live ones oldest-first as SLOW-ROLLOUT lines (ms = age so far), so `grep 'in flight'` of the abort
+    // feeds MTG_KEEP_REPLAY_LIST unchanged. One uncontended lock per rollout; nothing here feeds a
+    // decision, a seed or an accumulator, so results stay byte-identical.
+    struct InFlight { std::chrono::steady_clock::time_point t0; int H; std::vector<int> comp; int pd; long long r; uint64_t rs; };
+    std::mutex flight_mtx;
+    std::unordered_map<std::thread::id, InFlight> flight;
+    membudget::SetCapContext([&]() -> std::string {
+        std::vector<InFlight> v;
+        { std::lock_guard<std::mutex> lk(flight_mtx); for (const auto& kv : flight) { v.push_back(kv.second); } }
+        std::sort(v.begin(), v.end(), [](const InFlight& a, const InFlight& b) { return a.t0 < b.t0; });
+        const auto now = std::chrono::steady_clock::now();
+        std::string out;
+        for (const InFlight& f : v)
+        {
+            const long long ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - f.t0).count();
+            out += "[rss-cap]   in flight: SLOW-ROLLOUT " + std::to_string(ms) + "ms  keep-rollout  "
+                 + describe_cell(f.H, f.comp, f.pd, f.r, f.rs) + "\n";
+        }
+        return out;
+    });
+    // The printer reads this frame's locals, so it must not outlive the frame.
+    struct CapContextClear { ~CapContextClear() { membudget::SetCapContext(std::function<std::string()>()); } } cap_ctx_clear;
+
     // ---- PER-ROLLOUT WALL BACKSTOP, and what an abandoned rollout does (USER RULING 2026-10-10) ----
     // Until this existed the keep generator armed NO per-rollout bound of any kind: `gamework` was
     // armed only by BatchRunner, so `RolloutKeepWinTurn` here ran unbounded. That is not a theoretical
@@ -2849,8 +2920,10 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         const auto t_roll = std::chrono::steady_clock::now();
         double wt;
         arm_rollout();
+        { std::lock_guard<std::mutex> lk(flight_mtx); flight[std::this_thread::get_id()] = { t_roll, H, comp, pd, r, rs }; }
         if (hit) { std::fill(hit->begin(), hit->end(), 0); wt = ai.RolloutKeepWinTurn(s, 0, cfg.max_turns, hit); }
         else     { wt = ai.RolloutKeepWinTurn(s, 0, cfg.max_turns); }
+        { std::lock_guard<std::mutex> lk(flight_mtx); flight.erase(std::this_thread::get_id()); }
         capture_slow(H, comp, pd, r, rs,   // always-on (cheap-gated); slow_ms only adds streaming
             std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t_roll).count());
         // Abandoned => NOT A LABEL. This path's caller stores the result in a per-(cell,r) slot and

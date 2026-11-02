@@ -1,0 +1,69 @@
+{
+  "_comment": [
+    "HARD PRUNES (2026-10-28): the SAME position with the three plan-level levers ON. THE SHUFFLE LINE (USER: 'use",
+    "Brainstorm or Brainsurge to throw away bad cards with a shuffle ... might be the one case where we don't always throw",
+    "back all of our Eldrazi'): the Brainstorm draws the Cyclone (now available), go-off is 2+ draws away, so both plans",
+    "stay and the JUNK plan's pick is the dump of both Deluges before the Tarn. The original fixture follows.",
+    "Cantrip item 1 (2026-10-28): THE SHUFFLE LINE (USER 2026-10-27: 'use Brainstorm or Brainsurge to throw away bad cards",
+    "with a shuffle, such as from a fetchland ... We need to support playing the fetch lands after the brainstorm to do",
+    "this'). Round 2, main 1, the land drop unused: Island + Steam Vents out; Brainstorm, two Toxic Deluges (dead),",
+    "Scalding Tarn, Street Wraith and Emrakul in hand -- NO Unpredictable Cyclone (a missing piece; go-off 2+ draws away).",
+    "The library top is Cyclone, Ponder, Remand (no land), then Mountains (and a Steam Vents + an Emrakul at the bottom).",
+    "The line: cast Brainstorm (draws the Cyclone), put back the two Deluges (the scored order ranks this dump FIRST only",
+    "because a shuffle follows), THEN play the Tarn and crack it (Steam Vents) -- the shuffle takes the Deluges away, the",
+    "round-3 and round-4 draws are lands, and round 4 casts Cyclone and cycles the Wraith into the library Emrakul.",
+    "Playing the Tarn first shuffles the Cyclone away before the Brainstorm; skipping the shuffle leaves both Deluges as",
+    "the next two draws (no fifth land). Asserted on the game log at the shipped play budget (d5 b20)."
+  ],
+  "env": {
+    "MTG_CYCLONE_PB_PLANS": "1",
+    "MTG_CYCLONE_PONDER_PLANS": "1",
+    "MTG_CYCLONE_CANTRIP_SITUATIONAL": "1"
+  },
+  "deck": "decks/Unpredictable Cyclone/Unpredictable Cyclone.cod",
+  "turn": 2,
+  "on_the_play": true,
+  "resume_at": "main1",
+  "lands_played_this_turn": 0,
+  "active_life": 20,
+  "opponent_life": 15,
+  "battlefield": [
+    {
+      "name": "Island",
+      "controller": 0
+    },
+    {
+      "name": "Steam Vents",
+      "controller": 0
+    }
+  ],
+  "hand": [
+    "Brainstorm",
+    "Toxic Deluge",
+    "Toxic Deluge",
+    "Scalding Tarn",
+    "Street Wraith",
+    "Emrakul, the Aeons Torn"
+  ],
+  "library_top": [
+    "Unpredictable Cyclone",
+    "Ponder",
+    "Remand"
+  ],
+  "library_filler": "Mountain",
+  "library_size": 20,
+  "library": [
+    "Steam Vents",
+    "Emrakul, the Aeons Torn"
+  ],
+  "depth": 5,
+  "budget_ms": 20,
+  "max_turns": 6,
+  "expect_log_sequence": [
+    "T2 MAIN_1 CAST_SPELL Brainstorm",
+    "REVEAL Brainstorm (put back): Toxic Deluge, Toxic Deluge",
+    "PLAY_LAND Scalding Tarn"
+  ],
+  "show_log": true,
+  "expect_win_turn": 4
+}

@@ -19,6 +19,7 @@ EXTENSIONS=(
   ms-vscode.cpptools-extension-pack
   ms-python.python
   anthropic.claude-code
+  openai.chatgpt
 )
 
 if ! command -v code >/dev/null 2>&1; then

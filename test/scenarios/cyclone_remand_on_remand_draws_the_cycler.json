@@ -1,0 +1,84 @@
+{
+  "_comment": [
+    "Round 5, main 1, land drop made, nine untapped lands (3 Mountain, 6 Island), opponent at 15. Hand: Unpredictable",
+    "Cyclone, Remand, Remand. Library top: Street Wraith, Island, Emrakul. The only round-5 kill is REMAND-ON-REMAND",
+    "(USER 2026-10-28): cast Cyclone ({3}{R}{R}), Remand A on it, Remand B on A ({1}{U} each) -- B resolves first:",
+    "A back to hand, B draws the Wraith; Cyclone was never countered and resolves. Then cycle the Wraith (2 life):",
+    "Cyclone replaces the draw, the walk exiles the Island and casts Emrakul free -> an extra turn, Emrakul attacks",
+    "for 15 (extra turns do not count: round 5). Remand A's target is a MV-5 spell -- no ceiling on it.",
+    "Ceiling 2 (MTG_CYCLONE_REMAND_MAX_MV=2) admits the chain."
+  ],
+  "deck": "decks/Unpredictable Cyclone/Unpredictable Cyclone.cod",
+  "env": {
+    "MTG_CYCLONE_REMAND_MAX_MV": "2"
+  },
+  "turn": 5,
+  "on_the_play": true,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "active_life": 20,
+  "opponent_life": 15,
+  "battlefield": [
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Island",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Island",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Island",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Island",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Island",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Island",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Unpredictable Cyclone",
+    "Remand",
+    "Remand"
+  ],
+  "library_top": [
+    "Street Wraith",
+    "Island",
+    "Emrakul, the Aeons Torn"
+  ],
+  "library_filler": "Island",
+  "library_size": 30,
+  "depth": 2,
+  "budget_ms": 100,
+  "max_turns": 7,
+  "expect_win_turn": 5
+}

@@ -39,6 +39,29 @@ the default. `scripts/analyze_deck.py` rebuilds via the same multi-config `build
 optimized); the regression harness expects a pre-built binary at `build/Release/mtg` — build it with
 `./build.sh` first.
 
+## Long-running agent work
+
+A shell job finishing does not, by itself, resume an agent conversation. When a
+requested workflow has dependent stages (for example, generate a mulligan table,
+validate and commit it, then generate a value leaf), keep the agent turn active,
+watch the job to completion, and carry out the remaining stages. If the agent
+cannot stay active, arrange and verify an explicit continuation in the same
+conversation when a scheduling tool is available. Otherwise tell the user
+plainly that completion will not wake the agent, where to check the job, and
+which work remains. Starting a background command is not completion of its
+dependent workflow.
+
+## CPU concurrency
+
+**Use the maximum concurrency the machine supports by default** (USER,
+2026-10-31). Respect the available CPU affinity and machine limits; do not reserve
+cores or carry forward an arbitrary smaller worker cap. On this machine that is
+32 logical CPUs. Smaller counts are for rare, explicit purposes such as debugging
+memory behavior, verifying thread invariance, or investigating a race. Record the
+reason and actual worker count for those exceptions. A question about CPU use is
+not permission to cancel an existing run; fixed worker settings change on the next
+launch unless the user requests a restart.
+
 ## Repository Conventions
 
 - **THE PLAY SERVER MUST NEVER, EVER RUN FROM A TEMPORARY FOLDER (user directive, 2026-10-05).**
@@ -274,8 +297,9 @@ optimized); the regression harness expects a pre-built binary at `build/Release/
   cheap; guessing wrong in the protective direction costs only a couple of cores, guessing
   wrong the other way destroys user work.
 
-- **EVERY OVERNIGHT RUN GETS A SEPARATE 1-HOUR STATUS TIMER — NO EXCEPTIONS (user directive,
-  2026-10-17).** The user's words: *"Any time I give you instructions to run something overnight
+- **EVERY OVERNIGHT RUN GETS A SEPARATE 2-HOUR STATUS TIMER — NO EXCEPTIONS (user directive,
+  2026-10-17; interval changed from 1 h to 2 h by the USER 2026-10-24: *"Every hour is just a bit too
+  often."*).** The user's words: *"Any time I give you instructions to run something overnight
   you MUST set up an additional 1hr timer to check the status of the chain."* and *"I'm tired of
   broken overnight chains wasting hours of compute time."*
   * **What it cost.** 2026-10-17, Landfall mulligan profile. The agent launched a detached chain to
@@ -286,9 +310,16 @@ optimized); the regression harness expects a pre-built binary at `build/Release/
     detached process cannot notify the agent and nothing else was watching, so the box sat idle until
     the user asked at 21:18. The user: *"You failed badly here and wasted the overnight."*
   * **How.** In the same turn that launches the chain, create the timer with `CronCreate`: a
-    recurring hourly cron on an off-minute (e.g. `7 * * * *`), `durable: true` if the session might be
-    closed overnight. Its prompt names the chain and where its status lives (log file, DONE/STOPPED
-    markers, pid). On every fire, read that status. If the chain stopped, stalled, or left the box
+    recurring 2-hourly cron on an off-minute (e.g. `7 */2 * * *`), **`durable: false` (session-only) --
+    NEVER `durable: true`** (USER 2026-10-24: *"We should not be creating them this way."*). A durable job
+    lives in the SHARED `.claude/scheduled_tasks.json`, and every session in this checkout reads that file,
+    lists the job and FIRES it -- so one agent's timer lands in every other session, prompting each to
+    act on a run it does not own. 2026-10-23/24: the LFE mullgen timer fired in three sessions, and kept
+    arriving for hours after its run finished and the file entry was deleted (mechanism unconfirmed;
+    no session's CronList showed it any more, so nothing could cancel it). Durability buys nothing
+    anyway: the harness-tracked run is a child of the session, so a closed session loses the run's
+    waiter too. Its prompt names the OWNER session (so a stray copy is recognisably someone else's),
+    the chain and where its status lives (log file, DONE/STOPPED markers, pid). On every fire, read that status. If the chain stopped, stalled, or left the box
     idle, take the next step yourself: fix and relaunch it, or run the step it should have reached.
     Then report what you did. `CronDelete` the timer once the chain has finished and its result is
     reported. The timer comes IN ADDITION to a `run_in_background` waiter on the chain's markers (the
@@ -297,7 +328,7 @@ optimized); the regression harness expects a pre-built binary at `build/Release/
     wait on the process and set an extra waiter when it is overnight. I guess I didn't say that it was, but if
     it is anywhere in the 5:30 AM - 1:00 PM PDT range you should use the waiter."* So ANY long run whose span
     touches **5:30 AM - 1:00 PM Pacific (12:30 - 20:00 UTC under PDT, 13:30 - 21:00 UTC under PST)** gets the
-    hourly `CronCreate` timer above, whether or not the user called it overnight -- and EVERY long run, in or
+    2-hourly `CronCreate` timer above, whether or not the user called it overnight -- and EVERY long run, in or
     out of the window, gets a `run_in_background` waiter. 2026-10-22: a Landfall screen round finished at
     16:49 UTC with neither working, and the box sat idle ~4.5 h until the user asked "What's going on?".
   * **A waiter keys on the PID, never on `pgrep -f`.** `while pgrep -f "deck_compare.py spec.json"; do sleep 30;
@@ -472,8 +503,9 @@ optimized); the regression harness expects a pre-built binary at `build/Release/
     shouldn't be arbitrarily increasing the limit."* Only the USER changes the yardstick.) Check with
     `suite_gate.py --cost decks/<Deck>`; the table is `test/suite_cost.json`, refilled by
     `--measure-all` from **one pooled tier run** (never a per-deck loop — that is the "waves are a
-    loop" defect). The gated number is per-game core-ms at the deck's worst *searched* case, not total
-    tier time, because total is confounded by the game counts we choose and so is gameable by sizing.
+    loop" defect). Pool the seeds of each searched depth and budget, compute ms per game for each
+    depth and budget, then gate on the largest of those averages (USER 2026-10-31). Exclude budget-0
+    backstops. Total tier time is confounded by the game counts we choose and is gameable by sizing.
   * **A deck ENTERS with the small overnight ENTRY set and expands at its keep-table adoption** (USER
     2026-10-10): before the keep table every mulligan game plays out each candidate bottom as a full game,
     so the deck is at its most expensive (Bruna at the standard shape was 28.6% of the overnight tier). Expand
@@ -710,6 +742,15 @@ optimized); the regression harness expects a pre-built binary at `build/Release/
   Private memory is only for a single agent's own continuity across compaction / a
   new session (personal working prefs, resume hooks), never for parking deferred
   project state.
+
+- **Checkpoint active long-running work in the repo.** Keep one short, task-specific
+  file in `docs/design/` with the last completed stage, current source/build state,
+  running command and output paths, unresolved findings, and exact next steps.
+  Update it after milestones and before starting long runs; do not wait for a
+  compaction prompt. After compaction or a new session, read that file and verify
+  the current files and processes before resuming. This is shared project state,
+  so both Claude and Codex use the same checkpoint. Commit and push the checkpoint
+  before moving work to another machine.
 
 ## Coding Conventions Skill
 

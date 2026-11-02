@@ -1,0 +1,69 @@
+{
+  "deck": "decks/treasure_hunt/treasure_hunt.txt",
+  "turn": 3,
+  "on_the_play": true,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "active_life": 20,
+  "opponent_life": 20,
+  "battlefield": [
+    {
+      "name": "Island",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Island",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Treasure Hunt",
+    "Lonely Sandbar"
+  ],
+  "library_top": [
+    "Mountain",
+    "Throes of Chaos"
+  ],
+  "library_filler": "Island",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 50,
+  "env": {
+    "MTG_HUMAN_PLAY": "1",
+    "MTG_UNPRUNED": "1"
+  },
+  "_comment": [
+    "QR1 (USER 2026-10-29: 'Cycling should show in plans'): plan-item cycling on a deck whose provider does NOT",
+    "search its cycles (treasure_hunt keeps the generic dig loop in the autonomous search). Human play offers the hand",
+    "cycler as a plan action (HumanPlayCycleSources), so 'cast Treasure Hunt, cycle Lonely Sandbar' is ONE line, and its",
+    "payment holds the Island the cycle's {U} needs (PlanTraits::cycle_seed_pips): Treasure Hunt {1}{U} is paid Mountain +",
+    "Island, never Island + Island. Before QR1 the line was 'unsupported' (no enumerated plan cycles this way).",
+    "The graveyard pins prove the cycle happened (the human DigDraw pass skips an unpayable cycle without a",
+    "dropped-cast report). With MTG_ACT_LINE_HOLD=0 the payer spends both Islands on Treasure Hunt and the cycle fails."
+  ],
+  "human_lines": [
+    "cast=Treasure Hunt;cycle=Lonely Sandbar"
+  ],
+  "human_cast_orders": [
+    [
+      "**",
+      "cast=Treasure Hunt",
+      "cycle=Lonely Sandbar"
+    ]
+  ],
+  "expect_human_summary_contains": "Treasure Hunt, cycle Lonely Sandbar",
+  "expect_dropped": [],
+  "max_turns": 3,
+  "expect_no_win": true,
+  "expect_graveyard_contains": [
+    "Lonely Sandbar",
+    "Treasure Hunt"
+  ]
+}

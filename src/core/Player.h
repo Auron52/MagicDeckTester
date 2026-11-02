@@ -18,7 +18,7 @@ struct StagedCard
 struct SuspendedCard
 {
     Card card;
-    int  arrive_turn = 0; // the upkeep turn on which the last time counter is removed -> cast off suspend
+    int  arrive_turn = 0; // upkeep when last counter is removed; -1 = declined, exiled with zero counters
 };
 
 struct Player
@@ -151,6 +151,7 @@ struct Player
     // instead of by an audit of the readers. Folded into the state keys only when nonzero, so it is
     // 0 forever -- and byte-identical -- for every deck with no emblem source.
     int emblem_team_pump           = 0;
+    int emblem_spell_cast_damage   = 0; // Chandra emblems: total damage, five per independent trigger
     int poison_counters            = 0;
     // Rad counters (Mariposa Military Base: "You may have this land enter tapped. If you do, you
     // get two rad counters"). A PLAYER resource, not a permanent's. At the beginning of this

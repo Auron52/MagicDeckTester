@@ -282,7 +282,11 @@ static bool FirstDropManaWouldSitIdle(const GameState& state, bool hold_top_cons
         // Cycling is a real mana sink and the reason this must not just read mana values: on this
         // deck a Fluctuator-discounted cycle costs {0}, and a turn that can cycle is a turn whose
         // mana is NOT idle. EffectiveCyclingCostFor carries the discount (SpellEffects.h).
-        if (d->params.cycling_cost.has_value())
+        // A life-cost cycle (Street Wraith) the payers would refuse (life <= its cost) is no outlet.
+        // One they would take notes its mana part ({0}): reading TOO SMALL is this probe's
+        // conservative direction (the rule declines), see `cheapest` above.
+        if (d->params.cycling_cost.has_value()
+            && CyclingLifePayable(state, state.active_player_index, *d))
         { note(EffectiveCyclingCostFor(state, *d).ManaValue()); }
         if (d->params.sacrifice_draw_cost.has_value())
         { note(d->params.sacrifice_draw_cost->ManaValue()); }

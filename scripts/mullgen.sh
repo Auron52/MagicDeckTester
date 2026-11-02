@@ -656,6 +656,19 @@ PREFLIGHT
     : > "$REPORT"
     # A regen must keep the incumbent to compare against -- and to restore if the new one loses.
     if [ -e "$PROF" ]; then cp -f "$PROF" "$PREV"; log "regeneration: incumbent saved -> $PREV"; fi
+    # ...and keeps its BUCKETING (USER 2026-10-24: "we could actually save the bucketing used"). The
+    # generator re-uses the incumbent's buckets instead of re-discovering them, and falls back to
+    # discovery by itself when they no longer partition the list (a decklist edit) or break a
+    # keep_apart ruling (ExhaustiveKeep.cpp, MTG_KEEP_BUCKETS_FROM). A gzipped-only incumbent is
+    # unpacked into $OUT for the purpose. MTG_KEEP_REDISCOVER=1 forces fresh discovery.
+    if [ "${MTG_KEEP_REDISCOVER:-0}" != 1 ] && [ -z "${MTG_KEEP_BUCKETS_FROM:-}" ]; then
+      if [ -e "$PREV" ]; then
+        export MTG_KEEP_BUCKETS_FROM=$PREV
+      elif [ -e "$PROF.gz" ]; then
+        gzip -dc "$PROF.gz" > "$OUT/incumbent.keepmodel.json" && export MTG_KEEP_BUCKETS_FROM=$OUT/incumbent.keepmodel.json
+      fi
+      [ -n "${MTG_KEEP_BUCKETS_FROM:-}" ] && log "regeneration: re-using the incumbent's buckets ($MTG_KEEP_BUCKETS_FROM)"
+    fi
     log "=== GEN ($(stamp)) deck=$STEM recipe=$RECIPE ==="
     # Per-decision work ceiling (src/ai/DecisionWorkMeter.h). SearchBudget counts one unit per
     # simulated turn-step, so the greedy subset walk inside a step bills NOTHING against it -- on a

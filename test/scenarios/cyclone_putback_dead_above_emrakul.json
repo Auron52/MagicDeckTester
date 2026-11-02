@@ -1,0 +1,55 @@
+{
+  "_comment": [
+    "Cantrip item 1 (2026-10-28): the k = 0 put-back -- a dead noncreature goes ABOVE Emrakul (USER 2026-10-27: 'there is",
+    "actually reason to put it under a useless non-creature card you have in hand even if you are cycling with cyclone this",
+    "turn'). Round 3, main 1: Cyclone out, three Islands, Brainstorm + one Street Wraith in hand; Brainstorm draws Emrakul,",
+    "Toxic Deluge, Island. The scored order's rank 0 is [Toxic Deluge, Emrakul]: the Wraith's walk bottoms the Deluge and",
+    "casts Emrakul (extra turn, 15 flying) -> the 15-life opponent dies in ROUND 3. Every put-back with Emrakul at the walk",
+    "position wins the same round, so the chosen one is the tie-break: the scored rank. The log's put-back record",
+    "(REVEAL 'Brainstorm (put back)', top first) is the assertion."
+  ],
+  "deck": "decks/Unpredictable Cyclone/Unpredictable Cyclone.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "active_life": 20,
+  "opponent_life": 15,
+  "battlefield": [
+    {
+      "name": "Unpredictable Cyclone",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0
+    }
+  ],
+  "hand": [
+    "Brainstorm",
+    "Street Wraith"
+  ],
+  "library_top": [
+    "Emrakul, the Aeons Torn",
+    "Toxic Deluge",
+    "Island"
+  ],
+  "library_filler": "Island",
+  "library_size": 30,
+  "depth": 5,
+  "budget_ms": 20,
+  "max_turns": 4,
+  "expect_win_turn": 3,
+  "expect_log_sequence": [
+    "T3 MAIN_1 CAST_SPELL Brainstorm",
+    "REVEAL Brainstorm (put back): Toxic Deluge, Emrakul, the Aeons Torn"
+  ]
+}

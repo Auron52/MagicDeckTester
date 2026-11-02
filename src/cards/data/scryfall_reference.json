@@ -1,4 +1,13 @@
 {
+  "Abiding Grace": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{W}",
+    "oracle_text": "At the beginning of your end step, choose one —\n• You gain 1 life.\n• Return target creature card with mana value 1 from your graveyard to the battlefield.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment"
+  },
   "Abominable Treefolk": {
     "cmc": 4.0,
     "keywords": [
@@ -375,6 +384,17 @@
     "toughness": "3",
     "type_line": "Creature — Cat Knight"
   },
+  "Asylum Visitor": {
+    "cmc": 2.0,
+    "keywords": [
+      "Madness"
+    ],
+    "mana_cost": "{1}{B}",
+    "oracle_text": "At the beginning of each player's upkeep, if that player has no cards in hand, you draw a card and you lose 1 life.\nMadness {1}{B} (If you discard this card, discard it into exile. When you do, cast it for its madness cost or put it into your graveyard.)",
+    "power": "3",
+    "toughness": "1",
+    "type_line": "Creature — Vampire Wizard"
+  },
   "Atsushi, the Blazing Sky": {
     "cmc": 4.0,
     "keywords": [
@@ -592,6 +612,29 @@
     "toughness": null,
     "type_line": "Land — Swamp Mountain"
   },
+  "Bloodghast": {
+    "cmc": 2.0,
+    "keywords": [
+      "Landfall"
+    ],
+    "mana_cost": "{B}{B}",
+    "oracle_text": "This creature can't block.\nThis creature has haste as long as an opponent has 10 or less life.\nLandfall — Whenever a land you control enters, you may return this card from your graveyard to the battlefield.",
+    "power": "2",
+    "toughness": "1",
+    "type_line": "Creature — Vampire Spirit"
+  },
+  "Bloodline Keeper": {
+    "cmc": 4.0,
+    "keywords": [
+      "Flying",
+      "Transform"
+    ],
+    "mana_cost": "{2}{B}{B}",
+    "oracle_text": "Flying\n{T}: Create a 2/2 black Vampire creature token with flying.\n{B}: Transform this creature. Activate only if you control five or more Vampires.",
+    "power": "3",
+    "toughness": "3",
+    "type_line": "Creature — Vampire"
+  },
   "Bloodstained Mire": {
     "cmc": 0.0,
     "keywords": [],
@@ -758,6 +801,15 @@
     "toughness": null,
     "type_line": "Instant"
   },
+  "Brainsurge": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{U}",
+    "oracle_text": "Draw four cards, then put two cards from your hand on top of your library in any order.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
+  },
   "Branchloft Pathway": {
     "cmc": 0.0,
     "keywords": [],
@@ -793,6 +845,15 @@
     "power": "3",
     "toughness": "4",
     "type_line": "Creature — Badger Druid"
+  },
+  "Brindle Boar": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{G}",
+    "oracle_text": "Sacrifice this creature: You gain 4 life.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Boar"
   },
   "Bruna, Light of Alabaster": {
     "cmc": 6.0,
@@ -895,6 +956,15 @@
     "toughness": null,
     "type_line": "Land — Town"
   },
+  "Captivating Vampire": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{1}{B}{B}",
+    "oracle_text": "Other Vampire creatures you control get +1/+1.\nTap five untapped Vampires you control: Gain control of target creature. It becomes a Vampire in addition to its other types.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Vampire"
+  },
   "Carrion Feeder": {
     "cmc": 1.0,
     "keywords": [],
@@ -962,6 +1032,15 @@
     "toughness": "4",
     "type_line": "Legendary Creature — Human Wizard Knight"
   },
+  "Chain Lightning": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{R}",
+    "oracle_text": "Chain Lightning deals 3 damage to any target. Then that player or that permanent's controller may pay {R}{R}. If the player does, they may copy this spell and may choose a new target for that copy.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
   "Champion of the Parish": {
     "cmc": 1.0,
     "keywords": [],
@@ -970,6 +1049,26 @@
     "power": "1",
     "toughness": "1",
     "type_line": "Creature — Human Soldier"
+  },
+  "Chandra's Incinerator": {
+    "cmc": 6.0,
+    "keywords": [
+      "Trample"
+    ],
+    "mana_cost": "{5}{R}",
+    "oracle_text": "This spell costs {X} less to cast, where X is the total amount of noncombat damage dealt to your opponents this turn.\nTrample\nWhenever a source you control deals noncombat damage to an opponent, this creature deals that much damage to target creature or planeswalker that player controls.",
+    "power": "6",
+    "toughness": "6",
+    "type_line": "Creature — Elemental"
+  },
+  "Chandra, Torch of Defiance": {
+    "cmc": 4.0,
+    "keywords": [],
+    "mana_cost": "{2}{R}{R}",
+    "oracle_text": "+1: Exile the top card of your library. You may cast that card. If you don't, Chandra deals 2 damage to each opponent.\n+1: Add {R}{R}.\n−3: Chandra deals 4 damage to target creature.\n−7: You get an emblem with \"Whenever you cast a spell, this emblem deals 5 damage to any target.\"",
+    "power": null,
+    "toughness": null,
+    "type_line": "Legendary Planeswalker — Chandra"
   },
   "Chord of Calling": {
     "cmc": 3.0,
@@ -1129,6 +1228,18 @@
     "toughness": "4",
     "type_line": "Enchantment Creature — Centaur"
   },
+  "Crab Umbra": {
+    "cmc": 1.0,
+    "keywords": [
+      "Enchant",
+      "Umbra armor"
+    ],
+    "mana_cost": "{U}",
+    "oracle_text": "Enchant creature\n{2}{U}: Untap enchanted creature.\nUmbra armor (If enchanted creature would be destroyed, instead remove all damage from it and destroy this Aura.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment — Aura"
+  },
   "Crackle with Power": {
     "cmc": 2.0,
     "keywords": [],
@@ -1206,6 +1317,19 @@
     "power": null,
     "toughness": null,
     "type_line": "Sorcery"
+  },
+  "Curator of Mysteries": {
+    "cmc": 4.0,
+    "keywords": [
+      "Cycling",
+      "Flying",
+      "Scry"
+    ],
+    "mana_cost": "{2}{U}{U}",
+    "oracle_text": "Flying\nWhenever you cycle or discard another card, scry 1.\nCycling {U} ({U}, Discard this card: Draw a card.)",
+    "power": "4",
+    "toughness": "4",
+    "type_line": "Creature — Sphinx"
   },
   "Curiosity": {
     "cmc": 1.0,
@@ -1466,6 +1590,18 @@
     "toughness": null,
     "type_line": "Sorcery"
   },
+  "Drana, Liberator of Malakir": {
+    "cmc": 3.0,
+    "keywords": [
+      "First strike",
+      "Flying"
+    ],
+    "mana_cost": "{1}{B}{B}",
+    "oracle_text": "Flying, first strike\nWhenever Drana deals combat damage to a player, put a +1/+1 counter on each attacking creature you control.",
+    "power": "2",
+    "toughness": "3",
+    "type_line": "Legendary Creature — Vampire Ally"
+  },
   "Drannith Stinger": {
     "cmc": 2.0,
     "keywords": [
@@ -1577,6 +1713,15 @@
     "toughness": "2",
     "type_line": "Creature — Elf Druid"
   },
+  "Elvish Harbinger": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{G}",
+    "oracle_text": "When this creature enters, you may search your library for an Elf card, reveal it, then shuffle and put that card on top.\n{T}: Add one mana of any color.",
+    "power": "1",
+    "toughness": "2",
+    "type_line": "Creature — Elf Druid"
+  },
   "Elvish Mystic": {
     "cmc": 1.0,
     "keywords": [],
@@ -1586,6 +1731,15 @@
     "toughness": "1",
     "type_line": "Creature — Elf Druid"
   },
+  "Emeria, the Sky Ruin": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\nAt the beginning of your upkeep, if you control seven or more Plains, you may return target creature card from your graveyard to the battlefield.\n{T}: Add {W}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
   "Emiel the Blessed": {
     "cmc": 4.0,
     "keywords": [],
@@ -1594,6 +1748,19 @@
     "power": "4",
     "toughness": "4",
     "type_line": "Legendary Creature — Unicorn"
+  },
+  "Emrakul, the Aeons Torn": {
+    "cmc": 15.0,
+    "keywords": [
+      "Annihilator",
+      "Flying",
+      "Protection"
+    ],
+    "mana_cost": "{15}",
+    "oracle_text": "This spell can't be countered.\nWhen you cast this spell, take an extra turn after this one.\nFlying, protection from spells that are one or more colors, annihilator 6\nWhen Emrakul is put into a graveyard from anywhere, its owner shuffles their graveyard into their library.",
+    "power": "15",
+    "toughness": "15",
+    "type_line": "Legendary Creature — Eldrazi"
   },
   "Enlightened Tutor": {
     "cmc": 1.0,
@@ -1633,6 +1800,15 @@
     "toughness": "1",
     "type_line": "Creature — Elf Shaman"
   },
+  "Eternal Witness": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{1}{G}{G}",
+    "oracle_text": "When this creature enters, you may return target card from your graveyard to your hand.",
+    "power": "2",
+    "toughness": "1",
+    "type_line": "Creature — Human Shaman"
+  },
   "Ethereal Armor": {
     "cmc": 1.0,
     "keywords": [
@@ -1662,6 +1838,15 @@
     "toughness": null,
     "type_line": "Instant"
   },
+  "Explosive Vegetation": {
+    "cmc": 4.0,
+    "keywords": [],
+    "mana_cost": "{3}{G}",
+    "oracle_text": "Search your library for up to two basic land cards, put them onto the battlefield tapped, then shuffle.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
   "Expressive Iteration": {
     "cmc": 2.0,
     "keywords": [],
@@ -1670,6 +1855,17 @@
     "power": null,
     "toughness": null,
     "type_line": "Sorcery"
+  },
+  "Ezuri, Renegade Leader": {
+    "cmc": 3.0,
+    "keywords": [
+      "Regenerate"
+    ],
+    "mana_cost": "{1}{G}{G}",
+    "oracle_text": "{G}: Regenerate another target Elf.\n{2}{G}{G}{G}: Elf creatures you control get +3/+3 and gain trample until end of turn.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Legendary Creature — Elf Warrior"
   },
   "Faeburrow Elder": {
     "cmc": 3.0,
@@ -1681,6 +1877,24 @@
     "power": "0",
     "toughness": "0",
     "type_line": "Creature — Treefolk Druid"
+  },
+  "Falkenrath Gorger": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{R}",
+    "oracle_text": "Each Vampire creature card you own that isn't on the battlefield has madness. The madness cost is equal to its mana cost. (If you discard a card with madness, discard it into exile. When you do, cast it for its madness cost or put it into your graveyard.)",
+    "power": "2",
+    "toughness": "1",
+    "type_line": "Creature — Vampire Berserker"
+  },
+  "Falkenrath Pit Fighter": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{R}",
+    "oracle_text": "{1}{R}, Discard a card, Sacrifice a Vampire: Draw two cards. Activate only if an opponent lost life this turn.",
+    "power": "2",
+    "toughness": "1",
+    "type_line": "Creature — Vampire Warrior"
   },
   "Fanatic of Mogis": {
     "cmc": 4.0,
@@ -1788,6 +2002,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Artifact"
+  },
+  "Fireblast": {
+    "cmc": 6.0,
+    "keywords": [],
+    "mana_cost": "{4}{R}{R}",
+    "oracle_text": "You may sacrifice two Mountains rather than pay this spell's mana cost.\nFireblast deals 4 damage to any target.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
   },
   "Fists of Flame": {
     "cmc": 2.0,
@@ -1997,6 +2220,17 @@
     "power": "1",
     "toughness": "1",
     "type_line": "Creature — Sliver"
+  },
+  "Galvanic Alchemist": {
+    "cmc": 3.0,
+    "keywords": [
+      "Soulbond"
+    ],
+    "mana_cost": "{2}{U}",
+    "oracle_text": "Soulbond (You may pair this creature with another unpaired creature when either enters. They remain paired for as long as you control both of them.)\nAs long as this creature is paired with another creature, each of those creatures has \"{2}{U}: Untap this creature.\"",
+    "power": "1",
+    "toughness": "4",
+    "type_line": "Creature — Human Wizard"
   },
   "Gamble": {
     "cmc": 1.0,
@@ -2315,6 +2549,15 @@
     "toughness": null,
     "type_line": "Sorcery"
   },
+  "Grim Lavamancer": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{R}",
+    "oracle_text": "{R}, {T}, Exile two cards from your graveyard: This creature deals 2 damage to any target.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Human Wizard"
+  },
   "Grove of the Burnwillows": {
     "cmc": 0.0,
     "keywords": [],
@@ -2363,6 +2606,15 @@
     "power": "3",
     "toughness": "2",
     "type_line": "Legendary Creature — Human Soldier"
+  },
+  "Harrow": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{G}",
+    "oracle_text": "As an additional cost to cast this spell, sacrifice a land.\nSearch your library for up to two basic land cards, put them onto the battlefield, then shuffle.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
   },
   "Hatchery Sliver": {
     "cmc": 2.0,
@@ -2774,6 +3026,15 @@
     "toughness": "4",
     "type_line": "Legendary Creature — Cat Cleric"
   },
+  "Kessig Wolf Run": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{T}: Add {C}.\n{X}{R}{G}, {T}: Target creature gets +X/+0 and gains trample until end of turn.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
   "Khalni Heart Expedition": {
     "cmc": 2.0,
     "keywords": [
@@ -2955,6 +3216,15 @@
     "toughness": "3",
     "type_line": "Creature — Angel Warrior"
   },
+  "Legion Lieutenant": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{W}{B}",
+    "oracle_text": "Other Vampires you control get +1/+1.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Vampire Knight"
+  },
   "Light Up the Stage": {
     "cmc": 3.0,
     "keywords": [
@@ -3079,6 +3349,27 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Long-Term Plans": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{U}",
+    "oracle_text": "Search your library for a card, then shuffle and put that card third from the top.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
+  },
+  "Lord of Lineage": {
+    "cmc": 4.0,
+    "keywords": [
+      "Flying",
+      "Transform"
+    ],
+    "mana_cost": "",
+    "oracle_text": "Flying\nOther Vampire creatures you control get +2/+2.\n{T}: Create a 2/2 black Vampire creature token with flying.",
+    "power": "5",
+    "toughness": "5",
+    "type_line": "Creature — Vampire"
+  },
   "Lotus Bloom": {
     "cmc": 0.0,
     "keywords": [
@@ -3156,6 +3447,17 @@
     "toughness": "5",
     "type_line": "Legendary Creature — Elemental"
   },
+  "Magma Jet": {
+    "cmc": 2.0,
+    "keywords": [
+      "Scry"
+    ],
+    "mana_cost": "{1}{R}",
+    "oracle_text": "Magma Jet deals 2 damage to any target. Scry 2.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
+  },
   "Magma Opus": {
     "cmc": 8.0,
     "keywords": [
@@ -3227,6 +3529,19 @@
     "toughness": null,
     "type_line": "Legendary Snow Enchantment"
   },
+  "Markov Baron": {
+    "cmc": 3.0,
+    "keywords": [
+      "Convoke",
+      "Lifelink",
+      "Madness"
+    ],
+    "mana_cost": "{2}{B}",
+    "oracle_text": "Convoke (Your creatures can help cast this spell. Each creature you tap while casting this spell pays for {1} or one mana of that creature's color.)\nLifelink\nOther Vampires you control get +1/+1.\nMadness {2}{B} (If you discard this card, discard it into exile. When you do, cast it for its madness cost or put it into your graveyard.)",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Vampire Noble"
+  },
   "Marsh Flats": {
     "cmc": 0.0,
     "keywords": [],
@@ -3245,6 +3560,15 @@
     "toughness": "2",
     "type_line": "Creature — Human Knight"
   },
+  "Martyr of Sands": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{W}",
+    "oracle_text": "{1}, Reveal X white cards from your hand, Sacrifice this creature: You gain three times X life.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Human Cleric"
+  },
   "Massacre Wurm": {
     "cmc": 6.0,
     "keywords": [],
@@ -3253,6 +3577,15 @@
     "power": "6",
     "toughness": "5",
     "type_line": "Creature — Phyrexian Wurm"
+  },
+  "Mavren Fein, Dusk Apostle": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{W}",
+    "oracle_text": "Whenever one or more nontoken Vampires you control attack, create a 1/1 white Vampire creature token with lifelink.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Legendary Creature — Vampire Cleric"
   },
   "Melira, Sylvok Outcast": {
     "cmc": 2.0,
@@ -3365,6 +3698,17 @@
     "power": "3",
     "toughness": "3",
     "type_line": "Creature — Werewolf"
+  },
+  "Moraug, Fury of Akoum": {
+    "cmc": 6.0,
+    "keywords": [
+      "Landfall"
+    ],
+    "mana_cost": "{4}{R}{R}",
+    "oracle_text": "Each creature you control gets +1/+0 for each time it has attacked this turn.\nLandfall — Whenever a land you control enters, if it's your main phase, there's an additional combat phase after this phase. At the beginning of that combat, untap all creatures you control.",
+    "power": "6",
+    "toughness": "6",
+    "type_line": "Legendary Creature — Minotaur Warrior"
   },
   "Mossborn Hydra": {
     "cmc": 3.0,
@@ -3493,6 +3837,15 @@
     "toughness": null,
     "type_line": "Sorcery"
   },
+  "Nature's Lore": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{G}",
+    "oracle_text": "Search your library for a Forest card, put that card onto the battlefield, then shuffle.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
   "Neheb, the Worthy": {
     "cmc": 3.0,
     "keywords": [
@@ -3543,6 +3896,15 @@
     "power": "4",
     "toughness": "4",
     "type_line": "Legendary Creature — Dragon Wizard"
+  },
+  "Nourish": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{G}{G}",
+    "oracle_text": "You gain 6 life.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
   },
   "Nykthos Paragon": {
     "cmc": 6.0,
@@ -3656,6 +4018,17 @@
     "power": null,
     "toughness": null,
     "type_line": "Enchantment — Aura"
+  },
+  "Paradise Mantle": {
+    "cmc": 0.0,
+    "keywords": [
+      "Equip"
+    ],
+    "mana_cost": "{0}",
+    "oracle_text": "Equipped creature has \"{T}: Add one mana of any color.\"\nEquip {1}",
+    "power": null,
+    "toughness": null,
+    "type_line": "Artifact — Equipment"
   },
   "Parallel Lives": {
     "cmc": 4.0,
@@ -3784,6 +4157,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Sorcery"
+  },
+  "Price of Progress": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{R}",
+    "oracle_text": "Price of Progress deals damage to each player equal to twice the number of nonbasic lands that player controls.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
   },
   "Priest of Titania": {
     "cmc": 2.0,
@@ -4175,6 +4557,17 @@
     "toughness": "4",
     "type_line": "Legendary Creature — Human Soldier"
   },
+  "Rift Bolt": {
+    "cmc": 3.0,
+    "keywords": [
+      "Suspend"
+    ],
+    "mana_cost": "{2}{R}",
+    "oracle_text": "Rift Bolt deals 3 damage to any target.\nSuspend 1—{R} (Rather than cast this card from your hand, you may pay {R} and exile it with a time counter on it. At the beginning of your upkeep, remove a time counter. When the last is removed, you may cast it without paying its mana cost.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
   "Righteous Valkyrie": {
     "cmc": 3.0,
     "keywords": [
@@ -4373,6 +4766,15 @@
     "toughness": "2",
     "type_line": "Creature — Ooze"
   },
+  "Scholar of Athreos": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{W}",
+    "oracle_text": "{2}{B}: Each opponent loses 1 life. You gain life equal to the life lost this way.",
+    "power": "1",
+    "toughness": "4",
+    "type_line": "Creature — Human Cleric"
+  },
   "Scourge of Valkas": {
     "cmc": 5.0,
     "keywords": [
@@ -4392,6 +4794,30 @@
     "power": null,
     "toughness": null,
     "type_line": "Snow Land"
+  },
+  "Scute Swarm": {
+    "cmc": 3.0,
+    "keywords": [
+      "Landfall"
+    ],
+    "mana_cost": "{2}{G}",
+    "oracle_text": "Landfall — Whenever a land you control enters, create a 1/1 green Insect creature token. If you control six or more lands, create a token that's a copy of this creature instead.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Insect"
+  },
+  "Scythecat Cub": {
+    "cmc": 2.0,
+    "keywords": [
+      "Double",
+      "Landfall",
+      "Trample"
+    ],
+    "mana_cost": "{1}{G}",
+    "oracle_text": "Trample\nLandfall — Whenever a land you control enters, put a +1/+1 counter on target creature you control. If this is the second time this ability has resolved this turn, double the number of +1/+1 counters on that creature instead.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Cat"
   },
   "Search for Tomorrow": {
     "cmc": 3.0,
@@ -4441,6 +4867,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Land"
+  },
+  "Seedcradle Witch": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{G/W}",
+    "oracle_text": "{2}{G}{W}: Target creature gets +3/+3 until end of turn. Untap that creature.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Elf Shaman"
   },
   "Seething Song": {
     "cmc": 3.0,
@@ -4661,6 +5096,17 @@
     "toughness": null,
     "type_line": "Artifact — Equipment"
   },
+  "Skewer the Critics": {
+    "cmc": 3.0,
+    "keywords": [
+      "Spectacle"
+    ],
+    "mana_cost": "{2}{R}",
+    "oracle_text": "Spectacle {R} (You may cast this spell for its spectacle cost rather than its mana cost if an opponent lost life this turn.)\nSkewer the Critics deals 3 damage to any target.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
   "Skirk Prospector": {
     "cmc": 1.0,
     "keywords": [],
@@ -4696,6 +5142,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Land"
+  },
+  "Skyshroud Claim": {
+    "cmc": 4.0,
+    "keywords": [],
+    "mana_cost": "{3}{G}",
+    "oracle_text": "Search your library for up to two Forest cards, put them onto the battlefield, then shuffle.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
   },
   "Skyshroud Cutter": {
     "cmc": 4.0,
@@ -4947,6 +5402,15 @@
     "toughness": "2",
     "type_line": "Legendary Creature — Dwarf Advisor"
   },
+  "Staff of Domination": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{3}",
+    "oracle_text": "{1}: Untap this artifact.\n{2}, {T}: You gain 1 life.\n{3}, {T}: Untap target creature.\n{4}, {T}: Tap target creature.\n{5}, {T}: Draw a card.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Artifact"
+  },
   "Staunch Crewmate": {
     "cmc": 2.0,
     "keywords": [],
@@ -5023,6 +5487,19 @@
     "toughness": "2",
     "type_line": "Creature — Kor Artificer"
   },
+  "Street Wraith": {
+    "cmc": 5.0,
+    "keywords": [
+      "Cycling",
+      "Landwalk",
+      "Swampwalk"
+    ],
+    "mana_cost": "{3}{B}{B}",
+    "oracle_text": "Swampwalk (This creature can't be blocked as long as defending player controls a Swamp.)\nCycling—Pay 2 life. (Pay 2 life, Discard this card: Draw a card.)",
+    "power": "3",
+    "toughness": "4",
+    "type_line": "Creature — Wraith"
+  },
   "Striking Sliver": {
     "cmc": 1.0,
     "keywords": [],
@@ -5040,6 +5517,26 @@
     "power": null,
     "toughness": null,
     "type_line": "Instant"
+  },
+  "Stromkirk Captain": {
+    "cmc": 3.0,
+    "keywords": [
+      "First strike"
+    ],
+    "mana_cost": "{1}{B}{R}",
+    "oracle_text": "First strike\nOther Vampire creatures you control get +1/+1 and have first strike.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Vampire Soldier"
+  },
+  "Stromkirk Condemned": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{B}{B}",
+    "oracle_text": "Discard a card: Vampires you control get +1/+1 until end of turn. Activate only once each turn.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Vampire Horror"
   },
   "Sulfur Falls": {
     "cmc": 0.0,
@@ -5085,6 +5582,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Land"
+  },
+  "Swamp": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "({T}: Add {B}.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Basic Land — Swamp"
   },
   "Swiftblade Vindicator": {
     "cmc": 2.0,
@@ -5424,6 +5930,15 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Toxic Deluge": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{B}",
+    "oracle_text": "As an additional cost to cast this spell, pay X life.\nAll creatures get -X/-X until end of turn.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
   "Trace of Abundance": {
     "cmc": 2.0,
     "keywords": [
@@ -5470,6 +5985,15 @@
     "power": "1",
     "toughness": "3",
     "type_line": "Legendary Creature — Vedalken Scout"
+  },
+  "Trufflesnout": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{G}",
+    "oracle_text": "When this creature enters, choose one —\n• Put a +1/+1 counter on this creature.\n• You gain 4 life.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Boar"
   },
   "Tukatongue Thallid": {
     "cmc": 1.0,
@@ -5524,6 +6048,29 @@
     "power": "5",
     "toughness": "5",
     "type_line": "Creature — Dragon"
+  },
+  "Ulamog, the Ceaseless Hunger": {
+    "cmc": 10.0,
+    "keywords": [
+      "Indestructible"
+    ],
+    "mana_cost": "{10}",
+    "oracle_text": "When you cast this spell, exile two target permanents.\nIndestructible\nWhenever Ulamog attacks, defending player exiles the top twenty cards of their library.",
+    "power": "10",
+    "toughness": "10",
+    "type_line": "Legendary Creature — Eldrazi"
+  },
+  "Ulamog, the Infinite Gyre": {
+    "cmc": 11.0,
+    "keywords": [
+      "Annihilator",
+      "Indestructible"
+    ],
+    "mana_cost": "{11}",
+    "oracle_text": "When you cast this spell, destroy target permanent.\nIndestructible\nAnnihilator 4 (Whenever this creature attacks, defending player sacrifices four permanents of their choice.)\nWhen Ulamog is put into a graveyard from anywhere, its owner shuffles their graveyard into their library.",
+    "power": "10",
+    "toughness": "10",
+    "type_line": "Legendary Creature — Eldrazi"
   },
   "Umezawa's Jitte": {
     "cmc": 2.0,
@@ -5594,6 +6141,17 @@
     "toughness": null,
     "type_line": "Instant"
   },
+  "Unpredictable Cyclone": {
+    "cmc": 5.0,
+    "keywords": [
+      "Cycling"
+    ],
+    "mana_cost": "{3}{R}{R}",
+    "oracle_text": "If a cycling ability of another nonland card would cause you to draw a card, instead exile cards from the top of your library until you exile a card that shares a card type with the cycled card. You may cast that card without paying its mana cost. Then put the exiled cards that weren't cast this way on the bottom of your library in a random order.\nCycling {2} ({2}, Discard this card: Draw a card.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment"
+  },
   "Urza's Incubator": {
     "cmc": 3.0,
     "keywords": [],
@@ -5611,6 +6169,17 @@
     "power": "0",
     "toughness": "2",
     "type_line": "Creature — Fungus"
+  },
+  "Utopia Sprawl": {
+    "cmc": 1.0,
+    "keywords": [
+      "Enchant"
+    ],
+    "mana_cost": "{G}",
+    "oracle_text": "Enchant Forest\nAs this Aura enters, choose a color.\nWhenever enchanted Forest is tapped for mana, its controller adds an additional one mana of the chosen color.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment — Aura"
   },
   "Utvara Hellkite": {
     "cmc": 8.0,
@@ -5631,6 +6200,29 @@
     "power": "3",
     "toughness": "4",
     "type_line": "Creature — Human Knight"
+  },
+  "Vampire Socialite": {
+    "cmc": 2.0,
+    "keywords": [
+      "Menace"
+    ],
+    "mana_cost": "{B}{R}",
+    "oracle_text": "Menace (This creature can't be blocked except by two or more creatures.)\nWhen this creature enters, if an opponent lost life this turn, put a +1/+1 counter on each other Vampire you control.\nAs long as an opponent lost life this turn, each other Vampire you control enters with an additional +1/+1 counter on it.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Vampire Noble"
+  },
+  "Vampire of the Dire Moon": {
+    "cmc": 1.0,
+    "keywords": [
+      "Deathtouch",
+      "Lifelink"
+    ],
+    "mana_cost": "{B}",
+    "oracle_text": "Deathtouch (Any amount of damage this deals to a creature is enough to destroy it.)\nLifelink (Damage dealt by this creature also causes you to gain that much life.)",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Vampire"
   },
   "Varchild's War-Riders": {
     "cmc": 2.0,
@@ -5737,6 +6329,24 @@
     "toughness": "2",
     "type_line": "Creature — Spirit Cleric"
   },
+  "Voldaren Estate": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{T}: Add {C}.\n{T}, Pay 1 life: Add one mana of any color. Spend this mana only to cast a Vampire spell.\n{5}, {T}: Create a Blood token. This ability costs {1} less to activate for each Vampire you control. (It's an artifact with \"{1}, {T}, Discard a card, Sacrifice this token: Draw a card.\")",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
+  "Walking Ballista": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "{X}{X}",
+    "oracle_text": "This creature enters with X +1/+1 counters on it.\n{4}: Put a +1/+1 counter on this creature.\nRemove a +1/+1 counter from this creature: It deals 1 damage to any target.",
+    "power": "0",
+    "toughness": "0",
+    "type_line": "Artifact Creature — Construct"
+  },
   "Waterlogged Grove": {
     "cmc": 0.0,
     "keywords": [],
@@ -5745,6 +6355,26 @@
     "power": null,
     "toughness": null,
     "type_line": "Land"
+  },
+  "Watery Grave": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "({T}: Add {U} or {B}.)\nAs this land enters, you may pay 2 life. If you don't, it enters tapped.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land — Island Swamp"
+  },
+  "Weather the Storm": {
+    "cmc": 2.0,
+    "keywords": [
+      "Storm"
+    ],
+    "mana_cost": "{1}{G}",
+    "oracle_text": "You gain 3 life.\nStorm (When you cast this spell, copy it for each spell cast before it this turn.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
   },
   "Wellwisher": {
     "cmc": 2.0,
@@ -5833,6 +6463,17 @@
     "toughness": "2",
     "type_line": "Creature — Human Knight"
   },
+  "Xander's Lounge": {
+    "cmc": 0.0,
+    "keywords": [
+      "Cycling"
+    ],
+    "mana_cost": "",
+    "oracle_text": "({T}: Add {U}, {B}, or {R}.)\nThis land enters tapped.\nCycling {3} ({3}, Discard this card: Draw a card.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land — Island Swamp Mountain"
+  },
   "Yavimaya Coast": {
     "cmc": 0.0,
     "keywords": [],
@@ -5898,227 +6539,6 @@
     ],
     "mana_cost": "",
     "oracle_text": "When this land enters, scry 1. (Look at the top card of your library. You may put that card on the bottom.)\n{T}: Add {C}.",
-    "power": null,
-    "toughness": null,
-    "type_line": "Land"
-  },
-  "Bloodghast": {
-    "cmc": 2.0,
-    "keywords": [
-      "Landfall"
-    ],
-    "mana_cost": "{B}{B}",
-    "oracle_text": "This creature can't block.\nThis creature has haste as long as an opponent has 10 or less life.\nLandfall — Whenever a land you control enters, you may return this card from your graveyard to the battlefield.",
-    "power": "2",
-    "toughness": "1",
-    "type_line": "Creature — Vampire Spirit"
-  },
-  "Falkenrath Pit Fighter": {
-    "cmc": 1.0,
-    "keywords": [],
-    "mana_cost": "{R}",
-    "oracle_text": "{1}{R}, Discard a card, Sacrifice a Vampire: Draw two cards. Activate only if an opponent lost life this turn.",
-    "power": "2",
-    "toughness": "1",
-    "type_line": "Creature — Vampire Warrior"
-  },
-  "Legion Lieutenant": {
-    "cmc": 2.0,
-    "keywords": [],
-    "mana_cost": "{W}{B}",
-    "oracle_text": "Other Vampires you control get +1/+1.",
-    "power": "2",
-    "toughness": "2",
-    "type_line": "Creature — Vampire Knight"
-  },
-  "Stromkirk Condemned": {
-    "cmc": 2.0,
-    "keywords": [],
-    "mana_cost": "{B}{B}",
-    "oracle_text": "Discard a card: Vampires you control get +1/+1 until end of turn. Activate only once each turn.",
-    "power": "2",
-    "toughness": "2",
-    "type_line": "Creature — Vampire Horror"
-  },
-  "Swamp": {
-    "cmc": 0.0,
-    "keywords": [],
-    "mana_cost": "",
-    "oracle_text": "({T}: Add {B}.)",
-    "power": null,
-    "toughness": null,
-    "type_line": "Basic Land — Swamp"
-  },
-  "Temple of Deceit": {
-    "cmc": 0.0,
-    "keywords": [
-      "Scry"
-    ],
-    "mana_cost": "",
-    "oracle_text": "This land enters tapped.\nWhen this land enters, scry 1. (Look at the top card of your library. You may put that card on the bottom.)\n{T}: Add {U} or {B}.",
-    "power": null,
-    "toughness": null,
-    "type_line": "Land"
-  },
-  "Temple of Enlightenment": {
-    "cmc": 0.0,
-    "keywords": [
-      "Scry"
-    ],
-    "mana_cost": "",
-    "oracle_text": "This land enters tapped.\nWhen this land enters, scry 1. (Look at the top card of your library. You may put that card on the bottom.)\n{T}: Add {W} or {U}.",
-    "power": null,
-    "toughness": null,
-    "type_line": "Land"
-  },
-  "Vampire of the Dire Moon": {
-    "cmc": 1.0,
-    "keywords": [
-      "Deathtouch",
-      "Lifelink"
-    ],
-    "mana_cost": "{B}",
-    "oracle_text": "Deathtouch (Any amount of damage this deals to a creature is enough to destroy it.)\nLifelink (Damage dealt by this creature also causes you to gain that much life.)",
-    "power": "1",
-    "toughness": "1",
-    "type_line": "Creature — Vampire"
-  },
-  "Voldaren Estate": {
-    "cmc": 0.0,
-    "keywords": [],
-    "mana_cost": "",
-    "oracle_text": "{T}: Add {C}.\n{T}, Pay 1 life: Add one mana of any color. Spend this mana only to cast a Vampire spell.\n{5}, {T}: Create a Blood token. This ability costs {1} less to activate for each Vampire you control. (It's an artifact with \"{1}, {T}, Discard a card, Sacrifice this token: Draw a card.\")",
-    "power": null,
-    "toughness": null,
-    "type_line": "Land"
-  },
-  "Drana, Liberator of Malakir": {
-    "cmc": 3.0,
-    "keywords": [
-      "First strike",
-      "Flying"
-    ],
-    "mana_cost": "{1}{B}{B}",
-    "oracle_text": "Flying, first strike\nWhenever Drana deals combat damage to a player, put a +1/+1 counter on each attacking creature you control.",
-    "power": "2",
-    "toughness": "3",
-    "type_line": "Legendary Creature — Vampire Ally"
-  },
-  "Mavren Fein, Dusk Apostle": {
-    "cmc": 3.0,
-    "keywords": [],
-    "mana_cost": "{2}{W}",
-    "oracle_text": "Whenever one or more nontoken Vampires you control attack, create a 1/1 white Vampire creature token with lifelink.",
-    "power": "2",
-    "toughness": "2",
-    "type_line": "Legendary Creature — Vampire Cleric"
-  },
-  "Stromkirk Captain": {
-    "cmc": 3.0,
-    "keywords": [
-      "First strike"
-    ],
-    "mana_cost": "{1}{B}{R}",
-    "oracle_text": "First strike\nOther Vampire creatures you control get +1/+1 and have first strike.",
-    "power": "2",
-    "toughness": "2",
-    "type_line": "Creature — Vampire Soldier"
-  },
-  "Vampire Socialite": {
-    "cmc": 2.0,
-    "keywords": [
-      "Menace"
-    ],
-    "mana_cost": "{B}{R}",
-    "oracle_text": "Menace (This creature can't be blocked except by two or more creatures.)\nWhen this creature enters, if an opponent lost life this turn, put a +1/+1 counter on each other Vampire you control.\nAs long as an opponent lost life this turn, each other Vampire you control enters with an additional +1/+1 counter on it.",
-    "power": "2",
-    "toughness": "2",
-    "type_line": "Creature — Vampire Noble"
-  },
-  "Asylum Visitor": {
-    "cmc": 2.0,
-    "keywords": [
-      "Madness"
-    ],
-    "mana_cost": "{1}{B}",
-    "oracle_text": "At the beginning of each player's upkeep, if that player has no cards in hand, you draw a card and you lose 1 life.\nMadness {1}{B} (If you discard this card, discard it into exile. When you do, cast it for its madness cost or put it into your graveyard.)",
-    "power": "3",
-    "toughness": "1",
-    "type_line": "Creature — Vampire Wizard"
-  },
-  "Falkenrath Gorger": {
-    "cmc": 1.0,
-    "keywords": [],
-    "mana_cost": "{R}",
-    "oracle_text": "Each Vampire creature card you own that isn't on the battlefield has madness. The madness cost is equal to its mana cost. (If you discard a card with madness, discard it into exile. When you do, cast it for its madness cost or put it into your graveyard.)",
-    "power": "2",
-    "toughness": "1",
-    "type_line": "Creature — Vampire Berserker"
-  },
-  "Markov Baron": {
-    "cmc": 3.0,
-    "keywords": [
-      "Convoke",
-      "Lifelink",
-      "Madness"
-    ],
-    "mana_cost": "{2}{B}",
-    "oracle_text": "Convoke (Your creatures can help cast this spell. Each creature you tap while casting this spell pays for {1} or one mana of that creature's color.)\nLifelink\nOther Vampires you control get +1/+1.\nMadness {2}{B} (If you discard this card, discard it into exile. When you do, cast it for its madness cost or put it into your graveyard.)",
-    "power": "2",
-    "toughness": "2",
-    "type_line": "Creature — Vampire Noble"
-  },
-  "Bloodline Keeper": {
-    "cmc": 4.0,
-    "keywords": [
-      "Flying",
-      "Transform"
-    ],
-    "mana_cost": "{2}{B}{B}",
-    "oracle_text": "Flying\n{T}: Create a 2/2 black Vampire creature token with flying.\n{B}: Transform this creature. Activate only if you control five or more Vampires.",
-    "power": "3",
-    "toughness": "3",
-    "type_line": "Creature — Vampire"
-  },
-  "Captivating Vampire": {
-    "cmc": 3.0,
-    "keywords": [],
-    "mana_cost": "{1}{B}{B}",
-    "oracle_text": "Other Vampire creatures you control get +1/+1.\nTap five untapped Vampires you control: Gain control of target creature. It becomes a Vampire in addition to its other types.",
-    "power": "2",
-    "toughness": "2",
-    "type_line": "Creature — Vampire"
-  },
-  "Lord of Lineage": {
-    "cmc": 4.0,
-    "keywords": [
-      "Flying",
-      "Transform"
-    ],
-    "mana_cost": "",
-    "oracle_text": "Flying\nOther Vampire creatures you control get +2/+2.\n{T}: Create a 2/2 black Vampire creature token with flying.",
-    "power": "5",
-    "toughness": "5",
-    "type_line": "Creature — Vampire"
-  },
-  "Mossborn Hydra": {
-    "cmc": 3.0,
-    "keywords": [
-      "Double",
-      "Landfall",
-      "Trample"
-    ],
-    "mana_cost": "{2}{G}",
-    "oracle_text": "Trample (This creature can deal excess combat damage to the player or planeswalker it's attacking.)\nThis creature enters with a +1/+1 counter on it.\nLandfall — Whenever a land you control enters, double the number of +1/+1 counters on this creature.",
-    "power": "0",
-    "toughness": "0",
-    "type_line": "Creature — Elemental Hydra"
-  },
-  "Kessig Wolf Run": {
-    "cmc": 0.0,
-    "keywords": [],
-    "mana_cost": "",
-    "oracle_text": "{T}: Add {C}.\n{X}{R}{G}, {T}: Target creature gets +X/+0 and gains trample until end of turn.",
     "power": null,
     "toughness": null,
     "type_line": "Land"

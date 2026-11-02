@@ -1,0 +1,66 @@
+{
+  "value_play": { "expected_buckets": 14, "mull_gen_depth": 1, "mull_gen_budget_ms": 1 },
+  "card_scores": {
+    "Chain Lightning": [
+      0.07650454611054958,
+      0.08934911242603594
+    ],
+    "Chandra's Incinerator": [
+      0.40319803198031945
+    ],
+    "Chandra, Torch of Defiance": [
+      -0.3275546462797454
+    ],
+    "Fiery Islet": [
+      -0.07760326750600033,
+      -0.31419708900023835
+    ],
+    "Fireblast": [
+      0.2112306230041785
+    ],
+    "Grim Lavamancer": [
+      0.20506319238570736
+    ],
+    "Light Up the Stage": [
+      0.06770930304722889
+    ],
+    "Lightning Bolt": [
+      0.01976305405508949,
+      0.14721822048432465
+    ],
+    "Magma Jet": [
+      -0.15379335832321495
+    ],
+    "Monastery Swiftspear": [
+      0.9855317330847511,
+      0.5297619047619051
+    ],
+    "Price of Progress": [
+      -0.04407636885744193
+    ],
+    "Rift Bolt": [
+      0.30586297034462717,
+      0.009773188272173883
+    ],
+    "Searing Blaze": [
+      -0.6997284755134281,
+      -0.48517287234042517
+    ],
+    "Skewer the Critics": [
+      0.200049212598425,
+      0.006250000000000533
+    ]
+  },
+  "hand_score_threshold": -1e+18,
+  "mulligan": {
+    "bottom_order": "count_first",
+    "curve_check": "two_drop",
+    "max_lands": 5,
+    "min_color_sources": {},
+    "min_lands": 1,
+    "min_playable": 0,
+    "required_pieces": [],
+    "stop_at": 4
+  },
+  "version": 1
+}

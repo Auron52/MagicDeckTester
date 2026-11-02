@@ -469,3 +469,55 @@ bug — gen runs at mull_gen_depth=3, committed<=3, so it never hits committed=6
 GEN speed — gen is capped at `mull_gen_depth=3`, below where the d6 waste occurred; the R40 gen
 cost is Matron's tutor-branching, a separate lever. Profile change is standalone-validated and
 ready to fold into the frozen batch commit.
+
+## Goblin Lackey put: the axis covers a Lackey the PLAN casts and a second damaging Lackey (2026-10-29)
+
+**The defect.** The put axis (`Plan::lackey_choice` -> `GameState::scripted_cheat_choice`) has the same
+battlefield-only gate the Tectonic Giant / Surtland Flinger axes had (`docs/design/analysis-Giants.md`, last
+section). `LackeyCandidateCountNow` needs a Lackey that can attack from the battlefield. So a Lackey cast or
+Vial-put this turn, hasted by Goblin Warchief or Goblin Chieftain, took `CombatCheatCandidates`' front. That
+is a one-answer pick with search depth remaining, which the NO-GREEDY rule forbids. Every trigger also read
+the one pin, so a SECOND damaging Lackey always took the front as well.
+
+**The fix.** Three levers, all DEFAULT ON; each `=0` is byte-identical to before.
+
+* **`MTG_LACKEY_CAST_AXIS`.** A base plan also fans when it brings a Lackey into combat with a haste source
+  reachable. The Lackey can come from a hand cast or a Vial put, or from a continuation of a plan that opens
+  a breakpoint (deck-gated library scan, `GameState::deck_has_combat_put`, in padding). A sick Lackey already
+  in play counts too, once the plan's own haste source frees it. The put WIDTH is the hand left at combat
+  damage: the hand now, minus the matching permanents the plan casts, plus its tutors-to-hand or a
+  continuation's draw. The old count included the very Lackey being cast.
+* **`MTG_LACKEY_ORDINALS`.** The pin is PACKED per damaging-Lackey trigger (`SpellEffects.h LackeyRankAt`;
+  ordinal 0 keeps the historical rank). Each trigger reads ordinal 0 and shifts the rest down, so the two
+  damage steps of a first-strike combat share no counter. The fan is the PRODUCT of ranks over the
+  ordinals, minus the base plan's tuple (capped at 27 per base plan).
+* **`MTG_LACKEY_PIN_FOLD`.** The pin is a combat pin. `ResolveCombatDamage` spends it on every return path,
+  both worlds. It joins `PlanHasCombatPin`, so a clamped or unread rank folds after combat, and it is charged
+  its node unit only when not folded.
+
+**Measurement.** Base ce58a3a96. Held-out Goblins s3010001 x 8,000 and Goblins 2HG s3020001 x 3,000, one
+pooled batch, per-game paired:
+
+| arms | slower | faster | net turns | units ratio |
+|---|---|---|---|---|
+| Goblins: three ON vs three OFF | **0** | 2 | **-2** | 1.099 |
+| Goblins 2HG: three ON vs three OFF | **0** | 5 | **-5** | 1.073 |
+
+**Attribution** (Goblins, first 4,000 games of the same seed):
+
+| arm | play vs OFF | units |
+|---|---|---|
+| fold alone | byte-identical | 0.976 |
+| + ordinals | 0 slower / 2 faster | 0.986 |
+| + cast route (no ordinals) | 0 / 0 | 1.025 |
+
+Interleaved wall, 10 alternating blocks x 200 games: ON / OFF **1.12**. This is the price of searching a
+decision the engine had been taking greedily: the new variants are real choices, not duplicates (the fold
+removes those). No slower game, so there is nothing to take to d8 b0.
+
+**Identity.** With the three levers OFF, Goblins and Goblins 2HG are byte-identical to ce58a3a96, and so are
+the other 38 suite decks at defaults.
+
+**Still open.** A second attacking Surtland Flinger still takes the default victim. Its pin is a CARD NUMBER
+(the victim) or -2 (decline), which does not pack per ordinal the way a rank does; it needs its own
+encoding (`docs/design/analysis-Giants.md`).

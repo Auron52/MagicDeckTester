@@ -1,0 +1,18 @@
+{
+ "keep_apart": [
+  {
+   "cards": [
+    "Lightning Greaves",
+    "Swords to Plowshares"
+   ],
+   "why": "USER RULING 2026-10-24: 'Those buckets should be split up.' Discovery merged Lightning Greaves (equip {0}, haste + shroud) with Swords to Plowshares and Unexpectedly Absent, which do nothing in a goldfish. Haste moves a whole win turn on too few of the 400 probes for the 0.01 threshold to see it, but Greaves is a live card and a removal spell is not."
+  },
+  {
+   "cards": [
+    "Lightning Greaves",
+    "Unexpectedly Absent"
+   ],
+   "why": "USER RULING 2026-10-24: same split as above: Greaves is kept apart from the goldfish-dead removal."
+  }
+ ]
+}

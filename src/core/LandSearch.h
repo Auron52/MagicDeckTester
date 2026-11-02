@@ -18,6 +18,10 @@
 //   Myriad Landscape           2 basic sharing a land type, tapped     {2},{T}, sac: SacLandSearch
 //   Khalni Heart Expedition    2 basic, tapped                         3 quest ctrs + sac: QuestSac...
 //   Primeval Titan             2 ANY lands, tapped, optional           ETB + attack trigger
+//   Harrow                     2 basic, untapped (+ sacrifice a land)  spell resolution (the cost is paid first)
+//   Explosive Vegetation       2 basic, tapped                         spell resolution
+//   Nature's Lore              1 Forest card, untapped                 spell resolution
+//   Skyshroud Claim            2 Forest cards, untapped                spell resolution
 //
 // WHY NOT the fetchland collapse (fetch_land_types / PerformFetch): the fetchland never enters the
 // battlefield (so its own landfall and the hold line vanish), pays 1 life, filters by SUBTYPE and
@@ -59,6 +63,7 @@
 #include <functional>
 #include <string>
 #include <typeinfo>
+#include <unordered_map>
 #include <vector>
 
 // One identity class of legal library lands for a search. `rep` = the lexicographically smallest
@@ -78,6 +83,8 @@ inline bool LandSearchLegal(const CardDefinition* d, const LandSearchSpec& spec)
 {
     if (d == nullptr || !d->card.IsLand()) { return false; }
     if (spec.basic_only && !IsBasicLandCard(*d)) { return false; }
+    // "a Forest card": the land subtype off the definition (a basic Forest, a Stomping Ground).
+    if (spec.subtype != SubtypeRegistry::kNone && !d->card.m_subtypes.HasId(spec.subtype)) { return false; }
     return true;
 }
 
@@ -162,7 +169,7 @@ inline std::vector<std::vector<std::string>> LandSearchPicksUncached(const GameS
         cls.erase(std::remove_if(cls.begin(), cls.end(), [&](const LandSearchClass& k)
                   { return k.def == nullptr
                         || !prov.LandSearchAdmitsLand(s, ctrl, spec.count, spec.to_hand, spec.basic_only,
-                                                      spec.share_land_type, *k.def); }),
+                                                      spec.share_land_type, spec.subtype, *k.def); }),
                   cls.end());
     }
     const int n = static_cast<int>(cls.size());
@@ -241,12 +248,13 @@ inline std::vector<std::vector<std::string>> LandSearchPicksUncached(const GameS
         }
         for (auto& v : splits) { out.push_back(std::move(v)); }
     }
-    prov.LandSearchPickOrder(s, ctrl, spec.count, spec.to_hand, spec.basic_only, spec.share_land_type, out);
+    prov.LandSearchPickOrder(s, ctrl, spec.count, spec.to_hand, spec.basic_only, spec.share_land_type,
+                             spec.subtype, out);
     // The provider's NARROWING (LandSearchPickWidth): autonomous play only; see LandSearchPickPruned.
     if (LandSearchPickPruned())
     {
         const int w = prov.LandSearchPickWidth(s, ctrl, spec.count, spec.to_hand, spec.basic_only,
-                                               spec.share_land_type, out);
+                                               spec.share_land_type, spec.subtype, out);
         if (w >= 1 && w < static_cast<int>(out.size())) { out.resize(static_cast<std::size_t>(w)); }
     }
     return out;
@@ -259,7 +267,7 @@ inline std::vector<std::vector<std::string>> LandSearchPicksUncached(const GameS
 // LandSearchPicks 20.2% of the game's samples (inclusive), PerformLandSearch 37.3%.
 //
 // EXACT, so play is BYTE-IDENTICAL. The result is a pure function of
-//   (a) spec.count / basic_only / share_land_type / to_hand (tapped / optional never enter it);
+//   (a) spec.count / basic_only / share_land_type / to_hand / subtype (tapped / optional never enter it);
 //   (b) the MULTISET of DEFINITIONS of the legal land cards in ctrl's library -- the classes, their
 //       representatives, copy counts and the shared-type test are all functions of it; library ORDER
 //       never enters (LandSearchClasses sorts by representative name);
@@ -277,6 +285,7 @@ struct Key
     std::uint64_t         prov_key  = 0;
     int                   count = 0, to_hand = 0;
     bool                  basic_only = false, share = false;
+    std::uint16_t         subtype = 0;      // LandSearchSpec::subtype (Nature's Lore's "Forest card")
     bool                  pruned = false;   // LandSearchPickPruned() -- the provider's narrowing applied
     int                   n = 0;
     const CardDefinition* defs[kMaxDefs] = {};
@@ -285,7 +294,7 @@ struct Key
     {
         if (prov_type != o.prov_type || prov_key != o.prov_key || count != o.count
             || to_hand != o.to_hand || basic_only != o.basic_only || share != o.share
-            || pruned != o.pruned || n != o.n)
+            || subtype != o.subtype || pruned != o.pruned || n != o.n)
         { return false; }
         for (int i = 0; i < n; ++i)
         { if (defs[i] != o.defs[i] || copies[i] != o.copies[i]) { return false; } }
@@ -302,7 +311,8 @@ struct Key
         };
         mix(prov_type); mix(prov_key);
         mix(static_cast<std::uint64_t>(count) | (static_cast<std::uint64_t>(to_hand) << 8)
-            | (basic_only ? 1ull << 16 : 0ull) | (share ? 1ull << 17 : 0ull) | (pruned ? 1ull << 18 : 0ull));
+            | (basic_only ? 1ull << 16 : 0ull) | (share ? 1ull << 17 : 0ull) | (pruned ? 1ull << 18 : 0ull)
+            | (static_cast<std::uint64_t>(subtype) << 19));
         for (int i = 0; i < n; ++i)
         {
             mix(static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(defs[i])));
@@ -363,6 +373,7 @@ inline const landsearchmemo::Slot& LandSearchMemoSlot(const GameState& s, int ct
     k.to_hand    = spec.to_hand;
     k.basic_only = spec.basic_only;
     k.share      = spec.share_land_type;
+    k.subtype    = spec.subtype;
     k.pruned     = LandSearchPickPruned();
     bool ok = true;
     if (spec.count > 0)
@@ -815,6 +826,11 @@ inline void PerformLandSearch(GameState& state, int controller, const LandSearch
     }
     int n_bf = 0;
     std::string bf_text, hand_text;
+    // ONE land event: a token made by an earlier land's landfall (a Scute Swarm copy) neither triggers for
+    // a later land of it nor is offered as a target (LandfallSimultaneousScope). For a single land it only
+    // restarts the floor -- what matters when this search resolves INSIDE another event (a Titan a Genesis
+    // Wave put: its lands are an event of their own, after the Wave's earlier tokens exist).
+    LandfallSimultaneousScope lf_event(state);
     for (int i = 0; i < bf_n; ++i)
     {
         Card lc;
@@ -953,10 +969,37 @@ inline void ApplyLandSearchActivation(GameState& state, int controller, int src_
 // relative order of the survivors, so the j-th occurrence of a number among `nums` maps to the j-th
 // battlefield permanent carrying it -- exact even if two entries share a number. A permanent that
 // is gone is dropped (an attacker cannot leave this way; the guard is for completeness).
+//
+// LINEAR for a wide list (2026-10-23): the scan below is O(n^2 + n*B), and a Scute Swarm board swings
+// with hundreds of attackers, so a Titan's attack fetch (FireAttackLandSearch) spent 98.8% of a
+// 976-second Landfall game here. Past kRefindScanMax entries each number's battlefield slots are
+// gathered once, in order, and handed out through a per-number cursor -- the cursor counts the earlier
+// entries carrying the number whether or not they hit, which is exactly `seen_before`, so the output
+// is identical. The short list keeps the scan (no allocation for the 1-5 attackers of a normal turn).
 inline std::vector<int> RefindByNumberInOrder(const GameState& state, const std::vector<int>& nums)
 {
     std::vector<int> out;
     out.reserve(nums.size());
+    constexpr std::size_t kRefindScanMax = 16;
+    if (nums.size() > kRefindScanMax)
+    {
+        struct Slots { std::vector<int> at; std::size_t next = 0; };
+        std::unordered_map<int, Slots> by_num;
+        by_num.reserve(nums.size() * 2);
+        for (const int n : nums) { by_num.try_emplace(n); }
+        for (int j = 0; j < static_cast<int>(state.battlefield.size()); ++j)
+        {
+            const auto it = by_num.find(state.battlefield[static_cast<std::size_t>(j)].card.m_number);
+            if (it != by_num.end()) { it->second.at.push_back(j); }
+        }
+        for (const int n : nums)
+        {
+            Slots& sl = by_num.find(n)->second;
+            const std::size_t c = sl.next++;
+            if (c < sl.at.size()) { out.push_back(sl.at[c]); }
+        }
+        return out;
+    }
     for (std::size_t i = 0; i < nums.size(); ++i)
     {
         int seen_before = 0;
@@ -987,7 +1030,7 @@ struct CombatLandfallTargetScope
         : saved(g_landfall_target_pin), saved_turn(g_landfall_target_pin_turn)
     {
         g_landfall_target_pin      = s.scripted_combat_landfall_target;
-        g_landfall_target_pin_turn = s.turn_number;
+        g_landfall_target_pin_turn = s.TurnSeq();
     }
     ~CombatLandfallTargetScope() { g_landfall_target_pin = saved; g_landfall_target_pin_turn = saved_turn; }
     CombatLandfallTargetScope(const CombatLandfallTargetScope&) = delete;
@@ -1022,9 +1065,12 @@ inline void FireAttackLandSearch(GameState& state, int controller, std::vector<i
     if (!any) { return; }
     const CombatLandfallTargetScope _clt(state);   // the combat landfalls' target rank (above)
     int attack_ordinal = 0;   // the packed stream's ordinal (the put-bounce probe's key)
+    // Re-found only after a search: PerformLandSearch is the one call below that touches the
+    // battlefield, so between searches `now` cannot change (re-finding per attacker made a wide swing
+    // cubic -- see RefindByNumberInOrder).
+    std::vector<int> now = RefindByNumberInOrder(state, nums);
     for (std::size_t ai = 0; ai < nums.size(); ++ai)
     {
-        const std::vector<int> now = RefindByNumberInOrder(state, nums);
         if (ai >= now.size()) { break; }
         const int slot = now[ai];
         if (state.battlefield[static_cast<std::size_t>(slot)].controller_index != controller) { continue; }
@@ -1040,6 +1086,7 @@ inline void FireAttackLandSearch(GameState& state, int controller, std::vector<i
                           d->card.m_name.str(), pin, " (attack)");
         if (probe != nullptr) { probe->ordinal = -1; }
         ++attack_ordinal;
+        now = RefindByNumberInOrder(state, nums);
     }
     // Repair the attacker indices (a Karoo bounce erased a slot; appended lands shifted nothing
     // before them, but the erase may have).

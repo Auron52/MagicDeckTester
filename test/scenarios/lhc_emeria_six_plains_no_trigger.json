@@ -1,0 +1,51 @@
+{
+  "deck": "decks/LifegainHeliodCombo/LifegainHeliodCombo.cod",
+  "turn": 7,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "library_top": [
+    "Plains",
+    "Plains",
+    "Walking Ballista"
+  ],
+  "depth": 3,
+  "budget_ms": 0,
+  "max_turns": 8,
+  "_comment": "Emeria's INTERVENING IF (CR 603.4), negative half: lhc_emeria_seven_plains_front_wins with ONE Plains fewer. After T7's drop there are only six Plains, so T8's upkeep has NO trigger: Ranger-Captain (the graveyard's only creature, and the axis-off front) stays put, no Ballista is tutored, and nothing wins by T8. Before 2026-10-27 this fixture also held Auriok Champion, whose front pick could not win either way -- so it passed with the intervening if broken; with Ranger-Captain alone a broken check returns it and wins, failing expect_no_win.",
+  "battlefield": [
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Emeria, the Sky Ruin"
+    },
+    {
+      "name": "Heliod, Sun-Crowned"
+    }
+  ],
+  "hand": [
+    "Plains"
+  ],
+  "graveyard": [
+    "Ranger-Captain of Eos"
+  ],
+  "env": {
+    "MTG_EMERIA_AXIS": "0"
+  },
+  "expect_no_win": true
+}

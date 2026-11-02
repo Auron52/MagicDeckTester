@@ -1,0 +1,255 @@
+#!/usr/bin/env node
+// Headless check for the reference REVIEW viewer (tools/replay/review.html + review_server.js).
+//
+// Drives the REAL page script in jsdom against the REAL server routes (makeServer, listening on an
+// ephemeral port), over a synthetic fixture -- so it needs no engine build and never touches the
+// user's logs/ref_review/ or references/review/verdicts.json, and the refsafe `protect` step (backup +
+// autosave commit + push) is stubbed out. Pins:
+//   * the index route merges verdicts and grades them unreviewed / current / stale (a verdict on a
+//     search line the engine no longer plays must NOT read as reviewed);
+//   * the page lists the game, lays both games out turn by turn, folds identical turns, and marks the
+//     lost turn;
+//   * a verdict click writes the stamped record (with the judged search_digest) and calls protect;
+//     Clear removes it; the retired kinds are refused;
+//   * Promote sends the RIGHT-HAND line's source (the hand-off at the lost turn by default), protects
+//     every file the promotion wrote, and shows a refusal as NOT promoted (scripts/ref_promote.py is
+//     stubbed -- its own replay gates are exercised by `ref_promote.py --check-all`);
+//   * /review/ cannot escape the review directory.
+//
+// Run:  node test/review_viewer_check.js        (needs jsdom: test/node_modules)
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+let JSDOM;
+try { ({ JSDOM } = require('jsdom')); }
+catch (e) { console.error('jsdom not installed — add it to the container (npm i -D jsdom in test/).'); process.exit(2); }
+
+const ROOT = path.resolve(__dirname, '..');
+const { makeServer } = require(path.join(ROOT, 'tools', 'replay', 'review_server.js'));
+
+let fails = 0;
+const ok = (cond, msg) => { console.log((cond ? '  ok   ' : '  FAIL ') + msg); if (!cond) fails++; };
+
+// ---- fixture -------------------------------------------------------------------------------
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'review_check_'));
+const reviewDir = path.join(tmp, 'ref_review');
+const verdicts = path.join(tmp, 'verdicts.json');
+const gdir = path.join(reviewDir, 'Deck', 'claude_s1_gi0');
+fs.mkdirSync(gdir, { recursive: true });
+const step = (turn, phase, actions, bf, hand) => ({ turn, phase, actions,
+  boardAfter: { battlefield: bf, hand, playerLife: 20, opponentLife: 20 } });
+const land = (card, name) => ({ card, cardName: name, isLand: true, tapped: false });
+const T1 = [step(1, 'MAIN_1', [{ type: 'PLAY_LAND', card: 1, cardName: 'Mountain' }], [land(1, 'Mountain')], [2, 3])];
+const log = (turns, win) => ({ cardNumbering: { Mountain: [1], 'Lightning Bolt': [2], Island: [3] }, seed: 1,
+                               gameNumber: 0, result: { winner: 'player', turn: win }, turns });
+// The human log carries boards but NO plays, exactly as the engine writes it for a replayed choice
+// stream; the page must read the plays back out of reference.json.
+const human = log([step(1, 'MAIN_1', [], [land(1, 'Mountain')], [2, 3]),
+                   step(2, 'MAIN_1', [], [land(1, 'Mountain'), land(3, 'Island')], [2])], 4);
+const mainDec = (turn, summary) => ({ chosen: 0, decision: { type: 'main_phase', turn, phase: 'pre_main',
+  plans: [{ index: 0, summary }] } });
+fs.writeFileSync(path.join(gdir, 'reference.json'), JSON.stringify({ seed: 1, game_index: 0, win_turn: 4, won: true,
+  decisions: [mainDec(1, 'land=Mountain; cast: (nothing)'), mainDec(2, 'land=Island; cast: (nothing)'),
+              { chosen: -1, decision: { type: 'main_phase', turn: 2, phase: 'post_main', plans: [] } }] }));
+const search = log(T1.concat([step(2, 'MAIN_1', [{ type: 'CAST_SPELL', card: 2, cardName: 'Lightning Bolt', manaPaid: '{R}' }],
+                                   [land(1, 'Mountain')], [3])]), 3);
+fs.writeFileSync(path.join(gdir, 'human.json'), JSON.stringify(human));
+fs.writeFileSync(path.join(gdir, 'search.json'), JSON.stringify(search));
+fs.writeFileSync(path.join(gdir, 'handoff_T2.json'), JSON.stringify(search));
+const KEY = 'Deck/claude_s1_gi0.json';
+const entry = { key: KEY, dir: 'Deck/claude_s1_gi0', ref_dir: 'Deck', deck_key: 'deck',
+  seed: 1, gi: 0, human_win: 4, search_win: 3, delta: 1, search_digest: 'aaaa',
+  files: { human: 'human.json', search: 'search.json', reference: 'reference.json' },
+  replay: { ok: true, kind: 'ok', detail: '' }, human_log_matches: true, human_log_win: 4,
+  ladder: [{ turn: 1, phase: 'pre_main', board: '', picks: 0, cv_win: 3, nc_win: 4, cv_log: null },
+           { turn: 2, phase: 'pre_main', board: '', picks: 2, cv_win: 3, nc_win: 4, cv_log: 'handoff_T2.json' }],
+  lost_turns: [{ turn: 2, cv_from: 3, cv_after: 4, nc_from: 4, nc_after: 4, hint: 'likely-clairvoyance' }],
+  hint: 'likely-clairvoyance', hint_detail: 'fixture' };
+const writeIndex = e => fs.writeFileSync(path.join(reviewDir, 'index.json'),
+  JSON.stringify({ meta: { generated_at: 'now', src: '0123456789ab' }, games: [e] }));
+writeIndex(entry);
+
+const protects = [];
+const promotes = [];
+let promoteReply = null;
+let protectDelay = 0;   // ms -- a real save backs up, commits and pushes, which takes seconds
+const server = makeServer({ reviewDir, verdicts,
+  protect: async (rels, msg) => { protects.push({ rels, msg }); await sleep(protectDelay); return { ok: true, pushed: false }; },
+  promote: async (req) => { promotes.push(req); return promoteReply(req); } });
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+async function until(fn, what, ms = 4000) {
+  for (let t = 0; t < ms; t += 25) { const v = fn(); if (v) return v; await sleep(25); }
+  ok(false, 'timed out waiting for ' + what);
+  return null;
+}
+
+server.listen(0, '127.0.0.1', async () => {
+  const base = `http://127.0.0.1:${server.address().port}`;
+  try {
+    // ---- routes ------------------------------------------------------------------------------
+    let idx = await (await fetch(base + '/api/review')).json();
+    ok(idx.games.length === 1 && idx.games[0].verdict_state === 'unreviewed', 'index route: game listed, unreviewed');
+    const esc = await fetch(base + '/review/..%2f..%2fverdicts.json');
+    ok(esc.status === 404, '/review/ cannot escape the review directory');
+
+    // ---- page --------------------------------------------------------------------------------
+    const html = fs.readFileSync(path.join(ROOT, 'tools', 'replay', 'review.html'), 'utf8');
+    const dom = new JSDOM(html, { runScripts: 'dangerously', url: base + '/',
+      beforeParse(w) { w.fetch = (u, o) => fetch(base + u, o); w.scrollTo = () => {}; w.Element.prototype.scrollIntoView = () => {}; } });
+    const doc = dom.window.document;
+    const table = await until(() => doc.querySelector('table.cmp'), 'the side-by-side table');
+    ok(!!doc.querySelector(`.item[data-key="${KEY}"]`), 'page lists the game');
+    const rows = table ? [...table.querySelectorAll('tr')].slice(1) : [];
+    ok(rows.length === 2, 'one row per turn (2)');
+    ok(rows[0] && rows[0].classList.contains('same') && rows[0].classList.contains('collapsed'), 'identical T1 is folded');
+    ok(rows[1] && rows[1].classList.contains('lost') && !rows[1].classList.contains('same'), 'T2 differs and is marked as the lost turn');
+    ok(rows[1] && /Lightning Bolt/.test(rows[1].textContent) && /▣ Island/.test(rows[1].cells[1].textContent),
+       'T2 shows both lines (yours read from the reference\'s decisions)');
+    // Both columns in ONE format: your plan is split into one item per action, under the same phase
+    // heading as the search's (USER 2026-10-25: "make the plans of both sides look the same").
+    const youActs = rows[1] ? [...rows[1].cells[1].querySelectorAll('.full .act')].map(e => e.textContent) : [];
+    const youPh = rows[1] ? [...rows[1].cells[1].querySelectorAll('.full .ph')].map(e => e.textContent) : [];
+    ok(youActs.includes('▣ Island') && !youActs.some(t => /land=|cast:/.test(t)) && youPh.includes('MAIN 1'),
+       'your plan reads as items under MAIN 1, like the search (' + youActs.join(' | ') + ')');
+    const split = (x, a) => dom.window.splitPlanItems(x, a).map(i => i.t);
+    ok(JSON.stringify(split('Galvanic Alchemist, Elvish Harbinger → Ezuri, Renegade Leader',
+                            [{ card: 'Galvanic Alchemist' }, { card: 'Elvish Harbinger' }]))
+       === JSON.stringify(['Galvanic Alchemist', 'Elvish Harbinger → Ezuri, Renegade Leader']),
+       'a comma inside a card name does not split an item');
+    ok(JSON.stringify(split('Khalni Heart Expedition: remove quest counters, sacrifice it: search for two basic lands',
+                            [{ card: 'Khalni Heart Expedition' }])).length > 0
+       && split('Ezuri, Renegade Leader, Resplendent Angel, equip Lightning Greaves → Resplendent Angel',
+                [{ card: 'Ezuri, Renegade Leader' }, { card: 'Resplendent Angel' }, { card: 'Lightning Greaves', activate: true }]).length === 3,
+       'card-name and equip boundaries split exactly one item per action');
+    ok(split('A, B', [{ card: 'A' }, { card: 'Z' }]).length === 1, 'a list that cannot be matched to its actions is shown whole');
+    // A play's draws (Treasure Hunt, a cycle) are not in the replayed log; they come from the next
+    // frame's `drew`, shown after that play. A later turn's draw is the draw step, already in the log.
+    const plan = (turn, summary, drew) => ({ chosen: 0, decision: { type: 'main_phase', turn, phase: 'pre_main', drew,
+      plans: [{ index: 0, summary, actions: [{ card: 'Treasure Hunt' }], casts: ['Treasure Hunt'] }] } });
+    const hp = dom.window.humanPlays({ decisions: [
+      plan(2, 'land=Island; cast: Treasure Hunt', [{ turn: 2, card: 'Island' }]),
+      plan(2, 'land=none; cast: (nothing)', [{ turn: 2, card: 'Ferrous Lake' }, { turn: 2, card: 'Treasure Hunt' }]),
+      plan(3, 'land=none; cast: (nothing)', [{ turn: 3, card: 'Steam Vents' }])] });
+    ok(JSON.stringify((hp.get(2) || []).map(i => i.txt)) === JSON.stringify(['Island', 'Treasure Hunt', 'draw Ferrous Lake', 'draw Treasure Hunt'])
+       && !(hp.get(3) || []).length,
+       'a play\'s draws follow it; the draw-step card is not repeated (' + (hp.get(2) || []).map(i => i.txt).join(' | ') + ')');
+    ok(rows[1] && !/pass/.test(rows[1].cells[1].textContent), 'a pass is not listed as a play');
+    const imgs = rows[1] ? [...rows[1].cells[1].querySelectorAll('.endb img')].map(i => i.alt) : [];
+    ok(imgs.filter(n => n === 'Mountain' || n === 'Island').length === 2 && imgs.includes('Lightning Bolt'),
+       'lands and hand render as card images (' + imgs.join(', ') + ')');
+    ok(!!(rows[1] && rows[1].cells[1].querySelector('.thumb.diffcard img[alt="Island"]')),
+       'a card only one side has is outlined on its image');
+    ok(doc.getElementById('right').value === 'handoff_T2.json', 'right column defaults to the hand-off at the lost turn');
+
+    // ---- verdict -----------------------------------------------------------------------------
+    doc.getElementById('note').value = 'needed to know the top card';
+    doc.querySelector('#vbar button[data-v="clairvoyance"]').click();
+    await until(() => fs.existsSync(verdicts) && JSON.parse(fs.readFileSync(verdicts, 'utf8')).verdicts[KEY], 'the verdict write');
+    const v = JSON.parse(fs.readFileSync(verdicts, 'utf8')).verdicts[KEY] || {};
+    ok(v.verdict === 'clairvoyance' && v.note === 'needed to know the top card' && v.search_digest === 'aaaa'
+       && v.human_win === 4 && v.search_win === 3, 'verdict stamped with the judged line');
+    ok(protects.length === 1 && /clairvoyance/.test(protects[0].msg), 'save went through protect()');
+    ok(!!await until(() => /Clairvoyance/.test((doc.querySelector('.item.sel') || {}).textContent || ''), 'the list chip'),
+       'the marked game stays listed (default filter) and shows its verdict');
+
+    idx = await (await fetch(base + '/api/review')).json();
+    ok(idx.games[0].verdict_state === 'current', 'verdict on the same line reads as current');
+    writeIndex(Object.assign({}, entry, { search_digest: 'bbbb' }));
+    idx = await (await fetch(base + '/api/review')).json();
+    ok(idx.games[0].verdict_state === 'stale', 'a changed search line makes the verdict stale');
+    writeIndex(entry);
+
+    for (const kind of ['nope', 'search_better', 'promoted']) {
+      const bad = await fetch(base + '/api/verdict', { method: 'POST', body: JSON.stringify({ key: KEY, verdict: kind }) });
+      ok(bad.status === 400, `verdict kind '${kind}' is refused by /api/verdict`);
+    }
+
+    // ---- promote -----------------------------------------------------------------------------
+    dom.window.confirm = () => true;
+    promoteReply = () => ({ ok: false, error: 'diverged from the search\'s game at the start of T3 pre_main' });
+    doc.querySelector('#vbar button[data-act="promote"]').click();
+    ok(!!await until(() => /NOT promoted/.test(doc.getElementById('vstatus').textContent), 'the refusal banner'),
+       'a refused promotion is shown as NOT promoted');
+    ok(promotes.length === 1 && promotes[0].source === 'handoff_T2.json' && promotes[0].key === KEY,
+       'Promote sends the right-hand line (the hand-off at the lost turn)');
+    ok(protects.length === 1, 'a refused promotion protects nothing');
+    promoteReply = (req) => {
+      const v = JSON.parse(fs.readFileSync(verdicts, 'utf8'));
+      v.verdicts[KEY] = { verdict: 'promoted', note: req.note, search_digest: 'aaaa', reference: 'references/Deck/claude_s1_gi0.json' };
+      fs.writeFileSync(verdicts, JSON.stringify(v));
+      return { ok: true, win_turn: 3, reference: 'references/Deck/claude_s1_gi0.json', notes: [],
+               files: ['references/review/replaced/Deck/human_s1_gi0.json', 'references/Deck/claude_s1_gi0.json', 'references/review/verdicts.json'] };
+    };
+    doc.querySelector('#vbar button[data-act="promote"]').click();
+    ok(!!await until(() => /Promoted:/.test((doc.getElementById('vstatus') || {}).textContent || ''), 'the promoted banner'),
+       'a promotion reports the new reference');
+    ok(protects.length === 2 && protects[1].rels.length === 3, 'every file the promotion wrote went through protect()');
+    ok(/Promoted/.test((doc.querySelector('.item.sel') || {}).textContent || ''), 'the list shows Promoted');
+    const badsrc = await fetch(base + '/api/promote', { method: 'POST', body: JSON.stringify({ key: KEY, source: '../x.json' }) });
+    ok(badsrc.status === 400, 'an arbitrary promote source is refused');
+    const cl = await (await fetch(base + '/api/verdict', { method: 'POST', body: JSON.stringify({ key: KEY, verdict: null }) })).json();
+    ok(cl.ok && !(KEY in JSON.parse(fs.readFileSync(verdicts, 'utf8')).verdicts), 'Clear removes the verdict');
+
+    // ---- the note survives a save ---------------------------------------------------------------
+    // USER 2026-10-25: the comment box was cleared when a save landed. A save re-renders the panel
+    // from the STORED note, so text typed while the (slow) save was in flight was thrown away.
+    protectDelay = 400;
+    const readV = () => (JSON.parse(fs.readFileSync(verdicts, 'utf8')).verdicts || {})[KEY];
+    const type = (text) => { const n = doc.getElementById('note'); n.value = text;
+                             n.dispatchEvent(new dom.window.Event('input', { bubbles: true })); };
+    type('first thought');
+    doc.querySelector('#vbar button[data-v="bug"]').click();
+    await until(() => readV() && readV().verdict === 'bug', 'the slow save to start');
+    type('first thought, and more typed while it saved');
+    await until(() => /Saved to/.test(doc.getElementById('vstatus').textContent), 'the slow save to land');
+    ok(doc.getElementById('note').value === 'first thought, and more typed while it saved',
+       'text typed while a save was in flight is still in the box after it lands');
+    ok(readV().note === 'first thought', 'the save stored the note it sent');
+    ok(/not saved yet/.test(doc.getElementById('notestate').textContent), 'the box says the newer text is not saved yet');
+    doc.querySelector('#vbar button[data-v="bug"]').click();
+    await until(() => readV().note === 'first thought, and more typed while it saved', 'the re-save');
+    await until(() => !/saving/.test(doc.getElementById('vstatus').textContent), 'the re-save to land');
+    ok(doc.getElementById('note').value === 'first thought, and more typed while it saved'
+       && !/not saved/.test(doc.getElementById('notestate').textContent), 'a re-save stores it and the box keeps it');
+    type('unsaved draft');
+    doc.getElementById('expand').click();
+    ok(doc.getElementById('note').value === 'unsaved draft', 'an expand / ladder / right-column re-render keeps an unsaved note');
+    protectDelay = 0;
+    ok(JSON.parse(dom.window.localStorage.getItem('mdt-review-drafts') || '{}')[KEY] === 'unsaved draft',
+       'an unsaved note is kept in localStorage, so a reload does not lose it');
+
+    // ---- Save note: the note alone, the verdict untouched ----------------------------------------
+    // USER 2026-10-25: an edited note on a PROMOTED game had no way to be saved (the label buttons
+    // replace the verdict; Promote re-runs the promotion).
+    ok(!doc.getElementById('savenote').disabled, 'Save note is enabled while the note differs from the stored one');
+    const nprot = protects.length;
+    doc.getElementById('note').dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true }));
+    await until(() => readV().note === 'unsaved draft', 'the note-only save (Ctrl+Enter)');
+    await until(() => /Note saved/.test(doc.getElementById('vstatus').textContent), 'the note-saved banner');
+    ok(readV().verdict === 'bug' && readV().search_digest === 'aaaa', 'Save note keeps the verdict and its stamp');
+    ok(protects.length === nprot + 1 && /review note/.test(protects[nprot].msg), 'the note save went through protect()');
+    ok(doc.getElementById('savenote').disabled && !/not saved/.test(doc.getElementById('notestate').textContent),
+       'after the save the box reads as saved');
+    ok(!(KEY in JSON.parse(dom.window.localStorage.getItem('mdt-review-drafts') || '{}')), 'a saved note drops its draft');
+    const pv = JSON.parse(fs.readFileSync(verdicts, 'utf8'));
+    pv.verdicts[KEY] = { verdict: 'promoted', note: 'old', search_digest: 'aaaa', reference: 'references/Deck/claude_s1_gi0.json',
+                         human_line_kept_at: 'references/review/replaced/Deck/human_s1_gi0.json', source: 'handoff_T2.json' };
+    fs.writeFileSync(verdicts, JSON.stringify(pv));
+    const pn = await (await fetch(base + '/api/note', { method: 'POST', body: JSON.stringify({ key: KEY, note: 'new reasoning' }) })).json();
+    ok(pn.ok && readV().verdict === 'promoted' && readV().note === 'new reasoning'
+       && readV().reference === 'references/Deck/claude_s1_gi0.json' && readV().source === 'handoff_T2.json',
+       'Save note on a PROMOTED game changes the note and nothing else');
+    await fetch(base + '/api/verdict', { method: 'POST', body: JSON.stringify({ key: KEY, verdict: null }) });
+    const nv = await fetch(base + '/api/note', { method: 'POST', body: JSON.stringify({ key: KEY, note: 'x' }) });
+    ok(nv.status === 409, 'Save note on a game with no verdict is refused (pick a verdict)');
+    dom.window.close();
+  } catch (e) {
+    ok(false, 'exception: ' + (e && e.stack || e));
+  } finally {
+    server.close();
+    fs.rmSync(tmp, { recursive: true, force: true });
+    console.log(fails ? `review viewer check: ${fails} FAILURE(S)` : 'review viewer check: all passed');
+    process.exit(fails ? 1 : 0);
+  }
+});

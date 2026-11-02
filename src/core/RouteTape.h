@@ -35,6 +35,9 @@ inline thread_local bool t_miss    = false;   // play: an event the tape could n
 
 // A tutor that fetched nothing (declined, nothing legal, a guard whiffed).
 inline const std::string& NoneName() { static const std::string s("\x01(none)"); return s; }
+// A tutor whose library search found nothing and SHUFFLED (WhiffShuffle, CR 701.19b) -- distinct from
+// NoneName so a replay performs the same shuffle.
+inline const std::string& WhiffShuffledName() { static const std::string s("\x01(none, shuffled)"); return s; }
 inline thread_local std::vector<std::string>*       t_tutor_rec  = nullptr;
 inline thread_local const std::vector<std::string>* t_tutor_play = nullptr;
 inline thread_local std::size_t                     t_tutor_pos  = 0;

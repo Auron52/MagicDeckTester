@@ -15,6 +15,24 @@
 // is included widely; the featurization (which needs the card database) is declared here and defined
 // in KeepModel.cpp so the heavy includes stay out of the header.
 
+// FEATURIZER VERSION -- which semantics a learned model's inputs were FITTED on, recorded PER MODEL in its
+// sidecar as "featurizer" (inside the model object: `eval_model` of a value / eval sidecar, the profile's
+// `keep_model`), so every deck reads exactly the semantics its own model was trained on and models can be
+// regenerated onto a corrected read one deck at a time (USER 2026-10-31, docs/design/placeholder-card-reads.md).
+//   1 = the historical PLACEHOLDER read. A hand / library card is a name-only placeholder with empty type
+//       and subtype masks, so lands_in_hand / hand_creatures / lib_lands / lib_creatures counted only the
+//       def-built cards, hand_castable_now counted a placeholder land as a castable MV-0 spell, and the
+//       keep model's subtype_density was always 0. ABSENT FIELD = 1: every model fitted before the field
+//       existed was fitted on this read, so default play is byte-identical.
+//   2 = the DEFINITION read (ZoneCard): every characteristic off the card's definition.
+// kFeaturizerCurrent is what every GENERATOR uses: the label dumps write it into their rows header and the
+// trainers stamp the rows' version into the model they write. A model naming a version this binary does
+// not know is refused at load (an older binary must never read a newer model's inputs under old rules).
+constexpr int kFeaturizerPlaceholder = 1;
+constexpr int kFeaturizerDefinition  = 2;
+constexpr int kFeaturizerCurrent     = kFeaturizerDefinition;
+inline bool FeaturizerKnown(int v) { return v == kFeaturizerPlaceholder || v == kFeaturizerDefinition; }
+
 // Named features the tree may split on. The ORDER is the contract: the runtime feature vector is
 // indexed by these positions, while the serialized model references features by KeepFeatureName.
 // APPEND-ONLY: never reorder or remove an entry -- existing committed profiles reference features by
@@ -216,6 +234,8 @@ struct KeepModel
     KeepScore                score;        // additive-score form (takes precedence over `nodes` if set)
     std::vector<KeepScore>   leaf_scores;  // HYBRID model-tree: per-leaf additive scores (a leaf's
                                            // KeepNode::leaf_score indexes here). Empty => pure tree.
+    int                      featurizer = kFeaturizerPlaceholder;  // the semantics this model was
+                                           // fitted on (see kFeaturizerCurrent); "featurizer" in keep_model
 
     bool empty() const { return nodes.empty() && score.empty(); }
 
@@ -529,6 +549,11 @@ struct MidGameEvaluator
     // its horizon and otherwise escalates / warms up with zero leaf cost -- no rollout, no model, no
     // feature extraction. Non-empty on purpose: every presence gate treats it as an attached model.
     bool constant = false;
+    // Featurizer semantics this model was FITTED on (see kFeaturizerCurrent), from the sidecar's
+    // eval_model.featurizer (absent = 1, the historical placeholder read). Every ExtractMidGameFeatures
+    // call that feeds THIS model passes this value, so the version travels with the model object
+    // through the rollouts' threads -- no global, nothing to race on.
+    int  featurizer = kFeaturizerPlaceholder;
     static MidGameEvaluator Constant() { MidGameEvaluator m; m.constant = true; m.intercept = 99 * 1000; return m; }
 
     bool empty() const { return !constant && coefs.empty() && trees.empty(); }
@@ -722,7 +747,12 @@ private:
 // public information -- never library order or the opponent's hand). Called from the SAME site in
 // TurnSolver for both offline label emission and runtime inference, so training and serving see
 // byte-identical features (lockstep). Returns a vector indexed by MidGameFeature (size == Count).
-std::vector<int> ExtractMidGameFeatures(const GameState& state, const MidGamePlanSummary& plan);
+// `featurizer` is the semantics to extract under (kFeaturizer*): pass the consuming model's
+// `featurizer`, or kFeaturizerCurrent at a label dump. There is deliberately no default -- every caller
+// names whose semantics it is reading, which is the whole point of the version.
+// MTG_PLACEHOLDER_FEATURES=1 (heurarm PLACEHOLDER_FEATURES) is an EXPERIMENT override that forces the
+// definition read for every caller whatever its model was fitted on; unset / =0 = no override.
+std::vector<int> ExtractMidGameFeatures(const GameState& state, const MidGamePlanSummary& plan, int featurizer);
 
 // Build the plan summary from the cast-spell NAMES + whether a land is played. This is the SINGLE
 // canonical summary builder, used by BOTH runtime inference (the TurnSolver seams) and offline label

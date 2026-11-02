@@ -1,0 +1,89 @@
+{
+  "deck": "decks/FiveColour/FiveColour.cod",
+  "profile": "decks/FiveColour/FiveColour.profile.json",
+  "turn": 5,
+  "on_the_play": true,
+  "max_turns": 7,
+  "active_life": 18,
+  "opponent_life": 16,
+  "battlefield": [
+    {
+      "name": "Breeding Pool",
+      "controller": 0,
+      "tapped": false,
+      "sick": false
+    },
+    {
+      "name": "Birds of Paradise",
+      "controller": 0,
+      "tapped": false,
+      "sick": false
+    },
+    {
+      "name": "Godless Shrine",
+      "controller": 0,
+      "tapped": false,
+      "sick": false
+    },
+    {
+      "name": "Ancient Cornucopia",
+      "controller": 0,
+      "tapped": false,
+      "sick": false
+    },
+    {
+      "name": "Deathrite Shaman",
+      "controller": 0,
+      "tapped": false,
+      "sick": false
+    },
+    {
+      "name": "Jetmir's Garden",
+      "controller": 0,
+      "tapped": false,
+      "sick": false
+    },
+    {
+      "name": "Bloom Tender",
+      "controller": 0,
+      "tapped": false,
+      "sick": false
+    },
+    {
+      "name": "Deathrite Shaman",
+      "controller": 0,
+      "tapped": false,
+      "sick": false
+    },
+    {
+      "name": "Zagoth Triome",
+      "controller": 0,
+      "tapped": false,
+      "sick": false
+    }
+  ],
+  "hand": [
+    "Nicol Bolas, Planeswalker",
+    "Faeburrow Elder",
+    "Bloom Tender",
+    "Two-Headed Hellkite"
+  ],
+  "graveyard": [
+    "Windswept Heath",
+    "Unite the Coalition",
+    "Misty Rainforest"
+  ],
+  "library_top": [
+    "Scalding Tarn",
+    "Garth One-Eye"
+  ],
+  "library_filler": "Progenitus",
+  "library_size": 30,
+  "depth": 7,
+  "budget_ms": 40,
+  "env": {
+    "MTG_REAL_PAY_SCRIPT": "1"
+  },
+  "expect_win_turn": 6,
+  "_comment": "MTG_REAL_PAY_ATTACK_PIN (docs/design/mana-completeness-oracle.md 13.2). FiveColour s1130288 gi287's turn-5 board. The plan casts Two-Headed Hellkite and drains 2 with Deathrite #1 (exiling Unite the Coalition). The engine's own payment taps Breeding Pool for a {G} that floats and empties, so at the search's declaration the second Deathrite is the only untapped source: 1 mana pays for nothing in hand, and FiveColourProvider::ShouldAttackWith sends it in (16 -> 14 -> 8, and T6's swing is exactly lethal). Under MTG_REAL_PAY_SCRIPT the oracle's DOMINATING payment leaves Breeding Pool untapped, so on the REAL board Deathrite + Pool make 2 mana, Bloom Tender {1}{G} is castable, and the same hold kept Deathrite home: 5 damage, opponent at 9, nothing cast in main 2, and T6's attack one short (T6 -> T7). The pin makes the scripted main declare the attackers the search's own apply board declared. With MTG_REAL_PAY_ATTACK_PIN=0 this fixture wins on turn 7."
+}

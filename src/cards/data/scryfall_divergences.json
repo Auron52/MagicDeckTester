@@ -45,5 +45,8 @@
  },
  "Lord of Lineage": {
   "keywords": "Transforming DFC back face: Scryfall's card-level keywords include the layout's Transform; the back face carries no transform of its own (transform_front_name only re-faces it off the battlefield, CR 712.8a). Flying IS tagged on this entry (inert: no blockers). Reviewed 2026-10-18 (Vampires)."
+ },
+ "Emrakul, the Aeons Torn": {
+  "keywords": "'Protection from spells that are one or more colors' is a real keyword but INERT here (PROVISIONAL, ledger Q12): nothing in a goldfish game targets, damages, enchants or blocks Emrakul with a colored spell in the Unpredictable Cyclone list (Remand targets the spell on the stack, where a permanent's protection does not function; the Ulamog triggers are colorless abilities). Annihilator is modelled via the annihilator param and stripped in-code (MODELED_ELSEWHERE_KEYWORDS). Mirrors the Progenitus protection precedent. Reviewed 2026-10-27 (Unpredictable Cyclone phase 2)."
  }
 }

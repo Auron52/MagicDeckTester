@@ -1035,3 +1035,84 @@ TEST_CASE("payment: Wirewood Lodge cannot burst off a reserved, untapped Priest"
         CHECK_FALSE(pays(tapped, Cost(0, 0, 0, 0, 0, /*g=*/6), hold_priest, prepay));
     }
 }
+
+// MTG_PAINLESS_AURA_PIP: a COLOURED pip off a painland whose land Aura already pays it takes the
+// painless {C} face (EDF viewer seeds 3000-4000: Living Wish {1}{G} off Brushland + Wild Growth tapped
+// Brushland's damaging {G} in 724 of 1,001 games). Only where the swap reaches nothing but life.
+namespace
+{
+GameState PainAuraBoard(const std::vector<std::string>& more)
+{
+    EnsureCards();
+    GameState s = MakeBoard({ "Brushland" });
+    s.battlefield[0].card.m_number = 6;
+    int num = 100;
+    for (const std::string& n : more) { s.battlefield.push_back(MakeLand(n)); s.battlefield.back().card.m_number = num++; }
+    Permanent wg = MakeLand("Wild Growth");
+    wg.card.m_number    = 53;
+    wg.aura_attached_to = 6;
+    s.battlefield.push_back(wg);
+    s.deck_has_land_aura = true;
+    s.players[0].life    = 20;
+    s.players[1].life    = 20;
+    return s;
+}
+int PainAuraLife(GameState s, const ManaCost& c, int arm, int refine = -1)
+{
+    heurarm::t_arm[heurarm::PAINLESS_AURA_PIP] = static_cast<std::int8_t>(arm);
+    heurarm::t_arm[heurarm::PAY_REFINE]        = static_cast<std::int8_t>(refine);
+    const bool ok = TapForCostShared(s, c, /*for_creature=*/false, nullptr, true);
+    heurarm::t_arm[heurarm::PAINLESS_AURA_PIP] = -1;
+    heurarm::t_arm[heurarm::PAY_REFINE]        = -1;
+    REQUIRE(ok);
+    return s.players[0].life;
+}
+}
+
+TEST_CASE("payment: {1}{G} off Brushland + Wild Growth taps the painless {C}, the Aura pays the {G}")
+{
+    const GameState s = PainAuraBoard({});
+    CHECK(PainAuraLife(s, Cost(1, 0, 0, 0, 0, /*g=*/1), -1) == 20);
+    CHECK(PainAuraLife(s, Cost(1, 0, 0, 0, 0, /*g=*/1), 0, 0) == 19); // =0 (and no refine): the historical coloured tap
+    CHECK(PainAuraLife(s, Cost(1, 0, 0, 0, 0, /*g=*/1), 0, 1) == 20); // ...which MTG_PAY_REFINE re-faces on its own
+    GameState t = s;
+    REQUIRE(TapForCostShared(t, Cost(1, 0, 0, 0, 0, /*g=*/1), false, nullptr, true));
+    CHECK(t.battlefield[0].tapped);
+    CHECK(t.floating_mana.Total() == 0);
+}
+
+TEST_CASE("payment: the painless {C} is not taken where it would strand a pip or float a different unit")
+{
+    // {1}{G}{G} with a Plains: Brushland's {G} and Wild Growth's {G} pay both {G}; a {C} would leave one
+    // {G} pip to a board with no other green. Still pays, with the damage.
+    CHECK(PainAuraLife(PainAuraBoard({ "Plains" }), Cost(1, 0, 0, 0, 0, /*g=*/2), -1) == 19);
+    // {G} alone: no generic pip spends the {C}, so it would float {C} where the coloured tap floats {G}.
+    CHECK(PainAuraLife(PainAuraBoard({}), Cost(0, 0, 0, 0, 0, /*g=*/1), -1) == 19);
+}
+
+// The plan cache may be hot from a derivation outside CanonWaveBillScope, where odometer
+// visits are free. Inside that scope they consume actual SearchBudget units: a hot lookup
+// must do the same work as a cold computation, not only produce a different key bit.
+extern std::vector<long long> CanonBillPlanCacheForTest(const GameState& state);
+TEST_CASE("plan cache: a free warm entry cannot skip canon-wave enumeration billing")
+{
+    EnsureCards();
+    GameState state = MakeBoard({"Island", "Island"});
+    state.battlefield[0].card.m_number = 1;
+    state.battlefield[1].card.m_number = 2;
+    const CardDefinition* d = CardDatabase::Instance().Lookup("Ornithopter of Paradise");
+    REQUIRE(d != nullptr);
+    Card card = d->card;
+    card.m_number = 77;
+    state.players[0].hand.push_back(card);
+    const auto r = CanonBillPlanCacheForTest(state);
+    REQUIRE(r.size() == 8);
+    CHECK(r[0] == 0);       // the real derivation was free before billing was armed
+    CHECK(r[1] == 1);       // the production store really warmed the plan cache
+    CHECK(r[2] == 0);       // legacy-key negative control demonstrably skips all billing
+    CHECK(r[4] > 0);        // the real cold derivation reaches charged odometer visits
+    CHECK(r[3] == r[4]);    // hot-after-free equals cold computation, in exact units
+    CHECK(r[5] > 0);
+    CHECK(r[5] == r[6]);
+    CHECK(r[7] == 1);       // same actual plans, not a branch removal or order substitution
+}

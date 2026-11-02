@@ -34,7 +34,7 @@
 // docs stay readable. Where a number is listed twice, BOTH readings existed -- disambiguate by the
 // surrounding text.
 //
-//    1  TutorCandidates                 16  ShouldAttackWith  |  OpponentPlaysLands
+//    1  TutorCandidates                 16  ShouldAttackWith  |  OpponentPlaysLands (retired)
 //   1b  TutorToBattlefieldPutOrder      17  CastOrderRank
 //    2  FetchCandidates                 18  XCandidates
 //    3  ShouldEmitRiskyAltPayload       19  SituationalCardRank
@@ -74,6 +74,50 @@
 struct TopDisposition;   // core/GameLogger.h
 enum class LookKind;     // core/GameLogger.h
 #include <vector>
+
+// THE SCORED CANTRIP ORDER's inputs (DecisionProvider::CantripReadinessOf / ScoreTopDisposition; design:
+// docs/design/cantrip-search-optimization.md §3.3). Computed ONCE per resolution, before the candidates
+// are scored.
+// ONE BATCH of DecisionProvider::CantripPlanOf calls: the engine's plan-admission loops (PutBackPickAt's derivation,
+// PutBackCandidates) ask the plan of every candidate of ONE resolution with the SAME state and the SAME readiness
+// object. A provider may memoise per-resolution facts its plan hook derives from those two alone for the lifetime of
+// the batch (t_id != 0; ids are per-thread, unique per batch). Outside a batch t_id is 0 and nothing may be reused.
+namespace cantripbatch
+{
+inline thread_local unsigned long long t_id   = 0;
+inline thread_local unsigned long long t_next = 0;
+struct Scope
+{
+    unsigned long long prev;
+    Scope() : prev(t_id) { t_id = ++t_next; }
+    ~Scope() { t_id = prev; }
+    Scope(const Scope&) = delete;
+    Scope& operator=(const Scope&) = delete;
+};
+}   // namespace cantripbatch
+
+struct CantripReadiness
+{
+    int  k = -1;                 // our draw steps before the payoff turn (0 = this turn); -1 = unknown
+    int  c = 0;                  // payoff actions payable on that turn (Cyclone: creature cycles)
+    bool missing_piece = false;  // a piece the payoff needs is not in hand / on the battlefield
+    bool shuffle_after = false;  // a library shuffle is available AFTER the cantrip this turn
+    int  dead_in_hand  = 0;      // hand cards the provider rates as dead (keep need 0)
+    std::vector<int> keep_need;  // per HAND index: the provider's cost of removing that card (its scale)
+    int  aux[16] = {};           // provider-private context computed with the readiness (read by its scorer)
+};
+// ONE candidate of a put-back / reorder resolution, as its RESULT. The pointers live for the duration of the
+// ScoreTopDisposition call only.
+struct TopDispositionView
+{
+    bool putback  = false;       // Brainstorm-style: cards leave the hand for the library top
+    bool shuffle  = false;       // the candidate shuffles the library (Ponder's "you may shuffle")
+    int  draw_now = 0;           // how many of `top` the resolving spell itself draws right after (Ponder: 1)
+    const Card* top[8] = {};     // the KNOWN top-of-library sequence after the candidate, top first
+    int  n_top = 0;
+    int  removed[2] = { -1, -1 };   // put-back: the HAND indices that leave the hand, top first
+    int  n_removed = 0;
+};
 
 // A "scaled cast" variant of a spell whose mana cost depends on how much OUTPUT it commits -- the
 // divided-damage analogue of an {X} value. `face` damage reaches the opponent; the total `cost` is
@@ -152,6 +196,25 @@ public:
     // printed which provider was in force, so nothing could have caught them earlier. Pure reporting:
     // no engine path branches on this.
     virtual const char* Name() const { return "Generic"; }
+    // Historical burn target policy: Any targets opponent face; Multi chooses the
+    // opponent creature or the existing surviving-own-creature prowess fallback.
+    // Decks may opt into the complete target axis; human/unpruned always see it.
+    // This is a provider-owned narrowing, not a legality restriction.
+    virtual bool SearchesFixedBurnTargets() const { return false; }
+    // A goldfish deck may prove that spending targeted burn on its own life or
+    // permanents cannot improve its clock. Human and unpruned play retain every
+    // legal target; the provider only narrows autonomous plan enumeration.
+    virtual bool PrunesOwnFixedBurnTargets() const { return false; }
+    virtual bool PrunesPassiveBurnTargets() const { return false; }
+
+    // Cost-choice candidates. The generic provider preserves every legal pair; an archetype may
+    // return a smaller set when its lands/fuel are interchangeable. The caller opens the full set
+    // for human play and the matching unpruned audit gate. Fireblast's paid cast remains separate.
+    virtual void FireblastMountainPairCandidates(
+        const GameState&, std::vector<std::pair<int, int>>&) const {}
+    virtual void GraveyardDamageFuelCandidates(
+        const GameState&, std::vector<std::string>&) const {}
+    virtual bool OffersPaidFireblastCast(const GameState&) const { return true; }
 
     // TutorCandidates -- tutor priority: ordered library card-name candidates for a tutor
     // (Idyllic / Enlightened). 1 = decided, >1 = search picks, {} = whiff.
@@ -228,6 +291,35 @@ public:
     virtual std::vector<std::string>
     SacTutorPutList(const GameState& s, int controller, const CardParams& pp, int max_puts) const;
 
+    // SacTutorPutOptions -- THE SEARCHED Defense of the Heart put list (MTG_DOTH_AXIS, 2026-10-29). SacTutorPutList
+    // above used to BE the decision, at the executor's upkeep and at every simulated turn boundary the search
+    // crossed with depth left -- an in-window greedy pick (CLAUDE.md, NO GREEDY). Now the search branches over
+    // this menu where it crosses the boundary (TurnSolver.cpp, BoundaryFan) and the plan of the turn before
+    // carries the chosen RANK (Plan::doth_put_choice -> GameState::scripted_doth_put); both upkeeps resolve it
+    // through DothUpkeepPutList (SpellEffects.h) against this list, built at the UPKEEP state.
+    //   ENTRY 0 IS ALWAYS SacTutorPutList's ANSWER: the provider's pick is the first branch and wins every tie.
+    // The rest follow in the provider's order. The DEFAULT enumerates every ordered list of up to max_puts
+    // library creature cards (copies honoured), orders them by the closed-form immediate-drain score
+    // SacTutorPutList maximises, and applies two folds whose proofs the provider supplies through the hooks
+    // below (docs/design/searched-doth-put.md):
+    //   * IDENTITY: two lists that differ only by the resolution order of puts that COMMUTE
+    //     (SacTutorPutsCommute) reach the same state up to battlefield order -- one is kept;
+    //   * DOMINANCE: a list with a free slot is dropped while a FREE-GAIN card (SacTutorFreeGainPut) still has a
+    //     spare copy -- adding it weakly dominates.
+    // A provider may only ORDER and RESTRICT, and a restriction needs its proof.
+    // CONTRACT (it is cached on exactly this, SpellEffects.h DothMenuKey): a pure function of the provider, the
+    // controller, max_puts, MTG_DOTH_FOLDS, our creature-enter / creature-death drain watchers, each opposing
+    // creature's toughness margin in battlefield order, and the library's creature definitions with their counts
+    // in first-occurrence order. An override (of this, of SacTutorPutList or of the fold hooks) that reads
+    // anything else must extend that key.
+    virtual std::vector<std::vector<std::string>>
+    SacTutorPutOptions(const GameState& s, int controller, const CardParams& pp, int max_puts) const;
+    // ...the two fold hooks (MTG_DOTH_FOLDS, default ON, gates both). The defaults prove nothing beyond the
+    // trivial: two copies of ONE definition commute, nothing is free-gain. An override states its proof and the
+    // conditions under which it breaks, card by card, for the pool it covers (CreatureGivingProvider).
+    virtual bool SacTutorPutsCommute(const CardDefinition& a, const CardDefinition& b) const { return &a == &b; }
+    virtual bool SacTutorFreeGainPut(const CardDefinition& /*d*/) const { return false; }
+
     // TutorHandPutList -- Ranger of Eos's ETB multi-tutor TO HAND ("search your library for up to
     // two creature cards with mana value 1 or less"): which cards (by NAME, ordered, one entry per
     // library COPY -- repeats honour multiplicity) to fetch. Resolved once at the ETB on both the
@@ -247,6 +339,27 @@ public:
     // 2026-09-30). Human play overrides via the `revive` chooser. Disclosed in Stage 6a.
     virtual std::vector<std::string>
     ReviveCandidates(const GameState& s, int controller, int max_power, int max_returns) const;
+
+    // GyReturnOrder -- the ORDER of a single-target graveyard -> battlefield return's candidates
+    // (Abiding Grace's mode 2, Emeria, the Sky Ruin). `cand_numbers` = the legal candidates' card
+    // m_numbers (one per distinct NAME -- copies of one card are the same object to play -- in
+    // graveyard order); reorder in place, front = the default. ORDERING ONLY: never drop an entry
+    // (the search branches over all of them). Default: name ascending, then the lowest m_number --
+    // shuffle-independent, the MTG_TUTOR_RANKED_DEFAULT rationale.
+    virtual void GyReturnOrder(const GameState& s, int controller, std::vector<int>& cand_numbers) const;
+
+    // GraceOptions -- Abiding Grace's option list for ONE end-step trigger, in the order the searched
+    // rank (Plan::grace_choice) indexes it; front = the default the playout policy takes beyond the
+    // horizon. Each entry is kGraceGainOption (-1: "You gain N life") or the m_number of a graveyard
+    // card to return. `opts` arrives as the engine's full legal list in its default order (every
+    // return candidate in GyReturnOrder order, then the gain mode). The DEFAULT is that pure ordering,
+    // untouched. A deck provider may REORDER and RESTRICT with a proven dominance (see
+    // LifegainGraceFolds, DecisionProviders.h), but must leave at least one entry -- an emptied list
+    // is ignored and the engine's list is used. Never consulted in human play's prompt (the human
+    // sees every legal option).
+    static constexpr int kGraceGainOption = -1;
+    virtual void GraceOptions(const GameState& s, int controller, std::vector<int>& opts) const
+    { (void)s; (void)controller; (void)opts; }
 
     // FlickerTarget -- Felidar Guardian's ETB flicker ("you may exile another target permanent
     // you control, then return that card"): the target's card.m_number, or 0 to decline. Used on
@@ -581,6 +694,91 @@ public:
     // asked at resolution). Default false -> every candidate is searched.
     virtual bool PutBackSingleCandidate(const GameState& s) const { (void)s; return false; }
 
+    // ---- THE SCORED CANTRIP ORDER (docs/design/cantrip-search-optimization.md §3.2-3.3) -----------------
+    // CantripReadinessOf -- the provider's cheap GO-OFF estimate at a cantrip resolution: k = our draw steps
+    // before the payoff turn (0 = this turn), c = payoff actions payable on that turn, plus per-HAND-index
+    // keep needs. TRUE turns on the scored order for this resolution: the engine scores every candidate
+    // with ScoreTopDisposition and STABLE-sorts them by score, the existing order being the tie-break,
+    // inside the shared PutBackPickAt / PutBackCandidates / TopDispositionCandidates (core/SpellEffects.h)
+    // -- so the executor, the rollout and human play's default see the same ranks (ordinal lockstep). AN
+    // ORDER ONLY: the candidate SET and its size are untouched, so at an unlimited budget the search reaches
+    // exactly what it reached before. Must read only what the player KNOWS (hand, battlefield, life, the
+    // cards this resolution reveals or places). Default false -> today's order, byte-identical.
+    virtual bool CantripReadinessOf(const GameState& s, int controller, CantripReadiness& out) const
+    { (void)s; (void)controller; (void)out; return false; }
+
+    // ScoreTopDisposition -- score ONE candidate of a put-back / reorder resolution; LOWER = earlier in the
+    // fan. A pure function of (state, readiness, candidate) -- the ordinal pin names a rank, so the two
+    // worlds must sort identically. `view` holds the RESULT of the candidate: the known top-of-library
+    // sequence after it (top first), the hand indices it removes (put-back), whether it shuffles, and how
+    // many of the top cards the resolving spell draws right after (Ponder: 1). A shuffle candidate is placed
+    // by the engine at index 0 or 1 of a reorder fan (the USER's "the shuffle is ALWAYS searched, beside
+    // the best keep order"): its score only decides which of the two goes first. Returning false for any
+    // candidate keeps the existing order for the whole resolution. Default false.
+    virtual bool ScoreTopDisposition(const GameState& s, int controller, const CantripReadiness& r,
+                                     const TopDispositionView& view, int& score_out) const
+    { (void)s; (void)controller; (void)r; (void)view; (void)score_out; return false; }
+
+    // CantripOrderKey -- the PER-FAN RANKING CACHE's key (design item 8; a pure speedup, byte-identical): append
+    // to `key` EVERY input CantripReadinessOf and ScoreTopDisposition read off `s` for `controller` (and every
+    // per-job flag they consult), so that two states with equal keys provably score every candidate the same.
+    // The engine appends the candidate list itself (and, for a reorder, the looked cards and the library top
+    // the shuffle's score reads). Every searched fan member re-applies the same prefix and reaches the same
+    // resolution, so the scores are computed once per fan instead of once per member. FALSE (the default) =
+    // no cache: the scores are derived at every resolution, as before. A provider that changes what its scorer
+    // reads must change this key with it (MTG_CANTRIP_RANK_CACHE_VERIFY=1 re-derives every hit and aborts on
+    // a mismatch).
+    virtual bool CantripOrderKey(const GameState& s, int controller, std::vector<std::uint64_t>& key) const
+    { (void)s; (void)controller; (void)key; return false; }
+
+    // ---- PLAN-LEVEL CANTRIP BRANCHING (USER 2026-10-28; Cyclone ledger "Hard prunes + known-top blind test") ----
+    // USER: "search options that are vastly different when needed. So for example, putting junk on top when we plan
+    // to throw away those cards vs setting up a big creature to cycle into, but the heuristic would choose how to
+    // fulfil those options. Similarly Ponder shuffle vs reorder, but the heuristic would choose the order of the
+    // reorder. Naturally, even for these we may be able to prune the second or third plan depending on the
+    // situation." A HARD PRUNE of the scored fan (a provider RESTRICTION, lossy, the USER's call to adopt): every
+    // candidate is assigned to a PLAN; the engine keeps, per plan, only its best-scored candidate (the scored
+    // order's first member of that plan = the heuristic's fulfilment), so the search still branches over the PLANS.
+    // CantripPlanOf -- the plan of ONE scored candidate (same arguments as ScoreTopDisposition, called after it):
+    // >= 0 a plan id (the engine keeps that plan's best-scored candidate), kCantripPlanKeep (-2) keep this candidate
+    // ungrouped, kCantripPlanDrop (-1) drop it (a situational prune), kCantripPlanBoth (-3) belongs to
+    // BOTH plan 0 and plan 1. Select each role's best candidate before folding shared winners. FALSE = no plan-level
+    // admission for this resolution. The engine never leaves a fan empty (an all-dropped fan keeps its rank 0).
+    // Applied inside the shared PutBackPickAt / PutBackCandidates / ScoredReorderCandidates, so the executor, the
+    // rollout and the blind chooser read the same (shorter) list; must be a pure function of the resolution
+    // state (and, like the scorer, of what the player knows). Default false.
+    static constexpr int kCantripPlanDrop = -1;
+    static constexpr int kCantripPlanKeep = -2;
+    static constexpr int kCantripPlanBoth = -3;
+    virtual bool CantripPlanOf(const GameState& s, int controller, const CantripReadiness& r,
+                               const TopDispositionView& view, int& plan_out) const
+    { (void)s; (void)controller; (void)r; (void)view; (void)plan_out; return false; }
+    // CantripFanCap -- the most candidates the plan-level admission can leave in ONE put-back (putback = true) /
+    // reorder (false) resolution, i.e. the search fan's width cap at enumeration (the resolution list is never
+    // longer, so a wider fan's extra ranks would only clamp onto its last member). -1 = no cap (default).
+    virtual int CantripFanCap(const GameState& s, bool putback) const { (void)s; (void)putback; return -1; }
+    // CantripPlansActive -- is the plan-level admission on for this kind of resolution at all? The cheap gate the
+    // engine reads before asking CantripPlanOf per candidate (false => byte-identical, nothing computed). Default false.
+    virtual bool CantripPlansActive(const GameState& s, bool putback) const { (void)s; (void)putback; return false; }
+    // CycleScryPinHeuristic -- a searched cycle seed normally carries the "whenever you cycle ... scry 1" watchers'
+    // disposition as a pin (j = 0..N: bottom the top j). TRUE = no pin: the seed is emitted once, unpinned, and the
+    // provider's ScryKeepOnTop decides each scry at resolution, after the reveal (a provider HARD PRUNE of the j fan
+    // to its heuristic, the rule-as-prune shape: lossy, the USER's call). Default false -> every j is searched.
+    virtual bool CycleScryPinHeuristic(const GameState& s) const { (void)s; return false; }
+    // CycleSeedAdmissionSets -- a provider HARD PRUNE of WHICH cycler a plan's cycle seed may use, judged at PLAN level
+    // (EnumeratePlans' emission) because the seed cycles AFTER the plan's casts: `if_replacer_out` = the admitted cycler
+    // names when a cycle-draw replacer (Unpredictable Cyclone) is on the battlefield or cast by the plan before the cycle;
+    // `if_not` = when none will be out. TRUE = filter; false (default) = every seed stays. Human play is never filtered.
+    virtual bool CycleSeedAdmissionSets(const GameState& s, std::vector<std::string>& if_replacer_out,
+                                        std::vector<std::string>& if_not) const
+    { (void)s; (void)if_replacer_out; (void)if_not; return false; }
+    // ...and the PER-PLAN refinement when the replacer is (or will be) out: is `cycler` admitted for a plan whose own
+    // casts spend `plan_mana` (mana value, rituals' net output already subtracted) and `plan_blue` {U} pips before the
+    // cycle? Called only when CycleSeedAdmissionSets returned true. Default: the if_replacer_out list decides.
+    virtual bool CycleSeedAdmitOut(const GameState& s, const std::string& cycler, int plan_mana, int plan_blue,
+                                   bool* decided) const
+    { (void)s; (void)cycler; (void)plan_mana; (void)plan_blue; if (decided) { *decided = false; } return true; }
+
     // CleanupDiscardShedStable -- is the shed order above PREFIX-STABLE? That is: after shedding
     // its own top pick, does re-ranking the smaller hand leave the remaining cards in the same
     // order? When true (the default, and true of every bucket rule in the suite -- they choose which
@@ -747,6 +945,28 @@ public:
     // lowest battlefield index (the oldest). Restricts nothing.
     virtual void LandfallCounterTargetOrder(const GameState& s, int controller,
                                             std::vector<int>& class_reps) const;
+    // LandfallDoubleTargetOrder -- the same contract, for a resolution that DOUBLES the target's +1/+1
+    // counters instead of putting N (Scythecat Cub's second landfall resolution each turn). Base rule
+    // (out-of-line): a body that can attack RIGHT NOW first (LandfallCounterTargetOrder's first key), then
+    // the MOST +1/+1 counters (the doubling adds exactly that many), then the highest effective power,
+    // ties to the oldest. Restricts nothing.
+    virtual void LandfallDoubleTargetOrder(const GameState& s, int controller,
+                                           std::vector<int>& class_reps) const;
+
+    // CastTriggerTargetOrder -- a MANDATORY targeted CAST trigger over "target permanent", either side
+    // (Ulamog, the Ceaseless Hunger's exile two; Ulamog, the Infinite Gyre's destroy one; `destroy` says
+    // which). `class_reps` arrives as battlefield indices, ONE per identity class (CastTriggerTargetFoldKey),
+    // and the provider ORDERS it in place; the engine's options are the multisets of N classes in that
+    // order (rank 0 = the default; Plan::cast_trigger_target_choice is the searched rank). ORDER ONLY --
+    // opponent-first is NOT a provable dominance (exiling our own land is sometimes the line; destroying
+    // our own Emrakul fires its graveyard shuffle), so a provider must not restrict this list.
+    //
+    // Base rule (out-of-line): the opponent's permanents (smallest power first); for a destroy, our
+    // indestructible permanents next (a legal no-op); then our tapped lands, our untapped lands, our
+    // creatures (lowest power first), our other permanents; our cast-trigger fatties (power >= 10) last.
+    // Stable, so ties keep battlefield order (oldest first).
+    virtual void CastTriggerTargetOrder(const GameState& s, int controller, bool destroy,
+                                        std::vector<int>& class_reps) const;
 
     // JitteSpendCount -- Umezawa's Jitte: how many charge counters to spend on "+2/+2 until end
     // of turn" for THIS attacker's combat damage. Default -1 = greedy spend-all INCLUDING the
@@ -853,8 +1073,56 @@ public:
     // pure upside. Provider-owned so any narrowing away from that is a NAMED, A/B-testable
     // decision (core invariant) -- and the human chooser overrides it at the real-resolution
     // sites regardless. Disclosed in each deck's Stage 6a.
+    virtual void IncineratorTargetCandidates(const GameState&, int damaged_player, int amount,
+                                              std::vector<int>& out) const;
+
     virtual bool TakeFreeCast(const GameState& /*s*/, int /*controller*/,
                               const CardDefinition& /*found*/) const { return true; }
+
+    // ---- Searched CYCLING (Unpredictable Cyclone phase 3, 2026-10-27) ------------------------------
+    // SearchedCycleSources -- WHICH hand cyclers the search may cycle as a plan action (Action::Kind::
+    // DigDraw with dig_sacrifice false, a "seed" of the plan's dig chain; see CollectActions). An ORDERED,
+    // RESTRICTED list of DISTINCT card names (copies are one option: the apply worlds cycle BY NAME, so
+    // which copy is unobservable). A provider may restrict or order the set, never collapse a set it
+    // admits to an unbranched pick -- the engine emits one action per name and the search chooses.
+    // DEFAULT EMPTY: the deck keeps the legacy dig loop (ShouldConsiderDig + SelectDigSource), byte-
+    // identical. A provider that returns a non-empty list OWNS hand cycling through these actions inside
+    // the search window: its in-window plans run no legacy hand cycle (TurnSolver's dig loop), and the
+    // legacy gate + SelectDigSource remain only the permitted playout policy (the horizon leaf, the d0
+    // runner). [Opting the other cycling decks in is an open USER question -- see the Cyclone ledger.]
+    virtual std::vector<std::string> SearchedCycleSources(const GameState& /*s*/) const { return {}; }
+    // The cheap STATE-FREE twin of the above (read per apply): does this provider search its hand cycling
+    // at all? Must be true exactly when SearchedCycleSources can be non-empty. Default false.
+    virtual bool CyclesAreSearched() const { return false; }
+    // FreeCastTakeDominated -- is TAKING this free cast (Unpredictable Cyclone's walk hit) provably no worse
+    // than declining it (the hit to the bottom)? True folds the decline option away (no decline variant;
+    // a decline pin takes). A dominance RESTRICTION owned by the deck. DEFAULT FALSE: nothing is folded,
+    // every offer's take / decline is branched -- the sound default.
+    virtual bool FreeCastTakeDominated(const GameState& /*s*/, int /*controller*/,
+                                       const CardDefinition& /*hit*/) const { return false; }
+    // AdmitRemandOnFreeCast -- may a Remand (counters_target_spell_to_hand) in hand answer this FREE
+    // cast (Unpredictable Cyclone's walk hit, on the stack)? A RESTRICTION hook (default: admit all);
+    // the take / decline / take-and-Remand choice itself is searched (the DigDraw seed's free-cast pin).
+    virtual bool AdmitRemandOnFreeCast(const GameState& /*s*/, int /*controller*/,
+                                       const CardDefinition& /*hit*/) const { return true; }
+    // AdmitRemandRider -- may a Remand ride THIS hand cast of `target` (CollectActions' remand post-pass)?
+    // A RESTRICTION hook (default: admit all), so a deck can prune self-Remands it does not want offered
+    // (CycloneProvider: a mana-value ceiling, MTG_CYCLONE_REMAND_MAX_MV).
+    virtual bool AdmitRemandRider(const GameState& /*s*/, int /*controller*/,
+                                  const CardDefinition& /*target*/) const { return true; }
+    // AdmitRemandOnRemand -- may a second Remand target a first Remand (Action::remand_chain_by: A on any
+    // spell X, B on A; X resolves, A back to hand, B draws)? Read wherever a Remand rider is offered (the
+    // hand-cast post-pass and the Cyclone free-cast pin). `remand` = the Remand being targeted (A).
+    // DEFAULT FALSE: the line is new (2026-10-28) and every other Remand deck (Hinata2, NivMizzetCombo) keeps
+    // its measured play until its own A/B; opting one in is a USER decision (Cyclone ledger, Remand ceiling).
+    virtual bool AdmitRemandOnRemand(const GameState& /*s*/, int /*controller*/,
+                                     const CardDefinition& /*remand*/) const { return false; }
+    // AdmitRemandOnlyCast -- may a goldfish_inert card (never cast on its own) be cast ONLY as the target of
+    // a Remand rider (it never resolves: Remand returns it to hand, so its effect and any additional cost
+    // that scales with an X chosen as 0 are never realised)? DEFAULT FALSE (every inert card stays a dead
+    // card); CycloneProvider admits it under its ceiling behind MTG_CYCLONE_REMAND_INERT.
+    virtual bool AdmitRemandOnlyCast(const GameState& /*s*/, int /*controller*/,
+                                     const CardDefinition& /*inert*/) const { return false; }
 
     // DemonstrateCopy -- Creative Technique's "you may copy this spell" (CR 702.145). Default
     // TRUE: the copy is a second free payload at zero cost and the opponent's copy is inert
@@ -1575,6 +1843,27 @@ public:
         return out;
     }
 
+    // CounterPingCounts -- how many Walking Ballista pings ("Remove a +1/+1 counter: 1 damage to any
+    // target") ONE plan action puts on `target` (0 = the opponent's face, > 0 = a creature's m_number)
+    // from `source`; the candidates the search branches over, empty DECLINES that target. The engine
+    // asks only for targets that survive its SOUND folds (CollectCounterPingOffers in SpellEffects.h):
+    // the face always, with `max_counters` = the source's counters; a creature only when the pings KILL
+    // it and its death pays, with `max_counters` = exactly the kill count. A LIVE Heliod loop is not
+    // asked about at all (it wins this turn). Generic = every K for the face (a K decides how many
+    // counters become damage / lifelink events and whether the Ballista survives -- no K dominates
+    // another in general) and the kill count for a creature. A deck provider may narrow with a deck-pool
+    // argument (LifegainHeliodComboProvider, MTG_LHC_PING_PRUNE); MTG_UNPRUNE=counterping bypasses it.
+    // Human play never asks: one ping per click, target chosen at resolution.
+    virtual std::vector<int> CounterPingCounts(const GameState& s, const Permanent& source, int target,
+                                               int max_counters) const
+    {
+        (void)s; (void)source;
+        std::vector<int> out;
+        if (target != 0) { if (max_counters >= 1) { out.push_back(max_counters); } return out; }
+        for (int k = 1; k <= max_counters; ++k) { out.push_back(k); }
+        return out;
+    }
+
     // UntapActivationCounts -- how many times to activate an ACTIVATED UNTAPPER (Action::Kind::
     // ActivateUntap: Crab Umbra, Galvanic Alchemist's granted untap, Staff of Domination's untap-target
     // with its {1} self-untap interleaved, Seedcradle Witch) of shape `shape` from `source` at `target`
@@ -1690,6 +1979,14 @@ public:
     // gain the same reach, but that is a GT-moving change to measure per game before adopting
     // there. CritterLifegainProvider opts in (written when the list ran three Ajani; the current
     // CritterLifegain list runs one).
+    // Chandra's emblem ANY-target policy. A one-option provider prune: face damage dominates
+    // other recipients in Midrange Burn (no own-damage/death payoffs; opponent bodies are passive
+    // and may be needed for Searing Blaze). It also maximizes Incinerator's generic discount.
+    // A deck with damage/death payoffs must override this or add a searched target axis before
+    // using the policy. Human resolution always asks its unrestricted any-target chooser.
+    virtual int SpellCastEmblemTarget(const GameState& state, int controller, int amount) const
+    { (void)state; (void)controller; (void)amount; return 0; }
+
     virtual bool SearchesWalkerCastActivation() const
     { return EnvOn("MTG_WALKER_CAST_ACTIVATE"); }
 
@@ -2179,16 +2476,6 @@ public:
     // gate + PreferHoldLandDrop.
     virtual double NcLandDropTempoBonus(const GameState& s, int controller) const { (void)s; (void)controller; return 0.0; }
 
-    // OpponentPlaysLands -- does this deck's goldfish opponent play lands? Decks whose spells target the
-    // OPPONENT'S permanents for value (Hinata: Magma Opus taps them, the spread-damage / cost-
-    // reduction targeting points at them) need a realistic opponent board. When true the engine
-    // gives the passive opponent one land on each of the first three turns (a realistic floor:
-    // most opponents have >=3 lands, and aggressive decks with fewer bring creatures = better
-    // targets anyway). DEFAULT false -> every existing deck's opponent stays boardless-of-lands
-    // (byte-identical); only HinataProvider opts in. NOT pure (defaulted) so no other provider
-    // needs to implement it.
-    virtual bool OpponentPlaysLands() const { return false; }
-
     // UseLethalShortCircuit -- opt IN to the board-lethal search short-circuit (Solve + EnumeratePlans):
     // when the current board's attack-all damage already kills the opponent this turn, skip the cast-subset
     // odometer and just attack. WIN-TURN-INVARIANT (winning this turn is the min win-turn), but it changes
@@ -2527,6 +2814,13 @@ public:
     // Read through ProviderSecondMainLive (DecisionProviders.h), which never opens one on a deck that
     // already plays a full second main.
     virtual bool RestrictedSecondMainLive(const GameState& s) const { (void)s; return false; }
+    // MayOpenRestrictedSecondMain -- DECK-LEVEL: can RestrictedSecondMainLive ever return true for this provider? A
+    // provider that overrides it says so (true). Read where a proof needs "no post-combat main ever opens" without a
+    // state to ask (the rollout kill-only turn's no-m2 parity, TurnSolver KillOnlyNoM2Parity).
+    virtual bool MayOpenRestrictedSecondMain() const { return false; }
+    // Opt in to the proven no-second-main kill-only parity without enabling it for every deck.
+    // TurnSolver still checks the deck flags above before using the shortcut.
+    virtual bool LeafKillOnlyNoM2OptIn() const { return false; }
     virtual bool RestrictedSecondMainAdmits(const GameState& s, const Action& a) const
     { (void)s; (void)a; return true; }
 
@@ -3025,6 +3319,26 @@ public:
                                         const std::vector<int>* /*arranged*/) const
     { return false; }
 
+    // XCastBelowMax -- the deck's prune on an {X} cast (cands[j]) whose X leaves mana the plan does not
+    // use. Asked by BOTH subset walks for each selected X cast of a subset that is already legal; true
+    // drops the subset unless its projection wins this turn (a winning plan is never dropped).
+    // pool_total = the mana the walk paid from. Base false -> every deck byte-identical.
+    // LifegainHeliodComboProvider: the USER's Walking Ballista rule (MTG_LHC_BALLISTA_X).
+    virtual bool XCastBelowMax(const GameState& /*s*/, const std::vector<Action>& /*cands*/,
+                               const std::vector<int>& /*sel*/, int /*j*/, int /*pool_total*/) const
+    { return false; }
+
+    // RevealOutletPinned / RevealOutletPin -- a deck that PLACES its reveal outlet's activation (Martyr of
+    // Sands) instead of searching its position (TurnSolver::RevealOutletSlot's fan). Pinned: every outlet
+    // of every enumerated plan (breakpoint continuations included) gets ONE position, in place --
+    // RevealOutletPin's choice: 0 = before every cast, 1 = right after the plan's last "whenever you gain
+    // life" cast. A source the plan CASTS enters at a site-9 breakpoint, so position 0 of the continuation
+    // derived there is right after that cast. Base: not pinned (the fan). LifegainHeliodComboProvider:
+    // MTG_LHC_MARTYR_PIN.
+    virtual bool RevealOutletPinned() const { return false; }
+    virtual int  RevealOutletPin(const GameState& /*s*/, const std::vector<Action>& /*plan_actions*/) const
+    { return 0; }
+
     // RestrictorFollowsArrangement -- does this deck's ArrangeCastOrder PLACE its cast restrictor (a set-level
     // position rather than a rank)? Then both subset walks count the restrictor's followers -- the
     // max_casts_after legality, RestrictorPrePayable's pre-set and RestrictorSubsetWasted's follower -- in the
@@ -3199,8 +3513,10 @@ public:
     // `basic_only` / `share_land_type` are the search's own spec flags (LandSearchSpec), so a provider
     // can tell a Myriad Landscape pair (share_land_type) or a Primeval Titan pick (any land) from a
     // plain basic fetch; both are already in the memo key (core/LandSearch.h, landsearchmemo::Key).
+    // `subtype` (SubtypeRegistry id, kNone = none) is the "<Subtype> card" filter (Nature's Lore: Forest),
+    // also in the memo key: an any-land search is !basic_only AND no subtype.
     virtual void LandSearchPickOrder(const GameState& s, int controller, int count, int to_hand,
-                                     bool basic_only, bool share_land_type,
+                                     bool basic_only, bool share_land_type, std::uint16_t subtype,
                                      std::vector<std::vector<std::string>>& picks) const;
     // LandSearchPickOrderKey -- EVERYTHING LandSearchPickOrder reads from the STATE (beyond the pick
     // list it is handed), folded into one 64-bit key, so core/LandSearch.h can MEMOIZE the ordered list
@@ -3220,10 +3536,10 @@ public:
     // MTG_UNPRUNE=landpick lifts it for the standing pruned-vs-unpruned A/B. It may read ONLY what
     // LandSearchPickOrderKey keys (the result is memoized with the list). Base: no narrowing.
     virtual int LandSearchPickWidth(const GameState& s, int controller, int count, int to_hand,
-                                    bool basic_only, bool share_land_type,
+                                    bool basic_only, bool share_land_type, std::uint16_t subtype,
                                     const std::vector<std::vector<std::string>>& picks) const
     { (void)s; (void)controller; (void)count; (void)to_hand; (void)basic_only; (void)share_land_type;
-      return static_cast<int>(picks.size()); }
+      (void)subtype; return static_cast<int>(picks.size()); }
     // LandSearchAdmitsLand -- the same narrowing at the CLASS level: may the autonomous world's pick hold
     // this land at all? Applied BEFORE the maximal-pick walk, so the picks are re-formed without the
     // rejected lands -- "up to N" then reaches a smaller complete pick, or none (the search finds
@@ -3232,9 +3548,10 @@ public:
     // definition and the spec flags: the memo key carries the provider's type and the pruned bit, not
     // this answer. Base: every legal land.
     virtual bool LandSearchAdmitsLand(const GameState& s, int controller, int count, int to_hand,
-                                      bool basic_only, bool share_land_type, const CardDefinition& land) const
+                                      bool basic_only, bool share_land_type, std::uint16_t subtype,
+                                      const CardDefinition& land) const
     { (void)s; (void)controller; (void)count; (void)to_hand; (void)basic_only; (void)share_land_type;
-      (void)land; return true; }
+      (void)subtype; (void)land; return true; }
 
     // LandEntrySpotsRule -- does this deck rule WHERE its land entries go around its landfall sources?
     // When true (and the land-pick prune is in force: not human play, not MTG_UNPRUNE=landpick), the plan

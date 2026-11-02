@@ -316,6 +316,23 @@ enum class PermAbilityMode
     // band (never the ModeSpec K block); the shared resolver reads both off TapTargetPumpPinScope.
     // Appended LAST.
     TapTargetPump,
+    // {4}: Put a +1/+1 counter on this creature  (Walking Ballista; CardParams::self_counter_cost). NO {T}
+    // and NO sacrifice -> the Drain/PayToken shape: REPEATABLE within a turn, legal on a summoning-sick
+    // body (CR 302.6), K bounded by mana (ManaSinkActivationCounts). The counter is a "put" through
+    // PutPlusCounters; it is NOT a life-gain event. Appended LAST.
+    PayCounterSelf,
+    // Remove a +1/+1 counter from this creature: It deals N damage to any target  (Walking Ballista;
+    // CardParams::remove_counter_ping_damage). The cost is a COUNTER (the SporeSaproling shape, never
+    // SpendRepeatActivations); no {T}. Target rides CounterPingTargetPinScope (0 = opponent face).
+    // Resolution: ResolveCounterPing (inline death before the damage, LKI lifelink -> ONE GainLife).
+    // Appended LAST.
+    CounterPing,
+    // THE HELIOD + BALLISTA LOOP (Walking Ballista with lifelink + a lifegain_target_own_counter permanent
+    // + >= 2 counters): ping, gain 1, Heliod's counter back on the Ballista, repeat until the opponent is
+    // dead. ONE action on the Ballista source whose cost is the grant ({1}{W}) and/or the {4} top-up the
+    // loop still needs (PingLoopExtraCost); emitted only while PingLoopLiveNow -- a proven kill, executed
+    // ping by ping (RunPingLoop). Appended LAST.
+    PingLoop,
 };
 
 // Does this mode's cost include {T}? THE single source of truth, because three separate sites used
@@ -338,7 +355,10 @@ inline bool PermAbilityTaps(PermAbilityMode m)
         && m != PermAbilityMode::QuestSacLandSearch   // Khalni Heart Expedition: counters + sac, no {T}
         && m != PermAbilityMode::ReconfigureUnattach  // Lizard Blades: "{2}: unattach" -- no {T}
         && m != PermAbilityMode::TapSubtypeSteal      // Captivating Vampire: taps five OTHER bodies
-        && m != PermAbilityMode::TransformSelf;       // Bloodline Keeper: "{B}: Transform" -- no {T}
+        && m != PermAbilityMode::TransformSelf        // Bloodline Keeper: "{B}: Transform" -- no {T}
+        && m != PermAbilityMode::PayCounterSelf       // Walking Ballista: "{4}: put a counter" -- no {T}
+        && m != PermAbilityMode::CounterPing          // Walking Ballista: "remove a counter: 1 damage"
+        && m != PermAbilityMode::PingLoop;            // the Heliod + Ballista loop (pings, no {T})
     // SacLandSearch (Evolving Wilds / Myriad Landscape) is deliberately ABSENT: its cost has {T}.
     // SacLifePerCreature (Blighted Steppe) and TapLifegain (Wellwisher) are deliberately ABSENT --
     // this is an EXCLUSION list, so anything not named here taps, which is what both want. Adding
@@ -532,6 +552,37 @@ struct Permanent
     // parity check) -- a used Condemned and an unused one are not interchangeable. Never set for any
     // other deck -> every key gated on it is byte-identical elsewhere.
     bool      once_per_turn_used   : 1 = false;
+    // "If this is the second time this ability has resolved this turn" (Scythecat Cub's landfall,
+    // CardParams::landfall_target_second_doubles; 2026-10-23). PER OBJECT: `once` = it has resolved at
+    // least once this turn, `twice` = at least twice -- so a resolution finding once && !twice is the
+    // second, the one that doubles. Two more bits of the same byte (sizeof(Permanent) stays 304). Set in
+    // ResolveLandfallTargetCounters, reset at OUR untap step in BOTH worlds (GameEngine::UntapStep +
+    // TurnSolver's per-turn reset). FLIPS MID-TURN, so it carries the once_per_turn_used fold treatment
+    // (BuildSimKey bits, PermIsPlainForFoldImpl refusal, FungibilityKey, dominance::Build,
+    // LandfallTargetFoldKey, RemovalSelfTargetFoldKey, the payment parity check). Never set for a card
+    // without the param -> byte-identical elsewhere.
+    bool      landfall_resolved_once  : 1 = false;
+    bool      landfall_resolved_twice : 1 = false;
+    // "for each time it has attacked this turn" (Moraug, Fury of Akoum's static; 2026-10-23): how many times
+    // this creature was DECLARED as an attacker this turn (CR 508.1 -- a token put onto the battlefield
+    // attacking never was, CR 508.4), a 3-bit count in the last three bits of the same byte (sizeof stays
+    // 304), read and written ONLY through AttacksThisTurn / NoteAttackDeclared below. SATURATES AT 7: an
+    // eighth attack in one turn can only follow seven unblocked attacks by the same creature, each worth at
+    // least the +1, 1 + 2 + ... + 7 = 28 >= 20 -- the passive opponent is dead before it (a 30-life 2HG team
+    // could in principle survive seven attacks by a 0-power body; disclosed). Bumped at declare-attackers in
+    // both worlds only for a deck holding an attack-count reader (GameState::deck_has_extra_combat), reset at
+    // OUR untap step in both worlds, and FLIPS MID-TURN, so it carries the once_per_turn_used fold treatment.
+    bool      attacks_b0 : 1 = false;
+    bool      attacks_b1 : 1 = false;
+    bool      attacks_b2 : 1 = false;
+    int  AttacksThisTurn() const
+    { return (attacks_b0 ? 1 : 0) | (attacks_b1 ? 2 : 0) | (attacks_b2 ? 4 : 0); }
+    void SetAttacksThisTurn(int n)
+    {
+        n = n < 0 ? 0 : (n > 7 ? 7 : n);
+        attacks_b0 = (n & 1) != 0; attacks_b1 = (n & 2) != 0; attacks_b2 = (n & 4) != 0;
+    }
+    void NoteAttackDeclared() { SetAttacksThisTurn(AttacksThisTurn() + 1); }
     // DERIVED conditional haste (Bloodghast: "has haste as long as an opponent has 10 or less life";
     // CardParams::haste_if_opp_life_at_most). Read by CanAttackFull (both overloads) and CanTapNow
     // beside temp_haste, and RECOMPUTED (set AND cleared) by RefreshOppLifeHaste -- at the permanent's
@@ -542,9 +593,15 @@ struct Permanent
     // Incandescent Soulstoke's put: "Sacrifice it at the beginning of the next end step." A delayed
     // trigger, swept at BOTH end-step sites in lockstep through the shared SacrificePermanentAt (dies /
     // LTB fire, unlike the Twinflame exile). Folded into every sim key beside exile_at_end. Never set
-    // outside tap_put_sac_at_end_step. A 1-bit field in the byte above, so sizeof(Permanent) stays 304.
+    // outside tap_put_sac_at_end_step. A 1-bit field.
+    //
+    // NINE BITS NOW (rebase 2026-10-23): the Scythecat Cub and Moraug bits filled the byte above to eight, so
+    // this ninth bit starts a second byte -- and the plain bool that followed would then have cost a THIRD
+    // (+8 after alignment: 312, caught by Dominance.h's size assert). lifegain_counters_used_this_turn is
+    // therefore a 1-bit field too, sharing this second byte: two bytes, the same footprint as the eight-bit
+    // byte plus the old plain bool, sizeof(Permanent) 304. Nothing takes either field's address.
     bool      sac_at_end_step      : 1 = false;
-    bool      lifegain_counters_used_this_turn = false; // Nykthos Paragon's "Do this only once each
+    bool      lifegain_counters_used_this_turn : 1 = false; // Nykthos Paragon's "Do this only once each
                                            // turn" on "whenever you gain life, you may put that many
                                            // +1/+1 counters on each creature you control". PER
                                            // PERMANENT, not per name (Scryfall ruling 2: multiple

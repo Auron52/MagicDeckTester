@@ -3,9 +3,11 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <vector>
 #include <nlohmann/json.hpp>
+#include "EquivalenceDiscovery.h"
 
 // ---- Per-deck BUCKET POLICY -------------------------------------------------------------------
 //
@@ -104,10 +106,23 @@ struct BucketPolicy
         return emit(keep_apart, "apart") + emit(merge, "merge");
     }
 
-    // The `merge` groups in MTG_EQUIV_FORCE_MERGE's wire format ("a,b;c,d"), so they flow through
-    // the existing, tested force-merge path instead of a second implementation of the same thing.
+    // Preserve the legacy wire bytes for ordinary names. Commas (or semicolons) inside a full
+    // card name need structured groups: both Ulamogs have the SAME pre-comma name, so shortening
+    // them to the legacy prefix would silently merge neither. JSON groups always match exactly.
     std::string MergeSpec() const
     {
+        for (const Group& g : merge)
+        {
+            for (const std::string& n : g.cards)
+            {
+                if (n.find_first_of(",;") != std::string::npos)
+                {
+                    nlohmann::json groups = nlohmann::json::array();
+                    for (const Group& mg : merge) { groups.push_back(mg.cards); }
+                    return groups.dump();
+                }
+            }
+        }
         std::string out;
         for (const Group& g : merge)
         {
@@ -119,6 +134,91 @@ struct BucketPolicy
         return out;
     }
 };
+
+// The production post-discovery union, also used on cached/incumbent raw classes. A JSON policy
+// may be followed by ';' and a legacy environment override (main.cpp composes them that way).
+// Keep legacy prefix matching unchanged; structured groups must never fall back to an ambiguous
+// prefix or silently skip a misspelled full name.
+inline void ApplyBucketMergeSpec(EquivReport& eq, const std::string& spec, std::ostream& os)
+{
+    struct MergeGroup { std::vector<std::string> cards; bool exact = false; };
+    std::vector<MergeGroup> groups;
+    std::istringstream input(spec);
+    while (input >> std::ws && input.peek() != std::char_traits<char>::eof())
+    {
+        if (input.peek() == '[')
+        {
+            nlohmann::json js;
+            input >> js;
+            for (const auto& jg : js)
+            {
+                if (!jg.is_array() || jg.size() < 2)
+                { throw std::runtime_error("bucket force-merge: JSON groups need at least 2 full card names"); }
+                MergeGroup g;
+                g.exact = true;
+                for (const auto& jn : jg)
+                {
+                    if (!jn.is_string() || jn.get<std::string>().empty())
+                    { throw std::runtime_error("bucket force-merge: JSON card names must be nonempty strings"); }
+                    g.cards.push_back(jn.get<std::string>());
+                }
+                groups.push_back(std::move(g));
+            }
+            input >> std::ws;
+            if (input.peek() == ';') { input.get(); }
+            else if (input.peek() != std::char_traits<char>::eof())
+            { throw std::runtime_error("bucket force-merge: expected ';' after JSON groups"); }
+        }
+        else
+        {
+            std::string text;
+            std::getline(input, text, ';');
+            std::istringstream legacy(text);
+            MergeGroup g;
+            std::string name;
+            while (std::getline(legacy, name, ','))
+            {
+                const auto a = name.find_first_not_of(" \t");
+                const auto b = name.find_last_not_of(" \t");
+                if (a != std::string::npos) { g.cards.push_back(name.substr(a, b - a + 1)); }
+            }
+            groups.push_back(std::move(g));
+        }
+    }
+
+    std::vector<char> removed(eq.classes.size(), 0);
+    for (const MergeGroup& g : groups)
+    {
+        int keep_cls = -1;
+        for (const std::string& nm : g.cards)
+        {
+            int found = -1;
+            for (std::size_t c = 0; c < eq.classes.size(); ++c)
+                if (!removed[c])
+                    for (const std::string& mem : eq.classes[c].members)
+                        if (mem == nm || (!g.exact && mem.substr(0, mem.find(',')) == nm))
+                        { found = static_cast<int>(c); break; }
+            if (found < 0)
+            {
+                if (g.exact)
+                { throw std::runtime_error("bucket force-merge: full card name not found: '" + nm + "'"); }
+                os << "[keepgen]   force-merge: card not found: '" << nm << "'\n";
+                continue;
+            }
+            if (keep_cls < 0) { keep_cls = found; }
+            else if (found != keep_cls)
+            {
+                for (const std::string& mem : eq.classes[found].members)
+                { eq.classes[keep_cls].members.push_back(mem); }
+                removed[found] = 1;
+            }
+        }
+    }
+    std::vector<EquivClass> kept;
+    for (std::size_t c = 0; c < eq.classes.size(); ++c)
+    { if (!removed[c]) { kept.push_back(std::move(eq.classes[c])); } }
+    eq.classes = std::move(kept);
+}
 
 // `<stem>.buckets.json` beside the deck. Absent file == empty policy (every deck that has not made
 // a ruling behaves exactly as before). A malformed file is a hard error rather than a silent empty

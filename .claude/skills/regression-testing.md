@@ -91,6 +91,30 @@ bash test/regression.sh              # pre-commit
 bash test/regression.sh --overnight  # deep sweep (run later, not inline)
 ```
 
+### The rows test what SHIPS (USER 2026-10-27)
+
+*"I would cut d3 b10 games to run more at play settings. d3 b10 is a nice sanity-check, but of much lower
+importance than what we ship."* Play settings are *"the numbers I'm more interested in for both quality and
+performance."* So in every tier a deck's searched games are mostly **play rows**, plus one small d3 b10
+sanity row.
+* **A play row is a depth-5 row.** `regression.sh` drops its depth, so the deck's enabled `value_play`
+  block picks it (d4/d5/d6/d7 per deck). Its budget must be the deck's **shipped** `budget_ms` (b20 with no
+  enabled block). The row's budget still overrides the block's, so `regression.sh` WARNs about any play
+  row whose budget has drifted (`test/lib/play_rows_check.py`). Before this rule, Hinata (b30), Goblins
+  (b60), Melira (b60) and Kitty (b14) were tested at b20 in every tier. The overnight tier ran b40/b80
+  rows that nothing ships at.
+* **Re-tuning a deck's play setting re-tunes its rows** in all three tiers, in the same commit. GT moves
+  anyway when play does.
+* **Floor: once a deck has its keep table, never fewer play-row games than Hinata** in the same tier
+  (hinata2hg's for a 2HG row). USER 2026-10-27: *"If the numbers of games are still less than Hinata we might
+  need to upgrade them"*, *"for decks that have mulligan profile and maybe the value-leaf. The low numbers are
+  for decks that are in progress."* An in-progress deck keeps its small ENTRY set, and its keep-table adoption
+  raises it to at least this floor ("Sizing a deck's overnight rows"). Applied 2026-10-27 to EDF, Landfall,
+  Melira, Niv, PD and Snow: all six had keep tables, and Landfall's resize at its 10-20 adoption had been missed.
+  The guard WARNs about rows below the floor.
+* **Size a deck by its play-row cost**, not by d3. The d3 b10 sanity row is about a third of one former
+  d3 row.
+
 ### Unbudgeted backstop rows (USER 2026-10-22)
 
 Every other row is budgeted, so a path that runs only at `--budget-ms 0` (`g_unbudgeted_play`,
@@ -213,11 +237,13 @@ it is your job" -- which turned every play change into another overnight run.) A
 heuristic earns adoption -- but as its own pooled batch scoped to the decks that move, sized to the
 effect, not a full overnight tier.
 
-**Scope of the periodic run: the FULL tier.** `--deck=<name>[,<name>]` exists and is
-safe (the aggregate rebuild iterates the full mode arrays, so other decks' keys survive),
-but it only narrows the *promotion* when the RESULTS file itself came from a per-deck
-**run**; `--accept` after a full run promotes every key in `test/results/<mode>.env`
-regardless of `--deck`.
+**Scope of the periodic run: the FULL tier.** `--deck=<name>[,<name>]` narrows a
+run or an acceptance. A filtered acceptance promotes only measured keys for those
+decks, even when `test/results/<mode>.env` came from a full run; both aggregate
+and per-game promotion use the same filter. Unselected decks and modes remain
+unchanged. This was fixed in the harness on2026-10-20; the former warning that a
+full results file bypassed the acceptance filter is obsolete. Always inspect the
+GT diff and retain binding provenance notes after acceptance.
 
 Record *why* you accepted a known regression, in the ground truth itself:
 `bash test/regression.sh --overnight --accept-with-regressions="<note>"` writes an
@@ -615,7 +641,8 @@ arms by construction.
 regression case — see `analyze-deck.md` Stage 5j. And a deck qualifies only if its cost is **≤ 3x
 Hinata's**, the PINNED yardstick, timed in the same run (USER 2026-10-22: *"We shouldn't be arbitrarily
 increasing the limit"*; the old "most expensive deck with both artifacts" wording ratcheted the limit up
-with every expensive admission):
+with every expensive admission). Pool seeds within each searched depth and budget, then take the
+largest ms/game average across those shapes (USER 2026-10-31):
 
 ```
 python3 scripts/suite_gate.py --cost decks/<Deck>     # the 3x verdict

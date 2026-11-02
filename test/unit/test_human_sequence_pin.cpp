@@ -498,7 +498,7 @@ TEST_CASE("human sequence: EVERY action kind is claimable by the token the viewe
         CAPTURE(verb);
         if (verb.empty())
         {
-            CHECK((k == K::DigDraw || k == K::ComboRoute || k == K::PlayLand || k == K::SacForMana));
+            CHECK((k == K::ComboRoute || k == K::PlayLand || k == K::SacForMana));
             if (k == K::SacForMana)
             {
                 // MANA: never a step, never an orphan -- an unclaimed one stays in the plan, implicit.

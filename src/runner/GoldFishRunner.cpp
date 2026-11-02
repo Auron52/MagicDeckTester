@@ -956,7 +956,8 @@ RunResult GoldFishRunner::Run(const Decklist& deck, int num_games, uint64_t base
                 int gi = next_game.fetch_add(1, std::memory_order_relaxed);
                 if (gi >= num_games) { break; }
 
-                GameState state = SetupGame(deck, base_seed + static_cast<uint64_t>(gi));
+                GameState state = SetupGame(deck, base_seed + static_cast<uint64_t>(gi),
+                                            base_game_index + gi);
                 GoldFishRunner::PopulateOpponentSpawns(state, base_game_index + gi);
 
                 if (logging || forced) { AssignCardNumbers(state, numbering); }
@@ -1176,6 +1177,76 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
     // casts deferred INTO one (defer == delete there). Stamped from the same detector the runner
     // uses to decide whether to play post-combat mains, so the two can never disagree.
     state.uses_second_main     = DeckUsesSecondMain(deck);
+    // Moraug, Fury of Akoum (2026-10-23): extra combats and the per-attack count are only ever live in a deck
+    // that runs an additional-combat landfall card or an attack-count pump. MAINBOARD ONLY, for the Jorn
+    // stamp's reason below (a sideboard card cannot fire, and over-arming would split a screen's arms).
+    state.deck_has_extra_combat = [&deck]{
+        for (const Card& c : deck.mainboard)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d && (d->params.landfall_additional_combat || d->params.attack_count_team_power)) { return true; }
+        }
+        return false;
+    }();
+    // EXTRA TURNS (Emrakul, the Aeons Torn): MAINBOARD ONLY, the Moraug reasoning above -- this stamp
+    // switches OFF the turn-edge prunes, a behaviour, so over-arming would split a screen's arms.
+    state.deck_has_extra_turn = [&deck]{
+        for (const Card& c : deck.mainboard)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d && d->params.cast_trigger_extra_turns > 0) { return true; }
+        }
+        return false;
+    }();
+    // The Ulamogs' targeted cast triggers: MAINBOARD ONLY (the stamp opens a searched axis -- a behaviour).
+    state.deck_has_cast_target_trigger = [&deck]{
+        for (const Card& c : deck.mainboard)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d && (d->params.cast_trigger_exile_target_permanents > 0
+                      || d->params.cast_trigger_destroy_target_permanents > 0)) { return true; }
+        }
+        return false;
+    }();
+    // The graveyard-shuffle trigger and annihilator: BOTH ZONES -- each stamp only skips a scan that
+    // would find nothing (the deck_has_attack_threshold reasoning), so over-arming is merely slower.
+    {
+        bool gy = false, ann = false;
+        for (const std::vector<Card>* zone : { &deck.mainboard, &deck.sideboard })
+        {
+            for (const Card& c : *zone)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                if (!d) { continue; }
+                gy  = gy  || d->params.put_into_graveyard_shuffles_graveyard;
+                ann = ann || d->params.annihilator > 0;
+            }
+        }
+        state.deck_has_gy_shuffle  = gy;
+        state.deck_has_annihilator = ann;
+    }
+    // Unpredictable Cyclone's cycling-draw replacement: MAINBOARD ONLY (it changes what a cycle does, a
+    // behaviour -- the Moraug reasoning). Curator of Mysteries' discard watcher: BOTH ZONES (the stamp only
+    // gates a scan that would find nothing).
+    state.deck_has_cycle_draw_replacement = [&deck]{
+        for (const Card& c : deck.mainboard)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d && d->params.cycle_draw_exile_shared_type_freecast) { return true; }
+        }
+        return false;
+    }();
+    state.deck_has_discard_scry_watcher = [&deck]{
+        for (const std::vector<Card>* zone : { &deck.mainboard, &deck.sideboard })
+        {
+            for (const Card& c : *zone)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                if (d && d->params.cycle_or_discard_trigger_scry > 0) { return true; }
+            }
+        }
+        return false;
+    }();
     // Jorn's per-turn main 2 (UntapSecondMainLive) is only ever live in a deck that runs the card.
     state.deck_has_attack_untap = [&deck]{
         for (const Card& c : deck.mainboard)
@@ -1238,6 +1309,7 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
     state.deck_gy_readers      = DeckGraveyardReaders(deck); // EOT dominance's graveyard projection
     g_pending_self_bounces.clear();   // thread-scoped queue: a fresh game must never inherit a stray record
     g_pending_look_top.clear();       // ...the same for the look-top queue (Risen Reef)
+    g_pending_zero_toughness.clear(); // ...and the doomed 0/0 entrant queue (Walking Ballista X = 0)
     g_own_etb_depth     = 0;
     g_look_top_draining = false;
     // Does anything in this deck READ the mv-cast accumulator (Call Forth the Tempest's damage
@@ -1290,6 +1362,25 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         }
         return false;
     }();
+    // Life-TOTAL readers (GameState::deck_reads_life_total). Same zone set as the stamp above.
+    state.deck_reads_life_total = [&deck]{
+        const bool wish = GoldFishRunner::DeckWishesFromSideboard(deck);
+        for (const std::vector<Card>* zone : { &deck.mainboard, &deck.sideboard })
+        {
+            if (zone == &deck.sideboard && !wish) { break; }
+            for (const Card& c : *zone)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                if (!d) { continue; }
+                const CardParams& p = d->params;
+                if (p.life_threshold_pump_life > 0 || p.life_above_start_anthem_life > 0
+                    || p.tap_token_min_life_above_start > 0) { return true; }
+                for (const CardParams::LoyaltyAbilityParam& ab : p.loyalty_abilities)
+                { if (ab.effect == "exile_all_opponent_artifacts_creatures") { return true; } }
+            }
+        }
+        return false;
+    }();
     // ETB-cascade presence gates (see the block on GameState). FireEtbWatchers walks the whole
     // battlefield once for devotion, once per player for ascend and once to count Dragons, on
     // EVERY permanent that enters -- O(enters x battlefield), quadratic for a token deck, and 45%
@@ -1305,6 +1396,7 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         bool garth = false, ascend = false, devotion = false, dragon_ping = false;
         bool sac_mana_outlet = false;
         bool mana_grant      = false;
+        bool equip_mana_grant = false;   // Paradise Mantle (equip_grants_tap_mana_any)
         // The two guard-inside-the-loop scans (see the GameState block): a Giada-style "each other
         // <subtype> you control" counter rider, and an Emiel-style optional-cost counter on another
         // creature entering. Both need BOTH halves of their param pair to do anything, and the
@@ -1335,8 +1427,11 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         bool landfall = false;
         // The scry-watcher walk (see GameState::deck_has_scry_watcher): the param FireScryWatchers tests.
         bool scry_watcher = false;
+        bool track_noncombat = false;
         // The look-top enter watcher (see GameState::deck_has_look_top_watcher): the param itself.
         bool look_top_watcher = false;
+        // A same-phase mana untapper (see GameState::deck_has_mana_untapper): the params below.
+        bool mana_untapper = false;
         // Courser of Kruphix's top-of-library land drop (see GameState::deck_has_top_land_play): the
         // same param TopLandPlayStaticSource tests on the battlefield.
         bool top_land = false;
@@ -1354,6 +1449,20 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         bool first_equip_waiver = false;
         // Raubahn's attack attach: the axis fan-out + projection scans (GameState::deck_has_attack_attach).
         bool attack_attach = false;
+        // Walking Ballista's counter ping (GameState::deck_has_counter_ping): the param its sites test.
+        bool counter_ping = false;
+        // Abiding Grace's end-step mode/return (GameState::deck_has_endstep_reanimate).
+        bool endstep_reanimate = false;
+        // Tectonic Giant's modal attack trigger: the Tectonic axis's cast route (GameState::deck_has_attack_modal).
+        bool attack_modal = false;
+        // Goblin Lackey's combat-damage put: the Lackey axis's cast route (GameState::deck_has_combat_put).
+        bool combat_put = false;
+        // Emeria, the Sky Ruin's upkeep return (GameState::deck_has_upkeep_reanimate).
+        bool upkeep_reanimate = false;
+        // An echo card (GameState::deck_has_echo): the searched-echo axis's plan walk.
+        bool echo = false;
+        // An upkeep sac-tutor (GameState::deck_has_sac_tutor, Defense of the Heart): the searched put-list fan.
+        bool sac_tutor = false;
         // The Niv-Mizzet draw/damage loop (GameState::deck_has_draw_ping): the four params its two
         // shared hooks (ResolveDrawTriggers, OnCreatureDealtDamageToOpponent) test.
         bool draw_ping = false;
@@ -1379,6 +1488,7 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                 if (d->params.dragon_ping_on_enter)           { dragon_ping = true; }
                 if (IsSacManaOutlet(d->params))               { sac_mana_outlet = true; }
                 if (!d->params.granted_tap_mana_subtypes.empty()) { mana_grant = true; }
+                if (d->params.equip_grants_tap_mana_any) { mana_grant = true; equip_mana_grant = true; }
                 if (d->params.other_subtype_enters_counters_per_each > 0
                     && !d->params.other_subtype_enters_counters_subtype.empty())
                 { subtype_enter_counters = true; }
@@ -1407,6 +1517,13 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                     || !d->params.transform_front_name.empty())           { transform = true; }
                 if (d->params.steal_tap_count > 0)                       { tap_steal = true; }
                 if (d->params.enters_look_top_land_or_hand) { look_top_watcher = true; }
+                if (d->params.etb_untap_lands > 0 || d->params.untap_x_mana_sources
+                    || !d->params.mana_requires_land_subtype.empty() || d->params.untap_creature_cost.has_value()
+                    || d->params.untap_target_creature_cost.has_value()
+                    || d->params.soulbond_grants_untap_self_cost.has_value() || d->params.untap_pump_cost.has_value())
+                { mana_untapper = true; }
+                if (d->params.cost_less_per_opponent_noncombat_damage || d->params.incinerator_damage_trigger)
+                { track_noncombat = true; }
                 if (d->params.scry_reveal_land_to_battlefield) { scry_watcher = true; }
                 if (d->params.play_lands_from_library_top) { top_land = true; }
                 if (d->params.land_search_count > 0)       { land_search = true; }
@@ -1417,6 +1534,13 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                 if (d->params.first_equip_free || d->params.storied_first_equip_free)
                 { first_equip_waiver = true; }
                 if (d->params.attack_attach_equipment)        { attack_attach = true; }
+                if (d->params.remove_counter_ping_damage > 0) { counter_ping = true; }
+                if (d->params.endstep_modal_reanimate_mv >= 0) { endstep_reanimate = true; }
+                if (d->params.attack_trigger_modal)            { attack_modal = true; }
+                if (!d->params.combat_damage_puts_subtype_from_hand.empty()) { combat_put = true; }
+                if (d->params.upkeep_gy_reanimate)             { upkeep_reanimate = true; }
+                if (d->params.echo_cost.has_value())          { echo = true; }
+                if (d->params.upkeep_sac_tutor_creatures > 0)  { sac_tutor = true; }
                 if (d->params.draw_trigger_damage > 0 || d->params.cast_trigger_instant_sorcery_draw > 0
                     || d->params.aura_damage_trigger_draw || d->params.soulbond_damage_trigger_draw)
                 { draw_ping = true; }
@@ -1438,6 +1562,7 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         state.deck_has_dragon_ping       = garth || dragon_ping;
         state.deck_has_sac_mana_outlet   = garth || sac_mana_outlet;
         state.deck_has_mana_grant        = garth || mana_grant;
+        state.deck_has_equip_mana_grant  = garth || equip_mana_grant;
         // Garth can COPY a card, so he holds every gate open -- same treatment as the five above.
         state.deck_has_unconditional_endstep_tokens = garth || uncond_endstep;
         // NO LEVER, deliberately -- same call as the BuildSimKey graveyard gate (94667fa1). A clear
@@ -1455,8 +1580,14 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         state.deck_has_landfall          = garth || landfall;
         // Same reasoning, no lever: a clear bit proves FireScryWatchers' walk finds no scry watcher.
         state.deck_has_scry_watcher      = garth || scry_watcher;
+        state.deck_tracks_noncombat_damage = garth || track_noncombat;
         // Same reasoning, no lever: a clear bit proves no look-top trigger (Risen Reef) can be recorded.
         state.deck_has_look_top_watcher  = garth || look_top_watcher;
+        // Not a walk gate but a dominance premise (the payment refine's float-for-source trade). NOT held open
+        // by Garth: his copies are six fixed cards (Disenchant, Braingeyser, Terror, Shivan Dragon, Regrowth,
+        // Black Lotus), none of which untaps anything, and Regrowth returns only this deck's own cards -- the
+        // ones scanned here. (Holding it open cost FiveColour every trade: 2,019 refines -> 0 on 3 games.)
+        state.deck_has_mana_untapper     = mana_untapper;
         // Same reasoning, no lever: a clear bit PROVES TopLandPlayStaticSource's walk finds no
         // play-from-top permanent, so every library-top land read is dead code for that deck.
         state.deck_has_top_land_play     = garth || top_land;
@@ -1479,6 +1610,25 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         // Same reasoning, no lever: a clear bit proves no Raubahn can exist, so the attack-attach axis
         // scan and the projection's CountAttackAttachPump scan are provably empty.
         state.deck_has_attack_attach       = garth || attack_attach;
+        // Same reasoning, no lever: a clear bit proves no counter pinger can exist, so CounterPingFinish,
+        // the CounterPingReach projection term and the Heliod bump scan are dead code for that deck.
+        state.deck_has_counter_ping        = garth || counter_ping;
+        // Same reasoning, no lever: a clear bit proves no end-step reanimator can exist, so the end-step
+        // Grace walk (both worlds) and the plan axis's consumer scan are dead code for that deck.
+        state.deck_has_endstep_reanimate   = garth || endstep_reanimate;
+        // Same reasoning, no lever: a clear bit proves no modal attack trigger can exist, so the Tectonic
+        // axis's cast-route scan is dead code for that deck.
+        state.deck_has_attack_modal        = garth || attack_modal;
+        state.deck_has_combat_put          = garth || combat_put;
+        // Same reasoning, no lever: a clear bit proves no upkeep graveyard reanimator (Emeria) can exist,
+        // so the upkeep walk (both worlds) and the plan axis's consumer scan are dead code for that deck.
+        state.deck_has_upkeep_reanimate    = garth || upkeep_reanimate;
+        // Same reasoning, no lever: a clear bit proves no echo permanent can exist, so the echo axis's
+        // per-plan walk (AppendSubdecisionAxes) finds no obligation and is dead code for that deck.
+        state.deck_has_echo                = garth || echo;
+        // Same reasoning, no lever: a clear bit proves no Defense of the Heart can exist, so the searched put-list
+        // fan's battlefield walk at every turn boundary (BoundaryFan) is dead code for that deck.
+        state.deck_has_sac_tutor           = garth || sac_tutor;
         // Same reasoning, no lever: a clear bit proves no permanent can carry a draw trigger or a
         // damage->draw grant, so every ResolveDrawTriggers flush and the combat hook are dead code.
         state.deck_has_draw_ping           = garth || draw_ping;
@@ -1550,20 +1700,21 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         // VAMPIRES (A1, 2026-10-18; ledger open question 6 -- default ON, PROVISIONAL): Asylum Visitor's
         // MANDATORY upkeep life loss (hellbent_upkeep_life_loss) and Voldaren Estate's pay-1-life
         // coloured mana (tap_blood_cost marks the Estate; its pain is tap_self_damage) can take our
-        // own life to 0 in a long game, so our own death must be able to end it (CR 704.5a). Both
-        // params are carried by no other card in cards.json, so no other deck arms.
-        auto vamp_life = [](const std::vector<Card>& zone)
+        // own life to 0 in a long game, so our own death must be able to end it (CR 704.5a).
+        // Midrange Burn adds Fiery Islet's explicit life cost and Price of Progress's self damage.
+        auto life_cost_live = [](const std::vector<Card>& zone)
         {
             for (const Card& c : zone)
             {
                 const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
-                if (d && (d->params.hellbent_upkeep_life_loss > 0 || d->params.tap_blood_cost.has_value()))
+                if (d && (d->params.hellbent_upkeep_life_loss > 0 || d->params.tap_blood_cost.has_value()
+                          || d->params.tap_is_life_payment || d->params.damage_per_nonbasic_land > 0))
                 { return true; }
             }
             return false;
         };
         state.own_death_live = state.dmg_events_armed || s_own_death_all
-                            || vamp_life(deck.mainboard) || vamp_life(deck.sideboard);
+                            || life_cost_live(deck.mainboard) || life_cost_live(deck.sideboard);
     }
     // SPELL-COST REDUCERS (see GameState::deck_has_cost_reducer): can anything that ever reaches a
     // battlefield in this game reduce the cost of a spell we cast? EffectiveSpellCost walks the
@@ -1667,7 +1818,7 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
 }
 
 
-GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed)
+GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed, int game_index)
 {
     GameState state;
 
@@ -1756,26 +1907,26 @@ GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed)
     // search/rollout state is a copy of this one, so the pointer reaches every node.
     state.m_provider = &SelectDecisionProvider(deck);
 
-    // Decks whose spells target the OPPONENT'S permanents for value (Hinata: Magma Opus taps
-    // them, the spread-damage / cost-reduction targeting points at them) get a realistic
-    // opponent board -- three lands (a realistic floor: most opponents have >=3 lands, and
-    // aggressive decks with fewer bring creatures = better targets anyway; see HinataProvider::
-    // OpponentPlaysLands). Pre-populated here (the single setup choke point) so every search
-    // deep copy and the real game agree, and present by the time the deck targets them (T4+).
-    if (state.m_provider->OpponentPlaysLands())
+    // Every passive opponent starts with three inert lands. Across ten game indices, two have
+    // 0 nonbasics, two have 1, three have 2, and three have 3. The extra slots go to buckets
+    // 2 and 3: the modal counts among three lands for the 40 unique regression-suite lists
+    // were 0:10, 1:6, 2:12, 3:12 (one vote per list). Both play/draw parity halves contain
+    // every bucket. Standalone analyzer probes use seed modulo ten as a deterministic fallback.
+    static constexpr int kNonbasics[10] = {0, 2, 1, 3, 2, 0, 3, 1, 2, 3};
+    const int pattern_index = game_index >= 0 ? game_index % 10 : static_cast<int>(seed % 10);
+    const int nonbasics = kNonbasics[pattern_index];
+    for (int i = 0; i < 3; ++i)
     {
-        for (int i = 0; i < 3; ++i)
-        {
-            Card land;
-            land.m_name = "Opponent Land";
-            land.RehashName();
-            land.AddType(CardType::Land);
-            Permanent perm;
-            perm.card             = land;
-            perm.controller_index = 1;
-            perm.owner_index      = 1;
-            state.battlefield.push_back(perm);
-        }
+        Card land;
+        land.m_name = i < nonbasics ? "Opponent Nonbasic Land" : "Opponent Basic Land";
+        land.RehashName();
+        land.AddType(CardType::Land);
+        if (i >= nonbasics) { land.AddSupertype(Supertype::Basic); }
+        Permanent perm;
+        perm.card             = land;
+        perm.controller_index = 1;
+        perm.owner_index      = 1;
+        state.battlefield.push_back(perm);
     }
 
     return state;

@@ -352,6 +352,10 @@ document.addEventListener('keydown',e=>{ if(!STEPS.length) return;
   else if(e.key==='Home'){go(0);} else if(e.key==='End'){go(STEPS.length-1);} });
 ['dragover','drop'].forEach(ev=>document.addEventListener(ev,e=>e.preventDefault()));
 document.addEventListener('drop',e=>{ const f=e.dataTransfer.files[0]; if(f) readFile(f); });
+// ?log=<url>: load a game log straight from a server (the review page's "open in step viewer" links,
+// served by tools/replay/review_server.js). file:// use is unchanged.
+{ const u=new URLSearchParams(location.search).get('log');
+  if(u) fetch(u).then(r=>r.json()).then(load).catch(e=>alert('Could not load '+u+': '+e.message)); }
 
 // Scryfall hover popover (full card on hover of any .card / .thumb / .nowact[data-name])
 const pop=document.createElement('div'); pop.id='pop'; pop.innerHTML='<img alt=""/>'; document.body.appendChild(pop);

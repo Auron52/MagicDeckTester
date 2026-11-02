@@ -79,6 +79,16 @@ static void CollectBoardState(const GameState& state,
         hand_out.push_back(c.m_number);
         if (c.m_is_staged) { staged_out.push_back(c.m_number); }  // exiled-but-playable (Light Up etc.)
     }
+    // Autonomous play parks unspent impulse-exile cards outside hand between
+    // decision passes. Show those unexpired cards in the same viewer hand/staged
+    // snapshots as the human path, which keeps them marked in hand. The zones are
+    // disjoint by MergeStagedIntoHand / ReturnStagedFromHand.
+    for (const StagedCard& sc : ap.staged_cards)
+    {
+        if (sc.expiry_turn < state.TurnSeq()) { continue; }
+        hand_out.push_back(sc.card.m_number);
+        staged_out.push_back(sc.card.m_number);
+    }
     for (const Card& c : ap.graveyard)
     {
         graveyard_out.push_back(c.m_number);
@@ -156,10 +166,17 @@ int GameEngine::PlayOutFrom(GameState& state, int max_turns, ResumeAt from)
         if (CheckWinCondition(state))       { return state.turn_number; }
         if (state.ActivePlayer().HasLost()) { return -1; }
     }
-    while (state.turn_number < max_turns)
+    // An extra turn owed at the end of round max_turns is still played (it is part of that round:
+    // USER 2026-10-26, extra turns do not count toward the turn count). `pending_extra_turns` is 0 for
+    // every deck without an extra-turn card, so the guard is the old one there.
+    while (state.turn_number < max_turns || state.pending_extra_turns > 0)
     {
         if (state.player_lost_on_draw) { return -1; }
-        if (m_stop_after_turn > 0 && state.turn_number >= m_stop_after_turn) { return tnote(-1); }   // SetStopAfterTurn
+        // Extra-turn chain backstop (GameState::TurnSeqCapped; inert unless an extra turn was taken).
+        if (state.TurnSeqCapped(max_turns)) { return tnote(-1); }
+        // SetStopAfterTurn, in ROUNDS: an extra turn still owed after round `stop` is not played --
+        // a win there would only TIE a round-`stop` win, never beat it (the caller's use: a bound).
+        if (m_stop_after_turn > 0 && state.turn_number >= m_stop_after_turn) { return tnote(-1); }
         // Stop playing a game that has already been voided. The search bails out of its recursion as
         // soon as the meter trips (SearchBudget::Overrun), but the game itself would otherwise keep
         // running turns on rolled-back lines -- cheap per turn, yet unbounded in count, and every one
@@ -216,7 +233,16 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
     if (from == ResumeAt::NewTurn)
     {
         AIEngine::LandDrawCensusBeginTurn();   // MTG_LANDDRAW_CENSUS (diagnostic only; no-op unless set)
-        ++state.turn_number;
+        // ++turn_number, or (a pending extra turn) ++extra_turns_taken with the round unchanged.
+        // Lockstep twin: SimulateEndAndStartNextTurn. Identical to ++turn_number for every other deck.
+        state.AdvanceTurnCounter();
+        g_play_extra_turns_taken = state.extra_turns_taken;   // play-event turn_seq stamp (GameLogger.h)
+        if (state.in_extra_turn)
+        {
+            EmitPlayEvent(state.turn_number, "extra_turn",
+                          "\xE2\x8F\xB3 Extra turn begins (turn " + std::to_string(state.turn_number)
+                          + ", extra " + std::to_string(static_cast<int>(state.extra_turns_taken)) + ")");
+        }
         UntapStep(state);
         UpkeepStep(state);   // includes UpkeepTail
     }
@@ -231,6 +257,13 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
         if (state.player_lost_on_draw) { return; }
     }
     if (at <= static_cast<int>(ResumeAt::Main1)) { MainPhase(state, /*is_pre_combat=*/true); }
+    // A main phase that killed the opponent ends the game here (CR 704.5a / 104.3a), exactly like
+    // the post-combat check below. Without it a main-1 kill (Walking Ballista pings, a Heliod loop)
+    // still played combat: the win turn was unchanged, but the final life totals were wrong and the
+    // viewer asked the human for lifelink-trigger Heliod targets in a game that was already over
+    // (LifegainHeliodCombo claude-play sweep, seeds 95004/95010/95013/95016/95017/95019). Checked
+    // before own death: opp-loss wins even if we also died. Lockstep twin: SimulateToEndImpl.
+    if (CheckWinCondition(state)) { return; }
     // OWN DEATH (own_death_live decks only -- Prevent Damage, or MTG_OWN_DEATH_ALL): a main phase
     // that killed us ends the game here (CR 704.5a), before combat could gain the life back
     // (a lifelinking Faithmender) or deal the opponent a now-meaningless lethal. PlayOutFrom then
@@ -239,6 +272,10 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
     { NoteOwnDeath(state); return; }
     if (at <= static_cast<int>(ResumeAt::Combat))
     {
+        // Moraug, Fury of Akoum: the additional combats main 1's landfalls queued come FIRST, each untapping
+        // our creatures at its beginning; the regular combat after them does not untap (Scryfall ruling
+        // 2020-09-25). No main phase between them. Lockstep with TurnSolver's SimulateCombat wrapper.
+        if (RunQueuedExtraCombats(state)) { return; }
         CombatPhase(state);
         // State-based action (CR 704.5a / 104.3a): a player at 0 or less life loses
         // immediately -- before its controller gets priority for the post-combat main. Without
@@ -253,19 +290,27 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
     if (at <= static_cast<int>(ResumeAt::Main2)) { MainPhase(state, /*is_pre_combat=*/false); }
     if (state.own_death_live && !CheckWinCondition(state) && SelfHasLost(state))
     { NoteOwnDeath(state); return; }
+    // ...and the ones main 2 queued run after it, before the end step (no main phase follows them).
+    if (RunQueuedExtraCombats(state)) { return; }
     // MTG_LANDDRAW_CENSUS (diagnostic only, a no-op unless set): did this turn's dig chain draw a
     // land with the drop open and end with the drop unused? Read before the end step changes nothing.
     AIEngine::LandDrawCensusEndTurn(state);
     if (at <= static_cast<int>(ResumeAt::End))   { EndStep(state); }
     CleanupStep(state);
-    // Asylum Visitor at THE OPPONENT'S upkeep (Vampires A1), which precedes their notional draw below.
-    // A no-op unless the opponent was dealt a hand and holds none. Lockstep twin: the rollout's.
-    if (!PerformOpponentUpkeepHellbentDraw(state)) { state.player_lost_on_draw = true; }
-    // The passive opponent's notional draw for THEIR turn, which falls between ours (see
-    // core/OpponentDeck.h for why here, and why that makes a deck-out's win turn OUR turn).
-    // No-op for every deck that was not dealt an opponent library. Lockstep with the rollout's
-    // TurnSolver::SimulateEndAndStartNextTurn.
-    opponentdeck::EndOfTurnDraw(state);
+    // EXTRA TURN NEXT (pending_extra_turns > 0): the opponent takes NO turn before it, so neither
+    // their upkeep nor their notional draw happens (CR 500.7: the extra turn is taken directly after
+    // this one). Lockstep twin: SimulateEndAndStartNextTurn. 0 for every deck without the card.
+    if (state.pending_extra_turns == 0)
+    {
+        // Asylum Visitor at THE OPPONENT'S upkeep (Vampires A1), which precedes their notional draw below.
+        // A no-op unless the opponent was dealt a hand and holds none. Lockstep twin: the rollout's.
+        if (!PerformOpponentUpkeepHellbentDraw(state)) { state.player_lost_on_draw = true; }
+        // The passive opponent's notional draw for THEIR turn, which falls between ours (see
+        // core/OpponentDeck.h for why here, and why that makes a deck-out's win turn OUR turn).
+        // No-op for every deck that was not dealt an opponent library. Lockstep with the rollout's
+        // TurnSolver::SimulateEndAndStartNextTurn.
+        opponentdeck::EndOfTurnDraw(state);
+    }
     // DAY / NIGHT turn-based check (CR 726.3a) for the opponent's notional untap and our next one
     // (Brutal Cathar). Lockstep with SimulateEndAndStartNextTurn; no-op unless a daybound card set it.
     DayNightTurnBoundary(state);
@@ -276,12 +321,15 @@ void GameEngine::UntapStep(GameState& state)
     state.phase = Phase::Beginning;
     state.step  = Step::Untap;
     state.opponent_lost_life_this_turn = false;
+    state.noncombat_damage_received_this_turn = {};
+    state.pending_incinerator_damage.clear();
     state.floating_mana = ManaPool{};   // reserve (ritual) mana empties each turn (CR 500.4); no-op for non-ritual decks
     state.floating_creature_mana = ManaPool{};   // ...and the creature-only reserve with it (lockstep)
     state.floating_bigspell_mana = ManaPool{}; state.floating_bigspell_pp = nullptr;   // big-spell-only reserve (lockstep)
     state.floating_haste_c = 0;         // Generator Servant's haste tag dies with the float (lockstep)
     state.spells_cast_this_turn = 0;    // STORM counter resets each turn (lockstep w/ SimulateEndAndStartNextTurn); no-op for non-storm decks
     state.mv_cast_this_turn     = 0;    // CFT damage accumulator resets with its pair
+    DrainPendingZeroToughness(state);   // safety net: a 0/0 Walking Ballista entrant (lockstep w/ the rollout)
     DrainPendingSelfBounces(state);     // safety net: an off-cascade bounce (e.g. off-suspend Dragon) lands by turn start
     DrainPendingLookTop(state);         // safety net (lockstep w/ SimulateEndAndStartNextTurn): a watcher-only entry's Risen Reef trigger
     DrainPendingSagaEnters(state);      // safety net (lockstep w/ SimulateEndAndStartNextTurn): Saga enters take their counter by turn start
@@ -292,11 +340,13 @@ void GameEngine::UntapStep(GameState& state)
     state.scripted_cheat_choice = -1;   // searched Lackey put is per-turn (lockstep w/ SimulateEndAndStartNextTurn)
     state.scripted_fling_victim = -1;   // searched Flinger victim is per-turn (same lockstep)
     state.scripted_tectonic_mode = -1;  // searched Tectonic mode is per-turn (same lockstep)
+    state.scripted_grace_choice = -1;   // searched Abiding Grace pin is per-turn (same lockstep)
     state.scripted_tectonic_keep = -1;  // ...and its mode-B keep pin (same lockstep)
     state.scripted_bruna_gather = -1;   // searched Bruna gather subset is per-turn (same lockstep)
     state.scripted_combat_aura_swap = -1;   // searched Arcanum Wings combat swap (same lockstep)
     state.scripted_combat_aura_swap_in = -1;   // ...and its fixed Aura (human deferred swap)
     state.scripted_attack_land_search = -1;    // searched Primeval Titan attack pick (same lockstep)
+    state.pending_extra_combats = 0;   // Moraug: drained every turn; a turn boundary never carries one
     state.scripted_combat_land_search_crack = -1;   // ...and the in-combat Khalni crack (same lockstep)
     state.scripted_combat_landfall_target = -1;     // ...and the combat landfall-target rank (same lockstep)
     state.scripted_combat_transform = -1;           // ...and Bloodline Keeper's combat transform (same lockstep)
@@ -368,6 +418,9 @@ void GameEngine::UntapStep(GameState& state)
             p.colored_cast_lifegain_used_this_turn = false;   // Ancient Cornucopia once-each-turn
             p.lifegain_counters_used_this_turn = false;   // Nykthos Paragon once-each-turn (PER COPY)
             p.once_per_turn_used = false;                 // Stromkirk Condemned once-each-turn (PER COPY)
+            p.landfall_resolved_once  = false;            // Scythecat Cub's "second time this turn" (PER COPY)
+            p.landfall_resolved_twice = false;
+            p.SetAttacksThisTurn(0);                       // Moraug's per-turn attack count (PER COPY)
             p.storied_draw_used_this_turn      = false;   // Kili once-each-turn draw (PER COPY)
             p.loyalty_activated_this_turn = false;   // planeswalkers: one loyalty ability per turn
         }
@@ -377,8 +430,10 @@ void GameEngine::UntapStep(GameState& state)
     state.free_casts_available = 0;
 
     // Materialise any passive opponent creatures scheduled for this turn.
+    // Spawns are keyed on the ROUND and arrive at the regular turn's untap only: an extra turn is not
+    // a new round (the schedule would otherwise fire twice). Lockstep twin: the rollout's spawn site.
     int opp_index = 1 - state.active_player_index;
-    if (state.opponent_spawns)
+    if (state.opponent_spawns && !state.in_extra_turn)
     for (const OpponentSpawn& spawn : *state.opponent_spawns)
     {
         if (spawn.turn != state.turn_number) { continue; }
@@ -467,20 +522,16 @@ void GameEngine::UpkeepTail(GameState& state)
     // The pre-draw/post-draw asymmetry described above is real but it is an INFORMATION difference,
     // so it only bites a NON-CLAIRVOYANT decider (a human, or the NC model). A clairvoyant search
     // sees this turn's draw either way, so both lands should be equally representable to it.
-    for (Permanent& p : state.battlefield)
-    {
-        if (p.controller_index != state.active_player_index) { continue; }
-        if (p.tapped || p.storage_counters <= 0) { continue; }
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        if (!d || !d->params.storage_land || d->params.storage_charge_mode != "upkeep_if_tapped")
-        { continue; }
-        bool hold = ResolveProvider(state).StorageLandHold(
-            state, state.active_player_index, *d, p.storage_counters);
-        if (g_play_storage_hold_chooser)
-        { hold = (*g_play_storage_hold_chooser)(state, p, p.storage_counters); }
-        if (hold) { p.storage_hold_this_turn = true; }
-    }
+    //
+    // ONE function for both worlds (SpellEffects.h PerformUpkeepStorageHolds): the rollout's
+    // SimulateEndAndStartNextTurn asks the same question at the same point, so a provider that
+    // overrides StorageLandHold cannot split the executor from the search.
+    PerformUpkeepStorageHolds(state);
 
+    // Emeria, the Sky Ruin: its intervening if and legal targets are fixed as the beginning-of-upkeep
+    // triggers go on the stack -- BEFORE any of the upkeep triggers below resolves (CR 603.3d / 603.4).
+    // Lockstep twin before the rollout's upkeep-token loop; empty for every deck without the card.
+    const UpkeepGyReanimateSnapshot emeria_snapshot = SnapshotUpkeepGyReanimate(state);
     // Upkeep token creation (e.g. Thrumming Hivepool: create two 1/1 Sliver tokens).
     // Iterate over initial size only — tokens added here must not trigger their own upkeep.
     int bf_size = static_cast<int>(state.battlefield.size());
@@ -523,8 +574,15 @@ void GameEngine::UpkeepTail(GameState& state)
     // Defense of the Heart sac-tutor check. Mirrors the rollout's identical block in
     // TurnSolver::SimulateEndAndStartNextTurn (lockstep); param-gated -> byte-identical elsewhere.
     PerformUpkeepCumulativeGifts(state);
-    PerformUpkeepSacTutor(state);
+    // Defense of the Heart: resolves the searched put list the previous turn's plan pinned
+    // (GameState::scripted_doth_put, MTG_DOTH_AXIS) through the same function the rollout uses, and
+    // consumes the pin whatever it finds. The flag only feeds the MTG_DOTH_AXIS_STATS census.
+    PerformUpkeepSacTutor(state, nullptr, m_ai.SearchesTurnsForCensus());
     PerformUpkeepSlumber(state);   // Marit Lage's Slumber (lockstep twin in SimulateEndAndStartNextTurn)
+    // Emeria, the Sky Ruin's intervening-if return (consumes the previous turn's searched pin), against
+    // the triggers and targets fixed at the top of this upkeep (emeria_snapshot). Lockstep twin in
+    // SimulateEndAndStartNextTurn; gated on deck_has_upkeep_reanimate -> inert elsewhere.
+    PerformUpkeepGyReanimate(state, emeria_snapshot);
     // Mirri's Guile: arrange the top 3 at upkeep (before the draw). Lockstep in both worlds.
     PerformUpkeepReorder(state);
 
@@ -534,6 +592,10 @@ void GameEngine::UpkeepTail(GameState& state)
     // death-trigger impulse exile must eat the pre-draw library top, exactly as the search
     // modelled it). Param-gated on echo_cost -> byte-identical for every non-echo deck.
     m_ai.ResolveEchoUpkeep(state);
+    // ...and the searched echo pin (Plan::echo_choice) is CONSUMED by this upkeep whatever it found -- the
+    // rollout's echo block clears it the same way -- so a pin whose obligation left the battlefield before
+    // the upkeep (a Mogg War Marshal sacrificed in main 2) cannot leak into this turn's plans as a cover.
+    state.scripted_echo = -1;
 
     // Upkeep Call of the Wild (MTG_UPKEEP_CALL, default OFF -> byte-identical): put a fatty stacked
     // by LAST turn's tutor into play before the draw step pulls it into hand. After echo so the
@@ -547,8 +609,9 @@ void GameEngine::DrawStep(GameState& state)
 {
     state.step = Step::Draw;
 
-    // Player on the play skips their first draw step (CR 103.8a).
-    if (state.on_the_play && state.turn_number == 1)
+    // Player on the play skips their first draw step (CR 103.8a) -- the first TURN taken, so an
+    // extra turn taken in round 1 draws (TurnSeq == turn_number for every other deck).
+    if (state.on_the_play && state.TurnSeq() == 1)
     {
         ResolveStack(state);
         return;
@@ -570,7 +633,7 @@ void GameEngine::DrawStep(GameState& state)
         std::vector<GameLogger::PermSnapshot> bf, obf;
         std::vector<int> hand, gy, staged;
         CollectBoardState(state, bf, hand, obf, gy, staged);
-        m_logger->StartPhase(state.turn_number, "DRAW");
+        m_logger->StartPhase(state.turn_number, "DRAW", state.in_extra_turn ? state.extra_turns_taken : 0);
         m_logger->LogDraw(drawn.m_number, drawn.m_name);
         hand.push_back(drawn.m_number);
         m_logger->CommitPhase(ap.life, state.Opponent().life, bf, hand, obf, gy, staged, PhaseLibraryTop(state));
@@ -600,7 +663,7 @@ void GameEngine::MainPhase(GameState& state, bool is_pre_combat)
 
     if (m_logger)
     {
-        m_logger->StartPhase(state.turn_number, is_pre_combat ? "MAIN_1" : "MAIN_2");
+        m_logger->StartPhase(state.turn_number, is_pre_combat ? "MAIN_1" : "MAIN_2", state.in_extra_turn ? state.extra_turns_taken : 0);
     }
 
     // Initial cast pass. The AI resolves each cast before the next (we don't model
@@ -687,7 +750,18 @@ void GameEngine::MainPhase(GameState& state, bool is_pre_combat)
     }
 }
 
-void GameEngine::CombatPhase(GameState& state)
+bool GameEngine::RunQueuedExtraCombats(GameState& state)
+{
+    while (state.pending_extra_combats > 0)
+    {
+        --state.pending_extra_combats;
+        CombatPhase(state, /*additional=*/true);
+        if (CheckWinCondition(state)) { state.pending_extra_combats = 0; return true; }
+    }
+    return false;
+}
+
+void GameEngine::CombatPhase(GameState& state, bool additional)
 {
     // Mana empties when leaving the pre-combat main phase (CR 500.4): drop any reserve
     // floated this main phase. Mirrors TurnSolver::SimulateCombat (lockstep). Off
@@ -702,6 +776,8 @@ void GameEngine::CombatPhase(GameState& state)
 
     state.step = Step::BeginCombat;
     ResolveStack(state);
+    // Moraug's delayed trigger: "At the beginning of that combat, untap all creatures you control."
+    if (additional) { UntapOwnCreaturesForCombat(state, state.active_player_index); }
 
     // Legend rule (CR 704.5j): a duplicate legendary (e.g. a second Haytham Kenway) is
     // put into the graveyard before attackers are declared, so duplicate legendary lords
@@ -731,7 +807,7 @@ void GameEngine::CombatPhase(GameState& state)
     std::vector<Permanent*> declared = m_ai.DeclareAttackers(state);
     ResolveStack(state);
 
-    if (m_logger) { m_logger->StartPhase(state.turn_number, "COMBAT"); }
+    if (m_logger) { m_logger->StartPhase(state.turn_number, "COMBAT", state.in_extra_turn ? state.extra_turns_taken : 0); }
 
     state.step = Step::CombatDamage;
     Player& opp = state.Opponent();
@@ -745,6 +821,8 @@ void GameEngine::CombatPhase(GameState& state)
     {
         atk_idx.push_back(static_cast<int>(p - state.battlefield.data()));
     }
+    // Moraug's "for each time it has attacked this turn": the DECLARED attackers (before any token joins).
+    NoteAttacksDeclared(state, state.active_player_index, atk_idx);
 
     // Beastmaster Ascension's quest counters: one trigger per DECLARED attacker, resolving in the
     // declare-attackers step so the +5/+5 applies to this same combat. Fired BEFORE the Adeline
@@ -805,6 +883,9 @@ void GameEngine::CombatPhase(GameState& state)
     // Adeline's Human are pumped too (CR 603.3b -- the player orders simultaneous attack triggers,
     // and tokens-first is strictly dominant here). Mirrors TurnSolver::SimulateCombat. Gated inert.
     ApplyBattleCry(state, state.active_player_index, atk_idx);
+    // Annihilator (Emrakul, Ulamog the Infinite Gyre): the defending player sacrifices N permanents.
+    // Mirrors TurnSolver::SimulateCombat (lockstep, ONE shared helper). Deck-gated inert.
+    ApplyAnnihilator(state, state.active_player_index, atk_idx);
 
     // Two-Headed Hellkite attack-trigger draw (attack_draw_cards): drawn at declare-attackers,
     // so the cards are in hand for the post-combat main. Mirrors TurnSolver::SimulateCombat.
@@ -891,6 +972,9 @@ void GameEngine::CombatPhase(GameState& state)
     // does. Only the real game collects the per-attacker descriptions for the play viewer.
     const CombatDamageResult combat =
         ResolveCombatDamage(state, atk_idx, exalted_bonus, /*collect_descs=*/g_play_event_sink != nullptr);
+    // Walking Ballista's post-combat-damage lethal finish (shared; rollout twin: SimulateOneCombat). Runs
+    // AFTER the damage and its lifelink gains, BEFORE the history line below reads total_combat_dmg.
+    CounterPingFinish(state, state.active_player_index);
     if (jorn_untap) { UntapSnowPermanents(state, state.active_player_index); }   // Jorn, see above
     const int total_combat_dmg = combat.total_damage;
     const int trigger_life_loss = combat.trigger_life_loss;
@@ -931,6 +1015,10 @@ void GameEngine::EndStep(GameState& state)
 {
     state.phase = Phase::Ending;
     state.step  = Step::End;
+    // Abiding Grace's legal targets are fixed as its trigger goes on the stack -- the beginning of
+    // this step, before any other beginning-of-step effect below resolves (CR 603.3d). Lockstep twin
+    // at the top of TurnSolver::SimulateEndAndStartNextTurn; empty for every deck without the card.
+    const std::vector<int> grace_snapshot = SnapshotEndStepGraceTargets(state);
     // "Exile those tokens at the beginning of the next end step" (Twinflame token copies,
     // Permanent::exile_at_end). Swept battlefield -> exile here, BEFORE cleanup (CR 512/514
     // order). Lockstep with the top of TurnSolver::SimulateEndAndStartNextTurn; no-op for every
@@ -957,6 +1045,11 @@ void GameEngine::EndStep(GameState& state)
     // creature on the battlefield by the time this checks (both are beginning-of-end-step triggers
     // we control; making the token first is the order that keeps the enchantment).
     PerformEndStepNoCreatureSacrifice(state);
+    // Abiding Grace's "choose one" (gain 1 / return an MV-1 creature card), the searched
+    // Plan::grace_choice pin. Last: the intervening-ifs above (Ocelot's "if you gained life this
+    // turn", Pyrohemia's "if no creatures") were checked as the step began (CR 603.4), so neither may
+    // see this trigger's gain or body. Lockstep twin in TurnSolver::SimulateEndAndStartNextTurn.
+    PerformEndStepAbidingGrace(state, grace_snapshot);
     // TODO: other "end of turn" triggered abilities (Phase 1.2)
     ResolveStack(state);
 }
@@ -978,31 +1071,36 @@ void GameEngine::CleanupStep(GameState& state)
     // Discard down to maximum hand size (7 unless unlimited by a permanent).
     if (!unlimited_hand && ap.hand.size() > 7 && m_logger)
     {
-        m_logger->StartPhase(state.turn_number, "CLEANUP");
+        m_logger->StartPhase(state.turn_number, "CLEANUP", state.in_extra_turn ? state.extra_turns_taken : 0);
     }
     // MADNESS (Vampires A1): a madness card shed here is exiled and queued by the shared hook, and its
     // trigger resolves after the CR 514.2 reset below (lockstep twin: SimulateEndAndStartNextTurn).
     std::vector<MadnessPending> madness_q;
-    while (!unlimited_hand && ap.hand.size() > 7)
     {
-        Card* discard = m_ai.ChooseDiscard(state);
-        // Human play: let the player pick WHICH card to discard (one per over-limit card). The
-        // heuristic pick is the prepopulated default. Consulted only here in the real cleanup step
-        // (search rollouts never reach GameEngine::CleanupStep), so autonomous play is unchanged.
-        if (g_play_discard_chooser && !ap.hand.empty())
+        // The discard to hand size is ONE simultaneous event: a graveyard-shuffle trigger it fires (Emrakul)
+        // resolves after the whole discard (GyShuffleBatch; lockstep with SimulateEndAndStartNextTurn).
+        GyShuffleBatch _gyb(state);
+        while (!unlimited_hand && ap.hand.size() > 7)
         {
-            int heur = static_cast<int>(discard - &ap.hand[0]);
-            if (heur < 0 || heur >= static_cast<int>(ap.hand.size())) { heur = 0; }
-            std::vector<int> idxs(ap.hand.size());
-            for (int i = 0; i < static_cast<int>(ap.hand.size()); ++i) { idxs[i] = i; }
-            int chosen = (*g_play_discard_chooser)(state, state.active_player_index, idxs, heur);
-            if (chosen >= 0 && chosen < static_cast<int>(ap.hand.size())) { discard = &ap.hand[chosen]; }
+            Card* discard = m_ai.ChooseDiscard(state);
+            // Human play: let the player pick WHICH card to discard (one per over-limit card). The
+            // heuristic pick is the prepopulated default. Consulted only here in the real cleanup step
+            // (search rollouts never reach GameEngine::CleanupStep), so autonomous play is unchanged.
+            if (g_play_discard_chooser && !ap.hand.empty())
+            {
+                int heur = static_cast<int>(discard - &ap.hand[0]);
+                if (heur < 0 || heur >= static_cast<int>(ap.hand.size())) { heur = 0; }
+                std::vector<int> idxs(ap.hand.size());
+                for (int i = 0; i < static_cast<int>(ap.hand.size()); ++i) { idxs[i] = i; }
+                int chosen = (*g_play_discard_chooser)(state, state.active_player_index, idxs, heur);
+                if (chosen >= 0 && chosen < static_cast<int>(ap.hand.size())) { discard = &ap.hand[chosen]; }
+            }
+            if (m_logger) { m_logger->LogDiscard(discard->m_number, discard->m_name); }
+            // THE SHARED DISCARD HOOK: madness exile + queue, else Progenitus (shuffled into its owner's
+            // library instead of the graveyard -- a replacement), else the graveyard.
+            DiscardCardFromHand(state, state.active_player_index, static_cast<int>(discard - ap.hand.data()),
+                                &madness_q, "cleanup");
         }
-        if (m_logger) { m_logger->LogDiscard(discard->m_number, discard->m_name); }
-        // THE SHARED DISCARD HOOK: madness exile + queue, else Progenitus (shuffled into its owner's
-        // library instead of the graveyard -- a replacement), else the graveyard.
-        DiscardCardFromHand(state, state.active_player_index, static_cast<int>(discard - ap.hand.data()),
-                            &madness_q, "cleanup");
     }
     if (m_logger && m_logger->InPhase())
     {
@@ -1102,6 +1200,7 @@ void GameEngine::ResolveStack(GameState& state)
                                            c.m_number) != hand_before_nums.end();
                 if (!was_there) { m_logger->LogDraw(c.m_number, c.m_name); }
             }
+            m_logger->FlushPutBack(hand_before_nums);   // Brainstorm's drawn-and-put-back cards + the put-back (log only)
         }
 
         CheckStateBasedActions(state);

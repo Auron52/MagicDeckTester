@@ -166,10 +166,25 @@ inline bool SbaCheckpoint(GameState& s)
 // (a mana ability's damage is immediate; City of Brass's is technically a trigger, but it too
 // resolves before the spell being paid for, which is all the engine can observe) unless Purity
 // prevents it; the triggers it causes are only RECORDED, for FlushDamageEvents.
+// Life may be paid down to zero (CR 119.4); insufficient life cannot pay an activation cost.
+inline bool CanPayManaTapLife(const GameState& s, int ctrl, const CardDefinition& d)
+{
+    return !d.params.tap_is_life_payment || s.players[ctrl].life >= d.params.tap_self_damage;
+}
+
 inline void ArmedManaTap(GameState& s, int ctrl, Permanent& p, int pain)
 {
     std::uint8_t m = p.mana_tap_mark;
     if (p.card.IsLand()) { m |= kMarkLand; }
+    const CardDefinition* d = Def(p);
+    if (pain > 0 && d && d->params.tap_is_life_payment)
+    {
+        // The cost was checked before activation. It cannot be prevented and records NO pain;
+        // the land mark remains, so Manabarbs still observes this mana tap.
+        s.players[ctrl].life -= pain;
+        p.mana_tap_mark = m;
+        return;
+    }
     if (pain > 0 && !WonLocked(s))
     {
         if (PurityProtects(s, ctrl)) { m |= kMarkPrevented; }
@@ -987,6 +1002,14 @@ inline bool PainAwarePay(GameState& s, ManaPool* available, bool allow_lethal, A
 {
     if (!s.dmg_events_armed || t_pay_cap.live || !PainPayEnabled()) { return attempt(); }
     const int ctrl = s.active_player_index;
+    // This damage-only assignment optimiser cannot price a non-damage life cost.
+    // Keep the ordinary rules-complete payer on boards containing such a source.
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != ctrl || p.tapped) { continue; }
+        const CardDefinition* d = Def(p);
+        if (d && d->params.tap_is_life_payment) { return attempt(); }
+    }
     if (WonLocked(s) || PurityProtects(s, ctrl)) { return attempt(); }
     struct Scope
     {

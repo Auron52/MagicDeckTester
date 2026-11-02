@@ -1,0 +1,14 @@
+{
+ "value_play": {
+  "expected_buckets": 16,
+  "mull_gen_depth": 1,
+  "mull_gen_budget_ms": 1,
+  "ladder": "emulated",
+  "leaf": "none",
+  "emul_r": [
+   419.84,
+   1645.09,
+   893.6
+  ]
+ }
+}

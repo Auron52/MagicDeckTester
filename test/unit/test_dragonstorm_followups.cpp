@@ -748,6 +748,53 @@ TEST_CASE("Line float: a spare source pays the generic before floating colour th
     }
 }
 
+TEST_CASE("Line float: a source that makes an owed colour is spare once the float covers the line (MTG_LINE_FLOAT_COVERED)")
+{
+    // NivMizzetCombo seed 1180522 gi521 T2 (with MTG_PAY_REFINE): Ponder paid off Saprazzan Skerry floats {U},
+    // Cascade Bluffs is up, and Sol Ring's {1} is next with Tandem Lookout ({2}{U}) still to come in the line.
+    // Bluffs makes {U} by filtering a {U}/{R}, so the colour test kept it off the spare list and the float paid
+    // the {1} -- Lookout's {U} then had nothing. The float alone covers the line's {U}: Bluffs' {C} pays the
+    // generic and the {U} stays. The line casts Ponder's follow-ups (an opener) in play, so the unseen guard is
+    // on in both settings: it guards creature-only-colour lands, not Bluffs.
+    const GameState s0 = BoardFu({ "Cascade Bluffs" }, {}, 2);
+    ManaCost ring;
+    ring.generic = 1;
+    ManaCost line_cost = ring;   // + Tandem Lookout {2}{U}
+    line_cost.generic += 2;
+    line_cost.blue = 1;
+    ManaCost owes_two = line_cost;   // + a second {U} later: the float no longer covers the line
+    owes_two.blue += 1;
+    for (const bool on : { true, false })
+    {
+        for (const bool unseen : { false, true })
+        {
+            CAPTURE(on);
+            CAPTURE(unseen);
+            ArmFu tf(heurarm::LINE_FLOAT_TAP_FIRST, true);
+            ArmFu guard(heurarm::LINE_FLOAT_UNSEEN_GUARD, true);
+            ArmFu cov(heurarm::LINE_FLOAT_COVERED, on);
+            LineOpensUnseenScope lou(unseen);
+            {
+                GameState s = s0;
+                s.floating_mana.blue = 1;
+                LineCostFu line(line_cost);
+                REQUIRE(TapForCostDirect(s, ring, /*for_creature=*/false));
+                CHECK(s.floating_mana.blue == (on ? 1 : 0));
+                CHECK(PermFu(s, "Cascade Bluffs").tapped == on);
+            }
+            {
+                // Not covered: the line owes {U}{U} and one floats, so the colour test stands on both arms.
+                GameState s = s0;
+                s.floating_mana.blue = 1;
+                LineCostFu line(owes_two);
+                REQUIRE(TapForCostDirect(s, ring, /*for_creature=*/false));
+                CHECK(s.floating_mana.blue == 0);
+                CHECK_FALSE(PermFu(s, "Cascade Bluffs").tapped);
+            }
+        }
+    }
+}
+
 TEST_CASE("Line float: a line that will reveal cards it cannot name keeps the creature-only-colour land (MTG_LINE_FLOAT_UNSEEN_GUARD)")
 {
     // dragonstorm s4050 g46 / s5254 g249 T4's shape: Unclaimed Territory + Mountain up, Lotus Bloom's {R}{R}{R}

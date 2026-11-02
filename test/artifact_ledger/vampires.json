@@ -1,0 +1,25 @@
+{
+ "deck": "vampires",
+ "_doc": "artifact refresh verdicts -- scripts/artifact_queue.py (LEDGER_DIR)",
+ "entries": [
+  {
+   "run_id": "vampires-artifact-queue-tool-647f24-20261101T064305",
+   "kind": "valueleaf",
+   "verdict": "kept-incumbent",
+   "ident": "em:27e0e460528b3073e0fd",
+   "frozen": "a2fa79c830b1415a984c656af88e285f9b0b093d",
+   "src_tree": "83b1f17308cff28f24934c82e9c113000a08992f",
+   "date": "2026-11-01",
+   "worker": "artifact-queue-tool-647f24",
+   "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_vampires/DECISIONS.txt)",
+   "decisions": [
+    "      trust: REJECTED -- the lever NEVER ENGAGED: play is byte-identical on every seed AND cost is 1.04x (>= 0.98), so trusting at d5 changed nothing at all. A non-inferiority test passes trivially on a dead experiment, and no evidence is not evidence of safety. Usual cause: a staged sidecar carrying value_play leaf:none, which swaps the model for a Constant() so it can never be consulted. Shipping UNSET (always eligible to escalate).",
+    "",
+    "=== 2026-11-01T07:02:35  PHASE E.6: ADOPTED vampires escalation_skip_r = [98.0, 32.7, 0.0, 0.0, 0.0] -- this tree, NOT committed",
+    "    probe 1200 g (seed 7100000): 83 ladder escalations, headroom 4.1% of all work, fitted vector [98.0, 32.7, 0.0, 0.0, 0.0] (n/depth 70/28/1/0/0) projects -3.1%",
+    "    A/B 6000 g vs R = 0 (seed 7300000; no win = 9): fitted [98.0, 32.7, 0.0, 0.0, 0.0] units -3.7%, 0 moved: 0 flicker, 0 real",
+    "    next: commit it with the deck's smoke + regression GT re-accepted (it can change play)."
+   ]
+  }
+ ]
+}

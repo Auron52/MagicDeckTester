@@ -31,7 +31,13 @@ enum class Targeting
 // Parameters extracted from a card's JSON definition, forwarded to the template handler.
 struct CardParams
 {
+    bool cost_less_per_opponent_noncombat_damage = false;
+    bool incinerator_damage_trigger = false; // transient chooser filter and Incinerator trigger marker
+
     int damage       = 0;
+    int damage_per_nonbasic_land = 0; // each player takes their own live nonbasic-land count
+    bool chain_lightning_copy = false; // damaged player/controller may pay RR and copy
+    bool sacrifice_mountains_alternative = false; // Fireblast: sacrifice two Mountains instead of mana
     int draw         = 0;
     int power_bonus  = 0;
     int tough_bonus  = 0;
@@ -228,6 +234,15 @@ struct CardParams
     std::vector<std::string> landfall_token_subtypes;
     std::string              landfall_token_color;
     std::vector<std::string> landfall_token_keywords;
+    // "If you control N or more lands, create a token that's a copy of this creature instead" (Scute
+    // Swarm: 6; 2026-10-23). Rides landfall_creates_tokens: at RESOLUTION (CR 608.2 -- the condition is
+    // in the effect, not an intervening "if"), with N+ lands we control the payload is ONE token copy of
+    // the watcher (CR 707.2: its copiable values, i.e. Permanent::card -- no counters, damage or
+    // until-EOT effects; Scryfall ruling 2020-09-25) through CreateTokenCopyOfCard, instead of the
+    // landfall_token_* token. The copy carries the ability, so the swarm doubles per landfall from then
+    // on; a copy made while a SIMULTANEOUS land entry resolves did not exist when those lands entered and
+    // does not trigger for them (LandfallSimultaneousScope). 0 = never a copy.
+    int                      landfall_copy_self_at_lands = 0;
     // "you may put a +1/+1 counter on each <subtype> creature you control" (Avenger of Zendikar:
     // 1 on each Plant). The set is read at RESOLUTION (CR 608.2), so Plants made earlier in the same
     // cascade receive it. The "may" is resolved as YES by a dominance argument stated at the
@@ -242,6 +257,19 @@ struct CardParams
     // LandfallCounterTargetOrder; the human picks on the board (`target`, loyalty-prompt shape).
     int                      landfall_target_counters      = 0;
     std::string              landfall_target_subtype;
+    // "...on target CREATURE you control" (Scythecat Cub, 2026-10-23): the targeted payload above with no
+    // subtype filter -- every creature we control (an animated land included) is legal, minus shroud. The
+    // same searched / provider-ordered target machinery as Phylath's Plant (DefHasTargetedLandfall).
+    bool                     landfall_target_any_creature  = false;
+    // "If this is the second time this ability has resolved this turn, double the number of +1/+1
+    // counters on that creature instead" (Scythecat Cub). PER OBJECT, read at RESOLUTION: the watcher's
+    // own Permanent::landfall_resolved_once / _twice bits (reset at our untap step in both worlds) say
+    // whether this resolution is its second this turn; that one DOUBLES the target's counters through
+    // DoublePlusCounters (CR 701.10e) instead of putting landfall_target_counters, and the provider
+    // orders its target by LandfallDoubleTargetOrder. The first and the third-and-later resolutions put
+    // the counters as usual. A trigger removed for want of a target (CR 603.3d) never resolved, so it
+    // is not counted.
+    bool                     landfall_target_second_doubles = false;
     // "you gain N life" (Courser of Kruphix). Through the shared GainLife hook: one life-gain EVENT.
     int                      landfall_lifegain             = 0;
     // "you may put a quest counter on this enchantment" (Khalni Heart Expedition). Through
@@ -265,6 +293,15 @@ struct CardParams
     // landfall payload in the pool (none of them puts a counter on the doubling creature), so the
     // sequential-entry argument in OnLandEntered's contract still holds.
     bool                     landfall_double_self_counters = false;
+    // "Landfall -- Whenever a land you control enters, if it's your main phase, there's an additional combat
+    // phase after this phase. At the beginning of that combat, untap all creatures you control." (Moraug,
+    // Fury of Akoum; 2026-10-23). An intervening "if" (CR 603.4): only while OUR main phase is the current
+    // phase (GameState::phase, kept faithful in both worlds for a deck that runs one). Each trigger queues one
+    // ADDITIONAL COMBAT (GameState::pending_extra_combats) that runs after the main phase it came from -- from
+    // main 1 BEFORE the regular combat, from main 2 before the end step -- with NO additional main phase after
+    // it (Scryfall ruling 2020-09-25), each untapping our creatures at its beginning (the regular combat does
+    // not untap). MANDATORY, no target, no choice.
+    bool                     landfall_additional_combat    = false;
 
     // ETB per-land tokens (Avenger of Zendikar: "create a 0/1 green Plant creature token for each
     // land you control"; Phylath, World Sculptor: "...for each BASIC land you control"). N tokens of
@@ -517,6 +554,31 @@ struct CardParams
     // already sees the counters. 0 = none -> byte-identical for every other card.
     int enters_with_plus_counters = 0;
 
+    // ---- WALKING BALLISTA (LifegainHeliodCombo, 2026-10-27) ------------------------------------------
+    // "This creature enters with X +1/+1 counters on it." -- the X of the CAST (CR 107.3m): an AS-ENTERS
+    // replacement applied in the pre-push window of BOTH creature-enter sites (EffectHandler::
+    // EnterBattlefield / TurnSolver apply_one), reading the cast's chosen_x, through PutPlusCounters (a
+    // "put", CR 122.6). Any non-cast entry (a graveyard return) has X = 0 and enters as its printed 0/0,
+    // which dies to the toughness SBA before its enter triggers resolve (g_pending_zero_toughness).
+    // X is a SEARCHED axis 0..max (GenericProvider::XCandidates). false -> every other card unchanged.
+    bool enters_with_x_plus_counters = false;
+    // "{4}: Put a +1/+1 counter on this creature." (PermAbilityMode::PayCounterSelf). No {T}: repeatable
+    // within a turn, legal while summoning-sick (CR 302.6); a put (PutPlusCounters). nullopt = none.
+    std::optional<ManaCost> self_counter_cost;
+    // "Remove a +1/+1 counter from this creature: It deals N damage to any target."
+    // (PermAbilityMode::CounterPing, and the Heliod loop PermAbilityMode::PingLoop). The cost is a
+    // COUNTER, so a body that drops to 0 toughness dies before the damage resolves; the damage and its
+    // lifelink use last-known information (CR 608.2h / 702.15b). 0 = none.
+    int remove_counter_ping_damage = 0;
+
+    // ---- "EACH CREATURE YOU CONTROL GETS +1/+0 FOR EACH TIME IT HAS ATTACKED THIS TURN" (Moraug; 2026-10-23) --
+    // A static ability (CR 611.3a, layer 7c): read in ComputeLordBonus off the creature's own count of
+    // attacks this turn (Permanent::AttacksThisTurn, set at each declare-attackers in both worlds, reset at
+    // our untap step), times the number of such sources we control. It counts attacks made before the
+    // source arrived and stops applying when it leaves (Scryfall ruling 2020-09-25); the first attack of a
+    // turn already counts for that combat's damage. false = no pump -> byte-identical for every other card.
+    bool attack_count_team_power = false;
+
     // Tap-and-pay activated token creation: {tap_token_cost}, {T} creates 1 token
     // with the given power/toughness/subtypes. Only activatable when at least one
     // permanent matching tap_token_requires_subtypes is controlled (e.g. Sliver Hive).
@@ -710,9 +772,10 @@ struct CardParams
     // GameState::deck_has_scry_watcher, so every deck without one is byte-identical.
     bool scry_reveal_land_to_battlefield = false;
 
-    // Pain land (e.g. Fiery Islet): tapping this land for mana costs the controller
-    // this much life. Applied at tap time in TapForCost / TapForCostDirect.
+    // Pain from tapping for mana (or a life cost when tap_is_life_payment is set).
     int tap_self_damage = 0;
+    // Horizon lands pay life as an activation COST: never preventable damage or a damage trigger.
+    bool tap_is_life_payment = false;
     // The pain applies to EVERY mode of the land's mana ability, including a {C} one (Ancient
     // Tomb: "{T}: Add {C}{C}. This land deals 2 damage to you."). Every pain site treats a {C} tap
     // of a land that HAS a {C} mode as the painless separate ability of a painland (Brushland's
@@ -724,6 +787,17 @@ struct CardParams
     // discard the card from hand to draw a card. Modelled as an activated ability the
     // AI uses only when the card is surplus (see AIEngine cycling heuristic).
     std::optional<ManaCost> cycling_cost;
+
+    // Life-cost cycling (Street Wraith: "Cycling--Pay 2 life."): the LIFE part of the cycling cost,
+    // paid in addition to `cycling_cost`'s mana part (Street Wraith carries `cycling_cost: ""`, an
+    // all-zero ManaCost, so the mana part is free). The loader REQUIRES cycling_cost alongside it.
+    // Probed and paid at EVERY cycle site through CyclingLifePayable / PayCyclingLife (SpellEffects.h),
+    // in lockstep with EffectiveCyclingCost's mana part. Payable only while life > N: CR 119.4 lets a
+    // player pay life equal to their total, but paying to 0 loses at the next state-based check (CR
+    // 704.5a), which happens before the cycling draw resolves, so a pay-to-0 cycle can never gain
+    // anything -- a sound dominance prune, applied identically in human play. Fluctuator-style
+    // reducers do not touch it (they reduce MANA, CR 601.2f). 0 = no life cost.
+    int cycling_life_cost = 0;
 
     // Sacrifice-to-draw activated ability (e.g. Fiery Islet: {1}, {T}, Sacrifice: draw
     // a card). Cost is this mana plus tapping and sacrificing the source.
@@ -1307,6 +1381,16 @@ struct CardParams
     // Tutor (enchantment -> hand), Enlightened Tutor (artifact/enchantment -> top).
     bool                     tutor_to_hand = false;
     bool                     tutor_to_top  = false;
+    // "Search your library for a card, then shuffle and put that card N-th from the top" (Long-Term
+    // Plans: 3). 0 = off; N >= 2 (1 IS tutor_to_top, and the loader refuses it and any combination
+    // with tutor_to_hand / tutor_to_top). Deliberately NOT tutor_to_top: about 30 provider sites read
+    // tutor_to_top as "the found card is the NEXT DRAW" (Stompy's Worldly Tutor line, the TopResolve
+    // re-arm, Fluctuator's order slot, the Harbinger finders, top_stacked_turn), and tutor_to_top
+    // alone sets the anti-lifegain routing signature. Every site that must treat this card as a
+    // library tutor asks IsLibraryTutor() (below the struct). Resolution: PerformTutor inserts the
+    // card at index min(N-1, library size) after the search shuffle -- with fewer than N-1 cards
+    // left, that is the bottom (the Long-Term Plans ruling). Not a top stack (top_stacked_turn unset).
+    int                      tutor_library_position = 0;
     // "You MAY search" -- opens a DECLINE arm on the searched tutor axis
     // (kTutorDeclineChoice, SpellEffects.h). Default false keeps every existing tutor deck
     // byte-identical, so this is opt-in per card rather than a blanket behaviour change.
@@ -1568,6 +1652,14 @@ struct CardParams
     // Pilot can still pay its {T} rebuy). Contrast the same cards' REACH grant, which stays a
     // bracket note because Keyword::Reach has no readers anywhere in the engine.
     bool equip_grants_vigilance = false;
+    // Paradise Mantle: "Equipped creature has '{T}: Add one mana of any color.'" A STATIC grant of
+    // an activated MANA ability (CR 605.1a) to the host (layer 6). Resolved by LiveManaGrant /
+    // ManaDefOf (SpellEffects.h), the same chokepoint as Brightcap Badger's subtype grant: the
+    // host is handed a synthetic any-colour ManaDork face, so every payment site taps it with no
+    // per-site body change, and summoning sickness (CR 302.6) rides GrantedBodyCanTap/CanTapNow.
+    // GameState::deck_has_mana_grant (and deck_has_equip_mana_grant) gate the board walk away for
+    // every deck that plays no such Equipment.
+    bool equip_grants_tap_mana_any = false;
     int  equip_min_power    = 0;
     bool equip_sacrifices_prior_host = false;
     // Dragonfire Blade: "Equip {4}. This ability costs {1} less to activate for each color of
@@ -1852,6 +1944,7 @@ struct CardParams
     //    -> gy_exile_creature_lifegain = 2 (cost fixed {G})
     // The exiled card is fungible within its type filter (deterministic first-match pick, both
     // worlds).
+    int tap_graveyard_exile_damage = 0; // {R}, {T}, exile two graveyard cards: damage to any target
     int gy_exile_instant_sorcery_drain = 0;
     int gy_exile_creature_lifegain     = 0;
 
@@ -2259,6 +2352,32 @@ struct CardParams
     std::optional<ManaCost> ping_all_cost;
     int  ping_all_amount                        = 0;
     bool endstep_sac_if_no_creatures            = false;
+    // Abiding Grace: "At the beginning of your end step, choose one -- * You gain 1 life. * Return
+    // target creature card with mana value 1 from your graveyard to the battlefield."
+    //   endstep_modal_lifegain      -- mode 1's life amount (0 = no such trigger).
+    //   endstep_modal_reanimate_mv  -- mode 2's EXACT mana value filter; -1 = absent (MV 0 is a real
+    //                                  value, so 0 cannot be the sentinel). The trigger exists iff this
+    //                                  is >= 0 (HasEndStepGraceTrigger). Resolved by the SHARED
+    //                                  PerformEndStepAbidingGrace (GameEngine::EndStep + the rollout's
+    //                                  SimulateEndAndStartNextTurn); mode + target are the searched
+    //                                  Plan::grace_choice axis.
+    int  endstep_modal_lifegain                 = 0;
+    int  endstep_modal_reanimate_mv             = -1;
+    // Emeria, the Sky Ruin: "At the beginning of your upkeep, if you control seven or more Plains, you
+    // may return target creature card from your graveyard to the battlefield."
+    //   upkeep_gy_reanimate                 -- the trigger exists (HasUpkeepGyReanimate).
+    //   upkeep_gy_reanimate_land_subtype    -- the intervening-if counts LANDS you control with this
+    //                                          subtype ("Plains": basic or not; Emeria is not one).
+    //   upkeep_gy_reanimate_land_threshold  -- ...at least this many (0 = no condition). CR 603.4:
+    //                                          checked when the upkeep begins AND at resolution.
+    //   upkeep_gy_reanimate_may             -- "you may": declining is a real (searched) option.
+    // Resolved by the SHARED PerformUpkeepGyReanimate (GameEngine::UpkeepTail + the rollout's
+    // SimulateEndAndStartNextTurn); WHICH card (or decline) is the searched next-upkeep axis
+    // Plan::upkeep_gy_reanimate_choice -> GameState::scripted_upkeep_gy_reanimate.
+    bool upkeep_gy_reanimate                    = false;
+    std::string upkeep_gy_reanimate_land_subtype;
+    int  upkeep_gy_reanimate_land_threshold     = 0;
+    bool upkeep_gy_reanimate_may                = false;
     bool x_damage_each_creature_and_player      = false;
     bool tutor_max_mv_is_lands                  = false;
     bool shuffles_self_into_library_on_resolve  = false;
@@ -2457,12 +2576,17 @@ struct CardParams
     //   tapped           battlefield entries are FORCED tapped (EnterLand's LandEntryTap::ForcedTapped:
     //                    the land's own enters-tapped / shock rule is not consulted -- no life is paid).
     //   optional         "you MAY search" (Primeval Titan): only the HUMAN is offered the decline.
+    //   subtype          "a <Subtype> card" (Nature's Lore, Skyshroud Claim: "Forest card(s)"): only a library
+    //                    land with that land subtype is a legal find -- a Stomping Ground qualifies, a
+    //                    Mountain does not. JSON "land_search_subtype"; held as the interned SubtypeRegistry
+    //                    id (kNone = no filter), resolved at load.
     int  land_search_count            = 0;
     bool land_search_basic_only       = false;
     bool land_search_share_land_type  = false;
     int  land_search_to_hand          = 0;
     bool land_search_tapped           = false;
     bool land_search_optional         = false;
+    std::uint16_t land_search_subtype_id = 0;
     // WHERE it fires. on_resolve: an instant/sorcery's resolution (Rampant Growth, Search for
     // Tomorrow -- also off suspend -- Cultivate). on_enter_or_attack: ONE printed trigger with two
     // fire sites (Primeval Titan): FireOwnEtbTriggers and FireAttackLandSearch (declare-attackers,
@@ -3805,6 +3929,14 @@ struct CardParams
     // READS the gain (SacOutletLifegainRead): against a passive opponent unread life changes nothing.
     // 0 = no lifegain payload (byte-identical).
     int  sac_outlet_lifegain           = 0;
+    // Martyr of Sands: "{1}, Reveal X white cards from your hand, Sacrifice this creature: You gain
+    // three times X life." When set, sac_outlet_lifegain is the life PER revealed card of this colour
+    // and X is the count of hand cards of that colour (SacOutletLifegainAmount, SpellEffects.h), read
+    // at activation (CR 601.2b via 602.2b). The autonomous engine reveals the maximum -- a SOUND
+    // dominance, not a pick: revealing is free against the passive opponent, the gain is ONE event
+    // whatever X is (CR 119.10), and every life reader in the pool is monotone in life. Human play is
+    // asked for X (the x_value decision). Empty = the flat Brindle Boar amount (byte-identical).
+    std::string sac_outlet_lifegain_per_revealed_color;
     // Fulminator Mage: "Sacrifice this creature: Destroy target nonbasic land." A self-only outlet
     // (sac_creature_outlet + sac_outlet_self_only) whose payload destroys a NONBASIC land, either side
     // (the goldfish opponent has none, so the legal set is our own nonbasics). The activation needs a
@@ -3933,7 +4065,8 @@ struct CardParams
     // Applied by EffectiveCyclingCost at ALL SIX sites a cycling cost is read (three payments, two
     // affordability filters, one human-play offer probe) -- the affordability sites MUST move in
     // lockstep with the payment sites, or a loop filters in a cycle it then cannot buy and silently
-    // breaks. UNLIKE Training Grounds the floor is ZERO, not one mana: Fluctuator's wording carries
+    // breaks. (Street Wraith's LIFE half, cycling_life_cost, rides the same sites: CyclingPayable /
+    // CyclingLifePayable / PayCyclingLife.) UNLIKE Training Grounds the floor is ZERO, not one mana: Fluctuator's wording carries
     // no "can't reduce below one mana" clause, so a {2} cycler goes to {0} -- which is the whole
     // point of this deck. Generic half only (CR 601.2f); a coloured cycling pip survives.
     int reduces_cycling_activation = 0;
@@ -3944,6 +4077,53 @@ struct CardParams
     // "another" is structurally always satisfied: the watcher is on the battlefield and cycling
     // happens from HAND, so a card can never cycle-trigger itself. 0 = not a cycle watcher.
     int cycle_trigger_damage_each_opponent = 0;
+
+    // ---- Unpredictable Cyclone deck (onboarding 2026-10-26) --------------------------------------------
+    // Added in phase 1 of the onboarding so CycloneProvider's routing signature (DetectDecisionProvider's
+    // `cyclone` flag) can key on them before the cards exist. Phase 2 wired the extra turn (below); the
+    // Cyclone replacement and the Curator watcher are still PARSED, NOT YET WIRED (phase 3).
+    //
+    // Unpredictable Cyclone: "If a cycling ability of another nonland card would cause you to draw a
+    // card, instead exile cards from the top of your library until you exile a card that shares a card
+    // type with the cycled card. You may cast that card without paying its mana cost. Then put the
+    // exiled cards that weren't cast this way on the bottom of your library in a random order."
+    // A REPLACEMENT of the cycling draw (phase 3).
+    bool cycle_draw_exile_shared_type_freecast = false;
+    // Emrakul, the Aeons Torn: "When you cast this spell, take an extra turn after this one." The
+    // number of extra turns the CAST trigger grants. WIRED (phase 2): pushed above the spell at EVERY cast
+    // (EffectHandler::PushCastTriggers -- hand casts and PushFreeCast's free casts -- and the rollout
+    // apply_one cast block, lockstep); resolving it does ++GameState::pending_extra_turns, which the
+    // next turn transition consumes (GameState::AdvanceTurnCounter). Extra turns do NOT advance
+    // turn_number (USER 2026-10-26: they do not count toward the turn count). 0 = none.
+    int cast_trigger_extra_turns = 0;
+    // Ulamog, the Ceaseless Hunger: "When you cast this spell, exile N target permanents." A MANDATORY
+    // cast trigger with N DISTINCT targets (CR 115.3) chosen as it is put on the stack (CR 603.3d) from
+    // every permanent on the battlefield, either side (the spell itself is on the stack, not a target).
+    // Fewer than N legal targets -> the trigger is removed from the stack (603.3d). Re-checked on
+    // resolution (608.2b): a target that left is skipped. Exile ignores indestructible and is not a
+    // graveyard. The target CHOICE is searched (Plan::cast_trigger_target_choice). 0 = none.
+    int cast_trigger_exile_target_permanents = 0;
+    // Ulamog, the Infinite Gyre: "When you cast this spell, destroy N target permanent(s)." Same trigger
+    // shape and target axis as above, DESTROY semantics: an indestructible target is a legal no-op; a
+    // destroyed creature dies through OnCreatureDies. 0 = none.
+    int cast_trigger_destroy_target_permanents = 0;
+    // ANNIHILATOR N (CR 702.86): "Whenever this creature attacks, defending player sacrifices N
+    // permanents." Applied at declare attackers in both worlds (ApplyAnnihilator, beside battle cry). The
+    // sacrifice choice is the OPPONENT's, not ours, so a fixed deterministic rule is legitimate under the
+    // no-greedy rule (DecisionProvider never sees it; nothing for the viewer): the passive opponent's
+    // permanents are its scheduled vanilla spawns, each an equally good future target. 0 = none.
+    // (Modelled as a param, not a Keyword: the audit lists "annihilator" in MODELED_ELSEWHERE_KEYWORDS.)
+    int annihilator = 0;
+    // "When <this> is put into a graveyard from anywhere, its owner shuffles their graveyard into their
+    // library." (Emrakul, the Aeons Torn; Ulamog, the Infinite Gyre). A TRIGGER (CR 603.6a, a zone-change
+    // trigger), NOT Progenitus's replacement (graveyard_replace_shuffle_library): the card reaches the
+    // graveyard, then its owner shuffles the WHOLE graveyard, the card included, into the library
+    // (FireGraveyardEntryTriggers, called after the move at the graveyard-entry sites; the shuffle is
+    // ShuffleAfterSearch so the search cannot foresee it). Gated per game on GameState::deck_has_gy_shuffle.
+    bool put_into_graveyard_shuffles_graveyard = false;
+    // Curator of Mysteries: "Whenever you cycle or discard another card, scry N." A battlefield watcher
+    // on every discard from hand, cycling included (phase 3). 0 = not a watcher.
+    int cycle_or_discard_trigger_scry = 0;
 
     // Hollow One: "This spell costs {2} less to cast for each card you've cycled or discarded this
     // turn." A cost reduction scaled by a PER-TURN COUNTER (Player::cards_cycled_or_discarded_this_
@@ -4354,6 +4534,14 @@ inline bool IsSacManaOutlet(const CardParams& p)
 { return p.sac_creature_outlet
       && (!p.sac_outlet_add_mana_color.empty() || p.sac_outlet_add_mana_any_color); }
 
+// A LIBRARY TUTOR: a spell that searches the library for a card and puts it in hand
+// (tutor_to_hand), on top (tutor_to_top) or N-th from the top (tutor_library_position, Long-Term
+// Plans). THE single predicate for every generic site that must emit, resolve, size the target axis
+// of, or classify a tutor -- so the position tutor cannot silently miss one (IsManaConversionSource's
+// reason). Provider sites that mean "the found card is the next draw" keep reading tutor_to_top.
+inline bool IsLibraryTutor(const CardParams& p)
+{ return p.tutor_to_hand || p.tutor_to_top || p.tutor_library_position > 1; }
+
 // A fully resolved card definition: base Card data plus template + parameters.
 struct CardDefinition
 {
@@ -4455,15 +4643,25 @@ inline bool DefHasCreatureEnterWatcher(const CardParams& p)
 // per-game presence stamp (GameState::deck_has_landfall) stays clear for a deck that needs it.
 // `landfall_damage` (Searing Blaze) is deliberately NOT a term: it is a resolution-time CONDITION
 // on a spell, never a trigger.
+// A TARGETED landfall counters payload: "put N +1/+1 counters on target <subtype> you control" (Phylath)
+// or "...on target creature you control" (Scythecat Cub). The one predicate for the dispatch, the
+// presence stamp and the solver's target-rank axes.
+inline bool DefHasTargetedLandfall(const CardParams& p)
+{
+    return p.landfall_target_counters > 0
+        && (!p.landfall_target_subtype.empty() || p.landfall_target_any_creature);
+}
+
 inline bool DefHasLandfallTrigger(const CardParams& p)
 {
     return p.landfall_creates_tokens > 0
         || (p.landfall_counters_each > 0 && !p.landfall_counters_each_subtype.empty())
-        || (p.landfall_target_counters > 0 && !p.landfall_target_subtype.empty())
+        || DefHasTargetedLandfall(p)   // Phylath; Scythecat Cub (any creature, 2026-10-23)
         || p.landfall_lifegain > 0
         || p.landfall_quest_counters > 0
         || p.landfall_self_pump_power > 0 || p.landfall_self_pump_toughness > 0
-        || p.landfall_double_self_counters;
+        || p.landfall_double_self_counters    // Mossborn Hydra (2026-10-22)
+        || p.landfall_additional_combat;      // Moraug, Fury of Akoum (2026-10-23)
 }
 
 // Codegen hints for CardDatabase::LookupCached (the hottest call in the search; see its comment).

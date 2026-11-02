@@ -13,6 +13,7 @@
 #include <vector>
 
 class TranspositionTable;  // per-decision SimulateToEnd memo (see TranspositionTable.h)
+class GameLogger;         // ApplyLandSearchActs: the executor's logger (null in the rollout)
 
 // A single atomic play the active player can make in a main phase. Unifies the
 // formerly-separate action sources (hand cast, Aether Vial activation, Land's Edge
@@ -46,6 +47,7 @@ struct ContPins
     int bounce     = -1;   // Plan::bounce_choice (the continuation's own Karoo drop)
     std::vector<int> sac;  // Plan::sac_pins
     std::vector<int> land_search;   // Plan::land_search_pins (the continuation's own land searches)
+    std::vector<int> incinerator_targets;
     std::vector<int> look_top;      // Plan::look_top_pins (the continuation's own Risen Reef looks / orders)
     int put_bounce = -1;   // Plan::bounce_choice as the put-Karoo pin (a Genesis Wave the continuation
                            // casts; PutBouncePinOf -- -1 when its own drop is the Karoo)
@@ -54,7 +56,7 @@ struct ContPins
     {
         return etbdig >= 0 || saga_ch1 >= 0 || ponder >= 0 || etbcounter >= 0 || tutor >= 0
             || scry >= 0 || bounce >= 1 || !sac.empty() || !land_search.empty() || put_bounce >= 1
-            || putback >= 0 || !look_top.empty();
+            || putback >= 0 || !look_top.empty() || !incinerator_targets.empty();
     }
 };
 
@@ -704,6 +706,18 @@ struct Action
                                        // any number"); declining is often right, since the bodies are
                                        // usually worth more attacking.
                                        // SENTINEL -1 = not a devour cast.
+    std::int32_t seed_pay_split  = 0;
+                                       // A searched CYCLE SEED's PAYMENT SPLIT (MTG_CYCLE_SEED_PAY_SPLIT,
+                                       // ledger Q61): WHICH sources pay the seed's all-generic cycling
+                                       // cost, as a packed multiset of source colour SIGNATURES
+                                       // (SeedPaySplits / SeedPaySplitHoldMask, ManaPayment.h). A seed
+                                       // pays BEFORE its site-4 continuation exists, so the payer alone
+                                       // could spend the colours the continuation needs (two Cyclones,
+                                       // three Mountains: the {2} took two Mountains and the other
+                                       // Cyclone's {R}{R} was unpayable at ANY budget). 0 = the payer
+                                       // decides (every non-seed action, human play, the lever off).
+                                       // Folded beside devour_count only when non-zero, so every key is
+                                       // byte-identical with the lever off.
     int         replicate_count  = -1;
                                        // REPLICATE (CR 702.56, Hatchery Sliver + every Sliver spell it
                                        // grants it to): how many EXTRA token copies this cast pays for.
@@ -748,6 +762,15 @@ struct Action
                                        // odometer group key and the canonical-order key of the subset
                                        // guard; never read at apply, which takes the Remand BY NAME --
                                        // copies are interchangeable). -1 = not a remand variant.
+    InternedName remand_chain_by;      // REMAND-ON-REMAND (Cyclone remand ceiling >= 2, USER 2026-10-28).
+                                       // Non-empty only on a remand variant: a Remand of THIS name (A) is
+                                       // cast targeting X, then remand_by (B) is cast targeting A. B
+                                       // resolves first: A returns to its owner's hand, B draws a card;
+                                       // then X RESOLVES NORMALLY (nothing countered it). Cost = X + A + B
+                                       // in one bill; three casts (storm, cast triggers). Needs two Remand
+                                       // copies in hand at apply (else the rider is void: X cast plainly).
+                                       // Shared body: CastAndResolveRemandChain (ManaPayment.h), both
+                                       // worlds. Admitted per deck by DecisionProvider::AdmitRemandOnRemand.
     InternedName pitch_name;           // PITCH EVOKE (CardParams::evoke_exile_color -- Fury "Evoke--Exile
                                        // a red card from your hand"). Non-empty only on an evoke variant
                                        // of such a card: the NAME of the hand card exiled as the cost. One
@@ -818,6 +841,11 @@ struct Action
     // realised no win). 0 = not recorded (legacy record / lever off): the replay keeps its own.
     int rec_mana_casts  = 0;
     int rec_pump_target = 0;
+    // Realized records can be a strict subset of a plan, or an inline continuation paid
+    // under inherited traits. Preserve the actual full scope for casts and searched cycles.
+    // Unengaged = legacy/unrecorded; engaged nullptr = explicitly no traits. The separate
+    // rec_pump_target also records zero, overriding any surrounding pump hold.
+    std::optional<std::shared_ptr<const PlanTraits>> rec_payment_traits;
     // Which MAIN-LEVEL breakpoint of the apply produced this TOP-LEVEL breakpoint record (0 = the
     // first). The executor replays each recorded segment at the matching main-level breakpoint.
     // Before 2026-09-30 the whole top-level list replayed at the FIRST one, which is right only
@@ -896,6 +924,29 @@ inline bool IsSelfDrawXCast(const CardDefinition& d, int draw_target)
     return d.tmpl == CardTemplate::DrawX && (!d.params.draw_target_player || draw_target == 0);
 }
 
+// A SEARCHED CYCLE seed (CollectActions, Unpredictable Cyclone phase 3): a hand-cycle DigDraw carried by
+// NAME (hand_index -1) WITH its definition, Curator's scry pin in devour_count and Cyclone's free-cast pin in
+// ponder_keep. Neither the human-play standalone dig action (AppendHumanPlayDigPlans) nor a recorded DigDraw
+// (the breakpoint script) carries `def`, so neither ever reads as a seed.
+inline bool IsCycleSeed(const Action& a)
+{
+    return a.kind == Action::Kind::DigDraw && !a.dig_sacrifice && a.hand_index < 0 && a.def != nullptr;
+}
+// A HUMAN-PLAY cycle seed on a deck whose provider does NOT search its cycles (QR1, HumanPlayCycleSources) carries
+// hand_index kHumanGenericCycleSeedHand (-2) instead of -1: still a seed everywhere (every reader tests
+// hand_index < 0), but distinguishable from the standalone dig plan's action and its breakpoint variants, which
+// can carry a back-filled def and so read as seeds too. EnumerateMainPlans' OrderHumanCycleSeedPlans keys on it.
+constexpr int kHumanGenericCycleSeedHand = -2;
+inline bool IsHumanGenericCycleSeed(const Action& a)
+{
+    return IsCycleSeed(a) && a.hand_index == kHumanGenericCycleSeedHand;
+}
+inline const Action* CycleSeedOf(const std::vector<Action>& acts)
+{
+    for (const Action& a : acts) { if (IsCycleSeed(a)) { return &a; } }
+    return nullptr;
+}
+
 struct CastRiders
 {
     int      loyalty_ability = -1;   // Action::loyalty_ability on a walker CAST (the rollout's activation;
@@ -917,6 +968,11 @@ struct CastRiders
                                         // ApplyCastLifegain in both worlds
     InternedName pitch_name;            // Action::pitch_name: the hand card a pitch evoke exiles as its
                                         // cost (Fury); empty for every other cast
+    InternedName remand_chain_by;       // Action::remand_chain_by: Remand-on-Remand (A targets X, remand_by
+                                        // targets A; X resolves, A back to hand)
+    bool     free_remand     = false;   // the remand_by rider rides a FREE walk cast (Unpredictable
+                                        // Cyclone's take-and-Remand): only the Remand is paid. Set by the
+                                        // walk itself, never by CastRiders::Of (no plan Action carries it)
 
     static CastRiders Of(const Action& a)
     {
@@ -928,6 +984,7 @@ struct CastRiders
         r.land_put        = a.rock_mana;
         r.free_cast       = a.free_cast;
         r.remand_by       = a.remand_by;
+        r.remand_chain_by = a.remand_chain_by;
         r.player_target   = a.player_target;
         r.draw_target     = a.draw_target;
         r.pitch_name      = a.pitch_name;
@@ -1093,6 +1150,14 @@ public:
         //
         // Both flags are human-menu only and neither is read by the search or any digest.
         bool combo_off_offered  = false;
+        // SEARCHED DEFENSE OF THE HEART PUT LIST (MTG_DOTH_AXIS, 2026-10-29): the NEXT upkeep's put lists, packed
+        // exactly as GameState::scripted_doth_put (a rank per trigger ordinal into the resolution-time option
+        // list, rank 0 = the provider's pick, + the count of ordinals it covers); -1 = write nothing. Written
+        // write-when-set by WritePostApplyStatePins and consumed at that upkeep in both worlds. Chosen where
+        // the search crosses the turn boundary (the BOUNDARY FAN, TurnSolver.cpp BoundaryFan: one crossing
+        // per option, the provider's first so it wins ties) and recorded on the plan of the turn that crossed.
+        // An int32 in the 5-byte hole after combo_off_offered (gdb ptype /o: 36; sizeof(Plan) unchanged).
+        std::int32_t doth_put_choice = -1;
         // Which rule fired, for the viewer label, the logs and the fixture harness.
         std::string combo_off_rule;
 
@@ -1115,6 +1180,15 @@ public:
         // turn" and move-order committed the forfeit). MTG_ATK_FORFEIT_GATE, default OFF
         // pending measurement + user review.
         bool atk_forfeit    = false;
+        // SEARCHED ECHO (MTG_ECHO_AXIS, 2026-10-29): the NEXT upkeep's echo pay-vs-decline, packed exactly as
+        // GameState::scripted_echo (an invert mask over the obligations by ordinal + the count of ordinals it
+        // covers); -1 = write nothing. Written write-when-set by WritePostApplyStatePins and consumed at that
+        // upkeep in both worlds. The axis (AppendSubdecisionAxes) stamps a plan that leaves an obligation the
+        // state's pin does not cover with the provider's answer ("follow", mask 0) and emits one clone per
+        // non-empty subset of those new ordinals with the answer inverted, so pay AND decline are both
+        // searched and the provider only orders them. An int16_t in the 2-byte hole after atk_forfeit
+        // (gdb ptype /o: 74; sizeof(Plan) unchanged).
+        std::int16_t echo_choice = -1;
 
         // Searched dork attack/hold choice (MTG_DORK_ATK_SEARCH): -1 = not contested at this
         // node (natural heuristic combat, the default); 0 = contested, search chose the
@@ -1428,6 +1502,19 @@ public:
         // Folded into the plan hash, SamePlan, IsApplyEmptyPlan, PlanIsAxisVariant, the census key,
         // the dominance Xaxes key and (live) the breakpoint key.
         std::vector<int> look_top_pins;
+        std::vector<int> incinerator_targets; // stable target id per actual queued trigger ordinal
+        // bp_pre -- the FOURTH breakpoint axis beside bp_choice / bp_at / bp_all: the earlier entries
+        // of a deviation SEQUENCE (MTG_BP_DEV_SEQ; docs/design/bp-empty-arm-deferred-site.md 6.1).
+        // bp_pre[i] is the continuation choice at
+        // class-on occurrence i < bp_at -- a rank or a sentinel, exactly what bp_choice holds -- or -1:
+        // untargeted, so that occurrence plays as every untargeted one does (the nested canon). The
+        // pair (bp_pre, bp_choice@bp_at) therefore carries several simultaneous deviations, which is
+        // what the bp_at axis alone (one deviation per apply) cannot express. Only the wave walker
+        // ever sets it, on a compound variant built off an already-scored variant, so it is empty on
+        // every other plan and every reader below sees exactly the old single deviation. Ignored when
+        // bp_choice < 0 or bp_all. Read through TurnSolver::BpChoiceAt, by the rollout and all three
+        // executor twins alike.
+        std::vector<int> bp_pre;
         //   combat_crack_choice -- crack Khalni Heart Expedition(s) IN COMBAT, after Primeval Titan's
         //     attack trigger filled them and before damage (a bitmask over the Expeditions eligible at
         //     that point, battlefield order; -1 = no crack). Rides GameState::
@@ -1486,6 +1573,17 @@ public:
         // AppendSubdecisionAxes on a pre-combat list whose state has an untapped banked source and a
         // firebreathing / team-pump source on the battlefield or in hand.
         int8_t fb_hold_choice = -1;
+        // SEARCHED CAST-TRIGGER TARGETS (2026-10-27; Ulamog, the Ceaseless Hunger's "exile two target
+        // permanents", Ulamog, the Infinite Gyre's "destroy target permanent"). -1 (default) == the
+        // provider's front option at every targeted cast trigger; k >= 1 == the option ranked k
+        // (CastTriggerTargetOption: multisets of N identity-folded classes in
+        // DecisionProvider::CastTriggerTargetOrder's order), computed AT EACH TRIGGER's state and clamped.
+        // A WHOLE-TURN POLICY (the landfall_target_choice shape): installed by both worlds for the turn
+        // (ScriptedCastTriggerTarget, keyed on GameState::TurnSeq) and folded into every plan key while
+        // live. Emitted by AppendSubdecisionAxes for plans that cast a targeted cast-trigger card from
+        // hand, every option (no width cap -- a cap would make the later options unfindable at any budget).
+        // int16_t: a two-target option list on a wide board exceeds 127.
+        int16_t cast_trigger_target_choice = -1;
 
         // HOLD-vs-TAP of this turn's mana creatures. 0 (default) == the shipped heuristic (reserve
         // every mana creature for the whole turn, and sort them last in the tap backtracker);
@@ -1528,7 +1626,9 @@ public:
 
         // TECTONIC GIANT modal attack trigger: 0 = "3 damage to each opponent", 1 = "exile the
         // top two, play one", -1 (default) == ResolveAttackModalMode, byte-identical to no
-        // branch. Same state-pin route and reason as fling_victim_choice.
+        // branch. Same state-pin route and reason as fling_victim_choice. PACKED per trigger ordinal
+        // (MTG_TECTONIC_ORDINALS; SpellEffects.h TectonicPackModes) when the plan's combat can hold
+        // more than one modal attacker -- ordinal 0 alone is the historical 0 / 1.
         int tectonic_mode_choice = -1;
 
         // ...and WHICH of the two exiled cards mode B keeps. -1 (default) == the ranked pick
@@ -1562,6 +1662,16 @@ public:
         // future-turn rollout combat-swap pin applies to (MTG_ROLLOUT_AURA_SWAP). Never keyed,
         // compared or serialised -- a rollout-local marker.
         bool horizon_leaf = false;
+        // SEARCHED EMERIA UPKEEP RETURN ("At the beginning of your upkeep, if you control seven or more
+        // Plains, you may return target creature card from your graveyard to the battlefield"). PACKED
+        // per trigger ordinal (kUpkeepReanimatePinBits bits each, low first; -1 = unpinned = every
+        // trigger returns its list's front): each field is a RANK into GyReanimateCandidateNames built
+        // at the trigger's own resolution (out-of-range ranks clamp to the last option, duplicate-not-
+        // whiff) or kUpkeepReanimateDecline ("you may"). Decided in this turn's main phase, consumed at
+        // the NEXT upkeep, so it rides GameState::scripted_upkeep_gy_reanimate (the Search for Tomorrow
+        // upkeep_land_search_choice shape). An int16_t in the 3-byte hole after horizon_leaf (gdb
+        // ptype /o: no size change); folded into the census Xaxes key by hand.
+        std::int16_t upkeep_gy_reanimate_choice = -1;
 
         // Ponder-style REORDER disposition: which candidate of TopDispositionCandidates(Reorder) the
         // reorder takes. -1 == the provider heuristic, byte-identical to no branch. The FULL set
@@ -1652,6 +1762,18 @@ public:
         // branch-by-default, and so the rare case it IS wrong (chapter II's counters are PERMANENT,
         // so a body about to be eaten by Natural Order is the wrong home) is reachable.
         int saga_target_choice = -1;
+
+        // SEARCHED ABIDING GRACE END-STEP MODE + TARGET ("At the beginning of your end step, choose
+        // one -- you gain 1 life; or return target creature card with mana value 1 from your
+        // graveyard to the battlefield"). PACKED per trigger ordinal (kGracePinBits bits each, low
+        // first; -1 = unpinned = every trigger takes its option list's front): each field is a RANK
+        // into GraceOptions (SpellEffects.h) built at the trigger's own resolution, out-of-range
+        // ranks clamping to the last option (duplicate-not-whiff, the saga rule). The saga-target
+        // shape exactly: the decision fires AFTER the plan apply has returned (this turn's end step),
+        // so the pick rides GameState::scripted_grace_choice, consumed by the SHARED
+        // PerformEndStepAbidingGrace in both worlds (no AIEngine member). The search branches over
+        // mode AND target; only beyond the horizon does the unpinned front pick apply.
+        int grace_choice = -1;
 
         // SEARCHED SAGA CHAPTER I FREE CAST (World War Hulk I: "the next red or green creature
         // spell you cast this turn can be cast without paying its mana cost"). A RANK into
@@ -1749,6 +1871,9 @@ public:
         // the search scored a turn in which candidate k was taken at every breakpoint, so the
         // executor must realise that same turn or the committed line diverges from the scored one.
         bool bp_all = false;
+
+        // ...and Plan::bp_pre (MTG_BP_DEV_SEQ, declared beside look_top_pins to keep the layout packed)
+        // is the FOURTH: a deviation SEQUENCE's earlier entries. See there.
 
         // Did WAVE 0 (AppendBreakpointVariants) fan this BASE plan out? Set on the base plan, never
         // on a variant. MTG_BP_MAXBASE caps how many breakpoint-opening plans get variants at all,
@@ -2011,6 +2136,31 @@ public:
     // built on: the enumeration emits a position after each such action, and both worlds' cast
     // loops count exactly these actions to find position k (lockstep by construction).
     static bool PutsLandfallWatcher(const Action& a);
+    // ---- THE REVEAL OUTLET'S POSITION (Martyr of Sands, 2026-10-27) --------------------------------
+    // "{1}, Reveal X white cards from your hand, Sacrifice this creature: You gain three times X life."
+    // X is the hand at ACTIVATION, so WHERE the activation sits among the plan's casts changes what it
+    // gains (every white card cast first is one card fewer) and who sees the gain (a "whenever you gain
+    // life" permanent cast first gets the event). The trailing pass alone made "sacrifice first, THEN
+    // cast" unfindable at any budget. Encoded on the activation's own `chosen_x` (always 0 on a
+    // SacCreatureOutlet before this, and folded into every plan signature / PlansEqual already):
+    //   0      -- the trailing pass (the base plan, unchanged);
+    //   k + 1  -- right after the k-th "whenever you gain life" cast this plan dispatches (k = 0: in the
+    //             pre-cast pass, before every cast).
+    // Emitted by AppendSubdecisionAxes; dispatched at that point by both worlds (ApplyPlanDirect's
+    // pre-cast pass + slot_hook, AIEngine::TakeTurn's twins) through each world's own trailing-pass
+    // body, so payment and resolution are the trailing pass's exactly.
+    static bool IsRevealOutletDef(const CardDefinition* d);
+    // The position k of a positioned reveal outlet, -1 for every other action (and an unpositioned one).
+    static int  RevealOutletSlot(const Action& a);
+    // Does any action of this plan carry a reveal position? False (no lookups) for every other deck.
+    static bool PlanHasPositionedRevealOutlet(const std::vector<Action>& acts);
+    // THE position counter: a cast / graveyard cast / Vial put of a "whenever you gain life" permanent
+    // (the FireLifegainWatchers prefilter, plus a walker that makes the Ajani's Pridemate token). The
+    // enumeration's position bound and both worlds' counters read only this.
+    static bool RevealSlotCounts(const Action& a);
+    // A positioned reveal outlet whose source is no longer ours on the battlefield: it already ran at
+    // its position (or cannot run), so the trailing pass must not pay for it again.
+    static bool PositionedRevealOutletSpent(const GameState& state, const Action& a);
     // Vampires A2: does this ACTIVATION put a GRAVEYARD-landfall card (Bloodghast) into our graveyard --
     // a pinned discard of one, or a sacrifice of one? Read ONLY by the land-after-ALL-casts (-1) clone
     // emission (EnumeratePlansWithLandUncached), so a plan that discards / sacrifices Bloodghast is
@@ -2040,6 +2190,13 @@ public:
     // shifts every later bp_at index -- which is how the first cut of this rule cost Mirrorwing
     // +0.1266 at every budget.
     static bool ParamKeyedDrawClass(const GameState& state, const CardDefinition& def);
+    // A PLAIN CANTRIP by definition: the DrawSpell template, neither staging nor Expressive Iteration -- the
+    // casts whose resolution opens the plain cantrip breakpoint (apply_one's DrawSpell branch, plain_cantrip
+    // = true). The Remand-on-Remand rider admits exactly these among the draw classes (see BpNameOf).
+    static bool IsPlainCantripDef(const CardDefinition& d)
+    {
+        return d.tmpl == CardTemplate::DrawSpell && !d.params.stages_cards && !d.params.expressive_iteration;
+    }
 
     // Lands + mana rocks + mana dorks the active player controls. Snapshotted at a breakpoint so a
     // decline can be re-admitted once the mana base grows (BpTurnManaSettled).
@@ -2099,6 +2256,13 @@ public:
     //  * Untargeted -- a later one; None -- the plan targets nothing.
     enum class BpOccurrence : std::int8_t { None, Target, PreTarget, Untargeted };
     static BpOccurrence ClassifyBpOccurrence(const Plan& p, int idx);
+    // THE ONE READER of a plan's searched continuation at class-on occurrence `idx` (the ordinal above):
+    // the choice the plan carries there -- bp_choice at bp_at (or at every occurrence under bp_all),
+    // a bp_pre entry before it (MTG_BP_DEV_SEQ) -- or -1 when the plan does not target `idx`. A rank or
+    // a sentinel (kBpEmptyChoice, kBpChainChoice + j, kBpDemotedChoice + j); every one is >= 0, so
+    // ">= 0" is "targeted". The rollout's bp_searched_plan and the executor's three twins (the main
+    // site, the pod chain, site 9) all resolve through it, so they cannot disagree about a sequence.
+    static int BpChoiceAt(const Plan& p, int idx);
     // At an occurrence the executor does not replay, does it MIRROR the rollout's canon (true) or re-solve
     // (false)? A verified committed line mirrors every one; an unverified (estimate) commit mirrors only up
     // to the plan's own target -- after it, the estimate re-solve is the designed behaviour (the search
@@ -2263,6 +2427,8 @@ public:
     // COMBO OFF route narrates each link it plays with it, so the history lists the actions, not a macro.
     static std::string PlanLineSummary(const Plan& plan, const GameState& state);
     static void              ApplyPlan(GameState& state, const Plan& plan, bool is_pre_combat);
+    // Build the real dynamic replay script while applying a fixed plan, for executor parity tests.
+    static void ApplyPlanWithRecordsForTest(GameState& state, Plan& plan, bool is_pre_combat);
     // The rollout's staged-card re-lay at an executor pass head (TurnSolver.cpp MergeStagedToHandEnd,
     // lockstep #5): staged hand cards move to the END, order kept. Public only so a unit test can hold
     // it to the executor's layout (AIEngine.h MergeStagedIntoHand); the engine calls the static.
@@ -2299,6 +2465,10 @@ public:
     // Charge `n` units of such sub-search work to `budget` (no-op on nullptr), attributed to the
     // census's `equip_route` bucket.
     static void              ChargeDecisionUnits(SearchBudget* budget, int n);
+    // MTG_CACHE_HIT_CHARGE: a provider sub-search that charges the decision budget and memoises per DECISION
+    // (the equip-route DFS's SeenForThisDecision, the AA route walk) ran inside the cacheable computation in
+    // flight -- its cost depends on that memo's warmth, so the computation is not stored (mode 1).
+    static void              NoteChargingSubsearch();
     // The same for the AccomplishedAlchemist untap-loop route walk (MTG_AA_ROUTE_NODE_UNITS), attributed
     // to the census's own `aa_route` bucket. No-op on nullptr or n <= 0.
     static void              ChargeAaRouteUnits(SearchBudget* budget, int n);
@@ -2340,6 +2510,10 @@ public:
     // Work units the Brainstorm put-back price (MTG_PUTBACK_PRICE) has charged on THIS thread so far --
     // a running total, so a caller diffs it around a game to report that game's units net of the price.
     static long long         PutBackPriceCharged();
+    // The sound cantrip folds' process-wide counters (docs/design/cantrip-search-optimization.md §2), for tests and
+    // reports: [0] F2 exactly sized fans, [1] F3 mirror ranks declined, [2] F4 stranding ranks declined, [3] F5
+    // cross-base ranks declined, [4] Q36 seed variants not emitted. Monotonic; a caller diffs around its work.
+    static void              SoundFoldCounters(long long out[5]);
     // True inside a horizon playout -- beyond the search window, where a greedy policy is permitted.
     static bool              InRolloutPlayout();
     // True inside the depth-0 executor's greedy pick (a GreedyPermit(D0Runner) is live) -- the
@@ -2456,6 +2630,16 @@ public:
     // Ardenn's begin-combat attach applied first, then every attack-trigger addend -- Raubahn's
     // CountAttackAttachPump included). Test hook only: lets a unit test assert projection == realised.
     static int ProjectedAttackDamageForTest(const GameState& state);
+    // Test hook (searched echo, MTG_ECHO_AXIS): the rollout's turn boundary itself (end step, cleanup,
+    // untap, upkeep -- echo included -- and the draw), exactly as every search host runs it. False = the
+    // game ended on the boundary (an empty-library draw).
+    static bool SimulateEndAndStartNextTurnForTest(GameState& state);
+    // ...and the boundary fan's pins for a state about to cross it (EchoBoundaryPins): one per inverted
+    // subset of the obligations its echo pin does not cover, "follow" first; empty when all are covered.
+    static std::vector<int> EchoBoundaryPinsForTest(const GameState& state);
+    // Test hook (searched Defense of the Heart, MTG_DOTH_AXIS): every crossing the boundary fan makes from `state`
+    // (a state at the end of its turn), in order, as the pin it would record (-1 = that crossing decided nothing).
+    static std::vector<int> DothBoundaryPinsForTest(const GameState& state);
     // MTG_LEAF_KILL_ONLY test hook: one horizon rollout exactly as FSLineWin's leaf runs it (SimulateToEnd
     // at `depth` under `cutoff`, a fresh leaf table, no budget), and how many kill-only turns it armed /
     // candidate rollouts it skipped on this thread (counted in every build, thread-local).
@@ -2474,11 +2658,17 @@ public:
     // ...the same projection for a PROVIDER pick that must agree with how the search prices the turn
     // (ColossusHammerProvider's Sigarda's Aid host: "lethal this turn" first). Read-only.
     static int ProjectedAttackDamage(const GameState& state);
+    // Does the board AS IT STANDS kill this turn -- no further main-phase action, just the attack --
+    // VERIFIED by applying the idle plan on a copy and simulating the combat, exactly as the
+    // board-lethal short-circuit does (LethalCutKillIsReal). Read-only. Post-combat: only an
+    // opponent already at <= 0.
+    static bool BoardLethalAsIs(const GameState& state, bool is_pre_combat);
     // MTG_BP_RESUME_LINE_HOLD test hook: apply `plan` with a breakpoint-node capture; if it pends, resume its
     // EMPTY child from the snapshot. Returns false when the apply did not pend. `at_capture` is the line's
     // unpaid-cost hold where the full apply stopped; `at_resume` the hold the resumed apply ran under.
     static bool BpResumeLineHoldForTest(const GameState& state, const Plan& plan, bool is_pre_combat,
-                                        ManaCost& at_capture, ManaCost& at_resume);
+                                        ManaCost& at_capture, ManaCost& at_resume,
+                                        GameState* complete_state = nullptr, GameState* resumed_state = nullptr);
     // MTG_BP_PO_W0_FOLD test hook (the playout wave-0 identity; see the pofold namespace in
     // TurnSolver.cpp). Applies `base` and then each of `variants` (all carrying bp_base = 0) INSIDE A
     // PLAYOUT, exactly as SolveWithLookahead's candidate loop does: the base apply is measured (its
@@ -2511,6 +2701,20 @@ public:
                                                           int hosted = -1, int hosted_at = -1,
                                                           int hosted_want = -1, int demoted_len = 0,
                                                           int hosted_demoted = 0);
+    // MTG_BP_DEV_SEQ's walk, for the unit test: one hand-out per step with its whole deviation
+    // sequence. `reach_of(v)` plays the apply: how many class-on occurrences that variant's apply
+    // reached, counting one it could reach only by targeting it (the site-9 re-open's latent count).
+    // Every list is `list_len` long. `seed_*` seeds one host-applied (wave-0) variant, as the hosts do (a
+    // negative reach, there as from reach_of, is a LATENT reach of -reach).
+    // MTG_DEV_SEQ_TAIL_SKIP's second-pass skip predicate, for the unit test: a first-pass tail recorded under
+    // cutoff `rec_cut` with answer `rec_win` and earliest latent turn `rec_mlt`; may the second pass skip the same
+    // tail under `cut`? (Builds a reading carry with that one record and asks the gate the hosts use.)
+    static bool DevSeqTailSkipForTest(const GameState& tail_state, int rec_cut, int rec_win, int rec_mlt, int cut);
+    struct DevSeqStep { std::vector<int> pre; int bp_choice; int bp_at; };
+    static std::vector<DevSeqStep> WaveWalkerDevSeqForTest(const GameState& state,
+                                                           const std::vector<Plan>& plans, int list_len,
+                                                           const std::function<int(const Plan&)>& reach_of,
+                                                           int seed_pos = -1, int seed_reach = 0);
 
     // BREAKPOINT SITE 7 -- the Birthing Pod CHAIN (bit 7 of MTG_BP_SITES, default ON). A Pod
     // activation's fetch is a mid-phase event that creates a NEW actionable object: the fetched
@@ -2601,8 +2805,18 @@ public:
     // hold, if the line can pay without them, the sources the REST of the hand needs for its
     // coloured pips (MTG_HUMAN_PREPAY_DEMAND; see HumanPrepayDemandHolds). Every other caller
     // (the executor, rollouts, the payability probes) passes false: byte-identical.
+    // `allow_partial`: the caller is an APPLY (the executor and ApplyPlanDirect, which ignore the
+    // result and cast from whatever floats). Only then may a land-Aura batch be prepaid for its held
+    // Auras alone and return false with that share pre-loaded (MTG_PREPAY_AURA_STAGE); every probe
+    // keeps "false = state untouched".
     static bool BatchPrepayMainCasts(GameState& state, const std::vector<Action>& acts,
-                                     bool mint_prefix = false, bool hand_demand = false);
+                                     bool mint_prefix = false, bool hand_demand = false,
+                                     bool allow_partial = false);
+    // A face-targeted Lavamancer activation can be the sole source of a
+    // same-plan spectacle discount. Return its action index so both apply
+    // worlds can run it before the spectacle cast, rather than in the trailing
+    // activation pass. -1 when the special order is unnecessary.
+    static int SpectacleGraveyardDamageFirst(const GameState& state, const std::vector<Action>& acts);
     // The hold masks behind `hand_demand`, exposed for tests: one untapped source per coloured pip
     // the hand minus `acts`' casts still owes (scarcest colour first, narrowest source, tie lower
     // card number), written to `out` as PREFIX masks over battlefield indices, largest first --
@@ -2698,6 +2912,22 @@ public:
     // the same discipline ApplySacForMana's own shared-helper note describes.
     static std::string SacFloatColorFor(const GameState& state, const std::vector<Action>& acts,
                                         const Action& self);
+
+    // The sequenced same-subset rock credit (MTG_ROCK_SEQ_CREDIT; TurnSolver.cpp SequencedRockProduction):
+    // the production of the selected rocks castable in SOME order off `pool` plus the rocks before them.
+    static ManaPool SequencedRockProductionForTest(const ManaPool& pool, const std::vector<Action>& cands,
+                                                   const std::vector<int>& sel);
+
+    // GARTH CONJURE-AND-CRACK: a GarthActivate naming Black Lotus that cracks the copy as it lands
+    // (ritual_float = the Lotus's amount; chosen_float_color = its SEARCHED colour, one variant per
+    // colour). A sac source of the plan like an on-board Lotus's SacForMana, so SacFloatColorFor charges
+    // it in the same sequential walk (and returns its pinned colour). GarthLotusCrackColor is the colour
+    // every apply site hands ApplyGarthActivate: "" for every other Garth action (keep the copy).
+    static bool IsGarthLotusCrack(const Action& a)
+    { return a.kind == Action::Kind::GarthActivate && a.ritual_float > 0; }
+    static std::string GarthLotusCrackColor(const GameState& state, const std::vector<Action>& acts,
+                                            const Action& self)
+    { return IsGarthLotusCrack(self) ? SacFloatColorFor(state, acts, self) : std::string(); }
 
     // "We are resolving a BREAKPOINT CONTINUATION" marker, for MTG_CONDEMN_M1_BP.
     // g_bp_enum_depth is NOT the right signal: it only covers EnumerateBreakpointPlans, i.e. the
@@ -2812,8 +3042,12 @@ public:
     // two worlds apply the positioned land-search activations through ONE body): is `a` a land-search
     // activation; apply every such action of `acts` now (live source, {T} first, shared payer,
     // stranded -> the tap restored and nothing happens); and `acts` minus them (the trailing list).
+    // `log` (the executor's logger; null in the rollout) records each activation that fired as an
+    // ABILITY entry, OUTSIDE the play digest: these cracks used to run unlogged, so a game log showed a
+    // land vanishing into the graveyard with no action naming it (ref_promote had to infer them).
     static bool IsLandSearchActivation(const Action& a);
-    static void ApplyLandSearchActs(GameState& state, const std::vector<Action>& acts);
+    static void ApplyLandSearchActs(GameState& state, const std::vector<Action>& acts,
+                                    GameLogger* log = nullptr);
     static std::vector<Action> WithoutLandSearchActs(const std::vector<Action>& acts);
     // ...and the PRE-CAST SUBSET form of the position (Plan::land_search_act_slot <= -2, 2026-10-19):
     // bit i of the mask = the plan's i-th land-search activation (in `actions` order) runs in the
@@ -2884,6 +3118,7 @@ public:
     // MTG_VAMP_RULE_PRE test hook: SubsetVampOutletInvalid on `sel` both ways -- `slow` the per-subset
     // rules, `fast` the per-enumeration VampRulePre path (built over `cands` on `state`). Equal by design.
     // The raw candidate list CollectActions emits for `state` (test hook; what both subset walkers index).
+    static Action ChandraNestedCastOption(const std::string& option);
     static std::vector<Action> CollectActionsForTest(const GameState& state, bool is_pre_combat);
     static void VampRulePreAgreeForTest(const GameState& state, const std::vector<Action>& cands,
                                         const std::vector<int>& sel, bool fold_from_odometer,
@@ -3067,6 +3302,14 @@ public:
         // same card a different way, so `cast=<name>` cannot distinguish the two. EMPTY => legacy
         // matching (a Channel action matches by card name inside the ordinary cast multiset).
         std::vector<std::string> channels;
+        // "cycle=<card name>": cycle a card from hand (a DigDraw action, dig_sacrifice false) and
+        // "sacdraw=<land name>": sacrifice a land in play to draw (dig_sacrifice true). A DigDraw is
+        // ALWAYS matched against these (never by name inside the cast multiset): `cast=Curator of
+        // Mysteries` and "cycle Curator of Mysteries" play the same card two different ways, and a plan
+        // that cycles (a cycle seed, USER 2026-10-28: "Cycling should be a plan item like any other") must
+        // never match a line that does not.
+        std::vector<std::string> cycles;
+        std::vector<std::string> sac_draws;
         // "suspend=<card name>": Lotus Bloom's own Suspend (CR 702.61) -- exile it from hand with
         // time counters instead of casting it. Its own verb for the SAME reason `channel=` has one:
         // suspend is a from-hand ALTERNATIVE to casting the same card, so `cast=<name>` cannot say
@@ -3307,6 +3550,9 @@ public:
     // can detect non-convergence (a later turn's verified win exceeding an earlier
     // one). A win-this-turn reports (turn, depth-1); an empty / depth<=0 decision
     // reports (max_turns+1, 0) i.e. "no verified win".
+    // The graded no-win leaf quantity of the line the last enforcing SolveWithLookahead on this thread committed
+    // (LOWER = better; LLONG_MAX = none). Read by the blind resolution chooser only.
+    static long long LastCommittedTieBreak();
     static Plan SolveWithLookahead(const GameState& state, bool is_pre_combat,
                                    int depth, int max_turns = 20,
                                    SearchBudget* budget = nullptr,
@@ -3340,6 +3586,11 @@ public:
         // replayable continuation). Propagated up through every adoption; a committed line carrying it
         // is re-searched with the shortcut off so play always replays a complete line.
         bool truncated = false;
+        // THE BOUNDARY FAN's answer at a SINGLE-MAIN boundary (searched Defense of the Heart, MTG_DOTH_AXIS): the
+        // put-list pin FSLineTail's single-main tail chose where it crossed into the next turn, which belongs on
+        // the plan of the turn that crossed -- the CALLER's main-1 plan, which this line does not contain. The
+        // caller stamps it there (StampBoundaryPins); -2 = nothing chosen. Never set by FSLineWin itself.
+        int boundary_doth = -2;
     };
 
     // fd-oracle diagnostic (MTG_FD_ORACLE only, inert otherwise): the smallest WIN-CLAIMING estimate
@@ -3567,6 +3818,9 @@ const std::function<bool(GameState&, const ManaCost&)>& RolloutMadnessPayer();
 // over-counting there would discard the original Zada for a phantom lethal. Mutates `state`
 // (damage, taps, pumps): call on a throwaway copy only.
 void RolloutSimulateCombat(GameState& state);
+// Moraug: the additional combats a post-combat main queued (TurnSolver.cpp RunPostMain2ExtraCombats), for the
+// unit tests and any provider that simulates a main 2. Returns true if they won.
+bool RolloutRunPostMain2ExtraCombats(GameState& state);
 
 // TEST HOOK (chunk P copy/host folds): this THREAD's running count of enumerations in which the fold
 // armed -- 0 = hand-copy classes built (MTG_HAND_COPY_CLASS_FOLD), 1 = land-Aura host prefix armed

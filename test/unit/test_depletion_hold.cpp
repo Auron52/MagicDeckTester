@@ -243,16 +243,24 @@ TEST_CASE("depletion hold: the only source of a colour is still used (an order, 
         CHECK(TappedDh(end) == std::vector<bool>{ true, false });
     }
     // A land the payment cannot do without keeps today's order exactly: {2} with only an Island beside the
-    // Skerry -> the Island (rank 10) then the Skerry (11), with or without the lever.
+    // Skerry -> the Island (rank 10) then the Skerry (11), with or without the lever -- and a {U} floats away.
+    // The per-payment refine (MTG_PAY_REFINE, pinned on here) then gives the Island back: the Skerry's {U}{U}
+    // pays the {2} alone. (The Skerry is Niv-Mizzet's, a deck with no same-phase untapper: stamped so. With one,
+    // the refine keeps the floated {U} -- GameState::deck_has_mana_untapper.)
+    for (int refine : { 0, 1 })
     for (bool on : { true, false })
     {
+        CAPTURE(refine);
         CAPTURE(on);
         HoldArm arm(on);
-        const GameState b2 = BoardDh({ LandDh("Saprazzan Skerry", 1), LandDh("Island") });
+        heurarm::t_arm[heurarm::PAY_REFINE] = static_cast<std::int8_t>(refine);
+        GameState b2 = BoardDh({ LandDh("Saprazzan Skerry", 1), LandDh("Island") });
+        b2.deck_has_mana_untapper = false;
         bool ok = false;
         const GameState end = PayBoth(b2, CostDh(2), false, CostDh(2), &ok);
+        heurarm::t_arm[heurarm::PAY_REFINE] = -1;
         CHECK(ok);
-        CHECK(TappedDh(end) == std::vector<bool>{ true, true });
+        CHECK(TappedDh(end) == std::vector<bool>{ true, refine == 0 });
     }
 }
 

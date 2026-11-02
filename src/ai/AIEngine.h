@@ -141,6 +141,12 @@ public:
 
     void SetLogger(GameLogger* logger) { m_logger = logger; }
 
+    // Re-point a live engine at new search settings, exactly as the constructor sets them (including
+    // the run-level TurnSolver::SetSearchedPlay). For --choices-then-auto: the human's recorded prefix
+    // replays at the viewer's depth (the menus its plan indices point into are ordered by it), and the
+    // shipped settings take over only at the hand-back. Every reader takes the members fresh.
+    void SetSearchSettings(int lookahead_depth, int budget_ms);
+
     // Discard all lands from hand to each Land's Edge permanent the active player
     // controls, dealing 2 damage per land per Land's Edge.  Called by GameEngine
     // after ResolveStack so Treasure Hunt has already resolved and filled the hand.
@@ -158,6 +164,10 @@ public:
     // it to depth removes the search/executor and single-deck/batch config-mismatch
     // footguns that an independent toggle caused.
     bool LookaheadBottoming() const { return m_lookahead_depth > 0; }
+    // Does this engine SEARCH its turns (depth > 0, not a rollout engine, not human play)? Read only by the
+    // MTG_DOTH_AXIS_STATS census at the real upkeep (GameEngine::UpkeepTail), which counts a searched game's
+    // Defense of the Heart resolutions that no plan's pin covered.
+    bool SearchesTurnsForCensus() const { return m_lookahead_depth > 0 && !m_in_rollout && !HumanPlayActive(); }
 
     // Sets the max-turns horizon used by ActivateLandsEdge rollouts (depth > 0).
     // Called by GameEngine::PlayOut so the value tracks each game's actual limit.
@@ -436,6 +446,11 @@ private:
     // turn's DeclareAttackers, saved/restored around shared-engine rollouts alongside
     // m_committed_line so a probe/keep playout cannot eat the real game's pin.
     int m_atk_release_pin = -1;
+    // MTG_REAL_PAY_ATTACK_PIN: the SCORED combat of a pre-combat main the executor paid with the mana oracle's
+    // script (ManaOracle PlanPaymentScript's attack_pin): +card number = attacked on the search's apply board,
+    // -number = did not. Written by TakeTurn, consumed by this turn's DeclareAttackers, saved/restored around
+    // shared-engine rollouts like the release pin. Empty = no pin (the heuristic declares).
+    std::vector<int> m_script_atk_pin;
 
     // Oracle (MTG_FD_ORACLE): earliest searched win predicted this game and the turn
     // it was predicted, to flag when a later recompute degrades below it (divergence).
@@ -471,6 +486,9 @@ private:
     void BottomCards(GameState& state, int count, int max_turns);
 
 public:
+    // PerformDigFull's tri-state (Unpredictable Cyclone hazard R1: a REPLACED cycle draws nothing). Public
+    // so the test seam's callers can name it.
+    enum class DigOutcome : std::uint8_t { Failed, DrewLand, DrewNonland, Replaced };
     // Picks the index of the card the curve/castability heuristic would bottom,
     // considering only cards whose allowed[i] is non-zero. Returns -1 if none.
     // (Public for test_bottom_pref_order.cpp; const, reads the hand + profile only.)
@@ -512,6 +530,14 @@ private:
     int RolloutWinTurnFrom(GameState trial, int max_turns, GameEngine::ResumeAt from,
                            int* lands_out = nullptr);
 
+public:
+    // THE BLIND RESOLUTION CHOOSER's evaluation (blind mode only; see blindsearch in AIEngine.cpp and
+    // BlindDrawSpellChooser): the rank of this put-back / Ponder resolution a blind search from each
+    // candidate's resulting state values best (ties to the lower rank), or -1 to keep the plan's pin.
+    int BlindChooseDrawSpell(const GameState& state, const StackEntry& entry, const CardDefinition& def,
+                             bool is_pre_combat);
+private:
+
     // Discards up to `count` lands from hand to Land's Edge at `rate` damage each.
     // Used by ActivateLandsEdge for both the real game path and rollout comparisons.
     // `log` is false for throwaway trial copies so their projected pings do not leak
@@ -548,7 +574,8 @@ private:
     // re-solves with that land's mana.
     bool UseSurplusLandAbilities(GameState& state,
                                  const std::function<void(GameState&)>& resolve_stack = {},
-                                 int dig_choice = -1);
+                                 int dig_choice = -1,
+                                 const Action* cycle_seed = nullptr);
 
     // Mechanically perform one dig: cycle the named land from hand (is_sacrifice=false) or
     // {cost},{T},Sacrifice it from the battlefield (is_sacrifice=true), pay the cost, and
@@ -557,6 +584,17 @@ private:
     // performed. The post-draw casts on a committed line are replayed separately by the
     // caller (the DigDraw's nested breakpoint_casts).
     bool PerformDig(GameState& state, const std::string& source, bool is_sacrifice);
+    // The full form (Unpredictable Cyclone phase 3). `scry_pin` = Curator of Mysteries' searched disposition
+    // for this cycle's triggers (-1 = unpinned: ScryKeepOnTop), `fc_pin` = Unpredictable Cyclone's free-cast
+    // choice (kCycFc*; -1 = the provider default) -- a committed line passes its DigDraw record's REALISED
+    // values. With a replacer on the battlefield the draw is REPLACED (the walk, the free cast through
+    // EffectHandler::PushFreeCast, the random-order bottom, the take-and-Remand), and `resolve_stack`, when
+    // given, resolves what it put on the stack. Returns the tri-state (hazard R1: a replaced cycle draws
+    // nothing, so a caller must not read "no draw" as "no dig").
+    DigOutcome PerformDigFull(GameState& state, const std::string& source, bool is_sacrifice,
+                              int scry_pin, int fc_pin,
+                              const std::function<void(GameState&)>& resolve_stack,
+                              std::int32_t pay_split = 0);   // a seed's payment split (ManaPayment.h, Q61)
     // MTG_LANDDRAW_CENSUS's per-dig half (diagnostic only; see LandDrawCensusEndTurn).
     static void LandDrawCensusAfterDig(const GameState& state, bool drew_land, int drawn_num);
 
@@ -637,6 +675,8 @@ struct HumanCommitPreview
     bool                     unpayable = false; // "**": the queued order cannot pay -- the commit
                                                 // applies NOTHING of the segment (never reorders it)
     std::vector<std::string> dropped;           // trial_result: casts the applied plan drops
+    std::vector<std::string> dropped_reasons;   // ...and why, index-aligned (Q37: "X costs {2}{R}; only 1
+                                                // mana available"; "" when the drop site gives none)
     std::vector<std::string> failed;            // trial_result: steps that did not happen
 };
 HumanCommitPreview PrepareHumanCommit(const GameState& state, const TurnSolver::Plan& chosen,

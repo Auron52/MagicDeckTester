@@ -486,7 +486,7 @@ def gate_regression_tiers(deck_path):
     Rows are found via DECK_FILE, so 2HG variants ride along. GT is required because rows added
     without a baseline strand NEW keys for whoever runs that tier next (d41561a0)."""
     cases = ROOT / "test/regression_cases.sh"
-    gt = ROOT / "test/regression_gt.txt"
+    gt = ROOT / os.environ.get("REGRESSION_GT", "test/regression_gt.txt")
     if not cases.exists():
         return Gate("regression_tiers", ERROR, True, "test/regression_cases.sh not found")
     text = cases.read_text()

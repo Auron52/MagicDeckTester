@@ -127,7 +127,14 @@ deterministic game applying the prior `--choices`, then prints the next decision
   `<<<CLAUDE_DECISION>>>` and `<<<END_DECISION>>>` and exits **70** ("more input
   needed"). The JSON has: turn, phase, your life/battlefield/hand/graveyard,
   `library_size`, `upcoming_draws` (next up-to-N draws if `--reveal N`), opponent
-  life/battlefield, and a `plans` array of LEGAL plans each with an `index` + `summary`.
+  life/battlefield, and an indexed `plans` array of enumerated PROPOSALS. The
+  `plan_contract` is `enumerated_proposals`: these preserve the search's optimistic
+  menu and are not certified complete legal lines. A plan's `declared_order_payability`
+  is `known_drops` when `drops` lists casts that its order cannot execute, otherwise
+  `not_verified` (which makes NO payability claim). Do not assume an absent `drops`
+  means affordable; single-cast ritual proposals can be unpayable too. Check costs
+  against the actual board; use `--validate-line` for an exact queued line. Direct
+  `--choices` selects a proposal and may execute only its playable subset.
 - Choose exactly ONE plan index, **append** it to the CSV, re-invoke with the FULL
   accumulated CSV (e.g. ``→`"2"`→`"2,0"`→`"2,0,1"`…). Never drop earlier choices.
 - `-1` passes (cast nothing). When you see `<<<CLAUDE_RESULT>>> { "win_turn": N … }`

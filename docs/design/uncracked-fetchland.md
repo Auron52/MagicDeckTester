@@ -123,3 +123,13 @@ that way the risky change lands on a base whose mana is known good.
 * [[auto-resolved-target-picks]] — same "can the engine express the line?" lens.
 * The land tie-break (`f21b046`) — a fetch produces nothing directly, so any
   colour-aware land ranker must look *through* `FetchCandidates`.
+
+## Second motivation: Unpredictable Cyclone (2026-10-27)
+
+USER, 2026-10-27, while analyzing `decks/Unpredictable Cyclone/`: *"Technically we should probably support
+leaving it as a fetch land or cracking them later as a future item. It isn't often super relevant, so it can
+remain deferred for the time being."* That deck sets up the top of its library (Brainstorm / Brainsurge /
+Ponder / Long-Term Plans / Curator scry) before cycling into Unpredictable Cyclone, so the crack's shuffle is a
+real decision there: crack before the top-setters (keep the arrangement), or after a Brainstorm to shuffle away
+the two cards it put back. A Scalding Tarn held on the battlefield across turns, then cracked as a shuffle
+outlet, is also inexpressible today. Still deferred.

@@ -1,0 +1,108 @@
+{
+ "deck": "angels",
+ "_doc": "artifact refresh verdicts -- scripts/artifact_queue.py (LEDGER_DIR)",
+ "entries": [
+  {
+   "run_id": "angels-artifact-queue-d7d6a5-20261025T163337",
+   "kind": "mulligan",
+   "verdict": "adopted",
+   "ident": "4a2a31f45e9ee143981323d75ba647ad91ba3575",
+   "frozen": "60f525f1785cc0cd127873d4196a858f9ed317f2",
+   "src_tree": "aba41d81c1291fb08dd08c8c0f391491e2bfeac2",
+   "date": "2026-10-25",
+   "worker": "artifact-queue-d7d6a5",
+   "delta": -0.002969,
+   "settings": {
+    "recipe": "complete",
+    "env": {},
+    "depth": null,
+    "budget": null
+   },
+   "detail": "mulligan: ADOPTED (new-vs-old -0.002969 t, recipe complete)"
+  },
+  {
+   "run_id": "angels-artifact-queue-d7d6a5-20261025T163337",
+   "kind": "valueleaf",
+   "verdict": "kept-incumbent",
+   "ident": "em:2038500e481e3f714a03",
+   "frozen": "60f525f1785cc0cd127873d4196a858f9ed317f2",
+   "src_tree": "aba41d81c1291fb08dd08c8c0f391491e2bfeac2",
+   "date": "2026-10-25",
+   "worker": "artifact-queue-d7d6a5",
+   "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_angels/DECISIONS.txt)",
+   "decisions": [
+    "    VERDICT arm=d6b30 adopt=1 delta=-0.00013 t=-1.00 cost=0.905x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=cheaper (0.90x) and quality not notably worse (-0.00013)",
+    "    VERDICT arm=d6b40 adopt=1 delta=-0.00013 t=-1.00 cost=0.906x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=cheaper (0.91x) and quality not notably worse (-0.00013)",
+    "    PICK arm=d6b20 why=the cheapest of 3 passing arm(s) (0.90x vs live, delta +0.00000)",
+    "    next: commit it with the deck's smoke + regression GT re-accepted (it changes play).",
+    "",
+    "=== 2026-10-25T17:26:22  PHASE E.6: no allowance for angels -- no ladder escalations in 1200 games (single-path or trust-dominated); fleet default R = 0"
+   ]
+  },
+  {
+   "run_id": "angels-artifact-queue-tool-647f24-20261028T190602",
+   "kind": "mulligan",
+   "verdict": "adopted",
+   "ident": "43abe76ffe72cfca7816ed53b15137592e10cbb2",
+   "frozen": "1db4218a98b700dd919199b8a32142664e2470de",
+   "src_tree": "6f0ca7ae7b6fd9565a7b85d7fba5b6e84a88b6dc",
+   "date": "2026-10-28",
+   "worker": "artifact-queue-tool-647f24",
+   "delta": -0.000792,
+   "cost": [
+    0.998590803903881,
+    0.0014244993186229684,
+    96
+   ],
+   "settings": {
+    "recipe": "complete",
+    "env": {},
+    "depth": null,
+    "budget": null
+   },
+   "detail": "mulligan: ADOPTED (new-vs-old -0.000792 t, cost 0.999x (se 0.001, 96 seeds), recipe complete)"
+  },
+  {
+   "run_id": "angels-artifact-queue-tool-647f24-20261028T201937",
+   "kind": "mulligan",
+   "verdict": "adopted",
+   "ident": "fb8b9cc7035c1be4389ed15320219c2a0c3548b3",
+   "frozen": "78694cdf93629aa41d9c9cdc8fec57a91ef9946a",
+   "src_tree": "6f0ca7ae7b6fd9565a7b85d7fba5b6e84a88b6dc",
+   "date": "2026-10-28",
+   "worker": "artifact-queue-tool-647f24",
+   "delta": 0.0,
+   "cost": [
+    1.0,
+    0.0,
+    96
+   ],
+   "settings": {
+    "recipe": "complete",
+    "env": {},
+    "depth": null,
+    "budget": null
+   },
+   "detail": "mulligan: ADOPTED (new-vs-old 0.0 t, cost 1.000x (se 0.000, 96 seeds), recipe complete)"
+  },
+  {
+   "run_id": "angels-artifact-queue-tool-647f24-20261031T161828",
+   "kind": "valueleaf",
+   "verdict": "kept-incumbent",
+   "ident": "em:2038500e481e3f714a03",
+   "frozen": "c18b5e99fe330f78207c39c7027ae5489928fc76",
+   "src_tree": "89b146d10406063213d9abe41e1cfdf1a616c021",
+   "date": "2026-10-31",
+   "worker": "artifact-queue-tool-647f24",
+   "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_angels/DECISIONS.txt)",
+   "decisions": [
+    "    VERDICT arm=d7b20 adopt=0 delta=+0.00000 t=+0.00 cost=0.988x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=byte-identical to the baseline: the arm is not engaging",
+    "    VERDICT arm=d7b30 adopt=0 delta=-0.00013 t=-1.00 cost=1.022x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.02x) with quality better (-0.00013) -- a TRADE, the user's call",
+    "    VERDICT arm=d7b40 adopt=0 delta=-0.00013 t=-1.00 cost=1.013x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.01x) with quality better (-0.00013) -- a TRADE, the user's call",
+    "    PICK arm=none why=no candidate is cheaper than live with quality not notably worse",
+    "",
+    "=== 2026-10-31T16:24:43  PHASE E.6: no allowance for angels -- no ladder escalations in 1200 games (single-path or trust-dominated); fleet default R = 0"
+   ]
+  }
+ ]
+}

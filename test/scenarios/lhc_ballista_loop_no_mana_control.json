@@ -1,0 +1,27 @@
+{
+  "deck": "decks/LifegainHeliodCombo/LifegainHeliodCombo.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 200,
+  "max_turns": 4,
+  "lands_played_this_turn": 1,
+  "_comment": "Control for lhc_ballista_loop_on_board: no mana for the grant, so the loop is not live; the 2 pings alone (the post-combat finish only fires when lethal) cannot kill 20. Pins that the loop is gated on its real cost.",
+  "battlefield": [
+    {
+      "name": "Heliod, Sun-Crowned"
+    },
+    {
+      "name": "Walking Ballista",
+      "sick": true,
+      "plus_counters": 2
+    }
+  ],
+  "hand": [],
+  "expect_no_win": true,
+  "resume_at": "main1"
+}

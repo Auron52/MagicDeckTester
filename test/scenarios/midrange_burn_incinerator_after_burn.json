@@ -1,0 +1,29 @@
+{
+  "deck": "decks/Midrange Burn/Midrange Burn.cod",
+  "turn": 3,
+  "resume_at": "main1",
+  "active_life": 20,
+  "opponent_life": 12,
+  "library_filler": "Swords to Plowshares",
+  "library_size": 20,
+  "depth": 5,
+  "budget_ms": 100,
+  "max_turns": 4,
+  "battlefield": [
+    {
+      "name": "Mountain"
+    },
+    {
+      "name": "Mountain"
+    },
+    {
+      "name": "Mountain"
+    }
+  ],
+  "hand": [
+    "Lightning Bolt",
+    "Lightning Bolt",
+    "Chandra's Incinerator"
+  ],
+  "expect_win_turn": 4
+}

@@ -1,0 +1,30 @@
+{
+ "deck": "fungus",
+ "_doc": "artifact refresh verdicts -- scripts/artifact_queue.py (LEDGER_DIR)",
+ "entries": [
+  {
+   "run_id": "fungus-artifact-queue-tool-647f24-20261030T004541",
+   "kind": "mulligan",
+   "verdict": "kept-incumbent",
+   "ident": "1988994f10c434a5873895f973ad991070c781a0",
+   "frozen": "8f303fddc97f7f4afb2404414d3bdad1df8256b1",
+   "src_tree": "da525a17659a9ffd767c0bfd84eb77d74a38a284",
+   "date": "2026-10-30",
+   "worker": "artifact-queue-tool-647f24",
+   "delta": 0.000698,
+   "cost": [
+    1.0129821334261442,
+    0.002648167738825743,
+    96
+   ],
+   "trade": false,
+   "settings": {
+    "recipe": "complete",
+    "env": {},
+    "depth": null,
+    "budget": null
+   },
+   "detail": "mulligan: KEPT INCUMBENT -- a fresh table at no-lower settings was not better (new-vs-old 0.000698 t, cost 1.013x (se 0.003, 96 seeds)); incumbent restored"
+  }
+ ]
+}

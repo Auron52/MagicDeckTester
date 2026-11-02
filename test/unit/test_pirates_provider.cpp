@@ -101,7 +101,7 @@ TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pir
     const std::map<std::string, std::string> expected = {
         {"Angels", "Angels"},                 {"Anti-Lifegain", "AntiLifegain"},
         {"Auras", "Auras"},                   {"BreachingDragonstorm", "BreachingDragonstorm"},
-        {"Creature Giving", "CreatureGiving"}, {"CritterLifegain", "CritterLifegain"},
+        {"Creature Giving", "CreatureGiving"}, {"CritterLifegain", "CritterLifegain"}, {"LifegainHeliodCombo", "LifegainHeliodCombo"},
         {"Dragons", "Dragons"},               {"Dragonstorm", "Dragonstorm"},
         {"EldraziDisplacerFlicker", "EldraziFlicker"}, {"FiveColour", "FiveColour"},
         {"Fluctuator", "Fluctuator"},         {"Fungus", "Fungus"},
@@ -118,7 +118,9 @@ TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pir
         {"WhiteKnights", "WhiteKnights"},
         // Unprofiled lists (no .profile.json): pinned from a direct --batch probe of the pre-change
         // binary so a future signature cannot capture them unnoticed either.
-        {"Mill", "AntiLifegain"},             {"Unpredictable Cyclone", "AntiLifegain"},
+        // Unpredictable Cyclone: CycloneProvider since phase 3 (2026-10-27) -- the Cyclone / Curator entries
+        // carry its signature params; it rode AntiLifegain (Scalding Tarn's fetch_land_types) before.
+        {"Mill", "AntiLifegain"},             {"Unpredictable Cyclone", "Cyclone"},
         // THE ONE CHANGE: was AntiLifegain (Forerunner of the Coalition's tutor_to_top).
         {"Pirates", "Pirates"},
         // Prevent Damage (onboarded 2026-09-27): routed at the TOP by its own signature (Tamanoa /
@@ -193,6 +195,9 @@ TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pir
         // ride AntiLifegainProvider (Flamekin Harbinger's tutor_to_top) or VialProvider (Aether Vial);
         // LandfallElementalsProvider is an empty DeckProvider derivation.
         {"LandfallElementals", "LandfallElementals"},
+        // Midrange Burn is intentionally separate from the low-curve Burn provider:
+        // Chandra and Incinerator need their own cast/legend ordering.
+        {"Midrange Burn", "MidrangeBurn"},
     };
 
     namespace fs = std::filesystem;

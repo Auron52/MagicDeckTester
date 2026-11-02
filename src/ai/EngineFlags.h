@@ -306,6 +306,23 @@ inline bool LineFloatUnseenGuardOn()
     return LineFloatTapFirstOn() && heurarm::Flag(heurarm::LINE_FLOAT_UNSEEN_GUARD, env_on);
 }
 
+// MTG_LINE_FLOAT_COVERED (DEFAULT ON since 2026-10-28; =0 -> the rung's colour test always applies) -- the
+// LINE_FLOAT_TAP_FIRST rung's colour test refuses a source that makes a colour the line still owes, because a
+// later pip may need it for that colour. When the reserve left after this payment's own pips already covers
+// every coloured pip the line owes, no later pip needs any source for its colour and the test refuses for
+// nothing: the source paying the generic leaves the named line exactly as payable with the owed float kept,
+// where the plain drain spends float the line owes. NivMizzetCombo seed 1180522 gi521 T2 (with
+// MTG_PAY_REFINE): Ponder off Saprazzan Skerry floats {U}; Sol Ring's {1} spent it with Cascade Bluffs
+// untapped -- Bluffs makes {U} only by filtering a {U}/{R}, and that {U} was the only feed -- so Tandem
+// Lookout's {U} had nothing and the T3 kill went (T4 at d8 b0). Held out (seed 1210001, 48,020 paired games):
+// 0 slower / 0 faster alone (decision streams move in Dragonstorm and EDF only); with MTG_PAY_REFINE its only
+// turn change is gi521 recovering. Inert unless LineFloatTapFirstOn().
+inline bool LineFloatCoveredOn()
+{
+    static const bool env_on = EnvOn("MTG_LINE_FLOAT_COVERED", true);
+    return LineFloatTapFirstOn() && heurarm::Flag(heurarm::LINE_FLOAT_COVERED, env_on);
+}
+
 // MTG_LINE_SPARE_GENERIC_FIRST (DEFAULT ON; =0 disables) -- the shared payer's line-aware generic tap
 // (produce_impl in TapForCostSharedOnce, ManaPayment.cpp): a colour-short line's generic pip taps a SPARE
 // source first. One payer for executor, rollout and the payability walks -> lockstep by construction.
@@ -399,6 +416,162 @@ inline bool PayEnergyLastOn()
 {
     static const bool env_on = EnvOn("MTG_PAY_ENERGY_LAST", true);
     return PayPainLastOn() && heurarm::Flag(heurarm::PAY_ENERGY_LAST, env_on);
+}
+
+// MTG_PAINLESS_AURA_PIP (2026-10-27; DEFAULT ON, =0 -> the historical coloured tap): a coloured pip off a
+// painland whose land Aura already pays it takes the painless {C} face -- see PainlessAuraPipColor
+// (ManaPayment.cpp) for the rule and the EDF numbers. One reader for the shared payer.
+inline bool PainlessAuraPipOn()
+{
+    static const bool env_on = EnvOn("MTG_PAINLESS_AURA_PIP", true);
+    return heurarm::Flag(heurarm::PAINLESS_AURA_PIP, env_on);
+}
+
+// MTG_ENERGY_AURA_PIP (2026-10-31; DEFAULT ON, =0 -> the energy-paid coloured tap) -- the PainlessAuraPipColor
+// rule for an ENERGY-paid colour (Aether Hub): a coloured pip off a Hub whose land Aura already pays it taps the
+// free {C} face, and the {E} is kept. The deck owner's report, EDF viewer seed 3432 T3: Kitchen + Aether Hub
+// carrying Wild Growth, {E} 1, "land=Kitchen; cast=Wild Growth -> Kitchen": the host is held while the Aura
+// pays, the payer took the Hub's ANY-COLOUR mode for the {G} (energy 1 -> 0) and floated Wild Growth's {G},
+// where the Hub's free {C} plus the same {G} pays it and keeps the energy the T4 go-off needs. Two exact
+// cases (ManaPayment.cpp PainlessAuraPipColor): the leftover is spent on this payment's generic (the
+// painland rule's own test), or it is left floating while the line binding this payment owes no further pip
+// of that colour -- then the floating {C} pays everything the floating {G} could for the rest of the line
+// (generic, and a {C} pip the {G} cannot), and the phase ends with the float either way. Not for a line that
+// casts a breakpoint opener (its continuation re-plans on the float) nor outside a line. One reader.
+inline bool EnergyAuraPipOn()
+{
+    static const bool env_on = EnvOn("MTG_ENERGY_AURA_PIP", true);
+    return heurarm::Flag(heurarm::ENERGY_AURA_PIP, env_on);
+}
+
+// MTG_PAY_SHRINK (2026-10-27; DEFAULT ON, =0 -> the backtracker's first covering tap set) -- the per-cast
+// payer's give-back: when its backtracker fallback tapped more sources than the bill has mana points,
+// re-solve with each one held back (most flexible first) and keep it untapped if the bill still pays from
+// the rest of that payment's taps (ManaPayment.cpp, TapForCostSharedOnceImpl).
+inline bool PayShrinkOn()
+{
+    static const bool env_on = EnvOn("MTG_PAY_SHRINK", true);
+    return heurarm::Flag(heurarm::PAY_SHRINK, env_on);
+}
+
+// MTG_PREPAY_COLOURS (2026-10-27; DEFAULT ON, =0 -> the flat joint bill and the any-colour decline): the
+// whole-turn prepay keeps the casts' hybrid pips in its joint bill and pins the any-colour units of its
+// pool to the colours the bill needs -- see PrepayColoursFit (TurnSolver.cpp).
+inline bool PrepayColoursOn()
+{
+    static const bool env_on = EnvOn("MTG_PREPAY_COLOURS", true);
+    return heurarm::Flag(heurarm::PREPAY_COLOURS, env_on);
+}
+
+// MTG_PREPAY_AURA_HOST (2026-10-27; DEFAULT ON, =0 -> the host is an ordinary source of the joint solve):
+// the whole-turn prepay holds the untapped host of every land Aura the batch casts out of its solve --
+// see PrepayAuraHostHold (TurnSolver.cpp). The per-cast payer's twin is AIEngine's RESERVE THE AURA'S
+// OWN HOST.
+inline bool PrepayAuraHostOn()
+{
+    static const bool env_on = EnvOn("MTG_PREPAY_AURA_HOST", true);
+    return heurarm::Flag(heurarm::PREPAY_AURA_HOST, env_on);
+}
+
+// MTG_PREPAY_AURA_STAGE (2026-10-27; DEFAULT ON, =0 -> the hold's decline): a prepay the held land-Aura hosts
+// leave unpayable is tried STAGED (an apply pre-loads the held Auras' bills, paid without the hosts, when the
+// rest is payable with host + bonus; the rest then pays per cast) before it declines -- see THE LAND AURA
+// STAGED SOLVE (TurnSolver.cpp).
+inline bool PrepayAuraStageOn()
+{
+    static const bool env_on = EnvOn("MTG_PREPAY_AURA_STAGE", true);
+    return heurarm::Flag(heurarm::PREPAY_AURA_STAGE, env_on);
+}
+
+// MTG_PREPAY_AURA_UNHELD (2026-10-27; with MTG_PREPAY_AURA_STAGE): a batch neither the hold nor the staged
+// split pays is retried with the hosts as ordinary sources before it declines. DEFAULT OFF (USER decision owed):
+// it pays batches the per-cast walk strands (EDF census: APPLY-DROP 304 -> 225 over 142 games), but the host it
+// taps loses its Aura's bonus, and EDF held-out seed 1010001 gi2852 is T3 -> T4 even at d8 b0 (the search's
+// rollouts pay through the same retry, so the Conservatory line it would win with reads worse on turn 1).
+inline bool PrepayAuraUnheldOn()
+{
+    static const bool env_on = EnvOn("MTG_PREPAY_AURA_UNHELD");
+    return heurarm::Flag(heurarm::PREPAY_AURA_UNHELD, env_on);
+}
+
+// MTG_SCARCE_COLOR_MASK (DEFAULT OFF; heurarm SCARCE_COLOR_MASK since 2026-10-28): the per-cast payer's held first
+// attempt keeps the line's scarce colour providers up -- see ScarceColorHoldMask (ManaPayment.cpp). Held-out A/B (seed
+// 1080001, 39 decks, 20,910 paired games): 3 slower / 0 faster (EDF gi103, Hinata gi223, Snow gi239), work +0.18%
+// (EDF +1.29%) -- not adopted; the losses are owed a root cause.
+inline bool ScarceColorMaskOn()
+{
+    static const bool env_on = EnvOn("MTG_SCARCE_COLOR_MASK");
+    return heurarm::Flag(heurarm::SCARCE_COLOR_MASK, env_on);
+}
+
+// MTG_AUTO_LINE_GENERIC (2026-10-28; DEFAULT ON, =0 -> WUBRG outside human play): the three line-aware generic-pip
+// orders (SpendFloatingTowardCost's surplus-first drain, ConsumeFloatingAny, LineDemandAnyPipColor -- SpellEffects.h)
+// outside human play too, for lines that name everything they will cast. Read through LineGenericOrderLive
+// (SpellEffects.h), which adds human play. Held-out A/B (seed 1080001, 39 decks at play settings, 20,910 paired
+// games): 0 slower / 1 faster (Dragons), work +0.024%.
+inline bool AutoLineGenericOn()
+{
+    static const bool env_on = EnvOn("MTG_AUTO_LINE_GENERIC", true);
+    return heurarm::Flag(heurarm::AUTO_LINE_GENERIC, env_on);
+}
+
+// MTG_PAY_REFINE (2026-10-28; DEFAULT ON since 2026-10-29, the USER's adoption; =0 -> the payment as made): after an
+// outermost payment that cost life, energy or a haste-tagged {C} on a noncreature bill, or floated a surplus off two
+// or more taps, the payer asks the mana oracle for the cheapest payment of the same bill out of the same taps that
+// dominates it (ManaOracle.h RefinePayment) and makes that one instead. Shared payer: search, executor and human
+// auto-tap alike. Held out on every seed since MTG_LINE_FLOAT_COVERED, every slower game recovers at d8 b0 or is
+// clear clairvoyance (docs/design/mana-completeness-oracle.md section 13.3).
+inline bool PayRefineOn()
+{
+    static const bool env_on = EnvOn("MTG_PAY_REFINE", true);
+    return heurarm::Flag(heurarm::PAY_REFINE, env_on);
+}
+
+// MTG_REAL_PAY_SCRIPT (2026-10-28; DEFAULT OFF pending its A/B, =1 -> on): real play pays the chosen plan with the
+// mana oracle's realisation when the engine's is dominated at the line level (ManaOracle.h PlanPaymentScript /
+// RealPayScope; AIEngine::TakeTurn). Its first form also paid DROPS and was 17 slower / 0 faster (seed 1130001).
+inline bool RealPayScriptOn()
+{
+    static const bool env_on = EnvOn("MTG_REAL_PAY_SCRIPT", false);
+    return heurarm::Flag(heurarm::REAL_PAY_SCRIPT, env_on);
+}
+
+// MTG_REAL_PAY_ATTACK_PIN (2026-10-31; DEFAULT ON, =0 reverts; inert unless MTG_REAL_PAY_SCRIPT is on): the scripted
+// payment keeps the scored COMBAT. The script pays the same line on a dominating tap set, so the board reaching combat
+// has MORE untapped sources than the board the search scored -- and an attack rule that reads untapped mana re-decides
+// the combat there (FiveColourProvider::ShouldAttackWith holds Deathrite Shaman whenever a hand card is castable).
+// FiveColour s1130288 gi287 T5: the script left Breeding Pool untapped, Deathrite + Pool can cast Bloom Tender, so the
+// hold kept Deathrite home; the line the search scored at 8 life realised 9, and T6's attack was one short (T6 -> T7).
+// Under this lever the executor declares exactly the attackers the search's apply board declared (ManaOracle
+// PlanPaymentScript's attack_pin; AIEngine::DeclareAttackers), so the realised combat is the scored one and the saved
+// sources are pure surplus for the second main.
+inline bool RealPayAttackPinOn()
+{
+    static const bool env_on = EnvOn("MTG_REAL_PAY_ATTACK_PIN", true);
+    return heurarm::Flag(heurarm::REAL_PAY_ATTACK_PIN, env_on);
+}
+
+// MTG_PAY_REFINE_LAZY / MTG_PAY_REFINE_MEMO (2026-10-28; DEFAULT ON): the refine's cost, not its choice -- the
+// supersets that cannot win are not verified, and a repeated refine is read back (ManaOracle.cpp RefinePayment).
+inline bool PayRefineLazyOn()
+{
+    static const bool env_on = EnvOn("MTG_PAY_REFINE_LAZY", true);
+    return heurarm::Flag(heurarm::PAY_REFINE_LAZY, env_on);
+}
+inline bool PayRefineMemoOn()
+{
+    static const bool env_on = EnvOn("MTG_PAY_REFINE_MEMO", true);
+    return heurarm::Flag(heurarm::PAY_REFINE_MEMO, env_on);
+}
+inline bool PayRefineWildOutOn()
+{
+    static const bool env_on = EnvOn("MTG_PAY_REFINE_WILD_OUT", true);
+    return heurarm::Flag(heurarm::PAY_REFINE_WILD_OUT, env_on);
+}
+inline bool OracleFaceFoldOn()
+{
+    static const bool env_on = EnvOn("MTG_ORACLE_FACE_FOLD", true);
+    return heurarm::Flag(heurarm::ORACLE_FACE_FOLD, env_on);
 }
 
 // MTG_PAY_NARROW_RESTRICTED_FIRST (Vampires sweep L, 2026-10-18; DEFAULT ON, =0 -> battlefield order) --
@@ -1055,6 +1228,21 @@ inline bool SeqEtbUntapEnabled()
     return heurarm::Flag(heurarm::EDF_SEQ_ETB, env_on);
 }
 
+// MTG_EF_SCALAR_REFUND (2026-10-31; DEFAULT OFF pending the USER, =1 -> on): the sequential rescue's scalar ceiling
+// (`ef-scalar`, TurnSolver.cpp exec_feas_rescues) counts each same-subset ETB untapper's refund -- EtbUntapLandsCredit
+// plus the subset's largest land-Aura bonuses -- as supply, like the land Aura's own bonus. An upper bound, so it only
+// lets more subsets reach the walk that decides them (exact: every plan it admits the walk pays). OFF because it
+// failed the adoption bar: held out (seed 1640001, 2,000 EDF games) its one slower game, gi552 T3 -> T4, does not
+// recover at --depth 8 --budget-ms 0 -- with only this lever on, the T2 search rates {Wild Growth -> Shivan Gorge,
+// Fertile Ground -> Kitchen} a T4 win in-tree although the T3 root finds the kill from that board (the larger menu
+// exposes a search defect; docs/design/mana-completeness-oracle.md 13.7). Only EldraziDisplacerFlicker holds an
+// etb_untap_lands card.
+inline bool EfScalarRefundOn()
+{
+    static const bool env_on = EnvOn("MTG_EF_SCALAR_REFUND", false);
+    return heurarm::Flag(heurarm::EF_SCALAR_REFUND, env_on);
+}
+
 // MTG_EDF_AURA_RANGE -- part 2 of the USER-approved EldraziDisplacerFlicker cast-order package
 // (2026-10-14; docs/design/edf-cast-order-2026-10-14.md). DEFAULT ON; =0 restores the fixed land-Aura
 // slots byte-identically.
@@ -1356,9 +1544,12 @@ inline bool DorkAtkSearchEnabled()
 }
 
 // Per-thread combat-variant override for the searched dork attack/hold. -1 = natural (the
-// heuristic hold decides); 1 = RELEASE (held dorks attack). Set ONLY (a) by the FSLineWin
-// branch around the alternate SimulateCombat, and (b) by the executor's DeclareAttackers when
-// the committed line pinned a release -- never ambient, so every other combat is byte-identical.
+// heuristic hold decides); 1 = RELEASE (held dorks attack); 0 = HOLD (the hold direction); 3 =
+// RELEASE the damage dorks an archetype's ShouldAttackWith keeps home (MTG_DORK_ATK_PROVIDER_HOLD).
+// Set ONLY (a) by the FSLineWin branch around the alternate SimulateCombat, (b) by the executor's
+// DeclareAttackers when the committed line pinned a release, and (c) by PlanPaymentScript reading
+// the scored declaration under the plan's variant (MTG_REAL_PAY_ATTACK_PIN) -- never ambient, so
+// every other combat is byte-identical.
 inline thread_local int g_dork_atk_override = -1;
 
 // HOLD DIRECTION of the searched dork attack/hold (default ON inside MTG_DORK_ATK_SEARCH; =0
@@ -1372,6 +1563,23 @@ inline bool DorkAtkHoldDirEnabled()
 {
     static const bool v = EnvOn("MTG_DORK_ATK_HOLD_DIR", true);
     return v;
+}
+
+// MTG_DORK_ATK_PROVIDER_HOLD (heurarm DORK_ATK_PROVIDER_HOLD; DEFAULT OFF pending its A/B, =1 on) -- the RELEASE
+// direction for the OTHER greedy dork hold. DorkAtkContestedKind contested only the collapsed-main
+// tower's victims (HoldManaSourceForCollapsedMain, 0-power dorks by construction); a dork that deals
+// damage but is held by an ARCHETYPE's ShouldAttackWith "for its mana" (FiveColourProvider: Deathrite
+// Shaman / Bloom Tender stay home whenever any hand card is castable off the full pool) was never
+// contested, so the search never priced its swing and the hold was a greedy pick inside the window.
+// Measured case (docs/design/mana-completeness-oracle.md 13.2): FiveColour s1130288 gi287 under
+// MTG_REAL_PAY_SCRIPT -- the script's dominating T5 payment leaves Breeding Pool untapped, the hold
+// then keeps Deathrite home on T6, and the attack is exactly one damage short (T6 -> T7, not recovered
+// at d8 b0). Under this lever such a dork is contested (kind 1) and the release variant (override 1)
+// sends it in; the executor's pin replays the choice. Applies at every budget.
+inline bool DorkAtkProviderHoldEnabled()
+{
+    static const bool env_on = EnvOn("MTG_DORK_ATK_PROVIDER_HOLD", false);
+    return heurarm::Flag(heurarm::DORK_ATK_PROVIDER_HOLD, env_on);
 }
 
 // MTG_ACQ_RESOLVE=1 -- measurement lever (DEFAULT OFF until the adoption A/B is accepted):

@@ -1,0 +1,14 @@
+{
+ "value_play": {
+  "ladder": "single",
+  "leaf": "none",
+  "alpha": "relaxed",
+  "mull_gen_depth": 1,
+  "mull_gen_budget_ms": 1,
+  "expected_buckets": 14,
+  "target_depth": 6,
+  "budget_ms": 20,
+  "enabled": true,
+  "note": "E.7 play-setting stage 2026-10-29: nlfit_d6b20 adopted over the built-in default (no enabled block) (d5/20); the phase-E shape nlfit (logs/vlq_lifegainheliodcombo/LifegainHeliodCombo.value.NLFIT.json) REPLACES the live sidecar; the cheapest of 15 passing arm(s) (0.77x vs live, delta +0.00025)"
+ }
+}

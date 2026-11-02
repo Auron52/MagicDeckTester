@@ -136,9 +136,17 @@ enum class UnprunedGate
                   // instead of DecisionProvider::LandSearchPickWidth's leading entries (Landfall's
                   // colour-sequence rule prunes a basic search to ONE pick, USER 2026-10-16). Human
                   // play never prunes: the human answers the tutor_etb prompts.
+    CounterPing,  // Walking Ballista's counter pings (2026-10-27): the per-target ping COUNT and the
+                  // face-ping offer opened to the generic full set instead of the deck provider's
+                  // CounterPingCounts narrowing (LifegainHeliodComboProvider, MTG_LHC_PING_PRUNE). The
+                  // 33rd gate: the masks were widened to 64 bits for it. Human play always sees every ping.
+    FixedBurnTarget, // fixed direct-damage targets/pairs: full rules-legal axis
+    FireblastPair,   // Midrange Burn: restore every legal Mountain pair for Fireblast's alternative cost
+    FireblastPaid,   // Midrange Burn: restore the printed-cost cast below its optimistic mana ceiling
+    LavamancerFuel,  // Midrange Burn: restore every graveyard fuel pair for Grim Lavamancer
     _Count
 };
-static_assert(static_cast<int>(UnprunedGate::_Count) <= 32, "UnprunedGate masks are 32-bit");
+static_assert(static_cast<int>(UnprunedGate::_Count) <= 64, "UnprunedGate masks are 64-bit");
 
 // True if `g` should be un-pruned for this run: the global MTG_UNPRUNED opens all gates,
 // else MTG_UNPRUNE=<list> opens the named subset. Same human-play suppression as the no-arg
@@ -161,7 +169,7 @@ bool UseValueModel();
 // matching cards / rituals / dig source), so opening it provably changes nothing -- skip sweeping it.
 // The mask accumulates across all threads/games since SetGateProbe(true). GateName maps enum->name.
 void        SetGateProbe(bool on);
-uint32_t    QueriedGatesMask();
+std::uint64_t QueriedGatesMask();
 const char* GateName(UnprunedGate g);
 // Is the probe armed RIGHT NOW? Read by anything that would otherwise skip a DecisionUnpruned
 // callsite as provably-dead work: the probe measures REACHABILITY, so a skipped query would show
@@ -235,6 +243,8 @@ double CastFactorFor(const Census& c, const CardDefinition& d, const std::vector
 class GenericProvider : public DecisionProvider
 {
 public:
+    bool TakeFreeCast(const GameState&, int, const CardDefinition&) const override;
+
     const char* Name() const override { return "Generic"; }
     std::vector<std::string> TutorCandidates(const GameState&, int, const CardParams&) const override;
     std::vector<std::string> FetchCandidates(const GameState&, int, const CardParams&) const override;
@@ -572,6 +582,7 @@ public:
     // her Angel-only {W} but not without it; admits only such Angel casts (two are never payable: her
     // one {W} can fund one of them, and neither is payable without it). Everything else stays main 1.
     bool RestrictedSecondMainLive(const GameState& s) const override;
+    bool MayOpenRestrictedSecondMain() const override { return true; }
     bool RestrictedSecondMainAdmits(const GameState& s, const Action& a) const override;
     // PROPOSED (MTG_ANGELS_GIADA_SEARCH, default OFF -- the order is the USER's): when Giada and an Angel
     // the USER's order puts ahead of her (Righteous Valkyrie, Archangel of Thune, Lyra AoD) are cast in
@@ -687,6 +698,7 @@ public:
     // that TapForTokenPay activation. The main-1 activation stays enumerated (no main-1 prune).
     // Implementation + soundness argument: DecisionProviders.cpp, "ColossusHammerProvider".
     bool RestrictedSecondMainLive(const GameState& s) const override;
+    bool MayOpenRestrictedSecondMain() const override { return true; }
     bool RestrictedSecondMainAdmits(const GameState& s, const Action& a) const override;
     // PATH TO EXILE: the autonomous search offers only the SELF-target casts (exile our own creature,
     // fetch a tapped basic); the opponent-target cast is refused -- it exiles a spawn that never
@@ -1258,6 +1270,34 @@ public:
     bool Main2CastAllowed(const GameState& s, const Action& a) const override;
 };
 
+// Midrange Burn uses the common baseline: the original Burn list's low-curve land
+// banking and main-2 restrictions are invalid for Chandra and Incinerator.
+// No Burn-specific judgement hooks are inherited; future narrowing belongs here.
+class MidrangeBurnProvider : public DeckProvider
+{
+public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed, "NOT ASSESSED. Bound direct burn, suspend, planeswalker "
+        "abilities, Grim Lavamancer activations and combat before claiming a winless turn" }; }
+    const char* Name() const override { return "MidrangeBurn"; }
+    bool SearchesFixedBurnTargets() const override { return true; }
+    bool PrunesOwnFixedBurnTargets() const override;
+    bool PrunesPassiveBurnTargets() const override;
+    void FireblastMountainPairCandidates(
+        const GameState& s, std::vector<std::pair<int, int>>& pairs) const override;
+    void GraveyardDamageFuelCandidates(
+        const GameState& s, std::vector<std::string>& pairs) const override;
+    bool OffersPaidFireblastCast(const GameState& s) const override;
+    std::vector<int> CleanupDiscardCandidates(
+        const GameState& s, const std::vector<std::string>* required_pieces) const override;
+    std::vector<int> CleanupDiscardShedOrder(
+        const GameState& s, const std::vector<std::string>* required_pieces) const override;
+    bool CleanupDiscardShedStable() const override;
+    int CastOrderRank(const GameState&, const CardDefinition&) const override;
+    bool OrderOpaqueCastsByRank() const override;
+    int LegendKeepIndex(const GameState&, int, const std::vector<int>&) const override;
+};
+
 // Hinata, Dawn-Crowned (UR Crackle / cost-reduction combo). Its spells slash their cost by
 // Hinata's "{1} less per target", which the deck maximises by targeting extra/own/opponent
 // permanents -- so its goldfish opponent must present real targets. Layer 2 grows this provider
@@ -1287,7 +1327,6 @@ public:
     bool CastOrderingCandidates(const GameState& s, const std::vector<Action>& plan_actions,
                                 const std::vector<Action>& reorder,
                                 std::vector<std::vector<int>>& out) const override;
-    bool OpponentPlaysLands() const override { return true; }
     // M2 FIXPOINT OPT-IN, mode 2 (ADOPTED 2026-09-06; USER approved the per-deck opt-in and
     // the 18-deck sweep found hinata the only converter). Evidence, both tiers + quiet box:
     // train smoke d0 -0.012/1000g; held-out regression net -12 game-turns (d0 -0.010, d3/d5
@@ -1776,6 +1815,19 @@ public:
     // defer the d0 drop when a hand-land tutor is payable from the mana already on board, so
     // the fetched Orchard can be the drop. Gated with MTG_CG_ORDER.
     bool LandDropAfterHandLandTutor(const GameState&, int) const override;
+
+    // THE SEARCHED DEFENSE OF THE HEART MENU's folds (MTG_DOTH_AXIS / MTG_DOTH_FOLDS), proven card by card for
+    // THIS pool against the passive goldfish opponent (docs/design/searched-doth-put.md, "The folds"). A
+    // creature outside the proven pool gets no fold at all, so adding a creature to the list can only widen
+    // the menu, never make a line unfindable.
+    //   COMMUTE: of the pool, only Hunted Phantasm (ETB: the opponent makes five 1/1s) and Massacre Wurm (ETB:
+    //     -2/-2 sweep) fire an own enter trigger; the other puts' entries fire only our lifegain watchers, which
+    //     neither ETB touches -- so two puts commute unless BOTH are those two.
+    //   FREE-GAIN: Suture Priest, Soul Warden, Essence Warden, Birds of Paradise, Varchild's War-Riders -- no
+    //     enter trigger and nothing on the battlefield that can cost us vs the goldfish, so on the stable shuffle
+    //     the put weakly dominates leaving the copy in the library (the mimic argument in the doc).
+    bool SacTutorPutsCommute(const CardDefinition& a, const CardDefinition& b) const override;
+    bool SacTutorFreeGainPut(const CardDefinition& d) const override;
 };
 
 // FiveColour (5-colour domain/goodstuff): eleven fetchlands feeding six shocks, two triomes and
@@ -1846,12 +1898,8 @@ public:
     // Measurement lever, default OFF pending the per-deck A/B.
     bool        CondemnsPassedMainPhase() const override;
     // Nicol Bolas +3 is "destroy target NONCREATURE permanent" -- it REQUIRES a target, and with a
-    // land-less opponent the only legal ones are ours. Destroying our own land is a real cost, so
-    // the search correctly declined the ability; but -9 is unreachable from loyalty 5 without two
-    // +3s, which left an EIGHT-mana walker ({4}{U}{B}{B}{R}) inert BY CONSTRUCTION. Opting in gives the passive opponent
-    // lands (inert props -- destroying one changes nothing else), so the faithful play is available
-    // and +3 becomes the free ramp it is meant to be. Same reason HinataProvider opts in.
-    bool OpponentPlaysLands() const override { return true; }
+    // land-less opponent the only legal ones were ours. The shared passive opponent now has
+    // three lands in every game, so its +3 can target one of those lands.
     // MTG_5C_BUCKET_DISCARD: USER-reviewed bucket cleanup-shed policy (2026-08-21) -- quota-first
     // keep set (colour coverage / land drops / acceleration / threat floor / Cannons / Greaves),
     // single-index return. See the .cpp comment for the full design + evidence.
@@ -3033,6 +3081,70 @@ public:
                                    const std::vector<int>&) const override;
 };
 
+// LifegainHeliodCombo (2026-10-27) -- mono-white "whenever you gain life" aggro sharing the CritterLifegain
+// shell (Soul Warden / Soul's Attendant / Auriok Champion into Ajani's Pridemate / Voice of the Blessed /
+// Serra Ascendant / Ajani, Strength of the Pride), plus the Heliod, Sun-Crowned + Walking Ballista combo,
+// Martyr of Sands, Abiding Grace and Emeria, the Sky Ruin. The USER asked for its own provider ("even if it
+// is a derived or something of that nature"). It DERIVES FROM CritterLifegainProvider because that is what
+// the list ROUTED TO before this class existed (Pridemate / Voice / Heliod set the critter signature) --
+// the analyze-deck 4a rule: derive from what the deck actually routes to, never from a thematically related
+// provider it did not ride. So every CritterLifegain judgement hook (the USER-settled total cast order, the
+// cleanup-discard buckets, the walker-aware legend keep, same-turn walker activation, Heliod's searched
+// two-way placement) is inherited byte-for-byte; the cast order and the discard buckets are the USER's to
+// settle for THIS deck (disclosed in docs/design/analysis-LifegainHeliodCombo.md, not decided here).
+// USER on the combo: "the deck often wins without the combo. It is not that reliant on it" -- "(but when
+// the combo is the right line we should take it nonetheless)". The combo is found by the search as an
+// execution-verified PingLoop action (SpellEffects.h) that exists only while the loop is live. The deck's own
+// cast order, Martyr placement, Ballista X / activation rules and discard rule are the USER's (reviewed
+// 2026-10-28; docs/design/lifegainheliodcombo-order-and-discard-proposal.md).
+// Its own hooks: Abiding Grace's dominance folds (LifegainGraceFolds, MTG_GRACE_RETURN_DOMINATES).
+class LifegainHeliodComboProvider : public CritterLifegainProvider
+{
+public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed, "NOT ASSESSED. Combat is NOT the only route to the opponent's "
+               "life: Walking Ballista pings (counter reach, post-combat finish) and the Heliod lifelink "
+               "loop deal unbounded non-combat damage, so any winless bound must price ping reach and treat "
+               "a live loop as a kill." }; }
+    const char* Name() const override { return "LifegainHeliodCombo"; }
+    // Abiding Grace: the deck-pool folds (B1 return dominates gain-1 while an unfiltered enter-lifegain
+    // watcher is out; B4 identical-behaviour cards are one option). Proven for THIS pool only -- see
+    // LifegainGraceFolds. MTG_GRACE_RETURN_DOMINATES=0 restores the ordering-only base list.
+    void GraceOptions(const GameState& s, int controller, std::vector<int>& opts) const override;
+    // Walking Ballista's face pings, narrowed with THIS pool's argument (MTG_LHC_PING_PRUNE, default ON):
+    // a non-lifelinked main-phase face ping is dropped. Creature targets keep the generic kill count.
+    std::vector<int> CounterPingCounts(const GameState& s, const Permanent& source, int target,
+                                       int max_counters) const override;
+    // Heliod's counter onto a one-counter Ballista whose loop it turns on (MTG_LHC_BUMP_TARGET, default
+    // ON); -1 (the generic pick) otherwise.
+    int LifegainCounterTarget(const GameState& s, int controller) const override;
+    // ---- The USER-reviewed rules of 2026-10-28 (docs/design/lifegainheliodcombo-order-and-discard-proposal.md),
+    // one lever each, every one =0 -> the inherited CritterLifegain behaviour.
+    // The cast order (MTG_LHC_ORDER): Abiding Grace first, Martyr first when it enables Serra Ascendant else at
+    // the head of the bodies, Ranger-Captain first body, Walking Ballista right after Heliod and never before it.
+    int  CastOrderRank(const GameState&, const CardDefinition&) const override;
+    int  CastOrderRankLatest(const GameState&, const CardDefinition&) const override;
+    int  CastOrderActionRank(const GameState&, const Action&, int rank) const override;
+    void ArrangeCastOrder(const GameState&, const std::vector<Action>&, std::vector<int>&) const override;
+    bool CastOrderingCandidates(const GameState& s, const std::vector<Action>& plan_actions,
+                                const std::vector<Action>& reorder,
+                                std::vector<std::vector<int>>& out) const override;
+    const char* CastOrderTierName(int rank) const override;
+    // Martyr of Sands' reveal PINNED, not searched (MTG_LHC_MARTYR_PIN / MTG_LHC_MARTYR_SERRA).
+    bool RevealOutletPinned() const override;
+    int  RevealOutletPin(const GameState& s, const std::vector<Action>& plan_actions) const override;
+    int  ActivationOrderRankForAction(const GameState& s, const CardDefinition& d, const Action& a) const override;
+    // Walking Ballista: X is the max the plan leaves, or the loop's reserve (MTG_LHC_BALLISTA_X); its {4} and
+    // its pings wait until they can make lethal (MTG_LHC_BALLISTA_WAIT; pings: CounterPingCounts above).
+    bool XCastBelowMax(const GameState& s, const std::vector<Action>& cands, const std::vector<int>& sel,
+                       int j, int pool_total) const override;
+    std::vector<int> ManaSinkActivationCounts(const GameState& s, const Permanent& source,
+                                              PermAbilityMode mode, int max_affordable) const override;
+    // The cleanup-discard rule (MTG_LHC_BUCKET_DISCARD): CritterLifegain's ladder + the partner-gated COMBO bucket.
+    std::vector<int> CleanupDiscardCandidates(
+        const GameState& s, const std::vector<std::string>* required_pieces) const override;
+};
+
 // SelesnyaLifegain (GW "whenever you gain life" ramp-into-fatties: Wellwisher / Blighted Steppe /
 // Blossoming Sands / Feed the Clan / Verdant Sun's Avatar generating the life, Ageless Entity and
 // Nykthos Paragon converting it into +1/+1 counters, Accomplished Alchemist converting it into
@@ -3344,7 +3456,242 @@ public:
     // narrows; the axis is ADDITIVE (one rollout per extra target). MTG_LFE_TUTOR_WIDTH=0 restores
     // the base 6; MTG_TUTOR_WIDTH still overrides engine-side.
     int TutorSearchWidth() const override;
+    // THE FETCH RULE (USER 2026-10-23, MTG_LFE_FETCH_ORDER, default ON): Terramorphic Expanse / Myriad
+    // Landscape fetch the first colour the battlefield still lacks in the order Red -> Green -> Blue ->
+    // second Red -> second Green -> Red thereafter; Myriad (two basics sharing a type) skips Blue. An
+    // ORDER plus a PRUNE to that one pick, so the search no longer branches over which basic to fetch.
+    // Human play and MTG_UNPRUNE=landpick keep the full fan (LandSearchPickPruned).
+    bool LandSearchPickOrderKey(const GameState& s, int controller, std::uint64_t& key) const override;
+    void LandSearchPickOrder(const GameState& s, int controller, int count, int to_hand, bool basic_only,
+                             bool share_land_type, std::uint16_t subtype,
+                             std::vector<std::vector<std::string>>& picks) const override;
+    int  LandSearchPickWidth(const GameState& s, int controller, int count, int to_hand, bool basic_only,
+                             bool share_land_type, std::uint16_t subtype,
+                             const std::vector<std::vector<std::string>>& picks) const override;
+    // THE HARBINGER RULE (USER 2026-10-23, MTG_LFE_HARBINGER_RULE, default ON): Flamekin Harbinger's tutor is
+    // restricted to the USER's short list (Hydra / Brushfire / Soulstoke / Smokebraider by their conditions)
+    // and searched over it; MTG_UNPRUNE=tutor and human play keep every legal Elemental.
+    std::vector<std::string> TutorCandidates(const GameState& s, int controller, const CardParams& pp) const override;
 };
+
+// UNPREDICTABLE CYCLONE (cycling into Eldrazi; onboarding 2026-10-26). The deck rode
+// AntiLifegainProvider BY ACCIDENT: Scalding Tarn's fetch_land_types sets `anti` alone (pinned from a
+// probe in test_pirates_provider.cpp, never decided). EMPTY derivation of DeckProvider (== Generic),
+// NOT of AntiLifegain: the deck was never measured on AL (not in the suite, no GT), so nothing is
+// preserved by inheriting its width-2 tutor, single-pick fetch or cleanup buckets. Signature: see
+// DetectDecisionProvider's `cyclone` flag (Cyclone-only params OR-ed across three cards; the deck
+// routes here once the phase 2/3 card entries carry them).
+class CycloneProvider : public DeckProvider
+{
+public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed, "NOT ASSESSED. Damage is combat only (Emrakul 15 flying + "
+               "annihilator 6, the Ulamogs 10, Curator of Mysteries 4 flying, Street Wraith 3), but the "
+               "bodies arrive mid-turn as FREE casts off Unpredictable Cyclone's walk (the library is "
+               "known to the search), and Emrakul's cast grants an EXTRA TURN. A winless-this-turn bound "
+               "must count every cycler in hand times the creature each walk can reach, and must say "
+               "whether 'this turn' is the turn or the ROUND (the USER's rounds win-turn metric: an extra "
+               "turn untaps and attacks before the opponent's next turn)." }; }
+    const char* Name() const override { return "Cyclone"; }
+    bool LeafKillOnlyNoM2OptIn() const override { return true; }
+    // TutorSearchWidth -- a COVERAGE fix, not a heuristic (the LandfallElementals / Pirates precedent):
+    // Long-Term Plans can find ANY card (~22 distinct names in the list) and the generic candidate list
+    // is in LIBRARY (= shuffle) order, so the base width 6 left most names -- Emrakul among them, as the
+    // shuffle chose -- unreachable per search at ANY budget. 32 admits every distinct name; it widens,
+    // never narrows, and the axis is additive (one rollout per extra target). MTG_CYCLONE_TUTOR_WIDTH=0
+    // restores the base 6; MTG_TUTOR_WIDTH still overrides engine-side. PROVISIONAL (USER Q8).
+    int TutorSearchWidth() const override;
+
+    // ---- Phase 3 (2026-10-27): the searched cycle, Cyclone's free cast, Remand ------------------------
+    // THE SEARCHED CYCLE. Every distinct cycler in hand whose life half is payable is a seed the search
+    // branches over (no restriction; ORDER only: nonland cyclers before lands, creatures first, cheaper
+    // first) -- "which card do I cycle" is this deck's main decision, so nothing is pruned here. The
+    // engine then runs no in-window legacy cycle for this deck (CyclesAreSearched); ShouldConsiderDig /
+    // SelectDigSource below are only its PLAYOUT policy (the horizon leaf, the d0 runner).
+    bool CyclesAreSearched() const override;
+    std::vector<std::string> SearchedCycleSources(const GameState& s) const override;
+    // No dig twins / dig-while-affordable variants: the seeds ARE the searched dig.
+    DigOffer DigOfferAt(const GameState& s) const override { (void)s; return DigOffer{}; }
+    // The playout gate: the generic empty-of-gas rule, OR a replacer is out and a nonland cycler is held
+    // (cycling is the combo, not a dig of last resort). The playout pick: with a replacer out, the first
+    // payable creature cycler (Street Wraith before Curator: no mana), else the generic first-affordable.
+    // The chain continues after a re-solve (the loop's DigContinueAfterResolve).
+    bool ShouldConsiderDig(const GameState& s) const override;
+    std::string SelectDigSource(const GameState& s, const ManaPool& pool, bool& out_is_sac) const override;
+    bool DigContinueAfterResolve() const override { return true; }
+    // THE TAKE-DOMINANCE FOLD (stated): taking the walk's hit is no worse than bottoming it when the hit is
+    // a vanilla-template creature (Street Wraith, Curator of Mysteries, Emrakul, the Ulamogs -- their
+    // printed abilities are all upside for us or attack-time) or another replacer (a second Cyclone: one
+    // replacement applies, CR 616.1), AND it collides with no legendary permanent we control (an Emrakul
+    // hit beside an Emrakul dies to the legend rule and shuffles the graveyard back), AND every TARGET its
+    // mandatory cast trigger needs can be the opponent's (the Ulamogs: with fewer opposing permanents the
+    // trigger must take ours). Everything else is branched.
+    bool FreeCastTakeDominated(const GameState& s, int controller, const CardDefinition& hit) const override;
+    // The playout's take: the fold above, else take (the generic default) unless the hit's targeted cast
+    // trigger would be forced onto our own permanents.
+    bool TakeFreeCast(const GameState& s, int controller, const CardDefinition& found) const override;
+    // USER 2026-10-27 (ledger Q6): "I would probably heuristically prune remanding either Ulamog". Keyed on
+    // the card's PROPERTIES, not its name: a counterable spell with a TARGETED cast trigger (Remand would
+    // bounce the threat whose trigger already resolved). Emrakul (can't be countered: Remand is a cantrip)
+    // and the cyclers (back to hand, cycle again) stay admitted.
+    bool AdmitRemandOnFreeCast(const GameState& s, int controller, const CardDefinition& hit) const override;
+    // HAND-CAST self-Remand (ledger Q6, USER 2026-10-27: "maybe allowing remands on other cheaper spells
+    // (say on something MV 1)"): admitted only when the target's mana value is at most
+    // MTG_CYCLONE_REMAND_MAX_MV (int, DEFAULT 1; -1 = never). Per-job via the numeric arm
+    // (valuearm::Arm::cyclone_remand_max_mv, manifest "cyclone_remand_max_mv") so the Stage 5 A/B arms
+    // pool in one batch.
+    bool AdmitRemandRider(const GameState& s, int controller, const CardDefinition& target) const override;
+    // Remand-on-Remand: admitted when the ceiling reaches the targeted Remand's own MV (2) -- USER 2026-10-28,
+    // "we should allow casting Remand to be Remanded if MV 2 is supported".
+    bool AdmitRemandOnRemand(const GameState& s, int controller, const CardDefinition& remand) const override;
+    // A goldfish_inert card (Toxic Deluge) as a Remand-ONLY target: the ceiling reaches its MV AND the
+    // per-job / env switch MTG_CYCLONE_REMAND_INERT is on (default off). Keyed on properties, never a name.
+    bool AdmitRemandOnlyCast(const GameState& s, int controller, const CardDefinition& inert) const override;
+
+    // ---- Phase 5 (2026-10-27): the USER's search heuristics (ledger "Optimization plan") ---------------
+    // Each is a RESTRICTION / ORDER behind its own default-ON lever (heurarm); human play and MTG_UNPRUNED
+    // keep every legal option (engine-side bypasses). See the .cpp for the USER's words.
+    // SCALDING TARN (MTG_CYCLONE_FETCH_RULE): Steam Vents while one is left; then by red NEED (the shared
+    // red count): short -> Blood Crypt, Mountain; else Watery Grave, Island. The top pick is the one-option
+    // fetch; Xander's Lounge is searched beside it.
+    std::vector<std::string> FetchCandidates(const GameState& s, int controller, const CardParams& fetch_pp) const override;
+    std::vector<std::string> FetchSearchCandidates(const GameState& s, int controller, const CardParams& fetch_pp,
+                                                   const std::vector<std::string>& ranked) const override;
+    // MYRIAD LANDSCAPE (MTG_CYCLONE_MYRIAD_RULE): two Islands, the one-option pick; two Mountains searched
+    // beside them only while short on red.
+    void LandSearchPickOrder(const GameState& s, int controller, int count, int to_hand,
+                             bool basic_only, bool share_land_type, std::uint16_t subtype,
+                             std::vector<std::vector<std::string>>& picks) const override;
+    bool LandSearchPickOrderKey(const GameState& s, int controller, std::uint64_t& key) const override;
+    int  LandSearchPickWidth(const GameState& s, int controller, int count, int to_hand,
+                             bool basic_only, bool share_land_type, std::uint16_t subtype,
+                             const std::vector<std::vector<std::string>>& picks) const override;
+    // LONG-TERM PLANS (MTG_CYCLONE_LTP_RULE): a missing Cyclone, or Emrakul when there is no other way to
+    // top one; neither -> the cast is held (CollectedActionAllowed). MTG_CYCLONE_LTP_ULAMOG (OFF): an
+    // Ulamog once no Emrakul is left in the library.
+    std::vector<std::string> TutorCandidates(const GameState& s, int controller, const CardParams& pp) const override;
+    bool RestrictsCollectedActions() const override { return true; }
+    bool CollectedActionAllowed(const GameState& s, const Action& a, bool is_pre_combat) const override;
+    // THE SCORED CANTRIP ORDER (MTG_CYCLONE_CANTRIP_ORDER, DEFAULT ON; an ORDER, inert at unlimited budget):
+    // the go-off estimate {k, c} (CycloneGoOff) and the USER's put-back / Ponder rules (2026-10-27) score every
+    // Brainstorm / Brainsurge put-back and every Ponder order; the engine stable-sorts the fan by it.
+    bool CantripReadinessOf(const GameState& s, int controller, CantripReadiness& out) const override;
+    bool ScoreTopDisposition(const GameState& s, int controller, const CantripReadiness& r,
+                             const TopDispositionView& view, int& score_out) const override;
+    // The per-fan ranking cache's key (design item 8): everything CycloneGoOff / CycloneShortOnRed / the scorer
+    // read -- our permanents (name, tapped, def_absent), the hand (name, P/T), life, the land drop, the flags.
+    bool CantripOrderKey(const GameState& s, int controller, std::vector<std::uint64_t>& key) const override;
+    bool CantripPlanOf(const GameState& s, int controller, const CantripReadiness& r,
+                       const TopDispositionView& view, int& plan_out) const override;
+    int  CantripFanCap(const GameState& s, bool putback) const override;
+    bool CantripPlansActive(const GameState& s, bool putback) const override;
+    // MTG_CYCLONE_SEED_PLANS (DEFAULT ON): the cycle seeds' Curator scry pin -> the walk-aware scry below.
+    bool CycleScryPinHeuristic(const GameState& s) const override;
+    // MTG_CYCLONE_CYCLER_RULE (DEFAULT ON since 2026-10-29): which creature cycler a plan's cycle seed uses (CycloneCyclerRuleApply).
+    bool CycleSeedAdmissionSets(const GameState& s, std::vector<std::string>& if_replacer_out,
+                                std::vector<std::string>& if_not) const override;
+    bool CycleSeedAdmitOut(const GameState& s, const std::string& cycler, int plan_mana, int plan_blue,
+                           bool* decided) const override;
+    bool ScryKeepOnTop(const GameState& s, const Card& top_card) const override;
+    // CANTRIP PROPOSALS (DEFAULT OFF pending the USER, Q33): MTG_CYCLONE_PUTBACK_RULE = rank 0 of the scored
+    // order is the put-back rule (it turns the scorer on for the put-back by itself); MTG_CYCLONE_PUTBACK_SINGLE
+    // prunes the put-back fan to that pick; MTG_CYCLONE_PONDER_KEEPSHUFFLE narrows Ponder to keep-vs-shuffle.
+    bool PutBackSingleCandidate(const GameState& s) const override;
+    bool ReorderKeepShuffleOnly(const GameState& s) const override;
+    // THE BUCKETED CLEANUP DISCARD (MTG_CYCLONE_BUCKET_DISCARD, DEFAULT ON with the second Eldrazi over Remand -- the EL2 arm;
+    // docs/design/cyclone-discard-buckets.md). The shed is the last card of the bucket keep order
+    // (CycloneBucketRankOf below), routed through CleanupDiscardRankingWithOrder so the staged-card and
+    // required-piece protections stay engine-enforced, returned as ONE index (two under
+    // MTG_CYCLONE_DISCARD_SHUFFLE_PLAN with a known top). The quotas move after every shed, so the rule is
+    // asked again per shed (ShedStable false). The SHED ORDER is the whole ranking, which is what the put-back
+    // tie-break (PutBackRanking) reads. Lever off -> the generic rule, byte-identical.
+    std::vector<int> CleanupDiscardCandidates(
+        const GameState& s, const std::vector<std::string>* required_pieces) const override;
+    std::vector<int> CleanupDiscardShedOrder(
+        const GameState& s, const std::vector<std::string>* required_pieces) const override;
+    bool CleanupDiscardShedStable() const override;
+    std::vector<int> PutBackRanking(const GameState& s, int controller) const override;
+
+    // ---- THE DRAFTED CAST ORDER (MTG_CYCLONE_CAST_ORDER, DEFAULT OFF; docs/design/cyclone-cast-order.md) ----
+    // Long-Term Plans < Ponder < Brainstorm < Brainsurge < Remand < Seething Song < Unpredictable Cyclone <
+    // Curator < Street Wraith < Ulamog CH < Ulamog IG < Emrakul, read from PARAMS (CycloneCastOrderRankOf);
+    // TOTAL by name; the land drop and cycling keep their structural positions. The draft's FUNDING ranges
+    // ride CastOrderFallbackRanks (walked by the range ladder only). MTG_CYCLONE_ORDER_DRAW_TURNS (DEFAULT
+    // OFF, needs the order): OrderOpaqueCastsByRank, so draw turns follow the rank and the ladder runs.
+    int              CastOrderRank(const GameState& s, const CardDefinition& def) const override;
+    const char*      CastOrderTierName(int rank) const override;
+    bool             CastOrderTotalByName() const override;
+    bool             OrderOpaqueCastsByRank() const override;
+    std::vector<int> CastOrderFallbackRanks(const GameState& s, const CardDefinition& def) const override;
+    // DRAW searches the independent information slots; canonical order first.
+    bool WantsCastOrderingSearch() const override;
+    bool CastOrderingCandidates(const GameState& s, const std::vector<Action>& plan_actions,
+                                 const std::vector<Action>& reorder,
+                                 std::vector<std::vector<int>>& out) const override;
+};
+
+// ---- THE CYCLONE BUCKET MODEL, the USER's expendability rank (shared by the cleanup discard and, under
+// MTG_CYCLONE_BUCKET_KEEPNEED, the scored put-back's keep needs: "one model, two consumers",
+// docs/design/cyclone-discard-buckets.md). A pure function of the hand, our battlefield, life and the LEGITIMATELY
+// known top (never the library order). Exposed (not file-static) so the cantrip scorer, the put-back plans and the
+// unit tests read the same ranking. MERGE NOTE: the put-back plans' own keep-need rank (the cyclone-prunes branch's
+// CycloneExpendability(readiness, def, hand index), the kCyc tiers) is the other half of "one model"; when both land,
+// CycloneBucketKeepNeed(CycloneBucketRankOf(...).tier[i]) is the bucket reading of the same per-card need.
+//
+// Bucket TIERS, in shed order (lower = shed first). The overflow tiers come first; the quota ("crucial") tiers
+// follow, shed only when the hand holds nothing else, and the engine (the last Cyclone, or Long-Term Plans
+// standing in for it) is shed last of all.
+enum CycShedTier : int
+{
+    kCycTierDead           = 10,    // Toxic Deluge (goldfish_inert), a surplus Cyclone, a second Song (every Song once Cyclone is out), an uncyclable Wraith
+    kCycTierEldraziBeyond  = 20,    // the third Eldrazi and beyond (and, under MTG_CYCLONE_DISCARD_ELDRAZI2_SHUFFLE_EARLY, a shuffling second)
+    kCycTierLandFar        = 30,    // lands beyond the quota + 2
+    kCycTierEldrazi2       = 40,    // the second Eldrazi (default: below Remand in keep priority)
+    kCycTierShuffleSetup   = 45,    // known SETUP top: a shuffling Eldrazi from the tiers above, after every non-shuffle card in them
+    kCycTierRemand         = 50,    // Remand (and any card the model does not name)
+    kCycTierEldrazi2Over   = 55,    // the second Eldrazi under MTG_CYCLONE_DISCARD_ELDRAZI2_OVER_REMAND
+    kCycTierExtraLand      = 60,    // the 2 extra lands
+    kCycTierCyclerSurplus  = 70,    // creature cyclers beyond three (Curator before Wraith)
+    kCycTierDigSurplus     = 80,    // dig beyond its quota of 2 (the reverse of the fill order)
+    kCycTierEldrazi1       = 90,    // the first Eldrazi (Emrakul when held): the last non-crucial card
+    kCycTierDigSlot2       = 100,   // ---- quota from here on ----
+    kCycTierLandQuota      = 110,   // lands within the go-off need, beyond the minimum
+    kCycTierSong           = 120,   // the one Seething Song before Cyclone is out
+    kCycTierCycler         = 130,   // creature cyclers within three
+    kCycTierDigSlot1       = 140,   // the put-back slot
+    kCycTierLandMin        = 150,   // the minimum land (the next drop)
+    kCycTierEngine         = 200,   // the last Cyclone, or Long-Term Plans standing in while none is found
+};
+enum class CycloneKnownTop : std::uint8_t { Unknown, Setup, Junk };
+struct CycloneBucketOpts
+{
+    bool dig_putback_first_after_cyclone = false;   // MTG_CYCLONE_DISCARD_DIG_PUTBACK_FIRST
+    bool eldrazi2_over_remand            = false;   // MTG_CYCLONE_DISCARD_ELDRAZI2_OVER_REMAND
+    bool eldrazi2_shuffle_early          = false;   // MTG_CYCLONE_DISCARD_ELDRAZI2_SHUFFLE_EARLY
+    CycloneKnownTop top                  = CycloneKnownTop::Unknown;
+};
+struct CycloneBucketRank
+{
+    std::vector<int>  shed_order;   // every hand index, most expendable first
+    std::vector<int>  tier;         // per hand index: its CycShedTier
+    std::vector<char> shuffles;     // per hand index: discarding it shuffles the graveyard into the library
+};
+CycloneBucketRank CycloneBucketRankOf(const GameState& s, int me, const CycloneBucketOpts& o);
+// What we LEGITIMATELY know about the top. Today's proxy (until the known-top tracking lands): a deliberate top
+// stack THIS turn (top_stacked_turn == TurnSeq) whose card is still on top -- a creature there is a SETUP, any
+// other card JUNK. Unknown otherwise.
+CycloneKnownTop CycloneKnownTopOf(const GameState& s, int me);
+// The bucket model's options as the per-job flags set them (the discard's and the scorer's shared reading).
+CycloneBucketOpts CycloneBucketOptsNow(const GameState& s, int me);
+bool CycloneBucketDiscardOn();
+bool CycloneBucketKeepNeedOn();
+
+// The drafted Cyclone cast/cycle orders, exposed for the unit tests (test_cyclone_cast_order.cpp).
+// CycloneCastOrderRankOf: the param rank (-1 = a card the order does not name). CycloneCycleOrderKey: the
+// cycle order's key for cycler `d` (lower = cycled first) under `mode` (1 = draft 2, 2 = cheapest first).
+int CycloneCastOrderRankOf(const CardDefinition& def);
+int CycloneCycleOrderKey(const GameState& s, int me, const CardDefinition& d, int mode);
+int CycloneCycleOrderMode();
 
 class LandfallProvider : public DeckProvider
 {
@@ -3367,16 +3714,17 @@ public:
     // Myriad pairs, and with no basic left to a fixed order (Turf, Myriad, Radiant Fountain, Haunted
     // Fengraf, Wilds). See the .cpp for the user's words.
     void LandSearchPickOrder(const GameState& s, int controller, int count, int to_hand,
-                             bool basic_only, bool share_land_type,
+                             bool basic_only, bool share_land_type, std::uint16_t subtype,
                              std::vector<std::vector<std::string>>& picks) const override;
     int  LandSearchPickWidth(const GameState& s, int controller, int count, int to_hand,
-                             bool basic_only, bool share_land_type,
+                             bool basic_only, bool share_land_type, std::uint16_t subtype,
                              const std::vector<std::vector<std::string>>& picks) const override;
     bool LandSearchPickOrderKey(const GameState& s, int controller, std::uint64_t& key) const override;
     // "Primeval Titan must never search for a basic" (USER 2026-10-16): an any-land search admits no
     // basic, so Titan takes one nonbasic, or none, when fewer than two are left.
     bool LandSearchAdmitsLand(const GameState& s, int controller, int count, int to_hand, bool basic_only,
-                              bool share_land_type, const CardDefinition& land) const override;
+                              bool share_land_type, std::uint16_t subtype,
+                              const CardDefinition& land) const override;
     // THE KAROO BOUNCE (USER 2026-10-16): Gruul Turf returns a land that re-enters untapped "in reverse
     // order from colour requirements" -- colourless first, then the colour with the most to spare over
     // what the deck's costs need -- with no search.
@@ -3846,9 +4194,31 @@ inline const DecisionProvider& ResolveProvider(const GameState& s)
 // beside UntapSecondMainLive / DigSecondMainLive at every post-combat site. Never on a deck that
 // already plays a full second main: its phase is open anyway, and the restricted menu must not
 // narrow it. One virtual call that returns false for every other provider.
+inline bool ProviderSecondMainLive(const GameState& s);   // below
+// Is an ADDITIONAL-COMBAT source (Moraug, Fury of Akoum: landfall_additional_combat) on OUR battlefield? Then
+// THIS turn's post-combat main is live: a land that enters there queues a combat after it, which no main-1
+// line can produce (a main-1 landfall's combat precedes the regular one, and the regular one does not untap
+// -- so under Moraug a land held for main 2 is worth one more attack). Read off the post-combat state at
+// every post-combat site of both worlds, beside the provider's restricted main 2 below (a pure function of
+// the state: lockstep, nothing to fold). The phase's menu is the FULL one -- no restriction is applied for
+// it -- and the held-land bar and the main-2 drop gate exempt it (TurnSolver ExtraCombatMain2Exempt).
+// Deck constant first, so every other deck pays one bool test.
+inline bool ExtraCombatSecondMainLive(const GameState& s)
+{
+    if (!s.deck_has_extra_combat) { return false; }
+    const int me = s.active_player_index;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.landfall_additional_combat) { return true; }
+    }
+    return false;
+}
 inline bool ProviderSecondMainLive(const GameState& s)
 {
-    return !s.uses_second_main && ResolveProvider(s).RestrictedSecondMainLive(s);
+    if (s.uses_second_main) { return false; }
+    return ExtraCombatSecondMainLive(s) || ResolveProvider(s).RestrictedSecondMainLive(s);
 }
 
 // MTG_TOP_RESOLVE as THIS game's deck plays it: the global lever (EngineFlags.h TopResolveEnabled,
@@ -3921,7 +4291,8 @@ inline int BpChainSlotFor(const GameState& s)
 // the FSLineWin branch then evaluates both combat variants. False whenever the flag is off.
 // Searched dork attack/hold trigger. 0 = not contested; 1 = the greedy HOLDS a dork whose release
 // would deal damage (search the RELEASE); 2 = the greedy ATTACKS with a non-vigilance mana dork
-// whose mana the deferred main would spend (search the HOLD). See EngineFlags.h.
+// whose mana the deferred main would spend (search the HOLD); 3 = an archetype ShouldAttackWith
+// holds a damage-dealing mana dork (search its RELEASE, MTG_DORK_ATK_PROVIDER_HOLD). See EngineFlags.h.
 int DorkAtkContestedKind(const GameState& s);
 
 // MTG_EDF_TURN_TRACE (diagnostic, default off): one line per REAL main phase describing the
@@ -4024,3 +4395,21 @@ bool AlchemistComboOffWon(const GameState& s, int controller);
 // The ONE dispatch of Action::Kind::ComboRoute (rollout, executor main plan, executor continuation):
 // whichever route the provider owns. Three routes share the kind; they are mutually exclusive per deck.
 int  ComboRouteApplyFor(GameState& s, int controller);
+
+// Abiding Grace's DOMINANCE FOLDS for a lifegain deck provider's GraceOptions override (USER-visible
+// lever MTG_GRACE_RETURN_DOMINATES, default ON; a no-op when off). Restricts `opts` (kGraceGainOption /
+// graveyard m_numbers, see DecisionProvider::GraceOptions) with two folds proven for a deck whose MV-1
+// creatures carry no harmful ETB/static and whose graveyard is read only by Grace / Emeria:
+//   B1  RETURN DOMINATES GAIN when at least one always-firing "another creature enters -> you gain
+//       life" watcher we control is on the battlefield (any_creature_enters_lifegain /
+//       own_creature_enters_lifegain: Soul Warden; Soul's Attendant and Auriok Champion, whose "may" is
+//       always taken). The return then produces >= 1 life-gain event of the same size as the gain
+//       mode's (CR 119.10) AFTER the body has entered (so every Heliod counter target set is a
+//       superset) plus the body; the gain option is dropped. Never drops the last option.
+//   B4  IDENTITY: two return options whose definitions are BEHAVIOURALLY IDENTICAL
+//       (CardDefinition::behaviour_identity, nonzero and equal -- Soul Warden == Soul's Attendant) are
+//       one option; the earlier in the list is kept.
+// (B5, "two triggers never target the same card", needs no fold: options are built at each trigger's
+// resolution from the cards still in the graveyard, so an earlier trigger's return is already gone.)
+bool GraceReturnDominatesOn();
+void LifegainGraceFolds(const GameState& s, int controller, std::vector<int>& opts);

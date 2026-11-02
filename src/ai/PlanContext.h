@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -156,6 +157,21 @@ struct PlanTraits
     // the restricted-first payer's line test (ManaPayment.cpp, RestrictedMayHoldForAttack) when no
     // subtype-restricted source was on the board at apply time.
     int  act_mana_total        = 0;
+    // --- CYCLE SEED HOLD inputs (MTG_ACT_LINE_HOLD; Unpredictable Cyclone reference s8 gi7 T4) ---
+    // The plan's searched cycle (a DigDraw cycle seed, CollectActions) is paid AFTER its casts and its
+    // trailing activations, so it is a trailing activation to the casts' payer -- and was invisible to
+    // it. Seething Song ({2}{R}) on Island, Island, Mountain, Mountain tapped both Islands and left a
+    // Mountain, so the plan's "cycle Curator of Mysteries" ({U}) after Cyclone could not be paid and
+    // the line was unreachable in every world (the human paid by hand: Mountain, Mountain, Island).
+    // cycle_seed_pips = the seed's COLOURED cycling pips (EffectiveCyclingCostFor, from the CARD so a
+    // recorded DigDraw, which carries no cost, yields the same traits as the plan's seed: executor /
+    // rollout lockstep). The seed is OWED while the hand still holds at least
+    // cycle_seed_hand_floor copies of the cycler (the copies at apply start minus the plan's casts of
+    // the same name): once one copy is cycled the hold is released. Only for a provider that SEARCHES
+    // its cycles (CyclesAreSearched), the only decks whose plans carry seeds -- zero everywhere else.
+    int  cycle_seed_pips[5]    = {};
+    const struct CardDefinition* cycle_seed_def = nullptr;
+    int  cycle_seed_hand_floor = 0;
     // --- RESTRICTED-FIRST LINE TEST inputs (LandfallElementals sweep flags C/E, 2026-10-19) ---
     // What the plan owes that the board's SUBTYPE-restricted creature source (Smokebraider: Elemental
     // spells and abilities of Elementals; Giada: Angel spells) can NOT pay. Holding such a source back
@@ -197,6 +213,11 @@ struct PlanTraits
 // Null when no plan apply is in scope (or every consumer lever is off -- the builder is not run).
 const PlanTraits* CurrentPlanTraits();
 
+// Immutable recorded-payment context. Reuse one lazy snapshot per live scope;
+// callers may request an outer scope's saved pointer after entering a nested one.
+// Only the snapshot escapes the scope; nullptr records an explicitly absent context.
+std::shared_ptr<const PlanTraits> CapturePlanTraitsForRecord(const PlanTraits* pt);
+
 // RAII setter, PlanContextScope's twin. Nests safely.
 class PlanTraitsScope
 {
@@ -207,5 +228,9 @@ public:
     PlanTraitsScope& operator=(const PlanTraitsScope&) = delete;
 
 private:
+    friend std::shared_ptr<const PlanTraits> CapturePlanTraitsForRecord(const PlanTraits* pt);
     const PlanTraits* m_prev;
+    const PlanTraits* m_current;
+    const PlanTraitsScope* m_prev_scope;
+    mutable std::shared_ptr<const PlanTraits> m_record_snapshot;
 };

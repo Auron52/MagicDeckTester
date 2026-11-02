@@ -1,0 +1,37 @@
+{
+  "deck": "decks/LifegainHeliodCombo/LifegainHeliodCombo.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 28,
+  "opponent_life": 7,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 200,
+  "max_turns": 4,
+  "lands_played_this_turn": 1,
+  "_comment": "LifegainHeliodCombo (2026-10-27), Abiding Grace: THE MODE IS SEARCHED, not a 'return if you can' rule. Serra Ascendant (not sick) + Grace, Martyr of Sands in the graveyard, no watcher, empty hand, Plains library (colourless: Martyr reveals nothing). T3: Ascendant hits for 1 with lifelink (28 -> 29, opp 7 -> 6). At the end step the GAIN mode takes us to 30, so on T4 Ascendant is a 6/6 flier and kills (6). The RETURN mode (the default order's front) leaves us at 29: T4 is Ascendant 1 + Martyr 1 = 2 and no win. Requires the Plan::grace_choice axis to branch the mode. Final life 36 = 30 (end-step gain) + 6 (the T4 lifelink hit): only the gain line reaches it.",
+  "battlefield": [
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Abiding Grace"
+    },
+    {
+      "name": "Serra Ascendant"
+    }
+  ],
+  "graveyard": [
+    "Martyr of Sands"
+  ],
+  "hand": [],
+  "expect_win_turn": 4,
+  "expect_active_life": 36
+}

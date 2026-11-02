@@ -1,0 +1,192 @@
+# Cyclone final validation reproducers
+
+These helpers prepare, run and report the outstanding cost, memory, QC1,
+QC3, nested-exhaustion, cast and payment experiments. `reconstruct_prunes.py`
+and `prunes_proofs.py` beside them own the pruning work; see
+`prunes-PROOF-REPORTS.md`. Nothing was simulated while this copy was prepared.
+Engine source is unchanged by these helpers.
+
+Run commands from the primary checkout. Helpers may remain here; runtime
+manifests, candidate profiles, traces and logs belong under `build/scratch`,
+not beside decks or in this persistent directory. Launcher and reporter
+resolve that primary checkout even when invoked from this linked worktree.
+
+## Prepare V4 after a source freeze
+
+The current protocol is [V4-PROTOCOL.md](V4-PROTOCOL.md). V3 stopped after
+a common ordinary fidelity divergence and is incomplete and unadoptable. V4
+requires a full refresh on the repaired, clean source. Preparation is not a PGO freshness
+claim: final launch requires a freshly trained PGO binary whose `SRC_TREE`
+stamp matches the current source. Refresh source/data provenance before the
+first launch, never after different code has already produced observations.
+Read-only Git calls disable optional locks.
+
+```bash
+HELPERS=.claude/worktrees/cyclone-ready/logs/cyclone-completion/prepared
+WORKTREE=.claude/worktrees/cyclone-ready
+INPUTS=build/scratch/cyclone-finish/v4/final-pgo-inputs
+PRUNES=build/scratch/cyclone-finish/v4/final-prunes
+python3 "$HELPERS/make_validation_manifests.py" \
+  --worktree "$WORKTREE" --bin "$WORKTREE/build/PGO/mtg" --build-mode pgo \
+  --threads 24 --out "$INPUTS" \
+  --experiment cost --experiment memory --experiment qc1 --experiment qc3 \
+  --experiment nested --experiment cast --experiment payment --experiment verify \
+  --qc1-traces build/scratch/cyclone-finish/qc1-sampling/traces
+python3 "$HELPERS/compose_final_quality.py" \
+  --inputs "$INPUTS" --prunes "$PRUNES/phasec/manifest.json" \
+  --worktree "$WORKTREE" --bin "$WORKTREE/build/PGO/mtg" --threads 24
+```
+
+Do not regenerate over measurement inputs in use. On complete runtime-volume
+loss, first reconstruct pruning Phase C using its helper, then reconstruct
+the QC1 sample below, then run the commands above. The default twelve-arm
+Phase C contains shared controls, Ponder and PBCYC+Ponder; do not add the old
+separate PB/KEEP pools again. The composed primary has 13,142 games with the
+original 97-hand QC1 cohort. A changed selected cohort must be explained,
+not forced to have the old count.
+
+Cast raw/blind each contain six arms: base, CO, CO_CYC1, CO_CYC1_DRAW,
+CO_CYC1_REV_CYCLERS and CO_CYC1_MIDDLE (1,800 games per pool). DRAW enables
+`MTG_CYCLONE_ORDER_DRAW_TURNS` on CO_CYC1 and is measured afresh after the
+four searched information orders fix; historical DRAW outcomes are obsolete.
+The reporter compares DRAW against both base and CYC1. REV_CYCLERS keeps the
+rank5 diagnostic, while MIDDLE independently enables rank55 before Song;
+all arms pin both other interventions OFF. The Q60 cast-only refresh added600
+primary games, preserving all existing cast jobs plus every noncast manifest,
+profile copy/link and existing runtime output. Its before/after hash audit
+is in runtime storage at `build/scratch/cyclone-finish/cast-q60-refresh-audit.json`.
+
+## Preserve QC1 sample identity
+
+The original 600 forced-seven sampling traces are under
+`build/scratch/cyclone-finish/qc1-sampling/traces`, with adjacent `meta.json`.
+The exact original source/deck input hashes are retained here as
+`qc1-original-sampling-provenance.json`. Sampling uses d0, max_turns1,
+`force_mulligan:"0:"`, seeds109000/110000, 300 hands each. Its autoplay
+outcomes are not measurements. All policy comparisons remove force_mulligan
+and replay the original seed and global game index under normal policies.
+
+If those runtime traces are lost, generate only `--experiment qc1` without
+`--qc1-traces` into a fresh runtime input directory first. Its `run-plan.json`
+contains one `qc1_sample` plan with exact argv/cwd/env and 10-game chunks.
+The following explicitly launches that sample; use it only after current PGO
+is ready and a simulation launch is intended. It refuses changed original
+shuffle inputs or pre-existing logs. Replace SAMPLE_INPUTS below with that
+fresh directory. It writes new actual-binary provenance before launching.
+
+```bash
+python3 - "$HELPERS" SAMPLE_INPUTS <<'PY_SAMPLE'
+import hashlib,json,os,subprocess,sys
+from pathlib import Path
+helpers,inputs=map(Path,sys.argv[1:])
+record=json.loads((helpers/'qc1-original-sampling-provenance.json').read_text())
+plan=json.loads((inputs/'run-plan.json').read_text())
+p,= [p for p in plan['plans'] if p['name']=='qc1_sample']
+root=Path(p['cwd']); binary=Path(p['argv'][0])
+for name,expected in record['inputs'].items():
+    assert hashlib.sha256((root/name).read_bytes()).hexdigest()==expected,name
+stamp=binary.parent/'SRC_TREE'
+assert stamp.read_text().strip()==plan['src_tree'],'stale PGO stamp'
+run=Path(p['stdout']).parent; run.mkdir(parents=True,exist_ok=True)
+for key in ('--game-log-dir','--game-trace-dir'):
+    Path(p['argv'][p['argv'].index(key)+1]).mkdir(parents=True,exist_ok=True)
+record['binary_sha256']=hashlib.sha256(binary.read_bytes()).hexdigest()
+with (run/'meta.json').open('x') as f: json.dump(record,f,indent=2)
+env=dict(os.environ)
+for key in plan['unset_before_run']: env.pop(key,None)
+env.update(p['env']); env['GIT_OPTIONAL_LOCKS']='0'
+with Path(p['stdout']).open('x') as out,Path(p['stderr']).open('x') as err:
+    subprocess.run(p['argv'],cwd=root,env=env,stdout=out,stderr=err,check=True)
+PY_SAMPLE
+```
+
+Pass the resulting `runs/qc1_sample/traces` path to final generation. Selection
+requires all600 exact identities and forced-seven traces. The default cohort
+fails TwoDrop through no cheap nonland while passing the other static filters;
+one-land-only failures are counted separately. Measured reports verify both
+initial physical hands and the first keep decision (shipped rejects; curve
+none keeps), then report zero versus at-least-one creature-cycler strata.
+Never copy provenance onto older traces whose origin is unknown.
+
+## Launch and report
+
+After fresh PGO, the already-planned normal memory processes can run before
+primary to catch a default FSL/thread-unit problem early. The launcher does
+not require primary result files for these stages. Run sequentially, then
+inspect the independent interim report before launching primary:
+
+```bash
+python3 "$HELPERS/run_prepared_validation.py" memory6 --worktree "$WORKTREE" --inputs "$INPUTS" --prunes "$PRUNES/phasec/manifest.json" --threads 24
+python3 "$HELPERS/run_prepared_validation.py" memory1 --worktree "$WORKTREE" --inputs "$INPUTS" --prunes "$PRUNES/phasec/manifest.json" --threads 24
+python3 "$HELPERS/report_final_results.py" memory-preflight --inputs "$INPUTS"
+```
+
+`memory-preflight-report.json` compares only the168 shared logical games
+(t1 vs t6), with exact win/digest/unit differences. It inventories the extra300
+t6-only shape games separately and makes no t12/tiny/full-proof claim. Both
+processes need complete output files and exit cache statistics. Any positive
+FSL refusal count or determinism warning requires review and exits1 even when
+the168 observed pairs agree; decide whether that existing issue is a prerequisite
+before collecting primary A/B data. Counts are process-wide, so a t6 warning
+cannot be attributed solely to the168 shared games. Missing data exits2.
+
+After fresh PGO and a passing preflight, the primary launch command is:
+
+```bash
+python3 "$HELPERS/run_prepared_validation.py" primary --worktree "$WORKTREE" --inputs "$INPUTS" --prunes "$PRUNES/phasec/manifest.json" --threads 24
+```
+
+It seals source, profile, manifest and binary provenance, validates the original
+QC1 sampler inputs, links pruning result paths to the shared pool, refuses
+existing results and records PID/status/DONE or STOPPED. It never uses timeout,
+restarts a run, or treats an engine exit as a quality verdict. The caller owns
+progress monitoring. `--dry-run` still seals/checks; it cannot bypass stale PGO.
+
+All stages use this same launcher with stage names `memory1`, `memory6`,
+`memory12`, `memory-tiny12`, `memory-unbounded6`, `cost`, `verify`. V4 primary
+uses 24 workers, stored consistently in generation and sealed runtime plans.
+Normal6 and normal12 each run both 468 reference games independently; primary
+normal24 contains the same references in chunks. The additional normal12
+process preserves the t12 proof and does not split the quality sample into waves. No per-thread cache quota is used. Tiny uses a
+shared20MiB plan pool; unbounded uses the existing shared-pool control.
+
+Run the separate535-game current Cyclone+Hinata cost batch on a quiet host
+after other pools have finished. Hinata bottoming remains ON through the
+normal depth-based behavior. It omits full traces. Do not interpret timing
+ratios from mixed schedules. The separate24-game VERIFY batch combines junk
+memo, cantrip rank-cache and kill-only checks; automatic checking requires
+actual positive hits/exercise and rejects mismatches.
+
+```bash
+python3 "$HELPERS/report_final_results.py" quality --inputs "$INPUTS"
+python3 "$HELPERS/report_final_results.py" memory --inputs "$INPUTS"
+python3 "$HELPERS/reconstruct_prunes.py" --worktree "$WORKTREE" \
+  --output "$PRUNES" report phasec
+```
+
+Quality aggregates the chunk map into logical cells and exact seed/globalGI
+pairs, scoring unwon as9. It reports paired deltas/SE/faster/slower and units,
+QC1 keep handshake/strata, QC3, payment and raw/blind cast arms. It inventories
+FD/nonconv by family and preserves `leaf_est`. Blind-unknown warnings require
+ordinary-world controls before a rollout/executor conclusion; ordinary raw
+Cyclone true simulated FD divergence remains blocking. Hinata/Kitty leaf
+estimate warnings are classified separately. Missing/incomplete data exits2;
+unresolved fidelity review exits1. `--allow-partial` labels intersections but
+still fails missing data. It does not duplicate pruning reports.
+
+Memory compares exact per-game wins, digests and units from primary chunks
+against t1/t6/t12/tiny/unbounded runs, reporting every difference. It also
+requires complete normal12 coverage of both reference sets and exact pairwise
+6/12/24 comparisons of all 300 shape games. Every run must
+have its process-exit plan-pool summary. The tiny12 proof additionally requires
+budget20480KB and positive refused stores; equality without actual pressure
+is inconclusive and exits1. Missing files or exit summaries exit2; drift
+exits1; complete exact equality with proven tiny12 pressure exits0. Per-run
+FSL refused-store counts and warning lines are retained separately: binding
+FSL still has the existing hit-discount/interleaving limitation, even if this
+measured comparison happens to agree. Use `--primary-stderr FILE` and repeat
+`--stderr PLAN_NAME=FILE` when overriding log locations. Synthetic-only
+regressions are reproducible with `python3 "$HELPERS/test_report_final_results.py"`. Repro manifests emitted
+by reporting (ordinary controls, d8/b0 and expanded budgets) are inputs only;
+no reporter launches those jobs or supplies invented results. See pruning
+proof documentation for separate iso92 and data-dependent blind workloads.

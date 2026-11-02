@@ -141,6 +141,64 @@ but never make a line unfindable at large budget; a lossy narrowing needs a held
 `MTG_EQUIV_ONLY=<probe>:<card>` (one discovery rollout), `MTG_ENUM_HIWATER_KB` axis breakdown,
 `MTG_AXIS_TRACE=<min plans>` (stage counts while the list grows), `MTG_ENUM_DUPCENSUS=<min plans>`
 (distinct post-apply states + per-axis inert variants; prints and exits).
+Keep-gen RSS-cap aborts now list the rollouts IN FLIGHT as SLOW-ROLLOUT lines (5136dadca):
+`grep 'in flight' gen.log` feeds `MTG_KEEP_REPLAY_LIST` unchanged.
+
+## 7. The keep-gen RSS-cap loop (2026-10-23 PM) and the canon-front fans fold
+
+**Symptom.** The fresh mulligan generation at ffeb8f10a (d1 b1, K=21, 32 threads, 20 GB cap) aborted at the cap
+20 times in 4 h, each relaunch 4-75 min long, the journal gaining ~1.4 MB per 10-min cycle at the end. Baseline
+RSS after a resume is 8-9 GB (the cell tables); the rest was 4-11 Risen Reef rollouts in flight at 400-990 s each
+(healthy rollouts take < 1 s), never journaled, so every resume restarted them. Replayed alone on one thread one
+of them swung between 0.7 and 2.2 GB and was still running after an hour.
+
+**Layer 1: the canon derived the whole pin product to read one entry.** With three or four Reefs out every
+reveal is an UNBRANCHED breakpoint, and `BpUnbranchedCanon` -> `BpCanonFront` takes the front() of the
+continuation list there. The front-only derivation (which skips the put-back / Ponder clones) only armed when a
+put-back / reorder card was in hand, so this deck built the full list, land-search pins and look-top pins
+included, every time: on the replayed rollout 620 derivations over 300 ms (t6 main 1, enum depth 1, outside any
+playout, up to 381,711 plans) took 516 s of ~600 s. **Fold (`MTG_BP_CANON_FRONT_FANS`, default ON, =0 restores):**
+the front-only derivation also skips the land-search pin and look-top pin fans, and arms whenever the deck has a
+look-top watcher. Same argument as the put-back clones: each variant is a copy of a base differing only in its
+pin list, appended after every base, so no verdict separates it from its base and the stable ranking keeps it
+behind; derivations charge no units. Verified: smoke 149/149 byte-identical; 1,200 held-out games (seeds
+300000/310000/320000 + gi, d1 b1 / d3 b10 / d5 b20) identical digests AND units; `MTG_BP_CANON_FRONT_VERIFY=1`
+194,466 front-only derivations, 0 mismatches. Replays of the 11 stuck rollouts: 438 s -> 16-21 s and 990 s -> 173 s
+for the two that finish under a 1.7 GB per-process cap.
+
+**Layer 2 (fixed play-identically by the lazy look-top block below; the lossy alternatives are section 5 option 1 / 4):** the other nine still exceed 1.7 GB, now in the
+OUTER turn-6 enumeration at the rollout's own searched decision: 160-300k plans before the look-top fan (about
+100k tutor variants and 100k land_slot twins over 7-cast plans), which the fan then multiplies. Option 5 does not
+reach it (that node is in the window at d1). The enumeration is uncharged, so at d1 b1 the decision builds
+millions of plans to score a few hundred.
+
+**Measured since (2026-10-23 PM), all uncommitted levers, patch `logs/lfe/reef_land_levers.patch`:**
+* A keep-gen gate serialising giant enumerations across workers (play-identical) CANNOT work: alone on one thread
+  the 19 heavy rollouts peak at 1.3-9.8 GB (8), 11.9-19.9 GB (7) and over 18 GB (4), against ~11 GB of headroom
+  over the generation's ~9 GB baseline (cell tables).
+* `MTG_LFE_REEF_LAND_DEFAULT` (the Reef land answer is the provider default only; Harbinger ORDER entries still
+  fan) fixes it -- all 19 finish together at 11.4 GB -- at +13 turns over 15,000 held-out paired games (three
+  samples, d1/d3/d5) with 8 of 21 slower games not recovering at d8 b0. One root cause is local (a Terramorphic
+  to hand and cracked the same turn; two reveals sharing one drop), the other is not: the pruned search steers
+  away from early Reef lines because their future flips are gone (d5 s380967 gi967).
+* `MTG_LFE_REEF_LAND_DROP_USED` (prune only where every look resolves with the drop used) is ~neutral (+1 over
+  4,500 games, d1 digest identical) but does not fix memory: the heavy plans do not play their land first.
+
+**Option 2 LANDED: the lazy look-top block (`MTG_PB_LAZY_LOOKTOP`, default ON, =0 materialises).** The put-back
+lazy layout (`PbLazyLayout` / `CandSeq`) gained a per-fan KIND: a look-top fan holds one prototype per base (the
+base as the axis copied it) plus its pin rows (`pin_flat`), and `Edit` writes the one varied field for either kind.
+The look-top axis emits into it whenever the host asked for a lazy list and no put-back block holds the layout --
+the block sits at the end of the list, exactly where the eager `extra` lands, so full-list indices are unchanged.
+`PutBounceFold::BuildInPlanView` replaces the vector-only `BuildInPlan` in both hosts (FSLineWin,
+SolveWithLookahead): it builds the same arrays over the view, inserting synthesised entries into the base map
+where the vector form would (their hash is their prototype's) and skipping them at the equality (a synthesised
+entry never equals a single-deviation one). That fold materialised every lazy pre-combat list on any deck with a
+land search, so before this change even the put-back block saved nothing there. Measured: 1,200 held-out LFE games
+(d1/d3/d5) identical digests AND units with 18,814 lists held lazily and 0 materialised (669k variants never
+built); the 19 heavy keep-gen rollouts pooled under the 20 GB cap all finish (576 s, 9.07 GB peak, 43M variants
+never built) where they went past 20 GB before. `MTG_PB_LAZY_CANDS_VERIFY` cannot judge this deck: it reports
+mismatches on the committed binary too, with no lazy list at all (its second, eager enumeration does not replay
+every per-call counter), so identity rests on the digest checks and the suite.
 
 ## Appendix: the option-5 experiment patch (against 9711d6231; `MTG_ROLLOUT_FAN_NARROW=1` arms it)
 

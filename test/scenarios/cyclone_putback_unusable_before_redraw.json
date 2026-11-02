@@ -1,0 +1,35 @@
+{
+  "_comment": [
+    "Q44 amendment (1) (MTG_CYCLONE_PUTBACK_USABLE, 2026-10-28), from d5 gi13 (seed 102013): T1 on the draw, Steam Vents",
+    "and the land drop used, no Cyclone (a missing piece: k = 3). Brainstorm draws Brainstorm, Scalding Tarn, Remand; the",
+    "hand then holds two Brainsurges ({2}{U}) and two Remands ({1}{U}). Next turn projects 2 mana, so a Brainsurge put back",
+    "cannot be cast before it is drawn again -- the Niv rule 'followed by the ones you can't use yet so you can draw them",
+    "later' says it goes back. Rank 0 of the amended score puts back [Brainsurge, Brainsurge]; the pre-amendment score",
+    "put back [Remand, Remand] (the lowest keep needs), as gi13's A arm did. The searched fan is unchanged (an ORDER); at",
+    "d5 b20 the search takes rank 0 here. The switch is DEFAULT OFF (measured worse, ledger Q44), so the fixture turns",
+    "it on; it FAILS with the switch off.",
+    "PB_PLANS is pinned OFF (2026-10-30): this fixture tests the FULL scored fan's rank 0, which the plan-level prune",
+    "replaces with the JUNK pick (here [Remand, Remand]: both cards are unusable before the redraw and Remand is the",
+    "lower keep need). It stays meaningful whatever PB_PLANS's default is."
+  ],
+  "env": { "MTG_CYCLONE_PUTBACK_USABLE": "1", "MTG_CYCLONE_PB_PLANS": "0" },
+  "deck": "decks/Unpredictable Cyclone/Unpredictable Cyclone.cod",
+  "turn": 1,
+  "on_the_play": false,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "active_life": 20,
+  "opponent_life": 20,
+  "battlefield": [ { "name": "Steam Vents", "controller": 0 } ],
+  "hand": [ "Brainsurge", "Brainsurge", "Ponder", "Brainstorm", "Xander's Lounge", "Ponder", "Remand" ],
+  "library_top": [ "Brainstorm", "Scalding Tarn", "Remand" ],
+  "library_filler": "Island",
+  "library_size": 30,
+  "depth": 5,
+  "budget_ms": 20,
+  "max_turns": 2,
+  "expect_log_sequence": [
+    "T1 MAIN_1 CAST_SPELL Brainstorm",
+    "REVEAL Brainstorm (put back): Brainsurge, Brainsurge"
+  ]
+}

@@ -349,6 +349,39 @@ TEST_CASE("Legend rule: a second Heliod dying as a CREATURE is a death -- Daxos 
     CHECK(u.players[0].life == 20);
 }
 
+TEST_CASE("Legend rule before triggers: a redundant second Heliod does not see its own entry's gain")
+{
+    // CR 704.3 / 704.5j: the legend rule removes the new Heliod BEFORE Soul Warden's trigger for its
+    // entry resolves, so that gain is seen by ONE Heliod (LifegainHeliodCombo sweep seed 95005:
+    // 4 enter-lifegain events -> 6 counters). MTG_LEGEND_SBA_FIRST (LegendRuleLoser).
+    EnsureCardsLoaded();
+    auto counters_after_second_heliod = [](int arm)
+    {
+        const std::int8_t saved = heurarm::t_arm[heurarm::LEGEND_SBA_FIRST];
+        heurarm::t_arm[heurarm::LEGEND_SBA_FIRST] = static_cast<std::int8_t>(arm);
+        GameState s = Fresh();
+        Put(s, "Soul Warden", 0, 1);                     // {W}: devotion 1
+        Put(s, "Daxos, Blessed by the Sun", 0, 2);       // {W}{W}: 3
+        Put(s, "Ajani's Pridemate", 0, 3);               // {1}{W}: 4
+        Put(s, "Heliod, Sun-Crowned", 0, 4);             // {2}{W}: 5 -> a creature
+        int before = 0;
+        for (const Permanent& p : s.battlefield) { before += PlusCounters(p); }
+        Enter(s, "Heliod, Sun-Crowned", 0, 5);           // enters as a creature: Warden + Daxos gain 1 each
+        CHECK(s.players[0].life == 22);
+        int after = 0;
+        for (const Permanent& p : s.battlefield)
+        {
+            after += PlusCounters(p);
+            if (arm == 1 && p.card.m_number == 5) { CHECK(PlusCounters(p) == 0); }   // never the target
+        }
+        heurarm::t_arm[heurarm::LEGEND_SBA_FIRST] = saved;
+        return after - before;
+    };
+    // Two gain events, each: Pridemate's own +1, plus one Heliod counter per Heliod that saw it.
+    CHECK(counters_after_second_heliod(0) == 6);   // the old ordering: both Heliods saw both
+    CHECK(counters_after_second_heliod(1) == 4);   // only the surviving (oldest) Heliod
+}
+
 // ---------------------------------------------------------------------------------------------
 // Ocelot Pride (2026-09-15). Four separable claims, one test each, because each fails silently on
 // its own: the intervening-if, the token's ENTER (which is the card's whole payoff in this deck),

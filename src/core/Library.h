@@ -37,7 +37,7 @@ public:
     // dropping keeps the per-node copy cost equal to the old (erase-shrunk) vector form.
     Library(const Library& o)
         : m_cards(o.m_cards.begin() + static_cast<std::ptrdiff_t>(o.m_top), o.m_cards.end()),
-          m_bottom_known(o.m_bottom_known)
+          m_bottom_known(o.m_bottom_known), m_bottom_placed(o.m_bottom_placed), m_known_top(o.m_known_top)
     {
     }
     Library& operator=(const Library& o)
@@ -47,6 +47,8 @@ public:
             m_cards.assign(o.m_cards.begin() + static_cast<std::ptrdiff_t>(o.m_top), o.m_cards.end());
             m_top = 0;
             m_bottom_known = o.m_bottom_known;
+            m_bottom_placed = o.m_bottom_placed;
+            m_known_top = o.m_known_top;
         }
         return *this;
     }
@@ -61,9 +63,78 @@ public:
     // provider may read those cards (RawAt(size() - KnownBottom() + i)). Drawing into the pile
     // shrinks it with the library (the min). Sites that bottom without noting (a dig's "rest to the
     // bottom") only make the count conservative. Read by GaladrielProvider's Crackle rule.
-    void        NoteBottomed()      { ++m_bottom_known; }
+    void        NoteBottomed()      { if (m_bottom_known < 0xFF) { ++m_bottom_known; } }
     std::size_t KnownBottom() const { return std::min<std::size_t>(m_bottom_known, size()); }
     std::size_t size()  const { return m_cards.size() - m_top; }
+
+    // ---- KNOWN LIBRARY INFORMATION (the owner's legitimate knowledge; 2026-10-28) ----------------
+    // WHAT THE PLAYER KNOWS about his own library, maintained by the mutation primitives below so no
+    // effect site has to remember to note it:
+    //   * KNOWN POSITIONS from the top (bit i of m_known_top = live position i, i < 32): a card the
+    //     owner PLACED there himself -- every insert() is a placement by a game action whose card the
+    //     owner saw (a Brainstorm put-back, Ponder's / a scry's keep-on-top, Long-Term Plans' third
+    //     from the top, a tuck). A draw shifts the mask (DrawTop / erase at 0), an erase deeper in the
+    //     library closes its gap, an insert opens one.
+    //   * THE PLACED BOTTOM BLOCK (m_bottom_placed): how many of the library's LAST cards were put
+    //     there by a game action since the last shuffle (every push_back: a scry / mulligan bottom,
+    //     the Cyclone walk's random-order bottom). The owner knows WHICH cards they are; their ORDER
+    //     may be random (the walk), so a blind reader treats the block as a known set.
+    //   * Any SHUFFLE forgets both (Shuffle / ShuffleByKey / assign).
+    // READ ONLY BY THE BLIND SEARCH (BlindUnknownOrder below, MTG_SEARCH_BLIND_UNKNOWN): nothing else
+    // in the engine reads these fields, no key folds them, so play with the blind mode off is byte-
+    // identical by construction. They share the 8 bytes the old 32-bit m_top + m_bottom_known held,
+    // so sizeof(Library) stays 32 (Player 200 / GameState 1160, Dominance.h's tripwires).
+    std::uint32_t KnownTopMask()   const { return m_known_top; }
+    std::size_t   BottomPlaced()   const { return std::min<std::size_t>(m_bottom_placed, size()); }
+    bool          KnownAt(std::size_t i) const { return i < 32 && ((m_known_top >> i) & 1u) != 0; }
+    // The leading run of known positions (0 when the top card is unknown).
+    int           KnownTopRun()    const { int n = 0; while (n < 32 && ((m_known_top >> n) & 1u) != 0) { ++n; } return std::min<int>(n, static_cast<int>(size())); }
+    // Explicit notes, for a site that reveals cards without moving them (none in the engine today).
+    void          NoteKnownAt(std::size_t i) { if (i < 32) { m_known_top |= (1u << i); } }
+
+    // THE BLIND RESHUFFLE (the known-respecting clairvoyance test; MTG_SEARCH_BLIND_UNKNOWN). Re-randomise
+    // ONLY what the owner does not know: every live position that is neither a known position nor in the
+    // placed bottom block is refilled from those same cards in a keyed order (splitmix64(salt, m_number),
+    // the ShuffleByKey key), and the bottom block is permuted among itself (a set the owner knows, in an
+    // order he may not). Known positions keep their card. The knowledge fields are unchanged (the result
+    // is still "these positions known"). Never called by play unless the blind mode is on.
+    void BlindUnknownOrder(std::uint64_t salt)
+    {
+        const std::size_t n = size();
+        if (n < 2) { return; }
+        const std::size_t bottom = std::min<std::size_t>(m_bottom_placed, n);
+        const std::size_t upper  = n - bottom;
+        auto key = [salt](std::int32_t number) -> std::uint64_t
+        {
+            std::uint64_t x = salt * 0x9E3779B97F4A7C15ull
+                            + (static_cast<std::uint64_t>(number) + 1) * 0xD1B54A32D192ED03ull;
+            x ^= x >> 30; x *= 0xBF58476D1CE4E5B9ull;
+            x ^= x >> 27; x *= 0x94D049BB133111EBull;
+            x ^= x >> 31;
+            return x;
+        };
+        auto refill = [&](const std::vector<std::size_t>& pos, std::uint64_t s2)
+        {
+            if (pos.size() < 2) { return; }
+            std::vector<Card> cards;
+            cards.reserve(pos.size());
+            for (std::size_t p : pos) { cards.push_back(std::move(m_cards[m_top + p])); }
+            std::vector<std::pair<std::uint64_t, std::size_t>> ord;
+            ord.reserve(cards.size());
+            for (std::size_t i = 0; i < cards.size(); ++i)
+            { ord.push_back({ key(cards[i].m_number) ^ s2, i }); }
+            std::sort(ord.begin(), ord.end(), [&](const auto& a, const auto& b)
+            { return a.first != b.first ? a.first < b.first : cards[a.second].m_number < cards[b.second].m_number; });
+            for (std::size_t i = 0; i < pos.size(); ++i) { m_cards[m_top + pos[i]] = std::move(cards[ord[i].second]); }
+        };
+        std::vector<std::size_t> unknown;
+        unknown.reserve(upper);
+        for (std::size_t i = 0; i < upper; ++i) { if (!KnownAt(i)) { unknown.push_back(i); } }
+        refill(unknown, 0);
+        std::vector<std::size_t> bot;
+        for (std::size_t i = upper; i < n; ++i) { if (!KnownAt(i)) { bot.push_back(i); } }
+        refill(bot, 0x5bd1e9955bd1e995ull);
+    }
 
     // --- INDEX-CARRY (src/core/IndexCarry.h): every PUBLIC read of a card's identity records that
     // the game could have seen that index. Null sink => one predicted-not-taken branch, byte-
@@ -103,12 +174,34 @@ public:
     Card&       RawAt(std::size_t i)       { return m_cards[m_top + i]; }
 
     // --- mutation (forwarded; the passed iterators already point into the live window) ---
-    void push_back(const Card& c) { m_cards.push_back(c); }
-    void push_back(Card&& c)      { m_cards.push_back(std::move(c)); }
+    // A push_back is a BOTTOM placement by a game action (see KNOWN LIBRARY INFORMATION above).
+    void push_back(const Card& c) { m_cards.push_back(c); NotePlacedBottom(); }
+    void push_back(Card&& c)      { m_cards.push_back(std::move(c)); NotePlacedBottom(); }
 
-    iterator erase(const_iterator pos)                 { return m_cards.erase(pos); }
-    iterator insert(const_iterator pos, const Card& c) { return m_cards.insert(pos, c); }
-    iterator insert(const_iterator pos, Card&& c)      { return m_cards.insert(pos, std::move(c)); }
+    // erase / insert keep the known-position mask aligned with the live positions (an insert is a
+    // placement the owner knows; an insert at the very bottom is a bottom placement).
+    iterator erase(const_iterator pos)
+    {
+        const std::size_t n0  = size();
+        const std::size_t idx = static_cast<std::size_t>(pos - (m_cards.cbegin() + static_cast<std::ptrdiff_t>(m_top)));
+        KnownErase(idx);
+        if (m_bottom_placed > 0 && idx < n0 && idx >= n0 - std::min<std::size_t>(m_bottom_placed, n0)) { --m_bottom_placed; }
+        return m_cards.erase(pos);
+    }
+    iterator insert(const_iterator pos, const Card& c)
+    {
+        const std::size_t n0  = size();
+        const std::size_t idx = static_cast<std::size_t>(pos - (m_cards.cbegin() + static_cast<std::ptrdiff_t>(m_top)));
+        KnownInsert(idx, n0);
+        return m_cards.insert(pos, c);
+    }
+    iterator insert(const_iterator pos, Card&& c)
+    {
+        const std::size_t n0  = size();
+        const std::size_t idx = static_cast<std::size_t>(pos - (m_cards.cbegin() + static_cast<std::ptrdiff_t>(m_top)));
+        KnownInsert(idx, n0);
+        return m_cards.insert(pos, std::move(c));
+    }
 
     template <class InputIt>
     void assign(InputIt first, InputIt last)
@@ -116,6 +209,8 @@ public:
         m_cards.assign(first, last);
         m_top = 0;
         m_bottom_known = 0;
+        m_bottom_placed = 0;
+        m_known_top = 0;
     }
 
     // --- draws ---
@@ -133,6 +228,7 @@ public:
         // Move the top card out and advance the cursor (O(1), no shift). The vacated slot
         // joins the dead prefix and is never read again (dropped on the next copy).
         indexcarry::NoteNumber(m_cards[m_top].m_number);
+        m_known_top >>= 1;   // the known positions move up one (KNOWN LIBRARY INFORMATION)
         return std::move(m_cards[m_top++]);
     }
 
@@ -174,6 +270,8 @@ public:
     void Shuffle(uint64_t seed)
     {
         m_bottom_known = 0;   // a shuffle forgets the known bottom pile
+        m_bottom_placed = 0;  // ...and every known position (KNOWN LIBRARY INFORMATION)
+        m_known_top = 0;
         std::mt19937_64   rng(seed);
         const std::size_t n = size();
         if (n < 2) { return; }
@@ -220,6 +318,8 @@ public:
     void ShuffleByKey(uint64_t seed)
     {
         m_bottom_known = 0;   // a shuffle forgets the known bottom pile
+        m_bottom_placed = 0;  // ...and every known position (KNOWN LIBRARY INFORMATION)
+        m_known_top = 0;
         const std::size_t n = size();
         if (n < 2) { return; }
         auto key = [seed](std::int32_t number) -> std::uint64_t
@@ -279,9 +379,34 @@ public:
     }
 
 private:
+    void NotePlacedBottom() { if (m_bottom_placed < 0xFF) { ++m_bottom_placed; } }
+    // Remove live position idx from the known mask (positions below it move up one).
+    void KnownErase(std::size_t idx)
+    {
+        if (idx >= 32) { return; }
+        const std::uint32_t low  = idx == 0 ? 0u : (m_known_top & ((1u << idx) - 1u));
+        const std::uint32_t high = idx >= 31 ? 0u : ((m_known_top >> (idx + 1)) << idx);
+        m_known_top = low | high;
+    }
+    // Open live position idx as a KNOWN position (positions at and below it move down one). An insert
+    // at the very bottom of a non-empty library is a bottom placement instead.
+    void KnownInsert(std::size_t idx, std::size_t n0)
+    {
+        if (idx >= n0 && n0 > 0) { NotePlacedBottom(); return; }
+        if (idx >= 32) { return; }
+        const std::uint32_t lowmask = idx == 0 ? 0u : ((1u << idx) - 1u);
+        const std::uint32_t low  = m_known_top & lowmask;
+        const std::uint32_t high = (m_known_top & ~lowmask) << 1;
+        m_known_top = low | (1u << idx) | high;
+    }
+
     std::vector<Card> m_cards;
-    // 32-bit so the KNOWN-BOTTOM count below shares its 8 bytes: sizeof(Library) stays 32, and the
-    // search deep-copies two of them at every node.
-    std::uint32_t     m_top = 0;   // index of the current top; live library is [m_top, size())
-    std::uint32_t     m_bottom_known = 0;   // see NoteBottomed
+    // 16-bit index + two 8-bit counts + the 32-bit known-position mask share the 8 bytes the old
+    // 32-bit m_top / m_bottom_known held: sizeof(Library) stays 32, and the search deep-copies two of
+    // them at every node. (No library approaches 65,535 cards; the counts saturate at 255.)
+    std::uint16_t     m_top = 0;   // index of the current top; live library is [m_top, size())
+    std::uint8_t      m_bottom_known = 0;    // see NoteBottomed
+    std::uint8_t      m_bottom_placed = 0;   // see KNOWN LIBRARY INFORMATION
+    std::uint32_t     m_known_top = 0;       // see KNOWN LIBRARY INFORMATION
 };
+static_assert(sizeof(Library) == 32, "Library grew -- see the packing note above its fields");

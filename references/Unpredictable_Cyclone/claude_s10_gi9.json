@@ -1,0 +1,595 @@
+{
+  "seed": 10, "game_index": 9, "win_turn": 5, "won": true,
+  "mulligan": { "count": 0, "bottom": [] }, "karoo_float": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1,
+  "decisions": [
+    { "chosen": 1, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 19, "name": "Island" }, { "num": 2, "name": "Brainstorm" }, { "num": 55, "name": "Unpredictable Cyclone" }, { "num": 47, "name": "Street Wraith" }, { "num": 56, "name": "Unpredictable Cyclone" }, { "num": 25, "name": "Mountain" }, { "num": 26, "name": "Mountain" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 1,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 2, "name": "Brainstorm", "cost": "{U}", "mv": 1, "kind": "nonpermanent", "is_draw": true }, { "num": 19, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 25, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 47, "name": "Street Wraith", "cost": "{3}{B}{B}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Unpredictable Cyclone", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent" }, { "num": 56, "name": "Unpredictable Cyclone", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent" }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }] },
+  "plans": [
+    { "index": 0, "summary": "land=Island; cast: Brainstorm", "land": "Island", "casts": ["Brainstorm"], "actions": [{ "card": "Brainstorm" }] },
+    { "index": 1, "summary": "land=Island; cast: (nothing)", "land": "Island", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 4, "summary": "cycle Street Wraith to draw", "land": null, "casts": [], "actions": [{ "card": "Street Wraith", "dig": true, "dig_sacrifice": false }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 2,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Island", "idx": 1, "num": 19, "is_land": true, "taps": "U" }], "vial_counters": [], "hand": [{ "num": 2, "name": "Brainstorm", "cost": "{U}", "mv": 1, "kind": "nonpermanent", "is_draw": true }, { "num": 25, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 47, "name": "Street Wraith", "cost": "{3}{B}{B}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Unpredictable Cyclone", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent" }, { "num": 56, "name": "Unpredictable Cyclone", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent" }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Brainstorm", "land": null, "casts": ["Brainstorm"], "actions": [{ "card": "Brainstorm" }] },
+    { "index": 1, "summary": "cycle Street Wraith to draw", "land": null, "casts": [], "actions": [{ "card": "Street Wraith", "dig": true, "dig_sacrifice": false }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 3,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Island", "idx": 1, "num": 19, "is_land": true, "taps": "U" }], "vial_counters": [], "hand": [{ "num": 2, "name": "Brainstorm", "cost": "{U}", "mv": 1, "kind": "nonpermanent", "is_draw": true }, { "num": 25, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 47, "name": "Street Wraith", "cost": "{3}{B}{B}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Unpredictable Cyclone", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent" }, { "num": 56, "name": "Unpredictable Cyclone", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent" }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Brainstorm", "land": null, "casts": ["Brainstorm"], "actions": [{ "card": "Brainstorm" }] },
+    { "index": 1, "summary": "cycle Street Wraith to draw", "land": null, "casts": [], "actions": [{ "card": "Street Wraith", "dig": true, "dig_sacrifice": false }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 4,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 2, "card": "Cascade Bluffs" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Island", "idx": 1, "num": 19, "is_land": true, "taps": "U" }], "vial_counters": [], "hand": [{ "num": 2, "name": "Brainstorm", "cost": "{U}", "mv": 1, "kind": "nonpermanent", "is_draw": true }, { "num": 10, "name": "Cascade Bluffs", "cost": "", "mv": 0, "kind": "land" }, { "num": 25, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 47, "name": "Street Wraith", "cost": "{3}{B}{B}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Unpredictable Cyclone", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent" }, { "num": 56, "name": "Unpredictable Cyclone", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }] },
+  "plans": [
+    { "index": 0, "summary": "land=Cascade Bluffs; cast: Brainstorm", "land": "Cascade Bluffs", "casts": ["Brainstorm"], "actions": [{ "card": "Brainstorm" }] },
+    { "index": 1, "summary": "land=Mountain; cast: Brainstorm", "land": "Mountain", "casts": ["Brainstorm"], "actions": [{ "card": "Brainstorm" }] },
+    { "index": 2, "summary": "land=none; cast: Brainstorm", "land": null, "casts": ["Brainstorm"], "actions": [{ "card": "Brainstorm" }] },
+    { "index": 3, "summary": "land=Cascade Bluffs; cast: (nothing)", "land": "Cascade Bluffs", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 6, "summary": "cycle Street Wraith to draw", "land": null, "casts": [], "actions": [{ "card": "Street Wraith", "dig": true, "dig_sacrifice": false }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Cascade Bluffs", "idx": 3, "num": 10, "is_land": true, "taps": "C", "tap_fed": ["UU", "UR", "RR"], "tap_feed": "{U/R}", "tap_note": "its {U/R} is paid from your floating mana -- tap a source for it first" }, { "name": "Island", "idx": 1, "num": 19, "is_land": true, "taps": "U" }], "vial_counters": [], "hand": [{ "num": 2, "name": "Brainstorm", "cost": "{U}", "mv": 1, "kind": "nonpermanent", "is_draw": true }, { "num": 25, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 47, "name": "Street Wraith", "cost": "{3}{B}{B}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Unpredictable Cyclone", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent" }, { "num": 56, "name": "Unpredictable Cyclone", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Brainstorm", "land": null, "casts": ["Brainstorm"], "actions": [{ "card": "Brainstorm" }] },
+    { "index": 1, "summary": "cycle Unpredictable Cyclone to draw", "land": null, "casts": [], "actions": [{ "card": "Unpredictable Cyclone", "dig": true, "dig_sacrifice": false }] },
+    { "index": 2, "summary": "cycle Street Wraith to draw", "land": null, "casts": [], "actions": [{ "card": "Street Wraith", "dig": true, "dig_sacrifice": false }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 6,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Cascade Bluffs", "idx": 3, "num": 10, "is_land": true, "taps": "C", "tap_fed": ["UU", "UR", "RR"], "tap_feed": "{U/R}", "tap_note": "its {U/R} is paid from your floating mana -- tap a source for it first" }, { "name": "Island", "idx": 1, "num": 19, "is_land": true, "taps": "U" }], "vial_counters": [], "hand": [{ "num": 2, "name": "Brainstorm", "cost": "{U}", "mv": 1, "kind": "nonpermanent", "is_draw": true }, { "num": 25, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 47, "name": "Street Wraith", "cost": "{3}{B}{B}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Unpredictable Cyclone", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent" }, { "num": 56, "name": "Unpredictable Cyclone", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Brainstorm", "land": null, "casts": ["Brainstorm"], "actions": [{ "card": "Brainstorm" }] },
+    { "index": 1, "summary": "cycle Unpredictable Cyclone to draw", "land": null, "casts": [], "actions": [{ "card": "Unpredictable Cyclone", "dig": true, "dig_sacrifice": false }] },
+    { "index": 2, "summary": "cycle Street Wraith to draw", "land": null, "casts": [], "actions": [{ "card": "Street Wraith", "dig": true, "dig_sacrifice": false }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 2, "cast_order": ["**", "land=Mountain", "cast=Brainstorm", "cast=Remand"], "decision": {
+  "decision_index": 7,
+  "main_ordinal": 6,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 3, "card": "Remand" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Cascade Bluffs", "idx": 3, "num": 10, "is_land": true, "taps": "C", "tap_fed": ["UU", "UR", "RR"], "tap_feed": "{U/R}", "tap_note": "its {U/R} is paid from your floating mana -- tap a source for it first" }, { "name": "Island", "idx": 1, "num": 19, "is_land": true, "taps": "U" }], "vial_counters": [], "hand": [{ "num": 2, "name": "Brainstorm", "cost": "{U}", "mv": 1, "kind": "nonpermanent", "is_draw": true }, { "num": 25, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 35, "name": "Remand", "cost": "{1}{U}", "mv": 2, "kind": "nonpermanent", "is_draw": true }, { "num": 47, "name": "Street Wraith", "cost": "{3}{B}{B}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Unpredictable Cyclone", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent" }, { "num": 56, "name": "Unpredictable Cyclone", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent" }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 4, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }] },
+  "plans": [
+    { "index": 0, "summary": "land=Mountain; cast: Brainstorm", "land": "Mountain", "casts": ["Brainstorm"], "actions": [{ "card": "Brainstorm" }] },
+    { "index": 1, "summary": "land=none; cast: Brainstorm", "land": null, "casts": ["Brainstorm"], "actions": [{ "card": "Brainstorm" }] },
+    { "index": 2, "summary": "land=Mountain; cast: Brainstorm + Remand on it (back to hand; draw a card)", "land": "Mountain", "casts": ["Brainstorm", "Remand"], "actions": [{ "card": "Brainstorm", "remand_by": "Remand", "remand_slot": 5 }] },
+    { "index": 3, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 5, "summary": "cycle Unpredictable Cyclone to draw", "land": null, "casts": [], "actions": [{ "card": "Unpredictable Cyclone", "dig": true, "dig_sacrifice": false }] },
+    { "index": 6, "summary": "cycle Street Wraith to draw", "land": null, "casts": [], "actions": [{ "card": "Street Wraith", "dig": true, "dig_sacrifice": false }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "main_ordinal": 7,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 3, "card": "Toxic Deluge" }],
+  "events": [{ "turn": 3, "kind": "trigger", "text": "Remand targets Brainstorm -- countered, back to hand; draw a card" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Cascade Bluffs", "idx": 3, "num": 10, "tapped": true, "is_land": true }, { "name": "Island", "idx": 1, "num": 19, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 5, "num": 25, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 2, "name": "Brainstorm", "cost": "{U}", "mv": 1, "kind": "nonpermanent", "is_draw": true }, { "num": 26, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 47, "name": "Street Wraith", "cost": "{3}{B}{B}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Toxic Deluge", "cost": "{2}{B}", "mv": 3, "kind": "nonpermanent" }, { "num": 55, "name": "Unpredictable Cyclone", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent" }, { "num": 56, "name": "Unpredictable Cyclone", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent" }], "graveyard": ["Remand"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 4, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }] },
+  "plans": [
+    { "index": 0, "summary": "cycle Street Wraith to draw", "land": null, "casts": [], "actions": [{ "card": "Street Wraith", "dig": true, "dig_sacrifice": false }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "main_ordinal": 8,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Cascade Bluffs", "idx": 3, "num": 10, "tapped": true, "is_land": true }, { "name": "Island", "idx": 1, "num": 19, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 5, "num": 25, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 2, "name": "Brainstorm", "cost": "{U}", "mv": 1, "kind": "nonpermanent", "is_draw": true }, { "num": 26, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 47, "name": "Street Wraith", "cost": "{3}{B}{B}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Toxic Deluge", "cost": "{2}{B}", "mv": 3, "kind": "nonpermanent" }, { "num": 55, "name": "Unpredictable Cyclone", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent" }, { "num": 56, "name": "Unpredictable Cyclone", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent" }], "graveyard": ["Remand"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 4, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }] },
+  "plans": [
+    { "index": 0, "summary": "cycle Street Wraith to draw", "land": null, "casts": [], "actions": [{ "card": "Street Wraith", "dig": true, "dig_sacrifice": false }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Steam Vents", "cast=Brainstorm"], "decision": {
+  "decision_index": 10,
+  "main_ordinal": 9,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 4, "card": "Steam Vents" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Cascade Bluffs", "idx": 3, "num": 10, "is_land": true, "taps": "C", "tap_fed": ["UU", "UR", "RR"], "tap_feed": "{U/R}", "tap_note": "its {U/R} is paid from your floating mana -- tap a source for it first" }, { "name": "Island", "idx": 1, "num": 19, "is_land": true, "taps": "U" }, { "name": "Mountain", "idx": 5, "num": 25, "is_land": true, "taps": "R" }], "vial_counters": [], "hand": [{ "num": 2, "name": "Brainstorm", "cost": "{U}", "mv": 1, "kind": "nonpermanent", "is_draw": true }, { "num": 26, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 45, "name": "Steam Vents", "cost": "", "mv": 0, "kind": "land" }, { "num": 47, "name": "Street Wraith", "cost": "{3}{B}{B}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Toxic Deluge", "cost": "{2}{B}", "mv": 3, "kind": "nonpermanent" }, { "num": 55, "name": "Unpredictable Cyclone", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent" }, { "num": 56, "name": "Unpredictable Cyclone", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent" }], "graveyard": ["Remand"], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 4, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }] },
+  "plans": [
+    { "index": 0, "summary": "land=Steam Vents; cast: Brainstorm", "land": "Steam Vents", "casts": ["Brainstorm"], "actions": [{ "card": "Brainstorm" }] },
+    { "index": 1, "summary": "land=Mountain; cast: Brainstorm", "land": "Mountain", "casts": ["Brainstorm"], "actions": [{ "card": "Brainstorm" }] },
+    { "index": 2, "summary": "land=none; cast: Brainstorm", "land": null, "casts": ["Brainstorm"], "actions": [{ "card": "Brainstorm" }] },
+    { "index": 3, "summary": "land=Steam Vents; cast: (nothing)", "land": "Steam Vents", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 6, "summary": "cycle Unpredictable Cyclone to draw", "land": null, "casts": [], "actions": [{ "card": "Unpredictable Cyclone", "dig": true, "dig_sacrifice": false }] },
+    { "index": 7, "summary": "cycle Street Wraith to draw", "land": null, "casts": [], "actions": [{ "card": "Street Wraith", "dig": true, "dig_sacrifice": false }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 11,
+  "type": "land_entry",
+  "source": "Steam Vents",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Cascade Bluffs", "idx": 3, "num": 10, "is_land": true, "taps": "C", "tap_fed": ["UU", "UR", "RR"], "tap_feed": "{U/R}", "tap_note": "its {U/R} is paid from your floating mana -- tap a source for it first" }, { "name": "Island", "idx": 1, "num": 19, "is_land": true, "taps": "U" }, { "name": "Mountain", "idx": 5, "num": 25, "is_land": true, "taps": "R" }], "vial_counters": [], "hand": [{ "num": 2, "name": "Brainstorm", "cost": "{U}", "mv": 1, "kind": "nonpermanent", "is_draw": true }, { "num": 26, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 45, "name": "Steam Vents", "cost": "", "mv": 0, "kind": "land" }, { "num": 47, "name": "Street Wraith", "cost": "{3}{B}{B}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Toxic Deluge", "cost": "{2}{B}", "mv": 3, "kind": "nonpermanent" }, { "num": 55, "name": "Unpredictable Cyclone", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent" }, { "num": 56, "name": "Unpredictable Cyclone", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent" }], "graveyard": ["Remand"], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 4, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }] },
+  "pay_life": 2,
+  "reveal_types": [],
+  "heuristic_default": 1,
+  "note": "reply 1 to enter UNTAPPED (pay 2 life), or 0 to enter tapped. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 12,
+  "type": "dig",
+  "source": "Brainstorm (put back: top)",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Cascade Bluffs", "idx": 3, "num": 10, "is_land": true, "taps": "C", "tap_fed": ["UU", "UR", "RR"], "tap_feed": "{U/R}", "tap_note": "its {U/R} is paid from your floating mana -- tap a source for it first" }, { "name": "Island", "idx": 1, "num": 19, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 5, "num": 25, "is_land": true, "taps": "R" }, { "name": "Steam Vents", "idx": 6, "num": 45, "is_land": true, "taps": "UR" }], "vial_counters": [], "hand": [{ "num": 6, "name": "Brainsurge", "cost": "{2}{U}", "mv": 3, "kind": "nonpermanent", "is_draw": true }, { "num": 11, "name": "Curator of Mysteries", "cost": "{2}{U}{U}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 15, "name": "Emrakul, the Aeons Torn", "cost": "{15}", "mv": 15, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 47, "name": "Street Wraith", "cost": "{3}{B}{B}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Toxic Deluge", "cost": "{2}{B}", "mv": 3, "kind": "nonpermanent" }, { "num": 55, "name": "Unpredictable Cyclone", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent" }, { "num": 56, "name": "Unpredictable Cyclone", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent" }], "graveyard": ["Remand"], "library_size": 46, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 4, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }] },
+  "heuristic_default": 0,
+  "examined": [{ "index": 0, "legal": true, "name": "Unpredictable Cyclone" }, { "index": 1, "legal": true, "name": "Street Wraith" }, { "index": 2, "legal": true, "name": "Unpredictable Cyclone" }, { "index": 3, "legal": true, "name": "Mountain" }, { "index": 4, "legal": true, "name": "Toxic Deluge" }, { "index": 5, "legal": true, "name": "Brainsurge" }, { "index": 6, "legal": true, "name": "Emrakul, the Aeons Torn" }, { "index": 7, "legal": true, "name": "Curator of Mysteries" }],
+  "note": "reply an index into `examined` (your hand's eligible cards) to put that card on TOP of your library (it is the next card you draw); you then choose the card to go beneath it. The put-back is mandatory, so -1 takes the AI's pick. Default = the AI's pick."
+}
+},
+    { "chosen": 5, "decision": {
+  "decision_index": 13,
+  "type": "dig",
+  "source": "Brainstorm (put back: second)",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Cascade Bluffs", "idx": 3, "num": 10, "is_land": true, "taps": "C", "tap_fed": ["UU", "UR", "RR"], "tap_feed": "{U/R}", "tap_note": "its {U/R} is paid from your floating mana -- tap a source for it first" }, { "name": "Island", "idx": 1, "num": 19, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 5, "num": 25, "is_land": true, "taps": "R" }, { "name": "Steam Vents", "idx": 6, "num": 45, "is_land": true, "taps": "UR" }], "vial_counters": [], "hand": [{ "num": 6, "name": "Brainsurge", "cost": "{2}{U}", "mv": 3, "kind": "nonpermanent", "is_draw": true }, { "num": 11, "name": "Curator of Mysteries", "cost": "{2}{U}{U}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 15, "name": "Emrakul, the Aeons Torn", "cost": "{15}", "mv": 15, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 47, "name": "Street Wraith", "cost": "{3}{B}{B}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Toxic Deluge", "cost": "{2}{B}", "mv": 3, "kind": "nonpermanent" }, { "num": 55, "name": "Unpredictable Cyclone", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent" }, { "num": 56, "name": "Unpredictable Cyclone", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent" }], "graveyard": ["Remand"], "library_size": 46, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 4, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }] },
+  "heuristic_default": 5,
+  "examined": [{ "index": 0, "legal": true, "name": "Street Wraith" }, { "index": 1, "legal": true, "name": "Unpredictable Cyclone" }, { "index": 2, "legal": true, "name": "Mountain" }, { "index": 3, "legal": true, "name": "Toxic Deluge" }, { "index": 4, "legal": true, "name": "Brainsurge" }, { "index": 5, "legal": true, "name": "Emrakul, the Aeons Torn" }, { "index": 6, "legal": true, "name": "Curator of Mysteries" }],
+  "note": "reply an index into `examined` (the cards left -- the one you put on top is no longer listed) to put that card on top of your library BENEATH the one you just chose (it is the second card you draw). Mandatory: -1 takes the AI's pick. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 14,
+  "main_ordinal": 10,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 4, "card": "Brainsurge" }, { "turn": 4, "card": "Emrakul, the Aeons Torn" }, { "turn": 4, "card": "Curator of Mysteries" }],
+  "events": [{ "turn": 4, "kind": "putback", "text": "⤴ Brainstorm -- put back on top of the library: Unpredictable Cyclone, then Emrakul, the Aeons Torn (top first)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Cascade Bluffs", "idx": 3, "num": 10, "is_land": true, "taps": "C", "tap_fed": ["UU", "UR", "RR"], "tap_feed": "{U/R}", "tap_note": "its {U/R} is paid from your floating mana -- tap a source for it first" }, { "name": "Island", "idx": 1, "num": 19, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 5, "num": 25, "is_land": true, "taps": "R" }, { "name": "Steam Vents", "idx": 6, "num": 45, "is_land": true, "taps": "UR" }], "vial_counters": [], "hand": [{ "num": 6, "name": "Brainsurge", "cost": "{2}{U}", "mv": 3, "kind": "nonpermanent", "is_draw": true }, { "num": 11, "name": "Curator of Mysteries", "cost": "{2}{U}{U}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 47, "name": "Street Wraith", "cost": "{3}{B}{B}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Toxic Deluge", "cost": "{2}{B}", "mv": 3, "kind": "nonpermanent" }, { "num": 56, "name": "Unpredictable Cyclone", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent" }], "graveyard": ["Brainstorm", "Remand"], "library_size": 48, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 4, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Brainsurge", "land": null, "casts": ["Brainsurge"], "actions": [{ "card": "Brainsurge" }] },
+    { "index": 1, "summary": "cycle Street Wraith to draw", "land": null, "casts": [], "actions": [{ "card": "Street Wraith", "dig": true, "dig_sacrifice": false }] },
+    { "index": 2, "summary": "cycle Unpredictable Cyclone to draw", "land": null, "casts": [], "actions": [{ "card": "Unpredictable Cyclone", "dig": true, "dig_sacrifice": false }] },
+    { "index": 3, "summary": "cycle Curator of Mysteries to draw", "land": null, "casts": [], "actions": [{ "card": "Curator of Mysteries", "dig": true, "dig_sacrifice": false }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 15,
+  "main_ordinal": 11,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Cascade Bluffs", "idx": 3, "num": 10, "is_land": true, "taps": "C", "tap_fed": ["UU", "UR", "RR"], "tap_feed": "{U/R}", "tap_note": "its {U/R} is paid from your floating mana -- tap a source for it first" }, { "name": "Island", "idx": 1, "num": 19, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 5, "num": 25, "is_land": true, "taps": "R" }, { "name": "Steam Vents", "idx": 6, "num": 45, "is_land": true, "taps": "UR" }], "vial_counters": [], "hand": [{ "num": 6, "name": "Brainsurge", "cost": "{2}{U}", "mv": 3, "kind": "nonpermanent", "is_draw": true }, { "num": 11, "name": "Curator of Mysteries", "cost": "{2}{U}{U}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 47, "name": "Street Wraith", "cost": "{3}{B}{B}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Toxic Deluge", "cost": "{2}{B}", "mv": 3, "kind": "nonpermanent" }, { "num": 56, "name": "Unpredictable Cyclone", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent" }], "graveyard": ["Brainstorm", "Remand"], "library_size": 48, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 4, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Brainsurge", "land": null, "casts": ["Brainsurge"], "actions": [{ "card": "Brainsurge" }] },
+    { "index": 1, "summary": "cycle Street Wraith to draw", "land": null, "casts": [], "actions": [{ "card": "Street Wraith", "dig": true, "dig_sacrifice": false }] },
+    { "index": 2, "summary": "cycle Unpredictable Cyclone to draw", "land": null, "casts": [], "actions": [{ "card": "Unpredictable Cyclone", "dig": true, "dig_sacrifice": false }] },
+    { "index": 3, "summary": "cycle Curator of Mysteries to draw", "land": null, "casts": [], "actions": [{ "card": "Curator of Mysteries", "dig": true, "dig_sacrifice": false }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 4, "cast_order": ["**", "land=Mountain", "cast=Unpredictable Cyclone"], "decision": {
+  "decision_index": 16,
+  "main_ordinal": 12,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 5, "card": "Unpredictable Cyclone" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Cascade Bluffs", "idx": 3, "num": 10, "is_land": true, "taps": "C", "tap_fed": ["UU", "UR", "RR"], "tap_feed": "{U/R}", "tap_note": "its {U/R} is paid from your floating mana -- tap a source for it first" }, { "name": "Island", "idx": 1, "num": 19, "is_land": true, "taps": "U" }, { "name": "Mountain", "idx": 5, "num": 25, "is_land": true, "taps": "R" }, { "name": "Steam Vents", "idx": 6, "num": 45, "is_land": true, "taps": "UR" }], "vial_counters": [], "hand": [{ "num": 6, "name": "Brainsurge", "cost": "{2}{U}", "mv": 3, "kind": "nonpermanent", "is_draw": true }, { "num": 11, "name": "Curator of Mysteries", "cost": "{2}{U}{U}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 47, "name": "Street Wraith", "cost": "{3}{B}{B}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Toxic Deluge", "cost": "{2}{B}", "mv": 3, "kind": "nonpermanent" }, { "num": 56, "name": "Unpredictable Cyclone", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent" }, { "num": 55, "name": "Unpredictable Cyclone", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent" }], "graveyard": ["Brainstorm", "Remand"], "library_size": 47, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 4, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }] },
+  "plans": [
+    { "index": 0, "summary": "land=Mountain; cast: Brainsurge", "land": "Mountain", "casts": ["Brainsurge"], "actions": [{ "card": "Brainsurge" }] },
+    { "index": 1, "summary": "land=Mountain; cast: Curator of Mysteries", "land": "Mountain", "casts": ["Curator of Mysteries"], "actions": [{ "card": "Curator of Mysteries" }] },
+    { "index": 2, "summary": "land=none; cast: Brainsurge", "land": null, "casts": ["Brainsurge"], "actions": [{ "card": "Brainsurge" }] },
+    { "index": 3, "summary": "land=none; cast: Curator of Mysteries", "land": null, "casts": ["Curator of Mysteries"], "actions": [{ "card": "Curator of Mysteries" }] },
+    { "index": 4, "summary": "land=Mountain; cast: Unpredictable Cyclone", "land": "Mountain", "casts": ["Unpredictable Cyclone"], "actions": [{ "card": "Unpredictable Cyclone" }] },
+    { "index": 5, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 6, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 7, "summary": "cycle Street Wraith to draw", "land": null, "casts": [], "actions": [{ "card": "Street Wraith", "dig": true, "dig_sacrifice": false }] },
+    { "index": 8, "summary": "cycle Unpredictable Cyclone to draw", "land": null, "casts": [], "actions": [{ "card": "Unpredictable Cyclone", "dig": true, "dig_sacrifice": false }] },
+    { "index": 9, "summary": "cycle Curator of Mysteries to draw", "land": null, "casts": [], "actions": [{ "card": "Curator of Mysteries", "dig": true, "dig_sacrifice": false }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 17,
+  "main_ordinal": 13,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Cascade Bluffs", "idx": 3, "num": 10, "tapped": true, "is_land": true }, { "name": "Island", "idx": 1, "num": 19, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 5, "num": 25, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 7, "num": 26, "tapped": true, "is_land": true }, { "name": "Steam Vents", "idx": 6, "num": 45, "tapped": true, "is_land": true }, { "name": "Unpredictable Cyclone", "idx": 8, "num": 56, "is_land": false }], "vial_counters": [], "hand": [{ "num": 6, "name": "Brainsurge", "cost": "{2}{U}", "mv": 3, "kind": "nonpermanent", "is_draw": true }, { "num": 11, "name": "Curator of Mysteries", "cost": "{2}{U}{U}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Street Wraith", "cost": "{3}{B}{B}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Toxic Deluge", "cost": "{2}{B}", "mv": 3, "kind": "nonpermanent" }, { "num": 55, "name": "Unpredictable Cyclone", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent" }], "graveyard": ["Brainstorm", "Remand"], "library_size": 47, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 4, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }] },
+  "plans": [
+    { "index": 0, "summary": "cycle Street Wraith (Unpredictable Cyclone: exile until a creature, may cast it free)", "land": null, "casts": [], "actions": [{ "card": "Street Wraith", "dig": true, "dig_sacrifice": false }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 18,
+  "type": "free_cast",
+  "source": "Unpredictable Cyclone",
+  "turn": 5,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 16, "battlefield": [{ "name": "Cascade Bluffs", "idx": 3, "num": 10, "tapped": true, "is_land": true }, { "name": "Island", "idx": 1, "num": 19, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 5, "num": 25, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 7, "num": 26, "tapped": true, "is_land": true }, { "name": "Steam Vents", "idx": 6, "num": 45, "tapped": true, "is_land": true }, { "name": "Unpredictable Cyclone", "idx": 8, "num": 56, "is_land": false }], "vial_counters": [], "hand": [{ "num": 6, "name": "Brainsurge", "cost": "{2}{U}", "mv": 3, "kind": "nonpermanent", "is_draw": true }, { "num": 11, "name": "Curator of Mysteries", "cost": "{2}{U}{U}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Toxic Deluge", "cost": "{2}{B}", "mv": 3, "kind": "nonpermanent" }, { "num": 55, "name": "Unpredictable Cyclone", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent" }], "graveyard": ["Brainstorm", "Remand", "Street Wraith"], "library_size": 46, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 4, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }] },
+  "heuristic_default": 0,
+  "ai_pick": 0,
+  "candidates": [{ "index": 0, "name": "Emrakul, the Aeons Torn" }],
+  "note": "reply a candidate index to cast that spell WITHOUT paying its mana cost, or -1 to decline. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 19,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "reveals": [{ "turn": 5, "source": "Unpredictable Cyclone (cycled Street Wraith: exile until creature)", "cards": [{ "name": "Emrakul, the Aeons Torn", "disposition": "cast (free)" }] }],
+  "events": [{ "turn": 5, "kind": "life", "text": "Street Wraith (cycling cost): pay 2 life (18→16)" }, { "turn": 5, "kind": "trigger", "text": "⏳ Emrakul, the Aeons Torn: take an extra turn after this one (1 pending)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 16, "battlefield": [{ "name": "Cascade Bluffs", "idx": 3, "num": 10, "tapped": true, "is_land": true }, { "name": "Emrakul, the Aeons Torn", "idx": 9, "num": 15, "is_land": false, "power": 15, "toughness": 15 }, { "name": "Island", "idx": 1, "num": 19, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 5, "num": 25, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 7, "num": 26, "tapped": true, "is_land": true }, { "name": "Steam Vents", "idx": 6, "num": 45, "tapped": true, "is_land": true }, { "name": "Unpredictable Cyclone", "idx": 8, "num": 56, "is_land": false }], "vial_counters": [], "hand": [{ "num": 6, "name": "Brainsurge", "cost": "{2}{U}", "mv": 3, "kind": "nonpermanent", "is_draw": true }, { "num": 11, "name": "Curator of Mysteries", "cost": "{2}{U}{U}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Toxic Deluge", "cost": "{2}{B}", "mv": 3, "kind": "nonpermanent" }, { "num": 55, "name": "Unpredictable Cyclone", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent" }], "graveyard": ["Brainstorm", "Remand", "Street Wraith"], "library_size": 46, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 4, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 20,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 16, "battlefield": [{ "name": "Cascade Bluffs", "idx": 3, "num": 10, "tapped": true, "is_land": true }, { "name": "Emrakul, the Aeons Torn", "idx": 9, "num": 15, "is_land": false, "power": 15, "toughness": 15 }, { "name": "Island", "idx": 1, "num": 19, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 5, "num": 25, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 7, "num": 26, "tapped": true, "is_land": true }, { "name": "Steam Vents", "idx": 6, "num": 45, "tapped": true, "is_land": true }, { "name": "Unpredictable Cyclone", "idx": 8, "num": 56, "is_land": false }], "vial_counters": [], "hand": [{ "num": 6, "name": "Brainsurge", "cost": "{2}{U}", "mv": 3, "kind": "nonpermanent", "is_draw": true }, { "num": 11, "name": "Curator of Mysteries", "cost": "{2}{U}{U}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Toxic Deluge", "cost": "{2}{B}", "mv": 3, "kind": "nonpermanent" }, { "num": 55, "name": "Unpredictable Cyclone", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent" }], "graveyard": ["Brainstorm", "Remand", "Street Wraith"], "library_size": 46, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 4, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 21,
+  "main_ordinal": 14,
+  "type": "main_phase",
+  "turn": 5,
+  "extra_turn": 1,
+  "turn_seq": 6,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 5, "card": "Myriad Landscape" }],
+  "events": [{ "turn": 5, "kind": "extra_turn", "turn_seq": 6, "text": "⏳ Extra turn begins (turn 5, extra 1)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 16, "battlefield": [{ "name": "Cascade Bluffs", "idx": 3, "num": 10, "is_land": true, "taps": "C", "tap_fed": ["UU", "UR", "RR"], "tap_feed": "{U/R}", "tap_note": "its {U/R} is paid from your floating mana -- tap a source for it first" }, { "name": "Emrakul, the Aeons Torn", "idx": 9, "num": 15, "is_land": false, "power": 15, "toughness": 15 }, { "name": "Island", "idx": 1, "num": 19, "is_land": true, "taps": "U" }, { "name": "Mountain", "idx": 5, "num": 25, "is_land": true, "taps": "R" }, { "name": "Mountain", "idx": 7, "num": 26, "is_land": true, "taps": "R" }, { "name": "Steam Vents", "idx": 6, "num": 45, "is_land": true, "taps": "UR" }, { "name": "Unpredictable Cyclone", "idx": 8, "num": 56, "is_land": false }], "vial_counters": [], "hand": [{ "num": 6, "name": "Brainsurge", "cost": "{2}{U}", "mv": 3, "kind": "nonpermanent", "is_draw": true }, { "num": 11, "name": "Curator of Mysteries", "cost": "{2}{U}{U}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 28, "name": "Myriad Landscape", "cost": "", "mv": 0, "kind": "land" }, { "num": 51, "name": "Toxic Deluge", "cost": "{2}{B}", "mv": 3, "kind": "nonpermanent" }, { "num": 55, "name": "Unpredictable Cyclone", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent" }], "graveyard": ["Brainstorm", "Remand", "Street Wraith"], "library_size": 45, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 4, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }] },
+  "plans": [
+    { "index": 0, "summary": "land=Myriad Landscape; cast: Brainsurge", "land": "Myriad Landscape", "casts": ["Brainsurge"], "actions": [{ "card": "Brainsurge" }] },
+    { "index": 1, "summary": "land=Myriad Landscape; cast: Curator of Mysteries", "land": "Myriad Landscape", "casts": ["Curator of Mysteries"], "actions": [{ "card": "Curator of Mysteries" }] },
+    { "index": 2, "summary": "land=none; cast: Brainsurge", "land": null, "casts": ["Brainsurge"], "actions": [{ "card": "Brainsurge" }] },
+    { "index": 3, "summary": "land=none; cast: Curator of Mysteries", "land": null, "casts": ["Curator of Mysteries"], "actions": [{ "card": "Curator of Mysteries" }] },
+    { "index": 4, "summary": "land=Myriad Landscape; cast: Unpredictable Cyclone", "land": "Myriad Landscape", "casts": ["Unpredictable Cyclone"], "actions": [{ "card": "Unpredictable Cyclone" }] },
+    { "index": 5, "summary": "land=none; cast: Unpredictable Cyclone", "land": null, "casts": ["Unpredictable Cyclone"], "actions": [{ "card": "Unpredictable Cyclone" }] },
+    { "index": 6, "summary": "land=Myriad Landscape; cast: (nothing)", "land": "Myriad Landscape", "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 8, "summary": "cycle Curator of Mysteries (Unpredictable Cyclone: exile until a creature, may cast it free)", "land": null, "casts": [], "actions": [{ "card": "Curator of Mysteries", "dig": true, "dig_sacrifice": false }] },
+    { "index": 9, "summary": "cycle Unpredictable Cyclone (Unpredictable Cyclone: exile until a enchantment, may cast it free)", "land": null, "casts": [], "actions": [{ "card": "Unpredictable Cyclone", "dig": true, "dig_sacrifice": false }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 22,
+  "type": "dig",
+  "source": "Brainsurge (put back: top)",
+  "turn": 5,
+  "extra_turn": 1,
+  "turn_seq": 6,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 16, "battlefield": [{ "name": "Cascade Bluffs", "idx": 3, "num": 10, "tapped": true, "is_land": true }, { "name": "Emrakul, the Aeons Torn", "idx": 9, "num": 15, "is_land": false, "power": 15, "toughness": 15 }, { "name": "Island", "idx": 1, "num": 19, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 5, "num": 25, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 7, "num": 26, "is_land": true, "taps": "R" }, { "name": "Steam Vents", "idx": 6, "num": 45, "is_land": true, "taps": "UR" }, { "name": "Unpredictable Cyclone", "idx": 8, "num": 56, "is_land": false }], "vial_counters": [], "hand": [{ "num": 11, "name": "Curator of Mysteries", "cost": "{2}{U}{U}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 16, "name": "Emrakul, the Aeons Torn", "cost": "{15}", "mv": 15, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 28, "name": "Myriad Landscape", "cost": "", "mv": 0, "kind": "land" }, { "num": 39, "name": "Scalding Tarn", "cost": "", "mv": 0, "kind": "land" }, { "num": 48, "name": "Street Wraith", "cost": "{3}{B}{B}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Toxic Deluge", "cost": "{2}{B}", "mv": 3, "kind": "nonpermanent" }, { "num": 55, "name": "Unpredictable Cyclone", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent" }], "graveyard": ["Brainstorm", "Remand", "Street Wraith"], "library_size": 41, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 4, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }] },
+  "heuristic_default": 2,
+  "examined": [{ "index": 0, "legal": true, "name": "Toxic Deluge" }, { "index": 1, "legal": true, "name": "Curator of Mysteries" }, { "index": 2, "legal": true, "name": "Unpredictable Cyclone" }, { "index": 3, "legal": true, "name": "Myriad Landscape" }, { "index": 4, "legal": true, "name": "Mountain" }, { "index": 5, "legal": true, "name": "Emrakul, the Aeons Torn" }, { "index": 6, "legal": true, "name": "Street Wraith" }, { "index": 7, "legal": true, "name": "Scalding Tarn" }],
+  "note": "reply an index into `examined` (your hand's eligible cards) to put that card on TOP of your library (it is the next card you draw); you then choose the card to go beneath it. The put-back is mandatory, so -1 takes the AI's pick. Default = the AI's pick."
+}
+},
+    { "chosen": 4, "decision": {
+  "decision_index": 23,
+  "type": "dig",
+  "source": "Brainsurge (put back: second)",
+  "turn": 5,
+  "extra_turn": 1,
+  "turn_seq": 6,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 16, "battlefield": [{ "name": "Cascade Bluffs", "idx": 3, "num": 10, "tapped": true, "is_land": true }, { "name": "Emrakul, the Aeons Torn", "idx": 9, "num": 15, "is_land": false, "power": 15, "toughness": 15 }, { "name": "Island", "idx": 1, "num": 19, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 5, "num": 25, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 7, "num": 26, "is_land": true, "taps": "R" }, { "name": "Steam Vents", "idx": 6, "num": 45, "is_land": true, "taps": "UR" }, { "name": "Unpredictable Cyclone", "idx": 8, "num": 56, "is_land": false }], "vial_counters": [], "hand": [{ "num": 11, "name": "Curator of Mysteries", "cost": "{2}{U}{U}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 16, "name": "Emrakul, the Aeons Torn", "cost": "{15}", "mv": 15, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 28, "name": "Myriad Landscape", "cost": "", "mv": 0, "kind": "land" }, { "num": 39, "name": "Scalding Tarn", "cost": "", "mv": 0, "kind": "land" }, { "num": 48, "name": "Street Wraith", "cost": "{3}{B}{B}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Toxic Deluge", "cost": "{2}{B}", "mv": 3, "kind": "nonpermanent" }, { "num": 55, "name": "Unpredictable Cyclone", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent" }], "graveyard": ["Brainstorm", "Remand", "Street Wraith"], "library_size": 41, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 4, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }] },
+  "heuristic_default": 4,
+  "examined": [{ "index": 0, "legal": true, "name": "Toxic Deluge" }, { "index": 1, "legal": true, "name": "Curator of Mysteries" }, { "index": 2, "legal": true, "name": "Myriad Landscape" }, { "index": 3, "legal": true, "name": "Mountain" }, { "index": 4, "legal": true, "name": "Emrakul, the Aeons Torn" }, { "index": 5, "legal": true, "name": "Street Wraith" }, { "index": 6, "legal": true, "name": "Scalding Tarn" }],
+  "note": "reply an index into `examined` (the cards left -- the one you put on top is no longer listed) to put that card on top of your library BENEATH the one you just chose (it is the second card you draw). Mandatory: -1 takes the AI's pick. Default = the AI's pick."
+}
+},
+    { "chosen": 8, "decision": {
+  "decision_index": 24,
+  "main_ordinal": 15,
+  "type": "main_phase",
+  "turn": 5,
+  "extra_turn": 1,
+  "turn_seq": 6,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 5, "card": "Mountain" }, { "turn": 5, "card": "Emrakul, the Aeons Torn" }, { "turn": 5, "card": "Street Wraith" }, { "turn": 5, "card": "Scalding Tarn" }],
+  "events": [{ "turn": 5, "kind": "putback", "turn_seq": 6, "text": "⤴ Brainsurge -- put back on top of the library: Unpredictable Cyclone, then Emrakul, the Aeons Torn (top first)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 16, "battlefield": [{ "name": "Cascade Bluffs", "idx": 3, "num": 10, "tapped": true, "is_land": true }, { "name": "Emrakul, the Aeons Torn", "idx": 9, "num": 15, "is_land": false, "power": 15, "toughness": 15 }, { "name": "Island", "idx": 1, "num": 19, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 5, "num": 25, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 7, "num": 26, "is_land": true, "taps": "R" }, { "name": "Steam Vents", "idx": 6, "num": 45, "is_land": true, "taps": "UR" }, { "name": "Unpredictable Cyclone", "idx": 8, "num": 56, "is_land": false }], "vial_counters": [], "hand": [{ "num": 11, "name": "Curator of Mysteries", "cost": "{2}{U}{U}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 28, "name": "Myriad Landscape", "cost": "", "mv": 0, "kind": "land" }, { "num": 39, "name": "Scalding Tarn", "cost": "", "mv": 0, "kind": "land" }, { "num": 48, "name": "Street Wraith", "cost": "{3}{B}{B}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Toxic Deluge", "cost": "{2}{B}", "mv": 3, "kind": "nonpermanent" }], "graveyard": ["Brainstorm", "Brainsurge", "Remand", "Street Wraith"], "library_size": 43, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 4, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }] },
+  "plans": [
+    { "index": 0, "summary": "land=Scalding Tarn; cast: (nothing)", "land": "Scalding Tarn", "fetch_target": "Steam Vents", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=Scalding Tarn; cast: (nothing)", "land": "Scalding Tarn", "fetch_target": "Watery Grave", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=Scalding Tarn; cast: (nothing)", "land": "Scalding Tarn", "fetch_target": "Island", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Scalding Tarn; cast: (nothing)", "land": "Scalding Tarn", "fetch_target": "Blood Crypt", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=Scalding Tarn; cast: (nothing)", "land": "Scalding Tarn", "fetch_target": "Xander's Lounge", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=Myriad Landscape; cast: (nothing)", "land": "Myriad Landscape", "casts": [], "actions": [] },
+    { "index": 6, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 8, "summary": "cycle Curator of Mysteries (Unpredictable Cyclone: exile until a creature, may cast it free)", "land": null, "casts": [], "actions": [{ "card": "Curator of Mysteries", "dig": true, "dig_sacrifice": false }] },
+    { "index": 9, "summary": "cycle Street Wraith (Unpredictable Cyclone: exile until a creature, may cast it free)", "land": null, "casts": [], "actions": [{ "card": "Street Wraith", "dig": true, "dig_sacrifice": false }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 25,
+  "type": "free_cast",
+  "source": "Unpredictable Cyclone",
+  "turn": 5,
+  "extra_turn": 1,
+  "turn_seq": 6,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 16, "battlefield": [{ "name": "Cascade Bluffs", "idx": 3, "num": 10, "tapped": true, "is_land": true }, { "name": "Emrakul, the Aeons Torn", "idx": 9, "num": 15, "is_land": false, "power": 15, "toughness": 15 }, { "name": "Island", "idx": 1, "num": 19, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 5, "num": 25, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 7, "num": 26, "is_land": true, "taps": "R" }, { "name": "Steam Vents", "idx": 6, "num": 45, "tapped": true, "is_land": true }, { "name": "Unpredictable Cyclone", "idx": 8, "num": 56, "is_land": false }], "vial_counters": [], "hand": [{ "num": 27, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 28, "name": "Myriad Landscape", "cost": "", "mv": 0, "kind": "land" }, { "num": 39, "name": "Scalding Tarn", "cost": "", "mv": 0, "kind": "land" }, { "num": 48, "name": "Street Wraith", "cost": "{3}{B}{B}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Toxic Deluge", "cost": "{2}{B}", "mv": 3, "kind": "nonpermanent" }], "graveyard": ["Brainstorm", "Brainsurge", "Curator of Mysteries", "Remand", "Street Wraith"], "library_size": 41, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 4, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }] },
+  "heuristic_default": 0,
+  "ai_pick": 0,
+  "candidates": [{ "index": 0, "name": "Emrakul, the Aeons Torn" }],
+  "walked": ["Unpredictable Cyclone"],
+  "note": "reply a candidate index to cast that spell WITHOUT paying its mana cost, or -1 to decline. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 26,
+  "main_ordinal": 16,
+  "type": "main_phase",
+  "turn": 5,
+  "extra_turn": 1,
+  "turn_seq": 6,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "reveals": [{ "turn": 5, "source": "Unpredictable Cyclone (cycled Curator of Mysteries: exile until creature)", "cards": [{ "name": "Unpredictable Cyclone", "disposition": "bottom (random order)" }, { "name": "Emrakul, the Aeons Torn", "disposition": "cast (free)" }] }],
+  "events": [{ "turn": 5, "kind": "trigger", "turn_seq": 6, "text": "⏳ Emrakul, the Aeons Torn: take an extra turn after this one (1 pending)" }, { "turn": 5, "kind": "legend", "turn_seq": 6, "text": "⚖ legend rule: Emrakul, the Aeons Torn dies -- you already control a Emrakul, the Aeons Torn" }, { "turn": 5, "kind": "trigger", "turn_seq": 6, "text": "🔀 graveyard shuffled into the library (6 cards)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 16, "battlefield": [{ "name": "Cascade Bluffs", "idx": 3, "num": 10, "tapped": true, "is_land": true }, { "name": "Emrakul, the Aeons Torn", "idx": 9, "num": 15, "is_land": false, "power": 15, "toughness": 15 }, { "name": "Island", "idx": 1, "num": 19, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 5, "num": 25, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 7, "num": 26, "is_land": true, "taps": "R" }, { "name": "Steam Vents", "idx": 6, "num": 45, "tapped": true, "is_land": true }, { "name": "Unpredictable Cyclone", "idx": 8, "num": 56, "is_land": false }], "vial_counters": [], "hand": [{ "num": 27, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 28, "name": "Myriad Landscape", "cost": "", "mv": 0, "kind": "land" }, { "num": 39, "name": "Scalding Tarn", "cost": "", "mv": 0, "kind": "land" }, { "num": 48, "name": "Street Wraith", "cost": "{3}{B}{B}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Toxic Deluge", "cost": "{2}{B}", "mv": 3, "kind": "nonpermanent" }], "graveyard": [], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 4, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }] },
+  "plans": [
+    { "index": 0, "summary": "land=Scalding Tarn; cast: (nothing)", "land": "Scalding Tarn", "fetch_target": "Steam Vents", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=Scalding Tarn; cast: (nothing)", "land": "Scalding Tarn", "fetch_target": "Watery Grave", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=Scalding Tarn; cast: (nothing)", "land": "Scalding Tarn", "fetch_target": "Island", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Scalding Tarn; cast: (nothing)", "land": "Scalding Tarn", "fetch_target": "Blood Crypt", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=Scalding Tarn; cast: (nothing)", "land": "Scalding Tarn", "fetch_target": "Xander's Lounge", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=Myriad Landscape; cast: (nothing)", "land": "Myriad Landscape", "casts": [], "actions": [] },
+    { "index": 6, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 8, "summary": "cycle Street Wraith (Unpredictable Cyclone: exile until a creature, may cast it free)", "land": null, "casts": [], "actions": [{ "card": "Street Wraith", "dig": true, "dig_sacrifice": false }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 27,
+  "main_ordinal": 17,
+  "type": "main_phase",
+  "turn": 5,
+  "extra_turn": 1,
+  "turn_seq": 6,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 5, "kind": "trigger", "turn_seq": 6, "text": "🌀 annihilator 6 (Emrakul, the Aeons Torn): the opponent sacrifices 1/1 Creature, 1/1 Creature, 2/2 Creature" }, { "turn": 5, "kind": "combat", "turn_seq": 6, "text": "⚔ attacked: Emrakul, the Aeons Torn (15) — 15 to opponent (20→5)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 16, "battlefield": [{ "name": "Cascade Bluffs", "idx": 1, "num": 10, "tapped": true, "is_land": true }, { "name": "Emrakul, the Aeons Torn", "idx": 6, "num": 15, "tapped": true, "is_land": false, "power": 15, "toughness": 15 }, { "name": "Island", "idx": 0, "num": 19, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 2, "num": 25, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 4, "num": 26, "is_land": true, "taps": "R" }, { "name": "Steam Vents", "idx": 3, "num": 45, "tapped": true, "is_land": true }, { "name": "Unpredictable Cyclone", "idx": 5, "num": 56, "is_land": false }], "vial_counters": [], "hand": [{ "num": 27, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 28, "name": "Myriad Landscape", "cost": "", "mv": 0, "kind": "land" }, { "num": 39, "name": "Scalding Tarn", "cost": "", "mv": 0, "kind": "land" }, { "num": 48, "name": "Street Wraith", "cost": "{3}{B}{B}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Toxic Deluge", "cost": "{2}{B}", "mv": 3, "kind": "nonpermanent" }], "graveyard": [], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 5, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Scalding Tarn; cast: (nothing)", "land": "Scalding Tarn", "fetch_target": "Steam Vents", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=Scalding Tarn; cast: (nothing)", "land": "Scalding Tarn", "fetch_target": "Watery Grave", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=Scalding Tarn; cast: (nothing)", "land": "Scalding Tarn", "fetch_target": "Island", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Scalding Tarn; cast: (nothing)", "land": "Scalding Tarn", "fetch_target": "Blood Crypt", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=Scalding Tarn; cast: (nothing)", "land": "Scalding Tarn", "fetch_target": "Xander's Lounge", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=Myriad Landscape; cast: (nothing)", "land": "Myriad Landscape", "casts": [], "actions": [] },
+    { "index": 6, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 8, "summary": "cycle Street Wraith (Unpredictable Cyclone: exile until a creature, may cast it free)", "land": null, "casts": [], "actions": [{ "card": "Street Wraith", "dig": true, "dig_sacrifice": false }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 28,
+  "main_ordinal": 18,
+  "type": "main_phase",
+  "turn": 5,
+  "extra_turn": 2,
+  "turn_seq": 7,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 5, "card": "Scalding Tarn" }],
+  "events": [{ "turn": 5, "kind": "extra_turn", "turn_seq": 7, "text": "⏳ Extra turn begins (turn 5, extra 2)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 16, "battlefield": [{ "name": "Cascade Bluffs", "idx": 1, "num": 10, "is_land": true, "taps": "C", "tap_fed": ["UU", "UR", "RR"], "tap_feed": "{U/R}", "tap_note": "its {U/R} is paid from your floating mana -- tap a source for it first" }, { "name": "Emrakul, the Aeons Torn", "idx": 6, "num": 15, "is_land": false, "power": 15, "toughness": 15 }, { "name": "Island", "idx": 0, "num": 19, "is_land": true, "taps": "U" }, { "name": "Mountain", "idx": 2, "num": 25, "is_land": true, "taps": "R" }, { "name": "Mountain", "idx": 4, "num": 26, "is_land": true, "taps": "R" }, { "name": "Steam Vents", "idx": 3, "num": 45, "is_land": true, "taps": "UR" }, { "name": "Unpredictable Cyclone", "idx": 5, "num": 56, "is_land": false }], "vial_counters": [], "hand": [{ "num": 27, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 28, "name": "Myriad Landscape", "cost": "", "mv": 0, "kind": "land" }, { "num": 39, "name": "Scalding Tarn", "cost": "", "mv": 0, "kind": "land" }, { "num": 41, "name": "Scalding Tarn", "cost": "", "mv": 0, "kind": "land" }, { "num": 48, "name": "Street Wraith", "cost": "{3}{B}{B}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Toxic Deluge", "cost": "{2}{B}", "mv": 3, "kind": "nonpermanent" }], "graveyard": [], "library_size": 47, "land_drops_left": 1 },
+  "opponent": { "life": 5, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Scalding Tarn; cast: (nothing)", "land": "Scalding Tarn", "fetch_target": "Steam Vents", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=Scalding Tarn; cast: (nothing)", "land": "Scalding Tarn", "fetch_target": "Watery Grave", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=Scalding Tarn; cast: (nothing)", "land": "Scalding Tarn", "fetch_target": "Island", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Scalding Tarn; cast: (nothing)", "land": "Scalding Tarn", "fetch_target": "Blood Crypt", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=Scalding Tarn; cast: (nothing)", "land": "Scalding Tarn", "fetch_target": "Xander's Lounge", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=Myriad Landscape; cast: (nothing)", "land": "Myriad Landscape", "casts": [], "actions": [] },
+    { "index": 6, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 8, "summary": "cycle Street Wraith (Unpredictable Cyclone: exile until a creature, may cast it free)", "land": null, "casts": [], "actions": [{ "card": "Street Wraith", "dig": true, "dig_sacrifice": false }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 5, "kind": "trigger", "turn_seq": 7, "text": "🌀 annihilator 6 (Emrakul, the Aeons Torn): the opponent sacrifices nothing (no permanents)" },
+    { "turn": 5, "kind": "combat", "turn_seq": 7, "text": "⚔ attacked: Emrakul, the Aeons Torn (15) — 15 to opponent (5→-10)" }
+  ]
+}

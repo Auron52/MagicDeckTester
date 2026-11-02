@@ -62,48 +62,83 @@ def resolve(mode, key, cfg):
     deck, kmode, depth, seed = m.group(1), m.group(2), int(m.group(3)), int(m.group(4))
     if kmode != mode:
         raise ValueError(f"key mode '{kmode}' != '{mode}'")
+    # The completed run's job owns its actual play settings. In particular a matrix d5 row
+    # omits depth so value_play supplies it (FiveColour is d7); pinning d5 + ignore-play-profile
+    # reproduced a different game and falsely looked like budget recovery at seed3146/GI143.
+    manifest = os.path.join(ROOT, "test", "logs", mode, "manifest.json")
+    if os.path.exists(manifest):
+        with open(manifest) as f:
+            matches = [j for j in json.load(f).get("jobs", []) if j.get("name") == key]
+        if len(matches) > 1:
+            raise ValueError(f"duplicate saved manifest job '{key}'")
+        if matches:
+            j = matches[0]
+            return dict(deck=deck, deckfile=j["deck"], profile=j["profile"],
+                        depth=j.get("depth"), seed=j["seed"], budget=j["budget_ms"],
+                        twohg=deck.endswith("2hg"), job=j)
     budget = None
+    games = None
     for line in cfg["cases"].get(mode, []):
         f = line.split()
         if f[0] == deck and int(f[1]) == depth and int(f[2]) == seed:
-            budget = int(f[4]); break
+            budget = int(f[4]); games = int(f[3]); break
     if budget is None:
         raise ValueError(f"no {mode} case for {deck} d{depth} s{seed}")
     # "<deck>2hg" 2HG variant cases (see regression_cases.sh): the deck file/profile are the
     # BASE deck's; the game setup (starting_life 30 + opponent_heads 2) rides as env on the
     # re-run so the reproduction plays the same game the manifest did.
     base = deck[:-3] if deck.endswith("2hg") else deck
-    return dict(deck=deck, deckfile=cfg["DECK_FILE"][base], profile=cfg["DECK_PROF"][base],
-                depth=depth, seed=seed, budget=budget, twohg=deck.endswith("2hg"))
+    j = dict(name=key, deck=cfg["DECK_FILE"][base], profile=cfg["DECK_PROF"][base],
+             games=games, seed=seed, budget_ms=budget if depth > 0 else 0)
+    if depth != 5:
+        j.update(depth=depth, ignore_play_profile=True)
+    if deck.endswith("2hg"):
+        j.update(starting_life=30, opponent_heads=2)
+    if depth > 0 and budget == 0:
+        j["abandon_units"] = 2000000
+    return dict(deck=deck, deckfile=j["deck"], profile=j["profile"],
+                depth=j.get("depth"), seed=seed, budget=j["budget_ms"],
+                twohg=deck.endswith("2hg"), job=j)
+
+
+def single_game_job(r, gi):
+    """Retain all semantic job fields; only select one actual seed/global index."""
+    j = dict(r["job"])
+    offset = gi - j.get("game_index", 0)
+    if offset < 0 or offset >= j["games"]:
+        raise ValueError(f"GI {gi} outside saved job's range")
+    j.update(games=1, seed=j["seed"] + offset, game_index=gi, budget_ms=r["budget"])
+    j.pop("weight", None)   # scheduling has no meaning in a one-game process
+    return j
 
 
 # ---- run one game under a binary, parse its per-turn line ------------------------------------
 def run_game(binary, r, gi):
     tmp = tempfile.mkdtemp(prefix="explain_")
     try:
-        # Replay the case at its explicit depth/budget. --ignore-play-profile bypasses the deck's enabled
-        # value_play block (which otherwise OWNS the play depth and would reject an explicit --depth); the
-        # diagnostic wants to reproduce the exact case the manifest ran, so it pins depth/budget directly.
-        cmd = [binary, os.path.join(ROOT, r["deckfile"]),
-               "--profile", os.path.join(ROOT, r["profile"]), "--games", "1",
-               "--seed", str(r["seed"] + gi), "--game-index", str(gi),
-               "--depth", str(r["depth"]), "--budget-ms", str(r["budget"]),
-               "--ignore-play-profile", "--log-dir", tmp]
+        manifest = os.path.join(tmp, "manifest.json")
+        traces = os.path.join(tmp, "traces")
+        with open(manifest, "w") as f:
+            json.dump({"jobs": [single_game_job(r, gi)]}, f)
+        cmd = [binary, "--batch", manifest, "--threads", "1",
+               "--game-log-dir", os.path.join(tmp, "wins"), "--game-trace-dir", traces]
         env = os.environ.copy()
-        if r.get("twohg"):   # 2HG variant case: reproduce at its real game setup
-            env["MTG_START_LIFE"] = "30"
-            env["MTG_OPPONENT_HEADS"] = "2"
-        subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, timeout=600, env=env)
-        logs = glob.glob(os.path.join(tmp, "*.json"))
+        result = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, env=env)
+        if result.returncode != 0:
+            raise RuntimeError(f"replay exited {result.returncode}: {result.stderr.strip()}")
+        logs = glob.glob(os.path.join(traces, "*.json"))
         if not logs:
             return None
+        if len(logs) != 1:
+            raise RuntimeError(f"replay produced {len(logs)} traces for one game")
         return parse_log(logs[0])
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
 
 def parse_log(path):
-    d = json.load(open(path))
+    with open(path) as f:
+        d = json.load(f)
     res = d.get("result") or {}
     win = res.get("turn") if res.get("winner") not in (None, "none") else None
     turns = {}
@@ -167,8 +202,9 @@ def diff_game(mode, key, gi, old_bin=None, new_bin=None, budget_ms=None):
         cand = os.path.join(ROOT, f"logs/snapshots/{mode}-baseline")
         old_bin = cand if os.path.exists(cand) else None
 
-    seedline = (f"    explain {key} gi{gi}  (seed {r['seed']}+{gi}={r['seed']+gi}, "
-                f"d{r['depth']}, {r['budget']}ms)")
+    actual_seed = r["seed"] + gi - r["job"].get("game_index", 0)
+    depth_label = f"d{r['depth']}" if r["depth"] is not None else "depth from play profile"
+    seedline = f"    explain {key} gi{gi}  (seed {actual_seed}, {depth_label}, {r['budget']}ms)"
     new = run_game(new_bin, r, gi) if new_bin and os.path.exists(new_bin) else None
     old = run_game(old_bin, r, gi) if old_bin and os.path.exists(old_bin) else None
 

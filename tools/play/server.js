@@ -297,15 +297,20 @@ function buildArgs(p, logDir, validateLine, exhaustiveKeep) {
     const pairs = Object.keys(p.firebreathe).map(t => `${t}:${p.firebreathe[t]}`);
     if (pairs.length) args.push('--firebreathe', pairs.join(','));
   }
-  // Umezawa's Jitte counter-spend side-channel: same turn-keyed shape as firebreathe. Kept for
-  // REPLAY of games that recorded answers; the live PROMPT is gone (USER 2026-08-27: "It should be
-  // handled by allowing activations to be specifically triggered rather than having a dialog on
-  // attack") -- pumps are explicit main-phase JitteModeAbility plans, which last until end of turn
-  // and so cover combat; an unanswered combat turn BANKS the counters (engine human-play default).
+  // Umezawa's Jitte counter-spend side-channel: same turn-keyed shape as firebreathe. There is no
+  // dialog on attack (USER 2026-08-27: "It should be handled by allowing activations to be
+  // specifically triggered rather than having a dialog on attack") -- pumps are explicit main-phase
+  // JitteModeAbility plans, which last until end of turn and so cover combat; an unanswered combat
+  // turn BANKS the counters (engine human-play default). The ONE exception, and the only frame
+  // --jitte-prompt emits: a DOUBLE STRIKER carrying the Jitte, whose first strike earns counters that
+  // can be spent on its regular-damage half -- a mid-combat spend no main-phase activation can make
+  // (USER 2026-10-27 approved "spend as the counters arrive"; KittyEquipment v1 s15_gi14 T6). The
+  // answer -1 = spend as they arrive, N >= 0 = exactly N pre-strike.
   if (p.jitte && typeof p.jitte === 'object') {
     const jpairs = Object.keys(p.jitte).map(t => `${t}:${p.jitte[t]}`);
     if (jpairs.length) args.push('--jitte', jpairs.join(','));
   }
+  args.push('--jitte-prompt');
   args.push('--firebreathe-prompt');
   args.push(...castOrderArg(p.castOrder));
   // FULL-ENUM side channel (USER 2026-10-03: *"allows these lines to be played, but ... record that

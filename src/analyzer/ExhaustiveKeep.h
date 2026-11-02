@@ -106,7 +106,8 @@ struct ExhaustiveKeepConfig
                                 // REFUSES. See the lock note in BuildEquivalenceClasses.
     std::string commit;         // play-logic identity stamped into the raw sidecar (from MTG_COMMIT)
     std::string force_merge;    // MANUAL bucket override (MTG_EQUIV_FORCE_MERGE): ";"-separated groups,
-                                // each a ","-separated list of card names, unioned into ONE bucket AFTER
+                                // each a ","-separated list of card names, or JSON arrays of exact full-name groups.
+                                // Unioned into ONE bucket AFTER
                                 // discovery. For deliberately merging near-equivalents the strict distance
                                 // threshold keeps apart (e.g. the four fetchlands) to shrink the hand space.
                                 // Gameplay is untouched -- cards keep real identities; only the keep/bottom

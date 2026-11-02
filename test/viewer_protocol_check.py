@@ -44,7 +44,7 @@ test/regression.sh runs the full sweep --strict (threaded) in REGRESSION mode --
 three: this is a whole-corpus replay, so re-running it in smoke and overnight re-measured the same
 thing (VPC_ALWAYS=1 forces it in any mode, VPC_SKIP=1 skips it).
 """
-import json, os, re, subprocess, sys, glob
+import collections, json, os, re, subprocess, sys, glob
 
 MTG = os.environ.get("MTG_BIN", "./build/Release/mtg")
 # The passive opponent's scheduled creatures ("1/1 Creature" spawns) carry card numbers from this
@@ -287,7 +287,7 @@ RES_RE = re.compile(r"<<<CLAUDE_RESULT>>>\s*(\{.*?\})\s*<<<END_RESULT>>>", re.S)
 # Decision types that ride a KEYED SIDE-CHANNEL, not the positional --choices stream: their recorded
 # `chosen` must NOT be folded into --choices (that would desync the positional replay). They are
 # reconstructed separately in side_channel_args() and passed as --firebreathe / --storage-hold.
-SIDE_CHANNEL_TYPES = {"firebreathe", "storage_hold"}
+SIDE_CHANNEL_TYPES = {"firebreathe", "storage_hold", "jitte"}
 
 
 # Decision types that --force-mulligan resolves INTERNALLY (keep/mull answers and the bottoming
@@ -341,7 +341,7 @@ def recorded_attackers(decisions):
             # Attackers are "Name (power)" joined by ", "; split on '), ' because names themselves
             # can carry commas ("Oko, Thief of Crowns (3)"), then strip the power suffix.
             names = [re.sub(r" \(\d+\)?$", "", piece) for piece in body.split("), ")]
-            by_turn[ev.get("turn")] = names
+            by_turn[_tkey(ev)] = names
     return by_turn
 
 
@@ -367,17 +367,30 @@ def recorded_tap_prefs(decisions):
     phase-wide, the historical behaviour."""
     prefs = {}
     prev = None
+    # Sources seen TAPPED on the sub-decision frames between the pair (a target, a sacrifice): a
+    # source that tapped and then LEFT before the closing frame (the Mountain that paid Shard Volley
+    # and was then sacrificed to it, burn s21_gi20) is a payment tap the closing frame cannot show.
+    between = set()
     for d in decisions:
         dec = d.get("decision", {})
         if dec.get("type") != "main_phase":
+            between |= {p["num"] for p in (dec.get("me") or {}).get("battlefield", [])
+                        if isinstance(p.get("num"), int) and p.get("tapped")}
             continue
-        if prev is not None and prev.get("turn") == dec.get("turn") \
+        if prev is not None and _tkey(prev) == _tkey(dec) \
                 and prev.get("phase") == dec.get("phase"):
+            # By CARD NUMBER, not battlefield position: `idx` is a slot in a vector that is rebuilt
+            # when a permanent LEAVES between the two frames (a sac-land paid as Shard Volley's
+            # additional cost, Blighted Steppe sacrificed), and every later slot then shifts down
+            # by one, so an idx delta named permanents that never tapped and dropped ones that
+            # did. burn s21_gi20 pinned Swiftspear + Eidolon; SelesnyaLifegain s15_gi14 pinned
+            # Accomplished Alchemist, which then tapped before the lifegain and shrank Genesis
+            # Wave's X from 14 to 2 (ref_promote refusals, 2026-10-26).
             def field(fr, want_tapped):
-                return {p["idx"] for p in fr.get("me", {}).get("battlefield", [])
-                        if isinstance(p.get("idx"), int)
+                return {p["num"] for p in fr.get("me", {}).get("battlefield", [])
+                        if isinstance(p.get("num"), int)
                         and (bool(p.get("tapped")) or not want_tapped)}
-            delta = (field(dec, True) - field(prev, True)) & field(prev, False)
+            delta = ((field(dec, True) | between) - field(prev, True)) & field(prev, False)
             # (see the CAST-AND-TAPPED note below: those can carry a pair whose delta is empty)
             _hand = {h.get("num") for h in (prev.get("me", {}).get("hand") or [])
                      if isinstance(h.get("num"), int)}
@@ -393,9 +406,7 @@ def recorded_tap_prefs(decisions):
                 # killing the reference several frames later as an opaque "board differs". Same
                 # stale-index class that cost five Mirrorwing references. Copies of a card are
                 # interchangeable to a payment, so the name IS the whole recoverable intent.
-                by_idx = {p["idx"]: p.get("num") for p in prev.get("me", {}).get("battlefield", [])
-                          if isinstance(p.get("idx"), int)}
-                nums = {by_idx[i] for i in delta if isinstance(by_idx.get(i), int)}
+                nums = set(delta)
                 # CAST-AND-TAPPED. A source the line itself CAST from hand and then TAPPED is a payment tap too, and
                 # leaving it out is not neutral: a pin outranks every unpinned source, so the pinned
                 # lands pay the generic pips the human paid with the new rock and a later coloured pip
@@ -410,9 +421,10 @@ def recorded_tap_prefs(decisions):
                     ordinal = prev.get("main_ordinal")
                     if not isinstance(ordinal, int):
                         ordinal = -1
-                    key = (dec.get("turn"), dec.get("phase"), ordinal)
+                    key = (_tkey(dec), dec.get("phase"), ordinal)
                     prefs[key] = sorted(set(prefs.get(key, [])) | nums)
         prev = dec
+        between = set()
     return prefs
 
 
@@ -447,6 +459,11 @@ def recording_rule_args(ref):
     carries no key and replays with --legacy-gsz-shuffle -- the draws it was actually played with.
     Inert on every deck without Green Sun's Zenith.
 
+    `spell_copy_id` (2026-10-29, Cyclone ledger Q53): from then on the apply path human play uses files a
+    resolved instant / sorcery into the graveyard (or a self-exiler into exile) as its CAST COPY, as the executor
+    always did, not the template (m_number 0) -- which an Eldrazi's graveyard shuffle dealt back as tied,
+    duplicate-number cards. A recording made before carries no key and replays with --legacy-spell-copy.
+
     `combat_damage_steps` (2026-10-18, CR 510.4): from then on a combat with a first or double striker
     deals damage in two steps, so first-step lifelink reaches Thune / Pridemate / Serra Ascendant's
     30-life threshold before the regular step. A recording made before carries no key and replays with
@@ -459,6 +476,8 @@ def recording_rule_args(ref):
         args.append("--legacy-pain-pay")
     if not ref.get("gsz_copy_id"):
         args.append("--legacy-gsz-shuffle")
+    if not ref.get("spell_copy_id"):
+        args.append("--legacy-spell-copy")
     if not ref.get("combat_damage_steps"):
         args.append("--legacy-single-damage-step")
     return args
@@ -478,14 +497,16 @@ def side_channel_args(decisions, pin_lines=False, ordmap=None):
     an ordinal (or a recorded one it no longer shows) shifts every later key. Without the remap the
     pins land on the wrong frame, or on none. None = keys as recorded (the historical behaviour)."""
     om = ordmap if ordmap is not None else (lambda o: o)
-    fb, sh, co, fe = [], [], [], []
+    fb, sh, co, fe, jt = [], [], [], [], []
     for d in decisions:
         dec = d.get("decision", {})
         t = dec.get("type")
         if t == "firebreathe":
-            fb.append(f'{dec.get("turn")}:{int(d["chosen"])}')
+            fb.append(f'{_tkey(dec)}:{int(d["chosen"])}')
+        elif t == "jitte":     # -1 = spend as the counters arrive; N >= 0 = exactly N pre-strike
+            jt.append(f'{_tkey(dec)}:{int(d["chosen"])}')
         elif t == "storage_hold":
-            sh.append(f'{dec.get("turn")}:{dec.get("land_idx")}:{int(d["chosen"])}')
+            sh.append(f'{_tkey(dec)}:{dec.get("land_idx")}:{int(d["chosen"])}')
         if t == "main_phase" and d.get("cast_order"):
             _o = dec.get("main_ordinal")
             _o = om(_o) if isinstance(_o, int) and _o >= 0 else _o
@@ -558,6 +579,8 @@ def side_channel_args(decisions, pin_lines=False, ordmap=None):
     extra = []
     if fb:
         extra += ["--firebreathe", ",".join(fb)]
+    if jt:
+        extra += ["--jitte", ",".join(jt)]
     if sh:
         extra += ["--storage-hold", ",".join(sh)]
     if co:
@@ -674,6 +697,37 @@ def replay(deck, prof, seed, gi, choices, force=None, extra=None, max_turns=8, v
     return p.returncode, p.stdout + p.stderr
 
 
+def remap_candidate_index(choice, recorded, current):
+    """Re-anchor a candidate by name while retaining its published choice index.
+
+    Some prompts reserve 0 for decline and publish candidates at indices 1..N. Their list
+    positions are not the values --choices consumes. Keep the old index when its card is still
+    there, and use the new candidate's index when the provider reordered the list.
+    """
+    if choice < 0:
+        return choice
+    rec_by_idx = {c.get("index", i): c.get("name") for i, c in enumerate(recorded)}
+    name = rec_by_idx.get(choice)
+    if name is None:
+        return choice
+    cur_by_idx = {c.get("index", i): c.get("name") for i, c in enumerate(current)}
+    if cur_by_idx.get(choice) == name:
+        return choice
+    for i, c in enumerate(current):
+        if c.get("name") == name:
+            return c.get("index", i)
+    return choice
+
+
+def _tkey(d):
+    """THE TURN KEY: turns TAKEN. A decision / event carries `turn` (the ROUND -- extra turns do not
+    count toward the turn count, USER 2026-10-26) and, once an extra turn has been taken (Emrakul),
+    `turn_seq`. Anything meaning "the same turn" -- and the per-turn replay specs, which the engine keys
+    on turns taken -- uses this. Absent turn_seq (every reference without an extra turn): `turn`, so
+    those replay byte-identically."""
+    v = d.get("turn_seq") if isinstance(d, dict) else None
+    return v if v is not None else (d.get("turn") if isinstance(d, dict) else None)
+
 REQUIRED_DECISION_KEYS = {"decision_index", "type", "turn"}
 
 
@@ -692,7 +746,19 @@ def frame_ident(d):
     pick and tried to play it a phase early -- reported as a bogus ENUM-GAP ("recorded plan 'cast:
     Light Up the Stage' no longer enumerated", nplans 5->2, hand identical) or as play-drift on the
     decks with a real second main. They are different decisions; identity must say so."""
-    return (d.get("type"), d.get("turn"), d.get("phase"), d.get("source"))
+    return (d.get("type"), _tkey(d), d.get("phase"), d.get("source"))
+
+
+def legacy_blaze_player_stage(current, recorded):
+    """A saved one-step Blaze creature pick now follows a new player pick."""
+    if current.get("type") != "target" or current.get("source") != "Searing Blaze":
+        return False
+    if frame_ident(current) != frame_ident(recorded):
+        return False
+    def kinds(frame):
+        return {target.get("kind") for option in frame.get("options") or []
+                for target in option.get("targets") or []}
+    return kinds(current) == {"player"} and kinds(recorded) == {"permanent"}
 
 
 def plan_key(p):
@@ -1072,6 +1138,12 @@ def option_key(o):
         return ("placement", tuple(o.get("top") or []), tuple(o.get("away") or []),
                 bool(o.get("shuffle")))
     if "name" in o:
+        # A permanent pick (sacrifice / bounce) carries its TAPPED state, and that is intent, not
+        # position: sacrificing the Mountain that already paid is not sacrificing a fresh one
+        # (burn s21_gi20: Shard Volley + Skullcrack on three Mountains needs the TAPPED one
+        # sacrificed; name alone resolved to an untapped copy and stranded Skullcrack's mana).
+        if isinstance(o.get("tapped"), bool):
+            return ("name", o.get("name"), o["tapped"])
         return ("name", o.get("name"))
     if isinstance(o.get("label"), str) and o["label"]:
         parts = [p.strip() for p in o["label"].split(" + ")]
@@ -1079,7 +1151,7 @@ def option_key(o):
     return None
 
 
-def find_option(recorded, options, recorded_index=None):
+def find_option(recorded, options, recorded_index=None, source=None):
     """Index of the recorded option in the CURRENT options list, matched by stable CONTENT -- the
     enumeration order of scry/reorder/discard options is not part of the contract, so a verbatim
     index silently performs a different placement when the order changes. Prefers the recorded
@@ -1092,6 +1164,15 @@ def find_option(recorded, options, recorded_index=None):
         return recorded_index if (recorded_index is not None
                                   and 0 <= recorded_index < len(options)) else None
     hits = [i for i, o in enumerate(options) if option_key(o) == want]
+    if not hits and source == "Searing Blaze" and want[0] == "label":
+        # The old one-step creature dialog named an opposing token without a side suffix;
+        # the new second stage says "(opponent)" after the player was chosen separately.
+        hits = [i for i, o in enumerate(options)
+                if (key := option_key(o)) and key[0] == "label"
+                and tuple(part.removesuffix(" (opponent)") for part in key[1]) == want[1]]
+    if not hits and want[0] == "name" and len(want) == 3:
+        # The recorded tapped state is not reproducible (the payment moved): same card, any state.
+        hits = [i for i, o in enumerate(options) if (option_key(o) or ())[:2] == want[:2]]
     if not hits:
         return None
     if recorded_index is not None and recorded_index in hits:
@@ -1099,12 +1180,38 @@ def find_option(recorded, options, recorded_index=None):
     return hits[0]
 
 
-def engine_default(d):
+def engine_flags(d):
+    """The AI's own answer to a FLAGS frame as its full 0/1 vector, or None for any other frame. Two
+    shapes read one 0/1 flag per entry, not an index, and re-emit the frame until all are in:
+      * put-any-subset (dragon / sac_tutor / revive / rummage: max_puts + candidates + ai_set), whose
+        default is the ai_set candidates -- a lone 0 there means "put nothing";
+      * Soulfire Eruption's `target` frame (random_damage), one flag per legal_targets entry, whose
+        default is options[heuristic_default]'s set -- sending heuristic_default itself as each flag
+        targets EVERYTHING, your own creatures included."""
+    if (isinstance(d.get("max_puts"), int) and isinstance(d.get("candidates"), list)
+            and isinstance(d.get("ai_set"), list)):
+        on = set(d["ai_set"])
+        return [1 if i in on else 0 for i in range(len(d["candidates"]))]
+    if d.get("type") == "target" and d.get("random_damage") and isinstance(d.get("legal_targets"), list):
+        opts, hd = d.get("options") or [], d.get("heuristic_default")
+        if isinstance(hd, int) and 0 <= hd < len(opts):
+            want = {(t.get("kind"), t.get("index")) for t in opts[hd].get("targets") or []}
+            return [int((t.get("kind"), t.get("index")) in want) for t in d["legal_targets"]]
+        return [1] + [0] * (len(d["legal_targets"]) - 1)
+    return None
+
+
+def engine_default(d, nth=0):
     """The answer the engine itself would give for a frame the reference never recorded.
     Every emitted frame carries `heuristic_default` (= the AI's pick); the mulligan/bottom
     frames carry `ai_choice` instead. Answering from these makes a NEWLY ADDED decision point
     non-destructive: the replay proceeds exactly as the unattended engine would, and the
-    reference's own recorded picks stay aligned to the decisions it actually recorded."""
+    reference's own recorded picks stay aligned to the decisions it actually recorded.
+    A flags frame (engine_flags) is answered one flag at a time: `nth` = how many of its flags were
+    already sent (the caller counts its re-emissions)."""
+    fl = engine_flags(d)
+    if fl is not None:
+        return (fl[nth] if 0 <= nth < len(fl) else 0), "ai_flags"
     ac = d.get("ai_choice")
     if isinstance(ac, int):
         return ac, "ai_choice"
@@ -1153,13 +1260,13 @@ def replicate_intent(dec, kept, ri):
     all, and for those the old engine's own default -- greedy max -- is the recorded intent. The
     caller distinguishes the two cases; this returns only what the reference actually says.
     """
-    turn = dec.get("turn")
+    turn = _tkey(dec)
     out = {}
     for rec in kept[ri:]:
         rd = rec.get("decision") or {}
         if rd.get("type") != "replicate":
             continue
-        if rd.get("turn") != turn:
+        if _tkey(rd) != turn:
             break                      # a later turn: this turn's dialogs are all behind us
         chosen = rec.get("chosen")
         if isinstance(chosen, int) and rd.get("source"):
@@ -1181,14 +1288,14 @@ def free_cast_intent(dec, kept, ri):
 
     Returns (pick, source) or None when the reference has nothing to say (caller falls back).
     """
-    turn = dec.get("turn")
+    turn = _tkey(dec)
     cands = dec.get("candidates") or []
     if not cands:
         return None
     by_name = {c.get("name"): c.get("index") for c in cands}
     for rec in kept[ri:]:
         rd = rec.get("decision") or {}
-        if rd.get("type") != "main_phase" or rd.get("turn") != turn:
+        if rd.get("type") != "main_phase" or _tkey(rd) != turn:
             continue
         if rd.get("phase") != "post_main":
             continue
@@ -1218,12 +1325,12 @@ def target_intent(dec, kept, ri):
 
     Returns (pick, source) or None when the reference says nothing (caller falls back).
     """
-    src, turn = dec.get("source"), dec.get("turn")
+    src, turn = dec.get("source"), _tkey(dec)
     if not src:
         return None
     for rec in reversed(kept[:ri]):                 # the plan this cast came from, most recent first
         rd = rec.get("decision") or {}
-        if rd.get("type") != "main_phase" or rd.get("turn") != turn:
+        if rd.get("type") != "main_phase" or _tkey(rd) != turn:
             continue
         chosen = rec.get("chosen")
         if not isinstance(chosen, int) or chosen < 0:
@@ -1240,6 +1347,32 @@ def target_intent(dec, kept, ri):
                 return o.get("index"), f"recorded-intent({want})"
         return None
     return None
+
+
+def sacrifice_intent(dec, kept, ri):
+    """Answer an unaligned `sacrifice` frame from the RECORDED BOARD, not from a blind default.
+
+    A sacrifice-as-cost (Natural Order) used to be the engine's own pick, so references saved then
+    carry no `sacrifice` frame. The engine default has since changed, and answering from it put a
+    different elf in the graveyard: StompySurprise v1 s12_gi11 T3 recorded Arbor Elf sacrificed, the
+    default (option 0) is Elvish Mystic. The win turn happened to survive, so the drift gate passed
+    while every later board (and the review's hand-off rungs) sat on a game the user never played.
+    The next recorded frame of the SAME turn shows which permanent left: pick the option whose name
+    the recorded board has fewer of. Ambiguous or no later frame this turn -> None (caller falls back).
+    """
+    if ri >= len(kept):
+        return None
+    nxt = kept[ri].get("decision") or {}
+    if nxt.get("turn") != dec.get("turn"):
+        return None
+    now = collections.Counter(p.get("name") for p in (dec.get("me") or {}).get("battlefield") or [])
+    after = collections.Counter(p.get("name") for p in (nxt.get("me") or {}).get("battlefield") or [])
+    gone = {o.get("name") for o in (dec.get("options") or []) if now[o.get("name")] > after[o.get("name")]}
+    if len(gone) != 1:
+        return None
+    want = gone.pop()
+    pick = next(o.get("index") for o in dec["options"] if o.get("name") == want)
+    return pick, f"recorded-board({want})"
 
 
 def check_reference(path, collect=None):
@@ -1369,6 +1502,7 @@ def walk_reference(path, collect=None, valve=None, pin_lines=False):
     mt = max(8, ref.get("win_turn") or 0)
 
     resolved = []        # the pick stream actually sent (content-resolved + defaults filled in)
+    flag_sent = {}       # (frame ident, decision_index) -> flags already sent to an unrecorded flags frame
     # Aligned MAIN-PHASE frames, in walk order: where each one sits in `resolved`. This is the
     # alignment that viewer_validate_check.js needs and used to approximate on its own -- it lets
     # that check replay the exact prefix that lands the engine on a given recorded frame, instead
@@ -1414,7 +1548,7 @@ def walk_reference(path, collect=None, valve=None, pin_lines=False):
         except (TypeError, ValueError):
             return False
         rank = {"pre_main": 0, "post_main": 1}
-        dt, ct = d.get("turn"), dec.get("turn")
+        dt, ct = _tkey(d), _tkey(dec)
         if not isinstance(dt, int) or not isinstance(ct, int):
             return False
         if dt < ct:
@@ -1483,6 +1617,8 @@ def walk_reference(path, collect=None, valve=None, pin_lines=False):
             return False, "play", f"main_phase decision after {len(resolved)} picks has no plans list"
 
         aligned = ri < len(kept) and frame_ident(dec) == frame_ident(kept[ri]["decision"])
+        if aligned and legacy_blaze_player_stage(dec, kept[ri]["decision"]):
+            aligned = False
         if (not aligned and ri < len(kept) and dec.get("type") != "main_phase"
                 and kept[ri]["decision"].get("type") != "main_phase"):
             # SUB-DECISIONS OF ONE PLAN, ASKED IN A NEW ORDER (2026-10-15, burn s17 gi16). The
@@ -1501,7 +1637,8 @@ def walk_reference(path, collect=None, valve=None, pin_lines=False):
             g = next((k for k in range(ri, len(kept))
                       if kept[k]["decision"].get("type") == "main_phase"), len(kept))
             j = next((k for k in range(ri + 1, g)
-                      if frame_ident(kept[k]["decision"]) == frame_ident(dec)), None)
+                      if frame_ident(kept[k]["decision"]) == frame_ident(dec)
+                      and not legacy_blaze_player_stage(dec, kept[k]["decision"])), None)
             if j is not None:
                 kept.insert(ri, kept.pop(j))
                 reordered.append(f"{frame_ident(dec)}")
@@ -1534,10 +1671,11 @@ def walk_reference(path, collect=None, valve=None, pin_lines=False):
                 # walk really did pin, so a frame whose count was NOT reproduced still stays loud.
                 rd_ = rec["decision"]
                 if rd_.get("type") == "replicate":
-                    return (rd_.get("turn"), rd_.get("source"), rec.get("chosen")) in honoured
+                    return (_tkey(rd_), rd_.get("source"), rec.get("chosen")) in honoured
                 return False
             j = next((k for k in range(ri + 1, len(kept))
-                      if frame_ident(kept[k]["decision"]) == frame_ident(dec)), None)
+                      if frame_ident(kept[k]["decision"]) == frame_ident(dec)
+                      and not legacy_blaze_player_stage(dec, kept[k]["decision"])), None)
             if j is not None and all(_declined(kept[k]) for k in range(ri, j)):
                 for k in range(ri, j):
                     why = ("count moved into the plan"
@@ -1552,7 +1690,8 @@ def walk_reference(path, collect=None, valve=None, pin_lines=False):
             while ri < len(kept) and stale_pass_frame(kept[ri], dec):
                 skipped.append(f"{frame_ident(kept[ri]['decision'])}")
                 ri += 1
-            aligned = ri < len(kept) and frame_ident(dec) == frame_ident(kept[ri]["decision"])
+            aligned = (ri < len(kept) and frame_ident(dec) == frame_ident(kept[ri]["decision"])
+                       and not legacy_blaze_player_stage(dec, kept[ri]["decision"]))
         if not aligned:
             # A decision this reference never recorded (a point added after it was saved, or an
             # extra frame because the line ran longer). Consume no recorded pick. For a MAIN_PHASE
@@ -1580,14 +1719,39 @@ def walk_reference(path, collect=None, valve=None, pin_lines=False):
                         nm = next((c.get("name") for c in (dec.get("candidates") or [])
                                    if c.get("index") == pick), None)
                         if nm:
-                            freecast_done.setdefault(dec.get("turn"), []).append(nm)
+                            freecast_done.setdefault(_tkey(dec), []).append(nm)
                 else:
                     pick, src = engine_default(dec)
             elif dec.get("type") == "target":
                 # A trick target that used to ride the PLAN and is now asked at resolution: aim it
                 # where the reference's own plan aimed it (see target_intent).
-                intent = target_intent(dec, kept, ri)
+                if ri < len(kept) and legacy_blaze_player_stage(dec, kept[ri]["decision"]):
+                    # The recorded creature fixes the player for the new first stage.
+                    old = kept[ri]
+                    chosen = old.get("chosen")
+                    old_opts = old["decision"].get("options") or []
+                    old_opt = old_opts[chosen] if isinstance(chosen, int) and 0 <= chosen < len(old_opts) else {}
+                    old_targets = old_opt.get("targets") or []
+                    target_index = old_targets[0].get("index") if old_targets else None
+                    self_target = (any(p.get("idx") == target_index
+                                       for p in old["decision"].get("me", {}).get("battlefield", []))
+                                   or old_opt.get("label", "").endswith("yours)"))
+                    face = "You (face)" if self_target else "Opponent (face)"
+                    pick = next((i for i, option in enumerate(dec.get("options") or [])
+                                 if option.get("label") == face), dec.get("heuristic_default", 0))
+                    src = "recorded Blaze creature controller"
+                else:
+                    intent = target_intent(dec, kept, ri)
+                    pick, src = intent if intent else engine_default(dec)
+            elif dec.get("type") == "sacrifice":
+                intent = sacrifice_intent(dec, kept, ri)
                 pick, src = intent if intent else engine_default(dec)
+            elif engine_flags(dec) is not None:
+                # A flags frame re-emits with the same decision_index until all its flags are in:
+                # count what this one has been sent so far.
+                fk = (frame_ident(dec), dec.get("decision_index"))
+                pick, src = engine_default(dec, flag_sent.get(fk, 0))
+                flag_sent[fk] = flag_sent.get(fk, 0) + 1
             else:
                 pick, src = engine_default(dec)
             inserted.append(f"{frame_ident(dec)}<-{pick}({src})")
@@ -1707,7 +1871,7 @@ def walk_reference(path, collect=None, valve=None, pin_lines=False):
                     # time, so the plan is legitimately gone here and passing loses nothing.
                     # Only when the plan is NOTHING BUT those casts (no land, no extras) --
                     # anything still unplayed falls through and stays loud.
-                    done = freecast_done.get(dec.get("turn"), [])
+                    done = freecast_done.get(_tkey(dec), [])
                     plan_casts = sorted(recorded.get("casts") or [])
                     if (plan_casts and recorded.get("land") in (None, "", "none")
                             and plan_casts == sorted(done)):
@@ -1790,7 +1954,7 @@ def walk_reference(path, collect=None, valve=None, pin_lines=False):
                     shifted.append(f"{frame_ident(dec)} {p}->{q}")
                 for a in ((cur_plans[q] if 0 <= q < len(cur_plans) else {}).get("actions") or []):
                     if "replicate_count" in a:
-                        honoured.add((dec.get("turn"), a.get("card"), a["replicate_count"]))
+                        honoured.add((_tkey(dec), a.get("card"), a["replicate_count"]))
                 resolved.append(q)
         else:
             # Auxiliary decision (scry / reorder / discard / target / ...). These carry an
@@ -1820,7 +1984,7 @@ def walk_reference(path, collect=None, valve=None, pin_lines=False):
                         resolved.append(x)
                         continue
                     rec_opt = ref_opts[x] if 0 <= x < len(ref_opts) else None
-                    q = find_option(rec_opt, cur_opts, recorded_index=x)
+                    q = find_option(rec_opt, cur_opts, recorded_index=x, source=dec.get("source"))
                     if q is None:
                         cur_hand = hand_names(dec.get("me", {}).get("hand", []))
                         ref_hand = hand_names(rd.get("me", {}).get("hand", []))
@@ -1845,17 +2009,11 @@ def walk_reference(path, collect=None, valve=None, pin_lines=False):
                 # when the name still sits there (or the frame has no names), and -1 (decline)
                 # stays a sentinel. A recorded name that is no longer offered falls back to the
                 # verbatim index, i.e. exactly the old behaviour, and the drift test decides.
-                cur_names = [c.get("name") for c in dec["candidates"]]
-                ref_by_idx = {c.get("index"): c.get("name") for c in rd["candidates"]}
                 for x in rec_list:
                     x = int(x)
-                    nm = ref_by_idx.get(x)
-                    if x < 0 or nm is None or (0 <= x < len(cur_names) and cur_names[x] == nm) \
-                            or nm not in cur_names:
-                        resolved.append(x)
-                        continue
-                    q = cur_names.index(nm)
-                    shifted.append(f"{frame_ident(dec)} {x}->{q}")
+                    q = remap_candidate_index(x, rd["candidates"], dec["candidates"])
+                    if q != x:
+                        shifted.append(f"{frame_ident(dec)} {x}->{q}")
                     resolved.append(q)
             else:
                 resolved += [int(x) for x in rec_list]

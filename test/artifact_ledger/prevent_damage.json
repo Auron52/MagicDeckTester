@@ -1,0 +1,25 @@
+{
+ "deck": "prevent_damage",
+ "_doc": "artifact refresh verdicts -- scripts/artifact_queue.py (LEDGER_DIR)",
+ "entries": [
+  {
+   "run_id": "prevent_damage-artifact-queue-tool-647f24-20261031T110339",
+   "kind": "valueleaf",
+   "verdict": "kept-incumbent",
+   "ident": "em:bf21aa7b11b76bf32600",
+   "frozen": "2c76c854e7ce593f129c0aced8f6854339dd00c2",
+   "src_tree": "520d6ef09669321b0ab80c3252a15f487a7db01c",
+   "date": "2026-10-31",
+   "worker": "artifact-queue-tool-647f24",
+   "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_prevent_damage/DECISIONS.txt)",
+   "decisions": [
+    "    PICK arm=d6b20 why=the cheapest of 1 passing arm(s) (0.98x vs live, delta -0.00125)",
+    "    next: commit it with the deck's smoke + regression GT re-accepted (it changes play).",
+    "",
+    "=== 2026-10-31T12:05:47  PHASE E.6: NOT ADOPTED prevent_damage -- 1 game(s) slower; fleet default R = 0 stands",
+    "    probe 1200 g (seed 7100000): 931 ladder escalations, headroom 6.1% of all work, fitted vector [195.2, 103.9, 38.3, 17.3, 18.2, 9.9] (n/depth 931/327/98/45/32/33) projects -2.9%",
+    "    A/B 6000 g vs R = 0 (seed 7300000; no win = 9): fitted [195.2, 103.9, 38.3, 17.3, 18.2, 9.9] units -2.7%, 1 moved: 0 flicker, 1 real (gi3991 8->-1) -- FAILS: 1 game(s) slower"
+   ]
+  }
+ ]
+}

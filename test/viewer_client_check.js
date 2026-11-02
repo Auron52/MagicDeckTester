@@ -1959,6 +1959,10 @@ async function testOneStepLineNoSilentRevert() {
     const ve = win.document.getElementById('verdict');
     chk(ve && ve.style.display === 'block' && /rolled back/.test(ve.textContent || ''),
         'the rollback reason is not on screen (the revert was silent)');
+    // ...and it says what the dropped cast was short of (Q37, USER 2026-10-29: "Seething Song plans should error
+    // properly"): the engine's decision.dropped_reasons, read off the board at the failed payment.
+    chk(ve && / costs \{[^;]*; /.test(ve.textContent || ''),
+        `the rollback does not name the dropped cast's cost and the mana left (verdict: "${ve && (ve.textContent || '').slice(0, 240)}")`);
     chk(st.commitTurn == null, 'a rolled-back line must disarm Commit turn');
   }
   return fails;

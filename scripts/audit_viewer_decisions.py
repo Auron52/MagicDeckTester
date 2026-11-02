@@ -144,6 +144,9 @@ MANIFEST = {
     "grants_replicate_to_subtypes": ("replicate",     truthy),   # + grants it to Sliver spells
     "etb_bounce_land":       ("bounce",               truthy),
     "sacrifice_land":        ("sacrifice",            truthy),
+    "sacrifice_mountains_alternative": ("sacrifice", truthy),
+    "chain_lightning_copy": ("free_cast", truthy),
+    "incinerator_damage_trigger": ("target", truthy),
     "expressive_iteration":  ("expressive_iteration", truthy),
     # "pay a cost, or the land enters tapped" -- shock lands (pay life) + reveal lands (Frostboil
     # Snarl, reveal a matching land). One shared `land_entry` binary modal. SURFACED, but repetitive:
@@ -161,6 +164,10 @@ MANIFEST = {
     "draw_target_player":    ("main_phase",           truthy),
     "tutor_to_hand":         ("main_phase",           truthy),
     "tutor_to_top":          ("main_phase",           truthy),
+    # Long-Term Plans ("search your library for a card, then shuffle and put that card third from the
+    # top"): the same searched tutor target (Plan::tutor_choice / tutor_target plan variants); in human
+    # play an instant tutor re-asks at resolution (HumanPlayDefersTutorTarget -> the `tutor` chooser).
+    "tutor_library_position": ("main_phase",          positive),
     # "You MAY search" (Giant Harbinger). This is a real decision, not inert: TurnSolver.cpp
     # emits an extra DECLINE plan variant (`v.tutor_choice = kTutorDeclineChoice`) alongside the
     # per-target variants, so it rides the same main_phase plan list as the tutor pick it
@@ -212,6 +219,7 @@ MANIFEST = {
     # Scavenging Ooze: WHICH graveyard card to exile (and how many activations) are independent
     # main_phase plan actions, one per distinct graveyard name (Action::GraveyardExileGrow).
     "gy_exile_grow_cost":    ("main_phase",           truthy),
+    "tap_graveyard_exile_damage": ("gy_return_one", positive),
     # Felidar Guardian: WHICH permanent to flicker (+ decline) rides the CastFromHand chosen_x
     # plan-variant axis on a cast; a PUT entry (Pod/Chord/Reveillark) surfaces its own `flicker`
     # board-pick chooser (g_play_flicker_chooser in FireOwnEtbTriggers' blink block, reply -1 =
@@ -230,6 +238,16 @@ MANIFEST = {
     # reply shape) wired 2026-09-05; fires on EVERY LTB path (sac costs, flickers, evoke).
     # Default = the provider's ReviveCandidates pick (missing combo pieces first).
     "ltb_return_creatures":  ("revive",               positive),
+    # Abiding Grace (LifegainHeliodCombo, 2026-10-27): the end-step "choose one" -- gain 1 life OR
+    # return an MV-1 creature card -- asked as ONE `gy_return_one` pick (a graveyard card image, or
+    # the alt_text button) at the shared PerformEndStepAbidingGrace; only when a return is legal.
+    # Emeria, the Sky Ruin shares the type (alt_text "Return nothing"). MV 0 is a real value here,
+    # so the gate is ">= 0", not positive.
+    "endstep_modal_reanimate_mv": ("gy_return_one",   lambda v: isinstance(v, int) and v >= 0),
+    # Emeria, the Sky Ruin (LifegainHeliodCombo, 2026-10-27): the upkeep "you may return target creature
+    # card" -- the same `gy_return_one` pick (a graveyard card image, or the "Return nothing" alt button)
+    # at the shared PerformUpkeepGyReanimate; asked only when the intervening if holds and a target exists.
+    "upkeep_gy_reanimate":   ("gy_return_one",        truthy),
     # Celes: WHICH cards to rummage away -- its own `rummage` multi-pick chooser
     # (g_play_rummage_chooser at the etb_discard_any_number resolution, the sac_tutor reply
     # shape over the whole hand; zero picks legal) wired 2026-09-05. Default = excess lands.
@@ -268,6 +286,13 @@ MANIFEST = {
     # `target` board-click decision -- no new type.
     "lifegain_target_own_counter": ("target",          truthy),   # "put a +1/+1 counter on target creature or enchantment you control"
     "lifelink_grant_cost":   ("target",               truthy),   # "{1}{W}: Another target creature gains lifelink" (which creature)
+    # LifegainHeliodCombo (2026-10-27): Walking Ballista. "Remove a +1/+1 counter: 1 damage to ANY target"
+    # -- the target is asked at the ping's resolution through the shared `target` decision
+    # (ResolveCounterPing -> g_play_target_chooser, CollectDamageTargets); the X of its {X}{X} is a
+    # `main_phase` plan variant (chosen_x, every X 0..max), and the {4} counter is a main-phase activation.
+    "remove_counter_ping_damage": ("target",          positive),
+    "enters_with_x_plus_counters": ("main_phase",     truthy),
+    "self_counter_cost":     ("main_phase",           truthy),
     # SelesnyaLifegain screen (2026-10-22): Heroes' Reunion / Rest for the Weary, "TARGET PLAYER gains N
     # life". WHICH player is a real choice: the autonomous search branches over Action::player_target
     # (the opponent variant pruned by DecisionProvider::OffersLifegainOpponentTarget by default); a human
@@ -541,6 +566,25 @@ MANIFEST = {
     # ResolveLandfallTargetCounters, over EVERY legal Plant; the engine's searched pick
     # (Plan::landfall_target_choice) is preselected. A single legal Plant is forced (not prompted).
     "landfall_target_counters": ("target",            positive),
+    # ---- Unpredictable Cyclone phase 2 (2026-10-27): the Ulamogs' targeted CAST triggers ----
+    # "exile two target permanents" / "destroy target permanent": WHICH permanents (either side) is asked
+    # through the shared `target` board-click (g_play_loyalty_chooser) at ChooseCastTriggerTargets -- the
+    # shared push/inline chooser both apply paths call -- one pick per target over EVERY legal permanent;
+    # the engine's searched option (Plan::cast_trigger_target_choice) is preselected; a forced pick is not
+    # prompted.
+    "cast_trigger_exile_target_permanents":   ("target", positive),
+    "cast_trigger_destroy_target_permanents": ("target", positive),
+    # ---- Unpredictable Cyclone phase 3 (2026-10-27) ----
+    # Unpredictable Cyclone's replaced cycling draw: "You may cast that card without paying its mana cost"
+    # -- the shared `free_cast` decision at the human-play dig (TurnSolver's cyclone_replaced_draw), source
+    # "Unpredictable Cyclone", the walk's non-hits shown; with a Remand in hand that could answer the hit, a
+    # SECOND free_cast prompt offers that Remand (zone "hand"; its cost is paid). The autonomous engine
+    # searches it (the cycle seed's free-cast pin).
+    "cycle_draw_exile_shared_type_freecast":  ("free_cast", truthy),
+    # Curator of Mysteries' "whenever you cycle or discard another card, scry 1": the ordinary `scry`
+    # decision (ScryTop's g_play_top_chooser), one prompt per trigger, at the cycle (before its draw) and at
+    # every other discard (ResolveDiscardScryTriggers). The autonomous engine searches a cycle's j.
+    "cycle_or_discard_trigger_scry":          ("scry", positive),
     # ---- the land-search cluster (2026-10-15; core/LandSearch.h) ----
     # WHICH land(s) every land search finds is asked at RESOLUTION through the shared `tutor_etb`
     # chooser, one sequential prompt per land (PerformLandSearch -- the shared resolution helper, so it
@@ -660,6 +704,7 @@ BOARD_ACTIVATIONS = {
     # only once the piece is attached, so it is checked by test/unit/test_reconfigure.cpp, not here.)
     "reconfigure_cost":                          ("verb:equip",     truthy,   "reconfigure_cost"),
     "equip_combat_damage_charges":               ("verb:jittemode", truthy,   None),  # spends a counter
+    "tap_graveyard_exile_damage":               ("verb:gyexile",   positive, 3),
     "gy_exile_instant_sorcery_drain":            ("verb:gyexile",   positive, 1),     # "{B}, {T}"
     "gy_return_cost":                            ("verb:gyreturn",  truthy,   "gy_return_cost"),
     "gy_play_cost":                              ("verb:gyplay",    truthy,   None),  # Kaldring {T}
@@ -695,6 +740,8 @@ BOARD_ACTIVATIONS = {
     # (a land is never cast; a Khalni may also sit in hand).
     "land_search_activation_cost":               ("verb:landsearch", truthy,  "land_search_activation_cost"),
     "lifelink_grant_cost":                       ("activate",       truthy,   "lifelink_grant_cost"),  # Heliod {1}{W}
+    "self_counter_cost":                         ("activate",       truthy,   "self_counter_cost"),    # Walking Ballista {4}
+    "remove_counter_ping_damage":                ("activate",       positive, None),                   # Walking Ballista ping (counter cost)
     "can_animate":                               ("verb:animate",   truthy,   "animate_cost"),
     "tap_token_cost":                            ("verb:taptoken",  truthy,   "tap_token_cost"),
     "channel_cost":                              ("verb:channel",   truthy,   "channel_cost"),
@@ -744,6 +791,13 @@ def _cost_mv(card, cost_from):
 # one dangerous error; under-listing just yields a longer, safe review list.
 # ---------------------------------------------------------------------------
 INERT_PARAMS = {
+    # Midrange Burn: fixed arithmetic/cost semantics; the existing cast/tap actions own timing.
+    "damage_per_nonbasic_land": "Price of Progress deals its printed multiple to EACH player from the live nonbasic count; no targets or chosen amount",
+    "tap_is_life_payment": "Fiery Islet's printed life payment is a mandatory mana-ability cost, not preventable damage; the mana activation is the existing tap action",
+    # ---- Unpredictable Cyclone phase 2 (2026-10-27) -- PROVISIONAL, pending the user's OK ----
+    "cast_trigger_extra_turns": "Emrakul's 'take an extra turn after this one' -- MANDATORY cast trigger, no choice (display only: the turn bar's 'Turn N (extra k)', an event line, extra_turn/turn_seq in the decision JSON)",
+    "annihilator": "Annihilator N -- the DEFENDING player's sacrifice (the passive opponent sacrifices oldest first, a fixed rule); not our choice, nothing to surface (event line only)",
+    "put_into_graveyard_shuffles_graveyard": "Emrakul / Ulamog the Infinite Gyre: the owner shuffles their graveyard into their library -- MANDATORY trigger, no choice (event line)",
     # ---- LandfallElementals (2026-10-18) -- PROVISIONAL, pending the user's OK ----
     "landfall_self_pump_power": "Akoum Hellhound / Brushfire Elemental: 'this creature gets +2/+2 until end of turn' on each landfall -- MANDATORY, untargeted SELF pump, no choice (the land drop's timing is the decision and rides main_phase via Plan::land_slot)",
     "landfall_self_pump_toughness": "toughness half of the landfall self pump (rides landfall_self_pump_power) -- no choice",
@@ -787,6 +841,12 @@ INERT_PARAMS = {
     "landfall_counters_each": "Avenger of Zendikar's 'you MAY put a +1/+1 counter on each Plant creature you control' -- all-or-nothing, resolved YES by a stated dominance (a +1/+1 counter on our own creature is never worse vs the passive opponent; the one mechanic it could hurt, undying, exists on no card) -- DISCLOSED 6a, PROVISIONAL",
     "landfall_counters_each_subtype": "landfall each-<subtype> counter filter (rides landfall_counters_each)",
     "landfall_target_subtype": "landfall target filter (rides landfall_target_counters, which IS surfaced)",
+    # ---- Scute Swarm / Scythecat Cub (2026-10-23, Landfall screening candidates) -- PROVISIONAL, pending the user's OK ----
+    "landfall_copy_self_at_lands": "Scute Swarm's 'if you control six or more lands, create a token that's a copy of this creature instead' -- a resolution-time CONDITION on the landfall token, MANDATORY, no target, no choice",
+    "landfall_target_any_creature": "landfall target filter 'target creature you control' (Scythecat Cub; rides landfall_target_counters, which IS surfaced through the `target` board-click)",
+    "landfall_additional_combat": "Moraug's 'if it's your main phase, there's an additional combat phase after this phase ... untap all creatures you control' -- MANDATORY, no target, no choice; each additional combat re-asks the existing per-combat pickers and is logged as its own COMBAT phase -- PROVISIONAL",
+    "attack_count_team_power": "Moraug's static '+1/+0 for each time it has attacked this turn' -- automatic, no choice",
+    "landfall_target_second_doubles": "Scythecat Cub's 'if this is the second time this ability has resolved this turn, double the counters instead' -- WHICH resolution doubles is fixed by the rules, not chosen; its target rides the same surfaced `target` board-click",
     "landfall_lifegain": "automatic landfall lifegain (Courser of Kruphix), through GainLife -- no target, no choice",
     "land_search_count": "how many lands the search may find ('up to N') -- the pick itself rides the land-search fire-site param -> tutor_etb; 'up to' is collapsed for the search to the maximal picks by dominance (PROVISIONAL), the human may stop early with -1",
     "land_search_basic_only": "search FILTER ('basic land card', the Basic supertype) -- legality, not a choice; the pick rides tutor_etb",
@@ -1405,6 +1465,7 @@ INERT_PARAMS = {
     "drain_each_opponent": "Scholar of Athreos 'EACH opponent' scope of the drain (rides drain_cost -> main_phase): x opposing heads, no target -- nothing to choose",
     # Brindle Boar: "Sacrifice this creature: You gain 4 life" -- the payload is automatic; the
     # ACTIVATION rides sac_creature_outlet -> activate and the victim is forced (sac_outlet_self_only).
+    "sac_outlet_lifegain_per_revealed_color": "Martyr of Sands' reveal colour; the X it scales is surfaced as x_value (reveal kind) -- mapped in expected_types",
     "sac_outlet_lifegain": "automatic sac-outlet lifegain (Brindle Boar, 4), no choice in the payload; the activation rides sac_creature_outlet -> activate, the victim is the source itself",
     "cast_lifegain_ferocious": (
         "the FEROCIOUS amount of an automatic untargeted lifegain (Feed the Clan: 'you gain 10 life "
@@ -1460,6 +1521,7 @@ INERT_PARAMS = {
     "tap_put_from_hand_types": "put-from-hand card-type filter detail (rides tap_put_from_hand_cost -> main_phase)",
     # --- Fluctuator (cycling combo) ---
     "reduces_cycling_activation": "Fluctuator: STATIC cycling-cost reduction, no choice of its own -- it only makes the existing cycling activations cheaper (often FREE), and those already surface as cycling_cost main_phase plays. Nothing is decided when it applies.",
+    "cost_less_per_opponent_noncombat_damage": "Static cost reduction from recorded actual noncombat damage to opponents this turn; existing main_phase spell plans reflect the live cost.",
     "cost_less_per_cycle_or_discard": "Hollow One: STATIC cost reduction scaled by a per-turn counter (cards cycled or discarded this turn). Like any cost reducer it creates no decision -- it only changes what the existing main_phase cast plans cost, and the cycling that drives the counter is itself already surfaced as cycling_cost main_phase plays.",
     "cycle_trigger_damage_each_opponent": "Drannith Stinger: MANDATORY triggered ability on every cycle ('deals 1 damage to each opponent'). Not a may-ability and it takes no target -- 'each opponent' is the whole set, which in a goldfish is one player. No choice.",
     # --- Pirates (2026-09-26; USER-APPROVED 2026-09-27: "3 is approved"). Each is a mandatory/
@@ -1493,6 +1555,10 @@ INERT_PARAMS = {
     # ---- Prevent Damage (2026-09-27, phase I2) -- the deck's spells ----
     "on_cast_trigger_any_mv": "Spellshock: widens the Eidolon cast trigger to every mana value -- a trigger THRESHOLD, no choice (the damage is automatic, to the caster)",
     "ping_all_amount": "Pyrohemia: damage per activation (1) -- a printed constant; the activation itself (and its count) rides ping_all_cost -> main_phase",
+    "upkeep_gy_reanimate_land_subtype": "Emeria: the intervening-if's land SUBTYPE (Plains) -- a legality condition, no choice; the pick rides upkeep_gy_reanimate -> gy_return_one",
+    "upkeep_gy_reanimate_land_threshold": "Emeria: the intervening-if's land COUNT (7) -- a condition, no choice",
+    "upkeep_gy_reanimate_may": "Emeria: 'you may' -- the decline IS the gy_return_one alt_text button ('Return nothing'), riding upkeep_gy_reanimate",
+    "endstep_modal_lifegain": "Abiding Grace's gain-mode PAYLOAD -- automatic once the mode is chosen; the mode rides endstep_modal_reanimate_mv -> gy_return_one (its alt_text button)",
     "endstep_sac_if_no_creatures": "Pyrohemia: mandatory intervening-if end-step SACRIFICE of this enchantment -- no target, no may",
     "tutor_max_mv_is_lands": "Beseech the Queen: tutor MV cap = lands you control -- a legality FILTER read at resolution; the pick rides tutor_to_hand -> main_phase / the resolution re-ask",
     "shuffles_self_into_library_on_resolve": "Green Sun's Zenith: the resolved spell shuffles itself into the library -- automatic, no choice",
@@ -1558,6 +1624,10 @@ MAINPHASE_PARAMS = {
     # sub-choices reuse the existing `face` / `fetch` subs and the `bounce` decision.
     "play_lands_from_library_top": "Courser of Kruphix's 'You may play lands from the top of your library' -- the land drop's SOURCE is a main_phase plan variant (Plan::land_from_top; line verb landtop=, board field library_top)",
     "cycling_cost":        "cycling = discard-to-draw activation from hand (main_phase play)",
+    # Street Wraith (2026-10-26): "Cycling--Pay 2 life" -- the LIFE half of the cycling cost. It prices the
+    # same cycling_cost main_phase play (offered only while life > N; the viewer's offer probe and every
+    # payer read CyclingLifePayable), so it adds no decision of its own.
+    "cycling_life_cost":   "life half of a cycling cost (Street Wraith); prices the cycling_cost main_phase play, no choice",
     # Remand (2026-10-17): "Counter target spell ... put it into its owner's hand ... Draw a card." Its
     # only legal target is one of OUR OWN spells on the stack, so WHICH spell it answers is a main_phase
     # PLAN VARIANT -- Action::remand_by on the target's cast ("X + Remand on it"), one per legal target,
@@ -1700,6 +1770,9 @@ RES_RE = re.compile(r"<<<CLAUDE_RESULT>>>")
 # targeted seed-search cannot reach either: a forward driver can only cast cards, it cannot stock a
 # graveyard. Keep this list SHORT and every entry backed by a test that exercises the human chooser.
 STATE_GATED_TYPES = {
+    ("loyalty_abilities", "free_cast"): "Chandra's first +1 needs a payable nonland on top; deterministic paid/decline/unpayable fixtures cover the branches",
+    ("loyalty_abilities", "target"): "Chandra -3 needs a creature and the emblem needs seven loyalty; dedicated unit fixtures exercise both target paths",
+
     ("transform_back_name", "dig"):
         "Bloodline Keeper's in-combat transform window is asked only when the five-Vampire restriction holds "
         "at declare-attackers -- in this list only via Mavren Fein's attack token -- with {B} still open; a "
@@ -1767,6 +1840,15 @@ def expected_for_card(card):
             pass  # classified: inert / main_phase-ride / user-approved deferral
         else:
             unmapped.add(key)   # UNCLASSIFIED -> unmapped decision (wire it to surface) or new param -> guard trips
+    # Midrange Burn: the activation itself, any-target damage, and two non-targeting fuel costs.
+    if p.get("tap_graveyard_exile_damage", 0) > 0:
+        exp.update({"main_phase", "target", "gy_return_one"})
+    # Loyalty effect primitives can introduce additional decisions beyond the mode action.
+    loyalty_effects = {a.get("effect") for a in p.get("loyalty_abilities", [])}
+    if "exile_top_cast_or_damage" in loyalty_effects:
+        exp.add("free_cast")  # paid_cast=true; reuses the optional-cast protocol
+    if loyalty_effects & {"damage_target_creature", "emblem_spell_cast_damage"}:
+        exp.add("target")
     # X spells: {X} in the mana cost -> chosen_x plan variant (rides main_phase)
     if "{X}" in (card.get("mana_cost") or ""):
         exp.add("main_phase")
@@ -1776,6 +1858,10 @@ def expected_for_card(card):
     # xValuePanelHtml). One plan per X made the menu ~2*(float) wide after an untap loop and the
     # viewer plan-space valve dropped the card (AccomplishedAlchemist sweep seed 80016, 2026-10-19).
     if card.get("template") == "draw_x":
+        exp.add("x_value")
+    # Martyr of Sands' "Reveal X white cards" (sac_outlet_lifegain_per_revealed_color): the X is asked
+    # at the activation's cost in ApplySacCreatureOutlet (x_value, reveal kind).
+    if p.get("sac_outlet_lifegain_per_revealed_color"):
         exp.add("x_value")
     if card.get("name") in NAME_CHOICES:
         exp.add(NAME_CHOICES[card["name"]])
@@ -1812,9 +1898,15 @@ def modeled_tokens(card):
     """The choice tokens the card's PARAMS actually surface a decision for."""
     p = card.get("parameters", {}) or {}
     t = set()
+    if p.get("incinerator_damage_trigger") or p.get("tap_graveyard_exile_damage", 0) > 0 or any(
+        a.get("effect") in {"damage_target_creature", "emblem_spell_cast_damage"}
+        for a in p.get("loyalty_abilities", [])
+    ):
+        t.add("target")
     if real_target(p.get("targeting", "none")) or p.get("spectacle_cost"): t.add("target")
     if p.get("sacrifice_land"):                                            t.add("sacrifice")
     if p.get("etb_scry", 0) > 0 or p.get("cast_scry", 0) > 0:              t.add("scry")
+    if p.get("cycle_or_discard_trigger_scry", 0) > 0:                      t.add("scry")   # Curator
     if p.get("etb_surveil", 0) > 0:                                        t.add("surveil")
     if p.get("damage_divided"):                                           t.add("divide")
     if p.get("etb_damage_divided_creatures", 0) > 0:                      t.add("divide")   # Fury's ETB
@@ -1832,6 +1924,7 @@ def modeled_tokens(card):
     if p.get("grants_madness_creature_subtype"):
         t.add("discard")
     if p.get("tutor_to_hand") or p.get("tutor_to_top") or p.get("fetch_land_types") \
+            or p.get("tutor_library_position", 0) > 1 \
             or p.get("tutor_to_battlefield_single") or p.get("tutor_land_to_battlefield") \
             or p.get("look_top_put_creature_count", 0) > 0:
         t.add("search")
@@ -1856,6 +1949,10 @@ def modeled_tokens(card):
     # Fulminator Mage's sacrifice payload (the `target` board-click).
     if p.get("etb_destroy_artifact_enchantment_optional") or p.get("sac_outlet_destroy_nonbasic_land"):
         t.add("target")
+    # Unpredictable Cyclone phase 2: the Ulamogs' targeted CAST triggers (the `target` board-click,
+    # one pick per target, at ChooseCastTriggerTargets).
+    if p.get("cast_trigger_exile_target_permanents", 0) > 0 or p.get("cast_trigger_destroy_target_permanents", 0) > 0:
+        t.add("target")
     if p.get("transmute_cost") or p.get("life_gated_put_creatures_cost"):
         t.add("search")
     # The land-search cluster: every "search your library for ... land" is the tutor_etb prompts.
@@ -1875,6 +1972,14 @@ def modeled_tokens(card):
         t.add("target")
     # Magnetic Theft's "target Equipment ... target creature" IS the two-click `target` decision.
     if p.get("attach_target_equipment"):
+        t.add("target")
+    # Abiding Grace's end-step "choose one -- ... return TARGET creature card": the mode AND the target are
+    # ONE `gy_return_one` pick (a graveyard card, or the alt_text gain button). Emeria's "you may return
+    # target creature card" is the same decision (upkeep_gy_reanimate, below).
+    if isinstance(p.get("endstep_modal_reanimate_mv"), int) and p.get("endstep_modal_reanimate_mv") >= 0:
+        t.update({"target", "modal"})
+    # Emeria's upkeep "you may return target creature card" -- the same `gy_return_one` pick.
+    if p.get("upkeep_gy_reanimate"):
         t.add("target")
     return t
 
@@ -2056,7 +2161,7 @@ def verify_card(deck, prof, card_name, expected_types, base_seed, budget, max_tu
                 in_hand_here = True
             choice = pick_toward(d, target_lc)
             if t in ("jitte", "firebreathe"):   # side-channel reply, keyed by turn (see step())
-                jitte.append(("fb|" if t == "firebreathe" else "") + f"{d.get('turn')}:{choice}")
+                jitte.append(("fb|" if t == "firebreathe" else "") + f"{d.get('turn_seq', d.get('turn'))}:{choice}")
                 continue
             if t == "main_phase":
                 key = (d.get("turn"),
@@ -2139,7 +2244,7 @@ def verify_activation(deck, prof, card_name, marker, base_seed, budget, max_turn
                                              "turn": d.get("turn"), "marker": marker})
             choice = pick_toward(d, target_lc)
             if d.get("type") in ("jitte", "firebreathe"):
-                jitte.append(("fb|" if d.get("type") == "firebreathe" else "") + f"{d.get('turn')}:{choice}")
+                jitte.append(("fb|" if d.get("type") == "firebreathe" else "") + f"{d.get('turn_seq', d.get('turn'))}:{choice}")
                 continue
             if d.get("type") == "main_phase":
                 key = (d.get("turn"),
@@ -2206,7 +2311,7 @@ def run_sweep(deck, prof, base_seed, n_games, max_turns, mana_names=frozenset())
                             max_open_mana[nm] = open_mana
             choice = pick(d)
             if d.get("type") in ("jitte", "firebreathe"):   # side-channel reply, keyed by turn (see step())
-                jitte.append(("fb|" if d.get("type") == "firebreathe" else "") + f"{d.get('turn')}:{choice}")
+                jitte.append(("fb|" if d.get("type") == "firebreathe" else "") + f"{d.get('turn_seq', d.get('turn'))}:{choice}")
                 continue
             # Free repeatable actions (equip {0}: Lightning Greaves, metalcraft) legally recur
             # forever -- the engine faithfully re-offers "move the equipment back" after every

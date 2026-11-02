@@ -1,0 +1,63 @@
+{
+  "_comment": [
+    "HARD PRUNES (2026-10-28): the SAME position with MTG_CYCLONE_SEED_PLANS and MTG_CYCLONE_CYCLER_RULE ON. The",
+    "seed no longer pins Curator's scry j; the provider's walk-aware scry decides at resolution and must bottom the Street",
+    "Wraith on top (a non-Eldrazi creature would stop the walk), so the walk still reaches Emrakul in ROUND 3. The original",
+    "fixture follows.",
+    "Unpredictable Cyclone phase 3: Curator of Mysteries' scry resolves BEFORE the Cyclone walk, and its",
+    "disposition is SEARCHED (the cycle seed's pin j). Round 3, main 1, Cyclone + Curator (not sick) + three",
+    "Islands, Street Wraith in hand; the library top is Street Wraith, Emrakul. With j = 0 the walk hits the",
+    "Wraith on top (a 3/4); with j = 1 the scry bottoms it and the walk reaches Emrakul -> extra turn. The",
+    "opponent at 15: Curator attacks for 4 this turn (11), then Emrakul 15 + Curator 4 in the extra turn ->",
+    "ROUND 3. The j = 0 line cannot kill before round 5."
+  ],
+  "env": {
+    "MTG_CYCLONE_SEED_PLANS": "1",
+    "MTG_CYCLONE_CYCLER_RULE": "1"
+  },
+  "deck": "decks/Unpredictable Cyclone/Unpredictable Cyclone.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "active_life": 20,
+  "opponent_life": 15,
+  "battlefield": [
+    {
+      "name": "Unpredictable Cyclone",
+      "controller": 0
+    },
+    {
+      "name": "Curator of Mysteries",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Island",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Island",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Street Wraith"
+  ],
+  "library_top": [
+    "Street Wraith",
+    "Emrakul, the Aeons Torn"
+  ],
+  "library_filler": "Island",
+  "library_size": 30,
+  "depth": 2,
+  "budget_ms": 100,
+  "max_turns": 5,
+  "expect_win_turn": 3
+}

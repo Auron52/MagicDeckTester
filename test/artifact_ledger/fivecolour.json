@@ -1,0 +1,86 @@
+{
+ "deck": "fivecolour",
+ "_doc": "artifact refresh verdicts -- scripts/artifact_queue.py (LEDGER_DIR)",
+ "entries": [
+  {
+   "run_id": "fivecolour-artifact-queue-tool-647f24-20261025T141953",
+   "kind": "mulligan",
+   "verdict": "adopted",
+   "ident": "67517dad84ca8a698e8bf9affa12f5d35a78e167",
+   "frozen": "60f525f1785cc0cd127873d4196a858f9ed317f2",
+   "src_tree": "aba41d81c1291fb08dd08c8c0f391491e2bfeac2",
+   "date": "2026-10-28",
+   "worker": "artifact-queue-tool-647f24",
+   "delta": -0.001833,
+   "cost": [
+    0.977371837824193,
+    0.0041921053597974295,
+    96
+   ],
+   "settings": {
+    "recipe": "fast",
+    "env": {},
+    "depth": null,
+    "budget": null
+   },
+   "detail": "mulligan: ADOPTED (new-vs-old -0.001833 t, cost 0.977x (se 0.004, 96 seeds), recipe fast)"
+  },
+  {
+   "run_id": "fivecolour-artifact-queue-tool-647f24-20261025T141953",
+   "kind": "valueleaf",
+   "verdict": "kept-incumbent",
+   "ident": "em:15713f7430a43656572a",
+   "frozen": "60f525f1785cc0cd127873d4196a858f9ed317f2",
+   "src_tree": "aba41d81c1291fb08dd08c8c0f391491e2bfeac2",
+   "date": "2026-10-28",
+   "worker": "artifact-queue-tool-647f24",
+   "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_fivecolour/DECISIONS.txt)",
+   "decisions": [
+    "",
+    "=== 2026-10-28T18:47:33  PHASE E.7b: fivecolour -- trust ACCEPTED at d6 -> value_trust_depth 6 (unchanged); play moved d6/20 -> d7/20 after phase E decided trust",
+    "      trust candidate d6: ON-OFF -0.00325 turns (se 0.00037, one-sided 95% upper -0.00263) over 8 seeds x 1000 games; cost 2717 vs 2534 core-s (1.07x); 0/8 seeds byte-identical; se 0.00037 -> 0.00038 after the 3/n floor; tol 0.0020",
+    "      trust: ACCEPTED (bound -0.00263 <= tol 0.0020) -- the escalation skipped by trusting at d6 does not cost quality",
+    "",
+    "=== 2026-10-28T18:48:10  PHASE E.6: no allowance for fivecolour -- no ladder escalations in 1200 games (single-path or trust-dominated); fleet default R = 0"
+   ]
+  },
+  {
+   "run_id": "fivecolour-artifact-queue-d7d6a5-20261030T063213",
+   "kind": "valueleaf",
+   "verdict": "kept-incumbent",
+   "ident": "em:15713f7430a43656572a",
+   "frozen": "60935d372a01450cacc6a13fb6003ae8b94d681f",
+   "src_tree": "da525a17659a9ffd767c0bfd84eb77d74a38a284",
+   "date": "2026-10-30",
+   "worker": "artifact-queue-d7d6a5",
+   "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_fivecolour/DECISIONS.txt)",
+   "decisions": [
+    "    VERDICT arm=d8b20 adopt=0 delta=-0.00012 t=-1.00 cost=1.000x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.00x) with quality better (-0.00012) -- a TRADE, the user's call",
+    "    VERDICT arm=d8b30 adopt=0 delta=-0.00300 t=-7.10 cost=1.090x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.09x) with quality better (-0.00300) -- a TRADE, the user's call",
+    "    VERDICT arm=d8b40 adopt=0 delta=-0.00512 t=-10.69 cost=1.153x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.15x) with quality better (-0.00512) -- a TRADE, the user's call",
+    "    PICK arm=none why=no candidate is cheaper than live with quality not notably worse",
+    "",
+    "=== 2026-10-30T07:34:46  PHASE E.6: no allowance for fivecolour -- no ladder escalations in 1200 games (single-path or trust-dominated); fleet default R = 0"
+   ]
+  },
+  {
+   "run_id": "fivecolour-artifact-queue-tool-647f24-20261101T031139",
+   "kind": "valueleaf",
+   "verdict": "kept-incumbent",
+   "ident": "em:15713f7430a43656572a",
+   "frozen": "ad8c968be399b2be828ab8385c5963d4134191cd",
+   "src_tree": "83b1f17308cff28f24934c82e9c113000a08992f",
+   "date": "2026-11-01",
+   "worker": "artifact-queue-tool-647f24",
+   "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_fivecolour/DECISIONS.txt)",
+   "decisions": [
+    "    VERDICT arm=d8b40 adopt=0 delta=-0.00013 t=-1.00 cost=1.001x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.00x) with quality better (-0.00013) -- a TRADE, the user's call",
+    "    VERDICT arm=d8b60 adopt=0 delta=-0.00175 t=-4.78 cost=1.117x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.12x) with quality better (-0.00175) -- a TRADE, the user's call",
+    "    VERDICT arm=d8b80 adopt=0 delta=-0.00238 t=-5.66 cost=1.161x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.16x) with quality better (-0.00238) -- a TRADE, the user's call",
+    "    PICK arm=none why=no candidate is cheaper than live with quality not notably worse",
+    "",
+    "=== 2026-11-01T04:30:32  PHASE E.6: no allowance for fivecolour -- no ladder escalations in 1200 games (single-path or trust-dominated); fleet default R = 0"
+   ]
+  }
+ ]
+}

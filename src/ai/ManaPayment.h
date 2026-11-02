@@ -23,6 +23,7 @@
 #include "../core/GameState.h"
 #include "TurnSolver.h"   // Action
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -82,6 +83,27 @@ void AddRemandRiderCost(ManaCost& bill, const GameState& state, const std::strin
 std::size_t CastAndResolveRemand(GameState& state, int controller, const CardDefinition& remand_def,
                                  bool post_combat, bool countered, const Card& x_card,
                                  Card* remand_out);
+
+// REMAND-ON-REMAND (Action::remand_chain_by; the Cyclone remand ceiling >= 2, USER 2026-10-28), ONE body
+// for both worlds, called at the same point as CastAndResolveRemand (X's cast-time block done, X paid
+// with BOTH Remands in its bill): Remand A (`a_def`) is cast targeting X -- it leaves the hand (the
+// cast-copy rule), counts as a spell cast and fires its cast triggers -- then Remand B (`b_def`) is cast
+// targeting A, and B resolves first (CastAndResolveRemand with A as the countered spell): A returns to
+// its owner's hand, B draws and goes to the graveyard. A is gone from the stack, so X -- never countered
+// -- stays on the stack and resolves normally after this (the caller's normal resolution path, exactly
+// the can't-be-countered shape). Returns the hand size just before B's draw. The caller has verified two
+// copies in hand (A and B may share a name); `a_out` / `b_out` get the two cards.
+// Is a Remand-on-Remand rider LIVE for this cast? `a_name` = the Remand that targets X (Action::remand_chain_by),
+// `b_name` = the one that targets A (Action::remand_by); both must be Remand-type cards with a copy in hand other
+// than X's own card (`x_number`) -- two copies when they share a name -- and a cast restrictor must leave three
+// casts (X, A, B). Returns A's definition, or null (the whole rider is then void and X is cast plainly). The one
+// predicate both worlds read (the rollout's apply_one, the executor's CastSpellFromHand).
+const CardDefinition* RemandChainLive(const GameState& state, int controller, const InternedName& a_name,
+                                      const InternedName& b_name, int x_number);
+
+std::size_t CastAndResolveRemandChain(GameState& state, int controller, const CardDefinition& a_def,
+                                      const CardDefinition& b_def, bool post_combat,
+                                      Card* a_out, Card* b_out);
 
 // Apply a Ragemonger-style COLOURED pip reduction to `cost`: one plain pip of each of the
 // reduction's coloured pips comes off (floored at 0, generic untouched), consuming a PLAIN pip
@@ -438,6 +460,13 @@ ManaPool AvailableManaPoolNoAttackers(const GameState& state);
 bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creature,
                       ManaPool* available, bool honor_legacy_cco);
 
+// Every field of a ManaCost folded into one word (PayContextDigest's and the refine memo's bill).
+std::uint64_t ManaCostDigest(const ManaCost& c);
+// The payer's CONTEXT as one number: every thread-local a payment reads besides the board and its bill (the
+// line it is paying in, the holds and budgets around it, the heuristic arm). Two payments of one bill on one
+// board in equal contexts are the same payment -- the key manaoracle::RefinePayment's memo keeps.
+std::uint64_t PayContextDigest();
+
 // ---- COLOUR-EXACT SUBSET AFFORDABILITY (MTG_COLOR_EXACT) --------------------------------------
 //
 // The pool above is COLOUR-BLIND about its flexible sources: AddSourceToPool books every
@@ -511,6 +540,16 @@ struct ColorFeasibility
     int  rf_units = 0;
     int  rf_in[32] = {0};
     int  FilterFeedDeduction(unsigned s, const ManaPool& credit) const;
+
+    // DOMAIN SOURCES under MTG_DOMAIN_WIDEN (Faeburrow Elder / Bloom Tender: one mana of each colour among
+    // your permanents). cover[] / total hold each one's bundle at the board's domain (`dom_mask`); the
+    // colours a same-plan permanent cast adds are opened PER SUBSET in Payable (MTG_DOMAIN_OPEN_EXACT --
+    // see DomainOpenFor). dom_src = the count; 0 = none (or the old open-to-all build), nothing to adjust.
+    int  dom_src  = 0;
+    int  dom_mask = 0;
+    // The copy of this build with `dom_src` domain bundles opened by `pip_open` (coloured pips) and
+    // `gen_open` (generic supply) beyond dom_mask.
+    ColorFeasibility WithDomainOpen(int pip_open, int gen_open) const;
 
     // False only when NO assignment of the available mana to this subset's coloured pips exists.
     // `credit` is the same-turn mana the caller folded on top of the board pool (PoolCredit below).
@@ -662,6 +701,82 @@ private:
     ManaCost m_prev, m_cost;
 };
 
+// CYCLE SEED PAYMENT (PlanTraits::cycle_seed_pips): set while the plan's cycle seed pays its OWN cycling
+// cost, so ActLineHoldMask does not hold a provider back for the very pip being paid (with an Island and
+// a Steam Vents up it would hold the Island and tap the dual). Set at all three cycle payment sites --
+// the rollout's cycle_chain_step, human play's DigDraw pass and the executor's PerformDigFull -- in
+// lockstep. It only zeroes the seed half of the hold, which is zero for every deck without seeds.
+extern thread_local bool g_cycle_seed_paying;
+
+// THE SEED PAYMENT SPLIT (MTG_CYCLE_SEED_PAY_SPLIT, DEFAULT OFF; ledger Q61). A cycle seed pays
+// BEFORE its continuation exists; colours needed by that continuation must remain searchable.
+// Source units occupy low three bytes; high byte is an ordinal of a <=3-unit concrete floating
+// colour multiset (84 possibilities). SeedPaySplits covers one-unit unrestricted lands, including
+// a filter's free-C tap, and the float possible before the seed from in-hand rituals/filter output.
+// Dynamic/restricted/multi-unit sources and wild/provenance-bearing float use the ordinary payer.
+// Plain colour-subset dominance is applied within a fixed float allocation; special lands keep
+// their stable identity. This does not enumerate every possible filter output-colour production.
+// Scope exposes only the selected floating units to the payer, holding the rest aside until the
+// payment returns; a valid source/float pin is binding and a stale/unrealizable pin fails atomically.
+bool SeedPaySplitOn();
+std::vector<std::int32_t> SeedPaySplits(const GameState& state, int me, const ManaCost& cost,
+                                        const CardDefinition& seed_def);
+std::uint64_t SeedPaySplitHoldMask(const GameState& state, int me, std::int32_t split);
+extern thread_local std::uint64_t g_seed_pay_hold;
+extern thread_local std::int32_t g_seed_pay_split;
+class SeedPaySplitScope
+{
+public:
+    SeedPaySplitScope(GameState& state, int me, std::int32_t split);
+    ~SeedPaySplitScope();
+    bool Valid() const { return m_valid; }
+    SeedPaySplitScope(const SeedPaySplitScope&)            = delete;
+    SeedPaySplitScope& operator=(const SeedPaySplitScope&) = delete;
+private:
+    std::uint64_t m_prev;
+    std::int32_t m_prev_split;
+    GameState* m_state = nullptr;
+    ManaPool m_held_float;
+    bool m_valid = true;
+};
+
+class CycleSeedPayScope
+{
+public:
+    CycleSeedPayScope() : m_prev(g_cycle_seed_paying) { g_cycle_seed_paying = true; }
+    ~CycleSeedPayScope() { g_cycle_seed_paying = m_prev; }
+    CycleSeedPayScope(const CycleSeedPayScope&)            = delete;
+    CycleSeedPayScope& operator=(const CycleSeedPayScope&) = delete;
+private:
+    bool m_prev;
+};
+
+// A cycle that paid its cost no longer owes the plan's seed pips. Keep the other
+// pending activation holds, but release this seed's hold through the rest of its
+// resolution. A same-name Cyclone hit temporarily enters the rollout's hand before
+// its free cast; counting it must not resurrect the paid seed (the executor puts
+// that hit directly on the stack). A nested continuation installs its own traits
+// above this scope, so its newly selected seed still receives its own hold.
+class CycleSeedResolvedScope
+{
+public:
+    explicit CycleSeedResolvedScope(const CardDefinition& seed)
+    {
+        const PlanTraits* pt = CurrentPlanTraits();
+        if (pt == nullptr || pt->cycle_seed_def != &seed) { return; }
+        m_traits.emplace(*pt);
+        m_traits->cycle_seed_def = nullptr;
+        m_traits->cycle_seed_hand_floor = 0;
+        for (int& pip : m_traits->cycle_seed_pips) { pip = 0; }
+        m_scope.emplace(&*m_traits);
+    }
+    CycleSeedResolvedScope(const CycleSeedResolvedScope&)            = delete;
+    CycleSeedResolvedScope& operator=(const CycleSeedResolvedScope&) = delete;
+private:
+    std::optional<PlanTraits> m_traits;
+    std::optional<PlanTraitsScope> m_scope;   // restored before m_traits is destroyed
+};
+
 // RAII for g_plan_reserved_sources: sets it for the plan's cast section and restores the previous
 // value on scope exit (nested plan applications -- a rollout inside an apply -- restore correctly).
 // Release() drops the reservation early, which the unlock hoist calls the moment the dork is hasted:
@@ -760,6 +875,24 @@ public:
     LineUnpaidCostScope& operator=(const LineUnpaidCostScope&) = delete;
 private:
     ManaCost m_prev;
+};
+
+// THE SCARCE HOLD OUTRANKS A LAND AURA'S HOST HOLD (MTG_SCARCE_COLOR_MASK). Both per-cast host holds (the rollout's
+// apply_one and AIEngine's cast) mark the Aura's host tapped for a first payment and release it only if that payment
+// FAILS -- and the payment's own ladder ends in the unrestricted greedy, so a board whose only other payer is the
+// line's scarce colour source paid the Aura with it and kept the host (EDF smoke s1009 T3: Wild Growth onto Brushland
+// off Yavimaya Coast's {G}, then Cloud of Faeries had no {U}). While this scope is live, a payment whose scarce hold
+// actually holds something and whose held attempt fails returns false instead of falling through; the caller then
+// releases the host and pays again, scarce providers still held first -- so the Aura is paid off its own host (the
+// bonus lost) rather than off the colour the line needs. Inert when the scarce hold holds nothing (lever off).
+extern thread_local bool t_scarce_held_only;
+struct ScarceHeldOnlyScope
+{
+    bool prev;
+    explicit ScarceHeldOnlyScope(bool on) : prev(t_scarce_held_only) { if (on) { t_scarce_held_only = true; } }
+    ~ScarceHeldOnlyScope() { t_scarce_held_only = prev; }
+    ScarceHeldOnlyScope(const ScarceHeldOnlyScope&)            = delete;
+    ScarceHeldOnlyScope& operator=(const ScarceHeldOnlyScope&) = delete;
 };
 
 // The cost a mid-line greedy sink must clear: its own cost PLUS everything the line still owes.
@@ -913,6 +1046,9 @@ struct HumanPreTapAura
 };
 std::vector<HumanPreTapAura>
 HumanPreTapAuraFaces(const GameState& state, const Permanent& p);
+// The same, for a caller already holding p's HumanPreTapOfferFor (it gates the list).
+std::vector<HumanPreTapAura>
+HumanPreTapAuraFaces(const GameState& state, const Permanent& p, const HumanPreTapOffer& offer);
 
 // ---- The viewer's QUEUED-CONTINUATION untap demand (docs/design/viewer-line-macros.md) --------
 // `need=<COLOURS>` -- e.g. `need=UC` -- declares the colours the human's REMAINING QUEUED LINE

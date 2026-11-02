@@ -265,6 +265,9 @@ TEST_CASE("Brindle Boar: offered only while the gain is read; bakes ITSELF as th
     // Nothing reads life: the sacrifice only costs a 2/2 -> dominated, not offered.
     {
         GameState s = FreshAa();
+        // An unstamped GameState keeps deck_reads_life_total at its safe default TRUE (Martyr of Sands,
+        // 2026-10-27: a life-TOTAL reader keeps the outlet), so "nothing reads life" must say so.
+        s.deck_reads_life_total = false;
         PutAa(s, "Brindle Boar");
         PutAa(s, "Arbor Elf");
         for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true))

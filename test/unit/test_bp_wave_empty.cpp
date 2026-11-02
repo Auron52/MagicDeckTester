@@ -56,6 +56,9 @@ struct LeverScope
         heurarm::t_arm[heurarm::BP_WAVE_UNHOSTED_SITES] = static_cast<std::int8_t>(unhosted);
         heurarm::t_arm[heurarm::BP_NODE_NESTED_SLOTS]   = static_cast<std::int8_t>(nested);
         heurarm::t_arm[heurarm::BP_NEW_ONLY_DEMOTE]     = static_cast<std::int8_t>(demote);
+        // These pin the ONE-deviation walk; the compound (deviation-sequence) waves that follow it are
+        // test_bp_dev_seq.cpp's subject, and WalkerStep does not carry Plan::bp_pre.
+        heurarm::t_arm[heurarm::BP_DEV_SEQ]             = 0;
     }
     ~LeverScope()
     {
@@ -63,6 +66,7 @@ struct LeverScope
         heurarm::t_arm[heurarm::BP_WAVE_UNHOSTED_SITES] = -1;
         heurarm::t_arm[heurarm::BP_NODE_NESTED_SLOTS]   = -1;
         heurarm::t_arm[heurarm::BP_NEW_ONLY_DEMOTE]     = -1;
+        heurarm::t_arm[heurarm::BP_DEV_SEQ]             = -1;
     }
 };
 

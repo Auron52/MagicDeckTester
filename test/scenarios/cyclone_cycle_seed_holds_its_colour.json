@@ -1,0 +1,55 @@
+{
+  "deck": "decks/Unpredictable Cyclone/Unpredictable Cyclone.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "active_life": 20,
+  "opponent_life": 15,
+  "battlefield": [
+    {
+      "name": "Island",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Island",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Seething Song",
+    "Unpredictable Cyclone",
+    "Curator of Mysteries"
+  ],
+  "library_top": [
+    "Brainstorm",
+    "Emrakul, the Aeons Torn"
+  ],
+  "library_filler": "Island",
+  "library_size": 30,
+  "_comment": [
+    "REFERENCE claude_s8_gi7 T4 (USER 2026-10-28, the manual tap): Island, Island, Mountain, Mountain; Seething Song",
+    "({2}{R}) pays Unpredictable Cyclone, then Curator of Mysteries is cycled ({U}) into the Cyclone walk. The payer used to",
+    "spend both Islands on the Song (leaving a Mountain), so the plan's cycle seed could not be paid and the line was",
+    "unreachable -- the human had to tap by hand. The plan's cycle is a trailing activation to the casts' payer",
+    "(PlanTraits::cycle_seed_pips, ActLineHoldMask), so it now holds an Island. The walk passes Brainstorm and hits",
+    "Emrakul (free cast -> extra turn); Emrakul attacks for 15 in the extra turn: a ROUND-4 kill. Without the hold no",
+    "line kills in round 4."
+  ],
+  "depth": 1,
+  "budget_ms": 100,
+  "max_turns": 5,
+  "expect_win_turn": 4
+}

@@ -1,0 +1,25 @@
+{
+ "deck": "kittyequipment",
+ "_doc": "artifact refresh verdicts -- scripts/artifact_queue.py (LEDGER_DIR)",
+ "entries": [
+  {
+   "run_id": "kittyequipment-artifact-queue-tool-647f24-20261031T165332",
+   "kind": "valueleaf",
+   "verdict": "kept-incumbent",
+   "ident": "em:295602f6f4ea5eaa9346",
+   "frozen": "6fe26602c5f99df1395aebcad5441f190672f07a",
+   "src_tree": "89b146d10406063213d9abe41e1cfdf1a616c021",
+   "date": "2026-10-31",
+   "worker": "artifact-queue-tool-647f24",
+   "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_kittyequipment/DECISIONS.txt)",
+   "decisions": [
+    "    PICK arm=d6b14 why=the cheapest of 1 passing arm(s) (1.00x vs live, delta +0.00025)",
+    "    next: commit it with the deck's smoke + regression GT re-accepted (it changes play).",
+    "",
+    "=== 2026-10-31T21:35:18  PHASE E.6: no allowance for kittyequipment -- headroom 3.0% < 4%; fleet default R = 0",
+    "    probe 1200 g (seed 7100000): 467 ladder escalations, headroom 3.0% of all work, fitted vector [82.0, 37.0, 8.6, 14.1, 9.7, 0.1] (n/depth 464/133/43/26/24/38) projects -0.3%",
+    "    the live sidecar's existing escalation_skip_r = 43.3 is KEPT -- it was measured against the leaf live when it was set; if this run installed a new leaf it is stale: USER, keep or remove it."
+   ]
+  }
+ ]
+}

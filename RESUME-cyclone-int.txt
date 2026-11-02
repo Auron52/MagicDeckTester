@@ -1,0 +1,36 @@
+cyclone-int -- integrator state (written 2026-10-29 ~12:45 UTC, before the Hinata2 generation took the box at 13:30)
+
+BRANCH cyclone-int (LOCAL, not pushed), worktree .claude/worktrees/cyclone-int, base ff116556c (cyclone-analysis).
+Picked, in order:
+  mem      0fce7726a edaba76eb ab4fbc6a2            -> a6d802474 434ce5f17 5a3c185b2
+  prunes   4ec5a0957                                -> 63b454310
+  FIX      b991ec733  (F2 exact width honours the prunes' fan cap; exact plan-cache key folds Library::KnownTopMask)
+  mem docs 1cf27e587 7f1383017 c81473985            -> 65e972705 69f8c13f7 638586e91  (mem Q53/Q54 renumbered Q56/Q57)
+  q53      d3fc5eaec e60aa2bd1                      -> b0b982197 e84c5ca77
+  discard  86d5c5192 be6d731fb de0b9cfb7 9592dfd2e 081834493 d00a70f77
+                                                    -> f347cb778 ccf0ba25b 4d70a6e4f 57819766e e55446957 2c1429601
+  EL2 flip ce53794ca                                -> 83952b007  (HEAD; bucket discard + ELDRAZI2_OVER_REMAND default ON)
+
+GATES on HEAD 83952b007: build OK (MTG_BUILD_JOBS=4); unit 2130/2130; scenarios 339/339; smoke 149/149 ALL PASS,
+play-changed 0 (searched and d0), check_gt_logs consistent. No process left running (12:52 UTC).
+Gates on 2c1429601: unit 2129/2129, smoke 149/149 play-changed 0. On b991ec733: unit 2121, smoke 149/149 play-changed 0,
+verify modes 0 mismatches, determinism t1 == t3 (pre-Q53 binary).
+
+QUEUED, NOT YET PICKED (coordinator will send hashes): prunes PB_PLANS + CYCLER_RULE default-ON flips and the KEEP_AMEND
+levers; cost agent's JUNK_MEMO / KILL_ONLY_EXTRA / NOM2 levers; the cast-order levers. Do NOT re-run the cost gate until they
+are in.
+
+RESUME COMMANDS (no cd; kill by PID only, never pkill -f):
+  W=/workspaces/MagicDeckTester2/.claude/worktrees/cyclone-int; D=/workspaces/MagicDeckTester2/build/scratch/cyclone-int
+  git -C $W cherry-pick <hash>            # each queued commit; then diff-of-diffs vs `git show <orig>`
+  env -C $W MTG_BUILD_JOBS=4 ./build.sh   # only when <= 1 other `cmake --build` is running
+  env -C $W ./build/Release/mtg-test > $D/unit.log 2>&1
+  env -C $W THREADS=4 MTG_PGO=0 bash test/regression.sh --smoke > $D/smoke.log 2>&1   # expect play-changed 0
+  python3 $W/test/check_gt_logs.py
+Cost gate (pooled what-if, after the queued picks):
+  python3 $D/mkcost.py $D/cost_pool.json i= ii=MTG_CYCLONE_PB_PLANS,MTG_CYCLONE_CYCLER_RULE \
+      iii=MTG_CYCLONE_PB_PLANS,MTG_CYCLONE_PONDER_PLANS,MTG_CYCLONE_SEED_PLANS,MTG_CYCLONE_CYCLER_RULE,MTG_CYCLONE_CANTRIP_SITUATIONAL
+  env -C $W MTG_PGO=0 ./build/Release/mtg --batch $D/cost_pool.json --threads 4 --game-log-dir $D/cost_pool/wins > $D/cost_pool/batch.log 2> $D/cost_pool/batch.err
+  python3 $D/mkcost.py $D/cost_iv.json --no-hinata iv=MTG_CYCLONE_PB_PLANS,MTG_CYCLONE_CYCLER_RULE   # + MTG_BOTTOM_ROLLOUTS=0 env
+  python3 $D/costread.py $D/cost_pool/batch.log $D/cost_iv/batch.log
+  (if PB_PLANS/CYCLER become default ON, arm "i=" already includes them -- rename the arms accordingly)

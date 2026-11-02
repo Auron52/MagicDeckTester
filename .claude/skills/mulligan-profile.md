@@ -629,7 +629,11 @@ high R → clairvoyance (acceptable); if blind-*worse* → R-noise (raise R).
   binary, table off (or `--old-profile` for a regeneration) and on, proves each side reproduces its
   baseline, and classifies every changed game: a different mulligan count, a different bottom, or
   digest-only (the bottomed cards' ORDER, play identical). Anything else is UNEXPLAINED — the table
-  leaked into play — and it exits 1. SelesnyaLifegain 2026-10-08, regression tier: 851 changed games =
+  leaked into play — and it exits 1. **An UNEXPLAINED game is not yet a leak — replay it singly with the table keeping but
+  `MTG_EXHAUSTIVE_BOTTOM=0` (lookahead bottoming).** If that matches the table-OFF digest, the difference is
+  the bottoming METHOD's residue on later play (the lookahead's rollouts run before turn 1 even when they pick
+  the same bottom), not the table reaching into play. Bruna 2026-10-28, overnight: all 5 unexplained d5 games
+  (same hand, same bottom, turn 1 differs) were this. SelesnyaLifegain 2026-10-08, regression tier: 851 changed games =
   636 mulligan count + 206 bottom + 9 order-only, 0 unexplained.
 - **Bottoming:** always on (generation bakes `bottoming_enabled=true`; no off switch). It ships with the
   profile; confirm it with the confounded A/B (`MTG_CONFOUND_BOTTOM`, `KM_MODE=bottom`) as a sanity check,

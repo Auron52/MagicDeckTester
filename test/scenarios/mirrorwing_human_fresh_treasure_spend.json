@@ -1,0 +1,30 @@
+{
+  "_comment": [
+    "HUMAN PLAY SPENDS A FRESH TREASURE (references/Mirrorwing_Dragon/v2-instigator-entrance/claude_s4_gi3,",
+    "T3). The search plays Gold Rush -> crack its Treasure -> Luxurious Libation X=0 (its freshmode=1",
+    "variant). The fresh-hold doctrine is a SEARCH rule; with it biting in human play the frame after",
+    "Gold Rush offered no Libation plan at all and `cast=Luxurious Libation` graded unsupported, though",
+    "the decision JSON publishes the Treasure as a tap source. Board: Game Trail + Ignoble Hierarch tapped",
+    "(they paid Gold Rush), the Treasure it minted THIS turn (sick), no copy magnet."
+  ],
+  "deck": "decks/Mirrorwing Dragon/v2-instigator-entrance/Mirrorwing Dragon.cod",
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "resume_at": "main1",
+  "battlefield": [
+    { "name": "Game Trail", "tapped": true },
+    { "name": "Ignoble Hierarch", "tapped": true },
+    { "name": "Treasure Token", "sick": true }
+  ],
+  "hand": [ "Luxurious Libation" ],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 0,
+  "budget_ms": 20,
+  "max_turns": 3,
+  "validate_line": "cast=Luxurious Libation",
+  "expect_verdict": "accept"
+}

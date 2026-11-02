@@ -571,6 +571,8 @@
   .hist { list-style:none; margin:0; padding:0; font-size:12.5px; }
   .hist li { padding:5px 8px; border-bottom:1px solid var(--line); display:flex; gap:8px; }
   .hist li .t { color:var(--muted); white-space:nowrap; } .hist li.rej .lab { color:var(--bad); } .hist li.win .lab { color:var(--good); }
+  .hist li .sbadge { color:var(--warn); font-size:11px; font-weight:600; white-space:nowrap; cursor:pointer; }
+  #verdict .paylist { margin:4px 0 0 18px; padding:0; font-size:12px; }
   /* life-affecting event lines (combat / burn damage / lifegain / lifeloss) coloured by kind */
   .hist li.ev-combat .lab { color:var(--warn); } .hist li.ev-damage .lab { color:var(--bad); }
   .hist li.ev-lifeloss .lab { color:var(--bad); } .hist li.ev-lifegain .lab { color:var(--good); }
@@ -1318,11 +1320,34 @@ function digSources() {
   for (const p of (d.plans || [])) {
     const a = p.actions || [];
     if (a.length === 1 && a[0] && a[0].dig) {
-      if (a[0].dig_sacrifice) sac[a[0].card] = p.index; else cyc[a[0].card] = p.index;
+      // The land-less plan is THE dig (a deck whose cycles are plan actions also offers "land=X; cycle Y").
+      const m = a[0].dig_sacrifice ? sac : cyc;
+      if (m[a[0].card] == null || !p.land) m[a[0].card] = p.index;
     }
   }
   S._digFor = d; S._dig = { cyc, sac };
   return S._dig;
+}
+// Does this decision offer cycling `name` INSIDE a plan with other actions (a deck whose cycles are plan
+// items -- the engine's cycle seeds)? Then a queued cycle joins the line it ends; otherwise it is a
+// standalone dig and commits as a segment of its own (LineBuild.segmentParts reads `alone`).
+function cycleCombines(name) {
+  const d = S.decision;
+  if (!d || d.type !== 'main_phase') return false;
+  return (d.plans || []).some(p => { const a = p.actions || [];
+    return (a.length > 1 || p.land) && a.some(x => x && x.dig && !x.dig_sacrifice && x.card === name); });
+}
+// Queue a CYCLE of a hand card as a line item (USER 2026-10-28: "Cycling should be a plan item like any
+// other"): `cycle=<name>` in the line, after whatever is queued before it, so the line's payment knows the
+// cycle is coming (the engine holds the colour it needs). Click again to take the last one back.
+function queueCycle(name) {
+  if (S.busy || S.over) return;
+  const d = S.decision;
+  const cap = LineBuild.castableCount(d, name) - LineBuild.plannedCount(S.plan, name);
+  if (cap <= 0) { flashHint(`No copy of ${name} left in hand to cycle.`); return; }
+  S.plan.push({ name, kind: 'cycle', alone: !cycleCombines(name) });
+  flashHint(`Cycle ${name} queued — it runs after what is queued before it. Click ✕ on the chip to take it back.`);
+  renderBoard();
 }
 // Fire a dig (cycle a hand land / sacrifice a board land to draw). It is a STANDALONE action, so clear
 // any half-built line first -- otherwise applyAccepted's dropped-cast detector would see the queued
@@ -1763,7 +1788,7 @@ function queueActivation(src, opt, clickedNum){
     : opt.verb==='auraswap' ? `${src}: aura swap — ${opt.name} comes in from your hand, ${src} returns to your hand. Commit the phase to resolve it. (To swap AFTER attackers are declared instead, skip this: you are asked in combat.)`
     : opt.verb==='attachall' ? `${src}: attaching every Equipment you control to it. Commit the phase to resolve it.`
     : opt.verb==='jittemode' ? `${src}: spending a charge counter (${jitteModeLabel(opt.mode)}). Commit the phase to resolve it.`
-    : opt.verb==='gyexile' ? `${src}: tapping to exile ${opt.mode===2?'a creature card from a graveyard and gain 2 life':'an instant or sorcery card from a graveyard — each opponent loses 2 life'}. Commit the phase to resolve it.`
+    : opt.verb==='gyexile' ? `${src}: ${opt.mode===3?'paying {R}, tapping and exiling two cards from your graveyard to deal 2 damage to any target':opt.mode===2?'tapping to exile a creature card from a graveyard and gain 2 life':'tapping to exile an instant or sorcery card from a graveyard — each opponent loses 2 life'}. Commit the phase to resolve it.`
     : (opt.verb==='gyreturn' && opt.name==='@random') ? `${src}: tapping and sacrificing it to return a creature card AT RANDOM from your graveyard to your hand (the card is not chosen). Commit the phase to resolve it.`
     : opt.verb==='gyreturn' ? `${src}: tapping and sacrificing it to return ${opt.name} from your graveyard to your hand. Commit the phase to resolve it.`
     : opt.verb==='animate' ? `${src}: animating it — it becomes a creature and can attack this turn. Commit the phase to resolve it.`
@@ -2050,12 +2075,18 @@ function pruneCommitted(){
 // it is a different play. Stops at the first segment that is not loopable (a land drop / Land's
 // Edge discard), because a loop is a CONTIGUOUS tail -- skipping over a land drop in the middle
 // would repeat a block the human never played as one.
+// EXTRA TURNS (Emrakul): `turn` is the ROUND (extra turns do not count toward the turn count, USER
+// 2026-10-26), so two turns can share it. The engine adds `turn_seq` (turns taken) and `extra_turn` (k
+// in the k-th extra turn) once an extra turn has been taken -- absent in every other game, so these fall
+// back to `turn`. Anything that means "the same turn" keys on turnKey; the per-turn side-channels
+// (--firebreathe / --jitte / --storage-hold) do too, matching the engine's TurnSeq-keyed maps.
+function turnKey(d){ return d ? (d.turn_seq != null ? d.turn_seq : d.turn) : undefined; }
 function loopTail(){
   if (!S.decision || S.decision.type!=='main_phase') return [];
   const out=[]; const all=pruneCommitted();
   for (let i=all.length-1; i>=0 && out.length<LOOP_KS[LOOP_KS.length-1]; --i){
     const c=all[i];
-    if (c.turn !== S.decision.turn) break;
+    if ((c.tkey != null ? c.tkey : c.turn) !== turnKey(S.decision)) break;
     if (!LB.segmentLoopable(c.entries)) break;
     out.unshift(c);
   }
@@ -2304,7 +2335,7 @@ function zoneRow(items, cls='') { return `<div class="row ${cls}">${items.length
 // `dec` null, so the panel is hidden and the decision is unanswerable — the game just stalls on a
 // dead board (how lackey_put/echo/land_entry shipped: panel + wiring + commit written, whitelist
 // never updated). test/viewer_decision_types_check.js pins this list against src/main.cpp.
-const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','dig','discard','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe','storage_hold','lackey_put','free_cast','demonstrate','echo','land_entry','tutor_etb','sac_tutor','revive','rummage','attach_host','flicker','treasurify','jitte','choose_color','choose_abilities','attack_mode','lifegain_counters','madness','x_value'];
+const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','legend_keep','dig','discard','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe','storage_hold','lackey_put','free_cast','demonstrate','echo','land_entry','tutor_etb','sac_tutor','revive','rummage','attach_host','flicker','treasurify','jitte','choose_color','choose_abilities','attack_mode','lifegain_counters','madness','x_value','gy_return_one'];
 // The plan the engine flagged as a go-off, or null.
 //
 // TWO STRENGTHS, and the button says which (USER 2026-09-10: *"we require a much more aggressive,
@@ -2392,7 +2423,7 @@ function renderBoard() {
   // clickable) underneath.
   const isMain = !S.over && d.type === 'main_phase';
   const dec = (!S.over && SUBDECISIONS.includes(d.type)) ? d.type : null;
-  const boardClick = dec==='target' || dec==='bounce' || dec==='sacrifice' || dec==='vial_charge' || dec==='attach_host' || dec==='flicker' || dec==='treasurify';
+  const boardClick = dec==='target' || dec==='bounce' || dec==='sacrifice' || dec==='legend_keep' || dec==='vial_charge' || dec==='attach_host' || dec==='flicker' || dec==='treasurify';
   if (boardClick && S._selFor !== d.decision_index) initBoardSel(d);
   // HAND-CLICK decisions -- the hand's answer to boardClick. The objects being chosen among are
   // cards sitting in YOUR HAND, so they are picked by clicking them where they already are, not in a
@@ -2456,7 +2487,7 @@ function renderBoard() {
     if(p.target && p.kind==='activate'){ return; }
     // 'channel' is a from-HAND ability: the card is discarded for an effect, so like an activation it
     // puts nothing onto the battlefield and belongs in the spells row, not the planned-permanents row.
-    if(p.kind==='retrace'||p.kind==='nonpermanent'||p.kind==='activate'||p.kind==='channel'||p.kind==='suspend'||p.kind==='eternalize'){ plannedSpells.push(plannedThumb(p,i,ord[i])); return; }
+    if(p.kind==='retrace'||p.kind==='nonpermanent'||p.kind==='activate'||p.kind==='channel'||p.kind==='suspend'||p.kind==='eternalize'||p.kind==='cycle'){ plannedSpells.push(plannedThumb(p,i,ord[i])); return; }
     if(p.target){ return; }   // a queued aura with a target -> drawn overlapping its host (below)
     // The CAST half of a from-hand cast-and-equip: its equip half is already drawn on the host, so
     // drawing this too would put the same card in two places on the field.
@@ -2504,7 +2535,7 @@ function renderBoard() {
   // and other after-combat plays happen).
   const phaseLabel = d.phase==='pre_main' ? 'Main 1 · pre-combat'
                    : d.phase==='post_main' ? 'Main 2 · post-combat' : (d.phase||'').replace('_',' ');
-  h += `<div id="turnbar"><span class="turn">Turn ${d.turn ?? '?'}</span>`+
+  h += `<div id="turnbar"><span class="turn">Turn ${d.turn ?? '?'}${d.extra_turn ? ` (extra ${d.extra_turn})` : ''}</span>`+
     `<span class="phase">${esc(phaseLabel)}</span>`+
     `<span class="who">${d.on_the_play ? 'on the play' : 'on the draw'}</span></div>`;
   // Flow hint: explain that combat is automatic and Spectacle spells land in Main 2. Shown in Main 1
@@ -2724,12 +2755,13 @@ function renderPlanbar() {
         `<span class="nm" data-name="${esc(p.name)}">⛏ ${p.sac?'sac':'tap'} ${esc(p.name)} → ${esc(preTapFaceText(p.color))}${ac.length?` +{${esc(ac.join('} +{'))}}`:''}</span>`+
         `<span class="x" data-rm="${i}">✕</span></span>`;
     }
-    const cls = p.kind==='vial'?'vial':p.kind==='retrace'?'retrace':(p.kind==='activate'||p.kind==='channel'||p.kind==='suspend'||p.kind==='eternalize')?'act':(p.kind==='land'?'land':'spell');
+    const cls = p.kind==='vial'?'vial':p.kind==='retrace'?'retrace':(p.kind==='activate'||p.kind==='channel'||p.kind==='suspend'||p.kind==='eternalize'||p.kind==='cycle')?'act':(p.kind==='land'?'land':'spell');
     // A board activation names WHAT it does where the verb already says so — "⟳ ability" on four
     // chips reading "Bonesplitter / Shadowspear / Balan / Stoneforge" tells you nothing about which
     // of them equips, attaches everything, or puts a card from hand.
     const act = p.kind==='channel' ? (channelSources()[p.name]==='transmute' ? ' ⚡ transmute (discard)' : ' ⚡ channel (discard)')
               : p.kind==='suspend' ? ' ⌛ suspend (exile)'
+              : p.kind==='cycle' ? ' ↻ cycle (discard)'
               : p.kind==='eternalize' ? ' ⟳ eternalize (from graveyard)'
               : p.kind!=='activate' ? ''
               : p.verb==='gyexile'   ? ' ⟳ ' + (p.mode===2 ? 'exile a creature, gain 2' : 'exile an instant/sorcery, drain 2')
@@ -2863,6 +2895,7 @@ function renderHand() {
     const chN    = canCh ? channelCountFor(c.name) : 0;
     const canSu  = !!suspendSources()[c.name];         // suspendable from hand -- badge to exile it
     const suN    = canSu ? suspendCountFor(c.name) : 0;
+    const suCanAdd = suN < total && plannedCount(c.name) < LB.castableCount(S.decision, c.name);
     const advNm  = adventureSources()[c.name] || null;  // adventure half available -- badge to cast it
     const advN   = advNm ? adventureCountFor(c.name) : 0;
     // Kicker on offer -- badge to PAY it. Membership, not truthiness: a 0-mana kicker is a legal
@@ -2878,7 +2911,7 @@ function renderHand() {
       // land-face / channel / suspend badges below do -- and, unlike them, cycling RESOLVES ON THE
       // SPOT (fireDig commits the plan), so it must never be what an ordinary click on the card body
       // does. Clicking the body plays the card.
-      (canCyc?`<span class="digbadge" data-cycle="${esc(c.name)}" title="CYCLE — discard ${esc(c.name)} to draw a card (resolves immediately). Click the card itself to play it instead.">↻ cycle</span>`:'')+
+      (canCyc?`<span class="digbadge" data-cycle="${esc(c.name)}" title="CYCLE — queue cycling ${esc(c.name)} as part of your line (it runs after what is queued before it; commit the line to do it). Click the card itself to play it instead.">↻ cycle</span>`:'')+
       // MDFC land side: an explicit badge, because the card's own kind is the FRONT's and every
       // other route on this thumb (double-click, drag) casts that front. Clicking it queues the
       // land drop instead (`land=<front name>`, which is how the engine names the play).
@@ -2889,7 +2922,7 @@ function renderHand() {
       (canCh?`<span class="landface" data-channel="${esc(c.name)}" title="${channelSources()[c.name]==='transmute'?'TRANSMUTE — discard '+esc(c.name)+' to search your library for a card with the same mana value (you pick it when it resolves)':'CHANNEL — discard '+esc(c.name)+' from hand to use its ability instead of casting it'}${chN?' (click again to take it back)':''}">⚡ ${channelSources()[c.name]==='transmute'?'transmute':'channel'}${chN>1?` ×${chN}`:''}</span>`:'')+
       // Suspend: the same shape as channel -- another way to play THIS card, which the ordinary
       // cast gesture would silently take instead.
-      (canSu?`<span class="landface" data-suspend="${esc(c.name)}" title="SUSPEND — exile ${esc(c.name)} from hand with time counters instead of casting it${suN?' (click again to take it back)':''}">⌛ suspend${suN>1?` ×${suN}`:''}</span>`:'')+
+      (canSu?`<span class="landface" data-suspend="${esc(c.name)}" title="SUSPEND — exile ${esc(c.name)} from hand with time counters instead of casting it${suCanAdd?' (click to queue another copy)':suN?' (click to take back one copy)':' (all copies are already queued)'}">⌛ suspend${suN>1?` ×${suN}`:''}</span>`:'')+
       // Adventure: the same shape again, and the reason it is REQUIRED rather than a convenience is
       // that both modes are casts of this very card -- the thumb's own click already casts the
       // creature, so without this badge the adventure half has no gesture at all.
@@ -2932,7 +2965,7 @@ function renderHand() {
     b.onclick = e => { e.stopPropagation(); e.preventDefault();
       const nm = b.dataset.cycle, idx = digSources().cyc[nm];
       if (idx == null) return;                       // re-rendered since; not offered any more
-      fireDig(idx, `cycle ${nm} to draw`); };
+      queueCycle(nm); };
     b.ondblclick = e => { e.stopPropagation(); e.preventDefault(); };
   });
   // MDFC land-side badge: queue the LAND drop, not the front cast. stopPropagation keeps the
@@ -2956,14 +2989,16 @@ function renderHand() {
       renderBoard(); };
     b.ondblclick = e => { e.stopPropagation(); e.preventDefault(); };
   });
-  // Suspend badge: same toggle contract as the channel badge above.
+  // Suspend badge: queue each real hand copy before a further click takes one back.
   row.querySelectorAll('.landface[data-suspend]').forEach(b => {
     b.onclick = e => { e.stopPropagation(); e.preventDefault();
       const nm = b.dataset.suspend;
-      const i = S.plan.map(p => p.kind === 'suspend' && p.name === nm).lastIndexOf(true);
-      if (i >= 0) { S.plan.splice(i, 1); flashHint(`Took back ${nm}'s suspend.`); }
-      else { S.plan.push({ name: nm, kind: 'suspend' });
-             flashHint(`Suspending ${nm} — it is exiled with time counters and arrives later. Commit the phase to resolve it.`); }
+      const before = suspendCountFor(nm);
+      S.plan = LB.toggleSuspend(S.decision, S.plan, nm);
+      if (suspendCountFor(nm) < before) flashHint(`Took back one ${nm} suspend.`);
+      else if (suspendCountFor(nm) > before)
+        flashHint(`Suspending ${nm} — it is exiled with time counters and arrives later. Commit the phase to resolve it.`);
+      else flashHint(`All copies of ${nm} are already queued.`);
       renderBoard(); };
     b.ondblclick = e => { e.stopPropagation(); e.preventDefault(); };
   });
@@ -3601,7 +3636,13 @@ function applyAccepted(planIndex, label, planView) {
     return items.length && items.every(it => it.includes(': '))
       ? label.replace('cast: ', 'activate: ') : label;
   })();
-  S.history.push({ turn:S.decision.turn, label: hist });
+  // CAN THE SEARCH FIND THIS LINE (searchNoteFor): a badge on the history entry, and the full note
+  // once the commit lands (step), when the search's own payment of the plan drops a cast.
+  const sNote = searchNoteFor(S.lastValidation, planIndex);
+  S.lastValidation = null;
+  S.history.push(sNote ? { turn:S.decision.turn, label: hist, cls:'nosearch', note:sNote }
+                       : { turn:S.decision.turn, label: hist });
+  S.pendingSearchNote = sNote;
   // Remember which cards this line CAST, so the graveyard-add log can exclude them and surface only
   // the involuntary adds (Gamble's random discard, a mill, etc.) — #1: name the discarded card.
   S.lastCasts = new Set((S.plan||[]).filter(p=>p.kind!=='land'&&p.kind!=='le').map(p=>p.name));
@@ -3685,7 +3726,7 @@ function applyAccepted(planIndex, label, planView) {
   // an undo drops it for free (pruneCommitted) -- rollbackStep pops steps, and a record whose step
   // is gone describes a line that no longer happened.
   if (seg0.length) {
-    (S.committed=S.committed||[]).push({ at:S.steps.length, turn:dec0 && dec0.turn,
+    (S.committed=S.committed||[]).push({ at:S.steps.length, turn:dec0 && dec0.turn, tkey:turnKey(dec0),
                                          entries:seg0.map(p => Object.assign({}, p)) });
     if (S.committed.length > 60) { S.committed.splice(0, S.committed.length - 60); }
   }
@@ -3701,7 +3742,132 @@ function applyAccepted(planIndex, label, planView) {
   S.leMode=false; S.vialMode=null; S.blinkMode=null;
   renderHistory(); hideVerdict(); step();
 }
+// ---- CAN THE SEARCH FIND THIS LINE (USER 2026-10-27) ----------------------------------------------
+// *"a user using the viewer should be able to tell: 'Can the search actually find this line' while using
+// it"*, and *"show when it is possible to roll back the previous taps"*. The validation carries, for every
+// plan it can commit, the engine's own payment of that plan -- the payment the SEARCH scores -- and, when
+// that drops a cast, the mana oracle's answer (src/main.cpp WriteValidation `search_lines`,
+// manaoracle::AuditLine). A line you commit is paid in YOUR order with YOUR taps, so it can play here and
+// still be a line the search never reaches: this is what says so. MANA ONLY -- whether the search's own
+// enumeration offers the line is a different question, not asked here.
+function payListHtml(pays) {
+  if (!pays || !pays.length) return '';
+  return '<ol class="paylist">' + pays.map(p => '<li>' + (p.what ? `<b>${esc(p.what)}</b>: ` : '')
+    + (p.engine ? 'as the engine pays it' : p.fail ? '(no payment)' : (p.text ? 'tap ' + esc(p.text) : 'from floating mana'))
+    + (p.keep_floating ? ` — keep ${esc(p.keep_floating)} floating for later` : '') + '</li>').join('') + '</ol>';
+}
+function rollbackHtml(sl) {
+  const out = [];
+  if (sl.keep >= 0 && sl.failed >= 0) {
+    const d = sl.failed - sl.keep, n = sl.failed + 1;
+    out.push(d === 0
+      ? `Only the payment that failed (the engine's mana decision #${n}) has to change: the automatic tapping missed a way to pay it.`
+      : `Rolling back finds it: re-make the engine's mana decisions from #${sl.keep + 1} on. The one that failed is #${n}, so `
+        + `${d === 1 ? 'the decision before it has' : `the ${d} decisions before it have`} to change too `
+        + `(for example keeping a different colour up).`);
+  } else if (sl.rollback) {
+    out.push(`Rollback census: ${sl.rollback}.`);
+  }
+  if (sl.later) out.push('The lost spell is one the line picked after a draw, not one it named up front, so no earlier payment could plan for it.');
+  out.push(sl.pay_rollback
+    ? 'The engine’s one-swap payment rollback (MTG_PAY_ROLLBACK, off by default) would recover it.'
+    : 'The engine’s one-swap payment rollback (MTG_PAY_ROLLBACK) would not recover it.');
+  return `<div class="hint" style="margin-top:6px">${out.map(esc).join('<br>')}</div>`;
+}
+// The note for one committed plan, or null when the search pays for it (or nothing was checked).
+function searchNoteFor(v, idx) {
+  // Only the validation of THIS frame (a dig / Combo Off click commits without one).
+  if (!v || !S.decision || v.decision_index !== S.decision.decision_index) return null;
+  const sl = (v.search_lines || []).find(x => x && x.plan_index === idx);
+  if (!sl || !sl.audited || sl.engine_full || sl.sibling >= 0) return null;
+  let body = `<div>The search pays for this line with the engine’s automatic tapping, and that drops `
+    + `<b>${esc(sl.dropped)}</b> — so the search can only ever score the smaller line, never the one you just played. `
+    + `It played here because you paid for it in your own order or with your own taps.</div>`;
+  if (sl.payable && !sl.other_order) {
+    body += `<div style="margin-top:6px">The board pays every spell in this order like this:</div>${payListHtml(sl.pays)}${rollbackHtml(sl)}`;
+  } else if (sl.payable) {
+    body += `<div style="margin-top:6px">Only the order <b>${esc(sl.other_order)}</b> pays every spell, and the menu has no entry in that order:</div>${payListHtml(sl.pays)}`;
+  } else if (sl.partial) {
+    body += `<div class="hint" style="margin-top:6px">Mana oracle: no verdict — ${esc(sl.partial)}.</div>`;
+  } else {
+    body += `<div class="hint" style="margin-top:6px">The mana oracle found no payment for it in this order or the others it tried, `
+      + `although your commit paid for it — an oracle gap worth reporting.</div>`;
+  }
+  return { tip: `the search's automatic tapping drops ${sl.dropped}`, html: body };
+}
+function showSearchNote(note) {
+  if (!note) return;
+  const ve=$('verdict'); ve.className='legal';
+  ve.innerHTML=`<span class="vtag">search can’t find this line</span><h4>Played — but the search can’t pay for this line</h4>`
+    + note.html + `<div class="actions"><button id="snok" class="ghost">Dismiss</button></div>`;
+  ve.style.display='block';
+  $('snok').onclick=hideVerdict;
+}
+// "Queue these taps": put the mana check's taps into the queue, each right before the step its payment
+// was made in (`pays[].step` -- the engine's index of the queued step, the land included, which is the
+// viewer's index over the segment's non-tap entries: LB.sequenceSteps' count). The check chose EVERY tap
+// (it left the human's own out), so the segment's existing manual taps are replaced. Nothing is committed:
+// the human looks at the queue and clicks Commit, which validates it as usual. Offered only when every
+// payment has a step and every tap is one the viewer's manual tap can make (not the oracle's
+// creature-only route).
+function parsePreTapToken(t) {
+  const m = /^tap=(.*)#(\d+):([A-Z]+)((?:\+[A-Z])*)$/.exec(t || '');
+  if (!m) return null;
+  const ac = m[4] ? m[4].split('+').filter(Boolean) : [];
+  return { kind:'pretap', name:m[1], num:+m[2], color:m[3], auraColors:ac, sac:false, fed:false, note:'' };
+}
+function oracleTapsQueueable(oa) {
+  const pays = (oa && oa.pays) || [];
+  if (!pays.length) return false;
+  return pays.every(p => p.step >= 0 && !p.engine && !p.fail && !/creature-only/.test(p.text || '')
+                         && (p.taps || []).every(t => parsePreTapToken(t)));
+}
+function queueOracleTaps(oa) {
+  const seg0 = LB.segmentParts(S.plan || [])[0] || [];
+  const rest = (S.plan || []).filter(p => seg0.indexOf(p) < 0);
+  const byStep = new Map();
+  for (const p of (oa.pays || [])) {
+    for (const t of (p.taps || [])) {
+      const e = parsePreTapToken(t);
+      if (!e) return;
+      if (!byStep.has(p.step)) byStep.set(p.step, []);
+      byStep.get(p.step).push(e);
+    }
+  }
+  const out = [];
+  let k = 0;
+  for (const p of seg0) {
+    if (LB.isPreTap(p)) continue;
+    if (!p.sacMana) { (byStep.get(k) || []).forEach(e => out.push(e)); ++k; }
+    out.push(p);
+  }
+  S.plan = out.concat(rest);
+  hideVerdict(); renderBoard();
+  flashHint('Queued the mana check’s taps before the spells they pay for — check the queue and Commit Line.');
+}
+// The reject panel's mana check: when the queued ORDER cannot pay, can any taps pay it?
+function orderAuditHtml(oa) {
+  if (!oa || !oa.audited) return '';
+  let h;
+  if (oa.engine_full) {
+    h = 'With the engine’s automatic tapping (none of your manual taps) this order pays for every spell — it is the queued taps that leave one unpaid.';
+    return `<div class="hint" style="margin-top:6px"><b>Mana check:</b> ${esc(h)}</div>`;
+  }
+  if (oa.payable && !oa.other_order)
+    return `<div style="margin-top:6px"><b>Mana check: the board can pay this order</b> if you tap like this `
+      + `(each payment’s taps go just before the spell it pays for):</div>${payListHtml(oa.pays)}`
+      + (oracleTapsQueueable(oa)
+          ? `<div class="actions"><button id="oracletaps" class="primary">Queue these taps</button></div>`
+          : '');
+  if (oa.payable)
+    return `<div style="margin-top:6px"><b>Mana check:</b> not in this order — but <b>${esc(oa.other_order)}</b> pays every spell:</div>${payListHtml(oa.pays)}`;
+  if (oa.partial) return `<div class="hint" style="margin-top:6px"><b>Mana check:</b> no verdict — ${esc(oa.partial)}.</div>`;
+  return `<div class="hint" style="margin-top:6px"><b>Mana check:</b> no way of tapping this board pays for every spell, `
+    + `in this order or any other order tried.</div>`;
+}
 function handleVerdict(v, line) {
+  // applyAccepted reads this validation's `search_lines` for the plan it commits (searchNoteFor).
+  S.lastValidation = v;
   // The third argument is the verdict's OWN view of the plan it matched (matched_plans), which is
   // the only way applyAccepted can run its order guard when that plan is past the display cap.
   if (v.verdict==='accept') return applyAccepted(v.plan_index, v.matched_summary || line,
@@ -3775,11 +3941,13 @@ function handleVerdict(v, line) {
   const ve=$('verdict'); ve.className=cls;
   ve.innerHTML=`<span class="vtag">${tag}</span>${macroNote}<h4>${head}</h4>`+
     `<div>${esc(v.reason||'')}${v.failed_action?`<br><span class="hint">at: ${esc(v.failed_action)}</span>`:''}</div>`+
+    orderAuditHtml(v.order_audit)+
     `<div class="modelplans"><b>What the model would accept${plans.length?' (click to play)':''}:</b>${mp}</div>`+
     `<div class="actions">${playAnywayHtml(v)}<button id="artbtn" class="primary">Store as artifact</button>`+
     `<button id="retrybtn" class="ghost">Clear &amp; retry</button></div><div id="artinfo" class="hint" style="margin-top:8px"></div>`;
   ve.style.display='block';
   $('retrybtn').onclick=clearPlan; $('artbtn').onclick=()=>storeArtifact(v, line);
+  if ($('oracletaps')) { $('oracletaps').onclick=()=>queueOracleTaps(v.order_audit); }
   if ($('anywaybtn')) { $('anywaybtn').onclick=()=>playAnyway(v, line); }
   // Wire each model-plan button to submit its index. Clear S.plan first so the rejected hand-built
   // queue doesn't seed a false dropped-cast check against the (different) model plan's actual casts.
@@ -3934,7 +4102,7 @@ function sameNameMultiset(a,b){
 function sacBurstAuto(d){
   const q=S.sacBurst;
   if (!q) return false;
-  if (!d || d.type!=='sacrifice' || !(+d.pick_total>1) || d.source!==q.source || d.turn!==q.turn
+  if (!d || d.type!=='sacrifice' || !(+d.pick_total>1) || d.source!==q.source || turnKey(d)!==q.turn
       || !q.want.length) { S.sacBurst=null; return false; }
   const got=(d.options||[]).map(o=>o.name);
   if (!sameNameMultiset(got, q.expect)) { S.sacBurst=null; return false; }   // board moved -- ask
@@ -3967,7 +4135,7 @@ function initBoardSel(d){
     // the AI is recommending for pairing").
     const def=(d.options||[]).find(o=>o.index===d.heuristic_default);
     if (def) S.boardSel.add('m:'+def.perm_index);
-  } else if (d.type==='bounce' || d.type==='sacrifice' || d.type==='attach_host' || d.type==='flicker'){
+  } else if (d.type==='bounce' || d.type==='sacrifice' || d.type==='legend_keep' || d.type==='attach_host' || d.type==='flicker'){
     const def=(d.options||[]).find(o=>o.index===d.heuristic_default)||(d.options||[])[0];
     if (def) S.boardSel.add('m:'+def.perm_index);
     // Multi-victim burst: seed the WHOLE cost, not one body of it -- the heuristic pick first, then
@@ -3991,7 +4159,7 @@ function initHandSel(d){
 function toggleHandSel(oi){ S.handSel = (S.handSel===oi) ? null : oi; renderBoard(); }
 function legalTargetKeys(d){
   if (d.type==='target') return new Set((d.legal_targets||[]).map(tgtKey));
-  if (d.type==='bounce' || d.type==='sacrifice' || d.type==='attach_host' || d.type==='flicker' || d.type==='treasurify') return new Set((d.options||[]).map(o=>'m:'+o.perm_index));
+  if (d.type==='bounce' || d.type==='sacrifice' || d.type==='legend_keep' || d.type==='attach_host' || d.type==='flicker' || d.type==='treasurify') return new Set((d.options||[]).map(o=>'m:'+o.perm_index));
   return new Set();
 }
 function toggleSel(d, key, max){
@@ -4011,14 +4179,14 @@ function wireDecisionBoard(d, dec){
       t.onclick=e=>{ e.stopPropagation(); toggleHandSel(+t.dataset.hpick); };
     });
   }
-  if (dec==='target' || dec==='bounce' || dec==='sacrifice' || dec==='soulfire_targets' || dec==='attach_host' || dec==='flicker' || dec==='treasurify'){
+  if (dec==='target' || dec==='bounce' || dec==='sacrifice' || dec==='legend_keep' || dec==='soulfire_targets' || dec==='attach_host' || dec==='flicker' || dec==='treasurify'){
     const legal=legalTargetKeys(d);
     // A multi-victim sacrifice takes `need` bodies, not one -- and when need === the candidate count
     // every one of them dies, so the board is highlighted (they ARE the victims) but NOT clickable:
     // there is no choice to make and letting a click deselect one would only be able to produce an
     // un-confirmable state.
     const ro = dec==='sacrifice' && sacBurstForced(d);
-    const max = (dec==='bounce'||dec==='attach_host'||dec==='flicker'||dec==='treasurify')?1
+    const max = (dec==='bounce'||dec==='legend_keep'||dec==='attach_host'||dec==='flicker'||dec==='treasurify')?1
               : dec==='sacrifice' ? sacBurstNeed(d)
               : (dec==='soulfire_targets'?(d.count||1):(d.max_targets||1));
     board.querySelectorAll('.thumb[data-idx]').forEach(t=>{
@@ -4110,6 +4278,7 @@ function renderDecisionPanel(d, dec){
                 || dec==='lifegain_counters'   // Nykthos Paragon's once-each-turn team wave -- same shape
                 || dec==='madness'   // Vampires A1: the discarded card is in EXILE (no visible zone) -- a card-image modal
                 || dec==='x_value'   // Stroke of Genius's X, picked at the cast (not a plan axis in human play)
+                || dec==='gy_return_one'   // Abiding Grace / Emeria: a graveyard card (image) or the alternative
                 // free_cast is a modal ONLY for the walk-based sites (cascade / Breaching
                 // Dragonstorm / Creative Technique), whose card is in no visible zone. A from-hand
                 // charge (zone:"hand" -- World War Hulk chapter I, Maelstrom Archangel) is a bottom
@@ -4136,6 +4305,7 @@ function renderDecisionPanel(d, dec){
                   : dec==='free_cast' ? freeCastPanelHtml(d)
                   : dec==='demonstrate' ? demonstratePanelHtml(d)
                   : dec==='attack_mode' ? attackModePanelHtml(d)
+                  : dec==='gy_return_one' ? gyReturnOnePanelHtml(d)
                   : dec==='lifegain_counters' ? lifegainCountersPanelHtml(d)
                   : dec==='madness' ? madnessPanelHtml(d)
                   : dec==='tutor_etb' ? tutorPanelHtml(d)
@@ -4174,7 +4344,8 @@ function activationPickerHtml(pick){
                    : o.verb==='auraswap'  ? `Aura swap — bring in ${o.name} (${pick.src} returns to hand)${o.inCombat ? ' — in combat, after attacks' : ''}`
                    : o.verb==='attachall' ? `Attach every Equipment to ${pick.src}`
                    : o.verb==='jittemode' ? jitteModeLabel(o.mode)
-                   : o.verb==='gyexile'   ? (o.mode===2 ? 'Exile a creature card from a graveyard — gain 2 life'
+                   : o.verb==='gyexile'   ? (o.mode===3 ? 'Pay {R}, tap, exile two graveyard cards — 2 damage to any target'
+                                          : o.mode===2 ? 'Exile a creature card from a graveyard — gain 2 life'
                                                         : 'Exile an instant/sorcery from a graveyard — each opponent loses 2 life')
                    : (o.verb==='gyreturn' && o.name==='@random') ? `Sacrifice — return a creature card AT RANDOM from your graveyard to your hand`
                    : o.verb==='gyreturn'  ? `Sacrifice — return ${o.name} from your graveyard to your hand`
@@ -4439,6 +4610,15 @@ function lackeyPanelHtml(d){
 // silently lost when the paid variant of the same card won the dedup). Same shape as the Lackey put.
 function freeCastPanelHtml(d){
   const cands=d.candidates||[];
+  if(d.operation==='pay_rr'||d.operation==='copy'){
+    const pay=d.operation==='pay_rr';
+    const title=pay?'Pay {R}{R} for Chain Lightning?':'Copy Chain Lightning?';
+    const detail=pay?'You may pay two red mana. You may then copy the spell.':'The copy is not cast. Its target is chosen next.';
+    const c=cands[0]||{};
+    return `<h3>${title}</h3><div class="sub">${detail}</div>`+
+      `<div class="tutgrid"><span class="cardmini tdig" data-opt="0" data-name="Chain Lightning"><img loading="lazy" src="${scryImg(c.name||'Chain Lightning','small')}"/><em>${pay?'Pay {R}{R}':'Copy spell'}</em></span></div>`+
+      `<div class="pbtns"><button class="ghost" data-opt="-1">Decline</button></div>`;
+  }
   // The BADGE follows ai_pick (the engine's suggestion); heuristic_default is -1/decline, because a
   // "may" trigger must default to the no-op for references that predate this decision -- see
   // WriteFreeCastDecisionJson.
@@ -4455,6 +4635,22 @@ function freeCastPanelHtml(d){
   // redundant and the affordance the user rejected ("not in a separate dialog"). Declining is a
   // first-class button because the card grants a PERMISSION, not an obligation -- World War Hulk's
   // chapter I reads "CAN be cast without paying its mana cost".
+  // A PAID follow-up that reuses this decision (the engine's `paid_cost`): Remand on an Unpredictable
+  // Cyclone walk's hit, or a second Remand on that Remand. NOT a free cast -- the spell is cast for its
+  // cost (USER 2026-10-28: "it isn't really a free cast"), so say what is paid, what it targets and what
+  // happens. Same answer encoding as ever (0 = cast it, -1 = decline), so recorded games replay as before.
+  if (d.paid_cost){
+    const nm=(cands[0]||{}).name||'the spell';
+    const aiName=(cands.find(c=>c.index===aiPick)||{}).name;
+    return `<h3>Cast ${esc(nm)} on ${esc(d.paid_target||'the spell')}? (pay ${esc(d.paid_cost)})</h3>`+
+      `<div class="sub">This is a <b>paid</b> cast, not a free one: you pay <b>${esc(d.paid_cost)}</b>`+
+      ` to cast ${esc(nm)} targeting <b>${esc(d.paid_target||'')}</b>.`+
+      (d.paid_outcome?` If you do: ${esc(d.paid_outcome)}.`:'')+
+      ` Decline to let it resolve without ${esc(nm)}.`+
+      (aiName?` The AI would cast it.`:` The AI would decline.`)+`</div>`+
+      `<div class="pbtns"><span class="spacer"></span><button id="fcdecline" class="ghost">Decline</button>`+
+      `<button id="fcpaid" class="primary">Cast ${esc(nm)} (pay ${esc(d.paid_cost)})</button></div>`;
+  }
   if (d.zone==='hand'){
     const cands=d.candidates||[];
     const pickName=(cands.find(c=>c.index===S.handSel)||{}).name;
@@ -4469,16 +4665,18 @@ function freeCastPanelHtml(d){
       `<span class="spacer"></span><button id="fcdecline" class="ghost">Decline</button>`+
       `<button id="decconfirm" class="primary" ${pickName?'':'disabled'}>Confirm</button></div>`;
   }
-  let h=`<h3>${esc(src)} — cast a spell for free</h3>`;
-  h+=isArch
+  let h=`<h3>${esc(src)} — ${d.paid_cast?'cast paying its cost':'cast a spell for free'}</h3>`;
+  h+=d.paid_cast
+    ? `<div class="sub">You may cast this exiled card now, <b>paying its cost</b>. Decline to leave it exiled and deal 2 damage to each opponent.</div>`
+    : isArch
     ? `<div class="sub"><b>${esc(src)}</b> dealt combat damage — you may cast one spell from your hand <b>without paying its mana cost</b>. This is a one-time trigger: click a spell, or decline.</div>`
-    : `<div class="sub"><b>${esc(src)}</b> found this card — you may cast it <b>without paying its mana cost</b>. Click it to cast, or decline${src.indexOf('(cascade)')>=0?' (it goes to the bottom of your library)':src.indexOf('Creative Technique')>=0?' (it stays in exile)':' (it goes to your hand)'}.</div>`;
+    : `<div class="sub"><b>${esc(src)}</b> found this card — you may cast it <b>without paying its mana cost</b>. Click it to cast, or decline${src.indexOf('(cascade)')>=0?' (it goes to the bottom of your library)':(src.indexOf('Creative Technique')>=0||d.operation==='suspend_cast')?' (it stays in exile)':' (it goes to your hand)'}.</div>`;
   h+=`<div class="tutgrid fc-cands">`;
   if(!cands.length) h+=`<span class="hint">No castable spell in hand.</span>`;
   cands.forEach(c=>{
     const def=c.index===d.heuristic_default && c.name===defName;
     h+=`<span class="cardmini tdig${def?' def':''}" data-opt="${c.index}" data-name="${esc(c.name)}" title="${esc(c.name)}">`+
-       `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(c.name)}</em>`+
+       `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(c.name)}${d.paid_cast&&c.cost_label?'<br>'+esc(c.cost_label):''}</em>`+
        (def?`<span class="deftag">AI pick</span>`:'')+`</span>`;
   });
   h+=`</div>`;
@@ -4851,6 +5049,15 @@ function promptPanelHtml(d, dec){
       `<div class="pbtns"><span class="pcount">Returning: <b>${opt?esc(opt.name):'(pick a land)'}</b></span>`+
       `<span class="spacer"></span><button id="decconfirm" class="primary" ${sel.length?'':'disabled'}>Confirm</button></div>`;
   }
+  if (dec==='legend_keep'){
+    const sel=[...(S.boardSel||[])];
+    const opt=sel.length?(d.options||[]).find(o=>'m:'+o.perm_index===sel[0]):null;
+    const label=opt?`#${opt.card_num} · ${opt.loyalty} loyalty · ${opt.can_activate?'can activate':'already activated'}`:'(choose a Chandra)';
+    return `<h3>Keep one Chandra — legend rule</h3>`+
+      `<div class="sub">Click the copy to keep. The other goes to your graveyard. A fresh Chandra can use a loyalty ability even if the older copy already used one this turn.</div>`+
+      `<div class="pbtns"><span class="pcount">Keeping: <b>${label}</b></span>`+
+      `<span class="spacer"></span><button id="decconfirm" class="primary" ${sel.length?'':'disabled'}>Keep this copy</button></div>`;
+  }
   if (dec==='sacrifice'){
     const sel=[...(S.boardSel||[])];
     const opt=sel.length?(d.options||[]).find(o=>'m:'+o.perm_index===sel[0]):null;
@@ -5045,6 +5252,10 @@ function wireDecisionPanel(d, dec){
       const cb=panel.querySelector('#decconfirm');
       if (cb) cb.onclick=()=>{ if (S.handSel!=null) commitFreeCast(d, S.handSel); };
       const db=panel.querySelector('#fcdecline'); if (db) db.onclick=()=>commitFreeCast(d, -1);
+      const pb=panel.querySelector('#fcpaid'); if (pb) pb.onclick=()=>commitFreeCast(d, 0);   // a paid prompt
+    } else if (d.paid_cost){
+      const pb=panel.querySelector('#fcpaid'); if (pb) pb.onclick=()=>commitFreeCast(d, 0);
+      const db=panel.querySelector('#fcdecline'); if (db) db.onclick=()=>commitFreeCast(d, -1);
     } else {
       panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitFreeCast(d, +b.dataset.opt));
     }
@@ -5053,6 +5264,8 @@ function wireDecisionPanel(d, dec){
     panel.querySelectorAll('[data-demo]').forEach(b=>b.onclick=()=>commitDemonstrate(d, +b.dataset.demo));
   else if (dec==='attack_mode')
     panel.querySelectorAll('[data-atkmode]').forEach(b=>b.onclick=()=>commitAttackMode(d, +b.dataset.atkmode));
+  else if (dec==='gy_return_one')
+    panel.querySelectorAll('[data-gyr]').forEach(b=>b.onclick=()=>commitGyReturnOne(d, +b.dataset.gyr));
   else if (dec==='lifegain_counters')
     panel.querySelectorAll('[data-lgc]').forEach(b=>b.onclick=()=>commitLifegainCounters(d, +b.dataset.lgc));
   else if (dec==='madness')
@@ -5097,7 +5310,8 @@ function wireDecisionPanel(d, dec){
   else if (dec==='x_value') {
     // Presets fill the number box; Confirm commits whatever it holds (clamped to 0..max_x).
     const inp=panel.querySelector('#xvinput');
-    panel.querySelectorAll('[data-xv]').forEach(b=>b.onclick=()=>{ if (inp) { inp.value=b.dataset.xv; inp.dispatchEvent(new Event('input')); } });
+    // No number box (Martyr's reveal panel): a preset button IS the choice.
+    panel.querySelectorAll('[data-xv]').forEach(b=>b.onclick=()=>{ if (inp) { inp.value=b.dataset.xv; inp.dispatchEvent(new Event('input')); } else commitXValue(d, +b.dataset.xv); });
     const lab=panel.querySelector('#xvlabel');
     // An X above max_x is NOT silently clamped (USER 2026-10-21: typed 9 against "max 8"; the old clamp cast
     // X=8 without a word, so the 9 read as accepted and the max as wrong). Say so and refuse the confirm.
@@ -5177,7 +5391,7 @@ function commitLackey(d, oi){
 }
 function commitFreeCast(d, oi){
   const c=(d.candidates||[]).find(x=>x.index===oi);
-  pushChoice(d, oi, `${d.source||'Maelstrom Archangel'}: ${oi<0||!c?'declined the free cast':'cast '+c.name+' for free'}`);
+  pushChoice(d, oi, `${d.source||'Maelstrom Archangel'}: ${oi<0||!c?(d.paid_cast?'declined: 2 damage to each opponent':'declined the free cast'):'cast '+c.name+(d.paid_cast?' paying its cost':' for free')}`);
 }
 // MADNESS (Vampires A1; CR 702.35): a discarded card with madness went to EXILE and its trigger offers
 // "cast it for its madness cost or put it into your graveyard". A centred modal with the CARD IMAGE (the
@@ -5274,6 +5488,34 @@ function commitLifegainCounters(d, v){
   const amt = (d.amount!=null) ? d.amount : 1;
   pushChoice(d, v, v===0 ? `${d.source||'Lifegain counters'}: declined (use not consumed)`
                          : `${d.source||'Lifegain counters'}: spent ${v} — +${v*amt}/+${v*amt} on each creature`);
+}
+// `gy_return_one` (Abiding Grace's end-step "choose one"; Emeria, the Sky Ruin's upkeep "you may
+// return"): ONE pick -- a graveyard card IMAGE to return to the battlefield, or the alternative button
+// (alt_text: "Gain 1 life" / "Return nothing"). Reply 0 = the alternative, i >= 1 = candidate i.
+function gyReturnOnePanelHtml(d){
+  const def=(d.heuristic_default==null)?0:d.heuristic_default;
+  let h=`<h3>${esc(d.source||'')} — ${d.exile_cost?'exile cost ('+(d.cost_number||1)+'/2)':'return which creature card?'}</h3>`;
+  h+=d.exile_cost
+    ? `<div class="sub">Choose a card from your graveyard to <b>exile as an activation cost</b>. Two cards must be exiled; they are not targets.</div>`
+    : `<div class="sub">Pick a creature card in your graveyard to return to the battlefield${d.alt_text?`, or <b>${esc(d.alt_text)}</b> instead`:''}.</div>`;
+  h+=`<div class="cardrow" style="justify-content:center;margin:8px 0">${cardMini(d.source||'', '', 'normal')}</div>`;
+  h+=`<div class="tutgrid">`;
+  (d.candidates||[]).forEach(c=>{
+    const isAI=(c.index===def);
+    h+=`<span class="cardmini tdig${isAI?' def':''}" data-gyr="${c.index}" data-name="${esc(c.name)}" title="${esc(c.name)}">`+
+       `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(c.name)}</em>`+
+       (isAI?`<span class="deftag">AI pick</span>`:'')+`</span>`;
+  });
+  h+=`</div>`;
+  if (d.alt_text){
+    h+=`<div class="pbtns" style="justify-content:center">`+
+       `<button class="${def===0?'primary':'ghost'}" data-gyr="0">${esc(d.alt_text)}${def===0?'  ·  AI':''}</button></div>`;
+  }
+  return h;
+}
+function commitGyReturnOne(d, v){
+  const c=(d.candidates||[]).find(x=>x.index===v);
+  pushChoice(d, v, `${d.source||'Return'}: ${v===0?(d.alt_text||'none'):((d.exile_cost?'exile ':'return ')+(c?c.name:'#'+v))}`);
 }
 function commitAttackMode(d, v){
   const opts = d.options || [];
@@ -5468,6 +5710,17 @@ function xValueConsequence(d, n){
 }
 function xValuePanelHtml(d){
   const max=d.max_x|0, def=(d.heuristic_default==null?max:d.heuristic_default|0);
+  if (d.x_kind==='reveal_gain'){
+    // Martyr of Sands: reveal X white cards, gain life_per_x * X.
+    const per=d.life_per_x|0;
+    let h=`<h3>${esc(d.source||'')} — reveal how many white cards?</h3>`;
+    h+=`<div class="sub">You gain <b>${per}</b> life per white card revealed (up to <b>${max}</b> in hand). Lands and colourless cards don't count.</div>`;
+    h+=`<div class="tutgrid">`+cardMini(d.source||'')+`</div>`;
+    h+=`<div class="pbtns" style="margin-top:10px;flex-wrap:wrap"><span class="spacer"></span>`;
+    for (let k=0;k<=max;k++)
+      h+=`<button class="${k===def?'primary':'ghost'}" data-xv="${k}">reveal ${k} → +${per*k} life${k===def?'  ·  AI':''}</button>`;
+    return h+`</div>`;
+  }
   const opp = d.draw_target==='opponent';
   let h=`<h3>${esc(d.source||'X spell')} — choose X</h3>`;
   h+=`<div class="sub">${opp?'The <b>opponent</b> draws X cards':'<b>You</b> draw X cards'}. You can pay up to <b>X=${max}</b> right now`+
@@ -5487,6 +5740,7 @@ function xValuePanelHtml(d){
   return h;
 }
 function commitXValue(d, n){
+  if (d.x_kind==='reveal_gain'){ pushChoice(d, n, `${d.source}: reveal ${n} → gain ${(d.life_per_x|0)*n}`); return; }
   pushChoice(d, n, `${d.source}: X=${n} → ${d.draw_target==='opponent'?'opponent':'you'} draw${d.draw_target==='opponent'?'s':''}`);
 }
 // Firebreathe amount modal (#4): a combat-phase decision (the viewer's first NON-main-phase breakpoint
@@ -5507,22 +5761,29 @@ function firebreathePanelHtml(d){
     h+=`<button class="${k===def?'primary':'ghost'}" data-opt="${k}">×${k}${k===def?'  ·  AI':''}</button>`;
   return h+`</div>`;
 }
-// Umezawa's Jitte counter-spend: same modal + turn-keyed side-channel shape as firebreathing.
+// Umezawa's Jitte counter-spend: same modal + turn-keyed side-channel shape as firebreathing. Shown only
+// when a DOUBLE STRIKER carries the Jitte (engine `mid_step`): the counters its first strike earns can be
+// spent on its regular-damage half, which no main-phase activation can do. Every other spend is a
+// main-phase Jitte activation (USER 2026-08-27: no dialog on attack). -1 = "spend as they arrive".
+function jitteLabel(k, max){
+  return k<0 ? 'jitte: spend as they arrive' : `jitte ×${k}${k<max?` (held ${max-k})`:''}, first-strike counters banked`;
+}
 function jittePanelHtml(d){
-  const max=d.max_count||0, def=(d.heuristic_default==null?max:d.heuristic_default);
+  const max=d.max_count||0, def=(d.heuristic_default==null?-1:d.heuristic_default);
   const atk=(d.attackers||[]).map(a=>a.name);
-  let h=`<h3>Umezawa's Jitte — spend how many counters?</h3>`;
-  h+=`<div class="sub">Spend charge counters pre-strike on +2/+2 for the equipped attacker. You can spend up to <b>${max}</b>; the AI spends everything (incl. double-strike mid-step earnings). Hold counters to bank them for a bigger turn.</div>`;
+  let h=`<h3>Umezawa's Jitte — spend the counters as they arrive?</h3>`;
+  h+=`<div class="sub">A double striker carries the Jitte. <b>Spend as they arrive</b> spends all <b>${max}</b> counter${max===1?'':'s'} now, then the 2 its first-strike damage earns on the regular-damage half (+2/+2 each) — what the AI does. Or spend exactly ×N now and bank the rest, including the first strike's 2.</div>`;
   h+=`<div class="tutgrid">`+atk.map(n=>cardMini(n)).join('')+`</div>`;
   h+=`<div class="pbtns" style="margin-top:10px;flex-wrap:wrap"><span class="spacer"></span>`;
+  h+=`<button class="${def<0?'primary':'ghost'}" data-opt="-1">spend as they arrive${def<0?'  ·  AI':''}</button>`;
   for (let k=0;k<=max;k++)
-    h+=`<button class="${k===def?'primary':'ghost'}" data-opt="${k}">×${k}${k===def?'  ·  AI':''}</button>`;
+    h+=`<button class="${k===def?'primary':'ghost'}" data-opt="${k}">×${k} now, bank the rest${k===def?'  ·  AI':''}</button>`;
   return h+`</div>`;
 }
 function commitJitte(d, k){
-  const t=d.turn, max=d.max_count||0;
+  const t=turnKey(d), max=d.max_count||0;
   (S.jitte=S.jitte||{})[t]=k;
-  S.history.push({ turn:t, label:`jitte ×${k}${k<max?` (held ${max-k})`:''}` });
+  S.history.push({ turn:t, label:jitteLabel(k, max) });
   S.prev=S.decision;
   (S.steps=S.steps||[]).push({ n:0, auto:!!(d&&d._autoStep), jt:t });   // consumes NO --choices slot
   renderHistory(); hideDecPanel(); step();
@@ -5532,9 +5793,9 @@ function commitJitte(d, k){
 // turn key (fb) so undo (rollbackStep) can pop it and drop the side-channel entry, keeping the #2
 // checkpoint/step bookkeeping 1:1 (one shown decision -> one checkpoint -> one step).
 function commitFirebreathe(d, k){
-  const t=d.turn, max=d.max_count||0;
+  const t=turnKey(d), max=d.max_count||0;
   (S.firebreathe=S.firebreathe||{})[t]=k;
-  S.history.push({ turn:t, label:`firebreathe ×${k}${k<max?` (held ${max-k})`:''}` });
+  S.history.push({ turn:d.turn, label:`firebreathe ×${k}${k<max?` (held ${max-k})`:''}` });
   S.prev=S.decision;
   (S.steps=S.steps||[]).push({ n:0, auto:!!(d&&d._autoStep), fb:t });   // consumes NO --choices slot
   renderHistory(); hideDecPanel(); step();
@@ -5597,7 +5858,7 @@ function storageHoldPanelHtml(d){
 // Record the hold answer in the (turn, land-number)-keyed side-channel and re-step. Like commitFirebreathe
 // it appends NO --choices int; it pushes a ZERO-int step carrying the side-channel key (sh) so undo drops it.
 function commitStorageHold(d, k){
-  const key=`${d.turn}:${d.land_idx}`;
+  const key=`${turnKey(d)}:${d.land_idx}`;
   (S.storageHold=S.storageHold||{})[key]=k;
   S.history.push({ turn:d.turn, label:`${d.land||'storage'} ${k?'hold (charge)':'allow tap'}` });
   S.prev=S.decision;
@@ -5654,6 +5915,10 @@ function commitBoardSel(d, dec){
   if (dec==='bounce'){
     const opt=(d.options||[]).find(o=>'m:'+o.perm_index===sel[0]);
     oi=opt?opt.index:d.heuristic_default; lab=`${d.source}: return ${opt?opt.name:'land'}`;
+  } else if (dec==='legend_keep'){
+    const opt=(d.options||[]).find(o=>'m:'+o.perm_index===sel[0]);
+    oi=opt?opt.index:d.heuristic_default;
+    lab=`Legend rule: keep Chandra #${opt?opt.card_num:'default'}`;
   } else if (dec==='sacrifice'){
     const need=sacBurstNeed(d);
     if (need>1){
@@ -5669,7 +5934,7 @@ function commitBoardSel(d, dec){
       const expect=(d.options||[]).map(o=>o.name);
       expect.splice(expect.indexOf(picked[0].name), 1);
       const rest=picked.slice(1).map(o=>o.name);
-      S.sacBurst = rest.length ? { source:d.source, turn:d.turn, want:rest, expect } : null;
+      S.sacBurst = rest.length ? { source:d.source, turn:turnKey(d), want:rest, expect } : null;
       return pushChoice(d, picked[0].index,
         `${d.source}: sacrifice ${picked.map(o=>o.name).join(' + ')}`
         + (sacBurstForced(d)?' (forced — every creature)':''));
@@ -6003,10 +6268,10 @@ function advanceTo(dec) { (dec&&dec.mdfc_backs||[]).forEach(n=>MDFC_BACKS.add(n)
   // ARMED: once it is answered, the next main-phase frame of this turn is passed as before. (It used
   // to cancel the skip, so every Karoo land dropped the user back into Main 1 -- USER 2026-10-08.)
   if (!undoing && S.commitTurn != null) {
-    if (dec && dec.type==='main_phase' && dec.turn===S.commitTurn && (S.commitTurnPasses||0) < 40) {
+    if (dec && dec.type==='main_phase' && turnKey(dec)===S.commitTurn && (S.commitTurnPasses||0) < 40) {
       S.commitTurnPasses = (S.commitTurnPasses||0) + 1; dec._autoStep=true; S.plan=[]; commitLine(); return;
     }
-    if (dec && dec.type!=='main_phase' && dec.turn===S.commitTurn) return;   // answer it, keep skipping
+    if (dec && dec.type!=='main_phase' && turnKey(dec)===S.commitTurn) return;   // answer it, keep skipping
     S.commitTurn = null;   // turn advanced / cap hit -> resume normal interaction
   }
 }
@@ -6017,8 +6282,12 @@ function isDeadOpponentMain(dec){
 }
 // Commit the current line, then auto-pass the rest of THIS turn (see advanceTo). The turn number is
 // captured now so the skip stops once the engine advances to the next turn.
-function commitTurn(){ if (S.busy) return; S.commitTurn = S.decision && S.decision.turn; S.commitTurnPasses = 0; commitLine(); }
-function renderHistory() { $('hist').innerHTML=S.history.map(h=>`<li class="${h.rej?'rej':''} ${h.win?'win':''} ${h.cls||''}"><span class="t">T${h.turn}</span><span class="lab">${esc(h.label)}</span></li>`).join(''); }
+function commitTurn(){ if (S.busy) return; S.commitTurn = S.decision ? turnKey(S.decision) : undefined; S.commitTurnPasses = 0; commitLine(); }
+function renderHistory() {
+  $('hist').innerHTML=S.history.map((h,i)=>`<li class="${h.rej?'rej':''} ${h.win?'win':''} ${h.cls||''}"><span class="t">T${h.turn}</span><span class="lab">${esc(h.label)}</span>`
+    + (h.note ? ` <span class="sbadge" data-h="${i}" title="${esc(h.note.tip)} — click for details">⚠ search can’t pay</span>` : '') + `</li>`).join('');
+  $('hist').querySelectorAll('.sbadge').forEach(b => b.onclick = () => { const h = S.history[+b.getAttribute('data-h')]; if (h) showSearchNote(h.note); });
+}
 function hideVerdict() { $('verdict').style.display='none'; }
 function showError(msg, raw) { $('board').innerHTML=`<div class="err">⚠ ${esc(msg)}${raw?'\n\n'+esc(raw):''}</div>`; }
 function flashHint(msg) { const ve=$('verdict'); ve.className=''; ve.style.display='block';
@@ -6070,23 +6339,32 @@ async function step() {
     // leaving only a line that had silently vanished (Bruna seed 13 T5, "Bruna, then Glittering Wish").
     // A frame that reports a drop is never advanced to: the rollback owns it.
     const dropped=(res.decision||{}).dropped_casts||[];
-    if (dropped.length) return rollbackLine(dropped);
+    const note=S.pendingSearchNote; S.pendingSearchNote=null;
+    if (dropped.length) return rollbackLine(dropped, (res.decision||{}).dropped_reasons||[]);
     advanceTo(res.decision);
+    if (note) showSearchNote(note);
   } else if (res.kind==='result') {
     const dropped=(res.result||{}).dropped_casts||[];
-    if (dropped.length) return rollbackLine(dropped);
+    S.pendingSearchNote=null;
+    if (dropped.length) return rollbackLine(dropped, (res.result||{}).dropped_reasons||[]);
     showResult(res.result);
   } else showError(res.error||'unknown error', res.raw);
 }
 // (detectDropped removed: dropped-cast detection is now server-truth via decision.dropped_casts,
 // read directly in step(). The old board-diff inference false-positived on working lines — issue #3a.)
-function notifyDropped(names){
+// `reasons` (engine decision.dropped_reasons, parallel to dropped_casts; Q37, USER 2026-10-29: "Seething
+// Song plans should error properly if cast with 1 mana"): what each drop was short of, read off the board
+// at the failed payment ("Seething Song costs {2}{R}; only 1 mana available"). Absent on an older binary.
+function notifyDropped(names, reasons){
+  const why=(reasons||[]).filter(r=>r);
   const ve=$('verdict'); ve.className='unsupported';
   ve.innerHTML=`<span class="vtag">line rejected</span>`+
-    `<h4>${names.map(esc).join(', ')} — not enough mana</h4>`+
-    `<div>The board couldn’t actually produce the mana this line needs, so `+
-    `${names.length>1?'these spells were':'this spell was'} unpayable. The whole line was <b>rolled back</b> — `+
-    `nothing was cast, tapped, or drawn. Pick a line the board can really pay for.</div>`+
+    `<h4>${names.map(esc).join(', ')} — not paid</h4>`+
+    (why.length ? `<div class="dropwhy">${why.map(r=>esc(r)+'.').join('<br>')}</div>` : '')+
+    `<div>When the line was played, the engine’s automatic tapping couldn’t pay for `+
+    `${names.length>1?'these spells':'this spell'} in the order queued, so the whole line was <b>rolled back</b> — `+
+    `nothing was cast, tapped, or drawn. That is not always the board running out of mana: queuing your own `+
+    `taps (or another order) may pay for it.</div>`+
     `<div class="actions"><button id="dropok" class="ghost">Dismiss</button></div>`;
   ve.style.display='block';
   $('dropok').onclick=hideVerdict;
@@ -6161,7 +6439,7 @@ async function undo() {
 // Roll the whole line back to the previous phase — as if it was never committed (nothing cast/tapped/
 // drawn, history entries removed) — then re-fetch that decision and tell the user why. Stateless replay
 // makes the rollback exact: reducing S.choices and re-stepping reconstructs the pre-commit board.
-async function rollbackLine(names) {
+async function rollbackLine(names, reasons) {
   // A rolled-back line voids any pending "Commit turn" skip (mirror handleVerdict's reject branch):
   // otherwise the post-rollback advanceTo re-fires the commit-turn auto-pass and BURNS the turn --
   // the user reported "Commit turn played nothing and went to turn N+1" after a rejected line.
@@ -6169,7 +6447,7 @@ async function rollbackLine(names) {
   rollbackStep();
   S.undoing = true;                // land ON the restored pre-commit decision, don't auto-advance it (mirror undo())
   renderHistory(); await step();   // re-fetch the pre-commit decision (board fully restored)
-  notifyDropped(names);            // then surface why the line was rejected
+  notifyDropped(names, reasons);   // then surface why the line was rejected
 }
 async function saveRef(suboptimal) {
   $('saveinfo').textContent='saving…';

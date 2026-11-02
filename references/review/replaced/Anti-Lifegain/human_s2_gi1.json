@@ -1,0 +1,383 @@
+{
+  "seed": 2, "game_index": 1, "win_turn": 5, "won": true,
+  "mulligan": { "count": 0, "bottom": [] },
+  "decisions": [
+    { "chosen": 1, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 58, "name": "Wooded Foothills" }, { "num": 22, "name": "Ignoble Hierarch" }, { "num": 37, "name": "Reverent Silence" }, { "num": 53, "name": "Temple Garden" }, { "num": 23, "name": "Ignoble Hierarch" }, { "num": 20, "name": "Idyllic Tutor" }, { "num": 49, "name": "Tainted Remedy" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 11, "decision": {
+  "decision_index": 1,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 20, "name": "Idyllic Tutor", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 22, "name": "Ignoble Hierarch", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Ignoble Hierarch", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 37, "name": "Reverent Silence", "cost": "{3}{G}", "mv": 4, "kind": "nonpermanent" }, { "num": 49, "name": "Tainted Remedy", "cost": "{2}{B}", "mv": 3, "kind": "permanent" }, { "num": 53, "name": "Temple Garden", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Wooded Foothills", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Wooded Foothills; cast: Ignoble Hierarch, Reverent Silence", "land": "Wooded Foothills", "casts": ["Ignoble Hierarch", "Reverent Silence"], "cast_order_canonical": ["Ignoble Hierarch", "Reverent Silence"], "actions": [{ "card": "Ignoble Hierarch" }, { "card": "Reverent Silence" }] },
+    { "index": 1, "summary": "land=Wooded Foothills; cast: Ignoble Hierarch, Reverent Silence", "land": "Wooded Foothills", "casts": ["Ignoble Hierarch", "Reverent Silence"], "cast_order_canonical": ["Ignoble Hierarch", "Reverent Silence"], "actions": [{ "card": "Ignoble Hierarch" }, { "card": "Reverent Silence" }] },
+    { "index": 2, "summary": "land=Wooded Foothills; cast: Ignoble Hierarch, Reverent Silence", "land": "Wooded Foothills", "casts": ["Ignoble Hierarch", "Reverent Silence"], "cast_order_canonical": ["Ignoble Hierarch", "Reverent Silence"], "actions": [{ "card": "Ignoble Hierarch" }, { "card": "Reverent Silence" }] },
+    { "index": 3, "summary": "land=Temple Garden; cast: Ignoble Hierarch, Reverent Silence", "land": "Temple Garden", "casts": ["Ignoble Hierarch", "Reverent Silence"], "cast_order_canonical": ["Ignoble Hierarch", "Reverent Silence"], "actions": [{ "card": "Ignoble Hierarch" }, { "card": "Reverent Silence" }] },
+    { "index": 4, "summary": "land=Wooded Foothills; cast: Reverent Silence", "land": "Wooded Foothills", "casts": ["Reverent Silence"], "actions": [{ "card": "Reverent Silence" }] },
+    { "index": 5, "summary": "land=Wooded Foothills; cast: Reverent Silence", "land": "Wooded Foothills", "casts": ["Reverent Silence"], "actions": [{ "card": "Reverent Silence" }] },
+    { "index": 6, "summary": "land=Wooded Foothills; cast: Reverent Silence", "land": "Wooded Foothills", "casts": ["Reverent Silence"], "actions": [{ "card": "Reverent Silence" }] },
+    { "index": 7, "summary": "land=Temple Garden; cast: Reverent Silence", "land": "Temple Garden", "casts": ["Reverent Silence"], "actions": [{ "card": "Reverent Silence" }] },
+    { "index": 8, "summary": "land=Wooded Foothills; cast: Ignoble Hierarch", "land": "Wooded Foothills", "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
+    { "index": 9, "summary": "land=Wooded Foothills; cast: Ignoble Hierarch", "land": "Wooded Foothills", "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
+    { "index": 10, "summary": "land=Wooded Foothills; cast: Ignoble Hierarch", "land": "Wooded Foothills", "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
+    { "index": 11, "summary": "land=Temple Garden; cast: Ignoble Hierarch", "land": "Temple Garden", "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
+    { "index": 12, "summary": "land=Wooded Foothills; cast: (nothing)", "land": "Wooded Foothills", "casts": [], "actions": [] },
+    { "index": 13, "summary": "land=Wooded Foothills; cast: (nothing)", "land": "Wooded Foothills", "casts": [], "actions": [] },
+    { "index": 14, "summary": "land=Wooded Foothills; cast: (nothing)", "land": "Wooded Foothills", "casts": [], "actions": [] },
+    { "index": 15, "summary": "land=Wooded Foothills; cast: (nothing)", "land": "Wooded Foothills", "casts": [], "actions": [] },
+    { "index": 16, "summary": "land=Temple Garden; cast: (nothing)", "land": "Temple Garden", "casts": [], "actions": [] },
+    { "index": 17, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 2,
+  "type": "land_entry",
+  "source": "Temple Garden",
+  "turn": 1,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 20, "name": "Idyllic Tutor", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 22, "name": "Ignoble Hierarch", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Ignoble Hierarch", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 37, "name": "Reverent Silence", "cost": "{3}{G}", "mv": 4, "kind": "nonpermanent" }, { "num": 49, "name": "Tainted Remedy", "cost": "{2}{B}", "mv": 3, "kind": "permanent" }, { "num": 53, "name": "Temple Garden", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Wooded Foothills", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "pay_life": 2,
+  "reveal_types": [],
+  "heuristic_default": 1,
+  "note": "reply 1 to enter UNTAPPED (pay 2 life), or 0 to enter tapped. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 3,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Ignoble Hierarch", "idx": 1, "num": 22, "is_land": false }, { "name": "Temple Garden", "idx": 0, "num": 53, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 20, "name": "Idyllic Tutor", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 23, "name": "Ignoble Hierarch", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 37, "name": "Reverent Silence", "cost": "{3}{G}", "mv": 4, "kind": "nonpermanent" }, { "num": 49, "name": "Tainted Remedy", "cost": "{2}{B}", "mv": 3, "kind": "permanent" }, { "num": 58, "name": "Wooded Foothills", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Reverent Silence", "land": null, "casts": ["Reverent Silence"], "actions": [{ "card": "Reverent Silence" }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 4,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Ignoble Hierarch", "idx": 1, "num": 22, "is_land": false }, { "name": "Temple Garden", "idx": 0, "num": 53, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 20, "name": "Idyllic Tutor", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 23, "name": "Ignoble Hierarch", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 37, "name": "Reverent Silence", "cost": "{3}{G}", "mv": 4, "kind": "nonpermanent" }, { "num": 49, "name": "Tainted Remedy", "cost": "{2}{B}", "mv": 3, "kind": "permanent" }, { "num": 58, "name": "Wooded Foothills", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Reverent Silence", "land": null, "casts": ["Reverent Silence"], "actions": [{ "card": "Reverent Silence" }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 39, "decision": {
+  "decision_index": 5,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 2, "card": "Fiery Justice" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Ignoble Hierarch", "idx": 1, "num": 22, "is_land": false }, { "name": "Temple Garden", "idx": 0, "num": 53, "is_land": true }], "vial_counters": [], "hand": [{ "num": 14, "name": "Fiery Justice", "cost": "{W}{R}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 20, "name": "Idyllic Tutor", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 23, "name": "Ignoble Hierarch", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 37, "name": "Reverent Silence", "cost": "{3}{G}", "mv": 4, "kind": "nonpermanent" }, { "num": 49, "name": "Tainted Remedy", "cost": "{2}{B}", "mv": 3, "kind": "permanent" }, { "num": 58, "name": "Wooded Foothills", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Wooded Foothills; cast: Ignoble Hierarch, Reverent Silence", "land": "Wooded Foothills", "casts": ["Ignoble Hierarch", "Reverent Silence"], "cast_order_canonical": ["Ignoble Hierarch", "Reverent Silence"], "actions": [{ "card": "Ignoble Hierarch" }, { "card": "Reverent Silence" }] },
+    { "index": 1, "summary": "land=Wooded Foothills; cast: Ignoble Hierarch, Reverent Silence", "land": "Wooded Foothills", "casts": ["Ignoble Hierarch", "Reverent Silence"], "cast_order_canonical": ["Ignoble Hierarch", "Reverent Silence"], "actions": [{ "card": "Ignoble Hierarch" }, { "card": "Reverent Silence" }] },
+    { "index": 2, "summary": "land=Wooded Foothills; cast: Ignoble Hierarch, Reverent Silence", "land": "Wooded Foothills", "casts": ["Ignoble Hierarch", "Reverent Silence"], "cast_order_canonical": ["Ignoble Hierarch", "Reverent Silence"], "actions": [{ "card": "Ignoble Hierarch" }, { "card": "Reverent Silence" }] },
+    { "index": 3, "summary": "land=Wooded Foothills; cast: Ignoble Hierarch, Reverent Silence", "land": "Wooded Foothills", "casts": ["Ignoble Hierarch", "Reverent Silence"], "cast_order_canonical": ["Ignoble Hierarch", "Reverent Silence"], "actions": [{ "card": "Ignoble Hierarch" }, { "card": "Reverent Silence" }] },
+    { "index": 4, "summary": "land=none; cast: Ignoble Hierarch, Reverent Silence", "land": null, "casts": ["Ignoble Hierarch", "Reverent Silence"], "cast_order_canonical": ["Ignoble Hierarch", "Reverent Silence"], "actions": [{ "card": "Ignoble Hierarch" }, { "card": "Reverent Silence" }] },
+    { "index": 5, "summary": "land=Wooded Foothills; cast: Idyllic Tutor, Reverent Silence", "land": "Wooded Foothills", "casts": ["Idyllic Tutor", "Reverent Silence"], "cast_order_canonical": ["Idyllic Tutor", "Reverent Silence"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Aria of Flame" }, { "card": "Reverent Silence" }] },
+    { "index": 6, "summary": "land=Wooded Foothills; cast: Idyllic Tutor, Reverent Silence", "land": "Wooded Foothills", "casts": ["Idyllic Tutor", "Reverent Silence"], "cast_order_canonical": ["Idyllic Tutor", "Reverent Silence"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Tainted Remedy" }, { "card": "Reverent Silence" }] },
+    { "index": 7, "summary": "land=Wooded Foothills; cast: Reverent Silence, Tainted Remedy", "land": "Wooded Foothills", "casts": ["Reverent Silence", "Tainted Remedy"], "cast_order_canonical": ["Tainted Remedy", "Reverent Silence"], "actions": [{ "card": "Reverent Silence" }, { "card": "Tainted Remedy" }] },
+    { "index": 8, "summary": "land=Wooded Foothills; cast: Tainted Remedy, Reverent Silence", "land": "Wooded Foothills", "casts": ["Tainted Remedy", "Reverent Silence"], "cast_order_canonical": ["Tainted Remedy", "Reverent Silence"], "actions": [{ "card": "Tainted Remedy" }, { "card": "Reverent Silence" }] },
+    { "index": 9, "summary": "land=Wooded Foothills; cast: Idyllic Tutor, Reverent Silence", "land": "Wooded Foothills", "casts": ["Idyllic Tutor", "Reverent Silence"], "cast_order_canonical": ["Idyllic Tutor", "Reverent Silence"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Aria of Flame" }, { "card": "Reverent Silence" }] },
+    { "index": 10, "summary": "land=Wooded Foothills; cast: Idyllic Tutor, Reverent Silence", "land": "Wooded Foothills", "casts": ["Idyllic Tutor", "Reverent Silence"], "cast_order_canonical": ["Idyllic Tutor", "Reverent Silence"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Tainted Remedy" }, { "card": "Reverent Silence" }] },
+    { "index": 11, "summary": "land=Wooded Foothills; cast: Reverent Silence, Tainted Remedy", "land": "Wooded Foothills", "casts": ["Reverent Silence", "Tainted Remedy"], "cast_order_canonical": ["Tainted Remedy", "Reverent Silence"], "actions": [{ "card": "Reverent Silence" }, { "card": "Tainted Remedy" }] },
+    { "index": 12, "summary": "land=Wooded Foothills; cast: Tainted Remedy, Reverent Silence", "land": "Wooded Foothills", "casts": ["Tainted Remedy", "Reverent Silence"], "cast_order_canonical": ["Tainted Remedy", "Reverent Silence"], "actions": [{ "card": "Tainted Remedy" }, { "card": "Reverent Silence" }] },
+    { "index": 13, "summary": "land=Wooded Foothills; cast: Idyllic Tutor, Reverent Silence", "land": "Wooded Foothills", "casts": ["Idyllic Tutor", "Reverent Silence"], "cast_order_canonical": ["Idyllic Tutor", "Reverent Silence"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Aria of Flame" }, { "card": "Reverent Silence" }] },
+    { "index": 14, "summary": "land=Wooded Foothills; cast: Idyllic Tutor, Reverent Silence", "land": "Wooded Foothills", "casts": ["Idyllic Tutor", "Reverent Silence"], "cast_order_canonical": ["Idyllic Tutor", "Reverent Silence"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Tainted Remedy" }, { "card": "Reverent Silence" }] },
+    { "index": 15, "summary": "land=Wooded Foothills; cast: Reverent Silence, Tainted Remedy", "land": "Wooded Foothills", "casts": ["Reverent Silence", "Tainted Remedy"], "cast_order_canonical": ["Tainted Remedy", "Reverent Silence"], "actions": [{ "card": "Reverent Silence" }, { "card": "Tainted Remedy" }] },
+    { "index": 16, "summary": "land=Wooded Foothills; cast: Tainted Remedy, Reverent Silence", "land": "Wooded Foothills", "casts": ["Tainted Remedy", "Reverent Silence"], "cast_order_canonical": ["Tainted Remedy", "Reverent Silence"], "actions": [{ "card": "Tainted Remedy" }, { "card": "Reverent Silence" }] },
+    { "index": 17, "summary": "land=Wooded Foothills; cast: Idyllic Tutor, Reverent Silence", "land": "Wooded Foothills", "casts": ["Idyllic Tutor", "Reverent Silence"], "cast_order_canonical": ["Idyllic Tutor", "Reverent Silence"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Aria of Flame" }, { "card": "Reverent Silence" }] },
+    { "index": 18, "summary": "land=Wooded Foothills; cast: Idyllic Tutor, Reverent Silence", "land": "Wooded Foothills", "casts": ["Idyllic Tutor", "Reverent Silence"], "cast_order_canonical": ["Idyllic Tutor", "Reverent Silence"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Tainted Remedy" }, { "card": "Reverent Silence" }] },
+    { "index": 19, "summary": "land=Wooded Foothills; cast: Reverent Silence, Tainted Remedy", "land": "Wooded Foothills", "casts": ["Reverent Silence", "Tainted Remedy"], "cast_order_canonical": ["Tainted Remedy", "Reverent Silence"], "actions": [{ "card": "Reverent Silence" }, { "card": "Tainted Remedy" }] },
+    { "index": 20, "summary": "land=Wooded Foothills; cast: Tainted Remedy, Reverent Silence", "land": "Wooded Foothills", "casts": ["Tainted Remedy", "Reverent Silence"], "cast_order_canonical": ["Tainted Remedy", "Reverent Silence"], "actions": [{ "card": "Tainted Remedy" }, { "card": "Reverent Silence" }] },
+    { "index": 21, "summary": "land=Wooded Foothills; cast: Reverent Silence", "land": "Wooded Foothills", "casts": ["Reverent Silence"], "actions": [{ "card": "Reverent Silence" }] },
+    { "index": 22, "summary": "land=Wooded Foothills; cast: Reverent Silence", "land": "Wooded Foothills", "casts": ["Reverent Silence"], "actions": [{ "card": "Reverent Silence" }] },
+    { "index": 23, "summary": "land=Wooded Foothills; cast: Reverent Silence", "land": "Wooded Foothills", "casts": ["Reverent Silence"], "actions": [{ "card": "Reverent Silence" }] },
+    { "index": 24, "summary": "land=Wooded Foothills; cast: Reverent Silence", "land": "Wooded Foothills", "casts": ["Reverent Silence"], "actions": [{ "card": "Reverent Silence" }] },
+    { "index": 25, "summary": "land=none; cast: Reverent Silence", "land": null, "casts": ["Reverent Silence"], "actions": [{ "card": "Reverent Silence" }] },
+    { "index": 26, "summary": "land=Wooded Foothills; cast: Ignoble Hierarch", "land": "Wooded Foothills", "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
+    { "index": 27, "summary": "land=Wooded Foothills; cast: Ignoble Hierarch", "land": "Wooded Foothills", "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
+    { "index": 28, "summary": "land=Wooded Foothills; cast: Ignoble Hierarch", "land": "Wooded Foothills", "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
+    { "index": 29, "summary": "land=Wooded Foothills; cast: Ignoble Hierarch", "land": "Wooded Foothills", "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
+    { "index": 30, "summary": "land=none; cast: Ignoble Hierarch", "land": null, "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
+    { "index": 31, "summary": "land=Wooded Foothills; cast: Idyllic Tutor", "land": "Wooded Foothills", "casts": ["Idyllic Tutor"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Aria of Flame" }] },
+    { "index": 32, "summary": "land=Wooded Foothills; cast: Idyllic Tutor", "land": "Wooded Foothills", "casts": ["Idyllic Tutor"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Tainted Remedy" }] },
+    { "index": 33, "summary": "land=Wooded Foothills; cast: Tainted Remedy", "land": "Wooded Foothills", "casts": ["Tainted Remedy"], "actions": [{ "card": "Tainted Remedy" }] },
+    { "index": 34, "summary": "land=Wooded Foothills; cast: Idyllic Tutor", "land": "Wooded Foothills", "casts": ["Idyllic Tutor"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Aria of Flame" }] },
+    { "index": 35, "summary": "land=Wooded Foothills; cast: Idyllic Tutor", "land": "Wooded Foothills", "casts": ["Idyllic Tutor"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Tainted Remedy" }] },
+    { "index": 36, "summary": "land=Wooded Foothills; cast: Tainted Remedy", "land": "Wooded Foothills", "casts": ["Tainted Remedy"], "actions": [{ "card": "Tainted Remedy" }] },
+    { "index": 37, "summary": "land=Wooded Foothills; cast: Idyllic Tutor", "land": "Wooded Foothills", "casts": ["Idyllic Tutor"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Aria of Flame" }] },
+    { "index": 38, "summary": "land=Wooded Foothills; cast: Idyllic Tutor", "land": "Wooded Foothills", "casts": ["Idyllic Tutor"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Tainted Remedy" }] },
+    { "index": 39, "summary": "land=Wooded Foothills; cast: Tainted Remedy", "land": "Wooded Foothills", "casts": ["Tainted Remedy"], "actions": [{ "card": "Tainted Remedy" }] },
+    { "index": 40, "summary": "land=Wooded Foothills; cast: Idyllic Tutor", "land": "Wooded Foothills", "casts": ["Idyllic Tutor"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Aria of Flame" }] },
+    { "index": 41, "summary": "land=Wooded Foothills; cast: Idyllic Tutor", "land": "Wooded Foothills", "casts": ["Idyllic Tutor"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Tainted Remedy" }] },
+    { "index": 42, "summary": "land=Wooded Foothills; cast: Tainted Remedy", "land": "Wooded Foothills", "casts": ["Tainted Remedy"], "actions": [{ "card": "Tainted Remedy" }] },
+    { "index": 43, "summary": "land=Wooded Foothills; cast: (nothing)", "land": "Wooded Foothills", "casts": [], "actions": [] },
+    { "index": 44, "summary": "land=Wooded Foothills; cast: (nothing)", "land": "Wooded Foothills", "casts": [], "actions": [] },
+    { "index": 45, "summary": "land=Wooded Foothills; cast: (nothing)", "land": "Wooded Foothills", "casts": [], "actions": [] },
+    { "index": 46, "summary": "land=Wooded Foothills; cast: (nothing)", "land": "Wooded Foothills", "casts": [], "actions": [] },
+    { "index": 47, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 6,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 15, "battlefield": [{ "name": "Blood Crypt", "idx": 2, "num": 9, "tapped": true, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 1, "num": 22, "tapped": true, "is_land": false }, { "name": "Tainted Remedy", "idx": 3, "num": 49, "is_land": false }, { "name": "Temple Garden", "idx": 0, "num": 53, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 14, "name": "Fiery Justice", "cost": "{W}{R}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 20, "name": "Idyllic Tutor", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 23, "name": "Ignoble Hierarch", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 37, "name": "Reverent Silence", "cost": "{3}{G}", "mv": 4, "kind": "nonpermanent" }], "graveyard": ["Wooded Foothills"], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Reverent Silence", "land": null, "casts": ["Reverent Silence"], "actions": [{ "card": "Reverent Silence" }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 7,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 15, "battlefield": [{ "name": "Blood Crypt", "idx": 2, "num": 9, "tapped": true, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 1, "num": 22, "tapped": true, "is_land": false }, { "name": "Tainted Remedy", "idx": 3, "num": 49, "is_land": false }, { "name": "Temple Garden", "idx": 0, "num": 53, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 14, "name": "Fiery Justice", "cost": "{W}{R}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 20, "name": "Idyllic Tutor", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 23, "name": "Ignoble Hierarch", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 37, "name": "Reverent Silence", "cost": "{3}{G}", "mv": 4, "kind": "nonpermanent" }], "graveyard": ["Wooded Foothills"], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Reverent Silence", "land": null, "casts": ["Reverent Silence"], "actions": [{ "card": "Reverent Silence" }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 6, "cast_order": ["Fiery Justice", "Ignoble Hierarch"], "decision": {
+  "decision_index": 8,
+  "main_ordinal": 6,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 3, "card": "Godless Shrine" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 15, "battlefield": [{ "name": "Blood Crypt", "idx": 2, "num": 9, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 1, "num": 22, "is_land": false }, { "name": "Tainted Remedy", "idx": 3, "num": 49, "is_land": false }, { "name": "Temple Garden", "idx": 0, "num": 53, "is_land": true }], "vial_counters": [], "hand": [{ "num": 14, "name": "Fiery Justice", "cost": "{W}{R}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 17, "name": "Godless Shrine", "cost": "", "mv": 0, "kind": "land" }, { "num": 20, "name": "Idyllic Tutor", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 23, "name": "Ignoble Hierarch", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 37, "name": "Reverent Silence", "cost": "{3}{G}", "mv": 4, "kind": "nonpermanent" }], "graveyard": ["Wooded Foothills"], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Godless Shrine; cast: Fiery Justice, Ignoble Hierarch, Reverent Silence", "land": "Godless Shrine", "casts": ["Fiery Justice", "Ignoble Hierarch", "Reverent Silence"], "cast_order_canonical": ["Ignoble Hierarch", "Fiery Justice", "Reverent Silence"], "actions": [{ "card": "Fiery Justice" }, { "card": "Ignoble Hierarch" }, { "card": "Reverent Silence" }] },
+    { "index": 1, "summary": "land=Godless Shrine; cast: Ignoble Hierarch, Reverent Silence, Fiery Justice", "land": "Godless Shrine", "casts": ["Ignoble Hierarch", "Reverent Silence", "Fiery Justice"], "cast_order_canonical": ["Ignoble Hierarch", "Fiery Justice", "Reverent Silence"], "actions": [{ "card": "Ignoble Hierarch" }, { "card": "Reverent Silence" }, { "card": "Fiery Justice" }] },
+    { "index": 2, "summary": "land=Godless Shrine; cast: Fiery Justice, Reverent Silence", "land": "Godless Shrine", "casts": ["Fiery Justice", "Reverent Silence"], "cast_order_canonical": ["Fiery Justice", "Reverent Silence"], "actions": [{ "card": "Fiery Justice" }, { "card": "Reverent Silence" }] },
+    { "index": 3, "summary": "land=Godless Shrine; cast: Reverent Silence, Fiery Justice", "land": "Godless Shrine", "casts": ["Reverent Silence", "Fiery Justice"], "cast_order_canonical": ["Fiery Justice", "Reverent Silence"], "actions": [{ "card": "Reverent Silence" }, { "card": "Fiery Justice" }] },
+    { "index": 4, "summary": "land=none; cast: Fiery Justice, Reverent Silence", "land": null, "casts": ["Fiery Justice", "Reverent Silence"], "cast_order_canonical": ["Fiery Justice", "Reverent Silence"], "actions": [{ "card": "Fiery Justice" }, { "card": "Reverent Silence" }] },
+    { "index": 5, "summary": "land=none; cast: Reverent Silence, Fiery Justice", "land": null, "casts": ["Reverent Silence", "Fiery Justice"], "cast_order_canonical": ["Fiery Justice", "Reverent Silence"], "actions": [{ "card": "Reverent Silence" }, { "card": "Fiery Justice" }] },
+    { "index": 6, "summary": "land=Godless Shrine; cast: Fiery Justice, Ignoble Hierarch", "land": "Godless Shrine", "casts": ["Fiery Justice", "Ignoble Hierarch"], "cast_order_canonical": ["Ignoble Hierarch", "Fiery Justice"], "actions": [{ "card": "Fiery Justice" }, { "card": "Ignoble Hierarch" }] },
+    { "index": 7, "summary": "land=Godless Shrine; cast: Idyllic Tutor, Ignoble Hierarch, Reverent Silence", "land": "Godless Shrine", "casts": ["Idyllic Tutor", "Ignoble Hierarch", "Reverent Silence"], "cast_order_canonical": ["Ignoble Hierarch", "Idyllic Tutor", "Reverent Silence"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Aria of Flame" }, { "card": "Ignoble Hierarch" }, { "card": "Reverent Silence" }] },
+    { "index": 8, "summary": "land=Godless Shrine; cast: Idyllic Tutor, Ignoble Hierarch, Reverent Silence", "land": "Godless Shrine", "casts": ["Idyllic Tutor", "Ignoble Hierarch", "Reverent Silence"], "cast_order_canonical": ["Ignoble Hierarch", "Idyllic Tutor", "Reverent Silence"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Tainted Remedy" }, { "card": "Ignoble Hierarch" }, { "card": "Reverent Silence" }] },
+    { "index": 9, "summary": "land=Godless Shrine; cast: Ignoble Hierarch, Reverent Silence", "land": "Godless Shrine", "casts": ["Ignoble Hierarch", "Reverent Silence"], "cast_order_canonical": ["Ignoble Hierarch", "Reverent Silence"], "actions": [{ "card": "Ignoble Hierarch" }, { "card": "Reverent Silence" }] },
+    { "index": 10, "summary": "land=Godless Shrine; cast: Fiery Justice", "land": "Godless Shrine", "casts": ["Fiery Justice"], "actions": [{ "card": "Fiery Justice" }] },
+    { "index": 11, "summary": "land=none; cast: Ignoble Hierarch, Reverent Silence", "land": null, "casts": ["Ignoble Hierarch", "Reverent Silence"], "cast_order_canonical": ["Ignoble Hierarch", "Reverent Silence"], "actions": [{ "card": "Ignoble Hierarch" }, { "card": "Reverent Silence" }] },
+    { "index": 12, "summary": "land=none; cast: Fiery Justice", "land": null, "casts": ["Fiery Justice"], "actions": [{ "card": "Fiery Justice" }] },
+    { "index": 13, "summary": "land=Godless Shrine; cast: Idyllic Tutor, Reverent Silence", "land": "Godless Shrine", "casts": ["Idyllic Tutor", "Reverent Silence"], "cast_order_canonical": ["Idyllic Tutor", "Reverent Silence"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Aria of Flame" }, { "card": "Reverent Silence" }] },
+    { "index": 14, "summary": "land=Godless Shrine; cast: Idyllic Tutor, Reverent Silence", "land": "Godless Shrine", "casts": ["Idyllic Tutor", "Reverent Silence"], "cast_order_canonical": ["Idyllic Tutor", "Reverent Silence"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Tainted Remedy" }, { "card": "Reverent Silence" }] },
+    { "index": 15, "summary": "land=none; cast: Idyllic Tutor, Reverent Silence", "land": null, "casts": ["Idyllic Tutor", "Reverent Silence"], "cast_order_canonical": ["Idyllic Tutor", "Reverent Silence"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Aria of Flame" }, { "card": "Reverent Silence" }] },
+    { "index": 16, "summary": "land=none; cast: Idyllic Tutor, Reverent Silence", "land": null, "casts": ["Idyllic Tutor", "Reverent Silence"], "cast_order_canonical": ["Idyllic Tutor", "Reverent Silence"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Tainted Remedy" }, { "card": "Reverent Silence" }] },
+    { "index": 17, "summary": "land=Godless Shrine; cast: Reverent Silence", "land": "Godless Shrine", "casts": ["Reverent Silence"], "actions": [{ "card": "Reverent Silence" }] },
+    { "index": 18, "summary": "land=none; cast: Reverent Silence", "land": null, "casts": ["Reverent Silence"], "actions": [{ "card": "Reverent Silence" }] },
+    { "index": 19, "summary": "land=Godless Shrine; cast: Idyllic Tutor, Ignoble Hierarch", "land": "Godless Shrine", "casts": ["Idyllic Tutor", "Ignoble Hierarch"], "cast_order_canonical": ["Ignoble Hierarch", "Idyllic Tutor"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Aria of Flame" }, { "card": "Ignoble Hierarch" }] },
+    { "index": 20, "summary": "land=Godless Shrine; cast: Idyllic Tutor, Ignoble Hierarch", "land": "Godless Shrine", "casts": ["Idyllic Tutor", "Ignoble Hierarch"], "cast_order_canonical": ["Ignoble Hierarch", "Idyllic Tutor"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Tainted Remedy" }, { "card": "Ignoble Hierarch" }] },
+    { "index": 21, "summary": "land=Godless Shrine; cast: Ignoble Hierarch", "land": "Godless Shrine", "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
+    { "index": 22, "summary": "land=none; cast: Ignoble Hierarch", "land": null, "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
+    { "index": 23, "summary": "land=Godless Shrine; cast: Idyllic Tutor", "land": "Godless Shrine", "casts": ["Idyllic Tutor"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Aria of Flame" }] },
+    { "index": 24, "summary": "land=Godless Shrine; cast: Idyllic Tutor", "land": "Godless Shrine", "casts": ["Idyllic Tutor"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Tainted Remedy" }] },
+    { "index": 25, "summary": "land=none; cast: Idyllic Tutor", "land": null, "casts": ["Idyllic Tutor"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Aria of Flame" }] },
+    { "index": 26, "summary": "land=none; cast: Idyllic Tutor", "land": null, "casts": ["Idyllic Tutor"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Tainted Remedy" }] },
+    { "index": 27, "summary": "land=Godless Shrine; cast: (nothing)", "land": "Godless Shrine", "casts": [], "actions": [] },
+    { "index": 28, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 9,
+  "type": "land_entry",
+  "source": "Godless Shrine",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 15, "battlefield": [{ "name": "Blood Crypt", "idx": 2, "num": 9, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 1, "num": 22, "is_land": false }, { "name": "Tainted Remedy", "idx": 3, "num": 49, "is_land": false }, { "name": "Temple Garden", "idx": 0, "num": 53, "is_land": true }], "vial_counters": [], "hand": [{ "num": 14, "name": "Fiery Justice", "cost": "{W}{R}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 17, "name": "Godless Shrine", "cost": "", "mv": 0, "kind": "land" }, { "num": 20, "name": "Idyllic Tutor", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 23, "name": "Ignoble Hierarch", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 37, "name": "Reverent Silence", "cost": "{3}{G}", "mv": 4, "kind": "nonpermanent" }], "graveyard": ["Wooded Foothills"], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "pay_life": 2,
+  "reveal_types": [],
+  "heuristic_default": 1,
+  "note": "reply 1 to enter UNTAPPED (pay 2 life), or 0 to enter tapped. Default = the AI's pick."
+}
+},
+    { "chosen": [5, 0, 0], "decision": {
+  "decision_index": 10,
+  "type": "divide",
+  "source": "Fiery Justice",
+  "turn": 3,
+  "total_damage": 5,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 13, "battlefield": [{ "name": "Blood Crypt", "idx": 2, "num": 9, "tapped": true, "is_land": true }, { "name": "Godless Shrine", "idx": 4, "num": 17, "tapped": true, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 1, "num": 22, "tapped": true, "is_land": false }, { "name": "Tainted Remedy", "idx": 3, "num": 49, "is_land": false }, { "name": "Temple Garden", "idx": 0, "num": 53, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 20, "name": "Idyllic Tutor", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 23, "name": "Ignoble Hierarch", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 37, "name": "Reverent Silence", "cost": "{3}{G}", "mv": 4, "kind": "nonpermanent" }], "graveyard": ["Wooded Foothills"], "library_size": 50, "land_drops_left": 0, "floating_mana": {"G": 1} },
+  "opponent": { "life": 20, "battlefield": [] },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)", "default": 5 }, { "kind": "permanent", "index": 1, "label": "Ignoble Hierarch (yours)", "default": 0 }, { "kind": "player", "index": 0, "label": "You (face)", "default": 0 }],
+  "note": "reply one integer per legal target (in this order), each >= 0 and summing to 5 -- the damage assigned to each. Default = all to the opponent face."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "main_ordinal": 7,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "events": [{ "turn": 3, "kind": "damage", "text": "🔥 Fiery Justice: 5 to opponent (20→15)" }, { "turn": 3, "kind": "lifeloss", "text": "🩸 opponent −5 life (via Tainted Remedy)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 13, "battlefield": [{ "name": "Blood Crypt", "idx": 2, "num": 9, "tapped": true, "is_land": true }, { "name": "Godless Shrine", "idx": 4, "num": 17, "tapped": true, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 1, "num": 22, "tapped": true, "is_land": false }, { "name": "Ignoble Hierarch", "idx": 5, "num": 23, "is_land": false }, { "name": "Tainted Remedy", "idx": 3, "num": 49, "is_land": false }, { "name": "Temple Garden", "idx": 0, "num": 53, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 20, "name": "Idyllic Tutor", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 37, "name": "Reverent Silence", "cost": "{3}{G}", "mv": 4, "kind": "nonpermanent" }], "graveyard": ["Fiery Justice", "Wooded Foothills"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 10, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Reverent Silence", "land": null, "casts": ["Reverent Silence"], "actions": [{ "card": "Reverent Silence" }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 14,
+  "main_ordinal": 8,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 13, "battlefield": [{ "name": "Blood Crypt", "idx": 2, "num": 9, "tapped": true, "is_land": true }, { "name": "Godless Shrine", "idx": 4, "num": 17, "tapped": true, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 1, "num": 22, "tapped": true, "is_land": false }, { "name": "Ignoble Hierarch", "idx": 5, "num": 23, "is_land": false }, { "name": "Tainted Remedy", "idx": 3, "num": 49, "is_land": false }, { "name": "Temple Garden", "idx": 0, "num": 53, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 20, "name": "Idyllic Tutor", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 37, "name": "Reverent Silence", "cost": "{3}{G}", "mv": 4, "kind": "nonpermanent" }], "graveyard": ["Fiery Justice", "Wooded Foothills"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 10, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Reverent Silence", "land": null, "casts": ["Reverent Silence"], "actions": [{ "card": "Reverent Silence" }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 15,
+  "main_ordinal": 9,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 4, "card": "Idyllic Tutor" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 13, "battlefield": [{ "name": "Blood Crypt", "idx": 2, "num": 9, "is_land": true }, { "name": "Godless Shrine", "idx": 4, "num": 17, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 1, "num": 22, "is_land": false }, { "name": "Ignoble Hierarch", "idx": 5, "num": 23, "is_land": false }, { "name": "Tainted Remedy", "idx": 3, "num": 49, "is_land": false }, { "name": "Temple Garden", "idx": 0, "num": 53, "is_land": true }], "vial_counters": [], "hand": [{ "num": 20, "name": "Idyllic Tutor", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 21, "name": "Idyllic Tutor", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 37, "name": "Reverent Silence", "cost": "{3}{G}", "mv": 4, "kind": "nonpermanent" }], "graveyard": ["Fiery Justice", "Wooded Foothills"], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 10, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Idyllic Tutor, Reverent Silence", "land": null, "casts": ["Idyllic Tutor", "Reverent Silence"], "cast_order_canonical": ["Idyllic Tutor", "Reverent Silence"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Aria of Flame" }, { "card": "Reverent Silence" }] },
+    { "index": 1, "summary": "land=none; cast: Idyllic Tutor, Reverent Silence", "land": null, "casts": ["Idyllic Tutor", "Reverent Silence"], "cast_order_canonical": ["Idyllic Tutor", "Reverent Silence"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Tainted Remedy" }, { "card": "Reverent Silence" }] },
+    { "index": 2, "summary": "land=none; cast: Reverent Silence", "land": null, "casts": ["Reverent Silence"], "actions": [{ "card": "Reverent Silence" }] },
+    { "index": 3, "summary": "land=none; cast: Idyllic Tutor", "land": null, "casts": ["Idyllic Tutor"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Aria of Flame" }] },
+    { "index": 4, "summary": "land=none; cast: Idyllic Tutor", "land": null, "casts": ["Idyllic Tutor"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Tainted Remedy" }] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 16,
+  "main_ordinal": 10,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "reveals": [{ "turn": 4, "source": "Idyllic Tutor (searched)", "cards": [{ "name": "Aria of Flame", "disposition": "to hand" }] }],
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 13, "battlefield": [{ "name": "Blood Crypt", "idx": 2, "num": 9, "tapped": true, "is_land": true }, { "name": "Godless Shrine", "idx": 4, "num": 17, "tapped": true, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 1, "num": 22, "is_land": false }, { "name": "Ignoble Hierarch", "idx": 5, "num": 23, "is_land": false }, { "name": "Tainted Remedy", "idx": 3, "num": 49, "is_land": false }, { "name": "Temple Garden", "idx": 0, "num": 53, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 2, "name": "Aria of Flame", "cost": "{2}{R}", "mv": 3, "kind": "permanent" }, { "num": 21, "name": "Idyllic Tutor", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 37, "name": "Reverent Silence", "cost": "{3}{G}", "mv": 4, "kind": "nonpermanent" }], "graveyard": ["Fiery Justice", "Idyllic Tutor", "Wooded Foothills"], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 10, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Reverent Silence", "land": null, "casts": ["Reverent Silence"], "actions": [{ "card": "Reverent Silence" }] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 17,
+  "main_ordinal": 11,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 4, "kind": "combat", "text": "⚔ attacked: Ignoble Hierarch (2) — 2 to opponent (10→8)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 13, "battlefield": [{ "name": "Blood Crypt", "idx": 2, "num": 9, "tapped": true, "is_land": true }, { "name": "Godless Shrine", "idx": 4, "num": 17, "tapped": true, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 1, "num": 22, "tapped": true, "is_land": false }, { "name": "Ignoble Hierarch", "idx": 5, "num": 23, "is_land": false }, { "name": "Tainted Remedy", "idx": 3, "num": 49, "is_land": false }, { "name": "Temple Garden", "idx": 0, "num": 53, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 2, "name": "Aria of Flame", "cost": "{2}{R}", "mv": 3, "kind": "permanent" }, { "num": 21, "name": "Idyllic Tutor", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 37, "name": "Reverent Silence", "cost": "{3}{G}", "mv": 4, "kind": "nonpermanent" }], "graveyard": ["Fiery Justice", "Idyllic Tutor", "Wooded Foothills"], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 8, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Reverent Silence", "land": null, "casts": ["Reverent Silence"], "actions": [{ "card": "Reverent Silence" }] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 0, "cast_order": ["Aria of Flame", "Reverent Silence"], "decision": {
+  "decision_index": 18,
+  "main_ordinal": 12,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 5, "card": "Aria of Flame" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 13, "battlefield": [{ "name": "Blood Crypt", "idx": 2, "num": 9, "is_land": true }, { "name": "Godless Shrine", "idx": 4, "num": 17, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 1, "num": 22, "is_land": false }, { "name": "Ignoble Hierarch", "idx": 5, "num": 23, "is_land": false }, { "name": "Tainted Remedy", "idx": 3, "num": 49, "is_land": false }, { "name": "Temple Garden", "idx": 0, "num": 53, "is_land": true }], "vial_counters": [], "hand": [{ "num": 2, "name": "Aria of Flame", "cost": "{2}{R}", "mv": 3, "kind": "permanent" }, { "num": 3, "name": "Aria of Flame", "cost": "{2}{R}", "mv": 3, "kind": "permanent" }, { "num": 21, "name": "Idyllic Tutor", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 37, "name": "Reverent Silence", "cost": "{3}{G}", "mv": 4, "kind": "nonpermanent" }], "graveyard": ["Fiery Justice", "Idyllic Tutor", "Wooded Foothills"], "library_size": 47, "land_drops_left": 1 },
+  "opponent": { "life": 8, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Aria of Flame, Reverent Silence", "land": null, "casts": ["Aria of Flame", "Reverent Silence"], "cast_order_canonical": ["Aria of Flame", "Reverent Silence"], "actions": [{ "card": "Aria of Flame" }, { "card": "Reverent Silence" }] },
+    { "index": 1, "summary": "land=none; cast: Reverent Silence, Aria of Flame", "land": null, "casts": ["Reverent Silence", "Aria of Flame"], "cast_order_canonical": ["Aria of Flame", "Reverent Silence"], "actions": [{ "card": "Reverent Silence" }, { "card": "Aria of Flame" }] },
+    { "index": 2, "summary": "land=none; cast: Idyllic Tutor, Reverent Silence", "land": null, "casts": ["Idyllic Tutor", "Reverent Silence"], "cast_order_canonical": ["Idyllic Tutor", "Reverent Silence"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Tainted Remedy" }, { "card": "Reverent Silence" }] },
+    { "index": 3, "summary": "land=none; cast: Idyllic Tutor, Reverent Silence", "land": null, "casts": ["Idyllic Tutor", "Reverent Silence"], "cast_order_canonical": ["Idyllic Tutor", "Reverent Silence"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Aria of Flame" }, { "card": "Reverent Silence" }] },
+    { "index": 4, "summary": "land=none; cast: Reverent Silence", "land": null, "casts": ["Reverent Silence"], "actions": [{ "card": "Reverent Silence" }] },
+    { "index": 5, "summary": "land=none; cast: Aria of Flame", "land": null, "casts": ["Aria of Flame"], "actions": [{ "card": "Aria of Flame" }] },
+    { "index": 6, "summary": "land=none; cast: Idyllic Tutor", "land": null, "casts": ["Idyllic Tutor"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Tainted Remedy" }] },
+    { "index": 7, "summary": "land=none; cast: Idyllic Tutor", "land": null, "casts": ["Idyllic Tutor"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Aria of Flame" }] },
+    { "index": 8, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+}
+  ]
+}

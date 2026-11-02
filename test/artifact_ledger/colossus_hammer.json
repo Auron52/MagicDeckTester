@@ -1,0 +1,24 @@
+{
+ "deck": "colossus_hammer",
+ "_doc": "artifact refresh verdicts -- scripts/artifact_queue.py (LEDGER_DIR)",
+ "entries": [
+  {
+   "run_id": "colossus_hammer-artifact-queue-tool-647f24-20261025T140337",
+   "kind": "mulligan",
+   "verdict": "kept-incumbent",
+   "ident": "c1c20970e55b11a3345ebe51ecd64f16752156dc",
+   "frozen": "60f525f1785cc0cd127873d4196a858f9ed317f2",
+   "src_tree": "aba41d81c1291fb08dd08c8c0f391491e2bfeac2",
+   "date": "2026-10-25",
+   "worker": "artifact-queue-tool-647f24",
+   "delta": 0.100062,
+   "settings": {
+    "recipe": "complete",
+    "env": {},
+    "depth": null,
+    "budget": null
+   },
+   "detail": "mulligan: KEPT INCUMBENT -- a fresh table at no-lower settings was not better (new-vs-old 0.100062 t); incumbent restored"
+  }
+ ]
+}
