@@ -13,10 +13,27 @@
     }
   },
   "leaf_follows_mulligan": false,
-  "exclude": [],
+  "exclude": ["unpredictable_cyclone"],
   "lease_hours": 3,
   "heartbeat_minutes": 20,
   "idle_poll_minutes": 5,
   "retry_rejected_days": 14,
-  "marks": []
+  "marks": [
+    {
+      "deck": "unpredictable_cyclone",
+      "kind": "mulligan",
+      "why": "Resume the paused fast R30 profile from the banked 2026-11-02 journal on the next pipeline run; validate and adopt first",
+      "priority": 0,
+      "date": "2026-11-02",
+      "set": "2026-11-02T23:46:58Z"
+    },
+    {
+      "deck": "unpredictable_cyclone",
+      "kind": "valueleaf",
+      "why": "Build only after the Cyclone mulligan profile passes validation and is adopted in the next pipeline run",
+      "priority": 0,
+      "date": "2026-11-02",
+      "set": "2026-11-02T23:47:01Z"
+    }
+  ]
 }

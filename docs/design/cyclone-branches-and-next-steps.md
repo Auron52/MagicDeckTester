@@ -1,5 +1,16 @@
 # Unpredictable Cyclone: branch map, state and next steps (2026-10-31)
 
+> Paused 2026-11-02 23:44 UTC at the user's request. The `fast` R30 mulligan
+> generator stopped after all lower-hand subtables converged and 52.6% of
+> seven-card cell-sides froze. Its resumable journal and screened inputs remain
+> in `.claude/worktrees/cyclone-landing905`; a checked archive and exact resume
+> contract are in `build/scratch/cyclone-mullgen-run-20261031/secondary-handoff.md`.
+> The old value-leaf watcher exited. Both first-time stages are explicitly
+> marked on `artifact-queue-tool` but Cyclone is excluded there until the next
+> planned pipeline run. The queue cannot import the separate journal itself;
+> transfer it before removing the exclusion, or resume in the frozen worktree.
+> Profile validation/adoption must finish before starting the value leaf.
+>
 > Completion update (2026-10-31): all implementation branches and focused
 > follow-up fixes have landed on `phase-1-2-deck-analyzer`. Code integration
 > `08d816495` has source `89b146d10406063213d9abe41e1cfdf1a616c021`;
