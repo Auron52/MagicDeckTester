@@ -165,7 +165,9 @@ namespace manaoracle
     // apply_one's TAP-AHEAD site on the oracle's copy (an untap ritual / an ETB "untap N lands" about
     // to be cast): serve the next script entry -- the sources to tap into the float ahead of the untap
     // -- or, past the script's end, capture the frontier. Replaces the engine's heuristic tap-ahead.
-    void ScriptedTapAhead(GameState& state, int count, bool lands_only);
+    // False only for a SAFE hook (RealPayScope) whose entry did not fit: the board is put back, the hook
+    // gives up its script, and the caller runs the engine's own tap-ahead -- as it does for every later step.
+    bool ScriptedTapAhead(GameState& state, int count, bool lands_only);
 
     // TapForCostShared's oracle branch (ManaPayment.cpp). Returns the payment's result.
     bool ScriptedPay(GameState& state, const ManaCost& cost, bool for_creature, ManaPool* available,
