@@ -1,0 +1,321 @@
+{
+  "seed": 8, "game_index": 7, "win_turn": 4, "won": true,
+  "mulligan": { "count": 1, "bottom": [39] }, "karoo_float": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1,
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 27, "name": "Merfolk Mistbinder" }, { "num": 10, "name": "Island" }, { "num": 11, "name": "Island" }, { "num": 1, "name": "Aether Vial" }, { "num": 35, "name": "Secluded Courtyard" }, { "num": 51, "name": "Unclaimed Territory" }, { "num": 12, "name": "Island" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": true,
+  "to_bottom": 1,
+  "hand": [{ "num": 21, "name": "Lord of Atlantis" }, { "num": 6, "name": "Botanical Sanctum" }, { "num": 3, "name": "Aether Vial" }, { "num": 39, "name": "Silvergill Adept" }, { "num": 22, "name": "Lord of Atlantis" }, { "num": 18, "name": "Kumena's Speaker" }, { "num": 13, "name": "Island" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 2,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 1,
+  "hand": [{ "num": 21, "name": "Lord of Atlantis", "win_optimal": true }, { "num": 6, "name": "Botanical Sanctum", "win_optimal": true }, { "num": 3, "name": "Aether Vial", "win_optimal": true }, { "num": 39, "name": "Silvergill Adept", "win_optimal": true }, { "num": 22, "name": "Lord of Atlantis", "win_optimal": true }, { "num": 18, "name": "Kumena's Speaker", "win_optimal": true }, { "num": 13, "name": "Island", "win_optimal": true }],
+  "ai_choice": { "index": 0, "num": 21, "name": "Lord of Atlantis" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 1)"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Botanical Sanctum", "cast=Aether Vial"], "decision": {
+  "decision_index": 3,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 3, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 6, "name": "Botanical Sanctum", "cost": "", "mv": 0, "kind": "land" }, { "num": 13, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 18, "name": "Kumena's Speaker", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 21, "name": "Lord of Atlantis", "cost": "{U}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Lord of Atlantis", "cost": "{U}{U}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Botanical Sanctum; cast: Aether Vial", "land": "Botanical Sanctum", "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] },
+    { "index": 1, "summary": "land=Island; cast: Aether Vial", "land": "Island", "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] },
+    { "index": 2, "summary": "land=Botanical Sanctum; cast: Kumena's Speaker", "land": "Botanical Sanctum", "casts": ["Kumena's Speaker"], "actions": [{ "card": "Kumena's Speaker" }] },
+    { "index": 3, "summary": "land=Botanical Sanctum; cast: (nothing)", "land": "Botanical Sanctum", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=Island; cast: (nothing)", "land": "Island", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 4,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 4, "num": 3, "is_land": false }, { "name": "Botanical Sanctum", "idx": 3, "num": 6, "tapped": true, "is_land": true }], "vial_counters": [0], "hand": [{ "num": 13, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 18, "name": "Kumena's Speaker", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 21, "name": "Lord of Atlantis", "cost": "{U}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Lord of Atlantis", "cost": "{U}{U}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 4, "num": 3, "is_land": false }, { "name": "Botanical Sanctum", "idx": 3, "num": 6, "tapped": true, "is_land": true }], "vial_counters": [0], "hand": [{ "num": 13, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 18, "name": "Kumena's Speaker", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 21, "name": "Lord of Atlantis", "cost": "{U}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Lord of Atlantis", "cost": "{U}{U}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 6,
+  "type": "vial_charge",
+  "turn": 2,
+  "vial": "Aether Vial", "current_counters": 0,
+  "perm_index": 4,
+  "heuristic_default": 1,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 4, "num": 3, "is_land": false }, { "name": "Botanical Sanctum", "idx": 3, "num": 6, "is_land": true, "taps": "GU" }], "vial_counters": [0], "hand": [{ "num": 13, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 18, "name": "Kumena's Speaker", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 21, "name": "Lord of Atlantis", "cost": "{U}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Lord of Atlantis", "cost": "{U}{U}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "note": "reply 1 to add a charge counter this upkeep, 0 to hold. Aether Vial deploys a creature whose mana value EQUALS its counter count."
+}
+},
+    { "chosen": 0, "cast_order": ["**", "vial=Kumena's Speaker", "land=Island", "cast=Lord of Atlantis"], "decision": {
+  "decision_index": 7,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 2, "card": "Vodalian Hexcatcher" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 4, "num": 3, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Botanical Sanctum", "idx": 3, "num": 6, "is_land": true, "taps": "GU" }], "vial_counters": [1], "hand": [{ "num": 13, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 18, "name": "Kumena's Speaker", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 21, "name": "Lord of Atlantis", "cost": "{U}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Lord of Atlantis", "cost": "{U}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Vodalian Hexcatcher", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Island; cast: Lord of Atlantis, Kumena's Speaker (vial)", "land": "Island", "casts": ["Lord of Atlantis", "Kumena's Speaker"], "cast_order_canonical": ["Lord of Atlantis", "Kumena's Speaker"], "actions": [{ "card": "Lord of Atlantis" }, { "card": "Kumena's Speaker" }] },
+    { "index": 1, "summary": "land=Island; cast: Kumena's Speaker (vial), Vodalian Hexcatcher", "land": "Island", "casts": ["Kumena's Speaker", "Vodalian Hexcatcher"], "cast_order_canonical": ["Kumena's Speaker", "Vodalian Hexcatcher"], "actions": [{ "card": "Kumena's Speaker" }, { "card": "Vodalian Hexcatcher" }] },
+    { "index": 2, "summary": "land=Island; cast: Lord of Atlantis", "land": "Island", "casts": ["Lord of Atlantis"], "actions": [{ "card": "Lord of Atlantis" }] },
+    { "index": 3, "summary": "land=Island; cast: Kumena's Speaker", "land": "Island", "casts": ["Kumena's Speaker"], "actions": [{ "card": "Kumena's Speaker" }] },
+    { "index": 4, "summary": "land=Island; cast: Kumena's Speaker (vial)", "land": "Island", "casts": ["Kumena's Speaker"], "actions": [{ "card": "Kumena's Speaker" }] },
+    { "index": 5, "summary": "land=Island; cast: Vodalian Hexcatcher", "land": "Island", "casts": ["Vodalian Hexcatcher"], "actions": [{ "card": "Vodalian Hexcatcher" }] },
+    { "index": 6, "summary": "land=none; cast: Kumena's Speaker", "land": null, "casts": ["Kumena's Speaker"], "actions": [{ "card": "Kumena's Speaker" }] },
+    { "index": 7, "summary": "land=none; cast: Kumena's Speaker (vial)", "land": null, "casts": ["Kumena's Speaker"], "actions": [{ "card": "Kumena's Speaker" }] },
+    { "index": 8, "summary": "land=Island; cast: (nothing)", "land": "Island", "casts": [], "actions": [] },
+    { "index": 9, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 4, "num": 3, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Botanical Sanctum", "idx": 3, "num": 6, "tapped": true, "is_land": true }, { "name": "Island", "idx": 6, "num": 13, "tapped": true, "is_land": true }, { "name": "Kumena's Speaker", "idx": 5, "num": 18, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Lord of Atlantis", "idx": 7, "num": 21, "is_land": false, "power": 2, "toughness": 2 }], "vial_counters": [1], "hand": [{ "num": 22, "name": "Lord of Atlantis", "cost": "{U}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Vodalian Hexcatcher", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 4, "num": 3, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Botanical Sanctum", "idx": 3, "num": 6, "tapped": true, "is_land": true }, { "name": "Island", "idx": 6, "num": 13, "tapped": true, "is_land": true }, { "name": "Kumena's Speaker", "idx": 5, "num": 18, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Lord of Atlantis", "idx": 7, "num": 21, "is_land": false, "power": 2, "toughness": 2 }], "vial_counters": [1], "hand": [{ "num": 22, "name": "Lord of Atlantis", "cost": "{U}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Vodalian Hexcatcher", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 10,
+  "type": "vial_charge",
+  "turn": 3,
+  "vial": "Aether Vial", "current_counters": 1,
+  "perm_index": 4,
+  "heuristic_default": 1,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 4, "num": 3, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Botanical Sanctum", "idx": 3, "num": 6, "is_land": true, "taps": "GU" }, { "name": "Island", "idx": 6, "num": 13, "is_land": true, "taps": "U" }, { "name": "Kumena's Speaker", "idx": 5, "num": 18, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Lord of Atlantis", "idx": 7, "num": 21, "is_land": false, "power": 2, "toughness": 2 }], "vial_counters": [1], "hand": [{ "num": 22, "name": "Lord of Atlantis", "cost": "{U}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Vodalian Hexcatcher", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "4/4 Creature", "idx": 8, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "note": "reply 1 to add a charge counter this upkeep, 0 to hold. Aether Vial deploys a creature whose mana value EQUALS its counter count."
+}
+},
+    { "chosen": 0, "cast_order": ["**", "vial=Lord of Atlantis", "cast=Vodalian Hexcatcher"], "decision": {
+  "decision_index": 11,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 3, "card": "Tide Shaper" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 4, "num": 3, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Botanical Sanctum", "idx": 3, "num": 6, "is_land": true, "taps": "GU" }, { "name": "Island", "idx": 6, "num": 13, "is_land": true, "taps": "U" }, { "name": "Kumena's Speaker", "idx": 5, "num": 18, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Lord of Atlantis", "idx": 7, "num": 21, "is_land": false, "power": 2, "toughness": 2 }], "vial_counters": [2], "hand": [{ "num": 22, "name": "Lord of Atlantis", "cost": "{U}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Tide Shaper", "cost": "{U}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Vodalian Hexcatcher", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "4/4 Creature", "idx": 8, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Lord of Atlantis (vial), Vodalian Hexcatcher", "land": null, "casts": ["Lord of Atlantis", "Vodalian Hexcatcher"], "cast_order_canonical": ["Lord of Atlantis", "Vodalian Hexcatcher"], "actions": [{ "card": "Lord of Atlantis" }, { "card": "Vodalian Hexcatcher" }] },
+    { "index": 1, "summary": "land=none; cast: Lord of Atlantis, Vodalian Hexcatcher (vial)", "land": null, "casts": ["Lord of Atlantis", "Vodalian Hexcatcher"], "cast_order_canonical": ["Lord of Atlantis", "Vodalian Hexcatcher"], "actions": [{ "card": "Lord of Atlantis" }, { "card": "Vodalian Hexcatcher" }] },
+    { "index": 2, "summary": "land=none; cast: Lord of Atlantis (vial), Tide Shaper → Opponent Nonbasic Land", "land": null, "casts": ["Lord of Atlantis", "Tide Shaper"], "cast_order_canonical": ["Lord of Atlantis", "Tide Shaper"], "actions": [{ "card": "Lord of Atlantis" }, { "card": "Tide Shaper", "kicked": true, "verb": "kick", "kicked_cost_mv": 1, "enchant_target": 600000, "enchant_target_name": "Opponent Nonbasic Land" }] },
+    { "index": 3, "summary": "land=none; cast: Lord of Atlantis (vial), Tide Shaper → Opponent Basic Land #1", "land": null, "casts": ["Lord of Atlantis", "Tide Shaper"], "cast_order_canonical": ["Lord of Atlantis", "Tide Shaper"], "actions": [{ "card": "Lord of Atlantis" }, { "card": "Tide Shaper", "kicked": true, "verb": "kick", "kicked_cost_mv": 1, "enchant_target": 600001, "enchant_target_name": "Opponent Basic Land", "enchant_target_label": "Opponent Basic Land #1" }] },
+    { "index": 4, "summary": "land=none; cast: Lord of Atlantis (vial), Tide Shaper → Opponent Basic Land #2", "land": null, "casts": ["Lord of Atlantis", "Tide Shaper"], "cast_order_canonical": ["Lord of Atlantis", "Tide Shaper"], "actions": [{ "card": "Lord of Atlantis" }, { "card": "Tide Shaper", "kicked": true, "verb": "kick", "kicked_cost_mv": 1, "enchant_target": 600002, "enchant_target_name": "Opponent Basic Land", "enchant_target_label": "Opponent Basic Land #2" }] },
+    { "index": 5, "summary": "land=none; cast: Lord of Atlantis (vial), Tide Shaper → Botanical Sanctum", "land": null, "casts": ["Lord of Atlantis", "Tide Shaper"], "cast_order_canonical": ["Lord of Atlantis", "Tide Shaper"], "actions": [{ "card": "Lord of Atlantis" }, { "card": "Tide Shaper", "kicked": true, "verb": "kick", "kicked_cost_mv": 1, "enchant_target": 6, "enchant_target_name": "Botanical Sanctum" }] },
+    { "index": 6, "summary": "land=none; cast: Lord of Atlantis (vial), Tide Shaper → Island", "land": null, "casts": ["Lord of Atlantis", "Tide Shaper"], "cast_order_canonical": ["Lord of Atlantis", "Tide Shaper"], "actions": [{ "card": "Lord of Atlantis" }, { "card": "Tide Shaper", "kicked": true, "verb": "kick", "kicked_cost_mv": 1, "enchant_target": 13, "enchant_target_name": "Island" }] },
+    { "index": 7, "summary": "land=none; cast: Lord of Atlantis (vial), Tide Shaper", "land": null, "casts": ["Lord of Atlantis", "Tide Shaper"], "cast_order_canonical": ["Lord of Atlantis", "Tide Shaper"], "actions": [{ "card": "Lord of Atlantis" }, { "card": "Tide Shaper" }] },
+    { "index": 8, "summary": "land=none; cast: Vodalian Hexcatcher (vial), Tide Shaper → Opponent Nonbasic Land", "land": null, "casts": ["Vodalian Hexcatcher", "Tide Shaper"], "cast_order_canonical": ["Vodalian Hexcatcher", "Tide Shaper"], "actions": [{ "card": "Vodalian Hexcatcher" }, { "card": "Tide Shaper", "kicked": true, "verb": "kick", "kicked_cost_mv": 1, "enchant_target": 600000, "enchant_target_name": "Opponent Nonbasic Land" }] },
+    { "index": 9, "summary": "land=none; cast: Vodalian Hexcatcher (vial), Tide Shaper → Opponent Basic Land #1", "land": null, "casts": ["Vodalian Hexcatcher", "Tide Shaper"], "cast_order_canonical": ["Vodalian Hexcatcher", "Tide Shaper"], "actions": [{ "card": "Vodalian Hexcatcher" }, { "card": "Tide Shaper", "kicked": true, "verb": "kick", "kicked_cost_mv": 1, "enchant_target": 600001, "enchant_target_name": "Opponent Basic Land", "enchant_target_label": "Opponent Basic Land #1" }] },
+    { "index": 10, "summary": "land=none; cast: Vodalian Hexcatcher (vial), Tide Shaper → Opponent Basic Land #2", "land": null, "casts": ["Vodalian Hexcatcher", "Tide Shaper"], "cast_order_canonical": ["Vodalian Hexcatcher", "Tide Shaper"], "actions": [{ "card": "Vodalian Hexcatcher" }, { "card": "Tide Shaper", "kicked": true, "verb": "kick", "kicked_cost_mv": 1, "enchant_target": 600002, "enchant_target_name": "Opponent Basic Land", "enchant_target_label": "Opponent Basic Land #2" }] },
+    { "index": 11, "summary": "land=none; cast: Vodalian Hexcatcher (vial), Tide Shaper → Botanical Sanctum", "land": null, "casts": ["Vodalian Hexcatcher", "Tide Shaper"], "cast_order_canonical": ["Vodalian Hexcatcher", "Tide Shaper"], "actions": [{ "card": "Vodalian Hexcatcher" }, { "card": "Tide Shaper", "kicked": true, "verb": "kick", "kicked_cost_mv": 1, "enchant_target": 6, "enchant_target_name": "Botanical Sanctum" }] },
+    { "index": 12, "summary": "land=none; cast: Vodalian Hexcatcher (vial), Tide Shaper → Island", "land": null, "casts": ["Vodalian Hexcatcher", "Tide Shaper"], "cast_order_canonical": ["Vodalian Hexcatcher", "Tide Shaper"], "actions": [{ "card": "Vodalian Hexcatcher" }, { "card": "Tide Shaper", "kicked": true, "verb": "kick", "kicked_cost_mv": 1, "enchant_target": 13, "enchant_target_name": "Island" }] },
+    { "index": 13, "summary": "land=none; cast: Vodalian Hexcatcher (vial), Tide Shaper", "land": null, "casts": ["Vodalian Hexcatcher", "Tide Shaper"], "cast_order_canonical": ["Vodalian Hexcatcher", "Tide Shaper"], "actions": [{ "card": "Vodalian Hexcatcher" }, { "card": "Tide Shaper" }] },
+    { "index": 14, "summary": "land=none; cast: Lord of Atlantis", "land": null, "casts": ["Lord of Atlantis"], "actions": [{ "card": "Lord of Atlantis" }] },
+    { "index": 15, "summary": "land=none; cast: Lord of Atlantis (vial)", "land": null, "casts": ["Lord of Atlantis"], "actions": [{ "card": "Lord of Atlantis" }] },
+    { "index": 16, "summary": "land=none; cast: Vodalian Hexcatcher", "land": null, "casts": ["Vodalian Hexcatcher"], "actions": [{ "card": "Vodalian Hexcatcher" }] },
+    { "index": 17, "summary": "land=none; cast: Vodalian Hexcatcher (vial)", "land": null, "casts": ["Vodalian Hexcatcher"], "actions": [{ "card": "Vodalian Hexcatcher" }] },
+    { "index": 18, "summary": "land=none; cast: Tide Shaper → Opponent Nonbasic Land", "land": null, "casts": ["Tide Shaper"], "actions": [{ "card": "Tide Shaper", "kicked": true, "verb": "kick", "kicked_cost_mv": 1, "enchant_target": 600000, "enchant_target_name": "Opponent Nonbasic Land" }] },
+    { "index": 19, "summary": "land=none; cast: Tide Shaper → Opponent Basic Land #1", "land": null, "casts": ["Tide Shaper"], "actions": [{ "card": "Tide Shaper", "kicked": true, "verb": "kick", "kicked_cost_mv": 1, "enchant_target": 600001, "enchant_target_name": "Opponent Basic Land", "enchant_target_label": "Opponent Basic Land #1" }] },
+    { "index": 20, "summary": "land=none; cast: Tide Shaper → Opponent Basic Land #2", "land": null, "casts": ["Tide Shaper"], "actions": [{ "card": "Tide Shaper", "kicked": true, "verb": "kick", "kicked_cost_mv": 1, "enchant_target": 600002, "enchant_target_name": "Opponent Basic Land", "enchant_target_label": "Opponent Basic Land #2" }] },
+    { "index": 21, "summary": "land=none; cast: Tide Shaper → Botanical Sanctum", "land": null, "casts": ["Tide Shaper"], "actions": [{ "card": "Tide Shaper", "kicked": true, "verb": "kick", "kicked_cost_mv": 1, "enchant_target": 6, "enchant_target_name": "Botanical Sanctum" }] },
+    { "index": 22, "summary": "land=none; cast: Tide Shaper → Island", "land": null, "casts": ["Tide Shaper"], "actions": [{ "card": "Tide Shaper", "kicked": true, "verb": "kick", "kicked_cost_mv": 1, "enchant_target": 13, "enchant_target_name": "Island" }] },
+    { "index": 23, "summary": "land=none; cast: Tide Shaper", "land": null, "casts": ["Tide Shaper"], "actions": [{ "card": "Tide Shaper" }] },
+    { "index": 24, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 12,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 4, "num": 3, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Botanical Sanctum", "idx": 3, "num": 6, "tapped": true, "is_land": true }, { "name": "Island", "idx": 6, "num": 13, "tapped": true, "is_land": true }, { "name": "Kumena's Speaker", "idx": 5, "num": 18, "is_land": false, "power": 5, "toughness": 5 }, { "name": "Lord of Atlantis", "idx": 7, "num": 21, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Lord of Atlantis", "idx": 9, "num": 22, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Vodalian Hexcatcher", "idx": 10, "num": 55, "is_land": false, "power": 3, "toughness": 3 }], "vial_counters": [2], "hand": [{ "num": 47, "name": "Tide Shaper", "cost": "{U}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "4/4 Creature", "idx": 8, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Kumena's Speaker (5), Lord of Atlantis (4) — 9 to opponent (20→11)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 4, "num": 3, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Botanical Sanctum", "idx": 3, "num": 6, "tapped": true, "is_land": true }, { "name": "Island", "idx": 6, "num": 13, "tapped": true, "is_land": true }, { "name": "Kumena's Speaker", "idx": 5, "num": 18, "tapped": true, "is_land": false, "power": 5, "toughness": 5 }, { "name": "Lord of Atlantis", "idx": 7, "num": 21, "tapped": true, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Lord of Atlantis", "idx": 9, "num": 22, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Vodalian Hexcatcher", "idx": 10, "num": 55, "is_land": false, "power": 3, "toughness": 3 }], "vial_counters": [2], "hand": [{ "num": 47, "name": "Tide Shaper", "cost": "{U}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 11, "battlefield": [{ "name": "4/4 Creature", "idx": 8, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 14,
+  "type": "vial_charge",
+  "turn": 4,
+  "vial": "Aether Vial", "current_counters": 2,
+  "perm_index": 4,
+  "heuristic_default": 0,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 4, "num": 3, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Botanical Sanctum", "idx": 3, "num": 6, "is_land": true, "taps": "GU" }, { "name": "Island", "idx": 6, "num": 13, "is_land": true, "taps": "U" }, { "name": "Kumena's Speaker", "idx": 5, "num": 18, "is_land": false, "power": 5, "toughness": 5 }, { "name": "Lord of Atlantis", "idx": 7, "num": 21, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Lord of Atlantis", "idx": 9, "num": 22, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Vodalian Hexcatcher", "idx": 10, "num": 55, "is_land": false, "power": 3, "toughness": 3 }], "vial_counters": [2], "hand": [{ "num": 47, "name": "Tide Shaper", "cost": "{U}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 11, "battlefield": [{ "name": "4/4 Creature", "idx": 8, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "note": "reply 1 to add a charge counter this upkeep, 0 to hold. Aether Vial deploys a creature whose mana value EQUALS its counter count."
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 15,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 4, "card": "Aether Vial" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 4, "num": 3, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Botanical Sanctum", "idx": 3, "num": 6, "is_land": true, "taps": "GU" }, { "name": "Island", "idx": 6, "num": 13, "is_land": true, "taps": "U" }, { "name": "Kumena's Speaker", "idx": 5, "num": 18, "is_land": false, "power": 5, "toughness": 5 }, { "name": "Lord of Atlantis", "idx": 7, "num": 21, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Lord of Atlantis", "idx": 9, "num": 22, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Vodalian Hexcatcher", "idx": 10, "num": 55, "is_land": false, "power": 3, "toughness": 3 }], "vial_counters": [2], "hand": [{ "num": 4, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 47, "name": "Tide Shaper", "cost": "{U}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 11, "battlefield": [{ "name": "4/4 Creature", "idx": 8, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Aether Vial, Tide Shaper", "land": null, "casts": ["Aether Vial", "Tide Shaper"], "cast_order_canonical": ["Aether Vial", "Tide Shaper"], "actions": [{ "card": "Aether Vial" }, { "card": "Tide Shaper" }] },
+    { "index": 1, "summary": "land=none; cast: Tide Shaper, Aether Vial", "land": null, "casts": ["Tide Shaper", "Aether Vial"], "cast_order_canonical": ["Tide Shaper", "Aether Vial"], "actions": [{ "card": "Tide Shaper" }, { "card": "Aether Vial" }] },
+    { "index": 2, "summary": "land=none; cast: Tide Shaper → Opponent Nonbasic Land", "land": null, "casts": ["Tide Shaper"], "actions": [{ "card": "Tide Shaper", "kicked": true, "verb": "kick", "kicked_cost_mv": 1, "enchant_target": 600000, "enchant_target_name": "Opponent Nonbasic Land" }] },
+    { "index": 3, "summary": "land=none; cast: Tide Shaper → Opponent Basic Land #1", "land": null, "casts": ["Tide Shaper"], "actions": [{ "card": "Tide Shaper", "kicked": true, "verb": "kick", "kicked_cost_mv": 1, "enchant_target": 600001, "enchant_target_name": "Opponent Basic Land", "enchant_target_label": "Opponent Basic Land #1" }] },
+    { "index": 4, "summary": "land=none; cast: Tide Shaper → Opponent Basic Land #2", "land": null, "casts": ["Tide Shaper"], "actions": [{ "card": "Tide Shaper", "kicked": true, "verb": "kick", "kicked_cost_mv": 1, "enchant_target": 600002, "enchant_target_name": "Opponent Basic Land", "enchant_target_label": "Opponent Basic Land #2" }] },
+    { "index": 5, "summary": "land=none; cast: Tide Shaper → Botanical Sanctum", "land": null, "casts": ["Tide Shaper"], "actions": [{ "card": "Tide Shaper", "kicked": true, "verb": "kick", "kicked_cost_mv": 1, "enchant_target": 6, "enchant_target_name": "Botanical Sanctum" }] },
+    { "index": 6, "summary": "land=none; cast: Tide Shaper → Island", "land": null, "casts": ["Tide Shaper"], "actions": [{ "card": "Tide Shaper", "kicked": true, "verb": "kick", "kicked_cost_mv": 1, "enchant_target": 13, "enchant_target_name": "Island" }] },
+    { "index": 7, "summary": "land=none; cast: Tide Shaper", "land": null, "casts": ["Tide Shaper"], "actions": [{ "card": "Tide Shaper" }] },
+    { "index": 8, "summary": "land=none; cast: Aether Vial", "land": null, "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] },
+    { "index": 9, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 16,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 4, "num": 3, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Botanical Sanctum", "idx": 3, "num": 6, "tapped": true, "is_land": true }, { "name": "Island", "idx": 6, "num": 13, "tapped": true, "is_land": true }, { "name": "Kumena's Speaker", "idx": 5, "num": 18, "is_land": false, "power": 5, "toughness": 5 }, { "name": "Lord of Atlantis", "idx": 7, "num": 21, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Lord of Atlantis", "idx": 9, "num": 22, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Tide Shaper", "idx": 11, "num": 47, "is_land": false, "power": 5, "toughness": 5 }, { "name": "Vodalian Hexcatcher", "idx": 10, "num": 55, "is_land": false, "power": 3, "toughness": 3 }], "vial_counters": [2], "hand": [{ "num": 4, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 11, "battlefield": [{ "name": "4/4 Creature", "idx": 8, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 4, "kind": "combat", "text": "⚔ attacked: Kumena's Speaker (5), Lord of Atlantis (4), Lord of Atlantis (4), Vodalian Hexcatcher (3) — 16 to opponent (11→-5)" }
+  ]
+}

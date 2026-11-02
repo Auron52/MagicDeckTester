@@ -1,0 +1,339 @@
+{
+  "seed": 3, "game_index": 2, "win_turn": 4, "won": true,
+  "mulligan": { "count": 0, "bottom": [] }, "karoo_float": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1,
+  "decisions": [
+    { "chosen": 1, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 10, "name": "Island" }, { "num": 47, "name": "Tide Shaper" }, { "num": 1, "name": "Aether Vial" }, { "num": 5, "name": "Botanical Sanctum" }, { "num": 23, "name": "Master of the Pearl Trident" }, { "num": 24, "name": "Master of the Pearl Trident" }, { "num": 53, "name": "Vodalian Hexcatcher" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "cast_order": ["**", "land=Island", "cast=Aether Vial"], "decision": {
+  "decision_index": 1,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 1, "card": "Master of the Pearl Trident" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 1, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 5, "name": "Botanical Sanctum", "cost": "", "mv": 0, "kind": "land" }, { "num": 10, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 23, "name": "Master of the Pearl Trident", "cost": "{U}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 24, "name": "Master of the Pearl Trident", "cost": "{U}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Master of the Pearl Trident", "cost": "{U}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Tide Shaper", "cost": "{U}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Vodalian Hexcatcher", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Botanical Sanctum; cast: Aether Vial", "land": "Botanical Sanctum", "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] },
+    { "index": 1, "summary": "land=Island; cast: Aether Vial", "land": "Island", "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] },
+    { "index": 2, "summary": "land=Botanical Sanctum; cast: Tide Shaper", "land": "Botanical Sanctum", "casts": ["Tide Shaper"], "actions": [{ "card": "Tide Shaper" }] },
+    { "index": 3, "summary": "land=Island; cast: Tide Shaper", "land": "Island", "casts": ["Tide Shaper"], "actions": [{ "card": "Tide Shaper" }] },
+    { "index": 4, "summary": "land=Botanical Sanctum; cast: (nothing)", "land": "Botanical Sanctum", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=Island; cast: (nothing)", "land": "Island", "casts": [], "actions": [] },
+    { "index": 6, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 2,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 6, "num": 1, "is_land": false }, { "name": "Island", "idx": 5, "num": 10, "tapped": true, "is_land": true }], "vial_counters": [0], "hand": [{ "num": 5, "name": "Botanical Sanctum", "cost": "", "mv": 0, "kind": "land" }, { "num": 23, "name": "Master of the Pearl Trident", "cost": "{U}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 24, "name": "Master of the Pearl Trident", "cost": "{U}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Master of the Pearl Trident", "cost": "{U}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Tide Shaper", "cost": "{U}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Vodalian Hexcatcher", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 3,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 6, "num": 1, "is_land": false }, { "name": "Island", "idx": 5, "num": 10, "tapped": true, "is_land": true }], "vial_counters": [0], "hand": [{ "num": 5, "name": "Botanical Sanctum", "cost": "", "mv": 0, "kind": "land" }, { "num": 23, "name": "Master of the Pearl Trident", "cost": "{U}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 24, "name": "Master of the Pearl Trident", "cost": "{U}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Master of the Pearl Trident", "cost": "{U}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Tide Shaper", "cost": "{U}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Vodalian Hexcatcher", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 4,
+  "type": "vial_charge",
+  "turn": 2,
+  "vial": "Aether Vial", "current_counters": 0,
+  "perm_index": 6,
+  "heuristic_default": 1,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 6, "num": 1, "is_land": false }, { "name": "Island", "idx": 5, "num": 10, "is_land": true, "taps": "U" }], "vial_counters": [0], "hand": [{ "num": 5, "name": "Botanical Sanctum", "cost": "", "mv": 0, "kind": "land" }, { "num": 23, "name": "Master of the Pearl Trident", "cost": "{U}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 24, "name": "Master of the Pearl Trident", "cost": "{U}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Master of the Pearl Trident", "cost": "{U}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Tide Shaper", "cost": "{U}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Vodalian Hexcatcher", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "note": "reply 1 to add a charge counter this upkeep, 0 to hold. Aether Vial deploys a creature whose mana value EQUALS its counter count."
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Botanical Sanctum", "vial=Tide Shaper", "cast=Master of the Pearl Trident"], "decision": {
+  "decision_index": 5,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 2, "card": "Waterlogged Grove" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 6, "num": 1, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Island", "idx": 5, "num": 10, "is_land": true, "taps": "U" }], "vial_counters": [1], "hand": [{ "num": 5, "name": "Botanical Sanctum", "cost": "", "mv": 0, "kind": "land" }, { "num": 23, "name": "Master of the Pearl Trident", "cost": "{U}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 24, "name": "Master of the Pearl Trident", "cost": "{U}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Master of the Pearl Trident", "cost": "{U}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Tide Shaper", "cost": "{U}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Vodalian Hexcatcher", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Waterlogged Grove", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Botanical Sanctum; cast: Tide Shaper (vial), Master of the Pearl Trident", "land": "Botanical Sanctum", "casts": ["Tide Shaper", "Master of the Pearl Trident"], "cast_order_canonical": ["Tide Shaper", "Master of the Pearl Trident"], "actions": [{ "card": "Tide Shaper" }, { "card": "Master of the Pearl Trident" }] },
+    { "index": 1, "summary": "land=Waterlogged Grove; cast: Tide Shaper (vial), Master of the Pearl Trident", "land": "Waterlogged Grove", "casts": ["Tide Shaper", "Master of the Pearl Trident"], "cast_order_canonical": ["Tide Shaper", "Master of the Pearl Trident"], "actions": [{ "card": "Tide Shaper" }, { "card": "Master of the Pearl Trident" }] },
+    { "index": 2, "summary": "land=Botanical Sanctum; cast: Master of the Pearl Trident", "land": "Botanical Sanctum", "casts": ["Master of the Pearl Trident"], "actions": [{ "card": "Master of the Pearl Trident" }] },
+    { "index": 3, "summary": "land=Botanical Sanctum; cast: Tide Shaper (vial), Vodalian Hexcatcher", "land": "Botanical Sanctum", "casts": ["Tide Shaper", "Vodalian Hexcatcher"], "cast_order_canonical": ["Tide Shaper", "Vodalian Hexcatcher"], "actions": [{ "card": "Tide Shaper" }, { "card": "Vodalian Hexcatcher" }] },
+    { "index": 4, "summary": "land=Waterlogged Grove; cast: Master of the Pearl Trident", "land": "Waterlogged Grove", "casts": ["Master of the Pearl Trident"], "actions": [{ "card": "Master of the Pearl Trident" }] },
+    { "index": 5, "summary": "land=Waterlogged Grove; cast: Tide Shaper (vial), Vodalian Hexcatcher", "land": "Waterlogged Grove", "casts": ["Tide Shaper", "Vodalian Hexcatcher"], "cast_order_canonical": ["Tide Shaper", "Vodalian Hexcatcher"], "actions": [{ "card": "Tide Shaper" }, { "card": "Vodalian Hexcatcher" }] },
+    { "index": 6, "summary": "land=Botanical Sanctum; cast: Tide Shaper → Opponent Nonbasic Land", "land": "Botanical Sanctum", "casts": ["Tide Shaper"], "actions": [{ "card": "Tide Shaper", "kicked": true, "verb": "kick", "kicked_cost_mv": 1, "enchant_target": 600000, "enchant_target_name": "Opponent Nonbasic Land" }] },
+    { "index": 7, "summary": "land=Botanical Sanctum; cast: Tide Shaper → Opponent Basic Land #1", "land": "Botanical Sanctum", "casts": ["Tide Shaper"], "actions": [{ "card": "Tide Shaper", "kicked": true, "verb": "kick", "kicked_cost_mv": 1, "enchant_target": 600001, "enchant_target_name": "Opponent Basic Land", "enchant_target_label": "Opponent Basic Land #1" }] },
+    { "index": 8, "summary": "land=Botanical Sanctum; cast: Tide Shaper → Opponent Basic Land #2", "land": "Botanical Sanctum", "casts": ["Tide Shaper"], "actions": [{ "card": "Tide Shaper", "kicked": true, "verb": "kick", "kicked_cost_mv": 1, "enchant_target": 600002, "enchant_target_name": "Opponent Basic Land", "enchant_target_label": "Opponent Basic Land #2" }] },
+    { "index": 9, "summary": "land=Botanical Sanctum; cast: Tide Shaper → Island", "land": "Botanical Sanctum", "casts": ["Tide Shaper"], "actions": [{ "card": "Tide Shaper", "kicked": true, "verb": "kick", "kicked_cost_mv": 1, "enchant_target": 10, "enchant_target_name": "Island" }] },
+    { "index": 10, "summary": "land=Botanical Sanctum; cast: Tide Shaper → Botanical Sanctum", "land": "Botanical Sanctum", "casts": ["Tide Shaper"], "actions": [{ "card": "Tide Shaper", "kicked": true, "verb": "kick", "kicked_cost_mv": 1, "enchant_target": 5, "enchant_target_name": "Botanical Sanctum" }] },
+    { "index": 11, "summary": "land=Botanical Sanctum; cast: Tide Shaper", "land": "Botanical Sanctum", "casts": ["Tide Shaper"], "actions": [{ "card": "Tide Shaper" }] },
+    { "index": 12, "summary": "land=Botanical Sanctum; cast: Tide Shaper (vial)", "land": "Botanical Sanctum", "casts": ["Tide Shaper"], "actions": [{ "card": "Tide Shaper" }] },
+    { "index": 13, "summary": "land=Botanical Sanctum; cast: Vodalian Hexcatcher", "land": "Botanical Sanctum", "casts": ["Vodalian Hexcatcher"], "actions": [{ "card": "Vodalian Hexcatcher" }] },
+    { "index": 14, "summary": "land=Waterlogged Grove; cast: Tide Shaper → Opponent Nonbasic Land", "land": "Waterlogged Grove", "casts": ["Tide Shaper"], "actions": [{ "card": "Tide Shaper", "kicked": true, "verb": "kick", "kicked_cost_mv": 1, "enchant_target": 600000, "enchant_target_name": "Opponent Nonbasic Land" }] },
+    { "index": 15, "summary": "land=Waterlogged Grove; cast: Tide Shaper → Opponent Basic Land #1", "land": "Waterlogged Grove", "casts": ["Tide Shaper"], "actions": [{ "card": "Tide Shaper", "kicked": true, "verb": "kick", "kicked_cost_mv": 1, "enchant_target": 600001, "enchant_target_name": "Opponent Basic Land", "enchant_target_label": "Opponent Basic Land #1" }] },
+    { "index": 16, "summary": "land=Waterlogged Grove; cast: Tide Shaper → Opponent Basic Land #2", "land": "Waterlogged Grove", "casts": ["Tide Shaper"], "actions": [{ "card": "Tide Shaper", "kicked": true, "verb": "kick", "kicked_cost_mv": 1, "enchant_target": 600002, "enchant_target_name": "Opponent Basic Land", "enchant_target_label": "Opponent Basic Land #2" }] },
+    { "index": 17, "summary": "land=Waterlogged Grove; cast: Tide Shaper → Island", "land": "Waterlogged Grove", "casts": ["Tide Shaper"], "actions": [{ "card": "Tide Shaper", "kicked": true, "verb": "kick", "kicked_cost_mv": 1, "enchant_target": 10, "enchant_target_name": "Island" }] },
+    { "index": 18, "summary": "land=Waterlogged Grove; cast: Tide Shaper → Waterlogged Grove", "land": "Waterlogged Grove", "casts": ["Tide Shaper"], "actions": [{ "card": "Tide Shaper", "kicked": true, "verb": "kick", "kicked_cost_mv": 1, "enchant_target": 57, "enchant_target_name": "Waterlogged Grove" }] },
+    { "index": 19, "summary": "land=Waterlogged Grove; cast: Tide Shaper", "land": "Waterlogged Grove", "casts": ["Tide Shaper"], "actions": [{ "card": "Tide Shaper" }] },
+    { "index": 20, "summary": "land=Waterlogged Grove; cast: Tide Shaper (vial)", "land": "Waterlogged Grove", "casts": ["Tide Shaper"], "actions": [{ "card": "Tide Shaper" }] },
+    { "index": 21, "summary": "land=Waterlogged Grove; cast: Vodalian Hexcatcher", "land": "Waterlogged Grove", "casts": ["Vodalian Hexcatcher"], "actions": [{ "card": "Vodalian Hexcatcher" }] },
+    { "index": 22, "summary": "land=none; cast: Tide Shaper", "land": null, "casts": ["Tide Shaper"], "actions": [{ "card": "Tide Shaper" }] },
+    { "index": 23, "summary": "land=none; cast: Tide Shaper (vial)", "land": null, "casts": ["Tide Shaper"], "actions": [{ "card": "Tide Shaper" }] },
+    { "index": 24, "summary": "land=Botanical Sanctum; cast: (nothing)", "land": "Botanical Sanctum", "casts": [], "actions": [] },
+    { "index": 25, "summary": "land=Waterlogged Grove; cast: (nothing)", "land": "Waterlogged Grove", "casts": [], "actions": [] },
+    { "index": 26, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 72,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 6, "num": 1, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Botanical Sanctum", "idx": 9, "num": 5, "tapped": true, "is_land": true }, { "name": "Island", "idx": 5, "num": 10, "tapped": true, "is_land": true }, { "name": "Master of the Pearl Trident", "idx": 11, "num": 23, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Tide Shaper", "idx": 10, "num": 47, "is_land": false, "power": 2, "toughness": 2 }], "vial_counters": [1], "hand": [{ "num": 24, "name": "Master of the Pearl Trident", "cost": "{U}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Master of the Pearl Trident", "cost": "{U}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Vodalian Hexcatcher", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Waterlogged Grove", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 7,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 6, "num": 1, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Botanical Sanctum", "idx": 9, "num": 5, "tapped": true, "is_land": true }, { "name": "Island", "idx": 5, "num": 10, "tapped": true, "is_land": true }, { "name": "Master of the Pearl Trident", "idx": 11, "num": 23, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Tide Shaper", "idx": 10, "num": 47, "is_land": false, "power": 2, "toughness": 2 }], "vial_counters": [1], "hand": [{ "num": 24, "name": "Master of the Pearl Trident", "cost": "{U}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Master of the Pearl Trident", "cost": "{U}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Vodalian Hexcatcher", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Waterlogged Grove", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 8,
+  "type": "vial_charge",
+  "turn": 3,
+  "vial": "Aether Vial", "current_counters": 1,
+  "perm_index": 6,
+  "heuristic_default": 1,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 6, "num": 1, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Botanical Sanctum", "idx": 9, "num": 5, "is_land": true, "taps": "GU" }, { "name": "Island", "idx": 5, "num": 10, "is_land": true, "taps": "U" }, { "name": "Master of the Pearl Trident", "idx": 11, "num": 23, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Tide Shaper", "idx": 10, "num": 47, "is_land": false, "power": 2, "toughness": 2 }], "vial_counters": [1], "hand": [{ "num": 24, "name": "Master of the Pearl Trident", "cost": "{U}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Master of the Pearl Trident", "cost": "{U}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Vodalian Hexcatcher", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Waterlogged Grove", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 12, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 13, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "note": "reply 1 to add a charge counter this upkeep, 0 to hold. Aether Vial deploys a creature whose mana value EQUALS its counter count."
+}
+},
+    { "chosen": 6, "cast_order": ["**", "vial=Master of the Pearl Trident", "cast=Master of the Pearl Trident", "land=Waterlogged Grove"], "decision": {
+  "decision_index": 9,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 3, "card": "Aether Vial" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 6, "num": 1, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Botanical Sanctum", "idx": 9, "num": 5, "is_land": true, "taps": "GU" }, { "name": "Island", "idx": 5, "num": 10, "is_land": true, "taps": "U" }, { "name": "Master of the Pearl Trident", "idx": 11, "num": 23, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Tide Shaper", "idx": 10, "num": 47, "is_land": false, "power": 2, "toughness": 2 }], "vial_counters": [2], "hand": [{ "num": 2, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 24, "name": "Master of the Pearl Trident", "cost": "{U}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Master of the Pearl Trident", "cost": "{U}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Vodalian Hexcatcher", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Waterlogged Grove", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 12, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 13, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Waterlogged Grove; cast: Master of the Pearl Trident (vial), Aether Vial, Master of the Pearl Trident", "land": "Waterlogged Grove", "casts": ["Master of the Pearl Trident", "Aether Vial", "Master of the Pearl Trident"], "cast_order_canonical": ["Master of the Pearl Trident", "Aether Vial", "Master of the Pearl Trident"], "actions": [{ "card": "Master of the Pearl Trident" }, { "card": "Aether Vial" }, { "card": "Master of the Pearl Trident" }] },
+    { "index": 1, "summary": "land=Waterlogged Grove; cast: Master of the Pearl Trident (vial), Master of the Pearl Trident, Aether Vial", "land": "Waterlogged Grove", "casts": ["Master of the Pearl Trident", "Master of the Pearl Trident", "Aether Vial"], "cast_order_canonical": ["Master of the Pearl Trident", "Master of the Pearl Trident", "Aether Vial"], "actions": [{ "card": "Master of the Pearl Trident" }, { "card": "Master of the Pearl Trident" }, { "card": "Aether Vial" }] },
+    { "index": 2, "summary": "land=Waterlogged Grove; cast: Master of the Pearl Trident (vial), Aether Vial, Vodalian Hexcatcher", "land": "Waterlogged Grove", "casts": ["Master of the Pearl Trident", "Aether Vial", "Vodalian Hexcatcher"], "cast_order_canonical": ["Master of the Pearl Trident", "Aether Vial", "Vodalian Hexcatcher"], "actions": [{ "card": "Master of the Pearl Trident" }, { "card": "Aether Vial" }, { "card": "Vodalian Hexcatcher" }] },
+    { "index": 3, "summary": "land=Waterlogged Grove; cast: Master of the Pearl Trident (vial), Vodalian Hexcatcher, Aether Vial", "land": "Waterlogged Grove", "casts": ["Master of the Pearl Trident", "Vodalian Hexcatcher", "Aether Vial"], "cast_order_canonical": ["Master of the Pearl Trident", "Vodalian Hexcatcher", "Aether Vial"], "actions": [{ "card": "Master of the Pearl Trident" }, { "card": "Vodalian Hexcatcher" }, { "card": "Aether Vial" }] },
+    { "index": 4, "summary": "land=Waterlogged Grove; cast: Vodalian Hexcatcher (vial), Aether Vial, Master of the Pearl Trident", "land": "Waterlogged Grove", "casts": ["Vodalian Hexcatcher", "Aether Vial", "Master of the Pearl Trident"], "cast_order_canonical": ["Vodalian Hexcatcher", "Aether Vial", "Master of the Pearl Trident"], "actions": [{ "card": "Vodalian Hexcatcher" }, { "card": "Aether Vial" }, { "card": "Master of the Pearl Trident" }] },
+    { "index": 5, "summary": "land=Waterlogged Grove; cast: Master of the Pearl Trident, Vodalian Hexcatcher (vial), Aether Vial", "land": "Waterlogged Grove", "casts": ["Master of the Pearl Trident", "Vodalian Hexcatcher", "Aether Vial"], "cast_order_canonical": ["Master of the Pearl Trident", "Vodalian Hexcatcher", "Aether Vial"], "actions": [{ "card": "Master of the Pearl Trident" }, { "card": "Vodalian Hexcatcher" }, { "card": "Aether Vial" }] },
+    { "index": 6, "summary": "land=Waterlogged Grove; cast: Master of the Pearl Trident (vial), Master of the Pearl Trident", "land": "Waterlogged Grove", "casts": ["Master of the Pearl Trident", "Master of the Pearl Trident"], "cast_order_canonical": ["Master of the Pearl Trident", "Master of the Pearl Trident"], "actions": [{ "card": "Master of the Pearl Trident" }, { "card": "Master of the Pearl Trident" }] },
+    { "index": 7, "summary": "land=none; cast: Master of the Pearl Trident (vial), Master of the Pearl Trident", "land": null, "casts": ["Master of the Pearl Trident", "Master of the Pearl Trident"], "cast_order_canonical": ["Master of the Pearl Trident", "Master of the Pearl Trident"], "actions": [{ "card": "Master of the Pearl Trident" }, { "card": "Master of the Pearl Trident" }] },
+    { "index": 8, "summary": "land=Waterlogged Grove; cast: Master of the Pearl Trident (vial), Vodalian Hexcatcher", "land": "Waterlogged Grove", "casts": ["Master of the Pearl Trident", "Vodalian Hexcatcher"], "cast_order_canonical": ["Master of the Pearl Trident", "Vodalian Hexcatcher"], "actions": [{ "card": "Master of the Pearl Trident" }, { "card": "Vodalian Hexcatcher" }] },
+    { "index": 9, "summary": "land=Waterlogged Grove; cast: Master of the Pearl Trident, Vodalian Hexcatcher (vial)", "land": "Waterlogged Grove", "casts": ["Master of the Pearl Trident", "Vodalian Hexcatcher"], "cast_order_canonical": ["Master of the Pearl Trident", "Vodalian Hexcatcher"], "actions": [{ "card": "Master of the Pearl Trident" }, { "card": "Vodalian Hexcatcher" }] },
+    { "index": 10, "summary": "land=Waterlogged Grove; cast: Aether Vial, Master of the Pearl Trident", "land": "Waterlogged Grove", "casts": ["Aether Vial", "Master of the Pearl Trident"], "cast_order_canonical": ["Aether Vial", "Master of the Pearl Trident"], "actions": [{ "card": "Aether Vial" }, { "card": "Master of the Pearl Trident" }] },
+    { "index": 11, "summary": "land=Waterlogged Grove; cast: Master of the Pearl Trident, Aether Vial", "land": "Waterlogged Grove", "casts": ["Master of the Pearl Trident", "Aether Vial"], "cast_order_canonical": ["Master of the Pearl Trident", "Aether Vial"], "actions": [{ "card": "Master of the Pearl Trident" }, { "card": "Aether Vial" }] },
+    { "index": 12, "summary": "land=Waterlogged Grove; cast: Master of the Pearl Trident (vial), Aether Vial", "land": "Waterlogged Grove", "casts": ["Master of the Pearl Trident", "Aether Vial"], "cast_order_canonical": ["Master of the Pearl Trident", "Aether Vial"], "actions": [{ "card": "Master of the Pearl Trident" }, { "card": "Aether Vial" }] },
+    { "index": 13, "summary": "land=none; cast: Master of the Pearl Trident (vial), Vodalian Hexcatcher", "land": null, "casts": ["Master of the Pearl Trident", "Vodalian Hexcatcher"], "cast_order_canonical": ["Master of the Pearl Trident", "Vodalian Hexcatcher"], "actions": [{ "card": "Master of the Pearl Trident" }, { "card": "Vodalian Hexcatcher" }] },
+    { "index": 14, "summary": "land=none; cast: Master of the Pearl Trident, Vodalian Hexcatcher (vial)", "land": null, "casts": ["Master of the Pearl Trident", "Vodalian Hexcatcher"], "cast_order_canonical": ["Master of the Pearl Trident", "Vodalian Hexcatcher"], "actions": [{ "card": "Master of the Pearl Trident" }, { "card": "Vodalian Hexcatcher" }] },
+    { "index": 15, "summary": "land=none; cast: Master of the Pearl Trident (vial), Aether Vial", "land": null, "casts": ["Master of the Pearl Trident", "Aether Vial"], "cast_order_canonical": ["Master of the Pearl Trident", "Aether Vial"], "actions": [{ "card": "Master of the Pearl Trident" }, { "card": "Aether Vial" }] },
+    { "index": 16, "summary": "land=Waterlogged Grove; cast: Aether Vial, Vodalian Hexcatcher", "land": "Waterlogged Grove", "casts": ["Aether Vial", "Vodalian Hexcatcher"], "cast_order_canonical": ["Aether Vial", "Vodalian Hexcatcher"], "actions": [{ "card": "Aether Vial" }, { "card": "Vodalian Hexcatcher" }] },
+    { "index": 17, "summary": "land=Waterlogged Grove; cast: Vodalian Hexcatcher, Aether Vial", "land": "Waterlogged Grove", "casts": ["Vodalian Hexcatcher", "Aether Vial"], "cast_order_canonical": ["Vodalian Hexcatcher", "Aether Vial"], "actions": [{ "card": "Vodalian Hexcatcher" }, { "card": "Aether Vial" }] },
+    { "index": 18, "summary": "land=Waterlogged Grove; cast: Vodalian Hexcatcher (vial), Aether Vial", "land": "Waterlogged Grove", "casts": ["Vodalian Hexcatcher", "Aether Vial"], "cast_order_canonical": ["Vodalian Hexcatcher", "Aether Vial"], "actions": [{ "card": "Vodalian Hexcatcher" }, { "card": "Aether Vial" }] },
+    { "index": 19, "summary": "land=none; cast: Vodalian Hexcatcher (vial), Aether Vial", "land": null, "casts": ["Vodalian Hexcatcher", "Aether Vial"], "cast_order_canonical": ["Vodalian Hexcatcher", "Aether Vial"], "actions": [{ "card": "Vodalian Hexcatcher" }, { "card": "Aether Vial" }] },
+    { "index": 20, "summary": "land=Waterlogged Grove; cast: Master of the Pearl Trident", "land": "Waterlogged Grove", "casts": ["Master of the Pearl Trident"], "actions": [{ "card": "Master of the Pearl Trident" }] },
+    { "index": 21, "summary": "land=Waterlogged Grove; cast: Master of the Pearl Trident (vial)", "land": "Waterlogged Grove", "casts": ["Master of the Pearl Trident"], "actions": [{ "card": "Master of the Pearl Trident" }] },
+    { "index": 22, "summary": "land=none; cast: Master of the Pearl Trident", "land": null, "casts": ["Master of the Pearl Trident"], "actions": [{ "card": "Master of the Pearl Trident" }] },
+    { "index": 23, "summary": "land=none; cast: Master of the Pearl Trident (vial)", "land": null, "casts": ["Master of the Pearl Trident"], "actions": [{ "card": "Master of the Pearl Trident" }] },
+    { "index": 24, "summary": "land=Waterlogged Grove; cast: Vodalian Hexcatcher", "land": "Waterlogged Grove", "casts": ["Vodalian Hexcatcher"], "actions": [{ "card": "Vodalian Hexcatcher" }] },
+    { "index": 25, "summary": "land=Waterlogged Grove; cast: Vodalian Hexcatcher (vial)", "land": "Waterlogged Grove", "casts": ["Vodalian Hexcatcher"], "actions": [{ "card": "Vodalian Hexcatcher" }] },
+    { "index": 26, "summary": "land=Waterlogged Grove; cast: Aether Vial", "land": "Waterlogged Grove", "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] },
+    { "index": 27, "summary": "land=none; cast: Vodalian Hexcatcher", "land": null, "casts": ["Vodalian Hexcatcher"], "actions": [{ "card": "Vodalian Hexcatcher" }] },
+    { "index": 28, "summary": "land=none; cast: Vodalian Hexcatcher (vial)", "land": null, "casts": ["Vodalian Hexcatcher"], "actions": [{ "card": "Vodalian Hexcatcher" }] },
+    { "index": 29, "summary": "land=none; cast: Aether Vial", "land": null, "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] },
+    { "index": 30, "summary": "land=Waterlogged Grove; cast: (nothing)", "land": "Waterlogged Grove", "casts": [], "actions": [] },
+    { "index": 31, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 96,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 10,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 6, "num": 1, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Botanical Sanctum", "idx": 9, "num": 5, "tapped": true, "is_land": true }, { "name": "Island", "idx": 5, "num": 10, "tapped": true, "is_land": true }, { "name": "Master of the Pearl Trident", "idx": 11, "num": 23, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Master of the Pearl Trident", "idx": 14, "num": 24, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Master of the Pearl Trident", "idx": 15, "num": 25, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Tide Shaper", "idx": 10, "num": 47, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Waterlogged Grove", "idx": 16, "num": 57, "is_land": true, "taps": "GU" }], "vial_counters": [2], "hand": [{ "num": 2, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 53, "name": "Vodalian Hexcatcher", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 12, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 13, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Aether Vial", "land": null, "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] }
+  ],
+  "plans_hidden": 6,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 11,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Tide Shaper (4), Master of the Pearl Trident (4) — 8 to opponent (20→12)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 6, "num": 1, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Botanical Sanctum", "idx": 9, "num": 5, "tapped": true, "is_land": true }, { "name": "Island", "idx": 5, "num": 10, "tapped": true, "is_land": true }, { "name": "Master of the Pearl Trident", "idx": 11, "num": 23, "tapped": true, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Master of the Pearl Trident", "idx": 14, "num": 24, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Master of the Pearl Trident", "idx": 15, "num": 25, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Tide Shaper", "idx": 10, "num": 47, "tapped": true, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Waterlogged Grove", "idx": 16, "num": 57, "is_land": true, "taps": "GU" }], "vial_counters": [2], "hand": [{ "num": 2, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 53, "name": "Vodalian Hexcatcher", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 12, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 12, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 13, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Aether Vial", "land": null, "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] }
+  ],
+  "plans_hidden": 6,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 12,
+  "type": "vial_charge",
+  "turn": 4,
+  "vial": "Aether Vial", "current_counters": 2,
+  "perm_index": 6,
+  "heuristic_default": 0,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 6, "num": 1, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Botanical Sanctum", "idx": 9, "num": 5, "is_land": true, "taps": "GU" }, { "name": "Island", "idx": 5, "num": 10, "is_land": true, "taps": "U" }, { "name": "Master of the Pearl Trident", "idx": 11, "num": 23, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Master of the Pearl Trident", "idx": 14, "num": 24, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Master of the Pearl Trident", "idx": 15, "num": 25, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Tide Shaper", "idx": 10, "num": 47, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Waterlogged Grove", "idx": 16, "num": 57, "is_land": true, "taps": "GU" }], "vial_counters": [2], "hand": [{ "num": 2, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 53, "name": "Vodalian Hexcatcher", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 12, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 12, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 13, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "note": "reply 1 to add a charge counter this upkeep, 0 to hold. Aether Vial deploys a creature whose mana value EQUALS its counter count."
+}
+},
+    { "chosen": 4, "cast_order": ["**", "vial=Vodalian Hexcatcher", "cast=Silvergill Adept"], "decision": {
+  "decision_index": 13,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 4, "card": "Silvergill Adept" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 6, "num": 1, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Botanical Sanctum", "idx": 9, "num": 5, "is_land": true, "taps": "GU" }, { "name": "Island", "idx": 5, "num": 10, "is_land": true, "taps": "U" }, { "name": "Master of the Pearl Trident", "idx": 11, "num": 23, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Master of the Pearl Trident", "idx": 14, "num": 24, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Master of the Pearl Trident", "idx": 15, "num": 25, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Tide Shaper", "idx": 10, "num": 47, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Waterlogged Grove", "idx": 16, "num": 57, "is_land": true, "taps": "GU" }], "vial_counters": [2], "hand": [{ "num": 2, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 39, "name": "Silvergill Adept", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Vodalian Hexcatcher", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 12, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 12, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 13, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Vodalian Hexcatcher (vial), Aether Vial, Silvergill Adept", "land": null, "casts": ["Vodalian Hexcatcher", "Aether Vial", "Silvergill Adept"], "cast_order_canonical": ["Vodalian Hexcatcher", "Aether Vial", "Silvergill Adept"], "actions": [{ "card": "Vodalian Hexcatcher" }, { "card": "Aether Vial" }, { "card": "Silvergill Adept" }] },
+    { "index": 1, "summary": "land=none; cast: Silvergill Adept, Vodalian Hexcatcher (vial), Aether Vial", "land": null, "casts": ["Silvergill Adept", "Vodalian Hexcatcher", "Aether Vial"], "cast_order_canonical": ["Silvergill Adept", "Vodalian Hexcatcher", "Aether Vial"], "actions": [{ "card": "Silvergill Adept" }, { "card": "Vodalian Hexcatcher" }, { "card": "Aether Vial" }] },
+    { "index": 2, "summary": "land=none; cast: Silvergill Adept (vial), Aether Vial, Vodalian Hexcatcher", "land": null, "casts": ["Silvergill Adept", "Aether Vial", "Vodalian Hexcatcher"], "cast_order_canonical": ["Silvergill Adept", "Aether Vial", "Vodalian Hexcatcher"], "actions": [{ "card": "Silvergill Adept" }, { "card": "Aether Vial" }, { "card": "Vodalian Hexcatcher" }] },
+    { "index": 3, "summary": "land=none; cast: Silvergill Adept (vial), Vodalian Hexcatcher, Aether Vial", "land": null, "casts": ["Silvergill Adept", "Vodalian Hexcatcher", "Aether Vial"], "cast_order_canonical": ["Silvergill Adept", "Vodalian Hexcatcher", "Aether Vial"], "actions": [{ "card": "Silvergill Adept" }, { "card": "Vodalian Hexcatcher" }, { "card": "Aether Vial" }] },
+    { "index": 4, "summary": "land=none; cast: Silvergill Adept, Vodalian Hexcatcher (vial)", "land": null, "casts": ["Vodalian Hexcatcher", "Silvergill Adept"], "cast_order_canonical": ["Silvergill Adept", "Vodalian Hexcatcher"], "actions": [{ "card": "Vodalian Hexcatcher" }, { "card": "Silvergill Adept" }] },
+    { "index": 5, "summary": "land=none; cast: Silvergill Adept (vial), Vodalian Hexcatcher", "land": null, "casts": ["Vodalian Hexcatcher", "Silvergill Adept"], "cast_order_canonical": ["Silvergill Adept", "Vodalian Hexcatcher"], "actions": [{ "card": "Vodalian Hexcatcher" }, { "card": "Silvergill Adept" }] },
+    { "index": 6, "summary": "land=none; cast: Aether Vial, Silvergill Adept", "land": null, "casts": ["Aether Vial", "Silvergill Adept"], "cast_order_canonical": ["Aether Vial", "Silvergill Adept"], "actions": [{ "card": "Aether Vial" }, { "card": "Silvergill Adept" }] },
+    { "index": 7, "summary": "land=none; cast: Silvergill Adept, Aether Vial", "land": null, "casts": ["Silvergill Adept", "Aether Vial"], "cast_order_canonical": ["Silvergill Adept", "Aether Vial"], "actions": [{ "card": "Silvergill Adept" }, { "card": "Aether Vial" }] },
+    { "index": 8, "summary": "land=none; cast: Silvergill Adept (vial), Aether Vial", "land": null, "casts": ["Aether Vial", "Silvergill Adept"], "cast_order_canonical": ["Silvergill Adept", "Aether Vial"], "actions": [{ "card": "Aether Vial" }, { "card": "Silvergill Adept" }] },
+    { "index": 9, "summary": "land=none; cast: Aether Vial, Vodalian Hexcatcher", "land": null, "casts": ["Aether Vial", "Vodalian Hexcatcher"], "cast_order_canonical": ["Aether Vial", "Vodalian Hexcatcher"], "actions": [{ "card": "Aether Vial" }, { "card": "Vodalian Hexcatcher" }] },
+    { "index": 10, "summary": "land=none; cast: Vodalian Hexcatcher, Aether Vial", "land": null, "casts": ["Vodalian Hexcatcher", "Aether Vial"], "cast_order_canonical": ["Vodalian Hexcatcher", "Aether Vial"], "actions": [{ "card": "Vodalian Hexcatcher" }, { "card": "Aether Vial" }] },
+    { "index": 11, "summary": "land=none; cast: Vodalian Hexcatcher (vial), Aether Vial", "land": null, "casts": ["Vodalian Hexcatcher", "Aether Vial"], "cast_order_canonical": ["Vodalian Hexcatcher", "Aether Vial"], "actions": [{ "card": "Vodalian Hexcatcher" }, { "card": "Aether Vial" }] },
+    { "index": 12, "summary": "land=none; cast: Silvergill Adept", "land": null, "casts": ["Silvergill Adept"], "actions": [{ "card": "Silvergill Adept" }] },
+    { "index": 13, "summary": "land=none; cast: Silvergill Adept (vial)", "land": null, "casts": ["Silvergill Adept"], "actions": [{ "card": "Silvergill Adept" }] },
+    { "index": 14, "summary": "land=none; cast: Vodalian Hexcatcher", "land": null, "casts": ["Vodalian Hexcatcher"], "actions": [{ "card": "Vodalian Hexcatcher" }] },
+    { "index": 15, "summary": "land=none; cast: Vodalian Hexcatcher (vial)", "land": null, "casts": ["Vodalian Hexcatcher"], "actions": [{ "card": "Vodalian Hexcatcher" }] },
+    { "index": 16, "summary": "land=none; cast: Aether Vial", "land": null, "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] },
+    { "index": 17, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 18, "summary": "sacrifice Waterlogged Grove to draw", "land": null, "casts": [], "actions": [{ "card": "Waterlogged Grove", "dig": true, "dig_sacrifice": true }] }
+  ],
+  "plans_hidden": 96,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 14,
+  "main_ordinal": 6,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 6, "num": 1, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Botanical Sanctum", "idx": 9, "num": 5, "is_land": true, "taps": "GU" }, { "name": "Island", "idx": 5, "num": 10, "is_land": true, "taps": "U" }, { "name": "Master of the Pearl Trident", "idx": 11, "num": 23, "is_land": false, "power": 5, "toughness": 5 }, { "name": "Master of the Pearl Trident", "idx": 14, "num": 24, "is_land": false, "power": 5, "toughness": 5 }, { "name": "Master of the Pearl Trident", "idx": 15, "num": 25, "is_land": false, "power": 5, "toughness": 5 }, { "name": "Tide Shaper", "idx": 10, "num": 47, "is_land": false, "power": 5, "toughness": 5 }, { "name": "Vodalian Hexcatcher", "idx": 17, "num": 53, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Waterlogged Grove", "idx": 16, "num": 57, "is_land": true, "taps": "GU" }], "vial_counters": [2], "hand": [{ "num": 2, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 39, "name": "Silvergill Adept", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 12, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 12, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 13, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Aether Vial", "land": null, "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 2, "summary": "sacrifice Waterlogged Grove to draw", "land": null, "casts": [], "actions": [{ "card": "Waterlogged Grove", "dig": true, "dig_sacrifice": true }] }
+  ],
+  "plans_hidden": 18,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 4, "kind": "combat", "text": "⚔ attacked: Tide Shaper (5), Master of the Pearl Trident (5), Master of the Pearl Trident (5), Master of the Pearl Trident (5) — 20 to opponent (12→-8)" }
+  ]
+}
