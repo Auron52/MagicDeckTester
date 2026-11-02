@@ -1,0 +1,313 @@
+{
+  "seed": 10, "game_index": 9, "win_turn": 4, "won": true,
+  "mulligan": { "count": 1, "bottom": [9] }, "karoo_float": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1,
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 18, "name": "Island" }, { "num": 7, "name": "Curiosity" }, { "num": 30, "name": "Niv-Mizzet, the Firemind" }, { "num": 57, "name": "Tandem Lookout" }, { "num": 31, "name": "Niv-Mizzet, the Firemind" }, { "num": 34, "name": "Ponder" }, { "num": 3, "name": "Cascade Bluffs" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": true,
+  "to_bottom": 1,
+  "hand": [{ "num": 21, "name": "Island" }, { "num": 58, "name": "Tandem Lookout" }, { "num": 38, "name": "Preordain" }, { "num": 13, "name": "Generator Servant" }, { "num": 52, "name": "Spirebluff Canal" }, { "num": 11, "name": "Ferrous Lake" }, { "num": 9, "name": "Curiosity" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 6, "decision": {
+  "decision_index": 2,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 1,
+  "hand": [{ "num": 21, "name": "Island", "win_optimal": true }, { "num": 58, "name": "Tandem Lookout", "win_optimal": true }, { "num": 38, "name": "Preordain", "win_optimal": true }, { "num": 13, "name": "Generator Servant", "win_optimal": true }, { "num": 52, "name": "Spirebluff Canal", "win_optimal": true }, { "num": 11, "name": "Ferrous Lake", "win_optimal": true }, { "num": 9, "name": "Curiosity", "win_optimal": true }],
+  "ai_choice": { "index": 0, "num": 21, "name": "Island" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 1)"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Spirebluff Canal", "cast=Preordain"], "decision": {
+  "decision_index": 3,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 11, "name": "Ferrous Lake", "cost": "", "mv": 0, "kind": "land" }, { "num": 13, "name": "Generator Servant", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 21, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 38, "name": "Preordain", "cost": "{U}", "mv": 1, "kind": "nonpermanent", "is_draw": true }, { "num": 52, "name": "Spirebluff Canal", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Tandem Lookout", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Spirebluff Canal; cast: Preordain", "land": "Spirebluff Canal", "casts": ["Preordain"], "actions": [{ "card": "Preordain" }] },
+    { "index": 1, "summary": "land=Island; cast: Preordain", "land": "Island", "casts": ["Preordain"], "actions": [{ "card": "Preordain" }] },
+    { "index": 2, "summary": "land=Spirebluff Canal; cast: (nothing)", "land": "Spirebluff Canal", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Island; cast: (nothing)", "land": "Island", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=Ferrous Lake; cast: (nothing)", "land": "Ferrous Lake", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 4,
+  "type": "scry",
+  "source": "Scry",
+  "turn": 1,
+  "away_zone": "bottom",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Spirebluff Canal", "idx": 4, "num": 52, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 11, "name": "Ferrous Lake", "cost": "", "mv": 0, "kind": "land" }, { "num": 13, "name": "Generator Servant", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 21, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Tandem Lookout", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "looked": [{ "name": "Island", "is_land": true }, { "name": "Gitaxian Probe", "is_land": false }],
+  "heuristic_default": 4,
+  "options": [{ "index": 0, "label": "All to bottom", "shuffle": false, "top": [], "away": ["Island", "Gitaxian Probe"] }, { "index": 1, "label": "Top: Island  (rest to bottom)", "shuffle": false, "top": ["Island"], "away": ["Gitaxian Probe"] }, { "index": 2, "label": "Top: Gitaxian Probe  (rest to bottom)", "shuffle": false, "top": ["Gitaxian Probe"], "away": ["Island"] }, { "index": 3, "label": "Top: Island, Gitaxian Probe", "shuffle": false, "top": ["Island", "Gitaxian Probe"], "away": [] }, { "index": 4, "label": "Top: Gitaxian Probe, Island", "shuffle": false, "top": ["Gitaxian Probe", "Island"], "away": [] }],
+  "note": "reply an option index. Kept cards stay on top (listed order); the rest go to the bottom."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 1, "card": "Island" }],
+  "reveals": [{ "turn": 1, "source": "Scry", "cards": [{ "name": "Island", "disposition": "kept" }, { "name": "Gitaxian Probe", "disposition": "to the bottom" }] }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Spirebluff Canal", "idx": 4, "num": 52, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 11, "name": "Ferrous Lake", "cost": "", "mv": 0, "kind": "land" }, { "num": 13, "name": "Generator Servant", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 21, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 22, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Tandem Lookout", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Preordain"], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Spirebluff Canal", "idx": 4, "num": 52, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 11, "name": "Ferrous Lake", "cost": "", "mv": 0, "kind": "land" }, { "num": 13, "name": "Generator Servant", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 21, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 22, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Tandem Lookout", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Preordain"], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "cast_order": ["**", "land=Island", "cast=Generator Servant"], "decision": {
+  "decision_index": 7,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 2, "card": "Niv-Mizzet, the Firemind" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Spirebluff Canal", "idx": 4, "num": 52, "is_land": true, "taps": "UR" }], "vial_counters": [], "hand": [{ "num": 11, "name": "Ferrous Lake", "cost": "", "mv": 0, "kind": "land" }, { "num": 13, "name": "Generator Servant", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 21, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 22, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 32, "name": "Niv-Mizzet, the Firemind", "cost": "{2}{U}{U}{R}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Tandem Lookout", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Preordain"], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Ferrous Lake; cast: Generator Servant", "land": "Ferrous Lake", "casts": ["Generator Servant"], "actions": [{ "card": "Generator Servant" }] },
+    { "index": 1, "summary": "land=Island; cast: Generator Servant", "land": "Island", "casts": ["Generator Servant"], "actions": [{ "card": "Generator Servant" }] },
+    { "index": 2, "summary": "land=Ferrous Lake; cast: (nothing)", "land": "Ferrous Lake", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Island; cast: (nothing)", "land": "Island", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Generator Servant", "idx": 7, "num": 13, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Island", "idx": 6, "num": 21, "tapped": true, "is_land": true }, { "name": "Spirebluff Canal", "idx": 4, "num": 52, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 11, "name": "Ferrous Lake", "cost": "", "mv": 0, "kind": "land" }, { "num": 22, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 32, "name": "Niv-Mizzet, the Firemind", "cost": "{2}{U}{U}{R}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Tandem Lookout", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Preordain"], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Generator Servant", "idx": 7, "num": 13, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Island", "idx": 6, "num": 21, "tapped": true, "is_land": true }, { "name": "Spirebluff Canal", "idx": 4, "num": 52, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 11, "name": "Ferrous Lake", "cost": "", "mv": 0, "kind": "land" }, { "num": 22, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 32, "name": "Niv-Mizzet, the Firemind", "cost": "{2}{U}{U}{R}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Tandem Lookout", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Preordain"], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "cast_order": ["**", "land=Ferrous Lake", "cast=Tandem Lookout"], "decision": {
+  "decision_index": 10,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 3, "card": "Sandstone Needle" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Generator Servant", "idx": 7, "num": 13, "is_land": false, "taps": "C", "tap_sac": true, "tap_note": "{T}, sacrifice it: adds {C}{C} -- a creature spell this mana is spent on gains haste", "power": 2, "toughness": 1 }, { "name": "Island", "idx": 6, "num": 21, "is_land": true, "taps": "U" }, { "name": "Spirebluff Canal", "idx": 4, "num": 52, "is_land": true, "taps": "UR" }], "vial_counters": [], "hand": [{ "num": 11, "name": "Ferrous Lake", "cost": "", "mv": 0, "kind": "land" }, { "num": 22, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 32, "name": "Niv-Mizzet, the Firemind", "cost": "{2}{U}{U}{R}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 46, "name": "Sandstone Needle", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Tandem Lookout", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Preordain"], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Sandstone Needle; cast: Tandem Lookout, Generator Servant: sacrifice for {C}×2 (haste to the creature it pays for)", "land": "Sandstone Needle", "casts": ["Tandem Lookout", "Generator Servant"], "actions": [{ "card": "Tandem Lookout" }, { "card": "Generator Servant", "src_num": 13, "activate": true, "sacout": true, "sac_count": 1, "sac_mana": true, "float_color": "C" }] },
+    { "index": 1, "summary": "land=Ferrous Lake; cast: Tandem Lookout", "land": "Ferrous Lake", "casts": ["Tandem Lookout"], "actions": [{ "card": "Tandem Lookout" }] },
+    { "index": 2, "summary": "land=Ferrous Lake; cast: Tandem Lookout, Generator Servant: sacrifice for {C}×2 (haste to the creature it pays for)", "land": "Ferrous Lake", "casts": ["Tandem Lookout", "Generator Servant"], "actions": [{ "card": "Tandem Lookout" }, { "card": "Generator Servant", "src_num": 13, "activate": true, "sacout": true, "sac_count": 1, "sac_mana": true, "float_color": "C" }] },
+    { "index": 3, "summary": "land=Island; cast: Tandem Lookout", "land": "Island", "casts": ["Tandem Lookout"], "actions": [{ "card": "Tandem Lookout" }] },
+    { "index": 4, "summary": "land=Island; cast: Tandem Lookout, Generator Servant: sacrifice for {C}×2 (haste to the creature it pays for)", "land": "Island", "casts": ["Tandem Lookout", "Generator Servant"], "actions": [{ "card": "Tandem Lookout" }, { "card": "Generator Servant", "src_num": 13, "activate": true, "sacout": true, "sac_count": 1, "sac_mana": true, "float_color": "C" }] },
+    { "index": 5, "summary": "land=none; cast: Tandem Lookout, Generator Servant: sacrifice for {C}×2 (haste to the creature it pays for)", "land": null, "casts": ["Tandem Lookout", "Generator Servant"], "actions": [{ "card": "Tandem Lookout" }, { "card": "Generator Servant", "src_num": 13, "activate": true, "sacout": true, "sac_count": 1, "sac_mana": true, "float_color": "C" }] },
+    { "index": 6, "summary": "land=Sandstone Needle; cast: (nothing)", "land": "Sandstone Needle", "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=Sandstone Needle; cast: Generator Servant: sacrifice for {C}×2 (haste to the creature it pays for)", "land": "Sandstone Needle", "casts": ["Generator Servant"], "actions": [{ "card": "Generator Servant", "src_num": 13, "activate": true, "sacout": true, "sac_count": 1, "sac_mana": true, "float_color": "C" }] },
+    { "index": 8, "summary": "land=Ferrous Lake; cast: (nothing)", "land": "Ferrous Lake", "casts": [], "actions": [] },
+    { "index": 9, "summary": "land=Ferrous Lake; cast: Generator Servant: sacrifice for {C}×2 (haste to the creature it pays for)", "land": "Ferrous Lake", "casts": ["Generator Servant"], "actions": [{ "card": "Generator Servant", "src_num": 13, "activate": true, "sacout": true, "sac_count": 1, "sac_mana": true, "float_color": "C" }] },
+    { "index": 10, "summary": "land=Island; cast: (nothing)", "land": "Island", "casts": [], "actions": [] },
+    { "index": 11, "summary": "land=Island; cast: Generator Servant: sacrifice for {C}×2 (haste to the creature it pays for)", "land": "Island", "casts": ["Generator Servant"], "actions": [{ "card": "Generator Servant", "src_num": 13, "activate": true, "sacout": true, "sac_count": 1, "sac_mana": true, "float_color": "C" }] },
+    { "index": 12, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 13, "summary": "land=none; cast: Generator Servant: sacrifice for {C}×2 (haste to the creature it pays for)", "land": null, "casts": ["Generator Servant"], "actions": [{ "card": "Generator Servant", "src_num": 13, "activate": true, "sacout": true, "sac_count": 1, "sac_mana": true, "float_color": "C" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 11,
+  "type": "attach_host",
+  "source": "Tandem Lookout",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Ferrous Lake", "idx": 9, "num": 11, "tapped": true, "is_land": true }, { "name": "Generator Servant", "idx": 7, "num": 13, "is_land": false, "taps": "C", "tap_sac": true, "tap_note": "{T}, sacrifice it: adds {C}{C} -- a creature spell this mana is spent on gains haste", "power": 2, "toughness": 1 }, { "name": "Island", "idx": 6, "num": 21, "tapped": true, "is_land": true }, { "name": "Spirebluff Canal", "idx": 4, "num": 52, "tapped": true, "is_land": true }, { "name": "Tandem Lookout", "idx": 10, "num": 58, "is_land": false, "power": 2, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 22, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 32, "name": "Niv-Mizzet, the Firemind", "cost": "{2}{U}{U}{R}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 46, "name": "Sandstone Needle", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Preordain"], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "perm_index": 7, "name": "Generator Servant", "label": "Generator Servant" }],
+  "soulbond": true,
+  "note": "reply an option index -- the unpaired creature to PAIR with (soulbond, CR 702.46b), or -1 to decline the pairing. While paired, both creatures keep the bonus for as long as you control both. Default = the AI's pick (highest effective power; a Tandem Lookout ranks a Niv first, and under MTG_NIV_LOOKOUT_NIV_ONLY waits -- -1 -- rather than pair with anything else while a Niv can still arrive)."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 12,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Ferrous Lake", "idx": 9, "num": 11, "tapped": true, "is_land": true }, { "name": "Generator Servant", "idx": 7, "num": 13, "is_land": false, "taps": "C", "tap_sac": true, "tap_note": "{T}, sacrifice it: adds {C}{C} -- a creature spell this mana is spent on gains haste", "power": 2, "toughness": 1 }, { "name": "Island", "idx": 6, "num": 21, "tapped": true, "is_land": true }, { "name": "Spirebluff Canal", "idx": 4, "num": 52, "tapped": true, "is_land": true }, { "name": "Tandem Lookout", "idx": 10, "num": 58, "is_land": false, "power": 2, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 22, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 32, "name": "Niv-Mizzet, the Firemind", "cost": "{2}{U}{U}{R}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 46, "name": "Sandstone Needle", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Preordain"], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Generator Servant: sacrifice for {C}×2 (haste to the creature it pays for)", "land": null, "casts": ["Generator Servant"], "actions": [{ "card": "Generator Servant", "src_num": 13, "activate": true, "sacout": true, "sac_count": 1, "sac_mana": true, "float_color": "C" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Generator Servant (2) — 2 to opponent (20→18)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Ferrous Lake", "idx": 9, "num": 11, "tapped": true, "is_land": true }, { "name": "Generator Servant", "idx": 7, "num": 13, "tapped": true, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Island", "idx": 6, "num": 21, "tapped": true, "is_land": true }, { "name": "Spirebluff Canal", "idx": 4, "num": 52, "tapped": true, "is_land": true }, { "name": "Tandem Lookout", "idx": 10, "num": 58, "is_land": false, "power": 2, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 22, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 32, "name": "Niv-Mizzet, the Firemind", "cost": "{2}{U}{U}{R}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 46, "name": "Sandstone Needle", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Preordain"], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Island", "cast=Niv-Mizzet, the Firemind"], "decision": {
+  "decision_index": 14,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 4, "card": "Niv-Mizzet, the Firemind" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Ferrous Lake", "idx": 9, "num": 11, "is_land": true, "tap_fed": ["UR"], "tap_feed": "{1}", "tap_note": "its {1} is paid from your floating mana -- tap a source for it first" }, { "name": "Generator Servant", "idx": 7, "num": 13, "is_land": false, "taps": "C", "tap_sac": true, "tap_note": "{T}, sacrifice it: adds {C}{C} -- a creature spell this mana is spent on gains haste", "power": 2, "toughness": 1 }, { "name": "Island", "idx": 6, "num": 21, "is_land": true, "taps": "U" }, { "name": "Spirebluff Canal", "idx": 4, "num": 52, "is_land": true, "taps": "UR" }, { "name": "Tandem Lookout", "idx": 10, "num": 58, "is_land": false, "power": 2, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 22, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 32, "name": "Niv-Mizzet, the Firemind", "cost": "{2}{U}{U}{R}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 30, "name": "Niv-Mizzet, the Firemind", "cost": "{2}{U}{U}{R}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 46, "name": "Sandstone Needle", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Preordain"], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Island; cast: Niv-Mizzet, the Firemind, Generator Servant: sacrifice for {C}×2 (haste to the creature it pays for)", "land": "Island", "casts": ["Niv-Mizzet, the Firemind", "Generator Servant"], "actions": [{ "card": "Niv-Mizzet, the Firemind" }, { "card": "Generator Servant", "src_num": 13, "activate": true, "sacout": true, "sac_count": 1, "sac_mana": true, "float_color": "C" }] },
+    { "index": 1, "summary": "land=Sandstone Needle; cast: (nothing)", "land": "Sandstone Needle", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=Sandstone Needle; cast: Generator Servant: sacrifice for {C}×2 (haste to the creature it pays for)", "land": "Sandstone Needle", "casts": ["Generator Servant"], "actions": [{ "card": "Generator Servant", "src_num": 13, "activate": true, "sacout": true, "sac_count": 1, "sac_mana": true, "float_color": "C" }] },
+    { "index": 3, "summary": "land=Island; cast: (nothing)", "land": "Island", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=Island; cast: Generator Servant: sacrifice for {C}×2 (haste to the creature it pays for)", "land": "Island", "casts": ["Generator Servant"], "actions": [{ "card": "Generator Servant", "src_num": 13, "activate": true, "sacout": true, "sac_count": 1, "sac_mana": true, "float_color": "C" }] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 6, "summary": "land=none; cast: Generator Servant: sacrifice for {C}×2 (haste to the creature it pays for)", "land": null, "casts": ["Generator Servant"], "actions": [{ "card": "Generator Servant", "src_num": 13, "activate": true, "sacout": true, "sac_count": 1, "sac_mana": true, "float_color": "C" }] }
+  ],
+  "plans_hidden": 6,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 15,
+  "type": "attach_host",
+  "source": "Tandem Lookout",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Ferrous Lake", "idx": 8, "num": 11, "tapped": true, "is_land": true }, { "name": "Island", "idx": 6, "num": 21, "tapped": true, "is_land": true }, { "name": "Island", "idx": 10, "num": 22, "tapped": true, "is_land": true }, { "name": "Niv-Mizzet, the Firemind", "idx": 11, "num": 32, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Spirebluff Canal", "idx": 4, "num": 52, "tapped": true, "is_land": true }, { "name": "Tandem Lookout", "idx": 9, "num": 58, "is_land": false, "power": 2, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 30, "name": "Niv-Mizzet, the Firemind", "cost": "{2}{U}{U}{R}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 46, "name": "Sandstone Needle", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Generator Servant", "Preordain"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "perm_index": 11, "name": "Niv-Mizzet, the Firemind", "label": "Niv-Mizzet, the Firemind" }],
+  "soulbond": true,
+  "note": "reply an option index -- the unpaired creature to PAIR with (soulbond, CR 702.46b), or -1 to decline the pairing. While paired, both creatures keep the bonus for as long as you control both. Default = the AI's pick (highest effective power; a Tandem Lookout ranks a Niv first, and under MTG_NIV_LOOKOUT_NIV_ONLY waits -- -1 -- rather than pair with anything else while a Niv can still arrive)."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 16,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "events": [{ "turn": 4, "kind": "mana", "text": "🪷 Generator Servant -- sacrifice: add 2 C (a creature spell it pays for gains haste)" }, { "turn": 4, "kind": "trigger", "text": "Tandem Lookout: soulbond → paired with Niv-Mizzet, the Firemind" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Ferrous Lake", "idx": 8, "num": 11, "tapped": true, "is_land": true }, { "name": "Island", "idx": 6, "num": 21, "tapped": true, "is_land": true }, { "name": "Island", "idx": 10, "num": 22, "tapped": true, "is_land": true }, { "name": "Niv-Mizzet, the Firemind", "idx": 11, "num": 32, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Spirebluff Canal", "idx": 4, "num": 52, "tapped": true, "is_land": true }, { "name": "Tandem Lookout", "idx": 9, "num": 58, "is_land": false, "power": 2, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 30, "name": "Niv-Mizzet, the Firemind", "cost": "{2}{U}{U}{R}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 46, "name": "Sandstone Needle", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Generator Servant", "Preordain"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Niv-Mizzet, the Firemind: draw a card", "land": null, "casts": ["Niv-Mizzet, the Firemind"], "actions": [{ "card": "Niv-Mizzet, the Firemind", "src_num": 32, "activate": true, "act_label": "draw a card", "x": 1 }] }
+  ],
+  "plans_hidden": 6,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 4, "kind": "damage", "text": "🔥 Niv-Mizzet, the Firemind (whenever you draw): 18 pings to opponent (18→0) -- lethal" }
+  ]
+}
