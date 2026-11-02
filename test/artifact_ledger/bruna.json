@@ -20,6 +20,25 @@
     "    A/B 6000 g vs R = 0 (seed 7300000; no win = 9): fitted [97.0, 48.3, 19.7, 11.2, 6.9, 0.0] units -2.1%, 1 moved: 0 flicker, 1 real (gi4290 6->5)",
     "    next: commit it with the deck's smoke + regression GT re-accepted (it can change play)."
    ]
+  },
+  {
+   "run_id": "bruna-artifact-queue-tool-647f24-20261101T043240",
+   "kind": "valueleaf",
+   "verdict": "kept-incumbent",
+   "ident": "em:8da6bbd94cc2f05973c8",
+   "frozen": "8e81153ad29e0d3b2f89d2337f52eda4625427df",
+   "src_tree": "83b1f17308cff28f24934c82e9c113000a08992f",
+   "date": "2026-11-02",
+   "worker": "artifact-queue-tool-647f24",
+   "detail": "valueleaf: KEPT INCUMBENT (staged leaf +0.00013 turns, 1.131x work); adopted play setting d7b20 (depth 7, budget 20 ms; -0.00038 turns, 0.994x work); kept existing escalation_skip_r",
+   "decisions": [
+    "    next: commit it with the deck's smoke + regression GT re-accepted (it changes play).",
+    "",
+    "=== 2026-11-02T11:59:21  PHASE E.6: KEPT bruna's existing escalation_skip_r = [97.0, 48.3, 19.7, 11.2, 6.9, 0.0] -- saves at least as much",
+    "    probe 1200 g (seed 7100000): 685 ladder escalations, headroom 4.5% of all work, fitted vector [99.6, 49.4, 20.6, 0.0, 0.0, 0.0, 0.0] (n/depth 683/227/36/14/10/7/6) projects -1.9%",
+    "    A/B 6000 g vs R = 0 (seed 7300000; no win = 9): fitted [99.6, 49.4, 20.6, 0.0, 0.0, 0.0, 0.0] units -1.8%, 1 moved: 0 flicker, 1 real (gi4290 6->5)",
+    "    existing [97.0, 48.3, 19.7, 11.2, 6.9, 0.0]: units -2.0%, 1 moved: 0 flicker, 1 real (gi4290 6->5)"
+   ]
   }
  ]
 }
