@@ -4,12 +4,14 @@
   "valueleaf": "em:8da6bbd94cc2f05973c8"
  },
  "deck": "bruna",
- "detail": "valueleaf: FAILED rc=1",
- "finished": "2026-11-01T06:13:35Z",
+ "detail": "valueleaf: KEPT INCUMBENT (staged +0.00013 turns, 1.131x work); play setting ADOPTED d7b20 (-0.00038 turns, 0.994x work); escalation skip KEPT; smoke 3/3 and regression 6/6 passed, strict viewer 709 refs passed",
+ "finished": "2026-11-02T12:11:23Z",
  "frozen": "8e81153ad29e0d3b2f89d2337f52eda4625427df",
  "heartbeat": "2026-11-01T06:08:58Z",
  "host": "58199181d02e",
- "result_branch": null,
+ "landed": "bfef1b4fd222beaf22942c325f379303d9abce66",
+ "landed_at": "2026-11-02T12:11:23Z",
+ "result_branch": "artifact-refresh/bruna-20261102-1200",
  "run_id": "bruna-artifact-queue-tool-647f24-20261101T043240",
  "score": 0.0012,
  "stage": "valueleaf",
@@ -17,6 +19,6 @@
   "valueleaf"
  ],
  "started": "2026-11-01T04:32:40Z",
- "state": "failed",
+ "state": "done",
  "worker": "artifact-queue-tool-647f24"
 }
