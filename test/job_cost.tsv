@@ -162,12 +162,12 @@ bruna_regression_d0_s2002	1
 bruna_regression_d3_s2002	9161
 bruna_regression_d3_s3003	71288
 bruna_regression_d3_s30221	4735
-bruna_regression_d5_s2002	14201
-bruna_regression_d5_s3003	13427
+bruna_regression_d5_s2002	13961
+bruna_regression_d5_s3003	13390
 bruna_regression_d5_s30221	1606
 bruna_smoke_d0_s1001	1
 bruna_smoke_d3_s1001	11994
-bruna_smoke_d5_s1001	15830
+bruna_smoke_d5_s1001	16011
 burn2hg_smoke_d3_s1001	11885
 burn2hg_smoke_d5_s1001	21880
 burn_overnight_d0_s10010	1
