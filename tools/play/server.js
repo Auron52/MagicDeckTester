@@ -785,7 +785,7 @@ function sideChannelArgs(p) {
 //   (beta)   the apparatus is complete, but the deck has not yet earned the top tier: fewer than 30
 //            references, or the search does not match the human on the ones it has.
 //   (none)   30+ references AND the shipped search matches or beats the human win turn on every
-//            single one of them.
+//            single one of them AND a clean mana analysis (manaState, USER 2026-11-02).
 //
 // THE GREEN GATE IS THE POINT (user, 2026-08-27: "ideally beta would be exited only when the play is
 // green on the references -- i.e. we at least match the win turn"). A reference count measures how
@@ -975,9 +975,41 @@ function benchState(key) {
   return { state: 'green', n: e.n, human: e.human, search: e.search };
 }
 
+// THE MANA-CLEAN GATE (USER 2026-11-02): "a requirement for a deck to pass beyond beta is a mana analysis
+// that passes on a clean set of games. An example could be 5000 games with no issues found and if we find
+// any we fix those and then need to run on another 5000 games." scripts/mana_clean.py runs the mana
+// completeness oracle over a FRESH block of games per run and records each run in test/mana_clean.json;
+// the deck's LATEST run is its verdict. Like the bench it is cached, never run from here, and stamped
+// with HEAD:src: a later src commit makes it STALE, which carries the last verdict forward (the
+// 2026-08-29 rule above, same reasoning). A changed decklist voids it -- the run audited other cards.
+const MANA_CLEAN = path.join(ROOT, 'test', 'mana_clean.json');
+function fileSha(rel) {
+  try {
+    const data = fs.readFileSync(path.join(ROOT, rel)).toString('binary').replace(/\r\n/g, '\n');
+    return require('crypto').createHash('sha1').update(data, 'binary').digest('hex');
+  } catch (e) { return ''; }
+}
+function manaState(key) {
+  let cache;
+  try { cache = JSON.parse(fs.readFileSync(MANA_CLEAN, 'utf8')); }
+  catch (e) { return { state: 'never' }; }
+  const runs = ((cache.decks || {})[key] || {}).runs || [];
+  if (!runs.length) return { state: 'never' };
+  const need = cache.games_required || 5000;
+  const r = runs[runs.length - 1];
+  const base = { games: r.games, need, issues: r.issues, at: (r.src || '').slice(0, 12),
+                 first: r.game_index, last: r.game_index + r.games - 1 };
+  if (fileSha(r.deck) !== r.deck_sha) return Object.assign(base, { state: 'changed' });
+  if (r.verdict !== 'clean') return Object.assign(base, { state: r.verdict });     // issues | invalid
+  if (r.games < need) return Object.assign(base, { state: 'short' });
+  const now = srcNow();
+  if (now && r.src && r.src !== now) return Object.assign(base, { state: 'stale', wasClean: true });
+  return Object.assign(base, { state: 'clean' });
+}
+
 // PURE, so the policy is testable without a filesystem (test/viewer_deck_beta_check.js).
 // -> { tier: 'unplayable' | 'alpha' | 'beta' | 'stable', tierReasons: [...] }
-function tierFrom({ hasProfile, refs, hasValueLeaf, valueLeafDisabled, hasKeepModel, refsOnArchivedList, bench }) {
+function tierFrom({ hasProfile, refs, hasValueLeaf, valueLeafDisabled, hasKeepModel, refsOnArchivedList, bench, mana }) {
   if (!hasProfile) return { tier: 'unplayable', tierReasons: [] };
 
   // ALPHA -- a piece of the apparatus is missing outright.
@@ -1031,6 +1063,18 @@ function tierFrom({ hasProfile, refs, hasValueLeaf, valueLeafDisabled, hasKeepMo
       ? `${b.handMismatch} reference(s) did not reconstruct, so the bench is not a valid comparison`
       : 'reference bench has never been run for this deck');
   }
+  // THE MANA-CLEAN GATE (manaState above). Clean on the current src, or stale with a clean last run
+  // (staleness alone does not demote -- the bench's rule); anything else holds the deck at beta.
+  const m = mana || { state: 'never' };
+  if (!(m.state === 'clean' || (m.state === 'stale' && m.wasClean))) {
+    const games = m.first !== undefined ? ` (games ${m.first}-${m.last}, src ${m.at})` : '';
+    short.push(
+      m.state === 'issues'  ? `the mana analysis found ${m.issues} issue(s) in ${m.games} games${games}: fix them, then run a fresh ${m.need}`
+    : m.state === 'invalid' ? `the last mana analysis is invalid: play moved with the oracle on${games}`
+    : m.state === 'changed' ? 'the decklist changed since its mana analysis: run it again'
+    : m.state === 'short'   ? `the mana analysis was clean on only ${m.games} of ${m.need} games${games}`
+    :                         'no clean mana analysis yet (scripts/mana_clean.py)');
+  }
   return short.length ? { tier: 'beta', tierReasons: short } : { tier: 'stable', tierReasons: [] };
 }
 
@@ -1058,14 +1102,15 @@ function deckMaturity(dir, name, hasProfile, version, fstem) {
   // borrowed-evidence bug this whole ownership rule exists to stop. No references of its own means
   // no bench of its own.
   const bench = owner === key ? benchState(key) : { state: 'unbenched' };
+  const mana = manaState(key);
   // The NEXT reference-count requirement, so the chip can always show progress ("beta 20/30")
   // until the count is met (USER 2026-08-27: "always put it unless we have more references than
   // the requirement"). Server-owned so the thresholds are never re-stated client-side. Null once
   // refs >= STABLE_REFS -- past the last count requirement there is no fraction to show.
   const refGoal = refs < MIN_OPTIMAL_REFS ? MIN_OPTIMAL_REFS
                 : refs < STABLE_REFS      ? STABLE_REFS : null;
-  return Object.assign({ refs, refGoal, hasValueLeaf, valueLeafDisabled, hasKeepModel, refsOnArchivedList, bench },
-                       tierFrom({ hasProfile, refs, hasValueLeaf, valueLeafDisabled, hasKeepModel, refsOnArchivedList, bench }));
+  return Object.assign({ refs, refGoal, hasValueLeaf, valueLeafDisabled, hasKeepModel, refsOnArchivedList, bench, mana },
+                       tierFrom({ hasProfile, refs, hasValueLeaf, valueLeafDisabled, hasKeepModel, refsOnArchivedList, bench, mana }));
 }
 
 // ---- SESSION-PINNED ENGINE BINARY + LIVE-FRAME LEDGER ----------------------------
@@ -1677,7 +1722,7 @@ module.exports = { runStep, runValidate, listDecks, resolveDeck, buildArgs, BIN,
                    runStepCached, runValidateCached, saveTrace, auditTrace, frameFingerprint, recordFrame,
                    sessionBin, sessionFor, gameKey, PIN_BIN, SESSION_DIR, httpServer: server,
                    // deck maturity, for test/viewer_deck_beta_check.js
-                   tierFrom, benchState, deckMaturity, countOptimalRefs, MIN_OPTIMAL_REFS, STABLE_REFS, KEEPMODEL_EXTS,
+                   tierFrom, benchState, manaState, deckMaturity, countOptimalRefs, MIN_OPTIMAL_REFS, STABLE_REFS, KEEPMODEL_EXTS,
                    pySlug, referenceOwners,
                    // stale-server detection (see SERVER_API): the client warns when the running
                    // server is older than the page it just served.

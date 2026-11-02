@@ -167,7 +167,7 @@ Selecting a labelled deck shows a badge naming the specific reasons (amber for b
   (`<stem>.keepmodel.exhaustive.profile.json[.gz]`, the two names `MulliganProfileIO.h` loads), not
   that generation was started — a lone `.raw.json.journal` is a paused run, not a model.
 
-**Beta → stable** additionally needs both:
+**Beta → stable** additionally needs all three:
 
 - **30 reference games.** Not a statistical threshold: every deck's references run from seed 1
   upward at roughly one game per seed, so "30" reads as *the first 30 seeds have been played*.
@@ -177,6 +177,12 @@ Selecting a labelled deck shows a badge naming the specific reasons (amber for b
   beat the human win turn on **every** reference. This is the criterion that actually matters — 30
   games nobody compared against is not evidence — and the only one that can move a deck *down*
   after it was fine.
+- **A clean mana analysis** (USER 2026-11-02). The deck's latest `scripts/mana_clean.py` run, 5,000
+  games under the mana completeness oracle (`docs/design/mana-completeness-oracle.md`), found no
+  issue: no flag of any class the oracle counts as an engine miss, no ORACLE-GAP, and play
+  byte-identical with the oracle off. Every run takes a **fresh** block of games, so after a run
+  with issues the fixes are checked on 5,000 games they were not fitted to. The record is
+  `test/mana_clean.json`; a changed decklist voids it.
 
 The bench is **cached**, never run by the viewer:
 
@@ -187,8 +193,19 @@ python3 scripts/ref_bench.py --json test/ref_bench.json --stale-only   # the rou
 
 Each deck's entry is stamped with the `git rev-parse HEAD:src` it was measured at, so `--stale-only`
 re-benches exactly the decks whose stamp no longer matches and skips the rest in under a second. A
-stamp that no longer matches reads **stale**, which is not green — evidence measured against an
-engine that no longer exists cannot hold up a top tier.
+stamp that no longer matches reads **stale**, which carries the last verdict forward (a deck that
+was green stays stable, one that was short stays beta) until the running viewer's background
+re-bench lands; staleness alone never demotes a deck.
+
+The mana analysis is cached the same way, and is run by hand (it is hours of compute, not minutes):
+
+```bash
+python3 scripts/mana_clean.py status     # every shipping deck: verdict, next game block, DUE
+python3 scripts/mana_clean.py run        # every DUE deck, one pooled batch
+```
+
+A deck is DUE when it was never run, its list changed, or its last run had issues and src has
+changed since. Its record is stamped with `HEAD:src` and goes stale on the bench's terms.
 
 `node test/viewer_deck_beta_check.js` prints the current alpha/beta/stable split and gates the grading.
 

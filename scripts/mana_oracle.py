@@ -122,6 +122,139 @@ def norm(s):
     return s
 
 
+def flag_record(ln, deck_of, group=None):
+    """One `[mana-oracle] <CLASS> ...` stderr line -> its record (None for anything else). `gi` becomes the
+    GLOBAL game index (the engine prints the job-local one); `deck` is group(job)."""
+    m = LINE.match(ln)
+    if not m or m.group("cls") == "DECISION":
+        return None
+    rec = m.groupdict()
+    j0 = deck_of.get(rec["job"])
+    rec["gi"] = str(int(rec["gi"]) + (j0.get("game_index", 0) if j0 else 0))
+    rec["deck"] = (group or (lambda job: job))(rec["job"])
+    detail, _, board = rec["detail"].rpartition(" | ")
+    rec["detail"], rec["board"] = (detail, board) if detail else (rec["detail"], "")
+    return rec
+
+
+def collect(err_paths, deck_of, flags_path, group=None):
+    """Parse oracle-ON stderr files into flag records (also written to `flags_path` as JSON lines).
+    `group` maps a batch job name to the row it is reported under (a chunked run reports per deck);
+    each record keeps its own job for the repro. Returns (flags, decisions, plans_seen, summary)."""
+    group = group or (lambda job: job)
+    flags, decisions, plans_seen, summary = [], collections.Counter(), collections.Counter(), []
+    with open(flags_path, "w") as fj:
+        for err_path in err_paths:
+            with open(err_path, errors="replace") as fh:
+                for ln in fh:
+                    ln = ln.rstrip("\n")
+                    if ln.startswith("=== MANA ORACLE"):
+                        summary.append(ln)
+                        continue
+                    m = DECISION.match(ln)
+                    if m:
+                        decisions[group(m.group("job"))] += 1
+                        plans_seen[group(m.group("job"))] += int(m.group("n"))
+                        continue
+                    rec = flag_record(ln, deck_of, group)
+                    if rec is None:
+                        continue
+                    flags.append(rec)
+                    fj.write(json.dumps(rec) + "\n")
+    return flags, decisions, plans_seen, summary
+
+
+def report(title, header, rows, deck_of, flags, decisions, plans_seen, summary, identity, rc_on, top=12):
+    """The markdown report over collect()'s output, one table row per entry of `rows` (job names, or the
+    groups collect() mapped them to). Returns (text, miss_total, gap_total, by_cls) where by_cls is
+    class -> Counter(row -> flags)."""
+    by_cls = collections.defaultdict(lambda: collections.Counter())
+    sigs = collections.defaultdict(dict)   # cls -> sig -> {count, example}
+    for f in flags:
+        by_cls[f["cls"]][f["deck"]] += 1
+        detail = f["detail"].split("; the engine ended")[0].split("; engine ended")[0]
+        sig = (f["deck"], norm(f["plan"]), norm(detail)[:240])
+        e = sigs[f["cls"]].setdefault(sig, {"count": 0, "ex": f})
+        e["count"] += 1
+
+    def repro(f):
+        j = deck_of.get(f["job"])
+        if j is None:
+            return ""
+        prof = (" --profile '%s'" % j["profile"]) if "profile" in j else ""
+        return ("MTG_MANA_ORACLE=3 MTG_MANA_ORACLE_TURN=%s build/Release/mtg '%s'%s --games 1 --seed %s --game-index %s"
+                % (f["turn"], j["deck"], prof, f["seed"], f["gi"]))
+
+    miss_total = sum(sum(by_cls[c].values()) for c in MISS)
+    gap_total = sum(by_cls["ORACLE-GAP"].values())
+    rep = []
+    rep.append("# %s\n" % title)
+    rep.append(header + "\n")
+    rep.append("**MISS = %d, ORACLE-GAP = %d.** Play identity with the oracle off: %s.\n"
+               % (miss_total, gap_total,
+                  "not checked" if identity is None else ("byte-identical" if identity else "**MOVED -- the run is invalid**")))
+    if rc_on != 0:
+        rep.append("**The oracle-on batch exited %d.**\n" % rc_on)
+    rep.append("```\n" + "\n".join(summary) + "\n```\n")
+    # Per-deck table.
+    cols = [c for c in ORDER if sum(by_cls[c].values())]
+    rep.append("## Per deck\n")
+    rep.append("| deck | decisions | plans | " + " | ".join(cols) + " |")
+    rep.append("|---|---|---|" + "---|" * len(cols))
+    for k in rows:
+        rep.append("| %s | %d | %d | %s |" % (k, decisions[k], plans_seen[k],
+                                            " | ".join(str(by_cls[c][k]) for c in cols)))
+    rep.append("")
+    # The rollback census (USER 2026-10-27): per lost line, how far back the engine's mana decisions have to
+    # be re-made for the line to pay (APPLY-DROP flags carry the verdict), plus the reorder / off-menu lines.
+    rb = collections.defaultdict(collections.Counter)
+    for f in flags:
+        if f["cls"] == "APPLY-DROP":
+            m = RB.search(f["detail"])
+            v = m.group(1) if m else "no-census"
+            rb[f["deck"]][v] += 1
+            if "MTG_PAY_ROLLBACK (forced on) recovers it" in f["detail"]:
+                rb[f["deck"]]["rescued"] += 1
+            if "was not declared in the plan" in f["detail"]:
+                rb[f["deck"]]["need-later"] += 1
+        elif f["cls"] == "APPLY-DROP-ORDER":
+            rb[f["deck"]]["reorder"] += 1
+        elif f["cls"] == "ENUM-GAP":
+            rb[f["deck"]]["off-menu"] += 1
+    if rb:
+        rcols = ["depth0", "depth1", "depth2", "depth3+", "capped", "unfaithful", "no-failed-payment",
+                 "unmodeled", "inconsistent", "no-census", "reorder", "off-menu", "rescued", "need-later"]
+        rcols = [c for c in rcols if any(rb[k][c] for k in rb)]
+        rep.append("## Rollback census\n")
+        rep.append("_Lost lines: APPLY-DROP split by DEPTH -- how many of the engine's mana decisions before the "
+                   "failing payment must be re-made (0 = the failing payment itself had a way; 1 = the payment before "
+                   "it, i.e. a one-step rollback); reorder = only another cast order pays (APPLY-DROP-ORDER); off-menu "
+                   "= a mana gate kept it off the menu (ENUM-GAP). rescued = MTG_PAY_ROLLBACK forced on recovers the "
+                   "APPLY-DROP; need-later = a lost action the plan did not declare; unmodeled = every paying line rests "
+                   "on an engine mana choice the oracle does not drive (no depth)._\n")
+        rep.append("| deck | " + " | ".join(rcols) + " |")
+        rep.append("|---|" + "---|" * len(rcols))
+        for k in rows:
+            if k in rb:
+                rep.append("| %s | %s |" % (k, " | ".join(str(rb[k][c]) for c in rcols)))
+        rep.append("")
+    for c in ORDER:
+        if not sigs.get(c):
+            continue
+        items = sorted(sigs[c].items(), key=lambda kv: -kv[1]["count"])
+        rep.append("## %s (%d flags, %d signatures)\n" % (c, sum(by_cls[c].values()), len(items)))
+        rep.append("_%s._\n" % WHAT.get(c, ""))
+        for (job, plan, detail), e in items[:top]:
+            f = e["ex"]
+            rep.append("- **%s** x%d -- T%s m%s `{%s}`  \n  %s  \n  board: %s  \n  repro: `%s`"
+                       % (job, e["count"], f["turn"], f["phase"], f["plan"], f["detail"][:700], f["board"][:400],
+                          repro(f)))
+        if len(items) > top:
+            rep.append("- ... %d more signatures in flags.jsonl" % (len(items) - top))
+        rep.append("")
+    return "\n".join(rep) + "\n", miss_total, gap_total, by_cls
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("decks", nargs="*", help="deck keys / folders (default: every shipping deck)")
@@ -177,121 +310,15 @@ def main():
             bad = sorted(k for k in set(d_on) | set(d_off) if d_on.get(k) != d_off.get(k))
             print("mana_oracle: PLAY MOVED with the oracle on (or a job is missing): %s" % ", ".join(bad), file=sys.stderr)
 
-    flags, decisions, plans_seen, summary = [], collections.Counter(), collections.Counter(), []
-    with open(os.path.join(scratch, "on.err"), errors="replace") as fh, \
-         open(os.path.join(out_dir, "flags.jsonl"), "w") as fj:
-        for ln in fh:
-            ln = ln.rstrip("\n")
-            if ln.startswith("=== MANA ORACLE"):
-                summary.append(ln)
-                continue
-            m = DECISION.match(ln)
-            if m:
-                decisions[m.group("job")] += 1
-                plans_seen[m.group("job")] += int(m.group("n"))
-                continue
-            m = LINE.match(ln)
-            if not m or m.group("cls") == "DECISION":
-                continue
-            rec = m.groupdict()
-            # The engine prints the job-LOCAL game number; the viewer's game is the global one.
-            j0 = deck_of.get(rec["job"])
-            rec["gi"] = str(int(rec["gi"]) + (j0.get("game_index", 0) if j0 else 0))
-            detail, _, board = rec["detail"].rpartition(" | ")
-            rec["detail"], rec["board"] = (detail, board) if detail else (rec["detail"], "")
-            flags.append(rec)
-            fj.write(json.dumps(rec) + "\n")
-
-    by_cls = collections.defaultdict(lambda: collections.Counter())
-    sigs = collections.defaultdict(dict)   # cls -> sig -> {count, example}
-    for f in flags:
-        by_cls[f["cls"]][f["job"]] += 1
-        detail = f["detail"].split("; the engine ended")[0].split("; engine ended")[0]
-        sig = (f["job"], norm(f["plan"]), norm(detail)[:240])
-        e = sigs[f["cls"]].setdefault(sig, {"count": 0, "ex": f})
-        e["count"] += 1
-
-    def repro(f):
-        j = deck_of.get(f["job"])
-        if j is None:
-            return ""
-        prof = (" --profile '%s'" % j["profile"]) if "profile" in j else ""
-        return ("MTG_MANA_ORACLE=3 MTG_MANA_ORACLE_TURN=%s build/Release/mtg '%s'%s --games 1 --seed %s --game-index %s"
-                % (f["turn"], j["deck"], prof, f["seed"], f["gi"]))
-
-    miss_total = sum(sum(by_cls[c].values()) for c in MISS)
-    gap_total = sum(by_cls["ORACLE-GAP"].values())
-    rep = []
-    rep.append("# Mana oracle run `%s`\n" % name)
-    rep.append("%d decks x %d games, seed %d%s, binary `%s`. Engine: `MTG_MANA_ORACLE=2`%s.\n"
-               % (len(jobs), args.games, args.seed,
-                  (", game index %d" % args.game_index) if args.game_index else "", os.path.relpath(mtg, ROOT),
-                  (", `MTG_MANA_ORACLE_NODES=%d`" % args.nodes) if args.nodes else ""))
-    rep.append("**MISS = %d, ORACLE-GAP = %d.** Play identity with the oracle off: %s.\n"
-               % (miss_total, gap_total,
-                  "not checked" if identity is None else ("byte-identical" if identity else "**MOVED -- the run is invalid**")))
-    if rc_on != 0:
-        rep.append("**The oracle-on batch exited %d.**\n" % rc_on)
-    rep.append("```\n" + "\n".join(summary) + "\n```\n")
-    # Per-deck table.
-    cols = [c for c in ORDER if sum(by_cls[c].values())]
-    rep.append("## Per deck\n")
-    rep.append("| deck | decisions | plans | " + " | ".join(cols) + " |")
-    rep.append("|---|---|---|" + "---|" * len(cols))
-    for j in jobs:
-        k = j["name"]
-        rep.append("| %s | %d | %d | %s |" % (k, decisions[k], plans_seen[k],
-                                            " | ".join(str(by_cls[c][k]) for c in cols)))
-    rep.append("")
-    # The rollback census (USER 2026-10-27): per lost line, how far back the engine's mana decisions have to
-    # be re-made for the line to pay (APPLY-DROP flags carry the verdict), plus the reorder / off-menu lines.
-    rb = collections.defaultdict(collections.Counter)
-    for f in flags:
-        if f["cls"] == "APPLY-DROP":
-            m = RB.search(f["detail"])
-            v = m.group(1) if m else "no-census"
-            rb[f["job"]][v] += 1
-            if "MTG_PAY_ROLLBACK (forced on) recovers it" in f["detail"]:
-                rb[f["job"]]["rescued"] += 1
-            if "was not declared in the plan" in f["detail"]:
-                rb[f["job"]]["need-later"] += 1
-        elif f["cls"] == "APPLY-DROP-ORDER":
-            rb[f["job"]]["reorder"] += 1
-        elif f["cls"] == "ENUM-GAP":
-            rb[f["job"]]["off-menu"] += 1
-    if rb:
-        rcols = ["depth0", "depth1", "depth2", "depth3+", "capped", "unfaithful", "no-failed-payment",
-                 "unmodeled", "inconsistent", "no-census", "reorder", "off-menu", "rescued", "need-later"]
-        rcols = [c for c in rcols if any(rb[k][c] for k in rb)]
-        rep.append("## Rollback census\n")
-        rep.append("_Lost lines: APPLY-DROP split by DEPTH -- how many of the engine's mana decisions before the "
-                   "failing payment must be re-made (0 = the failing payment itself had a way; 1 = the payment before "
-                   "it, i.e. a one-step rollback); reorder = only another cast order pays (APPLY-DROP-ORDER); off-menu "
-                   "= a mana gate kept it off the menu (ENUM-GAP). rescued = MTG_PAY_ROLLBACK forced on recovers the "
-                   "APPLY-DROP; need-later = a lost action the plan did not declare; unmodeled = every paying line rests "
-                   "on an engine mana choice the oracle does not drive (no depth)._\n")
-        rep.append("| deck | " + " | ".join(rcols) + " |")
-        rep.append("|---|" + "---|" * len(rcols))
-        for j in jobs:
-            k = j["name"]
-            if k in rb:
-                rep.append("| %s | %s |" % (k, " | ".join(str(rb[k][c]) for c in rcols)))
-        rep.append("")
-    for c in ORDER:
-        if not sigs.get(c):
-            continue
-        items = sorted(sigs[c].items(), key=lambda kv: -kv[1]["count"])
-        rep.append("## %s (%d flags, %d signatures)\n" % (c, sum(by_cls[c].values()), len(items)))
-        rep.append("_%s._\n" % WHAT.get(c, ""))
-        for (job, plan, detail), e in items[:args.top]:
-            f = e["ex"]
-            rep.append("- **%s** x%d -- T%s m%s `{%s}`  \n  %s  \n  board: %s  \n  repro: `%s`"
-                       % (job, e["count"], f["turn"], f["phase"], f["plan"], f["detail"][:700], f["board"][:400],
-                          repro(f)))
-        if len(items) > args.top:
-            rep.append("- ... %d more signatures in flags.jsonl" % (len(items) - args.top))
-        rep.append("")
-    open(os.path.join(out_dir, "report.md"), "w").write("\n".join(rep) + "\n")
+    flags, decisions, plans_seen, summary = collect([os.path.join(scratch, "on.err")], deck_of,
+                                                    os.path.join(out_dir, "flags.jsonl"))
+    header = ("%d decks x %d games, seed %d%s, binary `%s`. Engine: `MTG_MANA_ORACLE=2`%s."
+              % (len(jobs), args.games, args.seed,
+                 (", game index %d" % args.game_index) if args.game_index else "", os.path.relpath(mtg, ROOT),
+                 (", `MTG_MANA_ORACLE_NODES=%d`" % args.nodes) if args.nodes else ""))
+    text, miss_total, gap_total, _ = report("Mana oracle run `%s`" % name, header, [j["name"] for j in jobs], deck_of,
+                                            flags, decisions, plans_seen, summary, identity, rc_on, args.top)
+    open(os.path.join(out_dir, "report.md"), "w").write(text)
     print("mana_oracle: MISS=%d ORACLE-GAP=%d identity=%s -> %s" % (miss_total, gap_total, identity,
           os.path.relpath(os.path.join(out_dir, "report.md"), ROOT)), file=sys.stderr)
     if rc_on != 0 or identity is False:

@@ -1,0 +1,370 @@
+#!/usr/bin/env python3
+"""THE MANA-CLEAN GATE: a deck leaves beta only after a clean mana analysis (USER 2026-11-02).
+
+The USER: "a requirement for a deck to pass beyond beta is a mana analysis that passes on a clean set of
+games. An example could be 5000 games with no issues found and if we find any we fix those and then need
+to run on another 5000 games. Naturally, some decks are unlikely to have any mana issues and should just
+run 5000 games."
+
+So, per deck:
+  * a RUN is 5000 games under the mana completeness oracle (scripts/mana_oracle.py,
+    docs/design/mana-completeness-oracle.md) at the deck's shipped play settings, plus the same games
+    with the oracle OFF to prove it did not move play (an oracle that moves play audits other games);
+  * a run is CLEAN when it finds no ISSUE -- no flag of any class the oracle counts as an engine miss
+    (mana_oracle.MISS) and no ORACLE-GAP -- and play is byte-identical with the oracle off;
+  * every run takes a FRESH block of games: run k plays the games after run k-1's, so a fix is never
+    re-checked on the games it was fitted to. After a run with issues: fix them, then run again.
+
+The record is test/mana_clean.json (committed, like test/ref_bench.json); the play viewer reads it in
+tools/play/server.js (tierFrom). A run is stamped with HEAD:src and the decklist's hash. A later src
+commit makes the record STALE, which carries the last verdict forward (the ref-bench rule, USER
+2026-08-29); a changed decklist voids it.
+
+    python3 scripts/mana_clean.py status                 # every shipping deck: verdict, next game block
+    python3 scripts/mana_clean.py run                    # every deck that is DUE (below), ONE pooled batch
+    python3 scripts/mana_clean.py run niv decks/Snow     # these decks, due or not
+    python3 scripts/mana_clean.py run --resume <name>    # finish an interrupted run (same src required)
+
+DUE: never run; the decklist changed; or the last run had issues and src has changed since (a fix may
+have landed). A deck whose last run had issues on the CURRENT src is not due: the same engine would find
+the same defects, so fix first (or name the deck to run it anyway).
+
+The run is ONE `mtg --batch` per arm over every deck, each deck split into chunks of games (jobs) so an
+interrupted run resumes at chunk granularity; there is no barrier between decks. The oracle's stderr is
+filtered as it streams (ISSUE lines kept whole, the context classes cut to one-line counters): at full
+detail it is ~40 KB per game. Output: logs/mana_clean/<name>/report.md + run.json (host drive);
+scratch (batch output, the filtered stderr) on build/scratch/mana_clean/<name>/.
+Exit: 0 = every deck run is clean; 1 = a deck has issues; 2 = the run failed or play moved.
+"""
+import argparse
+import collections
+import datetime
+import hashlib
+import json
+import os
+import re
+import subprocess
+import sys
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(ROOT, "scripts"))
+import deck_registry  # noqa: E402
+import mana_oracle as mo  # noqa: E402
+from engine_bin import engine_bin, pgo_ensure, pgo_fresh  # noqa: E402
+
+STATE = os.path.join(ROOT, "test", "mana_clean.json")
+GAMES = 5000                     # per run (USER 2026-11-02: "An example could be 5000 games")
+CHUNK = 250                      # games per batch job: the resume granularity
+SEED_BASE = 30000000             # game g of a deck's sequence is seed SEED_BASE + g, game index g
+ISSUE = mo.MISS + ["ORACLE-GAP"]
+COUNTER = re.compile(r"^\[mana-oracle\] (?P<cls>[A-Z-]+) seed=\d+ job=(?P<job>\S+)")
+
+
+def git(*args):
+    return subprocess.run(["git", "-C", ROOT] + list(args), capture_output=True, text=True).stdout.strip()
+
+
+def now_iso():
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def deck_sha(path):
+    """The decklist's identity, line endings folded (a Windows checkout must hash the same)."""
+    data = open(os.path.join(ROOT, path), "rb").read().replace(b"\r\n", b"\n")
+    return hashlib.sha1(data).hexdigest()
+
+
+def load_state():
+    try:
+        return json.load(open(STATE))
+    except (OSError, ValueError):
+        return {}
+
+
+def save_state(st):
+    st["_note"] = ("The mana-clean gate (scripts/mana_clean.py): one record per mana-oracle run per deck. A deck "
+                   "leaves beta only when its latest run is clean on >= games_required games of its current list.")
+    st["games_required"] = GAMES
+    st["issue_classes"] = ISSUE
+    st.setdefault("decks", {})
+    tmp = STATE + ".tmp"
+    with open(tmp, "w") as fh:
+        json.dump(st, fh, indent=1, sort_keys=True)
+        fh.write("\n")
+    os.replace(tmp, STATE)
+
+
+def shipping(decks):
+    """Every SHIPPING list with a profile (an archived variant is decks/<Deck>/<v1-...>)."""
+    return [d for k, d in sorted(decks.items())
+            if os.path.normpath(os.path.relpath(d.dir, ROOT)).count(os.sep) == 1 and os.path.exists(d.profile)]
+
+
+def verdict(entry, sha, src_now):
+    """-> (state, latest run or None). state: never | changed | clean | stale-clean | issues | invalid."""
+    runs = (entry or {}).get("runs") or []
+    if not runs:
+        return "never", None
+    last = runs[-1]
+    if last.get("deck_sha") != sha:
+        return "changed", last
+    if last["verdict"] == "clean":
+        if last["games"] < GAMES:
+            return "short", last           # a clean run on fewer games than the gate asks for
+        return ("clean" if last["src"] == src_now else "stale-clean"), last
+    return last["verdict"], last
+
+
+def due(entry, sha, src_now):
+    state, last = verdict(entry, sha, src_now)
+    if state in ("never", "changed", "short"):
+        return True
+    if state in ("issues", "invalid"):
+        return last["src"] != src_now
+    return False
+
+
+def next_game(entry):
+    return max([r["game_index"] + r["games"] for r in (entry or {}).get("runs") or []] or [0])
+
+
+def cmd_status(args, decks):
+    st = load_state().get("decks", {})
+    src_now = git("rev-parse", "HEAD:src")
+    chosen = pick(args.decks, decks) if args.decks else shipping(decks)
+    print("%-22s %-12s %8s %8s %-14s %s" % ("deck", "verdict", "games", "issues", "src", "next games"))
+    for d in chosen:
+        e = st.get(d.key)
+        state, last = verdict(e, deck_sha(os.path.relpath(d.deck_file, ROOT)), src_now)
+        n = next_game(e)
+        print("%-22s %-12s %8s %8s %-14s %d-%d%s" % (
+            d.key, state, last["games"] if last else "-", last["issues"] if last else "-",
+            last["src"][:12] if last else "-", n, n + GAMES - 1,
+            "  DUE" if due(e, deck_sha(os.path.relpath(d.deck_file, ROOT)), src_now) else ""))
+    return 0
+
+
+def pick(names, decks):
+    alias = mo.suite_aliases()
+    out = []
+    for name in names:
+        key = deck_registry.slug(os.path.basename(os.path.normpath(name)))
+        key = key if key in decks else alias.get(name, key)
+        if key not in decks:
+            sys.exit("mana_clean: no deck '%s'" % name)
+        out.append(decks[key])
+    return out
+
+
+def run_arm(mtg, manifest, level, out_path, err_path, threads):
+    """One pooled batch. stdout (the per-job result lines) to `out_path`; stderr filtered into `err_path`:
+    ISSUE flag lines whole, every other flag cut to a one-line counter, everything else as is."""
+    env = dict(os.environ, MTG_MANA_ORACLE=str(level))
+    with open(out_path, "w") as so, open(err_path, "w") as se:
+        p = subprocess.Popen([mtg, "--batch", manifest, "--threads", str(threads)], stdout=so,
+                             stderr=subprocess.PIPE, env=env, cwd=ROOT, text=True, errors="replace", bufsize=1)
+        for ln in p.stderr:
+            m = COUNTER.match(ln)
+            if m and m.group("cls") not in ISSUE and m.group("cls") != "DECISION":
+                se.write("[mana-oracle] %s seed=0 job=%s\n" % (m.group("cls"), m.group("job")))
+            else:
+                se.write(ln)
+        return p.wait()
+
+
+def done_jobs(path):
+    return set(mo.digests(path)) if os.path.exists(path) else set()
+
+
+def cmd_run(args, decks):
+    if git("status", "--porcelain", "--untracked-files=no", "--", "src"):
+        sys.exit("mana_clean: src/ has uncommitted changes -- a gate run is stamped with HEAD:src, so commit first")
+    src_now = git("rev-parse", "HEAD:src")
+    st = load_state()
+    st.setdefault("decks", {})
+
+    if args.resume:
+        out_dir = os.path.join(ROOT, "logs", "mana_clean", args.resume)
+        plan = json.load(open(os.path.join(out_dir, "run.json")))
+        if plan["src"] != src_now:
+            sys.exit("mana_clean: run %s was planned at src %s, HEAD:src is %s -- start a new run"
+                     % (args.resume, plan["src"][:12], src_now[:12]))
+        name = args.resume
+    else:
+        chosen = pick(args.decks, decks) if args.decks else [
+            d for d in shipping(decks)
+            if due(st["decks"].get(d.key), deck_sha(os.path.relpath(d.deck_file, ROOT)), src_now)]
+        if not chosen:
+            print("mana_clean: no deck is due (status lists them)", file=sys.stderr)
+            return 0
+        name = args.name or datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d-%H%M%S")
+        out_dir = os.path.join(ROOT, "logs", "mana_clean", name)
+        os.makedirs(out_dir, exist_ok=True)
+        plan = {"name": name, "src": src_now, "commit": git("rev-parse", "HEAD"), "games": args.games,
+                "chunk": args.chunk,
+                "started": now_iso(), "decks": []}
+        for d in chosen:
+            deck = os.path.relpath(d.deck_file, ROOT)
+            g0 = next_game(st["decks"].get(d.key))
+            plan["decks"].append({"key": d.key, "deck": deck, "deck_sha": deck_sha(deck),
+                                  "profile": os.path.relpath(d.profile, ROOT), "game_index": g0,
+                                  "seed": SEED_BASE + g0, "games": args.games})
+        json.dump(plan, open(os.path.join(out_dir, "run.json"), "w"), indent=1)
+
+    pgo_ensure()
+    if not pgo_fresh():
+        sys.exit("mana_clean: build/PGO is not built from HEAD:src (MTG_PGO=0, or its build failed) -- a gate "
+                 "record must name the binary's src tree; the PGO stamp is the only proof of it")
+    mtg = engine_bin("mtg")
+    scratch = os.path.join(ROOT, "build", "scratch", "mana_clean", name)
+    os.makedirs(scratch, exist_ok=True)
+
+    chunk = plan.get("chunk", CHUNK)      # a resume must rebuild the SAME job names
+    jobs = []
+    for pd in plan["decks"]:
+        for off in range(0, pd["games"], chunk):
+            gi = pd["game_index"] + off
+            jobs.append({"name": "%s__g%d" % (pd["key"], gi), "deck": pd["deck"], "profile": pd["profile"],
+                         "games": min(chunk, pd["games"] - off), "seed": SEED_BASE + gi, "game_index": gi})
+    deck_of = {j["name"]: j for j in jobs}
+    group = lambda job: job.split("__g")[0]  # noqa: E731
+
+    # Each arm resumes at chunk granularity: attempt k runs the chunks no earlier attempt finished.
+    rc = {}
+    for arm, level in (("on", 2), ("off", 0)):
+        k = 0
+        while os.path.exists(os.path.join(scratch, "%s.%d.out" % (arm, k))):
+            k += 1
+        finished = set().union(*[done_jobs(os.path.join(scratch, "%s.%d.out" % (arm, i))) for i in range(k)])
+        todo = [j for j in jobs if j["name"] not in finished]
+        if not todo:
+            continue
+        manifest = os.path.join(scratch, "manifest.%s.%d.json" % (arm, k))
+        json.dump({"jobs": todo}, open(manifest, "w"), indent=1)
+        print("mana_clean: %s arm attempt %d: %d chunks / %d games over %d decks, %s"
+              % (arm, k, len(todo), sum(j["games"] for j in todo), len({group(j["name"]) for j in todo}), mtg),
+              file=sys.stderr, flush=True)
+        rc[arm] = run_arm(mtg, manifest, level, os.path.join(scratch, "%s.%d.out" % (arm, k)),
+                          os.path.join(scratch, "%s.%d.err" % (arm, k)), args.threads)
+
+    # Gather, counting each chunk only from the attempt that finished it (an interrupted attempt's
+    # partial lines for a chunk that a later attempt re-ran must not count twice).
+    def attempts(arm):
+        out, k = [], 0
+        while os.path.exists(os.path.join(scratch, "%s.%d.out" % (arm, k))):
+            out.append((os.path.join(scratch, "%s.%d.out" % (arm, k)), os.path.join(scratch, "%s.%d.err" % (arm, k))))
+            k += 1
+        return out
+
+    dig = {"on": {}, "off": {}}
+    for arm in dig:
+        for o, _ in attempts(arm):
+            for job, v in mo.digests(o).items():
+                dig[arm].setdefault(job, v)
+    owner = {}
+    for i, (o, _) in enumerate(attempts("on")):
+        for job in mo.digests(o):
+            owner.setdefault(job, i)
+
+    counts = collections.defaultdict(collections.Counter)
+    decisions, plans_seen, summary, flags = collections.Counter(), collections.Counter(), [], []
+    for i, (_, e) in enumerate(attempts("on")):
+        for ln in open(e, errors="replace"):
+            ln = ln.rstrip("\n")
+            if ln.startswith("=== MANA ORACLE"):
+                summary.append(ln)
+                continue
+            m = mo.DECISION.match(ln)
+            if m:
+                if owner.get(m.group("job")) == i:
+                    decisions[group(m.group("job"))] += 1
+                    plans_seen[group(m.group("job"))] += int(m.group("n"))
+                continue
+            m = COUNTER.match(ln)
+            if not m or owner.get(m.group("job")) != i:
+                continue
+            counts[group(m.group("job"))][m.group("cls")] += 1
+            if m.group("cls") in ISSUE:
+                rec = mo.flag_record(ln, deck_of, group)
+                if rec:
+                    flags.append(rec)
+
+    when = now_iso()
+    rows, worst = [], 0
+    for pd in plan["decks"]:
+        mine = [j["name"] for j in jobs if group(j["name"]) == pd["key"]]
+        complete = all(j in dig["on"] and j in dig["off"] for j in mine)
+        identical = complete and all(dig["on"][j] == dig["off"][j] for j in mine)
+        played = sum(int(dig["on"][j][0]) for j in mine if j in dig["on"])
+        c = counts[pd["key"]]
+        issues = sum(c[k] for k in ISSUE)
+        if not complete or played < pd["games"]:
+            v = "incomplete"
+        elif not identical:
+            v = "invalid"
+        else:
+            v = "clean" if issues == 0 else "issues"
+        worst = max(worst, {"clean": 0, "issues": 1}.get(v, 2))
+        rows.append((pd["key"], v, played, issues, c))
+        if v == "incomplete":
+            continue                       # nothing recorded: --resume finishes it
+        rec = {"run": name, "date": when, "src": plan["src"], "commit": plan["commit"], "binary": "PGO",
+               "deck": pd["deck"], "deck_sha": pd["deck_sha"], "game_index": pd["game_index"], "seed": pd["seed"],
+               "games": played, "issues": issues, "identity": identical, "verdict": v,
+               "by_class": {k: c[k] for k in sorted(c)}, "decisions": decisions[pd["key"]],
+               "report": os.path.relpath(os.path.join(out_dir, "report.md"), ROOT)}
+        e = st["decks"].setdefault(pd["key"], {"runs": []})
+        e["runs"] = [r for r in e["runs"] if r.get("run") != name] + [rec]
+    save_state(st)
+
+    # The report: a verdict table, the per-class counts (every class -- the context ones are disclosure),
+    # then mana_oracle's own sections over the ISSUE flags, with their repro commands.
+    cls_cols = [k for k in mo.ORDER if any(r[4][k] for r in rows)]
+    head = ["## Verdict per deck\n",
+            "| deck | games | verdict | issues | " + " | ".join(cls_cols) + " |",
+            "|---|---|---|---|" + "---|" * len(cls_cols)]
+    for key, v, played, issues, c in rows:
+        head.append("| %s | %d | %s | %d | %s |" % (key, played, v, issues, " | ".join(str(c[k]) for k in cls_cols)))
+    blocks = ", ".join("%s %d-%d" % (pd["key"], pd["game_index"], pd["game_index"] + pd["games"] - 1)
+                       for pd in plan["decks"])
+    header = ("Mana-clean gate run: %d decks, games (seed %d + game index) %s; src `%s`, binary `%s`, "
+              "`MTG_MANA_ORACLE=2`. ISSUE classes: %s.\n\n%s"
+              % (len(plan["decks"]), SEED_BASE, blocks, plan["src"][:12], os.path.relpath(mtg, ROOT),
+                 ", ".join(ISSUE), "\n".join(head)))
+    identity_all = all(r[1] != "invalid" for r in rows)
+    text, _, _, _ = mo.report("Mana-clean gate `%s`" % name, header, [pd["key"] for pd in plan["decks"]], deck_of,
+                              flags, decisions, plans_seen, summary, identity_all, rc.get("on", 0), args.top)
+    open(os.path.join(out_dir, "report.md"), "w").write(text)
+    for key, v, played, issues, _ in rows:
+        print("mana_clean: %-22s %-10s %5d games, %d issues" % (key, v, played, issues), file=sys.stderr)
+    print("mana_clean: -> %s; record %s" % (os.path.relpath(os.path.join(out_dir, "report.md"), ROOT),
+                                            os.path.relpath(STATE, ROOT)), file=sys.stderr)
+    return worst
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    s = sub.add_parser("status")
+    s.add_argument("decks", nargs="*")
+    r = sub.add_parser("run")
+    r.add_argument("decks", nargs="*", help="deck keys / folders (default: every DUE shipping deck)")
+    r.add_argument("--games", type=int, default=GAMES)
+    r.add_argument("--threads", type=int, default=os.cpu_count() or 8)
+    r.add_argument("--name", default=None)
+    r.add_argument("--resume", default=None, help="finish an interrupted run of this name")
+    r.add_argument("--top", type=int, default=12)
+    r.add_argument("--chunk", type=int, default=CHUNK, help="games per batch job (the resume granularity)")
+    for p in (s, r):
+        p.add_argument("--state", default=None, help="the record file (default test/mana_clean.json; a test run "
+                       "points it elsewhere so it does not spend a deck's game blocks)")
+    args = ap.parse_args()
+    if args.state:
+        global STATE
+        STATE = os.path.abspath(args.state)
+    decks = deck_registry.discover(os.path.join(ROOT, "decks"))
+    return cmd_status(args, decks) if args.cmd == "status" else cmd_run(args, decks)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

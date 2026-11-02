@@ -7,7 +7,8 @@
 //            completed mulligan profile. The numbers may simply be wrong.
 //   (beta)   complete but unproven -- fewer than 30 references, or the shipped search does not
 //            match the human win turn on the ones it has.
-//   (none)   30+ references AND green on every one of them.
+//   (none)   30+ references AND green on every one of them AND a clean mana analysis
+//            (scripts/mana_clean.py, test/mana_clean.json; USER 2026-11-02).
 //
 // See tierFrom / deckMaturity in tools/play/server.js.
 //
@@ -65,18 +66,29 @@ const BENCHES = [GREEN, { state: 'short', short: 1, n: 40 }, STALE_GREEN, STALE_
                  { state: 'unbenched' }];
 // Does this bench count as proof of green play? The policy, restated independently of tierFrom.
 const benchProves = b => b.state === 'green' || (b.state === 'stale' && b.wasGreen);
+// THE MANA-CLEAN GATE (USER 2026-11-02): the latest scripts/mana_clean.py run must be clean on the
+// required games. Stale-and-clean carries forward like the bench; every other state holds at beta.
+const CLEAN = { state: 'clean', games: 5000, need: 5000, issues: 0, at: 'abc123', first: 0, last: 4999 };
+const MANAS = [CLEAN, { state: 'stale', wasClean: true, games: 5000, need: 5000, issues: 0, at: 'abc123', first: 0, last: 4999 },
+               { state: 'issues', games: 5000, need: 5000, issues: 3, at: 'abc123', first: 0, last: 4999 },
+               { state: 'invalid', games: 5000, need: 5000, issues: 0, at: 'abc123', first: 0, last: 4999 },
+               { state: 'short', games: 40, need: 5000, issues: 0, at: 'abc123', first: 0, last: 39 },
+               { state: 'changed', games: 5000, need: 5000, issues: 0, at: 'abc123', first: 0, last: 4999 },
+               { state: 'never' }];
+const manaProves = m => m.state === 'clean' || (m.state === 'stale' && m.wasClean);
 
 for (const refs of [0, A - 1, A, A + 1, S - 1, S, S + 1]) {
   for (const hasValueLeaf of [false, true]) {
     for (const hasKeepModel of [false, true]) {
       for (const bench of BENCHES) {
-        const r = srv.tierFrom({ hasProfile: true, refs, hasValueLeaf, hasKeepModel, bench });
+       for (const mana of MANAS) {
+        const r = srv.tierFrom({ hasProfile: true, refs, hasValueLeaf, hasKeepModel, bench, mana });
         // The policy, restated independently of the implementation.
         const missing = refs < A || !hasValueLeaf || !hasKeepModel;
         const want = missing ? 'alpha'
-                   : (refs >= S && benchProves(bench)) ? 'stable' : 'beta';
+                   : (refs >= S && benchProves(bench) && manaProves(mana)) ? 'stable' : 'beta';
         ok(r.tier === want,
-           `tier(refs=${refs}, value=${hasValueLeaf}, keep=${hasKeepModel}, bench=${bench.state}) === ${want}`,
+           `tier(refs=${refs}, value=${hasValueLeaf}, keep=${hasKeepModel}, bench=${bench.state}, mana=${mana.state}) === ${want}`,
            'got ' + r.tier);
         // A labelled deck must always be able to say why -- the badge renders the reasons, so an
         // empty list would show "beta — " with nothing after it.
@@ -88,6 +100,7 @@ for (const refs of [0, A - 1, A, A + 1, S - 1, S, S + 1]) {
           ok(!r.tierReasons.some(x => x.includes('/' + S + ' reference')),
              'alpha does not also report the 30-reference shortfall', JSON.stringify(r.tierReasons));
         }
+       }
       }
     }
   }
@@ -96,7 +109,7 @@ for (const refs of [0, A - 1, A, A + 1, S - 1, S, S + 1]) {
 // THE GREEN GATE, isolated: identical deck, only the bench differs. This is the criterion the whole
 // three-tier scheme turns on, and the only one that can move a deck DOWN after it was fine.
 for (const bench of BENCHES) {
-  const r = srv.tierFrom({ hasProfile: true, refs: S + 5, hasValueLeaf: true, hasKeepModel: true, bench });
+  const r = srv.tierFrom({ hasProfile: true, refs: S + 5, hasValueLeaf: true, hasKeepModel: true, bench, mana: CLEAN });
   ok(r.tier === (benchProves(bench) ? 'stable' : 'beta'),
      `a fully-equipped ${S + 5}-reference deck is ${benchProves(bench) ? 'stable' : 'beta'} when the bench is ${bench.state}`
        + (bench.state === 'stale' ? ` (wasGreen=${!!bench.wasGreen})` : ''),
@@ -110,24 +123,39 @@ for (const bench of BENCHES) {
 // re-labelled the entire picker on every commit -- signalling nothing about any individual deck.
 // The carried-forward verdict is the last REAL measurement, so this is not "assume green": a deck
 // that was short stays beta, and a re-bench that finds a genuine shortfall still demotes it.
-ok(srv.tierFrom({ hasProfile: true, refs: 99, hasValueLeaf: true, hasKeepModel: true,
+ok(srv.tierFrom({ hasProfile: true, refs: 99, hasValueLeaf: true, hasKeepModel: true, mana: CLEAN,
                   bench: { state: 'stale', at: 'deadbee', n: 99, wasGreen: true } }).tier === 'stable',
    'a stale bench whose last verdict was GREEN keeps the deck stable');
-ok(srv.tierFrom({ hasProfile: true, refs: 99, hasValueLeaf: true, hasKeepModel: true,
+ok(srv.tierFrom({ hasProfile: true, refs: 99, hasValueLeaf: true, hasKeepModel: true, mana: CLEAN,
                   bench: { state: 'stale', at: 'deadbee', n: 99, wasGreen: false, short: 2 } }).tier === 'beta',
    'a stale bench whose last verdict was SHORT still holds the deck at beta');
 // The demotion path still works end-to-end: stale-and-green today, genuinely short after the
 // re-bench lands => beta. This is the property the old stale-is-never-green rule existed to protect.
-ok(srv.tierFrom({ hasProfile: true, refs: 99, hasValueLeaf: true, hasKeepModel: true,
+ok(srv.tierFrom({ hasProfile: true, refs: 99, hasValueLeaf: true, hasKeepModel: true, mana: CLEAN,
                   bench: { state: 'short', short: 4, n: 99 } }).tier === 'beta',
    'a completed re-bench that finds a shortfall still demotes a formerly-stable deck');
 // Neither is a bench that never ran -- absence of evidence must not read as evidence.
-ok(srv.tierFrom({ hasProfile: true, refs: 99, hasValueLeaf: true, hasKeepModel: true,
+ok(srv.tierFrom({ hasProfile: true, refs: 99, hasValueLeaf: true, hasKeepModel: true, mana: CLEAN,
                   bench: { state: 'unbenched' } }).tier === 'beta',
    'an un-benched deck cannot promote to stable');
 // A missing `bench` argument entirely must fail CLOSED, not throw and not pass.
-ok(srv.tierFrom({ hasProfile: true, refs: 99, hasValueLeaf: true, hasKeepModel: true }).tier === 'beta',
+ok(srv.tierFrom({ hasProfile: true, refs: 99, hasValueLeaf: true, hasKeepModel: true, mana: CLEAN }).tier === 'beta',
    'a missing bench argument fails closed to beta');
+
+// THE MANA-CLEAN GATE, isolated: identical green-benched deck, only the mana record differs.
+for (const mana of MANAS) {
+  const r = srv.tierFrom({ hasProfile: true, refs: S + 5, hasValueLeaf: true, hasKeepModel: true, bench: GREEN, mana });
+  ok(r.tier === (manaProves(mana) ? 'stable' : 'beta'),
+     `a green-benched ${S + 5}-reference deck is ${manaProves(mana) ? 'stable' : 'beta'} when the mana record is ${mana.state}`,
+     'got ' + r.tier);
+  if (!manaProves(mana)) {
+    ok(r.tierReasons.length === 1 && /mana analysis/.test(r.tierReasons[0]),
+       'the ONLY thing holding it back is the mana analysis, and the reason says so', JSON.stringify(r.tierReasons));
+  }
+}
+// Fails closed: no `mana` argument at all is not a clean analysis.
+ok(srv.tierFrom({ hasProfile: true, refs: 99, hasValueLeaf: true, hasKeepModel: true, bench: GREEN }).tier === 'beta',
+   'a missing mana argument fails closed to beta');
 
 // A deck with NO profile is unplayable, not alpha: the picker already renders "(no profile)" and
 // disables it, which is the strictly stronger statement. Stacking a tier on it would say less.
@@ -228,7 +256,7 @@ console.log('--- listDecks() wiring ---');
 const decks = srv.listDecks();
 ok(decks.length > 0, 'listDecks() found decks');
 for (const d of decks) {
-  for (const f of ['refs', 'hasValueLeaf', 'hasKeepModel', 'tier', 'tierReasons', 'bench']) {
+  for (const f of ['refs', 'hasValueLeaf', 'hasKeepModel', 'tier', 'tierReasons', 'bench', 'mana']) {
     ok(f in d, `${d.name}: /api/decks reports "${f}"`);
   }
   const want = srv.tierFrom(d);
