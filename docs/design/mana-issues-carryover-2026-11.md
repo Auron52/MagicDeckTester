@@ -115,4 +115,18 @@ deck (`docs/design/mana-clean-gate.md`, `scripts/mana_clean.py`, `test/mana_clea
 5. **FiveColour d7b40** (was d7b40 -0.0050 turns at 1.15x): adopt **if it retains that performance** on the
    current engine (USER: "somewhat marginal ... not a slam-dunk"). Owed: a fresh held-out re-measure, then adopt or
    report.
-6. **NivMizzetCombo cast order** (gi887 fails the bar): the USER is reviewing the order in detail before deciding.
+6. **NivMizzetCombo cast order** (gi887 fails the bar): **approved** ("The new order seems okay"). The implemented
+   order is the USER's (Brainstorm first among the draws; Curiosity/Lookout ahead of the draws only with a Niv).
+   Owed before landing: root-cause gi887's T4 Signet + Lookout over Signet + Generator Servant valuation.
+7. **UNMODELED and CAPPED fail the mana-clean gate** (USER: "Even if this means an issue in our instrument it means
+   something to fix"). `scripts/mana_clean.py` ISSUE set; `docs/design/mana-clean-gate.md`.
+8. **Slivers cast order: approved as a FULL order, every card on its own row** (USER: "Making it a full order is
+   ideal. But yeah, only Hatchery and Thrumming Hivepool care about the order here"). Draft:
+   `docs/design/cast-order-drafts-2026-10-14/slivers_vial.md` section 3.
+9. **The mana rollback repairs mistakes; it never exploits clairvoyance.** USER: "I would use more hedge rules
+   rather than actual clairvoyance in the mana engine ... I would rather build this engine in a more general way. I
+   think we should be using the mana rollback idea, but that is more to compensate for mistakes rather than take
+   advantage of clairvoyance." So `LINE_REPAY` may re-make a payment only against cards known at that payment (in
+   hand, or in the plan), never against a card drawn after it. A drop that only a drawn card's knowledge would avoid
+   is a candidate for a **hedge rule**: a provider hold for what to keep open when the next card is unknown (e.g.
+   Dragonstorm's "hold 1 {B} when red is plentiful", Fluctuator's ordered {B} / {1}{R} / {W} holds).
