@@ -892,6 +892,20 @@ inline MadnessPin MadnessPinOf(const Action& a) { return MadnessPin{ a.madness_c
 // precedent): the lowest-numbered permanent of that name we control that entered this turn.
 inline int ResolveHandSourceActivation(const GameState& state, const Action& a)
 {
+    // Shadowborn Apostle (SacNamedTutorPut): the effect does not reference its source, so any copy of the
+    // name we control is the source (an identity fold; SpellEffects.h ResolveSacNamedSourceId is the same
+    // rule) -- the action's own copy while it is still ours, else the lowest-numbered copy.
+    if (a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::SacNamedTutorPut)
+    {
+        int best = 0;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index || p.card.m_name != a.card_name) { continue; }
+            if (p.card.m_number == a.sac_source_id) { return a.sac_source_id; }
+            if (best == 0 || p.card.m_number < best) { best = p.card.m_number; }
+        }
+        return best != 0 ? best : a.sac_source_id;
+    }
     if ((a.needs_cast_mask & 1) == 0 || a.kind != Action::Kind::ActivatePermAbility) { return a.sac_source_id; }
     const int me = state.active_player_index;
     int best = 0;
@@ -1597,6 +1611,14 @@ public:
         // hand, every option (no width cap -- a cap would make the later options unfindable at any budget).
         // int16_t: a two-target option list on a wide board exceeds 127.
         int16_t cast_trigger_target_choice = -1;
+        // SEARCHED DEMON TRIGGERS (Shadowborn INT-2): Reaper from the Abyss's end-step morbid destroy TARGET
+        // (bits 0-7) and Abhorrent Overlord's upkeep sacrifice VICTIM (bits 8-15), each PACKED per trigger
+        // ordinal (kDemonPinBits bits, low first) as a RANK into the trigger's resolution-time class list
+        // (DemonTriggerClassReps; clamped). -1 = unpinned = every trigger takes its list's front. Decided in
+        // this turn's main phase; rides GameState::scripted_demon_trigger (WritePostApplyStatePins): the end
+        // step consumes the low byte, the NEXT upkeep the rest. In the 2-byte hole after the field above
+        // (gdb ptype /o, 2026-11-03: no size change); folded into the census Xaxes key by hand.
+        std::int16_t demon_trigger_choice = -1;
 
         // HOLD-vs-TAP of this turn's mana creatures. 0 (default) == the shipped heuristic (reserve
         // every mana creature for the whole turn, and sort them last in the tap backtracker);
@@ -3409,6 +3431,12 @@ public:
         // (board-click `target`), never on the line. EMPTY keeps the legacy name-in-casts matching.
         std::vector<std::string> steals;
         std::vector<std::string> transforms;
+        // "sacnamed=<Demon name | (no fetch)>" (Shadowborn INT-2): Shadowborn Apostle's "{B}, Sacrifice six
+        // creatures named ~: put a Demon onto the battlefield" (PermAbilityMode::SacNamedTutorPut), naming
+        // the FETCH (the pod= / ooze= reason: the source is any copy, the Demon is the choice; and
+        // `cast=Shadowborn Apostle` is a hand cast). The six bodies are asked at resolution (`sacrifice`).
+        // EMPTY keeps the legacy name-in-casts matching.
+        std::vector<std::string> sac_nameds;
         // "auraswap=<Aura brought in>": Arcanum Wings' main-phase Aura swap (Action::Kind::AuraSwap),
         // naming the hand Aura it puts onto the Wings' host. ALWAYS its own verb (no legacy split --
         // the kind is new): `cast=Colossification` and swapping Colossification in are different

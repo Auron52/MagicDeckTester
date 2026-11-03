@@ -310,7 +310,7 @@ static CombatDamageResult ResolveCombatDamageTwoStep(GameState& state, const std
             const bool animated = p.is_animated;
             // The SAME power assembly as the single-step loop (keep the two in lockstep), multiplier 1.
             auto [lord_pb, lord_tb] = ComputeLordBonus(p.card, state, active, p.AnimatedAllTypes(), &p,
-                                                       &bs.lords, &bs.anthems);
+                                                       &bs.lords, &bs.anthems, bs.own_creatures);
             (void)lord_tb;
             int base_pw = p.EffectivePower() + lord_pb + exalted_bonus;
             const CardDefinition* adef = CardDatabase::Instance().LookupCached(p.card);

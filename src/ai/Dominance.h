@@ -573,6 +573,14 @@ static_assert(sizeof(Player) == 208,
 // DECK CONSTANTS stamped once in StampDeckTraits -- nothing to fold. `gy_shuffle_batch` /
 // `pending_gy_shuffles[2]` are 0 outside one simultaneous event (GyShuffleBatch), never live at a
 // snapshot -- nothing to fold.
+// +0 bytes (2026-11-03, Shadowborn INT-2): `deck_has_morbid`, `deck_has_count_anthem`, `deck_has_demon_triggers`
+// (bools in the 3-byte hole after deck_tracks_noncombat_damage), `deck_has_sac_named` (a bool in the 1-byte hole
+// after deck_has_upkeep_reanimate) and `scripted_demon_trigger` (an int16_t in the 2-byte hole after
+// opponent_decked), measured with gdb ptype /o, total unchanged (1232 then; 1240 with upkeep_tutor). Classification: the bools are DECK
+// CONSTANTS stamped once in StampDeckTraits -- nothing to fold; the pin is FUTURE-DETERMINING (set by the turn's
+// plan apply, consumed at this turn's end step and the NEXT upkeep), FOLDED in Build() value-gated (and in
+// BuildDedupKey's pending pins and BuildBreakpointKey). INT-1's `creature_died_this_turn` (MORBID) is now read
+// (Reaper) and is FOLDED in Build() and BuildSimKey, gated on deck_has_morbid.
 static_assert(sizeof(GameState) == 1240,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
@@ -935,6 +943,12 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     // card keeps its exact key.
     if (s.scripted_upkeep_gy_reanimate >= 0)
     { fold(0xE3E41A0000ull + static_cast<std::uint64_t>(s.scripted_upkeep_gy_reanimate)); }
+    // Shadowborn INT-2: the packed demon-trigger pin (end step + NEXT upkeep -- FUTURE-DETERMINING across
+    // the turn boundary) and the MORBID flag (Reaper's end-step intervening if), each value-gated / deck-
+    // gated with its own domain tag so every deck without the cards keeps its exact key.
+    if (s.scripted_demon_trigger >= 0)
+    { fold(0xDE404E0000ull + static_cast<std::uint64_t>(s.scripted_demon_trigger)); }
+    if (s.deck_has_morbid && s.creature_died_this_turn) { fold(0x40B1D0000ull); }
     // LAND SEARCH pins (core/LandSearch.h): Primeval Titan's attack-trigger pick (consumed at this
     // turn's declare-attackers) and Search for Tomorrow's off-suspend pick (consumed at the NEXT
     // upkeep -- live across exactly this boundary, the scripted_vial_charge class). Both

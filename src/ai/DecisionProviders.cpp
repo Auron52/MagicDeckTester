@@ -23431,7 +23431,8 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
         if (p.enters_look_top_land_or_hand || p.mana_only_subtype_abilities) { lfe = true; }
         if (p.cycle_draw_exile_shared_type_freecast) { cyclone = true; }
         if (!p.etb_replace_sacrifice_land_subtype.empty()
-            || (p.tutor_to_hand && p.suspend_time_counters > 0)) { shadowborn = true; }
+            || (p.tutor_to_hand && p.suspend_time_counters > 0)
+            || p.sac_named_count > 0) { shadowborn = true; }   // INT-2: Shadowborn Apostle's activation
         if (p.cast_trigger_extra_turns > 0)          { cy_extra_turn = true; }
         if (p.cycle_or_discard_trigger_scry > 0)     { cy_cycle_scry = true; }
         if (p.draw_trigger_damage > 0 || p.cast_trigger_instant_sorcery_draw > 0
@@ -38740,6 +38741,7 @@ static void RouteSig(const GameState& s, std::vector<long long>& v)
     v.push_back(s.scripted_upkeep_gy_reanimate);
     v.push_back(s.scripted_echo);
     v.push_back(s.scripted_doth_put);
+    v.push_back(s.scripted_demon_trigger); v.push_back(s.creature_died_this_turn);
     v.push_back(static_cast<long long>(s.battlefield.size()));
     for (const Permanent& p : s.battlefield)
     {

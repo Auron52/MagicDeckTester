@@ -311,6 +311,10 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
         // No-op for every deck that was not dealt an opponent library. Lockstep with the rollout's
         // TurnSolver::SimulateEndAndStartNextTurn.
         opponentdeck::EndOfTurnDraw(state);
+        // Sire of Insanity at the OPPONENT's notional end step ("each end step"): after their draw.
+        // Our hand is empty by then in this pool (our own end step discarded it), so it is faithful and
+        // inert; the opponent discards a dealt hand. Lockstep twin in the rollout; deck-gated.
+        PerformEndStepDiscardHands(state, state.active_player_index);
     }
     // DAY / NIGHT turn-based check (CR 726.3a) for the opponent's notional untap and our next one
     // (Brutal Cathar). Lockstep with SimulateEndAndStartNextTurn; no-op unless a daybound card set it.
@@ -607,6 +611,10 @@ void GameEngine::UpkeepTail(GameState& state)
     // Fading (Saproling Burst): remove a fade counter, or sacrifice if you cannot -- and the LTB
     // then destroys every token it made. Lockstep twin in TurnSolver::SimulateEndAndStartNextTurn.
     PerformUpkeepFading(state);
+    // Abhorrent Overlord: "At the beginning of your upkeep, sacrifice a creature" -- the victim the
+    // previous turn's plan pinned (Plan::demon_trigger_choice, high byte), consumed here whatever happens.
+    // Lockstep twin in TurnSolver::SimulateEndAndStartNextTurn; deck-gated -> inert elsewhere.
+    PerformUpkeepSacrificeCreature(state);
 
     // Creature Giving upkeep triggers, in controller-optimal order: Varchild's War-Riders
     // cumulative-upkeep gifts FIRST (the fresh Survivors count toward DotH's >= 3), then the
@@ -1113,6 +1121,10 @@ void GameEngine::EndStep(GameState& state)
     // this step, before any other beginning-of-step effect below resolves (CR 603.3d). Lockstep twin
     // at the top of TurnSolver::SimulateEndAndStartNextTurn; empty for every deck without the card.
     const std::vector<int> grace_snapshot = SnapshotEndStepGraceTargets(state);
+    // Reaper from the Abyss's intervening if ("if a creature died this turn") is checked as the step
+    // begins, with its trigger (CR 603.4) -- snapshotted here, before any beginning-of-step effect below.
+    // Lockstep twin at the top of TurnSolver::SimulateEndAndStartNextTurn; 0 for every deck without it.
+    const int morbid_triggers = SnapshotEndStepMorbidTriggers(state);
     // "Exile those tokens at the beginning of the next end step" (Twinflame token copies,
     // Permanent::exile_at_end). Swept battlefield -> exile here, BEFORE cleanup (CR 512/514
     // order). Lockstep with the top of TurnSolver::SimulateEndAndStartNextTurn; no-op for every
@@ -1144,6 +1156,12 @@ void GameEngine::EndStep(GameState& state)
     // turn", Pyrohemia's "if no creatures") were checked as the step began (CR 603.4), so neither may
     // see this trigger's gain or body. Lockstep twin in TurnSolver::SimulateEndAndStartNextTurn.
     PerformEndStepAbidingGrace(state, grace_snapshot);
+    // Shadowborn INT-2: Reaper from the Abyss's morbid destroy (the searched Plan::demon_trigger_choice
+    // target, consumed here) and Sire of Insanity's hand discard. They COMMUTE (a destroy does not touch a
+    // hand, a discard kills nothing, morbid was read as the step began), so the order is fixed. Lockstep
+    // twin in TurnSolver::SimulateEndAndStartNextTurn; deck-gated -> inert elsewhere.
+    PerformEndStepMorbidDestroy(state, morbid_triggers);
+    PerformEndStepDiscardHands(state, state.active_player_index);
     // TODO: other "end of turn" triggered abilities (Phase 1.2)
     ResolveStack(state);
 }

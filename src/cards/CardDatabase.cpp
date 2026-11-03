@@ -548,6 +548,7 @@ static Keyword KeywordFromString(const std::string& s)
     if (s == "Madness")       { return Keyword::Madness; }    // inert tag; param-modelled (madness_cost)
     if (s == "Landwalk")      { return Keyword::Landwalk; }   // inert evasion tag; nothing blocks
     if (s == "Swampwalk")     { return Keyword::Swampwalk; }  // inert evasion tag; nothing blocks
+    if (s == "Morbid")        { return Keyword::Morbid; }     // inert ability-word tag; morbid params
     throw std::runtime_error("Unknown keyword: " + s);
 }
 
@@ -1701,6 +1702,21 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.tutor_color                   = params.value("tutor_color", std::string{});
     p.sac_additional_creature_color = params.value("sac_additional_creature_color", std::string{});
     p.sac_additional_creature       = params.value("sac_additional_creature", false);
+    // Shadowborn INT-2 -- see CardParams.
+    p.sac_named_count               = params.value("sac_named_count", 0);
+    if (params.contains("sac_named_activation_cost"))
+        p.sac_named_activation_cost = ManaCostFromString(params["sac_named_activation_cost"].get<std::string>());
+    p.tutor_required_subtype        = params.value("tutor_required_subtype", std::string{});
+    p.etb_tokens_per_devotion_color = params.value("etb_tokens_per_devotion_color", std::string{});
+    p.upkeep_sacrifice_creature     = params.value("upkeep_sacrifice_creature", 0);
+    p.endstep_morbid_destroy_target_creature = params.value("endstep_morbid_destroy_target_creature", false);
+    p.endstep_destroy_excluded_subtype = params.value("endstep_destroy_excluded_subtype", std::string{});
+    p.endstep_each_player_discards_hand = params.value("endstep_each_player_discards_hand", false);
+    for (int t : params.value("creature_count_anthem_tiers", json::array()))
+        p.creature_count_anthem_tiers.push_back(t);
+    p.creature_count_anthem_power   = params.value("creature_count_anthem_power", 0);
+    for (const std::string& s : params.value("creature_count_anthem_keywords", json::array()))
+        p.creature_count_anthem_keywords.push_back(s);
     p.etb_replace_sacrifice_land_subtype =
         params.value("etb_replace_sacrifice_land_subtype", std::string{});
     p.sac_for_mana_victim_land_subtype =

@@ -1603,6 +1603,7 @@ inline void Record(const GameState& s, const TurnSolver::Plan& first, const Turn
     pl("looktop", first.look_top_pins != dup.look_top_pins);
     pl("upkreanim", first.upkeep_gy_reanimate_choice != dup.upkeep_gy_reanimate_choice);
     pl("upktutor", first.upkeep_tutor_choice != dup.upkeep_tutor_choice);
+    pl("demontrig", first.demon_trigger_choice != dup.demon_trigger_choice);
     pl("echo", first.echo_choice != dup.echo_choice);
     pl("doth", first.doth_put_choice != dup.doth_put_choice);
     pl("atkrel", first.atk_dork_release != dup.atk_dork_release);
@@ -11933,7 +11934,7 @@ static int PendingAttackDamageImpl(const GameState& state)
         if (!WantsToAttack(state, p)) { continue; }
         bool animated = p.is_animated;
         auto [lord_pb, lord_tb] = ComputeLordBonus(
-            p.card, state, active, p.AnimatedAllTypes(), &p, &bs.lords, &bs.anthems);
+            p.card, state, active, p.AnimatedAllTypes(), &p, &bs.lords, &bs.anthems, bs.own_creatures);
         // The single shared oracle (SpellEffects.h); mirrors ResolveCombatDamage exactly.
         const bool ds = CreatureHasDoubleStrike(p, state, &bs.ds);
         int base_pw = p.EffectivePower() + lord_pb;
@@ -12026,7 +12027,7 @@ static int PendingAttackDamageImpl(const GameState& state)
             tok.m_subtypes = d->params.attack_token_subtypes;
             tok.m_power    = d->params.attack_token_power;
             auto [tpb, ttb] = ComputeLordBonus(tok, state, active, false, nullptr,
-                                               &bs.lords, &bs.anthems);
+                                               &bs.lords, &bs.anthems, bs.own_creatures);
             // One per head only when the oracle says "for each opponent" (Adeline). Hero of
             // Bladehold's "create two" is a FLAT count and must not scale -- inert at 1 head,
             // a doubling bug in the 2HG cases this repo ships. Mirrors FireAttackCreateTokens.
@@ -18889,7 +18890,7 @@ static int ProjectedTokenAnthemToughness(const GameState& state, int me,
     tok.m_power     = 0;
     tok.m_toughness = 0;
     const BoardSources bs = GatherBoardSources(state.battlefield, me);
-    return ComputeLordBonus(tok, state, me, false, nullptr, &bs.lords, &bs.anthems).second;
+    return ComputeLordBonus(tok, state, me, false, nullptr, &bs.lords, &bs.anthems, bs.own_creatures).second;
 }
 
 // How many LIVE bodies a Saproling Burst fade activation adds to the board. Zero for every other
@@ -26337,6 +26338,9 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
     { fold(0x454D45524941ull); fold(static_cast<uint64_t>(p.upkeep_gy_reanimate_choice)); }   // "EMERIA"
     if (p.upkeep_tutor_choice >= 0)
     { fold(0x5550545554ull); fold(static_cast<uint64_t>(p.upkeep_tutor_choice)); }   // "UPTUT"
+    // Shadowborn INT-2's demon-trigger pin -- same must-fold rule, value-gated (own domain tag).
+    if (p.demon_trigger_choice >= 0)
+    { fold(0x44454D4F4Eull); fold(static_cast<uint64_t>(p.demon_trigger_choice)); }   // "DEMON"
     // The searched echo pin (next upkeep's pay/decline): the same must-fold, value-gated rule.
     if (p.echo_choice >= 0) { fold(0x4543484Full); fold(static_cast<uint64_t>(p.echo_choice)); }   // "ECHO"
     // The searched Defense of the Heart put list (next upkeep): the same must-fold, value-gated rule.
@@ -26720,7 +26724,7 @@ static bool IsApplyEmptyPlan(const TurnSolver::Plan& p)
         && p.putback_choice == -1
         && p.etbcounter_choice == -1 && p.sweep_choice == -1 && p.le_fire_choice == -1
         && p.vial_charge_choice == -1 && p.saga_target_choice == -1 && p.grace_choice == -1
-        && p.upkeep_gy_reanimate_choice == -1 && p.upkeep_tutor_choice == -1
+        && p.upkeep_gy_reanimate_choice == -1 && p.upkeep_tutor_choice == -1 && p.demon_trigger_choice == -1
         && p.echo_choice == -1 && p.doth_put_choice == -1
         && p.fling_victim_choice == -1 && p.tectonic_mode_choice == -1
         && p.tectonic_keep_choice == -1
@@ -26768,7 +26772,7 @@ static bool PlanIsAxisVariantExceptOrder(const TurnSolver::Plan& p)
         // outcome sequence (EnumerateReanimateCodes); only the headroom ranks for cards that may yet
         // reach the graveyard can still clamp onto a sibling, by design (completeness).
         || p.grace_choice >= 0
-        || p.upkeep_gy_reanimate_choice >= 0
+        || p.upkeep_gy_reanimate_choice >= 0 || p.demon_trigger_choice >= 0
         || p.upkeep_tutor_choice >= 0
         // Look-top pins (Risen Reef): every variant is a clone of its base differing only in a land /
         // order entry, and an entry past the decisions the apply actually reaches (a nonland top, a
@@ -27703,6 +27707,8 @@ inline std::uint64_t PlanH(const TurnSolver::Plan& p, int ax)
     { h = Mix(h, 0x454Dull + static_cast<std::uint64_t>(p.upkeep_gy_reanimate_choice)); }   // value-gated
     if (p.upkeep_tutor_choice >= 0)
     { h = Mix(h, 0x555054ull + static_cast<std::uint64_t>(p.upkeep_tutor_choice)); }
+    if (p.demon_trigger_choice >= 0)
+    { h = Mix(h, 0x444Dull + static_cast<std::uint64_t>(p.demon_trigger_choice)); }   // value-gated (Shadowborn)
     if (p.echo_choice >= 0) { h = Mix(h, 0xEC40ull + static_cast<std::uint64_t>(p.echo_choice)); }   // value-gated
     if (p.doth_put_choice >= 0)
     { h = Mix(h, 0xD0E70000ull + static_cast<std::uint64_t>(p.doth_put_choice)); }   // value-gated
@@ -29101,7 +29107,10 @@ enum : uint64_t {
     kActCounterPing  = 205,
     kActPingLoopLive = 206,
     kActGraveyardDamage = 207,
-    kActLoyaltyManaContinuation = 208
+    kActLoyaltyManaContinuation = 208,
+    // Shadowborn Apostle (INT-2): ONE board-level key per named-sacrifice ability, its value
+    // floor(copies / N) in bits 40+ -- see CollectActivationKeys.
+    kActSacNamed = 209
 };
 inline uint64_t ActKey(int m_number, uint64_t ability)
 { return (static_cast<uint64_t>(static_cast<uint32_t>(m_number)) << 8) | ability; }
@@ -29332,6 +29341,34 @@ void CollectActivationKeys(const GameState& state, int ctrl, const Permanent& p,
         {
             out.push_back(ActKey(num, kActUntapLoopFunded)
                           | (static_cast<uint64_t>(std::min(need_mv, 0xFFFF)) << 40));
+        }
+    }
+
+    // SHADOWBORN APOSTLE (INT-2): "{B}, Sacrifice six creatures named ~". A BOARD-LEVEL key -- carried
+    // only by the lowest-numbered copy, keyed on the NAME (not a copy's number, which the activation
+    // itself sacrifices), valued floor(copies / N) -- so it is NEW exactly when the count crosses a
+    // multiple of N: the sixth copy arriving mid-plan (a cast, a ripple chain), or six still left after
+    // the plan's own activation. Never per copy: an arm per Apostle entry would re-open the site on every
+    // cast (the over-arm failure). Total-only affordability, like every key here.
+    // CARRIER: the FIRST copy in battlefield order (any copy would do -- the key is the name's, not the
+    // copy's); every later copy stops at the first one it meets, so only the carrier walks the whole board
+    // (no per-copy board walk: the board-width quadratic family).
+    if (pp.sac_named_count > 0 && (p.card.IsCreature() || p.is_animated))
+    {
+        bool carrier = true;
+        int count = 0;
+        for (const Permanent& q : state.battlefield)
+        {
+            if (q.controller_index != ctrl || q.card.m_name != p.card.m_name) { continue; }
+            if (!q.card.IsCreature() && !q.is_animated) { continue; }
+            if (count == 0 && &q != &p) { carrier = false; break; }
+            ++count;
+        }
+        const int k = carrier ? count / pp.sac_named_count : 0;
+        if (carrier && k > 0 && ActAffordable(state, ctrl, p.card, pp.sac_named_activation_cost, total_cache))
+        {
+            const int name_key = static_cast<int>(std::hash<std::string>{}(p.card.m_name.str()) & 0x3FFFFFFF);
+            out.push_back(ActKey(name_key, kActSacNamed) | (static_cast<uint64_t>(std::min(k, 0xFFFF)) << 40));
         }
     }
 
@@ -33191,7 +33228,7 @@ static FadeBoardRead ReadFadeBoard(const GameState& state)
         tok.m_power     = 0;
         tok.m_toughness = 0;
         const auto [pb, tb] =
-            ComputeLordBonus(tok, state, me, false, nullptr, &bs.lords, &bs.anthems);
+            ComputeLordBonus(tok, state, me, false, nullptr, &bs.lords, &bs.anthems, bs.own_creatures);
         r.sap_anthem_p = pb;
         r.sap_anthem_t = tb;
     }
@@ -33267,7 +33304,7 @@ static FadeBoardRead ReadFadeBoard(const GameState& state)
             if (std::find(f.begin(), f.end(), "Saproling") != f.end()) { ++r.cda_per_body; }
         }
         const auto [pb, tb] =
-            ComputeLordBonus(p.card, state, me, p.is_animated, &p, &bs.lords, &bs.anthems);
+            ComputeLordBonus(p.card, state, me, p.is_animated, &p, &bs.lords, &bs.anthems, bs.own_creatures);
         (void)tb;
         // A CHARACTERISTIC-DEFINING ABILITY IS NOT IN EffectivePower(), which is printed power plus
         // +1/+1 and -1/-1 counters and nothing else. The Mycotyrant's printed P/T is */* -- modelled
@@ -34768,6 +34805,148 @@ static void EmitStealVariants(const GameState& state, const Card& src_card, cons
             actions.push_back(std::move(a));
             if (leaf) { return; }   // the playout policy: the front of the order only
         }
+    }
+}
+
+// SHADOWBORN APOSTLE'S ACTIVATION -- every searched variant (INT-2; resolver: SpellEffects.h
+// "SHADOWBORN APOSTLE", ApplyPermAbility's SacNamedTutorPut case). ONE emission per BOARD, never per copy:
+// the effect does not reference its source, so the copies are interchangeable sources (an identity fold;
+// the apply re-resolves the source by name, ResolveHandSourceActivation). One activation per plan (the
+// source's ActivationFamilyKey group); a second in the same main is reached through breakpoint site 9 --
+// the activation key (CollectActivationKeys, kActSacNamed) carries floor(copies / N), so it re-arms
+// exactly when the count crosses a multiple of N (the sixth copy arriving, or six left after the first
+// activation), never per copy (the over-arm failure of breakpoints-open-on-new-options).
+//   * BODIES: the readiness-count code (s strong + t tapped copies; X copies first, U the rest -- see
+//     SacNamedReadiness). A code with s > 0 while a T or U copy would be left over is DOMINATED (a strong
+//     copy can do everything a weak one can, and they are identical from our next untap) and is not
+//     emitted -- the arrivals the plan can add count toward U: one per copy of the name in HAND (cast
+//     before the trailing pass, sick), so "cast two, sacrifice those two and four old ones" is a code of
+//     its own. A code whose arrivals the plan does not make is a clean no-op at apply.
+//   * DEMON: one variant per distinct legal library card (the card's own tutor filter: "Demon creature
+//     card") plus the fail-to-find (kSacNamedNoFetch -- legal, and it still shuffles). Unnarrowed.
+//   * HUMAN PLAY: one entry per Demon (+ fail to find), unpinned bodies -- the six are board clicks at
+//     resolution (`sacrifice`), the Demon is the plan variant (the main-phase menu lists every legal one).
+//   * ORDER ONLY (the eval): the Demon's power, then the fewest strong copies given up. A ROLLOUT LEAF
+//     (beyond the horizon) keeps only the front code -- the permitted playout policy.
+static bool SacNamedTutorMatch(const Card& lc, const CardParams& pp)
+{
+    const CardDefinition* ld = CardDatabase::Instance().LookupCached(lc);
+    const Card& card = ld ? ld->card : lc;
+    if (!CardHasColorNamed(card, pp.tutor_color) || !TutorNumericFilterOk(card, pp)) { return false; }
+    if (pp.tutor_types.empty()) { return true; }
+    for (const std::string& t : pp.tutor_types) { if (CardMatchesTypeName(card, t)) { return true; } }
+    return false;
+}
+static void EmitSacNamedVariants(const GameState& state, std::vector<Action>& actions)
+{
+    const int me = state.active_player_index;
+    const Player& ap = state.players[static_cast<std::size_t>(me)];
+    // The canonical source: the lowest-numbered copy on the battlefield, else (all copies still to be
+    // cast this plan) the lowest-numbered copy in hand. One emission per distinct name.
+    std::vector<InternedName> done;
+    auto emit_for = [&](const Card& src, const CardDefinition* sd)
+    {
+        if (std::find(done.begin(), done.end(), src.m_name) != done.end()) { return; }
+        done.push_back(src.m_name);
+        const int N = sd->params.sac_named_count;
+        if (N <= 0 || N > 60) { return; }
+        int board_src = 0;
+        for (const Permanent& q : state.battlefield)
+        {
+            if (q.controller_index != me || q.card.m_name != src.m_name || (!q.card.IsCreature() && !q.is_animated)) { continue; }
+            if (board_src == 0 || q.card.m_number < board_src) { board_src = q.card.m_number; }
+        }
+        int hand_src = 0, arrivals = 0;
+        for (const Card& h : ap.hand)
+        {
+            if (h.m_name != src.m_name || h.m_is_staged) { continue; }
+            ++arrivals;
+            if (hand_src == 0 || h.m_number < hand_src) { hand_src = h.m_number; }
+        }
+        const auto b = SacNamedBuckets(state, me, src.m_name);
+        const int X = static_cast<int>(b[0].size()), T = static_cast<int>(b[1].size());
+        const int U = static_cast<int>(b[2].size()), S = static_cast<int>(b[3].size());
+        if (X + T + U + S + arrivals < N) { return; }
+        // Human play: the copies must be on the battlefield now (the menu re-prompts after each cast).
+        if (HumanPlayActive() && X + T + U + S < N) { return; }
+        // Library Demons (distinct names, library order).
+        std::vector<std::string> targets;
+        for (const Card& lc : ap.library)
+        {
+            if (!SacNamedTutorMatch(lc, sd->params)) { continue; }
+            const std::string nm = lc.m_name.str();
+            if (std::find(targets.begin(), targets.end(), nm) == targets.end()) { targets.push_back(nm); }
+        }
+        auto power_of = [](const std::string& nm) -> int
+        {
+            const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
+            return (d != nullptr && d->card.m_power.has_value()) ? *d->card.m_power : 0;
+        };
+        std::stable_sort(targets.begin(), targets.end(),
+                         [&](const std::string& x, const std::string& y) { return power_of(x) > power_of(y); });
+        targets.push_back(kSacNamedNoFetch);
+        // Readiness-count codes.
+        struct Code { int s, t, arr; };
+        std::vector<Code> codes;
+        if (!HumanPlayActive())
+        {
+            const int r = N - std::min(N, X);
+            for (int t = 0; t <= std::min(T, r); ++t)
+            {
+                for (int sc = 0; sc <= std::min(S, r - t); ++sc)
+                {
+                    const int u = r - t - sc;
+                    if (u > U + arrivals) { continue; }                  // even every arrival cannot fill it
+                    if (sc > 0 && (t < T || u < U)) { continue; }        // dominated: a weak copy left over
+                    codes.push_back(Code{ sc, t, std::max(0, u - U) });
+                }
+            }
+            if (codes.empty()) { return; }
+            std::stable_sort(codes.begin(), codes.end(), [](const Code& x, const Code& y)
+            {
+                if (x.s != y.s) { return x.s < y.s; }
+                if (x.arr != y.arr) { return x.arr < y.arr; }
+                return x.t < y.t;
+            });
+        }
+        else { codes.push_back(Code{ -1, 0, 0 }); }   // unpinned (bodies asked at resolution)
+        const bool leaf = !HumanPlayActive() && !(g_search_candidate_enum || g_condemn_root_turn < 0);
+        if (leaf && codes.size() > 1) { codes.resize(1); }   // the playout policy: the front code only
+        Action base;
+        base.kind           = Action::Kind::ActivatePermAbility;
+        base.card_name      = src.m_name;
+        base.def            = sd;
+        base.hand_index     = -1;
+        base.sac_source_id  = board_src != 0 ? board_src : hand_src;
+        base.ability_mode   = Action::AbilityMode::SacNamedTutorPut;
+        base.chosen_x       = 1;   // never a K block: chosen_x > 1 on a {T}-less mode means repeats
+        base.cost           = sd->params.sac_named_activation_cost.value_or(ManaCost{});
+        base.is_noncreature = true;
+        constexpr int DMG = 100;
+        for (const std::string& tg : targets)
+        {
+            const int pw = tg == kSacNamedNoFetch ? 0 : power_of(tg);
+            for (const Code& c : codes)
+            {
+                Action a = base;
+                a.tutor_target  = tg;
+                a.sac_victim_id = c.s < 0 ? 0 : SacNamedSpecCode(c.s, c.t);
+                a.eval          = pw * DMG - std::max(0, c.s) * 10 - c.arr;
+                actions.push_back(std::move(a));
+            }
+        }
+    };
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != me || q.def_absent) { continue; }
+        const CardDefinition* sd = CardDatabase::Instance().LookupCached(q.card);
+        if (sd != nullptr && sd->params.sac_named_count > 0) { emit_for(q.card, sd); }
+    }
+    for (const Card& h : ap.hand)
+    {
+        if (h.m_is_staged) { continue; }
+        const CardDefinition* sd = CardDatabase::Instance().LookupCached(h);
+        if (sd != nullptr && sd->params.sac_named_count > 0) { emit_for(h, sd); }
     }
 }
 
@@ -44795,6 +44974,10 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 emit_pod_source(hc, sd);
             }
         }
+        // Shadowborn Apostle's "{B}, Sacrifice six creatures named ~: put a Demon" (INT-2; see
+        // EmitSacNamedVariants). One emission per board; inert for every deck without the param (a board
+        // + hand walk testing one int).
+        if (state.deck_has_sac_named) { EmitSacNamedVariants(state, actions); }
 
         // HAND GO-OFF (MTG_EDF_HAND_GOFF, USER 2026-09-14: "detecting when our current board + hand
         // can go off"). The blink loop above is enumerated per OUTLET ON THE BATTLEFIELD, so a
@@ -50534,6 +50717,7 @@ namespace solvememo
             || a.grace_choice != b.grace_choice
             || a.upkeep_gy_reanimate_choice != b.upkeep_gy_reanimate_choice
             || a.upkeep_tutor_choice != b.upkeep_tutor_choice
+            || a.demon_trigger_choice != b.demon_trigger_choice
             || a.echo_choice != b.echo_choice
             || a.doth_put_choice != b.doth_put_choice
             || a.saga_ch1_choice != b.saga_ch1_choice
@@ -65572,6 +65756,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // Executor twin: AIEngine.
             const int src_id = ResolveHandSourceActivation(state, a);
             const StealPinScope _steal_pin(a.enchant_target, a.steal_spec);
+            // Shadowborn Apostle's searched readiness-count code + Demon (SacNamedTutorPut); {0, null} for
+            // every other mode (never read). Lockstep twin in the other world.
+            const bool sac_named = a.ability_mode == Action::AbilityMode::SacNamedTutorPut;
+            const SacNamedPinScope _sac_named_pin(sac_named ? a.sac_victim_id : 0,
+                                                  sac_named ? &a.tutor_target.str() : nullptr);
             // Kessig Wolf Run's searched TARGET + X (TapTargetPump), read by the liveness check, the
             // payment (TapTargetPumpPay) and the resolver. {0, 0} for every other mode (never read).
             const bool tpump = a.ability_mode == Action::AbilityMode::TapTargetPump;
@@ -67166,7 +67355,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         || plan.fling_victim_choice != -1 || plan.tectonic_mode_choice >= 0
                         || plan.tectonic_keep_choice >= 0 || plan.bruna_gather_choice >= 0
                         || plan.combat_aura_swap_choice >= 0 || plan.saga_target_choice >= 0
-                        || plan.grace_choice >= 0 || plan.upkeep_gy_reanimate_choice >= 0
+                        || plan.grace_choice >= 0 || plan.upkeep_gy_reanimate_choice >= 0 || plan.demon_trigger_choice >= 0
                         || plan.attack_attach_choice >= 0 || plan.fb_hold_choice >= 0
                         || plan.saga_ch1_choice != -1 || !plan.sac_pins.empty()
                         || plan.tapmode_choice != 0 || plan.freshmode_choice != 0
@@ -67792,6 +67981,8 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     // Abiding Grace's legal-target snapshot, taken as its trigger goes on the stack (the beginning of the
     // end step, before the sweeps below) -- lockstep twin of GameEngine::EndStep's.
     const std::vector<int> grace_snapshot = SnapshotEndStepGraceTargets(state);
+    // Reaper's morbid snapshot -- lockstep twin of GameEngine::EndStep's.
+    const int morbid_triggers = SnapshotEndStepMorbidTriggers(state);
 
     // "Exile those tokens at the beginning of the next end step" (Twinflame token copies,
     // Permanent::exile_at_end): swept FIRST, before the cleanup discard below, mirroring
@@ -67819,6 +68010,9 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     PerformEndStepNoCreatureSacrifice(state);
     // Abiding Grace's end-step "choose one" (lockstep twin of GameEngine::EndStep, same position: last).
     PerformEndStepAbidingGrace(state, grace_snapshot);
+    // Reaper's morbid destroy + Sire's discard (lockstep twin of GameEngine::EndStep, same position/order).
+    PerformEndStepMorbidDestroy(state, morbid_triggers);
+    PerformEndStepDiscardHands(state, state.active_player_index);
 
     // Check for "no maximum hand size" permanent (e.g. Reliquary Tower) — if present,
     // skip the discard-to-7 step so the lookahead correctly models turns after RT is played.
@@ -67968,6 +68162,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     {
         if (!PerformOpponentUpkeepHellbentDraw(state)) { return false; }
         opponentdeck::EndOfTurnDraw(state);
+        PerformEndStepDiscardHands(state, state.active_player_index);   // Sire at the opponent's end step (twin)
     }
     // DAY / NIGHT turn-based check (CR 726.3a) -- lockstep twin of GameEngine::RunTurnFrom's call,
     // at the same instant (spells_cast_this_turn still OUR turn's count). No-op unless a daybound
@@ -68222,6 +68417,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     // Fading (Saproling Burst): remove one, or sacrifice if you cannot -- and the LTB then
     // destroys every token it made. Lockstep twin in GameEngine::UpkeepTail.
     PerformUpkeepFading(state);
+    PerformUpkeepSacrificeCreature(state);   // Abhorrent Overlord (lockstep twin of GameEngine::UpkeepTail)
 
     // Creature Giving upkeep triggers, in controller-optimal order: Varchild's War-Riders
     // cumulative-upkeep gifts FIRST (the fresh Survivors count toward DotH's >= 3), then the
@@ -69832,6 +70028,10 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                 // Walking Ballista's ping: WHICH target (0 = face) is a decision. Every other ability: no tag.
                 if (act.ability_mode == Action::AbilityMode::CounterPing && act.sac_victim_id != 0)
                 { w.Put("#B"); w.Int(act.sac_victim_id); }
+                // Shadowborn Apostle: WHICH Demon and WHICH six (the readiness-count code) are distinct
+                // plans (the Gamble lesson). Lockstep with the legacy builder. Every other ability: no tag.
+                if (act.ability_mode == Action::AbilityMode::SacNamedTutorPut)
+                { w.Put("#N"); w.Int(act.sac_victim_id); w.Put("#F"); w.Put(act.tutor_target); }
                 w.End(); break;
         }
     }
@@ -74767,7 +74967,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                                      ? std::string() : "#P" + std::to_string(act.sac_victim_id))
                                   // Walking Ballista's ping target (0 = the face, untagged).
                                   + (act.ability_mode != Action::AbilityMode::CounterPing || act.sac_victim_id == 0
-                                     ? std::string() : "#B" + std::to_string(act.sac_victim_id)));
+                                     ? std::string() : "#B" + std::to_string(act.sac_victim_id))
+                                  // Shadowborn Apostle: the readiness-count code and the Demon (writer twin).
+                                  + (act.ability_mode != Action::AbilityMode::SacNamedTutorPut
+                                     ? std::string() : "#N" + std::to_string(act.sac_victim_id)
+                                                       + "#F" + act.tutor_target.str()));
                     break;
             }
         }
@@ -82175,7 +82379,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                         || p.tectonic_keep_choice >= 0
                         || p.bruna_gather_choice >= 0 || p.combat_aura_swap_choice >= 0
                         || p.attack_attach_choice >= 0
-                        || p.saga_target_choice >= 0 || p.grace_choice >= 0 || p.upkeep_gy_reanimate_choice >= 0 || p.saga_ch1_choice != -1
+                        || p.saga_target_choice >= 0 || p.grace_choice >= 0 || p.upkeep_gy_reanimate_choice >= 0 || p.demon_trigger_choice >= 0 || p.saga_ch1_choice != -1
                         || !p.sac_pins.empty()) { continue; }
                     // k = 0 is the heuristic's own pick, which the base plan already carries.
                     for (int k = 1; k < W; ++k)
@@ -82273,7 +82477,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                         || p.tectonic_keep_choice >= 0
                         || p.bruna_gather_choice >= 0 || p.combat_aura_swap_choice >= 0
                         || p.attack_attach_choice >= 0
-                        || p.saga_target_choice >= 0 || p.grace_choice >= 0 || p.upkeep_gy_reanimate_choice >= 0 || p.saga_ch1_choice != -1
+                        || p.saga_target_choice >= 0 || p.grace_choice >= 0 || p.upkeep_gy_reanimate_choice >= 0 || p.demon_trigger_choice >= 0 || p.saga_ch1_choice != -1
                         || !p.sac_pins.empty()) { continue; }
                     // k = 0 is the heuristic's own pick, which the base plan carries on a fresh state.
                     for (const int k : saga_ranks)
@@ -82391,7 +82595,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     || p.tectonic_keep_choice >= 0
                     || p.bruna_gather_choice >= 0 || p.combat_aura_swap_choice >= 0
                     || p.attack_attach_choice >= 0
-                    || p.saga_target_choice >= 0 || p.grace_choice >= 0 || p.upkeep_gy_reanimate_choice >= 0 || p.saga_ch1_choice != -1
+                    || p.saga_target_choice >= 0 || p.grace_choice >= 0 || p.upkeep_gy_reanimate_choice >= 0 || p.demon_trigger_choice >= 0 || p.saga_ch1_choice != -1
                     || !p.sac_pins.empty()) { continue; }
                 const int n = std::min(kGraceMaxOrdinals, n_bf + casts_per_plan[i]);
                 if (n <= 0) { continue; }
@@ -82411,6 +82615,116 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             all.insert(all.end(), std::make_move_iterator(extra.begin()),
                                   std::make_move_iterator(extra.end()));
         }
+    }
+
+    // SEARCHED DEMON TRIGGERS (Shadowborn INT-2) -- the post-dedup fan-out for Reaper from the Abyss's
+    // end-step morbid destroy TARGET and Abhorrent Overlord's next-upkeep sacrifice VICTIM. Both resolve
+    // after the plan apply has returned, so the pick rides the STATE (Plan::demon_trigger_choice ->
+    // GameState::scripted_demon_trigger, PACKED: low byte Reaper, high byte Overlord; the Grace / Emeria
+    // shape). Ranks index each trigger's resolution-time CLASS list (DemonTriggerClassReps), clamped
+    // (duplicate-not-whiff), so every class is reachable from every state.
+    //
+    // PER-PLAN CONSUMERS: a Reaper on our battlefield now or put / cast by THIS plan, AND a death possible
+    // this turn (one already happened, or the plan sacrifices: the Apostle activation, an additional-cost
+    // sacrifice, an outlet) -- Reaper's intervening if; an Overlord on our battlefield now or put / cast by
+    // this plan. A plan with neither gets no variants (they would be duplicates of its base).
+    // THE RANK BOUND per half: the classes on the board now (both sides for the destroy, ours for the
+    // sacrifice) + one per distinct creature NAME the plan adds that is not a class yet + one for the
+    // Harpy class when the plan adds a devotion-token maker. An over-estimate only costs duplicates.
+    // CROSS PRODUCT of the two halves (both small; the deck runs one of each): every combination is
+    // reachable. Base plans only (one axis at a time, the Grace rule). MTG_DEMON_AXIS=0 restores the pure
+    // default (every trigger takes its list's front) -- an A/B arm only.
+    static const bool s_demon_axis = EnvOn("MTG_DEMON_AXIS", true);
+    if (!cont_axes_only && s_demon_axis && state.deck_has_demon_triggers && !HumanPlayActive())
+    {
+        const int me = state.active_player_index;
+        int reaper_bf = 0, over_bf = 0;
+        std::string reaper_excl;
+        std::vector<std::string> own_names;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != me) { continue; }
+            if (!p.card.IsCreature() && !p.is_animated) { continue; }
+            const std::string nm = p.card.m_name.str();
+            if (std::find(own_names.begin(), own_names.end(), nm) == own_names.end()) { own_names.push_back(nm); }
+            if (p.def_absent) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d == nullptr) { continue; }
+            if (d->params.endstep_morbid_destroy_target_creature) { ++reaper_bf; reaper_excl = d->params.endstep_destroy_excluded_subtype; }
+            if (d->params.upkeep_sacrifice_creature > 0) { ++over_bf; }
+        }
+        const int classes_destroy = static_cast<int>(DemonTriggerClassReps(state, me, true, reaper_excl).size());
+        const int classes_own     = static_cast<int>(DemonTriggerClassReps(state, me, false, std::string{}).size());
+        const int inherited = state.scripted_demon_trigger;
+        std::vector<TurnSolver::Plan> extra;
+        for (std::size_t i = 0, n_base = all.size(); i < n_base; ++i)
+        {
+            const TurnSolver::Plan& p = all[i];
+            // Base plans only -- one axis at a time, so cost stays additive.
+            if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.tutor_choice >= 0
+                || p.etbdig_choice >= 0 || p.lackey_choice >= 0 || p.ponder_choice >= 0 || p.putback_choice >= 0
+                || p.discard_choice >= 0 || p.vial_charge_choice >= 0
+                || p.fling_victim_choice != -1 || p.tectonic_mode_choice >= 0
+                || p.tectonic_keep_choice >= 0
+                || p.bruna_gather_choice >= 0 || p.combat_aura_swap_choice >= 0
+                || p.attack_attach_choice >= 0
+                || p.saga_target_choice >= 0 || p.grace_choice >= 0 || p.upkeep_gy_reanimate_choice >= 0
+                || p.demon_trigger_choice >= 0 || p.saga_ch1_choice != -1
+                || !p.sac_pins.empty()) { continue; }
+            bool reaper = reaper_bf > 0, over = over_bf > 0, kills = state.creature_died_this_turn;
+            bool harpy = false;
+            std::vector<std::string> new_names, new_nondemon;
+            auto note_creature = [&](const CardDefinition* d)
+            {
+                if (d == nullptr || !d->card.IsCreature()) { return; }
+                const std::string nm = d->card.m_name.str();
+                if (d->params.endstep_morbid_destroy_target_creature) { reaper = true; reaper_excl = d->params.endstep_destroy_excluded_subtype; }
+                if (d->params.upkeep_sacrifice_creature > 0) { over = true; }
+                if (!d->params.etb_tokens_per_devotion_color.empty()) { harpy = true; }
+                if (std::find(own_names.begin(), own_names.end(), nm) != own_names.end()) { return; }
+                if (std::find(new_names.begin(), new_names.end(), nm) == new_names.end())
+                {
+                    new_names.push_back(nm);
+                    if (reaper_excl.empty() || !CardHasSubtype(d->card, reaper_excl)) { new_nondemon.push_back(nm); }
+                }
+            };
+            for (const Action& a : p.actions)
+            {
+                const CardDefinition* ad = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+                if (a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::SacNamedTutorPut)
+                {
+                    kills = true;
+                    if (!a.tutor_target.empty() && a.tutor_target.str() != kSacNamedNoFetch)
+                    { note_creature(CardDatabase::Instance().Lookup(a.tutor_target.str())); }
+                    continue;
+                }
+                if (a.kind == Action::Kind::SacCreatureOutlet) { kills = true; continue; }
+                if (a.kind != Action::Kind::CastFromHand || ad == nullptr) { continue; }
+                if (HasSacCreatureAdditionalCost(ad->params)) { kills = true; }
+                note_creature(ad);
+            }
+            const bool r_on = reaper && kills;
+            if (!r_on && !over) { continue; }
+            const int kr = r_on ? std::min(kDemonPinMask + 1,
+                                           classes_destroy + static_cast<int>(new_nondemon.size()) + (harpy ? 1 : 0)) : 1;
+            const int ko = over ? std::min(kDemonPinMask + 1,
+                                           classes_own + static_cast<int>(new_names.size()) + (harpy ? 1 : 0)) : 1;
+            for (int r = 0; r < std::max(1, kr); ++r)
+            {
+                for (int o = 0; o < std::max(1, ko); ++o)
+                {
+                    const int packed = r | (o << kDemonOverlordShift);
+                    if (inherited >= 0 ? packed == inherited : packed == 0) { continue; }
+                    TurnSolver::Plan v = p;
+                    v.demon_trigger_choice = static_cast<std::int16_t>(packed);
+                    extra.push_back(std::move(v));
+                }
+            }
+        }
+        TRACE("demonaxis", "T%d %zu plan(s) -> %zu demon-trigger variant(s) (reaper_bf=%d over_bf=%d)",
+              state.turn_number, all.size(), extra.size(), reaper_bf, over_bf);
+        all.insert(all.end(), std::make_move_iterator(extra.begin()),
+                              std::make_move_iterator(extra.end()));
     }
 
     // SEARCHED EMERIA UPKEEP RETURN -- the post-dedup fan-out for Emeria, the Sky Ruin's intervening-if
@@ -82528,7 +82842,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                             || p.tectonic_keep_choice >= 0
                             || p.bruna_gather_choice >= 0 || p.combat_aura_swap_choice >= 0
                             || p.attack_attach_choice >= 0
-                            || p.saga_target_choice >= 0 || p.grace_choice >= 0 || p.upkeep_gy_reanimate_choice >= 0
+                            || p.saga_target_choice >= 0 || p.grace_choice >= 0 || p.upkeep_gy_reanimate_choice >= 0 || p.demon_trigger_choice >= 0
                             || p.saga_ch1_choice != -1
                             || !p.sac_pins.empty()) { continue; }
                         const int n = ords[i];
@@ -82651,7 +82965,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             const TurnSolver::Plan& p = all[bi];
             if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.tutor_choice >= 0
                 || p.etbdig_choice >= 0 || p.lackey_choice >= 0
-                || p.saga_target_choice >= 0 || p.grace_choice >= 0 || p.upkeep_gy_reanimate_choice >= 0 || p.saga_ch1_choice != -1
+                || p.saga_target_choice >= 0 || p.grace_choice >= 0 || p.upkeep_gy_reanimate_choice >= 0 || p.demon_trigger_choice >= 0 || p.saga_ch1_choice != -1
                 || !p.sac_pins.empty()) { return false; }
             return (plan_traits(bi) & kTrSacCol) != 0;
         });
@@ -82662,7 +82976,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             // Base plans only -- one axis at a time, so cost stays additive (the tutor axis's rule).
             if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.tutor_choice >= 0
                 || p.etbdig_choice >= 0 || p.lackey_choice >= 0
-                || p.saga_target_choice >= 0 || p.grace_choice >= 0 || p.upkeep_gy_reanimate_choice >= 0 || p.saga_ch1_choice != -1
+                || p.saga_target_choice >= 0 || p.grace_choice >= 0 || p.upkeep_gy_reanimate_choice >= 0 || p.demon_trigger_choice >= 0 || p.saga_ch1_choice != -1
                 || !p.sac_pins.empty()) { continue; }
             if ((plan_traits(pi) & kTrSacCol) == 0) { continue; }
             // This plan's sac-cost casts, plus the family-representative test (every one of them
@@ -82823,7 +83137,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     || p.tectonic_keep_choice >= 0
                     || p.bruna_gather_choice >= 0 || p.combat_aura_swap_choice >= 0
                     || p.attack_attach_choice >= 0
-                    || p.saga_target_choice >= 0 || p.grace_choice >= 0 || p.upkeep_gy_reanimate_choice >= 0 || p.saga_ch1_choice != -1
+                    || p.saga_target_choice >= 0 || p.grace_choice >= 0 || p.upkeep_gy_reanimate_choice >= 0 || p.demon_trigger_choice >= 0 || p.saga_ch1_choice != -1
                     || !p.sac_pins.empty() || p.tapmode_choice != 0
                     || p.freshmode_choice != 0) { continue; }
                 if (!DigOfferCovers(dg, p)) { continue; }
@@ -83277,7 +83591,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         auto base_plan = [](const TurnSolver::Plan& p)
         {
             return !PlanIsAxisVariantExceptOrder(p) && p.sac_pins.empty() && p.rad_mode == -1
-                && p.saga_target_choice == -1 && p.grace_choice == -1 && p.upkeep_gy_reanimate_choice == -1 && p.saga_ch1_choice == -1
+                && p.saga_target_choice == -1 && p.grace_choice == -1 && p.upkeep_gy_reanimate_choice == -1 && p.demon_trigger_choice == -1 && p.saga_ch1_choice == -1
                 && p.vial_charge_choice == -1 && p.fling_victim_choice == -1
                 && p.tectonic_mode_choice == -1 && p.tectonic_keep_choice == -1
                 && p.bruna_gather_choice == -1 && p.combat_aura_swap_choice == -1
@@ -84045,7 +84359,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     || p.vial_charge_choice >= 0 || p.fling_victim_choice != -1
                     || p.tectonic_mode_choice >= 0 || p.tectonic_keep_choice >= 0
                     || p.bruna_gather_choice >= 0 || p.combat_aura_swap_choice >= 0
-                    || p.attack_attach_choice >= 0 || p.saga_target_choice >= 0 || p.grace_choice >= 0 || p.upkeep_gy_reanimate_choice >= 0 || p.saga_ch1_choice != -1
+                    || p.attack_attach_choice >= 0 || p.saga_target_choice >= 0 || p.grace_choice >= 0 || p.upkeep_gy_reanimate_choice >= 0 || p.demon_trigger_choice >= 0 || p.saga_ch1_choice != -1
                     || p.freshmode_choice != 0 || p.tapmode_choice != 0 || p.dig_choice != -1
                     || p.soulbond_decline || p.fb_hold_choice >= 0)
                 { continue; }
@@ -84114,7 +84428,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 // changes the card it sees, so the land / order answer and the position interact
                 && p.look_top_pins.empty() && p.incinerator_targets.empty()
                 && p.sac_pins.empty() && p.rad_mode == -1
-                && p.saga_target_choice == -1 && p.grace_choice == -1 && p.upkeep_gy_reanimate_choice == -1 && p.saga_ch1_choice == -1
+                && p.saga_target_choice == -1 && p.grace_choice == -1 && p.upkeep_gy_reanimate_choice == -1 && p.demon_trigger_choice == -1 && p.saga_ch1_choice == -1
                 && p.vial_charge_choice == -1 && p.fling_victim_choice == -1
                 && p.tectonic_mode_choice == -1 && p.tectonic_keep_choice == -1
                 && p.bruna_gather_choice == -1 && p.combat_aura_swap_choice == -1
@@ -84792,6 +85106,7 @@ static void PlanDomCensus(const std::vector<TurnSolver::Plan>& all)
             add(pl.grace_choice);
             add(pl.upkeep_gy_reanimate_choice);   // Emeria: in padding, so the size pin cannot catch it
             add(pl.upkeep_tutor_choice);
+            add(pl.demon_trigger_choice);   // Shadowborn's demon triggers: in padding, so the size pin cannot catch it
             add(pl.echo_choice);   // the searched echo pin: in padding, so the size pin cannot catch it
             add(pl.doth_put_choice);   // the searched DotH put list: in padding, so the size pin cannot catch it
             add(pl.land_slot); add(pl.landfall_target_choice); add(pl.combat_landfall_target_choice);
@@ -88460,6 +88775,13 @@ static TranspositionTable::Key BuildSimKeyBase(const GameState& state, int max_t
         // that differ in it have genuinely different futures (one doubles its tokens every end step,
         // the other does not). Folded only when TRUE -> byte-identical for every non-ascend deck.
         if (p.has_city_blessing) { Fold(k, 0x0CB1E); }
+        // MORBID (GameState::creature_died_this_turn; Reaper from the Abyss's end-step intervening if).
+        // FUTURE-DETERMINING for a deck holding a morbid reader: two same-turn states differing only in
+        // "a creature died" reach different end steps. A bare marker (the trigger reads > 0, never a
+        // count), folded once (pi == the active player) and deck-gated (deck_has_morbid), so every other
+        // deck keeps its exact prior key.
+        if (state.deck_has_morbid && state.creature_died_this_turn && pi == state.active_player_index)
+        { Fold(k, 0x40B1D); }
         if (p.has_enduring_story)        { Fold(k, 0x5709A); }   // STORIED designation (monotone)
         if (p.equip_activated_this_turn) { Fold(k, 0xE9A1F); }   // Kili waiver already spent
         // Emblem anthem count (Gideon, Ally of Zendikar -4). Same shape as the city's blessing above
@@ -90536,7 +90858,10 @@ static TranspositionTable::Key BuildDedupKeyBeforeLandSearchPins(const GameState
                          // The searched Defense of the Heart put list, read at the next upkeep (appended:
                          // value-gated, own slot).
                          static_cast<int>(state.scripted_doth_put),
-                         static_cast<int>(state.scripted_upkeep_tutor) };
+                         static_cast<int>(state.scripted_upkeep_tutor),
+                         // Shadowborn's packed demon-trigger pin (end step + next upkeep; appended:
+                         // value-gated, own slot).
+                         static_cast<int>(state.scripted_demon_trigger) };
     for (int i = 0; i < static_cast<int>(sizeof(pins) / sizeof(pins[0])); ++i)
     {
         if (pins[i] != -1)
@@ -102116,7 +102441,7 @@ TurnSolver::Plan TurnSolver::ReshuffleAvgChoosePlan(const GameState& state, int 
                 iv("attack_attach", q.attack_attach_choice, -1); iv("etbdig", q.etbdig_choice, -1); iv("dig", q.dig_choice, -1);
                 iv("tutor", q.tutor_choice, -1); iv("bp", q.bp_choice, -1); iv("ponder", q.ponder_choice, -1);
                 iv("putback", q.putback_choice, -1); iv("discard", q.discard_choice, -1); iv("scry", q.scry_choice, -1);
-                iv("etbcounter", q.etbcounter_choice, -1); iv("le_fire", q.le_fire_choice, -1); iv("grace", q.grace_choice, -1);
+                iv("etbcounter", q.etbcounter_choice, -1); iv("le_fire", q.le_fire_choice, -1); iv("grace", q.grace_choice, -1); iv("demontrig", q.demon_trigger_choice, -1);
                 iv("echo", q.echo_choice, -1);
                 iv("doth", q.doth_put_choice, -1);
                 std::fprintf(stderr, "[nc]   #%zu %s |%s\n", i, FsPlanText(q).c_str(), ax.c_str());
@@ -105836,6 +106161,10 @@ static TranspositionTable::Key BuildBreakpointKey(const GameState& state, bool i
     { Fold(k, 0xD0E7); Fold(k, static_cast<uint64_t>(state.scripted_doth_put)); }
     if (fold_upkeep_pins && state.scripted_upkeep_tutor >= 0)
     { Fold(k, 0x555054); Fold(k, static_cast<uint64_t>(state.scripted_upkeep_tutor)); }
+    // Shadowborn's demon-trigger pin (Reaper end step + Overlord next upkeep): the axis skips the variant
+    // equal to the inherited pin, so a memoised list under one pin is not another's. Value-gated.
+    if (fold_upkeep_pins && state.scripted_demon_trigger >= 0)
+    { Fold(k, 0xDE40); Fold(k, static_cast<uint64_t>(state.scripted_demon_trigger)); }
     // LIVE ORDER-CONDEMNATION stamp (added 2026-08-20, when the m2-facing enum memo gained
     // coverage): a live stamp FILTERS the post-combat harvest, so two same-board states with
     // different stamp lists enumerate differently -- exactly the "same-turn m2 memo must fold
@@ -109535,6 +109864,19 @@ static std::string BoardActivationIllegalReason(const GameState& s, const TurnSo
         if (d && d->params.steal_tap_count <= 0)
         { return "'" + name + "' has no tap-Vampires-to-gain-control ability"; }
     }
+    // --- sacnamed= (Shadowborn Apostle): the value is the DEMON (or "(no fetch)"). The six copies are
+    // NOT asserted -- the line's own casts can supply them (the LegalNotEnumerated grade).
+    for (const std::string& fetch : spec.sac_nameds)
+    {
+        bool any_src = false;
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != s.active_player_index) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d && d->params.sac_named_count > 0) { any_src = true; break; }
+        }
+        if (!any_src) { return "you control nothing with a sacrifice-six-to-search ability (sacnamed=" + fetch + ")"; }
+    }
     for (const std::string& name : spec.transforms)
     {
         if (!live(name))
@@ -110215,6 +110557,7 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
                       spec.tap_lifes.empty() && spec.aura_swaps.empty()
                       && spec.land_searches.empty()
                       && spec.steals.empty() && spec.transforms.empty()
+                      && spec.sac_nameds.empty()
                       && spec.untap_acts.empty() && spec.tap_draws.empty()))
     {
         out.verdict = V::Accept; out.plan_index = -1;
@@ -110406,6 +110749,10 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
     const bool ooze_declared      = !spec.ooze_exiles.empty();
     std::vector<std::string> sortedOoze = spec.ooze_exiles;
     std::sort(sortedOoze.begin(), sortedOoze.end());
+    // sacnamed= (Shadowborn Apostle; the value is the Demon), the same declared-vs-legacy split.
+    const bool sacnamed_declared  = !spec.sac_nameds.empty();
+    std::vector<std::string> sortedSacNamed = spec.sac_nameds;
+    std::sort(sortedSacNamed.begin(), sortedSacNamed.end());
     // eternalize= (Timeless Witness from the graveyard): its own verb, never in the cast multiset.
     std::vector<std::string> sortedEternalize = spec.eternalizes;
     std::sort(sortedEternalize.begin(), sortedEternalize.end());
@@ -110481,6 +110828,7 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
         std::vector<int> jitteModes, gyExileModes;
         std::vector<TurnSolver::LineSpec::PodSpec> podActs;
         std::vector<std::string> oozeNames;
+        std::vector<std::string> sacNamedFetches;
         std::vector<std::string> eternalizeNames;
         // One entry per blink activation: (outlet name, blinked creature's m_number). Matched
         // against spec.blinks by BlinksMatch below, which honours the 0 wildcard.
@@ -110585,6 +110933,9 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
             { podActs.push_back({ a.tutor_target.str(), a.sac_victim_id }); continue; }
             if (ooze_declared && a.kind == Action::Kind::GraveyardExileGrow)
             { oozeNames.push_back(a.tutor_target); continue; }
+            if (sacnamed_declared && a.kind == Action::Kind::ActivatePermAbility
+                && a.ability_mode == Action::AbilityMode::SacNamedTutorPut)
+            { sacNamedFetches.push_back(a.tutor_target.str()); continue; }
             if (a.kind == Action::Kind::Eternalize)
             { eternalizeNames.push_back(a.card_name.str()); continue; }
             // Blink: matched against its own verb when declared (the target is the decision), else
@@ -110786,6 +111137,12 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
             std::vector<std::string> v2 = oozeNames;
             std::sort(v2.begin(), v2.end());
             if (v2 != sortedOoze) { continue; }
+        }
+        if (sacnamed_declared)
+        {
+            std::vector<std::string> v2 = sacNamedFetches;
+            std::sort(v2.begin(), v2.end());
+            if (v2 != sortedSacNamed) { continue; }
         }
         {
             std::vector<std::string> v2 = eternalizeNames;
@@ -113453,7 +113810,8 @@ static const char* PlanDumpModeName(PermAbilityMode m)
         "IceCounter", "GrantLifelink", "SporeSaproling", "PayToken", "FadeSaproling", "PingAll",
         "LifeGatedPutCreatures", "SacLifePerCreature", "TapLifegain", "ActivatedDig",
         "SacLandSearch", "QuestSacLandSearch", "ReconfigureUnattach", "TapBlood", "BloodDraw",
-        "TapSubtypeSteal", "TransformSelf", "TapTargetPump", "PayCounterSelf", "CounterPing", "PingLoop"
+        "TapSubtypeSteal", "TransformSelf", "TapTargetPump", "PayCounterSelf", "CounterPing", "PingLoop",
+        "SacNamedTutorPut"
     };
     const int i = static_cast<int>(m);
     if (i >= 0 && i < static_cast<int>(sizeof(kNames) / sizeof(kNames[0]))) { return kNames[i]; }
@@ -113714,6 +114072,9 @@ void TurnSolver::WritePostApplyStatePins(GameState& s, const Plan& p)
     // worlds) -- write-when-set, so a main-2 plan without the axis leaves main 1's pin standing.
     if (p.upkeep_gy_reanimate_choice >= 0) { s.scripted_upkeep_gy_reanimate = p.upkeep_gy_reanimate_choice; }
     if (p.upkeep_tutor_choice >= 0) { s.scripted_upkeep_tutor = p.upkeep_tutor_choice; }
+    // Shadowborn's demon triggers (Reaper end step + Overlord next upkeep): the end step and the upkeep
+    // consume their own halves (PerformEndStepMorbidDestroy / PerformUpkeepSacrificeCreature).
+    if (p.demon_trigger_choice >= 0) { s.scripted_demon_trigger = p.demon_trigger_choice; }
     // The searched echo pin, read at the NEXT turn's upkeep (both worlds' echo loops) -- write-when-set, so a
     // main-2 plan with nothing new to decide leaves main 1's pin (and its cover) standing.
     if (p.echo_choice >= 0) { s.scripted_echo = p.echo_choice; }

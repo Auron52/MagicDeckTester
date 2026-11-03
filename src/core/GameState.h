@@ -276,6 +276,19 @@ struct IncineratorDamageTrigger
 struct GameState
 {
     bool deck_tracks_noncombat_damage = false;
+    // ---- SHADOWBORN INT-2 deck constants (StampDeckTraits), in the 3-byte hole after the bool above
+    // (gdb ptype /o, 2026-11-03). DEFAULT TRUE: an unstamped GameState (the scenario harness) keeps the
+    // walks / folds; a stamped deck without the card gets false and stays byte-identical. Never folded.
+    //   deck_has_morbid        -- a card READS GameState::creature_died_this_turn (Reaper from the
+    //                             Abyss): gates that flag's fold into the state keys.
+    //   deck_has_count_anthem  -- a tiered creature-count anthem (Jetmir): gates ComputeLordBonus'
+    //                             count pass and the keyword-grant scans for callers without a prefilter.
+    //   deck_has_demon_triggers-- Overlord's upkeep sacrifice / Reaper's end-step destroy / Sire's
+    //                             end-step discard: gates the three shared trigger walks and the
+    //                             Plan::demon_trigger_choice axis.
+    bool deck_has_morbid         = true;
+    bool deck_has_count_anthem   = true;
+    bool deck_has_demon_triggers = true;
     std::array<int, 2> noncombat_damage_received_this_turn{};
     std::vector<IncineratorDamageTrigger> pending_incinerator_damage;
     int noncombat_trigger_depth = 0;
@@ -342,6 +355,16 @@ struct GameState
     // turn number and not the next one: the opponent never gets a main phase in this model, so on
     // the user's instruction (2026-09-02) the game is over as of our last turn.
     bool                     opponent_decked              = false;
+    // SEARCHED DEMON-TRIGGER PIN (Plan::demon_trigger_choice; Shadowborn INT-2), in the 2-byte hole
+    // after this bool (gdb ptype /o, 2026-11-03). PACKED: bits 0-7 = Reaper from the Abyss's end-step
+    // destroy TARGET (kDemonPinBits per trigger ordinal), bits 8-15 = Abhorrent Overlord's upkeep
+    // sacrifice VICTIM; each a RANK into that trigger's resolution-time class list (clamped); -1 =
+    // unpinned (every trigger takes its list's front). Written by the turn's plan apply
+    // (WritePostApplyStatePins, both worlds). The END STEP consumes + clears the low byte; the NEXT
+    // UPKEEP consumes + clears the whole field -- so the Overlord half SURVIVES the turn boundary.
+    // FUTURE-DETERMINING: folded value-gated in dominance::Build(), BuildDedupKey's pending pins and
+    // the sim key.
+    std::int16_t             scripted_demon_trigger       = -1;
     // "Infinite life" marker (USER feature, 2026-09-04; redesigned on USER review 2026-09-05):
     // the TURN a demonstrated unbounded lifegain loop was first proven, -1 = never. NOT a win --
     // the game plays on to the actual kill (the metric counts kills only; the loop's outlet
@@ -1433,6 +1456,11 @@ struct GameState
     // scan, so a clear bit PROVES both find nothing. DEFAULT TRUE (an unstamped GameState -- the
     // scenario harness -- keeps the walks). A deck constant: never folded.
     bool                     deck_has_upkeep_reanimate    = true;
+    // Shadowborn INT-2: a "Sacrifice N creatures named ~" activation in the deck (CardParams::
+    // sac_named_count; Shadowborn Apostle), the 1-byte hole after the bool above (gdb ptype /o). Gates
+    // CollectActions' board + hand walk (EmitSacNamedVariants). DEFAULT TRUE (unstamped = walk). A deck
+    // constant: never folded.
+    bool                     deck_has_sac_named           = true;
     // Non-owning pointer to the deck's learned mid-game PLAY evaluator (MulliganProfile::eval_model),
     // stamped in AIEngine::HandleMulligan and propagated through every deep copy. Ranks NON-lethal
     // turn-plans in TurnSolver::Solve (the d0 decision + every rollout leaf) when MTG_EVAL_MODEL is

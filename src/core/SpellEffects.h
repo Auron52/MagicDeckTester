@@ -2148,6 +2148,7 @@ TutorZoneView(const Player& ap, const std::vector<Card>* wish_pool)
 // providers' TutorCandidates); deliberately NOT a unification of those sites, whose empty-
 // tutor_types semantics differ on purpose (SpellEffects = "no match", Generic = "no restriction").
 // -1 defaults = no filter -> every existing tutor byte-identical.
+inline bool CardHasSubtype(const Card& c, std::string_view sub);   // defined below
 inline bool TutorNumericFilterOk(const Card& card, const CardParams& pp)
 {
     if (pp.tutor_max_mv >= 0 && card.m_mana_cost.ManaValue() > pp.tutor_max_mv) { return false; }
@@ -2170,6 +2171,11 @@ inline bool TutorNumericFilterOk(const Card& card, const CardParams& pp)
     // cards.json; a def-less placeholder (an unimplemented sideboard card) has an empty mask and
     // correctly fails. false for every other tutor -> byte-identical.
     if (pp.wish_requires_multicolored && !card.IsMulticolored()) { return false; }
+    // "...a Demon creature card" (Shadowborn Apostle): a SUBTYPE conjunct on top of the tutor_types
+    // OR-list, so a non-creature Demon (a Kindred card) cannot satisfy "Creature" + "Demon" through
+    // the OR. Empty for every other tutor -> byte-identical.
+    if (!pp.tutor_required_subtype.empty() && !CardHasSubtype(card, pp.tutor_required_subtype))
+    { return false; }
     return true;
 }
 
@@ -3355,6 +3361,9 @@ inline void PerformTutorToBattlefield(GameState& state, int controller, const Ca
         if (!CardHasColorNamed(card, pp.tutor_color)) { return false; }   // Natural Order: green only
         if (require_mv >= 0 && card.m_mana_cost.ManaValue() != require_mv) { return false; }   // Pod
         if (max_mv_cap >= 0 && card.m_mana_cost.ManaValue() > max_mv_cap) { return false; }    // Chord
+        // Shadowborn Apostle's "Demon creature card" (tutor_required_subtype; empty = no filter).
+        if (!pp.tutor_required_subtype.empty() && !CardHasSubtype(card, pp.tutor_required_subtype))
+        { return false; }
         for (const std::string& t : pp.tutor_types)
         { if (CardMatchesTypeName(card, t)) { return true; } }
         return false;
@@ -4648,6 +4657,8 @@ inline bool CreatureHasLifelink(const Permanent& creature, const GameState& stat
 // overdraw and the surplus is discarded at cleanup. So an attacking, vigilant Cid can still rebuy.
 // Equipment-only by design: the shields' other grant (reach) has ZERO readers anywhere in the
 // engine, so it stays a disclosed bracket note rather than a param.
+inline bool CountAnthemGrantsKeyword(const GameState& state, int controller_index, const char* kw,
+                                     const std::vector<int>* idx);   // defined below (Jetmir)
 inline bool CreatureHasVigilance(const Permanent& creature, const GameState& state,
                                  const std::vector<int>* granter_idx = nullptr)
 {
@@ -4670,6 +4681,9 @@ inline bool CreatureHasVigilance(const Permanent& creature, const GameState& sta
         }
         return false;
     };
+    // Jetmir's three-creature tier ("... have vigilance as long as you control three or more
+    // creatures"). Admitted to bs.vigilance (GatherBoardSources); deck-gated inside.
+    if (CountAnthemGrantsKeyword(state, creature.controller_index, "Vigilance", granter_idx)) { return true; }
     if (granter_idx)
     {
         for (int i : *granter_idx) { if (grants(state.battlefield[i])) { return true; } }
@@ -5522,7 +5536,8 @@ inline std::pair<int,int> ComputeLordBonus(
     bool                           all_creature_types = false,
     const Permanent*               self               = nullptr,
     const std::vector<int>*        controlled_lord_idx = nullptr,
-    const std::vector<int>*        controlled_anthem_idx = nullptr)
+    const std::vector<int>*        controlled_anthem_idx = nullptr,
+    int                            own_creature_count = -1)
 {
     const std::vector<Permanent>& battlefield = state.battlefield;
     int pb = 0, tb = 0;
@@ -5934,7 +5949,94 @@ inline std::pair<int,int> ComputeLordBonus(
         else
         { for (const Permanent& src : battlefield) { process_quest_anthem(src); } }
     }
+
+    // TIERED CREATURE-COUNT ANTHEM (Jetmir, Nexus of Revels: "Creatures you control get +1/+0 ... as
+    // long as you control three or more creatures. ... also get +1/+0 ... six or more ... also get
+    // +1/+0 ... nine or more"). A CONDITIONAL STATIC (CR 604.3 / 611.3), read live at every query, so a
+    // sacrifice that drops the count switches a tier off at once. SELF-INCLUSIVE ("creatures you
+    // control", not "other"): every creature we control counts, Jetmir, tokens and sick bodies
+    // included (CountOwnCreatures' predicate: a creature or an animated permanent).
+    //
+    // THE COUNT IS TAKEN ONCE PER BOARD, not once per creature (the board-width quadratic family:
+    // a per-creature count walk is O(n^2) per board on a 20-body Apostle + Harpy board). Board walks
+    // that hold a BoardSources pass bs.own_creatures (GatherBoardSources counts it once, only when a
+    // count-anthem source is on the board); a lone query (own_creature_count < 0) counts here, lazily,
+    // only when a source is found. Deck-gated (deck_has_count_anthem): every deck without the card
+    // pays one bool test.
+    if (state.deck_has_count_anthem)
+    {
+        int count = own_creature_count;
+        auto process_count_anthem = [&](const Permanent& src)
+        {
+            if (src.controller_index != controller_index) { return; }
+            if (src.def_absent) { return; }
+            const CardDefinition* sd = CardDatabase::Instance().LookupCached(src.card);
+            if (!sd || sd->params.creature_count_anthem_tiers.empty()) { return; }
+            if (count < 0)
+            {
+                // CAPPED at the highest tier: only "is the count >= each tier" is read, so the walk
+                // stops at the top tier's creature -- a bounded scan per query, never O(board) x O(board).
+                int cap = 0;
+                for (int t : sd->params.creature_count_anthem_tiers) { cap = std::max(cap, t); }
+                count = 0;
+                for (const Permanent& q : battlefield)
+                {
+                    if (q.controller_index == controller_index && (q.card.IsCreature() || q.is_animated)
+                        && ++count >= cap) { break; }
+                }
+            }
+            int met = 0;
+            for (int t : sd->params.creature_count_anthem_tiers) { if (count >= t) { ++met; } }
+            pb += met * sd->params.creature_count_anthem_power;
+        };
+        if (controlled_anthem_idx)
+        { for (int ai : *controlled_anthem_idx) { process_count_anthem(battlefield[ai]); } }
+        else
+        { for (const Permanent& src : battlefield) { process_count_anthem(src); } }
+    }
     return {pb, tb};
+}
+
+// Jetmir's KEYWORD tiers: does a creature-count anthem we control grant `kw` ("Vigilance", "Trample",
+// "Double strike") right now? Tier i grants creature_count_anthem_keywords[i] while we control
+// creature_count_anthem_tiers[i] or more creatures. `idx` = a prefilter of candidate sources (the
+// BoardSources list the caller holds) or nullptr for a full walk. The count is taken once, lazily,
+// only when a source is found. Deck-gated like the P/T pass.
+inline bool CountAnthemGrantsKeyword(const GameState& state, int controller_index, const char* kw,
+                                     const std::vector<int>* idx)
+{
+    if (!state.deck_has_count_anthem) { return false; }
+    const std::vector<Permanent>& bf = state.battlefield;
+    int count = -1;
+    auto check = [&](const Permanent& src) -> bool
+    {
+        if (src.controller_index != controller_index || src.def_absent) { return false; }
+        const CardDefinition* sd = CardDatabase::Instance().LookupCached(src.card);
+        if (!sd || sd->params.creature_count_anthem_tiers.empty()) { return false; }
+        const auto& tiers = sd->params.creature_count_anthem_tiers;
+        const auto& kws   = sd->params.creature_count_anthem_keywords;
+        for (std::size_t i = 0; i < tiers.size() && i < kws.size(); ++i)
+        {
+            if (kws[i] != kw) { continue; }
+            if (count < 0)
+            {
+                // CAPPED at the highest tier (see the P/T pass): a bounded scan per query.
+                int cap = 0;
+                for (int t : tiers) { cap = std::max(cap, t); }
+                count = 0;
+                for (const Permanent& q : bf)
+                {
+                    if (q.controller_index == controller_index && (q.card.IsCreature() || q.is_animated)
+                        && ++count >= cap) { break; }
+                }
+            }
+            if (count >= tiers[i]) { return true; }
+        }
+        return false;
+    };
+    if (idx) { for (int i : *idx) { if (check(bf[static_cast<std::size_t>(i)])) { return true; } } return false; }
+    for (const Permanent& q : bf) { if (check(q)) { return true; } }
+    return false;
 }
 
 // Returns true if any lord on the battlefield grants double strike to creature's subtype.
@@ -6086,6 +6188,10 @@ inline bool CreatureHasDoubleStrike(const Permanent& creature, const GameState& 
                                  creature.AnimatedAllTypes(), ds_idx))
     { return true; }
     if (HasDoubleStrikeFromEquipment(creature, state)) { return true; }   // Kor Duelist / Balan
+    // Jetmir's nine-creature tier ("... also get +1/+0 and have double strike as long as you control
+    // nine or more creatures"). Its source is admitted to bs.ds (GatherBoardSources), so a prefiltered
+    // caller still reaches it; deck-gated inside.
+    if (CountAnthemGrantsKeyword(state, creature.controller_index, "Double strike", ds_idx)) { return true; }
 
     // Silverblade Paladin's soulbond: "As long as this creature is paired with another creature,
     // BOTH creatures have double strike." Symmetric, so it must be answerable from EITHER side --
@@ -6225,6 +6331,10 @@ struct BoardSources
     // creature you control" sources (combat_damage_counters_each_attacker) -> the combat core's
     // between-step trigger and the projection's matching addend. Empty for every other deck.
     std::vector<int> cd_counters;
+    // Jetmir (Shadowborn INT-2): the controller's creature count, taken ONCE per gather and only when a
+    // tiered count-anthem source is on the board (-1 otherwise = "not counted": ComputeLordBonus then
+    // counts lazily per query). Passed to ComputeLordBonus by the board walks that hold this struct.
+    int own_creatures = -1;
 
     // MAINTAIN THE LISTS ACROSS AN ERASE. Every list holds battlefield INDICES, so a caller that
     // removes a permanent mid-loop (SweepDeadFadeTokens) invalidates them: the erased index is gone
@@ -6251,6 +6361,7 @@ struct BoardSources
         fix(haste.lords); fix(haste.equips);
         fix(lords); fix(anthems); fix(ds); fix(lifelink); fix(attached); fix(deaths); fix(dwatch); fix(vigilance);
         fix(fs); fix(cd_counters);
+        own_creatures = -1;   // the erased permanent may have been a creature: recount lazily
     }
 };
 
@@ -6258,6 +6369,7 @@ inline BoardSources GatherBoardSources(const std::vector<Permanent>& battlefield
                                        int                          controller_index)
 {
     BoardSources bs;
+    bool count_anthem = false;
     for (int i = 0; i < static_cast<int>(battlefield.size()); ++i)
     {
         const Permanent& q = battlefield[i];
@@ -6318,6 +6430,16 @@ inline BoardSources GatherBoardSources(const std::vector<Permanent>& battlefield
             || pp.etb_choose_keyword_count > 0)
         { bs.fs.push_back(i); }
         if (pp.combat_damage_counters_each_attacker > 0) { bs.cd_counters.push_back(i); }
+        // Jetmir's tiered count anthem: a P/T anthem, a double-strike granter and a vigilance granter
+        // (each list stays a superset; the consumers apply their own tests).
+        if (!pp.creature_count_anthem_tiers.empty())
+        { bs.anthems.push_back(i); bs.ds.push_back(i); bs.vigilance.push_back(i); count_anthem = true; }
+    }
+    if (count_anthem)
+    {
+        bs.own_creatures = 0;
+        for (const Permanent& q : battlefield)
+        { if (q.controller_index == controller_index && (q.card.IsCreature() || q.is_animated)) { ++bs.own_creatures; } }
     }
     return bs;
 }
@@ -11027,6 +11149,33 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
                                  ? std::string() : " " + p.etb_created_token_subtypes.front())
                           + " token(s) (one per " + (p.etb_tokens_per_land_basic_only ? "basic " : "")
                           + "land you control)");
+        }
+    }
+    // (1-d) ETB tokens PER DEVOTION (Abhorrent Overlord: "When this creature enters, create a number of
+    //     1/1 black Harpy creature tokens with flying equal to your devotion to black"). DevotionTo is
+    //     read at RESOLUTION with this creature already on the battlefield, so its own pips count
+    //     (CR 700.5); tokens have no mana cost and add 0. ONE event of N tokens through CreateTokens
+    //     (Doubling Season, the per-body enter cascade); every Harpy enters summoning sick. The token
+    //     carries etb_created_token_keywords (Flying -- inert here: no blocker path) so a future flying
+    //     reader sees it. Fires on every entry route (cast, Shadowborn Apostle's put, any tutor put).
+    //     Param-gated -> byte-identical elsewhere.
+    if (!p.etb_tokens_per_devotion_color.empty())
+    {
+        const int n = DevotionTo(state, controller, p.etb_tokens_per_devotion_color);
+        std::vector<std::string> kws = p.etb_created_token_keywords;
+        for (const std::string& h : HasteKeywords(p.created_token_haste)) { kws.push_back(h); }
+        CreateTokens(state, controller, n, p.etb_created_token_power,
+                     p.etb_created_token_toughness, p.etb_created_token_subtypes,
+                     p.created_token_color, kws);
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "etb",
+                          def->card.m_name.str() + " -- create " + std::to_string(n) + " "
+                          + std::to_string(p.etb_created_token_power) + "/"
+                          + std::to_string(p.etb_created_token_toughness)
+                          + (p.etb_created_token_subtypes.empty()
+                                 ? std::string() : " " + p.etb_created_token_subtypes.front())
+                          + " token(s) (devotion to " + p.etb_tokens_per_devotion_color + ")");
         }
     }
     // (1-t) ETB Treasure mint (Corsair Captain: "When this creature enters, create a Treasure
@@ -29341,6 +29490,139 @@ inline int SpendCounterPingActivations(GameState& state, int controller, int sou
     return done;
 }
 
+// ===== SHADOWBORN APOSTLE (INT-2, 2026-11-03): "{B}, Sacrifice six creatures named Shadowborn Apostle:
+// Search your library for a Demon creature card, put it onto the battlefield, then shuffle." ==========
+// PermAbilityMode::SacNamedTutorPut; CardParams::sac_named_count / sac_named_activation_cost + the card's
+// own tutor_types / tutor_required_subtype / tutor_shuffle_after.
+//
+// NO {T} in the cost (CR 602.5 / 302.6 restrict only {T}/{Q}): summoning-sick and tapped copies are legal
+// victims, the source may be one of them, and the ability can be activated any number of times while
+// six copies remain. The effect does not reference its source, so WHICH copy is the source is not a
+// decision (an identity fold): an action names a canonical source, re-resolved by name at apply
+// (ResolveSacNamedSourceId) when that copy has already left.
+//
+// THE SIX BODIES -- a READINESS-COUNT pin, searched. Every copy has the same name; they differ for the
+// rest of the turn only in their readiness state (they become identical at our next untap). Four
+// readiness codes (SacNamedReadiness):
+//   X = tapped AND new this turn   -- can neither attack nor pay a tap cost, and untapping it would not
+//                                     let it attack: weakly dominated by every other code, so X copies
+//                                     are ALWAYS sacrificed first (a sound dominance fold, no axis);
+//   T = tapped, not new            -- (an untap effect could make it attack again);
+//   U = untapped, new              -- (it can pay a non-{T} tap cost; it cannot attack);
+//   S = untapped, not new = STRONG -- can do everything any other copy can.
+// T and U do not dominate each other (the INT-1 readiness fold keeps them apart for the same reason),
+// and S dominates both. So the SEARCHED part is: how many T copies (t) and how many S copies (s) the
+// six include; the rest are U. A pin with s > 0 while a T or U copy is left over is dominated and is not
+// emitted (TurnSolver's enumeration); the apply honours a pin exactly or does nothing (a stale pin is a
+// clean no-op -- NO SUBSTITUTION, which would be an in-window pick). Within one code the copies are
+// taken lowest-numbered first: an identity fold that is exact while every copy of the name shares its
+// base identity (no counters / Auras / per-copy pumps -- true for every card in this pool; a pool that
+// can split one name into two base identities inside a readiness code is a disclosed generality gap).
+// Encoded in Action::sac_victim_id as 1 + s + 8 * t (0 = unpinned: human play asks the bodies as
+// board clicks; the autonomous fallback -- the playout policy beyond the horizon only -- takes X, T, U, S).
+inline int SacNamedReadiness(const Permanent& q)
+{
+    if (q.tapped) { return q.entered_this_turn ? 0 : 1; }
+    return q.entered_this_turn ? 2 : 3;
+}
+inline int SacNamedSpecCode(int s, int t) { return 1 + s + 8 * t; }
+inline int SacNamedSpecS(int code) { return code > 0 ? (code - 1) % 8 : 0; }
+inline int SacNamedSpecT(int code) { return code > 0 ? (code - 1) / 8 : 0; }
+// Copies of `name` we control, as battlefield indices bucketed by readiness code, lowest number first.
+inline std::array<std::vector<int>, 4> SacNamedBuckets(const GameState& state, int controller,
+                                                       const InternedName& name)
+{
+    std::array<std::vector<int>, 4> b;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+        if (q.controller_index != controller || q.card.m_name != name) { continue; }
+        if (!q.card.IsCreature() && !q.is_animated) { continue; }   // "creatures named ..."
+        b[static_cast<std::size_t>(SacNamedReadiness(q))].push_back(i);
+    }
+    for (auto& v : b)
+    {
+        std::stable_sort(v.begin(), v.end(), [&](int x, int y)
+        { return state.battlefield[static_cast<std::size_t>(x)].card.m_number
+               < state.battlefield[static_cast<std::size_t>(y)].card.m_number; });
+    }
+    return b;
+}
+inline int CountSacNamed(const GameState& state, int controller, const InternedName& name)
+{
+    int n = 0;
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.controller_index == controller && q.card.m_name == name && (q.card.IsCreature() || q.is_animated))
+        { ++n; }
+    }
+    return n;
+}
+// THE BODY RESOLVER, shared by the liveness check and the payment in both worlds: the battlefield
+// indices of the `n` copies the pin names, or empty when the pin cannot be realised. code 0 (unpinned)
+// = the fallback order X, T, U, S.
+inline std::vector<int> ResolveSacNamedBodies(const GameState& state, int controller, const InternedName& name,
+                                              int n, int code)
+{
+    const auto b = SacNamedBuckets(state, controller, name);
+    std::vector<int> out;
+    const int x = std::min<int>(n, static_cast<int>(b[0].size()));
+    out.insert(out.end(), b[0].begin(), b[0].begin() + x);
+    const int r = n - x;
+    if (code <= 0)
+    {
+        for (int c = 1; c <= 3 && static_cast<int>(out.size()) < n; ++c)
+        {
+            for (int i : b[static_cast<std::size_t>(c)])
+            { if (static_cast<int>(out.size()) < n) { out.push_back(i); } }
+        }
+        if (static_cast<int>(out.size()) < n) { out.clear(); }
+        return out;
+    }
+    const int s = SacNamedSpecS(code), t = SacNamedSpecT(code), u = r - s - t;
+    if (u < 0 || t > static_cast<int>(b[1].size()) || u > static_cast<int>(b[2].size())
+        || s > static_cast<int>(b[3].size()))
+    { return {}; }
+    out.insert(out.end(), b[1].begin(), b[1].begin() + t);
+    out.insert(out.end(), b[2].begin(), b[2].begin() + u);
+    out.insert(out.end(), b[3].begin(), b[3].begin() + s);
+    return out;
+}
+// The live source of an Apostle action: its own number while that copy is still ours, else the
+// lowest-numbered copy of the name we control (the source-identity fold above), else the number unchanged
+// (the liveness check then fails cleanly).
+inline int ResolveSacNamedSourceId(const GameState& state, int controller, int source_id,
+                                   const InternedName& name)
+{
+    int best = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        if (p.card.m_number == source_id && p.card.m_name == name) { return source_id; }
+        if (p.card.m_name == name && (best == 0 || p.card.m_number < best)) { best = p.card.m_number; }
+    }
+    return best != 0 ? best : source_id;
+}
+// THE PIN of the activation being applied: the readiness-count code (Action::sac_victim_id) and the
+// Demon (Action::tutor_target; "" = unpinned, kPodNoFetch-style sentinel kSacNamedNoFetch = fail to
+// find). ApplyPermAbility's signature carries no Action, so both trailing passes install it around the
+// liveness check and the apply (the StealPinScope shape); the SacNamedTutorPut case CONSUMES it.
+inline const char* const kSacNamedNoFetch = "(no fetch)";
+struct SacNamedPin { int code = 0; const std::string* target = nullptr; };
+inline thread_local SacNamedPin g_sac_named_pin{};
+struct SacNamedPinScope
+{
+    SacNamedPin prev;
+    SacNamedPinScope(int code, const std::string* target) : prev(g_sac_named_pin)
+    { g_sac_named_pin = SacNamedPin{ code, target }; }
+    ~SacNamedPinScope() { g_sac_named_pin = prev; }
+    SacNamedPinScope(const SacNamedPinScope&) = delete;
+    SacNamedPinScope& operator=(const SacNamedPinScope&) = delete;
+};
+// MEASUREMENT: an AUTONOMOUS activation applied with no body pin inside the search window (the
+// no-greedy rule: must read 0 -- every emitted variant carries its code).
+inline std::atomic<long long> g_sac_named_unpinned{0};
+
 // Is an ActivatePermAbility's source still there and still activatable? Checked BEFORE paying in
 // both worlds, so a stranded activation (its source left, or it got tapped earlier in the same
 // plan) is a clean no-op rather than a paid one -- the UntapCreature discipline.
@@ -29438,6 +29720,22 @@ inline bool PermAbilitySourceLive(const GameState& state, int controller, int so
                 }
                 if (untapped < sd2->params.steal_tap_count) { return false; }
             }
+        }
+        // Shadowborn Apostle: "Sacrifice six creatures named ~" is part of the COST (CR 602.2b), so the
+        // activation is impossible without six copies -- checked before the {B} is paid. Pinned (the
+        // searched readiness-count code): THAT composition must still be realisable (ResolveSacNamedBodies),
+        // NO substitution. Unpinned (human play / beyond the horizon): six copies exist.
+        if (mode == PermAbilityMode::SacNamedTutorPut)
+        {
+            const CardDefinition* ad = CardDatabase::Instance().LookupCached(p.card);
+            if (ad == nullptr || ad->params.sac_named_count <= 0) { return false; }
+            const int n = ad->params.sac_named_count;
+            if (g_sac_named_pin.code > 0)
+            {
+                if (ResolveSacNamedBodies(state, controller, p.card.m_name, n, g_sac_named_pin.code).empty())
+                { return false; }
+            }
+            else if (CountSacNamed(state, controller, p.card.m_name) < n) { return false; }
         }
         // Kessig Wolf Run: "target creature" is chosen as the ability is activated (CR 601.2c via
         // 602.2b), so the activation is impossible without a legal target -- checked here, before the
@@ -29586,6 +29884,8 @@ inline const char* PermAbilityLabel(PermAbilityMode mode)
         case PermAbilityMode::PayCounterSelf: return "put a +1/+1 counter on this creature";
         case PermAbilityMode::CounterPing:    return "remove a +1/+1 counter: 1 damage to any target";
         case PermAbilityMode::PingLoop:       return "Heliod loop: ping until the opponent is dead";
+        case PermAbilityMode::SacNamedTutorPut:
+                                              return "sacrifice six of them: search for a Demon, put it onto the battlefield";
         default:                              return "activate";
     }
 }
@@ -30457,6 +30757,93 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
                 }
                 break;
             }
+            break;
+        }
+        case PermAbilityMode::SacNamedTutorPut:
+        {
+            // Shadowborn Apostle. The {B} was paid by the caller; PermAbilitySourceLive checked the
+            // cost's six copies under the same pin. The pin is CONSUMED here.
+            const SacNamedPin pin = g_sac_named_pin;
+            g_sac_named_pin = SacNamedPin{};
+            const int n = d->params.sac_named_count;
+            if (n <= 0) { break; }
+            const InternedName nm = state.battlefield[static_cast<std::size_t>(idx)].card.m_name;
+            // 1. THE COST: sacrifice the six (CR 601.2h -- costs before the effect).
+            //    * PINNED: exactly the copies ResolveSacNamedBodies names on the live board.
+            //    * HUMAN PLAY: N `sacrifice` board clicks in sequence over every copy not yet picked, the
+            //      pinned / fallback body preselected; forced (not prompted) once the copies left are
+            //      exactly the ones still owed.
+            //    * UNPINNED AUTONOMOUS (the playout policy beyond the horizon only; counted -- must read 0
+            //      inside the window): the fallback order X, T, U, S.
+            std::vector<int> chosen = ResolveSacNamedBodies(state, controller, nm, n, pin.code);
+            if (g_play_sacrifice_chooser != nullptr && !g_tap_speculating)
+            {
+                std::vector<int> picked;
+                for (int k = 0; k < n; ++k)
+                {
+                    std::vector<int> legal;
+                    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+                    {
+                        const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+                        if (q.controller_index != controller || q.card.m_name != nm) { continue; }
+                        if (!q.card.IsCreature() && !q.is_animated) { continue; }
+                        if (std::find(picked.begin(), picked.end(), i) != picked.end()) { continue; }
+                        legal.push_back(i);
+                    }
+                    if (static_cast<int>(legal.size()) < n - k) { picked.clear(); break; }
+                    if (static_cast<int>(legal.size()) == n - k)
+                    { picked.insert(picked.end(), legal.begin(), legal.end()); break; }   // forced
+                    int heur = 0;
+                    for (int ci : chosen)
+                    {
+                        if (std::find(picked.begin(), picked.end(), ci) != picked.end()) { continue; }
+                        bool hit = false;
+                        for (int j = 0; j < static_cast<int>(legal.size()); ++j)
+                        { if (legal[static_cast<std::size_t>(j)] == ci) { heur = j; hit = true; break; } }
+                        if (hit) { break; }
+                    }
+                    SacBurstScope _burst(k, n);   // discloses "pick 6" on the `sacrifice` frame
+                    const int c = (*g_play_sacrifice_chooser)(state, controller, src_name, legal, heur);
+                    const int pick = (c >= 0 && c < static_cast<int>(legal.size())) ? c : heur;
+                    picked.push_back(legal[static_cast<std::size_t>(pick)]);
+                }
+                chosen = picked;
+            }
+            else if (pin.code <= 0 && !HumanPlayActive() && greedywindow::InWindow(0))
+            { g_sac_named_unpinned.fetch_add(1, std::memory_order_relaxed); }
+            if (static_cast<int>(chosen.size()) != n) { break; }   // unreachable after the liveness check
+            // Sacrifice by card NUMBER (each erase shifts the indices), through the shared death cascade
+            // (SacrificePermanentAt -> OnCreatureDies: dies watchers, morbid, Jetmir's count).
+            std::vector<int> nums;
+            for (int i : chosen) { nums.push_back(state.battlefield[static_cast<std::size_t>(i)].card.m_number); }
+            if (g_play_event_sink && !g_tap_speculating)
+            {
+                EmitPlayEvent(state.turn_number, "sacrifice",
+                              "\xF0\x9F\x94\xAA " + src_name + " -- sacrificed "
+                              + std::to_string(n) + " creatures named " + nm.str());
+            }
+            for (int num : nums)
+            {
+                for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+                {
+                    if (state.battlefield[static_cast<std::size_t>(i)].card.m_number == num
+                        && state.battlefield[static_cast<std::size_t>(i)].controller_index == controller)
+                    { SacrificePermanentAt(state, controller, i); break; }
+                }
+            }
+            // 2. THE EFFECT: search for a Demon creature card, put it onto the battlefield (full enter
+            //    cascade: Abhorrent Overlord's devotion tokens count the copies LEFT), then shuffle.
+            //    Pinned target (the searched plan variant -- human play too: the main-phase menu lists
+            //    one entry per legal Demon, so the plan pin suppresses the resolution dialog);
+            //    kSacNamedNoFetch = fail to find (legal: a hidden-zone search, CR 701.19b), which still
+            //    shuffles. Unpinned (beyond the horizon): the provider's put order.
+            std::vector<std::string> pref;
+            if (pin.target != nullptr && !pin.target->empty())
+            {
+                if (*pin.target == kSacNamedNoFetch) { pref.push_back(kTutorDeclineTarget); }
+                else { pref.push_back(*pin.target); }
+            }
+            PerformTutorToBattlefield(state, controller, d->params, /*max_puts=*/1, pref, src_name);
             break;
         }
         case PermAbilityMode::TransformSelf:
@@ -42707,6 +43094,273 @@ inline void PerformSacrificeCreatureCost(GameState& state, const std::string& sp
     }
     FireSacrificeWatchers(state, active);   // Slaughter-Priest (a sac cost IS a sacrifice)
     OnCreatureDies(state, active, dead, was_tok, dead_m1);
+}
+
+// ===== SHADOWBORN INT-2: THE DEMON TRIGGERS (Reaper from the Abyss, Abhorrent Overlord, Sire of Insanity)
+//
+// THE SEARCHED PIN (Plan::demon_trigger_choice -> GameState::scripted_demon_trigger), PACKED:
+//   bits 0-7  = Reaper's end-step destroy TARGET, kDemonPinBits per trigger ordinal (low first);
+//   bits 8-15 = Overlord's upkeep sacrifice VICTIM, the same layout.
+// Each nibble is a RANK into that trigger's resolution-time CLASS list (DemonTriggerClassReps), clamped to
+// its last entry (duplicate-not-whiff, the saga / Grace rule); -1 = unpinned = every trigger takes its
+// list's front (the playout policy beyond the horizon). The END STEP consumes the low byte; the NEXT
+// UPKEEP consumes the rest -- so the Overlord half SURVIVES the turn boundary (the Emeria / echo class).
+//
+// THE CLASSES are identity folds: two creatures with the same controller and base identity (INT-1's
+// SacReadinessBaseKey: name, MV, P/T, counters, token-ness, animation, attachments) are interchangeable --
+// at the END STEP nothing reads tapped / summoning-sick before our next untap resets both, and at the
+// UPKEEP both are already reset. The list order (opponent creatures first for a destroy; tokens, then
+// the lowest power, for one of ours -- SacCreatureCandidateIndices) is BRANCH ORDER only: every class
+// is a searched rank, nothing is pruned.
+constexpr int kDemonPinBits      = 4;
+constexpr int kDemonPinMask      = (1 << kDemonPinBits) - 1;
+constexpr int kDemonMaxOrdinals  = 2;    // per half: two copies; a third+ copy takes its list's front
+constexpr int kDemonOverlordShift = 8;
+inline int DemonPinRank(int pin, int shift, int ordinal)
+{
+    if (pin < 0 || ordinal >= kDemonMaxOrdinals) { return 0; }
+    return (pin >> (shift + kDemonPinBits * ordinal)) & kDemonPinMask;
+}
+// A legal "target non-<excl> creature" (Reaper): any creature on the battlefield, either side (CR 115.1),
+// that lacks the excluded subtype (an all-creature-types animation has it, CR 205.3m), and that can be
+// targeted (shroud: nobody; hexproof: not by us when it is the opponent's).
+inline bool MorbidDestroyTargetLegal(const GameState& s, const Permanent& q, int controller, const std::string& excl)
+{
+    if (!q.card.IsCreature() && !q.is_animated) { return false; }
+    if (!excl.empty() && (q.AnimatedAllTypes() || CardHasSubtype(q.card, excl))) { return false; }
+    if (CreatureHasShroud(q, s, nullptr)) { return false; }
+    if (q.controller_index != controller && q.card.HasKeyword(Keyword::Hexproof)) { return false; }
+    return true;
+}
+// The class representatives (battlefield indices) a trigger chooses among, in branch order.
+//   destroy = true : Reaper -- every legal target, the opponent's first;
+//   destroy = false: Overlord -- every creature we control.
+inline std::vector<int> DemonTriggerClassReps(const GameState& s, int controller, bool destroy,
+                                              const std::string& excl)
+{
+    std::vector<int> order;
+    if (destroy)
+    {
+        for (int i = 0; i < static_cast<int>(s.battlefield.size()); ++i)
+        {
+            const Permanent& q = s.battlefield[static_cast<std::size_t>(i)];
+            if (q.controller_index != controller && MorbidDestroyTargetLegal(s, q, controller, excl)) { order.push_back(i); }
+        }
+    }
+    for (int i : SacCreatureCandidateIndices(s, controller, std::string{}))
+    {
+        const Permanent& q = s.battlefield[static_cast<std::size_t>(i)];
+        if (destroy && !MorbidDestroyTargetLegal(s, q, controller, excl)) { continue; }
+        order.push_back(i);
+    }
+    std::vector<int> out;
+    std::vector<std::string> seen;
+    for (int i : order)
+    {
+        const Permanent& q = s.battlefield[static_cast<std::size_t>(i)];
+        std::string key = (q.controller_index == controller ? "o|" : "x|") + SacReadinessBaseKey(s, q);
+        if (std::find(seen.begin(), seen.end(), key) != seen.end()) { continue; }
+        seen.push_back(std::move(key));
+        out.push_back(i);
+    }
+    return out;
+}
+// Reaper's intervening if (CR 603.4: "if a creature died this turn") is checked as the end step begins,
+// with every other beginning-of-end-step trigger: the caller SNAPSHOTS the number of triggering Reapers
+// at the top of the step (both worlds), before any of the step's effects resolve. 0 for every deck
+// without the card (deck-gated) and on a turn nothing died.
+inline int SnapshotEndStepMorbidTriggers(const GameState& state)
+{
+    if (!state.deck_has_demon_triggers || !state.creature_died_this_turn) { return 0; }
+    int n = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.endstep_morbid_destroy_target_creature) { ++n; }
+    }
+    return n;
+}
+// REAPER FROM THE ABYSS: "Morbid -- At the beginning of each end step, if a creature died this turn,
+// destroy target non-Demon creature." MANDATORY. One trigger per Reaper counted by the snapshot; with no
+// legal target the trigger is removed (CR 603.3d). The target: the pinned rank's class (searched);
+// HUMAN PLAY: the `target` board click over EVERY legal target, both sides (a forced single target is
+// not prompted). Indestructible: targeted, not destroyed. The destroy routes a creature through the
+// shared death cascade (OnCreatureDies, + FireOppCreatureDies for the opponent's). [PARTIAL, USER-
+// approved 2026-11-03: "each end step" reduced to OUR end step -- the passive opponent takes no turn in
+// which anything can die.] Shared by GameEngine::EndStep and the rollout (lockstep). Consumes the pin's
+// low byte whatever happens.
+inline void PerformEndStepMorbidDestroy(GameState& state, int n_triggers)
+{
+    const int pin = state.scripted_demon_trigger;
+    if (pin >= 0)
+    {
+        const int rest = pin & ~0xFF;
+        state.scripted_demon_trigger = static_cast<std::int16_t>(rest != 0 ? rest : -1);
+    }
+    if (n_triggers <= 0) { return; }
+    const int me = state.active_player_index;
+    // The excluded subtype off the first Reaper we control (every copy prints the same one).
+    std::string excl;
+    std::string src = "Reaper from the Abyss";
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != me || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.endstep_morbid_destroy_target_creature)
+        { excl = d->params.endstep_destroy_excluded_subtype; src = d->card.m_name.str(); break; }
+    }
+    for (int j = 0; j < n_triggers; ++j)
+    {
+        const std::vector<int> reps = DemonTriggerClassReps(state, me, /*destroy=*/true, excl);
+        if (reps.empty())
+        {
+            if (g_play_event_sink && !g_tap_speculating)
+            { EmitPlayEvent(state.turn_number, "trigger", src + ": no legal target -- the trigger is removed"); }
+            continue;
+        }
+        const int k = std::min<int>(DemonPinRank(pin, 0, j), static_cast<int>(reps.size()) - 1);
+        int bi = reps[static_cast<std::size_t>(k)];
+        if (g_play_loyalty_chooser != nullptr && !g_tap_speculating)
+        {
+            std::vector<int> legal;
+            for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+            {
+                if (MorbidDestroyTargetLegal(state, state.battlefield[static_cast<std::size_t>(i)], me, excl))
+                { legal.push_back(i); }
+            }
+            if (legal.size() > 1)
+            {
+                int heur = 0;
+                for (int li = 0; li < static_cast<int>(legal.size()); ++li)
+                { if (legal[static_cast<std::size_t>(li)] == bi) { heur = li; break; } }
+                const int c = (*g_play_loyalty_chooser)(state, me, src,
+                                                         "destroyed (morbid: target non-Demon creature -- mandatory)",
+                                                         legal, heur);
+                bi = legal[static_cast<std::size_t>((c >= 0 && c < static_cast<int>(legal.size())) ? c : heur)];
+            }
+        }
+        Permanent& q = state.battlefield[static_cast<std::size_t>(bi)];
+        if (q.card.HasKeyword(Keyword::Indestructible)) { continue; }   // targeted, not destroyed
+        const Card dead      = q.card;
+        const int  dead_ctrl = q.controller_index;
+        const bool was_token = q.is_token;
+        const int  m1        = MinusCountersOn(q);
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "trigger",
+                          "\xF0\x9F\x92\x80 " + src + " (morbid): destroys "
+                          + (dead_ctrl == me ? std::string("your ") : std::string("the opponent's "))
+                          + dead.m_name.str());
+        }
+        state.players[q.owner_index].graveyard.push_back(dead);
+        state.battlefield.erase(state.battlefield.begin() + bi);
+        for (Permanent& o : state.battlefield)
+        {
+            if (o.equipped_to      == dead.m_number) { o.equipped_to      = 0; }
+            if (o.aura_attached_to == dead.m_number) { o.aura_attached_to = 0; }
+        }
+        OnCreatureDies(state, dead_ctrl, dead, was_token, m1);
+        if (dead_ctrl != me) { FireOppCreatureDies(state, dead_ctrl); }
+    }
+}
+// SIRE OF INSANITY: "At the beginning of each end step, each player discards their hand." No choice: each
+// Sire we control is one trigger (a second finds every hand empty). OUR hand: every non-staged card (an
+// impulse-STAGED card is in exile -- the rollout keeps it in hand flagged, the executor already moved it
+// out, so skipping it keeps the two worlds in lockstep); the OPPONENT's hand when it was dealt one. ONE
+// simultaneous discard event per player (GyShuffleBatch), through the shared DiscardCardFromHand hook
+// (graveyard replacements, discard watchers). Called at OUR end step (GameEngine::EndStep and the rollout,
+// lockstep) and at the opponent's NOTIONAL end step (RunTurnFrom / the rollout's opponent turn, after its
+// notional draw) -- the latter finds our hand empty in this pool (nothing puts a card into it between our
+// end step and our next draw), so it is faithful and inert.
+inline void PerformEndStepDiscardHands(GameState& state, int sire_controller)
+{
+    if (!state.deck_has_demon_triggers) { return; }
+    int n = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != sire_controller || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.endstep_each_player_discards_hand) { ++n; }
+    }
+    for (int j = 0; j < n; ++j)
+    {
+        for (int pi = 0; pi < 2; ++pi)
+        {
+            if (pi != sire_controller && !state.opponent_library_dealt) { continue; }
+            Player& pl = state.players[static_cast<std::size_t>(pi)];
+            int shed = 0;
+            {
+                GyShuffleBatch _gyb(state);
+                for (int i = static_cast<int>(pl.hand.size()) - 1; i >= 0; --i)
+                {
+                    if (pl.hand[static_cast<std::size_t>(i)].m_is_staged) { continue; }
+                    DiscardCardFromHand(state, pi, i, nullptr, "Sire of Insanity");
+                    ++shed;
+                }
+            }
+            if (shed > 0 && g_play_event_sink && !g_tap_speculating)
+            {
+                EmitPlayEvent(state.turn_number, "discard",
+                              std::string("Sire of Insanity: ") + (pi == sire_controller ? "you discard" : "the opponent discards")
+                              + " " + std::to_string(shed) + " card" + (shed == 1 ? "" : "s"));
+            }
+        }
+    }
+}
+// ABHORRENT OVERLORD: "At the beginning of your upkeep, sacrifice a creature." MANDATORY; one trigger per
+// Overlord we control at the beginning of the upkeep (snapshotted first: CR 113.7a, a trigger resolves
+// even if an earlier one sacrificed its source); never zero options while an Overlord is out (it is a
+// creature itself). The victim: the pinned rank's class (searched; the previous turn's plan decided it);
+// HUMAN PLAY: the `sacrifice` board click over EVERY creature we control (a single one is forced). Through
+// SacrificePermanentAt (the shared death cascade: dies watchers, sacrifice watchers, morbid). Shared by
+// GameEngine::UpkeepTail and the rollout's upkeep block (lockstep). CONSUMES the whole pin.
+inline void PerformUpkeepSacrificeCreature(GameState& state)
+{
+    const int pin = state.scripted_demon_trigger;
+    state.scripted_demon_trigger = -1;
+    if (!state.deck_has_demon_triggers) { return; }
+    const int me = state.active_player_index;
+    int n = 0;
+    std::string src = "Abhorrent Overlord";
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != me || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.upkeep_sacrifice_creature > 0)
+        { n += d->params.upkeep_sacrifice_creature; src = d->card.m_name.str(); }
+    }
+    for (int j = 0; j < n; ++j)
+    {
+        const std::vector<int> reps = DemonTriggerClassReps(state, me, /*destroy=*/false, std::string{});
+        if (reps.empty()) { break; }
+        const int k = std::min<int>(DemonPinRank(pin, kDemonOverlordShift, j), static_cast<int>(reps.size()) - 1);
+        int bi = reps[static_cast<std::size_t>(k)];
+        if (g_play_sacrifice_chooser != nullptr && !g_tap_speculating)
+        {
+            std::vector<int> legal;
+            for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+            {
+                const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+                if (q.controller_index == me && (q.card.IsCreature() || q.is_animated)) { legal.push_back(i); }
+            }
+            if (legal.size() > 1)
+            {
+                int heur = 0;
+                for (int li = 0; li < static_cast<int>(legal.size()); ++li)
+                { if (legal[static_cast<std::size_t>(li)] == bi) { heur = li; break; } }
+                const int c = (*g_play_sacrifice_chooser)(state, me, src + " (upkeep)", legal, heur);
+                bi = legal[static_cast<std::size_t>((c >= 0 && c < static_cast<int>(legal.size())) ? c : heur)];
+            }
+        }
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "sacrifice",
+                          "\xF0\x9F\x94\xAA " + src + " (upkeep) -- sacrificed "
+                          + state.battlefield[static_cast<std::size_t>(bi)].card.m_name.str());
+        }
+        SacrificePermanentAt(state, me, bi);
+    }
 }
 
 // Crop Rotation resolution (CardParams::tutor_land_to_battlefield): "Search your library for a

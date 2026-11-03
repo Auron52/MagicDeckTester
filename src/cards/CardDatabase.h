@@ -3675,6 +3675,43 @@ struct CardParams
     //     it" is enumerable on an empty board too;
     //   * is uncastable with no legal victim.
     bool sac_additional_creature = false;
+    // ---- SHADOWBORN INT-2 (2026-11-03) ----------------------------------------------------------
+    // Shadowborn Apostle: "{B}, Sacrifice six creatures named Shadowborn Apostle: Search your library
+    // for a Demon creature card, put it onto the battlefield, then shuffle." PermAbilityMode::
+    // SacNamedTutorPut. sac_named_count = how many creatures NAMED LIKE THIS CARD the cost sacrifices
+    // (0 = no such ability); sac_named_activation_cost = the mana half. NO {T}: summoning-sick and
+    // tapped copies are legal victims and the source may be one of them. The search reads the card's
+    // own tutor_types / tutor_required_subtype / tutor_shuffle_after (the Birthing Pod precedent:
+    // no tutor_to_hand / _top / _battlefield_single flag, so no cast-time tutor site fires).
+    int                     sac_named_count = 0;
+    std::optional<ManaCost> sac_named_activation_cost;
+    // "...a Demon creature card": a SUBTYPE conjunct on top of tutor_types (which is an OR-list of
+    // type names) -- applied in TutorNumericFilterOk and PerformTutorToBattlefield's type match, so
+    // every tutor filter site honours it. Empty = no subtype restriction (byte-identical).
+    std::string             tutor_required_subtype;
+    // Abhorrent Overlord: "When this creature enters, create a number of 1/1 black Harpy creature
+    // tokens with flying equal to your devotion to black." The colour whose devotion (DevotionTo, read
+    // at resolution with the creature already on the battlefield) is the token count; the token is the
+    // shared etb_created_token_* spec. Empty = no such trigger.
+    std::string             etb_tokens_per_devotion_color;
+    // Abhorrent Overlord: "At the beginning of your upkeep, sacrifice a creature." MANDATORY; the victim
+    // (any creature we control, this one included) is SEARCHED: the previous turn's plan pins its rank
+    // (Plan::demon_trigger_choice -> GameState::scripted_demon_trigger). 0 = no such trigger.
+    int                     upkeep_sacrifice_creature = 0;
+    // Reaper from the Abyss: "Morbid -- At the beginning of each end step, if a creature died this
+    // turn, destroy target non-<excluded subtype> creature." MANDATORY targeted destroy over BOTH
+    // sides' creatures; the target is SEARCHED (Plan::demon_trigger_choice, low field). false = none.
+    bool                    endstep_morbid_destroy_target_creature = false;
+    std::string             endstep_destroy_excluded_subtype;
+    // Sire of Insanity: "At the beginning of each end step, each player discards their hand." No choice.
+    bool                    endstep_each_player_discards_hand = false;
+    // Jetmir, Nexus of Revels: a TIERED creature-count anthem. "Creatures you control get +P/+0 [and
+    // have <kw_i>] as long as you control <tiers[i]> or more creatures", cumulative over the tiers
+    // met. Self-inclusive (every creature we control counts, tokens and sick bodies included).
+    // Empty tiers = no such anthem.
+    std::vector<int>         creature_count_anthem_tiers;
+    int                      creature_count_anthem_power = 0;
+    std::vector<std::string> creature_count_anthem_keywords;
     // Lake of the Dead: "If this land would enter, sacrifice a <subtype> instead. If you do, put
     // this land onto the battlefield. If you don't, put it into its owner's graveyard." Resolved in
     // the shared land drop (PlayLandCore) BEFORE the land enters. Empty = no such replacement.

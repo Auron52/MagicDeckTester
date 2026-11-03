@@ -185,6 +185,11 @@ enum class Keyword
     // nothing blocks anywhere in this engine. No engine code reads either enumerator.
     Landwalk,
     Swampwalk,
+    // Morbid (Reaper from the Abyss): an INERT ability-word tag (CR 207.2c), the Landfall precedent. The
+    // trigger is modelled by CardParams::endstep_morbid_destroy_target_creature + GameState::
+    // creature_died_this_turn; no engine code reads this enumerator. It exists so Scryfall's keywords array
+    // can be pasted VERBATIM (KeywordFromString throws on an unmapped keyword -- see Jump's note).
+    Morbid,
     // Sentinel: MUST stay last. Keyword ordinals are bit indices into Card::m_keyword_mask (uint64_t).
     KeywordCount_
 };

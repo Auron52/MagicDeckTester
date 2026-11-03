@@ -14567,6 +14567,133 @@
     "tutor_types": [],
     "tutor_shuffle_after": true
    }
+  },
+  {
+   "name": "Shadowborn Apostle",
+   "mana_cost": "{B}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Human",
+    "Cleric"
+   ],
+   "keywords": [],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "A deck can have any number of cards named Shadowborn Apostle.\n{B}, Sacrifice six creatures named Shadowborn Apostle: Search your library for a Demon creature card, put it onto the battlefield, then shuffle. [DECK-CONSTRUCTION clause ('any number of cards named ~'): no in-game effect -- nothing in the engine enforces a copy limit. ACTIVATION: PermAbilityMode::SacNamedTutorPut (sac_named_count 6, sac_named_activation_cost {B}; the search is the card's own tutor_types [Creature] + tutor_required_subtype Demon + tutor_shuffle_after -- the Birthing Pod shape: no tutor_to_hand / _top / _battlefield_single flag, so no cast-time tutor fires). NO {T}: summoning-sick and tapped copies are legal victims, the source may be one of them (CR 602.5 / 302.6), and it can be activated again while six copies remain. COST paid before the effect (CR 601.2h): the six die through the shared death cascade (SacrificePermanentAt -> OnCreatureDies: morbid, dies watchers), THEN the Demon is put onto the battlefield through the full enter cascade (Abhorrent Overlord's devotion counts the copies LEFT), THEN shuffle. SEARCHED, both mains: WHICH six = a readiness-count variant (how many attack-ready and how many tapped copies; tapped-and-new copies always go first and an attack-ready copy is never given up while a weaker copy is left -- sound dominance folds; copies the same plan casts count as new copies) and WHICH Demon = one variant per legal library Demon plus fail-to-find (legal, CR 701.19b; it still shuffles). One activation per plan; a second in the same main is the breakpoint re-solve when six copies are left (or the sixth arrives). Human play: the Demon is the plan variant (viewer verb sacnamed=), the six are `sacrifice` board clicks at resolution. Second main enabled (DeckUsesSecondMain): attack with the Apostles, then sacrifice them post-combat.]",
+   "template": "custom",
+   "parameters": {
+    "sac_named_count": 6,
+    "sac_named_activation_cost": "{B}",
+    "tutor_types": [
+     "Creature"
+    ],
+    "tutor_required_subtype": "Demon",
+    "tutor_shuffle_after": true
+   }
+  },
+  {
+   "name": "Abhorrent Overlord",
+   "mana_cost": "{5}{B}{B}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Demon"
+   ],
+   "keywords": [
+    "Flying"
+   ],
+   "power": 6,
+   "toughness": 6,
+   "oracle_text": "Flying\nWhen this creature enters, create a number of 1/1 black Harpy creature tokens with flying equal to your devotion to black. (Each {B} in the mana costs of permanents you control counts toward your devotion to black.)\nAt the beginning of your upkeep, sacrifice a creature. [ETB: etb_tokens_per_devotion_color B with the shared etb_created_token_* spec (1/1 Harpy, created_token_color B, etb_created_token_keywords [Flying]) -- N = DevotionTo(B) read at RESOLUTION with the Overlord already on the battlefield, so its own {B}{B} counts (CR 700.5); tokens add 0; ONE CreateTokens event; every Harpy enters summoning sick. Fires on every entry route (cast, Shadowborn Apostle's put). UPKEEP: upkeep_sacrifice_creature 1 -- MANDATORY, any creature we control including the Overlord itself, through SacrificePermanentAt (dies / sacrifice watchers, morbid). WHICH creature is SEARCHED: identity-folded classes of our creatures, the previous turn's plan pins the rank (Plan::demon_trigger_choice high byte -> GameState::scripted_demon_trigger, consumed by PerformUpkeepSacrificeCreature in both worlds); unpinned = the class list's front (tokens first, then the lowest power), only beyond the horizon. Human play: the `sacrifice` board click over every creature we control (a single one is forced). Flying (Overlord and Harpies): carried, INERT in a goldfish -- no blocker path (USER-approved 2026-11-03).]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "etb_tokens_per_devotion_color": "B",
+    "etb_created_token_power": 1,
+    "etb_created_token_toughness": 1,
+    "etb_created_token_subtypes": [
+     "Harpy"
+    ],
+    "etb_created_token_keywords": [
+     "Flying"
+    ],
+    "created_token_color": "B",
+    "upkeep_sacrifice_creature": 1
+   }
+  },
+  {
+   "name": "Reaper from the Abyss",
+   "mana_cost": "{3}{B}{B}{B}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Demon"
+   ],
+   "keywords": [
+    "Flying",
+    "Morbid"
+   ],
+   "power": 6,
+   "toughness": 6,
+   "oracle_text": "Flying\nMorbid — At the beginning of each end step, if a creature died this turn, destroy target non-Demon creature. [endstep_morbid_destroy_target_creature + endstep_destroy_excluded_subtype Demon: a MANDATORY targeted end-step trigger resolved by the shared PerformEndStepMorbidDestroy from GameEngine::EndStep and TurnSolver::SimulateEndAndStartNextTurn (lockstep). MORBID = GameState::creature_died_this_turn (set in OnCreatureDies for any creature dying, either side, tokens included; cleared at both untap sites), an intervening if (CR 603.4) snapshotted as the end step begins and folded into the state keys. TARGETS: every non-Demon creature on the battlefield, BOTH sides -- the goldfish opponent's scheduled spawns are legal; with none, it MUST destroy one of OUR non-Demon creatures (an Apostle or a Harpy); with no legal target the trigger is removed (CR 603.3d). Indestructible: targeted, not destroyed. WHICH target is SEARCHED: identity-folded classes (opponent creatures first in branch order, then ours tokens-first), the turn's plan pins the rank (Plan::demon_trigger_choice low byte -> GameState::scripted_demon_trigger); unpinned = the front, only beyond the horizon. Human play: the `target` board click over every legal target. [PARTIAL, USER-approved 2026-11-03: 'each end step' is reduced to OUR end step -- the passive opponent takes no turn in which anything can die.] Flying: INERT (no blocker path; USER-approved).]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "endstep_morbid_destroy_target_creature": true,
+    "endstep_destroy_excluded_subtype": "Demon"
+   }
+  },
+  {
+   "name": "Sire of Insanity",
+   "mana_cost": "{4}{B}{R}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Demon"
+   ],
+   "keywords": [],
+   "power": 6,
+   "toughness": 4,
+   "oracle_text": "At the beginning of each end step, each player discards their hand. [endstep_each_player_discards_hand: resolved by the shared PerformEndStepDiscardHands at OUR end step (GameEngine::EndStep and TurnSolver::SimulateEndAndStartNextTurn, lockstep -- so the search sees that a card held past the end step is lost) and at the opponent's NOTIONAL end step (after their notional draw, both worlds). Our whole hand as ONE simultaneous discard event through the shared DiscardCardFromHand hook; impulse-staged cards (in exile) and suspended cards are untouched. The opponent discards its hand too when it was dealt one. No choice. Ordered after Reaper from the Abyss's end-step trigger: they commute. [The opponent-end-step half is wired but inert in this pool: our own end step already emptied our hand and nothing puts a card into it before our next draw (USER-approved 2026-11-03).]]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "endstep_each_player_discards_hand": true
+   }
+  },
+  {
+   "name": "Jetmir, Nexus of Revels",
+   "mana_cost": "{1}{R}{G}{W}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Cat",
+    "Demon"
+   ],
+   "keywords": [],
+   "power": 5,
+   "toughness": 4,
+   "oracle_text": "Creatures you control get +1/+0 and have vigilance as long as you control three or more creatures.\nCreatures you control also get +1/+0 and have trample as long as you control six or more creatures.\nCreatures you control also get +1/+0 and have double strike as long as you control nine or more creatures. [creature_count_anthem_tiers [3,6,9] + creature_count_anthem_power 1 (cumulative: +1/+2/+3 power) + creature_count_anthem_keywords [Vigilance, Trample, Double strike] (tier i grants keyword i): a CONDITIONAL STATIC read live in ComputeLordBonus / CreatureHasDoubleStrike / CreatureHasVigilance, SELF-INCLUSIVE (every creature we control counts: Jetmir, tokens, summoning-sick bodies), so it switches off the moment a sacrifice drops the count. The count is taken once per board (BoardSources) and capped at the top tier -- never a per-creature board walk. DOUBLE STRIKE is real: combat resolves first-strike and regular damage and the attack projections read the same oracle. VIGILANCE is wired (a live reader) but INERT here -- no creature in the list has a {T} ability. TRAMPLE: INERT -- no blocker path (both USER-approved 2026-11-03). Uncastable in a B/R list (no G/W source): it arrives by Shadowborn Apostle's put.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "creature_count_anthem_tiers": [
+     3,
+     6,
+     9
+    ],
+    "creature_count_anthem_power": 1,
+    "creature_count_anthem_keywords": [
+     "Vigilance",
+     "Trample",
+     "Double strike"
+    ]
+   }
   }
  ]
 }

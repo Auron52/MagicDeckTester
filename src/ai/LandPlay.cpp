@@ -585,7 +585,7 @@ int UnmetActivationColorMask(const GameState& state)
             &q.blink_cost, &q.team_pump_cost, &q.pod_activation_cost, &q.sac_creature_cost,
             &q.firebreathing_cost, &q.animate_cost, &q.tap_token_cost, &q.attach_all_equipment_cost,
             &q.tap_put_from_hand_cost, &q.gy_exile_grow_cost, &q.activated_reveal_top_cost,
-            &q.untap_creature_cost,
+            &q.untap_creature_cost, &q.sac_named_activation_cost,
             // Arcanum Wings' swap is an activation only while the Aura is attached.
             p.aura_attached_to != 0 ? &q.aura_swap_cost : nullptr,
         };

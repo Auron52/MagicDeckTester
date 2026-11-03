@@ -708,7 +708,7 @@ inline bool CarriesPostApplyPin(const TurnSolver::Plan& p)
         || p.combat_aura_swap_choice >= 0 || p.attack_attach_choice >= 0 || p.fb_hold_choice >= 0
         || p.attack_land_search_choice >= 0 || p.combat_crack_choice >= 0 || p.discard_choice >= 0
         || p.vial_charge_choice >= 0 || p.saga_target_choice >= 0 || p.upkeep_land_search_choice >= 0
-        || p.grace_choice >= 0 || p.upkeep_gy_reanimate_choice >= 0
+        || p.grace_choice >= 0 || p.upkeep_gy_reanimate_choice >= 0 || p.demon_trigger_choice >= 0
         || p.upkeep_tutor_choice >= 0 || p.echo_choice >= 0
         || p.doth_put_choice >= 0
         || p.atk_dork_release >= 0 || p.combat_landfall_target_choice >= 0 || p.landfall_target_choice >= 0
@@ -757,6 +757,7 @@ inline void RecordReSolveRealized(const GameState& s, const TurnSolver::Plan& p,
     if (p.upkeep_gy_reanimate_choice >= 0
         && s.scripted_upkeep_gy_reanimate != p.upkeep_gy_reanimate_choice)                       { ok = false; }
     if (p.upkeep_tutor_choice >= 0 && s.scripted_upkeep_tutor != p.upkeep_tutor_choice)            { ok = false; }
+    if (p.demon_trigger_choice >= 0 && s.scripted_demon_trigger != p.demon_trigger_choice)      { ok = false; }
     if (p.upkeep_land_search_choice >= 0 && s.scripted_upkeep_land_search != p.upkeep_land_search_choice) { ok = false; }
     if (p.echo_choice >= 0             && s.scripted_echo != p.echo_choice)                        { ok = false; }
     if (p.doth_put_choice >= 0         && s.scripted_doth_put != p.doth_put_choice)                { ok = false; }
@@ -6941,6 +6942,11 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // searched target + tap spec scope.
             const int src_id = ResolveHandSourceActivation(state, a);
             const StealPinScope _steal_pin(a.enchant_target, a.steal_spec);
+            // Shadowborn Apostle's searched readiness-count code + Demon (SacNamedTutorPut); {0, null} for
+            // every other mode (never read). Lockstep twin in the other world.
+            const bool sac_named = a.ability_mode == Action::AbilityMode::SacNamedTutorPut;
+            const SacNamedPinScope _sac_named_pin(sac_named ? a.sac_victim_id : 0,
+                                                  sac_named ? &a.tutor_target.str() : nullptr);
             // Kessig Wolf Run's searched target + X (TapTargetPump) -- lockstep twin of the rollout's.
             const bool tpump = a.ability_mode == Action::AbilityMode::TapTargetPump;
             const TapTargetPumpPinScope _tpump_pin(tpump ? a.sac_victim_id : 0, tpump ? a.chosen_x : 0);

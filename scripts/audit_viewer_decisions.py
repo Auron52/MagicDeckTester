@@ -477,6 +477,17 @@ MANIFEST = {
     # basic-subset dominance).
     "etb_replace_sacrifice_land_subtype": ("sacrifice", truthy),
     "sac_for_mana_victim_land_subtype":   ("sacrifice", truthy),
+    # --- Shadowborn Apostle (INT-2, 2026-11-03) ---
+    # Shadowborn Apostle: "{B}, Sacrifice six creatures named ~: search for a Demon creature card, put it
+    # onto the battlefield". WHICH Demon (or fail to find) = a main_phase plan variant (verb sacnamed=);
+    # WHICH six = `sacrifice` board clicks at resolution (ApplyPermAbility's SacNamedTutorPut case).
+    "sac_named_count":               ("sacrifice",    positive),
+    # Abhorrent Overlord's upkeep "sacrifice a creature": the `sacrifice` board click at the upkeep
+    # (PerformUpkeepSacrificeCreature); the search pins the victim the turn before (demon_trigger_choice).
+    "upkeep_sacrifice_creature":     ("sacrifice",    positive),
+    # Reaper from the Abyss's morbid "destroy target non-Demon creature": the `target` board click over
+    # every legal target, both sides (PerformEndStepMorbidDestroy).
+    "endstep_morbid_destroy_target_creature": ("target", truthy),
     # Turntimber Symbiosis front: WHICH creature to put (or decline) = named plan variants.
     "look_top_put_creature_count": ("main_phase",     positive),
     # Turntimber back face: pay-3-life-or-tapped rides the shared land_entry chooser.
@@ -1457,6 +1468,15 @@ INERT_PARAMS = {
     "look_put_counter_bonus_max_mv": "counter-bonus threshold detail",
     "untap_creature_subtype": "untap-target subtype detail (rides untap_creature_cost)",
     "tutor_color": "tutor colour filter detail (rides the tutor target axis)",
+    # --- Shadowborn Apostle (INT-2, 2026-11-03) -- PROPOSED inert classifications (USER sign-off owed) ---
+    "tutor_required_subtype": "tutor subtype filter detail ('Demon creature card'; rides the Demon plan variant)",
+    "sac_named_activation_cost": "the {B} mana half of Shadowborn Apostle's activation; the decisions are sac_named_count's",
+    "endstep_destroy_excluded_subtype": "Reaper's 'non-Demon' target filter detail (rides endstep_morbid_destroy_target_creature's `target` click)",
+    "endstep_each_player_discards_hand": "Sire of Insanity discards the WHOLE hand of each player at each end step -- no selection",
+    "etb_tokens_per_devotion_color": "Abhorrent Overlord's ETB token count = devotion at resolution; no choice",
+    "creature_count_anthem_tiers": "Jetmir's static tiered anthem thresholds; no choice",
+    "creature_count_anthem_power": "Jetmir's static per-tier +power; no choice",
+    "creature_count_anthem_keywords": "Jetmir's static per-tier keyword grants (vigilance / trample / double strike); no choice",
     "loyalty_start": "starting loyalty stat, no choice",
     "modal_damage_per_choice": "modal payload detail (rides modal_choose_n)",
     "modal_draw_per_choice": "modal payload detail (rides modal_choose_n)",
@@ -1958,6 +1978,14 @@ def modeled_tokens(card):
     if p.get("sac_additional_creature") or p.get("etb_replace_sacrifice_land_subtype") \
             or p.get("sac_for_mana_victim_land_subtype"):
         t.add("sacrifice")
+    # Shadowborn INT-2: the Apostle's six (and its Demon search, a plan variant) and the Overlord's upkeep
+    # sacrifice are `sacrifice` board clicks; Reaper's morbid destroy is a `target` board click.
+    if p.get("sac_named_count") or p.get("upkeep_sacrifice_creature"):
+        t.add("sacrifice")
+        if p.get("sac_named_count"):
+            t.add("search")
+    if p.get("endstep_morbid_destroy_target_creature"):
+        t.add("target")
     # Kitesail Larcenist: "for each player, choose up to one other target artifact or creature" IS
     # the treasurify choice (own side = chosen_x plan variants, both sides = the treasurify chooser),
     # so both the 'target' and the 'choose up to' (modal) phrases are covered.

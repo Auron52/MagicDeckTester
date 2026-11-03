@@ -1393,7 +1393,7 @@ function activatableSources(){
       // pod=/ooze= name their TARGET (the fetch / the exiled card, riding tutor_target),
       // the gyreturn precedent -- the source artifact is never castable, the target IS the choice.
       const payload = (a.verb==='gyreturn' && a.gyreturn_target) ? a.gyreturn_target
-                    : ((a.verb==='pod' || a.verb==='ooze') && a.tutor_target) ? a.tutor_target
+                    : ((a.verb==='pod' || a.verb==='ooze' || a.verb==='sacnamed') && a.tutor_target) ? a.tutor_target
                     : a.card;
       // A BLINK's payload is the outlet, but its real choice is the TARGET -- Emiel blinking a
       // Peregrine Drake (refill five lands) and Emiel blinking anything else are different plays that
@@ -1802,6 +1802,9 @@ function queueActivation(src, opt, clickedNum){
     : opt.verb==='transform' ? `${src}: paying {B} to transform it into Lord of Lineage (other Vampires get +2/+2). Commit the phase to resolve it.`
     : opt.verb==='pod' ? `${src}: tapping it and sacrificing a creature to fetch ${opt.name}. You pick the victim when committing.`
     : opt.verb==='ooze' ? `${src}: paying {G} to exile ${opt.name} from a graveyard. Commit the phase to resolve it.`
+    : opt.verb==='sacnamed' ? (opt.name==='(no fetch)'
+        ? `${src}: paying {B} and sacrificing six of them — searching but finding nothing (the library is still shuffled). You pick the six as it resolves.`
+        : `${src}: paying {B} and sacrificing six of them to put ${opt.name} onto the battlefield. You pick the six as it resolves.`)
     // Repeatable (no {T}, no sacrifice): say it STACKS, since that is the whole point of the flag
     // and the cap no longer bounds it. Removal is the chip's ✕ -- clicking the source only ever adds.
     : opt.repeatable ? `${src}: ${have+1} activation${have?'s':''} queued${opt.blinkTargetName?` — blink ${opt.blinkTargetName}`:''}. Click again to stack another (✕ on a chip removes one), then commit ONCE.`
@@ -2774,6 +2777,7 @@ function renderPlanbar() {
               : p.verb==='landsearch' ? ' ⟳ sac → search for lands'
               : p.verb==='steal'     ? ' ⟳ tap 5 Vampires → steal'
               : p.verb==='transform' ? ' ⟳ transform'
+              : p.verb==='sacnamed'  ? ' ⟳ sac six → ' + (p.name||'Demon')
               : p.verb==='equip'     ? ' ⟳ equip'
               : p.verb==='attachall' ? ' ⟳ attach all'
               // The HOST is the chip's `name` for this one (the engine's action names the host too),
@@ -4363,6 +4367,8 @@ function activationPickerHtml(pick){
                    : o.verb==='landsearch' ? `${o.name} — sacrifice it: search for land(s) (you pick them as it resolves)`
                    : o.verb==='steal'     ? `${o.name} — tap five untapped Vampires: gain control of target creature (you pick it and the five as it resolves)`
                    : o.verb==='transform' ? `${o.name} — {B}: transform it into Lord of Lineage`
+                   : o.verb==='sacnamed'  ? (o.name==='(no fetch)' ? `{B}, sacrifice six: search for a Demon and find nothing (still shuffles)`
+                                                                   : `{B}, sacrifice six: put ${o.name} onto the battlefield (you pick the six as it resolves)`)
                    // Always the single activation now: the go-off count is filtered out of the click
                    // path (clickActivationOptions) and lives on the COMBO OFF panel button instead,
                    // so this picker only ever offers real, one-at-a-time plays. Click it again to

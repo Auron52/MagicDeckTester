@@ -2797,6 +2797,14 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                 else if (ac.kind == Action::Kind::ActivatePermAbility
                          && ac.ability_mode == Action::AbilityMode::TransformSelf)
                 { os << ", \"verb\": \"transform\""; }
+                // Shadowborn Apostle's "{B}, Sacrifice six creatures named ~: put a Demon" (INT-2): the
+                // list runs eighteen copies, so `cast=Shadowborn Apostle` is a hand cast. The line value is
+                // the DEMON (tutor_target, already serialised; "(no fetch)" = fail to find) -- the pod= /
+                // ooze= reason: one source with four Demons is four different activations. The six bodies
+                // are asked at resolution (`sacrifice` board clicks).
+                else if (ac.kind == Action::Kind::ActivatePermAbility
+                         && ac.ability_mode == Action::AbilityMode::SacNamedTutorPut)
+                { os << ", \"verb\": \"sacnamed\""; }
                 // Birthing Pod: names the SOURCE artifact (never castable), carries the fetch on
                 // tutor_target (already serialised) + the victim id, so the GUI writes
                 // `pod=<fetch>#<victim>` instead of an ambiguous `cast=Birthing Pod`.
@@ -5075,6 +5083,7 @@ static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
         else if (key == "taplife")   { ls.tap_lifes.push_back(val); }     // Wellwisher "{T}: gain 1 per Elf"
         else if (key == "landsearch"){ ls.land_searches.push_back(val); }
         else if (key == "steal")     { ls.steals.push_back(val); }       // Captivating Vampire's steal (Vampires B)
+        else if (key == "sacnamed")  { ls.sac_nameds.push_back(val); }   // Shadowborn Apostle (the Demon)
         else if (key == "transform") { ls.transforms.push_back(val); }   // Bloodline Keeper's {B} transform // Wilds / Myriad / Khalni crack
         // "pod=<fetch>[#<victim num>]": Birthing Pod activation (fetch name + optional victim id).
         else if (key == "pod")

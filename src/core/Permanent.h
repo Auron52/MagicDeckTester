@@ -333,6 +333,14 @@ enum class PermAbilityMode
     // loop still needs (PingLoopExtraCost); emitted only while PingLoopLiveNow -- a proven kill, executed
     // ping by ping (RunPingLoop). Appended LAST.
     PingLoop,
+    // {B}, Sacrifice six creatures named <this card>: Search your library for a Demon creature card, put
+    // it onto the battlefield, then shuffle  (Shadowborn Apostle; CardParams::sac_named_count /
+    // sac_named_activation_cost + the card's tutor_* search spec; Shadowborn INT-2). NO {T} -- sick and
+    // tapped copies are legal victims, the source may be one of them, repeatable while six copies remain
+    // -- so in PermAbilityTaps' exclusion list. WHICH six (a readiness-count pin, Action::sac_victim_id)
+    // and WHICH Demon (Action::tutor_target) are SEARCHED; both ride SacNamedPinScope into the shared
+    // resolver in ApplyPermAbility. Emitted out of band (never a K block). Appended LAST.
+    SacNamedTutorPut,
 };
 
 // Does this mode's cost include {T}? THE single source of truth, because three separate sites used
@@ -358,7 +366,8 @@ inline bool PermAbilityTaps(PermAbilityMode m)
         && m != PermAbilityMode::TransformSelf        // Bloodline Keeper: "{B}: Transform" -- no {T}
         && m != PermAbilityMode::PayCounterSelf       // Walking Ballista: "{4}: put a counter" -- no {T}
         && m != PermAbilityMode::CounterPing          // Walking Ballista: "remove a counter: 1 damage"
-        && m != PermAbilityMode::PingLoop;            // the Heliod + Ballista loop (pings, no {T})
+        && m != PermAbilityMode::PingLoop             // the Heliod + Ballista loop (pings, no {T})
+        && m != PermAbilityMode::SacNamedTutorPut;    // Shadowborn Apostle: "{B}, Sacrifice six ..." -- no {T}
     // SacLandSearch (Evolving Wilds / Myriad Landscape) is deliberately ABSENT: its cost has {T}.
     // SacLifePerCreature (Blighted Steppe) and TapLifegain (Wellwisher) are deliberately ABSENT --
     // this is an EXCLUSION list, so anything not named here taps, which is what both want. Adding

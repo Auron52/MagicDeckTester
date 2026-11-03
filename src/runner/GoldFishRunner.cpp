@@ -99,6 +99,13 @@ bool GoldFishRunner::DeckUsesSecondMain(const Decklist& deck)
         // otherwise reduces to "castable in both mains" in this engine; the real end-of-opponent-
         // turn Chord is a disclosed Tier-4 gap -- no opponent-turn priority window exists.)
         if (def->params.pod_mv_delta != 0 || def->params.convoke) { return true; }
+        // SHADOWBORN APOSTLE (2026-11-03, INT-2; USER-approved for this deck, to be measured at the
+        // matrix). "{B}, Sacrifice six creatures named Shadowborn Apostle: put a Demon onto the
+        // battlefield" -- the Birthing Pod shape: attack with the Apostles, THEN sacrifice the tapped
+        // attackers post-combat, banking their damage AND the Demon; a single main forces the trade
+        // (Jetmir is the case where activating BEFORE combat wins, so main 1 keeps the activation too).
+        // Culling the Weak / Diabolic Intent sacrifice post-combat for the same reason.
+        if (def->params.sac_named_count > 0) { return true; }
         // MYCOLOTH / DEVOUR (2026-09-23). Devour sacrifices bodies as an ADDITIONAL COST as the
         // creature enters (CR 702.81), so casting it pre-combat forfeits the attack of every body
         // eaten: the search's only choices are "devour and lose those attacks" or "do not devour
@@ -1461,6 +1468,8 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         bool upkeep_reanimate = false;
         // An echo card (GameState::deck_has_echo): the searched-echo axis's plan walk.
         bool echo = false;
+        // Shadowborn INT-2 (GameState::deck_has_morbid / deck_has_count_anthem / deck_has_demon_triggers).
+        bool morbid = false, count_anthem = false, demon_triggers = false, sac_named = false;
         // An upkeep sac-tutor (GameState::deck_has_sac_tutor, Defense of the Heart): the searched put-list fan.
         bool sac_tutor = false;
         // The Niv-Mizzet draw/damage loop (GameState::deck_has_draw_ping): the four params its two
@@ -1540,6 +1549,12 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                 if (!d->params.combat_damage_puts_subtype_from_hand.empty()) { combat_put = true; }
                 if (d->params.upkeep_gy_reanimate)             { upkeep_reanimate = true; }
                 if (d->params.echo_cost.has_value())          { echo = true; }
+                if (d->params.endstep_morbid_destroy_target_creature) { morbid = true; }
+                if (!d->params.creature_count_anthem_tiers.empty())  { count_anthem = true; }
+                if (d->params.sac_named_count > 0)                    { sac_named = true; }
+                if (d->params.endstep_morbid_destroy_target_creature || d->params.upkeep_sacrifice_creature > 0
+                    || d->params.endstep_each_player_discards_hand)
+                { demon_triggers = true; }
                 if (d->params.upkeep_sac_tutor_creatures > 0)  { sac_tutor = true; }
                 if (d->params.draw_trigger_damage > 0 || d->params.cast_trigger_instant_sorcery_draw > 0
                     || d->params.aura_damage_trigger_draw || d->params.soulbond_damage_trigger_draw)
@@ -1626,6 +1641,13 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         // Same reasoning, no lever: a clear bit proves no echo permanent can exist, so the echo axis's
         // per-plan walk (AppendSubdecisionAxes) finds no obligation and is dead code for that deck.
         state.deck_has_echo                = garth || echo;
+        // Shadowborn INT-2, same reasoning, no lever: a clear bit proves no morbid reader / count anthem /
+        // demon trigger can exist, so the morbid key fold, the count-anthem pass and the three trigger
+        // walks (both worlds) and the demon-trigger plan axis are dead code for that deck.
+        state.deck_has_morbid              = garth || morbid;
+        state.deck_has_count_anthem        = garth || count_anthem;
+        state.deck_has_demon_triggers      = garth || demon_triggers;
+        state.deck_has_sac_named           = garth || sac_named;
         // Same reasoning, no lever: a clear bit proves no Defense of the Heart can exist, so the searched put-list
         // fan's battlefield walk at every turn boundary (BoundaryFan) is dead code for that deck.
         state.deck_has_sac_tutor           = garth || sac_tutor;
