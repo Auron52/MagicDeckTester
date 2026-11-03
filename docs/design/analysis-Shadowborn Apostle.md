@@ -854,6 +854,7 @@ now goes to the rest of the turn.
 
 **Open (surfaced, not blocking):** the weakest-copy tie order (tapped > sick > first) is PROVISIONAL and inert at the
 upkeep; with no Harpy and no Apostle the Overlord sacrifices ITSELF ahead of Sire / Jetmir / Reaper, per the USER's order.
+**Both CONFIRMED by the USER at INT-9** (see INT-9's ruling 3).
 
 ## INT-8 done (2026-11-03)
 Commits on `shadowborn-analysis` (not pushed): `b15fe7f37` (provider, engine, tests, design doc) + this ledger commit.
@@ -980,10 +981,149 @@ units are deterministic). Avg = the batch's (non-wins penalised):
 1. **A, the waves.** Deleting them is unplayable (numbers above). They stay at INT-7's thresholds until the
    resolution-time picks land (`docs/design/shadowborn-ripple-resolution-picks.md`). Build that next, or accept the
    waves meanwhile?
-2. **E's tutor reading:** "mana while the earliest turn is later than next turn" (provisional), and ranking mana
+2. **E's tutor reading** (CONFIRMED by the USER at INT-9): "mana while the earliest turn is later than next turn" (provisional), and ranking mana
    candidates by their own earliest turn (this can put Dark Ritual ahead of a fuelled Lake when the Ritual is a turn
    sooner).
-3. **E's discard precedence:** route cards replace the quota fill; an off-route Ritual is pitchable, but last of the
+3. **E's discard precedence** (CONFIRMED by the USER at INT-9): route cards replace the quota fill; an off-route Ritual is pitchable, but last of the
    overflow.
 4. **The held-out result is +1 / +2 turn-quanta worse on 200 games at -2% units.** Every slower game recovers at
    d5 b200. A larger held-out A/B can size it if you want adoption evidence.
+
+## INT-9 done (2026-11-03)
+Commits on `shadowborn-analysis` (not pushed): `853849aff` (site census), `28c053fe9` (WIP: every INT-9 prune),
+`a73269590` (tests + Lake land signature), `1a430750d` (waves deleted), `95a26cdd5` + `3260bf5af` (Demon timing fixes
+found by the A/B), `83d04394c` (comment), + this ledger commit. Brief `logs/shadowborn/int9-brief.md`, hand-off
+`logs/shadowborn/int9-handoff.md`. Scratch `build/scratch/shadowborn/int9/`; summaries `logs/shadowborn/int9/`.
+
+**USER rulings, all CONFIRMED (verbatim):**
+1. INT-8 E's tutor reading ("short" = the earliest turn to the bar is later than next turn; mana candidates ranked by
+   their own earliest turn), INT-8 E's discard precedence (route replaces quota fill; an off-route Ritual pitchable but
+   shed last), and brief A.4's victim order.
+2. Free Diabolic Intent: *"4 seems potentially okay, but honestly I'm considering whether we should just never cast it.
+   Sacrificing an extra spare creature when we already have a search happening seems kind of poor."* -> DEFAULT never
+   take; the take-iff-expendable arm (`MTG_SHADOWBORN_FREE_INTENT_TAKE=1`) measured below. Hard Intent unaffected.
+3. INT-7's open items: *"The Apostle rule is also good."* and *"Didn't I approve the Overlord sacrificing itself first
+   after the small critters are gone already? I actually suggested that. ... Realistically it will never happen in a
+   real game that the Abhorrent is a win and Jetmir not."* -> INT-7's weakest-copy order and the Overlord-itself step
+   are CONFIRMED.
+4. One sacrifice order: *"The sacrifice for other effects (than Overlord) can use the same order. We prioritize
+   Shadowborns over Harpies and other demons over Overlord."* + *"Sire, Reaper, Jetmir in that order would be fine if we
+   want a full list. Jetmir is essentially the only one without a drawback in this deck."* -> Harpy > Apostle > Overlord
+   > Sire > Reaper > Jetmir for every creature sacrifice (incl. INT-7 step 4). Apostle activation still eats Apostles
+   only; Lake still a basic Swamp before Blood Crypt.
+5. E-bis amendment: *"If we have only 7 or so shadowborns on the field ... Abhorrent overlord (second main) is the best
+   option there. ... Jetmir is not that good in the situation where we lose almost all of the creatures."* -> Jetmir
+   only when it raises this turn's damage (lethal first), else Overlord main 2; then *"That rule sounds reasonable to
+   me."*
+6. P1: *"That makes sense. We don't have a good reason to hold lands."* + *"(beyond the Lake of the Dead case you
+   mentioned. That is held for the burst turn)"* -> only no-land plans dropped; Swamp + Lake in hand keeps both land
+   plans (test added).
+7. Sick turn: *"On a summoning sick turn you can do demon search main 1 if you want."* -> sick-turn activations in
+   main 1 only (was both mains).
+8. Reveal: *"Always revealing is probably okay, arguably not correct only in 1v1. We could always make that an option
+   and just fully prune it with heuristics if we want."* -> already that shape: the engine offers the reveal ("may";
+   searched masks under `MTG_UNPRUNED`, the dig chooser in the viewer) and `ShadowbornProvider::RippleFixed` prunes it
+   to always-reveal. No code change.
+9. *"The existing lethal check makes sense."* -> `UseLethalShortCircuit` opted in for this deck, CONFIRMED.
+10. Process: a subagent past ~250K context hands off (INT-9 did once).
+
+**A. Inventory** (menu = mean / max width per call, sanity cell d3 b10 + d5 b20, seed 1001, 100 games; census tool =
+the per-site `[sbsite]` census under `MTG_RIPPLE_STATS=1`, commit `853849aff`):
+
+| site | before (INT-8) | already pruned by | INT-9 prune | after |
+|---|---|---|---|---|
+| Demonic / Profane / Intent search, hard (`tutor_axis`) | 2.33 / 4 | USER tables (INT-4/5/8) | kept (cheap) | 3.06 / 4 |
+| free (ripple) tutor pick (`tutor_cast.pick`) | 2.49 / 4 | -- | front of the USER table at resolution | 1 / 1 |
+| Apostle activation: six bodies + Demon (`sac_named`) | 1.81 / 14 | INT-4 Demon list | weakest six (one code); Demon x phase rule | 1.09 / 2 |
+| ripple casts, Apostle (`f1_apostle`) | 9.97 / 19 | INT-5 Apostle decline | one variant (+ granter-free twin) | 1.84 / 2 |
+| ripple casts, Ritual / other (`f1_ritual`, `f1_other`) | 2.65 / 33, 2.45 / 33 | -- | take every free Ritual / Stone / Profane; reveal all | 1.82 / 2, 1.99 / 2 |
+| tutor-family ripple cast (`tutor_cast`) | 3.50 / 1,444 | waves | reveal all, free Intent declined, front pick, live victim | 1 / 1 |
+| "sacrifice a creature" cost (`sac_victim`) | 2.72 / 6 | -- | ONE victim, the deck's sacrifice order | 0.98 / 1 |
+| Overlord upkeep sacrifice | 1 | INT-7 | (order CONFIRMED) | 1 |
+| Lake ETB keep-vs-graveyard | 1 | not a branch (`ChooseSubtypeLandSacrifice`) | -- | 1 |
+| legend rule (free Stone) | 1 | keeps the oldest copy | -- | 1 |
+| land / no-land | -- | -- | P1: no no-land plan while a free land is in hand | -- |
+| one-activation verified kill | -- | -- | the frame's only plan (+ the land family's idle baseline) | -- |
+
+Ripple triggers in the sanity cell: 24.6M -> 1.64M; unpinned-in-window answers 10,029 -> 0. Files:
+`logs/shadowborn/int9/census_before.txt`, `census_after.txt`. The deck has a full searched second main.
+
+**F.1 factor table.** INT-8's 5,488 variants of one hard Intent cast (Stone out, 3 Intents in the library) = 2 hard
+victims x 8 don't-reveal masks x (1 + wt*wv)^3 over the 3 free-Intent ordinals (decline, or take with wt = 3 picks x
+wv = 2 victims) = 2 x 8 x 7^3. Free-Intent decline alone: 2 x 8 = 16. Every INT-9 prune: 1 (unit-tested at an
+unlimited root).
+
+**Fixes found while validating (not in the WIP):**
+- **Lake of the Dead shared a land signature with a basic Swamp** (`land_sig` had no term for
+  `etb_replace_sacrifice_land_subtype`), so with both in hand only the first in hand order was ever enumerated, at any
+  budget. Now in the signature; only Lake sets the param, so every other deck is byte-identical (smoke). Found by the
+  P1 Swamp + Lake test.
+- **The Demon timing judged the pre-chain board.** The activation is emitted before the plan's casts resolve, so a
+  board short of six (gi126, gi119, gi5, gi30, gi32: INT-8 chained into Jetmir before combat and won a turn earlier) or
+  six attack-ready Apostles with more to come from a hand Apostle (gi97) read "no Jetmir gain". Now Jetmir stays offered
+  in main 1 whenever a chain can still add bodies (fewer than six on the board, or a sac-named creature in hand); after
+  combat the devotion Demon. This is a 2-way searched branch, an amendment to the USER's rule -- SURFACED below.
+
+**F.3 waves: DELETED.** Units/game ~0.33-0.47x INT-8 and no game over 60 s, so `RippleLateWaveAdmitted` /
+`RippleDeepWaveAdmitted` and the 0x11B8 plan-cache mix are gone: the full ripple menus are admitted at every budget
+under a decision root (`RippleFullMenusAdmitted`). Under the shipped provider they are never built; sanity digests and
+units were byte-identical before / after the deletion. Only the `MTG_UNPRUNED` audit arm reaches them (at full width:
+a d8 b0 unpruned single game ran > 5 min and was stopped, my own probe).
+
+**Measurement** (Release, `MTG_PGO=0`, binary `mtg.int9d` = HEAD src, one pooled 1,004-game batch at 24 threads;
+INT-8 = `build/scratch/shadowborn/int8/ab/g_int8`; sanity "before" = `mtg.base`, play byte-identical to INT-8). Avg =
+the batch's (non-wins penalised). Both free-Intent arms:
+
+| cell | games | avg before | avg INT-9 | faster / slower | units/game before | units/game INT-9 (alt arm) |
+|---|---|---|---|---|---|---|
+| d3 b10 seed 1001 (sanity) | 50 | 5.420 | 5.060 | 17 / 2 | 69,883 | 30,925 (30,966) |
+| d5 b20 seed 1001 (sanity) | 50 | 5.400 | 4.980 | 19 / 0 | 108,940 | 51,468 (51,373) |
+| d3 b10 seed 7001 (held-out) | 200 | 5.445 | 5.165 | 55 / 8 | 119,059 | 39,614 (39,697) |
+| d5 b20 seed 7001 (held-out) | 200 | 5.390 | 5.055 | 60 / 3 | 188,887 | 70,746 (70,823) |
+
+- **Free-Intent arms are identical in turns** (195 / 196 / 50 / 49 identical digests). Real-resolution free casts in the
+  batch: Apostle 11,930 taken, Dark Ritual 64, Profane Tutor 4, Thrumming Stone 0; Diabolic Intent 7 taken (alt arm)
+  / 19 declined. Recommendation: keep the default (never), as the USER leaned.
+- **No SLOW-GAME (> 60 s).** Non-wins: INT-8 gi103 (d3), gi103 + gi125 (d5); INT-9 gi103, gi117, gi120 (d3), gi103,
+  gi120 (d5).
+- **Every slower game at `--depth 8 --budget-ms 0`** (INT-9 binary; INT-8's best shipped turn in brackets):
+  gi32 5 [5], gi55 4 [4], gi117 6 [8], gi120 6 [7], gi150 5 [5], gi179 5 [5], gi193 5 [5], sanity gi8 5 [6], sanity
+  gi35 5 [5] -- all recover; budget-bound (the same line, found with more search). **gi97 does NOT: 5 [4]** at d3 b10,
+  d5 b20 and d8 b0.
+  - *Why can they not run the same line?* INT-8: T1 Apostle, T2 Diabolic Intent eating it (fetches the Stone), T3 Lake
+    + Stone + Apostle (4 reveals, then the remaining triggers NOT revealed), T4 Swamp + two Apostles into the Stone +
+    Jetmir -> T4. A per-hook probe (temporary `MTG_SB_HOOK_OFF` mask, removed) restores T4 at d3 b10 and d8 b0 only
+    when `RippleFixed` is off -- not the victim order, body code, timing filter, kill cut, P1 or lethal cut. The
+    likely sub-answer is the reveal: INT-8's T3 stops revealing, which keeps the library order and the T4 Swamp draw
+    that pays for the T4 chain; always-reveal bottoms those cards. Not isolated further (the reveal and take answers
+    share the hook).
+  - *Is there a similar line that should win on the same turn?* Not under always-reveal: the unbudgeted d8 search finds
+    T5 as the best there.
+- **No-land passes** (`build/scratch/shadowborn/rc8/noland.py`, held-out d3 b10): INT-8 26 games / 32 passes with this
+  scanner (the stricter rc8 list: 19 / 23); INT-9 9 games / 11 passes, **all Lake-alone holds** (the USER's burst-turn
+  exception), 0 with a free land in hand.
+- **Unbudgeted d3 singles** (seed 1001+g, gi0-3, in the pooled batch): gi0 12.9 s / 668,933 units, gi1 8.8 s / 501,350,
+  gi2 12.6 s / 644,140, gi3 0.23 s / 6,354 (INT-8: gi0, gi1 > 10 min; gi2 72 s / 3.45M; gi3 2.2 s / 94,785). No longer
+  degenerate; ready for the Stage 4-bis backstop rows.
+- **The turn after going off** (E.1; `MTG_TURN_CENSUS`, single-threaded, sanity d3 b10): units charged on the win turn,
+  mean 1,210 (INT-8) -> 1,541 (INT-9), max 17,635 -> 22,436; 1.7% -> 5.0% of a game's units (the game total fell 2.3x).
+  The kill turn was already cheap: the earlier turns' full-line searches serve it from the game-line cache. Its share
+  rose because everything else shrank. When the cut fires, the frame holds the verified kill plus the land family's
+  idle baseline (2 plans).
+
+**Tests:** `test_shadowborn_int9.cpp` (fixed answers, victims, Lake, body code, timing incl. 7 / 10 / 11 / 10 + 2
+Harpies, the chain cases, sick turn main 1 only, the 13 / 12 and 2HG 14 / 13 kills, the kill collapse, one enumerator
+variant, the F factor probe, P1 incl. Swamp + Lake); INT-4 runs with the timing filter off; INT-5's wave tests now
+assert full menus at any budget under a root. **Unit 2517/2517. Scenarios 398/398. Smoke** (not accepted): 161
+passed, 4 failed -- the pre-existing Merfolk d0/d3/d5 + merfolk2hg d3 (merfolk d3 digest 16290806e85e1728); every other
+case byte-identical (this deck is not a suite case yet).
+
+**Decisions for the USER (surfaced, not blocking):**
+1. **The chain exception to the Demon timing rule** (mine): when a chain can still add bodies this turn, Jetmir stays
+   offered before combat and the search compares it with the Overlord after combat. Without it, 6 held-out games lost a
+   turn. Keep it?
+2. **gi97**: the always-reveal pin (CONFIRMED) costs this game a turn at every budget. Accept it, or keep the reveal
+   searched when a granter is cast this turn with a land-light hand? (I recommend accepting: 1 of 200, and the pin is
+   what keeps the chains narrow.)
+3. **Free Intent**: never (default) vs take-iff-expendable measured identical in turns. Keep never?
+4. gi117 / gi120 are new non-wins at the shipped budget (both win T6 at d8 b0). Budget-bound, not a lost line.
