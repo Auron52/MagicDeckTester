@@ -4071,7 +4071,11 @@ public:
     //   |                                        |  turn's attack over not activating (lethal first); else the |
     //   |                                        |  devotion-token Demon (Overlord), main 2 only. SICK TURN:   |
     //   |                                        |  the INT-4 list (Overlord, then Jetmir), main 1 only (USER) |
-    //   | ripple reveal (every trigger)          | reveal                                                      |
+    //   |                                        |  A CHAIN CAN STILL ADD BODIES (fewer than six on the board, |
+    //   |                                        |  or an Apostle in hand): Jetmir stays offered in main 1     |
+    //   | ripple reveal (every trigger; USER      | reveal -- the engine offers it ("may"); MTG_UNPRUNED and   |
+    //   |   CONFIRMED: "Always revealing is      |   the viewer keep the choice                                |
+    //   |   probably okay")                      |                                                             |
     //   | ripple take: Apostle, plain ritual,    | TAKE                                                        |
     //   |   granter, tutor without a sac cost    |                                                             |
     //   | ripple take: a creature-sacrificing    | DECLINE (MTG_SHADOWBORN_FREE_INTENT_TAKE=1: take iff an     |
