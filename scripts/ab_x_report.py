@@ -16,8 +16,8 @@ import re
 import sys
 
 GAME = re.compile(r"SLOW-GAME (\d+)ms\s+job=(\S+) gi=(\d+) wt=(-?\d+) units=(\d+)")
-ARM = re.compile(r"^(.*)_x(\d+)$")
-TAILARM = re.compile(r"^tailx(\d+)_(.*)$")
+ARM = re.compile(r"^(.*)_x(\d+(?:ng)?)$")
+TAILARM = re.compile(r"^tailx(\d+(?:ng)?)_(.*)$")   # "ng" = priced start gate off
 
 
 def pct(v, q):
@@ -40,32 +40,33 @@ def main():
             ms, job, gi, wt, u = int(m.group(1)), m.group(2), int(m.group(3)), int(m.group(4)), int(m.group(5))
             t = TAILARM.match(job)
             if t:
-                tail[int(t.group(1))][t.group(2)] = (ms, wt, u)
+                tail[t.group(1)][t.group(2)] = (ms, wt, u)
                 continue
             r = ARM.match(job)
             if r:
-                reg[int(r.group(2))][(r.group(1), gi)] = (ms, wt, u)
+                reg[r.group(2)][(r.group(1), gi)] = (ms, wt, u)
     if a.tail0:
         with open(a.tail0 + ".err") as f:
             for ln in f:
                 m = GAME.search(ln)
                 if m and m.group(2).startswith("tail_"):
-                    tail[0][m.group(2)[5:]] = (int(m.group(1)), int(m.group(4)), int(m.group(5)))
-    xs = sorted(reg)
-    if 0 not in reg:
+                    tail.setdefault("0", {})[m.group(2)[5:]] = (int(m.group(1)), int(m.group(4)), int(m.group(5)))
+    order = lambda k: (int(k.rstrip("ng")), k.endswith("ng"))
+    xs = sorted(reg, key=order)
+    if "0" not in reg:
         sys.exit("no X=0 arm")
     w = lambda t: t if t > 0 else a.nowin
     print("=== QUALITY (held-out regression shapes), each X vs X=0, paired per game")
     for x in xs:
-        if x == 0:
+        if x == "0":
             continue
-        keys = sorted(set(reg[0]) & set(reg[x]))
+        keys = sorted(set(reg["0"]) & set(reg[x]))
         by = collections.defaultdict(lambda: [0, 0, 0, 0, 0])   # n, moved, better, worse, sum delta
         for k in keys:
             d = k[0].split("_")[0]
             b = by[d]
             b[0] += 1
-            d0, d1 = w(reg[0][k][1]), w(reg[x][k][1])
+            d0, d1 = w(reg["0"][k][1]), w(reg[x][k][1])
             if d0 != d1:
                 b[1] += 1
                 b[2 if d1 < d0 else 3] += 1
@@ -79,11 +80,11 @@ def main():
     print("=== TAIL (held-out regression shapes): per-game wall by arm")
     for x in xs:
         v = sorted(g[0] for g in reg[x].values())
-        print(f"X={x:3d}: n={len(v)} sum {sum(v) / 1000:8.0f}s  p50 {pct(v, .5)}ms  p99 {pct(v, .99) / 1000:.1f}s  "
+        print(f"X={x:>5}: n={len(v)} sum {sum(v) / 1000:8.0f}s  p50 {pct(v, .5)}ms  p99 {pct(v, .99) / 1000:.1f}s  "
               f"p99.9 {pct(v, .999) / 1000:.1f}s  max {v[-1] / 1000 if v else 0:.1f}s")
     if tail:
         print("=== TAIL CORPUS: wall s (win turn) by X")
-        txs = sorted(tail)
+        txs = sorted(tail, key=order)
         print("   %-48s" % "game" + "".join("%16s" % f"X={x}" for x in txs))
         names = sorted(set().union(*[set(tail[x]) for x in txs]), key=lambda n: -max(tail[x].get(n, (0,))[0] for x in txs))
         for n in names:

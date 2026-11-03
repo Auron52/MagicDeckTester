@@ -111,8 +111,20 @@ Started 2026-11-03.
   that game also moved with MTG_MANA_CACHE=0 before). All 6 repros: default units == KB=1 units, CONTENT-DIFF 0.
   OPEN (user's call): MTG_MANA_CACHE_X_TRAITS / _X_PAYCTX would close 40 colour-only mana-cache diffs on n83
   (no unit effect measured; key cost on the hottest path).
-- RUNNING (04:07 UTC): run_purity2.sh -> p2a.* (default) vs p2b.* (MTG_PLAN_CACHE_KB=1), regression tier,
-  14 threads each concurrently; pure => identical digests AND per-game units. Marker purity2.DONE.
+- PURITY AT SCALE (run_purity2.sh): p2a (default, new binary) DONE: vs V1 the purity fixes move 6 digests (bruna
+  x3, niv x3), 1 win turn (niv d0, better), 156 games' units (niv 95, niv2hg 25, snow 16, melira 13, bruna 4, edf 3).
+  p2b (MTG_PLAN_CACHE_KB=1, every store refused) still RUNNING (much slower); pure => p2b == p2a in every unit.
+- A/B v2 VERDICT NEEDS CARE: it ran on the PRE-fix binary with a near-full global plan pool at 32 threads, i.e.
+  play was pool-interleaving dependent. edf gi214 X=10: 2,148 s in the batch, but 123 s (t4) alone on the fixed
+  binary -> that blow-up was the impurity, not the ceiling. alchemist gi490 X=20 t6->t8 REPRODUCES alone (real):
+  the t2/t3 decisions need ~30x L priced, a trip discards the one deep pass (idwaste ~18k) and commits a 21-unit
+  depth-1 pass. And the ceiling does NOT bound edf gi821: at X=50 its decisions still spend 84-238 s priced
+  (ratio up to 529) -- the heavy work never reaches an Overrun check (subagent investigating WHERE; candidate:
+  the EDF combo route has no budget checks).
+- EDF EXPLOSION (subagent 2, worktree branch from ba8bf8a0e): anatomy + sound collapses of the land-Aura /
+  untapper enumeration (~2,000 plans and ~280k payment calls per enumeration).
+- RUNNING (04:31 UTC): run_ab_x3.sh -> abx3.*: PURE binary, arms X{0,20,30,50,100} gate on + X=50 gate off, held-out
+  regression shapes + tail corpus (own X=0 arm), 18 threads. Report: `scripts/ab_x_report.py abx3`.
 - Per-job X lever for the A/B: manifest "decision_priced_x" (ValueArm), env MTG_DECISION_PRICED_X otherwise.
 - Tail corpus READY: build/scratch/budget/tail_corpus.json (45 one-game jobs, mostly d5 b20; originals
   up to 4.6 h) + tail_corpus_notes.md. Not yet run on HEAD (MTG_MAX_GAME_WALL_SEC=3600, alone on box).
