@@ -24,6 +24,7 @@ commit makes the record STALE, which carries the last verdict forward (the ref-b
     python3 scripts/mana_clean.py run                    # every deck that is DUE (below), ONE pooled batch
     python3 scripts/mana_clean.py run niv decks/Snow     # these decks, due or not
     python3 scripts/mana_clean.py run --resume <name>    # finish an interrupted run (same src required)
+    python3 scripts/mana_clean.py rescore                # re-derive verdicts after a change to the failing classes
 
 DUE: never run; the decklist changed; or the last run had issues and src has changed since (a fix may
 have landed). A deck whose last run had issues on the CURRENT src is not due: the same engine would find
@@ -45,6 +46,7 @@ import os
 import re
 import subprocess
 import sys
+from pathlib import Path
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
@@ -67,9 +69,37 @@ SEED_BASE = 30000000             # game g of a deck's sequence is seed SEED_BASE
 # cases (for 1v1 for example)"). A payment whose lost life DOES cost a later line shows up at that later payment
 # as a lost-option class (ENUM-GAP, APPLY-DROP ...), which still fails. Its whole lines are kept (to the same
 # cap) in the filtered stderr so the 1v1 dig has its samples: docs/design/mana-clean-gate.md.
+# EXCEPT in a LIFE-BREAKPOINT deck (USER, same day: "Except maybe in a 'life matters' deck that needs to reach
+# certain breakpoints"), where a life short can be the breakpoint missed: there DOMINATED-LIFE fails. A deck is one
+# when a card on either board reads its controller's life total against a threshold (Serra Ascendant's "30 or more
+# life", Righteous Valkyrie's "at least 7 life more than your starting life total"), read off cards.json's oracle
+# text with the [bracket notes] cut, so the rule follows the list rather than a hand-kept deck set.
 DISCLOSED = ["DOMINATED-LIFE"]
 ISSUE = [c for c in mo.MISS if c not in DISCLOSED] + ["ORACLE-GAP"]
+LIFE_BREAKPOINT = re.compile(r"\bat least \d+ life\b|(?<!gained )\b\d+ or more life\b|\blife total is (?:less|greater) than \d+",
+                             re.I)
 COUNTER = re.compile(r"^\[mana-oracle\] (?P<cls>[A-Z-]+) seed=\d+ job=(?P<job>\S+)")
+
+
+_CARDS = None
+
+
+def life_breakpoints(deck_path):
+    """-> the cards in the decklist (main and side) that read their controller's life total against a threshold."""
+    global _CARDS
+    from analyze_deck import LoadDeckCounts            # the engine's own board split (DeckLoader.cpp)
+    if _CARDS is None:
+        raw = json.load(open(os.path.join(ROOT, "src", "cards", "data", "cards.json")))
+        rows = raw if isinstance(raw, list) else raw.get("cards", list(raw.values()))
+        _CARDS = {c.get("name"): (c.get("oracle_text") or "").split("[")[0] for c in rows if isinstance(c, dict)}
+    path = Path(os.path.join(ROOT, deck_path))
+    names = set(LoadDeckCounts(path, "main")) | set(LoadDeckCounts(path, "side"))
+    return sorted(n for n in names if LIFE_BREAKPOINT.search(_CARDS.get(n, "")))
+
+
+def issue_classes(deck_path):
+    """The classes that fail this deck: ISSUE, plus DOMINATED-LIFE in a life-breakpoint deck."""
+    return ISSUE + (DISCLOSED if life_breakpoints(deck_path) else [])
 
 
 def git(*args):
@@ -237,6 +267,24 @@ def done_jobs(path):
     return set(mo.digests(path)) if os.path.exists(path) else set()
 
 
+def cmd_rescore(args, decks):
+    """Re-derive each record's issue count and verdict from its exact per-class counts (`by_class`) under the
+    CURRENT failing classes, for records scored under an older ISSUE set. A clean/issues verdict is all that
+    moves; an invalid or incomplete run stays what it was (play identity is not a class count)."""
+    st = load_state()
+    for key, e in sorted(st.get("decks", {}).items()):
+        for r in e.get("runs", []):
+            fails = issue_classes(r["deck"])
+            issues = sum(r["by_class"].get(k, 0) for k in fails)
+            v = r["verdict"] if r["verdict"] not in ("clean", "issues") else ("clean" if issues == 0 else "issues")
+            if (issues, v, fails) != (r["issues"], r["verdict"], r.get("issue_classes")):
+                print("mana_clean: %-22s %s: %d issues %s -> %d %s" % (key, r["run"], r["issues"], r["verdict"],
+                                                                     issues, v), file=sys.stderr)
+                r.update(issues=issues, verdict=v, issue_classes=fails, life_breakpoints=life_breakpoints(r["deck"]))
+    save_state(st)
+    return 0
+
+
 def cmd_run(args, decks):
     if git("status", "--porcelain", "--untracked-files=no", "--", "src"):
         sys.exit("mana_clean: src/ has uncommitted changes -- a gate run is stamped with HEAD:src, so commit first")
@@ -343,6 +391,7 @@ def cmd_run(args, decks):
             owner.setdefault(job, i)
 
     counts = collections.defaultdict(collections.Counter)
+    fails = collections.defaultdict(lambda: ISSUE, {pd["key"]: issue_classes(pd["deck"]) for pd in plan["decks"]})
     decisions, plans_seen, summary, flags = collections.Counter(), collections.Counter(), [], []
     for i, (_, e) in enumerate(attempts("on")):
         for ln in open(e, errors="replace"):
@@ -360,12 +409,14 @@ def cmd_run(args, decks):
             if not m or owner.get(m.group("job")) != i:
                 continue
             counts[group(m.group("job"))][m.group("cls")] += 1
-            if m.group("cls") in ISSUE:
+            if m.group("cls") in fails[group(m.group("job"))]:
                 rec = mo.flag_record(ln, deck_of, group)
                 if rec:
                     flags.append(rec)
 
     when = now_iso()
+    st = load_state()                      # re-read: a run takes hours and another run or a rescore may have
+    st.setdefault("decks", {})             # written since this one loaded it; only this run's records change
     rows, worst = [], 0
     for pd in plan["decks"]:
         mine = [j["name"] for j in jobs if group(j["name"]) == pd["key"]]
@@ -373,7 +424,7 @@ def cmd_run(args, decks):
         identical = complete and all(dig["on"][j] == dig["off"][j] for j in mine)
         played = sum(int(dig["on"][j][0]) for j in mine if j in dig["on"])
         c = counts[pd["key"]]
-        issues = sum(c[k] for k in ISSUE)
+        issues = sum(c[k] for k in fails[pd["key"]])
         if not complete or played < pd["games"]:
             v = "incomplete"
         elif not identical:
@@ -387,6 +438,7 @@ def cmd_run(args, decks):
         rec = {"run": name, "date": when, "src": plan["src"], "commit": plan["commit"], "binary": "PGO",
                "deck": pd["deck"], "deck_sha": pd["deck_sha"], "game_index": pd["game_index"], "seed": pd["seed"],
                "games": played, "issues": issues, "identity": identical, "verdict": v,
+               "issue_classes": fails[pd["key"]], "life_breakpoints": life_breakpoints(pd["deck"]),
                "by_class": {k: c[k] for k in sorted(c)}, "decisions": decisions[pd["key"]],
                "ms_on": sum(ms["on"].get(j, 0) for j in mine), "ms_off": sum(ms["off"].get(j, 0) for j in mine),
                "report": os.path.relpath(os.path.join(out_dir, "report.md"), ROOT)}
@@ -436,7 +488,9 @@ def main():
     r.add_argument("--resume", default=None, help="finish an interrupted run of this name")
     r.add_argument("--top", type=int, default=12)
     r.add_argument("--chunk", type=int, default=None, help="games per batch job (default: sized per deck)")
-    for p in (s, r):
+    q = sub.add_parser("rescore", help="re-derive issue counts and verdicts from by_class under the current "
+                       "failing classes (after a change to ISSUE)")
+    for p in (s, r, q):
         p.add_argument("--state", default=None, help="the record file (default test/mana_clean.json; a test run "
                        "points it elsewhere so it does not spend a deck's game blocks)")
     args = ap.parse_args()
@@ -444,7 +498,7 @@ def main():
         global STATE
         STATE = os.path.abspath(args.state)
     decks = deck_registry.discover(os.path.join(ROOT, "decks"))
-    return cmd_status(args, decks) if args.cmd == "status" else cmd_run(args, decks)
+    return {"status": cmd_status, "rescore": cmd_rescore}.get(args.cmd, cmd_run)(args, decks)
 
 
 if __name__ == "__main__":

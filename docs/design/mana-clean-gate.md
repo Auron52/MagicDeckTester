@@ -45,6 +45,23 @@ life does cost a line, the oracle flags that later payment with a lost-option cl
 and that class still fails. The report counts DOMINATED-LIFE per deck. The filtered stderr keeps its whole flag lines,
 up to the same cap as the ISSUE classes.
 
+**The exception is a life-breakpoint deck, where DOMINATED-LIFE still fails.** The USER: *"Except maybe in a 'life
+matters' deck that needs to reach certain breakpoints."* In such a deck a payment a life short can be the breakpoint
+missed. A deck counts when a card on either board reads its controller's life total against a threshold. The test is
+`LIFE_BREAKPOINT` in `scripts/mana_clean.py`, run on the cards.json oracle text with the bracket notes cut. A "gained N
+or more life this turn" clause does not count, because paying life does not reduce life gained. As of 2026-11-03 the
+shipping decks this catches are:
+
+- Angels (Righteous Valkyrie)
+- Colossus Hammer (Speaker of the Heavens)
+- CritterLifegain and LifegainHeliodCombo (Serra Ascendant, Ajani, Strength of the Pride)
+- Prevent Damage (Bilbo, Birthday Celebrant)
+- StompySurprise (Elderscale Wurm)
+
+Each record stores the deck's `issue_classes` and the `life_breakpoints` cards that put it there. The USER noted that
+CritterLifegain plays no card that costs life, so the class cannot fire there; it passed its first 100,000 games
+clean.
+
 **Deferred (USER 2026-11-03):** *"in the future we may need to dig further into those cases (for 1v1 for example)"*.
 Against an opponent, life is a resource, and a payment a life short is a real loss even when no later payment
 needs that life. When 1v1 play arrives, revisit the class. Either fail on it again, or score the life against what
