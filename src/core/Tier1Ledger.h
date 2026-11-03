@@ -77,12 +77,14 @@ inline void Set(int c, long long now) { Add(c, now - t_cur[c]); }
 // caches use the shared pool; the solve memo keeps its portable entry-count cap).
 // Defaults: the per-cache max over the regression tier's 32,874 searched games (2026-11-03) with
 // headroom -- tt 5.0 MB, fsl 15.4, m1memo 8.3, gamelc 15.6, mana 46.0 (p99.9 6.7).
+// Mana 16 -> 24 MB (USER 2026-11-03, within the 50-100 MB per-thread tier-1 range; total 80 MB): it was the only
+// allocation that bound (wholesale clears in 10 games). Content-pure and uncharged, so its size moves wall only.
 inline bool On() { static const bool v = EnvOn("MTG_TIER1", true); return v; }
 inline long long AllocBytes(int c)
 {
     static const long long* v = []{
         static long long a[kCats] = {};
-        const long long def_mb[kCats] = { 8, 16, 0, 0, 8, 0, 24, 16 };   // tt fsl plan_enum plan_bp m1memo solvememo gamelc mana
+        const long long def_mb[kCats] = { 8, 16, 0, 0, 8, 0, 24, 24 };   // tt fsl plan_enum plan_bp m1memo solvememo gamelc mana
         const char* env[kCats] = { "MTG_TIER1_TT_MB", "MTG_TIER1_FSL_MB", nullptr, nullptr, "MTG_TIER1_M1MEMO_MB",
                                    nullptr, "MTG_TIER1_GAMELC_MB", "MTG_TIER1_MANA_MB" };
         for (int c = 0; c < kCats; ++c)
