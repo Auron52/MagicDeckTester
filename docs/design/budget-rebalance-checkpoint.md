@@ -140,6 +140,13 @@ Started 2026-11-03.
   tight X loses Alchemist turns); tier-1 sizes (tt 8, fsl 16, m1memo 8, gamelc 24, mana 16 MB); mana-cache
   context fold (MTG_MANA_CACHE_X_TRAITS / _X_PAYCTX); branch not pushed (push would also run Windows CI).
 
+## PURITY CONFIRMED (2026-11-03 ~05:00 UTC): plan caches are tier 2
+- p2a (default) vs p2b (MTG_PLAN_CACHE_KB=1, every plan store refused), regression tier on the pure binary:
+  260/260 jobs identical, 50,760 games, 0 win-turn and **0 unit** differences. Plan caches buy 2.57x wall
+  overall (hinata 6.8x, alchemist 4.5x, cyclone 4.1x; contended run). => the plan caches (bp continuation, m1/m2
+  enum memos) stay in the RAM-derived shared GLOBAL pool (membudget::DefaultPlanCacheKb) = tier 2: wall-only,
+  play is independent of the machine's RAM.
+
 ## A/B v3 partial reading (2026-11-03 04:55 UTC; abx3 ~1% of 189,870 games, all tail-corpus arms in)
 - READ WITHOUT --tail0: abx3 has its own same-binary tailx0 arm (ab_x_report.py now prefers it).
 - Tail corpus, win turn per X (0/20/30/50/100): alchemist gi490 6/**8**/6/6/6; kittyv2arch r8 gi1723
