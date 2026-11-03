@@ -3161,6 +3161,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
           int sub_units = 0;
           bool sub_any_combo = false;
           const CardParams* sub_pp = nullptr;
+          int sub_colours = 0x3f;    // colours (W,U,B,R,G,C bits) EVERY subtype source tapped here makes
           int gen_tap_colours = 0;   // colours (W,U,B,R,G,C bits) the GENERAL sources this payment tapped make
           const int nb = static_cast<int>(std::min(bf_pre.size(), state.battlefield.size()));
           for (int bi = 0; bi < nb; ++bi)
@@ -3181,6 +3182,10 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
               if (!bd->params.mana_only_subtype.empty())
               {
                   sub_units += units;
+                  int mk = 0;
+                  for (Color c : EffectiveProduces(state, active, *bd))
+                  { const int ci = static_cast<int>(c); if (ci >= 0 && ci < 6) { mk |= 1 << ci; } }
+                  sub_colours &= mk;
                   if (sub_pp == nullptr) { sub_pp = &bd->params; }
                   if (bd->params.produces_any_combination) { sub_any_combo = true; }
                   continue;
@@ -3215,13 +3220,45 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                   { if (lo_cols[c] > 0 && (gen_tap_colours & (1 << c)) == 0) { general_made = false; } }
                   if (alt_left < sub_left && general_made) { sub_left = alt_left; }
               }
+              // A FIXED-COLOUR SUBTYPE SOURCE'S UNITS PAY FIRST (MTG_SUBTYPE_LEFTOVER_EXACT, DEFAULT ON; =0 the
+              // legacy booking above). Angels mana-clean pass 1, 1,794 APPLY-DROPs and most of its ORACLE-GAPs:
+              // Giada, Font of Hope's Angel-only {W} + Sol Ring's {C}{C} pay a second Giada's {1}{W}, and the {C}
+              // left over went into the ANGEL-ONLY reserve -- a unit Giada cannot even make -- so Serra the
+              // Benevolent's {2}{W}{W} (a planeswalker) or Resplendent Angel's pump was a mana short. Which
+              // floating units a payment spent is the player's choice (CR 106.4 / 601.2h), and inside an Angel
+              // spell's payment a restricted unit may pay any of its pips the unit's colour can pay: every
+              // generic pip (less {S}, which only a snow source pays) and every pip of a colour it makes. By the
+              // exchange argument (a general unit paying such a pip while a restricted one floats can swap with
+              // it), the fewest restricted units that MUST be left over is sub_units - those pips, and booking
+              // just that many leaves general units where the legacy booking left restricted ones: each such
+              // unit pays everything the restricted one could, so the outcome is resource-for-resource no worse
+              // (a sound dominance, not a preference). The colours are those EVERY tapped subtype source makes
+              // (an intersection: fewer coverable pips -> more booked restricted, the safe direction), and the
+              // units booked are taken from those colours first. Any-combination sources (Smokebraider) keep
+              // the demand-led rule above, where neither booking dominates.
+              static const bool s_sub_exact = EnvOn("MTG_SUBTYPE_LEFTOVER_EXACT", true);
+              const int sub_colour_mask = sub_colours & 0x1f;   // the coloured pips only ({C} pips never count)
+              if (s_sub_exact && !sub_any_combo && sub_colour_mask != 0)
+              {
+                  const int pips[5] = { tap_bill.white, tap_bill.blue, tap_bill.black, tap_bill.red, tap_bill.green };
+                  int coverable = std::max(0, tap_bill.generic - static_cast<int>(tap_bill.snow_pips));
+                  for (int c = 0; c < 5; ++c) { if (sub_colour_mask & (1 << c)) { coverable += pips[c]; } }
+                  sub_left = std::min(sub_left, std::max(0, sub_units - coverable));
+              }
               ManaPool r;
               int* src[7] = { &lo.white, &lo.blue, &lo.black, &lo.red, &lo.green, &lo.colorless, &lo.wild };
               int* dst[7] = { &r.white,  &r.blue,  &r.black,  &r.red,  &r.green,  &r.colorless,  &r.wild };
               for (int k = 0; k < sub_left; ++k)
               {
                   int best = -1;
-                  for (int c = 0; c < 7; ++c) { if (*src[c] > 0 && (best < 0 || *src[c] > *src[best])) { best = c; } }
+                  if (s_sub_exact && !sub_any_combo && sub_colour_mask != 0)
+                  {
+                      // The source's own colours first (the units it made); the legacy pick below only if none is left.
+                      for (int c = 0; c < 5; ++c)
+                      { if ((sub_colour_mask & (1 << c)) && *src[c] > 0 && (best < 0 || *src[c] > *src[best])) { best = c; } }
+                  }
+                  if (best < 0)
+                  { for (int c = 0; c < 7; ++c) { if (*src[c] > 0 && (best < 0 || *src[c] > *src[best])) { best = c; } } }
                   if (best < 0) { break; }
                   --*src[best]; ++*dst[best];
               }
@@ -8719,6 +8756,33 @@ static bool LineFloatTapFirstPlan(const GameState& state, const ManaCost& cost_i
         else if (i < 64) { hold_mask |= (1ull << i); }
     }
     hold_k = std::min(owed_spend, spare);
+    // ENOUGH PIPS HELD TO KEEP THE OWED FLOAT (MTG_LINE_FLOAT_HOLD_EXACT, DEFAULT ON; =0 the count above alone).
+    // `owed_spend` counts the owed units the full drain spends, and holding that many generic pips keeps them
+    // only when the drain reaches them LAST. The drain stops when the reserve runs dry, and the pips the hold
+    // takes back are the ones it never reached. Angels mana-clean pass 1 (seed 30001531 T2, APPLY-DROP x112):
+    // Remote Farm paid Sol Ring and floated {W}; Lightning Greaves' {2} held one pip, the drain still spent the
+    // {W} on the other, Sol Ring paid the held one, and Lightstall Inquisitor's {W} had only a {C}. So the
+    // drain the payer will run (the shared SpendFloatingTowardCost, on the reserve left after this payment's
+    // own pips) is replayed, and the hold grows until it leaves every owed unit in place, or until it is all
+    // the generic the spare sources can pay. The count above is kept wherever it already does that, so the
+    // rung changes only where it failed its own stated purpose. Same attempt, same fall-through on failure.
+    static const bool s_hold_exact = EnvOn("MTG_LINE_FLOAT_HOLD_EXACT", true);
+    if (hold_k > 0 && s_hold_exact)
+    {
+        const int cap = std::min(cost_in.generic, spare);
+        auto keeps_owed = [&](int k) -> bool
+        {
+            ManaPool r = r_pips;
+            ManaCost c = cost_in;
+            c.white = c.blue = c.black = c.red = c.green = c.colorless = 0;
+            c.generic = cost_in.generic - k;
+            SpendFloatingTowardCost(r, c);
+            const int rem[5] = { r.white, r.blue, r.black, r.red, r.green };
+            for (int ci = 0; ci < 5; ++ci) { if (rem[ci] < std::min(rp[ci], later[ci])) { return false; } }
+            return true;
+        };
+        while (hold_k < cap && !keeps_owed(hold_k)) { ++hold_k; }
+    }
     return hold_k > 0;
 }
 

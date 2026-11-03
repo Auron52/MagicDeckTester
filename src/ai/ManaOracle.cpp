@@ -1318,6 +1318,15 @@ struct PayEnum
     }
     void ExtendSurplusNow()
     {
+        // A MULTI-UNIT EXTRA TAP, in the audit's own table only (MTG_ORACLE_SURPLUS_MULTI, DEFAULT ON; =0 one-unit
+        // faces only). Angels mana-clean pass 1, the "Youthful Valkyrie + Lightstall Inquisitor" ORACLE-GAPs: the
+        // engine paid Youthful's {1}{W} off Remote Farm's {W}{W} AND Sol Ring's {C}{C}, floating {W}{C}, so
+        // Lightstall's {W} came off the float and Giada stayed up to attack. Remote Farm alone is the minimal
+        // payment, and the one more tap beside it was offered only as a one-unit face, so the oracle never
+        // reproduced the engine's own outcome (I1). Still ONE extra tap; the refine (whole_float, which compares
+        // only subsets of the engine's own taps) keeps the one-unit rule, so play does not move.
+        static const bool s_multi = EnvOn("MTG_ORACLE_SURPLUS_MULTI", true);
+        const bool multi_ok = s_multi && !whole_float;
         for (std::size_t c = 0; c < srcs.size() && !capped; ++c)
         {
             const SrcClass& sc = srcs[c];
@@ -1325,8 +1334,8 @@ struct PayEnum
             for (std::size_t fi = 0; fi < sc.faces.size() && !capped; ++fi)
             {
                 // The added tap stands in for the unit that floats on, so a ONE-unit face: a second
-                // multi-unit tap is a deeper superset (see above).
-                if (sc.faces[fi].fed || sc.faces[fi].net != 1) { continue; }
+                // multi-unit tap is a deeper superset (see above) -- except in the audit (multi_ok).
+                if (sc.faces[fi].fed || sc.faces[fi].net < 1 || (sc.faces[fi].net != 1 && !multi_ok)) { continue; }
                 cur.push_back({ static_cast<int>(c), static_cast<int>(fi) });
                 t_trc_site = 2; Verify(cur); t_trc_site = 0;
                 cur.pop_back();

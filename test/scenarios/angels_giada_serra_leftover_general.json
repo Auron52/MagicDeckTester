@@ -1,0 +1,38 @@
+{
+  "_comment": "Angels mana-clean pass 1, seed 30010687 gi 10687 T3 (APPLY-DROP x208; 1,794 flags of the family). Giada, Font of Hope's Angel-only {W} + Sol Ring's {C}{C} pay a second Giada's {1}{W}; the {C} left over is Sol Ring's (Giada makes only {W}), so it floats UNRESTRICTED and Serra the Benevolent's {2}{W}{W} pays off it + Remote Farm's {W}{W} + Plains. The legacy booking (MTG_SUBTYPE_LEFTOVER_EXACT=0) put that {C} in the Angel-only reserve and the plan {Serra, Giada} dropped Serra. The board's T4 win is the same under both bookings (the search finds another T4 line), so the scenario guards the board; the exact mechanism is pinned by test_mana_oracle.cpp ('a {C} left over beside Giada's Angel-only {W}', 'Angels s30010687 T3').",
+  "deck": "decks/Angels/Angels.cod",
+  "profile": "decks/Angels/Angels.profile.json",
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "battlefield": [
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Sol Ring"
+    },
+    {
+      "name": "Remote Farm",
+      "depletion_counters": 2
+    },
+    {
+      "name": "Giada, Font of Hope"
+    }
+  ],
+  "hand": [
+    "Serra the Benevolent",
+    "Giada, Font of Hope",
+    "Lightstall Inquisitor",
+    "Swords to Plowshares",
+    "Youthful Valkyrie",
+    "Seraph Sanctuary"
+  ],
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 5,
+  "budget_ms": 300,
+  "max_turns": 7,
+  "expect_win_turn": 4
+}

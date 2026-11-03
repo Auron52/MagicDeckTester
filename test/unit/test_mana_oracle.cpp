@@ -16,6 +16,7 @@
 #include "core/GameLogger.h"
 #include "core/GameState.h"
 #include "core/HeuristicDefaults.h"
+#include "core/SpellEffects.h"
 
 #include <algorithm>
 #include <optional>
@@ -736,4 +737,96 @@ TEST_CASE("ENUM-GAP: an equip the Equipment's own entry trigger already made sta
     CHECK(manaoracle::EnumGapVerdict(s, /*pre=*/true, with_equip, {}, &observed).empty());
     CHECK(manaoracle::EnumGapVerdict(s, /*pre=*/true, with_equip, { casts }).empty());
     CHECK(manaoracle::EnumGapVerdict(s, /*pre=*/true, with_equip, {}) == "ENUM-GAP");
+}
+
+namespace
+{
+// Angels, mana-clean pass 1 (seed 30010687 gi 10687 T3, APPLY-DROP x208 and the 1,794-flag family around it): Plains,
+// Sol Ring, Remote Farm (two depletion counters) and Giada, Font of Hope #7 untapped; a second Giada and Serra the
+// Benevolent in hand.
+GameState AngelsGiadaSerraBoard()
+{
+    static const AngelsProvider prov;
+    GameState s = Board({ "Plains", "Sol Ring", "Remote Farm", "Giada, Font of Hope" });
+    s.turn_number = 3;
+    s.m_provider  = &prov;
+    s.players[0].life = 20;
+    s.players[1].life = 20;
+    PutDepletionCounters(s, s.battlefield[2], 2);
+    int n = 100;
+    for (const char* nm : { "Serra the Benevolent", "Giada, Font of Hope", "Lightstall Inquisitor" })
+    {
+        Card c = CardDatabase::Instance().Lookup(nm)->card;
+        c.m_number = n++;
+        s.players[0].hand.push_back(c);
+    }
+    for (int i = 0; i < 20; ++i)
+    { Card c = CardDatabase::Instance().Lookup("Plains")->card; c.m_number = 300 + i; s.players[0].library.push_back(c); }
+    return s;
+}
+} // namespace
+
+TEST_CASE("payment: a {C} left over beside Giada's Angel-only {W} is Sol Ring's, so it floats unrestricted")
+{
+    EnsureOracleCards();
+    GameState s = Board({ "Sol Ring", "Giada, Font of Hope" });
+    s.turn_number = 3;
+    const Card giada = CardDatabase::Instance().Lookup("Giada, Font of Hope")->card;
+    ManaCost bill = giada.m_mana_cost;
+    REQUIRE(bill.white == 1);
+    REQUIRE(bill.generic == 1);
+    {
+        SpellSubtypePayScope ps(&giada);
+        REQUIRE(TapForCostShared(s, bill, /*for_creature=*/true, nullptr, true));
+    }
+    CHECK(s.battlefield[0].tapped);
+    CHECK(s.battlefield[1].tapped);
+    // Giada makes only {W}, and the {W} pip took it: the {C} still floating can only be Sol Ring's.
+    CHECK(s.floating_mana.colorless == 1);
+    CHECK(s.floating_bigspell_mana.Total() == 0);
+}
+
+TEST_CASE("Angels s30010687 T3: Serra the Benevolent and a second Giada both pay (the Angel-only {W} goes to the Angel)")
+{
+    EnsureOracleCards();
+    const GameState s = AngelsGiadaSerraBoard();
+    for (int order = 0; order < 2; ++order)
+    {
+        TurnSolver::Plan plan = order == 0
+            ? PlanOf({ CastAction(s, "Serra the Benevolent"), CastAction(s, "Giada, Font of Hope") })
+            : PlanOf({ CastAction(s, "Giada, Font of Hope"), CastAction(s, "Serra the Benevolent") });
+        const manaoracle::LineAudit a = manaoracle::AuditLine(s, /*pre=*/true, plan);
+        INFO("order ", order, " dropped=", a.dropped, " rollback=", a.rollback);
+        REQUIRE(a.audited);
+        CHECK(a.engine_full);
+        CHECK(a.dropped.empty());
+    }
+}
+
+TEST_CASE("Angels s30001531 T2: Lightning Greaves' {2} off Sol Ring keeps Remote Farm's floating {W} for Lightstall Inquisitor")
+{
+    EnsureOracleCards();
+    static const AngelsProvider prov;
+    GameState s = Board({ "Remote Farm" });
+    s.turn_number = 2;
+    s.m_provider  = &prov;
+    s.players[0].life = 20;
+    s.players[1].life = 20;
+    PutDepletionCounters(s, s.battlefield[0], 2);
+    int n = 100;
+    for (const char* nm : { "Lightning Greaves", "Lightstall Inquisitor", "Sol Ring" })
+    {
+        Card c = CardDatabase::Instance().Lookup(nm)->card;
+        c.m_number = n++;
+        s.players[0].hand.push_back(c);
+    }
+    for (int i = 0; i < 20; ++i)
+    { Card c = CardDatabase::Instance().Lookup("Plains")->card; c.m_number = 300 + i; s.players[0].library.push_back(c); }
+    const TurnSolver::Plan plan = PlanOf({ CastAction(s, "Lightning Greaves"), CastAction(s, "Lightstall Inquisitor"),
+                                           CastAction(s, "Sol Ring") });
+    const manaoracle::LineAudit a = manaoracle::AuditLine(s, /*pre=*/true, plan);
+    INFO("dropped=", a.dropped, " rollback=", a.rollback);
+    REQUIRE(a.audited);
+    CHECK(a.engine_full);
+    CHECK(a.dropped.empty());
 }
