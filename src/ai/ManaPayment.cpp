@@ -5579,8 +5579,17 @@ static bool CastSatisfiesAttachTarget(const Action& c, const std::string& nm, bo
 }
 static bool IsDependentAttachSpell(const Action& a)
 {
-    return a.kind == Action::Kind::CastFromHand && a.attach_equip_id != 0
-        && (!a.attach_equip_hand.empty() || !a.trick_hand_target.empty());
+    if (a.kind != Action::Kind::CastFromHand) { return false; }
+    if (a.attach_equip_id != 0 && (!a.attach_equip_hand.empty() || !a.trick_hand_target.empty())) { return true; }
+    // The same structural dependency for a "sacrifice a creature" additional cost whose victim is a
+    // SAME-PLAN HAND creature (the readiness route: Diabolic Intent / Culling the Weak, CollectActions'
+    // SAC-ANY-CREATURE post-pass, Action::trick_hand_target): the cost cannot be paid before that body
+    // is on the battlefield (CR 601.2h), so the spell is moved to just after the creature's cast under
+    // ANY cast-order rank. Byte-identical for every deck without such a card (trick_hand_target is
+    // otherwise set only on attach spells, handled above).
+    if (a.trick_hand_target.empty() || a.attach_equip_id != 0) { return false; }
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    return d != nullptr && SacCreatureCostFoldsByReadiness(d->params);
 }
 
 void ApplyAttachSpellDependencyOrder(const std::vector<Action>& acts, std::vector<int>& order)

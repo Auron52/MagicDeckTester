@@ -1,0 +1,39 @@
+{
+ "deck": "decks/Shadowborn Apostle/Shadowborn Apostle.cod",
+ "turn": 2,
+ "on_the_play": true,
+ "active_life": 20,
+ "opponent_life": 20,
+ "resume_at": "main1",
+ "library_filler": "Swords to Plowshares",
+ "library_size": 40,
+ "depth": 2,
+ "budget_ms": 50,
+ "max_turns": 2,
+ "env": {
+  "MTG_HUMAN_PLAY": "1"
+ },
+ "battlefield": [
+  {
+   "name": "Swamp",
+   "controller": 0
+  }
+ ],
+ "hand": [
+  "Vampire of the Dire Moon",
+  "Culling the Weak"
+ ],
+ "human_lines": [
+  "cast=Vampire of the Dire Moon;cast=Culling the Weak",
+  "pass"
+ ],
+ "expect_dropped": [
+  "Culling the Weak"
+ ],
+ "_comment": [
+  "INT-1: the one-Swamp twin. The Vampire must be cast BEFORE Culling (its victim), so Culling's own {B}",
+  "has no source and the cast is DROPPED -- never cast for free, never cast first with no victim. (The flat",
+  "subset math still admits this plan -- it credits Culling's float against the Vampire's cost -- so the menu",
+  "over-offers it; recorded in the analysis ledger as an INT-1 gap. The realisation is what this pins.)"
+ ]
+}

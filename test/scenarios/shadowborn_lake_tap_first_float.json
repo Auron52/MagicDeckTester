@@ -1,0 +1,40 @@
+{
+ "deck": "decks/Shadowborn Apostle/Shadowborn Apostle.cod",
+ "turn": 2,
+ "on_the_play": true,
+ "active_life": 20,
+ "opponent_life": 20,
+ "resume_at": "main1",
+ "library_filler": "Swords to Plowshares",
+ "library_size": 40,
+ "depth": 2,
+ "budget_ms": 50,
+ "max_turns": 2,
+ "env": {
+  "MTG_HUMAN_PLAY": "1"
+ },
+ "battlefield": [
+  {
+   "name": "Swamp",
+   "controller": 0
+  }
+ ],
+ "hand": [
+  "Lake of the Dead",
+  "Demonic Tutor"
+ ],
+ "human_lines": [
+  "land=Lake of the Dead;cast=Demonic Tutor",
+  "pass"
+ ],
+ "expect_dropped": [],
+ "expect_history_contains": [
+  "Swamp -- tapped for {B} before sacrificing it",
+  "Lake of the Dead -- sacrificed Swamp as it entered"
+ ],
+ "_comment": [
+  "INT-1: Lake of the Dead's entry replacement sacrifices the only Swamp -- TAPPED FOR ITS {B} FIRST (you hold",
+  "priority before playing a land), then the Lake enters untapped and taps for {B}: {1}{B} for Demonic Tutor.",
+  "Without the tap-first float the line has one mana and drops the Tutor."
+ ]
+}

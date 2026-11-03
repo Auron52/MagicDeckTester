@@ -467,6 +467,16 @@ MANIFEST = {
     # main_phase variant per victim x target; Action::soulfire_own_targets reused for the victim).
     "tutor_to_battlefield_single": ("main_phase",     truthy),
     "sac_additional_creature_color": ("main_phase",   truthy),
+    # --- Shadowborn Apostle (INT-1, 2026-11-03) ---
+    # Diabolic Intent / Culling the Weak: "sacrifice a creature" (any) additional cost. WHICH creature is
+    # a searched cast variant (battlefield classes + same-plan hand creatures); the human picks at CAST
+    # through the `sacrifice` board click (PerformSacrificeCreatureCost, g_play_sacrifice_chooser).
+    "sac_additional_creature":       ("sacrifice",    truthy),
+    # Lake of the Dead: WHICH Swamp its entry replacement / its crack eats -- the `sacrifice` board click
+    # over every Swamp (ChooseSubtypeLandSacrifice); the autonomous side folds soundly (tap-first +
+    # basic-subset dominance).
+    "etb_replace_sacrifice_land_subtype": ("sacrifice", truthy),
+    "sac_for_mana_victim_land_subtype":   ("sacrifice", truthy),
     # Turntimber Symbiosis front: WHICH creature to put (or decline) = named plan variants.
     "look_top_put_creature_count": ("main_phase",     positive),
     # Turntimber back face: pay-3-life-or-tapped rides the shared land_entry chooser.
@@ -1942,6 +1952,11 @@ def modeled_tokens(card):
     # Natural Order's "sacrifice a green creature" additional cost is a modeled plan-variant
     # choice (sac victim variants), so its "sacrifice a/an" phrase is covered.
     if p.get("sac_additional_creature_color"):
+        t.add("sacrifice")
+    # Diabolic Intent / Culling the Weak (any creature) and Lake of the Dead's two Swamp sacrifices:
+    # all surfaced through the `sacrifice` board click (see MANIFEST).
+    if p.get("sac_additional_creature") or p.get("etb_replace_sacrifice_land_subtype") \
+            or p.get("sac_for_mana_victim_land_subtype"):
         t.add("sacrifice")
     # Kitesail Larcenist: "for each player, choose up to one other target artifact or creature" IS
     # the treasurify choice (own side = chosen_x plan variants, both sides = the treasurify chooser),

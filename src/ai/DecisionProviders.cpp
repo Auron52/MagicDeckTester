@@ -21115,6 +21115,7 @@ namespace
     const MeliraPodProvider      g_melira_pod;
     const PiratesProvider        g_pirates;
     const MerfolkProvider        g_merfolk;
+    const ShadowbornProvider     g_shadowborn;
     const PreventDamageProvider  g_prevent_damage;
 }
 
@@ -23378,6 +23379,19 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // the cantrips' / Remand's / Seething Song's params (Hinata, Niv, Dragonstorm), fetch / shock lands.
     // Must beat `anti` (Scalding Tarn's fetch_land_types), which the deck rode by accident.
     bool cyclone = false, cy_extra_turn = false, cy_cycle_scry = false;
+    // SHADOWBORN APOSTLE (onboarding 2026-11-03). Signature = gated params OR'd across several of the
+    // list's own cards, none a staple another archetype would plausibly add:
+    //   * Lake of the Dead's entry replacement (etb_replace_sacrifice_land_subtype);
+    //   * Profane Tutor's suspended to-hand tutor (tutor_to_hand AND suspend_time_counters -- the
+    //     conjunction is unique; each alone is not);
+    //   * [INT-2] Shadowborn Apostle's "sacrifice six creatures named ~" activation (sac_named_count);
+    //   * [INT-3] Thrumming Stone's ripple grant (grants_ripple).
+    // The INT-2 / INT-3 terms are added with their params (named in the analysis ledger now so the
+    // integrators wire them here). EXCLUDED, with reasons: Dark Ritual (ritual_floating_mana, every
+    // black storm list), Demonic Tutor / Diabolic Intent (tutor_to_hand, sac_additional_creature --
+    // black staples), Lotus Bloom (Dragonstorm). Must beat `anti` (the tutors' tutor_to_hand), so it
+    // routes FIRST; the signature is carried by no other deck, so the position is free.
+    bool shadowborn = false;
     for (const Card& c : deck.mainboard)
     {
         // Midrange Burn's three independent signature cards, conjuncted with the
@@ -23416,6 +23430,8 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
         if (p.scry_reveal_land_to_battlefield || p.mana_colors_of_graveyard_legends) { galadriel = true; }
         if (p.enters_look_top_land_or_hand || p.mana_only_subtype_abilities) { lfe = true; }
         if (p.cycle_draw_exile_shared_type_freecast) { cyclone = true; }
+        if (!p.etb_replace_sacrifice_land_subtype.empty()
+            || (p.tutor_to_hand && p.suspend_time_counters > 0)) { shadowborn = true; }
         if (p.cast_trigger_extra_turns > 0)          { cy_extra_turn = true; }
         if (p.cycle_or_discard_trigger_scry > 0)     { cy_cycle_scry = true; }
         if (p.draw_trigger_damage > 0 || p.cast_trigger_instant_sorcery_draw > 0
@@ -23893,6 +23909,8 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // beat `anti` (Flamekin Harbinger's tutor_to_top), `vial` (Aether Vial), `landfall` and `fungus`.
     // Cyclone: FIRST -- its signature is carried by no other card, so the position is free, and it must
     // beat `anti` (Scalding Tarn) and whatever a later card's param might trip (see the flag).
+    // Shadowborn Apostle: FIRST (see the flag) -- above `anti`, which its tutors set alone.
+    if (shadowborn)  { return g_shadowborn; }
     cyclone = cyclone || (cy_extra_turn && cy_cycle_scry);
     if (cyclone)     { return g_cyclone; }
     if (lfe)         { return g_landfall_elementals; }

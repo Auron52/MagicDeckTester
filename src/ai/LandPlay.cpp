@@ -66,6 +66,47 @@ static bool PlayLandCore(GameState& state, const Card& card, const CardDefinitio
     // (Turntimber: pay 3 life or enter tapped).
     const CardDefinition& fdef = *face_def;
 
+    // LAKE OF THE DEAD (etb_replace_sacrifice_land_subtype): "If this land would enter, sacrifice a
+    // Swamp instead. If you do, put this land onto the battlefield. If you don't, put it into its
+    // owner's graveyard." A REPLACEMENT (CR 614.1c), resolved before the land exists -- so no landfall
+    // and no ETB for it when it goes to the graveyard (it never entered), and the land drop is spent
+    // either way (playing a land is the special action, CR 305.1). The victim: ChooseSubtypeLandSacrifice
+    // (identity + basic-subset folds; the human picks at the `sacrifice` board click), tapped for its
+    // mana FIRST (you hold priority before playing a land -- FloatLandBeforeSacrifice). Declining the
+    // sacrifice while a Swamp exists is collapsed: it is the no-Swamp outcome (Lake to the graveyard,
+    // the drop spent) with the Swamp kept, i.e. no better than not playing the Lake at all -- and the
+    // autonomous land choice never plays a Lake with no Swamp (LakeDropWithoutVictim). This is THE land
+    // drop for the executor, the rollout and the enumeration probe -> lockstep by construction.
+    if (!fdef.params.etb_replace_sacrifice_land_subtype.empty())
+    {
+        const int vic = ChooseSubtypeLandSacrifice(state, state.active_player_index,
+                                                   fdef.params.etb_replace_sacrifice_land_subtype,
+                                                   /*exclude_number=*/0, fdef.card.m_name.str());
+        if (vic < 0)
+        {
+            const Card gone = card;
+            leave_zone();
+            ++ap.lands_played_this_turn;
+            ap.graveyard.push_back(gone);
+            if (g_play_event_sink)
+            {
+                EmitPlayEvent(state.turn_number, "land",
+                              gone.m_name.str() + " -- no " + fdef.params.etb_replace_sacrifice_land_subtype
+                              + " to sacrifice: put into the graveyard (the land drop is used)");
+            }
+            return true;
+        }
+        FloatLandBeforeSacrifice(state, state.active_player_index, vic, "before sacrificing it");
+        if (g_play_event_sink)
+        {
+            EmitPlayEvent(state.turn_number, "sacrifice",
+                          "\xF0\x9F\x94\xAA " + fdef.card.m_name.str() + " -- sacrificed "
+                          + state.battlefield[static_cast<std::size_t>(vic)].card.m_name.str()
+                          + " as it entered");
+        }
+        SacrificeLandAt(state, state.active_player_index, vic);
+    }
+
     // Resolve "as this land enters" choices (shock life payment, reveal-untap) while the card is
     // still in hand; this also tells us whether it enters tapped.
     bool tapped;
@@ -255,6 +296,7 @@ static bool FirstDropManaWouldSitIdle(const GameState& state, bool hold_top_cons
         // A Karoo needs another land to bounce and there is none (this is the first drop), so it is
         // not a candidate here at all -- matching the four-pass scan's own skip.
         if (def->params.etb_bounce_land) { continue; }
+        if (!def->params.etb_replace_sacrifice_land_subtype.empty()) { continue; }   // Lake: no victim yet
         const bool is_tapped = LegacyStaticTapped() ? def->params.enters_tapped
                                                     : LandWouldEnterTapped(state, *def);
         if (is_tapped) { has_tapped = true; continue; }
@@ -464,6 +506,7 @@ static GreedyLandPick GreedyLandRank(const GameState& state, const Card* top, bo
             if (hold_top_consumer && front != nullptr
                 && front->params.look_top_put_creature_count > 0) { continue; }   // combo piece, not the drop
             if (def->params.etb_bounce_land && (!has_other_land || karoo_returns_karoo())) { continue; }
+            if (LakeDropWithoutVictim(state, *def)) { continue; }   // see LakeDropWithoutVictim
             if (LandClosingWindowEnabled())
             {
                 const bool closing = def->params.fastland_max_other_lands >= 0
@@ -609,6 +652,7 @@ int ActivationColorLandIndex(const GameState& state, int preferred)
             const CardDefinition* def = LandFaceDefOf(CardDatabase::Instance().LookupCached(ap.hand[i]));
             if (def == nullptr) { continue; }
             if (def->params.etb_bounce_land && !has_other_land) { continue; }
+            if (LakeDropWithoutVictim(state, *def)) { continue; }
             if (pass == 0 && def->params.produces.size() <= 1) { continue; }
             if (supplies(i)) { return i; }
         }

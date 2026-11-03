@@ -1700,6 +1700,11 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.dies_trigger_copy_self_token  = params.value("dies_trigger_copy_self_token", false);
     p.tutor_color                   = params.value("tutor_color", std::string{});
     p.sac_additional_creature_color = params.value("sac_additional_creature_color", std::string{});
+    p.sac_additional_creature       = params.value("sac_additional_creature", false);
+    p.etb_replace_sacrifice_land_subtype =
+        params.value("etb_replace_sacrifice_land_subtype", std::string{});
+    p.sac_for_mana_victim_land_subtype =
+        params.value("sac_for_mana_victim_land_subtype", std::string{});
     p.tutor_to_battlefield_single   = params.value("tutor_to_battlefield_single", false);
     if (params.contains("activated_reveal_top_cost"))
         p.activated_reveal_top_cost = ManaCostFromString(params["activated_reveal_top_cost"].get<std::string>());

@@ -9975,13 +9975,20 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
         // publish -- the additional-cost victim (own_targets) pays before any other source.
         // A sacrifice-a-LAND cast's predicted victim pays first too (SacLandPayVictim; the rollout
         // twin is apply_one's identical publish).
-        PaySacVictimScope _psv(!def->params.sac_additional_creature_color.empty()
-            ? ResolveSacVictimId(state, def->params.sac_additional_creature_color, own_targets)
+        PaySacVictimScope _psv(HasSacCreatureAdditionalCost(def->params)
+            ? SacCostPayVictimId(state, def->params, own_targets)
             : (def->params.sacrifice_land ? SacLandPayVictim(state, effective) : 0));
         // Phyrexian life gate (before the tap, which mutates): the payment must leave us alive.
         // Mirrors the rollout apply's gate exactly -- an unpayable life half drops the cast.
         if (phyrexian_life > 0
             && state.players[state.active_player_index].life <= phyrexian_life)
+        {
+            return;
+        }
+        // "Sacrifice a creature" with NO creature left (the generic route): the spell cannot be cast
+        // (CR 601.2h) -- drop it before any mana moves. Twin of the rollout apply's identical gate.
+        if (SacCreatureCostFoldsByReadiness(def->params)
+            && !SacReadinessVictimAvailable(state, state.active_player_index))
         {
             return;
         }
@@ -10186,10 +10193,13 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
     // the searched victim rides own_targets (the soulfire int, reused as a card m_number here);
     // its dies-triggers (Worldspine tokens + shuffle-back, Vaultborn copy) resolve before the
     // spell does. Lockstep with the rollout's apply_one branch.
-    if (!def->params.sac_additional_creature_color.empty())
+    // The generic route (sac_additional_creature: Diabolic Intent, Culling the Weak) pays at this
+    // same site; its rollout twin is apply_one's generic site right after the hand erase.
+    if (HasSacCreatureAdditionalCost(def->params))
     {
         PerformSacrificeCreatureCost(state, (*hand_card_p).m_name.str(),
-                                     def->params.sac_additional_creature_color, own_targets);
+                                     def->params.sac_additional_creature_color, own_targets,
+                                     SacCreatureCostFoldsByReadiness(def->params));
     }
 
     // REMAND: keep the physical card -- a countered X goes back to its owner's hand under its own number.

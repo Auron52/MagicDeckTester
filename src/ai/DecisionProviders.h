@@ -3888,6 +3888,37 @@ public:
     bool CleanupDiscardShedStable() const override;
 };
 
+// SHADOWBORN APOSTLE (mono-B Apostle / ripple / Demon fetch; onboarding 2026-11-03,
+// docs/design/analysis-Shadowborn Apostle.md). DERIVES FROM DeckProvider -- the archetype-neutral
+// default -- NOT from a provider the list would trip by accident: Demonic Tutor's / Diabolic
+// Intent's / Profane Tutor's tutor_to_hand alone set `anti` (AntiLifegainProvider, width 2), and
+// later params of this onboarding would set others (a creature-sac outlet -> goblin, devotion
+// tokens -> minotaur). Routed at the TOP of the chain (see DetectDecisionProvider's `shadowborn`).
+//
+// Hooks held (everything else inherits DeckProvider byte-for-byte):
+//   * Certificate -- NotAssessed (see the body for what a sound one must model).
+//   * TutorSearchWidth 32 -- a COVERAGE fix, not a heuristic (the Cyclone precedent): Demonic Tutor,
+//     four Diabolic Intent and two Profane Tutor can each fetch ANY card, ~15 distinct names in this
+//     library; the generic candidate list is in LIBRARY (= shuffle) order and the base width is 6, so
+//     the shuffle -- not a judgement -- decided which names no budget could reach. 32 makes every
+//     name reachable. PROVISIONAL (a play change for this deck only): held-out A/B owed, USER call.
+class ShadowbornProvider : public DeckProvider
+{
+public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed,
+               "NOT ASSESSED. Damage is combat-only (Apostles 1/1; Demons: Reaper 6/6 flier, Abhorrent "
+               "Overlord 6/6 flier + devotion-many 1/1 flying Harpies, Sire 6/4, Jetmir's team pump up "
+               "to double strike), but Demons arrive mid-turn UNCAST through the Apostles' {B}, "
+               "sacrifice-six activation, and Thrumming Stone's ripple casts Apostles free off a known "
+               "library. A sound winless-this-turn bound must count the Apostles reachable through "
+               "ripple (top-four reveals of a clairvoyant library, chained), every {B}+six-Apostle "
+               "activation the turn's mana (Dark Ritual, Culling the Weak, Lake of the Dead, Lotus "
+               "Bloom) can fund, and re-evaluate Jetmir's 3/6/9 thresholds after each." }; }
+    const char* Name() const override { return "ShadowbornApostle"; }
+    int TutorSearchWidth() const override { return 32; }
+};
+
 class PiratesProvider : public DeckProvider
 {
 public:

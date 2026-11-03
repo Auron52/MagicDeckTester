@@ -11915,6 +11915,9 @@ inline void OnCreatureDies(GameState& state, int dead_controller, const Card& de
                            bool dead_was_token, int dead_minus_counters,
                            const std::vector<int>* dwatch = nullptr)
 {
+    // MORBID (GameState::creature_died_this_turn). Only a CREATURE dying counts: the shared
+    // sacrifice chokepoint (SacrificePermanentAt) routes land / artifact sacrifices through here too.
+    if (dead_card.IsCreature()) { state.creature_died_this_turn = true; }
     // LTB triggers fire on every death (Reveillark sacrificed to Carrion Feeder / Pod / combat).
     // Before the persist block: independent mechanics, and Reveillark itself has no persist.
     FireLeavesBattlefieldTriggers(state, dead_controller, dead_card);
@@ -21510,6 +21513,25 @@ inline void CastOffSuspend(GameState& state, int controller, const Card& card)
             PerformLandSearch(state, controller, LandSearchSpecOf(def->params), card.m_name.str(),
                               ConsumePackedLandSearchPin(state.scripted_upkeep_land_search));
         }
+        // PROFANE TUTOR (suspend-only tutor_to_hand): "Search your library for a card, put that card
+        // into your hand, then shuffle." Its target is the SAME packed upkeep pin stream as Search for
+        // Tomorrow's basic (one ordinal per search-bearing arrival, in suspension order -- the
+        // TurnSolver upkeep-pin fan counts a tutor arrival exactly like a land-search one), decided in
+        // the PREVIOUS turn's main phase, because the upkeep is not a search node. The ordinal is a
+        // rank into PerformTutor's deduped LiveTutorCandidates at THIS resolution state (the
+        // MTG_TUTOR_AXIS_RESOLVE index path, clamped); -1 = unpinned = the provider front, reached only
+        // beyond the search horizon (the permitted playout policy). Human play: the empty target makes
+        // PerformTutor ask the `tutor` chooser over every legal library card. A deck without a
+        // suspended tutor never takes this branch -> byte-identical.
+        else if (def->params.tutor_to_hand)
+        {
+            const int pin   = ConsumePackedLandSearchPin(state.scripted_upkeep_land_search);
+            const int saved = g_scripted_tutor_choice;
+            g_scripted_tutor_choice = pin;
+            PerformTutor(state, controller, def->params, /*target_name=*/std::string{}, card.m_name.str(),
+                         /*human_repick=*/false);
+            g_scripted_tutor_choice = saved;
+        }
         state.players[static_cast<std::size_t>(controller)].graveyard.push_back(card);
         return;
     }
@@ -21566,6 +21588,28 @@ inline void ApplySuspend(GameState& state, int controller, const std::string& na
     }
 }
 
+// LAKE OF THE DEAD played with NO legal victim (etb_replace_sacrifice_land_subtype and no land of that
+// subtype on our battlefield): it goes straight to the graveyard and spends the land drop. Strictly
+// dominated by HOLDING it (the drop can take any other land; the held Lake can be played once a Swamp
+// lands, and is a free cleanup discard), so the AUTONOMOUS land choices skip it -- the Karoo
+// self-bounce precedent. Human play still offers it (a legal move): every caller exempts it.
+inline bool LakeDropWithoutVictim(const GameState& state, const CardDefinition& def)
+{
+    const std::string& sub = def.params.etb_replace_sacrifice_land_subtype;
+    if (sub.empty()) { return false; }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index == state.active_player_index && p.card.IsLand()
+            && LandHasSubtypeNow(state, p, sub)) { return false; }
+    }
+    return true;
+}
+// Lake of the Dead's land sacrifices (defined after PerformSacrificeLandCost).
+inline int  ChooseSubtypeLandSacrifice(GameState& state, int controller, const std::string& subtype,
+                                       int exclude_number, const std::string& source_name);
+inline bool FloatLandBeforeSacrifice(GameState& state, int controller, int idx, const char* why);
+inline void SacrificeLandAt(GameState& state, int controller, int idx);
+
 // Apply a SacForMana ability: find the untapped source in play by its per-instance id, float `amount`
 // mana of `color` into the turn-scoped reserve (AddChosenColorFloat), then SACRIFICE the source (to the
 // graveyard). Shared by the rollout and the executor (lockstep). No-op if the source is gone/tapped.
@@ -21601,6 +21645,35 @@ inline void ApplySacForMana(GameState& state, int controller, int sac_source_id,
         // Generator Servant. The enumeration applies the same CanTapNow, so this re-check only
         // fires for a stale plan (the source lost its haste). Param-gated -> byte-identical.
         if (lotus && d->params.sac_for_mana_requires_tap && !CanTapNow(p, state.battlefield)) { continue; }
+        // LAKE OF THE DEAD's crack ("{T}, Sacrifice a Swamp: Add {B}{B}{B}{B}";
+        // sac_for_mana_victim_land_subtype): the SOURCE is TAPPED and STAYS; ANOTHER land with the
+        // subtype is the sacrifice. Victim first (no victim = the cost cannot be paid = no activation,
+        // no float -- the phantom-float rule below, applied up front), then TAP-FIRST: an untapped
+        // victim is tapped for its own mana before it goes (mana abilities may be activated while
+        // paying a cost, CR 605.3a), so the sacrifice never costs this phase a mana -- which is also
+        // what lets the subset math credit the crack as a DELTA (CreditFixedColorSac) on top of the
+        // victim's own unit. Shared by the rollout and the executor -> lockstep.
+        if (lotus && !d->params.sac_for_mana_victim_land_subtype.empty())
+        {
+            const int         src_num  = p.card.m_number;
+            const std::string src_name = p.card.m_name.str();
+            const int vi = ChooseSubtypeLandSacrifice(state, controller,
+                                                      d->params.sac_for_mana_victim_land_subtype,
+                                                      src_num, src_name);
+            if (vi < 0) { return; }
+            p.tapped = true;   // `p` is still valid: nothing has touched the battlefield yet
+            FloatLandBeforeSacrifice(state, controller, vi, "before sacrificing it");
+            SacrificeLandAt(state, controller, vi);
+            AddChosenColorFloat(state, color, amount);
+            if (g_play_event_sink)
+            {
+                EmitPlayEvent(state.turn_number, "mana",
+                              "\xF0\x9F\xAA\xB7 " + src_name + " -- tapped, sacrificed a "
+                              + d->params.sac_for_mana_victim_land_subtype + ": add "
+                              + std::to_string(amount) + " " + (color.empty() ? "wild" : color));
+            }
+            return;
+        }
         // Skirk MULTI-SAC BURST: the repeatable "Sacrifice a Goblin: Add {R}" can ramp in one turn.
         // ritual_float carries the TOTAL floated (k * per-sac), so a burst is `amount > per`. Sac k
         // canonical Goblins (token/weakest first, the source LAST -- so a full sac-all sacs Skirk itself
@@ -41172,6 +41245,18 @@ inline bool KarooFloatModelled()
 inline bool FloatKarooBouncedLand(GameState& state, int controller, int idx)
 {
     if (!KarooFloatModelled()) { return false; }
+    return FloatLandBeforeSacrifice(state, controller, idx, "in response to the bounce");
+}
+
+// THE TAP-FIRST FLOAT, shared: tap the land at battlefield index `idx` for its mana into the float
+// (if it is floatable -- KarooBounceFloatable: an untapped land whose tap has no side effect), right
+// before it leaves the battlefield. Used by the Karoo bounce (behind its own lever, above) and,
+// unconditionally, by Lake of the Dead's two land sacrifices: holding priority before a land drop, or
+// while paying a cost, you may always tap the land first, and floating mana has no downside in this
+// engine (no mana burn), so "sacrifice an untapped land" is always "tap it, then sacrifice it" -- a
+// sound fold that also makes a victim's tapped-ness irrelevant this phase. Returns true iff it tapped.
+inline bool FloatLandBeforeSacrifice(GameState& state, int controller, int idx, const char* why)
+{
     if (idx < 0 || idx >= static_cast<int>(state.battlefield.size())) { return false; }
     Permanent& p = state.battlefield[idx];
     if (p.controller_index != controller) { return false; }
@@ -41192,7 +41277,7 @@ inline bool FloatKarooBouncedLand(GameState& state, int controller, int idx)
         put(a.wild - before.wild, "{any}");
         EmitPlayEvent(state.turn_number, "ability",
                       p.card.m_name.str() + " -- tapped for " + got
-                      + " in response to the bounce (floating until the phase ends)");
+                      + " " + why + " (floating until the phase ends)");
     }
     return true;
 }
@@ -42134,6 +42219,128 @@ inline void PerformSacrificeLandCost(GameState& state, const std::string& spell_
     }
 }
 
+// ---- LAKE OF THE DEAD: "sacrifice a <subtype>" land victims ------------------------------------
+//
+// Sacrifice the LAND at battlefield index `idx`: its attachments fall off (CR 301.5c -- a Wild Growth
+// on the victim), owner's graveyard, sacrifice watchers. NOT SacrificePermanentAt: that is the creature
+// chokepoint (OnCreatureDies -> dies-watchers), which must not hear a land leave.
+inline void SacrificeLandAt(GameState& state, int controller, int idx)
+{
+    if (idx < 0 || idx >= static_cast<int>(state.battlefield.size())) { return; }
+    const Card dead     = state.battlefield[static_cast<std::size_t>(idx)].card;
+    const int  dead_num = dead.m_number;
+    for (Permanent& q : state.battlefield)
+    {
+        if (dead_num != 0 && q.equipped_to      == dead_num) { q.equipped_to      = 0; }
+        if (dead_num != 0 && q.aura_attached_to == dead_num) { q.aura_attached_to = 0; }
+    }
+    state.players[state.battlefield[static_cast<std::size_t>(idx)].owner_index].graveyard.push_back(dead);
+    state.battlefield.erase(state.battlefield.begin() + idx);
+    FireSacrificeWatchers(state, controller);   // Slaughter-Priest ("whenever you sacrifice ...")
+}
+
+// WHICH land a "sacrifice a <subtype>" cost or replacement eats (Lake of the Dead's entry replacement
+// and its crack). Candidates = the controller's lands with that subtype NOW (LandHasSubtypeNow), never
+// the source itself (`exclude_number`). Returns a battlefield index, -1 = none.
+//
+// Two SOUND folds collapse the choice; both are stated here because they are what keeps this from
+// being a greedy pick inside the search window:
+//   1. TAP-FIRST + IDENTITY. The victim is tapped for its mana first (FloatLandBeforeSacrifice), so its
+//      tapped-ness does not matter this phase; two victims of the same definition with the same
+//      attachments and counters leave the same board. One option per such class.
+//   2. SUBSET DOMINANCE. If victim A is a basic land with no attachments or counters whose produced
+//      colours AND subtypes are each a subset of victim B's, keeping B can do everything keeping A
+//      can (same mana this phase after the float; more colours and more land types afterwards), so
+//      sacrificing A weakly dominates sacrificing B. Basic Swamp before Blood Crypt is the case this
+//      list meets (Crypt keeps the deck's only {R} source). Caveat, disclosed in the card note: a card
+//      that rewards a land being BASIC, or reads lands in the graveyard, would break this -- none is
+//      in the pool that runs Lake of the Dead.
+// When the folds leave more than one class (two non-basic Swamps of different names, say) the choice
+// is NOT folded: the k-th class is taken from g_scripted_bounce_choice-free ordering below, i.e. the
+// FRONT -- no searched axis feeds it yet. Unreachable for the Shadowborn list (17 basic Swamps + one
+// Blood Crypt always fold to width 1); recorded as a generality gap in the analysis ledger.
+// Human play: the `sacrifice` board click over EVERY candidate (unfolded), default = the fold's pick.
+inline int ChooseSubtypeLandSacrifice(GameState& state, int controller, const std::string& subtype,
+                                      int exclude_number, const std::string& source_name)
+{
+    std::vector<int> cands;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+        if (p.controller_index != controller || !p.card.IsLand()) { continue; }
+        if (exclude_number != 0 && p.card.m_number == exclude_number) { continue; }
+        if (!LandHasSubtypeNow(state, p, subtype)) { continue; }
+        cands.push_back(i);
+    }
+    if (cands.empty()) { return -1; }
+    auto attached = [&](const Permanent& v) -> int
+    {
+        int n = 0;
+        if (v.card.m_number == 0) { return 0; }
+        for (const Permanent& q : state.battlefield)
+        { if (q.equipped_to == v.card.m_number || q.aura_attached_to == v.card.m_number) { ++n; } }
+        return n;
+    };
+    struct Info { int idx; const CardDefinition* d; int att; unsigned colours; std::size_t nsub; bool basic; };
+    std::vector<Info> info;
+    for (int i : cands)
+    {
+        const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        unsigned m = 0;
+        if (d != nullptr) { for (Color c : EffectiveProducesFor(state, controller, *d, &p)) { m |= 1u << static_cast<int>(c); } }
+        const bool basic = d != nullptr && d->card.HasSupertype(Supertype::Basic)
+                        && attached(p) == 0 && p.counters.empty();
+        info.push_back({ i, d, attached(p), m, d != nullptr ? d->card.m_subtypes.size() : 0, basic });
+    }
+    // Fold 1: one per (definition, attachments, counters) class, first in battlefield order.
+    std::vector<Info> classes;
+    for (const Info& x : info)
+    {
+        const Permanent& px = state.battlefield[static_cast<std::size_t>(x.idx)];
+        bool dup = false;
+        for (const Info& y : classes)
+        {
+            const Permanent& py = state.battlefield[static_cast<std::size_t>(y.idx)];
+            if (x.d == y.d && x.att == y.att && px.counters.KeyFragment() == py.counters.KeyFragment())
+            { dup = true; break; }
+        }
+        if (!dup) { classes.push_back(x); }
+    }
+    // Fold 2: a basic class dominated-as-victim over every other class -> the only option.
+    auto subtypes_subset = [](const CardDefinition* a, const CardDefinition* b) -> bool
+    {
+        if (a == nullptr || b == nullptr) { return false; }
+        for (const std::string& s : a->card.m_subtypes)
+        {
+            bool found = false;
+            for (const std::string& t : b->card.m_subtypes) { if (s == t) { found = true; break; } }
+            if (!found) { return false; }
+        }
+        return true;
+    };
+    int pick = classes.front().idx;
+    for (const Info& a : classes)
+    {
+        if (!a.basic) { continue; }
+        bool dominates = true;
+        for (const Info& b : classes)
+        {
+            if (&a == &b) { continue; }
+            if ((a.colours & ~b.colours) != 0 || !subtypes_subset(a.d, b.d)) { dominates = false; break; }
+        }
+        if (dominates) { pick = a.idx; break; }
+    }
+    if (g_play_sacrifice_chooser && cands.size() > 1)
+    {
+        int def_opt = 0;
+        for (int k = 0; k < static_cast<int>(cands.size()); ++k) { if (cands[k] == pick) { def_opt = k; break; } }
+        const int chosen = (*g_play_sacrifice_chooser)(state, controller, source_name, cands, def_opt);
+        if (chosen >= 0 && chosen < static_cast<int>(cands.size())) { pick = cands[chosen]; }
+    }
+    return pick;
+}
+
 // THE LAND A SACRIFICE-A-LAND CAST IS ABOUT TO SACRIFICE PAYS FIRST (MTG_PAY_PAIN_LAST's companion;
 // payer A/B 2026-10-18, creature_giving std d0 block B gi24, T4 -> T5). The m_number to publish as
 // g_pay_sac_victim (PaySacVictimScope) around a sacrifice_land cast's payment, or 0.
@@ -42304,17 +42511,140 @@ inline int ResolveSacVictimId(const GameState& state, const std::string& color, 
     return best != nullptr ? best->card.m_number : victim_id;
 }
 
+// ---- THE READINESS VICTIM FOLD (CardParams::sac_additional_creature; Diabolic Intent, Culling the Weak)
+//
+// "Sacrifice a creature" with N candidate bodies is a choice of WHICH body leaves. Two folds make it
+// small without losing a line, and both are SOUND (no line becomes unfindable at any budget):
+//
+//   1. IDENTITY FOLD. Two candidates with the same base identity (name, MV, effective P/T, counters,
+//      token-ness, animation, attachments) AND the same readiness state (tapped, entered this turn)
+//      are interchangeable: the board after sacrificing either is the same board up to relabelling.
+//      (The Birthing Pod death-equivalence key, plus attachments.)
+//   2. READINESS DOMINANCE. Within one base identity, a STRONG copy (untapped and not new this turn)
+//      can do everything any other copy can -- attack, block, pay a {T} cost, pay a tap-N-creatures
+//      cost -- and the copies become identical at our next untap. So keeping the strong copy weakly
+//      dominates keeping a weak one, i.e. sacrificing a strong copy is dominated whenever a weak copy
+//      of the same base identity exists. Strong copies are then not offered. (A fresh HASTE copy is
+//      classed weak on purpose: the non-fresh copy still dominates it, so the fold stays sound.)
+//
+// What stays SEARCHED: every base identity, and every distinct readiness state among the weak copies
+// (a tapped body vs a summoning-sick untapped one: the sick one can still pay a non-{T} tap cost, so
+// neither dominates). The name-only fold of the legacy route (Natural Order) merges "a sick Apostle"
+// with "an attack-ready Apostle" onto the battlefield-order front -- usually the attack-ready one,
+// the WORSE victim -- which is why this route does not use it. Extending the fold to Natural Order
+// is a play change for Stompy that needs its own A/B (ledger: analysis-Shadowborn Apostle.md).
+inline std::string SacReadinessBaseKey(const GameState& state, const Permanent& v)
+{
+    std::string key = v.card.m_name.str();
+    key += "|" + std::to_string(v.card.m_mana_cost.ManaValue());
+    key += "|" + std::to_string(v.EffectivePower()) + "/" + std::to_string(v.EffectiveToughness());
+    key += "|" + v.counters.KeyFragment();
+    key += v.is_token ? "|tok" : "|c";
+    key += v.is_animated ? "|an" : "|na";
+    int attached = 0;
+    for (const Permanent& q : state.battlefield)
+    {
+        if (v.card.m_number != 0
+            && (q.equipped_to == v.card.m_number || q.aura_attached_to == v.card.m_number)) { ++attached; }
+    }
+    key += "|a" + std::to_string(attached);
+    return key;
+}
+inline bool SacReadinessStrong(const Permanent& v) { return !v.tapped && !v.entered_this_turn; }
+// One battlefield index per surviving class, in SacCreatureCandidateIndices order (tokens first,
+// then lowest power, then battlefield order) -- that order is the branch ORDER only, never a pick.
+inline std::vector<int> SacReadinessVictimReps(const GameState& state, int controller)
+{
+    const std::vector<int> cands = SacCreatureCandidateIndices(state, controller, std::string{});
+    std::vector<std::string> base(cands.size());
+    std::vector<std::string> weak_bases;
+    for (std::size_t k = 0; k < cands.size(); ++k)
+    {
+        const Permanent& v = state.battlefield[static_cast<std::size_t>(cands[k])];
+        base[k] = SacReadinessBaseKey(state, v);
+        if (!SacReadinessStrong(v)
+            && std::find(weak_bases.begin(), weak_bases.end(), base[k]) == weak_bases.end())
+        { weak_bases.push_back(base[k]); }
+    }
+    std::vector<int> out;
+    std::vector<std::string> seen;
+    for (std::size_t k = 0; k < cands.size(); ++k)
+    {
+        const Permanent& v = state.battlefield[static_cast<std::size_t>(cands[k])];
+        const bool strong = SacReadinessStrong(v);
+        if (strong && std::find(weak_bases.begin(), weak_bases.end(), base[k]) != weak_bases.end())
+        { continue; }   // dominated (fold 2)
+        std::string full = base[k];
+        full += v.tapped ? "|t" : "|u";
+        full += v.entered_this_turn ? "|s" : "|r";
+        if (std::find(seen.begin(), seen.end(), full) != seen.end()) { continue; }   // fold 1
+        seen.push_back(std::move(full));
+        out.push_back(cands[k]);
+    }
+    return out;
+}
+// The victim a readiness-route cast actually sacrifices, by card m_number. A pin naming a creature on
+// the battlefield is honoured as is. A pin naming a HAND card (the same-plan victim variant: "cast
+// this creature, then sacrifice it") whose name the plan cast from ANOTHER copy maps to the freshly
+// cast copy of that name -- every fresh copy of one name shares base identity and readiness (sick,
+// untapped), so by fold 1 which of them is immaterial. Anything else is returned unchanged (the
+// caller's fallback).
+inline int ResolveSacReadinessVictimId(const GameState& state, int victim_id)
+{
+    if (victim_id <= 0) { return victim_id; }
+    const int active = state.active_player_index;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index == active && p.card.m_number == victim_id && p.card.IsCreature())
+        { return victim_id; }
+    }
+    const Card* in_hand = nullptr;
+    for (const Card& c : state.players[active].hand)
+    {
+        if (c.m_number == victim_id) { in_hand = &c; break; }
+    }
+    if (in_hand == nullptr) { return victim_id; }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != active || !p.card.IsCreature() || p.is_token) { continue; }
+        if (p.card.m_name != in_hand->m_name || !p.entered_this_turn || p.tapped) { continue; }
+        return p.card.m_number;
+    }
+    return victim_id;
+}
+// Can a readiness-route "sacrifice a creature" cost be paid on this board? (CR 601.2h: with no legal
+// victim the spell cannot be cast at all.) Checked at both cast sites BEFORE any mana is spent, so a
+// plan whose victim never arrived drops the cast instead of casting it for free.
+inline bool SacReadinessVictimAvailable(const GameState& state, int controller)
+{
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index == controller && p.card.IsCreature()) { return true; }
+    }
+    return false;
+}
+// The id the sac-fodder-pays scope publishes for a cast with either route of the cost (0 = none).
+inline int SacCostPayVictimId(const GameState& state, const CardParams& pp, int own_targets)
+{
+    if (SacCreatureCostFoldsByReadiness(pp)) { return ResolveSacReadinessVictimId(state, own_targets); }
+    if (!pp.sac_additional_creature_color.empty())
+    { return ResolveSacVictimId(state, pp.sac_additional_creature_color, own_targets); }
+    return 0;
+}
+
 // "As an additional cost to cast this spell, sacrifice a <color> creature" (Natural Order). Paid
 // at CAST time (CR 601.2h) in both worlds, BEFORE resolution -- so a sacrificed Worldspine Wurm's
 // dies-triggers (3 Wurm tokens + shuffle-into-library) resolve before the search, making the Wurm
 // itself a legal fetch target. `victim_id` is the searched plan variant (card m_number); <= 0 or
 // stale falls back to the most-expendable candidate. Fires the full death cascade.
 inline void PerformSacrificeCreatureCost(GameState& state, const std::string& spell_name,
-                                         const std::string& color, int victim_id)
+                                         const std::string& color, int victim_id,
+                                         bool readiness_route = false)
 {
     const int active = state.active_player_index;
     int idx = -1;
-    victim_id = ResolveSacVictimId(state, color, victim_id);   // MTG_SAC_VICTIM_SAME_NAME
+    victim_id = readiness_route ? ResolveSacReadinessVictimId(state, victim_id)
+                                : ResolveSacVictimId(state, color, victim_id);   // MTG_SAC_VICTIM_SAME_NAME
     if (victim_id > 0)
     {
         for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
@@ -42326,7 +42656,11 @@ inline void PerformSacrificeCreatureCost(GameState& state, const std::string& sp
     }
     if (idx < 0)
     {
-        std::vector<int> cands = SacCreatureCandidateIndices(state, active, color);
+        // A stale or absent pin. Legacy route: the most-expendable candidate. Readiness route: the
+        // front surviving class (SacReadinessVictimReps) -- reached only by a plan whose pinned
+        // victim is gone, i.e. a duplicate world of a sibling variant, or beyond the horizon.
+        std::vector<int> cands = readiness_route ? SacReadinessVictimReps(state, active)
+                                                 : SacCreatureCandidateIndices(state, active, color);
         if (!cands.empty()) { idx = cands.front(); }
     }
     // HUMAN-PLAY victim override (USER 2026-09-17). The searched `victim_id` is baked during ACTION

@@ -322,6 +322,12 @@ struct GameState
     // (and running the fallback lookahead) every remaining turn. See GameEngine::PlayOutFrom.
     bool                     proven_no_win                = false;
     bool                     opponent_lost_life_this_turn = false;
+    // MORBID: "if a creature died this turn" (Reaper from the Abyss). Set in OnCreatureDies for a
+    // dying CREATURE of either side (sacrifice costs, destroy, SBA, tokens included -- CR 700.4);
+    // cleared at BOTH untap sites (GameEngine::UntapStep, TurnSolver::SimulateEndAndStartNextTurn).
+    // No reader yet (INT-2's Reaper adds one, and with it the state-key folds a reader needs);
+    // until then it is write-only, so it changes no decision.
+    bool                     creature_died_this_turn      = false;
     // Was the opponent DEALT a library (and an opening hand)? See core/OpponentDeck.h. Stamped by
     // GoldFishRunner::StampDeckTraits from the decklist: false for every deck that cannot touch the
     // opponent's library or hand, which is what keeps those decks byte-identical.

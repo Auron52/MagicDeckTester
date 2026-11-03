@@ -1,0 +1,48 @@
+{
+ "deck": "decks/Shadowborn Apostle/Shadowborn Apostle.cod",
+ "turn": 2,
+ "on_the_play": true,
+ "active_life": 20,
+ "opponent_life": 20,
+ "resume_at": "main1",
+ "library_filler": "Swords to Plowshares",
+ "library_size": 40,
+ "depth": 2,
+ "budget_ms": 50,
+ "max_turns": 2,
+ "env": {
+  "MTG_HUMAN_PLAY": "1"
+ },
+ "battlefield": [
+  {
+   "name": "Lake of the Dead",
+   "controller": 0
+  },
+  {
+   "name": "Swamp",
+   "controller": 0
+  },
+  {
+   "name": "Swamp",
+   "controller": 0
+  }
+ ],
+ "hand": [
+  "Demonic Tutor",
+  "Demonic Tutor",
+  "Demonic Tutor"
+ ],
+ "human_lines": [
+  "sacout=Lake of the Dead;cast=Demonic Tutor;cast=Demonic Tutor;cast=Demonic Tutor",
+  "pass"
+ ],
+ "expect_dropped": [],
+ "expect_history_contains": [
+  "Lake of the Dead -- tapped, sacrificed a Swamp: add 4 B"
+ ],
+ "_comment": [
+  "INT-1: Lake of the Dead's crack ({T}, Sacrifice a Swamp: {B}{B}{B}{B}) taps the Lake (it stays) and eats",
+  "ANOTHER Swamp, tapped for its {B} first: 4 + 1 + the other Swamp's 1 = 6 mana = three Demonic Tutors.",
+  "Without the crack the board makes 3."
+ ]
+}

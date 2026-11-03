@@ -14463,6 +14463,110 @@
     "bounce_target_spell": true,
     "targeting": "nonland_permanent"
    }
+  },
+  {
+   "name": "Dark Ritual",
+   "mana_cost": "{B}",
+   "types": [
+    "Instant"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Add {B}{B}{B}. [Burst-mana RITUAL: pay {B} (1), add {B}{B}{B} = GROSS 3 BLACK to the turn-scoped reserve (state.floating_mana.black), net +2. Modelled via ritual_floating_mana:3 + ritual_float_color:B (the coloured-float variant of Seething Song / Rite of Flame), so the black can never pay an off-colour pip (Sire of Insanity's {R}). Executor (EffectHandler ApplyRitualFloat), rollout (apply_one) and planner (the subset float credit, colour-exact) are the shared ritual path. Instant speed is inert in the single-player goldfish (no opponent turn to respond in; every main-phase line an instant reaches, a sorcery-speed cast reaches too). No drawback, so no max_casts_after. A free cast (ripple / cascade) floats its own {B}{B}{B} through the same resolution.]",
+   "template": "custom",
+   "parameters": {
+    "ritual_floating_mana": 3,
+    "ritual_float_color": "B"
+   }
+  },
+  {
+   "name": "Demonic Tutor",
+   "mana_cost": "{1}{B}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Search your library for a card, put that card into your hand, then shuffle. [Tutor for ANY card (tutor_to_hand, no type filter), then shuffle (PerformTutor's to-hand search shuffles unconditionally; tutor_shuffle_after carried for consistency with Beseech the Queen / Goblin Matron). Target: the searched tutor axis over the provider's TutorCandidates -- every distinct library name; the deck provider widens TutorSearchWidth so no name is unreachable. Human play: every legal library card at the tutor prompt (re-asked at resolution).]",
+   "template": "custom",
+   "parameters": {
+    "tutor_to_hand": true,
+    "tutor_types": [],
+    "tutor_shuffle_after": true
+   }
+  },
+  {
+   "name": "Diabolic Intent",
+   "mana_cost": "{1}{B}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "As an additional cost to cast this spell, sacrifice a creature.\nSearch your library for a card, put that card into your hand, then shuffle. [ADDITIONAL COST (sac_additional_creature, any creature; CR 601.2h): paid at CAST in both worlds, before resolution, through the shared PerformSacrificeCreatureCost (death cascade: dies-watchers, morbid). Not castable with no creature. WHICH creature is a SEARCHED cast variant: one per battlefield victim class (identity + readiness fold: a summoning-sick or tapped copy is sacrificed before an attack-ready copy of the same identity -- sound dominance, SacReadinessVictimReps) plus one per distinct creature NAME in hand ('cast it earlier this turn, then sacrifice it'). Human play: the `sacrifice` board click over every creature at cast. Then tutor ANY card to hand and shuffle (tutor_to_hand, no type filter) -- the searched tutor axis, as Demonic Tutor. A free cast still pays the sacrifice.]",
+   "template": "custom",
+   "parameters": {
+    "tutor_to_hand": true,
+    "tutor_types": [],
+    "tutor_shuffle_after": true,
+    "sac_additional_creature": true
+   }
+  },
+  {
+   "name": "Culling the Weak",
+   "mana_cost": "{B}",
+   "types": [
+    "Instant"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "As an additional cost to cast this spell, sacrifice a creature.\nAdd {B}{B}{B}{B}. [ADDITIONAL COST (sac_additional_creature, any creature; CR 601.2h): paid at CAST in both worlds through the shared PerformSacrificeCreatureCost (death cascade, morbid); not castable with no creature. WHICH creature is a SEARCHED cast variant (battlefield classes folded by identity + readiness, plus same-plan hand creatures -- see Diabolic Intent's note); human play: the `sacrifice` board click. RITUAL: ritual_floating_mana:4 + ritual_float_color:B -- GROSS 4 BLACK into the turn-scoped reserve, net +3 mana for one body. [PARTIAL, PROVISIONAL: instant timing collapsed to the main phase. Every goldfish instant window was checked: in response to Abhorrent Overlord's upkeep sacrifice or Reaper's end-step destroy the {B}{B}{B}{B} empties with nothing to cast and the body is lost either way; in response to Sire of Insanity's end-step discard it costs an extra body for unspendable mana; during combat the mana empties before main 2. USER sign-off pending.]]",
+   "template": "custom",
+   "parameters": {
+    "ritual_floating_mana": 4,
+    "ritual_float_color": "B",
+    "sac_additional_creature": true
+   }
+  },
+  {
+   "name": "Lake of the Dead",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "If this land would enter, sacrifice a Swamp instead. If you do, put this land onto the battlefield. If you don't, put it into its owner's graveyard.\n{T}: Add {B}.\n{T}, Sacrifice a Swamp: Add {B}{B}{B}{B}. [ENTRY REPLACEMENT (etb_replace_sacrifice_land_subtype: Swamp; CR 614.1c): resolved in the shared land drop (PlayLandCore) BEFORE the land enters -- a land with subtype Swamp (basic Swamp, Blood Crypt) is sacrificed; with none, the Lake goes to the graveyard, the land drop is still spent, and nothing triggers (it never entered). TAP-FIRST: an untapped victim is tapped for its mana first (you hold priority before playing a land), so the sacrifice never costs a mana this phase (FloatLandBeforeSacrifice). WHICH Swamp (ChooseSubtypeLandSacrifice): identical Swamps are one option (sound identity fold after the float), and a BASIC Swamp is sacrificed before Blood Crypt (sound dominance: Crypt's colours and land types are a superset, and it is the deck's only {R} source) -- disclosed caveat: a card rewarding basic-ness or reading graveyard lands would break the fold; none is in the pool. Human play: the `sacrifice` board click over every Swamp. Declining the sacrifice is collapsed (it is the no-Swamp outcome with the Swamp kept -- no better than not playing the Lake). Playing it with no Swamp is legal and offered to the human; the autonomous land choice never makes it (holding it dominates -- LakeDropWithoutVictim). {T}: Add {B} = basic_land produces:[B]. CRACK ({T}, Sacrifice a Swamp: {B}{B}{B}{B}; sac_for_mana_amount:4 + sac_for_mana_color:B + sac_for_mana_victim_land_subtype:Swamp): its own SacForMana plan action (the Dwarven Ruins shape) that TAPS the Lake (it stays, tapped) and sacrifices ANOTHER land with subtype Swamp (same tap-first float and victim folds; the human clicks the victim); mutually exclusive with the plain tap (the subset math credits the crack's DELTA of +3 over the tap). At most one crack per available Swamp is enumerated. Lake is not a Swamp: it can never be its own or another Lake's victim.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "B"
+    ],
+    "etb_replace_sacrifice_land_subtype": "Swamp",
+    "sac_for_mana_amount": 4,
+    "sac_for_mana_color": "B",
+    "sac_for_mana_victim_land_subtype": "Swamp"
+   }
+  },
+  {
+   "name": "Profane Tutor",
+   "mana_cost": "",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [
+    "Suspend"
+   ],
+   "oracle_text": "Suspend 2—{1}{B} (Rather than cast this card from your hand, pay {1}{B} and exile it with two time counters on it. At the beginning of your upkeep, remove a time counter. When the last is removed, you may cast it without paying its mana cost.)\nSearch your library for a card, put that card into your hand, then shuffle. [NO mana cost -> suspend-only (never hard-cast; CR 202.1b). SUSPEND (suspend_time_counters:2, suspend_cost {1}{B}): a main-phase Action::Kind::Suspend paying {1}{B} (ApplySuspend) exiles it with two time counters; suspended on turn T it is cast off suspend at the T+2 upkeep through the shared CastOffSuspend site (a CAST: +1 spells_cast_this_turn). On resolution it tutors ANY card to hand, then shuffles (tutor_to_hand, PerformTutor). The target is a SEARCHED pin decided in the PREVIOUS turn's main phase (the upkeep is not a search node): Plan::upkeep_land_search_choice -> GameState::scripted_upkeep_land_search, the Search for Tomorrow stream (one packed ordinal per search-bearing arrival, in suspension order), a rank into the resolution-time candidate list (width = distinct fetchable names, capped by the provider's TutorSearchWidth); unpinned = the provider front, only beyond the search horizon. Human play: the `tutor` prompt at the upkeep over every legal library card. 'You MAY cast it' is collapsed to CAST [PROVISIONAL]: declining leaves it exiled with no counters for nothing, while casting adds a card to hand (at worst the cleanup discard sheds it) and a shuffle that is neutral in real-information terms.]",
+   "template": "custom",
+   "parameters": {
+    "suspend_time_counters": 2,
+    "suspend_cost": "{1}{B}",
+    "tutor_to_hand": true,
+    "tutor_types": [],
+    "tutor_shuffle_after": true
+   }
   }
  ]
 }

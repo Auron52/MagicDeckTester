@@ -1,0 +1,47 @@
+{
+ "deck": "decks/Shadowborn Apostle/Shadowborn Apostle.cod",
+ "turn": 1,
+ "on_the_play": true,
+ "active_life": 20,
+ "opponent_life": 20,
+ "resume_at": "main1",
+ "battlefield": [
+  {
+   "name": "Swamp",
+   "controller": 0
+  },
+  {
+   "name": "Swamp",
+   "controller": 0
+  }
+ ],
+ "hand": [
+  "Profane Tutor"
+ ],
+ "library_filler": "Swords to Plowshares",
+ "library_size": 40,
+ "depth": 2,
+ "budget_ms": 50,
+ "max_turns": 3,
+ "env": {
+  "MTG_HUMAN_PLAY": "1"
+ },
+ "human_lines": [
+  "suspend=Profane Tutor",
+  "pass"
+ ],
+ "expect_dropped": [],
+ "expect_graveyard_contains": [
+  "Profane Tutor"
+ ],
+ "expect_history_contains": [
+  "Profane Tutor -- suspended (arrives T3)",
+  "Profane Tutor -- cast off suspend"
+ ],
+ "_comment": [
+  "INT-1 (Shadowborn Apostle, 2026-11-03): Profane Tutor has no mana cost -- suspend-only. Suspend 2--{1}{B}",
+  "on T1 (two Swamps pay it), the T3 upkeep removes the last counter and casts it off suspend through CastOffSuspend's",
+  "new tutor branch: it resolves (a tutor to hand, its target the packed upkeep pin -- the human's tutor prompt here)",
+  "and goes to the graveyard."
+ ]
+}

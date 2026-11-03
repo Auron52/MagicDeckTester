@@ -1,0 +1,46 @@
+{
+ "deck": "decks/Shadowborn Apostle/Shadowborn Apostle.cod",
+ "turn": 2,
+ "on_the_play": true,
+ "active_life": 20,
+ "opponent_life": 20,
+ "resume_at": "main1",
+ "library_filler": "Swords to Plowshares",
+ "library_size": 40,
+ "depth": 2,
+ "budget_ms": 50,
+ "max_turns": 2,
+ "env": {
+  "MTG_HUMAN_PLAY": "1"
+ },
+ "battlefield": [
+  {
+   "name": "Swamp",
+   "controller": 0
+  },
+  {
+   "name": "Swamp",
+   "controller": 0
+  }
+ ],
+ "hand": [
+  "Vampire of the Dire Moon",
+  "Culling the Weak",
+  "Demonic Tutor"
+ ],
+ "human_lines": [
+  "cast=Vampire of the Dire Moon;cast=Culling the Weak;cast=Demonic Tutor",
+  "pass"
+ ],
+ "expect_dropped": [],
+ "expect_history_contains": [
+  "Culling the Weak -- sacrificed Vampire of the Dire Moon"
+ ],
+ "_comment": [
+  "INT-1 (Shadowborn Apostle, 2026-11-03). Culling the Weak's 'sacrifice a creature' additional cost on a",
+  "board with NO creature: the only victim is the creature the same line casts first (the SAC-ANY-CREATURE",
+  "post-pass's same-plan HAND victim, Action::trick_hand_target; ApplyAttachSpellDependencyOrder keeps Culling",
+  "after it). Two Swamps: Vampire {B}, Culling {B} -> {B}{B}{B}{B}, Demonic Tutor {1}{B}: nothing drops.",
+  "The legacy Natural Order route could never offer this (it skipped the cast with no pre-plan body)."
+ ]
+}

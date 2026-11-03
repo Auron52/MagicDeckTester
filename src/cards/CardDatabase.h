@@ -3660,6 +3660,29 @@ struct CardParams
     // per own matching creature); the sacrifice is paid at cast time (before resolution) and
     // fires the death cascade (dies-watchers, shuffle-back). Empty = no such cost.
     std::string sac_additional_creature_color;
+    // Diabolic Intent / Culling the Weak: "As an additional cost to cast this spell, sacrifice a
+    // creature" -- ANY creature (no colour filter). The GENERIC form of the cost above; read ONLY
+    // through HasSacCreatureAdditionalCost / SacCreatureCostFoldsByReadiness (below), never directly.
+    // Unlike the legacy colour route (Natural Order, whose victim fold and rollout position are
+    // left byte-identical pending their own A/B), this route:
+    //   * pays the sacrifice at the GENERIC cast site in BOTH worlds (the executor's
+    //     CastSpellFromHand already did; the rollout used to pay it only inside the
+    //     tutor_to_battlefield_single branch -- the lockstep hole a to-hand tutor or a ritual
+    //     with the cost fell into);
+    //   * folds victims by IDENTITY + READINESS (SacReadinessVictimReps), not by name alone;
+    //   * offers same-plan HAND creatures as victims at collection time (Action::
+    //     trick_hand_target carries the co-cast requirement), so "cast a creature, then sacrifice
+    //     it" is enumerable on an empty board too;
+    //   * is uncastable with no legal victim.
+    bool sac_additional_creature = false;
+    // Lake of the Dead: "If this land would enter, sacrifice a <subtype> instead. If you do, put
+    // this land onto the battlefield. If you don't, put it into its owner's graveyard." Resolved in
+    // the shared land drop (PlayLandCore) BEFORE the land enters. Empty = no such replacement.
+    std::string etb_replace_sacrifice_land_subtype;
+    // Lake of the Dead's crack: "{T}, Sacrifice a <subtype>: Add ..." -- with this set, the
+    // sac_for_mana ability TAPS the source (it stays) and sacrifices ANOTHER land with this subtype
+    // instead of the source itself (ApplySacForMana). Empty = the Lotus / Dwarven Ruins self-sac.
+    std::string sac_for_mana_victim_land_subtype;
     // Natural Order / Turntimber front: tutor_to_battlefield puts exactly ONE card (the searched
     // tutor_target). Distinguishes the single-target shape from Dragonstorm's storm-count put.
     bool tutor_to_battlefield_single = false;
@@ -4549,6 +4572,25 @@ inline bool IsSacManaOutlet(const CardParams& p)
 // Plans). THE single predicate for every generic site that must emit, resolve, size the target axis
 // of, or classify a tutor -- so the position tutor cannot silently miss one (IsManaConversionSource's
 // reason). Provider sites that mean "the found card is the next draw" keep reading tutor_to_top.
+// "As an additional cost to cast this spell, sacrifice a [<colour>] creature" -- either route.
+inline bool HasSacCreatureAdditionalCost(const CardParams& p)
+{
+    return p.sac_additional_creature || !p.sac_additional_creature_color.empty();
+}
+// The GENERIC route (CardParams::sac_additional_creature): generic-site payment, readiness victim
+// fold, same-plan hand victims. False for the legacy colour route (Natural Order), which keeps its
+// historical shape byte-for-byte.
+inline bool SacCreatureCostFoldsByReadiness(const CardParams& p)
+{
+    return p.sac_additional_creature;
+}
+// The LEGACY colour route only (Natural Order): name-folded victims, the rollout's in-branch
+// payment, the post-dedup same-plan victim axis (MTG_SAC_CREATURE_AXIS).
+inline bool SacCreatureCostLegacyRoute(const CardParams& p)
+{
+    return !p.sac_additional_creature_color.empty() && !p.sac_additional_creature;
+}
+
 inline bool IsLibraryTutor(const CardParams& p)
 { return p.tutor_to_hand || p.tutor_to_top || p.tutor_library_position > 1; }
 

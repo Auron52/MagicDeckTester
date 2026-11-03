@@ -951,6 +951,12 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                     }
                     if (have < k) { tag += " (this line makes the " + victim + " first)"; }
                 }
+                else if (a.kind == Action::Kind::SacForMana && od
+                         && !od->params.sac_for_mana_victim_land_subtype.empty())
+                {
+                    // Lake of the Dead: the SOURCE stays (tapped); ANOTHER land is eaten. Say which kind.
+                    tag = a.card_name + ": tap, sacrifice a " + od->params.sac_for_mana_victim_land_subtype;
+                }
                 else
                 {
                     tag = (a.kind == Action::Kind::SacForMana)
@@ -2592,7 +2598,10 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             const bool self_sac_mana =
                 ac.kind == Action::Kind::SacForMana
                 && [&]{ const CardDefinition* sd = CardDatabase::Instance().Lookup(ac.card_name);
-                        return !(sd && (sd->params.sac_creature_outlet || sd->params.sac_for_mana_grants_haste)); }();
+                        // Lake of the Dead's crack eats ANOTHER land (a Swamp): a decision, not a
+                        // payment detail -- it keeps the chip like a creature outlet.
+                        return !(sd && (sd->params.sac_creature_outlet || sd->params.sac_for_mana_grants_haste
+                                        || !sd->params.sac_for_mana_victim_land_subtype.empty())); }();
             if (!self_sac_mana
              && (ac.kind == Action::Kind::TapForTokens
              || ac.kind == Action::Kind::SacForMana
@@ -2968,7 +2977,7 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             {
                 const CardDefinition* sd = ac.def ? ac.def
                                                   : CardDatabase::Instance().Lookup(ac.card_name);
-                if (sd && !sd->params.sac_additional_creature_color.empty())
+                if (sd && HasSacCreatureAdditionalCost(sd->params))
                 {
                     os << ", \"sac_victim\": " << ac.soulfire_own_targets
                        << ", \"sac_victim_name\": ";

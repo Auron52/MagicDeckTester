@@ -37016,7 +37016,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // victim's card m_number riding soulfire_own_targets (int reuse, the Twinflame
             // precedent). Victim variants multiply the tutor-target axis below.
             std::vector<int> sac_victims;   // card m_numbers; {0} = no additional cost
-            if (!def.params.sac_additional_creature_color.empty())
+            if (SacCreatureCostLegacyRoute(def.params))   // the generic route: the SAC-ANY post-pass
             {
                 std::vector<int> cand_idx = SacCreatureCandidateIndices(
                     state, state.active_player_index, def.params.sac_additional_creature_color);
@@ -39190,11 +39190,35 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                                                    : ResolveProvider(state).FungibleSacSourceCap();
             // (def, storage_counters, counter-signature) -> how many already emitted.
             std::vector<std::pair<std::pair<const CardDefinition*, int>, int>> dup_seen;
+            // LAKE OF THE DEAD's crack sacrifices ANOTHER land of a subtype (sac_for_mana_victim_land_
+            // subtype), so each crack consumes one victim: emit at most as many such cracks as there
+            // are victims of that subtype (a crack with no victim cannot be activated -- the subset
+            // math must never credit one). -1 = not counted yet for the subtype.
+            std::vector<std::pair<std::string, int>> victims_left;
+            auto victim_budget = [&](const std::string& sub, int self_number) -> int&
+            {
+                for (auto& e : victims_left) { if (e.first == sub) { return e.second; } }
+                int n = 0;
+                for (const Permanent& q : state.battlefield)
+                {
+                    if (q.controller_index != state.active_player_index || !q.card.IsLand()) { continue; }
+                    if (q.card.m_number == self_number) { continue; }
+                    if (LandHasSubtypeNow(state, q, sub)) { ++n; }
+                }
+                victims_left.emplace_back(sub, n);
+                return victims_left.back().second;
+            };
             for (const Permanent& p : state.battlefield)
             {
                 if (p.controller_index != state.active_player_index || p.tapped) { continue; }
                 const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
                 if (!pd || pd->params.sac_for_mana_amount <= 0) { continue; }
+                if (!pd->params.sac_for_mana_victim_land_subtype.empty())
+                {
+                    int& left = victim_budget(pd->params.sac_for_mana_victim_land_subtype, p.card.m_number);
+                    if (left <= 0) { continue; }
+                    --left;
+                }
                 // {T} in a CREATURE's cost (Generator Servant): summoning sickness binds it (CR 302.6)
                 // unless it has haste. ApplySacForMana re-checks the same predicate. Param-gated.
                 if (pd->params.sac_for_mana_requires_tap && !CanTapNow(p, state.battlefield)) { continue; }
@@ -45594,6 +45618,94 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             [&](const Action& a) { return !rprov.RestrictedSecondMainAdmits(state, a); }), actions.end());
     }
 
+    // SAC-ANY-CREATURE post-pass (CardParams::sac_additional_creature -- Diabolic Intent, Culling the
+    // Weak: "As an additional cost to cast this spell, sacrifice a creature"). The VICTIM is a searched
+    // cast variant: every cast action of such a card is replaced by one variant per victim class, all
+    // sharing its hand_index (mutually exclusive in the odometer), the victim's card m_number riding
+    // soulfire_own_targets (the Natural Order carrier: plan_signature #V, the sac-fodder-pays scope,
+    // the viewer's sac_victim, PerformSacrificeCreatureCost). No victim at all -> the cast is not
+    // emitted (CR 601.2h: the cost cannot be paid). Two sources of victims:
+    //   * the BATTLEFIELD, folded by SacReadinessVictimReps (identity + readiness dominance -- the
+    //     proof is at the helper; sound, so nothing is unfindable at any budget);
+    //   * the HAND: one variant per distinct creature NAME in hand other than this card -- "cast it
+    //     earlier this turn, then sacrifice it". Action::trick_hand_target carries the co-cast
+    //     requirement (SubsetHasMissingTrickTarget rejects a subset that does not also cast a
+    //     creature of that name), and the canonical cast order resolves creatures (rank 10) before a
+    //     ritual (15) or a sorcery (20). Same-name hand copies are one class (a freshly cast copy is
+    //     sick and untapped whichever it was -- ResolveSacReadinessVictimId maps a pin onto the copy
+    //     the plan actually cast). A name already present on the battlefield as an untapped fresh
+    //     non-token body is skipped: eating that one or eating a second fresh copy leaves the same
+    //     board (identity fold).
+    // This is what makes "Swamp, Dark Ritual, Shadowborn Apostle, Culling the Weak (sacrificing it)"
+    // a turn the enumerator can see on an EMPTY board; the legacy route (Natural Order) never could,
+    // because it only offered the pre-plan board and skipped the cast with no body on it.
+    // Runs BEFORE the phyrexian / twobrid passes, so their copies inherit the victim. Gated on the
+    // param: byte-identical for every deck without such a card (the legacy colour route is untouched).
+    {
+        bool any_sac_any = false;
+        for (const Action& a : actions)
+        {
+            if (a.kind != Action::Kind::CastFromHand) { continue; }
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+            if (d != nullptr && SacCreatureCostFoldsByReadiness(d->params)) { any_sac_any = true; break; }
+        }
+        if (any_sac_any)
+        {
+            const int me = state.active_player_index;
+            const Player& sap = state.players[static_cast<std::size_t>(me)];
+            std::vector<int> bf_victims;   // card m_numbers
+            for (int bi : SacReadinessVictimReps(state, me))
+            { bf_victims.push_back(state.battlefield[static_cast<std::size_t>(bi)].card.m_number); }
+            struct HandVictim { int hand_index; int number; std::string name; };
+            std::vector<HandVictim> hand_victims;   // one per distinct creature name in hand
+            for (int h = 0; h < static_cast<int>(sap.hand.size()); ++h)
+            {
+                const Card& hc = sap.hand[static_cast<std::size_t>(h)];
+                const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+                // Type off the DEFINITION's card: a hand Card carries identity, not the type mask.
+                if (hd == nullptr || !hd->card.IsCreature() || hd->card.IsLand()) { continue; }
+                const std::string nm = hc.m_name.str();
+                bool dup = false;
+                for (const HandVictim& hv : hand_victims) { if (hv.name == nm) { dup = true; break; } }
+                if (dup) { continue; }
+                bool fresh_on_bf = false;
+                for (const Permanent& bp : state.battlefield)
+                {
+                    if (bp.controller_index == me && !bp.is_token && bp.entered_this_turn && !bp.tapped
+                        && bp.counters.empty() && bp.card.m_name.str() == nm) { fresh_on_bf = true; break; }
+                }
+                if (fresh_on_bf) { continue; }
+                hand_victims.push_back({ h, hc.m_number, nm });
+            }
+            std::vector<Action> out;
+            out.reserve(actions.size() + 8);
+            for (Action& a : actions)
+            {
+                const CardDefinition* d = nullptr;
+                if (a.kind == Action::Kind::CastFromHand)
+                { d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name); }
+                if (d == nullptr || !SacCreatureCostFoldsByReadiness(d->params) || a.soulfire_own_targets != 0)
+                { out.push_back(std::move(a)); continue; }
+                for (int v : bf_victims)
+                {
+                    Action c = a;
+                    c.soulfire_own_targets = v;
+                    out.push_back(std::move(c));
+                }
+                for (const HandVictim& hv : hand_victims)
+                {
+                    if (hv.hand_index == a.hand_index) { continue; }   // a spell never sacrifices itself
+                    Action c = a;
+                    c.soulfire_own_targets = hv.number;
+                    c.trick_hand_target    = hv.name;   // the co-cast requirement (see above)
+                    out.push_back(std::move(c));
+                }
+                // No victim on the battlefield or in hand: not castable -- nothing emitted.
+            }
+            actions.swap(out);
+        }
+    }
+
     // PHYREXIAN post-pass ({G/P}: pay the pip with 2 life instead -- CR 107.4f; Birthing Pod,
     // user-directed 2026-09-05). Mana-vs-life is a REAL search branch, not a payment preference:
     // paying 2 life FREES A SOURCE for the rest of the turn (the seed-1 T3 line: {3}+2 life to
@@ -46031,7 +46143,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 if (bp.counters_target_spell_to_hand) { return false; }
                 if (bp.cascade_max_mv > 0 || bp.demonstrate) { return false; }
                 if (bp.untap_x_mana_sources || bp.etb_untap_lands > 0) { return false; }
-                if (!bp.sac_additional_creature_color.empty()) { return false; }
+                if (HasSacCreatureAdditionalCost(bp)) { return false; }
                 if (b.replicate_count >= 0
                     || (b.def->card.IsCreature()
                         && CanReplicate(*b.def, state.battlefield, state.active_player_index)))
@@ -55615,7 +55727,7 @@ PlanTraits TurnSolver::ComputePlanTraits(const GameState& state, const std::vect
         // sacrificed as an additional cost.
         if (d->params.x_damage_each_creature_and_player || d->params.etb_destroy_nonartifact_nonblack
             || d->params.etb_destroy_artifact_enchantment_land
-            || !d->params.sac_additional_creature_color.empty())
+            || HasSacCreatureAdditionalCost(d->params))
         { t.own_board_hazard = true; }
         // Scarce-colour rank-tier gate: a mint opens the deferred breakpoint, a flood engine
         // draws new castables -- either can add a cast this plan's lists cannot see.
@@ -56165,7 +56277,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             if (a.kind != Action::Kind::CastFromHand || a.soulfire_own_targets <= 0) { continue; }
             const CardDefinition* d = a.def != nullptr
                 ? a.def : CardDatabase::Instance().Lookup(a.card_name.str());
-            if (d != nullptr && !d->params.sac_additional_creature_color.empty())
+            if (d != nullptr && HasSacCreatureAdditionalCost(d->params))
             { _sac_victim = a.soulfire_own_targets; break; }
         }
     }
@@ -56679,7 +56791,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             if (a.kind != Action::Kind::CastFromHand || a.soulfire_own_targets <= 0) { continue; }
             const CardDefinition* d = a.def != nullptr
                 ? a.def : CardDatabase::Instance().Lookup(a.card_name.str());
-            if (d == nullptr || d->params.sac_additional_creature_color.empty()) { continue; }
+            if (d == nullptr || !HasSacCreatureAdditionalCost(d->params)) { continue; }
             int pinned = -1;
             for (int i = 0; i < nb; ++i)
             {
@@ -61445,8 +61557,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             }
             // ...and a sacrifice-a-LAND cast's predicted victim (SacLandPayVictim; executor twin in
             // CastSpellFromHand) -- the land is leaving, so its mana is free.
-            PaySacVictimScope _psv(!def.params.sac_additional_creature_color.empty()
-                ? ResolveSacVictimId(state, def.params.sac_additional_creature_color, own_targets)
+            PaySacVictimScope _psv(HasSacCreatureAdditionalCost(def.params)
+                ? SacCostPayVictimId(state, def.params, own_targets)
                 : (is_sacrifice ? SacLandPayVictim(state, ec) : 0));   // the flag this apply sacrifices on
             // Phyrexian life gate (before the tap, which mutates): the payment must leave us
             // ALIVE (paying to 0 loses to the SBA). Emission gated on the same test, but life
@@ -61461,6 +61573,22 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         ? name + " needs " + std::to_string(phyrexian_life) + " life for its Phyrexian mana; you have "
                           + std::to_string(state.players[state.active_player_index].life)
                         : std::string());
+                }
+                if (sink_stack.empty())   // see SlotPrefixProbe
+                { SlotPrefixProbeNoteDrop(land_after_deferred && deferred_land_slot > 0, deferred_watchers_seen); }
+                return;
+            }
+            // "Sacrifice a creature" with NO creature left (the generic route: Diabolic Intent,
+            // Culling the Weak): the spell cannot be cast (CR 601.2h), so drop it before any mana
+            // moves -- a plan whose same-plan victim never arrived must not cast it for free.
+            // Executor twin: CastSpellFromHand's identical gate.
+            if (SacCreatureCostFoldsByReadiness(def.params)
+                && !SacReadinessVictimAvailable(state, state.active_player_index))
+            {
+                if (sink_stack.empty() && g_play_dropped_cast_sink)
+                {
+                    PlayReportDrop(name, PlayDropReasonWanted()
+                        ? name + " needs a creature to sacrifice; you control none" : std::string());
                 }
                 if (sink_stack.empty())   // see SlotPrefixProbe
                 { SlotPrefixProbeNoteDrop(land_after_deferred && deferred_land_slot > 0, deferred_watchers_seen); }
@@ -61610,6 +61738,19 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         const bool remand_countered = remand_def != nullptr && remand_chain_def == nullptr
                                    && !def.params.cant_be_countered;
         zone.erase(it);
+        // "As an additional cost to cast this spell, sacrifice a creature" -- the GENERIC route
+        // (sac_additional_creature: Diabolic Intent, Culling the Weak). Paid here, at CAST, with the
+        // mana (CR 601.2h), for EVERY resolution shape -- a to-hand tutor and a ritual alike. This is
+        // the lockstep fix: the rollout used to pay the cost only inside the tutor_to_battlefield_single
+        // branch, so a to-hand tutor or a ritual carrying it sacrificed in the executor and NOT here,
+        // and the search valued lines with a creature they do not lose. Executor twin:
+        // AIEngine::CastSpellFromHand's PerformSacrificeCreatureCost (also before resolution). The
+        // legacy colour route (Natural Order) keeps its historical in-branch position below.
+        if (SacCreatureCostFoldsByReadiness(def.params))
+        {
+            PerformSacrificeCreatureCost(state, name, def.params.sac_additional_creature_color,
+                                         own_targets, /*readiness_route=*/true);
+        }
         // ...and the PITCH half of the evoke cost (validated before payment above): exile the pinned
         // red card from hand -- any copy of that name other than the cast card. Paid here, with the
         // mana half, before the spell resolves (CR 601.2h). Lockstep twin: AIEngine::CastSpellFromHand.
@@ -63281,7 +63422,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // own_targets as a card m_number) -- its dies-triggers (Worldspine tokens +
             // shuffle-back, Vaultborn copy) resolve before the search -- then put ONE matching
             // creature onto the battlefield (tutor_target / scripted pin / provider front).
-            if (!def.params.sac_additional_creature_color.empty())
+            // LEGACY colour route only -- its historical position, kept byte-identical for Stompy.
+            // The generic route (sac_additional_creature) already paid at the cast site above.
+            if (SacCreatureCostLegacyRoute(def.params))
             {
                 PerformSacrificeCreatureCost(state, name,
                                              def.params.sac_additional_creature_color, own_targets);
@@ -67846,6 +67989,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     state.AdvanceTurnCounter();
     if (state.deck_has_extra_combat) { state.phase = Phase::Beginning; }   // Moraug (see the head of this function)
     state.opponent_lost_life_this_turn = false;
+    state.creature_died_this_turn = false;   // morbid resets each turn (lockstep w/ GameEngine::UntapStep)
     state.noncombat_damage_received_this_turn = {};
     state.pending_incinerator_damage.clear();
     state.floating_mana            = ManaPool{};   // reserve (ritual) mana empties each turn (CR 500.4)
@@ -68400,6 +68544,7 @@ static std::string SimulateLandPlay(GameState& state)
             const CardDefinition* d = LandFaceDefOf(CardDatabase::Instance().LookupCached(c));
             if (!d) { continue; }
             if (d->params.etb_bounce_land && !has_other_land) { continue; }
+            if (LakeDropWithoutVictim(state, *d)) { continue; }
             seen.insert(c.m_name.str());
         }
         alternatives = static_cast<int>(seen.size()) - 1;   // OTHER names beyond the one picked
@@ -68480,6 +68625,7 @@ static std::string SimulateLandPlay(GameState& state)
         const CardDefinition* def = LandFaceDefOf(CardDatabase::Instance().LookupCached(ap.library.front()));
         if (!def) { return false; }
         if (def->params.etb_bounce_land && !has_other_land) { return false; }
+        if (LakeDropWithoutVictim(state, *def)) { return false; }
         return pass != 0 || def->params.produces.size() > 1;
     };
     for (int pass = 0; pass < 2; ++pass)
@@ -68497,6 +68643,7 @@ static std::string SimulateLandPlay(GameState& state)
             // mandatory) -- net no land in play and a wasted drop. Never the greedy choice; play a
             // real land first (matches the searched land drop, which rejects the self-bounce).
             if (def->params.etb_bounce_land && !has_other_land) { continue; }
+            if (LakeDropWithoutVictim(state, *def)) { continue; }   // dominated by holding it
 
             bool is_multi = def->params.produces.size() > 1;   // see LandPlay.cpp's measurement
             if (pass == 0 && !is_multi) { continue; }
@@ -69513,7 +69660,7 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                 if (!act.chosen_float_color.empty()) { w.Put('#'); w.Put(act.chosen_float_color); }
                 if (act.free_cast) { w.Put("#FREE"); }
                 if (d && d->params.modal_choose_n > 0) { w.Put("#S"); w.Int(act.chosen_x); }
-                if (d && !d->params.sac_additional_creature_color.empty()) { w.Put("#V"); w.Int(act.soulfire_own_targets); }
+                if (d && HasSacCreatureAdditionalCost(d->params)) { w.Put("#V"); w.Int(act.soulfire_own_targets); }
                 if (d && d->params.look_top_put_creature_count > 0) { w.Put("#T"); w.Put(act.tutor_target); }
                 if (d && d->params.etb_destroy_own_noncreature_max > 0) { w.Put("#K"); w.Int(act.chosen_x); }
                 if (d && d->params.bestow_cost.has_value() && !legacy_bestow_sig) { w.Put(act.bestow ? "#B1" : "#B0"); }
@@ -74243,7 +74390,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                         if (cd && cd->params.modal_choose_n > 0) { k += "#S"; k += std::to_string(act.chosen_x); }
                         // Natural Order: distinct sacrifice victims are DISTINCT plans (core
                         // invariant); gated on the param so no existing deck's signature moves.
-                        if (cd && !cd->params.sac_additional_creature_color.empty())
+                        if (cd && HasSacCreatureAdditionalCost(cd->params))
                         { k += "#V"; k += std::to_string(act.soulfire_own_targets); }
                         // Turntimber Symbiosis: distinct put-choices are DISTINCT plans.
                         if (cd && cd->params.look_top_put_creature_count > 0) { k += "#T"; k += act.tutor_target.str(); }
@@ -79553,7 +79700,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 if (dd != nullptr)
                 {
                     if (!dd->params.saga_ch1_free_cast_creature_colors.empty()) { t |= kTrSaga1; }
-                    if (!dd->params.sac_additional_creature_color.empty())      { t |= kTrSacCol; }
+                    if (SacCreatureCostLegacyRoute(dd->params))                 { t |= kTrSacCol; }
                     if (dd->params.reveal_x_put_permanents && a.chosen_x > 0)  { t |= kTrWave; }
                 }
             }
@@ -82462,7 +82609,8 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             if (act.kind != Action::Kind::CastFromHand) { return std::string{}; }
             const CardDefinition* d = act.def ? act.def
                                               : CardDatabase::Instance().Lookup(act.card_name.str());
-            return d ? d->params.sac_additional_creature_color : std::string{};
+            return (d && SacCreatureCostLegacyRoute(d->params)) ? d->params.sac_additional_creature_color
+                                                                : std::string{};
         };
         // This plan's enumeration hand, as indices into state's hand (see the note above).
         std::vector<int> hmap;
@@ -83098,10 +83246,34 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     // pin while a Titan that can attack this turn is on the battlefield (one packed ordinal per such
     // Titan), the upkeep pin while a suspended land-search card arrives at the NEXT upkeep (one per
     // arrival). Additive per ordinal.
-    if (!HumanPlayActive() && state.deck_has_land_search)
+    // A suspended TUTOR arriving at the next upkeep (Profane Tutor) rides the same upkeep pin stream
+    // as Search for Tomorrow (fan (3) below), so the block also opens for it on a deck with no land
+    // search at all; fans (0)-(2) stay keyed on deck_has_land_search.
+    bool upkeep_tutor_due = false;
+    if (!HumanPlayActive() && !state.deck_has_land_search)
+    {
+        for (const SuspendedCard& sc : state.players[static_cast<std::size_t>(state.active_player_index)].suspended_cards)
+        {
+            if (sc.arrive_turn < 0 || sc.arrive_turn > state.TurnSeq() + 1) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(sc.card);
+            if (d != nullptr && !d->card.IsPermanentCard() && d->params.tutor_to_hand) { upkeep_tutor_due = true; break; }
+        }
+    }
+    if (!HumanPlayActive() && (state.deck_has_land_search || upkeep_tutor_due))
     {
         constexpr std::size_t kLandSearchProductCap = 64;
         const int me = state.active_player_index;
+        // The width of a suspended TUTOR's upkeep pin: the distinct names it could fetch NOW (the
+        // turn-start library; the resolution clamps any drift, the land-search widths' rule), capped
+        // by the provider's TutorSearchWidth -- the same width every tutor axis uses.
+        auto tutor_width_of = [&](const CardDefinition* d) -> std::size_t
+        {
+            std::vector<std::string> c = RankedTutorCandidates(ResolveProvider(state), state, me, d->params);
+            std::vector<std::string> u;
+            for (const std::string& n : c) { if (std::find(u.begin(), u.end(), n) == u.end()) { u.push_back(n); } }
+            const int w = ResolveProvider(state).TutorSearchWidth();
+            return std::min<std::size_t>(u.size(), static_cast<std::size_t>(std::max(1, w)));
+        };
         auto base_plan = [](const TurnSolver::Plan& p)
         {
             return !PlanIsAxisVariantExceptOrder(p) && p.sac_pins.empty() && p.rad_mode == -1
@@ -83217,7 +83389,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         const bool acts_at_end = ResolveProvider(state).LandEntrySpotsRule(state)
                               && !HumanPlayActive() && !DecisionUnpruned(UnprunedGate::LandPick);
         AxisTrace("pre-actslot", state, all);
-        if (!cont_axes_only && !acts_at_end && !t_rollout_narrow)
+        if (state.deck_has_land_search && !cont_axes_only && !acts_at_end && !t_rollout_narrow)
         {
             std::vector<TurnSolver::Plan> twins;
             for (const TurnSolver::Plan& p : all)
@@ -83311,7 +83483,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         //     every list is exactly 0 .. width-1 and the variants are the old width fan's.
         //     THE CANON FRONT DERIVATION skips them (BpFrontOnlyHere): each variant is its base with only
         //     land_search_pins set, appended after every base, so it is never the front (see there).
-        if (!BpFrontOnlyHere())
+        if (state.deck_has_land_search && !BpFrontOnlyHere())
         {
             std::vector<TurnSolver::Plan> extra;
             for (const TurnSolver::Plan& p : all)
@@ -83441,7 +83613,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         //     the rest of this fan. DISCLOSED CAP: past the stream's five ordinals a later trigger takes the
         //     provider's front (the packed-pin cap this fan already carries for several Titans).
         const bool xc_live = ExtraCombatSecondMainLive(state);
-        if (!cont_axes_only && (is_pre_combat || xc_live))
+        if (state.deck_has_land_search && !cont_axes_only && (is_pre_combat || xc_live))
         {
             std::vector<std::size_t> tw;            // width per attacking-Titan ordinal (the crack fan's offset)
             std::vector<const CardDefinition*> tdef;   // ...and its definition (the pin values, per plan)
@@ -83681,10 +83853,14 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 if (sc.arrive_turn > state.TurnSeq() + 1) { continue; }
                 const CardDefinition* d = CardDatabase::Instance().LookupCached(sc.card);
                 if (d == nullptr || d->card.IsPermanentCard()) { continue; }
-                // Only a land-search arrival consumes an ordinal (CastOffSuspend), so only it counts.
-                if (!d->params.land_search_on_resolve || d->params.land_search_count <= 0) { continue; }
+                // Only a search-bearing arrival consumes an ordinal (CastOffSuspend): a land search
+                // (Search for Tomorrow) or a to-hand tutor (Profane Tutor), so only those count.
+                const bool ls_arrival  = d->params.land_search_on_resolve && d->params.land_search_count > 0;
+                const bool tut_arrival = !ls_arrival && d->params.tutor_to_hand;
+                if (!ls_arrival && !tut_arrival) { continue; }
                 if (static_cast<int>(uw.size()) >= kLandSearchPinOrdinals) { break; }
-                uw.push_back(std::min<std::size_t>(width_of(d), kLandSearchPinMask + 1));
+                uw.push_back(std::min<std::size_t>(ls_arrival ? width_of(d) : tutor_width_of(d),
+                                                   kLandSearchPinMask + 1));
             }
             bool any = false;
             for (std::size_t x : uw) { if (x > 1) { any = true; } }
@@ -85311,6 +85487,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
     }
     auto karoo_self_bounce = [&](const CardDefinition* def)
     {
+        // Lake of the Dead with no Swamp to sacrifice: same dominated-drop class (LakeDropWithoutVictim).
+        if (!s_human_play_lands && LakeDropWithoutVictim(state, *def)) { return true; }
         return !s_karoo_selfbounce && !s_human_play_lands
             && def->params.etb_bounce_land && !has_other_land_enum;
     };
@@ -109085,6 +109263,15 @@ static std::string LineSummaryOfPlan(const TurnSolver::Plan& p, const GameState*
         else if (a.kind == Action::Kind::SacForMana || a.kind == Action::Kind::SacCreatureOutlet)
         {
             const int k = std::max(1, a.sac_count);
+            const CardDefinition* sd = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name.str());
+            // Lake of the Dead: the source stays (tapped) and ANOTHER land is eaten -- name it.
+            if (a.kind == Action::Kind::SacForMana && sd != nullptr
+                && !sd->params.sac_for_mana_victim_land_subtype.empty())
+            {
+                cast_names.push_back(a.card_name + ": tap, sacrifice a "
+                                     + sd->params.sac_for_mana_victim_land_subtype);
+                continue;
+            }
             cast_names.push_back(a.card_name + ": sac " + std::to_string(k)
                                  + (k == 1 ? " creature" : " creatures"));
         }
@@ -111543,6 +111730,27 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
         out.verdict = V::Illegal;
         out.reason  = why;
         return out;
+    }
+    // "As an additional cost to cast this spell, sacrifice a creature" (the generic route: Diabolic
+    // Intent, Culling the Weak) with NO creature to pay it: no creature on our battlefield and none
+    // among the line's own casts (the soundness rule above -- a line's own creature cast is admitted as
+    // the enabler). The affordability sim below models mana only, so without this such a line graded
+    // legal_not_enumerated. Byte-identical for every deck without such a card.
+    {
+        bool needs_victim = false, has_victim = false;
+        for (const std::string& nm : spec.casts)
+        {
+            const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
+            if (d == nullptr) { continue; }
+            if (SacCreatureCostFoldsByReadiness(d->params)) { needs_victim = true; }
+            if (d->card.IsCreature()) { has_victim = true; }
+        }
+        if (needs_victim && !has_victim && !SacReadinessVictimAvailable(s, s.active_player_index))
+        {
+            out.verdict = V::Illegal;
+            out.reason  = "a spell in this line needs a creature to sacrifice, and you control none";
+            return out;
+        }
     }
 
     // Resolve each named cast to a card definition; bail to Unsupported for the action

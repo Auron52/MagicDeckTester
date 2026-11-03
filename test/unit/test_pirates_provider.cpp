@@ -322,6 +322,12 @@ TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pir
         {"Midrange Burn", "MidrangeBurn"},
         // Image's copy-target policy and Tide/Seas land effects belong to Merfolk's own provider.
         {"Merfolk", "Merfolk"},
+        // Shadowborn Apostle (onboarding 2026-11-03): its OWN provider, routed at the TOP by Lake of the
+        // Dead's entry replacement OR Profane Tutor's suspended to-hand tutor (and, once INT-2/INT-3
+        // land, the Apostle's sacrifice-six activation and Thrumming Stone's ripple grant). Without it
+        // Demonic Tutor / Diabolic Intent / Profane Tutor's tutor_to_hand would capture it into
+        // AntiLifegainProvider.
+        {"Shadowborn Apostle", "ShadowbornApostle"},
     };
 
     namespace fs = std::filesystem;

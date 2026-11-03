@@ -1,0 +1,35 @@
+{
+ "deck": "decks/Shadowborn Apostle/Shadowborn Apostle.cod",
+ "turn": 2,
+ "on_the_play": true,
+ "active_life": 20,
+ "opponent_life": 20,
+ "resume_at": "main1",
+ "library_filler": "Swords to Plowshares",
+ "library_size": 40,
+ "depth": 2,
+ "budget_ms": 50,
+ "max_turns": 2,
+ "env": {
+  "MTG_HUMAN_PLAY": "1"
+ },
+ "battlefield": [
+  {
+   "name": "Swamp",
+   "controller": 0
+  },
+  {
+   "name": "Swamp",
+   "controller": 0
+  }
+ ],
+ "hand": [
+  "Culling the Weak",
+  "Demonic Tutor"
+ ],
+ "validate_line": "cast=Culling the Weak",
+ "expect_verdict": "illegal",
+ "_comment": [
+  "INT-1: Culling the Weak with no creature on the battlefield or in hand is not castable (CR 601.2h)."
+ ]
+}

@@ -1,0 +1,47 @@
+{
+ "deck": "decks/Shadowborn Apostle/Shadowborn Apostle.cod",
+ "turn": 2,
+ "on_the_play": true,
+ "active_life": 20,
+ "opponent_life": 20,
+ "resume_at": "main1",
+ "library_filler": "Swords to Plowshares",
+ "library_size": 40,
+ "depth": 2,
+ "budget_ms": 50,
+ "max_turns": 2,
+ "env": {
+  "MTG_HUMAN_PLAY": "1"
+ },
+ "battlefield": [
+  {
+   "name": "Swamp",
+   "controller": 0
+  },
+  {
+   "name": "Swamp",
+   "controller": 0
+  },
+  {
+   "name": "Vampire of the Dire Moon",
+   "controller": 0,
+   "sick": false
+  }
+ ],
+ "hand": [
+  "Diabolic Intent"
+ ],
+ "human_lines": [
+  "cast=Diabolic Intent",
+  "pass"
+ ],
+ "expect_dropped": [],
+ "expect_history_contains": [
+  "Diabolic Intent -- sacrificed Vampire of the Dire Moon"
+ ],
+ "_comment": [
+  "INT-1: Diabolic Intent pays {1}{B} from two Swamps and sacrifices the board's creature as its additional",
+  "cost -- in the executor AND the rollout (the generic cast-site payment; the rollout used to pay it only inside",
+  "Natural Order's tutor_to_battlefield_single branch)."
+ ]
+}
