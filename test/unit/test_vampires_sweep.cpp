@@ -20,6 +20,7 @@
 #include "ai/ManaPayment.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
+#include "core/EnvFlags.h"
 #include "core/GameSetup.h"
 #include "core/GameState.h"
 #include "core/HeuristicDefaults.h"
@@ -579,7 +580,11 @@ TEST_CASE("mana oracle: a memoised continuation's Blood source is not served to 
     run(1, checked, covered);
     CHECK(checked > 0);
     CHECK(covered == checked);
-    run(0, checked, covered);   // the defect, for the record: the twin board is served #58's Blood
+    // With the binding off, the plan cache's per-permanent key fold (MTG_PLAN_CACHE_PERM_KEY, default ON, read
+    // once per process) keys the twins apart on its own, so the oracle still covers every Blood line. Only with
+    // both off is the twin board served #58's Blood -- the defect, for the record (MTG_PLAN_CACHE_PERM_KEY=0).
+    run(0, checked, covered);
     CHECK(checked > 0);
-    CHECK(covered < checked);
+    if (EnvOn("MTG_PLAN_CACHE_PERM_KEY", true)) { CHECK(covered == checked); }
+    else { CHECK(covered < checked); }
 }
