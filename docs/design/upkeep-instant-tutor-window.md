@@ -1,6 +1,6 @@
 # Upkeep instant window for tutors-to-top (Enlightened Tutor)
 
-**STATUS: DEFERRED (recorded 2026-08-19, from the Creature Giving cast-order review). Not built.**
+**STATUS: Human play implemented; autonomous search remains open.**
 
 ## The hole, in the USER's words (2026-08-19, verbatim)
 
@@ -9,9 +9,9 @@
 > relevant, especially when you used your mana the previous turn but have say 5 mana to play
 > Defense of the Heart in the same turn.
 
-## What the engine does today
+## What the engine did before the viewer fix
 
-All casts happen in the main phases; there is no upkeep cast window. Enlightened Tutor
+All casts happened in the main phases; there was no upkeep cast window. Enlightened Tutor
 (`tutor_to_top`, an INSTANT) is therefore only ever cast in a main phase, which places its target
 on top **after** that turn's draw — the target arrives next turn, and next turn's mana pays for
 it. The line the card is actually built for — **cast at your own upkeep, before the draw step, so
@@ -19,7 +19,21 @@ this turn's draw IS the tutored card and this turn's full mana can cast it** —
 expressed. The USER's example: five mana available, Defense of the Heart in library; upkeep
 E-Tutor ({W}) → draw Defense → cast it ({3}{G}) the same turn. Today that line takes two turns.
 
-## Scope if built
+## Current human-play behavior
+
+The play viewer now offers a paid upkeep cast of each payable instant `tutor_to_top` card in hand,
+before the draw. The target is chosen in the same prompt; choosing "hold" keeps the tutor. The
+ordinary cast path pays mana and resolves the tutor, so Worldly Tutor and Enlightened Tutor both
+replace that turn's draw with the chosen card. This is covered by a focused engine test.
+The prompt defaults to hold, so references saved before the new prompt replay their original
+main-phase tutor lines.
+
+The autonomous search and rollout still do not generate an upkeep-cast branch. Their main-phase
+casts and regression results remain unchanged. A full searched implementation needs a pre-draw
+choice that survives the previous turn's plan and is consumed in both executor and rollout; see
+the scope below. A viewer reference using the new window can therefore be faster than search.
+
+## Scope of the remaining search work
 
 * A pre-draw decision point at the active player's upkeep, offered only when an instant-speed
   `tutor_to_top` card is in hand and payable — narrow on purpose, not a general instant system

@@ -4409,6 +4409,8 @@ static void WriteTutorDecisionJson(std::ostream& os, const GameState& s, const s
 {
     DecisionJson d(os, decision_index);
     d.Type("tutor_etb").Source(source).Turn(s).Board(s).HeuristicDefault(heuristic_default);
+    const bool upkeep_cast = source.find(" (upkeep cast)") != std::string::npos;
+    if (upkeep_cast) { d.Bool("upkeep_cast", true); }
     d.Array("candidates", candidates.size(), [&](std::size_t i)
     {
         os << "{ \"index\": " << i << ", \"name\": "; JsonStr(os, candidates[i]);
@@ -4416,8 +4418,10 @@ static void WriteTutorDecisionJson(std::ostream& os, const GameState& s, const s
         { os << ", \"suggested\": true"; }
         os << " }";
     });
-    d.Note("reply a candidate index to search that card up, or -1 to decline the optional search. "
-           "Default = the AI's pick.");
+    if (upkeep_cast)
+    { d.Note("reply a candidate index to cast this tutor during upkeep and put that card on top before your draw, or -1 to hold the tutor. The chosen cast pays its mana cost now."); }
+    else
+    { d.Note("reply a candidate index to search that card up, or -1 to decline the optional search. Default = the AI's pick."); }
 }
 
 // Dragonstorm put-order decision (the Dragon override dialog): the player picks WHICH library Dragons
@@ -4701,6 +4705,14 @@ static void WriteXValueDecisionJson(std::ostream& os, const GameState& s, const 
         d.Note(std::string("reply how many white cards to reveal for ") + source + " (0.."
                + std::to_string(max_x) + "; you gain " + std::to_string(lethal_x)
                + " life per card), or -1 for the default (" + std::to_string(default_x) + ").");
+        return;
+    }
+    if (target == 3)
+    {
+        d.Type("x_value").Source(source).Turn(s).Board(s)
+         .Word("x_kind", "etb_destroy_k").Int("min_x", 0).Int("max_x", max_x);
+        d.HeuristicDefault(default_x);
+        d.Note("reply how many noncreature permanents Terastodon targets (0..max_x). Target choices follow. This is an enter-the-battlefield trigger, not a mana payment.");
         return;
     }
     d.Type("x_value").Source(source).Turn(s).Board(s)

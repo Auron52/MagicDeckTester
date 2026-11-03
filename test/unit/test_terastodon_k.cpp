@@ -7,13 +7,16 @@
 #include <doctest/doctest.h>
 
 #include "ai/DecisionProviders.h"
+#include "ai/AIEngine.h"
 #include "cards/CardDatabase.h"
+#include "core/GameEngine.h"
 #include "core/GameState.h"
 #include "core/HeuristicDefaults.h"
 #include "core/SpellEffects.h"
 
 #include <algorithm>
 #include <string>
+#include <tuple>
 #include <vector>
 
 namespace
@@ -84,6 +87,152 @@ TEST_CASE("Terastodon destroy-K: an unpinned entry destroys exactly the provider
     CHECK(Count(b, true) == 1);
     CHECK(Count(b, false) == 2);
     CHECK(b.players[0].graveyard.size() == 2);
+}
+
+TEST_CASE("A human can choose Terastodon's K when it is put rather than cast")
+{
+    EnsureCardsLoadedTK();
+    FixedKProvider none(0);
+    GameState s = TerastodonBoard(&none);
+    int asked = 0;
+    XValueChooser choose = [&](const GameState&, int, const std::string& source,
+                               int kind, int max_k, int def, int) -> int
+    {
+        ++asked;
+        CHECK(source == "Terastodon");
+        CHECK(kind == 3);
+        CHECK(max_k == 3);
+        CHECK(def == 0);
+        return 2;
+    };
+    auto* old = g_play_x_value_chooser;
+    g_play_x_value_chooser = &choose;
+    FireOwnEtbTriggers(s, 0, 3, std::string(), kEtbKxHeuristic);
+    g_play_x_value_chooser = old;
+    CHECK(asked == 1);
+    CHECK(Count(s, true) == 1);
+    CHECK(Count(s, false) == 2);
+}
+
+TEST_CASE("Ghalta resolves every simultaneous entrant after Terastodon shifts battlefield slots")
+{
+    EnsureCardsLoadedTK();
+    FixedKProvider one(1);
+    GameState s = TerastodonBoard(&one);
+    s.battlefield.pop_back();
+    auto card = [](const char* name, int number)
+    {
+        Card c = CardDatabase::Instance().Lookup(name)->card;
+        c.m_number = number;
+        return c;
+    };
+    Permanent g;
+    g.card = card("Ghalta, Stampede Tyrant", 103);
+    g.controller_index = g.owner_index = 0;
+    s.battlefield.push_back(g);
+    // The hand is walked backwards: Terastodon enters first, Hornet Queen second.
+    s.players[0].hand.push_back(card("Hornet Queen", 105));
+    s.players[0].hand.push_back(card("Terastodon", 104));
+    FireOwnEtbTriggers(s, 0, 3);
+    int hornets = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (!p.is_token) { continue; }
+        for (const std::string& subtype : p.card.m_subtypes)
+        { if (subtype == "Insect") { ++hornets; break; } }
+    }
+    CHECK(hornets == 4);
+    CHECK(Count(s, true) == 2);
+    CHECK(Count(s, false) == 5);   // one Elephant and four Hornets
+}
+
+TEST_CASE("World War Hulk scores free casts without prompting for speculative Terastodon targets")
+{
+    EnsureCardsLoadedTK();
+    FixedKProvider one(1);
+    GameState s = TerastodonBoard(&one);
+    s.battlefield.pop_back();
+    auto card = [](const char* name, int number)
+    {
+        Card c = CardDatabase::Instance().Lookup(name)->card;
+        c.m_number = number;
+        return c;
+    };
+    s.players[0].hand.push_back(card("Terastodon", 104));
+    s.players[0].hand.push_back(card("Ghalta, Stampede Tyrant", 105));
+    int target_prompts = 0, free_prompts = 0;
+    LoyaltyTargetChooser targets = [&](const GameState&, int, const std::string&,
+                                       const std::string&, const std::vector<int>&, int def)
+    { ++target_prompts; return def; };
+    FreeCastChooser free_cast = [&](const GameState&, int, const std::string&,
+                                   const std::vector<Card>& options, int,
+                                   const std::vector<std::string>&)
+    {
+        ++free_prompts;
+        CHECK(target_prompts == 0);
+        for (int i = 0; i < static_cast<int>(options.size()); ++i)
+        { if (options[i].m_name.str() == "Ghalta, Stampede Tyrant") { return i; } }
+        return -1;
+    };
+    auto* old_targets = g_play_loyalty_chooser;
+    auto* old_free = g_play_free_cast_chooser;
+    const bool old_real = g_real_resolution;
+    g_play_loyalty_chooser = &targets;
+    g_play_free_cast_chooser = &free_cast;
+    g_real_resolution = true;
+    FireSagaChapter(s, 0, *CardDatabase::Instance().Lookup("World War Hulk"), 1);
+    g_play_loyalty_chooser = old_targets;
+    g_play_free_cast_chooser = old_free;
+    g_real_resolution = old_real;
+    CHECK(free_prompts == 1);
+    CHECK(target_prompts > 0);   // The actual Ghalta put still asks for Terastodon's targets.
+}
+
+TEST_CASE("Instant tutors can be cast in upkeep to replace this turn's draw")
+{
+    EnsureCardsLoadedTK();
+    for (const auto& [tutor, land, target] :
+         std::vector<std::tuple<const char*, const char*, const char*>>{
+             {"Worldly Tutor", "Forest", "Ghalta, Stampede Tyrant"},
+             {"Enlightened Tutor", "Plains", "Sol Ring"}})
+    {
+        GameState s;
+        s.active_player_index = 0;
+        s.turn_number = 1;
+        s.on_the_play = false;
+        s.players[0].hand.push_back(CardDatabase::Instance().Lookup(tutor)->card);
+        s.players[0].hand.back().m_number = 400;
+        s.players[0].library.push_back(CardDatabase::Instance().Lookup("Forest")->card);
+        s.players[0].library.push_back(CardDatabase::Instance().Lookup(target)->card);
+        Permanent p;
+        p.card = CardDatabase::Instance().Lookup(land)->card;
+        p.card.m_number = 401;
+        p.controller_index = p.owner_index = 0;
+        s.battlefield.push_back(p);
+        int asks = 0;
+        TutorChooser choose = [&](const GameState&, int, const std::string& source,
+                                  const std::vector<std::string>& names, int default_pick,
+                                  const std::vector<int>&) -> int
+        {
+            ++asks;
+            CHECK(source.find("upkeep cast") != std::string::npos);
+            CHECK(default_pick == -1);  // old references hold a tutor they never cast at upkeep
+            for (int i = 0; i < static_cast<int>(names.size()); ++i)
+            { if (names[i] == target) { return i; } }
+            return -1;
+        };
+        auto* old = g_play_tutor_chooser;
+        g_play_tutor_chooser = &choose;
+        AIEngine ai;
+        GameEngine game(ai);
+        game.PlayOutFrom(s, 1, GameEngine::ResumeAt::UpkeepTail);
+        g_play_tutor_chooser = old;
+        CHECK(asks == 1);
+        CHECK(std::any_of(s.players[0].hand.begin(), s.players[0].hand.end(),
+                          [&](const Card& c) { return c.m_name.str() == target; }));
+        CHECK(std::any_of(s.players[0].graveyard.begin(), s.players[0].graveyard.end(),
+                          [&](const Card& c) { return c.m_name.str() == tutor; }));
+    }
 }
 
 // ---- HUMAN PLAY: WHICH permanents (Landfall claude-play sweep flag 3, 2026-10-16) ----------------

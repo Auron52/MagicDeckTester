@@ -9349,6 +9349,20 @@ void AIEngine::Firebreathe(GameState& state, std::vector<int>& attacker_indices)
 
 // ---- Mana ----
 
+bool AIEngine::CastUpkeepTutor(GameState& state, int hand_number, const std::string& target)
+{
+    Player& ap = state.ActivePlayer();
+    auto it = std::find_if(ap.hand.begin(), ap.hand.end(), [&](const Card& c)
+    { return c.m_number == hand_number; });
+    if (it == ap.hand.end()) { return false; }
+    const CardDefinition* def = CardDatabase::Instance().LookupCached(*it);
+    if (!def || !def->card.IsInstant() || !def->params.tutor_to_top) { return false; }
+    ManaPool available = AvailableManaPool(state);
+    CastSpellFromHand(state, *it, available, 0, target);
+    return std::none_of(ap.hand.begin(), ap.hand.end(), [&](const Card& c)
+    { return c.m_number == hand_number; });
+}
+
 // Public payment entry. Delegates to the UNIFIED TapForCostShared (ManaPayment.cpp) -- formerly a
 // twin of TurnSolver's TapForCostDirect kept in lockstep by comment discipline. The executor
 // threads its `available` accounting pool through and has no MTG_LEGACY_CCO_PAY hatch.

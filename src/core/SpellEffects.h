@@ -10762,8 +10762,8 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
         // Phase 1: everything enters. As-enters +1/+1 counters (enters_with_plus_counters) belong to
         // this one event, so they are applied here at the pre-event doubler shift and the scope over
         // phase 2 keeps FireEtbWatchers from applying them again (EntersWithPreappliedScope).
-        std::vector<int> entered_slots;
-        entered_slots.reserve(deploy.size());
+        std::vector<int> entered_numbers;
+        entered_numbers.reserve(deploy.size());
         std::vector<int> enters_with_done;
         int enters_with_shift = 0;
         for (const Card& dc : deploy)
@@ -10783,22 +10783,37 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
             perm.entered_this_turn = true;
             if (dd != nullptr) { ApplyEntersWithOnPut(perm, *dd, enters_with_shift, enters_with_done); }
             state.battlefield.push_back(perm);
-            entered_slots.push_back(static_cast<int>(state.battlefield.size()) - 1);
+            entered_numbers.push_back(perm.card.m_number);
         }
         EntersWithPreappliedScope enters_with_scope(enters_with_done.empty() ? g_enters_with_preapplied
                                                                              : &enters_with_done);
         // Phase 2: only now do their triggers go on the stack. kEtbKxHeuristic: a PUT Terastodon
         // has no searched destroy-K axis, exactly as on the Turntimber put path.
-        for (int slot : entered_slots)
+        for (int number : entered_numbers)
         {
+            int slot = -1;
+            for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+            {
+                if (state.battlefield[static_cast<std::size_t>(i)].card.m_number == number)
+                { slot = i; break; }
+            }
+            if (slot < 0) { continue; }
             FireEtbWatchers(state, controller, slot);
+            // An earlier entrant's trigger can destroy a land and shift every later slot.
+            slot = -1;
+            for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+            {
+                if (state.battlefield[static_cast<std::size_t>(i)].card.m_number == number)
+                { slot = i; break; }
+            }
+            if (slot < 0) { continue; }
             FireOwnEtbTriggers(state, controller, slot, std::string(), kEtbKxHeuristic);
         }
-        if (!entered_slots.empty() && g_play_event_sink)
+        if (!entered_numbers.empty() && g_play_event_sink)
         {
             EmitPlayEvent(state.turn_number, "etb",
                           "\xF0\x9F\xA6\x95 " + def->card.m_name.str() + ": put "
-                          + std::to_string(entered_slots.size())
+                          + std::to_string(entered_numbers.size())
                           + " creature card(s) from hand onto the battlefield");
         }
     }
@@ -10878,7 +10893,24 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
     // play's explicit fan carries a positive K). Victim order and pool: EtbDestroyVictimClass
     // above (Forests first; the pool widens past them only when Forests run out).
     if (p.etb_destroy_own_noncreature_max > 0 && etb_kx == kEtbKxHeuristic)
-    { etb_kx = ResolveProvider(state).EtbDestroyK(state, controller, *def); }
+    {
+        etb_kx = ResolveProvider(state).EtbDestroyK(state, controller, *def);
+        // A put (Ghalta, Natural Order, Turntimber) has no cast-plan K. Human play
+        // must still choose how many of the optional targets to destroy, including 0.
+        if (g_play_x_value_chooser != nullptr && !g_tap_speculating)
+        {
+            int legal = 0;
+            for (const Permanent& q : state.battlefield)
+            { if (!q.is_animated && !q.card.IsCreature()) { ++legal; } }
+            const int max_k = std::min(p.etb_destroy_own_noncreature_max, legal);
+            if (max_k > 0)
+            {
+                etb_kx = (*g_play_x_value_chooser)(state, controller, def->card.m_name.str(),
+                                                    /*kind=*/3, max_k,
+                                                    std::clamp(etb_kx, 0, max_k), 0);
+            }
+        }
+    }
     // Human play picks WHICH permanents (AskHumanEtbDestroyVictims); the loop below is the rule.
     const bool tera_human = p.etb_destroy_own_noncreature_max > 0 && etb_kx > 0
                          && g_play_loyalty_chooser != nullptr && !g_tap_speculating;
@@ -41354,7 +41386,12 @@ inline void PerformSagaFreeCast(GameState& state, int controller, const CardPara
             GameState trial = state;
             Card      c     = trial.players[controller].hand[slot];
             trial.players[controller].hand.erase(trial.players[controller].hand.begin() + slot);
-            PutCardOntoBattlefield(trial, controller, c, source_name);
+            // Candidate scoring is speculative. Its ETBs must not ask the human to choose
+            // targets or consume a reference answer before the actual free-creature pick.
+            {
+                RevealLogPause pause;
+                PutCardOntoBattlefield(trial, controller, c, source_name);
+            }
             int board = 0;
             for (const Permanent& q : trial.battlefield)
             {

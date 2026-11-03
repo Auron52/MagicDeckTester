@@ -6,6 +6,7 @@
 #include "../ai/Combat.h"
 #include "../ai/EngineFlags.h"   // M2FixpointEnabled (the second-main fixpoint re-entry loop)
 #include "../ai/DecisionProviders.h"   // M2FixModeFor -- the per-deck fixpoint resolver
+#include "../ai/ManaPayment.h"  // upkeep instant tutor affordability
 #include "../ai/TurnSolver.h"   // EquipmentEtbDrawFires (the log's draw reporter, below)
 #include "../ai/GameWorkMeter.h"
 #include "../cards/CardDatabase.h"
@@ -601,6 +602,55 @@ void GameEngine::UpkeepTail(GameState& state)
     // by LAST turn's tutor into play before the draw step pulls it into hand. After echo so the
     // obligation claims mana first; lockstep twin in TurnSolver::SimulateEndAndStartNextTurn.
     m_ai.ResolveUpkeepRevealTop(state);
+
+    // Human-play priority window after upkeep triggers and before the draw. A tutor-to-top
+    // instant cast here supplies THIS turn's draw. The ordinary cast path pays mana and fires
+    // cast triggers; its normal resolution performs the library search and shuffle.
+    if (g_play_tutor_chooser != nullptr)
+    {
+        ResolveStack(state);  // finish upkeep triggers before offering the priority window
+        std::vector<int> tutor_numbers;
+        for (const Card& c : state.ActivePlayer().hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d && d->card.IsInstant() && d->params.tutor_to_top)
+            { tutor_numbers.push_back(c.m_number); }
+        }
+        for (int number : tutor_numbers)
+        {
+            const Player& ap = state.ActivePlayer();
+            auto it = std::find_if(ap.hand.begin(), ap.hand.end(), [&](const Card& c)
+            { return c.m_number == number; });
+            if (it == ap.hand.end()) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(*it);
+            if (!d) { continue; }
+            GameState trial = state;
+            bool payable = false;
+            {
+                RevealLogPause pause;
+                payable = TapForCostShared(trial, d->card.m_mana_cost, /*for_creature=*/false,
+                                           nullptr, /*honor_legacy_cco=*/true);
+            }
+            if (!payable) { continue; }
+            const auto names = RankedTutorCandidates(ResolveProvider(state), state,
+                                                       state.active_player_index, d->params);
+            if (names.empty()) { continue; }
+            const std::string source = d->card.m_name.str() + " (upkeep cast)";
+            const int selected = (*g_play_tutor_chooser)(state, state.active_player_index,
+                                                          source, names, /*default: hold=*/-1, {});
+            if (selected < 0 || selected >= static_cast<int>(names.size())) { continue; }
+            if (!m_ai.CastUpkeepTutor(state, number, names[static_cast<std::size_t>(selected)]))
+            { continue; }
+            // The upkeep prompt already selected the target. Suppress the normal cast's
+            // redundant resolution-time repick while preserving event and reveal logging.
+            auto* chooser = g_play_tutor_chooser;
+            g_play_tutor_chooser = nullptr;
+            ResolveStack(state);
+            g_play_tutor_chooser = chooser;
+            if (UpkeepFloatClearEnabled())
+            { state.floating_mana = ManaPool{}; state.floating_haste_c = 0; }
+        }
+    }
 
     ResolveStack(state);
 }

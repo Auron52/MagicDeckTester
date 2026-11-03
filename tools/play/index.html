@@ -4713,7 +4713,9 @@ function freeCastPanelHtml(d){
 function tutorPanelHtml(d){
   const cands=d.candidates||[];
   let h=`<h3>${esc(d.source||'Tutor')} — search your library</h3>`;
-  h+=`<div class="sub"><b>${esc(d.source||'Tutor')}</b> entered the battlefield — search your library for a card and put it into your hand. Click one, or decline (searching is optional).</div>`;
+  h+=d.upkeep_cast
+    ? `<div class="sub">Cast during upkeep and pay mana now. Choose a card to put on top of your library before this turn's draw, or hold the tutor.</div>`
+    : `<div class="sub"><b>${esc(d.source||'Tutor')}</b> searches your library. Choose a card, or decline when the search is optional.</div>`;
   h+=`<div class="tutgrid">`;
   if(!cands.length) h+=`<span class="hint">No legal card to search up.</span>`;
   // `suggested` = the engine's narrowed candidate set (Bruna's Glittering Wish rule, USER 2026-10-06):
@@ -4726,7 +4728,7 @@ function tutorPanelHtml(d){
        (c.suggested?`<span class="suggbadge" title="the engine's candidate rule searches this card">suggested</span>`:'')+`</span>`;
   });
   h+=`</div><div class="pbtns" style="margin-top:10px"><span class="spacer"></span>`+
-     `<button class="ghost" data-opt="-1">Decline — search for nothing</button></div>`;
+     `<button class="${d.heuristic_default===-1?'primary':'ghost'}" data-opt="-1">${d.upkeep_cast?'Hold tutor':'Decline — search for nothing'}${d.heuristic_default===-1?'  ·  AI':''}</button></div>`;
   return h;
 }
 // Echo pay-or-sacrifice panel: central modal, BINARY. At upkeep an echo creature is sacrificed unless
@@ -5542,7 +5544,7 @@ function commitDemonstrate(d, v){
 }
 function commitTutor(d, oi){
   const c=(d.candidates||[]).find(x=>x.index===oi);
-  pushChoice(d, oi, `${d.source||'Tutor'}: ${oi<0||!c?'declined the search':'searched up '+c.name}`);
+  pushChoice(d, oi, `${d.source||'Tutor'}: ${oi<0||!c?(d.upkeep_cast?'held for later':'declined the search'):'searched up '+c.name}`);
 }
 function commitEcho(d, v){ pushChoice(d, v, `Echo ${d.creature||''}: ${v?'pay':'sacrifice'}`); }
 // Multi-select cleanup discard: toggle a card in/out of the discard set (capped at over_by), then
@@ -5736,6 +5738,14 @@ function xValuePanelHtml(d){
       h+=`<button class="${k===def?'primary':'ghost'}" data-xv="${k}">reveal ${k} → +${per*k} life${k===def?'  ·  AI':''}</button>`;
     return h+`</div>`;
   }
+  if (d.x_kind==='etb_destroy_k'){
+    let h=`<h3>${esc(d.source||'Terastodon')} — choose how many targets</h3>`;
+    h+=`<div class="sub">Destroy up to <b>${max}</b> noncreature permanents. You will choose each target on the board next. Its controller gets a 3/3 Elephant if it is destroyed.</div>`;
+    h+=`<div class="pbtns" style="margin-top:10px;flex-wrap:wrap"><span class="spacer"></span>`;
+    for (let k=0;k<=max;k++)
+      h+=`<button class="${k===def?'primary':'ghost'}" data-xv="${k}">${k} target${k===1?'':'s'}${k===def?'  ·  AI':''}</button>`;
+    return h+`</div>`;
+  }
   const opp = d.draw_target==='opponent';
   let h=`<h3>${esc(d.source||'X spell')} — choose X</h3>`;
   h+=`<div class="sub">${opp?'The <b>opponent</b> draws X cards':'<b>You</b> draw X cards'}. You can pay up to <b>X=${max}</b> right now`+
@@ -5756,6 +5766,7 @@ function xValuePanelHtml(d){
 }
 function commitXValue(d, n){
   if (d.x_kind==='reveal_gain'){ pushChoice(d, n, `${d.source}: reveal ${n} → gain ${(d.life_per_x|0)*n}`); return; }
+  if (d.x_kind==='etb_destroy_k'){ pushChoice(d, n, `${d.source}: target ${n} noncreature permanent${n===1?'':'s'}`); return; }
   pushChoice(d, n, `${d.source}: X=${n} → ${d.draw_target==='opponent'?'opponent':'you'} draw${d.draw_target==='opponent'?'s':''}`);
 }
 // Firebreathe amount modal (#4): a combat-phase decision (the viewer's first NON-main-phase breakpoint

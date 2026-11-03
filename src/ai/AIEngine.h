@@ -47,6 +47,10 @@ public:
     // compared at game end so it never fires on games that win on time via combat.
     void OnGameEnd(const GameState& state, int win_turn);
 
+    // Cast a selected instant tutor during upkeep, using the ordinary paid-spell path.
+    // The caller supplies the library target selected before the draw step.
+    bool CastUpkeepTutor(GameState& state, int hand_number, const std::string& target);
+
     // Echo upkeep resolution (CR 702.29) at TRUE upkeep timing -- called from
     // GameEngine::UpkeepTail BEFORE the draw step, mirroring the rollout's position in
     // SimulateEndAndStartNextTurn. Lives on AIEngine (not GameEngine) because paying the echo
