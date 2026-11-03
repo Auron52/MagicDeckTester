@@ -169,6 +169,30 @@ launch unless the user requests a restart.
   * If a session's harness blocks agents/workflows outright, say so explicitly and record the step
     as **UN-RUN** in the per-deck ledger — never as "deferred to the user", which reads as a
     sign-off the user never gave.
+  * **"Cost is not a concern" covers HOW MANY agents and WHICH model, never a bloated one** — see the
+    250K handoff rule below.
+
+- **A SUBAGENT OVER ~250K CONTEXT HANDS OFF TO A FRESH AGENT (user directive, 2026-11-03).** The user's
+  words: *"If the subagents go over 250K context you should ask them to handoff and create a new agent to
+  continue on the work. Somehow almost 50% of my weekly budget has been eaten today by poor agent usage..."*
+  and *"We should make that a rule included in the repository agent documentation so that agents do it
+  automatically."* Every turn of an agent re-reads its whole context, so a long-lived agent's cost grows
+  with the square of its length: a 400K agent idling through an hour of background-run notifications
+  burns budget while doing nothing. It was not one session's habit; when another session's agents were
+  given this same rule, *"the problems slowed down a lot."*
+  * **As a subagent:** when your context passes ~250K tokens, finish the current step (never leave a
+    build running unattended or a file half-edited), commit WIP if the tree is consistent, write a
+    handoff file (`logs/<work>/<name>-handoff.md`: what is done with commit hashes; what remains, in
+    order; every USER ruling you were given, VERBATIM, since a brief rarely holds them all; running jobs
+    with PIDs, output paths and DONE markers; measurements so far), then stop with a short report naming
+    that file.
+  * **As the parent:** put this rule in every brief you write, check the `subagent_tokens` figure in
+    each completion/interim notification, and when an agent passes ~250K ask it to hand off, then launch
+    a NEW agent from the handoff file. Do not keep resuming the old one.
+  * **Keep agents small in the first place:** one narrow, focused change set per agent; **batch** USER
+    rulings into one message instead of many small `SendMessage`s (each resumes the agent and grows its
+    context); wait on long runs with a `run_in_background` waiter on the PID or a DONE marker, never
+    repeated polling or "still waiting" turns; do a cheap check inline rather than spawning for it.
 
 - **NEVER BLOCK ON A QUESTION — SURFACE IT AND KEEP WORKING (user directive, 2026-08-31).**
   Asking is not the problem; **waiting for the answer is.** Raise the question in your message
