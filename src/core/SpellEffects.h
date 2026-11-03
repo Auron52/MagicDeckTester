@@ -1274,6 +1274,50 @@ inline void CreateClueTokens(GameState& state, int controller, int n);       // 
 constexpr int kEtbKxHeuristic = -2;
 extern thread_local int g_scripted_tutor_choice;   // defined below (ScriptedTutor)
 
+// TUTOR-PIN READ WITNESS (MTG_BP_TUTOR_PIN_ALIAS, src/ai/TurnSolver.cpp BpEnumEntryFor). Counts the reads
+// of g_scripted_tutor_choice that can observe ONE watched value: the value standing at ScriptedTutor
+// nesting depth `t_watch`. Every ScriptedTutor scope REPLACES the global for its lifetime (it installs its
+// plan's own pick, -1 included, and restores on exit), so a read made inside a deeper scope sees that
+// scope's value, never the watched one; a read at the watched depth sees the watched value. A breakpoint
+// derivation arms the witness for its own duration; zero reads proves the derived list is the same
+// function of the state for EVERY value of the pin (a deterministic computation that never reads a
+// variable cannot depend on it). Pure bookkeeping: nothing here changes what any read returns.
+namespace tutorpin
+{
+inline thread_local int       t_depth = 0;    // ScriptedTutor nesting depth on this thread
+inline thread_local int       t_watch = -1;   // depth whose pin value is watched (-1 = no witness armed)
+inline thread_local long long t_reads = 0;    // reads that could observe the watched value
+// A read of the pin itself at the current depth.
+inline void NoteRead() { if (t_watch >= 0 && t_depth == t_watch) { ++t_reads; } }
+// A read whose provenance cannot be tied to a depth (a pin value restored from a capture): conservatively
+// counted against any armed witness.
+inline void NoteAnyRead() { if (t_watch >= 0) { ++t_reads; } }
+// Arms the witness on the CURRENT depth for its lifetime (nestable). Close() returns this witness's
+// count and restores the enclosing one; a read counted here is also a read for an enclosing witness that
+// watches the same depth (it observed the same value), so it is handed up.
+struct Witness
+{
+    int       sv_watch;
+    long long sv_reads;
+    long long reads = 0;
+    bool      open = true;
+    Witness() : sv_watch(t_watch), sv_reads(t_reads) { t_watch = t_depth; t_reads = 0; }
+    long long Close()
+    {
+        if (!open) { return reads; }
+        open = false;
+        reads = t_reads;
+        const int mine = t_watch;
+        t_watch = sv_watch;
+        t_reads = sv_reads + (sv_watch == mine ? reads : 0);
+        return reads;
+    }
+    ~Witness() { if (open) { Close(); } }
+    Witness(const Witness&) = delete;
+    Witness& operator=(const Witness&) = delete;
+};
+}
+
 // "You MAY search" -- the DECLINE arm of the searched tutor axis (CardParams::tutor_optional).
 //
 // Deliberately a large POSITIVE sentinel rather than a negative one. Every fan-out and dedup site
@@ -3342,7 +3386,8 @@ inline void PerformTutorToBattlefield(GameState& state, int controller, const Ca
     // provider's deduped candidate list at the TRUE resolution state, clamped (duplicate, never
     // a whiff). Consumed only by a single-put card so the Dragonstorm multi-put path is untouched.
     bool pinned_single = false;
-    if (pp.tutor_to_battlefield_single && put_pref.empty() && g_scripted_tutor_choice >= 0)
+    if (pp.tutor_to_battlefield_single && put_pref.empty()
+        && (tutorpin::NoteRead(), g_scripted_tutor_choice >= 0))
     {
         pinned_single = true;
         const int pick = g_scripted_tutor_choice;
@@ -39414,8 +39459,8 @@ extern thread_local int g_scripted_tutor_choice;
 // script into the outer one).
 struct ScriptedTutor
 {
-    explicit ScriptedTutor(int k) : saved(g_scripted_tutor_choice) { g_scripted_tutor_choice = k; }
-    ~ScriptedTutor() { g_scripted_tutor_choice = saved; }
+    explicit ScriptedTutor(int k) : saved(g_scripted_tutor_choice) { g_scripted_tutor_choice = k; ++tutorpin::t_depth; }
+    ~ScriptedTutor() { g_scripted_tutor_choice = saved; --tutorpin::t_depth; }
     ScriptedTutor(const ScriptedTutor&) = delete;
     ScriptedTutor& operator=(const ScriptedTutor&) = delete;
     int saved;

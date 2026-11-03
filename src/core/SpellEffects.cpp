@@ -203,6 +203,7 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
     // Searched pick by INDEX (Plan::tutor_choice via ScriptedTutor, MTG_TUTOR_AXIS_RESOLVE=1).
     // Read-and-reset at entry so the FIRST tutor of the apply consumes it on every path (named
     // replay, whiff, scripted), mirroring g_scripted_etbdig_choice's consumed-once semantics.
+    tutorpin::NoteRead();   // MTG_BP_TUTOR_PIN_ALIAS's witness (core/SpellEffects.h)
     const int scripted_pick = g_scripted_tutor_choice;
     g_scripted_tutor_choice = -1;
     // THE ROUTE TAPE (core/RouteTape.h; MTG_AA_ROUTE_TAPE). RECORD: whatever this resolution fetches -- its

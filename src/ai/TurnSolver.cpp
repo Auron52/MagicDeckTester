@@ -5310,6 +5310,9 @@ struct BpEnumEntry
     // -- see BpEnumVerify). The field is written
     // unconditionally (one store, no branch) so the check can be flipped on without a second edit.
     std::uint64_t epoch = 0;
+    // MTG_BP_TUTOR_PIN_ALIAS: the derivation that built this list never read the searched tutor pin
+    // (core/SpellEffects.h tutorpin), so the list is valid under EVERY pin value -- see BpEnumEntryFor.
+    bool tutor_pin_unread = false;
     // MTG_BP_ENUM_LIBCHECK stamps (diagnostic; written only under the flag -- see bplibcheck):
     // the PHYSICAL library order (card numbers) and the NAME order the entry was derived under, and
     // the thread's game ordinal. The key folds the name order already (BuildSimKey's ordered
@@ -5455,6 +5458,34 @@ namespace bpcache
 {
 using Map = std::unordered_map<TranspositionTable::Key, BpEnumEntry, TranspositionTable::KeyHash>;
 inline thread_local Map t_plans;
+}
+// MTG_BP_TUTOR_PIN_ALIAS counters (see BpEnumEntryFor). Printed at exit under MTG_ROLLOUT_STATS /
+// MTG_BP_TUTOR_PIN_ALIAS_STATS / the verify flag; counting is a few relaxed adds per derivation.
+namespace tutorpinalias
+{
+inline bool On()       { static const bool v = EnvOn("MTG_BP_TUTOR_PIN_ALIAS", true); return v; }   // DEFAULT ON; =0 disables
+inline bool VerifyOn() { static const bool v = EnvOn("MTG_BP_TUTOR_PIN_ALIAS_VERIFY"); return v; }
+inline std::atomic<long long> g_hits{0}, g_alias_stores{0}, g_verified{0}, g_mismatch{0},
+                              g_deriv{0}, g_deriv_unread{0}, g_deriv_live{0}, g_deriv_live_unread{0};
+inline void NoteDerivation(bool unread, bool live)
+{
+    g_deriv.fetch_add(1, std::memory_order_relaxed);
+    if (unread) { g_deriv_unread.fetch_add(1, std::memory_order_relaxed); }
+    if (live) { g_deriv_live.fetch_add(1, std::memory_order_relaxed); if (unread) { g_deriv_live_unread.fetch_add(1, std::memory_order_relaxed); } }
+}
+struct Dump
+{
+    ~Dump()
+    {
+        static const bool on = EnvOn("MTG_ROLLOUT_STATS") || EnvOn("MTG_BP_TUTOR_PIN_ALIAS_STATS") || VerifyOn();
+        if (!on) { return; }
+        std::fprintf(stderr, "[bp-tutor-pin-alias] derivations=%lld unread=%lld | under a live pin=%lld unread=%lld"
+                     " | alias stores=%lld hits=%lld | verify checked=%lld MISMATCH=%lld\n",
+                     g_deriv.load(), g_deriv_unread.load(), g_deriv_live.load(), g_deriv_live_unread.load(),
+                     g_alias_stores.load(), g_hits.load(), g_verified.load(), g_mismatch.load());
+    }
+};
+inline Dump g_dump;
 }
 // THE CANON FRONT memo (see BpCanonFront): the FRONT entry of the continuation list at a key, derived
 // without the put-back clones the canon never reads. Same key, same epoch rule and the same per-game
@@ -50191,6 +50222,9 @@ static bool RestrictorPrePayable(const GameState& state, const std::vector<Actio
 // trap a Solve memo faces, and one shared key means one place to keep exact.
 static TranspositionTable::Key BuildBreakpointKey(const GameState& state, bool is_pre_combat,
                                                   bool cont_list = false);
+// Set only by TurnSolver::MidTurnStateKeyOfPayment: the key is being built for a payment-side memo, so the
+// tutor-pin witness does not count it (see BuildBreakpointKey).
+static thread_local bool t_bpkey_payment_key = false;
 
 // --- Greedy-Solve memo (MTG_SOLVE_MEMO, DEFAULT-ON 2026-08-19; =0 restores the old path) --------
 //
@@ -66145,6 +66179,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         g_scripted_saga_ch1      = bp_resume->pin_sagach1;
         g_scripted_etbdig_choice = bp_resume->pin_etbdig; // consumed pin stays consumed; the
         g_scripted_tutor_choice  = bp_resume->pin_tutor;  // entry guards' dtors still restore
+        if (bp_resume->pin_tutor >= 0) { tutorpin::NoteAnyRead(); }   // a captured pin re-installed: provenance unknown
         g_scripted_reorder_choice= bp_resume->pin_reorder;// the outer values on exit)
         g_scripted_putback_choice= bp_resume->pin_putback;
         g_scripted_sac_cursor    = bp_resume->pin_sac_cursor; // list already re-installed by _ssac
@@ -90163,6 +90198,14 @@ std::uint64_t TurnSolver::MidTurnStateKeyOf(const GameState& state)
     const TranspositionTable::Key k = BuildBreakpointKey(state, /*is_pre_combat=*/true);
     return k.h1 ^ (k.h2 * 0x9E3779B97F4A7C15ULL);
 }
+std::uint64_t TurnSolver::MidTurnStateKeyOfPayment(const GameState& state)
+{
+    const bool sv = t_bpkey_payment_key;
+    t_bpkey_payment_key = true;   // see BuildBreakpointKey's witness note
+    const TranspositionTable::Key k = BuildBreakpointKey(state, /*is_pre_combat=*/true);
+    t_bpkey_payment_key = sv;
+    return k.h1 ^ (k.h2 * 0x9E3779B97F4A7C15ULL);
+}
 
 std::vector<TurnSolver::Plan> TurnSolver::IdlePassWithAxes(const GameState& state)
 {
@@ -105232,6 +105275,12 @@ namespace solvekeycensus
 // on BuildSimKey alone silently changed Hinata's play; folding these three makes it exact.
 static TranspositionTable::Key BuildBreakpointKey(const GameState& state, bool is_pre_combat, bool cont_list)
 {
+    // MTG_BP_TUTOR_PIN_ALIAS's read witness (core/SpellEffects.h tutorpin): this key folds the searched
+    // tutor pin, so a memo keyed on it can serve an entry whose computation READ the pin. Counted as a read
+    // of the watched pin -- conservatively, for every key built at the watched depth -- so a breakpoint
+    // derivation that consults such a memo is never treated as pin-independent. Payment-side keys
+    // (MidTurnStateKeyOfPayment) are exempt: a payment never resolves a tutor.
+    if (!t_bpkey_payment_key) { tutorpin::NoteRead(); }
     TranspositionTable::Key k = BuildSimKey(state, 0, 0, is_pre_combat);
     // This memo returns index-encoded Plans (hand indices / battlefield positions), so under
     // MTG_CANON_SIMKEY a multiset hit could replay plans enumerated under a PERMUTED zone order --
@@ -108060,6 +108109,78 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
         }
     }
 
+    // THE TUTOR-PIN ALIAS (MTG_BP_TUTOR_PIN_ALIAS, DEFAULT ON; =0 keys every list on its live tutor pin as
+    // before). An IDENTITY FOLD, found on EldraziDisplacerFlicker seed 5826 gi821 (docs/design/
+    // edf-tutor-pin-alias-2026-11-03.md): a Living Wish plan's tutor-axis variants (Plan::tutor_choice
+    // 0..7, the eight sideboard names) all reach the SAME breakpoint state with their own pick still pinned
+    // (the Wish resolves after the draw), and BuildBreakpointKey folds the live pin, so each variant derived
+    // the identical 10,208-plan continuation list again -- 8 derivations of ~10 s each for one list, ~90% of
+    // a 237 s decision.
+    //
+    // SOUND BY A READ WITNESS, not by an argument about which code might look at the pin. The derivation is
+    // a deterministic function of (the key's other inputs, the pin); tutorpin (core/SpellEffects.h) counts
+    // every read that can observe the pin value standing at this depth -- the two resolutions that consume
+    // it (PerformTutor, the single-target put), every BuildBreakpointKey built at this depth (any memo keyed
+    // on it could serve an entry that read the pin) and a captured pin re-installed by a node resume. A
+    // read inside a nested apply sees that apply's own ScriptedTutor value, never this one. If the
+    // derivation finished with ZERO such reads, it ran identically to how it would run under any other pin
+    // value, so its list is stored under the key built with the pin cleared (-1) and flagged
+    // tutor_pin_unread; a later lookup under any pin first tries its exact key (as before), then this
+    // alias, and serves the alias only when the flag is set. A derivation that DID read the pin is stored
+    // under its exact key, exactly as before. Units: an alias hit is a cache hit (CacheHitCharge +
+    // BpSideReplay of the derivation's own recorded cost), as for an exact hit. Budget-independent: it
+    // applies at every budget and changes no list, only how often one is derived.
+    // MTG_BP_TUTOR_PIN_ALIAS_VERIFY=1 re-derives on every alias hit under the real pin and counts a list
+    // that differs (must be 0; printed at exit).
+    const bool s_pin_alias = tutorpinalias::On();
+    TranspositionTable::Key alias_key{};
+    bool alias_ok = false;
+    if (s_pin_alias && keyed && pre_key == nullptr && g_scripted_tutor_choice >= 0)
+    {
+        const int sv_pin = g_scripted_tutor_choice;
+        g_scripted_tutor_choice = -1;
+        alias_ok = BpEnumBuildKey(state, is_pre_combat, &alias_key);
+        g_scripted_tutor_choice = sv_pin;
+        if (alias_ok)
+        {
+            BpEnumMap::iterator at = cache.find(alias_key);
+            if (at != cache.end() && BpEnumEpochScoped() && at->second.epoch != g_decision_epoch) { at = cache.end(); }
+            if (at != cache.end() && at->second.tutor_pin_unread && CacheHitCharge(at->second.cost))
+            {
+                tutorpinalias::g_hits.fetch_add(1, std::memory_order_relaxed);
+                if (tutorpinalias::VerifyOn() && !t_bp_enum_verifying)
+                {
+                    t_bp_enum_verifying = true;
+                    BpChannels vch; vch.Save();
+                    const std::vector<TurnSolver::Plan> fresh =
+                        BpDeriveContinuationList(state, is_pre_combat, /*count_stats=*/false);
+                    vch.Restore();
+                    t_bp_enum_verifying = false;
+                    at = cache.find(alias_key);   // the re-derivation may have cleared the cache
+                    // A re-derivation cut by the per-game backstop (gamework::Abandoned: the wall cap) is not
+                    // a list, so it is not compared.
+                    if (at != cache.end() && !gamework::Abandoned())
+                    {
+                        const std::vector<TurnSolver::Plan> served = at->second.View().Materialised();
+                        bool same = served.size() == fresh.size();
+                        for (std::size_t i = 0; same && i < fresh.size(); ++i)
+                        { same = BpCandFingerprint(served[i]) == BpCandFingerprint(fresh[i]); }
+                        tutorpinalias::g_verified.fetch_add(1, std::memory_order_relaxed);
+                        if (!same) { tutorpinalias::g_mismatch.fetch_add(1, std::memory_order_relaxed); }
+                    }
+                }
+                if (at != cache.end())
+                {
+                    BpSideReplay(at->second.cost);
+                    PlanCacheNoteHit(plancache::kCatBp);
+                    return &at->second;
+                }
+            }
+        }
+    }
+    // The derivation's read witness (see the note above): armed for this derivation only.
+    tutorpin::Witness pin_witness;
+
     // THE SCRATCH ENTRY IS DEAD FROM HERE ON, SO FREE IT BEFORE DERIVING (memory only; 2026-10-20).
     // The lifetime contract (TurnSolver.h, EnumerateBreakpointPlansRef) ends a returned entry's life at
     // the next enumeration on this thread, and this IS the next enumeration. Until now the previous
@@ -108112,6 +108233,10 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
                                                                   /*front_only=*/false, &bp_interrupted,
                                                                   &plans_lz, &plans_ord);
     bp_chan.Restore();
+    // MTG_BP_TUTOR_PIN_ALIAS: did the derivation read the watched tutor pin? (Closed here, before the
+    // store path builds any diagnostic key.)
+    const bool pin_unread = pin_witness.Close() == 0;
+    tutorpinalias::NoteDerivation(pin_unread, g_scripted_tutor_choice >= 0);
     cachecharge::Cost bp_cost = bp_ccs.Done();
     bp_cost.ctx = bp_ctx;
     BpSideEnd(bp_side, bp_cost);
@@ -108169,6 +108294,87 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
                 static_cast<unsigned long long>(raw.h1), nr, cache.size(), s_bp_enum_cap,
                 plancache::PoolUsed().load(), plancache::BudgetBytes(),
                 static_cast<unsigned long long>(g_decision_epoch));
+            // MTG_BP_DERIVE_DUMP=1 (DIAGNOSTIC, print-only, with MTG_BP_DERIVE_SLOW_MS): the derivation's
+            // board in FULL identity detail (card numbers, tapped, sickness, attachments, the hand and the
+            // library top in order) plus a content hash of the derived list (signatures in order), so two
+            // visibly identical boards whose keys differ can be diffed field by field, and two derivations
+            // can be checked for having produced the SAME list.
+            static const bool s_dump = EnvOn("MTG_BP_DERIVE_DUMP");
+            if (s_dump)
+            {
+                std::string d;
+                for (const Permanent& p : state.battlefield)
+                {
+                    d += " " + p.card.m_name.str() + "#" + std::to_string(p.card.m_number)
+                       + (p.tapped ? "T" : "U") + (p.entered_this_turn ? "e" : "")
+                       + (p.aura_attached_to != 0 ? ">" + std::to_string(p.aura_attached_to) : "")
+                       + (p.counters.empty() ? "" : "c" + std::to_string(p.counters.size()));
+                }
+                d += " | hand:";
+                for (const Card& c : state.ActivePlayer().hand) { d += " " + std::to_string(c.m_number); }
+                d += " | lib" + std::to_string(state.ActivePlayer().library.size()) + ":";
+                {
+                    const auto& lib = state.ActivePlayer().library;
+                    for (std::size_t i = 0; i < lib.size() && i < 8; ++i) { d += " " + std::to_string(lib[i].m_number); }
+                }
+                d += " | gy" + std::to_string(state.ActivePlayer().graveyard.size())
+                   + " ex" + std::to_string(state.exile.size())
+                   + " life" + std::to_string(state.ActivePlayer().life) + "/" + std::to_string(state.players[1 - state.active_player_index].life)
+                   + " lp" + std::to_string(state.ActivePlayer().lands_played_this_turn) + " sc" + std::to_string(state.spells_cast_this_turn)
+                   + " en" + std::to_string(state.ActivePlayer().energy_counters);
+                for (int pi = 0; pi < static_cast<int>(state.players.size()); ++pi)
+                {
+                    const Player& pl = state.players[static_cast<std::size_t>(pi)];
+                    d += " P" + std::to_string(pi) + "[drawn" + std::to_string(pl.cards_drawn_this_turn)
+                       + " cyc" + std::to_string(pl.cards_cycled_or_discarded_this_turn)
+                       + " lg" + std::to_string(pl.life_gained_this_turn)
+                       + " sb" + std::to_string(pl.sideboard.size()) + " h" + std::to_string(pl.hand.size())
+                       + " lib" + std::to_string(pl.library.size()) + " gy0t" + std::to_string(pl.gy_size_at_turn_start)
+                       + " bld" + std::to_string(pl.bonus_land_drops_this_turn) + "]";
+                }
+                const ManaPool& fm = state.floating_mana;
+                d += " sc#" + std::to_string(state.search_count) + " fl{" + std::to_string(fm.white) + ","
+                   + std::to_string(fm.blue) + "," + std::to_string(fm.black) + "," + std::to_string(fm.red) + ","
+                   + std::to_string(fm.green) + "," + std::to_string(fm.colorless) + "," + std::to_string(fm.wild)
+                   + "," + std::to_string(fm.snow_units) + "} hf" + std::to_string(HasteFloatUnits(state))
+                   + " t" + std::to_string(state.turn_number) + " cr" + std::to_string(state.casts_remaining_this_turn)
+                   + " fca" + std::to_string(state.free_casts_available);
+                for (const Permanent& p : state.battlefield)
+                {
+                    if (p.damage != 0 || p.temp_power_bonus != 0 || p.temp_tough_bonus != 0 || p.AttacksThisTurn() != 0)
+                    { d += " #" + std::to_string(p.card.m_number) + "dmg" + std::to_string(p.damage) + "tp"
+                         + std::to_string(p.temp_power_bonus) + "at" + std::to_string(p.AttacksThisTurn()); }
+                }
+                { const TranspositionTable::Key sk = BuildSimKey(state, 0, 0, is_pre_combat);
+                  d += " simkey=" + std::to_string(sk.h1); }
+                d += " pins{top" + std::to_string(g_scripted_top_choice) + " etbdig" + std::to_string(g_scripted_etbdig_choice)
+                   + " saga" + std::to_string(g_scripted_saga_ch1) + " tut" + std::to_string(g_scripted_tutor_choice)
+                   + " reord" + std::to_string(g_scripted_reorder_choice) + " pb" + std::to_string(g_scripted_putback_choice)
+                   + " tap" + std::to_string(g_scripted_tapmode) + " fresh" + std::to_string(g_scripted_freshmode)
+                   + " sac" + std::to_string(g_scripted_sac_pins ? static_cast<int>(g_scripted_sac_pins->size()) : -1)
+                   + "@" + std::to_string(g_scripted_sac_cursor)
+                   + " ls" + std::to_string(g_scripted_land_search_pins ? static_cast<int>(g_scripted_land_search_pins->size()) : -1)
+                   + "@" + std::to_string(g_scripted_land_search_cursor)
+                   + " lt" + std::to_string(g_scripted_look_top_pins ? static_cast<int>(g_scripted_look_top_pins->size()) : -1)
+                   + " lf" + std::to_string(LandfallTargetPinFor(state))
+                   + " echo" + std::to_string(state.scripted_echo) + " m1h" + std::to_string(state.m1_hand_n)
+                   + " ord" + std::to_string(FsOrderSig(state)) + "}";
+                { const TranspositionTable::Key rk = BuildBreakpointKey(state, is_pre_combat, true);
+                  d += " bpkey=" + std::to_string(rk.h1); }
+                std::uint64_t lh = 1469598103934665603ull;
+                for (const TurnSolver::Plan& p : plans)
+                {
+                    for (const Action& a : p.actions)
+                    {
+                        lh = (lh ^ std::hash<std::string>{}(a.card_name.str())) * 1099511628211ull;
+                        lh = (lh ^ static_cast<std::uint64_t>(a.enchant_target + 7)) * 1099511628211ull;
+                        lh = (lh ^ static_cast<std::uint64_t>(a.chosen_x + 3)) * 1099511628211ull;
+                    }
+                    lh = (lh ^ std::hash<std::string>{}(p.land_to_play)) * 1099511628211ull;
+                    lh = (lh ^ 0x55ull) * 1099511628211ull;
+                }
+                std::fprintf(stderr, "[bp-derive-dump] list=%016llx bf:%s\n", static_cast<unsigned long long>(lh), d.c_str());
+            }
         }
     }
 
@@ -108286,6 +108492,7 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
             ent.plans   = std::move(plans);
             ent.demoted = std::move(demoted);
             ent.epoch = g_decision_epoch;   // stamped unconditionally; see BpEnumEpochScoped
+            ent.tutor_pin_unread = pin_unread;   // MTG_BP_TUTOR_PIN_ALIAS
             if (bpuse::On())
             {
                 ent.use_born     = static_cast<std::uint8_t>(bpuse::t_reason);
@@ -108353,7 +108560,11 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
             // it in place -- so the next decision would re-derive on every single lookup and never
             // refresh the stamp. That is the "no-power arm dressed as a working one" shape: the
             // flag would look enabled, cost wall, and never actually reseat the entry.
-            auto res = cache.insert_or_assign(key, std::move(ent));
+            // MTG_BP_TUTOR_PIN_ALIAS: a pin-independent list derived under a live pin is filed under the
+            // pin-cleared key, where every pin value's lookup finds it (see the alias note above).
+            const bool to_alias = alias_ok && pin_unread;
+            if (to_alias) { tutorpinalias::g_alias_stores.fetch_add(1, std::memory_order_relaxed); }
+            auto res = cache.insert_or_assign(to_alias ? alias_key : key, std::move(ent));
             return &res.first->second;
         }
     }
@@ -108442,7 +108653,22 @@ static bool BpCanonFront(const GameState& state, bool is_pre_combat, TurnSolver:
     const bool keyed = BpEnumBuildKey(state, is_pre_combat, &key);
     if (keyed)
     {
-        const auto it = bpcache::t_plans.find(key);
+        auto it = bpcache::t_plans.find(key);
+        // MTG_BP_TUTOR_PIN_ALIAS: a full list filed under the pin-cleared key (derived without reading the
+        // pin, so valid under this one) serves the canon exactly as an exact-key entry does.
+        if (it == bpcache::t_plans.end() && g_scripted_tutor_choice >= 0 && tutorpinalias::On())
+        {
+            TranspositionTable::Key ak;
+            const int sv_pin = g_scripted_tutor_choice;
+            g_scripted_tutor_choice = -1;
+            const bool aok = BpEnumBuildKey(state, is_pre_combat, &ak);
+            g_scripted_tutor_choice = sv_pin;
+            if (aok)
+            {
+                const auto at = bpcache::t_plans.find(ak);
+                if (at != bpcache::t_plans.end() && at->second.tutor_pin_unread) { it = at; }
+            }
+        }
         // MTG_CACHE_HIT_CHARGE: a full entry's derivation and the front-only one charge the same units
         // (they differ only in the put-back / Ponder / look-top clones, which no charging site builds),
         // so the full entry's cost is what the front-only recompute here would charge.

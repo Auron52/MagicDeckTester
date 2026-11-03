@@ -487,7 +487,7 @@ std::uint64_t CoreKey(const GameState& s, bool canonical = true)
     n.pay_ledger = PayRollbackLedger{};
     // Mid-plan (the frontier's Pareto prune) ids DO matter: a later action can name a permanent by
     // number (a sac source), so two states that differ only in which copy is where may not finish alike.
-    if (!canonical) { return TurnSolver::MidTurnStateKeyOf(n); }
+    if (!canonical) { return TurnSolver::MidTurnStateKeyOfPayment(n); }
     // AGE IS NOT IDENTITY for a land that can never be a creature (ResClassKey's rule, applied to the END board). The
     // frontier prune already folds "old copy tapped, new copy up" with "new copy tapped, old copy up" (the resources
     // forget a plain land's age, and mid-plan cores clear the tapped flags), so the end board must not tell them apart
@@ -559,7 +559,7 @@ std::uint64_t CoreKey(const GameState& s, bool canonical = true)
         std::stable_sort(pl.graveyard.begin(), pl.graveyard.end(), by_name);
     }
     std::stable_sort(n.exile.begin(), n.exile.end(), by_name);
-    return TurnSolver::MidTurnStateKeyOf(n);
+    return TurnSolver::MidTurnStateKeyOfPayment(n);
 }
 
 // What is attached to `p` (Auras, Equipment), sorted -- the part of a permanent's resource value ClassKey
@@ -1286,7 +1286,7 @@ struct PayEnum
         // One option per distinct RESULT: two set-asides the payment never touched are one payment. The
         // engine's key does not say which copy of identical permanents is tapped, so a plan source's tapped
         // flag is folded in (see t_plan_srcs): tapping it is not the same result as tapping its twin.
-        std::uint64_t rkey = TurnSolver::MidTurnStateKeyOf(sc);
+        std::uint64_t rkey = TurnSolver::MidTurnStateKeyOfPayment(sc);
         if (t_plan_srcs != nullptr && !t_plan_srcs->empty())
         {
             for (const Permanent& p : sc.battlefield)
@@ -1520,7 +1520,7 @@ std::vector<PayOption> TapAheadOptions(const GameState& state, int count, bool l
         srcs.erase(std::remove_if(srcs.begin(), srcs.end(), [](const SrcClass& c) { return !c.land; }), srcs.end());
     }
     std::unordered_set<std::uint64_t> seen;
-    seen.insert(TurnSolver::MidTurnStateKeyOf(state));
+    seen.insert(TurnSolver::MidTurnStateKeyOfPayment(state));
     const std::size_t cap = 512;
     std::vector<Pick> cur;
     bool capped = false;
@@ -1542,7 +1542,7 @@ std::vector<PayOption> TapAheadOptions(const GameState& state, int count, bool l
             }
             for (const TurnSolver::PreTap& t : fed) { o.taps.push_back(t); }
             GameState sc = state;
-            if (PerformTaps(sc, o) && seen.insert(TurnSolver::MidTurnStateKeyOf(sc)).second) { out.push_back(o); }
+            if (PerformTaps(sc, o) && seen.insert(TurnSolver::MidTurnStateKeyOfPayment(sc)).second) { out.push_back(o); }
         }
         if (left <= 0) { return; }
         for (std::size_t c = ci; c < srcs.size(); ++c)
@@ -1915,7 +1915,7 @@ bool RefinePayment(const GameState& pre, const GameState& post, const ManaCost& 
     if (!PayRefineMemoOn() || t_plan_srcs != nullptr)
     { return RefinePaymentImpl(pre, post, cost, for_creature, creature_ability, useful, no_trade, out); }
     RefineKey k;
-    k.board    = TurnSolver::MidTurnStateKeyOf(pre);
+    k.board    = TurnSolver::MidTurnStateKeyOfPayment(pre);
     k.pay_pre  = PayFieldsDigest(pre);
     k.pay_post = PayFieldsDigest(post);
     k.payer    = PayContextDigest();

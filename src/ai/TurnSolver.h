@@ -2465,6 +2465,10 @@ public:
     // hand-rolled partial key let two boards that differ in a field it skipped (a land Aura's locked
     // colour, a pump until end of turn) share one verdict.
     static std::uint64_t     MidTurnStateKeyOf(const GameState& state);
+    // The same key for a PAYMENT-side memo / dedupe (the mana oracle): not counted by the tutor-pin read
+    // witness (MTG_BP_TUTOR_PIN_ALIAS), because a payment never resolves a spell and so no entry it keys
+    // can carry a dependence on the searched tutor pin. Same value as MidTurnStateKeyOf.
+    static std::uint64_t     MidTurnStateKeyOfPayment(const GameState& state);
     // The PASS a PRE-combat search host appends when a main enumerates nothing (FSLineWin's idle node:
     // land decided), routed through the post-dedup sub-decision fan-out like an enumerated plan
     // (AppendIdlePassAxes: the no-dig twin AND every pin it carries into this turn's combat and beyond).
