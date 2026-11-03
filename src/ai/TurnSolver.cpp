@@ -5321,6 +5321,9 @@ struct BpEnumEntry
     std::uint8_t use_born = 0;
     std::uint8_t use_branched = 0;
     std::string dbg;   // MTG_PLAN_CACHE_COST_VERIFY + MTG_BP_ENUM_VERIFY: the state fingerprint it was derived on
+    // MTG_BP_VERIFY_STATE_SWAP (diagnostic, default off): a copy of the state the entry was derived on, so a
+    // CONTENT-DIFF can re-derive on it at the hit and tell a state field the key misses from a global input.
+    std::shared_ptr<const GameState> dbg_state;
 };
 // MTG_BP_USE_CENSUS (DIAGNOSTIC, print-only, default OFF): breakpoint continuation-list USE. Each
 // BpEnumEntryFor lookup is tagged with its consumer (t_reason, bound by the call sites) and counted as a
@@ -86672,6 +86675,11 @@ static bool PlanCacheRouteKeyOn()
     static const bool v = EnvOn("MTG_PLAN_CACHE_ROUTE_KEY", true);
     return v;
 }
+static bool PlanCacheTraitsKeyOn()
+{
+    static const bool v = EnvOn("MTG_PLAN_CACHE_TRAITS_KEY", true);
+    return v;
+}
 static void FoldPhysicalCards(TranspositionTable::Key& k, const GameState& state)
 {
     if (!PlanCacheExactKeyOn()) { return; }
@@ -86693,7 +86701,57 @@ static void FoldPhysicalCards(TranspositionTable::Key& k, const GameState& state
         mix(static_cast<std::uint64_t>(p.library.KnownTopMask()));
     }
     mix(0x11B3);
-    for (const Permanent& pm : state.battlefield) { mix(static_cast<std::uint64_t>(pm.card.m_number)); }
+    // ...each with ITS OWN state (MTG_PLAN_CACHE_PERM_KEY, default ON; =0 restores the numbers-only fold). The
+    // base key folds the battlefield as a sorted multiset of per-permanent sub-keys without the copy number
+    // (CanonSimKeyOn), so two boards that differ only in WHICH copy of a name carries a state -- Carrion Feeder
+    // #16 with a +1/+1 counter and #17 without, or the reverse -- shared an entry, and a list naming its
+    // activation source by number was served to the mirror board. Found by MTG_BP_ENUM_VERIFY on Melira Pod
+    // seed 3016 gi13 d5 b120 (FP-DIFF: the counter on #16 at the store, on #17 at the hit). Every field of
+    // the permanent is folded, not only the ones the base key reads: the key must cover what the
+    // DERIVATION reads, and a field folded needlessly costs sharing only, never soundness.
+    static const bool s_perm = EnvOn("MTG_PLAN_CACHE_PERM_KEY", true);
+    for (const Permanent& pm : state.battlefield)
+    {
+        mix(static_cast<std::uint64_t>(pm.card.m_number));
+        if (!s_perm) { continue; }
+        mix(static_cast<std::uint64_t>(pm.card.m_name_hash));
+        mix(static_cast<std::uint64_t>(static_cast<std::int64_t>(pm.card.m_power.value_or(-999)))
+            ^ (static_cast<std::uint64_t>(static_cast<std::int64_t>(pm.card.m_toughness.value_or(-999))) << 20));
+        mix(static_cast<std::uint64_t>(pm.controller_index) | (static_cast<std::uint64_t>(pm.owner_index) << 4)
+            | (static_cast<std::uint64_t>(pm.tapped) << 8) | (static_cast<std::uint64_t>(pm.def_absent) << 9)
+            | (static_cast<std::uint64_t>(pm.is_token) << 10) | (static_cast<std::uint64_t>(pm.entered_this_turn) << 11)
+            | (static_cast<std::uint64_t>(pm.fresh_hold_exempt) << 12) | (static_cast<std::uint64_t>(pm.gained_control_this_turn) << 13)
+            | (static_cast<std::uint64_t>(pm.marked_for_destruction) << 14) | (static_cast<std::uint64_t>(pm.is_animated) << 15)
+            | (static_cast<std::uint64_t>(pm.animated_printed_types) << 16) | (static_cast<std::uint64_t>(pm.temp_haste) << 17)
+            | (static_cast<std::uint64_t>(pm.temp_lifelink) << 18) | (static_cast<std::uint64_t>(pm.temp_double_strike) << 19)
+            | (static_cast<std::uint64_t>(pm.skip_next_untap) << 20) | (static_cast<std::uint64_t>(pm.etb_tap_pending) << 21)
+            | (static_cast<std::uint64_t>(pm.exile_at_end) << 22) | (static_cast<std::uint64_t>(pm.pay_sac_eaten) << 23)
+            | (static_cast<std::uint64_t>(pm.echo_resolved) << 24) | (static_cast<std::uint64_t>(pm.storage_hold_this_turn) << 25)
+            | (static_cast<std::uint64_t>(pm.loyalty_activated_this_turn) << 26)
+            | (static_cast<std::uint64_t>(pm.colored_cast_lifegain_used_this_turn) << 27)
+            | (static_cast<std::uint64_t>(pm.storied_draw_used_this_turn) << 28) | (static_cast<std::uint64_t>(pm.once_per_turn_used) << 29)
+            | (static_cast<std::uint64_t>(pm.landfall_resolved_once) << 30) | (static_cast<std::uint64_t>(pm.landfall_resolved_twice) << 31)
+            | (static_cast<std::uint64_t>(pm.attacks_b0) << 32) | (static_cast<std::uint64_t>(pm.attacks_b1) << 33)
+            | (static_cast<std::uint64_t>(pm.attacks_b2) << 34) | (static_cast<std::uint64_t>(pm.cond_haste) << 35)
+            | (static_cast<std::uint64_t>(pm.sac_at_end_step) << 36)
+            | (static_cast<std::uint64_t>(pm.lifegain_counters_used_this_turn) << 37)
+            | (static_cast<std::uint64_t>(pm.mana_tap_mark) << 40));
+        mix(static_cast<std::uint64_t>(static_cast<std::uint8_t>(pm.chosen_color)) | (static_cast<std::uint64_t>(pm.garth_chosen_mask) << 8)
+            | (static_cast<std::uint64_t>(pm.chosen_keyword_mask) << 16) | (static_cast<std::uint64_t>(pm.chosen_subtype_id) << 24));
+        mix(static_cast<std::uint64_t>(pm.paired_with));
+        mix(static_cast<std::uint64_t>(pm.damage));
+        mix(static_cast<std::uint64_t>(pm.temp_power_bonus) ^ (static_cast<std::uint64_t>(pm.temp_tough_bonus) << 32));
+        mix(static_cast<std::uint64_t>(pm.equipped_to));
+        mix(static_cast<std::uint64_t>(pm.aura_attached_to));
+        mix(0xC0C0 + pm.counters.size());
+        for (const Counter& c : pm.counters) { mix(static_cast<std::uint64_t>(c.type) ^ (static_cast<std::uint64_t>(c.count) << 8)); }
+        const int extra[] = { pm.pending_death_trigger, pm.charge_counters, pm.verse_counters, pm.lore_counters,
+                              pm.storage_counters, pm.loyalty, pm.ice_counters, pm.age_counters, pm.spore_counters,
+                              pm.fade_counters, pm.created_by_number, pm.quest_counters, pm.hone_counters,
+                              pm.linked_exile_number };
+        for (int v : extra) { mix(static_cast<std::uint64_t>(static_cast<std::uint32_t>(v))); }
+        if (!pm.copy_printed_name.empty()) { mix(std::hash<std::string>{}(pm.copy_printed_name.str())); }
+    }
     mix(0x11B4);
     for (const Card& c : state.exile) { mix(static_cast<std::uint64_t>(c.m_number)); }
     // ...and WHICH copies were in hand as main 1 began (GameState::HeldSinceMain1, a per-card-NUMBER mask):
@@ -86703,6 +86761,37 @@ static void FoldPhysicalCards(TranspositionTable::Key& k, const GameState& state
     // land-drop half, FP-equal state), present at 330cc85bf too. BuildSimKey never folded the mask.
     if (state.m1start_hand_turn == state.TurnSeq())
     { mix(0x11B5); mix(state.m1start_hand_mask[0]); mix(state.m1start_hand_mask[1]); }
+    // ...and the GameState SCALARS a same-turn derivation can read that the base key does not fold
+    // (MTG_PLAN_CACHE_SCALAR_KEY, default ON; =0 restores the pre-fix key): every SCRIPTED choice the
+    // search pins on the state for a later resolution to read, the turn-scoped counters and markers, and
+    // the live m1 order-condemnation stamp (BuildSimKeyBase leaves m1_hand out on the stated condition that
+    // no SAME-TURN memo exists -- these caches are exactly that). Found by MTG_BP_VERIFY_STATE_SWAP on
+    // Bruna seed 3137 gi134 d5 b20: the bp entry was derived with scripted_combat_aura_swap=-1 and served at
+    // a state holding 1, whose fresh derivation drops {Eldrazi Conscription}; 23772 vs 24725 units against
+    // MTG_PLAN_CACHE_KB=1.
+    static const bool s_scalar = EnvOn("MTG_PLAN_CACHE_SCALAR_KEY", true);
+    if (s_scalar)
+    {
+        mix(0x11B9);
+        const std::int64_t sc[] = {
+            state.scripted_doth_put, state.scripted_combat_landfall_target, state.scripted_combat_transform,
+            state.scripted_fb_hold, state.scripted_echo, state.scripted_cheat_choice, state.scripted_fling_victim,
+            state.scripted_tectonic_mode, state.scripted_tectonic_keep, state.scripted_bruna_gather,
+            state.scripted_combat_aura_swap, state.scripted_combat_aura_swap_in, state.scripted_discard_choice,
+            state.scripted_vial_charge, state.scripted_saga_target, state.scripted_attack_land_search,
+            state.scripted_upkeep_land_search, state.scripted_combat_land_search_crack, state.scripted_attack_attach,
+            state.scripted_grace_choice, state.scripted_upkeep_gy_reanimate,
+            state.casts_remaining_this_turn, state.free_casts_available, state.hand_size_at_combat,
+            state.battlefield_at_combat, state.dep_enabler_main1 ? 1 : 0, state.dep_castpayoff_main1 ? 1 : 0,
+            state.top_stacked_turn, state.top_stacked_card_number, state.floating_haste_c, state.draw_trigger_mark };
+        for (std::int64_t v : sc) { mix(static_cast<std::uint64_t>(v)); }
+        if (state.m1_hand_turn == state.TurnSeq())
+        {
+            mix(0x11BA + static_cast<std::uint64_t>(state.m1_hand_n));
+            for (std::uint8_t i = 0; i < state.m1_hand_n && i < state.m1_hand.size(); ++i)
+            { mix(static_cast<std::uint64_t>(state.m1_hand[i])); }
+        }
+    }
     // ...and the SEARCH CONTEXT a provider sub-search reads to decide whether (and how) it runs: beyond the
     // horizon or in the depth-0 runner (the capped regimes), a decision root open, a finite budget to
     // charge (the equip-route DFS's RunSearch regime ladder). Found on KittyEquipment seed 1015 gi14 d5: a
@@ -86723,6 +86812,16 @@ static void FoldPhysicalCards(TranspositionTable::Key& k, const GameState& state
         // MTG_PLAN_CACHE_ROUTE_KEY=0 restores the pre-fix key (A/B control).
         | (PlanCacheRouteKeyOn() ? ((EquipRouteInProgress() ? 128u : 0u) | (EquipRouteDfsActive() ? 256u : 0u)
                                     | (AlchemistComboRouteInProgress() ? 512u : 0u)) : 0u));
+    // ...and THE ENCLOSING PLAN APPLY'S TRAITS (CurrentPlanTraits, by CONTENT -- PlanTraitsContentHash). A
+    // breakpoint fires mid-apply, so its continuation derivation (and any enumeration reached under an apply)
+    // runs with the applying plan's traits installed, and the payability probes read them through the payment
+    // holds (ActLineHoldMask / LineColorlessHoldMask: sources held back for the plan's own trailing
+    // activations). The same board under two different applying plans therefore derives different lists.
+    // Found by MTG_BP_VERIFY_WATCH on EldraziDisplacerFlicker seed 2070 gi68 d5 b20: the entry stored under
+    // one plan's traits listed {Overgrowth, Overgrowth, Cloud of Faeries}; re-derived on the STORED state at
+    // the next lookup, with no traits installed, it did not -- 36 CONTENT-DIFFs and 5557 vs 6719 units
+    // against MTG_PLAN_CACHE_KB=1. MTG_PLAN_CACHE_TRAITS_KEY=0 restores the pre-fix key (A/B control).
+    if (PlanCacheTraitsKeyOn()) { mix(0x11B8); mix(CurrentPlanTraitsHash()); }
     // An unarmed list cannot skip armed meter-only work or a weighted greedy walk.
     Fold(k, 0x9417C0);
     Fold(k, h);
@@ -107384,9 +107483,278 @@ static void BpSideReplay(const cachecharge::Cost& c)
     g_fs_trunc_events += c.trunc;
     budgetbind::t_binds += c.binds;
 }
+// MTG_BP_VERIFY_STATE_SWAP (diagnostic): at a CONTENT-DIFF, re-derive on the STORED state now. Same size as
+// the served list => the state differs in a field the key misses; same size as the fresh list => a global
+// input changed. Then graft store-state pieces onto a copy of the hit state to name the piece.
+static void BpVerifyStateSwap(const GameState& stored, const GameState& now, bool is_pre_combat,
+                              std::size_t served_n, std::size_t fresh_n)
+{
+    auto derive_n = [&](const GameState& s)
+    {
+        BpChannels ch; ch.Save();
+        const std::size_t n = BpDeriveContinuationList(s, is_pre_combat, /*count_stats=*/false).size();
+        ch.Restore();
+        return n;
+    };
+    const std::size_t on_stored = derive_n(stored);
+    const std::size_t on_now    = derive_n(now);
+    std::fprintf(stderr, "[bp-state-swap] served=%zu fresh=%zu | rederive(stored state)=%zu rederive(hit state)=%zu\n",
+                 served_n, fresh_n, on_stored, on_now);
+    if (on_stored == on_now) { return; }
+    {
+        std::string d;
+    if (stored.active_player_index != now.active_player_index) { d += " active_player_index=" + std::to_string(static_cast<long long>(stored.active_player_index)) + "/" + std::to_string(static_cast<long long>(now.active_player_index)); }
+    if (stored.battlefield_at_combat != now.battlefield_at_combat) { d += " battlefield_at_combat=" + std::to_string(static_cast<long long>(stored.battlefield_at_combat)) + "/" + std::to_string(static_cast<long long>(now.battlefield_at_combat)); }
+    if (stored.casts_remaining_this_turn != now.casts_remaining_this_turn) { d += " casts_remaining_this_turn=" + std::to_string(static_cast<long long>(stored.casts_remaining_this_turn)) + "/" + std::to_string(static_cast<long long>(now.casts_remaining_this_turn)); }
+    if (stored.combat_hand_turn != now.combat_hand_turn) { d += " combat_hand_turn=" + std::to_string(static_cast<long long>(stored.combat_hand_turn)) + "/" + std::to_string(static_cast<long long>(now.combat_hand_turn)); }
+    if (stored.consecutive_passes != now.consecutive_passes) { d += " consecutive_passes=" + std::to_string(static_cast<long long>(stored.consecutive_passes)) + "/" + std::to_string(static_cast<long long>(now.consecutive_passes)); }
+    if (stored.day_night != now.day_night) { d += " day_night=" + std::to_string(static_cast<long long>(stored.day_night)) + "/" + std::to_string(static_cast<long long>(now.day_night)); }
+    if (stored.deck_creature_pip_colors != now.deck_creature_pip_colors) { d += " deck_creature_pip_colors=" + std::to_string(static_cast<long long>(stored.deck_creature_pip_colors)) + "/" + std::to_string(static_cast<long long>(now.deck_creature_pip_colors)); }
+    if (stored.deck_endstep_lifegain_max_threshold != now.deck_endstep_lifegain_max_threshold) { d += " deck_endstep_lifegain_max_threshold=" + std::to_string(static_cast<long long>(stored.deck_endstep_lifegain_max_threshold)) + "/" + std::to_string(static_cast<long long>(now.deck_endstep_lifegain_max_threshold)); }
+    if (stored.deck_feeds_combat != now.deck_feeds_combat) { d += " deck_feeds_combat=" + std::to_string(static_cast<long long>(stored.deck_feeds_combat)) + "/" + std::to_string(static_cast<long long>(now.deck_feeds_combat)); }
+    if (stored.deck_gy_readers != now.deck_gy_readers) { d += " deck_gy_readers=" + std::to_string(static_cast<long long>(stored.deck_gy_readers)) + "/" + std::to_string(static_cast<long long>(now.deck_gy_readers)); }
+    if (stored.deck_has_annihilator != now.deck_has_annihilator) { d += " deck_has_annihilator=" + std::to_string(static_cast<long long>(stored.deck_has_annihilator)) + "/" + std::to_string(static_cast<long long>(now.deck_has_annihilator)); }
+    if (stored.deck_has_ascend != now.deck_has_ascend) { d += " deck_has_ascend=" + std::to_string(static_cast<long long>(stored.deck_has_ascend)) + "/" + std::to_string(static_cast<long long>(now.deck_has_ascend)); }
+    if (stored.deck_has_attack_attach != now.deck_has_attack_attach) { d += " deck_has_attack_attach=" + std::to_string(static_cast<long long>(stored.deck_has_attack_attach)) + "/" + std::to_string(static_cast<long long>(now.deck_has_attack_attach)); }
+    if (stored.deck_has_attack_dig_hand != now.deck_has_attack_dig_hand) { d += " deck_has_attack_dig_hand=" + std::to_string(static_cast<long long>(stored.deck_has_attack_dig_hand)) + "/" + std::to_string(static_cast<long long>(now.deck_has_attack_dig_hand)); }
+    if (stored.deck_has_attack_modal != now.deck_has_attack_modal) { d += " deck_has_attack_modal=" + std::to_string(static_cast<long long>(stored.deck_has_attack_modal)) + "/" + std::to_string(static_cast<long long>(now.deck_has_attack_modal)); }
+    if (stored.deck_has_attack_threshold != now.deck_has_attack_threshold) { d += " deck_has_attack_threshold=" + std::to_string(static_cast<long long>(stored.deck_has_attack_threshold)) + "/" + std::to_string(static_cast<long long>(now.deck_has_attack_threshold)); }
+    if (stored.deck_has_attack_untap != now.deck_has_attack_untap) { d += " deck_has_attack_untap=" + std::to_string(static_cast<long long>(stored.deck_has_attack_untap)) + "/" + std::to_string(static_cast<long long>(now.deck_has_attack_untap)); }
+    if (stored.deck_has_cast_target_trigger != now.deck_has_cast_target_trigger) { d += " deck_has_cast_target_trigger=" + std::to_string(static_cast<long long>(stored.deck_has_cast_target_trigger)) + "/" + std::to_string(static_cast<long long>(now.deck_has_cast_target_trigger)); }
+    if (stored.deck_has_combat_put != now.deck_has_combat_put) { d += " deck_has_combat_put=" + std::to_string(static_cast<long long>(stored.deck_has_combat_put)) + "/" + std::to_string(static_cast<long long>(now.deck_has_combat_put)); }
+    if (stored.deck_has_cond_haste != now.deck_has_cond_haste) { d += " deck_has_cond_haste=" + std::to_string(static_cast<long long>(stored.deck_has_cond_haste)) + "/" + std::to_string(static_cast<long long>(now.deck_has_cond_haste)); }
+    if (stored.deck_has_cost_reducer != now.deck_has_cost_reducer) { d += " deck_has_cost_reducer=" + std::to_string(static_cast<long long>(stored.deck_has_cost_reducer)) + "/" + std::to_string(static_cast<long long>(now.deck_has_cost_reducer)); }
+    if (stored.deck_has_counter_doubler != now.deck_has_counter_doubler) { d += " deck_has_counter_doubler=" + std::to_string(static_cast<long long>(stored.deck_has_counter_doubler)) + "/" + std::to_string(static_cast<long long>(now.deck_has_counter_doubler)); }
+    if (stored.deck_has_counter_ping != now.deck_has_counter_ping) { d += " deck_has_counter_ping=" + std::to_string(static_cast<long long>(stored.deck_has_counter_ping)) + "/" + std::to_string(static_cast<long long>(now.deck_has_counter_ping)); }
+    if (stored.deck_has_creature_enter_watcher != now.deck_has_creature_enter_watcher) { d += " deck_has_creature_enter_watcher=" + std::to_string(static_cast<long long>(stored.deck_has_creature_enter_watcher)) + "/" + std::to_string(static_cast<long long>(now.deck_has_creature_enter_watcher)); }
+    if (stored.deck_has_cycle_draw_replacement != now.deck_has_cycle_draw_replacement) { d += " deck_has_cycle_draw_replacement=" + std::to_string(static_cast<long long>(stored.deck_has_cycle_draw_replacement)) + "/" + std::to_string(static_cast<long long>(now.deck_has_cycle_draw_replacement)); }
+    if (stored.deck_has_devotion_creature != now.deck_has_devotion_creature) { d += " deck_has_devotion_creature=" + std::to_string(static_cast<long long>(stored.deck_has_devotion_creature)) + "/" + std::to_string(static_cast<long long>(now.deck_has_devotion_creature)); }
+    if (stored.deck_has_discard_land_damage != now.deck_has_discard_land_damage) { d += " deck_has_discard_land_damage=" + std::to_string(static_cast<long long>(stored.deck_has_discard_land_damage)) + "/" + std::to_string(static_cast<long long>(now.deck_has_discard_land_damage)); }
+    if (stored.deck_has_discard_scry_watcher != now.deck_has_discard_scry_watcher) { d += " deck_has_discard_scry_watcher=" + std::to_string(static_cast<long long>(stored.deck_has_discard_scry_watcher)) + "/" + std::to_string(static_cast<long long>(now.deck_has_discard_scry_watcher)); }
+    if (stored.deck_has_dragon_ping != now.deck_has_dragon_ping) { d += " deck_has_dragon_ping=" + std::to_string(static_cast<long long>(stored.deck_has_dragon_ping)) + "/" + std::to_string(static_cast<long long>(now.deck_has_dragon_ping)); }
+    if (stored.deck_has_draw_ping != now.deck_has_draw_ping) { d += " deck_has_draw_ping=" + std::to_string(static_cast<long long>(stored.deck_has_draw_ping)) + "/" + std::to_string(static_cast<long long>(now.deck_has_draw_ping)); }
+    if (stored.deck_has_echo != now.deck_has_echo) { d += " deck_has_echo=" + std::to_string(static_cast<long long>(stored.deck_has_echo)) + "/" + std::to_string(static_cast<long long>(now.deck_has_echo)); }
+    if (stored.deck_has_endstep_reanimate != now.deck_has_endstep_reanimate) { d += " deck_has_endstep_reanimate=" + std::to_string(static_cast<long long>(stored.deck_has_endstep_reanimate)) + "/" + std::to_string(static_cast<long long>(now.deck_has_endstep_reanimate)); }
+    if (stored.deck_has_equip_ds_grant != now.deck_has_equip_ds_grant) { d += " deck_has_equip_ds_grant=" + std::to_string(static_cast<long long>(stored.deck_has_equip_ds_grant)) + "/" + std::to_string(static_cast<long long>(now.deck_has_equip_ds_grant)); }
+    if (stored.deck_has_equip_mana_grant != now.deck_has_equip_mana_grant) { d += " deck_has_equip_mana_grant=" + std::to_string(static_cast<long long>(stored.deck_has_equip_mana_grant)) + "/" + std::to_string(static_cast<long long>(now.deck_has_equip_mana_grant)); }
+    if (stored.deck_has_etb_counter_payer != now.deck_has_etb_counter_payer) { d += " deck_has_etb_counter_payer=" + std::to_string(static_cast<long long>(stored.deck_has_etb_counter_payer)) + "/" + std::to_string(static_cast<long long>(now.deck_has_etb_counter_payer)); }
+    if (stored.deck_has_extra_combat != now.deck_has_extra_combat) { d += " deck_has_extra_combat=" + std::to_string(static_cast<long long>(stored.deck_has_extra_combat)) + "/" + std::to_string(static_cast<long long>(now.deck_has_extra_combat)); }
+    if (stored.deck_has_extra_turn != now.deck_has_extra_turn) { d += " deck_has_extra_turn=" + std::to_string(static_cast<long long>(stored.deck_has_extra_turn)) + "/" + std::to_string(static_cast<long long>(now.deck_has_extra_turn)); }
+    if (stored.deck_has_first_equip_waiver != now.deck_has_first_equip_waiver) { d += " deck_has_first_equip_waiver=" + std::to_string(static_cast<long long>(stored.deck_has_first_equip_waiver)) + "/" + std::to_string(static_cast<long long>(now.deck_has_first_equip_waiver)); }
+    if (stored.deck_has_gy_equipment_return != now.deck_has_gy_equipment_return) { d += " deck_has_gy_equipment_return=" + std::to_string(static_cast<long long>(stored.deck_has_gy_equipment_return)) + "/" + std::to_string(static_cast<long long>(now.deck_has_gy_equipment_return)); }
+    if (stored.deck_has_gy_shuffle != now.deck_has_gy_shuffle) { d += " deck_has_gy_shuffle=" + std::to_string(static_cast<long long>(stored.deck_has_gy_shuffle)) + "/" + std::to_string(static_cast<long long>(now.deck_has_gy_shuffle)); }
+    if (stored.deck_has_land_aura != now.deck_has_land_aura) { d += " deck_has_land_aura=" + std::to_string(static_cast<long long>(stored.deck_has_land_aura)) + "/" + std::to_string(static_cast<long long>(now.deck_has_land_aura)); }
+    if (stored.deck_has_land_search != now.deck_has_land_search) { d += " deck_has_land_search=" + std::to_string(static_cast<long long>(stored.deck_has_land_search)) + "/" + std::to_string(static_cast<long long>(now.deck_has_land_search)); }
+    if (stored.deck_has_landfall != now.deck_has_landfall) { d += " deck_has_landfall=" + std::to_string(static_cast<long long>(stored.deck_has_landfall)) + "/" + std::to_string(static_cast<long long>(now.deck_has_landfall)); }
+    if (stored.deck_has_look_top_watcher != now.deck_has_look_top_watcher) { d += " deck_has_look_top_watcher=" + std::to_string(static_cast<long long>(stored.deck_has_look_top_watcher)) + "/" + std::to_string(static_cast<long long>(now.deck_has_look_top_watcher)); }
+    if (stored.deck_has_madness != now.deck_has_madness) { d += " deck_has_madness=" + std::to_string(static_cast<long long>(stored.deck_has_madness)) + "/" + std::to_string(static_cast<long long>(now.deck_has_madness)); }
+    if (stored.deck_has_mana_grant != now.deck_has_mana_grant) { d += " deck_has_mana_grant=" + std::to_string(static_cast<long long>(stored.deck_has_mana_grant)) + "/" + std::to_string(static_cast<long long>(now.deck_has_mana_grant)); }
+    if (stored.deck_has_mana_untapper != now.deck_has_mana_untapper) { d += " deck_has_mana_untapper=" + std::to_string(static_cast<long long>(stored.deck_has_mana_untapper)) + "/" + std::to_string(static_cast<long long>(now.deck_has_mana_untapper)); }
+    if (stored.deck_has_other_subtype_enter_draw != now.deck_has_other_subtype_enter_draw) { d += " deck_has_other_subtype_enter_draw=" + std::to_string(static_cast<long long>(stored.deck_has_other_subtype_enter_draw)) + "/" + std::to_string(static_cast<long long>(now.deck_has_other_subtype_enter_draw)); }
+    if (stored.deck_has_reconfigure != now.deck_has_reconfigure) { d += " deck_has_reconfigure=" + std::to_string(static_cast<long long>(stored.deck_has_reconfigure)) + "/" + std::to_string(static_cast<long long>(now.deck_has_reconfigure)); }
+    if (stored.deck_has_sac_mana_outlet != now.deck_has_sac_mana_outlet) { d += " deck_has_sac_mana_outlet=" + std::to_string(static_cast<long long>(stored.deck_has_sac_mana_outlet)) + "/" + std::to_string(static_cast<long long>(now.deck_has_sac_mana_outlet)); }
+    if (stored.deck_has_sac_tutor != now.deck_has_sac_tutor) { d += " deck_has_sac_tutor=" + std::to_string(static_cast<long long>(stored.deck_has_sac_tutor)) + "/" + std::to_string(static_cast<long long>(now.deck_has_sac_tutor)); }
+    if (stored.deck_has_scry_watcher != now.deck_has_scry_watcher) { d += " deck_has_scry_watcher=" + std::to_string(static_cast<long long>(stored.deck_has_scry_watcher)) + "/" + std::to_string(static_cast<long long>(now.deck_has_scry_watcher)); }
+    if (stored.deck_has_self_bounce_etb != now.deck_has_self_bounce_etb) { d += " deck_has_self_bounce_etb=" + std::to_string(static_cast<long long>(stored.deck_has_self_bounce_etb)) + "/" + std::to_string(static_cast<long long>(now.deck_has_self_bounce_etb)); }
+    if (stored.deck_has_soulbond != now.deck_has_soulbond) { d += " deck_has_soulbond=" + std::to_string(static_cast<long long>(stored.deck_has_soulbond)) + "/" + std::to_string(static_cast<long long>(now.deck_has_soulbond)); }
+    if (stored.deck_has_spell_tax != now.deck_has_spell_tax) { d += " deck_has_spell_tax=" + std::to_string(static_cast<long long>(stored.deck_has_spell_tax)) + "/" + std::to_string(static_cast<long long>(now.deck_has_spell_tax)); }
+    if (stored.deck_has_storied != now.deck_has_storied) { d += " deck_has_storied=" + std::to_string(static_cast<long long>(stored.deck_has_storied)) + "/" + std::to_string(static_cast<long long>(now.deck_has_storied)); }
+    if (stored.deck_has_subtype_enter_counters != now.deck_has_subtype_enter_counters) { d += " deck_has_subtype_enter_counters=" + std::to_string(static_cast<long long>(stored.deck_has_subtype_enter_counters)) + "/" + std::to_string(static_cast<long long>(now.deck_has_subtype_enter_counters)); }
+    if (stored.deck_has_tap_steal != now.deck_has_tap_steal) { d += " deck_has_tap_steal=" + std::to_string(static_cast<long long>(stored.deck_has_tap_steal)) + "/" + std::to_string(static_cast<long long>(now.deck_has_tap_steal)); }
+    if (stored.deck_has_token_doubler != now.deck_has_token_doubler) { d += " deck_has_token_doubler=" + std::to_string(static_cast<long long>(stored.deck_has_token_doubler)) + "/" + std::to_string(static_cast<long long>(now.deck_has_token_doubler)); }
+    if (stored.deck_has_top_land_play != now.deck_has_top_land_play) { d += " deck_has_top_land_play=" + std::to_string(static_cast<long long>(stored.deck_has_top_land_play)) + "/" + std::to_string(static_cast<long long>(now.deck_has_top_land_play)); }
+    if (stored.deck_has_transform != now.deck_has_transform) { d += " deck_has_transform=" + std::to_string(static_cast<long long>(stored.deck_has_transform)) + "/" + std::to_string(static_cast<long long>(now.deck_has_transform)); }
+    if (stored.deck_has_unconditional_endstep_tokens != now.deck_has_unconditional_endstep_tokens) { d += " deck_has_unconditional_endstep_tokens=" + std::to_string(static_cast<long long>(stored.deck_has_unconditional_endstep_tokens)) + "/" + std::to_string(static_cast<long long>(now.deck_has_unconditional_endstep_tokens)); }
+    if (stored.deck_has_upkeep_reanimate != now.deck_has_upkeep_reanimate) { d += " deck_has_upkeep_reanimate=" + std::to_string(static_cast<long long>(stored.deck_has_upkeep_reanimate)) + "/" + std::to_string(static_cast<long long>(now.deck_has_upkeep_reanimate)); }
+    if (stored.deck_reads_life_total != now.deck_reads_life_total) { d += " deck_reads_life_total=" + std::to_string(static_cast<long long>(stored.deck_reads_life_total)) + "/" + std::to_string(static_cast<long long>(now.deck_reads_life_total)); }
+    if (stored.deck_reads_lifegain_in_play != now.deck_reads_lifegain_in_play) { d += " deck_reads_lifegain_in_play=" + std::to_string(static_cast<long long>(stored.deck_reads_lifegain_in_play)) + "/" + std::to_string(static_cast<long long>(now.deck_reads_lifegain_in_play)); }
+    if (stored.deck_reads_mv_cast != now.deck_reads_mv_cast) { d += " deck_reads_mv_cast=" + std::to_string(static_cast<long long>(stored.deck_reads_mv_cast)) + "/" + std::to_string(static_cast<long long>(now.deck_reads_mv_cast)); }
+    if (stored.deck_tracks_noncombat_damage != now.deck_tracks_noncombat_damage) { d += " deck_tracks_noncombat_damage=" + std::to_string(static_cast<long long>(stored.deck_tracks_noncombat_damage)) + "/" + std::to_string(static_cast<long long>(now.deck_tracks_noncombat_damage)); }
+    if (stored.dep_castpayoff_main1 != now.dep_castpayoff_main1) { d += " dep_castpayoff_main1=" + std::to_string(static_cast<long long>(stored.dep_castpayoff_main1)) + "/" + std::to_string(static_cast<long long>(now.dep_castpayoff_main1)); }
+    if (stored.dep_enabler_main1 != now.dep_enabler_main1) { d += " dep_enabler_main1=" + std::to_string(static_cast<long long>(stored.dep_enabler_main1)) + "/" + std::to_string(static_cast<long long>(now.dep_enabler_main1)); }
+    if (stored.dmg_events_armed != now.dmg_events_armed) { d += " dmg_events_armed=" + std::to_string(static_cast<long long>(stored.dmg_events_armed)) + "/" + std::to_string(static_cast<long long>(now.dmg_events_armed)); }
+    if (stored.draw_trigger_mark != now.draw_trigger_mark) { d += " draw_trigger_mark=" + std::to_string(static_cast<long long>(stored.draw_trigger_mark)) + "/" + std::to_string(static_cast<long long>(now.draw_trigger_mark)); }
+    if (stored.extra_turns_taken != now.extra_turns_taken) { d += " extra_turns_taken=" + std::to_string(static_cast<long long>(stored.extra_turns_taken)) + "/" + std::to_string(static_cast<long long>(now.extra_turns_taken)); }
+    if (stored.floating_haste_c != now.floating_haste_c) { d += " floating_haste_c=" + std::to_string(static_cast<long long>(stored.floating_haste_c)) + "/" + std::to_string(static_cast<long long>(now.floating_haste_c)); }
+    if (stored.free_casts_available != now.free_casts_available) { d += " free_casts_available=" + std::to_string(static_cast<long long>(stored.free_casts_available)) + "/" + std::to_string(static_cast<long long>(now.free_casts_available)); }
+    if (stored.game_seed != now.game_seed) { d += " game_seed=" + std::to_string(static_cast<long long>(stored.game_seed)) + "/" + std::to_string(static_cast<long long>(now.game_seed)); }
+    if (stored.gy_shuffle_batch != now.gy_shuffle_batch) { d += " gy_shuffle_batch=" + std::to_string(static_cast<long long>(stored.gy_shuffle_batch)) + "/" + std::to_string(static_cast<long long>(now.gy_shuffle_batch)); }
+    if (stored.hand_size_at_combat != now.hand_size_at_combat) { d += " hand_size_at_combat=" + std::to_string(static_cast<long long>(stored.hand_size_at_combat)) + "/" + std::to_string(static_cast<long long>(now.hand_size_at_combat)); }
+    if (stored.in_extra_turn != now.in_extra_turn) { d += " in_extra_turn=" + std::to_string(static_cast<long long>(stored.in_extra_turn)) + "/" + std::to_string(static_cast<long long>(now.in_extra_turn)); }
+    if (stored.inf_life_possible != now.inf_life_possible) { d += " inf_life_possible=" + std::to_string(static_cast<long long>(stored.inf_life_possible)) + "/" + std::to_string(static_cast<long long>(now.inf_life_possible)); }
+    if (stored.inf_life_turn != now.inf_life_turn) { d += " inf_life_turn=" + std::to_string(static_cast<long long>(stored.inf_life_turn)) + "/" + std::to_string(static_cast<long long>(now.inf_life_turn)); }
+    if (stored.m1_hand_n != now.m1_hand_n) { d += " m1_hand_n=" + std::to_string(static_cast<long long>(stored.m1_hand_n)) + "/" + std::to_string(static_cast<long long>(now.m1_hand_n)); }
+    if (stored.m1_hand_turn != now.m1_hand_turn) { d += " m1_hand_turn=" + std::to_string(static_cast<long long>(stored.m1_hand_turn)) + "/" + std::to_string(static_cast<long long>(now.m1_hand_turn)); }
+    if (stored.m1start_hand_turn != now.m1start_hand_turn) { d += " m1start_hand_turn=" + std::to_string(static_cast<long long>(stored.m1start_hand_turn)) + "/" + std::to_string(static_cast<long long>(now.m1start_hand_turn)); }
+    if (stored.m2_stage_turn != now.m2_stage_turn) { d += " m2_stage_turn=" + std::to_string(static_cast<long long>(stored.m2_stage_turn)) + "/" + std::to_string(static_cast<long long>(now.m2_stage_turn)); }
+    if (stored.m_model_feat_mask != now.m_model_feat_mask) { d += " m_model_feat_mask=" + std::to_string(static_cast<long long>(stored.m_model_feat_mask)) + "/" + std::to_string(static_cast<long long>(now.m_model_feat_mask)); }
+    if (stored.mv_cast_this_turn != now.mv_cast_this_turn) { d += " mv_cast_this_turn=" + std::to_string(static_cast<long long>(stored.mv_cast_this_turn)) + "/" + std::to_string(static_cast<long long>(now.mv_cast_this_turn)); }
+    if (stored.next_opp_spawn_number != now.next_opp_spawn_number) { d += " next_opp_spawn_number=" + std::to_string(static_cast<long long>(stored.next_opp_spawn_number)) + "/" + std::to_string(static_cast<long long>(now.next_opp_spawn_number)); }
+    if (stored.next_token_number != now.next_token_number) { d += " next_token_number=" + std::to_string(static_cast<long long>(stored.next_token_number)) + "/" + std::to_string(static_cast<long long>(now.next_token_number)); }
+    if (stored.noncombat_trigger_depth != now.noncombat_trigger_depth) { d += " noncombat_trigger_depth=" + std::to_string(static_cast<long long>(stored.noncombat_trigger_depth)) + "/" + std::to_string(static_cast<long long>(now.noncombat_trigger_depth)); }
+    if (stored.on_the_play != now.on_the_play) { d += " on_the_play=" + std::to_string(static_cast<long long>(stored.on_the_play)) + "/" + std::to_string(static_cast<long long>(now.on_the_play)); }
+    if (stored.opponent_decked != now.opponent_decked) { d += " opponent_decked=" + std::to_string(static_cast<long long>(stored.opponent_decked)) + "/" + std::to_string(static_cast<long long>(now.opponent_decked)); }
+    if (stored.opponent_library_dealt != now.opponent_library_dealt) { d += " opponent_library_dealt=" + std::to_string(static_cast<long long>(stored.opponent_library_dealt)) + "/" + std::to_string(static_cast<long long>(now.opponent_library_dealt)); }
+    if (stored.opponent_lost_life_this_turn != now.opponent_lost_life_this_turn) { d += " opponent_lost_life_this_turn=" + std::to_string(static_cast<long long>(stored.opponent_lost_life_this_turn)) + "/" + std::to_string(static_cast<long long>(now.opponent_lost_life_this_turn)); }
+    if (stored.own_death_live != now.own_death_live) { d += " own_death_live=" + std::to_string(static_cast<long long>(stored.own_death_live)) + "/" + std::to_string(static_cast<long long>(now.own_death_live)); }
+    if (stored.pending_extra_combats != now.pending_extra_combats) { d += " pending_extra_combats=" + std::to_string(static_cast<long long>(stored.pending_extra_combats)) + "/" + std::to_string(static_cast<long long>(now.pending_extra_combats)); }
+    if (stored.pending_extra_turns != now.pending_extra_turns) { d += " pending_extra_turns=" + std::to_string(static_cast<long long>(stored.pending_extra_turns)) + "/" + std::to_string(static_cast<long long>(now.pending_extra_turns)); }
+    if (stored.phase != now.phase) { d += " phase=" + std::to_string(static_cast<long long>(stored.phase)) + "/" + std::to_string(static_cast<long long>(now.phase)); }
+    if (stored.player_lost_on_draw != now.player_lost_on_draw) { d += " player_lost_on_draw=" + std::to_string(static_cast<long long>(stored.player_lost_on_draw)) + "/" + std::to_string(static_cast<long long>(now.player_lost_on_draw)); }
+    if (stored.priority_player_index != now.priority_player_index) { d += " priority_player_index=" + std::to_string(static_cast<long long>(stored.priority_player_index)) + "/" + std::to_string(static_cast<long long>(now.priority_player_index)); }
+    if (stored.proven_no_win != now.proven_no_win) { d += " proven_no_win=" + std::to_string(static_cast<long long>(stored.proven_no_win)) + "/" + std::to_string(static_cast<long long>(now.proven_no_win)); }
+    if (stored.scripted_attack_attach != now.scripted_attack_attach) { d += " scripted_attack_attach=" + std::to_string(static_cast<long long>(stored.scripted_attack_attach)) + "/" + std::to_string(static_cast<long long>(now.scripted_attack_attach)); }
+    if (stored.scripted_attack_land_search != now.scripted_attack_land_search) { d += " scripted_attack_land_search=" + std::to_string(static_cast<long long>(stored.scripted_attack_land_search)) + "/" + std::to_string(static_cast<long long>(now.scripted_attack_land_search)); }
+    if (stored.scripted_bruna_gather != now.scripted_bruna_gather) { d += " scripted_bruna_gather=" + std::to_string(static_cast<long long>(stored.scripted_bruna_gather)) + "/" + std::to_string(static_cast<long long>(now.scripted_bruna_gather)); }
+    if (stored.scripted_cheat_choice != now.scripted_cheat_choice) { d += " scripted_cheat_choice=" + std::to_string(static_cast<long long>(stored.scripted_cheat_choice)) + "/" + std::to_string(static_cast<long long>(now.scripted_cheat_choice)); }
+    if (stored.scripted_combat_aura_swap != now.scripted_combat_aura_swap) { d += " scripted_combat_aura_swap=" + std::to_string(static_cast<long long>(stored.scripted_combat_aura_swap)) + "/" + std::to_string(static_cast<long long>(now.scripted_combat_aura_swap)); }
+    if (stored.scripted_combat_aura_swap_in != now.scripted_combat_aura_swap_in) { d += " scripted_combat_aura_swap_in=" + std::to_string(static_cast<long long>(stored.scripted_combat_aura_swap_in)) + "/" + std::to_string(static_cast<long long>(now.scripted_combat_aura_swap_in)); }
+    if (stored.scripted_combat_land_search_crack != now.scripted_combat_land_search_crack) { d += " scripted_combat_land_search_crack=" + std::to_string(static_cast<long long>(stored.scripted_combat_land_search_crack)) + "/" + std::to_string(static_cast<long long>(now.scripted_combat_land_search_crack)); }
+    if (stored.scripted_combat_landfall_target != now.scripted_combat_landfall_target) { d += " scripted_combat_landfall_target=" + std::to_string(static_cast<long long>(stored.scripted_combat_landfall_target)) + "/" + std::to_string(static_cast<long long>(now.scripted_combat_landfall_target)); }
+    if (stored.scripted_combat_transform != now.scripted_combat_transform) { d += " scripted_combat_transform=" + std::to_string(static_cast<long long>(stored.scripted_combat_transform)) + "/" + std::to_string(static_cast<long long>(now.scripted_combat_transform)); }
+    if (stored.scripted_discard_choice != now.scripted_discard_choice) { d += " scripted_discard_choice=" + std::to_string(static_cast<long long>(stored.scripted_discard_choice)) + "/" + std::to_string(static_cast<long long>(now.scripted_discard_choice)); }
+    if (stored.scripted_doth_put != now.scripted_doth_put) { d += " scripted_doth_put=" + std::to_string(static_cast<long long>(stored.scripted_doth_put)) + "/" + std::to_string(static_cast<long long>(now.scripted_doth_put)); }
+    if (stored.scripted_echo != now.scripted_echo) { d += " scripted_echo=" + std::to_string(static_cast<long long>(stored.scripted_echo)) + "/" + std::to_string(static_cast<long long>(now.scripted_echo)); }
+    if (stored.scripted_fb_hold != now.scripted_fb_hold) { d += " scripted_fb_hold=" + std::to_string(static_cast<long long>(stored.scripted_fb_hold)) + "/" + std::to_string(static_cast<long long>(now.scripted_fb_hold)); }
+    if (stored.scripted_fling_victim != now.scripted_fling_victim) { d += " scripted_fling_victim=" + std::to_string(static_cast<long long>(stored.scripted_fling_victim)) + "/" + std::to_string(static_cast<long long>(now.scripted_fling_victim)); }
+    if (stored.scripted_grace_choice != now.scripted_grace_choice) { d += " scripted_grace_choice=" + std::to_string(static_cast<long long>(stored.scripted_grace_choice)) + "/" + std::to_string(static_cast<long long>(now.scripted_grace_choice)); }
+    if (stored.scripted_saga_target != now.scripted_saga_target) { d += " scripted_saga_target=" + std::to_string(static_cast<long long>(stored.scripted_saga_target)) + "/" + std::to_string(static_cast<long long>(now.scripted_saga_target)); }
+    if (stored.scripted_tectonic_keep != now.scripted_tectonic_keep) { d += " scripted_tectonic_keep=" + std::to_string(static_cast<long long>(stored.scripted_tectonic_keep)) + "/" + std::to_string(static_cast<long long>(now.scripted_tectonic_keep)); }
+    if (stored.scripted_tectonic_mode != now.scripted_tectonic_mode) { d += " scripted_tectonic_mode=" + std::to_string(static_cast<long long>(stored.scripted_tectonic_mode)) + "/" + std::to_string(static_cast<long long>(now.scripted_tectonic_mode)); }
+    if (stored.scripted_upkeep_gy_reanimate != now.scripted_upkeep_gy_reanimate) { d += " scripted_upkeep_gy_reanimate=" + std::to_string(static_cast<long long>(stored.scripted_upkeep_gy_reanimate)) + "/" + std::to_string(static_cast<long long>(now.scripted_upkeep_gy_reanimate)); }
+    if (stored.scripted_upkeep_land_search != now.scripted_upkeep_land_search) { d += " scripted_upkeep_land_search=" + std::to_string(static_cast<long long>(stored.scripted_upkeep_land_search)) + "/" + std::to_string(static_cast<long long>(now.scripted_upkeep_land_search)); }
+    if (stored.scripted_vial_charge != now.scripted_vial_charge) { d += " scripted_vial_charge=" + std::to_string(static_cast<long long>(stored.scripted_vial_charge)) + "/" + std::to_string(static_cast<long long>(now.scripted_vial_charge)); }
+    if (stored.search_count != now.search_count) { d += " search_count=" + std::to_string(static_cast<long long>(stored.search_count)) + "/" + std::to_string(static_cast<long long>(now.search_count)); }
+    if (stored.shuffle_salt != now.shuffle_salt) { d += " shuffle_salt=" + std::to_string(static_cast<long long>(stored.shuffle_salt)) + "/" + std::to_string(static_cast<long long>(now.shuffle_salt)); }
+    if (stored.shuffle_salt_opening != now.shuffle_salt_opening) { d += " shuffle_salt_opening=" + std::to_string(static_cast<long long>(stored.shuffle_salt_opening)) + "/" + std::to_string(static_cast<long long>(now.shuffle_salt_opening)); }
+    if (stored.shuffle_salt_search != now.shuffle_salt_search) { d += " shuffle_salt_search=" + std::to_string(static_cast<long long>(stored.shuffle_salt_search)) + "/" + std::to_string(static_cast<long long>(now.shuffle_salt_search)); }
+    if (stored.spells_cast_this_turn != now.spells_cast_this_turn) { d += " spells_cast_this_turn=" + std::to_string(static_cast<long long>(stored.spells_cast_this_turn)) + "/" + std::to_string(static_cast<long long>(now.spells_cast_this_turn)); }
+    if (stored.step != now.step) { d += " step=" + std::to_string(static_cast<long long>(stored.step)) + "/" + std::to_string(static_cast<long long>(now.step)); }
+    if (stored.top_stacked_card_number != now.top_stacked_card_number) { d += " top_stacked_card_number=" + std::to_string(static_cast<long long>(stored.top_stacked_card_number)) + "/" + std::to_string(static_cast<long long>(now.top_stacked_card_number)); }
+    if (stored.top_stacked_turn != now.top_stacked_turn) { d += " top_stacked_turn=" + std::to_string(static_cast<long long>(stored.top_stacked_turn)) + "/" + std::to_string(static_cast<long long>(now.top_stacked_turn)); }
+    if (stored.turn_number != now.turn_number) { d += " turn_number=" + std::to_string(static_cast<long long>(stored.turn_number)) + "/" + std::to_string(static_cast<long long>(now.turn_number)); }
+    if (stored.uses_second_main != now.uses_second_main) { d += " uses_second_main=" + std::to_string(static_cast<long long>(stored.uses_second_main)) + "/" + std::to_string(static_cast<long long>(now.uses_second_main)); }
+    if (stored.vial_target_mv != now.vial_target_mv) { d += " vial_target_mv=" + std::to_string(static_cast<long long>(stored.vial_target_mv)) + "/" + std::to_string(static_cast<long long>(now.vial_target_mv)); }
+    for (int i = 0; i < 2; ++i) { if (stored.m1start_hand_mask[i] != now.m1start_hand_mask[i]) { d += " m1start_hand_mask[" + std::to_string(i) + "]"; } }
+    for (int i = 0; i < 2; ++i) { if (stored.m2_prestaged_mask[i] != now.m2_prestaged_mask[i]) { d += " m2_prestaged_mask[" + std::to_string(i) + "]"; } }
+    for (int i = 0; i < 2; ++i) { if (stored.pending_gy_shuffles[i] != now.pending_gy_shuffles[i]) { d += " pending_gy_shuffles[" + std::to_string(i) + "]"; } }
+    if (stored.m1_hand != now.m1_hand) { d += " m1_hand"; }
+    if (stored.combat_hand != now.combat_hand) { d += " combat_hand"; }
+    if (stored.noncombat_damage_received_this_turn != now.noncombat_damage_received_this_turn) { d += " noncombat_damage_received_this_turn"; }
+    if (stored.floating_bigspell_pp != now.floating_bigspell_pp) { d += " floating_bigspell_pp"; }
+    if (stored.opponent_spawns != now.opponent_spawns) { d += " opponent_spawns"; }
+    if (stored.m_provider != now.m_provider) { d += " m_provider"; }
+    if (stored.m_required_pieces != now.m_required_pieces) { d += " m_required_pieces"; }
+    if (stored.pending_incinerator_damage.size() != now.pending_incinerator_damage.size()) { d += " pending_incinerator_damage"; }
+        std::fprintf(stderr, "[bp-state-swap]   scalar diffs (stored/now):%s\n", d.empty() ? " (none)" : d.c_str());
+    }
+    auto graft = [&](const char* what, auto&& fn)
+    {
+        GameState g = now;
+        fn(g);
+        std::fprintf(stderr, "[bp-state-swap]   graft %-14s -> %zu\n", what, derive_n(g));
+    };
+    graft("players[0]",  [&](GameState& g) { g.players[0] = stored.players[0]; });
+    graft("players[1]",  [&](GameState& g) { g.players[1] = stored.players[1]; });
+    graft("battlefield", [&](GameState& g) { g.battlefield = stored.battlefield; });
+    graft("exile",       [&](GameState& g) { g.exile = stored.exile; });
+    graft("stack",       [&](GameState& g) { g.stack = stored.stack; });
+    graft("floating",    [&](GameState& g) { g.floating_mana = stored.floating_mana; g.floating_creature_mana = stored.floating_creature_mana; g.floating_bigspell_mana = stored.floating_bigspell_mana; });
+    graft("all-but-bf",  [&](GameState& g) { const auto bf = g.battlefield; g = stored; g.battlefield = bf; });
+    graft("all-but-p0",  [&](GameState& g) { const auto p = g.players[0]; g = stored; g.players[0] = p; });
+    for (std::size_t i = 0; i < now.battlefield.size() && i < stored.battlefield.size(); ++i)
+    {
+        GameState g = now;
+        g.battlefield[i] = stored.battlefield[i];
+        const std::size_t r = derive_n(g);
+        if (r != on_now)
+        { std::fprintf(stderr, "[bp-state-swap]   graft bf[%zu] %s -> %zu\n", i, now.battlefield[i].card.m_name.c_str(), r); }
+    }
+    for (std::size_t i = 0; i < now.players[0].hand.size() && i < stored.players[0].hand.size(); ++i)
+    {
+        GameState g = now;
+        g.players[0].hand[i] = stored.players[0].hand[i];
+        const std::size_t r = derive_n(g);
+        if (r != on_now)
+        { std::fprintf(stderr, "[bp-state-swap]   graft hand[%zu] %s -> %zu\n", i, now.players[0].hand[i].m_name.c_str(), r); }
+    }
+}
+// MTG_BP_VERIFY_WATCH (diagnostic, default off; needs MTG_BP_ENUM_VERIFY): watch the FIRST stored entry whose
+// list holds a plan naming exactly the cards in MTG_BP_VERIFY_WATCH_PLAN ("A+B+C", by name, multiset),
+// re-derive its stored state at every later lookup, and report the first lookup at which the re-derivation's
+// size changes -- bisecting in TIME the global input a CONTENT-DIFF is made of.
+namespace bpwatch
+{
+inline bool On() { static const bool v = EnvOn("MTG_BP_VERIFY_WATCH"); return v; }
+inline thread_local std::shared_ptr<const GameState> t_st;
+inline thread_local bool t_pre = false, t_done = false, t_in = false;
+inline thread_local std::size_t t_n = 0;
+inline thread_local long long t_calls = 0;
+inline thread_local std::string t_last_ctx;
+inline bool PlanMatches(const TurnSolver::Plan& p)
+{
+    static const std::string want = [] { const char* e = std::getenv("MTG_BP_VERIFY_WATCH_PLAN"); return e ? std::string(e) : std::string(); }();
+    if (want.empty()) { return false; }
+    std::vector<std::string> w, h;
+    std::size_t i = 0;
+    while (i <= want.size())
+    {
+        const std::size_t j = want.find('+', i);
+        w.push_back(want.substr(i, j == std::string::npos ? std::string::npos : j - i));
+        if (j == std::string::npos) { break; }
+        i = j + 1;
+    }
+    for (const Action& a : p.actions) { h.push_back(static_cast<const std::string&>(a.card_name)); }
+    std::sort(w.begin(), w.end()); std::sort(h.begin(), h.end());
+    return w == h;
+}
+}
+static std::string BpWatchCtx(const GameState& s)
+{
+    char b[400];
+    const SearchBudget* d = TurnSolver::DecisionBudget();
+    std::snprintf(b, sizeof b, "t%d step=%d ctx=%llx epoch=%llu dec_used=%lld enumdepth=%d rnest=%d fsnest=%d solvenest=%d bproot=%d cand=%d",
+                  s.turn_number, static_cast<int>(s.step), static_cast<unsigned long long>(PlanCacheCtxBits()),
+                  static_cast<unsigned long long>(g_decision_epoch),
+                  d ? static_cast<long long>(d->Used()) : -1LL,
+                  g_bp_enum_depth, g_rollout_nest, g_fsline_nest, g_cs_solver_nest, g_bp_root_enum ? 1 : 0,
+                  g_search_candidate_enum ? 1 : 0);
+    std::string r = b;
+    std::snprintf(b, sizeof b, " | pctx=%p ptraits=%p unpaid_mv=%d act_paid=%d act_cur=%d reserved=%zu untap_need=%d"
+                  " opens_unseen=%d seedpay=%d split=%d hold=%llx",
+                  static_cast<const void*>(CurrentPlanContext()), static_cast<const void*>(CurrentPlanTraits()),
+                  g_line_unpaid_cost.ManaValue(), g_act_line_paid.ManaValue(), g_act_line_current.ManaValue(),
+                  g_plan_reserved_sources.size(), g_human_untap_need, g_line_opens_unseen ? 1 : 0,
+                  g_cycle_seed_paying ? 1 : 0, static_cast<int>(g_seed_pay_split),
+                  static_cast<unsigned long long>(g_seed_pay_hold));
+    r += b;
+    return r;
+}
+static void BpWatchCheck(const GameState& state, const char* where)
+{
+    if (!bpwatch::t_st || bpwatch::t_done || bpwatch::t_in) { return; }
+    bpwatch::t_in = true;
+    ++bpwatch::t_calls;
+    BpChannels ch; ch.Save();
+    const bool sv = t_bp_enum_verifying;
+    t_bp_enum_verifying = true;
+    const std::size_t n = BpDeriveContinuationList(*bpwatch::t_st, bpwatch::t_pre, /*count_stats=*/false).size();
+    t_bp_enum_verifying = sv;
+    ch.Restore();
+    const std::string now = BpWatchCtx(state);
+    if (n != bpwatch::t_n)
+    {
+        std::fprintf(stderr, "[bp-watch] FLIP at call %lld (%s): %zu -> %zu\n   prev ctx: %s\n   this ctx: %s\n",
+                     bpwatch::t_calls, where, bpwatch::t_n, n, bpwatch::t_last_ctx.c_str(), now.c_str());
+        bpwatch::t_done = true;
+    }
+    bpwatch::t_last_ctx = now;
+    bpwatch::t_in = false;
+}
 static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
                                    const TranspositionTable::Key* pre_key)
 {
+    if (bpwatch::On() && !t_bp_enum_verifying) { BpWatchCheck(state, "BpEnumEntryFor"); }
     const int bpd_ctx = (bpderive::On() && AlchemistComboRouteInProgress()) ? 1 : 0;
     if (bpderive::On()) { bpderive::g_lookups[bpd_ctx].fetch_add(1, std::memory_order_relaxed); }
     // static, not a per-call EnvOn: this runs millions of times per game and a getenv here is the
@@ -107565,6 +107933,7 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
                             }
                         }
                     }
+                    if (n < 6 && it->second.dbg_state) { BpVerifyStateSwap(*it->second.dbg_state, state, is_pre_combat, served.size(), fresh.size()); }
                     // MTG_BP_ENUM_VERIFY=2 -- NAME THE PLANS THAT DIFFER, not just the counts.
                     // The header above says a diff happened and nothing about WHAT, and three
                     // hypotheses were argued from it before this existed and two were wrong (the
@@ -107925,6 +108294,31 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
                 bpuse::g_stats.born_plans[bpuse::t_reason].fetch_add(static_cast<long long>(ent.Size()),
                                                                      std::memory_order_relaxed);
                 if (ent.use_branched) { bpuse::g_stats.branched[bpuse::t_reason].fetch_add(1, std::memory_order_relaxed); }
+            }
+            static const bool s_state_swap = EnvOn("MTG_BP_VERIFY_STATE_SWAP");   // diagnostic, default off
+            if (s_state_swap && BpEnumVerifyOn()) { ent.dbg_state = std::make_shared<const GameState>(state); }
+            if (bpwatch::On() && !bpwatch::t_st && !t_bp_enum_verifying)
+            {
+                const std::vector<TurnSolver::Plan> wl = ent.View().Materialised();
+                static const int s_want_n = EnvInt("MTG_BP_VERIFY_WATCH_N", 0);
+                if ((s_want_n <= 0 || static_cast<int>(wl.size()) == s_want_n)
+                    && std::any_of(wl.begin(), wl.end(), [](const TurnSolver::Plan& q) { return bpwatch::PlanMatches(q); }))
+                {
+                    bpwatch::t_st  = std::make_shared<const GameState>(state);
+                    bpwatch::t_pre = is_pre_combat;
+                    bpwatch::t_n   = wl.size();
+                    bpwatch::t_last_ctx = BpWatchCtx(state);
+                    // Copy fidelity: the copy and the original, re-derived NOW, must both give wl.size().
+                    const bool sv = t_bp_enum_verifying;
+                    t_bp_enum_verifying = true;
+                    BpChannels wch; wch.Save();
+                    const std::size_t n_orig = BpDeriveContinuationList(state, is_pre_combat, false).size();
+                    const std::size_t n_copy = BpDeriveContinuationList(*bpwatch::t_st, is_pre_combat, false).size();
+                    wch.Restore();
+                    t_bp_enum_verifying = sv;
+                    std::fprintf(stderr, "[bp-watch] WATCH stored n=%zu (now: orig=%zu copy=%zu) ctx: %s\n",
+                                 wl.size(), n_orig, n_copy, bpwatch::t_last_ctx.c_str());
+                }
             }
             if (pccv::On() && BpEnumVerifyOn())
             {

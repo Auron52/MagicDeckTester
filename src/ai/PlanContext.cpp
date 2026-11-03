@@ -29,6 +29,62 @@ PlanTraitsScope::~PlanTraitsScope()
     t_traits_scope = m_prev_scope;
 }
 
+std::uint64_t PlanTraitsContentHash(const PlanTraits& t)
+{
+    std::uint64_t h = 1469598103934665603ull;
+    auto mix = [&h](std::uint64_t v) { h = (h ^ v) * 1099511628211ull; h ^= h >> 29; };
+    auto mix_def = [&mix](const CardDefinition* d)
+    { mix(d != nullptr ? static_cast<std::uint64_t>(d->card.m_name_hash) : 0x5EEDull); };
+    mix(static_cast<std::uint64_t>(t.main2) | (static_cast<std::uint64_t>(t.plan_has_own_pump) << 1)
+        | (static_cast<std::uint64_t>(t.copy_magnet_live) << 2) | (static_cast<std::uint64_t>(t.bodies_are_multipliers) << 3)
+        | (static_cast<std::uint64_t>(t.casts_scaler_food) << 4) | (static_cast<std::uint64_t>(t.attack_matters) << 5)
+        | (static_cast<std::uint64_t>(t.restr_creature_up) << 6) | (static_cast<std::uint64_t>(t.restr_inelig_overflow) << 7)
+        | (static_cast<std::uint64_t>(t.mid_turn_casts) << 8) | (static_cast<std::uint64_t>(t.own_board_hazard) << 9));
+    mix(static_cast<std::uint64_t>(t.pump_target_card));
+    mix(static_cast<std::uint64_t>(t.mana_casts));
+    mix(static_cast<std::uint64_t>(t.cast_color_mask));
+    mix(static_cast<std::uint64_t>(t.cast_mv_total));
+    mix(static_cast<std::uint64_t>(t.cast_name_count));
+    for (int i = 0; i < PlanTraits::kMaxCastNames; ++i)
+    { mix(t.cast_names[i] != nullptr ? std::hash<std::string>{}(*t.cast_names[i]) : 0x0CA5ull); }
+    for (int c = 0; c < 5; ++c)
+    {
+        mix(static_cast<std::uint64_t>(t.cast_pips[c]));
+        mix(static_cast<std::uint64_t>(t.act_pips[c]));
+        mix(static_cast<std::uint64_t>(t.act_pips_cab[c]));
+        mix(static_cast<std::uint64_t>(t.cycle_seed_pips[c]));
+    }
+    mix(static_cast<std::uint64_t>(t.act_c_pips));
+    mix(static_cast<std::uint64_t>(t.act_src_count));
+    for (int i = 0; i < PlanTraits::kMaxActSrcs; ++i) { mix(static_cast<std::uint64_t>(t.act_src_nums[i])); }
+    mix(static_cast<std::uint64_t>(t.act_mana_total));
+    mix_def(t.cycle_seed_def);
+    mix(static_cast<std::uint64_t>(t.cycle_seed_hand_floor));
+    // restr_pp is a CardParams inside a process-lifetime CardDefinition: its ADDRESS is its identity. The
+    // key VALUE then differs run to run, the partition (which states share an entry) does not.
+    mix(static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(t.restr_pp)));
+    mix(static_cast<std::uint64_t>(t.restr_inelig_count));
+    for (int i = 0; i < PlanTraits::kMaxRestrCasts; ++i)
+    {
+        mix_def(t.restr_inelig_def[i]);
+        mix(static_cast<std::uint64_t>(t.restr_inelig_plan_n[i]));
+        mix(static_cast<std::uint64_t>(t.restr_inelig_hand0[i]));
+        mix(static_cast<std::uint64_t>(t.restr_inelig_mv[i]));
+    }
+    mix(static_cast<std::uint64_t>(t.act_restr_elig_mana));
+    mix(static_cast<std::uint64_t>(t.act_restr_inelig_mana));
+    return h | 1ull;   // never 0: 0 is "no traits installed"
+}
+
+std::uint64_t CurrentPlanTraitsHash()
+{
+    if (t_traits == nullptr) { return 0; }
+    const PlanTraitsScope* sc = t_traits_scope;
+    if (sc == nullptr || sc->m_current != t_traits) { return PlanTraitsContentHash(*t_traits); }
+    if (!sc->m_hash_valid) { sc->m_hash = PlanTraitsContentHash(*t_traits); sc->m_hash_valid = true; }
+    return sc->m_hash;
+}
+
 std::shared_ptr<const PlanTraits> CapturePlanTraitsForRecord(const PlanTraits* pt)
 {
     if (pt == nullptr) { return {}; }

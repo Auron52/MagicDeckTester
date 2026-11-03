@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <utility>
@@ -213,6 +214,14 @@ struct PlanTraits
 // Null when no plan apply is in scope (or every consumer lever is off -- the builder is not run).
 const PlanTraits* CurrentPlanTraits();
 
+// A CONTENT hash of the installed traits (0 when none): every field, so two applies whose traits are equal
+// field for field hash equal whatever their addresses. Computed once per installed scope (the traits are
+// immutable while installed). For the plan caches' keys (FoldPhysicalCards): a continuation derivation and
+// an enumeration run INSIDE a plan apply read these traits through the payment holds, so a list derived
+// under one plan's traits must not be served under another's.
+std::uint64_t CurrentPlanTraitsHash();
+std::uint64_t PlanTraitsContentHash(const PlanTraits& t);
+
 // Immutable recorded-payment context. Reuse one lazy snapshot per live scope;
 // callers may request an outer scope's saved pointer after entering a nested one.
 // Only the snapshot escapes the scope; nullptr records an explicitly absent context.
@@ -229,8 +238,11 @@ public:
 
 private:
     friend std::shared_ptr<const PlanTraits> CapturePlanTraitsForRecord(const PlanTraits* pt);
+    friend std::uint64_t CurrentPlanTraitsHash();
     const PlanTraits* m_prev;
     const PlanTraits* m_current;
     const PlanTraitsScope* m_prev_scope;
     mutable std::shared_ptr<const PlanTraits> m_record_snapshot;
+    mutable std::uint64_t m_hash = 0;
+    mutable bool          m_hash_valid = false;
 };

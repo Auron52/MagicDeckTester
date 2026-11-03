@@ -27,6 +27,7 @@
 #include "MemBudget.h"
 #include "RouteTape.h"
 #include <bit>            // std::popcount -- portable replacement for __builtin_popcount (MSVC has no such builtin)
+#include <memory>         // std::unique_ptr (MTG_MANA_CACHE_VERIFY_TAPS)
 
 // The live scry-watcher chain (Galadriel; see the SCRY WATCHERS block in SpellEffects.h).
 thread_local ScryChainState g_scry_chain;
@@ -5234,6 +5235,8 @@ static bool TapForCostBacktrackSolve(GameState& state, const ManaCost& cost, boo
 //     unstored (recomputed by the real DFS each time). Negative (unpayable) results are always
 //     cacheable (no side effect). A cache MISS always runs the real DFS, so a non-storable solution is
 //     still correct; it just is not memoised.
+std::uint64_t PayContextDigest();        // ai/ManaPayment.cpp (MTG_MANA_CACHE_VERIFY's store-time context)
+std::uint64_t CurrentPlanTraitsHash();   // ai/PlanContext.cpp
 namespace {
 inline bool ManaCacheEnabled() { static const bool v = EnvOn("MTG_MANA_CACHE", true); return v; }
 // THE RAMP-FEED SIDE OUTPUT ON A HIT (MTG_MC_FEED_ALT, DEFAULT ON; =0 is the legacy hit, which drops it).
@@ -5331,6 +5334,9 @@ struct ManaCacheEntry
     // entry (TapForCostBacktrack) to run the widened second pass -- so a hit must replay it exactly as it
     // replays the taps. See McFeedAltOn.
     bool                      feed_alt = false;
+    // MTG_MANA_CACHE_VERIFY only: the payer's context when the entry was stored (PayContextDigest) and the
+    // installed plan traits (CurrentPlanTraitsHash), so a mismatch can say whether the context moved.
+    std::uint64_t dbg_pay_ctx = 0, dbg_traits = 0;
 };
 inline thread_local std::unordered_map<std::uint64_t, ManaCacheEntry> g_mana_cache;
 // PER-THREAD BYTE CAP (2026-10-17, Galadriel value-leaf phase C RSS abort). The 500,000-entry bound
@@ -5899,6 +5905,15 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
         // The widened ramp-feed pass (g_bt_ramp_feed_branch) can find payments the first cannot, so it
         // keys apart. Mixed only while it is on -> every first-pass key is exactly as before.
         if (g_bt_ramp_feed_branch) { mix(h, 0x5A3FEEDull); }
+        // EXPERIMENT (diagnostic levers, default off): fold the payer's context / the installed plan traits.
+        // OPEN (2026-11-03): on NivMizzetCombo seed 2085 gi83 MTG_MANA_CACHE_VERIFY reports 40 hits whose
+        // produced/leftover pool COLOURS differ from a fresh solve (same totals, same verdict), every one with
+        // both the payer context and the plan traits changed since the store; either lever alone takes it to 0.
+        // That game's units do not move either way, so the key hole is real but its play cost is unmeasured.
+        static const bool s_x_traits = EnvOn("MTG_MANA_CACHE_X_TRAITS");
+        static const bool s_x_payctx = EnvOn("MTG_MANA_CACHE_X_PAYCTX");
+        if (s_x_traits) { mix(h, CurrentPlanTraitsHash()); }
+        if (s_x_payctx) { mix(h, PayContextDigest()); }
     };
     mixcost(h1); mixcost(h2);
     k1 = h1; k2 = h2;
@@ -6103,9 +6118,14 @@ static void McVerifyHit(const GameState& state, const ManaCost& cost, bool for_c
                         std::uint64_t tapped_mask, int untapped_max, std::uint64_t reserved_mask,
                         ManaPool* out_full_pool,
                         const std::vector<std::pair<int, const CardDefinition*>>* src_cands,
-                        const ManaCacheEntry& e)
+                        const ManaCacheEntry& e, GameState* out_vs = nullptr, bool* out_vok = nullptr)
 {
     GameState vs = state;
+    struct OutVs
+    {
+        GameState* dst; GameState& src;
+        ~OutVs() { if (dst != nullptr) { *dst = src; } }
+    } _out_vs{ out_vs, vs };
     const bool saved_crack = g_paysac_cracked;
     // ...and the ramp-feed side output (McFeedAltOn): the fresh solve raises it for itself, compared below.
     const bool saved_alt = g_bt_ramp_feed_alt;
@@ -6120,6 +6140,7 @@ static void McVerifyHit(const GameState& state, const ManaCost& cost, bool for_c
     g_paysac_cracked = saved_crack;
     const bool valt = g_bt_ramp_feed_alt;
     g_bt_ramp_feed_alt = saved_alt;
+    if (out_vok != nullptr) { *out_vok = vok; }
     g_mcv_checked.fetch_add(1, std::memory_order_relaxed);
     bool same = (vok == e.payable);
     // A negative whose fresh solve met a ramp-feed alternative must replay that flag (the widened pass hangs on it).
@@ -6142,12 +6163,14 @@ static void McVerifyHit(const GameState& state, const ManaCost& cost, bool for_c
     }
     std::fprintf(stderr,
                  "[mc-verify] MISMATCH T%d cost=%dG+W%d U%d B%d R%d G%d C%d x=%d full=%d left=%d | "
-                 "stored ok=%d pool=%d/%d | fresh ok=%d pool=%d/%d | life_gained_this_turn=%d | %s\n",
+                 "stored ok=%d pool=%d/%d | fresh ok=%d pool=%d/%d | life_gained_this_turn=%d | pay_ctx %s traits %s | %s\n",
                  state.turn_number, cost.generic, cost.white, cost.blue, cost.black, cost.red,
                  cost.green, cost.colorless, cost.has_x ? 1 : 0, out_full_pool ? 1 : 0,
                  out_leftover ? 1 : 0, e.payable ? 1 : 0, e.produced.Total(), e.leftover.Total(),
                  vok ? 1 : 0, vfull.Total(), vleft.Total(),
-                 state.players[a].life_gained_this_turn, board.c_str());
+                 state.players[a].life_gained_this_turn,
+                 e.dbg_pay_ctx == PayContextDigest() ? "same" : "DIFF",
+                 e.dbg_traits == CurrentPlanTraitsHash() ? "same" : "DIFF", board.c_str());
 }
 
 static bool TapForCostBacktrackTop(GameState& state, const ManaCost& cost,
@@ -6248,15 +6271,106 @@ static bool TapForCostBacktrackTop(GameState& state, const ManaCost& cost,
     if (mc_keyed)
     {
         auto it = g_mana_cache.find(mk1);
+        // MTG_MANA_CACHE_HIT_MAX=N (diagnostic, default -1 = off): serve only the first N hits of the process,
+        // run every later one as a miss -- bisects the first hit whose serving changes the game.
+        // MTG_MANA_CACHE_HIT_DUMP=N prints the N-th hit's call.
+        static const long long s_hit_max  = EnvInt("MTG_MANA_CACHE_HIT_MAX", -1);
+        static const long long s_hit_dump = EnvInt("MTG_MANA_CACHE_HIT_DUMP", -1);
+        static thread_local long long t_hit_n = 0;
+        if (it != g_mana_cache.end() && it->second.verify == mk2 && (s_hit_max >= 0 || s_hit_dump >= 0))
+        {
+            ++t_hit_n;
+            if (t_hit_n == s_hit_dump)
+            {
+                const int a = state.active_player_index;
+                std::string board;
+                for (const Permanent& p : state.battlefield)
+                {
+                    if (p.controller_index != a) { continue; }
+                    board += p.card.m_name.str() + "#" + std::to_string(p.card.m_number) + (p.tapped ? "(T) " : " ");
+                }
+                std::fprintf(stderr, "[mc-hit-dump] hit %lld T%d cost=%dG W%d U%d B%d R%d G%d C%d full=%d left=%d float=%d"
+                             " res=%llx umax=%d crt=%d src_cands=%d fail_memo=%d payable=%d taps=%zu | %s\n",
+                             t_hit_n, state.turn_number, cost.generic, cost.white, cost.blue, cost.black, cost.red,
+                             cost.green, cost.colorless, out_full_pool ? 1 : 0, out_leftover ? 1 : 0, floating.Total(),
+                             static_cast<unsigned long long>(reserved_mask), untapped_max, for_creature ? 1 : 0,
+                             src_cands ? 1 : 0, fail_memo ? 1 : 0, it->second.payable ? 1 : 0, it->second.taps.size(),
+                             board.c_str());
+                // ...and what the MISS would have done here: the real solve on a copy, with copies of the out
+                // params seeded from the caller's current values.
+                GameState vs = state;
+                ManaPool vleft = out_leftover ? *out_leftover : ManaPool{}, vfull = out_full_pool ? *out_full_pool : ManaPool{};
+                const bool crack0 = g_paysac_cracked;
+                const bool alt0 = g_bt_ramp_feed_alt;
+                g_bt_ramp_feed_alt = false;
+                TapBacktrackMemo vmemo;
+                const bool vok = TapForCostBacktrackSolve(vs, cost, for_creature, floating, rp_colors,
+                                                          fail_memo ? &vmemo : nullptr, out_leftover ? &vleft : nullptr,
+                                                          tapped_mask, untapped_max, reserved_mask,
+                                                          out_full_pool ? &vfull : nullptr, src_cands);
+                auto pool_s = [](const ManaPool& m)
+                {
+                    return "W" + std::to_string(m.white) + "U" + std::to_string(m.blue) + "B" + std::to_string(m.black)
+                         + "R" + std::to_string(m.red) + "G" + std::to_string(m.green) + "C" + std::to_string(m.colorless)
+                         + "*" + std::to_string(m.wild);
+                };
+                std::string bd;
+                for (std::size_t i = 0; i < state.battlefield.size() && i < vs.battlefield.size(); ++i)
+                {
+                    if (state.battlefield[i].tapped != vs.battlefield[i].tapped)
+                    { bd += " " + state.battlefield[i].card.m_name.str() + (vs.battlefield[i].tapped ? "(miss-tapped)" : "(miss-untapped)"); }
+                }
+                std::fprintf(stderr, "[mc-hit-dump]   miss: ok=%d ramp_alt=%d (entry %d) leftover %s -> %s full %s -> %s crack %d->%d life %d->%d board:%s\n",
+                             vok ? 1 : 0, g_bt_ramp_feed_alt ? 1 : 0, it->second.feed_alt ? 1 : 0, out_leftover ? pool_s(*out_leftover).c_str() : "-", pool_s(vleft).c_str(),
+                             out_full_pool ? pool_s(*out_full_pool).c_str() : "-", pool_s(vfull).c_str(),
+                             crack0 ? 1 : 0, g_paysac_cracked ? 1 : 0, state.players[a].life, vs.players[a].life,
+                             bd.empty() ? " (same)" : bd.c_str());
+                g_paysac_cracked = crack0;
+                g_bt_ramp_feed_alt = alt0;
+            }
+            if (s_hit_max >= 0 && t_hit_n > s_hit_max) { it = g_mana_cache.end(); }
+        }
         if (it != g_mana_cache.end() && it->second.verify == mk2)
         {
             if (tapstats::Enabled()) { tapstats::g_mc_hit.fetch_add(1, std::memory_order_relaxed); }
             const ManaCacheEntry& e = it->second;
+            // MTG_MANA_CACHE_VERIFY_TAPS (diagnostic, needs MTG_MANA_CACHE_VERIFY): also compare the BOARD the
+            // replay leaves with the board the real solve leaves (which permanents it tapped, counters, life).
+            static const bool s_vtaps = EnvOn("MTG_MANA_CACHE_VERIFY_TAPS");
+            std::unique_ptr<GameState> mcv_board;   // allocated only under the diagnostic (this is the hot hit path)
+            bool mcv_vok = false;
+            const bool mcv_cmp = McVerifyOn() && s_vtaps;
+            if (mcv_cmp) { mcv_board = std::make_unique<GameState>(); }
             if (McVerifyOn())
             {
                 McVerifyHit(state, cost, for_creature, floating, rp_colors, fail_memo, out_leftover,
-                            tapped_mask, untapped_max, reserved_mask, out_full_pool, src_cands, e);
+                            tapped_mask, untapped_max, reserved_mask, out_full_pool, src_cands, e,
+                            mcv_board.get(), &mcv_vok);
             }
+            struct McBoardCmp
+            {
+                const GameState& hit; const GameState* fresh_p; bool fresh_ok;
+                ~McBoardCmp()
+                {
+                    if (fresh_p == nullptr || !fresh_ok) { return; }
+                    const GameState& fresh = *fresh_p;
+                    std::string d;
+                    const std::size_t n = std::min(hit.battlefield.size(), fresh.battlefield.size());
+                    if (hit.battlefield.size() != fresh.battlefield.size()) { d += " bf-size"; }
+                    for (std::size_t i = 0; i < n; ++i)
+                    {
+                        const Permanent& a = hit.battlefield[i];
+                        const Permanent& b = fresh.battlefield[i];
+                        if (a.tapped != b.tapped)
+                        { d += " " + a.card.m_name.str() + "#" + std::to_string(a.card.m_number) + (a.tapped ? "(hit-tapped)" : "(fresh-tapped)"); }
+                    }
+                    for (int pi = 0; pi < 2; ++pi)
+                    { if (hit.players[pi].life != fresh.players[pi].life) { d += " life" + std::to_string(pi); } }
+                    if (d.empty()) { return; }
+                    static std::atomic<int> s_n{0};
+                    if (s_n.fetch_add(1) < 20) { std::fprintf(stderr, "[mc-verify] BOARD-DIFF T%d:%s\n", hit.turn_number, d.c_str()); }
+                }
+            } _mc_cmp{ state, mcv_board.get(), mcv_vok };
             if (!e.payable)
             {
                 if (e.feed_alt && !g_bt_ramp_feed_branch && McFeedAltOn()) { g_bt_ramp_feed_alt = true; }
@@ -6428,7 +6542,6 @@ static bool TapForCostBacktrackTop(GameState& state, const ManaCost& cost,
         (mc_active ? tapstats::g_mc_nodes_miss : tapstats::g_mc_nodes_skip)
             .fetch_add(dn, std::memory_order_relaxed);
     }
-
     const bool mc_alt_here = g_bt_ramp_feed_alt;
     if (mc_active) { g_bt_ramp_feed_alt = mc_alt_outer || mc_alt_here; }
 
@@ -6511,6 +6624,7 @@ static bool TapForCostBacktrackTop(GameState& state, const ManaCost& cost,
         if (g_mana_cache.size() > 500000) { g_mana_cache.clear(); g_mana_cache_bytes = 0; tier1::Set(tier1::kMana, 0); }   // bound cross-rollout growth
         ManaCacheEntry e; e.verify = mk2; e.payable = ok; e.drip_life = 0; e.self_life = 0;
         e.energy_spent = 0;
+        if (McVerifyOn()) { e.dbg_pay_ctx = PayContextDigest(); e.dbg_traits = CurrentPlanTraitsHash(); }
         e.feed_alt = !ok && mc_alt_here;
         bool storable = true;
         if (ok)
