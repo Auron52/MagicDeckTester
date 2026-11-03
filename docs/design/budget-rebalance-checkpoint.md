@@ -356,3 +356,18 @@ Branch base 3640b6bf1 is 44 commits behind origin (25 src files): rebase before 
   push budget-rebalance. Then a paired wall bench vs 26dbad212 (run_pairbench.sh pattern) -- test 5.
   Then: re-price stage (charge uncharged work); pooled bottoming budget; EDF remaining wastes.
   Shared-branch push only when the feature is complete (USER).
+
+## Live 2026-11-03 ~12:40 UTC: ledger tests 3+4 PASSED; test 5 running
+
+- CI for de98b05a5: ubuntu, windows, determinism parity all green.
+- Test 3 (MTG_PLAN_CACHE_KB=1 vs default, full regression tier, 264 jobs / 75,244 games): 0 play changes,
+  units IDENTICAL (358,188,724 both), 0 unit-diff jobs. Plan-cache residency no longer moves play.
+  Core-ms 1.368x for KB=1 (the cost of no cache; contention also differed). [plan-ledger] muted_recomputes=127.7M,
+  forced_misses=16,964, shadow_peak_keys=31,589 per thread (3 caches) -- ~1.5 MB/thread.
+- Test 4 (default ledger build vs GT): smoke 54,075 and regression 75,244 games, 0 play changes. Nothing to accept;
+  regression tier ALL PASS 264/264.
+- Test 5 RUNNING: build/scratch/budget/run_ledger_bench.sh -- same binary (de98b05a5 src), MTG_PLAN_PRICED_LEDGER=0
+  (== 26dbad212 behaviour; the only src diff since then is the flagged ledger) vs =1, regression manifest, both
+  arms concurrent at 16 threads. Output lb_on/lb_off.{log,err}, marker ledgerbench.DONE.
+- NEXT after test 5: re-price stage (charge uncharged work; moves every deck -> held-out A/B per deck), pool the
+  bottoming-trial budget, EDF wastes.
