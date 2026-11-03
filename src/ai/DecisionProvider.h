@@ -258,6 +258,18 @@ public:
     virtual bool SacNamedPutTargets(const GameState& /*s*/, int /*controller*/, const CardParams& /*pp*/,
                                     std::vector<std::string>& /*out*/) const { return false; }
 
+    // UpkeepSacrificeVictim -- the victim of a MANDATORY upkeep "sacrifice a creature" trigger (Abhorrent
+    // Overlord, CardParams::upkeep_sacrifice_creature; PerformUpkeepSacrificeCreature, both worlds). `source`
+    // = the battlefield card number of the permanent whose trigger this is (0 = unknown). Returning TRUE
+    // means the provider FIXES the victim: `pick` = a battlefield index of a creature `controller` controls,
+    // and the trigger's searched victim pin is ignored. FALSE (the default) = the engine's searched,
+    // identity-folded rank list. UpkeepSacrificeVictimFixed -- TRUE iff this provider fixes EVERY such
+    // trigger's victim on `s` (then the enumerator emits no victim variants: TurnSolver.cpp "SEARCHED DEMON
+    // TRIGGERS"). The two must agree: Fixed() true -> Victim() returns true whenever a creature is ours.
+    virtual bool UpkeepSacrificeVictim(const GameState& /*s*/, int /*controller*/, int /*source*/,
+                                       int& /*pick*/) const { return false; }
+    virtual bool UpkeepSacrificeVictimFixed(const GameState& /*s*/) const { return false; }
+
     // A library tutor whose candidate list (TutorCandidates) is EMPTY is NOT CAST -- neither from hand (no
     // cast action is emitted) nor for free off a ripple reveal (the match is not castable) -- instead of
     // the engine's default whiff ("castable, fetches nothing"). Default false = byte-identical for every

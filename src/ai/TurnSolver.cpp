@@ -83237,6 +83237,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             return (kw & ~(kd->card.m_keyword_mask | Card::Bit(Keyword::Flying))) == 0;
         };
         const int inherited = state.scripted_demon_trigger;
+        const bool victim_fixed = ResolveProvider(state).UpkeepSacrificeVictimFixed(state);
         std::vector<TurnSolver::Plan> extra;
         for (std::size_t i = 0, n_base = all.size(); i < n_base; ++i)
         {
@@ -83315,7 +83316,9 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 const int dc = ko_bound - hc - kc;
                 ko_bound = dc + std::max(hc, kc);
             }
-            const int ko = over ? std::min(kDemonPinMask + 1, ko_bound) : 1;
+            // A provider that FIXES the victim (Shadowborn INT-7, USER 2026-11-03: Harpy > Apostle > the Overlord,
+            // never searched) leaves the Overlord half one rank: no victim variants.
+            const int ko = (over && !victim_fixed) ? std::min(kDemonPinMask + 1, ko_bound) : 1;
             for (int r = 0; r < std::max(1, kr); ++r)
             {
                 for (int o = 0; o < std::max(1, ko); ++o)

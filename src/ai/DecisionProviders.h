@@ -4016,6 +4016,27 @@ public:
     bool SacNamedPutTargets(const GameState& s, int controller, const CardParams& pp,
                             std::vector<std::string>& out) const override;
     bool TutorNeedsCandidate(const GameState& s, int controller, const CardParams& pp) const override;
+
+    // ---- INT-7: THE USER'S OVERLORD UPKEEP-SACRIFICE ORDER (USER 2026-11-03) ---------------------------
+    // AUTHORITY. The USER: "Abhorrent Overlord can just sacrifice the first Harpy"; "The Overlord and Sire
+    // attack for 5 and 6. They hit hard enough to be worth keeping over a harpy."; and, on the rest: "I don't
+    // think we should fully search that. Maybe choose a Shadowborn next and finally the Overlord?"; "This
+    // seems better than wasting search time." So the victim is NEVER searched: exactly ONE, in this order --
+    //   1. a HARPY: a token creature with no CardDefinition matching the trigger source's devotion-token
+    //      spec (etb_tokens_per_devotion_color + etb_created_token_power / _toughness / _subtypes);
+    //   2. else a SAC-NAMED creature (sac_named_count > 0: Shadowborn Apostle);
+    //      within 1 and 2 the weakest copy (tapped first, then summoning-sick, then the first -- at the
+    //      upkeep every copy is untapped and none is sick, so they are equivalent);
+    //   3. else the trigger's own SOURCE (the Overlord itself);
+    //   4. the source gone before resolution (a second Overlord's trigger ate it) and neither 1 nor 2:
+    //      the engine's generic front (UpkeepSacFoldReps' rank 0).
+    // Sire, Reaper, Jetmir, another Overlord are never offered while any of 1-3 exists. A USER-ordered
+    // provider RESTRICTION (not a proof, not a budget wave): no other victim at any budget, --budget-ms 0
+    // included. It SUPERSEDES the INT-5 victim fold (SpellEffects.h UpkeepSacFoldReps), which stays as the
+    // engine's sound default for MTG_UNPRUNED (the audit arm) and every other deck. Roles off CARD DATA.
+    // Human play keeps the full `sacrifice` board click (this pick is its default).
+    bool UpkeepSacrificeVictim(const GameState& s, int controller, int source, int& pick) const override;
+    bool UpkeepSacrificeVictimFixed(const GameState& s) const override;
     static constexpr int kManaGoal       = 6;   // no granter out: the Stone's 5 + an Apostle's 1
     static constexpr int kManaGoalRipple = 3;   // a granter out (USER: "change 2 ... to be 3 mana"; 4 is the most needed)
     // "Reachable this or next turn" -- the most mana one of our next two turns can make, read off the

@@ -43213,6 +43213,14 @@ inline std::vector<int> DemonTriggerClassReps(const GameState& s, int controller
 // is a SOUND DOMINANCE FOLD (default ON; MTG_OVERLORD_VICTIM_FOLD=0 restores the full list, an A/B arm only).
 // Every non-dominated choice -- the Overlord itself, a Demon keeper, Reaper, Sire, a second token class --
 // stays searched. The enumerator's rank bound (TurnSolver.cpp "SEARCHED DEMON TRIGGERS") shrinks to match.
+//
+// SUPERSEDED FOR SHADOWBORN BY A USER RULE (INT-7, USER 2026-11-03: "The Overlord and Sire attack for 5 and 6.
+// They hit hard enough to be worth keeping over a harpy."; "I don't think we should fully search that. Maybe
+// choose a Shadowborn next and finally the Overlord?"). ShadowbornProvider::UpkeepSacrificeVictim fixes ONE
+// victim -- a Harpy, else a Shadowborn Apostle, else the Overlord itself -- through the DecisionProvider hook
+// read in PerformUpkeepSacrificeCreature below, so the proof above is no longer what decides that deck's
+// victim (it is a USER restriction, not a dominance). The fold stays the engine default: every other
+// provider, and Shadowborn under MTG_UNPRUNED (the audit arm), where the hook declines.
 inline bool UpkeepFoldOn() { static const bool v = EnvOn("MTG_OVERLORD_VICTIM_FOLD", true); return v; }
 struct UpkeepFoldPool
 {
@@ -43464,13 +43472,18 @@ inline void PerformUpkeepSacrificeCreature(GameState& state)
     const int me = state.active_player_index;
     int n = 0;
     std::string src = "Abhorrent Overlord";
+    std::vector<int> sources;   // the trigger's own permanent (card number), one entry per trigger
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != me || p.def_absent) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (d != nullptr && d->params.upkeep_sacrifice_creature > 0)
-        { n += d->params.upkeep_sacrifice_creature; src = d->card.m_name.str(); }
+        {
+            n += d->params.upkeep_sacrifice_creature; src = d->card.m_name.str();
+            for (int c = 0; c < d->params.upkeep_sacrifice_creature; ++c) { sources.push_back(p.card.m_number); }
+        }
     }
+    const DecisionProvider& prov = ResolveProvider(state);
     for (int j = 0; j < n; ++j)
     {
         // The rank list with the dominated keepers folded away (UpkeepSacFoldReps; proof above).
@@ -43478,6 +43491,11 @@ inline void PerformUpkeepSacrificeCreature(GameState& state)
         if (reps.empty()) { break; }
         const int k = std::min<int>(DemonPinRank(pin, kDemonOverlordShift, j), static_cast<int>(reps.size()) - 1);
         int bi = reps[static_cast<std::size_t>(k)];
+        // A provider that FIXES the victim (Shadowborn INT-7, the USER's Harpy > Apostle > the Overlord order)
+        // overrides the searched rank; the enumerator emits no victim variants for it.
+        int fixed = -1;
+        if (prov.UpkeepSacrificeVictim(state, me, sources[static_cast<std::size_t>(j)], fixed)
+            && fixed >= 0 && fixed < static_cast<int>(state.battlefield.size())) { bi = fixed; }
         if (g_play_sacrifice_chooser != nullptr && !g_tap_speculating)
         {
             std::vector<int> legal;

@@ -72,6 +72,14 @@ Permanent Perm5(const std::string& name, int number, bool fresh = false, bool ta
     return p;
 }
 const ShadowbornProvider& Prov5() { static const ShadowbornProvider p; return p; }
+// INT-7: the provider with the USER's fixed Overlord victim switched off -- the MTG_UNPRUNED audit arm's shape,
+// where the INT-5 fold's searched rank list decides. Used to keep the fold's own tests meaningful.
+struct SearchedVictimProv5 : ShadowbornProvider
+{
+    bool UpkeepSacrificeVictim(const GameState&, int, int, int&) const override { return false; }
+    bool UpkeepSacrificeVictimFixed(const GameState&) const override { return false; }
+};
+const ShadowbornProvider& ProvSearched5() { static const SearchedVictimProv5 p; return p; }
 GameState Base5(int swamps)
 {
     Ensure5();
@@ -279,11 +287,20 @@ TEST_CASE("INT-5 Overlord fold: a Harpy class drops the Apostle class; the Overl
     CHECK(s.battlefield[static_cast<std::size_t>(folded[1])].card.m_name.str() == kOver5);
     for (int rank = 0; rank < 4; ++rank)
     {
+        // The searched shape (the audit arm): the pin's rank picks among [Harpy, Overlord].
         GameState g = s;
+        g.m_provider = &ProvSearched5();
         g.scripted_demon_trigger = static_cast<std::int16_t>(rank << kDemonOverlordShift);
         PerformUpkeepSacrificeCreature(g);
         CHECK(CountBf5(g, kAp5) == 1);   // never the Apostle while a Harpy is there
         CHECK((rank == 0 ? CountTokens5(g) == 1 : CountBf5(g, kOver5) == 0));
+        // The shipped shape (INT-7, the USER's order): always the Harpy, whatever the pin says.
+        GameState u = s;
+        u.scripted_demon_trigger = static_cast<std::int16_t>(rank << kDemonOverlordShift);
+        PerformUpkeepSacrificeCreature(u);
+        CHECK(CountTokens5(u) == 1);
+        CHECK(CountBf5(u, kAp5) == 1);
+        CHECK(CountBf5(u, kOver5) == 1);
     }
     // A Demon keeper (Jetmir) with Reaper in the pool is NOT folded (it changes Reaper's forced target);
     // without any Reaper in the pool, Jetmir is a clean keeper and folds like the Apostle.
@@ -317,7 +334,9 @@ TEST_CASE("INT-5 Overlord fold: the enumerator's victim rank bound shrinks to D 
 {
     // Seven Apostles, B open, Overlord in the library: the activation plan puts the Overlord (2+ Harpies).
     // Classes at the upkeep: Harpy (H), Apostle (K), Overlord (D) -> the fold leaves 2 -> ranks 0..1.
+    // The SEARCHED shape (the audit arm); the shipped provider emits none (INT-7 test below).
     GameState s = Base5(2);
+    s.m_provider = &ProvSearched5();
     for (int k = 0; k < 7; ++k) { s.battlefield.push_back(Perm5(kAp5, 10 + k, /*fresh=*/true)); }
     Lib5(s, { kOver5, kReaper5, "Swamp", "Swamp", "Swamp" });
     int max_rank = -1, variants = 0;
@@ -547,4 +566,118 @@ TEST_CASE("INT-5 tutor fallback: exactly one -- a basic land, then a Demon the a
     for (const Action& act : TurnSolver::CollectActionsForTest(e, true))
     { if (act.kind == Action::Kind::CastFromHand && act.card_name.str() == "Demonic Tutor") { cast_seen = true; } }
     CHECK(cast_seen);
+}
+
+// ---- INT-7: the USER's Overlord upkeep-sacrifice order (USER 2026-11-03) ---------------------------------------
+// "The Overlord and Sire attack for 5 and 6. They hit hard enough to be worth keeping over a harpy."; "I don't
+// think we should fully search that. Maybe choose a Shadowborn next and finally the Overlord?" -- exactly ONE
+// victim: a Harpy, else an Apostle, else the Overlord itself, else (source gone) the generic front.
+namespace
+{
+GameState Upkeep7() { GameState s = Base5(2); Lib5(s, { kReaper5, "Swamp", "Swamp" }); return s; }
+void Unsick7(GameState& s) { for (Permanent& p : s.battlefield) { p.entered_this_turn = false; } }
+}
+
+TEST_CASE("INT-7 Overlord victim: Harpy + Sire + Overlord -> the Harpy only, at every pin")
+{
+    GameState s = Upkeep7();
+    s.battlefield.push_back(Perm5(kOver5, 5));
+    s.battlefield.push_back(Perm5(kSire5, 8));
+    CreateTokens(s, 0, 1, 1, 1, { "Harpy" }, "B", { "Flying" });
+    Unsick7(s);
+    int pick = -1;
+    REQUIRE(Prov5().UpkeepSacrificeVictimFixed(s));
+    REQUIRE(Prov5().UpkeepSacrificeVictim(s, 0, 5, pick));
+    CHECK(s.battlefield[static_cast<std::size_t>(pick)].is_token);
+    for (int rank = 0; rank < 4; ++rank)
+    {
+        GameState g = s;
+        g.scripted_demon_trigger = static_cast<std::int16_t>(rank << kDemonOverlordShift);
+        PerformUpkeepSacrificeCreature(g);
+        CHECK(CountTokens5(g) == 0);
+        CHECK(CountBf5(g, kSire5) == 1);
+        CHECK(CountBf5(g, kOver5) == 1);
+        CHECK(g.scripted_demon_trigger == -1);
+    }
+}
+
+TEST_CASE("INT-7 Overlord victim: no Harpy -> an Apostle (the weakest copy); Sire, Reaper, Jetmir stay")
+{
+    GameState s = Upkeep7();
+    s.battlefield.push_back(Perm5(kOver5, 5));
+    s.battlefield.push_back(Perm5(kSire5, 8));
+    s.battlefield.push_back(Perm5(kJet5, 7));
+    s.battlefield.push_back(Perm5(kAp5, 10));
+    s.battlefield.push_back(Perm5(kAp5, 11, /*fresh=*/false, /*tapped=*/true));
+    // A token that is NOT the devotion spec (a 2/2) is not a Harpy.
+    CreateTokens(s, 0, 1, 2, 2, { "Zombie" }, "B", {});
+    Unsick7(s);
+    int pick = -1;
+    REQUIRE(Prov5().UpkeepSacrificeVictim(s, 0, 5, pick));
+    CHECK(s.battlefield[static_cast<std::size_t>(pick)].card.m_number == 11);   // the tapped copy first
+    GameState g = s;
+    PerformUpkeepSacrificeCreature(g);
+    CHECK(CountBf5(g, kAp5) == 1);
+    CHECK(CountTokens5(g) == 1);
+    CHECK(CountBf5(g, kSire5) == 1);
+    CHECK(CountBf5(g, kJet5) == 1);
+    CHECK(CountBf5(g, kOver5) == 1);
+}
+
+TEST_CASE("INT-7 Overlord victim: no Harpy, no Apostle -> the Overlord itself; source gone -> the generic front")
+{
+    GameState s = Upkeep7();
+    s.battlefield.push_back(Perm5(kSire5, 8));
+    s.battlefield.push_back(Perm5(kOver5, 5));
+    s.battlefield.push_back(Perm5(kJet5, 7));
+    Unsick7(s);
+    GameState g = s;
+    PerformUpkeepSacrificeCreature(g);
+    CHECK(CountBf5(g, kOver5) == 0);
+    CHECK(CountBf5(g, kSire5) == 1);
+    CHECK(CountBf5(g, kJet5) == 1);
+    // Two Overlords, one Harpy: the first trigger eats the Harpy, the second its OWN source (not the first
+    // Overlord, not Sire).
+    GameState two = s;
+    two.battlefield.push_back(Perm5(kOver5, 6));
+    CreateTokens(two, 0, 1, 1, 1, { "Harpy" }, "B", { "Flying" });
+    Unsick7(two);
+    PerformUpkeepSacrificeCreature(two);
+    CHECK(CountTokens5(two) == 0);
+    CHECK(CountBf5(two, kOver5) == 1);
+    CHECK(CountBf5(two, kSire5) == 1);
+    CHECK(CountBf5(two, kJet5) == 1);
+    // The trigger's source already gone and neither a Harpy nor an Apostle: the generic front.
+    GameState gone = s;
+    gone.battlefield.erase(std::remove_if(gone.battlefield.begin(), gone.battlefield.end(),
+                                          [](const Permanent& q) { return q.card.m_name.str() == kOver5; }),
+                           gone.battlefield.end());
+    int pick = -1;
+    REQUIRE(Prov5().UpkeepSacrificeVictim(gone, 0, 5, pick));
+    const std::vector<int> reps = UpkeepSacFoldReps(gone, 0);
+    REQUIRE(!reps.empty());
+    CHECK(pick == reps.front());
+}
+
+TEST_CASE("INT-7 Overlord victim: the enumerator emits no Overlord victim variants")
+{
+    GameState s = Base5(2);
+    for (int k = 0; k < 7; ++k) { s.battlefield.push_back(Perm5(kAp5, 10 + k, /*fresh=*/true)); }
+    Lib5(s, { kOver5, kReaper5, "Swamp", "Swamp", "Swamp" });
+    int puts = 0, variants = 0;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true))
+    {
+        bool puts_over = false;
+        for (const Action& a : p.actions)
+        {
+            if (a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::SacNamedTutorPut
+                && a.tutor_target.str() == kOver5) { puts_over = true; }
+        }
+        if (!puts_over) { continue; }
+        ++puts;
+        if (p.demon_trigger_choice >= 0 && ((p.demon_trigger_choice >> kDemonOverlordShift) & kDemonPinMask) != 0)
+        { ++variants; }
+    }
+    CHECK(puts >= 1);
+    CHECK(variants == 0);
 }

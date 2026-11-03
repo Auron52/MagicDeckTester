@@ -58107,6 +58107,80 @@ int ShadowbornProvider::CastOrderRank(const GameState& s, const CardDefinition& 
     return DeckProvider::CastOrderRank(s, def);
 }
 
+// ---- ShadowbornProvider: the USER's Overlord upkeep-sacrifice order (Shadowborn INT-7; authority and the
+// order are in the declaration) ------------------------------------------------------------------------------
+bool ShadowbornProvider::UpkeepSacrificeVictimFixed(const GameState& /*s*/) const
+{
+    return !DecisionUnpruned();   // the audit arm (global MTG_UNPRUNED) searches the INT-5 fold's list
+}
+bool ShadowbornProvider::UpkeepSacrificeVictim(const GameState& s, int controller, int source, int& pick) const
+{
+    if (!UpkeepSacrificeVictimFixed(s)) { return false; }
+    // The devotion-token specs of every devotion-token maker we own on the battlefield or in the graveyard
+    // (the trigger's source may already be gone: a second Overlord's trigger can eat the first).
+    std::vector<const CardDefinition*> makers;
+    auto note_maker = [&](const Card& c)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d != nullptr && !d->params.etb_tokens_per_devotion_color.empty()
+            && std::find(makers.begin(), makers.end(), d) == makers.end()) { makers.push_back(d); }
+    };
+    for (const Permanent& p : s.battlefield)
+    { if (p.controller_index == controller && !p.def_absent) { note_maker(p.card); } }
+    for (const Card& c : s.players[static_cast<std::size_t>(controller)].graveyard) { note_maker(c); }
+    auto is_harpy = [&](const Permanent& q) -> bool
+    {
+        if (!q.is_token || !q.card.IsCreature() || CardDatabase::Instance().LookupCached(q.card) != nullptr) { return false; }
+        for (const CardDefinition* d : makers)
+        {
+            const CardParams& mp = d->params;
+            if (q.card.m_power.value_or(-1) != mp.etb_created_token_power
+                || q.card.m_toughness.value_or(-1) != mp.etb_created_token_toughness) { continue; }
+            bool subs = true;
+            for (const std::string& st : mp.etb_created_token_subtypes) { if (!CardHasSubtype(q.card, st)) { subs = false; break; } }
+            if (subs) { return true; }
+        }
+        return false;
+    };
+    auto is_apostle = [&](const Permanent& q) -> bool
+    {
+        if (q.is_token || q.def_absent) { return false; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+        return d != nullptr && d->card.IsCreature() && d->params.sac_named_count > 0;
+    };
+    // The weakest copy of a role: tapped first, then summoning-sick, then the first on the battlefield.
+    auto weakest = [&](auto&& role) -> int
+    {
+        int best = -1, best_w = -1;
+        for (int i = 0; i < static_cast<int>(s.battlefield.size()); ++i)
+        {
+            const Permanent& q = s.battlefield[static_cast<std::size_t>(i)];
+            if (q.controller_index != controller || !(q.card.IsCreature() || q.is_animated) || !role(q)) { continue; }
+            const int w = (q.tapped ? 2 : 0) + (q.entered_this_turn ? 1 : 0);
+            if (w > best_w) { best = i; best_w = w; }
+        }
+        return best;
+    };
+    int bi = weakest(is_harpy);
+    if (bi < 0) { bi = weakest(is_apostle); }
+    if (bi < 0 && source != 0)
+    {
+        for (int i = 0; i < static_cast<int>(s.battlefield.size()); ++i)
+        {
+            const Permanent& q = s.battlefield[static_cast<std::size_t>(i)];
+            if (q.controller_index == controller && q.card.m_number == source) { bi = i; break; }
+        }
+    }
+    if (bi < 0)
+    {
+        const std::vector<int> reps = UpkeepSacFoldReps(s, controller);   // the generic front
+        if (reps.empty()) { return false; }
+        bi = reps.front();
+    }
+    pick = bi;
+    return true;
+}
+
 // ---- ShadowbornProvider: the USER's tutor and Demon rules (Shadowborn INT-4; the rule table and its
 // authority are in the declaration) ----------------------------------------------------------------------
 int ShadowbornProvider::ShadowbornReachableMana(const GameState& s, int controller, bool this_turn_only,

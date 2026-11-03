@@ -274,7 +274,7 @@ TEST_CASE("Apostle activation: fail to find sacrifices six, puts nothing and sti
     CHECK(Activations(f).empty());
 }
 
-TEST_CASE("Abhorrent Overlord: the upkeep sacrifice takes the pinned class; unpinned takes the front")
+TEST_CASE("Abhorrent Overlord: the upkeep sacrifice is the USER's fixed victim; a pin does not move it")
 {
     GameState s = BaseSb2();
     s.battlefield.push_back(PermSb2("Abhorrent Overlord", 5));
@@ -287,14 +287,14 @@ TEST_CASE("Abhorrent Overlord: the upkeep sacrifice takes the pinned class; unpi
     CHECK(CountTokens(a) == 1);
     CHECK(CountOnBf(a, kApostle) == 1);
     CHECK(a.scripted_demon_trigger == -1);
-    // INT-5 THE OVERLORD VICTIM FOLD (SpellEffects.h UpkeepSacFoldReps): the Harpy class drops the Apostle
-    // class it dominates, so the ranks index [Harpy, Overlord]; with no Harpy the Apostle is rank 0.
+    // INT-7 (USER 2026-11-03): the victim is never searched -- Harpy, else Apostle, else the Overlord. A
+    // pin (rank 1 = itself under the INT-5 fold's [Harpy, Overlord]) no longer moves it off the Harpy.
     GameState b = s;
-    b.scripted_demon_trigger = static_cast<std::int16_t>(1 << kDemonOverlordShift);   // rank 1: itself
+    b.scripted_demon_trigger = static_cast<std::int16_t>(1 << kDemonOverlordShift);
     PerformUpkeepSacrificeCreature(b);
-    CHECK(CountTokens(b) == 2);
+    CHECK(CountTokens(b) == 1);
     CHECK(CountOnBf(b, kApostle) == 1);
-    CHECK(CountOnBf(b, "Abhorrent Overlord") == 0);
+    CHECK(CountOnBf(b, "Abhorrent Overlord") == 1);
     CHECK(b.creature_died_this_turn);
     CHECK(b.scripted_demon_trigger == -1);   // consumed
     GameState c = s;
