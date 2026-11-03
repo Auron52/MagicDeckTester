@@ -577,3 +577,134 @@ state (both 1-ofs already fetched by earlier activations).
    the library are not counted).
 5. Demon: no activation when neither Overlord nor Jetmir is left -- implemented as the USER ruled; recorded here
    with the USER's reasoning.
+
+## INT-5 done (2026-11-03)
+Commits on `shadowborn-analysis` (not pushed): `036f34907` (engine, provider, card notes, tests) + this ledger commit.
+Scope: the Stage 2d adversarial review (`logs/shadowborn/review-2d.md`) and the USER's same-day rulings on the tutor
+table, the Overlord victim, the Apostle decline and the fallback.
+
+**Review findings fixed (each with a unit test that fails with the fix reverted -- checked by reverting 1 / 2 / 9 and
+by `MTG_OVERLORD_VICTIM_FOLD=0` for 3):**
+1. **Free tutor clobbered the hard tutor's pick** (`PerformTutor`). A ripple free tutor now always carries a marker
+   (`RippleTutorRankPrefix` + rank, or + `u` = unpinned) and `PerformTutor` saves / restores `g_scripted_tutor_choice`
+   around it (the Profane upkeep discipline), so the hard tutor below resolves on the plan's `tutor_choice`.
+2. **Executor/rollout ripple divergence with `ripple_mask != 0`.** `PushCastTriggers(state, def, controller, number)`
+   stamps the cast copy's number on the Ripple entries (AIEngine hand cast + retrace, `PushFreeCast`,
+   `ResolveRippleTrigger`); the executor's "directly above its own spell" test now agrees with the rollout's.
+   Lockstep test with masks 0x01 / 0x02 / 0x03.
+3. **Overlord victim fold** -- see the proof below.
+4. **Free tutor / victim pin cap 2** -> every packed ordinal (`kRipplePinOrdinals` = 4) in a DEEP wave
+   (`RippleDeepWaveAdmitted`: unlimited, or a root budget >= `MTG_RIPPLE_DEEP_WAVE_MS`, default 1000 virtual ms);
+   2 below it. Budget-staged, reachable at `--budget-ms 0`. The 4-bit width (15 names) stays latent: the
+   restricted tutor list is <= 5 names.
+5. **Reveal budget silently exhausted.** New `kRippleRevealAll` ("every trigger reveals") replaces B = T at the top
+   of the per-name menu at every budget (identical in the dry run's world, still cast-everything when the plan's
+   earlier casts lengthen the chain; no extra variant). The late wave adds the finite budgets T .. Tmax-1
+   (Tmax = hand + library copies of the name) and decline bits sized by library copies.
+6. **Ordinals past the emitted menu.** Mask / decline bytes now carry their emitted menu length in the high nibble
+   (`RippleMenuByte` / `RippleMenuCovers`; 0 = hand-built, all 8 bits are pins); an ordinal past the menu is answered
+   by the playout policy AND counted (`unpinned_in_window` sites 2 / 4). Chosen over fanning them because the
+   ordinals are unforeseeable at enumeration (the dry run cannot see a library the plan moves) and fanning all 8
+   bits is a 256x cross product; the census is now honest instead (numbers below).
+8. **Late-wave leak through the plan cache.** `FoldPhysicalCards` folds the late / deep wave admissions (ripple
+   decks only). Not moot after the USER's Apostle ruling: the late wave still sizes the speculative tutor-chain fan
+   and the F1 budgets past the dry run.
+9. `ShadowbornReachableMana` reads suspend arrivals on `TurnSeq()`.
+7. **Ritual chain over-credit -- NOT fixed, recorded as known waste.** `ritual_float += per * (srch_taken + dom)` is
+   the dry run's chain on the pre-plan library; a plan casting one copy, or the payable-order fallback sequencing a
+   Ritual before the Stone, over-credits. Both worlds fail the later cast identically (wasted / misdirected search,
+   no divergence). A sound fix needs the plan's realised cast order at subset time; not cheap.
+
+**THE OVERLORD VICTIM FOLD (finding 3; USER 2026-11-03: "Abhorrent Overlord can just sacrifice the first Harpy").**
+The review's claim ("a Harpy is dominated by EVERY other creature") is false: keeping the Overlord itself means another
+forced sacrifice every upkeep, Reaper's forced end-step destroy can hit our creature, Sire discards our hand, and a
+DEMON keeper changes which of our creatures Reaper's "non-Demon" destroy must hit. The implemented fold is the provable
+part (`SpellEffects.h UpkeepSacFoldReps`, proof in the comment):
+- CLAIM: at our upkeep's Overlord trigger, with H a vanilla token (token, no definition, no counters / attachments,
+  not animated) and K a CLEAN KEEPER (`CardDefinition::upkeep_fold_keeper`: audited params only, no upkeep-sacrifice /
+  end-step destroy / end-step discard, benign keywords; no counters / attachments; no subtype a card we own excludes
+  from a destroy target), K at least as ready, power and toughness >= H's, H's keywords within K's + Flying -- and
+  EVERY card we own audited (`upkeep_fold_audited`, a raw-JSON key whitelist computed at load, so a new param is
+  unaudited until someone audits it) -- sacrificing H is at least as good as sacrificing K.
+- PROOF (simulation): world A keeps K, world B keeps H; map every later B decision onto A with K for H. Combat: K's
+  damage >= H's (goldfish, no blockers; Flying inert, USER-approved). Every audited reader counts a creature once
+  (Jetmir's tiers, Intent / Culling / the next Overlord's fodder, Reaper's target pool -- equal legality by the
+  subtype premise). K's extra characteristics are read only in its favour (a NAME count, devotion, card-ness unread).
+  K has no drawback. So value(A) >= value(B).
+- So: while a Harpy class is present, the Apostle class (and Jetmir when no Reaper is in our pool) leaves the rank
+  list; the Overlord itself, Jetmir with Reaper in the pool, Reaper and Sire stay searched. The enumerator's rank bound
+  becomes D + max(H, K) (it must still cover an upkeep where the Harpies are gone). The USER's simpler "Harpy first,
+  nothing else" would buy NO further units: the bound is set by the no-Harpy case either way. `MTG_OVERLORD_VICTIM_FOLD=0`
+  = A/B arm.
+
+**USER tutor table (2026-11-03, final; `ShadowbornProvider::TutorCandidates`, rule table in DecisionProviders.h):**
+
+| tier | no ripple granter on our battlefield | a granter on our battlefield |
+|---|---|---|
+| 1 | Thrumming Stone, if none on bf or in hand | Shadowborn Apostle, if none in hand |
+| 2 | mana, while reachable < 6 | mana, while reachable < 3 |
+| 3 | Apostle (first or second: one tier) | Apostle, if one is in hand ("second") |
+| 4 | extra mana | extra mana (the 4th mana and beyond) |
+
+- USER quotes: "Once thrumming stone is out we only need 3 or 4 mana maximum"; "2 apostles + 2 activations ... that
+  mana is less important than having an apostle in hand"; "The extra Apostle is actually probably better than the
+  seventh mana, so we would put them both at 3 and combine 4 and 6"; "Let's change 2 in the Stone on Battlefield case
+  to be 3 mana. 4 is the most we need, but not as crucial as having the second apostle."; "We shouldn't search Lotus
+  bloom" (Lotus Bloom never offered); spare Apostles = battlefield + hand (confirmed).
+- Mana order: Lake of the Dead first when fuelled (>= 2 Swamps, none held); then Dark Ritual > Culling the Weak, EXCEPT
+  Culling > Ritual when BOTH (i) an EXPENDABLE sacrifice target is out or castable from hand this turn (after reserving
+  one Apostle in hand for the Stone when a Stone is on bf or in hand -- none in hand = nothing expendable -- and one
+  creature for an Intent in hand while the Stone is missing, i.e. the Intent earmarked to fetch it; USER-confirmed)
+  AND (ii) Culling's net +3 reaches the tier's bar a turn earlier than Ritual's +2 (this-turn reachable mana -- new
+  `ShadowbornReachableMana(..., this_turn_only)`: untapped lands, this turn's drop, the pool -- then next turn's).
+  USER: "otherwise Dark Ritual which has no drawbacks"; "we should usually get the Thrumming Stone rather than culling
+  if you are missing it" (already so: tier 1).
+- FALLBACK (USER: "There should always be a tutor fallback or we should not cast the spell at all", "we prune it, not
+  return a full list", "Even better if that number is 1"): exactly ONE candidate when every tier is empty -- the first
+  present of a basic land producing a colour of the Apostle's cost (Swamp) > a creature of the activation's searched
+  subtype it does not fetch and that does not discard our hand (Reaper) > such a creature that does (Sire)
+  [order PROVISIONAL]. None -> the list is empty and the tutor is NOT CAST: new hook
+  `DecisionProvider::TutorNeedsCandidate` (default false, byte-identical elsewhere) drops the hand cast and makes a
+  ripple-revealed copy uncastable (`TutorCastPruned` in `RippleMatchCastable` and the dry run). Human play keeps every
+  legal cast (the four Shadowborn scenarios use a Swords filler and need it).
+- **Apostle decline PRUNED at every budget** (USER: "We should heuristically prune the decline of Apostles. I can't see
+  an advantage."): the INT-3 late-wave `take_cap` variants are gone; the script still honours a hand-built cap.
+- **Confirmed, no change** (USER): ripple bottom order = reveal order; cast order Stone-first with the payable-order
+  fallback casting rituals before the Stone when it needs their mana ("You just cast them before and go off").
+
+**Tests:** new `test/unit/test_shadowborn_int5.cpp` (13 cases); INT-2 (Overlord ranks under the fold), INT-3
+(ExecutorCast passes the number; budget menu tops with ALL; a free Intent's fallback pick), INT-4 (the new table,
+the one-candidate fallback) updated. **Unit 2471/2471. Scenarios 398/398. Smoke** (not accepted): 161 passed, 4 failed
+-- Merfolk d0/d3/d5 + merfolk2hg d3, the pre-existing drift (merfolk d3 digest 16290806e85e1728); every other case
+byte-identical.
+
+**Sanity** (d3 b10, seed 1001, 50 games, `--batch`, 8 threads per arm, run together; NOTE the deck folder now holds the
+Stage 4 `Shadowborn Apostle.profile.json`, which the batch picks up, so all three arms ran with it -- the INT-4 arm
+re-measures at 7,283,597 units / digest aae1fc798c6bfb44 rather than the ledger's profile-less 7,268,498):
+
+| | INT-4 `ae8cbd483` | INT-5 | INT-5, fold off |
+|---|---|---|---|
+| avg win turn | 5.60 | **5.42** | 5.44 |
+| units total (per game) | 7,283,597 (145,672) | **4,742,588 (94,852)** | 5,943,151 (118,863) |
+| batch digest | aae1fc798c6bfb44 | cbe610e63edc2f7f | 234a277fd63e2c0d |
+| activations | 52 in 39 games | 51 in 40 | 51 in 40 |
+| Demons put/entered | Jetmir 28, Overlord 25, Reaper 5, Sire 1 | Jetmir 30, Overlord 22, Reaper 5, Sire 1 | same as INT-5 |
+| Diabolic Intent fetched | Stone 11, Ritual 10, Apostle 7, Lake 4, Culling 4, Swamp 2, Blood Crypt 1 | Ritual 12, Apostle 9, Stone 9, Lake 6 | Ritual 13, Apostle 10, Stone 9, Lake 6 |
+
+The fold alone: -20.2% units (5.94M -> 4.74M) at equal-within-noise play (5.44 vs 5.42). INT-5 vs INT-4 overall:
+-34.9% units and -0.18 turns (the tutor table and the fixes together; 50 games, not a held-out A/B).
+
+**Census (MTG_RIPPLE_STATS, same runs), now honest:** INT-5 unpinned_in_window = 5,280 of 16.8M triggers: tutor 1,535 +
+victim 1,535 (free Intents on chains the dry run could not foresee, below the late wave), **take/past-bits 2,110 and
+reveal/past-mask 100 -- the residual finding 6 showed was previously read silently as "take / reveal"** (INT-4's census
+showed 0 there). Real-game bottom tripwire: 2,053 ripple-bottomed, 648 read before a shuffle.
+
+**Open / provisional (surfaced, not blocking):**
+1. Fallback order basic land > Reaper > Sire (the coordinator's PROVISIONAL order).
+2. The Overlord fold keeps the Overlord-self / Demon-with-Reaper / Sire options searched (sound), rather than the USER's
+   literal "Harpy only"; same units either way (above).
+3. The deep wave (`MTG_RIPPLE_DEEP_WAVE_MS` = 1000) multiplies the unbudgeted late-wave cross product by ~wt*wv per extra
+   ordinal; INT-3's note 8 (unbudgeted cost) gets worse -- to be sized with the unbudgeted backstop rows at Stage 4-bis.
+   The lasting fix is to decide free-tutor picks at their resolution (a breakpoint) instead of a packed cross product.
+4. Finding 7 (ritual chain over-credit) left as known waste.
+5. The residual in-window unpinned answers (5,280 at d3 b10) take the playout policy below the late wave, by design.
