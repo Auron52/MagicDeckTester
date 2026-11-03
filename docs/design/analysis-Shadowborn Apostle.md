@@ -265,3 +265,88 @@ now."* Covered (all now APPROVED for now, revisit-able):
 - Profane Tutor "you may cast" collapsed to always-cast — USER 2026-11-03.
 - Reaper / Sire "each end step" reduced to our end step — USER 2026-11-03.
 - Flying / trample / vigilance inert in goldfish — USER 2026-11-03.
+
+## INT-2 done (2026-11-03)
+Commits on `shadowborn-analysis` (not pushed): `df316ac28` (engine, cards, tests, viewer) + the ledger commit adding this section.
+
+**Cards (cards.json; cost + oracle verbatim from Scryfall, bracket notes appended):** Shadowborn Apostle
+(`sac_named_count 6`, `sac_named_activation_cost {B}`, `tutor_types [Creature]`, `tutor_required_subtype Demon`,
+`tutor_shuffle_after`), Abhorrent Overlord (`etb_tokens_per_devotion_color B` + 1/1 black Harpy flying spec,
+`upkeep_sacrifice_creature 1`), Reaper from the Abyss (`endstep_morbid_destroy_target_creature`,
+`endstep_destroy_excluded_subtype Demon`; keywords Flying + Morbid -- `Morbid` added as an inert keyword tag),
+Sire of Insanity (`endstep_each_player_discards_hand`), Jetmir (`creature_count_anthem_tiers [3,6,9]`,
+`_power 1`, `_keywords [Vigilance, Trample, Double strike]`, Legendary).
+
+**New params:** the eleven above (all default-off). New GameState fields in padding (size 1232 unchanged):
+`deck_has_morbid` / `deck_has_count_anthem` / `deck_has_demon_triggers` / `deck_has_sac_named` (deck stamps,
+default true when unstamped) and the pin `scripted_demon_trigger`. New Plan field `demon_trigger_choice` (in padding).
+
+**Engine:**
+- Apostle: `PermAbilityMode::SacNamedTutorPut` (no {T}). `EmitSacNamedVariants` emits ONE family per board
+  (any copy is the source; re-resolved by name in `ResolveHandSourceActivation`). Bodies = a READINESS-COUNT pin
+  (`Action::sac_victim_id = 1 + s + 8t`): tapped-and-new copies always first (dominated by every other state),
+  then t tapped / u new-untapped / s attack-ready; a code with s > 0 while a weaker copy is left over is NOT
+  emitted (sound dominance). T vs U stays searched (INT-1's readiness reasoning). Copies in HAND count as
+  arrivals, so "cast two, sacrifice them + four old" is its own code; an unrealised code is a clean no-op.
+  Demon = every legal library Demon (Jetmir included) + `(no fetch)` (fail-to-find, still shuffles). Resolver in
+  `ApplyPermAbility` (both trailing passes via `SacNamedPinScope`), sacrifices through `SacrificePermanentAt`
+  (morbid set), then `PerformTutorToBattlefield` (full ETB cascade). Plan-signature `#N<code>#F<demon>` in the fast
+  and legacy builders. One activation per plan; the second is breakpoint site 9: a board-level activation key
+  (`kActSacNamed`, carried by the first copy, valued floor(copies/6)) is new exactly when the count crosses a
+  multiple of 6 (the sixth arrival, or six left after the plan's own activation). Leaf/rollout keeps the front code.
+- Overlord ETB: `DevotionTo` at resolution (own pips count), one `CreateTokens` event.
+- `PerformUpkeepSacrificeCreature` (Overlord, after Fading, both worlds), `PerformEndStepMorbidDestroy` (Reaper,
+  morbid snapshotted at the top of the end step) and `PerformEndStepDiscardHands` (Sire; also at the opponent's
+  notional end step, after their draw) -- all deck-gated, lockstep in GameEngine and SimulateEndAndStartNextTurn.
+  Choice lists are identity-folded classes (`DemonTriggerClassReps`: controller + INT-1's base key); Reaper
+  orders opponent creatures first, then ours tokens-first (ORDER only).
+- Demon-trigger axis (`MTG_DEMON_AXIS`, default on): per base plan with a consumer (Reaper on board / put / cast
+  AND a possible death this turn; Overlord on board / put / cast), the CROSS PRODUCT of Reaper ranks (low byte)
+  x Overlord ranks (high byte), bounded by the classes now + new names the plan adds + a Harpy class. End step
+  consumes the low byte, the next upkeep the rest. Folded in dominance::Build, the dedup pending pins, the
+  breakpoint key, plan hash/equality/census. Morbid flag folded in BuildSimKey + dominance (deck_has_morbid).
+- Jetmir: count pass in `ComputeLordBonus` (count once per board via `BoardSources::own_creatures`, otherwise
+  capped at the top tier), `CountAnthemGrantsKeyword` feeding `CreatureHasDoubleStrike` / `CreatureHasVigilance`;
+  Jetmir admitted to bs.anthems / bs.ds / bs.vigilance.
+- Second main: `DeckUsesSecondMain` returns true on `sac_named_count > 0` (only this deck carries it).
+  `ShadowbornProvider` routing OR gains `sac_named_count > 0`.
+- Viewer: line verb `sacnamed=<Demon|(no fetch)>` (LineSpec, CheckLine, plan JSON, index.html); `sacrifice` reuse
+  (Apostle's six, with `SacBurstScope` "pick k of 6"; Overlord's upkeep), `target` reuse (Reaper). DECISIONS.md
+  rows + audit MANIFEST (`sac_named_count`, `upkeep_sacrifice_creature` -> sacrifice; Reaper -> target).
+
+**Tests:** `test/unit/test_shadowborn_int2.cpp` (10 cases: routing + second main; activation with sick Apostles
+and Overlord devotion after the six (2 + 2 left = 4 Harpies); readiness code s / arrivals; two activations and
+the order (Overlord first 8 Harpies vs second 5); fail-to-find shuffles, five copies not activatable; Overlord
+upkeep pin ranks incl. itself; Reaper own-creature forced target, spawn rank 0 / Apostle rank 1, low-byte-only
+consumption; Sire discard keeps staged; Jetmir 0/1/2/3 tiers, vigilance at 3, double strike at 9 = 8 damage vs 3;
+demon axis emits Reaper variants). Unit suite 2443/2443, scenarios 398/398.
+
+**Smoke:** 161 passed, 4 failed -- all Merfolk (d0/d3/d5, 2hg d3); merfolk d3 digest 16290806e85e1728 = the
+pre-existing drift INT-1 reproduced on HEAD. No other case play-changed. Not accepted.
+
+**Sanity run** (50 games, d3 b10, seed 1001, no profile): avg 6.34, one unwon (gi15, no lands early). Only 2
+activations in 50 games (gi18 main 2 after attacking: cast the sixth, Overlord + 2 Harpies, won T6; gi21 main 1
+Sire) -- without Thrumming Stone (INT-3) six Apostles are rarely reached. 21 s wall on 20 threads.
+
+**For INT-3 (ripple):** ripple-cast Apostles are NOT counted as arrivals by `EmitSacNamedVariants` (only hand
+copies); the activation after a chain is reached through the site-9 key (crossing a multiple of 6, armed post-plan,
+once per board -- not per Apostle entry). If a mid-chain activation is wanted, extend the arrival count with the
+chain's expected Apostles. Free ripple casts of Intent / Culling must still pay the sacrifice (INT-1 note).
+
+**Left / disclosed gaps:**
+- Within one readiness state the copies are taken lowest-number-first: exact while every copy of the name shares
+  its base identity (true in this pool); a name split by counters/Auras is a generality gap.
+- A third+ trigger ordinal of Reaper/Overlord takes its list front (pins hold 2 ordinals; the axis fans ordinal 0
+  only -- 1-ofs here). Multiple Reaper triggers choose targets at resolution, sequentially.
+- Demon axis cost: the Overlord half fans every base plan while an Overlord is out (x ~4-6 plans); measure at 2d /
+  the matrix; a boundary-fan (echo/DotH shape) is the alternative if it bites.
+- Sire's discard passes no madness host (no madness card in the pool).
+- `test/check_plan_sig_lockstep.py` fails at HEAD already (`ponder_keep` fast-only) -- not INT-2's.
+
+**New provisional calls (surfaced, USER sign-off owed):**
+1. Readiness dominance for the six: tapped-and-new copies first; an attack-ready copy never given up while a
+   weaker copy remains (only the counts are searched).
+2. Viewer-audit INERT classifications: `tutor_required_subtype`, `sac_named_activation_cost`,
+   `endstep_destroy_excluded_subtype`, `endstep_each_player_discards_hand`, `etb_tokens_per_devotion_color`,
+   `creature_count_anthem_tiers/_power/_keywords`.
+3. Demon-trigger default order (branch order only): Reaper -> opponent creatures first; Overlord -> tokens first.
