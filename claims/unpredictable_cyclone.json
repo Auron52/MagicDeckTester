@@ -1,0 +1,20 @@
+{
+ "blobs": {
+  "mulligan": null,
+  "valueleaf": null
+ },
+ "deck": "unpredictable_cyclone",
+ "frozen": "0b7d581f50786f0e20f438dfabf4531f558c2be4",
+ "heartbeat": "2026-11-03T13:42:03Z",
+ "host": "550a08fdc1f3",
+ "run_id": "unpredictable_cyclone-artifact-queue-d7d6a5-20261103T134203",
+ "score": 0.0,
+ "stage": "mulligan",
+ "stages": [
+  "mulligan",
+  "valueleaf"
+ ],
+ "started": "2026-11-03T13:42:03Z",
+ "state": "running",
+ "worker": "artifact-queue-d7d6a5"
+}
