@@ -140,6 +140,23 @@ Started 2026-11-03.
   tight X loses Alchemist turns); tier-1 sizes (tt 8, fsl 16, m1memo 8, gamelc 24, mana 16 MB); mana-cache
   context fold (MTG_MANA_CACHE_X_TRAITS / _X_PAYCTX); branch not pushed (push would also run Windows CI).
 
+## Live at compaction #2 (2026-11-03 ~06:40 UTC)
+- EDF subagent 2 DONE (write-up docs/design/edf-tutor-pin-alias-2026-11-03.md). Cherry-picked its 4 commits
+  (55ddfc4a7 MTG_BP_TUTOR_PIN_ALIAS, e3d46c06f MTG_SPWF_CANON_MEMO + MTG_RH_MOVED_VIA_CANDS, 36f12368c
+  MTG_BP_DERIVE_PRICED_STOP default OFF, 8feea40c3 docs). Exact collapses, default ON: gi821 767 s -> 178 s
+  quiet box, identical play. Where the tail work sits: breakpoint-continuation derivations run INSIDE one
+  apply (BpEnumEntryFor -> BpDeriveContinuationList -> EnumeratePlans), uncharged, no Overrun check; the
+  only sound check site is eval_and_push (= the PRICED_STOP proposal; repro: worst decision 47 -> 25 s
+  priced at X=50, but game +20% priced from re-derivation).
+- Binary rebuilt 06:24 UTC with all of it; unit tests 2420/2420.
+- RUNNING (harness-tracked b1eedgdg3): build/scratch/budget/run_edf.sh -> edf.DONE.
+  Pool A ea.* (24 thr, RSS cap 14): reg_manifest (compare `cmp_runs.py p2a ea` => expect 0 unit diffs)
+  + tail corpus tailx0_/tailx100_ (stop OFF). Pool B eb.* (8 thr, RSS cap 6, MTG_BP_DERIVE_PRICED_STOP=1):
+  tail tailx50_/tailx100_. Read: `ab_x_report.py ea` (needs tailx0 arm; regression jobs have no _x suffix ->
+  only the TAIL CORPUS table is meaningful), eb via a merged read or per-game SLOW-GAME grep.
+- Next: if ea == p2a on units, the collapses are exact at scale; judge gi821/gi214 tail at X=0/100; decide
+  whether PRICED_STOP earns a place (surface to USER). Then rebase onto origin (44 commits behind) before GT.
+
 ## A/B v3 FINAL (2026-11-03 05:47 UTC; pure binary, gate on unless "ng"; MTG_MAX_GAME_WALL_SEC=3600)
 Held-out regression shapes (seed+7e6), ~31,400 paired games per arm vs X=0:
 | X | moved (worse) | sum wall | p99.9 | max |
