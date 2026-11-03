@@ -174,7 +174,7 @@ bool ScriptedTapAhead(GameState& state, int count, bool lands_only)
     {
         const TurnSolver::PreTap& t = opt.taps[i];
         const bool restricted = i < opt.creature_route.size() && opt.creature_route[i] != 0;
-        const std::string why = restricted ? OracleCreatureTap(state, t) : ApplyHumanPreTap(state, t);
+        const std::string why = restricted ? OracleCreatureTap(state, t) : ApplyEnginePreTap(state, t);
         if (!why.empty()) { h.ended = true; h.tap_error = why; return true; }
         h.tapped_by_script.push_back(t.num);
     }
@@ -830,7 +830,7 @@ bool MeasureFace(const GameState& state, Face& f)
         return t;
     };
     const ManaPool fb = all_pools(sc);
-    const std::string why = f.creature ? OracleCreatureTap(sc, f.pt) : ApplyHumanPreTap(sc, f.pt);
+    const std::string why = f.creature ? OracleCreatureTap(sc, f.pt) : ApplyEnginePreTap(sc, f.pt);
     if (!why.empty()) { return false; }
     f.net = AllFloat(sc) - before;
     f.regular = sc.battlefield.size() == state.battlefield.size();
@@ -1113,7 +1113,7 @@ bool PerformTaps(GameState& sc, const PayOption& o)
     for (std::size_t i = 0; i < o.taps.size(); ++i)
     {
         const bool cr = i < o.creature_route.size() && o.creature_route[i] != 0;
-        if (!(cr ? OracleCreatureTap(sc, o.taps[i]) : ApplyHumanPreTap(sc, o.taps[i])).empty()) { return false; }
+        if (!(cr ? OracleCreatureTap(sc, o.taps[i]) : ApplyEnginePreTap(sc, o.taps[i])).empty()) { return false; }
     }
     return true;
 }
@@ -1602,7 +1602,7 @@ bool ReachesByTapping(const GameState& c, const GameState& e)
         for (std::size_t r = 0; r < faces_of.size() && ok; ++r)
         {
             const auto& f = faces_of[r][k[r]];
-            ok = (f.second ? OracleCreatureTap(c2, f.first) : ApplyHumanPreTap(c2, f.first)).empty();
+            ok = (f.second ? OracleCreatureTap(c2, f.first) : ApplyEnginePreTap(c2, f.first)).empty();
         }
         if (ok && CoversBoards(c2, e, true, nullptr)) { return true; }
         std::size_t r = 0;

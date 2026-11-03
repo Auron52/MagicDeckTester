@@ -220,7 +220,12 @@ print("manual tap/pay: turn %d %s (main_ordinal %d, %d plans); plan %d = %s"
 # test: an over-broad list is a click the engine would refuse, a missing one is a source the human
 # cannot reach at all. The Wild Growths are the negative control -- an Aura is not a mana source,
 # it only makes its HOST produce more.
-check("Aether Hub's tappable faces",  HUB.get("taps"),  "C")
+# The Hub's coloured faces cost {E}, so the expected offer depends on the energy the player holds --
+# the same rule arm (h) asserts. (This arm once pinned a bare "C", i.e. a board with no {E}; the
+# frame has since moved -- the arm SKIPPED for a long stretch -- and today's turn-3 board holds the
+# 1 {E} the Hub's ETB granted, so "CWUBRG" is the correct offer and "C" alone would be under-broad.)
+HUB_FACES = "CWUBRG" if (DEC["me"].get("energy") or 0) >= 1 else "C"
+check("Aether Hub's tappable faces (energy %r)" % DEC["me"].get("energy"), HUB.get("taps"), HUB_FACES)
 check("Conservatory's tappable faces", CONS.get("taps"), "GW")
 check("an Aura offers no tap of its own",
       sorted(o["name"] for o in DEC["me"]["battlefield"] if o.get("taps")),

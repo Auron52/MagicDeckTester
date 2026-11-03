@@ -986,6 +986,12 @@ bool ParseHumanPreTapToken(const std::string& tok, TurnSolver::PreTap& out);
 // A filter whose feed the floating pool cannot pay is one such report ("tap a source for the Izzet
 // Signet's {1} first"). MTG_PRE_TAP_TRACE (default off) prints one stderr line per tap and rejection.
 std::string ApplyHumanPreTap(GameState& state, const TurnSolver::PreTap& t);
+// The SAME mechanic for an ENGINE caller -- the mana oracle's scripted payments and scratch probes, the
+// MTG_PAY_REFINE payment -- which is not a human's tap and therefore never prints the MTG_PRE_TAP_TRACE
+// witness. That trace is read as "the taps the HUMAN forced" (test/manual_tap_check.py); routing engine taps
+// through ApplyHumanPreTap made a commit with no pre-taps print hundreds of them once MTG_PAY_REFINE went
+// default ON (c1d71aab0). Same legality, same taps, same return value: only the stderr line differs.
+std::string ApplyEnginePreTap(GameState& state, const TurnSolver::PreTap& t);
 
 // "{U}" / "{U}{R}" -- the face a pre-tap names, for the play-history line ("manual tap: ... for").
 std::string HumanPreTapFaceText(const TurnSolver::PreTap& t);

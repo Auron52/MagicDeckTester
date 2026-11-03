@@ -424,6 +424,13 @@ static void VerifyPaySnapRestore(const std::vector<Permanent>& now,
     }
 }
 
+// MTG_TAPDBG's "real payments only" contract (the [tapdbg] lines below) is g_real_resolution -- which stays
+// set while the MTG_PAY_REFINE dominance check (PayRefineAfter) makes its candidate payments on SCRATCH copies
+// of the real board. Those probe taps are not taps of the game, so the diagnostic skips them; the refined
+// payment it then makes on the real board is printed as before. Diagnostics only -- nothing reads this to play.
+static thread_local int t_refine_probe = 0;
+static bool TapDbgReal() { return g_real_resolution && t_refine_probe == 0; }
+
 // Tap one non-filter source, producing `amt` of colour `col`, applying depletion
 // decrement and pain. Mirrors the accounting in BuildAvailableMana (AddSourceToPool).
 //
@@ -467,7 +474,7 @@ void TapSourceIntoFloat(GameState& state, int active, Permanent& p, const CardDe
     CcoAuditTap(def, col, for_creature);   // legality audit (MTG_CCO_AUDIT); inert when off
     // TEMP DIAGNOSTIC (MTG_TAPDBG, default off): every real tap with source, colour and energy.
     { static const bool s_tapdbg = EnvOn("MTG_TAPDBG");
-      if (s_tapdbg && g_real_resolution)
+      if (s_tapdbg && TapDbgReal())
       { std::fprintf(stderr, "[tapdbg] tap %s col=%d energy=%d\n",
                      def.card.m_name.str().c_str(), (int)col,
                      state.players[active].energy_counters); } }
@@ -583,7 +590,7 @@ void TapSourceIntoFloat(GameState& state, int active, Permanent& p, const CardDe
     // MTG_TAPDBG (the TEMP DIAGNOSTIC above): the realised yield of a mana_per_life_gained tap
     // (Accomplished Alchemist), so a probe can count how often the lifegain engine paid more than 1.
     { static const bool s_tapdbg_amt = EnvOn("MTG_TAPDBG");
-      if (s_tapdbg_amt && g_real_resolution && def.params.mana_per_life_gained)
+      if (s_tapdbg_amt && TapDbgReal() && def.params.mana_per_life_gained)
       { std::fprintf(stderr, "[tapdbg] alchemist-yield %d turn=%d\n", amt, state.turn_number); } }
     // Per-PERMANENT: a locked etb_choose_color rock produces its ONE colour here, so it takes
     // the single-colour path below instead of the multi-colour `wild` accounting -- which is
@@ -2044,7 +2051,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
             // TEMP DIAGNOSTIC (MTG_TAPDBG, default off): the needs model's demand/supply for this
             // pip and every candidate's key, real payments only (the [tapdbg]/[paydbg] contract).
             static const bool s_nddbg = EnvOn("MTG_TAPDBG");
-            const bool nddbg = s_nddbg && nd_live && g_real_resolution;
+            const bool nddbg = s_nddbg && nd_live && TapDbgReal();
             if (nddbg && reserved_mask)
             {
                 std::fprintf(stderr, "[nddbg] reserved:");
@@ -7873,7 +7880,9 @@ void PayRefineAfter(GameState& state, const ManaCost& cost_in, bool for_creature
     manaoracle::PayOption opt;
     {
         t_pay_refining = true;
+        ++t_refine_probe;   // scratch copies only: no [tapdbg] line (see TapDbgReal)
         const bool found = manaoracle::RefinePayment(before, state, cost_in, for_creature, PayingCreatureAbility(), opt);
+        --t_refine_probe;
         t_pay_refining = false;
         if (!found) { return; }
     }
@@ -8093,7 +8102,7 @@ bool manaoracle::ScriptedPay(GameState& state, const ManaCost& cost_in, bool for
     {
         const TurnSolver::PreTap& t = opt.taps[i];
         const bool restricted = i < opt.creature_route.size() && opt.creature_route[i] != 0;
-        const std::string why = restricted ? OracleCreatureTap(state, t) : ApplyHumanPreTap(state, t);
+        const std::string why = restricted ? OracleCreatureTap(state, t) : ApplyEnginePreTap(state, t);
         if (!why.empty()) { h.ended = true; h.tap_error = why; return false; }
         h.tapped_by_script.push_back(t.num);
     }
@@ -9287,11 +9296,16 @@ std::string HumanPreTapFaceText(const TurnSolver::PreTap& t)
     return s;
 }
 
-std::string ApplyHumanPreTap(GameState& state, const TurnSolver::PreTap& t)
+// The mechanic behind ApplyHumanPreTap and ApplyEnginePreTap (ManaPayment.h). `trace` is the human witness:
+// only a tap the HUMAN declared may print a `[pre-tap]` line, because test/manual_tap_check.py reads those lines
+// as "the taps the human forced" -- an engine caller tracing through here (the mana oracle's scratch probes, the
+// MTG_PAY_REFINE payment) once printed hundreds of them on a commit that declared none.
+static std::string ApplyPreTapImpl(GameState& state, const TurnSolver::PreTap& t, bool trace)
 {
+    const bool tracing = trace && PreTapTraceOn();
     auto reject = [&](const std::string& why) -> std::string
     {
-        if (PreTapTraceOn())
+        if (tracing)
         { std::fprintf(stderr, "[pre-tap] REJECT %s#%d: %s\n", t.name.c_str(), t.num, why.c_str()); }
         return why;
     };
@@ -9498,7 +9512,7 @@ std::string ApplyHumanPreTap(GameState& state, const TurnSolver::PreTap& t)
         TapSourceIntoFloat(state, active, *found, *def, static_cast<Color>(t.color),
                            state.floating_mana, /*available=*/nullptr, /*for_creature=*/false, aura_pick);
     }
-    if (PreTapTraceOn())
+    if (tracing)
     {
         const ManaPool& f = state.floating_mana;
         std::string extra;
@@ -9518,6 +9532,9 @@ std::string ApplyHumanPreTap(GameState& state, const TurnSolver::PreTap& t)
     }
     return std::string();
 }
+
+std::string ApplyHumanPreTap(GameState& state, const TurnSolver::PreTap& t)  { return ApplyPreTapImpl(state, t, true); }
+std::string ApplyEnginePreTap(GameState& state, const TurnSolver::PreTap& t) { return ApplyPreTapImpl(state, t, false); }
 
 // ManaCostDigest (ManaPayment.h): every field of the cost, in declaration order.
 std::uint64_t ManaCostDigest(const ManaCost& c)
