@@ -1181,8 +1181,11 @@ logs/shadowborn/int10-brief.md for later).
 
 - **Mulligan profile SHIPPED** (e9f0f100d; fast R30, K=15, generation setting d2 b1 screened by mullgen): keep -0.2715t
   (4/4 seeds, t -9.6), confounded bottoming -0.0745t (4/4, t -13.1).
-- **Value leaf: none (USER 2026-11-03: "No leaf is okay, but heuristic ladder is not.").** Phase E vs no leaf, 8 paired
-  seeds x 1000 games: staged model -0.0091t at 1.89x units; emulated (heuristic) ladder -0.0228t at 1.13x; leafless
-  shapes nlesc +0.025t, nlfit +0.045t. Nothing adopted; the staged model stays in logs/eval/ only.
+- **Value leaf: open.** USER 2026-11-03: "No leaf is okay, but heuristic ladder is not." -- the deck has no sidecar, so
+  it plays the default heuristic ladder (phase E's `live` arm), which is the one option ruled out. Phase E vs live,
+  8 paired seeds x 1000 games, d5 b20: staged model -0.0091t at 1.89x units; leafless nlesc +0.025t at 1.44x; leafless
+  nlfit +0.045t at 1.46x. USER: "If we find the heuristic ladder that we start with beats other options that points to
+  a bug in our implementation" -- under investigation (the leafless shapes lose on gi4 seed 600004 at the T1 decision:
+  the single pass commits an unverified depth-3 "win 5" dump-everything line; the ladder commits a depth-2 T4 line).
 - Owed: overnight ENTRY -> FULL resize (accept with the keep table absent), then the smoke/regression GT re-accept
   for the keep-table adoption.
