@@ -153,6 +153,7 @@ add_library(mtg-core STATIC
     src/core/PoolAllocator.cpp
     src/core/FlagRegistry.cpp
     src/core/MemBudget.cpp
+    src/core/Tier2Overflow.cpp
 )
 target_include_directories(mtg-core PUBLIC src "${MTG_GENERATED_DIR}")
 target_link_libraries(mtg-core PUBLIC pugixml::pugixml nlohmann_json::nlohmann_json)
@@ -512,6 +513,7 @@ add_executable(mtg-test
     test/unit/test_spell_copy_id.cpp
     test/unit/test_cyclone_discard_buckets.cpp
     test/unit/test_cyclone_cast_order.cpp
+    test/unit/test_tier2_overflow.cpp
 )
 target_link_libraries(mtg-test PRIVATE mtg-core doctest::doctest)
 # Precompiled header for the unit tests ONLY (the engine binaries are untouched, so codegen and determinism

@@ -138,6 +138,18 @@ long long DefaultPlanCacheKb()
     return by_workers < by_budget ? by_workers : by_budget;
 }
 
+long long DefaultTier2OverflowKb()
+{
+    // Overflow of the per-thread tier-1 caches (Tier2Overflow.h). Entries there are scoped to one game on
+    // one worker and only spill when a game outgrows its fixed tier-1 allocation, so a modest slice covers
+    // the heavy tail: this box (23.5 GB, 32 workers) -> cache 3.7 GB -> ~470 MB.
+    const long long c = CacheMb();
+    if (c <= 0) { return 0LL; }
+    const long long by_workers = static_cast<long long>(Workers()) * 32768LL;
+    const long long by_budget  = c * 1024LL / 8;
+    return by_workers < by_budget ? by_workers : by_budget;
+}
+
 long long CurrentRssBytes()
 {
 #if defined(__linux__)

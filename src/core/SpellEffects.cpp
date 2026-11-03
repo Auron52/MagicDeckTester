@@ -23,6 +23,7 @@
 // about what looks hot: these helpers are fully inlined today, so they do not appear in a profile
 // by name at all -- only the total Ir moves.
 #include "Tier1Ledger.h"
+#include "Tier2Overflow.h"
 #include "SpellEffects.h"
 #include "MemBudget.h"
 #include "RouteTape.h"
@@ -5335,11 +5336,35 @@ struct ManaCacheEntry
     // entry (TapForCostBacktrack) to run the widened second pass -- so a hit must replay it exactly as it
     // replays the taps. See McFeedAltOn.
     bool                      feed_alt = false;
-    // MTG_MANA_CACHE_VERIFY only: the payer's context when the entry was stored (PayContextDigest) and the
-    // installed plan traits (CurrentPlanTraitsHash), so a mismatch can say whether the context moved.
+    // The payer's context (PayContextDigest) and the installed plan traits (CurrentPlanTraitsHash) when the
+    // solve that filled the entry STARTED (read before the DFS, the same moment a lookup reads them). Set when
+    // tier-2 overflow is on (a TIER-2 entry is served only under an identical pair -- see McT2CtxMatch) or under
+    // MTG_MANA_CACHE_VERIFY (whose mismatch print says whether the context moved). Never part of the tier-1 key.
     std::uint64_t dbg_pay_ctx = 0, dbg_traits = 0;
 };
 inline thread_local std::unordered_map<std::uint64_t, ManaCacheEntry> g_mana_cache;
+// TIER-2 OVERFLOW (core/Tier2Overflow.h; MTG_TIER2_OVERFLOW, DEFAULT ON). When the fixed tier-1 allocation
+// fills, the wholesale clear SPILLS every entry here instead of dropping it, and a tier-1 miss looks here
+// before solving. A hit is PROMOTED back into tier 1 through the same store path a recompute would take, so
+// tier-1 contents -- and with them every tier-1 hit and every later clear point -- are exactly what they would
+// be had tier 2 refused the entry. Payment charges no units and no priced work (workctr::kPay is counted in
+// TapForCostShared, before this cache), so a tier-2 hit and a recompute charge the same: nothing.
+// THE ONE HAZARD is content: MTG_MANA_CACHE_VERIFY found colour-only differences between a tier-1 hit and a
+// fresh solve when the payer context / plan traits had moved since the store (NivMizzetCombo seed 2085 gi83,
+// 40 hits). Inside tier 1 that is deterministic; served from a machine-sized tier 2 it would make play depend
+// on RAM. So a TIER-2 entry is served only when both context words match the lookup's (the
+// MTG_MANA_CACHE_X_TRAITS / _X_PAYCTX folds, applied to tier-2 entries only -- the tier-1 key is untouched).
+// USER 2026-11-03: the folds are "okay as long as it is truly isolated and doesn't cause any other changes".
+inline long long McEntryBytes(const ManaCacheEntry& e)   // the tier-1 PORTABLE entry size (see the store)
+{ return 160 + tier1::kMapNodeB + static_cast<long long>(e.taps.size()) * 24; }
+inline thread_local tier2::Overflow<std::unordered_map<std::uint64_t, ManaCacheEntry>, &McEntryBytes>
+    g_mana_t2(tier2::kMana);
+// Empty tier 1 at its bound: spill into tier 2 when overflow is on, else the legacy wholesale clear.
+inline void McTier1Clear()
+{
+    if (tier2::On()) { g_mana_t2.SpillAll(g_mana_cache); }
+    g_mana_cache.clear();
+}
 // PER-THREAD BYTE CAP (2026-10-17, Galadriel value-leaf phase C RSS abort). The 500,000-entry bound
 // below bounds nothing in BYTES: an entry carries its whole tap set, and a 40-land Galadriel board
 // makes ~40 taps per entry (massif: this map + its tap vectors = 15% of one d5 game's heap).
@@ -5937,7 +5962,7 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
 void ManaCacheClearPerGame()
 {
     static const bool s_keep = EnvOn("MTG_LEGACY_MANA_CACHE_ACROSS_GAMES");
-    if (!s_keep) { g_mana_cache.clear(); g_mana_cache_bytes = 0; tier1::Set(tier1::kMana, 0); }
+    if (!s_keep) { g_mana_cache.clear(); g_mana_cache_bytes = 0; tier1::Set(tier1::kMana, 0); g_mana_t2.Clear(); }
 }
 
 
@@ -6095,13 +6120,14 @@ static bool TapForCostBacktrackPass(GameState& state, const ManaCost& cost,
 namespace {
 inline bool McVerifyOn() { static const bool v = EnvOn("MTG_MANA_CACHE_VERIFY"); return v; }
 inline std::atomic<unsigned long long> g_mcv_checked{0}, g_mcv_mismatch{0};
+inline std::atomic<unsigned long long> g_mcv_t2_checked{0}, g_mcv_t2_mismatch{0};   // hits served from TIER 2
 struct McVerifyReport
 {
     ~McVerifyReport()
     {
         if (!McVerifyOn()) { return; }
-        std::fprintf(stderr, "=== MANA CACHE VERIFY: checked=%llu mismatches=%llu ===\n",
-                     g_mcv_checked.load(), g_mcv_mismatch.load());
+        std::fprintf(stderr, "=== MANA CACHE VERIFY: checked=%llu mismatches=%llu (tier-2 served: checked=%llu mismatches=%llu) ===\n",
+                     g_mcv_checked.load(), g_mcv_mismatch.load(), g_mcv_t2_checked.load(), g_mcv_t2_mismatch.load());
     }
 };
 inline McVerifyReport g_mcv_report;
@@ -6113,6 +6139,25 @@ inline bool McPoolEq(const ManaPool& a, const ManaPool& b)
         && a.snow_units == b.snow_units;
 }
 } // namespace
+// The tier-1 STORE, shared by a miss (after its solve) and a tier-2 hit's promotion, so both move the tier-1
+// byte count and clear points identically. Byte-for-byte the store the cache always had; the only change is
+// that the clear at the bound spills into tier 2 when overflow is on (McTier1Clear).
+static std::unordered_map<std::uint64_t, ManaCacheEntry>::iterator
+McTier1Insert(std::uint64_t mk1, ManaCacheEntry&& e)
+{
+    // Tier 1: PORTABLE size (counts x fixed constants, ~ the Linux sizeof()s), so the clear point
+    // is the same on every platform; legacy: the allocator-shaped estimate.
+    const long long eb = tier1::On()
+        ? McEntryBytes(e)
+        : static_cast<long long>(sizeof(ManaCacheEntry) + sizeof(std::uint64_t) + 32
+                                 + e.taps.capacity() * sizeof(ManaCacheTap));
+    const long long cap = ManaCacheByteCap();
+    if (cap > 0 && g_mana_cache_bytes + eb > cap) { McTier1Clear(); g_mana_cache_bytes = 0; }
+    g_mana_cache_bytes += eb;
+    tier1::Set(tier1::kMana, g_mana_cache_bytes);
+    return g_mana_cache.insert_or_assign(mk1, std::move(e)).first;
+}
+
 static void McVerifyHit(const GameState& state, const ManaCost& cost, bool for_creature,
                         const ManaPool& floating, const std::vector<Color>* rp_colors,
                         TapBacktrackMemo* fail_memo, ManaPool* out_leftover,
@@ -6249,6 +6294,7 @@ static bool TapForCostBacktrackTop(GameState& state, const ManaCost& cost,
                     && (McLeftoverShape()
                         || (out_full_pool != nullptr && out_leftover == nullptr && floating.Total() == 0));
     std::uint64_t mk1 = 0, mk2 = 0, pre_tapped = 0; bool mc_active = false;
+    std::uint64_t mc_ctx_pay = 0, mc_ctx_traits = 0;   // pre-solve context on a tier-1 miss (tier-2 overflow / verify)
     // Pre-solve snapshots, taken on a MISS only, so the store below can recover the two things the
     // final state does not spell out: how many storage counters each tap burned, and how much drip the
     // solve applied. Both are DELTAS against these. thread_local so a miss allocates nothing after
@@ -6331,6 +6377,33 @@ static bool TapForCostBacktrackTop(GameState& state, const ManaCost& cost,
             }
             if (s_hit_max >= 0 && t_hit_n > s_hit_max) { it = g_mana_cache.end(); }
         }
+        // A tier-1 MISS reads the context the solve would start in (the tier-2 match words, and what the store
+        // records), then looks in tier 2. A tier-2 hit is promoted into tier 1 exactly as a recompute's store
+        // would be, and is then served by the ordinary hit path below.
+        bool mc_from_t2 = false;
+        if (!(it != g_mana_cache.end() && it->second.verify == mk2) && (tier2::On() || McVerifyOn()))
+        {
+            mc_ctx_pay = PayContextDigest();
+            mc_ctx_traits = CurrentPlanTraitsHash();
+            if (tier2::On() && g_mana_t2.Size() != 0)
+            {
+                auto t2 = g_mana_t2.Find(mk1);
+                if (t2 != g_mana_t2.End() && t2->second.verify == mk2)
+                {
+                    // MTG_TIER2_MANA_CTX (DEFAULT ON; =0 is a DIAGNOSTIC arm only: serve a tier-2 entry whatever the
+                    // context, i.e. the tier-1 rule -- the arm that measures whether the context match is needed).
+                    static const bool s_t2_ctx = EnvOn("MTG_TIER2_MANA_CTX", true);
+                    if (!s_t2_ctx || (t2->second.dbg_pay_ctx == mc_ctx_pay && t2->second.dbg_traits == mc_ctx_traits))
+                    {
+                        g_mana_t2.NoteHit();
+                        auto nh = g_mana_t2.Take(t2);
+                        it = McTier1Insert(mk1, std::move(nh.mapped()));
+                        mc_from_t2 = true;
+                    }
+                    else { g_mana_t2.NoteCtxMiss(); }
+                }
+            }
+        }
         if (it != g_mana_cache.end() && it->second.verify == mk2)
         {
             if (tapstats::Enabled()) { tapstats::g_mc_hit.fetch_add(1, std::memory_order_relaxed); }
@@ -6344,9 +6417,16 @@ static bool TapForCostBacktrackTop(GameState& state, const ManaCost& cost,
             if (mcv_cmp) { mcv_board = std::make_unique<GameState>(); }
             if (McVerifyOn())
             {
+                const unsigned long long bad0 = g_mcv_mismatch.load(std::memory_order_relaxed);
                 McVerifyHit(state, cost, for_creature, floating, rp_colors, fail_memo, out_leftover,
                             tapped_mask, untapped_max, reserved_mask, out_full_pool, src_cands, e,
                             mcv_board.get(), &mcv_vok);
+                if (mc_from_t2)
+                {
+                    g_mcv_t2_checked.fetch_add(1, std::memory_order_relaxed);
+                    if (g_mcv_mismatch.load(std::memory_order_relaxed) != bad0)
+                    { g_mcv_t2_mismatch.fetch_add(1, std::memory_order_relaxed); }
+                }
             }
             struct McBoardCmp
             {
@@ -6622,10 +6702,10 @@ static bool TapForCostBacktrackTop(GameState& state, const ManaCost& cost,
     // ---- Store (negatives always; a positive records its tap-set + the two order-dependent deltas) --
     if (mc_active)
     {
-        if (g_mana_cache.size() > 500000) { g_mana_cache.clear(); g_mana_cache_bytes = 0; tier1::Set(tier1::kMana, 0); }   // bound cross-rollout growth
+        if (g_mana_cache.size() > 500000) { McTier1Clear(); g_mana_cache_bytes = 0; tier1::Set(tier1::kMana, 0); }   // bound cross-rollout growth
         ManaCacheEntry e; e.verify = mk2; e.payable = ok; e.drip_life = 0; e.self_life = 0;
         e.energy_spent = 0;
-        if (McVerifyOn()) { e.dbg_pay_ctx = PayContextDigest(); e.dbg_traits = CurrentPlanTraitsHash(); }
+        e.dbg_pay_ctx = mc_ctx_pay; e.dbg_traits = mc_ctx_traits;   // pre-solve context (0 unless overflow/verify)
         e.feed_alt = !ok && mc_alt_here;
         bool storable = true;
         if (ok)
@@ -6680,20 +6760,7 @@ static bool TapForCostBacktrackTop(GameState& state, const ManaCost& cost,
         }
         if (tapstats::Enabled() && !storable)
         { tapstats::g_mc_unstorable.fetch_add(1, std::memory_order_relaxed); }
-        if (storable)
-        {
-            // Tier 1: PORTABLE size (counts x fixed constants, ~ the Linux sizeof()s), so the clear point
-            // is the same on every platform; legacy: the allocator-shaped estimate.
-            const long long eb = tier1::On()
-                ? 160 + tier1::kMapNodeB + static_cast<long long>(e.taps.size()) * 24
-                : static_cast<long long>(sizeof(ManaCacheEntry) + sizeof(std::uint64_t) + 32
-                                         + e.taps.capacity() * sizeof(ManaCacheTap));
-            const long long cap = ManaCacheByteCap();
-            if (cap > 0 && g_mana_cache_bytes + eb > cap) { g_mana_cache.clear(); g_mana_cache_bytes = 0; }
-            g_mana_cache_bytes += eb;
-            tier1::Set(tier1::kMana, g_mana_cache_bytes);
-            g_mana_cache[mk1] = std::move(e);
-        }
+        if (storable) { McTier1Insert(mk1, std::move(e)); }
     }
     // §2a: sacrifice the Treasures this solve cracked. AFTER the cache store above, so the stored
     // entry describes the same board the live solve produced (hit/miss lockstep). Done here rather

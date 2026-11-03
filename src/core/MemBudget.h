@@ -55,6 +55,9 @@ std::size_t DefaultTtCapEntries();
 long long   DefaultFslPoolKb();
 std::size_t DefaultFslCapEntries();
 long long   DefaultPlanCacheKb();
+// TIER-2 OVERFLOW slice (core/Tier2Overflow.h, MTG_TIER2_OVERFLOW_KB): min(workers x 32 MB, cache_mb / 8), in KB.
+// Its own slice, apart from the plan-cache pool (one plan-heavy game's bp cache can fill that pool alone).
+long long   DefaultTier2OverflowKb();
 
 // This process's resident set in bytes (0 = unavailable on this platform).
 long long CurrentRssBytes();
