@@ -100,12 +100,19 @@ deck (`docs/design/mana-clean-gate.md`, `scripts/mana_clean.py`, `test/mana_clea
   `build/scratch/floatseq/h1370/out.txt`.
 - **The gi3031 haste-dork PHANTOM.**
 
-## USER decisions outstanding (measurements are input; nothing here is settled)
+## USER rulings, 2026-11-03 (these replace the "outstanding" list that was here)
 
-1. **`MTG_DORK_ATK_PROVIDER_HOLD`:** FiveColour 31 faster / 8 slower, every slower game recovers, at 1.35x
-   units. Default OFF until the USER decides.
-2. **Whether a value-leaf tie should be adopted.**
-3. **No-win options (a)/(b)/(c)** (`MTG_NOWIN_TWIN_FREE`, net 0, changes budget semantics). The recommendation
-   is (a), leave both off until the USER's budget-fairness work lands.
-4. **`MTG_EF_SCALAR_REFUND`:** OFF because gi552 does not recover. The question is whether to chase gi552 first
-   or adopt it with gi552 unexplained (the shipped four measured EDF -9 / -13 on two held-out seeds).
+1. **`MTG_DORK_ATK_PROVIDER_HOLD`** (FiveColour 31 faster / 8 slower, all recover, 1.35x units): **trim the cost
+   first.** USER: "I agree with the suggestion to trim the cost. We probably do want it on in some form in the
+   future" -- its quality gain outweighs the budget losses, but 1.35x units is too much branching as it stands.
+   Owed: find what the extra units buy and cut the waste, then re-measure. Stays OFF until then.
+2. **Value-leaf ties: adopt on a tie** when the goal is to move the kept-incumbent decks to the new featurizer
+   (USER: "adopting on a tie is okay if our goal is to switch them over to the new type"). Owed: re-run the
+   kept-incumbent decks' leaves with tie => adopt when the box is free (never alongside another generation).
+3. **No-win options: wait** for the USER's budget-fairness agent, which is far along. Both stay OFF.
+4. **`MTG_EF_SCALAR_REFUND`: chase EDF gi552 (s1640001, T3 -> T4, does not recover at d8 b0) before adoption is
+   even considered** (USER: "This shouldn't even be a question"). Stays OFF.
+5. **FiveColour d7b40** (was d7b40 -0.0050 turns at 1.15x): adopt **if it retains that performance** on the
+   current engine (USER: "somewhat marginal ... not a slam-dunk"). Owed: a fresh held-out re-measure, then adopt or
+   report.
+6. **NivMizzetCombo cast order** (gi887 fails the bar): the USER is reviewing the order in detail before deciding.
