@@ -558,3 +558,76 @@ TEST_CASE("AuraSpellCastLegal: an Aura spell needs its searched host to be a leg
     s.battlefield.back().controller_index = 1;
     CHECK_FALSE(AuraSpellCastLegal(s, 0, cur, 30));   // not ours: the plan never names one
 }
+
+// THE KNOWN TOP (Library::KnownTopRun / ShuffleUnseen; NivMizzetCombo gi887, 2026-11-03). A Brainstorm put-back
+// is public to its player, so the non-clairvoyant reshuffle (MTG_NC_SEARCH, the honest teacher) must keep it
+// on top: gi887's T4 Signet + Generator Servant line kills on T5 only because Curiosity was Brainstormed back.
+TEST_CASE("Brainstorm: the put-back is the KNOWN TOP; ShuffleUnseen keeps it, a real Shuffle forgets it")
+{
+    GameState s = BoardBs({ "Lightning Bolt", "Goblin Guide" }, { "Birds of Paradise", "Sol Ring", "Llanowar Elves" });
+    CHECK(s.players[0].library.KnownTopRun() == 0);
+    const CardDefinition& d = DefBs(kBs);
+    s.players[0].hand.erase(s.players[0].hand.begin());
+    StackEntry e;
+    e.type             = StackEntry::EntryType::Spell;
+    e.source           = CardBs(kBs, 20);
+    e.controller_index = 0;
+    EffectHandler::Resolve(s, e, d);
+    Library& lib = s.players[0].library;
+    REQUIRE(lib.KnownTopRun() == 2);
+    const int top0 = lib.RawAt(0).m_number, top1 = lib.RawAt(1).m_number;
+    const std::size_t n = lib.size();
+    // Every sampled future keeps both known cards in place and permutes only the rest.
+    std::set<int> third_cards;
+    for (uint64_t seed = 1; seed <= 40; ++seed)
+    {
+        Library l2 = lib;
+        CHECK(l2.KnownTopRun() == 2);                    // the copy carries the knowledge
+        l2.ShuffleUnseen(seed);
+        CHECK(l2.size() == n);
+        CHECK(l2.RawAt(0).m_number == top0);
+        CHECK(l2.RawAt(1).m_number == top1);
+        CHECK(l2.KnownTopRun() == 2);
+        third_cards.insert(l2.RawAt(2).m_number);
+    }
+    CHECK(third_cards.size() > 1u);                      // the unseen rest IS reshuffled
+    // A draw consumes the known prefix one card at a time.
+    Library l3 = lib;
+    (void)l3.DrawTop();
+    CHECK(l3.KnownTopRun() == 1);
+    (void)l3.DrawTop();
+    CHECK(l3.KnownTopRun() == 0);
+    // A real shuffle forgets it; with nothing known ShuffleUnseen IS Shuffle.
+    Library l4 = lib;
+    l4.Shuffle(77);
+    CHECK(l4.KnownTopRun() == 0);
+    Library l6 = l4;                                     // nothing known
+    l4.Shuffle(91);
+    l6.ShuffleUnseen(91);
+    for (std::size_t i = 0; i < n; ++i) { CHECK(l4.RawAt(i).m_number == l6.RawAt(i).m_number); }
+}
+
+TEST_CASE("ShuffleUnseen keeps a known card below an unknown top and a known bottom")
+{
+    std::vector<Card> cards;
+    for (int i = 0; i < 7; ++i) { cards.push_back(CardBs("Ponder", 300 + i)); }
+    Library lib;
+    lib.assign(cards.begin(), cards.end());
+    lib.insert(lib.begin() + 2, CardBs("Island", 400));
+    lib.push_back(CardBs("Mountain", 401));
+    lib.NoteBottomed();
+    REQUIRE(lib.KnownTopRun() == 0);
+    REQUIRE(lib.KnownAt(2));
+    const int known_middle = lib.RawAt(2).m_number;
+    const int known_bottom = lib.RawAt(lib.size() - 1).m_number;
+    std::set<int> sampled_top;
+    for (std::uint64_t seed = 1; seed <= 40; ++seed)
+    {
+        Library sample = lib;
+        sample.ShuffleUnseen(seed);
+        CHECK(sample.RawAt(2).m_number == known_middle);
+        CHECK(sample.RawAt(sample.size() - 1).m_number == known_bottom);
+        sampled_top.insert(sample.RawAt(0).m_number);
+    }
+    CHECK(sampled_top.size() > 1);
+}

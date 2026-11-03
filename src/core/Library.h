@@ -304,6 +304,48 @@ public:
         }
     }
 
+    // Sample an unknown future without forgetting cards this player placed. The known-position
+    // mask may have holes (Long-Term Plans puts a card third from the top), so only unknown
+    // positions are shuffled. The placed bottom block stays at the bottom; its unknown order is
+    // sampled within that block, while explicitly known bottom cards stay fixed. A real game
+    // shuffle still calls Shuffle and clears all knowledge. With nothing known this is exactly
+    // Shuffle, including its cross-platform permutation.
+    void ShuffleUnseen(uint64_t seed)
+    {
+        const std::size_t n = size();
+        const std::size_t fixed_bottom = KnownBottom();
+        const std::size_t placed_bottom = BottomPlaced();
+        if (m_known_top == 0 && fixed_bottom == 0 && placed_bottom == 0)
+        { Shuffle(seed); return; }
+        const std::size_t block = std::max(fixed_bottom, placed_bottom);
+        std::vector<std::size_t> upper, bottom;
+        upper.reserve(n - block);
+        bottom.reserve(block - fixed_bottom);
+        for (std::size_t i = 0; i < n - block; ++i)
+        { if (!KnownAt(i)) { upper.push_back(i); } }
+        for (std::size_t i = n - block; i < n - fixed_bottom; ++i)
+        { if (!KnownAt(i)) { bottom.push_back(i); } }
+        std::mt19937_64 rng(seed);
+        auto permute = [&](const std::vector<std::size_t>& positions)
+        {
+            for (std::size_t i = 1; i < positions.size(); ++i)
+            {
+                const std::uint64_t index = static_cast<std::uint64_t>(i + 1);
+                std::uint64_t off;
+                for (;;)
+                {
+                    const std::uint64_t ret = rng();
+                    if (ret / index < UINT64_MAX / index || UINT64_MAX % index == index - 1)
+                    { off = ret % index; break; }
+                }
+                if (off != i)
+                { std::swap(m_cards[m_top + positions[i]], m_cards[m_top + positions[static_cast<std::size_t>(off)]]); }
+            }
+        };
+        permute(upper);
+        permute(bottom);
+    }
+
     // COMMON-RANDOM-NUMBERS reshuffle: order the live library by a per-copy priority
     // key = splitmix64(seed, m_number). Unlike Shuffle() (a Fisher-Yates whose output
     // depends on the exact multiset + draw history), each card's rank here depends ONLY

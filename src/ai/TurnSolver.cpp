@@ -93201,7 +93201,7 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
             const uint64_t hsalt = SaltSeed(
                 state.game_seed + 0x9E3779B97F4A7C15ULL * static_cast<uint64_t>(state.TurnSeq()),
                 state.shuffle_salt_search);
-            ss.ActivePlayer().library.Shuffle(hsalt);
+            ss.ActivePlayer().library.ShuffleUnseen(hsalt);   // keep the player's known top/bottom
             pre_plan = TurnSolver::SolveWithLookahead(
                 ss, true, depth, max_turns, budget, false, second_main, nullptr);
         }
@@ -93281,7 +93281,7 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
                         + 0x9E3779B97F4A7C15ULL * static_cast<uint64_t>(state.TurnSeq())
                         + 7919ULL,   // distinct stream from the pre-combat reshuffle
                     state.shuffle_salt_search);
-                ss2.ActivePlayer().library.Shuffle(hsalt2);
+                ss2.ActivePlayer().library.ShuffleUnseen(hsalt2);
                 post_plan = TurnSolver::SolveWithLookahead(
                     ss2, false, depth, max_turns, budget, false, second_main, nullptr);
             }
@@ -105783,7 +105783,7 @@ TurnSolver::Plan TurnSolver::ReshuffleAvgChoosePlan(const GameState& state, int 
         {
             const auto nc_e0 = std::chrono::steady_clock::now();
             GameState s = state;
-            s.ActivePlayer().library.Shuffle(rs);
+            s.ActivePlayer().library.ShuffleUnseen(rs);    // a sampled future keeps the KNOWN top/bottom (Library::KnownTop)
             s.shuffle_salt_search = rs;             // honest continuation folds this (varies per k)
             ShuffleEvalGuard   _seg(true);
             HonestTeacherGuard _htg(depth > 0);     // decouple the depth>0 continuation lookahead
@@ -105849,6 +105849,18 @@ TurnSolver::Plan TurnSolver::ReshuffleAvgChoosePlan(const GameState& state, int 
     {
         size_t worst = 0;
         for (size_t i = 1; i < plans.size(); ++i) { if (nc_plan_s[i] > nc_plan_s[worst]) { worst = i; } }
+        // MTG_NC_TRACE=2: each candidate's K-sample average win turn (and how many samples the
+        // player's known top/bottom pinned), so a ranking can be read straight off the trace.
+        if (EnvInt("MTG_NC_TRACE", 0) >= 2)
+        {
+            std::fprintf(stderr, "[nc] T%d %s known top=%zu bottom=%zu\n", turn, is_pre_combat ? "pre" : "post",
+                         state.ActivePlayer().library.KnownTopRun(), state.ActivePlayer().library.KnownBottom());
+            for (size_t i = 0; i < plans.size(); ++i)
+            {
+                std::fprintf(stderr, "[nc]   avg #%zu %.3f  %s\n", i, static_cast<double>(sum[i]) / K,
+                             FsPlanText(plans[i]).c_str());
+            }
+        }
         std::fprintf(stderr, "[nc] T%d %s done: %.1fs total; slowest plan %zu %.1fs  %s\n", turn,
                      is_pre_combat ? "pre" : "post",
                      std::chrono::duration<double>(std::chrono::steady_clock::now() - nc_t0).count(),

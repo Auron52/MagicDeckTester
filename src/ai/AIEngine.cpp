@@ -857,7 +857,7 @@ static void EmitEvalRows(const GameState& state, int max_turns, bool second_main
         const uint64_t rs = state.game_seed
                           + 0x9E3779B97F4A7C15ULL * (static_cast<uint64_t>(k) + 1)
                           + 1000003ULL * static_cast<uint64_t>(state.turn_number);
-        s.ActivePlayer().library.Shuffle(rs);
+        s.ActivePlayer().library.ShuffleUnseen(rs); // keep cards the player knows for honest labels
         // Honest-teacher per-turn reshuffle (g_honest_teacher) folds shuffle_salt_search; vary it per
         // k so the K outer samples draw independent decoupled futures (else all k share one future).
         // Guarded to honest mode: leaves the non-honest rollout/searched dump path byte-unchanged.

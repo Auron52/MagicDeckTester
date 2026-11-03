@@ -2051,3 +2051,18 @@ ceiling"). CAPPED now fails the gate (USER 2026-11-03), so a plan that hits `MTG
 realized once more at 20000. It is always on; `MTG_MANA_ORACLE_NODES_RETRY` overrides the number and is not an off
 switch. Checker-only. The 7 CAPPED Fluctuator games of 3,000 (seed 30000000 + gi: 651 2139 2391 2655 2670 2772 2802)
 all finish at 20000 with wall about unchanged, and the slice above has 10 retried, 10 finished, CAPPED 0.
+
+### 13.15 Niv known cards in non-clairvoyant reshuffles (2026-11-07 port)
+
+Niv gi887 (seed 1650001) has a known Curiosity on top after Brainstorm. The old non-clairvoyant
+search shuffled it away in its sampled futures, so it preferred Signet + Tandem Lookout over
+Signet + Generator Servant even though Servant enables a guaranteed T5 hasty Firemind + Curiosity
+kill. The fix from `wip/niv-nc-known-top` is ported onto the current library's known-position mask:
+`Library::ShuffleUnseen` shuffles only unknown positions, preserving placed top cards and known
+bottom cards; a real shuffle still clears knowledge. The honest-teacher and `MTG_NC_SEARCH`
+reshuffles call it. With no known cards it uses the original whole-library shuffle exactly.
+The older branch's 2,000-game shipped Niv arm was byte-identical. On the current tree, all 2,631
+unit cases pass and Niv gi887 wins T5 under `MTG_NC_SEARCH=1` at d8/b0. The T4 menu has one known
+top and two known bottom cards: Generator Servant + Izzet Signet scores 5.000, versus Izzet
+Signet + Tandem Lookout at 6.000. `EmitEvalRows` now uses the same known-preserving shuffle for
+training labels; the blind leaf and mulligan trainer remain on their existing paths.
