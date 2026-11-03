@@ -438,3 +438,10 @@ X=0 and X=100 before). Next slowest 87 s (kitty_v1vscur_2hg_cur gi20037), then 7
 - `build/scratch/budget/cycprobe/` deleted. Later stages (re-price uncharged work, pooled bottoming budget,
   EDF wastes) remain PAUSED per the USER. Scratch worktrees still to clean via safe_worktree_remove.sh:
   origin-baseline, mf-bisect, tier2-overflow, plan-priced-ledger, plan-priced-ledger-base.
+
+## RESUMED budget work (USER 2026-11-03 23:54 UTC: "pause it for the time being ... get back to the budgeting changes")
+- Cyclone mulligan PAUSED via `artifact_queue.py pause` at 73.0% frozen (resumable: `start` from the artifact-queue
+  checkout; journal copy *.prepause-20261103T2355 in the worker tree). Status cron ff3f092e deleted.
+- Stage now: RE-PRICE (plan item 2). Step 1 = quiet-box cost fit on HEAD: build/scratch/budget/run_fit.sh -> fit.txt /
+  fit.DONE (regression manifest, 32 thr, MTG_TIER1_STATS). Then `scripts/cost_fit.py fit.txt` vs the provisional
+  contended prices in src/core/WorkCounters.h.
