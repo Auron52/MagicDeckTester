@@ -1176,6 +1176,7 @@ struct PayEnum
     std::size_t                     cap    = 4096;
     bool                            capped = false;
     bool                            whole_float = false;   // MinimalPayments' fast form: no leftover split either
+    ProbeCharge*                    charge = nullptr;      // MinimalPayments' priced form (null = unpriced)
     std::vector<Pick>               cur;
     // RefinePayment's LAZY SURPLUS: a paying set's one-more-tap supersets are parked here (the set, and where in
     // `out` they would have gone) instead of being verified at once -- see RefinePaymentImpl.
@@ -1250,6 +1251,14 @@ struct PayEnum
     // the set-aside; `wild` set when a haste-tagged {C} or a wild unit is in it) and what it left of it.
     bool PayAndRecord(PayOption o, ManaPool* offered, ManaPool* left)
     {
+        if (charge != nullptr)
+        {
+            // Priced: no probe once the budget is spent (the table is then partial: `cut`, and `capped` ends the walk).
+            SearchBudget* const b = charge->budget;
+            if (b != nullptr && (b->Exhausted() || b->Overrun())) { charge->cut = true; capped = true; return false; }
+            TurnSolver::ChargeDecisionUnits(b, charge->units);
+            ++charge->probes;
+        }
         OracleScratch scr(state);
         GameState& sc = scr.Board();
         auto why = [&](const char* w)
@@ -1432,7 +1441,7 @@ std::vector<PayOption> StashChoices(const GameState& s, std::vector<std::string>
 
 std::vector<PayOption> MinimalPayments(const GameState& state, const ManaCost& cost, bool for_creature,
                                        std::vector<std::string>* unmodeled, bool creature_ability, bool whole_float,
-                                       const Card* spell)
+                                       const Card* spell, ProbeCharge* charge)
 {
     // The payment's context, as the frontier saw it: a creature's activated ability being paid (the
     // Secluded Courtyard clause), the spell being paid for (a subtype restriction). Replayed around every
@@ -1482,7 +1491,9 @@ std::vector<PayOption> MinimalPayments(const GameState& state, const ManaCost& c
         if (f.wild > 0) { for (int c = 0; c < 5; ++c) { col[c] += f.wild; } }
         PayEnum pe{ state, cost, for_creature, srcs, suffix_max, st, seen, out };
         pe.whole_float = whole_float;
+        pe.charge = charge;
         pe.Dfs(0, col, total);
+        if (charge != nullptr && charge->cut) { break; }   // the budget is spent: a partial table
         if (pe.capped && unmodeled != nullptr) { unmodeled->push_back("payment enumeration capped"); }
     }
     return out;

@@ -10,6 +10,53 @@ Worktree: `/workspaces/MagicDeckTester/.claude/worktrees/agent-a9dab9fbcae918660
 origin/phase-1-2-deck-analyzer 980616e55. Scratch: `/workspaces/MagicDeckTester/build/scratch/mcdragons/`. Helper
 scripts (gitignored): `logs/mcdragons/{mk.py,gate.sh,batch.sh,repro.sh,abrep.py,scprobe.sh}`.
 
+## READ FIRST: Successor 5 (2026-11-03, stopped at the context cap; successor 6 continues)
+Branch wip/mc-dragons; WIP commit "two-pass LINE_REPAY" on top of 3d62e85ec. Scratch `build/scratch/mcdragons5/`.
+Binary under test = `mcdragons5/mtg.p3` (= HEAD src). Not pushed, no GT accepted.
+
+DESIGN (src/ai/ManaPayment.cpp): staged admission in `LineRepayTry` (:8445; stage loop after `p1_empty` :8568).
+Stages in order: (whole-float, d1) UNPRICED; then PRICED on TurnSolver::DecisionBudget(): (whole-float, d2), (full, d1),
+(full, d2). Price `kLineRepayProbeUnits = 1` (:8307) per MinimalPayments probe and per re-made-option trial, via
+ChargeDecisionUnits; cut when Exhausted()/Overrun(); a cut is never memoised (`note_fail.armed = false`). Unlimited
+budget -> null -> complete. `LineRepayPass` (:8311), `LineRepaySearch(..., pass)` (:8329). Priced MinimalPayments:
+`manaoracle::ProbeCharge` (ManaOracle.h:209; charge in PayEnum::PayAndRecord, ManaOracle.cpp:1254).
+Memos: `fail` (complete failures only), `ok` + `ok_p2` (hit on a priced success -> NoteChargingSubsearch),
+`fail_p1` (pass 1 proven empty -> repeat tries skip it). NoteChargingSubsearch on fail hits and on entering a priced stage.
+Sound prune: `LineRepayScopeFree` (:8237) -- JointPays (top level AND per option at d2) only on a board with no
+context-restricted mana (creature-only/subtype/big-spell/colored_creature_only/ability_ok/restricted floats).
+VERIFY (`MTG_LINE_REPAY_MEMO_VERIFY=1`) re-checks memo hits, fail_p1 and both prunes unpriced; play-identical.
+DEVIATION from the brief, for the coordinator/USER: the depth-2 WHOLE-FLOAT stage is priced too. With only pass 2
+priced (mtg.p2) smoke63 was still 18.0 s vs 5.7 s off (3.2x): all 12 s of re-pay cost was pass-1 d2 (1,365 searches,
+66k inner prunes); every pass 2 there was cut at entry (budget already spent). Pricing it: 3.66 vs 2.82 s (1.30x), but
+EDF g137 fired 391 -> 43 (401 d2 stages cut post-budget; still T5). Both shapes are complete at b0.
+Levers deleted: MTG_LINE_REPAY_DRAW (barrier logic kept), MTG_LR_INNER_JOINT, MTG_LR_MAX_PRECHECK, MTG_LR_WHOLE_FLOAT.
+
+MEASURED: Bruna s1830069 gi68 fired 220, 86bc663936b9ccc5 (= v2) on p2 (prune ON; joint_scoped=785 -> skipped there).
+Wall (`mcdragons5/wall/run.sh <bin> <tag>`, .res files; box load ~57, noise +-2x on 1-5 s games):
+p3 g137 4.8/3.2 s, smoke63 3.66/2.82, Dragonstorm gi45 0.46/0.46, EDF s1930046 gi45 noise (LR ms 0).
+(NB the predecessor's "ds45" ran the EDF deck; run.sh now runs both.) Units on p2: 2,435/2,435 (`ut.log`); p3 running (`ut3.log`).
+Identity baseline `mcdragons5/idbase` = mtg.v2 draw-ON over `mcdragons3/id/id.json`. p2 vs base (1,500 of 1,600; EDF
+unfinished): 3 differ -- AA off100 gi145 8->7 (faster), Niv off100 gi147 4->5 (slower; recovers: T4 on AND off at
+--depth 8 --budget-ms 0, `mcdragons5/d8/`), Niv off50 gi69 same turn. Verify counters 0 (p1/p2 runs).
+
+RUNNING (leave them): A/B `mcdragons5/ho` pid 2634771 (ho.json from ho/mk.py: 17 decks = brief's 8 + Hinata, FiveColour,
+Galadriel, Colossus, Stompy, Melira, Pirates, Angels, Cyclone; play settings 400-2,000 games/arm + d0 2,000/arm,
+seed 1870001 / d0 1870001+500000; ~12 nominal core-h, started 20:52 UTC). Identity verify p3 `mcdragons5/idv3` pid
+2634772. Gate slice p3 pid 2635177 -> `mcdragons3/gate_s5p3.{out,err}`. Units p3 -> `mcdragons5/ut3.log`.
+Wait with `while kill -0 <pid>`. No 2-h CronCreate timer was set (not available to the subagent) -- coordinator please.
+
+NEXT: (1) idv3: `python3 mcdragons5/cmpw.py mcdragons5/idbase/w mcdragons5/idv3/w`; grep `LINE REPAY` in idv3/id.err:
+memo_mismatch/ok_mismatch/ok_stale/joint_mismatch/inner_mismatch/p1_memo_mismatch must be 0; list changed games.
+(2) A/B report per deck, searched and d0 separately (abrep.py-style pairing; add ms per arm from ho.out); every slower
+searched game -> --depth 8 --budget-ms 0 on/off, then MTG_NC_SEARCH=1 for clairvoyance; net <= 0 per deck.
+(3) Gate: `python3 mcdragons3/nl/split.py mcdragons3/gate_s5p3.err` (draw-narrowing counts), CAPPED count; rerun CAPPED
+plans with a larger MTG_MANA_ORACLE_NODES. (4) `THREADS=8 bash test/regression.sh --smoke` (EDF row normal time).
+(5) Update EngineFlags.h:896 / HeuristicArm.h:828 descriptions (two passes, depth <= 2); squash; don't push/accept GT.
+BREACHING HOOKS (coordinator list): amount shortcut in LineRepayTry unchanged; LineRepayRemake + PerformPayTaps path
+unchanged; LineRepayRecord unchanged. CHANGED: LineRepaySearch gained a 6th param `const LineRepayPass&`, and
+MinimalPayments a trailing `ProbeCharge*` (default null). Multi-unit subsets: pass 1 is whole-float (no leftover
+split); the full table (with splits) only in priced stages -- a cut can drop them under a finite budget (th 30101568).
+
 ## Mechanisms (evidence)
 
 1. **ORACLE-GAP, 2,880 of 3,074 -- the oracle was wrong.** Haven of the Spirit Dragon's rebuy ("{2}, {T}, Sacrifice")
@@ -303,3 +350,12 @@ Option (a), an exact necessary condition for the failing class, was tried twice 
 precheck and the inner prune). Neither is a candidate as built.
 Not done: held-out A/B (blocked on wall), draw-narrowing gate slice, CAPPED rerun, ENUM-GAP depth-3 write-up, smoke.
 Units on a56a429ef: 2,435/2,435 pass (`mcdragons4/ut1.log`); `ut2.log` = v2.
+
+## Successor 5 (2026-11-03) -- two-pass LINE_REPAY (checkpoint; final results below when done)
+Scratch: `build/scratch/mcdragons5/`. Code (uncommitted until the squash): ManaOracle `ProbeCharge` (priced
+MinimalPayments: 1 unit/probe via ChargeDecisionUnits, cut when DecisionBudget() is spent); ManaPayment
+`LineRepayPass` (pass 1 whole-float unpriced, pass 2 full table priced; a cut is never memoised; `fail_p1` memo
+skips a proven-empty pass 1 on repeat; pass 2 skipped when every depth's joint is short), `LineRepayScopeFree`
+(the joint prune, top-level and per-option at depth 2, only on a board with no context-restricted mana -- exact;
+Bruna gi68 fired 220 / 86bc663936b9ccc5 with it ON). All four temp levers deleted; the draw barrier kept.
+Baseline for identity: `mcdragons5/idbase` = mtg.v2 (full table, draw ON) over `mcdragons3/id/id.json`.

@@ -201,9 +201,22 @@ namespace manaoracle
     // the payer does, so each tap set is one option.
     // `spell` (optional): the spell being paid for, set as the paying-spell scope (SpellSubtypePayScope) for the
     // table and every verification -- a subtype-restricted source (Giada) is offered only to a spell of its subtype.
+    // `charge` (optional): the table's work PRICED on a search budget (MTG_LINE_REPAY's second pass). Each probe
+    // charges `units` through TurnSolver::ChargeDecisionUnits (a null `budget` = unlimited: nothing is charged and
+    // nothing is cut, so the table is complete), and once `budget` is spent (Exhausted / Overrun) no further probe
+    // runs: `cut` is set and the table returned is PARTIAL -- every listed option still verified, but the list is
+    // not every minimal payment, so a caller must never read a cut table's absence of an option as a proof.
+    struct ProbeCharge
+    {
+        SearchBudget* budget = nullptr;
+        int           units  = 1;
+        bool          cut    = false;
+        long long     probes = 0;
+    };
     std::vector<PayOption> MinimalPayments(const GameState& state, const ManaCost& cost, bool for_creature,
                                            std::vector<std::string>* unmodeled, bool creature_ability = false,
-                                           bool whole_float = false, const Card* spell = nullptr);
+                                           bool whole_float = false, const Card* spell = nullptr,
+                                           ProbeCharge* charge = nullptr);
 
     // PAY REFINE (MTG_PAY_REFINE; TapForCostShared, ManaPayment.cpp). `pre` / `post`: the board before and after
     // ONE outermost payment of `cost` the engine just made. Returns true and `out` = the payment to make instead
