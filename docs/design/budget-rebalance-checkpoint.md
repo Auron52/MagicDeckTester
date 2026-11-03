@@ -131,6 +131,15 @@ Started 2026-11-03.
 - Cyclone mulligan generation in .claude/worktrees/cyclone-landing905: stopped deliberately by the USER
   (via another agent); restart planned by the user. Not ours.
 
+## Live at compaction (2026-11-03 04:40 UTC)
+- Unit tests on the combined branch (857ec8ae8): 2420/2420 pass.
+- RUNNING, all harness-tracked: p2b (purity KB=1 arm, 108/260 jobs at 04:39) -> compare `cmp_runs.py p2a p2b`
+  (pure => 0 unit diffs); abx3 (A/B v3, 259/1104 jobs) -> `ab_x_report.py abx3`; subagent 2 (EDF explosion
+  anatomy + collapses, also asked WHERE the heavy work sits relative to Overrun checks).
+- Surface to USER (not decided): X choice for the priced ceiling (X=50 clean on quality so far, small tail gain;
+  tight X loses Alchemist turns); tier-1 sizes (tt 8, fsl 16, m1memo 8, gamelc 24, mana 16 MB); mana-cache
+  context fold (MTG_MANA_CACHE_X_TRAITS / _X_PAYCTX); branch not pushed (push would also run Windows CI).
+
 ## Next steps
 0. Read armA-vs-armB; build worktree (stage 2 + counters + priced ceiling); verify MTG_TIER1=0 is
    byte-identical to armA and MTG_TIER1=1 play-identical where no allocation binds; refit prices with
