@@ -4028,7 +4028,61 @@ public:
     // a creature-sacrifice ritual only when a creature is on the battlefield or in hand).
     // this_turn_only: the mana THIS turn can still make -- untapped lands, this turn's drop (if unused), the
     // floating pool, the same Lake / Bloom / ritual terms, no suspend arrival (the Culling ordering rule).
-    static int ShadowbornReachableMana(const GameState& s, int controller, bool this_turn_only = false);
+    // board_only: the hand terms are left out (no hand lands, no rituals) -- the board's own share, which
+    // the INT-6 discard buckets add the KEPT hand cards to.
+    static int ShadowbornReachableMana(const GameState& s, int controller, bool this_turn_only = false,
+                                       bool board_only = false);
+
+    // ---- INT-6: THE USER'S CLEANUP-DISCARD BUCKETS (analyze-deck 5i; USER 2026-11-03) ------------------
+    // AUTHORITY. The USER: "We should bucket as usual, 1 Thumming Stone (or tutor if missing) between hand and
+    // battlefield, mana up to 6, 1-2 shadowborn. Tutors fill spots where something is missing including mana,
+    // though we need to keep a space for Shadowborns to be sacrificed to Diabolic Intent and Culling. 1
+    // Shadowborn at least should go before 6 slow mana. I don't want to see it keep Thumming Stone and 6
+    // lands."; "Fast mana like Dark Ritual is pretty much always a keep. Same with culling and lake of the dead
+    // in situations you mentioned. Naturally, we need to have fodder for the things that require it and at
+    // least a couple of land between hand and battlefield."; "Maybe with stone out, you would want to keep all
+    // Shadowborns and maybe even Reaper as a side threat to consider hardcasting."; with the Stone out "we only
+    // need 3 or 4 mana maximum" (4 = "the most we need").
+    //
+    // The KEEP set is built quota-first, NET OF BOARD; the shed is the overflow's first card, else the last
+    // card kept. Fill order (earlier = kept first):
+    //
+    //   | # | bucket          | keeps                                                                       |
+    //   |---|-----------------|-----------------------------------------------------------------------------|
+    //   | 1 | STONE           | 1 ripple granter (grants_ripple) between hand + battlefield; with none in   |
+    //   |   |                 | either, 1 TUTOR holds the slot (Demonic > Intent w/ fodder > Profane > Intent)|
+    //   | 2 | LANDS           | lands until 2 between hand + battlefield (a Lake -- a land entering by     |
+    //   |   |                 | sacrificing a land -- does not count from hand; basics first)              |
+    //   | 3 | APOSTLE #1      | 1 sac-named creature (Shadowborn Apostle); none in hand -> a tutor fills it |
+    //   |   |                 | (PROVISIONAL: the USER's "tutors fill spots where something is missing")    |
+    //   | 4 | FAST MANA       | NOT capped by the quota: every plain ritual (Dark Ritual); the first Lake   |
+    //   |   | + FODDER        | when fuelled (>= 2 lands of its subtype on our battlefield, no Lake there); |
+    //   |   |                 | the first creature-sac ritual (Culling the Weak) when it has fodder. FODDER: |
+    //   |   |                 | each kept creature-sac card (Culling, a kept Diabolic Intent) claims one of |
+    //   |   |                 | our battlefield creatures, else keeps one more hand Apostle (never #1)      |
+    //   | 5 | MANA to quota   | quota 6, or 4 with a granter ON OUR BATTLEFIELD; counted = the board's own   |
+    //   |   |                 | (ShadowbornReachableMana board_only) + kept hand cards (land 1, ritual its   |
+    //   |   |                 | net, Lake its crack surplus, tutor 1). Fills with lands, then a tutor.      |
+    //   | 6 | APOSTLE #2      | no granter on bf: one more Apostle. A granter on bf: EVERY Apostle, then    |
+    //   |   |                 | the first HARDCAST THREAT (a creature of the Apostle's searched subtype the  |
+    //   |   |                 | activation does not fetch and that does not discard our hand: Reaper)       |
+    //   | 7 | OVERFLOW (shed  | anything unclassified; a granter in hand while one is on bf; creatures      |
+    //   |   | first, in this  | (Demons: colour-unreachable first, then hand-discarders, then higher mana   |
+    //   |   | order)          | value); a second granter; slow mana (Lotus Bloom); Lake / Culling outside   |
+    //   |   |                 | their conditions; surplus lands; extra tutors; extra Apostles; rituals      |
+    //
+    // After the overflow, the kept cards shed in REVERSE fill order. ONE index (5i rule 5) through
+    // CleanupDiscardRankingWithOrder; re-asked after every shed (the fodder / Lake / quota conditions move as
+    // the hand shrinks). MTG_SHADOWBORN_BUCKET_DISCARD (heurarm slot, DEFAULT ON; =0 -> DeckProvider's generic
+    // max-MV ranking). MTG_SHADOWBORN_DISCARD_FAN=1 (TESTING ONLY, the 5i evidence run): the full shed order is
+    // the candidate set, so the executor's searched pass trials every card and the trace grades the pick.
+    std::vector<int> CleanupDiscardCandidates(
+        const GameState& s, const std::vector<std::string>* required_pieces) const override;
+    std::vector<int> CleanupDiscardShedOrder(
+        const GameState& s, const std::vector<std::string>* required_pieces) const override;
+    bool CleanupDiscardShedStable() const override;
+    static constexpr int kDiscardManaQuota       = 6;   // no granter on bf (the USER's "mana up to 6")
+    static constexpr int kDiscardManaQuotaRipple = 4;   // a granter on bf ("3 or 4 mana maximum"; 4 = the most needed)
 };
 
 class PiratesProvider : public DeckProvider

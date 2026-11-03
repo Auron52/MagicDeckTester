@@ -58109,7 +58109,8 @@ int ShadowbornProvider::CastOrderRank(const GameState& s, const CardDefinition& 
 
 // ---- ShadowbornProvider: the USER's tutor and Demon rules (Shadowborn INT-4; the rule table and its
 // authority are in the declaration) ----------------------------------------------------------------------
-int ShadowbornProvider::ShadowbornReachableMana(const GameState& s, int controller, bool this_turn_only)
+int ShadowbornProvider::ShadowbornReachableMana(const GameState& s, int controller, bool this_turn_only,
+                                                bool board_only)
 {
     const Player& ap = s.players[static_cast<std::size_t>(controller)];
     int lands = 0, perm_mana = 0, lake_surplus = 0;
@@ -58140,7 +58141,9 @@ int ShadowbornProvider::ShadowbornReachableMana(const GameState& s, int controll
         if (victims > 0) { lake_surplus = std::max(lake_surplus, lk->params.sac_for_mana_amount - 1); }
     }
     int hand_lands = 0, rituals = 0;
-    for (const Card& c : ap.hand)
+    static const std::vector<Card> kNoHand{};
+    const std::vector<Card>& hand = board_only ? kNoHand : ap.hand;   // board_only: the hand terms are 0 (INT-6 discard buckets)
+    for (const Card& c : hand)
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
         if (d == nullptr) { continue; }
@@ -58151,7 +58154,7 @@ int ShadowbornProvider::ShadowbornReachableMana(const GameState& s, int controll
             continue;
         }
     }
-    for (const Card& c : ap.hand)
+    for (const Card& c : hand)
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
         if (d == nullptr || d->params.ritual_floating_mana <= 0) { continue; }
@@ -58415,3 +58418,295 @@ bool ShadowbornProvider::TutorNeedsCandidate(const GameState& /*s*/, int /*contr
     if (HumanPlayActive()) { return false; }   // a HUMAN may cast any legal tutor (and choose at resolution)
     return pp.tutor_to_hand && pp.sac_named_count == 0;
 }
+
+// ---- ShadowbornProvider: the USER's cleanup-discard buckets (Shadowborn INT-6, analyze-deck 5i; the table and
+// its authority are in the declaration) ----------------------------------------------------------------------
+static bool ShadowbornBucketDiscardOn()
+{
+    // DEFAULT ON (the USER's design, 2026-11-03; pending the USER's adoption); =0 -> the generic max-MV ranking.
+    static const bool on = EnvOn("MTG_SHADOWBORN_BUCKET_DISCARD", true);
+    return heurarm::Flag(heurarm::SHADOWBORN_BUCKET_DISCARD, on);
+}
+
+namespace
+{
+// A hand card's ROLE, read off card data (never the name).
+enum class SbRole : std::uint8_t
+{
+    Granter,    // grants_ripple (Thrumming Stone)
+    Apostle,    // a creature with sac_named_count (Shadowborn Apostle)
+    Ritual,     // non-land ritual_floating_mana, no additional cost (Dark Ritual)
+    Culling,    // non-land ritual_floating_mana + sac_additional_creature (Culling the Weak)
+    Lake,       // a land entering by sacrificing a land of a subtype (Lake of the Dead)
+    Land,       // any other land (Swamp, Blood Crypt)
+    Tutor,      // a library tutor (Demonic Tutor, Diabolic Intent, Profane Tutor)
+    SlowMana,   // a non-land sacrifice-for-mana permanent (Lotus Bloom; suspend 3)
+    Threat,     // a creature of the Apostle's searched subtype the activation does not fetch, no hand discard (Reaper)
+    Creature,   // any other creature (the fetched Demons, a hand-discarding Demon)
+    Other,
+};
+}   // namespace
+
+std::vector<int> ShadowbornProvider::CleanupDiscardShedOrder(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    if (!ShadowbornBucketDiscardOn()) { return DeckProvider::CleanupDiscardShedOrder(s, required_pieces); }
+    const int me = s.active_player_index;
+    const Player& ap = s.players[static_cast<std::size_t>(me)];
+    const int n = static_cast<int>(ap.hand.size());
+    if (n <= 0) { return DeckProvider::CleanupDiscardShedOrder(s, required_pieces); }
+    const CardDatabase& db = CardDatabase::Instance();
+
+    // ---- the board, read once -----------------------------------------------------------------------------
+    bool granter_bf = false, lake_bf = false;
+    int lands_bf = 0, fodder_bf = 0;
+    std::uint8_t colours = 0;   // colours our lands (board + hand) produce
+    auto add_colours = [&](const CardDefinition* d)
+    { if (d != nullptr) { for (Color c : d->params.produces) { colours |= static_cast<std::uint8_t>(1u << static_cast<unsigned>(c)); } } };
+    const CardDefinition* engine = nullptr;   // the deck's sac-named creature: its searched subtype names the Demons
+    auto see_engine = [&](const CardDefinition* d)
+    { if (engine == nullptr && d != nullptr && d->card.IsCreature() && d->params.sac_named_count > 0) { engine = d; } };
+    std::vector<const Card*> bf_lands;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = db.LookupCached(p.card);
+        const Card& card = d ? d->card : p.card;
+        see_engine(d);
+        if (card.IsCreature() || p.is_animated) { ++fodder_bf; }
+        if (d != nullptr && d->params.grants_ripple > 0) { granter_bf = true; }
+        if (card.IsLand())
+        {
+            ++lands_bf;
+            bf_lands.push_back(&card);
+            add_colours(d);
+            if (d != nullptr && !d->params.etb_replace_sacrifice_land_subtype.empty()) { lake_bf = true; }
+        }
+    }
+
+    // ---- the hand, classified -----------------------------------------------------------------------------
+    std::vector<SbRole> role(static_cast<std::size_t>(n), SbRole::Other);
+    std::vector<const CardDefinition*> def(static_cast<std::size_t>(n), nullptr);
+    for (int i = 0; i < n; ++i)
+    {
+        const CardDefinition* d = db.LookupCached(ap.hand[static_cast<std::size_t>(i)]);
+        def[static_cast<std::size_t>(i)] = d;
+        see_engine(d);
+        if (d != nullptr && d->card.IsLand()) { add_colours(d); }
+    }
+    if (engine == nullptr)
+    {
+        for (const Card& c : ap.graveyard) { see_engine(db.LookupCached(c)); }
+        for (std::size_t i = 0, m = ap.library.size(); engine == nullptr && i < m; ++i) { see_engine(db.LookupCached(ap.library.RawAt(i))); }
+    }
+    for (int i = 0; i < n; ++i)
+    {
+        const CardDefinition* d = def[static_cast<std::size_t>(i)];
+        SbRole& r = role[static_cast<std::size_t>(i)];
+        if (d == nullptr) { r = SbRole::Other; continue; }
+        const CardParams& p = d->params;
+        if (p.grants_ripple > 0)                                     { r = SbRole::Granter; }
+        else if (d->card.IsCreature() && p.sac_named_count > 0)      { r = SbRole::Apostle; }
+        else if (d->card.IsLand())
+        { r = p.etb_replace_sacrifice_land_subtype.empty() ? SbRole::Land : SbRole::Lake; }
+        else if (p.ritual_floating_mana > 0)                         { r = p.sac_additional_creature ? SbRole::Culling : SbRole::Ritual; }
+        else if (IsLibraryTutor(p))                                  { r = SbRole::Tutor; }
+        else if (p.sac_for_mana_amount > 0)                          { r = SbRole::SlowMana; }
+        else if (d->card.IsCreature())
+        {
+            const bool subtype = engine == nullptr || engine->params.tutor_required_subtype.empty()
+                              || CardHasSubtype(d->card, engine->params.tutor_required_subtype);
+            const bool fetched = !p.etb_tokens_per_devotion_color.empty() || !p.creature_count_anthem_tiers.empty();
+            r = (subtype && !fetched && !p.endstep_each_player_discards_hand) ? SbRole::Threat : SbRole::Creature;
+        }
+    }
+
+    std::vector<char> kept(static_cast<std::size_t>(n), 0);
+    std::vector<int> keep_order;
+    keep_order.reserve(static_cast<std::size_t>(n));
+    auto keep = [&](int i) { kept[static_cast<std::size_t>(i)] = 1; keep_order.push_back(i); };
+    auto first_of = [&](SbRole want, auto&& extra) -> int
+    {
+        for (int i = 0; i < n; ++i)
+        {
+            if (kept[static_cast<std::size_t>(i)] || ap.hand[static_cast<std::size_t>(i)].m_is_staged) { continue; }
+            if (role[static_cast<std::size_t>(i)] == want && extra(i)) { return i; }
+        }
+        return -1;
+    };
+    auto any = [](int) { return true; };
+    auto sac_tutor = [&](int i) { return def[static_cast<std::size_t>(i)]->params.sac_additional_creature; };
+    auto suspend_only = [&](int i)
+    { const CardDefinition* d = def[static_cast<std::size_t>(i)]; return d->params.suspend_time_counters > 0 && d->card.m_mana_cost.ManaValue() == 0; };
+    // FODDER: a kept creature-sac card claims a battlefield creature, else keeps one more hand Apostle -- never
+    // Apostle #1 (the one cast with the Stone), so before step 3 one hand Apostle is held back for it and the
+    // slot-1 tutor's claim is DEFERRED to step 4.
+    int fodder_left = fodder_bf;
+    bool apostle1_done = false;
+    int pending_fodder = 0;
+    auto unkept_apostles = [&]()
+    {
+        int k = 0;
+        for (int i = 0; i < n; ++i)
+        {
+            if (!kept[static_cast<std::size_t>(i)] && !ap.hand[static_cast<std::size_t>(i)].m_is_staged
+                && role[static_cast<std::size_t>(i)] == SbRole::Apostle) { ++k; }
+        }
+        return k;
+    };
+    auto fodder_available = [&]() { return fodder_left > 0 || unkept_apostles() > (apostle1_done ? 0 : 1); };
+    auto claim_fodder = [&]()
+    {
+        if (fodder_left > 0) { --fodder_left; return; }
+        const int a = first_of(SbRole::Apostle, any);
+        if (a >= 0) { keep(a); }
+    };
+    // The best tutor for a slot: no additional cost and castable now (Demonic) > a creature-sac one with fodder
+    // (Intent) > suspend-only (Profane) > a creature-sac one without (allow_fodderless only).
+    auto best_tutor = [&](bool allow_fodderless) -> int
+    {
+        int t = first_of(SbRole::Tutor, [&](int i) { return !sac_tutor(i) && !suspend_only(i); });
+        if (t < 0 && fodder_available()) { t = first_of(SbRole::Tutor, sac_tutor); }
+        if (t < 0) { t = first_of(SbRole::Tutor, [&](int i) { return !sac_tutor(i); }); }
+        if (t < 0 && allow_fodderless) { t = first_of(SbRole::Tutor, any); }
+        return t;
+    };
+    auto keep_tutor = [&](int t)
+    {
+        keep(t);
+        if (!sac_tutor(t)) { return; }
+        if (!apostle1_done) { ++pending_fodder; return; }
+        if (fodder_available()) { claim_fodder(); }
+    };
+    auto basic_first = [&](int i) { return def[static_cast<std::size_t>(i)]->card.HasSupertype(Supertype::Basic); };
+    auto next_land = [&]() { const int b = first_of(SbRole::Land, basic_first); return b >= 0 ? b : first_of(SbRole::Land, any); };
+
+    // 1. STONE: one granter between hand + battlefield; with none in either, a tutor holds the slot.
+    if (!granter_bf)
+    {
+        const int g = first_of(SbRole::Granter, any);
+        if (g >= 0) { keep(g); }
+        else { const int t = best_tutor(/*allow_fodderless=*/true); if (t >= 0) { keep_tutor(t); } }
+    }
+    // 2. LANDS: at least two between hand + battlefield.
+    for (int need = 2 - lands_bf; need > 0; --need) { const int l = next_land(); if (l < 0) { break; } keep(l); }
+    // 3. APOSTLE #1 (none in hand: a tutor fills the slot -- PROVISIONAL).
+    {
+        const int a = first_of(SbRole::Apostle, any);
+        if (a >= 0) { keep(a); }
+        else { const int t = best_tutor(/*allow_fodderless=*/false); if (t >= 0) { keep_tutor(t); } }
+        apostle1_done = true;
+    }
+    // 4. FAST MANA, not capped by the quota: every plain ritual; the fuelled Lake; Culling with fodder (+ its fodder).
+    for (int r = first_of(SbRole::Ritual, any); r >= 0; r = first_of(SbRole::Ritual, any)) { keep(r); }
+    for (; pending_fodder > 0; --pending_fodder) { if (fodder_available()) { claim_fodder(); } }
+    int lake_victims = 0;
+    {
+        const int lk = first_of(SbRole::Lake, any);
+        if (lk >= 0)
+        {
+            const std::string& sub = def[static_cast<std::size_t>(lk)]->params.etb_replace_sacrifice_land_subtype;
+            for (const Card* c : bf_lands) { if (CardHasSubtype(*c, sub)) { ++lake_victims; } }
+            if (!lake_bf && lake_victims >= 2) { keep(lk); }
+        }
+    }
+    {
+        const int cu = first_of(SbRole::Culling, any);
+        if (cu >= 0 && fodder_available()) { keep(cu); claim_fodder(); }
+    }
+    // 5. MANA up to the quota (4 with a granter on our battlefield, else 6): lands, then a tutor.
+    auto hand_mana = [&](int i) -> int
+    {
+        const CardDefinition* d = def[static_cast<std::size_t>(i)];
+        switch (role[static_cast<std::size_t>(i)])
+        {
+        case SbRole::Land:    return 1;
+        case SbRole::Ritual:
+        case SbRole::Culling: return std::max(0, d->params.ritual_floating_mana - d->card.m_mana_cost.ManaValue());
+        case SbRole::Lake:    return std::max(0, d->params.sac_for_mana_amount - 1);
+        default:              return 0;
+        }
+    };
+    int mana = ShadowbornReachableMana(s, me, /*this_turn_only=*/false, /*board_only=*/true);
+    int mana_tutors = 0;   // a tutor kept in a mana slot counts 1 (PROVISIONAL)
+    for (int i : keep_order) { mana += hand_mana(i); }
+    const int quota = granter_bf ? kDiscardManaQuotaRipple : kDiscardManaQuota;
+    while (mana + mana_tutors < quota)
+    {
+        const int l = next_land();
+        if (l >= 0) { keep(l); ++mana; continue; }
+        const int t = best_tutor(/*allow_fodderless=*/false);
+        if (t < 0) { break; }
+        keep_tutor(t);
+        ++mana_tutors;
+    }
+    // 6. APOSTLE #2; with a granter on our battlefield every Apostle, then the hardcast threat (Reaper).
+    if (granter_bf)
+    {
+        for (int a = first_of(SbRole::Apostle, any); a >= 0; a = first_of(SbRole::Apostle, any)) { keep(a); }
+        const int th = first_of(SbRole::Threat, any);
+        if (th >= 0) { keep(th); }
+    }
+    else
+    {
+        const int a = first_of(SbRole::Apostle, any);
+        if (a >= 0) { keep(a); }
+    }
+
+    // ---- 7. the shed order: overflow first (in the USER's order), then the kept cards in reverse fill order ----
+    std::vector<int> shed;
+    shed.reserve(static_cast<std::size_t>(n));
+    auto overflow = [&](auto&& pred)
+    {
+        for (int i = 0; i < n; ++i)
+        { if (!kept[static_cast<std::size_t>(i)] && pred(i)) { kept[static_cast<std::size_t>(i)] = 2; shed.push_back(i); } }
+    };
+    auto is = [&](SbRole want) { return [&, want](int i) { return role[static_cast<std::size_t>(i)] == want; }; };
+    overflow(is(SbRole::Other));
+    if (granter_bf) { overflow(is(SbRole::Granter)); }   // pure extras with one out (legend rule)
+    {
+        // Creatures in hand (Demons), most distant first: a colour no land of ours makes, then a hand-discarder,
+        // then the higher mana value; hand order inside a class.
+        std::vector<int> cr;
+        for (int i = 0; i < n; ++i)
+        {
+            const SbRole r = role[static_cast<std::size_t>(i)];
+            if (!kept[static_cast<std::size_t>(i)] && (r == SbRole::Creature || r == SbRole::Threat)) { cr.push_back(i); }
+        }
+        auto key = [&](int i)
+        {
+            const CardDefinition* d = def[static_cast<std::size_t>(i)];
+            bool unreachable = false;
+            for (Color c : { Color::White, Color::Blue, Color::Black, Color::Red, Color::Green })
+            { if (d->card.HasColor(c) && !(colours & (1u << static_cast<unsigned>(c)))) { unreachable = true; } }
+            return std::make_tuple(unreachable ? 0 : 1, d->params.endstep_each_player_discards_hand ? 0 : 1,
+                                   -d->card.m_mana_cost.ManaValue());
+        };
+        std::stable_sort(cr.begin(), cr.end(), [&](int a, int b) { return key(a) < key(b); });
+        for (int i : cr) { kept[static_cast<std::size_t>(i)] = 2; shed.push_back(i); }
+    }
+    overflow(is(SbRole::Granter));   // a second granter (none on our battlefield)
+    overflow(is(SbRole::SlowMana));
+    overflow([&](int i) { const SbRole r = role[static_cast<std::size_t>(i)]; return r == SbRole::Lake || r == SbRole::Culling; });
+    overflow(is(SbRole::Land));
+    overflow(is(SbRole::Tutor));
+    overflow(is(SbRole::Apostle));
+    overflow([](int) { return true; });   // rituals (always kept above) and anything left
+    for (auto it = keep_order.rbegin(); it != keep_order.rend(); ++it) { shed.push_back(*it); }
+    return CleanupDiscardRankingCounted(s, required_pieces, shed);
+}
+
+std::vector<int> ShadowbornProvider::CleanupDiscardCandidates(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    if (!ShadowbornBucketDiscardOn()) { return DeckProvider::CleanupDiscardCandidates(s, required_pieces); }
+    std::vector<int> ranked = CleanupDiscardShedOrder(s, required_pieces);
+    // MTG_SHADOWBORN_DISCARD_FAN=1: TESTING-ONLY (the 5i evidence run) -- the full shed order is the candidate set,
+    // so the executor's searched pass trials every card and the trace grades the bucket pick. Never set in play.
+    static const bool s_fan = EnvOn("MTG_SHADOWBORN_DISCARD_FAN");
+    if (!s_fan && ranked.size() > 1) { ranked.resize(1); }
+    return ranked;
+}
+
+// The conditions (fodder, the Lake's fuel, the quota) move as the hand shrinks, so re-ask per shed.
+bool ShadowbornProvider::CleanupDiscardShedStable() const { return !ShadowbornBucketDiscardOn(); }

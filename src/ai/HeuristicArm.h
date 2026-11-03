@@ -827,6 +827,7 @@ enum Slot : int
     ETB_BOUND_AURA,           // MTG_ETB_BOUND_AURA  the odometer bounds' ETB-untap refund (EtbUntapBoundCredit, both ManaPruneBound and the selection-exact gate) adds the N largest land-Aura bonuses in hand: a same-selection Aura on a refunded land yields again (EDF seed 1100009 gi8 T2 {Wild Growth -> Adarkar, Cloud, Displacer} cut at the odometer; ENUM-GAP). Upper bound. Default ON; =0 -> the board-only refund
     CONVOKE_SHORTFALL_ORDER,  // MTG_CONVOKE_SHORTFALL_ORDER  a cast-time convoke cast (Markov Baron) that would find fewer bodies than its arm counts at its place in the cast order goes to the earliest later place that lowers the order's total body shortfall (after the creature arrival that supplies the body), never ahead of an arrival a plan-body arm names: the line subset rule 7 booked (mana-clean gate, Vampires seed 30001869 T3 {Baron, Baron, Stromkirk Captain}: APPLY-DROP-ORDER). Structural. Default ON; =0 -> the order as before
     ORDER_SIG_TAP_BIND,       // MTG_ORDER_SIG_TAP_BIND  FsOrderSig (the canonical key's order guard for index-encoded answers: the bp-enum continuation memo, FSL win lines, dedup drops, the rollout TT) folds the tapped flag of each permanent with a {T}-cost activation a plan names by number that has a same-name twin, so a memoised answer naming twin #58 is never served to the board where #58 is the tapped twin (mana-clean gate, Vampires seed 30000611 T3: Voldaren Estate's Blood dropped, ORACLE-GAP). Exact prior signature without such a twin. Default ON; =0 -> names and numbers only
+    SHADOWBORN_BUCKET_DISCARD, // MTG_SHADOWBORN_BUCKET_DISCARD  Shadowborn Apostle: the USER-designed cleanup-discard buckets (INT-6, analyze-deck 5i; ShadowbornProvider::CleanupDiscardShedOrder). DEFAULT ON (pending the USER's adoption); =0 -> DeckProvider's generic max-MV ranking
     COUNT
 };
 
@@ -1598,6 +1599,7 @@ inline const char* Name(int slot)
         "MTG_ETB_BOUND_AURA",
         "MTG_CONVOKE_SHORTFALL_ORDER",
         "MTG_ORDER_SIG_TAP_BIND",
+        "MTG_SHADOWBORN_BUCKET_DISCARD",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
