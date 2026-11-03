@@ -47,16 +47,64 @@ Started 2026-11-03.
   solvememo (+m2), gamelc, mana cache; BeginGame in ClearPerGameCaches; BatchRunner per-game dump
   `MTG_TIER1_STATS=<path>`; analysis `scripts/tier1_stats.py <dump> --by-deck`.
 
-## Current state / running
-- `build/scratch/budget/run_purity.sh` (worktree binary 00:52): arm A default -> armA.*, arm B
-  MTG_PLAN_CACHE_KB=1024 -> armB.*; DONE marker purity.DONE. Compare with `scripts/cmp_runs.py`.
-- Tail-corpus agent: building build/scratch/budget/tail_corpus.json (historical slowest budgeted games
-  on current lists) + tail_corpus_notes.md.
+## Current state / running (2026-11-03 ~01:25 UTC)
+- Commit 4794e6320 (local, branch budget-rebalance): ledger + work counters, play-inert (verified).
+- UNCOMMITTED in worktree, compiled OK in isolation, NOT yet built into build/Release:
+  * stage 2 tier-1 admission (MTG_TIER1, default ON; =0 legacy): Tier1Ledger.h AllocBytes/Fits/portable
+    constants (Action 544, Plan 552, PhasePlan 568, FSLineEntry 56, node 64); TT Store/StoreNoWin,
+    FslPoolAcquire/Adjust/Release (+FslBytes/FslHintBytes, FslCap fixed 2M), m1memo ByteCap + portable
+    entry bytes, gamelc CapBytes + portable nb, mana ByteCap + portable eb; DeterminismReport prints
+    [tier1] refusals. Default allocations MB: tt 8, fsl 16, m1memo 8, gamelc 24, mana 16 (plan_* and
+    solvememo not tier-1 admission categories).
+  * work counters kPay (ManaPayment.cpp TapForCostShared) + kSimKey (BuildSimKeyBase); priced sum
+    workctr::t_priced with kPriceNs table (pay/simkey prices 0 until refit).
+  * turn census columns w_step_c..w_simkey (thread_local, exact).
+  * PRICED DECISION CEILING: DecisionWorkMeter.h PricedScope / PricedExceeded / PricedLimitNs
+    (MTG_DECISION_PRICED_X default 0 = off; MTG_DECISION_PRICED_REF_NS default 25000), armed at both
+    decision roots (FullSearchLineHybrid _dwp_fs, SolveWithLookahead _dwp).
+- Purity run: build/scratch/budget/run_purity.sh. Arm A (default) DONE: reproduces t1_reg on all 260
+  jobs (1 game units 38292->38279, Alchemist d5 s3003 gi45 -- global plan pool refused 627 stores in
+  t1_reg => first evidence plan-cache residency is NOT perfectly pure). Arm B (MTG_PLAN_CACHE_KB=1024)
+  was on its last job (hinata_regression_d5_s3003) at 01:22; marker purity.DONE; compare with
+  `scripts/cmp_runs.py armA armB` in build/scratch/budget. Already visible: tiny pool makes games MUCH
+  slower (dragonstorm gi200 19 s -> 148 s; alchemist d3 gi26 -> 311 s) -> plan caches need big space.
+- Tail corpus READY: build/scratch/budget/tail_corpus.json (45 one-game jobs, mostly d5 b20; originals
+  up to 4.6 h) + tail_corpus_notes.md. Units overspend dominates generation tails (Niv vlq row 547M
+  units, EDF 904M at b20: no keep table -> bottoming trials x C(7,k), 25x per-pass ceilings); Kitty is
+  mispricing (2-27 ms/unit). NOT yet run on HEAD. Run it with MTG_MAX_GAME_WALL_SEC=3600 so a 1 h+ game
+  is reported, not waited on; alone on the box.
+- Primary checkout build/Release/mtg rebuilt to HEAD (00:49); the session-start build had failed
+  silently (`| tail`), see memory build-pipe-masks-failure.
+- Cyclone mulligan generation (NOT mine) in .claude/worktrees/cyclone-landing905 stopped ~23:44 UTC
+  11-02 mid-refine with no completion/error line; journal + .bak1/.bak2 intact. Reported to user.
 
 ## Next steps
+0. Read armA-vs-armB; build worktree (stage 2 + counters + priced ceiling); verify MTG_TIER1=0 is
+   byte-identical to armA and MTG_TIER1=1 play-identical where no allocation binds; refit prices with
+   pay/simkey; run the tail corpus; turn census for the per-decision priced distribution -> X.
 1. Purity verdict -> plan caches to tier 2 (shared RAM-sized pool, as HEAD's global pool already is) or
    keep in tier 1.
 2. Stage 2: fixed per-thread tier-1 allocations (TT, FSL, m1memo, solvememo, gamelc, mana) in a portable
    currency; remove RAM/worker-derived bounds.
 3. Cost model: fit per-game wall on workctr counts (armA) -> prices for uncharged work.
 4. Run the tail corpus on HEAD; then budget rebalancing (re-price + whole-decision allowance) as a curve.
+
+## Budget side: findings + plan (2026-11-03)
+- Cost fit (scripts/cost_fit.py, armA, 15,824 searched games >= 50 ms, contended wall): per-event prices
+  apply 20.4 us (59.6% of fitted time), enum call 23.0 us (15.9%), plan produced 5.9 us (15.1%), odometer
+  visit 1.13 us (4.4%), charged rollout step 17.9 us (3.5%), greedy visit 0.75 us (1.0%), interior unit
+  ~0. actual/pred p95 2.98 (units-only 4.54); max 518x (units-only 5955x). NO uncharged rollout steps
+  occur at tier settings (step_f = 0). Unexplained time beyond 3x: EDF 129 s (mana payment: perf on
+  edf gi143 = 38% TapForCost*/ManaCacheKey/SnapPayFields, 11% BuildSimKeyBase, 10% copies), then
+  colossus 17.6 s (fixed ~100-450 ms per-game overhead with ~no search), fivecolour2hg 12.8, alchemist
+  12.6. Counters `pay` (TapForCostShared) and `simkey` (BuildSimKeyBase) added for the next fit.
+- PLAN, staged:
+  1. PRICED DECISION CEILING (tail bound, minimal blast radius): keep units for every in-search choice
+     (start gate, exhaustion, pass ceilings); add a per-decision ceiling on PRICED work (all kinds, charged
+     or not) at X x the decision's budget, via decisionwork::Exceeded -> Overrun -> the running pass rolls
+     back, ID commits the deepest COMPLETED pass (turn-complete). Generous X => most games byte-identical.
+     X chosen from the per-decision priced-work distribution (turn census w_* columns), then a quality /
+     tail curve over X. Melira 2026-09-06 showed a UNIT ceiling at X=10 lost a turn: pricing first.
+  2. RE-PRICE the budget itself (charge priced work, renormalise NODES_PER_VIRTUAL_MS so the median deck
+     searches as much as today) -- moves every deck's play; full held-out A/B bar per deck.
+  3. Bottoming trials: pool their budget (they multiply a mulligan's cost by C(7,k)).

@@ -86212,6 +86212,15 @@ inline std::size_t ApproxPlanBytes(const TurnSolver::Plan& p)
 // deck ran flat at 2.6-3.8 GB with the memo off, which is what convicted it. A refused store
 // just recomputes -- the same result-neutral contract as MTG_TT_CAP / MTG_FSL_POOL / the FSL
 // byte pool -- so play is identical at ANY budget; only wall clock may move.
+// TIER-1 PORTABLE SIZE of a plan (core/Tier1Ledger.h): element counts x fixed constants, so a tier-1
+// admission decision is the same on every platform (ApproxPlanBytes above reads capacity() and sizeof(),
+// which differ between libstdc++ and MSVC; it stays the currency of the wall-only shared plan pool).
+inline long long PortablePlanBytes(const TurnSolver::Plan& p)
+{
+    long long n = static_cast<long long>(p.actions.size() + p.breakpoint_actions.size());
+    for (const Action& a : p.actions) { n += static_cast<long long>(a.breakpoint_casts.size()); }
+    return tier1::kPlanB + n * tier1::kActionB;
+}
 namespace plancache
 {
     inline long long BudgetBytes()
@@ -87509,6 +87518,7 @@ static bool KeyChosenColorOn()
 // every key's VALUE and no key's EQUALITY -- the same states share a key exactly as before.
 static TranspositionTable::Key BuildSimKeyBase(const GameState& state, int max_turns, bool second_main)
 {
+    workctr::Inc(workctr::kSimKey);
     ++combatpin::t_reads;   // folds the combat pins (GameState.h, COMBAT-PIN READ WITNESS)
     TranspositionTable::Key k;
     const bool canon = CanonSimKeyOn();
@@ -90235,11 +90245,32 @@ inline std::size_t ApproxFslBytes(const TurnSolver::SearchLine& line)
     { b += ApproxPlanBytes(pp.plan) - sizeof(TurnSolver::Plan); }
     return b;
 }
+// The FSL cache's admission currency: PORTABLE under tier 1 (MTG_TIER1, core/Tier1Ledger.h), the legacy
+// ApproxFslBytes otherwise. Every add/adjust/release of one entry must use the same function.
+inline long long FslBytes(const TurnSolver::SearchLine& line)
+{
+    if (!tier1::On()) { return static_cast<long long>(ApproxFslBytes(line)); }
+    long long b = tier1::kFslEntryB + tier1::kMapNodeB
+                + static_cast<long long>(line.phases.size()) * tier1::kPhasePlanB;
+    for (const TurnSolver::PhasePlan& pp : line.phases) { b += PortablePlanBytes(pp.plan) - tier1::kPlanB; }
+    return b;
+}
+inline long long FslHintBytes()
+{ return tier1::On() ? tier1::kFslEntryB + tier1::kMapNodeB : static_cast<long long>(sizeof(FSLineEntry) + 64); }
 // Preserve the original shared FSL pool. Its hits do not have hit-equals-miss
 // pricing, so binding admission can still affect units; the warning below stays
 // truthful until the separate cache-budgeting project resolves that contract.
 inline bool FslPoolAcquire(long long kb)
 {
+    // TIER 1 (MTG_TIER1): a fixed per-thread allocation replaces the RAM-sized GLOBAL pool, whose
+    // refusals depended on what OTHER workers held (and on the machine) -- and FSL hits are free, so a
+    // refusal moves units and, through the start gate, play.
+    if (tier1::On())
+    {
+        if (!tier1::Fits(tier1::kFsl, kb)) { FslPoolRefused().fetch_add(1, std::memory_order_relaxed); return false; }
+        tier1::Add(tier1::kFsl, kb);
+        return true;
+    }
     const long long pool = FslPool();
     if (pool <= 0) { tier1::Add(tier1::kFsl, kb); return true; }   // pool off: only the per-cache cap applies
     const long long now = FslPoolUsed().fetch_add(kb, std::memory_order_relaxed) + kb;
@@ -90267,7 +90298,26 @@ struct DeterminismReport
     ~DeterminismReport()
     {
         const long long p = plancache::Refused().load();
-        const long long f = FslPoolRefused().load();
+        long long f = FslPoolRefused().load();
+        if (tier1::On())
+        {
+            // TIER 1: every free-hit cache is admitted against a FIXED per-thread allocation, so a refusal
+            // is a function of the game alone -- deterministic, never a cross-thread or cross-machine effect.
+            long long r = 0;
+            for (int c = 0; c < tier1::kCats; ++c) { r += tier1::g_refused[c].load(); }
+            if (r > 0)
+            {
+                std::fprintf(stderr, "[tier1] refusals (deterministic, per-thread fixed allocations):");
+                for (int c = 0; c < tier1::kCats; ++c)
+                {
+                    if (tier1::g_refused[c].load() > 0)
+                    { std::fprintf(stderr, " %s=%lld (%lld MB)", tier1::CatName(c), tier1::g_refused[c].load(),
+                                   tier1::AllocBytes(c) >> 20); }
+                }
+                std::fprintf(stderr, "\n");
+            }
+            f = 0;   // the FSL refusals above are tier-1 refusals now
+        }
         if (p == 0 && f == 0) { return; }
         // Shared plan-cache pressure is neutral only with all exact-mode
         // prerequisites. The separate FSL cache still discounts hits: any FSL
@@ -90313,7 +90363,7 @@ inline DeterminismReport g_determinism_report;
 inline void FslPoolAdjust(long long delta_kb)
 {
     tier1::Add(tier1::kFsl, delta_kb);
-    if (FslPool() > 0 && delta_kb != 0)
+    if (!tier1::On() && FslPool() > 0 && delta_kb != 0)
     {
         FslPoolUsed().fetch_add(delta_kb, std::memory_order_relaxed);
     }
@@ -90321,7 +90371,7 @@ inline void FslPoolAdjust(long long delta_kb)
 inline void FslPoolRelease(long long kb)
 {
     tier1::Add(tier1::kFsl, -kb);
-    if (FslPool() > 0 && kb != 0)
+    if (!tier1::On() && FslPool() > 0 && kb != 0)
     {
         FslPoolUsed().fetch_sub(kb, std::memory_order_relaxed);
     }
@@ -91030,8 +91080,9 @@ inline std::size_t FslCap()
 {
     static const std::size_t cap = []{
         const char* e = std::getenv("MTG_FSL_CAP");
+        // Tier 1: a constant (the RAM-derived default is 2M, but 0 = unbounded when RAM is unknown).
         return e ? static_cast<std::size_t>(std::strtoull(e, nullptr, 10))
-                 : membudget::DefaultFslCapEntries();
+                 : (tier1::On() ? std::size_t{2000000} : membudget::DefaultFslCapEntries());
     }();
     return cap;
 }
@@ -91194,7 +91245,7 @@ inline void FSLineStoreOfHint(FSLineCache* lc, const TranspositionTable::Key& ca
     if (it == lc->end())
     {
         if (FslCap() && lc->size() >= FslCap()) { return; }
-        const long long hint_b = static_cast<long long>(sizeof(FSLineEntry) + 64);
+        const long long hint_b = FslHintBytes();
         if (!FslPoolAcquire(hint_b)) { return; }
         lc->charged_kb += hint_b;
         FSLineEntry e;
@@ -91246,7 +91297,7 @@ inline void FSLineStoreWin(FSLineCache* lc, const TranspositionTable::Key& key,
     if (it == lc->end())
     {
         if (FslCap() && lc->size() >= FslCap()) { return; }   // memo full: recompute instead
-        const long long kb = static_cast<long long>(ApproxFslBytes(line));
+        const long long kb = FslBytes(line);
         if (!FslPoolAcquire(kb)) { return; }                  // shared pool drained: recompute
         lc->charged_kb += kb;
         lc->emplace(key, FSLineEntry{ line, std::numeric_limits<int>::max(), sig });
@@ -91256,7 +91307,7 @@ inline void FSLineStoreWin(FSLineCache* lc, const TranspositionTable::Key& key,
     else if (it->second.nowin_bound != std::numeric_limits<int>::max()
              || (it->second.line.truncated && !line.truncated))   // fill-in: complete line supersedes a truncated one
     {
-        const long long oldkb = static_cast<long long>(ApproxFslBytes(it->second.line));
+        const long long oldkb = FslBytes(it->second.line);
         it->second = FSLineEntry{ line, std::numeric_limits<int>::max(), sig };
         if (pastcut::On())
         {
@@ -91264,7 +91315,7 @@ inline void FSLineStoreWin(FSLineCache* lc, const TranspositionTable::Key& key,
             { pastcut::g_stores.fetch_add(1, std::memory_order_relaxed); pastcut::t_rec[key] = { lc, pastcut::t_node_cutoff }; }
             else { pastcut::t_rec.erase(key); }
         }
-        const long long delta = static_cast<long long>(ApproxFslBytes(it->second.line)) - oldkb;
+        const long long delta = FslBytes(it->second.line) - oldkb;
         FslPoolAdjust(delta);
         lc->charged_kb += delta;
     }
@@ -91280,7 +91331,7 @@ inline void FSLineStoreNoWin(FSLineCache* lc, const TranspositionTable::Key& key
     if (it == lc->end())
     {
         if (FslCap() && lc->size() >= FslCap()) { return; }   // memo full: recompute instead
-        const long long kb = static_cast<long long>(ApproxFslBytes(line));
+        const long long kb = FslBytes(line);
         if (!FslPoolAcquire(kb)) { return; }                  // shared pool drained: recompute
         lc->charged_kb += kb;
         lc->emplace(key, FSLineEntry{ line, bound });
@@ -94137,7 +94188,9 @@ namespace gamelc
     {
         static const std::size_t v = []() -> std::size_t
         { const char* e = std::getenv("MTG_GAME_LINE_CACHE_MB");
-          const unsigned long long mb = (e != nullptr && *e != '\0') ? std::strtoull(e, nullptr, 10) : 24ull;
+          // Tier 1: the gamelc allocation (MTG_TIER1_GAMELC_MB, default 24 = the legacy default).
+          const unsigned long long mb = (e != nullptr && *e != '\0') ? std::strtoull(e, nullptr, 10)
+                                      : (tier1::On() ? static_cast<unsigned long long>(tier1::AllocBytes(tier1::kGameLc) >> 20) : 24ull);
           return static_cast<std::size_t>(mb) << 20; }();
         return v;
     }
@@ -97344,7 +97397,9 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             auto it = gamelc::t_map.find(gk);
             if (it == gamelc::t_map.end())
             {
-                const std::size_t nb = (win ? ApproxFslBytes(best) : sizeof(FSLineEntry)) + 64;   // +64: the map node
+                const std::size_t nb = tier1::On()
+                    ? static_cast<std::size_t>((win ? FslBytes(best) : tier1::kFslEntryB + tier1::kMapNodeB))
+                    : (win ? ApproxFslBytes(best) : sizeof(FSLineEntry)) + 64;   // +64: the map node
                 if (gamelc::t_bytes + nb > gamelc::CapBytes()) { gamelc::g_full.fetch_add(1, std::memory_order_relaxed); }
                 else
                 {
@@ -97745,8 +97800,7 @@ static void FslEraseDirty(FSLineCache* lc, const std::vector<TranspositionTable:
     {
         auto it = lc->find(k);
         if (it == lc->end()) { return; }
-        const long long b = hint ? static_cast<long long>(sizeof(FSLineEntry) + 64)
-                                 : static_cast<long long>(ApproxFslBytes(it->second.line));
+        const long long b = hint ? FslHintBytes() : FslBytes(it->second.line);
         FslPoolAdjust(-b);
         lc->charged_kb -= b;
         lc->erase(it);
@@ -99348,6 +99402,9 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                                && g_fsline_nest == 0;
     decisionwork::Scope _dws_fs((fs_decision_root && s_dw_x_fs > 0)
                                 ? budget->Limit() * s_dw_x_fs : 0);
+    // The PRICED ceiling (MTG_DECISION_PRICED_X, default 0 = off; DecisionWorkMeter.h): same root, same
+    // trip path, but in real-cost currency, so a decision whose work the unit misses is bounded too.
+    decisionwork::PricedScope _dwp_fs(fs_decision_root ? decisionwork::PricedLimitNs(budget->Limit()) : 0);
     // PER-DECISION WORK CENSUS (MTG_TURN_CENSUS; TurnCensus.h). Hung on the SAME root predicate as
     // the work ceiling above, deliberately: the ceiling's root is the definition of "one real
     // decision" this engine already commits to, and a census with its own notion of a decision
@@ -101769,6 +101826,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                             && g_cs_solver_nest == 1 && g_rollout_nest == 0 && g_fsline_nest == 0;
     decisionwork::Scope _dws((decision_root && s_decision_work_x > 0)
                              ? budget->Limit() * s_decision_work_x : 0);
+    decisionwork::PricedScope _dwp(decision_root ? decisionwork::PricedLimitNs(budget->Limit()) : 0);   // see the hybrid root's twin
     // PER-DECISION WORK CENSUS -- see the twin in FullSearchLineHybrid. root=1 is this host.
     if (decision_root && turncensus::On()) { turncensus::t_board = CensusBoardDesc(state); }
     turncensus::Scope _tc(decision_root, state.game_seed, state.turn_number,
@@ -105320,6 +105378,7 @@ namespace m1memo
         static const long long v = []{
             if (std::getenv("MTG_ROLLOUT_M1_MEMO_MB") != nullptr)
             { return static_cast<long long>(std::max(0, EnvInt("MTG_ROLLOUT_M1_MEMO_MB", 0))) << 20; }
+            if (tier1::On()) { return tier1::AllocBytes(tier1::kM1Memo); }   // fixed, machine-independent
             const long long per_worker_mb = membudget::BudgetMb() / std::max(1, membudget::Workers());
             const long long mb = per_worker_mb > 0 ? std::min<long long>(96, std::max<long long>(16, per_worker_mb / 4)) : 96;
             return mb << 20; }();
@@ -105438,8 +105497,10 @@ static TurnSolver::Plan RolloutPreCombatSolve(const GameState& state, int depth,
     if (finite_budget && (g_fs_trunc_events != trunc_before || budgetbind::t_binds != binds_before
                           || decisionwork::Exceeded()))
     { return p; }
-    const long long entry_bytes = static_cast<long long>(ApproxPlanBytes(p))
-                                + static_cast<long long>(sizeof(TranspositionTable::Key) + sizeof(solvememo::Entry) + 32);
+    const long long entry_bytes = tier1::On()
+        ? PortablePlanBytes(p) + tier1::kMapNodeB + 16
+        : static_cast<long long>(ApproxPlanBytes(p))
+          + static_cast<long long>(sizeof(TranspositionTable::Key) + sizeof(solvememo::Entry) + 32);
     const long long byte_cap = m1memo::ByteCap();
     if (cache.size() >= m1memo::Cap() || (byte_cap > 0 && m1memo::t_bytes + entry_bytes > byte_cap))
     {
@@ -111893,7 +111954,17 @@ static long long MtgTurnCensusShapeSum(std::atomic<std::uint64_t> shapestats::Sl
     X(dig_mana_last,      MTG_TURN_CENSUS_CV(g_dig_mana_last_drops))                              \
     X(snow_look_opens,    MTG_TURN_CENSUS_CV(g_snow_look_opens))                                  \
     X(snow_look_mv_pass,  MTG_TURN_CENSUS_CV(g_snow_look_mv_pass))                                \
-    X(snow_look_colfail,  MTG_TURN_CENSUS_CV(g_snow_look_color_fail))
+    X(snow_look_colfail,  MTG_TURN_CENSUS_CV(g_snow_look_color_fail))                             \
+    /* per-decision WORK by kind (core/WorkCounters.h): thread_local, so exact even when contended */  \
+    X(w_step_c,           workctr::t_n[workctr::kStepCharged])                                    \
+    X(w_step_f,           workctr::t_n[workctr::kStepFree])                                       \
+    X(w_greedy,           workctr::t_n[workctr::kGreedyVisit])                                    \
+    X(w_enum,             workctr::t_n[workctr::kEnumCall])                                       \
+    X(w_plans,            workctr::t_n[workctr::kPlans])                                          \
+    X(w_odo,              workctr::t_n[workctr::kOdoVisit])                                       \
+    X(w_apply,            workctr::t_n[workctr::kApply])                                          \
+    X(w_pay,              workctr::t_n[workctr::kPay])                                            \
+    X(w_simkey,           workctr::t_n[workctr::kSimKey])
 
 const std::vector<const char*>& turncensus::FieldNames()
 {

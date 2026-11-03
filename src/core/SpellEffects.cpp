@@ -5345,6 +5345,7 @@ inline long long ManaCacheByteCap()
     static const long long v = []{
         if (std::getenv("MTG_MANA_CACHE_MB") != nullptr)
         { return static_cast<long long>(std::max(0, EnvInt("MTG_MANA_CACHE_MB", 0))) << 20; }
+        if (tier1::On()) { return tier1::AllocBytes(tier1::kMana); }   // fixed, machine-independent (Tier1Ledger.h)
         const long long per_worker_mb = membudget::BudgetMb() / std::max(1, membudget::Workers());
         const long long mb = per_worker_mb > 0 ? std::min<long long>(48, std::max<long long>(8, per_worker_mb / 8)) : 48;
         return mb << 20; }();
@@ -6566,8 +6567,12 @@ static bool TapForCostBacktrackTop(GameState& state, const ManaCost& cost,
         { tapstats::g_mc_unstorable.fetch_add(1, std::memory_order_relaxed); }
         if (storable)
         {
-            const long long eb = static_cast<long long>(sizeof(ManaCacheEntry) + sizeof(std::uint64_t) + 32
-                                                        + e.taps.capacity() * sizeof(ManaCacheTap));
+            // Tier 1: PORTABLE size (counts x fixed constants, ~ the Linux sizeof()s), so the clear point
+            // is the same on every platform; legacy: the allocator-shaped estimate.
+            const long long eb = tier1::On()
+                ? 160 + tier1::kMapNodeB + static_cast<long long>(e.taps.size()) * 24
+                : static_cast<long long>(sizeof(ManaCacheEntry) + sizeof(std::uint64_t) + 32
+                                         + e.taps.capacity() * sizeof(ManaCacheTap));
             const long long cap = ManaCacheByteCap();
             if (cap > 0 && g_mana_cache_bytes + eb > cap) { g_mana_cache.clear(); g_mana_cache_bytes = 0; }
             g_mana_cache_bytes += eb;

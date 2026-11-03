@@ -3,6 +3,7 @@
 // former AIEngine::TapForCostOnce and TurnSolver TapForCostDirectOnce twins (303 of ~380 lines
 // were already identical); comments were merged from both.
 #include "ManaPayment.h"
+#include "../core/WorkCounters.h"
 #include "DecisionProviders.h"   // IdealOrderSuppressScope (the range's cost-efficient end)
 #include "EngineFlags.h"
 #include "PayLedger.h"            // MTG_PAY_ROLLBACK_AUDIT: the rollback's count-only instrument
@@ -8077,6 +8078,7 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
     // audit below wants the OUTERMOST failure, the same depth-1 notion the damage flush uses.
     ++t_pay_nest;
     struct NestGuard { ~NestGuard() { --t_pay_nest; } } nest_guard;
+    workctr::Inc(workctr::kPay);   // per-game work counter (core/WorkCounters.h)
     // MANA ORACLE (MTG_MANA_ORACLE, ManaOracle.h): the oracle's OWN state copy pays from its script --
     // the taps it chose, then float-only. Null on every thread unless the oracle is mid-apply, and
     // keyed on the state object, so every other payment (search, play, a probe on a scratch copy)

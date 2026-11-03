@@ -20,6 +20,8 @@
 //
 // Deterministic: identical seed + budget + multiplier trips at the identical unit on every
 // machine. Disarmed (multiplier 0/unset) nothing is ever tripped and play is byte-identical.
+#include "../core/WorkCounters.h"
+#include "../core/EnvFlags.h"
 namespace decisionwork
 {
 inline thread_local long long t_used  = 0;
@@ -32,9 +34,20 @@ inline thread_local long long t_limit = 0;   // 0 == disarmed
 // first. Begin() zeroes it and Scope restores it, exactly as for t_used.
 inline thread_local int       t_charge_acc = 0;
 
+// PRICED CEILING (MTG_DECISION_PRICED_X, default 0 = off). The unit ceiling above counts budget units,
+// which miss most of a decision's real cost on some decks (plan enumeration, applies, mana payment are
+// charged nothing or one unit regardless of size; see core/WorkCounters.h). This second ceiling counts
+// PRICED work -- every kind, charged or not -- from workctr::t_priced, so it bounds what a decision
+// actually costs. Same trip path (Exceeded -> SearchBudget::Overrun -> running passes roll back, the
+// ladder commits the deepest COMPLETED pass), same scoping. Inert at an unlimited budget: only a
+// budgeted decision root arms it. Kept apart from Armed(), which gates the unit meter's own billing.
+inline thread_local long long t_pr_start = 0;
+inline thread_local long long t_pr_limit = 0;   // 0 == disarmed
+inline bool PricedExceeded() { return t_pr_limit > 0 && workctr::t_priced - t_pr_start >= t_pr_limit; }
+
 inline void Add(long long n) { t_used += n; }
 inline bool Armed() { return t_limit > 0; }
-inline bool Exceeded() { return t_limit > 0 && t_used >= t_limit; }
+inline bool Exceeded() { return (t_limit > 0 && t_used >= t_limit) || PricedExceeded(); }
 
 // Arm (limit_units <= 0 disarms) and reset for one decision. Only the decision ROOT calls this.
 inline void Begin(long long limit_units)
@@ -58,4 +71,27 @@ struct Scope
     { if (armed) { Begin(limit_units); } }
     ~Scope() { if (armed) { t_used = prev_used; t_limit = prev_limit; t_charge_acc = prev_acc; } }
 };
+
+// RAII for the PRICED ceiling, armed at the same decision roots (limit_ns <= 0 is a true no-op).
+struct PricedScope
+{
+    bool      armed;
+    long long prev_start, prev_limit;
+    explicit PricedScope(long long limit_ns)
+        : armed(limit_ns > 0), prev_start(t_pr_start), prev_limit(t_pr_limit)
+    { if (armed) { t_pr_start = workctr::t_priced; t_pr_limit = limit_ns; } }
+    ~PricedScope() { if (armed) { t_pr_start = prev_start; t_pr_limit = prev_limit; } }
+};
+// The priced limit for a decision whose budget is `limit_units`: X x the budget valued at a REFERENCE
+// cost per unit (MTG_DECISION_PRICED_REF_NS, default 25,000 ns -- about the median deck's wall per
+// unit on the 2026-11-03 regression tier), i.e. X = how many budgets' worth of real work one decision
+// may spend. 0 when off or unbudgeted.
+inline long long PricedLimitNs(long long limit_units);
+inline long long PricedLimitNs(long long limit_units)
+{
+    static const long long x   = EnvInt("MTG_DECISION_PRICED_X", 0);
+    static const long long ref = EnvInt("MTG_DECISION_PRICED_REF_NS", 25000);
+    if (x <= 0 || limit_units <= 0) { return 0; }
+    return limit_units * ref * x;
+}
 }

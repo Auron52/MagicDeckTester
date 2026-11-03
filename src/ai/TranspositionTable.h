@@ -129,8 +129,15 @@ public:
     // extra reads short-circuit and the store is unchanged (byte-identical).
     void Store(const Key& k, int win_turn)
     {
-        static const std::size_t cap = Cap();
-        if (cap && m_map.size() >= cap) { return; }
+        if (tier1::On())
+        {   // TIER 1: the thread's fixed TT allocation (all live tables), not a RAM-derived per-table cap.
+            if (m_map.find(k) != m_map.end() || !tier1::Fits(tier1::kTT, kWinEntryBytes)) { return; }
+        }
+        else
+        {
+            static const std::size_t cap = Cap();
+            if (cap && m_map.size() >= cap) { return; }
+        }
         if (m_map.emplace(k, win_turn).second) { Account(kWinEntryBytes); }
         if (StatsOn())
         {
@@ -182,8 +189,15 @@ public:
     // full-run argument for which queries may read it at all).
     void StoreNoWin(const Key& k, const NoWinEntry& e)
     {
-        static const std::size_t cap = Cap();
-        if (cap && m_nowin.size() >= cap) { return; }
+        if (tier1::On())
+        {
+            if (m_nowin.find(k) == m_nowin.end() && !tier1::Fits(tier1::kTT, kNoWinEntryBytes)) { return; }
+        }
+        else
+        {
+            static const std::size_t cap = Cap();
+            if (cap && m_nowin.size() >= cap) { return; }
+        }
         if (StatsOn()) { NoWinStores().fetch_add(1, std::memory_order_relaxed); }
         std::unordered_map<Key, NoWinEntry, KeyHash>::iterator it = m_nowin.find(k);
         if (it == m_nowin.end())            { m_nowin.emplace(k, e); Account(kNoWinEntryBytes); }

@@ -16,14 +16,34 @@ enum Kind : int
     kPlans,             // plans produced by EnumeratePlansWithLand
     kOdoVisit,          // enumeration odometer visits (EnumChargeScope)
     kApply,             // ApplyPlanDirect call
+    kPay,               // TapForCostShared call (a mana-payment search; EDF: 38% of a slow game's time)
+    kSimKey,            // BuildSimKeyBase call (state key for the TT / line caches / memos)
     kKinds
 };
 inline const char* KindName(int k)
 {
-    static const char* n[kKinds] = { "step_c", "step_f", "greedy", "enum", "plans", "odo", "apply" };
+    static const char* n[kKinds] = { "step_c", "step_f", "greedy", "enum", "plans", "odo", "apply", "pay", "simkey" };
     return (k >= 0 && k < kKinds) ? n[k] : "?";
 }
+// PRICES, in nanoseconds of reference work per event: a non-negative per-game fit of wall clock on these
+// counts (scripts/cost_fit.py over the regression tier, 2026-11-03; this box, Release). They turn the
+// counts into ONE currency that tracks real cost across decks -- which the search unit (one per
+// simulated turn-step / plan applied) does not: units-only mispredicts a game's wall by up to ~6000x,
+// the priced sum by ~3x at p95. Deterministic (integer constants x counts), so anything bounded in this
+// currency trips at the same event on every machine.
+inline constexpr long long kPriceNs[kKinds] = {
+    17900,   // step_c
+    17900,   // step_f   (same work as a charged step)
+      751,   // greedy
+    22972,   // enum
+     5916,   // plans
+     1131,   // odo
+    20376,   // apply
+        0,   // pay      (fit pending)
+        0,   // simkey   (fit pending)
+};
 inline thread_local long long t_n[kKinds] = {};
-inline void Inc(int k, long long n = 1) { t_n[k] += n; }
-inline void BeginGame() { for (int k = 0; k < kKinds; ++k) { t_n[k] = 0; } }
+inline thread_local long long t_priced = 0;   // running sum of price x count this game (ns)
+inline void Inc(int k, long long n = 1) { t_n[k] += n; t_priced += kPriceNs[k] * n; }
+inline void BeginGame() { for (int k = 0; k < kKinds; ++k) { t_n[k] = 0; } t_priced = 0; }
 }
