@@ -894,8 +894,8 @@ inline bool RampFeedRouteOn()
 }
 
 // MTG_LINE_REPAY -- DEFAULT ON; =0 restores the drop. When an outermost payment of a line fails and the line's
-// previous payment is still exactly as it left the board, that payment is re-made so that both pay (a depth-1
-// rollback over every minimal payment of its bill; ManaPayment.cpp LineRepayTry). Read inside the shared payer, so
+// previous payments are still exactly as they left the board, up to two of them are re-made so that all pay (a
+// rollback of depth <= 2 over every minimal payment of each bill; ManaPayment.cpp LineRepayTry, kLineRepayMaxDepth). Read inside the shared payer, so
 // executor, rollout and the enumerator's sequential walk see one value; heurarm slot so a pooled batch carries both
 // arms. docs/design/mana-completeness-oracle.md section 14.
 inline bool LineRepayOn()

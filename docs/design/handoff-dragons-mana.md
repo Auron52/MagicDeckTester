@@ -217,4 +217,17 @@ pre-fix line re-pay; same bytes as `mcdragons/mtg.fix2`).
   (report moved rows, do not accept).
 
 ### USER questions to carry
-- The 23 need-later drops whose card was drawn mid-line (re-paying across that draw is clairvoyant).
+- (RESOLVED, successor 4) The "23 need-later drops whose card was drawn mid-line" do not exist: `nl/split.py` split
+  the hand on ", " and so broke every name containing a comma (Lathliss, Dragon Queen; Atsushi, the Blazing Sky).
+  With the hand matched as a string (fixed in `mcdragons3/nl/split.py`), ALL 138 need-later drops on
+  `gate_new.err` have the failing card in hand before the draw (115 non-comma names + 17 Atsushi + 6 Lathliss),
+  so every one is a mistake-repair case under the USER ruling of 2026-11-03 (the rollback compensates for
+  mistakes, never uses a drawn card; drawn cards stay behind the barrier -- LineRepayAcrossDraw already enforces
+  it). There is therefore no hedge-rule candidate from this set.
+- "Pay generic with colourless first" (USER ruling 2026-11-03: good EXCEPT EDF) ALREADY IS the shared default:
+  GenericProvider's ManaSourceRankBase ranks a {C}-only source 5, ahead of every coloured land (StompySurprise s9
+  T2, 2026-08-24; Sol Ring and Mind Stone fall on that rung). EDF's {C} holds (MTG_C_SOURCE_HOLD -> 59, and
+  EldraziFlickerProvider's MTG_EDF_C_CONSERVE +40) are HUMAN-PLAY ONLY, so autonomous EDF also pays generic with
+  {C} first today. An explicit EDF opt-out in autonomous play is a play change for EDF (EDF_C_CONSERVE's comment
+  records that demoting {C} in the autonomous loop measured worse: edf_blink_loop_cashes_deckout t4 -> t5). Not
+  built: USER question whether to A/B it.

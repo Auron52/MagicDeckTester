@@ -8135,8 +8135,9 @@ bool LineRepayDrawOn() { static const bool on = EnvOn("MTG_LINE_REPAY_DRAW", tru
 
 // A DRAW BETWEEN THE TWO PAYMENTS (USER request 2026-11-03, the need-later lines). Re-making a payment made before a
 // draw is planning, not clairvoyance, when the card whose payment fails was ALREADY IN HAND when that payment was
-// made: the need for its colour was on the table then. A card drawn in between is not -- the re-pay refuses it (a
-// USER question: docs/design/mana-completeness-oracle.md section 14). In hand = a copy of the failing spell's name in
+// made: the need for its colour was on the table then, so the re-pay repairs a mistake. A card drawn in between is
+// not, and the re-pay refuses it (USER ruling 2026-11-03: the rollback compensates for mistakes and never uses
+// knowledge of a drawn card; those lines are hedge-rule territory -- a provider hold -- not a re-pay). In hand = a copy of the failing spell's name in
 // the record's hand beyond the copies that payment and the chain's newer payments were for (a copy cast in between
 // is not the one that fails). Not a spell (an activation): refused across a draw.
 bool LineRepayAcrossDraw(const LineRepayRec& r, const LineRepayRec* const* newer, int nnewer)
