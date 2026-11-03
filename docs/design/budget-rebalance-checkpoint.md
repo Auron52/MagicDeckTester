@@ -77,9 +77,25 @@ Started 2026-11-03.
 - PRICES REFIT (v0.txt, contended): simkey 7.8 us 41.5%, enum 26.8 us 16.7%, apply 5.6 us 14.6%, pay 2.2 us
   13.8%, plans 2.1 us, step 20.3 us, odo 1.0 us, greedy 0.7 us. Slowest 1%: actual/pred p95 3.7 (units 15.4).
   In WorkCounters.h kPriceNs (commit after 4901452e4).
-- RUNNING (02:29 UTC): run_census_tail.sh -> ct.* + census.tsv: tail corpus (45, weight-first) + regression
-  (260) pooled, defaults, MTG_MAX_GAME_WALL_SEC=3600, census MIN_UNITS 2000 or MIN_PRICED_MS 50, job-tagged.
-  Analyse: scripts/census_priced.py census.tsv --by-deck; marker census_tail.DONE.
+- TAIL CORPUS ON CURRENT LISTS (ct.*, 02:29-03:00): 44 of 45 historical slow games (originals up to 4.6 h)
+  now finish <= 214 s (kitty 2hg gi20037 214 s, kitty keepab_static gi674 204 s, fungusB 2hg 161 s, alchemist
+  overnight d4 gi490 153 s; most << 60 s): keep tables removed most bottoming-trial cost. The one exception:
+  edf_keepab_static_gi821 = 1,881 s (31 min, t7) -- decisions of 70-237 s wall with ~500 units each: ~200
+  enumerations x ~2,200 plans x ~280k mana-payment calls (hand: Overgrowth, Wild Growth, Cloud of Faeries,
+  Adarkar Wastes, Living Wish). That is a BRANCHING/payment explosion, a collapse candidate in its own right.
+- CENSUS (census.tsv, 27,086 budgeted decisions >= 2000 units or >= 50 ms priced): ratio priced/(L x 25 us)
+  p50 0.56, p99 7.4, p99.9 30, max 763 (edf gi821). Trips: X=10 162 (0.6%), X=20 49, X=50 16; regression
+  decks max ~74 (alchemist gi170 t5), mostly <= 30.
+- PRICED CEILING A/B v1 (abx_oldtrip.*, held-out seeds +7e6, 139 budgeted shapes x X{0,10,20,50} + tail x
+  X{10,20,50}): quality X=10 7 games worse (+8 turns / 10,950), X=20 2 worse, X=50 0. BUT a PATHOLOGY: the trip
+  went through decisionwork::Exceeded(), which also disables plan-cache hits/stores, makes rollouts instant
+  no-wins and stops no-win stores -> tripped decisions got SLOWER (goblins2hg gi30 X=10: 168 s vs 29.5 s; 104 s
+  priced vs a 13.5 s limit; alchemist gi490 X=10 628 s and t6->t8). FIXED 98d69de23: the priced trip reaches
+  the search ONLY through SearchBudget::Overrun (per-pass rollback path); Exceeded() is units-only again.
+  goblins gi30 X=10 after fix: same units, priced 23.6 s (= no-ceiling), deep pass wasted (idwaste 69k,
+  commit 749 units) -- overshoot because the uncharged path checks Overrun sparsely.
+- RUNNING (03:21 UTC): run_ab_x.sh again with the fixed trip -> abx.*; report:
+  `scripts/ab_x_report.py abx --tail0 ct` (in build/scratch/budget); marker ab_x.DONE.
 - Per-job X lever for the A/B: manifest "decision_priced_x" (ValueArm), env MTG_DECISION_PRICED_X otherwise.
 - Tail corpus READY: build/scratch/budget/tail_corpus.json (45 one-game jobs, mostly d5 b20; originals
   up to 4.6 h) + tail_corpus_notes.md. Not yet run on HEAD (MTG_MAX_GAME_WALL_SEC=3600, alone on box).
