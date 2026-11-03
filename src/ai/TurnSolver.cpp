@@ -64933,7 +64933,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 }
                 if (idx < 0) { continue; }
                 state.battlefield[idx].tapped = true;   // {T}: the source can't pay its own cost
-                if (!TapForCostDirect(state, sd->params.sacrifice_draw_cost.value(), false))
+                bool dig_paid = false;
+                {
+                    // The oracle's frontier: WHICH copy's {T} this is (the payment rolls it back on failure).
+                    manaoracle::AbilityTapSrcScope _ats(state.battlefield[idx].card.m_number);
+                    dig_paid = TapForCostDirect(state, sd->params.sacrifice_draw_cost.value(), false);
+                }
+                if (!dig_paid)
                 { state.battlefield[idx].tapped = false; continue; }
                 ap.graveyard.push_back(state.battlefield[idx].card);
                 state.battlefield.erase(state.battlefield.begin() + idx);
@@ -66807,7 +66813,16 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 }
                 if (idx < 0) { break; }
                 state.battlefield[idx].tapped = true;
-                if (!TapForCostDirect(state, sd->params.sacrifice_draw_cost.value(), false))
+                bool dig_paid = false;
+                {
+                    // The oracle's frontier: WHICH copy's {T} this is. Two Mind Stones: the frontier boards after
+                    // tapping either one read alike, the Pareto prune kept one, and the failed payment then untaps
+                    // the source -- so the engine's line (the other copy left up) was never reached (Dragons
+                    // seed 30100045 T4, an ORACLE-GAP). Read by the oracle only; play never sees it.
+                    manaoracle::AbilityTapSrcScope _ats(state.battlefield[idx].card.m_number);
+                    dig_paid = TapForCostDirect(state, sd->params.sacrifice_draw_cost.value(), false);
+                }
+                if (!dig_paid)
                 {
                     state.battlefield[idx].tapped = false;
                     break;

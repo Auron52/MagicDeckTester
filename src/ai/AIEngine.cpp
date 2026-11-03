@@ -9050,7 +9050,12 @@ AIEngine::DigOutcome AIEngine::PerformDigFull(GameState& state, const std::strin
         if (idx < 0) { return DigOutcome::Failed; }
         ManaPool avail = AvailableManaPool(state);
         state.battlefield[idx].tapped = true;  // {T}; tap before paying so it isn't its own source
-        if (!TapForCost(state, sd->params.sacrifice_draw_cost.value(), avail, false))
+        bool dig_paid = false;
+        {
+            manaoracle::AbilityTapSrcScope _ats(state.battlefield[idx].card.m_number);   // the oracle's frontier (TurnSolver's mirror)
+            dig_paid = TapForCost(state, sd->params.sacrifice_draw_cost.value(), avail, false);
+        }
+        if (!dig_paid)
         {
             state.battlefield[idx].tapped = false;
             return DigOutcome::Failed;

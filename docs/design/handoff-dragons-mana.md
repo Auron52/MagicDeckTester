@@ -132,20 +132,89 @@ test_edf_goff_verify failure below.
   floating colour the hand needs least on a generic pip" (a payment-order change, same A/B). Only the drawn-card
   cases remain a USER question.
 
-## Successor 3 (2026-11-03, in progress)
-- FOUND: the line re-pay costs EDF ~20-40x WALL with units unchanged (ab1 EDF ON/OFF ms 26x; games up to 3,600 s
-  at 7,526 units, e.g. EDF seed 1830138 gi 137: 2,737 s ON vs ~100 s OFF). perf: 99% in MinimalPayments under
-  LineRepaySearch, called from EdfRangeAurasBehindUntappers -> OrderPaysSequentially -> SeqWalkFixedOrder (the
-  enumerator's walk; Aura'd lands make every leftover split a verified probe). Units never saw it. Held-out A/B
-  must wait for the fix.
-- Fix in progress (uncommitted, ManaPayment.cpp): (a) a decision-scoped memo of FAILED re-pays keyed on
-  MidTurnStateKeyOf + digest + record content + bill + every payer thread-local + heurarm arms
-  (MTG_LINE_REPAY_MEMO_VERIFY=1 re-runs hits and counts mismatches); (b) the joint-bill necessary condition per
-  depth-2 option (LineRepayChain::JointPays); (c) more MTG_LINE_REPAY_STATS counters + a slow-try line.
-- NEXT 2 code also in (temporary lever MTG_LINE_REPAY_DRAW, default on, =0 = old barrier): library size out of the
-  digest; a record across a draw matches only when the failing spell's name was in the record's hand beyond the
-  copies cast since (LineRepayAcrossDraw). Split of the 138 (by name in the pre-plan hand): 115 in hand, 23 drawn;
-  107 of the 115 involve Mind Stone (its crack sacrifices, so the record is likely skipped by the battlefield-size
-  check anyway -- measure).
-- Scratch: /workspaces/MagicDeckTester/build/scratch/mcdragons3/ (mtg.cur = HEAD 3d3b067c1 binary; edfslow/ repro;
-  ho/mk.py = held-out manifest, seed block 1840001; nl/split.py = the need-later split).
+## Successor 3 (2026-11-03, stopped at the context cap) -- READ THIS FIRST
+State: all code below is in the WIP commit after d647743e3; NOT BUILT, NOT TESTED. A build of it is queued:
+`buildq.sh` PID 2193594 (cwd = this worktree), log `/workspaces/MagicDeckTester/build/scratch/mcdragons3/build1.log`
+(prints `rc=` when done; the queue was ~9 deep at 12:25 UTC). If that PID is gone without `rc=`, rebuild:
+`cd <worktree> && bash /workspaces/MagicDeckTester/build/scratch/buildq.sh`. No other jobs of mine are running.
+Scratch: `/workspaces/MagicDeckTester/build/scratch/mcdragons3/` (`mtg.cur` = binary of HEAD 3d3b067c1, i.e. the
+pre-fix line re-pay; same bytes as `mcdragons/mtg.fix2`).
+
+### Task 1 (held-out A/B) -- BLOCKED on a wall-time defect, now (hopefully) fixed in code
+- FOUND: the line re-pay costs EDF ~20-40x WALL with units unchanged. ab1 (same batch, same box): EDF ms ON/OFF
+  = 26x, units 1.0165; every other deck ~1x. Per game: EDF seed 1830038 gi 37 3,611 s (7,526 units), seed 1830138
+  gi 137 2,737 s ON vs ~100 s OFF. Section 14's "units x1.0003" never saw it (the work is outside the units).
+- perf (`mcdragons3/edfslow/perf3.data`): 99% in `manaoracle::MinimalPayments` under `LineRepaySearch`, reached from
+  `EdfRangeAurasBehindUntappers` (EDF provider) -> `OrderPaysSequentially` -> `SeqWalkFixedOrder` inside
+  `BpDeriveContinuationList`/`BpEnumEntryFor`. Inside MinimalPayments: `PayEnum::Verify`'s leftover-split recursion
+  and `ExtendSurplusNow` (Aura'd lands = multi-unit taps; up to 4,096 verified probes per set-aside, per try).
+- FIX (in the WIP commit, ManaPayment.cpp, lossless by construction, to be verified):
+  (a) a decision-scoped memo of FAILED re-pays (`LineRepayMemoKey`: MidTurnStateKeyOf + re-pay digest + library
+      size + both chain records' content hash (`LineRepayRec::content`, computed at record) + the bill + every
+      payer thread-local I found + the heurarm arms; scope `TurnSolver::DecisionEpoch()`, cap 65,536, successes
+      never memoised). `MTG_LINE_REPAY_MEMO_VERIFY=1` re-runs every hit; a disagreement counts `memo_mismatch`.
+  (b) depth 2 checks the joint bill per option before recursing (`LineRepayChain::JointPays`, the same necessary
+      condition the top level already used); the chain's record 2 is now found up front (needed by the key).
+  (c) `MTG_LINE_REPAY_STATS=1` now prints searched d1/d2, MinimalPayments calls/options, inner-joint prunes,
+      memo hits/mismatches, total ms, and a `[line-repay] slow try` line for any try > 100 ms.
+- NEXT: (1) when built, copy the binary to `mcdragons3/mtg.new`. (2) Identity: run `mcdragons3/id/id.json` (ab2's ON
+  jobs for the 6 movers + 2 Dragons jobs, renamed id_*) with `MTG_LINE_REPAY_DRAW=0 MTG_LINE_REPAY_MEMO_VERIFY=1
+  MTG_LINE_REPAY_STATS=1 MTG_DUMP_WINS=1`, threads 8, `--game-log-dir mcdragons3/id/w`; per-game digests must equal
+  `mcdragons/ab/ab2_w/on_*.wins` (same seeds; ab2 ran mtg.fix2) and memo_mismatch must be 0. (3) Wall: EDF seed
+  1830138 gi 137 single game with the new binary must be ~100 s, not ~45 min (command in the edfslow dir:
+  `cd <worktree> && MTG_LINE_REPAY_STATS=1 <bin> decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod --profile
+  decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json --games 1 --seed 1830138 --game-index 137`). If
+  the memo is not enough, the stats line says where the time is (d1 vs d2, options per call). (4) Then the held-out
+  A/B: `python3 mcdragons3/ho/mk.py mcdragons3/ho/ho.json` (already generated: 1,100 jobs) -- SEED BLOCK 1840001
+  (fresh: prior A/Bs used 1810001 / 1820001 / 1830001, the gate 30000000+); 5,000 games/arm for Niv, EDF,
+  Alchemist, Bruna, Pirates, SelesnyaV2, Dragons, Dragons 2HG (Dragons added because the draw narrowing below moves
+  it again), arms paired by (seed, game index), per-job MTG_LINE_REPAY off/on, ONE pooled batch, threads 8,
+  MTG_DUMP_WINS=1 MTG_PGO=0 MTG_RSS_CAP_GB=43, `--game-log-dir mcdragons3/ho/w`; report with
+  `python3 <worktree>/logs/mcdragons/abrep.py mcdragons3/ho ho` (expects ho.out and ho_w/; name the dirs to match).
+  Compare WALL per deck too (ms on/off), not only units. Estimated ~36 core-h (~5-9 h at 8 threads on this box).
+  2-hourly status timer per CLAUDE.md if it runs into 12:30-20:00 UTC.
+
+### Task 2 (NEXT 2, the 138 need-later drops)
+- Split (`mcdragons3/nl/split.py` over `mcdragons/gate_new.err`, by the dropped card's name in the pre-plan hand,
+  net of the plan's own casts): 138 need-later = 115 in hand before the draw, 23 drawn mid-line (Lathliss,
+  Atsushi, ...). 107 of the 115 have Mind Stone on the board: the draw is Mind Stone's crack ({1},{T},sacrifice).
+- Code (WIP commit, TEMPORARY lever `MTG_LINE_REPAY_DRAW`, default ON, =0 restores the old barrier exactly; delete
+  the lever before landing): library size moved out of `LineRepayDigest`; records keep `lib` and the hand's name
+  hashes; `LineRepayFind` accepts a record across a draw only when `LineRepayAcrossDraw` holds (the failing spell's
+  name in the record's hand, net of the copies that record and the chain's newer records paid for; activations
+  refused).
+- Expectation to CHECK, not assume: the Mind Stone crack sacrifices its source, so the battlefield shrinks and
+  `LineRepayFind` skips that record (`s.battlefield.size() < r.n`) -- the draw barrier may not be the binding one
+  for 107 of the 115. Measure: `bash mcdragons3/gate.sh <bin> new2 8` (gate slice, keeps CAPPED/UNMODELED lines
+  too) and `... new2d0 8 MTG_LINE_REPAY_DRAW=0`; rerun split.py on each `.err`. Report count + mechanism; the 23
+  drawn cases stay a USER question.
+
+### Task 3 (remaining gate flags) -- two oracle-side fixes in the WIP commit (play-neutral), rest classified
+- ORACLE-GAP x8 {creature + Haven rebuy}, two Havens (seed 30103105 T5): ORACLE defect. MinimalPayments dedupes
+  results by MidTurnStateKeyOf, which on attachment-free boards forgets WHICH identical copy is tapped; the rebuy's
+  own Haven (a plan source, keyed apart in BuildSources) then merged with its twin, the kept option tapped the
+  rebuy's Haven and the engine's line was dropped. Fix: `ResultKey` (ManaOracle.cpp) folds each plan source's
+  tapped state into the dedupe key (unchanged when t_plan_srcs is null, i.e. every play path).
+- ORACLE-GAP x20 {Mind Stone + another cast} (seed 30100045 T4): ORACLE defect. The plan apply's dig (Mind Stone
+  crack) taps the first untapped Mind Stone, then pays {1}, and untaps it on failure; the oracle's frontier did not
+  know which copy's {T} it was, so the boards after tapping #29 or #30 read alike, the Pareto prune kept one, and the
+  rollback then left the other copy up -- the engine's board was never reached. Fix: `AbilityTapSrcScope` around the
+  dig's payment at the three sites (TurnSolver.cpp two, AIEngine.cpp one), so the frontier key carries the source.
+- Both need the gate slice to confirm (expect ORACLE-GAP 28 -> ~0).
+- ENUM-GAP x1 (seed 30101370 T4, {Mountain, Incubator, Atsushi, Greaves, equip}): ENGINE, a depth-3 chain
+  (Incubator's {3} must float {R} off Gruul Turf and leave Sol Ring for Greaves); kLineRepayMaxDepth = 2. Raising it
+  to 3 is the lossless fix but only after the memo has made the re-pay cheap; measure.
+- need-in-plan x4 (seed 30102617 T5 {Haven, Bolt, Lathliss}, Haven's creature-only {R}): not yet chased.
+- CAPPED (7 in the gate slice, 31 in pass1; now a gate FAIL): the oracle's per-plan apply cap
+  (`MTG_MANA_ORACLE_NODES`, default 2000) -- a CHECKER limit. Next: rerun the capped plans with a larger cap and see
+  whether they finish clean; then decide between a larger default and better pruning. UNMODELED: 0 on Dragons.
+
+### Task 4 -- not started
+- `src/ai/EngineFlags.h:896` comment and `src/ai/HeuristicArm.h:828` description say depth-1; the code is depth <= 2.
+- `MTG_LINE_REPAY` stays (heurarm A/B arm, DEFAULT ON, like MTG_RAMP_FEED_ROUTE). Remove `MTG_LINE_REPAY_DRAW`
+  (temporary). Keep or drop `MTG_LINE_REPAY_MEMO_VERIFY` (diagnostic verify gate, the enum-memo precedent) -- say
+  which in its comment. Then units (`build/Release/mtg-test`), scenarios, `THREADS=8 bash test/regression.sh --smoke`
+  (report moved rows, do not accept).
+
+### USER questions to carry
+- The 23 need-later drops whose card was drawn mid-line (re-paying across that draw is clairvoyant).

@@ -1142,6 +1142,26 @@ thread_local int  t_trc_site = 0;
 // Island that feeds Bluffs now can pay Preordain AND float the {U} Curiosity needs. If the real
 // payment fails, the optimistic arithmetic was wrong (a yield it over-counted) and the search goes on
 // extending, so no minimal set hides behind an optimistic one.
+// One option per distinct RESULT -- the board's mid-turn identity, which on an attachment-free board forgets WHICH copy
+// of identical permanents is tapped. A plan's own source (t_plan_srcs: the copy the plan taps or sacrifices itself)
+// is not its twins' equal, so its tapped state is folded in: Dragons seed 30103105 T5 {Glorybringer, Haven rebuy}
+// with two Havens -- BuildSources keyed the rebuy's Haven #17 apart, but tapping #16 or #17 for the Glorybringer read
+// as one result, the dedupe kept the #17 option (which strands the rebuy) and dropped the engine's #16 line (an
+// ORACLE-GAP). Off a plan realisation (t_plan_srcs null: the refine, the line re-pay) the key is unchanged.
+std::uint64_t ResultKey(const GameState& sc)
+{
+    std::uint64_t k = TurnSolver::MidTurnStateKeyOf(sc);
+    if (t_plan_srcs == nullptr || t_plan_srcs->empty()) { return k; }
+    for (const Permanent& p : sc.battlefield)
+    {
+        if (t_plan_srcs->count(p.card.m_number) == 0) { continue; }
+        k ^= (static_cast<std::uint64_t>(static_cast<std::uint32_t>(p.card.m_number)) * 0x9e3779b97f4a7c15ULL)
+           + (p.tapped ? 0x632be59bd9b4e019ULL : 0x85ebca6bULL);
+        k *= 0xbf58476d1ce4e5b9ULL;
+    }
+    return k;
+}
+
 struct PayEnum
 {
     const GameState&                state;
@@ -1265,7 +1285,7 @@ struct PayEnum
         sf.red += o.stash.red; sf.green += o.stash.green; sf.colorless += o.stash.colorless;
         sc.floating_haste_c += o.stash_haste;
         // One option per distinct RESULT: two set-asides the payment never touched are one payment.
-        if (seen.insert(TurnSolver::MidTurnStateKeyOf(sc)).second) { out.push_back(std::move(o)); }
+        if (seen.insert(ResultKey(sc)).second) { out.push_back(std::move(o)); }
         return true;
     }
 
@@ -1481,7 +1501,7 @@ std::vector<PayOption> TapAheadOptions(const GameState& state, int count, bool l
         srcs.erase(std::remove_if(srcs.begin(), srcs.end(), [](const SrcClass& c) { return !c.land; }), srcs.end());
     }
     std::unordered_set<std::uint64_t> seen;
-    seen.insert(TurnSolver::MidTurnStateKeyOf(state));
+    seen.insert(ResultKey(state));
     const std::size_t cap = 512;
     std::vector<Pick> cur;
     bool capped = false;
@@ -1503,7 +1523,7 @@ std::vector<PayOption> TapAheadOptions(const GameState& state, int count, bool l
             }
             for (const TurnSolver::PreTap& t : fed) { o.taps.push_back(t); }
             GameState sc = state;
-            if (PerformTaps(sc, o) && seen.insert(TurnSolver::MidTurnStateKeyOf(sc)).second) { out.push_back(o); }
+            if (PerformTaps(sc, o) && seen.insert(ResultKey(sc)).second) { out.push_back(o); }
         }
         if (left <= 0) { return; }
         for (std::size_t c = ci; c < srcs.size(); ++c)
