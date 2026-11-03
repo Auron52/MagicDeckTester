@@ -447,7 +447,7 @@ TEST_CASE("Ripple pins: the first Apostle carries the reveal budget, the other c
         if (a.kind != Action::Kind::CastFromHand || a.card_name.str() != kApostle3) { continue; }
         CHECK(a.ripple_pinned);
         if (a.ripple_reveals == kRippleContinue) { ++cont; continue; }
-        CHECK(a.ripple_take_cap == -1);   // no late wave outside a large-budget decision
+        CHECK(a.ripple_take_cap == -1);   // the Apostle decline is pruned at every budget (USER, INT-5)
         budgets.push_back(a.ripple_reveals);
     }
     CHECK(cont == 1);

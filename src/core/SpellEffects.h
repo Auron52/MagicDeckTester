@@ -46100,7 +46100,7 @@ constexpr std::int8_t kRippleContinue   = -2;   // Action::ripple_reveals on a n
 // finding 5). The dry run sizes B on the pre-plan library, and the plan's earlier casts can lengthen the
 // live chain past it; B = T then STOPPED revealing at T, and "reveal every time" -- the near-dominant
 // cast-everything line -- had no representation at any budget. ALL replaces the top of the menu (in the
-// dry run's world it IS B = T); the late wave adds the finite B's past T (RippleLateWaveAdmitted).
+// dry run's world it IS B = T); the full menus add the finite B's past T (RippleFullMenusAdmitted; the INT-3 late wave, deleted at INT-9).
 constexpr std::int8_t kRippleRevealAll  = -3;
 constexpr int         kRipplePinBits    = 4;    // free_tutor / free_victim: (rank+1) per ordinal
 constexpr int         kRipplePinOrdinals = 4;
@@ -46137,6 +46137,19 @@ namespace ripplestats
     // In-window unpinned answers by SITE (0 reveal/no script, 1 reveal/no budget, 2 reveal/past mask,
     // 3 take/no script, 4 take/past bits, 5 tutor, 6 victim) -- which host is missing the pins.
     inline std::atomic<long long> g_unpinned_site[7];
+    // FREE-CAST ANSWERS by card (Shadowborn INT-9 B: "report how often each take comes up"): [card][real][take], card =
+    // Dark Ritual / Thrumming Stone / Profane Tutor / Diabolic Intent / Shadowborn Apostle / other; real = a REAL
+    // resolution (g_real_resolution) vs search + rollout. Diagnostic only, never read by play.
+    inline std::atomic<long long> g_answer[6][2][2];
+    inline void NoteAnswer(const std::string& name, bool take)
+    {
+        if (!On()) { return; }
+        static const char* const kNames[5] = { "Dark Ritual", "Thrumming Stone", "Profane Tutor", "Diabolic Intent",
+                                               "Shadowborn Apostle" };
+        int k = 5;
+        for (int i = 0; i < 5; ++i) { if (name == kNames[i]) { k = i; break; } }
+        g_answer[k][g_real_resolution ? 1 : 0][take ? 1 : 0].fetch_add(1);
+    }
     inline void NoteUnpinned(int site = 0)
     {
         if (!On()) { return; }
@@ -46204,6 +46217,14 @@ namespace ripplestats
                          g_unpinned_site[0].load(), g_unpinned_site[1].load(), g_unpinned_site[2].load(),
                          g_unpinned_site[3].load(), g_unpinned_site[4].load(), g_unpinned_site[5].load(),
                          g_unpinned_site[6].load());
+            static const char* const kAns[6] = { "Dark Ritual", "Thrumming Stone", "Profane Tutor", "Diabolic Intent",
+                                                 "Shadowborn Apostle", "other" };
+            for (int k = 0; k < 6; ++k)
+            {
+                std::fprintf(stderr, "[ripple] free-cast answer %-18s real take=%lld decline=%lld | search+rollout "
+                             "take=%lld decline=%lld\n", kAns[k], g_answer[k][1][1].load(), g_answer[k][1][0].load(),
+                             g_answer[k][0][1].load(), g_answer[k][0][0].load());
+            }
         }
     };
     inline Dumper g_dumper;
@@ -46388,6 +46409,7 @@ inline bool RippleTakeDecision(GameState& s, int controller, const CardDefinitio
     RippleScript& sc = s.ripple_script;
     const DecisionProvider& prov = ResolveProvider(s);
     const int answer = prov.RippleFreeCastAnswer(s, controller, md);   // 1 take, 0 decline, -1 searched
+    if (answer >= 0) { ripplestats::NoteAnswer(md.card.m_name.str(), answer == 1); }   // diagnostic (fixed answers)
     if (answer == 0) { return false; }
     if (!RippleScriptCovers(s, spell))
     {

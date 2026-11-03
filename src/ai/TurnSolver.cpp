@@ -34962,36 +34962,18 @@ static RippleDry RippleChainDryRun(const GameState& s, int me, const CardDefinit
     return r;
 }
 
-// THE LATE WAVE: the menus a dry run on the pre-plan library cannot size -- the speculative free tutor /
-// victim / decline fan of a tutor-family chain, and an F1 name's finite budgets and decline bits past the
-// dry run (INT-5) -- are admitted only at a decision whose budget is UNLIMITED or at least
-// MTG_RIPPLE_LATE_WAVE_MS virtual ms (default 100 -- ten times the shipped d3 play budget). (INT-3 also
-// admitted the Apostle DECLINES here; the USER pruned those at every budget on 2026-11-03.) A budget-staged
-// admission, never a gate: a larger budget reaches more, an unlimited one reaches everything (the
-// completeness invariant), and a small one spends on the dry run's lines first. It
-// reads the decision ROOT's static budget, so one decision's enumeration (and its memo, scoped to the
-// decision epoch) always sees one answer. Not human play (the human answers each take at resolution).
-static bool RippleLateWaveAdmitted()
+// THE RIPPLE MENUS (the INT-3 late wave and the INT-5 deep wave, DELETED at INT-9, USER 2026-11-03: "I don't want to add
+// special rules like this."): the menus a dry run on the pre-plan library cannot size -- the speculative free tutor /
+// victim / decline fan of a tutor-family chain, an F1 name's finite budgets and decline bits past the dry run, and
+// every packed free pick / victim ordinal -- are admitted at EVERY budget once a decision root is open (not human
+// play: the human answers each take at resolution). They used to wait for a root budget >= 100 / 1000 virtual ms.
+// INT-8 measured deleting them as unplayable (5,488 variants of one Diabolic Intent cast); INT-9's fixed answers
+// (DecisionProvider::RippleFixed: every take / pick / victim decided by the deck's USER rules) emit ONE variant per
+// cast instead, so for the shipped Shadowborn provider these menus are never built, and the budget staging bought
+// nothing. Only a provider without fixed answers (MTG_UNPRUNED's audit arm) reaches them, at full width.
+static bool RippleFullMenusAdmitted()
 {
-    if (HumanPlayActive() || !TurnSolver::DecisionRootOpen()) { return false; }
-    static const long long thr =
-        static_cast<long long>(std::max(0, EnvInt("MTG_RIPPLE_LATE_WAVE_MS", 100))) * SearchBudget::NODES_PER_VIRTUAL_MS;
-    const SearchBudget* b = TurnSolver::DecisionBudget();
-    if (b == nullptr || b->Unlimited()) { return true; }
-    return b->Limit() >= thr;
-}
-
-// THE DEEP WAVE (INT-5): the third and fourth free-tutor / free-victim ordinals of one cast's chain. Same
-// shape as the late wave, one step further out: unlimited, or a ROOT budget >= MTG_RIPPLE_DEEP_WAVE_MS
-// virtual ms (default 1000). Static per decision. Reachable at --budget-ms 0 (the completeness invariant).
-static bool RippleDeepWaveAdmitted()
-{
-    if (HumanPlayActive() || !TurnSolver::DecisionRootOpen()) { return false; }
-    static const long long thr =
-        static_cast<long long>(std::max(0, EnvInt("MTG_RIPPLE_DEEP_WAVE_MS", 1000))) * SearchBudget::NODES_PER_VIRTUAL_MS;
-    const SearchBudget* b = TurnSolver::DecisionBudget();
-    if (b == nullptr || b->Unlimited()) { return true; }
-    return b->Limit() >= thr;
+    return !HumanPlayActive() && TurnSolver::DecisionRootOpen();
 }
 
 // The ripple N a cast would get this turn (the granter on the battlefield, else the one in hand).
@@ -35032,9 +35014,9 @@ static void EmitRipplePins(const GameState& state, std::vector<Action>& actions)
     if (n <= 0) { return; }
     const DecisionProvider& prov = ResolveProvider(state);
     // INT-9 (DecisionProvider::RippleFixed): every ripple answer is fixed, so each cast gets ONE variant (plus the
-    // granter-free twin below); the late / deep waves widen nothing.
+    // granter-free twin below); the full menus (RippleFullMenusAdmitted) widen nothing.
     const bool fixed = prov.RippleFixed(state);
-    const bool late = !fixed && RippleLateWaveAdmitted();
+    const bool late = !fixed && RippleFullMenusAdmitted();
     // A granter only in HAND: ripple is live only in a plan that casts it (first -- the deck's cast order).
     // Every variant that can reveal or cast is then marked ripple_granter_req (SubsetHasMissingTrickTarget
     // rejects it in a plan without a granter cast), and ONE variant per cast -- the one equal to "no ripple"
@@ -35218,11 +35200,10 @@ static void EmitRipplePins(const GameState& state, std::vector<Action>& actions)
             if (sac) { all.sacs = std::max(all.sacs, lib_copies); }
         }
         const bool f2 = RippleResolutionShuffles(*d) && StableShuffleEnabled();
-        // FREE PICK / VICTIM ORDINALS PINNED PER CAST (the 2d review's finding 4): 2 below the deep wave, every
-        // packed ordinal (kRipplePinOrdinals) in it -- a third / fourth free tutor's pick and victim are
-        // searched at a large / unlimited budget instead of always taking the front. A budget-staged
-        // admission like the late wave (the cross product grows by a factor of wt * wv per ordinal).
-        const int pin_ords = fixed ? 0 : RippleDeepWaveAdmitted() ? kRipplePinOrdinals : 2;
+        // FREE PICK / VICTIM ORDINALS PINNED PER CAST (the 2d review's finding 4): every packed ordinal
+        // (kRipplePinOrdinals) whenever the full menus are admitted (the INT-5 deep wave staged the third / fourth
+        // behind a 1000 ms root budget; deleted at INT-9), 2 outside a decision root; none under fixed answers.
+        const int pin_ords = fixed ? 0 : RippleFullMenusAdmitted() ? kRipplePinOrdinals : 2;
         const int mt = fixed ? 0 : std::min(f2 ? all.nonadj : all.triggers, 3);
         const int ms = std::min(all.srch, 3);
         int wt = 1;
@@ -88257,13 +88238,8 @@ static void FoldPhysicalCards(TranspositionTable::Key& k, const GameState& state
     // the next lookup, with no traits installed, it did not -- 36 CONTENT-DIFFs and 5557 vs 6719 units
     // against MTG_PLAN_CACHE_KB=1. MTG_PLAN_CACHE_TRAITS_KEY=0 restores the pre-fix key (A/B control).
     if (PlanCacheTraitsKeyOn()) { mix(0x11B8); mix(CurrentPlanTraitsHash()); }
-    // ...and the RIPPLE WAVES (Shadowborn; the 2d review's finding 8): RippleLateWaveAdmitted /
-    // RippleDeepWaveAdmitted read the decision ROOT's budget, which this key does not otherwise see (it
-    // folds only whether a budget exists), and they change the pin menus EmitRipplePins emits -- so a list
-    // derived under one admission must not be served under the other (two decisions of one game straddling
-    // the thresholds: escalation, a budget ceiling). Ripple decks only, so every other key is unchanged.
-    if (state.deck_has_ripple)
-    { mix(0x11B8); mix((RippleLateWaveAdmitted() ? 1u : 0u) | (RippleDeepWaveAdmitted() ? 2u : 0u)); }
+    // (The ripple waves' budget mix went with the waves at Shadowborn INT-9: RippleFullMenusAdmitted reads only
+    // DecisionRootOpen, which the 0x11B6 context mix above already folds.)
     // An unarmed list cannot skip armed meter-only work or a weighted greedy walk.
     Fold(k, 0x9417C0);
     Fold(k, h);

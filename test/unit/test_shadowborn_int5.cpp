@@ -4,7 +4,7 @@
 //   2. the executor's ripple trigger knows its own spell (card number), so a ripple_mask != 0 chain plays the
 //      same in the executor as in the rollout;
 //   3. the Overlord victim fold (a vanilla token class drops every clean keeper class it is dominated by);
-//   4. the free tutor / victim pins reach every packed ordinal in the deep wave;
+//   4. the free tutor / victim pins reach every packed ordinal (the deep wave, deleted at INT-9: any budget now);
 //   5. "reveal every trigger" (kRippleRevealAll) tops the per-name budget menu;
 //   6. an ordinal past the emitted mask / decline menu is answered by policy and COUNTED, never read as a pin;
 //   9. ShadowbornReachableMana reads suspend arrivals on TurnSeq();
@@ -376,7 +376,7 @@ TEST_CASE("INT-5 Overlord fold: the enumerator's victim rank bound shrinks to D 
 }
 
 // ---- 4 / 5 / 6. the ripple pin menus ---------------------------------------------------------------------------
-TEST_CASE("INT-5 ripple pins: ALL tops the Apostle budget; the late wave adds the finite budgets past the dry run")
+TEST_CASE("INT-5 ripple pins: ALL tops the Apostle budget; a decision root adds the finite budgets past the dry run")
 {
     GameState s = Base5(2);
     s.battlefield.push_back(Perm5(kStone5, 90));
@@ -395,9 +395,13 @@ TEST_CASE("INT-5 ripple pins: ALL tops the Apostle budget; the late wave adds th
         }
         return b;
     };
-    // Below the late wave: ALL, then the dry run's T-1 .. 0 (T = 3).
+    // Outside a decision root: ALL, then the dry run's T-1 .. 0 (T = 3).
     CHECK(budgets(TurnSolver::CollectActionsForTest(s, true)) == std::vector<int>{ kRippleRevealAll, 2, 1, 0 });
-    // Unlimited (the late wave): Tmax = 2 hand + 3 library copies = 5 -> ALL, 4 .. 0.
+    // Under a root, at ANY budget (INT-9 deleted the late wave's 100 ms threshold): Tmax = 2 hand + 3 library copies
+    // = 5 -> ALL, 4 .. 0.
+    SearchBudget small(10LL * SearchBudget::NODES_PER_VIRTUAL_MS);
+    CHECK(budgets(TurnSolver::CollectActionsUnderRootForTest(s, true, &small))
+          == std::vector<int>{ kRippleRevealAll, 4, 3, 2, 1, 0 });
     const std::vector<Action> unl = TurnSolver::CollectActionsUnderRootForTest(s, true, nullptr);
     CHECK(budgets(unl) == std::vector<int>{ kRippleRevealAll, 4, 3, 2, 1, 0 });
     // A revealed Apostle is ALWAYS cast (USER 2026-11-03: "We should heuristically prune the decline of
@@ -410,7 +414,7 @@ TEST_CASE("INT-5 ripple pins: ALL tops the Apostle budget; the late wave adds th
     for (int k = 0; k < 9; ++k) { CHECK(RippleRevealDecision(g, 0, Def5(kAp5), 4, true)); }
 }
 
-TEST_CASE("INT-5 ripple pins: free tutor / victim ordinals reach 4 in the deep wave, 2 below it")
+TEST_CASE("INT-5 ripple pins: free tutor / victim ordinals reach every copy under a decision root at any budget (INT-9: no deep wave)")
 {
     GameState s = Base5(4);
     s.battlefield.push_back(Perm5(kStone5, 90));
@@ -431,9 +435,13 @@ TEST_CASE("INT-5 ripple pins: free tutor / victim ordinals reach 4 in the deep w
         }
         return m;
     };
-    SearchBudget late(200LL * SearchBudget::NODES_PER_VIRTUAL_MS);   // late wave (>= 100), below the deep (1000)
-    CHECK(max_ord(TurnSolver::CollectActionsUnderRootForTest(s, true, &late)) == 2);
-    CHECK(max_ord(TurnSolver::CollectActionsUnderRootForTest(s, true, nullptr)) == 3);   // 3 library copies
+    // INT-9 deleted the deep wave (USER: "I don't want to add special rules like this."): under a decision root every
+    // packed ordinal is admitted at ANY budget -- a small one (10 ms) and unlimited alike reach 3 (3 library copies).
+    // Outside a root (CollectActionsForTest) the speculative tutor-family fan is not built at all.
+    SearchBudget small(10LL * SearchBudget::NODES_PER_VIRTUAL_MS);
+    CHECK(max_ord(TurnSolver::CollectActionsForTest(s, true)) == 0);
+    CHECK(max_ord(TurnSolver::CollectActionsUnderRootForTest(s, true, &small)) == 3);
+    CHECK(max_ord(TurnSolver::CollectActionsUnderRootForTest(s, true, nullptr)) == 3);
 }
 
 TEST_CASE("INT-5 ripple: an ordinal past the emitted menu is answered by policy, not read as a pin")
