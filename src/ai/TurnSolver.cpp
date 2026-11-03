@@ -9830,6 +9830,7 @@ struct Scope
     // index), built on the scope's first OrderPaysSequentially probe. `acts` is fixed for the scope.
     std::vector<std::int16_t>  canon;
     bool                       canon_built = false;
+    bool                       any_copy = false;   // some candidate has an earlier walk-equivalent twin
     void BuildCanon()
     {
         canon_built = true;
@@ -9842,7 +9843,7 @@ struct Scope
             for (std::size_t i = 0; i < j; ++i)
             {
                 if (static_cast<std::size_t>(canon[i]) != i || !WalkCanonical(v[i])) { continue; }
-                if (WalkEquivalent(v[i], v[j])) { canon[j] = static_cast<std::int16_t>(i); break; }
+                if (WalkEquivalent(v[i], v[j])) { canon[j] = static_cast<std::int16_t>(i); any_copy = true; break; }
             }
         }
     }
@@ -9881,10 +9882,15 @@ inline bool Probe(int fn, const GameState& s, const std::vector<Action>& acts, c
     // A LOCAL vector, not a thread_local: compute() can re-enter Probe through a nested scope, and the
     // key is read again after it returns (the insert below).
     std::vector<int> canon_ids;
-    const bool use_canon = (fn == paycensus::OPS || fn == paycensus::OPWT || fn == paycensus::SPS) && CanonOn();
+    const bool use_canon = (fn == paycensus::OPS || fn == paycensus::OPWT || fn == paycensus::SPS
+                            || fn == paycensus::SPWF) && CanonOn();
     if (use_canon)
     {
         if (!sc->canon_built) { sc->BuildCanon(); }
+        // SubsetPayableWithFilters (MTG_SPWF_CANON_MEMO) is memoised ONLY where its repeats can be copies:
+        // with no walk-equivalent pair among the candidates its exact-id repeats were measured negligible
+        // (~400 hits in 5.1M calls), so the table would cost more than it saves. Straight to the probe.
+        if (fn == paycensus::SPWF && !sc->any_copy) { return compute(); }
         canon_ids.reserve(raw_ids.size());
         for (int j : raw_ids) { canon_ids.push_back(sc->canon[static_cast<std::size_t>(j)]); }
     }
@@ -10294,7 +10300,27 @@ static bool SubsetPayableWithFilters(const GameState& state, const std::vector<A
             return false;
         }
     }
-    const bool ok  = SubsetPayableWithFiltersImpl(state, cands, sel, tap);
+    // MTG_SPWF_CANON_MEMO (DEFAULT ON; =0 always probes): the verdict memoised on the copy-equivalence of the
+    // asked subset IN ASKED ORDER, inside the enumerator's paymemo scope -- the MTG_PAY_PROBE_CANON argument
+    // applied to this probe. SubsetPayableWithFiltersImpl reads the board (the scope's const object), the
+    // payment-context globals (paymemo::Ctx, checked per probe) and cands[sel[k]]'s CONTENTS in `sel` order
+    // (its walk order, or a stable content-only CastOrderLess sort of it); it never reads an action's
+    // identity (hand_index, equiv_ord) nor the hand -- except SameSubsetRevealSurcharge for a reveal-or-pay
+    // cast, so a subset holding one is never memoised. Two subsets that name different physical copies of
+    // the same casts at the same positions therefore pay identically. Measured on EldraziDisplacerFlicker
+    // seed 5826 gi821 (MTG_PAY_CENSUS): 82% of this probe's calls were such repeats -- copies of the
+    // hand's 2x Trace / 2x Overgrowth / 2x Peregrine Drake / 2x Living Wish -- in breakpoint continuation
+    // derivations on a 14-card hand. MTG_PAY_PROBE_MEMO_VERIFY re-runs the probe on every hit.
+    static const bool s_spwf_canon = EnvOn("MTG_SPWF_CANON_MEMO", true);
+    bool ok;
+    if (s_spwf_canon && !HumanPlayActive()
+        && std::none_of(sel.begin(), sel.end(), [&](int j)
+                        { return IsRevealCostCast(cands[static_cast<std::size_t>(j)]); }))
+    {
+        ok = paymemo::Probe(paycensus::SPWF, state, cands, sel,
+                            [&] { return SubsetPayableWithFiltersImpl(state, cands, sel, tap); });
+    }
+    else { ok = SubsetPayableWithFiltersImpl(state, cands, sel, tap); }
     if (paycensus::On()) { paycensus::Record(paycensus::SPWF, state, cands, sel, ok, _pc_t0); }
     if (payprobe::On()) { payprobe::g_filters.fetch_add(1, std::memory_order_relaxed); }
     const int  lim = RescueTapTraceLimit();
@@ -74838,6 +74864,40 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         { return CastOrderLess(state, rp.actions[static_cast<std::size_t>(x)], rp.actions[static_cast<std::size_t>(y)]); });
         auto compute = [&]() -> int
         {
+            // MTG_RH_MOVED_VIA_CANDS (DEFAULT ON; =0 arranges on the plan's own action vector). The same
+            // arrangement asked over THIS ENUMERATION'S candidate vector: each cast of the plan is a copy of a
+            // candidate, so position k is mapped to the candidate EXACTLY equal to it (Action ==, identity
+            // included) and the arrangement runs on cands[map[k]]. ApplyDeckCastArrangement reads only
+            // acts[order[k]] and the board (the note above), so with every acts[order[k]] equal the
+            // computation, and the permutation it returns position by position, are identical -- the verdict
+            // cannot move. What changes is that its order probes (OrderPaysSequentially /
+            // OrderPrepaysWholeTurn, under the EDF range projection) are now asked about `cands`, the vector
+            // this enumeration's paymemo::Scope is keyed on, so they are served from the walks the subset's
+            // own payability rescue (SubsetPayableSequential) already ran on the same casts, instead of
+            // bypassing the memo (measured: 525k of 1.65M OrderPaysSequentially probes bypassed in one EDF
+            // decision, all from here). Any cast with no exactly-equal candidate, or a mapping that is not
+            // one-to-one, keeps the old path.
+            static const bool s_via_cands = EnvOn("MTG_RH_MOVED_VIA_CANDS", true);
+            if (s_via_cands)
+            {
+                std::vector<int> rk_c;
+                rk_c.reserve(rk.size());
+                bool ok = true;
+                for (int i : rk)
+                {
+                    const Action& a = rp.actions[static_cast<std::size_t>(i)];
+                    int found = -1;
+                    for (std::size_t j = 0; j < cands.size(); ++j) { if (cands[j] == a) { found = static_cast<int>(j); break; } }
+                    if (found < 0 || std::find(rk_c.begin(), rk_c.end(), found) != rk_c.end()) { ok = false; break; }
+                    rk_c.push_back(found);
+                }
+                if (ok)
+                {
+                    std::vector<int> arr_c = rk_c;
+                    ApplyDeckCastArrangement(state, cands, arr_c);
+                    return arr_c != rk_c ? 1 : 0;
+                }
+            }
             std::vector<int> arr = rk;
             ApplyDeckCastArrangement(state, rp.actions, arr);
             return arr != rk ? 1 : 0;
