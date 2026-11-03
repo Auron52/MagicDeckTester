@@ -1169,9 +1169,27 @@ void EffectHandler::PushCastTriggers(GameState& state, const CardDefinition& def
             state.stack.push_back(std::move(te));
         }
     }
+    // RIPPLE (Thrumming Stone; Shadowborn INT-3): one entry per instance -- the innate one plus one per
+    // granter on the battlefield NOW (RippleInstanceNs; the legend rule leaves at most one Stone). Pushed
+    // LAST, so a ripple resolves before the other cast triggers of the same spell (the rollout twin runs
+    // its block after the cascade one -- no card in the pool carries both). `source` keeps the spell's
+    // card NUMBER: ResolveRippleTrigger tests "directly above its own spell" (F2) by it.
+    // deck_has_ripple false -> RippleInstanceNs returns at once: byte-identical for every other deck.
+    const std::vector<int> rns = RippleInstanceNs(state, controller, def);
+    for (int n : rns)
+    {
+        StackEntry te;
+        te.type             = StackEntry::EntryType::Triggered;
+        te.trigger_kind     = StackEntry::TriggerKind::Ripple;
+        te.source           = def.card;
+        te.controller_index = controller;
+        te.enchant_target   = n;   // ripple N
+        state.stack.push_back(std::move(te));
+    }
 }
 
-bool EffectHandler::PushFreeCast(GameState& state, const Card& card, int controller)
+bool EffectHandler::PushFreeCast(GameState& state, const Card& card, int controller, bool push_triggers,
+                                 int sac_victim_id, const std::string& tutor_target)
 {
     auto def = CardDatabase::Instance().LookupCached(card);
     if (!def) { return false; }
@@ -1183,6 +1201,16 @@ bool EffectHandler::PushFreeCast(GameState& state, const Card& card, int control
     // card's fallback zone (cascade bottoms it, Breaching Dragonstorm hands it, Creative
     // Technique strands it in exile). Inert (-1) for every deck without a max_casts_after card.
     if (state.casts_remaining_this_turn == 0) { return false; }
+    // "Without paying its mana cost" waives the MANA cost only: an ADDITIONAL "sacrifice a creature" (the
+    // readiness route -- Diabolic Intent, Culling the Weak) is still paid, at cast (CR 601.2h), and with no
+    // creature the spell cannot be cast (the caller bottoms it). Rollout twin: the ripple handler's cast
+    // step in apply_one. The legacy colour route (Natural Order) is unchanged; no deck free-casts it.
+    if (SacCreatureCostFoldsByReadiness(def->params))
+    {
+        if (!SacReadinessVictimAvailable(state, controller)) { return false; }
+        PerformSacrificeCreatureCost(state, def->card.m_name.str(), def->params.sac_additional_creature_color,
+                                     sac_victim_id, /*readiness_route=*/true);
+    }
 
     StackEntry e;
     e.type             = StackEntry::EntryType::Spell;
@@ -1198,6 +1226,7 @@ bool EffectHandler::PushFreeCast(GameState& state, const Card& card, int control
         if (!PrepareFixedBurnPin(state, controller, *def, "", pin)) { return false; }
         e.tutor_target = EncodeFixedBurnPin(pin);
     }
+    if (!tutor_target.empty()) { e.tutor_target = tutor_target; }   // a ripple free tutor's pick
 
     // A free cast IS a cast (CR 601.2 / 702.85a): count it and fire cast-time abilities
     // exactly as CastSpellFromHand does -- lockstep with the rollout's apply_one free-cast
@@ -1220,8 +1249,9 @@ bool EffectHandler::PushFreeCast(GameState& state, const Card& card, int control
     FireProwess(state, *def);
     FlushNoncombatTriggersAtPriorityBoundary(state);
     if (state.own_death_live && SelfHasLost(state)) { return true; }
-    // ...including the free spell's OWN cast triggers, so cascade chains nest naturally.
-    PushCastTriggers(state, *def, controller);
+    // ...including the free spell's OWN cast triggers, so cascade chains nest naturally -- unless the caller
+    // pushes them itself after casting the rest of a reveal (ripple).
+    if (push_triggers) { PushCastTriggers(state, *def, controller); }
     return true;
 }
 
@@ -1232,6 +1262,8 @@ bool EffectHandler::ResolveTriggered(GameState& state, const StackEntry& entry,
     {
         case StackEntry::TriggerKind::Cascade:
             ResolveCascadeTrigger(state, entry, def);   return true;
+        case StackEntry::TriggerKind::Ripple:
+            ResolveRippleTrigger(state, entry, def);    return true;
         case StackEntry::TriggerKind::EtbExileFreeCast:
             ResolveEtbExileFreeCast(state, entry, def); return true;
         case StackEntry::TriggerKind::Demonstrate:
@@ -1289,6 +1321,36 @@ void EffectHandler::ResolveCascadeTrigger(GameState& state, const StackEntry& en
     {
         state.players[entry.controller_index].library.push_back(hit);
     }
+}
+
+// RIPPLE (Thrumming Stone; Shadowborn INT-3) -- the executor's trigger. Every choice comes from the shared
+// RippleResolveTrigger (SpellEffects.h "RIPPLE"), exactly as the rollout's handler takes them. The taken
+// cards are ALL cast first (PushFreeCast with deferred triggers, additional costs paid, a free tutor's pick
+// on its stack entry), then their own cast triggers are pushed in cast order -- so the stack reads
+// [.., S2, S3, R2, R3] and every reveal of the new spells' chains happens before any of them resolves
+// (the rollout realises the same order). A card that cannot be cast after all goes to the bottom.
+void EffectHandler::ResolveRippleTrigger(GameState& state, const StackEntry& entry, const CardDefinition& def)
+{
+    // "Directly above its own spell" (F2): the entry now on top (this trigger has been popped) is the
+    // spell that put it there -- same card number, a Spell.
+    const bool adjacent = !state.stack.empty()
+        && state.stack.back().type == StackEntry::EntryType::Spell
+        && state.stack.back().source.m_number == entry.source.m_number;
+    const int me = entry.controller_index;
+    std::vector<Card> taken = RippleResolveTrigger(state, me, def, entry.enchant_target, adjacent);
+    std::vector<const CardDefinition*> cast_defs;
+    for (Card& c : taken)
+    {
+        const CardDefinition* md = CardDatabase::Instance().LookupCached(c);
+        if (md == nullptr) { state.players[static_cast<std::size_t>(me)].library.push_back(c); continue; }
+        const int victim = SacCreatureCostFoldsByReadiness(md->params) ? RippleNextFreeVictimId(state, me) : 0;
+        const std::string tut = IsLibraryTutor(md->params) ? RippleNextFreeTutorTarget(state) : std::string{};
+        if (!PushFreeCast(state, c, me, /*push_triggers=*/false, victim, tut))
+        { state.players[static_cast<std::size_t>(me)].library.push_back(c); continue; }
+        cast_defs.push_back(md);
+        if (state.own_death_live && SelfHasLost(state)) { return; }
+    }
+    for (const CardDefinition* md : cast_defs) { PushCastTriggers(state, *md, me); }
 }
 
 void EffectHandler::ResolveEtbExileFreeCast(GameState& state, const StackEntry& entry,

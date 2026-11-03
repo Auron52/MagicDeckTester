@@ -5313,7 +5313,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         FireProwess(state, *def);
         // A retrace cast is a cast: its cascade fires exactly as a hand cast's does (this is
         // Throes of Chaos's ONLY effect -- since cascade moved to cast-trigger entries, this
-        // call is what keeps retrace-cast Throes cascading at all).
+        // call is what keeps retrace-cast Throes cascading at all). Its ripple chain carries no plan
+        // pin (no retrace card shares a list with a ripple source): stamped UNPINNED.
+        StampRippleScript(state, *def, false, -1, -1, 0, 0, 0, 0);
         EffectHandler::PushCastTriggers(state, *def, state.active_player_index);
     };
 
@@ -10330,6 +10332,12 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
     // so they -- and the free casts they make -- resolve BEFORE the spell itself (CR 601.2i /
     // 702.85a). This is what makes cascade fire on CREATURE casts. No-op for every card
     // without a cast-trigger param -> byte-identical elsewhere.
+    // RIPPLE: this hard cast starts its own chain, so its searched pins (Action::ripple_*, via the riders)
+    // become the chain script BEFORE the triggers go on the stack (lockstep twin: apply_one's stamp).
+    // deck_has_ripple false -> a no-op.
+    StampRippleScript(state, *def, riders.ripple_pinned, riders.ripple_reveals, riders.ripple_take_cap,
+                      riders.ripple_mask, riders.ripple_decline, riders.ripple_free_tutor,
+                      riders.ripple_free_victim);
     EffectHandler::PushCastTriggers(state, *def, state.active_player_index);
     FlushNoncombatTriggersAtPriorityBoundary(state);
     if (state.own_death_live && SelfHasLost(state)) { return; }

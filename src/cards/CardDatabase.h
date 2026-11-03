@@ -661,6 +661,20 @@ struct CardParams
     // every existing cascade card byte-identical.
     int  cascade_count = 1;
 
+    // RIPPLE (CR 702.60; Shadowborn INT-3, 2026-11-03). `grants_ripple` = N on a PERMANENT whose
+    // static ability reads "Spells you cast have ripple N" (Thrumming Stone, 4); `ripple` = N on a
+    // spell with INNATE ripple (Surging Flame; none in the pool yet). Each instance -- the innate one
+    // plus one per granter on the caster's battlefield AT CAST -- is its own Triggered{Ripple} entry
+    // pushed ABOVE the spell by the single shared cast site (EffectHandler::PushCastTriggers, which
+    // every hand cast and every free cast -- PushFreeCast -- runs), its rollout twin in apply_one, and
+    // the inline twin in CastOffSuspend (no stack there). "You may reveal the top N; you may cast any
+    // revealed card with the same name without paying its mana cost; put the rest on the bottom in any
+    // order." The reveal and the casts are SEARCHED (plan pins, Action::ripple_*), with the sound folds
+    // proved at RippleScript (SpellEffects.h, "RIPPLE"). Legendary granters: the legend rule is an SBA
+    // run before any priority, so at most one Stone grants at any cast. 0 = no ripple (every other card).
+    int  grants_ripple = 0;
+    int  ripple        = 0;
+
     // Breaching Dragonstorm: "When this enchantment enters, exile cards from the top of your
     // library until you exile a nonland card. You may cast it without paying its mana cost if
     // that spell's mana value is 8 or less. If you don't, put that card into your hand."

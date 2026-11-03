@@ -231,7 +231,10 @@ struct StackEntry
         ExtraTurn,         // Emrakul's "take an extra turn after this one" (one per instance)
         CastExileTargets,  // Ulamog CH's "exile two target permanents": targets chosen at PUSH
                            // (CR 603.3d), stored as m_numbers in targets[i].permanent_index
-        CastDestroyTarget  // Ulamog IG's "destroy target permanent": same target storage
+        CastDestroyTarget, // Ulamog IG's "destroy target permanent": same target storage
+        Ripple             // RIPPLE N (CR 702.60; Thrumming Stone grants 4): one per instance, pushed ABOVE
+                           // the spell by PushCastTriggers; N rides `enchant_target`. Resolved by
+                           // EffectHandler::ResolveRippleTrigger (SpellEffects.h "RIPPLE" decides).
     };
     TriggerKind         trigger_kind = TriggerKind::None;  // meaningful on EntryType::Triggered
     bool                is_copy     = false;  // demonstrate copy: resolves its payload but was
@@ -271,6 +274,33 @@ struct IncineratorDamageTrigger
     int controller = 0;
     int damaged_player = 1;
     int amount = 0;
+};
+
+// ---- RIPPLE CHAIN SCRIPT (Thrumming Stone; Shadowborn INT-3, 2026-11-03) -----------------------------
+// The searched answers to a ripple chain's choices, stamped by the HARD cast that starts the chain (its
+// Action::ripple_* pins, carried by CastRiders into AIEngine::CastSpellFromHand and the rollout's
+// apply_one) and read by the shared resolvers in SpellEffects.h ("RIPPLE") at every trigger of that
+// chain, in BOTH worlds and in the same resolution order. Semantics and the soundness proofs of the two
+// folds the encoding relies on are at RippleScript's readers (SpellEffects.h). Consumed within the turn;
+// cleared at both untap sites. Never folded into a state key: every field is re-stamped by the next hard
+// cast before anything reads it, EXCEPT the per-name budget an F1 name carries across its own adjacent
+// copies (kRippleContinue) -- and a continue cast whose budget was not stamped this turn reads 0 reveals,
+// never the playout policy, so two states differing only here differ only in a duplicate plan's play.
+struct RippleScript
+{
+    InternedName  name;                 // the spell NAME the script belongs to (empty = none stamped)
+    std::int8_t   reveals     = -1;     // F1 names: reveals left in the per-name budget
+    std::int8_t   take_cap    = -1;     // take-dominated (Apostle-class) matches still allowed; -1 = all
+    std::uint8_t  decline     = 0;      // searched-match DECLINE bits, by match ordinal
+    std::uint8_t  match_ord   = 0;      // next searched-match ordinal
+    std::uint8_t  mask        = 0;      // non-F1 names: DON'T-REVEAL bits over the fanned triggers
+    std::uint8_t  fan_ord     = 0;      // next fanned-trigger ordinal
+    std::uint8_t  tutor_ord   = 0;      // next free-tutor ordinal
+    std::uint8_t  sac_ord     = 0;      // next free-sacrifice ordinal
+    std::uint16_t free_tutor  = 0;      // packed 4-bit (rank+1) per free tutor ordinal; 0 = unpinned
+    std::uint16_t free_victim = 0;      // packed 4-bit (rank+1) per free sacrifice ordinal; 0 = unpinned
+    bool          pinned      = false;  // a plan pin drives this script (false = the playout policy)
+    bool          per_name    = false;  // F1: the reveal budget/caps persist across same-name casts
 };
 
 struct GameState
@@ -1461,6 +1491,12 @@ struct GameState
     // CollectActions' board + hand walk (EmitSacNamedVariants). DEFAULT TRUE (unstamped = walk). A deck
     // constant: never folded.
     bool                     deck_has_sac_named           = true;
+    // Shadowborn INT-3: a ripple source in the deck (CardParams::grants_ripple / ripple; Thrumming Stone).
+    // Gates every ripple scan (RippleInstances, the CollectActions pin pass, the upkeep pin fan). DEFAULT
+    // TRUE (unstamped = scan). A deck constant: never folded.
+    bool                     deck_has_ripple              = true;
+    // THE RIPPLE CHAIN SCRIPT (see RippleScript above). Turn-scoped, consumed within a chain.
+    RippleScript             ripple_script;
     // Non-owning pointer to the deck's learned mid-game PLAY evaluator (MulliganProfile::eval_model),
     // stamped in AIEngine::HandleMulligan and propagated through every deep copy. Ranks NON-lethal
     // turn-plans in TurnSolver::Solve (the d0 decision + every rollout leaf) when MTG_EVAL_MODEL is

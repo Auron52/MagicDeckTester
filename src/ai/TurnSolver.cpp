@@ -4190,6 +4190,7 @@ void TurnSolver::ChargeAaRouteUnits(SearchBudget* budget, int n)
 // True inside a horizon playout (SimulateToEnd's RolloutNestGuard), i.e. BEYOND the search window,
 // where the doctrine permits a greedy policy and a provider's sub-search is not owed completeness.
 bool TurnSolver::InRolloutPlayout() { return g_rollout_nest > 0; }
+bool RippleCensusBeyondHorizon() { return TurnSolver::InRolloutPlayout() || TurnSolver::InD0Runner(); }   // ripplestats
 
 // Decision epoch: bumped at each committed-decision driver entry (SolveWithLookahead
 // enforce_budget, FSLineWin nest 0, FullSearchLineHybrid). Scopes the per-decision caches --
@@ -17919,6 +17920,17 @@ static std::uint64_t ActionFoldSig(const Action& a)
         if (!a.remand_chain_by.empty())
         { FoldMix(h, static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(&a.remand_chain_by.str()))); }
     }
+    // RIPPLE chain pins (Shadowborn INT-3): folded only when set -> every other deck is byte-identical.
+    if (a.ripple_pinned)
+    {
+        FoldMix(h, 0x5249504Cull);   // "RIPL"
+        FoldMix(h, static_cast<std::uint64_t>(static_cast<std::uint8_t>(a.ripple_reveals))
+                   | (static_cast<std::uint64_t>(static_cast<std::uint8_t>(a.ripple_take_cap)) << 8)
+                   | (static_cast<std::uint64_t>(a.ripple_mask) << 16) | (static_cast<std::uint64_t>(a.ripple_decline) << 24)
+                   | (static_cast<std::uint64_t>(a.ripple_free_tutor) << 32)
+                   | (static_cast<std::uint64_t>(a.ripple_free_victim) << 48));
+        FoldMix(h, static_cast<std::uint64_t>(a.ripple_granter_req));
+    }
     // PITCH EVOKE (Action::pitch_name / pitch_slot -- Fury): WHICH hand card the evoke exiles is a
     // searched axis. Folded only when set -> every other deck's signature is byte-identical.
     if (!a.pitch_name.empty())
@@ -17989,6 +18001,10 @@ static void FinalizeFoldTags(const GameState& state, std::vector<Action>& action
             // (it also spends a Remand), and CollectActions pins it to the LAST copy of X so the
             // plain casts' canonical prefix never needs its slot (see the REMAND post-pass).
             if (!a.remand_by.empty()) { continue; }
+            // A RIPPLE-pinned cast is never a class member either, EXCEPT an F1 name's continue copies (one
+            // identical action per copy, so they still fold): the first copy carries the per-name budget
+            // variants (EmitRipplePins), and a per-cast pinned name has several variants per copy.
+            if (a.ripple_pinned && a.ripple_reveals != kRippleContinue) { continue; }
             int& st = slot_tag[static_cast<size_t>(a.hand_index)];
             if (st < 0) { st = HandCastEquivTag(state, ap.hand[a.hand_index]); }
             a.equiv_tag = st;
@@ -20062,6 +20078,20 @@ static bool SubsetHasMissingTrickTarget(const GameState& state,
     for (int j : sel)
     {
         if (cands[j].kind != Action::Kind::CastFromHand) { continue; }
+        // RIPPLE (Shadowborn INT-3): a chain pin that only means something with a granter cast by this plan
+        // (EmitRipplePins, the Stone in hand) -- without one it is a duplicate of its "no ripple" sibling.
+        if (cands[j].ripple_granter_req == 1)
+        {
+            bool granter = false;
+            for (int k : sel)
+            {
+                if (k == j || cands[k].kind != Action::Kind::CastFromHand) { continue; }
+                const CardDefinition* kd = cands[k].def ? cands[k].def
+                                                        : CardDatabase::Instance().LookupInterned(cands[k].card_name);
+                if (kd != nullptr && kd->params.grants_ripple > 0) { granter = true; break; }
+            }
+            if (!granter) { return true; }
+        }
         if (cands[j].enchant_target == kTrickBestOwnTarget)
         {
             int needs = best_needs_body;
@@ -21619,6 +21649,7 @@ static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::v
                 // bit down for it is exact (and spares the Theft deck those per-subset lookups).
                 if (a.enchant_target > 0 && a.attach_equip_id == 0) { p.aura_target = true; }
                 if (!a.trick_hand_target.empty())             { p.trick_target = true; }
+                if (a.ripple_granter_req != 0)                { p.trick_target = true; }   // ripple (INT-3)
                 if (a.enchant_target == kTrickBestOwnTarget)  { p.trick_target = true; best_target = true; }
                 if (a.attach_equip_id != 0)                   { p.attach_spell = true; }
                 if (d != nullptr && d->params.splice_onto_arcane) { p.splice = true; }
@@ -34837,6 +34868,295 @@ static bool SacNamedTutorMatch(const Card& lc, const CardParams& pp)
     for (const std::string& t : pp.tutor_types) { if (CardMatchesTypeName(card, t)) { return true; } }
     return false;
 }
+// ---- RIPPLE: the enumerator's half (Shadowborn INT-3; the shared model is SpellEffects.h "RIPPLE") ----------
+//
+// THE DRY RUN sizes a chain's pin menus: casting `copies` copies of `def` (one after another) on a COPY of the
+// library, every instance resolved with N = `n`, under a given script -- `budget` reveals across the whole
+// chain (F1; -1 = every trigger reveals), the searched-match DECLINE bits, the take-dominated CAP (-1 =
+// all). Stack order is the executor's (a reveal's casts push their triggers together; LIFO). It touches no
+// state: no mana, no casts, nothing but the library copy and counters, so it is an ESTIMATE of the live
+// chain's shape (a tutor's mid-chain shuffle is not modelled) -- a pin past the realised chain is a
+// duplicate line, never a missing one, and the menus are sized generously.
+struct RippleDry
+{
+    int triggers = 0;     // ripple triggers that resolve
+    int reveals  = 0;     // ...that reveal
+    int nonadj   = 0;     // ...that are NOT directly above their own spell (F2 cannot fold them)
+    int dom      = 0;     // take-dominated matches cast (Apostle-class)
+    int dom_seen = 0;     // take-dominated matches revealed (cast or capped)
+    int srch     = 0;     // searched matches revealed (each a decline bit)
+    int srch_taken = 0;   // ...cast
+    int tutors   = 0;     // free casts that tutor (each a free_tutor ordinal)
+    int sacs     = 0;     // free casts with a sacrifice-a-creature cost (each a free_victim ordinal)
+};
+static RippleDry RippleChainDryRun(const GameState& s, int me, const CardDefinition& def, int copies, int n,
+                                   int budget = -1, unsigned decline = 0, int take_cap = -1)
+{
+    RippleDry r;
+    if (n <= 0 || copies <= 0) { return r; }
+    const Player& pl = s.players[static_cast<std::size_t>(me)];
+    std::vector<Card> lib;
+    lib.reserve(pl.library.size());
+    for (const Card& c : pl.library) { lib.push_back(c); }
+    std::size_t top = 0;   // lib[top..] is the live library (bottoming appends)
+    const DecisionProvider& prov = ResolveProvider(s);
+    int bodies = RippleCountBodies(s, me) + (def.card.IsCreature() ? copies : 0);
+    int srch_ord = 0;
+    std::vector<char> stack;   // pending triggers: 1 = adjacent
+    for (int c = 0; c < copies; ++c)
+    {
+        stack.push_back(1);
+        while (!stack.empty())
+        {
+            const bool adjacent = stack.back() != 0;
+            stack.pop_back();
+            ++r.triggers;
+            if (!adjacent) { ++r.nonadj; }
+            if (budget >= 0 && r.reveals >= budget) { continue; }
+            ++r.reveals;
+            const std::size_t live = lib.size() - top;
+            const std::size_t k = std::min<std::size_t>(static_cast<std::size_t>(n), live);
+            std::vector<Card> rev(lib.begin() + static_cast<std::ptrdiff_t>(top),
+                                  lib.begin() + static_cast<std::ptrdiff_t>(top + k));
+            top += k;
+            int taken = 0;
+            for (Card& rc : rev)
+            {
+                bool take = false;
+                if (rc.m_name == def.card.m_name)
+                {
+                    const CardDefinition* md = CardDatabase::Instance().LookupCached(rc);
+                    const bool castable = md != nullptr && FreeCastHasLegalTargets(s, me, *md)
+                        && (!SacCreatureCostFoldsByReadiness(md->params) || bodies > 0);
+                    if (castable && prov.FreeCastTakeDominated(s, me, *md))
+                    {
+                        ++r.dom_seen;
+                        take = take_cap < 0 || r.dom < take_cap;
+                        if (take) { ++r.dom; }
+                    }
+                    else if (castable)
+                    {
+                        const int ord = srch_ord++;
+                        ++r.srch;
+                        take = ord >= kRippleMaskBits || ((decline >> ord) & 1u) == 0;
+                        if (take) { ++r.srch_taken; }
+                    }
+                    if (take)
+                    {
+                        if (IsLibraryTutor(md->params)) { ++r.tutors; }
+                        if (SacCreatureCostFoldsByReadiness(md->params)) { ++r.sacs; --bodies; }
+                        if (md->card.IsCreature()) { ++bodies; }
+                    }
+                }
+                if (take) { ++taken; } else { lib.push_back(rc); }
+            }
+            for (int t = 0; t < taken; ++t) { stack.push_back(taken == 1 ? 1 : 0); }
+        }
+    }
+    return r;
+}
+
+// THE LATE WAVE (USER 2026-11-03: "cast-all first with declining in a later budget wave"): declining a
+// take-dominated revealed card (a Shadowborn Apostle) is admitted only at a decision whose budget is
+// UNLIMITED or at least MTG_RIPPLE_LATE_WAVE_MS virtual ms (default 100 -- ten times the shipped d3 play
+// budget). A budget-staged admission, never a gate: a larger budget reaches the declines, an unlimited one
+// reaches everything (the completeness invariant), and a small one spends on the cast-all lines first. It
+// reads the decision ROOT's static budget, so one decision's enumeration (and its memo, scoped to the
+// decision epoch) always sees one answer. Not human play (the human answers each take at resolution).
+static bool RippleLateWaveAdmitted()
+{
+    if (HumanPlayActive() || !TurnSolver::DecisionRootOpen()) { return false; }
+    static const long long thr =
+        static_cast<long long>(std::max(0, EnvInt("MTG_RIPPLE_LATE_WAVE_MS", 100))) * SearchBudget::NODES_PER_VIRTUAL_MS;
+    const SearchBudget* b = TurnSolver::DecisionBudget();
+    if (b == nullptr || b->Unlimited()) { return true; }
+    return b->Limit() >= thr;
+}
+
+// The ripple N a cast would get this turn (the granter on the battlefield, else the one in hand).
+static int RippleReachableN(const GameState& s, int me)
+{
+    int n = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr) { n = std::max(n, d->params.grants_ripple); }
+    }
+    if (n > 0) { return n; }
+    for (const Card& c : s.players[static_cast<std::size_t>(me)].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d != nullptr) { n = std::max(n, std::max(d->params.grants_ripple, d->params.ripple)); }
+    }
+    return n;
+}
+
+// THE PIN PASS (CollectActions, after the sacrifice-victim pass so a Diabolic Intent's own victim variants
+// carry the chain pins too). Decision space only: a rollout leaf (beyond the horizon) plays the playout
+// policy, the phyrexian / condemnation precedent. For every cast whose chain can ripple:
+//   * F1 name: the FIRST copy (lowest hand slot) carries the per-name budget B = T..0 (T = the dry run's
+//     trigger count for every copy in hand) x the searched-match decline masks; the take-dominated cap only
+//     in the late wave; every other copy carries kRippleContinue (one action, so the copies still fold).
+//     A mana ritual's float credits the free rituals its variant's chain casts (USER: "ritual-chain mana
+//     counted by the planner"), so a line needing that mana survives the subset payability check.
+//   * any other name (a tutor): per cast -- don't-reveal bits over the triggers F2 cannot fold, decline
+//     bits over the matches, and for every TAKEN free tutor / free sacrifice its pick / victim rank.
+// ORDER: B = T first (cast everything, the near-dominant line), then descending; decline masks ascending.
+static void EmitRipplePins(const GameState& state, std::vector<Action>& actions)
+{
+    const int me = state.active_player_index;
+    const int n = RippleReachableN(state, me);
+    if (n <= 0) { return; }
+    const bool late = RippleLateWaveAdmitted();
+    const DecisionProvider& prov = ResolveProvider(state);
+    // A granter only in HAND: ripple is live only in a plan that casts it (first -- the deck's cast order).
+    // Every variant that can reveal or cast is then marked ripple_granter_req (SubsetHasMissingTrickTarget
+    // rejects it in a plan without a granter cast), and ONE variant per cast -- the one equal to "no ripple"
+    // (B = 0; or don't-reveal everything and decline every match) -- carries no requirement, so the same
+    // cast stays enumerable in the Stone-less plans without a duplicate per pin.
+    bool granter_bf = false;
+    for (const Permanent& gp : state.battlefield)
+    {
+        if (gp.controller_index != me) { continue; }
+        const CardDefinition* gd = CardDatabase::Instance().LookupCached(gp.card);
+        if (gd != nullptr && gd->params.grants_ripple > 0) { granter_bf = true; break; }
+    }
+    // Per F1 name: copies in hand (distinct slots among its casts) and the first slot.
+    struct NameInfo { InternedName name; int first_slot = INT_MAX; std::vector<int> slots; };
+    std::vector<NameInfo> names;
+    auto def_of = [](const Action& a) -> const CardDefinition*
+    { return a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name); };
+    for (const Action& a : actions)
+    {
+        if (a.kind != Action::Kind::CastFromHand || a.ripple_pinned) { continue; }
+        const CardDefinition* d = def_of(a);
+        if (d == nullptr || d->card.IsLand() || !RippleChainOrderInert(*d)) { continue; }
+        auto it = std::find_if(names.begin(), names.end(), [&](const NameInfo& ni) { return ni.name == d->card.m_name; });
+        if (it == names.end()) { names.push_back(NameInfo{ d->card.m_name, INT_MAX, {} }); it = names.end() - 1; }
+        if (std::find(it->slots.begin(), it->slots.end(), a.hand_index) == it->slots.end()) { it->slots.push_back(a.hand_index); }
+        it->first_slot = std::min(it->first_slot, a.hand_index);
+    }
+    std::vector<Action> out;
+    out.reserve(actions.size() * 2);
+    for (Action& a : actions)
+    {
+        const CardDefinition* d = (a.kind == Action::Kind::CastFromHand) ? def_of(a) : nullptr;
+        if (d == nullptr || d->card.IsLand() || a.ripple_pinned) { out.push_back(std::move(a)); continue; }
+        if (RippleChainOrderInert(*d))
+        {
+            auto it = std::find_if(names.begin(), names.end(), [&](const NameInfo& ni) { return ni.name == d->card.m_name; });
+            if (it == names.end()) { out.push_back(std::move(a)); continue; }
+            if (a.hand_index != it->first_slot)
+            {
+                a.ripple_pinned  = true;
+                a.ripple_reveals = kRippleContinue;
+                out.push_back(std::move(a));
+                continue;
+            }
+            const int copies = static_cast<int>(it->slots.size());
+            const RippleDry all = RippleChainDryRun(state, me, *d, copies, n);
+            const int T = std::max(all.triggers, copies);
+            const int ms = std::min(all.srch, 3);
+            const bool ritual = IsManaRitual(*d);
+            const int per = ritual ? RitualFloatAmount(state, *d, a.chosen_x) : 0;
+            std::vector<int> caps{ -1 };
+            if (late) { for (int c = all.dom_seen - 1; c >= 0; --c) { caps.push_back(c); } }
+            for (int cap : caps)
+            for (int B = T; B >= 0; --B)
+            for (unsigned m = 0; m < (1u << ms); ++m)
+            {
+                Action v = a;
+                v.ripple_pinned   = true;
+                v.ripple_reveals  = static_cast<std::int8_t>(std::min(B, 127));
+                v.ripple_take_cap = static_cast<std::int8_t>(cap);
+                v.ripple_decline  = static_cast<std::uint8_t>(m);
+                if (B == 0 && (m != 0 || cap != -1)) { continue; }   // nothing is revealed: one B = 0 line
+                v.ripple_granter_req = static_cast<std::int8_t>(granter_bf || B == 0 ? 0 : 1);
+                if (ritual && per > 0)
+                {
+                    const RippleDry dv = RippleChainDryRun(state, me, *d, copies, n, B, m, cap);
+                    v.ritual_float += per * (dv.srch_taken + dv.dom);
+                }
+                out.push_back(std::move(v));
+            }
+            continue;
+        }
+        // Per-cast pins (a tutor-family name).
+        RippleDry all = RippleChainDryRun(state, me, *d, 1, n);
+        // THE LATE WAVE also fans the chain a dry run CANNOT see: the plan's earlier casts move the library
+        // (an Apostle chain's bottoming, a tutor's shuffle) before this cast reveals, so a copy of this name
+        // anywhere in the library can be revealed and cast. Sized by those copies (capped like the rest), so
+        // at an unlimited / large budget every free cast's pick, victim and decline is a searched pin; a
+        // small budget takes the dry run's sizing and leaves the unforeseen ones to the front (counted by
+        // MTG_RIPPLE_STATS as unpinned_in_window -- the disclosed residual).
+        if (late)
+        {
+            int lib_copies = 0;
+            for (const Card& lc : state.players[static_cast<std::size_t>(me)].library)
+            { if (lc.m_name == d->card.m_name) { ++lib_copies; } }
+            const bool tut = IsLibraryTutor(d->params), sac = SacCreatureCostFoldsByReadiness(d->params);
+            all.srch    = std::max(all.srch, lib_copies);
+            all.triggers = std::max(all.triggers, 1 + lib_copies);
+            all.nonadj  = std::max(all.nonadj, lib_copies > 1 ? lib_copies : 0);
+            if (tut) { all.tutors = std::max(all.tutors, lib_copies); }
+            if (sac) { all.sacs = std::max(all.sacs, lib_copies); }
+        }
+        const bool f2 = RippleResolutionShuffles(*d) && StableShuffleEnabled();
+        const int mt = std::min(f2 ? all.nonadj : all.triggers, 3);
+        const int ms = std::min(all.srch, 3);
+        int wt = 1;
+        if (all.tutors > 0)
+        {
+            std::vector<std::string> uniq;
+            for (const std::string& c : RankedTutorCandidates(prov, state, me, d->params))
+            { if (std::find(uniq.begin(), uniq.end(), c) == uniq.end()) { uniq.push_back(c); } }
+            wt = std::max(1, std::min<int>(static_cast<int>(uniq.size()), 15));
+        }
+        int wv = 1;
+        if (all.sacs > 0)
+        {
+            std::vector<std::string> hn;
+            for (const Card& hc : state.players[static_cast<std::size_t>(me)].hand)
+            {
+                const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+                if (hd != nullptr && hd->card.IsCreature() && !hd->card.IsLand()
+                    && std::find(hn.begin(), hn.end(), hc.m_name.str()) == hn.end()) { hn.push_back(hc.m_name.str()); }
+            }
+            wv = std::max(1, std::min<int>(static_cast<int>(SacReadinessVictimReps(state, me).size() + hn.size()), 15));
+        }
+        for (unsigned mask = 0; mask < (1u << mt); ++mask)
+        for (unsigned dm = 0; dm < (1u << ms); ++dm)
+        {
+            int declined = 0;
+            for (unsigned b = dm; b != 0; b >>= 1) { declined += static_cast<int>(b & 1u); }   // portable popcount
+            const int taken = ms - declined + std::max(0, all.srch - ms);
+            const int kt = std::min({ taken, all.tutors, 2 });
+            const int kv = std::min({ taken, all.sacs, 2 });
+            long long combos = 1;
+            for (int i = 0; i < kt; ++i) { combos *= wt; }
+            for (int i = 0; i < kv; ++i) { combos *= wv; }
+            for (long long code = 0; code < combos; ++code)
+            {
+                long long rest = code;
+                std::uint16_t ft = 0, fv = 0;
+                for (int i = 0; i < kt; ++i) { ft |= static_cast<std::uint16_t>((rest % wt) + 1) << (i * kRipplePinBits); rest /= wt; }
+                for (int i = 0; i < kv; ++i) { fv |= static_cast<std::uint16_t>((rest % wv) + 1) << (i * kRipplePinBits); rest /= wv; }
+                Action v = a;
+                const bool no_ripple = mask == (1u << mt) - 1 && dm == (1u << ms) - 1;
+                v.ripple_granter_req = static_cast<std::int8_t>(granter_bf || no_ripple ? 0 : 1);
+                v.ripple_pinned      = true;
+                v.ripple_mask        = static_cast<std::uint8_t>(mask);
+                v.ripple_decline     = static_cast<std::uint8_t>(dm);
+                v.ripple_free_tutor  = ft;
+                v.ripple_free_victim = fv;
+                out.push_back(std::move(v));
+            }
+        }
+    }
+    actions.swap(out);
+}
+
 static void EmitSacNamedVariants(const GameState& state, std::vector<Action>& actions)
 {
     const int me = state.active_player_index;
@@ -34862,6 +35182,19 @@ static void EmitSacNamedVariants(const GameState& state, std::vector<Action>& ac
             if (h.m_name != src.m_name || h.m_is_staged) { continue; }
             ++arrivals;
             if (hand_src == 0 || h.m_number < hand_src) { hand_src = h.m_number; }
+        }
+        // RIPPLE (Shadowborn INT-3): with Thrumming Stone out (or castable), the hand copies' chain casts more
+        // copies FREE -- each an arrival too (sick, untapped: the U bucket), so the activation that eats them
+        // is emitted in the SAME plan. Sized by the dry run under cast-all (the wave-0 line); a plan whose
+        // chain falls short realises its code as a clean no-op, exactly like an unmade hand arrival.
+        if (arrivals > 0 && state.deck_has_ripple && !HumanPlayActive() && RippleGranterReachable(state, me))
+        {
+            const int rn = RippleReachableN(state, me);
+            if (rn > 0)
+            {
+                const RippleDry dr = RippleChainDryRun(state, me, *sd, arrivals, rn);
+                arrivals += dr.dom + dr.srch_taken;
+            }
         }
         const auto b = SacNamedBuckets(state, me, src.m_name);
         const int X = static_cast<int>(b[0].size()), T = static_cast<int>(b[1].size());
@@ -45887,6 +46220,16 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             }
             actions.swap(out);
         }
+    }
+
+    // RIPPLE PIN PASS (Thrumming Stone; Shadowborn INT-3 -- EmitRipplePins has the shape and the folds).
+    // Decision space only (a rollout leaf plays the playout policy beyond the horizon, the phyrexian
+    // precedent below); human play answers every ripple choice at resolution. deck_has_ripple false ->
+    // one bool test, byte-identical for every other deck.
+    if (state.deck_has_ripple && !HumanPlayActive() && (g_search_candidate_enum || g_condemn_root_turn < 0)
+        && RippleGranterReachable(state, state.active_player_index))
+    {
+        EmitRipplePins(state, actions);
     }
 
     // PHYREXIAN post-pass ({G/P}: pay the pip with 2 life instead -- CR 107.4f; Birthing Pod,
@@ -61344,6 +61687,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // Its own nested breakpoint records still nest under the DigDraw (the caller pushes its sink). One-shot,
     // taken at apply_one's head like cascade_free.
     bool suppress_cast_record = false;
+    // RIPPLE one-shots (Shadowborn INT-3), taken at apply_one's head like cascade_free: the ripple handler
+    // (ripple_trigger, below) has already CAST this card -- counted it, paid its additional cost, fired its
+    // on-cast triggers and resolved its own ripple chain -- so apply_one only RESOLVES it; and it is the
+    // revealed copy with this card number (a same-name copy in hand must not be cast in its place).
+    bool ripple_precast     = false;
+    int  ripple_cast_number = 0;
+    std::function<void(const CardDefinition&, int, bool)> ripple_trigger;
     // Maelstrom Archangel's banked charge is NOT armed here: a plan action marked free_cast carries
     // it as a cast rider (CastRiders::free_cast) and apply_one spends the bank AT PAYMENT -- after
     // every early return, exactly where the executor's CastSpellFromHand spends it -- so a skipped
@@ -61378,6 +61728,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // The line hold as this cast's payment begins (Action::rec_line_hold, stamped on its record below).
         const ManaCost cast_line_unpaid = g_line_unpaid_cost;
         const bool     cast_line_unseen = g_line_opens_unseen;
+        const bool     rip_precast = ripple_precast;            // ...and the ripple one-shots
+        ripple_precast = false;
+        const int      rip_number  = ripple_cast_number;
+        ripple_cast_number = 0;
         const ManaPool cast_put_credit = riders.land_put;
         const int      cast_loyalty    = riders.loyalty_ability;
         const int      cast_devour     = riders.devour_count;
@@ -61452,6 +61806,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         for (auto c = zone.begin(); c != zone.end(); ++c)
         {
             if (c->m_name != name) { continue; }
+            if (rip_number != 0) { if (c->m_number == rip_number) { it = c; break; } continue; }   // ripple: that copy
             if (it == zone.end()) { it = c; continue; }             // first match (fallback)
             if (c->m_is_staged && (!it->m_is_staged || c->m_staged_expiry < it->m_staged_expiry))
             {
@@ -61513,7 +61868,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // the static subset checks only approximate; without it the search finds illegal Irencrag -> Apex ->
         // (dump the whole exile) lines. Checked before any mutation. Inert (budget == -1) for every deck
         // without a max_casts_after card. See GameState::casts_remaining_this_turn.
-        if (state.casts_remaining_this_turn == 0) { return; }   // budget spent: this cast is illegal
+        if (!rip_precast && state.casts_remaining_this_turn == 0) { return; }   // budget spent: this cast is illegal
         FixedBurnPin fixed_burn_pin;
         const bool fixed_burn_targeted = FixedTargetedBurn(def) && FixedBurnSearchEnabled(state);
         if (fixed_burn_targeted
@@ -61930,7 +62285,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // and the search valued lines with a creature they do not lose. Executor twin:
         // AIEngine::CastSpellFromHand's PerformSacrificeCreatureCost (also before resolution). The
         // legacy colour route (Natural Order) keeps its historical in-branch position below.
-        if (SacCreatureCostFoldsByReadiness(def.params))
+        if (SacCreatureCostFoldsByReadiness(def.params) && !rip_precast)   // a ripple cast paid at its cast
         {
             PerformSacrificeCreatureCost(state, name, def.params.sac_additional_creature_color,
                                          own_targets, /*readiness_route=*/true);
@@ -61949,8 +62304,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // copies stay in hand, not cast), a cascade free-cast IS its own spell, and each nested
         // draw-breakpoint cast is its own apply_one so it self-counts. Read only by Dragonstorm's
         // resolution (below) + no BuildSimKey fold -> byte-identical for every non-storm deck.
-        ++state.spells_cast_this_turn;
         _sba.committed = true;   // committed to the stack: the executor resolves it, then runs its SBA
+        // A RIPPLE cast (rip_precast) was counted at its cast by the ripple handler -- PushFreeCast's
+        // bookkeeping, the executor twin -- so none of this block runs again for it.
+        if (!rip_precast)
+        {
+        ++state.spells_cast_this_turn;
         state.mv_cast_this_turn += def.card.m_mana_cost.ManaValue();   // CFT damage accumulator (lockstep pair)
         // The main-2 stager stamp (GameState::m2_stage_turn): a no-op unless this is a stages_cards cast
         // in the post-combat main of a deck whose provider restricts main 2. Lockstep twin:
@@ -61972,6 +62331,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     ? def.params.max_casts_after
                     : std::min(state.casts_remaining_this_turn, def.params.max_casts_after);
         }
+        }   // !rip_precast
 
         // Alternative cost paid as "an opponent / each other player gains alt_lifegain life"
         // (Invigorate / Skyshroud Cutter / Reverent Silence) -> reversed to damage by a Tainted
@@ -62271,6 +62631,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             rec.kicked             = kicked;
             rec.devour_count       = cast_devour;
             rec.player_target      = static_cast<std::int8_t>(cast_player_target);
+            // ...and the RIPPLE chain pins (Shadowborn INT-3): the replayed cast must stamp the same script.
+            rec.ripple_pinned      = riders.ripple_pinned;
+            rec.ripple_reveals     = riders.ripple_reveals;
+            rec.ripple_take_cap    = riders.ripple_take_cap;
+            rec.ripple_mask        = riders.ripple_mask;
+            rec.ripple_decline     = riders.ripple_decline;
+            rec.ripple_free_tutor  = riders.ripple_free_tutor;
+            rec.ripple_free_victim = riders.ripple_free_victim;
             rec.twobrid_colored    = cast_twobrid;
             rec.rock_mana          = cast_put_credit;
             rec.loyalty_ability    = cast_loyalty;
@@ -62375,9 +62743,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // A life-cost payment to zero commits the cast but ends the game before
         // cast triggers or the spell resolve (executor's identical boundary).
         if (state.own_death_live && SelfHasLost(state)) { return; }
-        FireOnCastTriggers(state, def);
-        FireProwess(state, def);
-        FlushNoncombatTriggersAtPriorityBoundary(state);
+        if (!rip_precast)   // a ripple cast fired these at its cast (the handler; PushFreeCast's order)
+        {
+            FireOnCastTriggers(state, def);
+            FireProwess(state, def);
+            FlushNoncombatTriggersAtPriorityBoundary(state);
+        }
         if (state.own_death_live && SelfHasLost(state)) { return; }
 
         // EMRAKUL'S EXTRA TURN and THE ULAMOGS' TARGETED CAST TRIGGERS -- the inline twin of the executor's
@@ -62403,6 +62774,26 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 if (!nums.empty())
                 { ResolveCastTriggerTargets(state, state.active_player_index, def.card.m_name.str(), nums, destroy); }
             }
+        }
+        // RIPPLE (Thrumming Stone; Shadowborn INT-3) -- the inline twin of the executor's Triggered{Ripple}
+        // entries (PushCastTriggers) and ResolveRippleTrigger: a PLAN cast stamps its chain script from the
+        // Action's pins (the riders; AIEngine::CastSpellFromHand stamps the same), then every instance
+        // resolves -- the last one is the one directly above the spell (F2's "adjacent") -- each through
+        // ripple_trigger, which casts the reveal's takes and resolves their chains and spells before
+        // returning. All of it BEFORE this spell resolves, as on the stack. A ripple cast (rip_precast)
+        // already had its triggers resolved by the handler. deck_has_ripple false -> one bool test.
+        if (state.deck_has_ripple && !rip_precast)
+        {
+            if (!cascade_hit_free)
+            {
+                StampRippleScript(state, def, riders.ripple_pinned, riders.ripple_reveals, riders.ripple_take_cap,
+                                  riders.ripple_mask, riders.ripple_decline, riders.ripple_free_tutor,
+                                  riders.ripple_free_victim);
+            }
+            const std::vector<int> rns = RippleInstanceNs(state, state.active_player_index, def);
+            // Top of the stack first (the executor pushed instance 0 first); instance 0 is the adjacent one.
+            for (std::size_t k = rns.size(); k-- > 0;) { ripple_trigger(def, rns[k], k == 0); }
+            if (state.own_death_live && SelfHasLost(state)) { return; }
         }
 
         // THE CANTRIP BREAKPOINT -- what a draw spell's resolution does once it has drawn: stop for the
@@ -64167,6 +64558,76 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             deferred_put_armed       = true;   // site 10, its own bit (see deferred_site_index)
         }
     };
+    // RIPPLE -- the rollout's (and the viewer's) twin of EffectHandler::ResolveRippleTrigger (Shadowborn INT-3).
+    // Every choice comes from the shared RippleResolveTrigger (SpellEffects.h "RIPPLE"); only the casts are
+    // this world's, in the executor's stack order: (1) CAST every taken card -- the checks and bookkeeping
+    // PushFreeCast makes, in its order (targets, the Irencrag budget, the readiness sacrifice at its pinned
+    // victim, the counters, on-cast triggers); (2) resolve their ripple triggers, the LAST cast's first (it
+    // is on top: [.., S2, S3, R2, R3]); (3) resolve the spells, the last cast's first, through apply_one with
+    // the ripple one-shots (free, pre-cast, this very copy, not recorded -- the replayed hard cast re-derives
+    // the chain from its own pins). Instance lists are taken BEFORE any trigger resolves, as the executor
+    // pushes every trigger at once. A card that cannot be cast after all is bottomed, as there.
+    ripple_trigger = [&](const CardDefinition& sdef, int n, bool adjacent)
+    {
+        const int me = state.active_player_index;
+        Player& rp = state.players[static_cast<std::size_t>(me)];
+        std::vector<Card> taken = RippleResolveTrigger(state, me, sdef, n, adjacent);
+        struct RippleCast { Card card; const CardDefinition* def; std::string tut; };
+        std::vector<RippleCast> casts;
+        for (Card& c : taken)
+        {
+            const CardDefinition* md = CardDatabase::Instance().LookupCached(c);
+            if (md == nullptr) { rp.library.push_back(c); continue; }
+            const int victim = SacCreatureCostFoldsByReadiness(md->params) ? RippleNextFreeVictimId(state, me) : 0;
+            std::string tut = IsLibraryTutor(md->params) ? RippleNextFreeTutorTarget(state) : std::string{};
+            if (!FreeCastHasLegalTargets(state, me, *md) || state.casts_remaining_this_turn == 0)
+            { rp.library.push_back(c); continue; }
+            if (SacCreatureCostFoldsByReadiness(md->params))
+            {
+                if (!SacReadinessVictimAvailable(state, me)) { rp.library.push_back(c); continue; }
+                PerformSacrificeCreatureCost(state, md->card.m_name.str(), md->params.sac_additional_creature_color,
+                                             victim, /*readiness_route=*/true);
+            }
+            ++state.spells_cast_this_turn;
+            state.mv_cast_this_turn += md->card.m_mana_cost.ManaValue();
+            if (state.casts_remaining_this_turn > 0) { --state.casts_remaining_this_turn; }
+            if (md->params.max_casts_after >= 0)
+            {
+                state.casts_remaining_this_turn = (state.casts_remaining_this_turn < 0)
+                    ? md->params.max_casts_after
+                    : std::min(state.casts_remaining_this_turn, md->params.max_casts_after);
+            }
+            if (state.own_death_live && SelfHasLost(state)) { return; }
+            FireOnCastTriggers(state, *md);
+            FireProwess(state, *md);
+            FlushNoncombatTriggersAtPriorityBoundary(state);
+            if (state.own_death_live && SelfHasLost(state)) { return; }
+            casts.push_back(RippleCast{ std::move(c), md, std::move(tut) });
+        }
+        std::vector<std::vector<int>> inst(casts.size());
+        for (std::size_t i = 0; i < casts.size(); ++i) { inst[i] = RippleInstanceNs(state, me, *casts[i].def); }
+        const bool single = casts.size() == 1;
+        for (std::size_t i = casts.size(); i-- > 0;)
+        {
+            for (std::size_t k = inst[i].size(); k-- > 0;)
+            { ripple_trigger(*casts[i].def, inst[i][k], single && k == 0); }
+            if (state.own_death_live && SelfHasLost(state)) { return; }
+        }
+        for (std::size_t i = casts.size(); i-- > 0;)
+        {
+            const std::string nm  = casts[i].card.m_name.str();
+            const int         num = casts[i].card.m_number;
+            EnterHand(state, me, std::move(casts[i].card), HandEntryReason::Reveal);
+            cascade_free         = true;   // free (one-shot, consumed by the recursion)
+            ripple_precast       = true;
+            ripple_cast_number   = num;
+            suppress_cast_record = true;
+            apply_one(nm, false, false, 0, false, 0, casts[i].tut, 0, 0, -1, -1, 0,
+                      std::string{}, 0, false, -1, 0, 0, 0, false, false, false);
+            if (state.own_death_live && SelfHasLost(state)) { return; }
+        }
+    };
+
 
     // ---- UNPREDICTABLE CYCLONE: the replaced cycling draw, this file's two worlds ------------------------
     // Called by the human-play DigDraw pass (D2) and the rollout dig loop (D3) right after a cycle's cost,
@@ -68185,6 +68646,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     if (state.deck_has_extra_combat) { state.phase = Phase::Beginning; }   // Moraug (see the head of this function)
     state.opponent_lost_life_this_turn = false;
     state.creature_died_this_turn = false;   // morbid resets each turn (lockstep w/ GameEngine::UntapStep)
+    state.ripple_script = RippleScript{};    // the ripple chain script is turn-scoped (lockstep w/ GameEngine::UntapStep)
     state.noncombat_damage_received_this_turn = {};
     state.pending_incinerator_damage.clear();
     state.floating_mana            = ManaPool{};   // reserve (ritual) mana empties each turn (CR 500.4)
@@ -69906,6 +70368,13 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                 }
                 if (!act.remand_by.empty()) { w.Put("#RM"); w.Put(act.remand_by); w.Put(':'); w.Int(act.chosen_x); }
                 if (!act.remand_chain_by.empty()) { w.Put("#RC"); w.Put(act.remand_chain_by); }
+                if (act.ripple_pinned)   // the ripple chain pins (Shadowborn INT-3)
+                {
+                    w.Put("#RP"); w.Int(act.ripple_reveals); w.Put('/'); w.Int(act.ripple_take_cap);
+                    w.Put('/'); w.Int(act.ripple_mask); w.Put('/'); w.Int(act.ripple_decline);
+                    w.Put('/'); w.Int(act.ripple_free_tutor); w.Put('/'); w.Int(act.ripple_free_victim);
+                    w.Put('/'); w.Int(act.ripple_granter_req);
+                }
                 w.End();
                 break;
             }
@@ -74785,6 +75254,16 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                         if (!act.remand_by.empty())
                         { k += "#RM"; k += act.remand_by.str(); k += ':'; k += std::to_string(act.chosen_x); }
                         if (!act.remand_chain_by.empty()) { k += "#RC"; k += act.remand_chain_by.str(); }
+                        // The ripple chain pins (Shadowborn INT-3; lockstep with PlanSignatureFast).
+                        if (act.ripple_pinned)
+                        {
+                            k += "#RP"; k += std::to_string(act.ripple_reveals); k += '/';
+                            k += std::to_string(act.ripple_take_cap); k += '/'; k += std::to_string(act.ripple_mask);
+                            k += '/'; k += std::to_string(act.ripple_decline); k += '/';
+                            k += std::to_string(act.ripple_free_tutor); k += '/';
+                            k += std::to_string(act.ripple_free_victim); k += '/';
+                            k += std::to_string(act.ripple_granter_req);
+                        }
                     } break;
                 case Action::Kind::CastFromGraveyard: g.push_back(act.card_name); break;
                 case Action::Kind::DiscardToLandsEdge:
@@ -83570,7 +84049,10 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         {
             if (sc.arrive_turn < 0 || sc.arrive_turn > state.TurnSeq() + 1) { continue; }
             const CardDefinition* d = CardDatabase::Instance().LookupCached(sc.card);
-            if (d != nullptr && !d->card.IsPermanentCard() && d->params.tutor_to_hand) { upkeep_tutor_due = true; break; }
+            // ...and ANY arrival on a ripple deck (Lotus Bloom): its upkeep ripple is a searched pin on the same
+            // stream (ResolveSuspendRipple). Fan (3) opens it only when a granter can be live.
+            if (d != nullptr && ((!d->card.IsPermanentCard() && d->params.tutor_to_hand) || state.deck_has_ripple))
+            { upkeep_tutor_due = true; break; }
         }
     }
     if (!HumanPlayActive() && (state.deck_has_land_search || upkeep_tutor_due))
@@ -84159,26 +84641,54 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         }
         // (3) Search for Tomorrow's off-suspend pin (packed per arrival at the NEXT upkeep, in the
         //     order ProcessSuspendArrivals casts them -- suspension order).
+        //     RIPPLE (Shadowborn INT-3): with a ripple granter live at that upkeep, EVERY arriving spell first
+        //     consumes a DECISION ordinal and a FREE-SEARCH ordinal (ResolveSuspendRipple, CastOffSuspend), so
+        //     its own search ordinal comes after them. Live = a granter on the battlefield now, or one the
+        //     base plan casts -- so the widths are per plan (`uw` without ripple, `uw_r` with).
         if (!cont_axes_only && is_pre_combat)
         {
-            std::vector<std::size_t> uw;
-            for (const SuspendedCard& sc : state.players[static_cast<std::size_t>(me)].suspended_cards)
+            std::vector<std::size_t> uw, uw_r;
+            const bool rip_possible = state.deck_has_ripple && RippleGranterReachable(state, me);
+            bool rip_bf = false;
+            if (rip_possible)
+            {
+                for (const Permanent& gp : state.battlefield)
+                {
+                    if (gp.controller_index != me) { continue; }
+                    const CardDefinition* gd = CardDatabase::Instance().LookupCached(gp.card);
+                    if (gd != nullptr && gd->params.grants_ripple > 0) { rip_bf = true; break; }
+                }
+            }
+            const Player& sp = state.players[static_cast<std::size_t>(me)];
+            for (const SuspendedCard& sc : sp.suspended_cards)
             {
                 if (sc.arrive_turn > state.TurnSeq() + 1) { continue; }
                 const CardDefinition* d = CardDatabase::Instance().LookupCached(sc.card);
-                if (d == nullptr || d->card.IsPermanentCard()) { continue; }
+                if (d == nullptr) { continue; }
                 // Only a search-bearing arrival consumes an ordinal (CastOffSuspend): a land search
                 // (Search for Tomorrow) or a to-hand tutor (Profane Tutor), so only those count.
-                const bool ls_arrival  = d->params.land_search_on_resolve && d->params.land_search_count > 0;
-                const bool tut_arrival = !ls_arrival && d->params.tutor_to_hand;
-                if (!ls_arrival && !tut_arrival) { continue; }
-                if (static_cast<int>(uw.size()) >= kLandSearchPinOrdinals) { break; }
-                uw.push_back(std::min<std::size_t>(ls_arrival ? width_of(d) : tutor_width_of(d),
-                                                   kLandSearchPinMask + 1));
+                const bool perm        = d->card.IsPermanentCard();
+                const bool ls_arrival  = !perm && d->params.land_search_on_resolve && d->params.land_search_count > 0;
+                const bool tut_arrival = !perm && !ls_arrival && d->params.tutor_to_hand;
+                const std::size_t own_w = (ls_arrival || tut_arrival)
+                    ? std::min<std::size_t>(ls_arrival ? width_of(d) : tutor_width_of(d), kLandSearchPinMask + 1) : 0;
+                if (rip_possible)
+                {
+                    // The decision: F2 (the arrival's search shuffles) 0 take / 1 decline; else 0 reveal+take /
+                    // 1 don't reveal / 2 reveal+decline. A match is possible only with a copy in the library.
+                    bool copy_in_lib = false;
+                    for (const Card& lc : sp.library) { if (lc.m_name == d->card.m_name) { copy_in_lib = true; break; } }
+                    const bool f2 = RippleResolutionShuffles(*d) && StableShuffleEnabled();
+                    uw_r.push_back(f2 ? (copy_in_lib ? 2u : 1u) : (copy_in_lib ? 3u : 2u));
+                    uw_r.push_back(copy_in_lib && own_w > 0 ? own_w : 1u);   // the free copy's own search
+                    if (own_w > 0) { uw_r.push_back(own_w); }
+                }
+                if (own_w > 0 && static_cast<int>(uw.size()) < kLandSearchPinOrdinals) { uw.push_back(own_w); }
             }
-            bool any = false;
-            for (std::size_t x : uw) { if (x > 1) { any = true; } }
-            if (any)
+            if (static_cast<int>(uw_r.size()) > kLandSearchPinOrdinals) { uw_r.resize(kLandSearchPinOrdinals); }
+            auto any_wide = [](const std::vector<std::size_t>& v)
+            { for (std::size_t x : v) { if (x > 1) { return true; } } return false; };
+            if (any_wide(uw) || any_wide(uw_r))
             {
                 // A state pin read at the NEXT upkeep: one already on the state is the base plan's
                 // (all-front 0 is then a variant, the one-hot equal to it is the base's).
@@ -84187,15 +84697,27 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 for (const TurnSolver::Plan& p : all)
                 {
                     if (!base_plan(p)) { continue; }
+                    bool rip = rip_possible && rip_bf;
+                    if (rip_possible && !rip)
+                    {
+                        for (const Action& pa : p.actions)
+                        {
+                            if (pa.kind != Action::Kind::CastFromHand) { continue; }
+                            const CardDefinition* pd = pa.def ? pa.def : CardDatabase::Instance().LookupInterned(pa.card_name);
+                            if (pd != nullptr && pd->params.grants_ripple > 0) { rip = true; break; }
+                        }
+                    }
+                    const std::vector<std::size_t>& w = rip ? uw_r : uw;
+                    if (!any_wide(w)) { continue; }
                     if (StatePinFrontIsVariant(up_inh, 0))
                     {
                         TurnSolver::Plan v = p;
                         v.upkeep_land_search_choice = 0;
                         extra.push_back(std::move(v));
                     }
-                    for (std::size_t j = 0; j < uw.size(); ++j)
+                    for (std::size_t j = 0; j < w.size(); ++j)
                     {
-                        for (std::size_t c = 1; c < uw[j]; ++c)
+                        for (std::size_t c = 1; c < w[j]; ++c)
                         {
                             const int pin = static_cast<int>(c) << (kLandSearchPinBits * static_cast<int>(j));
                             if (pin == up_inh) { continue; }   // the base plan already carries it

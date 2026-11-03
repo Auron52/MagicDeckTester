@@ -1470,6 +1470,7 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         bool echo = false;
         // Shadowborn INT-2 (GameState::deck_has_morbid / deck_has_count_anthem / deck_has_demon_triggers).
         bool morbid = false, count_anthem = false, demon_triggers = false, sac_named = false;
+        bool ripple = false;   // Shadowborn INT-3: Thrumming Stone (grants_ripple) / innate ripple
         // An upkeep sac-tutor (GameState::deck_has_sac_tutor, Defense of the Heart): the searched put-list fan.
         bool sac_tutor = false;
         // The Niv-Mizzet draw/damage loop (GameState::deck_has_draw_ping): the four params its two
@@ -1552,6 +1553,7 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                 if (d->params.endstep_morbid_destroy_target_creature) { morbid = true; }
                 if (!d->params.creature_count_anthem_tiers.empty())  { count_anthem = true; }
                 if (d->params.sac_named_count > 0)                    { sac_named = true; }
+                if (d->params.grants_ripple > 0 || d->params.ripple > 0) { ripple = true; }
                 if (d->params.endstep_morbid_destroy_target_creature || d->params.upkeep_sacrifice_creature > 0
                     || d->params.endstep_each_player_discards_hand)
                 { demon_triggers = true; }
@@ -1648,6 +1650,9 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         state.deck_has_count_anthem        = garth || count_anthem;
         state.deck_has_demon_triggers      = garth || demon_triggers;
         state.deck_has_sac_named           = garth || sac_named;
+        // Same reasoning, no lever: a clear bit proves no spell can have ripple (no granter, no innate
+        // instance), so every ripple scan (RippleInstances, the pin pass, the upkeep fan) is dead code.
+        state.deck_has_ripple              = garth || ripple;
         // Same reasoning, no lever: a clear bit proves no Defense of the Heart can exist, so the searched put-list
         // fan's battlefield walk at every turn boundary (BoundaryFan) is dead code for that deck.
         state.deck_has_sac_tutor           = garth || sac_tutor;

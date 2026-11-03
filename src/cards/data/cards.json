@@ -14694,6 +14694,23 @@
      "Double strike"
     ]
    }
+  },
+  {
+   "name": "Thrumming Stone",
+   "mana_cost": "{5}",
+   "types": [
+    "Artifact"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Spells you cast have ripple 4. (Whenever you cast a spell, you may reveal the top four cards of your library. You may cast spells with the same name as that spell from among the revealed cards without paying their mana costs. Put the rest on the bottom of your library.) [RIPPLE GRANT (grants_ripple 4; CR 702.60): every spell its controller casts while it is on the battlefield -- hand casts, free casts (each ripple cast ripples again: EffectHandler::PushFreeCast -> PushCastTriggers) and casts off suspend (CastOffSuspend, inline: a Lotus Bloom / Profane Tutor arrival ripples at upkeep, before the draw) -- gets one Triggered{Ripple} per granter, pushed above the spell. Its own cast has no ripple (it is not on the battlefield yet). LEGENDARY: the legend rule is a state-based action checked before any player gets priority, so at most one Stone is out at any cast -- one ripple trigger per spell; a second Stone cast (or ripple-cast) resolves and the legend rule keeps the oldest (the copies are identical: an identity fold). STACK ORDER: a reveal casts every taken card first and their triggers go on the stack together above them, so the new spells' chains reveal before any of those spells resolves, and all of it before older pending triggers. REVEAL: SEARCHED -- a reveal that casts nothing still moves the top four to the bottom; two SOUND folds (proofs at SpellEffects.h 'RIPPLE'): for a name whose resolution never touches library order (Apostle, Dark Ritual, Culling the Weak, the Stone, the Demons) only the NUMBER of revealing triggers matters, and copies of that name cast back to back share one reveal budget; a trigger directly above a spell that searches and shuffles (Diabolic Intent, Demonic Tutor, Profane Tutor) always reveals, since a reveal that casts nothing there is undone by the shuffle (equal up to which identical copy the search takes). CAST of revealed same-name cards: a Shadowborn Apostle is cast, declining one is admitted in a later budget wave (USER-approved 2026-11-03; findable at --budget-ms 0); Dark Ritual (adds {B}{B}{B}), Thrumming Stone, Diabolic Intent and Profane Tutor are take-or-decline SEARCHED; ADDITIONAL costs are paid (Intent / Culling sacrifice a creature -- a searched victim -- and cannot be cast without one); a free tutor's pick is searched. BOTTOM ORDER ('any order'): reveal order [APPROVED deferral, USER 2026-11-03; MTG_RIPPLE_STATS counts how often a ripple-bottomed card is drawn or revealed before the next shuffle]. Instant-speed responses between a chain's resolutions (an Apostle activation, a Dark Ritual with triggers pending) are not modelled [APPROVED deferral, USER 2026-11-03]. Viewer: `dig` '(ripple reveal)' per trigger, `free_cast` '(ripple)' re-asked after each cast.]",
+   "template": "custom",
+   "parameters": {
+    "grants_ripple": 4
+   }
   }
  ]
 }

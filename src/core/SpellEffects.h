@@ -2258,9 +2258,11 @@ inline bool StableShuffleEnabled()
     return !legacy;
 }
 
+inline void RippleTraceNoteShuffle();   // RIPPLE bottom tripwire (diagnostic; defined at the end)
 inline void ShuffleAfterSearch(GameState& state, int controller_index)
 {
     if (!SearchShuffleEnabled()) { return; }
+    RippleTraceNoteShuffle();
     // Decoupling instrument: the SEARCH evaluation shuffles with shuffle_salt_search, the real
     // executor with shuffle_salt. Equal by default -> byte-identical / lockstep. See g_shuffle_eval.
     const uint64_t salt = g_shuffle_eval ? state.shuffle_salt_search : state.shuffle_salt;
@@ -19186,8 +19188,10 @@ inline bool MadnessPinnedOptionNow(const GameState& state, const MadnessPending&
 // replacements, Vampire Socialite's counter included; lords and Stromkirk Condemned's later pump see
 // it). DISCLOSED SIMPLIFICATION (D-A1-1; the World War Hulk chapter-I precedent, PerformSagaFreeCast):
 // the spell does not physically traverse the stack, so stack-only cast machinery (PushCastTriggers:
-// cascade / demonstrate) is not run -- provably inert for every card that can be madness-cast in the
-// pool (no Vampire creature carries a cast trigger, cascade or storm). It is the ONE path both worlds
+// cascade / demonstrate / ripple) is not run -- provably inert for every card that can be madness-cast in
+// the pool (no Vampire creature carries a cast trigger, cascade or storm, and no madness card shares a
+// list with a ripple granter -- Thrumming Stone's deck casts off SUSPEND, which does ripple: see
+// ResolveSuspendRipple in CastOffSuspend). It is the ONE path both worlds
 // can call at every madness site, including the rollout's cleanup.
 inline void FireProwess(GameState& state, const CardDefinition& def);   // defined far below
 inline void CastFromMadness(GameState& state, int controller, const Card& card, const std::string& source)
@@ -21585,6 +21589,7 @@ inline bool PayFireblastAlternative(GameState& state, int controller, const std:
     return true;
 }
 
+inline void ResolveSuspendRipple(GameState& state, int controller, const CardDefinition& def);   // RIPPLE (below)
 inline void CastOffSuspend(GameState& state, int controller, const Card& card)
 {
     const CardDefinition* def = CardDatabase::Instance().LookupCached(card);
@@ -21630,6 +21635,13 @@ inline void CastOffSuspend(GameState& state, int controller, const Card& card)
     // do not come through here. Byte-identical for every deck that never suspends (this path never runs).
     ++state.spells_cast_this_turn;
     state.mv_cast_this_turn += def->card.m_mana_cost.ManaValue();   // CFT damage accumulator (lockstep pair)
+    // RIPPLE (Thrumming Stone; Shadowborn INT-3): a cast off suspend IS a cast (CR 702.62e), so it ripples.
+    // There is no stack here, so its trigger resolves INLINE, above the spell -- before the spell resolves
+    // (a Profane Tutor's search, a Lotus Bloom's entry) and before this turn's draw (the upkeep). Shared by
+    // both worlds' upkeeps (this function is the single arrival path). This used to be the place where
+    // "PushCastTriggers is not run" was provably inert; with a ripple granter in the pool it is not, so the
+    // upkeep twin runs here. deck_has_ripple false -> one bool test, byte-identical for every other deck.
+    if (state.deck_has_ripple) { ResolveSuspendRipple(state, controller, *def); }
     // A suspended INSTANT or SORCERY (Search for Tomorrow, 2026-10-15) is cast, RESOLVES, and goes to
     // its owner's graveyard -- it never becomes a permanent (CR 702.62e / 608.2n). Only the land
     // search is modelled for a suspended spell today (no other suspend sorcery is in the pool); its
@@ -45840,3 +45852,509 @@ inline int PerformDrawX(GameState& state, int controller, bool target_opponent, 
     if (drew < n) { state.player_lost_on_draw = true; }
     return drew;
 }
+
+// =================================================================================================
+// RIPPLE (CR 702.60) -- Thrumming Stone, "Spells you cast have ripple 4" (Shadowborn INT-3, 2026-11-03)
+// =================================================================================================
+//
+// THE RULE. "When you cast this spell, you may reveal the top N cards of your library (all of them if
+// fewer). If you reveal cards this way, you may cast any of them with the same name as this spell
+// without paying their mana costs, then put all revealed cards not cast this way on the bottom of your
+// library in any order." Each instance triggers separately (702.60b). Spells cast from a reveal are
+// CAST, so they ripple again; they are cast during the trigger's resolution and their own triggers go on
+// the stack above them, so a reveal's spells and their chains resolve BEFORE every older pending trigger.
+// Additional costs are NOT waived ("without paying its mana cost" waives only the mana cost): Diabolic
+// Intent / Culling the Weak still sacrifice a creature, and with none to sacrifice they cannot be cast.
+//
+// THE THREE SITES, ONE SET OF DECISIONS. Executor: EffectHandler::PushCastTriggers pushes one
+// Triggered{Ripple} per instance (RippleInstanceNs) above every cast -- hand casts and every free cast
+// (PushFreeCast) -- and EffectHandler::ResolveRippleTrigger resolves it. Rollout (also the viewer's
+// path): apply_one's ripple block + its ripple_trigger handler (TurnSolver.cpp). Upkeep (no stack):
+// ResolveSuspendRipple, inside the shared CastOffSuspend. All three take every choice from the helpers
+// below, in the same resolution order, so the two worlds realise the same chain:
+//   * executor stack after a reveal casting S2, S3:  [.., S2, S3, R2, R3]  -> R3 (+chain), R2 (+chain),
+//     S3, S2 -- the spells are all cast first (PushFreeCast with deferred triggers), then their triggers
+//     are pushed in cast order;
+//   * rollout: cast S2, S3 (counted, additional costs paid), then the handler resolves R3's chain, R2's
+//     chain, then S3, then S2 (apply_one's ripple_precast resolution) -- the same sequence.
+//
+// THE SEARCHED SCRIPT (GameState::ripple_script, stamped from the hard cast's Action::ripple_* pins by
+// StampRippleScript at BOTH cast sites). Every choice inside the window is a pin; the unpinned branch is
+// the PLAYOUT policy (reveal iff the top N holds a castable same-name card; take every castable match;
+// tutor / victim = the front), legal only beyond the horizon -- ripplestats counts any unpinned answer
+// taken while greedywindow::InWindow (MTG_RIPPLE_STATS=1), the madness / echo census precedent.
+//
+//   REVEAL. A real choice in general: a reveal that casts nothing still moves the top N to the bottom,
+//   which changes the next draws. Two SOUND folds shrink it.
+//
+//   F1 -- "only the NUMBER of revealing triggers matters" (RippleChainOrderInert names: Apostles, Dark
+//   Ritual, Culling the Weak, Thrumming Stone, the Demons). Claim: for a chain of triggers of ONE name
+//   whose spells' resolutions neither read nor change library order, two reveal policies that reveal
+//   the same number of times reach the same state. Proof: (1) every pending trigger of the chain is
+//   the same ability (same name, same N, same controller), so WHICH trigger performs the k-th reveal is
+//   immaterial; (2) a declined trigger touches no zone; (3) nothing that resolves between two reveals
+//   reads or moves the library (the inert-name premise), so the k-th reveal always sees the library the
+//   (k-1)-th left, and what it reveals -- hence what it casts and bottoms -- depends only on k and on the
+//   take answers, which are keyed by match ORDINAL, not by trigger; (4) revealing with the EARLIEST
+//   triggers is never worse for reaching k reveals, because each reveal can only ADD triggers (its
+//   casts). So a chain's reveal decisions reduce to one budget B = 0..T (2^k -> k+1), the first B
+//   triggers revealing. The same argument crosses CASTS: copies of one inert name cast back to back
+//   (one cast-order rank, so adjacent; nothing else resolves between their chains) are a single chain of
+//   identical triggers, so the budget is per NAME and only the first copy carries it (the others carry
+//   kRippleContinue) -- n copies cost B+1 variants, not (B+1)^n.
+//
+//   F2 -- "a reveal that casts nothing, right before the spell's own shuffle, is a no-op" (names whose
+//   resolution SHUFFLES: Diabolic Intent, Demonic Tutor, Profane Tutor). Claim: when a trigger sits
+//   DIRECTLY above its own spell and that spell's resolution searches and shuffles the library, then
+//   "reveal, cast nothing" and "don't reveal" reach the same state. Proof: the revealed cards go back to
+//   the library (the bottom), so the library's MULTISET is unchanged; the next thing to resolve is the
+//   spell itself, whose search ends in ShuffleAfterSearch -> Library::ShuffleByKey, whose result is a
+//   pure function of (seed, shuffle ordinal, the multiset of card numbers) -- independent of the prior
+//   order -- and the ordinal advances identically on both sides. One honest caveat, the keyed-shuffle
+//   artifact the engine already accepts for Search for Tomorrow: the search takes the FIRST copy of its
+//   target in library order, so when a rotated card is a copy of the searched name a different COPY can
+//   be taken; the two worlds are then the same game up to which identical copy left, i.e. equal in
+//   real-information terms. So such a trigger always reveals, and "reveal, decline every match" is the
+//   don't-reveal line -- the decline bits are searched, nothing is lost. Valid only under the stable
+//   shuffle (MTG_LEGACY_SHUFFLE orders by the prior library): there, and for every trigger NOT directly
+//   above its spell (one reveal casting two tutors stacks [T1, T2, R2, R3] -- R3 sits on R2), the reveal
+//   is a per-trigger DON'T-REVEAL bit (RippleScript::mask), fanned by the enumerator.
+//
+//   TAKE. A same-name revealed card the PROVIDER proves take-dominated (FreeCastTakeDominated: a
+//   Shadowborn Apostle) is cast; declining one is admitted only in the LATE wave (take_cap, the USER's
+//   budget-staged admission, 2026-11-03) so it stays findable at --budget-ms 0. Every other match
+//   (Dark Ritual, Thrumming Stone, Diabolic Intent, Profane Tutor) is SEARCHED: a decline bit per match
+//   ordinal. A free tutor's pick and a free sacrifice's victim are pins too (free_tutor / free_victim,
+//   ranks at the resolution / cast state), never the provider's front inside the window.
+//
+//   BOTTOM ORDER: reveal order (APPROVED deferral, USER 2026-11-03). MTG_RIPPLE_STATS reports how often a
+//   ripple-bottomed card is later drawn or revealed before the next shuffle in a real game -- the
+//   tripwire the USER asked for.
+constexpr std::int8_t kRippleContinue   = -2;   // Action::ripple_reveals on a non-first copy of an F1 name
+constexpr int         kRipplePinBits    = 4;    // free_tutor / free_victim: (rank+1) per ordinal
+constexpr int         kRipplePinOrdinals = 4;
+constexpr int         kRippleMaskBits   = 8;    // mask / decline: one bit per ordinal
+inline const std::string& RippleTutorRankPrefix() { static const std::string p("\x01rk"); return p; }
+
+bool RippleCensusBeyondHorizon();   // TurnSolver.cpp: inside a horizon playout or the d0 runner (diagnostic)
+namespace ripplestats
+{
+    inline bool On() { static const bool v = EnvOn("MTG_RIPPLE_STATS"); return v; }
+    inline std::atomic<long long> g_triggers{0}, g_reveals{0}, g_free_casts{0};
+    inline std::atomic<long long> g_unpinned_in_window{0}, g_unpinned_beyond{0};
+    inline std::atomic<long long> g_bottom_placed{0}, g_bottom_read{0};
+    // Real-game tripwire: (game seed, card number) of every card a REAL ripple bottomed since the last
+    // shuffle (g_real_resolution only; diagnostic, never read by play).
+    inline thread_local std::vector<std::pair<std::uint64_t, int>> t_bottomed;
+    // In-window unpinned answers by SITE (0 reveal/no script, 1 reveal/no budget, 2 reveal/past mask,
+    // 3 take/no script, 4 take/past bits, 5 tutor, 6 victim) -- which host is missing the pins.
+    inline std::atomic<long long> g_unpinned_site[7];
+    inline void NoteUnpinned(int site = 0)
+    {
+        if (!On()) { return; }
+        // A horizon playout's plan is APPLIED after its greedy solve's frame has closed, so the window test
+        // alone counts the permitted playout too: TurnSolver's playout / d0-runner nests separate them.
+        if (!HumanPlayActive() && greedywindow::InWindow(0) && !RippleCensusBeyondHorizon())
+        { g_unpinned_in_window.fetch_add(1); g_unpinned_site[site].fetch_add(1); }
+        else { g_unpinned_beyond.fetch_add(1); }
+    }
+    inline void NoteRead(const GameState& s, int number)
+    {
+        if (!On() || !g_real_resolution || t_bottomed.empty()) { return; }
+        for (const auto& e : t_bottomed)
+        { if (e.first == s.game_seed && e.second == number) { g_bottom_read.fetch_add(1); return; } }
+    }
+    inline void NoteShuffle() { if (g_real_resolution) { t_bottomed.clear(); } }
+    struct Dumper
+    {
+        ~Dumper()
+        {
+            if (!On()) { return; }
+            std::fprintf(stderr, "[ripple] triggers=%lld reveals=%lld free_casts=%lld unpinned_in_window=%lld "
+                         "unpinned_beyond=%lld real_bottomed=%lld real_bottom_reads_before_shuffle=%lld\n",
+                         g_triggers.load(), g_reveals.load(), g_free_casts.load(), g_unpinned_in_window.load(),
+                         g_unpinned_beyond.load(), g_bottom_placed.load(), g_bottom_read.load());
+            std::fprintf(stderr, "[ripple] unpinned_in_window by site: reveal/no-script=%lld reveal/no-budget=%lld "
+                         "reveal/past-mask=%lld take/no-script=%lld take/past-bits=%lld tutor=%lld victim=%lld\n",
+                         g_unpinned_site[0].load(), g_unpinned_site[1].load(), g_unpinned_site[2].load(),
+                         g_unpinned_site[3].load(), g_unpinned_site[4].load(), g_unpinned_site[5].load(),
+                         g_unpinned_site[6].load());
+        }
+    };
+    inline Dumper g_dumper;
+}
+
+// One entry per ripple INSTANCE a spell cast by `controller` right now has (its N): the innate one
+// (CardParams::ripple) plus one per granter on the controller's battlefield. Empty for a land and for
+// every deck without a ripple card (deck_has_ripple). Under the legend rule a deck of Stones has at most
+// one granter out at any cast (the SBA runs before priority), so the vector holds 0 or 1 here.
+inline std::vector<int> RippleInstanceNs(const GameState& s, int controller, const CardDefinition& def)
+{
+    std::vector<int> ns;
+    if (!s.deck_has_ripple || def.card.IsLand()) { return ns; }
+    if (def.params.ripple > 0) { ns.push_back(def.params.ripple); }
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.grants_ripple > 0) { ns.push_back(d->params.grants_ripple); }
+    }
+    return ns;
+}
+
+// F1's premise (see the header): does this spell's RESOLUTION neither read nor move library order? A
+// conservative list of the library-touching families -- an unlisted one would make F1 merge reveal
+// splits that differ, so a new library-touching param belongs here.
+inline bool RippleChainOrderInert(const CardDefinition& d)
+{
+    const CardParams& p = d.params;
+    if (IsLibraryTutor(p) || p.tutor_to_battlefield_single || p.tutor_land_to_battlefield) { return false; }
+    if (p.land_search_on_resolve || p.cascade_max_mv > 0 || p.shuffle_reveal_freecast
+        || p.etb_exile_until_nonland) { return false; }
+    if (p.etb_scry > 0 || p.etb_surveil > 0 || p.etb_dig_count > 0 || p.etb_tutor_hand_count > 0
+        || p.etb_reveal_count > 0 || p.etb_self_draw > 0 || p.cast_scry > 0) { return false; }
+    if (d.tmpl == CardTemplate::DrawSpell || d.tmpl == CardTemplate::DrawX
+        || d.tmpl == CardTemplate::DrawUntilNonland) { return false; }
+    return true;
+}
+// F2's premise: the spell's resolution searches the library and SHUFFLES it (PerformTutor's library
+// branch always ends in ShuffleAfterSearch).
+inline bool RippleResolutionShuffles(const CardDefinition& d)
+{
+    const CardParams& p = d.params;
+    return IsLibraryTutor(p) && !p.wish_from_sideboard && !p.tutor_from_graveyard;
+}
+
+// Is ripple POSSIBLE for `controller`'s casts this turn -- a granter on the battlefield, or one in hand
+// (a plan can cast the Stone first)? The enumerator's gate for attaching pins.
+inline bool RippleGranterReachable(const GameState& s, int controller)
+{
+    if (!s.deck_has_ripple) { return false; }
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.grants_ripple > 0) { return true; }
+    }
+    for (const Card& c : s.players[static_cast<std::size_t>(controller)].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d != nullptr && (d->params.grants_ripple > 0 || d->params.ripple > 0)) { return true; }
+    }
+    return false;
+}
+
+// THE CAST SITE STAMP (both worlds: AIEngine::CastSpellFromHand, the rollout's apply_one for a paid /
+// hand cast). Free casts never stamp -- they belong to the chain the hard cast stamped.
+inline void StampRippleScript(GameState& s, const CardDefinition& def, bool pinned, std::int8_t reveals,
+                              std::int8_t take_cap, std::uint8_t mask, std::uint8_t decline,
+                              std::uint16_t free_tutor, std::uint16_t free_victim)
+{
+    if (!s.deck_has_ripple) { return; }
+    RippleScript& sc = s.ripple_script;
+    const bool f1 = RippleChainOrderInert(def);
+    if (pinned && f1 && reveals == kRippleContinue)
+    {
+        // A later copy of an F1 name: it continues the per-name budget the first copy stamped (F1 across
+        // casts). With no such budget this turn it reveals nothing -- a duplicate of the first copy's
+        // B = 0 line, never the playout policy.
+        if (sc.pinned && sc.per_name && sc.name == def.card.m_name) { return; }
+        sc = RippleScript{};
+        sc.name = def.card.m_name; sc.pinned = true; sc.per_name = true; sc.reveals = 0; sc.take_cap = take_cap;
+        return;
+    }
+    sc = RippleScript{};
+    sc.name        = def.card.m_name;
+    sc.pinned      = pinned;
+    sc.per_name    = f1;
+    sc.reveals     = reveals;
+    sc.take_cap    = take_cap;
+    sc.mask        = mask;
+    sc.decline     = decline;
+    sc.free_tutor  = free_tutor;
+    sc.free_victim = free_victim;
+}
+inline bool RippleScriptCovers(const GameState& s, const CardDefinition& def)
+{
+    return s.ripple_script.pinned && s.ripple_script.name == def.card.m_name;
+}
+
+// A revealed card's castability for free (CR 601.2c targets, 601.2h additional costs, the Irencrag
+// budget). `bodies_left` = creatures still available to pay a "sacrifice a creature" cost (the reveal's
+// earlier takes already committed theirs).
+inline bool RippleMatchCastable(const GameState& s, int controller, const CardDefinition& md, int bodies_left,
+                                int casts_left)
+{
+    if (casts_left == 0) { return false; }
+    if (!FreeCastHasLegalTargets(s, controller, md)) { return false; }
+    if (SacCreatureCostFoldsByReadiness(md.params) && bodies_left <= 0) { return false; }
+    return true;
+}
+inline int RippleCountBodies(const GameState& s, int controller)
+{
+    int n = 0;
+    for (const Permanent& p : s.battlefield)
+    { if (p.controller_index == controller && p.card.IsCreature()) { ++n; } }
+    return n;
+}
+
+// THE REVEAL DECISION of one trigger (see the header for F1 / F2). `adjacent` = the trigger sits directly
+// above its own spell on the stack.
+inline bool RippleRevealDecision(GameState& s, int controller, const CardDefinition& spell, int n, bool adjacent)
+{
+    RippleScript& sc = s.ripple_script;
+    const Player& pl = s.players[static_cast<std::size_t>(controller)];
+    auto policy = [&]() -> bool
+    {
+        // The playout policy (beyond the horizon only): reveal iff a castable same-name card is in reach.
+        int i = 0;
+        for (const Card& c : pl.library)
+        {
+            if (i++ >= n) { break; }
+            if (c.m_name != spell.card.m_name) { continue; }
+            const CardDefinition* md = CardDatabase::Instance().LookupCached(c);
+            if (md != nullptr && RippleMatchCastable(s, controller, *md, RippleCountBodies(s, controller),
+                                                     s.casts_remaining_this_turn)) { return true; }
+        }
+        return false;
+    };
+    bool reveal;
+    if (!RippleScriptCovers(s, spell)) { ripplestats::NoteUnpinned(0); reveal = policy(); }
+    else if (sc.per_name)
+    {
+        if (sc.reveals < 0) { ripplestats::NoteUnpinned(1); reveal = policy(); }
+        else if (sc.reveals > 0) { --sc.reveals; reveal = true; }
+        else { reveal = false; }
+    }
+    else if (adjacent && RippleResolutionShuffles(spell) && StableShuffleEnabled()) { reveal = true; }   // F2
+    else
+    {
+        const int ord = sc.fan_ord++;
+        if (ord >= kRippleMaskBits) { ripplestats::NoteUnpinned(2); reveal = policy(); }
+        else { reveal = ((sc.mask >> ord) & 1u) == 0; }
+    }
+    // HUMAN PLAY: the `dig` decision, "(ripple reveal)" -- the spell's own tile, 0 = reveal the top N,
+    // -1 = don't. Asked before the cards are seen (the real-information prompt). Nulled by
+    // RevealLogPause in every search / rollout scope, so autonomous play never reaches it.
+    if (g_play_dig_chooser != nullptr && !pl.library.empty())
+    {
+        const std::vector<Card> examined{ spell.card };
+        const int r = (*g_play_dig_chooser)(s, controller, spell.card.m_name.str() + " (ripple reveal)",
+                                            examined, std::vector<int>{ 0 }, reveal ? 0 : -1);
+        reveal = (r == 0);
+    }
+    return reveal;
+}
+
+// THE TAKE DECISION of one castable match (autonomous worlds).
+inline bool RippleTakeDecision(GameState& s, int controller, const CardDefinition& spell, const CardDefinition& md)
+{
+    RippleScript& sc = s.ripple_script;
+    const DecisionProvider& prov = ResolveProvider(s);
+    if (!RippleScriptCovers(s, spell))
+    {
+        ripplestats::NoteUnpinned(3);
+        return prov.TakeFreeCast(s, controller, md);
+    }
+    if (prov.FreeCastTakeDominated(s, controller, md))
+    {
+        if (sc.take_cap < 0) { return true; }
+        if (sc.take_cap > 0) { --sc.take_cap; return true; }
+        return false;
+    }
+    const int ord = sc.match_ord++;
+    if (ord >= kRippleMaskBits) { ripplestats::NoteUnpinned(4); return prov.TakeFreeCast(s, controller, md); }
+    return ((sc.decline >> ord) & 1u) == 0;
+}
+
+// The chain's NEXT free tutor pick, as the tutor_target string PerformTutor decodes (an index into its
+// resolution-state candidate list, clamped); empty = unpinned (the front -- beyond the horizon only).
+inline std::string RippleNextFreeTutorTarget(GameState& s)
+{
+    RippleScript& sc = s.ripple_script;
+    const int ord = sc.tutor_ord++;
+    if (!sc.pinned || ord >= kRipplePinOrdinals) { ripplestats::NoteUnpinned(5); return std::string{}; }
+    const int v = (sc.free_tutor >> (ord * kRipplePinBits)) & ((1 << kRipplePinBits) - 1);
+    if (v == 0) { ripplestats::NoteUnpinned(5); return std::string{}; }
+    return RippleTutorRankPrefix() + std::to_string(v - 1);
+}
+// Decode a RippleNextFreeTutorTarget string: the rank, or -1 when `t` is an ordinary target name.
+inline int RippleTutorRankOf(const std::string& t)
+{
+    const std::string& pre = RippleTutorRankPrefix();
+    if (t.size() <= pre.size() || t.compare(0, pre.size(), pre) != 0) { return -1; }
+    return std::atoi(t.c_str() + pre.size());
+}
+// The chain's NEXT free sacrifice victim (card m_number), a rank into SacReadinessVictimReps AT THE CAST
+// (clamped; a rank past the live list is a duplicate of the last class, never a whiff). 0 = none.
+inline int RippleNextFreeVictimId(GameState& s, int controller)
+{
+    RippleScript& sc = s.ripple_script;
+    const int ord = sc.sac_ord++;
+    int rank = 0;
+    if (sc.pinned && ord < kRipplePinOrdinals)
+    {
+        const int v = (sc.free_victim >> (ord * kRipplePinBits)) & ((1 << kRipplePinBits) - 1);
+        if (v > 0) { rank = v - 1; } else { ripplestats::NoteUnpinned(6); }
+    }
+    else { ripplestats::NoteUnpinned(6); }
+    const std::vector<int> reps = SacReadinessVictimReps(s, controller);
+    if (reps.empty()) { return 0; }
+    const int i = reps[static_cast<std::size_t>(std::min<int>(rank, static_cast<int>(reps.size()) - 1))];
+    return s.battlefield[static_cast<std::size_t>(i)].card.m_number;
+}
+
+// ONE ripple trigger up to its casts: the reveal decision, the reveal, the take decisions (reveal order,
+// castability checked sequentially), the bottom (reveal order), the reveal emit. Returns the cards to
+// cast, in CAST order; the caller casts every one of them before any of their triggers resolves (see the
+// header). Human play: the take is the `free_cast` decision, re-asked after each cast (-1 = cast no more).
+inline std::vector<Card> RippleResolveTrigger(GameState& s, int controller, const CardDefinition& spell, int n,
+                                              bool adjacent)
+{
+    std::vector<Card> taken;
+    if (ripplestats::On()) { ripplestats::g_triggers.fetch_add(1); }
+    if (!RippleRevealDecision(s, controller, spell, n, adjacent)) { return taken; }
+    if (ripplestats::On()) { ripplestats::g_reveals.fetch_add(1); }
+    Player& pl = s.players[static_cast<std::size_t>(controller)];
+    std::vector<Card> revealed;
+    for (int i = 0; i < n && !pl.library.empty(); ++i) { revealed.push_back(pl.library.DrawTop()); }
+    for (const Card& c : revealed) { ripplestats::NoteRead(s, c.m_number); }
+    // The castable matches, in reveal order (sequential bodies / Irencrag budget).
+    int bodies = RippleCountBodies(s, controller);
+    int casts_left = s.casts_remaining_this_turn;
+    std::vector<int> match_idx;   // indices into `revealed`
+    for (int i = 0; i < static_cast<int>(revealed.size()); ++i)
+    {
+        if (revealed[static_cast<std::size_t>(i)].m_name != spell.card.m_name) { continue; }
+        const CardDefinition* md = CardDatabase::Instance().LookupCached(revealed[static_cast<std::size_t>(i)]);
+        if (md == nullptr) { continue; }
+        match_idx.push_back(i);
+    }
+    std::vector<char> take(revealed.size(), 0);
+    std::vector<int> order;   // cast order (indices into revealed)
+    auto castable = [&](int i) -> bool
+    {
+        const CardDefinition* md = CardDatabase::Instance().LookupCached(revealed[static_cast<std::size_t>(i)]);
+        return md != nullptr && RippleMatchCastable(s, controller, *md, bodies, casts_left);
+    };
+    auto commit = [&](int i)
+    {
+        const CardDefinition* md = CardDatabase::Instance().LookupCached(revealed[static_cast<std::size_t>(i)]);
+        take[static_cast<std::size_t>(i)] = 1;
+        order.push_back(i);
+        if (md != nullptr && SacCreatureCostFoldsByReadiness(md->params)) { --bodies; }
+        if (casts_left > 0) { --casts_left; }
+    };
+    // Autonomous answers first (also the human's defaults).
+    for (int i : match_idx)
+    {
+        if (!castable(i)) { continue; }
+        const CardDefinition* md = CardDatabase::Instance().LookupCached(revealed[static_cast<std::size_t>(i)]);
+        if (RippleTakeDecision(s, controller, spell, *md)) { commit(i); }
+    }
+    if (g_play_free_cast_chooser != nullptr && !match_idx.empty())
+    {
+        // Re-ask per cast: candidates = the castable, not-yet-cast matches; walked = the rest revealed.
+        const std::vector<char> dflt = take;
+        std::fill(take.begin(), take.end(), 0);
+        order.clear();
+        bodies = RippleCountBodies(s, controller);
+        casts_left = s.casts_remaining_this_turn;
+        for (;;)
+        {
+            std::vector<int> cand;
+            for (int i : match_idx) { if (!take[static_cast<std::size_t>(i)] && castable(i)) { cand.push_back(i); } }
+            if (cand.empty()) { break; }
+            std::vector<Card> cc;
+            int def_i = -1;
+            for (std::size_t k = 0; k < cand.size(); ++k)
+            {
+                cc.push_back(revealed[static_cast<std::size_t>(cand[k])]);
+                if (def_i < 0 && dflt[static_cast<std::size_t>(cand[k])]) { def_i = static_cast<int>(k); }
+            }
+            std::vector<std::string> walked;
+            for (int i = 0; i < static_cast<int>(revealed.size()); ++i)
+            {
+                if (std::find(cand.begin(), cand.end(), i) != cand.end() || take[static_cast<std::size_t>(i)]) { continue; }
+                walked.push_back(revealed[static_cast<std::size_t>(i)].m_name.str());
+            }
+            const int r = (*g_play_free_cast_chooser)(s, controller, spell.card.m_name.str() + " (ripple)", cc,
+                                                      def_i, walked);
+            if (r < 0 || r >= static_cast<int>(cand.size())) { break; }
+            commit(cand[static_cast<std::size_t>(r)]);
+        }
+    }
+    // Bottom everything not cast, in reveal order (the approved canonical order).
+    std::vector<int> nums, kept, bottomed;
+    std::vector<std::string> names;
+    for (int i = 0; i < static_cast<int>(revealed.size()); ++i)
+    {
+        Card& c = revealed[static_cast<std::size_t>(i)];
+        nums.push_back(c.m_number);
+        names.push_back(c.m_name.str());
+        if (take[static_cast<std::size_t>(i)]) { kept.push_back(c.m_number); continue; }
+        bottomed.push_back(c.m_number);
+        if (ripplestats::On() && g_real_resolution)
+        {
+            ripplestats::g_bottom_placed.fetch_add(1);
+            ripplestats::t_bottomed.emplace_back(s.game_seed, c.m_number);
+        }
+        pl.library.push_back(c);
+    }
+    EmitReveal(s.turn_number, spell.card.m_name.str() + " (ripple)", nums, names, kept, bottomed);
+    for (int i : order) { taken.push_back(std::move(revealed[static_cast<std::size_t>(i)])); }
+    if (ripplestats::On()) { ripplestats::g_free_casts.fetch_add(static_cast<long long>(taken.size())); }
+    return taken;
+}
+
+// THE UPKEEP TWIN (CastOffSuspend has no stack; Lotus Bloom / Profane Tutor arriving at upkeep, before
+// the draw). The pins ride the SAME packed upkeep stream Search for Tomorrow / Profane Tutor use
+// (GameState::scripted_upkeep_land_search, decided by the previous turn's main phase -- the upkeep is not
+// a search node): per ripple-live arrival, in suspension order, a DECISION ordinal and then a FREE-SEARCH
+// ordinal (consumed by a free search-bearing cast's own search, or discarded when none is cast, so the
+// fan in TurnSolver -- AppendSubdecisionAxes (3) -- always lines up). Decision ranks: F2 names (the
+// arrival's search shuffles, the trigger is directly above it): 0 = take every match, 1 = decline them
+// all (F2 makes the reveal itself free); other names: 0 = reveal and take, 1 = don't reveal, 2 = reveal
+// and decline. -1 = unpinned = rank 0 (the front; beyond the horizon). A free card cast here is cast by
+// CastOffSuspend itself (it resolves at once, as the arrival does); ITS ripple answers rank 0 without
+// consuming an ordinal [disclosed: unreachable for this pool -- two Profane Tutors leave nothing to match].
+inline thread_local int t_suspend_ripple_depth = 0;
+inline void CastOffSuspend(GameState& state, int controller, const Card& card);
+inline void ResolveSuspendRipple(GameState& state, int controller, const CardDefinition& def)
+{
+    const std::vector<int> ns = RippleInstanceNs(state, controller, def);
+    if (ns.empty()) { return; }
+    const bool nested = t_suspend_ripple_depth > 0;
+    const bool f2 = RippleResolutionShuffles(def) && StableShuffleEnabled();
+    for (std::size_t k = 0; k < ns.size(); ++k)
+    {
+        int rank = nested ? -1 : ConsumePackedLandSearchPin(state.scripted_upkeep_land_search);
+        if (rank < 0) { rank = 0; }
+        RippleScript sc;
+        sc.name = def.card.m_name; sc.pinned = true; sc.per_name = !f2;
+        if (f2) { sc.mask = 0; sc.decline = rank == 1 ? 0xFF : 0; sc.take_cap = rank == 1 ? 0 : -1; }
+        else
+        {
+            sc.reveals  = rank == 1 ? 0 : 1;
+            sc.decline  = rank == 2 ? 0xFF : 0;
+            sc.take_cap = rank == 2 ? 0 : -1;
+        }
+        const RippleScript saved = state.ripple_script;
+        state.ripple_script = sc;
+        const bool adjacent = (k + 1 == ns.size());
+        std::vector<Card> taken = RippleResolveTrigger(state, controller, def, ns[k], adjacent);
+        state.ripple_script = saved;
+        bool consumed_search = false;
+        for (Card& c : taken)
+        {
+            const CardDefinition* md = CardDatabase::Instance().LookupCached(c);
+            if (md != nullptr && !md->card.IsPermanentCard()
+                && (IsLibraryTutor(md->params) || md->params.land_search_on_resolve)) { consumed_search = true; }
+            ++t_suspend_ripple_depth;
+            CastOffSuspend(state, controller, c);
+            --t_suspend_ripple_depth;
+        }
+        if (!nested && !consumed_search) { (void)ConsumePackedLandSearchPin(state.scripted_upkeep_land_search); }
+    }
+}
+inline void RippleTraceNoteShuffle() { if (ripplestats::On()) { ripplestats::NoteShuffle(); } }

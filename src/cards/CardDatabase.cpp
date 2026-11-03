@@ -989,6 +989,8 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.discard_land_damage = params.value("discard_land_damage", 0);
     p.cascade_max_mv      = params.value("cascade_max_mv",      0);
     p.cascade_count       = params.value("cascade_count",       1);
+    p.grants_ripple       = params.value("grants_ripple",       0);   // Thrumming Stone (ripple 4)
+    p.ripple              = params.value("ripple",              0);   // innate ripple N
     p.etb_exile_until_nonland    = params.value("etb_exile_until_nonland",    false);
     p.etb_exile_free_cast_max_mv = params.value("etb_exile_free_cast_max_mv", 0);
     p.shuffle_reveal_freecast    = params.value("shuffle_reveal_freecast",    false);

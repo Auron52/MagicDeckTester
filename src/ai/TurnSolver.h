@@ -818,6 +818,30 @@ struct Action
     bool is_draw_until_nonland = false;// Treasure Hunt (Solve's LE/TH combo valuation)
     int  discard_land_damage   = 0;    // if this card IS a Land's Edge being cast (Solve)
 
+    // THRUMMING STONE / RIPPLE PINS (Shadowborn INT-3; CastFromHand only). The searched answers to the
+    // ripple chain this cast starts, carried by CastRiders into BOTH worlds' cast site, which stamps them
+    // into GameState::ripple_script (SpellEffects.h "RIPPLE" has the semantics and the fold proofs).
+    //   ripple_pinned      -- the enumerator attached a script (false = the playout policy decides).
+    //   ripple_reveals     -- F1 names: the per-NAME reveal budget (0..T); kRippleContinue (-2) on every
+    //                         copy but the first (the copies share the first copy's budget); -1 unused.
+    //   ripple_take_cap    -- take-dominated matches (Apostle-class) allowed; -1 = all (wave 0); >= 0
+    //                         only in the LATE wave (RippleLateWaveAdmitted).
+    //   ripple_mask        -- non-F1 names: DON'T-REVEAL bits over the chain's fanned triggers.
+    //   ripple_decline     -- DECLINE bits over the searched-class matches, by match ordinal.
+    //   ripple_free_tutor  -- packed 4-bit (rank+1) tutor picks of the chain's free tutor casts.
+    //   ripple_free_victim -- packed 4-bit (rank+1) sacrifice victims of the chain's free sac casts.
+    // Folded into BOTH plan signatures (#RP). Defaults = no ripple pin (every other deck).
+    bool          ripple_pinned      = false;
+    std::int8_t   ripple_reveals     = -1;
+    std::int8_t   ripple_take_cap    = -1;
+    std::uint8_t  ripple_mask        = 0;
+    std::uint8_t  ripple_decline     = 0;
+    std::uint16_t ripple_free_tutor  = 0;
+    std::uint16_t ripple_free_victim = 0;
+    // 1 = this variant's chain needs a ripple GRANTER cast by the same plan (the Stone is only in hand);
+    // SubsetHasMissingTrickTarget rejects it otherwise. 0 = valid with or without one.
+    std::int8_t   ripple_granter_req = 0;
+
     // Cached card definition for `card_name`, resolved ONCE by CollectActions (where the
     // name is assigned) so the hot subset evaluators (consider's max_casts_after loop, the
     // combo-line scan, CapGroupsBySituationalRank) read the pointer instead of re-hashing the
@@ -1000,6 +1024,15 @@ struct CastRiders
     bool     free_remand     = false;   // the remand_by rider rides a FREE walk cast (Unpredictable
                                         // Cyclone's take-and-Remand): only the Remand is paid. Set by the
                                         // walk itself, never by CastRiders::Of (no plan Action carries it)
+    // The ripple chain pins (Action::ripple_*; Shadowborn INT-3) -- stamped into GameState::ripple_script
+    // by the cast site (StampRippleScript) of BOTH worlds.
+    bool          ripple_pinned      = false;
+    std::int8_t   ripple_reveals     = -1;
+    std::int8_t   ripple_take_cap    = -1;
+    std::uint8_t  ripple_mask        = 0;
+    std::uint8_t  ripple_decline     = 0;
+    std::uint16_t ripple_free_tutor  = 0;
+    std::uint16_t ripple_free_victim = 0;
 
     static CastRiders Of(const Action& a)
     {
@@ -1015,6 +1048,13 @@ struct CastRiders
         r.player_target   = a.player_target;
         r.draw_target     = a.draw_target;
         r.pitch_name      = a.pitch_name;
+        r.ripple_pinned      = a.ripple_pinned;
+        r.ripple_reveals     = a.ripple_reveals;
+        r.ripple_take_cap    = a.ripple_take_cap;
+        r.ripple_mask        = a.ripple_mask;
+        r.ripple_decline     = a.ripple_decline;
+        r.ripple_free_tutor  = a.ripple_free_tutor;
+        r.ripple_free_victim = a.ripple_free_victim;
         return r;
     }
     // Copy out and reset: the ONLY way a cast reads them.

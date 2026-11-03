@@ -42,12 +42,18 @@ public:
     // Irencrag budget, fires on-cast triggers/prowess, and pushes the spell's own cast
     // triggers. Returns false if a cast restriction forbids it (caller decides the card's
     // fallback zone). Used by cascade / Breaching Dragonstorm / Creative Technique resolution.
-    static bool PushFreeCast(GameState& state, const Card& card, int controller);
+    // `push_triggers` = false defers the free spell's OWN cast triggers to the caller (a ripple reveal casts
+    // every taken card first, then pushes their triggers -- CR 603.3: triggers wait for priority).
+    // `sac_victim_id` pays a "sacrifice a creature" ADDITIONAL cost (readiness route; 0 = the front class)
+    // and `tutor_target` is carried on the spell entry (a ripple free tutor's searched pick).
+    static bool PushFreeCast(GameState& state, const Card& card, int controller, bool push_triggers = true,
+                             int sac_victim_id = 0, const std::string& tutor_target = std::string{});
 
 private:
     // Triggered-entry resolution (dispatched from Resolve() on EntryType::Triggered).
     static bool ResolveTriggered(GameState& state, const StackEntry& entry, const CardDefinition& def);
     static void ResolveCascadeTrigger(GameState& state, const StackEntry& entry, const CardDefinition& def);
+    static void ResolveRippleTrigger(GameState& state, const StackEntry& entry, const CardDefinition& def);
     static void ResolveEtbExileFreeCast(GameState& state, const StackEntry& entry, const CardDefinition& def);
     static void ResolveDemonstrate(GameState& state, const StackEntry& entry, const CardDefinition& def);
     // Creative Technique's payload (shuffle -> reveal until nonland -> exile it -> bottom the

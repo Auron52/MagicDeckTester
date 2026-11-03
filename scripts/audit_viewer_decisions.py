@@ -485,6 +485,11 @@ MANIFEST = {
     # Abhorrent Overlord's upkeep "sacrifice a creature": the `sacrifice` board click at the upkeep
     # (PerformUpkeepSacrificeCreature); the search pins the victim the turn before (demon_trigger_choice).
     "upkeep_sacrifice_creature":     ("sacrifice",    positive),
+    # --- Thrumming Stone (INT-3, 2026-11-03) ---
+    # "Spells you cast have ripple 4": per trigger, reveal-or-not is the `dig` decision "(ripple reveal)"
+    # (RippleRevealDecision, every ripple site -- the stack, the rollout/viewer apply, the upkeep twin);
+    # WHICH revealed same-name cards to cast is `free_cast` "(ripple)", re-asked after each cast.
+    "grants_ripple":                 ("dig",          positive),
     # Reaper from the Abyss's morbid "destroy target non-Demon creature": the `target` board click over
     # every legal target, both sides (PerformEndStepMorbidDestroy).
     "endstep_morbid_destroy_target_creature": ("target", truthy),
@@ -1986,6 +1991,9 @@ def modeled_tokens(card):
             t.add("search")
     if p.get("endstep_morbid_destroy_target_creature"):
         t.add("target")
+    # Shadowborn INT-3: Thrumming Stone's ripple -- reveal (`dig`) and the free casts (`free_cast`).
+    if p.get("grants_ripple") or p.get("ripple"):
+        t.update({"reveal", "cast"})
     # Kitesail Larcenist: "for each player, choose up to one other target artifact or creature" IS
     # the treasurify choice (own side = chosen_x plan variants, both sides = the treasurify chooser),
     # so both the 'target' and the 'choose up to' (modal) phrases are covered.

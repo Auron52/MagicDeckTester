@@ -3960,6 +3960,16 @@ static void WriteDigDecisionJson(std::ostream& os, const GameState& s, const std
         d.Note("reply an examined index to put that card onto the battlefield, or -1 to put "
                "nothing; the rest go to the bottom. Default = the AI's pick.");
     }
+    else if (source.find("(ripple reveal)") != std::string::npos)
+    {
+        // RIPPLE (Thrumming Stone; Shadowborn INT-3) reuses this modal: the one examined card is the SPELL
+        // whose ripple trigger is resolving (the top cards are not seen before deciding). Asked once per
+        // trigger at its resolution (SpellEffects.h RippleRevealDecision, every ripple site); WHICH revealed
+        // same-name cards to cast is the next decision (`free_cast`, re-asked after each cast).
+        d.Note("reply 0 to reveal the top four cards of your library (you may then cast any with the same "
+               "name for free; the rest go to the bottom in the order revealed), or -1 not to reveal "
+               "(nothing moves). Default = the AI's pick.");
+    }
     else if (source.find("(galadriel reveal)") != std::string::npos)
     {
         // Galadriel of Lothlorien's scry trigger (SpellEffects.h FireScryWatchers) reuses this modal:

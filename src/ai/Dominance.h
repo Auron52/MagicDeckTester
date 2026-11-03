@@ -581,7 +581,15 @@ static_assert(sizeof(Player) == 208,
 // plan apply, consumed at this turn's end step and the NEXT upkeep), FOLDED in Build() value-gated (and in
 // BuildDedupKey's pending pins and BuildBreakpointKey). INT-1's `creature_died_this_turn` (MORBID) is now read
 // (Reaper) and is FOLDED in Build() and BuildSimKey, gated on deck_has_morbid.
-static_assert(sizeof(GameState) == 1240,
+// +32 bytes (2026-11-03, Shadowborn INT-3, measured 1232 -> 1264): `deck_has_ripple` (a DECK CONSTANT stamped once in
+// StampDeckTraits -- nothing to fold) and `ripple_script` (RippleScript: the ripple chain's searched answers, stamped
+// by every hard cast from its Action pins and consumed by that cast's own chain; reset at both untap sites). The
+// script is NOT folded: a chain finishes inside the cast that stamped it, so at any snapshot it only holds a
+// finished chain's leftovers, which the next hard cast overwrites before anything reads them -- except an F1
+// name's per-name reveal budget, which a later copy of the SAME name carrying kRippleContinue reads; two states
+// that differ only there differ only in what such a copy (a plan duplicate of the first copy's own budget line)
+// reveals, never in a decision the search scored from the key.
+static_assert(sizeof(GameState) == 1272,   // 1264 + upstream's upkeep_tutor (+8)
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 

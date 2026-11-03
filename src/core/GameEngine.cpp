@@ -327,6 +327,7 @@ void GameEngine::UntapStep(GameState& state)
     state.step  = Step::Untap;
     state.opponent_lost_life_this_turn = false;
     state.creature_died_this_turn = false;   // morbid resets each turn (lockstep w/ SimulateEndAndStartNextTurn)
+    state.ripple_script = RippleScript{};    // the ripple chain script is turn-scoped (lockstep twin: SimulateEndAndStartNextTurn)
     state.noncombat_damage_received_this_turn = {};
     state.pending_incinerator_damage.clear();
     state.floating_mana = ManaPool{};   // reserve (ritual) mana empties each turn (CR 500.4); no-op for non-ritual decks
@@ -727,6 +728,7 @@ void GameEngine::DrawStep(GameState& state)
     }
     Card drawn = ap.library.DrawTop();
     ap.cards_drawn_this_turn += 1;   // the draw step is a real CR-121 draw (Fists of Flame counts it)
+    if (state.deck_has_ripple) { ripplestats::NoteRead(state, drawn.m_number); }   // MTG_RIPPLE_STATS tripwire
     // Human-play (--claude-play) accurate draw reporting: record the per-turn draw so the viewer
     // can show exactly what was drawn this turn (nulled by RevealLogPause during search).
     if (g_play_draw_sink) { g_play_draw_sink->push_back({ state.turn_number, drawn.m_name.str() }); }

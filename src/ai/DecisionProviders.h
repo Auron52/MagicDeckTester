@@ -3917,6 +3917,25 @@ public:
                "Bloom) can fund, and re-evaluate Jetmir's 3/6/9 thresholds after each." }; }
     const char* Name() const override { return "ShadowbornApostle"; }
     int TutorSearchWidth() const override { return 32; }
+    // RIPPLE TAKE (Shadowborn INT-3; USER-approved 2026-11-03 as a BUDGET-STAGED admission): a revealed
+    // Shadowborn Apostle is cast; DECLINING one is admitted only in the late wave (RippleLateWaveAdmitted,
+    // TurnSolver.cpp), so the decline stays findable at --budget-ms 0. The near-dominance argument (not a
+    // strict proof, hence the wave rather than a fold): an extra Apostle on the battlefield is a superset
+    // resource -- sacrifice fodder (the six, Diabolic Intent, Culling the Weak), devotion for Abhorrent
+    // Overlord, Jetmir's count, a spare Reaper target -- its own ripple trigger is optional (the reveal
+    // budget), and under the stable shuffle the take-world library is the decline-world library minus one
+    // Apostle with every other card's relative order kept. The rare exceptions: one card ahead of the
+    // decline world once its bottom slot is reached (a cleanup discard, decking) and which COPY a later
+    // keyed shuffle places where. Scope: a creature spell of a name with a "sacrifice N named ~" ability
+    // and no other text the engine models on entry -- read off the card data, never the name.
+    bool FreeCastTakeDominated(const GameState& s, int controller, const CardDefinition& hit) const override;
+    // THE DECK'S CAST ORDER, one rank (PROVISIONAL -- cast order is the USER's call, surfaced in the
+    // ledger): a ripple GRANTER (Thrumming Stone) is cast before every other spell of the same plan, so
+    // each later cast in the plan has its ripple (an Apostle cast before the Stone resolves reveals
+    // nothing). Weakly dominant given payability -- every ripple is optional (the reveal budget can be 0)
+    // -- and when the Stone needs a ritual's mana first, the payable-order fallback (MTG_PAYABLE_ORDER)
+    // re-sequences the plan. Every other card keeps the generic rank.
+    int CastOrderRank(const GameState& s, const CardDefinition& def) const override;
 };
 
 class PiratesProvider : public DeckProvider

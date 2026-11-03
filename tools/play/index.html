@@ -4496,6 +4496,25 @@ function digPanelHtml(d){
        `<button class="ghost" data-opt="-1">Take the AI's pick</button></div>`;
     return h;
   }
+  // RIPPLE (Thrumming Stone; Shadowborn INT-3) reuses this modal ("(ripple reveal)" in the source): the one
+  // tile is the SPELL whose ripple trigger is resolving -- the top four are not shown before you decide.
+  // Asked once per trigger; WHICH revealed copies to cast is the next decision (free_cast "(ripple)").
+  // ON BY DEFAULT (USER 2026-11-03), so there is no options-menu toggle.
+  if (/\(ripple reveal\)/.test(d.source||'')) {
+    const src=(d.source||'').replace(/\s*\(ripple reveal\)\s*$/,'');
+    const rev=d.heuristic_default===0;
+    let h=`<h3>${esc(src)} — ripple 4: reveal the top four?</h3>`;
+    h+=`<div class="sub">Thrumming Stone gives this spell ripple 4. Reveal the top four cards of your library: you may cast any named <b>${esc(src)}</b> for free (each of those ripples again), and the rest go to the <b>bottom</b> in the order revealed. Or don't reveal: nothing moves.</div>`;
+    h+=`<div class="tutgrid">`;
+    (d.examined||[]).forEach(c=>{
+      h+=`<span class="cardmini tdig${rev?' def':''}" data-opt="${c.index}" data-name="${esc(c.name)}" title="${esc(c.name)} — reveal the top four">`+
+         `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/><em>Reveal top 4</em>`+
+         (rev?`<span class="deftag">AI pick</span>`:'')+`</span>`;
+    });
+    h+=`</div><div class="pbtns" style="margin-top:10px"><span class="spacer"></span>`+
+       `<button class="${rev?'ghost':'primary'}" data-opt="-1">Don't reveal${rev?'':' (the AI\'s pick)'}</button></div>`;
+    return h;
+  }
   // Galadriel of Lothlórien's scry trigger reuses this modal ("(galadriel reveal)" in the source):
   // the one tile is the library top, a land; taking it puts it onto the battlefield tapped.
   if (/\(galadriel reveal\)/.test(d.source||'')) {
@@ -4682,6 +4701,8 @@ function freeCastPanelHtml(d){
     ? `<div class="sub">You may cast this exiled card now, <b>paying its cost</b>. Decline to leave it exiled and deal 2 damage to each opponent.</div>`
     : isArch
     ? `<div class="sub"><b>${esc(src)}</b> dealt combat damage — you may cast one spell from your hand <b>without paying its mana cost</b>. This is a one-time trigger: click a spell, or decline.</div>`
+    : src.indexOf('(ripple)')>=0
+    ? `<div class="sub"><b>${esc(src)}</b> revealed these — you may cast any of them <b>without paying their mana costs</b>, one at a time (you are asked again after each cast, and each one cast ripples again). An additional cost (a sacrifice) is still paid. Cast no more to stop: every revealed card not cast goes to the bottom of your library in the order revealed.</div>`
     : `<div class="sub"><b>${esc(src)}</b> found this card — you may cast it <b>without paying its mana cost</b>. Click it to cast, or decline${src.indexOf('(cascade)')>=0?' (it goes to the bottom of your library)':(src.indexOf('Creative Technique')>=0||d.operation==='suspend_cast')?' (it stays in exile)':' (it goes to your hand)'}.</div>`;
   h+=`<div class="tutgrid fc-cands">`;
   if(!cands.length) h+=`<span class="hint">No castable spell in hand.</span>`;
@@ -4709,7 +4730,7 @@ function freeCastPanelHtml(d){
     h+=`</div>`;
   }
   h+=`<div class="pbtns" style="margin-top:10px"><span class="spacer"></span>`+
-     `<button class="ghost" data-opt="-1">Decline</button></div>`;
+     `<button class="ghost" data-opt="-1">${src.indexOf('(ripple)')>=0?'Cast no more':'Decline'}</button></div>`;
   return h;
 }
 // ETB tutor fired by a PUT rather than a cast (a Lackey cheat / Vial deploy / Muxus reveal dropping a

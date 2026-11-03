@@ -23432,7 +23432,8 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
         if (p.cycle_draw_exile_shared_type_freecast) { cyclone = true; }
         if (!p.etb_replace_sacrifice_land_subtype.empty()
             || (p.tutor_to_hand && p.suspend_time_counters > 0)
-            || p.sac_named_count > 0) { shadowborn = true; }   // INT-2: Shadowborn Apostle's activation
+            || p.sac_named_count > 0
+            || p.grants_ripple > 0) { shadowborn = true; }   // INT-2: Apostle's activation; INT-3: Thrumming Stone
         if (p.cast_trigger_extra_turns > 0)          { cy_extra_turn = true; }
         if (p.cycle_or_discard_trigger_scry > 0)     { cy_cycle_scry = true; }
         if (p.draw_trigger_damage > 0 || p.cast_trigger_instant_sorcery_draw > 0
@@ -58089,4 +58090,19 @@ void DecisionProvider::IncineratorTargetCandidates(const GameState& state, int d
         { out.push_back(p.card.m_number); }
     }
     (void)amount;
+}
+
+// ---- ShadowbornProvider: the ripple hooks (Shadowborn INT-3; see the declarations for the reasoning) ---------
+bool ShadowbornProvider::FreeCastTakeDominated(const GameState& /*s*/, int /*controller*/, const CardDefinition& hit) const
+{
+    // A creature whose only modelled text is its "sacrifice N creatures named ~" activation (Shadowborn
+    // Apostle). Any enter-the-battlefield effect would make "it entered" a choice of its own.
+    const CardParams& p = hit.params;
+    return hit.card.IsCreature() && p.sac_named_count > 0 && p.etb_scry == 0 && p.etb_dig_count == 0
+        && p.etb_self_draw == 0 && p.etb_tutor_hand_count == 0;
+}
+int ShadowbornProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
+{
+    if (def.params.grants_ripple > 0) { return 1; }   // the granter first (PROVISIONAL deck order)
+    return DeckProvider::CastOrderRank(s, def);
 }
