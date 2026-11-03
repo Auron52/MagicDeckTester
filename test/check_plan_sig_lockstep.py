@@ -47,7 +47,10 @@ def fields(t):
 # (2026-10-21: nine unit tests failed after its rebase onto the fast builder). Every Action field the
 # legacy key reads must be read by the fast one too -- except the human-play-only sub-decision suffix,
 # which the fast builder never serves (sig_fast is off under human play).
-HUMAN_PLAY_ONLY = {"crackle_targets", "ponder_keep", "splice_count"}
+# ponder_keep left this set 2026-11-03: the Unpredictable Cyclone integration (e63afece6) reuses it for the cycling
+# free-cast choice, read by BOTH builders' main keys ("CYCLE#" and the tutor "c..k" pin), so exempting it from the
+# legacy side only made that shared read show as fast-only.
+HUMAN_PLAY_ONLY = {"crackle_targets", "splice_count"}
 
 bad = False
 for name, a, b in (("markers", markers(fast), markers(legacy)), ("Action::Kind cases", kinds(fast), kinds(legacy)),
