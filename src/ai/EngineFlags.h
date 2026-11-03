@@ -893,6 +893,17 @@ inline bool RampFeedRouteOn()
     return heurarm::Flag(heurarm::RAMP_FEED_ROUTE, env_on);
 }
 
+// MTG_LINE_REPAY -- DEFAULT ON; =0 restores the drop. When an outermost payment of a line fails and the line's
+// previous payment is still exactly as it left the board, that payment is re-made so that both pay (a depth-1
+// rollback over every minimal payment of its bill; ManaPayment.cpp LineRepayTry). Read inside the shared payer, so
+// executor, rollout and the enumerator's sequential walk see one value; heurarm slot so a pooled batch carries both
+// arms. docs/design/mana-completeness-oracle.md section 14.
+inline bool LineRepayOn()
+{
+    static const bool env_on = EnvOn("MTG_LINE_REPAY", true);
+    return heurarm::Flag(heurarm::LINE_REPAY, env_on);
+}
+
 // MTG_PAY_ROLLBACK -- DEFAULT OFF until measured. The same-turn mana-payment rollback: see
 // src/ai/PayRollback.h. Read in the shared payment entry and both dig-gate twins (lockstep).
 inline bool PayRollbackOn()

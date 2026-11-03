@@ -35,6 +35,7 @@ thread_local Hook* t_hook         = nullptr;
 thread_local bool  t_float_only   = false;
 thread_local bool  t_gate_observe = false;
 thread_local int   t_seq_step     = -1;
+thread_local int   t_ability_tap_src = 0;
 
 int Level()
 {
@@ -911,6 +912,13 @@ int UsefulColorMask(const GameState& s, const ManaCost& cost)
 // of two Conservatories) for the Wild Growth, the activation lost its source, and the oracle missed the
 // painless line the engine pays with #14 (an ORACLE-GAP, "life engine 20 oracle 19").
 thread_local const std::set<int>* t_plan_srcs = nullptr;
+// The frontier payment's own {T} source (Hook::f_self_src, from t_ability_tap_src): an ability's mana cost
+// cannot be paid by tapping the permanent whose {T} the same cost demands. Haven of the Spirit Dragon's rebuy
+// ("{2}, {T}, Sacrifice"): the table offered the Haven's own {C} toward its {2}, the rebuy then no-oped on the
+// tapped Haven, and the engine's realisation -- the rebuy unpaid, nothing tapped for it, the Bolt's spare {G}
+// still floating -- was never reached (Dragons pass1, 2,880 of 3,074 ORACLE-GAPs). Set by Realize around the
+// frontier's MinimalPayments; BuildSources leaves that permanent out.
+thread_local int t_exclude_src = 0;
 
 // THE ENUM-GAP PASS PAYS AS THE ENGINE CAN. A SacAction source -- Generator Servant, an on-board Lotus Bloom or Black
 // Lotus -- makes its mana only through a plan's own SacForMana action (both apply worlds crack it in their pre-pass;
@@ -959,6 +967,7 @@ std::vector<SrcClass> BuildSources(const GameState& state, bool for_creature, st
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != a || p.tapped) { continue; }
+        if (t_exclude_src != 0 && p.card.m_number == t_exclude_src) { continue; }   // see t_exclude_src
         const HumanPreTapOffer o = HumanPreTapOfferFor(state, p);
         if (t_no_sac_action && o.route == HumanPreTapOffer::Route::SacAction) { continue; }   // see t_no_sac_action
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
@@ -1957,6 +1966,7 @@ struct FrontierRec
     bool                   creature_ability = false;
     bool                   has_spell = false;   // the spell the frontier payment is for (Hook::f_spell)
     Card                   spell;
+    int                    self_src = 0;        // Hook::f_self_src: the ability's own {T} source, never a payer
 };
 
 // Apply `plan` to a copy of `root` once per payment script, LAYERED by payment index: every script of
@@ -2040,6 +2050,7 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                 fr.creature_ability = h.f_creature_ability;
                 fr.has_spell    = h.f_has_spell;
                 if (h.f_has_spell) { fr.spell = h.f_spell; }
+                fr.self_src     = h.f_self_src;
                 fronts.push_back(std::move(fr));
                 continue;
             }
@@ -2090,7 +2101,8 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                     ^ std::hash<std::string>{}(fronts[i].cost.ToString() + (fronts[i].for_creature ? "c" : "n")
                                                + (fronts[i].creature_ability ? "a" : "s")
                                                + "t" + std::to_string(fronts[i].tapahead)
-                                               + (fronts[i].has_spell ? "|" + fronts[i].spell.m_name.str() : ""));
+                                               + (fronts[i].has_spell ? "|" + fronts[i].spell.m_name.str() : "")
+                                               + "|x" + std::to_string(fronts[i].self_src));
             res[i]  = Resources(fronts[i].st, /*with_float=*/true);
         }
         std::vector<char> keep(n, 1);
@@ -2108,10 +2120,13 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
         {
             if (!keep[i]) { g_pruned.fetch_add(1, std::memory_order_relaxed); continue; }
             FrontierRec& f = fronts[i];
+            const int saved_excl = t_exclude_src;
+            t_exclude_src = f.tapahead > 0 ? 0 : f.self_src;
             std::vector<PayOption> opts = f.tapahead > 0
                 ? TapAheadOptions(f.st, f.tapahead, f.lands_only, &r.unmodeled)
                 : MinimalPayments(f.st, f.cost, f.for_creature, &r.unmodeled, f.creature_ability, /*whole_float=*/false,
                                   f.has_spell ? &f.spell : nullptr);
+            t_exclude_src = saved_excl;
             g_options.fetch_add(static_cast<long long>(opts.size()), std::memory_order_relaxed);
             if (Level() >= 3 && (TraceTurn() == 0 || TraceTurn() == root.turn_number))
             {
@@ -2867,6 +2882,17 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
             if (!o.Full() || o.line != e_line) { continue; }
             why += " -- nearest " + ScriptText(o.script) + ": " + DiffText(e, o.st);
             break;
+        }
+        if (Level() >= 3 && (TraceTurn() == 0 || TraceTurn() == root.turn_number))
+        {
+            // Every outcome the gap was judged against, and what separates each from the engine's.
+            std::lock_guard<std::mutex> lk(g_print_mu);
+            for (const Outcome& o : r.outcomes)
+            {
+                std::fprintf(stderr, "[mana-oracle]   gap-outcome full=%d same-line=%d core=%s %s: %s\n", o.Full() ? 1 : 0,
+                             o.line == e_line ? 1 : 0, CoreKey(o.st) == ek ? "same" : "DIFFERS",
+                             ScriptText(o.script).c_str(), DiffText(e, o.st).c_str());
+            }
         }
         Emit(C_ORACLE_GAP, root, pre, plan, why + "; engine ended " + BoardText(e));
         return;

@@ -6533,6 +6533,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             ManaPool avail = AvailableManaPool(state);
             dmgev::PayHoldScope _self_hold(dmgev::t_pay_hold
                 | (RestrictedManaRankOn() ? SelfTapSourceHoldBit(state, a.sac_source_id) : 0ull));
+            manaoracle::AbilityTapSrcScope _ats(a.sac_source_id);   // the oracle's frontier: not a payer for itself
             if (TapForCost(state, a.cost, avail, /*for_creature=*/false))
             {
                 ApplyGraveyardReturnAbility(state, state.active_player_index, a.sac_source_id,

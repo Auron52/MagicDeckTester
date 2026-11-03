@@ -1366,3 +1366,74 @@ so neither wins by T4; the go-off is the difference). Unit suite 2,244 / 2,244; 
   chasing on its own -- a larger exact menu should never lose a line at an unlimited budget.
 * Proposal X as the general backstop: not needed for any flag on this census; the next census that shows a walk
   failure no payer rule explains is where it would start.
+
+## 14. The Dragons mana-clean pass (2026-11-03): the Haven's own {T}, and the line re-pay
+
+The mana-clean gate's first Dragons run (`pass1-dragons`: 71,000 games, seed 30000000 + game index, src 7ec55bb505a8,
+`MTG_MANA_ORACLE=2`) found 8,929 issues: ENUM-GAP 1,691, APPLY-DROP 4,164, ORACLE-GAP 3,074 (rollback census depth1
+3,504, depth2 644, depth3+ 16, need-later 973, `MTG_PAY_ROLLBACK` forced on rescuing 1,635 of the 4,164). Grouped by
+mechanism rather than by signature, three causes account for nearly all of it.
+
+**1. The oracle offered an ability's own {T} source toward its mana cost (ORACLE-GAP, 2,880 of 3,074).** Haven of the
+Spirit Dragon's rebuy is "{2}, {T}, Sacrifice this land". The engine never pays the {2} with the Haven itself (the
+payer holds it: `SelfTapSourceHoldBit`, both rebuy apply sites), so on Gruul Turf + a fresh Haven the plan {Lightning
+Bolt, rebuy} pays Bolt off the Turf, floats its {G}, finds the {2} unpayable and leaves the Haven untapped. The oracle's
+frontier table (`BuildSources`) offered the Haven's {C} toward that {2}; with one option on the table it never took
+the "no payment" branch, so every realisation tapped the Haven -- after which the rebuy no-oped anyway -- and the
+engine's outcome was never reached. The oracle was wrong (CR 602.2b / 601.2g-h: the {T} is part of the total cost;
+tapped for mana first, the permanent cannot pay it). Fixed in the oracle: the two rebuy apply sites (TurnSolver
+`apply_one`, AIEngine's executor) set `manaoracle::AbilityTapSrcScope` around the payment, the hook's frontier records
+it (`Hook::f_self_src`), and `Realize` leaves that permanent out of the frontier's table (`t_exclude_src`). Play reads
+none of it. Pinned by "an ability's own {T} source is not offered toward its mana cost" (`test_mana_oracle.cpp`).
+
+**2. The per-cast payer strands the next cast's colour, with Gruul Turf (APPLY-DROP; and ENUM-GAP through the
+enumerator's sequential walk).** Gruul Turf makes {R}{G} on one tap, and nothing in the deck spends {G}. The line pays
+only when the Turf's {G} pays a generic pip and its {R} floats into the next cast, but the per-cast payer pays each
+cast alone and keeps the Turf:
+
+* APPLY-DROP T4 {Mountain, Mind Stone, Scourge of Valkas} off Mountain, Mind Stone, Gruul Turf with Dragonspeaker
+  Shaman out: Mind Stone's {2} took a Mountain and the old Mind Stone; Scourge's {R}{R}{R} met the Turf's {R}{G} and one
+  Mountain. Pays as Turf ({G}) + old Mind Stone, then the floating {R} and both Mountains.
+* ENUM-GAP T4 {Haven, Urza's Incubator, Lathliss} (and every Dragon after an Incubator, 1,601 of the 1,691): the
+  Incubator's {3} took Mountain, the Haven's {C} and Mind Stone, so Lathliss, discounted to {R}{R} only once the
+  Incubator has resolved, met the Turf alone. The enumerator's sequential walk (`SeqWalkFixedOrder`, the same payer)
+  failed it (`ef-walk-fail`), so the plan never reached the menu.
+
+No ranking of sources can know this in general: the next bill is not even known until the reducer resolves. The fix
+is `MTG_LINE_REPAY` (DEFAULT ON; `ManaPayment.cpp` `LineRepayTry`, heurarm `LINE_REPAY`), a rollback at the point where
+the information exists. Every committed outermost payment pushes a record onto a per-thread ring: a digest of the board
+right after it (every permanent's pay fields, the floating pools, life, energy, library size) and, when the payment is
+part of a line that still owes more, its pre-payment board, bill and context (creature spell, creature ability,
+paying spell). A payment that cannot be undone field by field (a sacrifice, a graveyard, the opponent's life, haste
+mana) pushes a barrier. When an outermost payment of a line FAILS, the newest record whose digest matches the board
+is the payment that left it; if it can be undone, every minimal payment of ITS bill on ITS board (the oracle's
+`MinimalPayments`, the permanents that entered since kept out) is tried on a scratch board followed by the failing
+payment through the normal payer, and the first option that pays both is made for real. If none does, the record before
+it (depth 2: it must match the board the first one found) is undone too and the two are searched oldest first. Two
+cheap necessary conditions run before any enumeration: the AMOUNT (mana is conserved, so a bill the current board cannot
+cover by amount no re-payment can) and the joint bill of every payment involved on the oldest board (the complete
+backtracker: a sequential realisation is a joint one).
+
+Why it is sound and lossless:
+* It runs only where a payment would otherwise FAIL, changes nothing about a line that pays, and never ranks payments
+  that all pay -- the first option that makes the line is taken, the freedom the payer always had.
+* The earlier cast has already resolved, and nothing it did depended on which sources paid for it: the engine has no
+  spent-colour effect, and a payment that spent haste-tagged mana, sacrificed, moved the opponent's life or touched a
+  graveyard is a barrier. A re-made payment must leave the same life and energy the original did.
+* It is planning, not clairvoyance: the digest holds the library size, so a draw between the two payments refuses the
+  re-pay -- the later card was in hand when the earlier one was paid.
+* Executor, rollout and the enumerator's walk share the payer, so the three stay in lockstep. The record is found by the
+  board's CONTENT, not its address, so a probe on a scratch copy taken between the two payments answers as the board
+  does.
+* Not in human play (the human chose those taps), under the reference replay's tap preference, on the oracle's own
+  copies and float-only probes, or on an armed damage board.
+
+Pinned by `test_line_repay.cpp` (both shapes, each failing with the lever off, and a line short by amount left alone).
+
+**3. Not fixed here: the need-later drops (USER decision).** The census's need-later lines (973) lose a cast a
+continuation chose AFTER a draw. The top one (x193, T3 {land=Gruul Turf}): the bounce taps the Mountain ahead and
+floats {R}; the continuation cracks Mind Stone ({1}, draw) and the payer spends the floating {R} on the {1}, keeping the
+Haven -- so the post-draw Lightning Bolt has no {R}. Paying the {1} with the Haven's {C} instead keeps the {R}, but
+whether that was right depends on what the draw shows, so re-paying it after the draw is clairvoyant (the line repay
+refuses it by its library-size check). The lossless shape is a searched payment variant at a breakpoint opener's
+payment -- the LOST-FOLLOW-UP design of section 2.3 and question 1 of section 5 -- which is the USER's call.

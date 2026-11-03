@@ -1,0 +1,32 @@
+{
+  "deck": "decks/Dragons/Dragons.cod",
+  "profile": "decks/Dragons/Dragons.profile.json",
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "lands_played_this_turn": 1,
+  "battlefield": [
+    { "name": "Mountain", "controller": 0, "tapped": false },
+    { "name": "Mind Stone", "controller": 0, "tapped": false },
+    { "name": "Dragonspeaker Shaman", "controller": 0, "tapped": false },
+    { "name": "Gruul Turf", "controller": 0, "tapped": false },
+    { "name": "Haven of the Spirit Dragon", "controller": 0, "tapped": false, "sick": true }
+  ],
+  "hand": [
+    "Urza's Incubator",
+    "Glorybringer",
+    "Inferno of the Star Mounts",
+    "Lathliss, Dragon Queen"
+  ],
+  "library_filler": "Utvara Hellkite",
+  "library_size": 10,
+  "depth": 3,
+  "budget_ms": 0,
+  "max_turns": 6,
+  "comment": "MTG_LINE_REPAY (docs/design/mana-completeness-oracle.md section 14; the Dragons mana-clean ENUM-GAP, 1,601 of its 1,691 flags). Five mana on T4: Mountain, Mind Stone, Gruul Turf ({T}: {R}{G}) and a fresh Haven of the Spirit Dragon, with Dragonspeaker Shaman out. {Urza's Incubator, Inferno of the Star Mounts} pays only as the Incubator's {3} off the Turf's {G} + the Haven's {C} + Mind Stone with the Turf's {R} floating, then Inferno ({4}{R}{R} less 2 less 2 = {R}{R}) off that {R} and the Mountain. The per-cast payer spent the Mountain on the {3} and left the Turf alone for {R}{R}, and the enumerator's sequential walk (the same payer) kept the plan off the menu, so the search never saw it. With the line re-pay the walk re-makes the {3} when the Inferno's payment fails, the plan is on the menu, and the search plays it. With MTG_LINE_REPAY=0 the T4 line is Inferno alone. (The library is uncastable Hellkites so no land drop or cheap draw changes the board.)",
+  "expect_log_sequence": [
+    "T4 MAIN_1 CAST_SPELL Urza's Incubator",
+    "T4 MAIN_1 CAST_SPELL Inferno of the Star Mounts"
+  ]
+}

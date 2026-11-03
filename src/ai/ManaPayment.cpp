@@ -7923,6 +7923,326 @@ void PayRefineAfter(GameState& state, const ManaCost& cost_in, bool for_creature
 }
 } // namespace
 
+// ---- MTG_LINE_REPAY: a later cast of the line fails -> re-make the payment just before it -----------------
+//
+// THE DEFECT (the mana-clean gate, Dragons pass1: 4,164 APPLY-DROP, rollback depth 1 for 3,504 of them, and most
+// of the 1,691 ENUM-GAP -- the enumerator's sequential walk runs this same payer, so the drop keeps the plan off
+// the menu). The per-cast payer pays each cast of a line on its own; it cannot see that the NEXT cast needs the
+// colour it is about to spend. Dragons T4, {Mind Stone, Scourge of Valkas} off Mountain, Mountain, Mind Stone and
+// Gruul Turf ({T}: {R}{G}): Mind Stone's {2} took a Mountain and the old Mind Stone, and Scourge's {R}{R}{R} met
+// Gruul Turf's {R}{G} and one Mountain. The line pays when the Turf's {G} and the old Mind Stone pay the {2} and
+// the Turf's {R} floats into Scourge. Urza's Incubator ({3}) before a Dragon it discounts to {R}{R} is the same
+// shape: the payer spends a Mountain on the {3} and keeps the Turf, the one source that makes only one {R}.
+// No ranking can know this in general (the next cast's bill is not even known until the reducer resolves).
+//
+// THE REPAIR is a depth-1 rollback, decided where the information exists: when an outermost payment of a line
+// FAILS, and the payment made just before it is still exactly as it left the board (nothing tapped, untapped,
+// floated, drawn or lost in between -- a digest over the mana fields, the library and the life total, taken
+// right after that payment), that payment is re-made. Every minimal payment of ITS bill on ITS board (the mana
+// oracle's table: MinimalPayments, every option verified; the permanents that have entered since stay out of
+// it) is tried on a scratch board, followed by this payment through the normal payer; the first that pays both
+// is made for real -- the earlier payment re-made in place -- and this one is paid again. The earlier cast has
+// resolved by then; nothing it did depended on which sources paid for it (no spent-colour effect exists in the
+// engine, and a payment that spent haste-tagged mana, sacrificed a source, moved the opponent's life or touched
+// a graveyard is never recorded), so the line is exactly the one a player who paid the earlier cast that way
+// would have played. It is planning, not clairvoyance: the digest's library size refuses a draw in between, so
+// the later card was in hand when the earlier one was paid.
+//
+// LOSSLESS BY CONSTRUCTION. It runs only where the payment would otherwise FAIL (the cast is dropped), it changes
+// nothing about a line that pays, and it never ranks payments that all pay: the first option that makes BOTH
+// payments is taken -- the same "any payment that realises the line" freedom the payer always had. Executor,
+// rollout and the enumerator's walk share this payer, so the three stay in lockstep (the record is found by the
+// board's CONTENT, so a scratch copy taken between the two payments -- a probe -- answers as the board does).
+// Two cheap necessary conditions run first: the amount (mana is conserved, so a bill the current board cannot
+// cover by amount no re-payment can), and the joint bill of both payments on the earlier board (the complete
+// backtracker; a sequential realisation is a joint one).
+//
+// Not here: human play (the human chose those taps), the reference replay's tap preference, the mana oracle's own
+// copies and float-only probes, an armed damage board, a payment the earlier one cannot be undone around.
+namespace
+{
+std::atomic<long long> g_lr_record{0}, g_lr_try{0}, g_lr_amount{0}, g_lr_joint{0}, g_lr_fired{0}, g_lr_fired_d2{0},
+                       g_lr_fail{0};
+struct LineRepayStats
+{
+    ~LineRepayStats()
+    {
+        if (!EnvOn("MTG_LINE_REPAY_STATS")) { return; }
+        std::fprintf(stderr, "=== LINE REPAY: recorded=%lld tried=%lld amount_short=%lld joint_short=%lld fired=%lld "
+                     "(depth2=%lld) commit_failed=%lld ===\n", g_lr_record.load(), g_lr_try.load(), g_lr_amount.load(),
+                     g_lr_joint.load(), g_lr_fired.load(), g_lr_fired_d2.load(), g_lr_fail.load());
+    }
+} g_lr_stats;
+
+// The mana-relevant content of `s` over its first `n` permanents: what a payment and nothing else may change
+// between the earlier payment and this one. Equal digests = the earlier payment is still the last thing that
+// touched the board's mana.
+std::uint64_t LineRepayDigest(const GameState& s, std::size_t n)
+{
+    std::uint64_t h = 0xcbf29ce484222325ULL;
+    auto mix = [&](std::uint64_t v) { h ^= v + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2); };
+    const int a = s.active_player_index;
+    mix(static_cast<std::uint64_t>(s.TurnSeq())); mix(static_cast<std::uint64_t>(a));
+    mix(static_cast<std::uint64_t>(n));
+    for (std::size_t i = 0; i < n; ++i)
+    {
+        const Permanent& p = s.battlefield[i];
+        int dep = -1;
+        for (const Counter& c : p.counters) { if (c.type == Counter::Type::Depletion) { dep = c.count; break; } }
+        mix(static_cast<std::uint64_t>(p.card.m_number) * 4u + (p.tapped ? 1u : 0u) + (p.controller_index == a ? 2u : 0u));
+        mix(static_cast<std::uint64_t>(static_cast<std::uint32_t>(p.storage_counters))
+            | (static_cast<std::uint64_t>(static_cast<std::uint32_t>(p.charge_counters)) << 32));
+        mix(static_cast<std::uint64_t>(static_cast<std::uint32_t>(dep)));
+    }
+    auto pool = [&](const ManaPool& f)
+    {
+        mix(static_cast<std::uint64_t>(static_cast<std::uint16_t>(f.white))
+            | (static_cast<std::uint64_t>(static_cast<std::uint16_t>(f.blue)) << 16)
+            | (static_cast<std::uint64_t>(static_cast<std::uint16_t>(f.black)) << 32)
+            | (static_cast<std::uint64_t>(static_cast<std::uint16_t>(f.red)) << 48));
+        mix(static_cast<std::uint64_t>(static_cast<std::uint16_t>(f.green))
+            | (static_cast<std::uint64_t>(static_cast<std::uint16_t>(f.colorless)) << 16)
+            | (static_cast<std::uint64_t>(static_cast<std::uint16_t>(f.wild)) << 32)
+            | (static_cast<std::uint64_t>(static_cast<std::uint16_t>(f.snow_units)) << 48));
+        mix(static_cast<std::uint64_t>(static_cast<std::uint16_t>(f.wild_c))
+            | (static_cast<std::uint64_t>(static_cast<std::uint16_t>(f.wild_phantom)) << 16)
+            | (static_cast<std::uint64_t>(static_cast<std::uint16_t>(f.wild_conv)) << 32));
+    };
+    pool(s.floating_mana); pool(s.floating_creature_mana); pool(s.floating_bigspell_mana);
+    mix(static_cast<std::uint64_t>(static_cast<std::uint32_t>(s.floating_haste_c)));
+    mix(static_cast<std::uint64_t>(static_cast<std::uint32_t>(s.players[a].life))
+        | (static_cast<std::uint64_t>(static_cast<std::uint32_t>(s.players[a].energy_counters)) << 32));
+    mix(static_cast<std::uint64_t>(s.players[a].library.size()));
+    return h;
+}
+
+struct LineRepayRec
+{
+    bool          live = false;
+    bool          undoable = false;   // false: a BARRIER -- the last payment on that board, which cannot be re-made
+    std::uint64_t post = 0;       // LineRepayDigest right after the payment
+    std::size_t   n    = 0;       // battlefield size then (permanents past it entered later)
+    PayRefineSnap pre;            // the board as the payment found it
+    ManaCost      cost;
+    bool          for_creature = false;
+    bool          creature_ability = false;
+    bool          has_spell = false;
+    Card          spell;
+};
+// A few per thread, found by CONTENT (the digest), newest first -- not by the board's address, so a copy of the
+// board taken after the payment finds it too. EVERY committed outermost payment pushes one (a payment that cannot
+// be re-made pushes a barrier), so the newest record whose digest matches a board is the payment that left it.
+constexpr int kLineRepayRing = 16;
+thread_local LineRepayRec t_lr_ring[kLineRepayRing];
+thread_local int          t_lr_next = 0;
+thread_local bool         t_lr_active = false;   // inside a re-payment's own trials: no recording, no nesting
+
+bool LineRepayContext(const GameState& s)
+{
+    return LineRepayOn() && !t_lr_active && !t_pay_refining && !manaoracle::t_float_only && !s.dmg_events_armed
+        && !HumanPlayActive() && g_play_tap_pref_chooser == nullptr;
+}
+
+// Record a committed outermost payment. `pre` (null = a barrier) is the board before it, given when the payment is
+// part of a line that still owes more after it.
+void LineRepayRecord(const GameState& s, const PayRefineSnap* pre, const ManaCost& cost, bool for_creature)
+{
+    const int a = s.active_player_index;
+    LineRepayRec& r = t_lr_ring[t_lr_next];
+    t_lr_next = (t_lr_next + 1) % kLineRepayRing;
+    r.live = true;
+    r.n    = s.battlefield.size();
+    r.post = LineRepayDigest(s, r.n);
+    // A sacrifice, a graveyard, a drip or haste mana is not undoable field by field: a barrier.
+    r.undoable = pre != nullptr && s.battlefield.size() == pre->bf.size() && s.players[a].graveyard.size() == pre->gy
+              && s.players[1 - a].life == pre->opp_life && s.opponent_lost_life_this_turn == pre->oll
+              && s.floating_haste_c == pre->fhc;
+    if (!r.undoable) { return; }
+    r.pre  = *pre;
+    r.cost = cost;
+    r.for_creature = for_creature;
+    r.creature_ability = PayingCreatureAbility();
+    r.has_spell = PayingSpellCard() != nullptr;
+    if (r.has_spell) { r.spell = *PayingSpellCard(); }
+    g_lr_record.fetch_add(1, std::memory_order_relaxed);
+}
+
+// The newest record whose digest matches `s` and is not one of `skip` (a chain does not revisit a payment). A barrier
+// (the last payment on that board cannot be re-made) ends the search: null.
+const LineRepayRec* LineRepayFind(const GameState& s, const LineRepayRec* const* skip = nullptr, int nskip = 0)
+{
+    for (int k = 1; k <= kLineRepayRing; ++k)
+    {
+        const LineRepayRec& r = t_lr_ring[(t_lr_next - k + kLineRepayRing) % kLineRepayRing];
+        if (!r.live || s.battlefield.size() < r.n) { continue; }
+        bool used = false;
+        for (int i = 0; i < nskip; ++i) { if (skip[i] == &r) { used = true; } }
+        if (used) { continue; }
+        if (LineRepayDigest(s, r.n) == r.post) { return r.undoable ? &r : nullptr; }
+    }
+    return nullptr;
+}
+
+// `b` back to the board the earlier payment found: its pay fields over the first r.n permanents, the floating
+// pools, life, energy and the payment ledger (the digest proved each is still what the payment left). The
+// permanents that entered since are tapped: a payment cannot be made with a source that was not there.
+void LineRepayUndo(GameState& b, const LineRepayRec& r)
+{
+    const int a = b.active_player_index;
+    RestorePayFields(b.battlefield, r.pre.bf);
+    for (std::size_t i = 0; i < r.n && i < r.pre.charge.size(); ++i) { b.battlefield[i].charge_counters = r.pre.charge[i]; }
+    b.floating_mana = r.pre.fm; b.floating_creature_mana = r.pre.fcm; b.floating_bigspell_mana = r.pre.fbm;
+    b.floating_haste_c = r.pre.fhc;
+    b.players[a].life = r.pre.life; b.players[a].energy_counters = r.pre.energy;
+    b.pay_ledger = r.pre.ledger;
+    for (std::size_t i = r.n; i < b.battlefield.size(); ++i) { b.battlefield[i].tapped = true; }
+}
+
+// The earlier payment made with option `o` on `b` (already undone): its taps, its set-aside, its bill float-only,
+// in the earlier payment's own context (creature ability, paying spell). It must leave the same life and energy
+// the engine's payment left (the earlier cast resolved on those).
+bool LineRepayRemake(GameState& b, const LineRepayRec& r, const manaoracle::PayOption& o, int life_post, int energy_post)
+{
+    std::optional<CreatureAbilityPayScope> cap;
+    if (r.creature_ability) { cap.emplace(); }
+    SpellSubtypePayScope ssp(r.has_spell ? &r.spell : nullptr);
+    if (!manaoracle::PerformPayTaps(b, o)) { return false; }
+    ManaPool& f = b.floating_mana;
+    const ManaPool& st = o.stash;
+    if (f.white < st.white || f.blue < st.blue || f.black < st.black || f.red < st.red || f.green < st.green
+        || f.colorless < st.colorless || b.floating_haste_c < o.stash_haste)
+    { return false; }
+    f.white -= st.white; f.blue -= st.blue; f.black -= st.black; f.red -= st.red; f.green -= st.green;
+    f.colorless -= st.colorless;
+    b.floating_haste_c -= o.stash_haste;
+    f.snow_units = std::min(f.snow_units, f.Total());
+    manaoracle::t_float_only = true;
+    const bool paid = TapForCostShared(b, r.cost, r.for_creature, nullptr, true);
+    manaoracle::t_float_only = false;
+    f.white += st.white; f.blue += st.blue; f.black += st.black; f.red += st.red; f.green += st.green;
+    f.colorless += st.colorless;
+    b.floating_haste_c += o.stash_haste;
+    const int a = b.active_player_index;
+    return paid && b.players[a].life == life_post && b.players[a].energy_counters == energy_post;
+}
+
+// THE CHAIN. chain[0] is the payment just before this one, chain[1] the one before that (depth 2: the census put
+// 644 of the Dragons pass's 4,164 lost lines there -- the cast two back took the colour too). Undoing them newest
+// first gives the board chain[d-1] found; the payments are then re-made oldest first, each later entrant released
+// as it was when the next payment found it.
+constexpr int kLineRepayMaxDepth = 2;
+struct LineRepayChain
+{
+    const LineRepayRec* rec[kLineRepayMaxDepth] = {};
+    std::vector<PermPaySnap> now_bf;   // the current board's pay fields (what the newest entrants go back to)
+    int life_now = 0, energy_now = 0;
+    // The life / energy the board held right after chain[k] paid: what a re-made chain[k] must leave too.
+    int LifePost(int k) const   { return k == 0 ? life_now : rec[k - 1]->pre.life; }
+    int EnergyPost(int k) const { return k == 0 ? energy_now : rec[k - 1]->pre.energy; }
+    // After chain[k] is re-made: the permanents that entered between it and the next payment come back as the next
+    // payment found them (for k = 0, as they are now).
+    void Release(GameState& b, int k) const
+    {
+        const std::size_t lo = rec[k]->n;
+        const std::vector<PermPaySnap>& src = k == 0 ? now_bf : rec[k - 1]->pre.bf;
+        const std::size_t hi = std::min(b.battlefield.size(), src.size());
+        for (std::size_t i = lo; i < hi; ++i) { b.battlefield[i].tapped = src[i].tapped; }
+    }
+};
+
+// Depth-first over the chain's options, oldest payment first; `b` has chain[0..k] undone. On success `picked[j]` is
+// the option chain[j] is re-made with. `try_now` pays the failing bill on the fully re-made board.
+bool LineRepaySearch(const LineRepayChain& ch, int k, const GameState& b, std::vector<manaoracle::PayOption>& picked,
+                     const std::function<bool(GameState&)>& try_now)
+{
+    const LineRepayRec& r = *ch.rec[k];
+    const std::vector<manaoracle::PayOption> opts =
+        manaoracle::MinimalPayments(b, r.cost, r.for_creature, nullptr, r.creature_ability, /*whole_float=*/false,
+                                    r.has_spell ? &r.spell : nullptr);
+    for (const manaoracle::PayOption& o : opts)
+    {
+        RampScratch t(b);
+        GameState& nb = t.Board();
+        if (!LineRepayRemake(nb, r, o, ch.LifePost(k), ch.EnergyPost(k))) { continue; }
+        ch.Release(nb, k);
+        picked[static_cast<std::size_t>(k)] = o;
+        if (k == 0 ? try_now(nb) : LineRepaySearch(ch, k - 1, nb, picked, try_now)) { return true; }
+    }
+    return false;
+}
+
+// The payment of `cost_in` on `state` just failed. Re-make the line's previous payment (or the two before it) so
+// that this one pays; true = re-made on `state` (`undo` holds the board as it was; the caller pays `cost_in`
+// again, which then succeeds).
+bool LineRepayTry(GameState& state, const ManaCost& cost_in, bool for_creature, ManaPool* available,
+                  bool honor_legacy_cco, PayRefineSnap& undo)
+{
+    LineRepayChain ch;
+    ch.rec[0] = LineRepayFind(state);
+    if (ch.rec[0] == nullptr) { return false; }
+    g_lr_try.fetch_add(1, std::memory_order_relaxed);
+    const int a = state.active_player_index;
+    // Mana is conserved: however the earlier payments are re-made, they leave exactly what they leave now in
+    // AMOUNT, so a bill this board cannot cover by amount stays uncoverable.
+    if (!PaymentManaCovers(state, for_creature, cost_in.ManaValue() - static_cast<int>(state.floating_mana.Total())))
+    { g_lr_amount.fetch_add(1, std::memory_order_relaxed); return false; }
+    struct Active { Active() { t_lr_active = true; } ~Active() { t_lr_active = false; } } _active;
+    RevealLogPause _quiet;   // trials on scratch boards: no game-log line, no chooser
+    SnapPayFields(state.battlefield, ch.now_bf);
+    ch.life_now = state.players[a].life;
+    ch.energy_now = state.players[a].energy_counters;
+    auto try_now = [&](GameState& b) { return TapForCostSharedDiag(b, cost_in, for_creature, nullptr, honor_legacy_cco); };
+    // Depth 1, then depth 2: each deeper attempt only after the shallower one found nothing.
+    RampScratch undone_scr(state);
+    GameState& undone = undone_scr.Board();
+    std::vector<manaoracle::PayOption> picked;
+    for (int depth = 1; depth <= kLineRepayMaxDepth; ++depth)
+    {
+        if (depth > 1)
+        {
+            // The record of the payment before: it must match the board the newer one found, i.e. `undone`.
+            ch.rec[depth - 1] = LineRepayFind(undone, ch.rec, depth - 1);
+            if (ch.rec[depth - 1] == nullptr) { break; }
+        }
+        LineRepayUndo(undone, *ch.rec[depth - 1]);
+        // The joint bill of every payment re-made plus this one, on the oldest board with the later entrants
+        // released (a rock an earlier cast put down can fund a later bill): a sequential realisation is a joint
+        // one, so no joint payment -> none at all at this depth.
+        {
+            RampScratch j(undone);
+            for (int k = depth - 1; k >= 0; --k) { ch.Release(j.Board(), k); }
+            ManaCost all = cost_in;
+            bool fc = for_creature;
+            for (int k = 0; k < depth; ++k) { AddManaCost(all, ch.rec[k]->cost); fc = fc || ch.rec[k]->for_creature; }
+            if (!PaymentManaCovers(j.Board(), fc, all.ManaValue() - static_cast<int>(j.Board().floating_mana.Total()))
+                || !TapForCostBacktrack(j.Board(), all, fc, j.Board().floating_mana))
+            { g_lr_joint.fetch_add(1, std::memory_order_relaxed); continue; }
+        }
+        picked.assign(static_cast<std::size_t>(depth), manaoracle::PayOption{});
+        if (!LineRepaySearch(ch, depth - 1, undone, picked, try_now)) { continue; }
+        // Found: re-make the chain on the real board that way, oldest first.
+        undo.Take(state, available);
+        bool made = true;
+        for (int k = 0; k < depth; ++k) { LineRepayUndo(state, *ch.rec[k]); }
+        for (int k = depth - 1; k >= 0 && made; --k)
+        {
+            made = LineRepayRemake(state, *ch.rec[k], picked[static_cast<std::size_t>(k)], ch.LifePost(k), ch.EnergyPost(k));
+            ch.Release(state, k);
+        }
+        if (!made)
+        {
+            g_lr_fail.fetch_add(1, std::memory_order_relaxed);
+            undo.Restore(state, available);
+            return false;
+        }
+        g_lr_fired.fetch_add(1, std::memory_order_relaxed);
+        if (depth > 1) { g_lr_fired_d2.fetch_add(1, std::memory_order_relaxed); }
+        return true;
+    }
+    return false;
+}
+} // namespace
+
 bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creature,
                       ManaPool* available, bool honor_legacy_cco)
 {
@@ -7949,6 +8269,11 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
                      && g_seed_pay_split == 0 && PayRefineOn();
     std::optional<PayRefineSnap> refine_pre;
     if (refine) { refine_pre.emplace(); refine_pre->Take(state, available); }
+    // MTG_LINE_REPAY (above): an outermost payment inside a line that still owes something. Its pre-payment board
+    // is kept (the refine's when that is taken) so the payment can be re-made if the line's next one fails.
+    const bool line_ctx = t_pay_nest == 1 && g_line_unpaid_cost.ManaValue() > 0 && LineRepayContext(state);
+    std::optional<PayRefineSnap> line_pre;
+    if (line_ctx && !refine_pre) { line_pre.emplace(); line_pre->Take(state, available); }
     bool ok;
     if (!state.dmg_events_armed)
     { ok = TapForCostSharedDiag(state, cost_in, for_creature, available, honor_legacy_cco); }
@@ -7976,7 +8301,29 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
         // so the re-pay is undone too (its own taps were restored by the failure path above).
         if (!ok) { payroll::UndoLast(state); }
     }
+    // MTG_LINE_REPAY: the line's previous payment re-made so that this one pays (LineRepayTry), then this one paid.
+    if (!ok && line_ctx)
+    {
+        PayRefineSnap undo;
+        if (LineRepayTry(state, cost_in, for_creature, available, honor_legacy_cco, undo))
+        {
+            if (available != nullptr) { *available = AvailableManaPool(state); }
+            (refine_pre ? *refine_pre : *line_pre).Take(state, available);
+            ok = TapForCostSharedDiag(state, cost_in, for_creature, available, honor_legacy_cco);
+            if (!ok)
+            {
+                // The trial on the scratch board paid it; the real board did not: keep the game as it was.
+                g_lr_fail.fetch_add(1, std::memory_order_relaxed);
+                undo.Restore(state, available);
+            }
+        }
+    }
     if (ok && refine_pre) { PayRefineAfter(state, cost_in, for_creature, available, honor_legacy_cco, *refine_pre); }
+    if (ok && t_pay_nest == 1 && LineRepayContext(state))
+    {
+        const bool undoable = line_ctx && RampLaterBill(cost_in).ManaValue() > 0;
+        LineRepayRecord(state, undoable ? (refine_pre ? &*refine_pre : &*line_pre) : nullptr, cost_in, for_creature);
+    }
     return ok;
 }
 
@@ -8093,6 +8440,7 @@ bool manaoracle::ScriptedPay(GameState& state, const ManaCost& cost_in, bool for
         // ...and the spell it pays for (the cast site's scope), so the table can keep a subtype restriction.
         h.f_has_spell = PayingSpellCard() != nullptr;
         if (h.f_has_spell) { h.f_spell = *PayingSpellCard(); }
+        h.f_self_src = t_ability_tap_src;   // the ability's own {T} source pays none of its mana (ManaOracle.h)
         return false;
     }
     const PayOption& opt = h.script[h.next++];

@@ -65745,6 +65745,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // now); lockstep with the executor's mirror in AIEngine.
             dmgev::PayHoldScope _self_hold(dmgev::t_pay_hold
                 | (RestrictedManaRankOn() ? SelfTapSourceHoldBit(state, a.sac_source_id) : 0ull));
+            manaoracle::AbilityTapSrcScope _ats(a.sac_source_id);   // the oracle's frontier: not a payer for itself
             if (TapForCostDirect(state, a.cost, /*for_creature=*/false))
             {
                 ApplyGraveyardReturnAbility(state, state.active_player_index, a.sac_source_id,

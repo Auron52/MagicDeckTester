@@ -83,6 +83,7 @@ namespace manaoracle
         // can apply a subtype restriction -- Giada, Font of Hope's {W} "only to cast an Angel spell".
         bool                   f_has_spell = false;
         Card                   f_spell;
+        int                    f_self_src = 0;          // t_ability_tap_src at the frontier: not a source for it
         int                    f_tapahead = 0;          // > 0: the frontier is a TAP-AHEAD (up to N sources)
         bool                   f_lands_only = true;     // ...of lands only (an ETB "untap N lands")
         // Every newly tapped mana source the script tapped (Card::m_number), for the unscripted-tap check.
@@ -104,6 +105,21 @@ namespace manaoracle
     };
 
     extern thread_local Hook* t_hook;
+    // THE ABILITY'S OWN {T} SOURCE (Haven of the Spirit Dragon's "{2}, {T}, Sacrifice this land: ..."). Set by
+    // the activation's apply sites (TurnSolver's apply_one, AIEngine's executor) around the payment of the
+    // ability's mana cost: the card number of the permanent whose {T} is part of that cost, which therefore
+    // cannot also tap for mana toward it (CR 602.2b, 601.2g-h: the {T} is paid as part of the total cost --
+    // tapped for mana first, it can no longer pay the {T}). The oracle's frontier records it and leaves that
+    // permanent out of the payment table. 0 = none. Read by the oracle only; play never reads it.
+    extern thread_local int   t_ability_tap_src;
+    struct AbilityTapSrcScope
+    {
+        int saved;
+        explicit AbilityTapSrcScope(int num) : saved(t_ability_tap_src) { t_ability_tap_src = num; }
+        ~AbilityTapSrcScope() { t_ability_tap_src = saved; }
+        AbilityTapSrcScope(const AbilityTapSrcScope&)            = delete;
+        AbilityTapSrcScope& operator=(const AbilityTapSrcScope&) = delete;
+    };
     // The human "**" sequence step being applied (TurnSolver's v2 walk: the index of the queued step,
     // the land included, that is being dispatched); -1 outside one. Written by the walk, read only by the
     // oracle's hook, so a payment can be placed where the viewer's pre-tap would have to sit.

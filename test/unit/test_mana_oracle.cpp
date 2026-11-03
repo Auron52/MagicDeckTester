@@ -737,3 +737,34 @@ TEST_CASE("ENUM-GAP: an equip the Equipment's own entry trigger already made sta
     CHECK(manaoracle::EnumGapVerdict(s, /*pre=*/true, with_equip, { casts }).empty());
     CHECK(manaoracle::EnumGapVerdict(s, /*pre=*/true, with_equip, {}) == "ENUM-GAP");
 }
+
+// THE ABILITY'S OWN {T} SOURCE PAYS NONE OF ITS MANA (Dragons pass1, 2,880 of 3,074 ORACLE-GAPs; ManaOracle.h
+// t_ability_tap_src). Haven of the Spirit Dragon: "{2}, {T}, Sacrifice this land: Return target Dragon creature card
+// from your graveyard to your hand." Board Gruul Turf ({T}: {R}{G}) and a fresh Haven; the plan {Lightning Bolt, the
+// rebuy}. The engine pays Bolt off the Turf, floats its {G}, and cannot pay the rebuy's {2}: the Haven owes its {T}
+// to the ability (the payer holds it), so the rebuy does nothing and the {G} still floats. The oracle's table offered
+// the Haven's own {C} toward the {2}, and with that one option on the table it never reached the engine's outcome --
+// every realisation tapped the Haven, after which the rebuy no-oped anyway.
+TEST_CASE("mana oracle: an ability's own {T} source is not offered toward its mana cost (Haven of the Spirit Dragon)")
+{
+    EnsureOracleCards();
+    GameState s = Board({ "Gruul Turf", "Haven of the Spirit Dragon" });
+    s.battlefield[1].entered_this_turn = true;
+    s.players[0].lands_played_this_turn = 1;
+    s.players[0].life = 20;
+    s.players[1].life = 20;
+    { Card c = CardDatabase::Instance().Lookup("Lightning Bolt")->card; c.m_number = 100; s.players[0].hand.push_back(c); }
+    { Card c = CardDatabase::Instance().Lookup("Glorybringer")->card; c.m_number = 150; s.players[0].graveyard.push_back(c); }
+    for (int i = 0; i < 20; ++i)
+    { Card c = CardDatabase::Instance().Lookup("Mountain")->card; c.m_number = 300 + i; s.players[0].library.push_back(c); }
+    Action bolt = CastAction(s, "Lightning Bolt");
+    Action rebuy;
+    rebuy.kind           = Action::Kind::GraveyardReturnAbility;
+    rebuy.card_name      = CardDatabase::Instance().Lookup("Haven of the Spirit Dragon")->card.m_name;
+    rebuy.hand_index     = -1;
+    rebuy.cost           = Cost(2);
+    rebuy.sac_source_id  = 2;
+    rebuy.tutor_target   = "Glorybringer";
+    rebuy.is_noncreature = true;
+    CHECK(manaoracle::CoversEngineOutcome(s, /*pre=*/true, PlanOf({ bolt, rebuy })));
+}
