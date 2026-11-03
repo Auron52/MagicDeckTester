@@ -10691,6 +10691,91 @@ const char* VialProvider::CastOrderTierName(int rank) const
     }
 }
 
+// ---- SliversProvider (slivers_vial) -------------------------------------------
+
+// MTG_SLIVERS_ORDER -- the slivers_vial TOTAL cast order. Agent draft 2026-10-14
+// (docs/design/cast-order-drafts-2026-10-14/slivers_vial.md section 3), USER-APPROVED 2026-11-03 with one
+// change, every card in its own row: "That Slivers order is fine, except that I would separate everything
+// into its own row. Making it a full order is ideal. But yeah, only Hatchery and Thrumming Hivepool care
+// about the order here." DEFAULT ON; =0 => VialProvider::CastOrderRank (the generic tiers: every creature
+// tied at 10, Vial and Hivepool tied at 20, ties in plan order). Per-job overridable (heurarm) so both arms
+// run in ONE pooled batch. All main 1 (the deck is single-main).
+//   land > Hatchery > Muscle > Predatory > Sinew > Leeching > Galerider > Striking > Plated > Crystalline
+//   > Hibernation > Cloudshredder > Aether Vial > Thrumming Hivepool
+// The two positions that change play are the role slots, read off PARAMS:
+//    1 Hatchery Sliver     grants_replicate_to_subtypes: every Sliver spell cast after it has replicate.
+//   13 Thrumming Hivepool  affinity_for_subtype: costs 1 less per Sliver already out (casts, Vial puts and
+//                          replicate copies), so it goes LAST; its haste / double strike are static.
+//   12 Aether Vial         upkeep_adds_charge: does nothing the turn it is cast and is not a Sliver.
+// Slots 2-11 are a tie-break kept TOTAL as the USER asked, in the draft's sequence (anthems, the drain, the
+// one-pip bodies, the two-pip bodies, the haste grant), by name. A card the deck does not hold falls to
+// 200 + its generic rank, after every card it does; two such cards order by NAME.
+static bool SliversOrderEnabled()
+{
+    static const bool on = EnvOn("MTG_SLIVERS_ORDER", true);   // DEFAULT ON (USER-approved); =0 -> generic
+    return heurarm::Flag(heurarm::SLIVERS_ORDER, on);
+}
+
+static constexpr int kSliversUnlisted = 200;
+int SliversProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
+{
+    if (!SliversOrderEnabled()) { return VialProvider::CastOrderRank(s, def); }
+    const CardParams& p = def.params;
+    if (p.grants_replicate_to_subtypes) { return 1; }    // Hatchery Sliver
+    if (p.affinity_for_subtype)         { return 13; }   // Thrumming Hivepool
+    if (p.upkeep_adds_charge)           { return 12; }   // Aether Vial
+    static const std::pair<const char*, int> kRow[] = {
+        {"Muscle Sliver", 2},     {"Predatory Sliver", 3},   {"Sinew Sliver", 4},   {"Leeching Sliver", 5},
+        {"Galerider Sliver", 6},  {"Striking Sliver", 7},    {"Plated Sliver", 8},  {"Crystalline Sliver", 9},
+        {"Hibernation Sliver", 10}, {"Cloudshredder Sliver", 11},
+    };
+    for (const auto& [name, r] : kRow) { if (def.card.m_name == name) { return r; } }
+    return kSliversUnlisted + VialProvider::CastOrderRank(s, def);
+}
+
+bool SliversProvider::CastOrderTotalByName() const { return SliversOrderEnabled(); }
+
+const char* SliversProvider::CastOrderTierName(int rank) const
+{
+    if (!SliversOrderEnabled()) { return VialProvider::CastOrderTierName(rank); }
+    switch (rank)
+    {
+        case 1:  return "REPLICATE GRANTER (Hatchery Sliver): first -- every later Sliver spell has replicate";
+        case 2:  return "ANTHEM (Muscle Sliver)";
+        case 3:  return "ANTHEM (Predatory Sliver)";
+        case 4:  return "ANTHEM (Sinew Sliver)";
+        case 5:  return "ATTACK DRAIN (Leeching Sliver)";
+        case 6:  return "ONE-PIP BODY (Galerider Sliver)";
+        case 7:  return "ONE-PIP BODY (Striking Sliver)";
+        case 8:  return "ONE-PIP BODY (Plated Sliver)";
+        case 9:  return "TWO-PIP BODY (Crystalline Sliver)";
+        case 10: return "TWO-PIP BODY (Hibernation Sliver)";
+        case 11: return "HASTE GRANT (Cloudshredder Sliver): static, so its slot changes no attack";
+        case 12: return "AETHER VIAL: idle the turn it is cast, not a Sliver";
+        case 13: return "AFFINITY FOR SLIVERS (Thrumming Hivepool): LAST -- every Sliver cast, put or copied first";
+        default: break;
+    }
+    return rank >= kSliversUnlisted ? "NOT IN THE SLIVERS ORDER: after every listed card, by name" : nullptr;
+}
+
+// MTG_SLIVERS_REPLICATE_TOPK -- the USER's replicate prune (2026-11-03): "we probably don't need to consider
+// every number of copies. Previously we would just try the max remaining mana which seems pretty solid from a
+// heuristic prune perspective. But yes, we don't need duplicates." DEFAULT ON; =0 => every enumerated count.
+bool SliversProvider::ReplicateTopCountOnly(const GameState&) const
+{
+    static const bool on = EnvOn("MTG_SLIVERS_REPLICATE_TOPK", true);
+    return heurarm::Flag(heurarm::SLIVERS_REPLICATE_TOPK, on);
+}
+
+// MTG_SLIVERS_REPLICATE_MANLAND -- an AGENT amendment to the USER's top-count prune (2026-11-03), measured, for the
+// USER's ruling: every slower game of the top-count A/B was "a one-pip Sliver with NO copy, the spare mana animating
+// Mutavault" (TurnSolver.cpp, THE MANLAND RESERVE). DEFAULT OFF: the USER's rule as stated stands until they answer.
+bool SliversProvider::ReplicateManlandReserve(const GameState&) const
+{
+    static const bool on = EnvOn("MTG_SLIVERS_REPLICATE_MANLAND", false);
+    return heurarm::Flag(heurarm::SLIVERS_REPLICATE_MANLAND, on);
+}
+
 // =================================================================================================
 // ---- THE AETHER-VIAL FAMILY'S CLEANUP DISCARD: the shared 3-turn CURVE FILL ----------------------
 // =================================================================================================
@@ -21086,6 +21171,7 @@ namespace
     const AntiLifegainProvider   g_antilife;
     const TreasureHuntProvider   g_treasure;
     const VialProvider           g_vial;
+    const SliversProvider        g_slivers;
     const HinataProvider         g_hinata;
     const BurnProvider           g_burn;
     const MidrangeBurnProvider   g_midrange_burn;
@@ -23206,6 +23292,7 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // Archetype detection by card params (same shape as GoldFishRunner::DeckUsesSecondMain).
     // Order matters only if a deck mixed signatures; today each is exclusive (verified).
     bool anti = false, th = false, vial = false, hinata = false, burn = false, dragonstorm = false;
+    bool slivers = false;   // Hatchery Sliver / Thrumming Hivepool: SliversProvider, inside `vial`
     bool merfolk = false; // Image, Tide Shaper, and Spreading Seas carry independent gated signatures.
     bool midrange_burn = false;
     bool goblin = false, gift = false, fivec = false, mirrorwing = false, equipment = false;
@@ -23853,6 +23940,7 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
             th = true;
         }
         if (p.upkeep_adds_charge) { vial = true; }
+        if (p.grants_replicate_to_subtypes || p.affinity_for_subtype) { slivers = true; }   // SliversProvider
 
         // Snow midrange. Signature = Snow-only gated params, OR'd across FOUR different cards
         // (Abominable Treefolk's CDA, Marit Lage's Slumber's threshold, Rimefeather Owl's
@@ -24077,6 +24165,7 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // is the only shipping list that resolves here; a NEW Vial deck that lands on this branch would
     // inherit that rule -- param-keyed and with derived land targets, but authored for Slivers -- so
     // give such a deck its own provider (the always-own-a-provider rule) rather than riding this one.
+    if (vial && slivers) { return g_slivers; }
     if (vial) { return g_vial; }
     if (burn && midrange_burn) { return g_midrange_burn; }
     if (burn) { return g_burn; }

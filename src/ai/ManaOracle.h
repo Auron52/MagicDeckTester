@@ -303,6 +303,13 @@ namespace manaoracle
     // realisation is no verdict) -- the census's own reading of I1.
     bool CoversEngineOutcome(const GameState& state, bool pre, const TurnSolver::Plan& plan, bool scripted_only = false);
 
+    // THE PER-PLAN AUDIT (AuditDecision's AuditPlan) of one plan against `menu` (its same-actions siblings are the
+    // full entries of `menu` with the same actions; `plan` itself need not be in it): every class it would emit, in
+    // order (empty = no flag). For the unit tests that pin a drop's cover rules. Quiet (nothing is counted or
+    // printed); copies only.
+    std::vector<std::string> PlanVerdict(const GameState& state, bool pre, const TurnSolver::Plan& plan,
+                                         const std::vector<TurnSolver::Plan>& menu);
+
     // THE ENUM-GAP VERDICT for one plan a mana gate kept off `menu` (AuditDecision's per-plan check), for the unit
     // tests that pin its false-positive rules: the class it would report ("ENUM-GAP", "HIDDEN-INFO", a
     // "DOMINATED-*"), or "" for none. `observed` (optional): the rest of the observe-mode enumeration -- the plans

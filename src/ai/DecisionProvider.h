@@ -3543,6 +3543,21 @@ public:
         return {};
     }
 
+    // ReplicateTopCountOnly -- a PRUNE over whole plans, the per-plan form ReplicateCounts cannot
+    // express: of the plans EnumeratePlans keeps that differ ONLY in their pinned replicate counts,
+    // search just the one whose counts, read in CAST ORDER, are largest -- "as many copies as the mana
+    // left after the plan's other casts pays", the earliest-cast replicate first. Every member of the
+    // group is a plan the enumeration already found payable, so the survivor is a real line and the
+    // count is the plan's own (the whole-turn bill priced it, Hivepool's affinity for the copies
+    // included), not a resolution-time greedy. LOSSY by design (a line that wants FEWER copies -- mana
+    // saved for an activation -- is not searched); the deck opts in. false = every count, the default.
+    // Human play and MTG_UNPRUNE=replicate always see every count.
+    virtual bool ReplicateTopCountOnly(const GameState& /*s*/) const { return false; }
+    // ReplicateManlandReserve -- with ReplicateTopCountOnly, ALSO keep, per untapped manland that was on the
+    // battlefield at the start of the turn, the top count among the plans whose cast bill leaves that manland its
+    // own mana plus its animate cost (the "fewer copies so Mutavault attacks" line). false = the bare top count.
+    virtual bool ReplicateManlandReserve(const GameState& /*s*/) const { return false; }
+
     // ---- Remaining engine built-ins, ported byte-identically -----------------------------------
     // Every hook below returns candidates in PREFERENCE order with index 0 equal to the historical
     // inline pick, so a non-branching caller is unchanged. Several of these base rules are known to

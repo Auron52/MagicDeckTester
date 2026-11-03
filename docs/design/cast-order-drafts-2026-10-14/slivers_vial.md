@@ -1,4 +1,7 @@
-# slivers_vial: cast-order draft (agent proposal, 2026-10-14; for USER review)
+# slivers_vial: cast-order draft (agent proposal, 2026-10-14; USER-APPROVED 2026-11-03)
+
+> **2026-11-03: the USER approved section 3 with every card in its own row** (no tied groups). It ships as
+> `SliversProvider` (`MTG_SLIVERS_ORDER`, default ON). Sections 1-2 describe the tree before that.
 
 ## 1. Status: **(D) generic tiers only**
 
@@ -26,19 +29,31 @@
 `MainPhaseFilterActive` returns false (TurnSolver.cpp:20388) and every cast is pre-combat. None of the
 cards is order-opaque (no draw, stage, cascade or retrace), so the rank sort governs every cast set.
 
-## 3. Proposed order
+## 3. Proposed order -- USER-APPROVED 2026-11-03 (one row per card)
 
-| pos | card(s) | main | range | why (card text, then the deck's plan) |
+**USER, 2026-11-03:** *"That Slivers order is fine, except that I would separate everything into its own
+row. Making it a full order is ideal. But yeah, only Hatchery and Thrumming Hivepool care about the order
+here."* So the draft's tied groups are split, each in the draft's listed order, and the order is STRICT and
+TOTAL. Implemented as `SliversProvider::CastOrderRank` (`MTG_SLIVERS_ORDER`, default ON, heurarm per-job
+override; `src/ai/DecisionProviders.cpp`). Only rows 1 and 13 change play; rows 2-12 are a tie-break and
+never branch.
+
+| pos | card | main | range | why (card text, then the deck's plan) |
 |---|---|---|---|---|
 | land | land drop | m1 | - | The deck has no draw, so nothing wants to come before the land. |
-| 1 | Hatchery Sliver (x4; copies are identical, so the tie is moot) | m1 | - | "Each Sliver spell you cast has replicate." This is an enabler, so it goes before what it enables (principle 3): every Sliver spell cast after it may be copied. Its Vial put sequences at this rank too, so a put Hatchery also comes before the casts. |
-| 2 | Muscle, Predatory, Sinew **(tie: moot)** | m1 | - | +1/+1 to every Sliver, the same effect on all three. Ranked first after Hatchery so that they get the leftover replicate copies (see 4.2); each copy pumps the whole team. |
-| 3 | Leeching Sliver | m1 | - | "Whenever a Sliver you control attacks, defending player loses 1 life." A copy adds one more drain per attacker, close to an anthem's worth on the attack. |
-| 4 | Galerider, Striking, Plated **(tie: moot)** | m1 | - | In a goldfish all three are identical 1/1s for one pip; their grants (flying, first strike, +0/+1) are unmodelled or inert. As leftover copies they give the most bodies per mana. |
-| 5 | Crystalline, Hibernation **(tie: moot)** | m1 | - | Identical vanilla 2/2s for two pips; shroud and the bounce ability are unmodelled. |
-| 6 | Cloudshredder Sliver | m1 | - | "Sliver creatures you control have ... haste." Haste is a static grant, so where it sits does not change what attacks. A second copy is only a 1/1 for 2 mana, so it is last in line for copies. |
-| 7 | Aether Vial | m1 | - | Enters with no counters, so it does nothing the turn it is cast. It is not a Sliver, so it does not move Hivepool's cost. Its tie with Hivepool is provably order-free (both costs are generic only). |
-| 8 | Thrumming Hivepool | m1 | - | "Affinity for Slivers": it costs 1 less for each Sliver already on the battlefield, counting casts, Vial puts and replicate copies. So it goes **LAST**. Its haste and double strike are static, so the Slivers cast before it still get them. This is unchanged from today's rank 20 vs 10, and it is made explicit. |
+| 1 | Hatchery Sliver | m1 | - | "Each Sliver spell you cast has replicate." This is an enabler, so it goes before what it enables (principle 3): every Sliver spell cast after it may be copied. Its Vial put sequences at this rank too, so a put Hatchery also comes before the casts. |
+| 2 | Muscle Sliver | m1 | - | +1/+1 to every Sliver; first after Hatchery so the anthems get the leftover replicate copies (see 4.2); each copy pumps the whole team. |
+| 3 | Predatory Sliver | m1 | - | The same anthem; tie-break after Muscle. |
+| 4 | Sinew Sliver | m1 | - | The same anthem; tie-break after Predatory. |
+| 5 | Leeching Sliver | m1 | - | "Whenever a Sliver you control attacks, defending player loses 1 life." A copy adds one more drain per attacker, close to an anthem's worth on the attack. |
+| 6 | Galerider Sliver | m1 | - | In a goldfish a 1/1 for one pip (flying unmodelled); the most bodies per mana as leftover copies. |
+| 7 | Striking Sliver | m1 | - | The same 1/1 for one pip (first strike inert in a goldfish); tie-break after Galerider. |
+| 8 | Plated Sliver | m1 | - | The same 1/1 for one pip (+0/+1 inert in a goldfish); tie-break after Striking. |
+| 9 | Crystalline Sliver | m1 | - | A vanilla 2/2 for two pips (shroud unmodelled). |
+| 10 | Hibernation Sliver | m1 | - | The same 2/2 for two pips (its bounce ability unmodelled); tie-break after Crystalline. |
+| 11 | Cloudshredder Sliver | m1 | - | "Sliver creatures you control have ... haste." Haste is a static grant, so where it sits does not change what attacks. A second copy is only a 1/1 for 2 mana, so it is last in line for copies. |
+| 12 | Aether Vial | m1 | - | Enters with no counters, so it does nothing the turn it is cast. It is not a Sliver, so it does not move Hivepool's cost. |
+| 13 | Thrumming Hivepool | m1 | - | "Affinity for Slivers": it costs 1 less for each Sliver already on the battlefield, counting casts, Vial puts and replicate copies. So it goes **LAST**. Its haste and double strike are static, so the Slivers cast before it still get them. |
 
 - **Main:** m1 for everything, matching the USER's "everything main 1" for Knights. The deck gains nothing
   from post-combat information: it has no draws and no combat-made resources.

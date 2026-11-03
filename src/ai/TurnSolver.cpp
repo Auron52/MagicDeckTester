@@ -7969,7 +7969,12 @@ static int SameTurnAffinityDiscountFor(const GameState& state, const std::vector
             for (const std::string& cs : dk->card.m_subtypes) { if (cs == sub) { match = true; break; } }
             if (match) { break; }
         }
-        if (match) { ++same_turn; }
+        // A PINNED replicate count (Hatchery Sliver) puts that many token COPIES of the Sliver onto the battlefield
+        // with it, before the later affinity spell is cast -- each one is a Sliver too. Slivers mana-clean pass 1: {Galerider Sliver + one copy + Thrumming
+        // Hivepool} off three lands (Hivepool {6} less three on board, Galerider and its copy = {1}) read as {3} for
+        // Hivepool and was kept off the menu (ENUM-GAP). Exact for a pinned count, and it can only ADD plans; the
+        // unpinned cast's greedy count is unknown here and keeps the cast-alone credit.
+        if (match) { same_turn += 1 + std::max(0, cands[k].replicate_count); }
     }
     return std::min(same_turn, cands[j].cost.generic);
 }
@@ -39439,10 +39444,15 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // greedy max, which is the very sink the reports above describe. The provider may PRUNE the
         // fan (DecisionProvider::ReplicateCounts, empty = every k); human play always gets it whole.
         // The greedy picker (g_greedy_solve_nest > 0, GreedyPermit-checked to sit outside every
-        // window) is not offered the fan and keeps resolution's line-hold max. Inside the window the
-        // unpinned (-1) cast is one SEARCHED option beside the pinned counts -- and until 2026-10-14 it
-        // was not: the autonomous dedup collapsed the counts (MTG_REPLICATE_SIG) and a Sliver cast
-        // after a same-plan Hatchery had no fan at all (MTG_REPLICATE_PENDING); see the fan below.
+        // window) is not offered the fan and keeps resolution's line-hold max. Inside the window a creature
+        // the board can replicate gets ONLY pinned counts: the unpinned "spare mana" cast (-1) was a
+        // searched option here from 2026-10-14 to 2026-11-03 and was DELETED (USER: "if it is waste it is
+        // waste and should be pruned if possible") -- its greedy copies ate a later cast's mana (the
+        // slivers mana-oracle APPLY-DROP / ORDER flags), and a pinned count priced into the bill, with
+        // Hivepool's affinity credited for the copies, expresses the same line. Which counts are searched
+        // is the provider's call (ReplicateCounts per cast, ReplicateTopCountOnly per plan). A Sliver cast
+        // after a same-plan Hatchery keeps its unpinned plain cast beside the pinned fan
+        // (MTG_REPLICATE_PENDING): with no granter in the plan it is simply the cast.
         // ---- DEVOUR (CR 702.81, Mycoloth "Devour 2") ---------------------------------------------
         // One cast variant per number of creatures devoured, k = 0 .. (own creatures on the
         // battlefield). Unlike the replicate fan below, this is enumerated in AUTONOMOUS play too,
@@ -39592,22 +39602,6 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     // under-projects (safe: the line is still searched) rather than over-projects.
                     v.haste_attack_power += k * (a.haste_attack_power);
                 }
-                actions.push_back(std::move(v));
-            }
-            // ...plus "as many copies as the spare mana allows" (replicate_count -1), realised at
-            // resolution by the line-hold loop: every co-planned cast keeps its mana, the copies take
-            // what is genuinely left. A SEARCHED option, not a default -- the search picks it or a
-            // pinned count. It is the only form that can express a line whose OTHER casts get
-            // cheaper from the copies: a pinned k is priced statically into this cast's bill, which
-            // cannot see Thrumming Hivepool's affinity drop as the token Slivers enter (slivers d3
-            // s2002 gi155/169, s3003 gi115: Hivepool + Striking x2 on T4 read as unaffordable,
-            // T4 -> T5 at 1x/4x/16x). A variant that realises the same count as a pinned one lands on
-            // the same state and the post-apply dedup skips it. Not offered to human play (a person
-            // picks a count).
-            if (rep_now && !HumanPlayActive() && kmax >= 1)
-            {
-                Action v = a;   // replicate_count stays -1
-                v.eval += kmax * EvalCard(def, state);
                 actions.push_back(std::move(v));
             }
             if (fan) { continue; }
@@ -66987,7 +66981,22 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 // nothing. The executor twin (AIEngine) reads the same function.
                 if (td == nullptr || !TapTokenSourceLive(state, p, *td)) { break; }
                 p.tapped = true;
-                if (!TapForCostDirect(state, a.cost, /*for_creature=*/true))
+                // AN ACTIVATED ABILITY, PAID AS ONE (slivers mana-clean pass 1, 2026-11-03). A tap-token activation
+                // (Sliver Hive "{5},{T}: create a 1/1 Sliver", Basri "{W},{T}, exert") is not a creature spell, so
+                // creature-spell-only mana may not pay it: Ancient Ziggurat pays nothing, Cavern of Souls / Unclaimed
+                // Territory / Sliver Hive pay only their {C} face (CR 106.6), and Secluded Courtyard's colour pays
+                // only when the SOURCE is a creature ("...or activate an ability of a creature source of the chosen
+                // type": CreatureAbilityPayScope). Both apply worlds used to pay it with for_creature=true, so a Hive
+                // token was bought with Ziggurat mana the enumeration (Action::is_noncreature) never counted -- 48
+                // ENUM-GAPs in 100,000 games whose "paying" realisation was illegal. Executor twin: AIEngine::TakeTurn.
+                bool tok_paid;
+                {
+                    const Card tok_src = p.card;   // a copy: the payment may reshape the battlefield
+                    std::optional<CreatureAbilityPayScope> tok_scope;
+                    if (tok_src.IsCreature()) { tok_scope.emplace(&tok_src); }
+                    tok_paid = TapForCostDirect(state, a.cost, /*for_creature=*/false);
+                }
+                if (!tok_paid)
                 { state.battlefield[pi].tapped = false; break; }
                 // CreateToken appends to the battlefield, so `p` must not be touched after this.
                 // Colour + keywords (Speaker's white flying Angel); empty for Hive / Basri.
@@ -76248,6 +76257,136 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 if (it == best.end()) { best.emplace(key, std::make_pair(i, x)); continue; }
                 if (x > it->second.second) { drop[it->second.first] = 1; it->second = { i, x }; }
                 else                       { drop[i] = 1; }
+            }
+            std::size_t w = 0;
+            for (std::size_t i = 0; i < deduped.size(); ++i)
+            { if (!drop[i]) { if (w != i) { deduped[w] = std::move(deduped[i]); } ++w; } }
+            deduped.resize(w);
+        }
+    }
+
+    // REPLICATE TOP COUNT (DecisionProvider::ReplicateTopCountOnly; SliversProvider opts in, MTG_SLIVERS_REPLICATE_TOPK,
+    // USER 2026-11-03: "Previously we would just try the max remaining mana which seems pretty solid from a heuristic
+    // prune perspective. But yes, we don't need duplicates."). The TOP-X rule above, for Hatchery Sliver's replicate
+    // counts: blank every PINNED count (replicate_count -> -1, which the signature does not key) and the plans that
+    // differ only in their counts collide. Of each such group keep the ONE whose counts, read in cast order
+    // (CastOrderLess, then plan position), are lexicographically largest: the first replicate cast takes every copy
+    // the mana left after the plan's other casts pays, the next takes what is left of that. A pending-grant plain
+    // cast (-1 beside its pinned twins) reads below every pin, so it survives only where no pin does. Every member
+    // was enumerated, deduped and kept as PAYABLE, so the survivor is a real line whose count the whole-turn bill
+    // priced -- not a resolution-time greedy. The provider decides; the engine only folds. Search only: human play
+    // and MTG_UNPRUNE=replicate see every count.
+    if (!s_human_play_sig && !DecisionUnpruned(UnprunedGate::Replicate) && deduped.size() > 1
+        && ResolveProvider(state).ReplicateTopCountOnly(state))
+    {
+        bool any_pin = false;
+        for (const TurnSolver::Plan& p : deduped)
+        {
+            for (const Action& a : p.actions)
+            { if (a.kind == Action::Kind::CastFromHand && a.replicate_count >= 0) { any_pin = true; break; } }
+            if (any_pin) { break; }
+        }
+        if (any_pin)
+        {
+            // The plan's counts in cast order: a stable sort of its casts' positions by CastOrderLess. Plans in one
+            // group hold the same casts, so they read their counts in the same order.
+            auto counts_of = [&](const TurnSolver::Plan& p)
+            {
+                std::vector<int> pos;
+                for (std::size_t k = 0; k < p.actions.size(); ++k)
+                { if (p.actions[k].kind == Action::Kind::CastFromHand) { pos.push_back(static_cast<int>(k)); } }
+                std::stable_sort(pos.begin(), pos.end(), [&](int x, int y)
+                { return CastOrderLess(state, p.actions[static_cast<std::size_t>(x)], p.actions[static_cast<std::size_t>(y)]); });
+                std::vector<int> c;
+                c.reserve(pos.size());
+                for (int k : pos) { c.push_back(p.actions[static_cast<std::size_t>(k)].replicate_count); }
+                return c;
+            };
+            // Pass 1: the largest count vector of every group that holds a pin. Pass 2: drop each member below it. A
+            // group with no pin is untouched, and members tied at the top all stay (two kept plans with one signature
+            // are some other rule's business, never this fold's).
+            std::vector<std::string> keys(deduped.size());
+            std::vector<std::vector<int>> cs(deduped.size());
+            std::unordered_map<std::string, std::vector<int>> top;
+            for (std::size_t i = 0; i < deduped.size(); ++i)
+            {
+                TurnSolver::Plan k = deduped[i];
+                bool pinned = false;
+                for (Action& a : k.actions)
+                {
+                    if (a.kind != Action::Kind::CastFromHand) { continue; }
+                    if (a.replicate_count >= 0) { pinned = true; }
+                    a.replicate_count = -1;
+                }
+                keys[i] = plan_signature(k);
+                cs[i] = counts_of(deduped[i]);
+                if (!pinned) { continue; }
+                auto it = top.find(keys[i]);
+                if (it == top.end()) { top.emplace(keys[i], cs[i]); }
+                else if (cs[i] > it->second) { it->second = cs[i]; }
+            }
+            // THE MANLAND RESERVE (DecisionProvider::ReplicateManlandReserve; SliversProvider: MTG_SLIVERS_REPLICATE_MANLAND).
+            // The top count spends every spare mana on copies, and the one thing outside the plan's casts that
+            // spare mana buys is an animated manland's attack (Mutavault: a 2/2 Sliver every anthem pumps). The
+            // 2026-11-03 A/B's slower games were all that line -- T3 Galerider/Plated with NO copy, the spare mana
+            // animating Mutavault (std gi1891/4064/4771, 4 -> 5). So, per untapped manland that was here at the
+            // start of the turn, also keep the group's top count among the members whose cast bill leaves that
+            // manland its own mana plus its animate cost (m manlands: the m cheapest reserves). A coarse mana-value
+            // read; it only ADDS survivors to the fold, so it can never lose a line the fold keeps.
+            std::vector<int> reserves;
+            if (ResolveProvider(state).ReplicateManlandReserve(state))
+            {
+                for (const Permanent& q : state.battlefield)
+                {
+                    if (q.controller_index != state.active_player_index || q.tapped || q.entered_this_turn) { continue; }
+                    const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+                    if (qd == nullptr || !qd->params.can_animate || !q.card.IsLand() || q.card.IsCreature()) { continue; }
+                    reserves.push_back(1 + (qd->params.animate_cost ? qd->params.animate_cost->ManaValue() : 0));
+                }
+                std::sort(reserves.begin(), reserves.end());
+            }
+            std::vector<int> bill(deduped.size(), 0), avail(deduped.size(), 0);
+            std::vector<std::unordered_map<std::string, std::vector<int>>> top_res(reserves.size());
+            if (!reserves.empty())
+            {
+                ManaPool pool0 = AvailableManaPool(state);
+                pool0.AddPool(state.floating_mana);
+                const int pool_total = pool0.Total();
+                for (std::size_t i = 0; i < deduped.size(); ++i)
+                {
+                    const TurnSolver::Plan& p = deduped[i];
+                    bool pinned = false;
+                    for (const Action& a : p.actions)
+                    {
+                        if (a.kind != Action::Kind::CastFromHand) { continue; }
+                        if (a.replicate_count >= 0) { pinned = true; }
+                        if (!a.free_cast && !a.alt_cost) { bill[i] += a.cost.ManaValue(); }
+                    }
+                    avail[i] = pool_total + ((p.land_decided && !p.land_to_play.empty()) ? 1 : 0);
+                    if (!pinned) { continue; }
+                    int need = 0;
+                    for (std::size_t m = 0; m < reserves.size(); ++m)
+                    {
+                        need += reserves[m];
+                        if (bill[i] > avail[i] - need) { break; }
+                        auto it = top_res[m].find(keys[i]);
+                        if (it == top_res[m].end()) { top_res[m].emplace(keys[i], cs[i]); }
+                        else if (cs[i] > it->second) { it->second = cs[i]; }
+                    }
+                }
+            }
+            std::vector<char> drop(deduped.size(), 0);
+            for (std::size_t i = 0; i < deduped.size(); ++i)
+            {
+                auto it = top.find(keys[i]);
+                if (it == top.end() || !(cs[i] < it->second)) { continue; }
+                bool reserve_top = false;
+                for (std::size_t m = 0; m < top_res.size() && !reserve_top; ++m)
+                {
+                    auto rt = top_res[m].find(keys[i]);
+                    reserve_top = rt != top_res[m].end() && cs[i] == rt->second;
+                }
+                if (!reserve_top) { drop[i] = 1; }
             }
             std::size_t w = 0;
             for (std::size_t i = 0; i < deduped.size(); ++i)

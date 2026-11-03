@@ -964,6 +964,28 @@ public:
     bool CleanupDiscardShedStable() const override;
 };
 
+// slivers_vial (2026-11-03). An empty derivation of VialProvider -- the deck keeps every Vial hook it played
+// with, the cleanup-discard rule included -- plus the two Slivers-only rules below. Routed on a mainboard
+// signature only Slivers carry (grants_replicate_to_subtypes or affinity_for_subtype) above `vial`.
+// Name() stays "Vial", the archetype the deck has always reported.
+class SliversProvider : public VialProvider
+{
+public:
+    // MTG_SLIVERS_ORDER -- the TOTAL cast order, USER-APPROVED 2026-11-03 with every card in its own row
+    // (docs/design/cast-order-drafts-2026-10-14/slivers_vial.md section 3): Hatchery Sliver first, Thrumming
+    // Hivepool last. DEFAULT ON; =0 => VialProvider::CastOrderRank byte-for-byte. A rank tie between two
+    // different cards goes to the NAME (CastOrderTotalByName).
+    int         CastOrderRank(const GameState&, const CardDefinition&) const override;
+    const char* CastOrderTierName(int rank) const override;
+    bool        CastOrderTotalByName() const override;
+    // MTG_SLIVERS_REPLICATE_TOPK -- the USER's replicate prune (2026-11-03): one count per replicate cast,
+    // the most copies the plan's leftover mana pays (DecisionProvider::ReplicateTopCountOnly). DEFAULT ON.
+    bool        ReplicateTopCountOnly(const GameState&) const override;
+    // MTG_SLIVERS_REPLICATE_MANLAND -- AGENT AMENDMENT to the USER's prune (2026-11-03, for USER review): also
+    // keep the top count that leaves an untapped Mutavault its animate mana. DEFAULT OFF until the USER rules.
+    bool        ReplicateManlandReserve(const GameState&) const override;
+};
+
 // Knights (Aether Vial knight tribal). Rode VialProvider and STILL DOES -- it derives from it, so
 // the Vial charge/drop policy this deck was measured with is inherited unchanged. This is the
 // "derive from a different one if there is code to reuse" case in the user's directive.

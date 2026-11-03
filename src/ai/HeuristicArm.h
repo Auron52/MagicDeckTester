@@ -832,6 +832,9 @@ enum Slot : int
     RAMP_FILTER_FEED_ORDER,   // MTG_RAMP_FILTER_FEED_ORDER  the order walks behind the payable-order decider (ExactOrderWalkImpl / FirstUnpayablePosImpl) HOLD a same-plan ramp-filter rock's net +1 (Izzet Signet: "{1},{T}: Add {U}{R}") until the pool has a unit to feed its {1}. It was credited at once, so "Signet off two Islands, then Sol Ring" read as payable off the unfed Signet, the decider kept that order and both apply worlds dropped the Sol Ring (mana-oracle APPLY-DROP-ORDER NivMizzetCombo). =0 -> the unconditional credit
     SERVANT_HASTE_KEEP,       // MTG_SERVANT_HASTE_KEEP  a noncreature payment keeps Generator Servant's haste-tagged {C} floating for a LATER creature cast in the same line (g_line_haste_takers), tapping other sources instead, when that payment still pays and the rest of the line stays payable on the board it leaves. It drained them first, so 'crack the Servant, Signet, hasty Niv-Mizzet' lost the haste at any budget (NivMizzetCombo cast-order draft p5; viewer references). =0 -> the drain-first payment
     NIV_CAST_ORDER,           // MTG_NIV_CAST_ORDER  the USER's NivMizzetCombo cast order (2026-10-31): Sol Ring > Izzet Signet > the Nivs > Curiosity on a Niv > Lookout with a Niv > Brainstorm > Ponder > Preordain > Gitaxian Probe > Remand > [no Niv: Curiosity > Lookout] > Generator Servant, binding inside cantrip plans, with the cantrip-first VALUE hoist of Curiosity / Lookout conditional on a Niv. =0 -> the generic tiers
+    SLIVERS_REPLICATE_TOPK,   // MTG_SLIVERS_REPLICATE_TOPK  SliversProvider: of the plans that differ ONLY in their replicate counts, search the one whose counts, read in cast order, are largest (the USER's "max remaining mana" prune, 2026-11-03). Default ON; =0 -> every enumerated count
+    SLIVERS_REPLICATE_MANLAND, // MTG_SLIVERS_REPLICATE_MANLAND  AGENT amendment (2026-11-03, for USER review): with the top-count prune, also keep the top count that leaves an untapped Mutavault its own mana + animate cost. Default OFF
+    SLIVERS_ORDER,            // MTG_SLIVERS_ORDER        Slivers TOTAL cast order, USER-APPROVED 2026-11-03 (docs/design/cast-order-drafts-2026-10-14/slivers_vial.md section 3, one row per card): Hatchery first, Thrumming Hivepool last. Default ON; =0 -> VialProvider's generic tiers
     COUNT
 };
 
@@ -1608,6 +1611,9 @@ inline const char* Name(int slot)
         "MTG_RAMP_FILTER_FEED_ORDER",
         "MTG_SERVANT_HASTE_KEEP",
         "MTG_NIV_CAST_ORDER",
+        "MTG_SLIVERS_REPLICATE_TOPK",
+        "MTG_SLIVERS_REPLICATE_MANLAND",
+        "MTG_SLIVERS_ORDER",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

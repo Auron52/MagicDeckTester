@@ -901,3 +901,130 @@ TEST_CASE("payment: a breakpoint continuation's first cast keeps the colour its 
     const manaoracle::LineAudit au = manaoracle::AuditLine(s, /*pre=*/true, plan);
     CHECK(au.engine_full);
 }
+
+// ---- SLIVERS, mana-clean pass 1 (2026-11-03; docs/design/mana-completeness-oracle.md 13.12) -------------------------
+namespace
+{
+Action AnimateAction(int num)
+{
+    const CardDefinition* d = CardDatabase::Instance().Lookup("Mutavault");
+    Action a;
+    a.kind           = Action::Kind::AnimateLand;
+    a.card_name      = d->card.m_name;
+    a.hand_index     = -1;
+    a.sac_source_id  = num;
+    a.cost           = d->params.animate_cost.value();
+    a.eval           = 1;
+    a.is_noncreature = true;
+    return a;
+}
+Action HiveTokenAction(int num)
+{
+    const CardDefinition* hive = CardDatabase::Instance().Lookup("Sliver Hive");
+    Action a;
+    a.kind           = Action::Kind::TapForTokenPay;
+    a.card_name      = hive->card.m_name;
+    a.hand_index     = -1;
+    a.sac_source_id  = num;
+    a.cost           = hive->params.tap_token_cost.value();
+    a.eval           = 1;
+    a.is_noncreature = true;
+    return a;
+}
+std::string Joined(const std::vector<std::string>& v)
+{
+    std::string s;
+    for (const std::string& c : v) { s += c + " "; }
+    return s;
+}
+bool Has(const std::vector<std::string>& v, const char* c) { return std::find(v.begin(), v.end(), c) != v.end(); }
+} // namespace
+
+// Slivers s30001200 T4 (ORACLE-GAP x125, ~6,000 flags of the family): {animate Mutavault #1 + animate Mutavault #2}. The
+// engine pays each animation with the land itself, so both end animated and tapped. The frontier's Pareto prune read
+// "#2 pays for #1" and "#1 pays for itself" as one board (both leave one untapped Mutavault) and kept the first, after
+// which #2 is tapped and its own animation has no source: the oracle never reproduced the engine (I1).
+// The oracle keys a copy the plan names (t_plan_srcs) apart from its twins in the prune (the Vampires KeyedApart fix).
+TEST_CASE("mana oracle: two Mutavaults each paying its own animation is among the oracle's outcomes")
+{
+    EnsureOracleCards();
+    GameState s = Board({ "Mutavault", "Mutavault", "Galerider Sliver" });
+    s.players[0].life = 20;
+    s.players[1].life = 20;
+    SetLibrary(s, std::vector<std::string>(20, "Plated Sliver"));
+    const TurnSolver::Plan plan = PlanOf({ AnimateAction(1), AnimateAction(2) });
+    CHECK(manaoracle::CoversEngineOutcome(s, /*pre=*/true, plan));
+}
+
+// Slivers s30001477 T4 (ORACLE-GAP x53): {cast Sinew Sliver + animate Mutavault #3}, the engine paying the Sliver off
+// Secluded Courtyard + Mutavault #2 and the animation off #3 itself. The prune kept "#3 pays the Sliver" instead.
+TEST_CASE("mana oracle: a Sliver paid off the other Mutavault, the animated one paying itself, is among the outcomes")
+{
+    EnsureOracleCards();
+    GameState s = Board({ "Secluded Courtyard", "Mutavault", "Mutavault", "Plated Sliver" });
+    s.players[0].life = 20;
+    s.players[1].life = 20;
+    Hand(s, { "Sinew Sliver" });
+    SetLibrary(s, std::vector<std::string>(20, "Plated Sliver"));
+    const TurnSolver::Plan plan = PlanOf({ CastAction(s, "Sinew Sliver"), AnimateAction(3) });
+    CHECK(manaoracle::CoversEngineOutcome(s, /*pre=*/true, plan));
+}
+
+// Sliver Hive's "{5}, {T}: create a 1/1 Sliver" is an ACTIVATED ABILITY of a land: Ancient Ziggurat's mana ("only to
+// cast a creature spell") cannot pay it, and Cavern of Souls pays it only with its {C} face (CR 106.6). Both apply worlds
+// paid it as a creature spell (for_creature=true), so a Hive token was bought with Ziggurat mana -- 48 ENUM-GAPs whose
+// "paying" realisation was illegal.
+TEST_CASE("payment: a Sliver Hive token is never paid with creature-spell-only mana")
+{
+    EnsureOracleCards();
+    {
+        GameState s = Board({ "Sliver Hive", "Ancient Ziggurat", "Ancient Ziggurat", "Ancient Ziggurat",
+                              "Ancient Ziggurat", "Cavern of Souls", "Plated Sliver" });
+        s.players[0].life = 20;
+        s.players[1].life = 20;
+        const std::size_t before = s.battlefield.size();
+        TurnSolver::ApplyPlan(s, PlanOf({ HiveTokenAction(1) }), /*is_pre_combat=*/true);
+        CHECK(s.battlefield.size() == before);   // no token: only Cavern's {C} may pay
+        CHECK_FALSE(s.battlefield[0].tapped);    // and the Hive is untapped again
+    }
+    {
+        GameState s = Board({ "Sliver Hive", "Cavern of Souls", "Cavern of Souls", "Cavern of Souls",
+                              "Unclaimed Territory", "Secluded Courtyard", "Plated Sliver" });
+        s.players[0].life = 20;
+        s.players[1].life = 20;
+        const std::size_t before = s.battlefield.size();
+        TurnSolver::ApplyPlan(s, PlanOf({ HiveTokenAction(1) }), /*is_pre_combat=*/true);
+        CHECK(s.battlefield.size() == before + 1);   // the five {C} faces pay it
+        for (const Permanent& p : s.battlefield) { if (p.card.IsLand()) { CHECK(p.tapped); } }
+    }
+}
+
+// Slivers s30019665 T4 (APPLY-DROP x15, ~3,700 flags of the family): Hatchery Sliver on the battlefield grants
+// replicate. The UNPINNED cast (replicate_count -1: copies made greedily at resolution) of Predatory Sliver spends the
+// mana Plated Sliver needed, so {Predatory, Plated} realises as {Predatory + a copy}. The oracle pays both by overpaying
+// Predatory (no copy affordable), leaving Mutavault up; the pinned-zero sibling pays Predatory off Mutavault + Cavern
+// and leaves Secluded Courtyard up -- incomparable boards, but the sibling's OWN payments include the Mutavault-up one,
+// and its own audit vouches for the payment the engine picks there: DROP-COVERED.
+TEST_CASE("mana oracle: a replicate drop whose board a same-actions sibling reaches under its own payment is covered")
+{
+    EnsureOracleCards();
+    GameState s = Board({ "Secluded Courtyard", "Sliver Hive", "Mutavault", "Cavern of Souls", "Hatchery Sliver" });
+    s.players[0].life = 20;
+    s.players[1].life = 20;
+    Hand(s, { "Predatory Sliver", "Plated Sliver" });
+    SetLibrary(s, std::vector<std::string>(20, "Plated Sliver"));
+    const Action pred = CastAction(s, "Predatory Sliver");
+    Action pred0 = pred;
+    pred0.replicate_count = 0;
+    const TurnSolver::Plan unpinned = PlanOf({ pred, CastAction(s, "Plated Sliver") });
+    const TurnSolver::Plan pinned0  = PlanOf({ pred0, CastAction(s, "Plated Sliver") });
+    // Alone on the menu, the drop is a lost line: a payment of this order realises both casts.
+    const std::vector<std::string> alone = manaoracle::PlanVerdict(s, /*pre=*/true, unpinned, { unpinned });
+    INFO("alone: ", Joined(alone));
+    REQUIRE(Has(alone, "APPLY-DROP"));
+    // Beside its pinned-zero sibling it is covered.
+    const std::vector<std::string> v = manaoracle::PlanVerdict(s, /*pre=*/true, unpinned, { unpinned, pinned0 });
+    INFO("with the sibling: ", Joined(v));
+    CHECK_FALSE(Has(v, "APPLY-DROP"));
+    CHECK(Has(v, "DROP-COVERED"));
+}

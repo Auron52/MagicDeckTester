@@ -1699,3 +1699,107 @@ spell off exactly the Signet's unfed +1 ({Signet, Preordain} on two lands) -- an
 `SequencedRockProduction` credit the +1 whenever the BOARD has a feeder, not whether one survives the plan's own
 payments, so those plans reach the menu and their apply drops the spell. The walk's hold is the apply half; the
 gate half is the same hold in the subset walkers (13.4 D).
+
+### 13.12 The slivers_vial mana-clean findings (2026-11-03, branch `wip/mc-slivers`)
+
+The first mana-clean gate pass on slivers_vial (`logs/mana_clean/pass1-slivers_vial`, 100,000 games, seed 30000000 +
+gi, src `7ec55bb`, `MTG_MANA_ORACLE=2`) failed on ORACLE-GAP 6,055, APPLY-DROP 3,763, ENUM-GAP 59 and
+APPLY-DROP-ORDER 26. Four mechanisms; two are oracle incompleteness, one an engine RULES bug, one an enumeration gate.
+
+**ORACLE-GAP (~95%): the frontier prune folded Mutavault into its twin -- the same fold as 13.9.** `{animate
+Mutavault #32 + animate #33}`: the engine pays each animation with the land itself (a mana ability during cost
+payment), so both end animated and tapped. `AnimateLand` names its land by number (`sac_source_id`), so it is a plan
+source, and the prune compared "#33 pays for #32" with "#32 pays for itself" by class: one untapped Mutavault each, so
+one was dropped, and the survivor had #33 tapped with its own animation unpayable. Same for `{cast Sinew Sliver +
+animate #33}`. No new mechanism: the Vampires fix (13.9: `Resources` / `PayAndRecord` key a plan source apart;
+`KeyedApart`) covers it. Two unit tests pin the Mutavault shapes (`test_mana_oracle.cpp`, "SLIVERS").
+
+**APPLY-DROP (>99% with Hatchery Sliver): the unpinned replicate cast's greedy copies (oracle cover rule).** Hatchery
+grants replicate, and the enumeration offers each Sliver at pinned counts 0..kmax AND unpinned (`replicate_count`
+-1, copies made greedily at resolution, TurnSolver.cpp ~38800). Autonomous play has no line hold for that greedy
+(`SinkCostWithLineHold` returns `own` unless `HumanPlayActive()`), so in `{Predatory Sliver(-1) + Plated Sliver}` the
+copy eats Plated's mana and Plated drops. The oracle realises both by overpaying Predatory so no copy is affordable,
+leaving Mutavault up; the pinned-zero sibling pays Predatory off Mutavault + Cavern and leaves Secluded Courtyard up.
+Those boards are incomparable, so the sibling test (engine boards only) failed. Fix (`AuditPlan`, oracle only): an
+uncovered full board also counts as covered when a same-actions sibling reaches it (same core, at least the
+resources) under one of the SIBLING's OWN payments (`Realize(sibling, ...)`), because which of several incomparable
+payments realises a plan is the payer's standing exemption and the sibling's own audit vouches for the payment the
+engine picks there. A capped or unmodelled sibling search reaches nothing (fail closed). Unit test: "a replicate drop
+whose board a same-actions sibling reaches under its own payment is covered" (`manaoracle::PlanVerdict`, a test
+entry that captures `Emit`'s classes).
+
+**ENUM-GAP (a): the Sliver Hive token was paid as a creature SPELL (engine rules bug).** "{5},{T}: create a 1/1
+Sliver" is an activated ability of a land; both apply worlds (`ApplyPlanDirect`, `AIEngine::TakeTurn`) paid it with
+`for_creature=true`, so Ancient Ziggurat's creature-spell-only mana bought it (CR 106.6). Fix: pay with
+`for_creature=false`, under `CreatureAbilityPayScope` when the source is a creature (Basri: Secluded Courtyard's
+"...or activate an ability of a creature source of the chosen type"). Unit test "a Sliver Hive token is never paid
+with creature-spell-only mana"; scenario `slivers_hive_token_no_creature_mana.json` (a legality pin: the enumeration
+already priced the activation as noncreature, so the plan was off the menu either way).
+
+**ENUM-GAP (b): Thrumming Hivepool's affinity ignored pinned replicate copies (enumeration gate).**
+`SameTurnAffinityDiscountFor` credited each same-subset Sliver cast but not its pinned copies, so `{Galerider + one
+copy + Hivepool}` off three lands priced Hivepool at {3} instead of {1} and kept the plan off the menu. Fix: credit
+`1 + replicate_count` for a pinned count (exact; it can only add plans). The unpinned cast keeps the cast-alone credit
+(its greedy count is unknown at enumeration).
+
+**Census (10,000 fresh games, gi 100000-109999, seed 30000000 + gi, oracle level 2).** Base = origin + the Angels fix
+(f627ae4c6); new = + Vampires 13.9 + this section; `sib0` = new with the cover rule off (same games, oracle-only arm).
+
+| class | base | new, cover rule off | new |
+|---|---|---|---|
+| ORACLE-GAP | 574 | 83 | **83** |
+| APPLY-DROP | 346 | 342 | **87** |
+| ENUM-GAP | 6 (5 Hive token, 1 Hivepool) | 0 | **0** |
+| APPLY-DROP-ORDER | 2 | 2 | 2 |
+
+Attribution: ORACLE-GAP 574 -> 83 is the 13.9 keying; APPLY-DROP 342 -> 87 is the sibling-payment cover (the 255 become
+DROP-COVERED); the six ENUM-GAPs are the Hive-token rule fix (5) and the affinity credit (1). Play identity: oracle
+level 0 vs 2 on the new binary over the same 10,000 games: 0 of 40 job digests changed, units identical.
+
+**What is left -- all the unpinned-replicate family (USER question).** The 87 APPLY-DROPs (85 with Hatchery on board;
+e.g. `{Aether Vial + Galerider Sliver(-1)}`: Galerider is ranked first, paid with Cavern of Souls' coloured face, the
+greedy copy takes Unclaimed Territory, and Vial has only Ziggurat left) and the 83 ORACLE-GAPs (e.g. s30100003 T4
+`{Cloudshredder(-1) + Galerider(-1)}`: the engine's greedy loop skips a Cloudshredder copy and copies Galerider; the
+oracle's realisations make the Cloudshredder copy instead and never reach the engine's board) are both the greedy
+count of the -1 variant. The -1 variant duplicates the pinned plans (wasted search under the COLLAPSE rule) and exists
+for Hivepool-affinity lines. Keep it, give it an affinity-aware line hold, or drop it where no affinity spell is
+co-planned: a USER decision, not settled here. **APPLY-DROP-ORDER (2 in 10k, 26 in 100k):** `{Sinew + Hivepool +
+Cloudshredder}` casts Hivepool before Cloudshredder, so Hivepool costs {1} and Cloudshredder drops; Cloudshredder >
+Sinew > Hivepool pays all. The generic rank puts creatures (10) before noncreature spells (20), so something
+downstream reorders (not traced). Cast order is the USER's: a candidate rule is "an affinity spell after every
+same-subtype cast of the plan".
+
+**Play.** Held-out A/B (one binary, the Hive-token pay and the affinity credit off/on per arm, seed 53000000 + gi,
+slivers_vial at its shipped profile): Standard 5,000 paired games: **0 slower, 0 faster**, net 0, mean 4.2082 both, 2
+games changed play, units +0.004%; 2HG (30 life, two heads) 5,000: **0 slower, 0 faster**, net 0, mean 4.8720 both,
+22 changed, units +0.005%. The A/B levers were temporary and are removed: both fixes are unconditional.
+
+**USER rulings and what followed (2026-11-03).** (1) The unpinned (-1) replicate variant is DELETED ("if it is waste it
+is waste"); the resolution-time greedy copy loops stay because the beyond-horizon greedy and the pending-grant plain
+cast use them. (2) Hivepool already comes last. (3) **B5, the USER's provider prune:** `SliversProvider` keeps ONE
+replicate count per cast set, the most copies payable from the mana left after the plan's other casts
+(`MTG_SLIVERS_REPLICATE_TOPK`, default ON). (4) **B6, the USER's full Slivers cast order**, one row per card
+(`MTG_SLIVERS_ORDER`, default ON). Slice (5,000 games, gi 100000-104999, ORACLE-GAP / APPLY-DROP / ORDER / ENUM-GAP):
+base 57/34/0/0, -1 deleted 17/21/0/0, +B5 13/19/0/0, +B5+B6 13/23/0/0; DROP-COVERED 2950 -> 0.
+
+**Held-out A/B** (`build/scratch/mcslivers/ab3.py`, seed 61000000 + gi, 5,000 Standard + 5,000 2HG per arm, one pooled
+batch per binary; a0 = base on the pre-deletion binary; the deletion is an exact identity for every arm: a1/a2 re-run on
+the post-deletion binary reproduce all 200 job digests and units):
+
+| arms | Std changed / slower / faster / net / units | 2HG changed / slower / faster / net / units |
+|---|---|---|
+| a0 -> a2 (B5+B6, shipped) | 2052 / 3 / 4 / **-1** / -14.03% | 2346 / 3 / 5 / **-2** / -16.90% |
+| a0 -> a4 (B5+MANLAND) | 465 / 0 / 1 / **-1** / -14.55% | 715 / 2 / 0 / **+2** / -15.90% |
+| a0 -> a5 (B5+B6+MANLAND) | 2046 / 0 / 4 / **-4** / -14.89% | 2338 / 2 / 5 / **-3** / -16.40% |
+| a1 -> a4 (MANLAND alone) | 16 / 0 / 3 / -3 / -1.00% | 16 / 0 / 1 / -1 / +0.73% |
+| a2 -> a5 (MANLAND alone) | 16 / 0 / 3 / -3 / -1.00% | 15 / 0 / 1 / -1 / +0.60% |
+
+a2's slower games: Std 1891 / 4064 / 4771, 2HG 191 / 1145 / 1570; at d8 b0 only Std 1891 recovers. In Std 4064/4771 the
+base casts a one-pip Sliver with NO copy on T3 and animates Mutavault with the spare mana while the top count taps out.
+**THE MANLAND RESERVE** (`MTG_SLIVERS_REPLICATE_MANLAND`, default OFF, a CANDIDATE amendment to the USER's rule awaiting
+the USER) also keeps the top count whose bill leaves an untapped start-of-turn manland its own mana + animate cost. It
+removes four of the six at the shipped setting (Std 1891/4064/4771, 2HG 1145) and adds none; of the two left, 2HG 1570
+recovers at d8 b0 (6 -> 5) and **2HG 191 does not** (5 at d8 b0, base 4). 2HG 191 is not a B5 or MANLAND loss: the
+-1 deletion alone (a3) plays the same game as a1 (identical digest). The base's T4 kill rides a T3 Plated Sliver cast
+with replicate x2 by the resolution greedy loop: {W}{W}{W} from Mutavault ({C} only), Ancient Ziggurat and Sliver Hive
+-- two coloured sources. That reads as an over-payment in the greedy copy path (unconfirmed; to trace).

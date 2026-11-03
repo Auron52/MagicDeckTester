@@ -7277,7 +7277,17 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 if (td == nullptr || !TapTokenSourceLive(state, p, *td)) { break; }
                 p.tapped = true;
                 ManaPool avail = AvailableManaPool(state);
-                if (!TapForCost(state, a.cost, avail, /*for_creature=*/true))
+                // An ACTIVATED ABILITY, paid as one: creature-spell-only mana may not pay it, and a creature
+                // source's ability takes Secluded Courtyard's colour. Rollout twin (and the why): ApplyPlanDirect's
+                // TapForTokenPay.
+                bool tok_paid;
+                {
+                    const Card tok_src = p.card;   // a copy: the payment may reshape the battlefield
+                    std::optional<CreatureAbilityPayScope> tok_scope;
+                    if (tok_src.IsCreature()) { tok_scope.emplace(&tok_src); }
+                    tok_paid = TapForCost(state, a.cost, avail, /*for_creature=*/false);
+                }
+                if (!tok_paid)
                 { state.battlefield[pi].tapped = false; break; }
                 const int num = a.sac_source_id;
                 CreateToken(state, state.active_player_index,

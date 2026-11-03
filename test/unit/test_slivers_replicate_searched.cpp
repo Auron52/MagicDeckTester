@@ -227,3 +227,66 @@ TEST_CASE("Replicate searched: no granter in hand -- the enumeration is unchange
     }
     CHECK(keys[0] == keys[1]);
 }
+
+// THE USER's REPLICATE PRUNE (2026-11-03, SliversProvider::ReplicateTopCountOnly, MTG_SLIVERS_REPLICATE_TOPK):
+// "Previously we would just try the max remaining mana ... we don't need duplicates." Of the plans that differ
+// only in their counts, the one whose counts, read in cast order, are largest survives.
+TEST_CASE("Replicate top count: one count per cast set, the earliest-cast replicate takes the copies")
+{
+    heurarm::Clear();
+    static const SliversProvider sp;
+    GameState pre = Board(3, 3, { "Cloudshredder Sliver", "Muscle Sliver" }, { "Hatchery Sliver" });
+    pre.m_provider = &sp;
+    heurarm::t_arm[heurarm::SLIVERS_ORDER]      = 1;   // Muscle (2) before Cloudshredder (11)
+    {
+        heurarm::t_arm[heurarm::SLIVERS_REPLICATE_TOPK] = 1;
+        const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(pre, true);
+        // Six mana: Cloudshredder + Muscle cost 4, one copy fits -- and it goes to Muscle, cast first.
+        CHECK(PlanWith(plans, { { "Cloudshredder Sliver", 0 }, { "Muscle Sliver", 1 } }) != nullptr);
+        CHECK(PlanWith(plans, { { "Cloudshredder Sliver", 1 }, { "Muscle Sliver", 0 } }) == nullptr);
+        CHECK(PlanWith(plans, { { "Cloudshredder Sliver", 0 }, { "Muscle Sliver", 0 } }) == nullptr);
+        // Muscle alone: {1}{G} + two copies = 6.
+        CHECK(PlanWith(plans, { { "Muscle Sliver", 2 } }) != nullptr);
+        CHECK(PlanWith(plans, { { "Muscle Sliver", 1 } }) == nullptr);
+        CHECK(PlanWith(plans, { { "Muscle Sliver", 0 } }) == nullptr);
+        // No in-window unpinned replicate cast.
+        for (const TurnSolver::Plan& p : plans)
+            for (const Action& x : p.actions)
+                if (x.kind == Action::Kind::CastFromHand && x.card_name.str() != "Hatchery Sliver")
+                { CHECK(x.replicate_count >= 0); }
+    }
+    {
+        heurarm::t_arm[heurarm::SLIVERS_REPLICATE_TOPK] = 0;   // control: every count is a plan
+        const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(pre, true);
+        CHECK(PlanWith(plans, { { "Cloudshredder Sliver", 1 }, { "Muscle Sliver", 0 } }) != nullptr);
+        CHECK(PlanWith(plans, { { "Muscle Sliver", 1 } }) != nullptr);
+    }
+    heurarm::Clear();
+}
+
+TEST_CASE("Slivers cast order: Hatchery first, Thrumming Hivepool last, every card its own rank")
+{
+    heurarm::Clear();
+    static const SliversProvider sp;
+    EnsureCardsRep();
+    GameState s;
+    const char* order[] = { "Hatchery Sliver", "Muscle Sliver", "Predatory Sliver", "Sinew Sliver", "Leeching Sliver",
+                            "Galerider Sliver", "Striking Sliver", "Plated Sliver", "Crystalline Sliver",
+                            "Hibernation Sliver", "Cloudshredder Sliver", "Aether Vial", "Thrumming Hivepool" };
+    int prev = -1;
+    for (const char* n : order)
+    {
+        const CardDefinition* d = CardDatabase::Instance().Lookup(n);
+        REQUIRE(d != nullptr);
+        const int r = sp.CastOrderRank(s, *d);
+        CHECK_MESSAGE(r > prev, n);
+        prev = r;
+    }
+    CHECK(sp.CastOrderTotalByName());
+    heurarm::t_arm[heurarm::SLIVERS_ORDER] = 0;   // =0 -> VialProvider's generic tiers
+    const CardDefinition* hp = CardDatabase::Instance().Lookup("Thrumming Hivepool");
+    const CardDefinition* hs = CardDatabase::Instance().Lookup("Hatchery Sliver");
+    CHECK(sp.CastOrderRank(s, *hp) == sp.VialProvider::CastOrderRank(s, *hp));
+    CHECK(sp.CastOrderRank(s, *hs) == sp.VialProvider::CastOrderRank(s, *hs));
+    heurarm::Clear();
+}

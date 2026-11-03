@@ -597,6 +597,9 @@ std::string AttachedKey(const GameState& s, const Permanent& p)
 // engine plays -- #58 for the mana, #57 for the Blood -- was never reached: 7,208 ORACLE-GAPs in 100,000
 // Vampires games ("Voldaren Estate#58 tapped by engine only"). A plan source's tapped flag is now part of
 // both identities.
+// Slivers pass 1 (~6,000 ORACLE-GAPs) is the same fold with Mutavault: {animate #32 + animate #33}, each paying its
+// own animation (AnimateLand names the land by number, so it is a plan source); the prune kept "#33 pays for #32",
+// after which #33's own animation had no source.
 thread_local const std::set<int>* t_plan_srcs = nullptr;
 // ...and, while a realisation runs, every TWINNED permanent a {T}-cost activation names by number
 // (TurnSolver::IsTwinnedNumberedTapSource), judged on the board at hand -- a land drop can make the twin
@@ -2386,8 +2389,12 @@ Cls DominanceClass(const Res& o, const Res& e, bool pre, std::string* what)
     return worst;
 }
 
+// DropVerdict's capture (unit tests): while set, Emit records the class here instead of counting or printing.
+thread_local std::vector<std::string>* t_emit_capture = nullptr;
+
 void Emit(Cls c, const GameState& root, bool pre, const TurnSolver::Plan& plan, const std::string& detail)
 {
+    if (t_emit_capture != nullptr) { t_emit_capture->push_back(kClsName[c]); return; }
     if (!Count(c)) { return; }
     std::lock_guard<std::mutex> lk(g_print_mu);
     std::fprintf(stderr, "[mana-oracle] %s %s plan={%s} | %s | %s\n", kClsName[c], Ctx(root, pre).c_str(),
@@ -2788,7 +2795,8 @@ std::string RollbackCensus(const GameState& root, bool pre, const TurnSolver::Pl
 }
 
 void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, const EngineReal& er_in,
-               const std::vector<const EngineReal*>& full_sibs)
+               const std::vector<const EngineReal*>& full_sibs,
+               const std::vector<const TurnSolver::Plan*>& sib_plans)
 {
     g_plans.fetch_add(1, std::memory_order_relaxed);
     for (const Action& a : plan.actions)
@@ -2852,13 +2860,14 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
         // A full oracle realisation that used everything the engine's line meant to use.
         const Outcome* full = nullptr;
         const Outcome* uncovered = nullptr;
+        std::vector<const Outcome*> uncovered_all;
         bool other_full = false;   // full, but a continuation chose different cards
         for (const Outcome& o : r.outcomes)
         {
             if (!o.Clean()) { continue; }
             if (!Includes(o.left, e_want)) { other_full = true; continue; }
             if (full == nullptr) { full = &o; }
-            if (uncovered == nullptr && !sib_covers(o)) { uncovered = &o; }
+            if (!sib_covers(o)) { uncovered_all.push_back(&o); if (uncovered == nullptr) { uncovered = &o; } }
         }
         if (full != nullptr && !sib.empty() && uncovered == nullptr)
         {
@@ -2866,6 +2875,44 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
                                                   "reaches, another menu entry with the same actions reaches "
                                                   "with at least the resources");
             return;
+        }
+        // ...OR UNDER ONE OF ITS OWN PAYMENTS (oracle audit only). The test above compares this order's boards with
+        // the boards the siblings' ENGINE payments reach. But which of several incomparable payments realises a plan is the payer's standing exemption: a
+        // sibling's own audit flags its engine payment only when another payment of it strictly dominates. So a
+        // board of this order that a sibling reaches under some payment of its own is not lost -- the sibling is on
+        // the menu, and its own audit vouches for the payment the engine picks there. Slivers mana-clean pass 1,
+        // ~3,700 APPLY-DROPs: the unpinned replicate cast (replicate_count -1, greedy copies at resolution; deleted
+        // from the search window 2026-11-03) drops
+        // the co-planned Plated Sliver; the oracle realises both by overpaying Predatory Sliver so no copy is
+        // affordable, leaving Mutavault up; the pinned-zero sibling pays Predatory with Mutavault + Cavern and leaves
+        // Secluded Courtyard up -- incomparable, yet the sibling's own payments include the Mutavault-up board.
+        // Each uncovered board must be reached (same core, at least the resources) by a sibling's realisation in the
+        // sibling's own order; a capped or unmodelled sibling search reaches nothing (fail closed).
+        if (full != nullptr && !uncovered_all.empty() && sib_plans.size() == full_sibs.size())
+        {
+            auto sib_pay_covers = [&](const Outcome& u)
+            {
+                const std::uint64_t k = CoreKey(u.st);
+                const Res ur = Resources(u.st, false);
+                const OutcomeTest acc = [&](const Outcome& o)
+                { return CoreKey(o.st) == k && Covers(Resources(o.st, false), ur, nullptr); };
+                for (const TurnSolver::Plan* sp : sib_plans)
+                {
+                    const Realization rs = Realize(root, *sp, pre, /*stop_at_full=*/true, {}, false, &e_want, &acc);
+                    if (rs.hit >= 0) { return true; }
+                }
+                return false;
+            };
+            const Outcome* still = nullptr;
+            for (const Outcome* u : uncovered_all) { if (!sib_pay_covers(*u)) { still = u; break; } }
+            if (still == nullptr)
+            {
+                Emit(C_DROP_COVERED, root, pre, plan, dropped + "; this order pays them all too, and every board it "
+                                                      "reaches, another menu entry with the same actions reaches "
+                                                      "under one of its own payments");
+                return;
+            }
+            uncovered = still;
         }
         if (full != nullptr)
         {
@@ -3221,6 +3268,30 @@ bool CoversEngineOutcome(const GameState& state, bool pre, const TurnSolver::Pla
     return false;
 }
 
+std::vector<std::string> PlanVerdict(const GameState& state, bool pre, const TurnSolver::Plan& plan,
+                                     const std::vector<TurnSolver::Plan>& menu)
+{
+    RevealLogPause pause;
+    std::vector<EngineReal> real;
+    real.reserve(menu.size());
+    for (const TurnSolver::Plan& p : menu) { real.push_back(EngineApply(state, pre, p)); }
+    const std::string key = SiblingKey(plan);
+    std::vector<const EngineReal*>       sibs;
+    std::vector<const TurnSolver::Plan*> sib_plans;
+    for (std::size_t i = 0; i < menu.size(); ++i)
+    {
+        if (!real[i].Full() || SiblingKey(menu[i]) != key) { continue; }
+        sibs.push_back(&real[i]);
+        sib_plans.push_back(&menu[i]);
+    }
+    std::vector<std::string> got;
+    std::vector<std::string>* saved = t_emit_capture;
+    t_emit_capture = &got;
+    AuditPlan(state, pre, plan, EngineApply(state, pre, plan), sibs, sib_plans);
+    t_emit_capture = saved;
+    return got;
+}
+
 // ---- THE EXECUTOR'S PAYMENT SCRIPT (ManaOracle.h) -------------------------------------------------------
 }   // namespace manaoracle
 // TurnSolver.cpp (next to SimulateOneCombat, sharing its pre-declaration body CombatPreDeclare): the rollout combat's
@@ -3449,12 +3520,21 @@ void AuditDecision(const GameState& state, bool is_pre_combat)
         keys.push_back(SiblingKey(p));
     }
     std::map<std::string, std::vector<const EngineReal*>> full_by_key;
-    for (std::size_t i = 0; i < plans.size(); ++i) { if (real[i].Full()) { full_by_key[keys[i]].push_back(&real[i]); } }
+    std::map<std::string, std::vector<const TurnSolver::Plan*>> full_plans_by_key;   // parallel to full_by_key
+    for (std::size_t i = 0; i < plans.size(); ++i)
+    {
+        if (!real[i].Full()) { continue; }
+        full_by_key[keys[i]].push_back(&real[i]);
+        full_plans_by_key[keys[i]].push_back(&plans[i]);
+    }
     static const std::vector<const EngineReal*> kNone;
+    static const std::vector<const TurnSolver::Plan*> kNoPlans;
     for (std::size_t i = 0; i < plans.size(); ++i)
     {
         const auto it = full_by_key.find(keys[i]);
-        AuditPlan(state, is_pre_combat, plans[i], real[i], it == full_by_key.end() ? kNone : it->second);
+        const auto pt = full_plans_by_key.find(keys[i]);
+        AuditPlan(state, is_pre_combat, plans[i], real[i], it == full_by_key.end() ? kNone : it->second,
+                  pt == full_plans_by_key.end() ? kNoPlans : pt->second);
     }
 
     // ---- ENUM-GAP: the plans a MANA GATE kept off the menu ----------------------------------------
