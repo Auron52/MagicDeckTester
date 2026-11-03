@@ -1,3 +1,5 @@
+#include "../core/Tier1Ledger.h"
+#include "../core/WorkCounters.h"
 #include "BatchRunner.h"
 #include "GoldFishRunner.h"
 #include "../core/GameEngine.h"
@@ -2223,6 +2225,32 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                 // per-unit wall cost, which the virtual-ms budget assumes is a constant
                 // (SearchBudget::NODES_PER_VIRTUAL_MS). A deck whose ratio blows up is one whose
                 // budget no longer means what it says, and the pair of numbers is what shows it.
+                // MTG_TIER1_STATS=<path>: one line per game of the tier-1 ledger's per-game peak
+                // (core/Tier1Ledger.h) -- the total, each cache's own peak, and what the total was
+                // made of at its peak. Read on the worker that played the game. Diagnostic only.
+                {
+                    static const char* s_t1_path = std::getenv("MTG_TIER1_STATS");
+                    if (s_t1_path != nullptr && *s_t1_path != '\0')
+                    {
+                        static std::mutex s_t1_mu;
+                        static std::FILE* s_t1_f = std::fopen(s_t1_path, "a");
+                        if (s_t1_f != nullptr)
+                        {
+                            std::string line = job.name + " " + std::to_string(global_gi) + " "
+                                             + std::to_string(g_ms) + " " + std::to_string(g_units) + " "
+                                             + std::to_string(tier1::t_peak_total);
+                            for (int c = 0; c < tier1::kCats; ++c)
+                            { line += " " + std::string(tier1::CatName(c)) + "=" + std::to_string(tier1::t_peak[c])
+                                    + "/" + std::to_string(tier1::t_at_peak[c]); }
+                            for (int k = 0; k < workctr::kKinds; ++k)
+                            { line += " " + std::string(workctr::KindName(k)) + "=" + std::to_string(workctr::t_n[k]); }
+                            line += "\n";
+                            std::lock_guard<std::mutex> lk(s_t1_mu);
+                            std::fputs(line.c_str(), s_t1_f);
+                            std::fflush(s_t1_f);
+                        }
+                    }
+                }
                 if (s_slow_game_ms > 0 && g_ms >= s_slow_game_ms)
                 {
                     std::fprintf(stderr,

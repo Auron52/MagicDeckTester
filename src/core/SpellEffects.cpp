@@ -22,6 +22,7 @@
 // Verify any addition with a deterministic callgrind Ir A/B on a fixed workload. Do NOT reason
 // about what looks hot: these helpers are fully inlined today, so they do not appear in a profile
 // by name at all -- only the total Ir moves.
+#include "Tier1Ledger.h"
 #include "SpellEffects.h"
 #include "MemBudget.h"
 #include "RouteTape.h"
@@ -5919,7 +5920,7 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
 void ManaCacheClearPerGame()
 {
     static const bool s_keep = EnvOn("MTG_LEGACY_MANA_CACHE_ACROSS_GAMES");
-    if (!s_keep) { g_mana_cache.clear(); g_mana_cache_bytes = 0; }
+    if (!s_keep) { g_mana_cache.clear(); g_mana_cache_bytes = 0; tier1::Set(tier1::kMana, 0); }
 }
 
 
@@ -6506,7 +6507,7 @@ static bool TapForCostBacktrackTop(GameState& state, const ManaCost& cost,
     // ---- Store (negatives always; a positive records its tap-set + the two order-dependent deltas) --
     if (mc_active)
     {
-        if (g_mana_cache.size() > 500000) { g_mana_cache.clear(); g_mana_cache_bytes = 0; }   // bound cross-rollout growth
+        if (g_mana_cache.size() > 500000) { g_mana_cache.clear(); g_mana_cache_bytes = 0; tier1::Set(tier1::kMana, 0); }   // bound cross-rollout growth
         ManaCacheEntry e; e.verify = mk2; e.payable = ok; e.drip_life = 0; e.self_life = 0;
         e.energy_spent = 0;
         e.feed_alt = !ok && mc_alt_here;
@@ -6570,6 +6571,7 @@ static bool TapForCostBacktrackTop(GameState& state, const ManaCost& cost,
             const long long cap = ManaCacheByteCap();
             if (cap > 0 && g_mana_cache_bytes + eb > cap) { g_mana_cache.clear(); g_mana_cache_bytes = 0; }
             g_mana_cache_bytes += eb;
+            tier1::Set(tier1::kMana, g_mana_cache_bytes);
             g_mana_cache[mk1] = std::move(e);
         }
     }

@@ -1,6 +1,7 @@
 #pragma once
 #include "../core/EnvFlags.h"
 #include "../core/MemBudget.h"
+#include "../core/Tier1Ledger.h"
 #include <atomic>
 #include <cstdint>
 #include <cstdio>
@@ -130,7 +131,7 @@ public:
     {
         static const std::size_t cap = Cap();
         if (cap && m_map.size() >= cap) { return; }
-        m_map.emplace(k, win_turn);
+        if (m_map.emplace(k, win_turn).second) { Account(kWinEntryBytes); }
         if (StatsOn())
         {
             std::size_t sz = m_map.size(), prev = PeakSize().load(std::memory_order_relaxed);
@@ -185,19 +186,48 @@ public:
         if (cap && m_nowin.size() >= cap) { return; }
         if (StatsOn()) { NoWinStores().fetch_add(1, std::memory_order_relaxed); }
         std::unordered_map<Key, NoWinEntry, KeyHash>::iterator it = m_nowin.find(k);
-        if (it == m_nowin.end())            { m_nowin.emplace(k, e); }
+        if (it == m_nowin.end())            { m_nowin.emplace(k, e); Account(kNoWinEntryBytes); }
         else if (it->second.bound < e.bound) { it->second = e; }
     }
 
     std::size_t Size() const { return m_map.size(); }
 
     // Drop all entries (the game-persistent leaf cache is cleared per game).
-    void Clear() { m_map.clear(); m_nowin.clear(); }
+    void Clear() { m_map.clear(); m_nowin.clear(); Account(-m_bytes); }
+
+    // TIER-1 LEDGER (core/Tier1Ledger.h): each table reports its approximate footprint -- a map node
+    // (next pointer + cached hash + key/value, malloc-rounded) plus its bucket slot -- to the owning
+    // thread's ledger. The same 64 B the RAM-derived cap assumes for a win entry.
+    static constexpr long long kWinEntryBytes   = 64;
+    static constexpr long long kNoWinEntryBytes = 80;
+    TranspositionTable() = default;
+    TranspositionTable(const TranspositionTable& o) : m_map(o.m_map), m_nowin(o.m_nowin) { Account(o.m_bytes); }
+    TranspositionTable(TranspositionTable&& o) noexcept
+        : m_map(std::move(o.m_map)), m_nowin(std::move(o.m_nowin)), m_bytes(o.m_bytes)
+    { o.m_map.clear(); o.m_nowin.clear(); o.m_bytes = 0; }
+    TranspositionTable& operator=(const TranspositionTable& o)
+    {
+        if (this != &o) { m_map = o.m_map; m_nowin = o.m_nowin; Account(o.m_bytes - m_bytes); }
+        return *this;
+    }
+    TranspositionTable& operator=(TranspositionTable&& o) noexcept
+    {
+        if (this != &o)
+        {
+            Account(-m_bytes);
+            m_map = std::move(o.m_map); m_nowin = std::move(o.m_nowin); m_bytes = o.m_bytes;
+            o.m_map.clear(); o.m_nowin.clear(); o.m_bytes = 0;
+        }
+        return *this;
+    }
+    ~TranspositionTable() { Account(-m_bytes); }
 
 private:
+    void Account(long long d) { if (d != 0) { m_bytes += d; tier1::Add(tier1::kTT, d); } }
     std::unordered_map<Key, int, KeyHash> m_map;
     // key -> the refutation (cutoff it was proved under + the body's replayable side effects)
     std::unordered_map<Key, NoWinEntry, KeyHash> m_nowin;
+    long long m_bytes = 0;   // this table's share of the thread's tier-1 ledger
 };
 
 // Print the aggregate lookup/hit totals once at exit when MTG_TT_STATS is set.

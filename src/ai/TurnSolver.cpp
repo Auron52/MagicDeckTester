@@ -1,3 +1,5 @@
+#include "../core/WorkCounters.h"
+#include "../core/Tier1Ledger.h"
 #include "HeuristicArm.h"
 #include "ValueArm.h"
 #include "../core/EnvFlags.h"
@@ -50233,8 +50235,14 @@ static TranspositionTable::Key BuildBreakpointKey(const GameState& state, bool i
 // collapses to ~1.03x). Suite smoke 1.064x aggregate: hinata d3 1.27x, dragonstorm d3 1.36x,
 // mirrorwing 1.14-1.17x, fivecolour 1.02-1.09x, against small losses where the hit rate is low
 // (creature_giving d5 0.89x, antilife d5 0.93x, knights d5 0.95x).
+inline std::size_t ApproxPlanBytes(const TurnSolver::Plan& p);   // defined with the plan pool, below
 namespace solvememo
 {
+    // TIER-1 LEDGER bytes of the two maps below (core/Tier1Ledger.h): plan + key + map node.
+    inline thread_local long long t_bytes = 0;
+    inline long long EntryBytes(const TurnSolver::Plan& p)
+    { return static_cast<long long>(ApproxPlanBytes(p)) + 16 + 64; }
+    inline void NoteSet(long long d) { t_bytes += d; tier1::Set(tier1::kSolveMemo, t_bytes); }
     inline bool Enabled()  { static const bool v = EnvOn("MTG_SOLVE_MEMO", true); return v; }
     inline bool VerifyOn() { static const bool v = EnvOn("MTG_SOLVE_MEMO_VERIFY"); return v; }
 
@@ -50900,8 +50908,14 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat, c
     if (gamework::Abandoned()) { return p; }
     if (cache.size() >= solvememo::Cap())
     {
+        for (const auto& kv : cache) { solvememo::NoteSet(-solvememo::EntryBytes(kv.second.plan)); }
         cache.clear();
         solvememo::g_clears.fetch_add(1, std::memory_order_relaxed);
+    }
+    {
+        const auto old = cache.find(k);
+        if (old != cache.end()) { solvememo::NoteSet(-solvememo::EntryBytes(old->second.plan)); }
+        solvememo::NoteSet(solvememo::EntryBytes(p));
     }
     cache[k] = solvememo::Entry{ g_decision_epoch, p };
     return p;
@@ -52040,6 +52054,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // spent. g_greedy_charge_budget is null unless the flag is on AND a budgeted rollout host
         // is on the stack -> zero-cost null check by default.
         if (walk_exhausted) { return; }
+        workctr::Inc(workctr::kGreedyVisit);
         // Observe the per-GAME abandon flag HERE -- see kWalkAbandonStride above the function. This
         // walk honours no budget, so without this it never learns the game has been voided by its
         // unit ceiling or its wall deadline. Strided, and inert unless one of those is armed.
@@ -59188,6 +59203,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // apply (see ArmNewDupAll). A reset at every apply's entry let a nested apply wipe the outer
     // base plan's measurement mid-flight.
     PROF_INC(applyplan_calls);
+    workctr::Inc(workctr::kApply);
     // DIAGNOSTIC (MTG_PREPAY_STAGE_SHADOW, never on in play): a plain apply whose prepay took the staged
     // land-Aura split is replayed on a copy with MTG_PREPAY_AURA_STAGE forced off, and any difference in
     // what the turn cast is printed -- the staged split must never realise fewer casts than the walk.
@@ -69684,6 +69700,7 @@ struct EnumChargeScope
     ~EnumChargeScope()
     {
         if (visits <= 0) { return; }
+        workctr::Inc(workctr::kOdoVisit, visits);
         const int w = EnumChargeWeight();
         if (w <= 0)
         {
@@ -70346,6 +70363,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // the chooser fires only during the REAL TurnSolver::ApplyPlan, which runs outside enumeration.
     RevealLogPause _rlp_enum;
     PROF_INC(enumerate_calls);
+    workctr::Inc(workctr::kEnumCall);
     const Player& ap              = state.ActivePlayer();
     ManaPool      pool            = AvailableManaPool(state);
     ManaPool      pool_noncreature = BuildNonCreaturePool(state);
@@ -86106,6 +86124,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
           state.turn_number, all.size(), land_names.size(), ap.hand.size());
     PROF_ADD(plans_generated, all.size()
                               + ((pb_lazy != nullptr && pb_lazy->active) ? pb_lazy->P : 0));
+    workctr::Inc(workctr::kPlans, static_cast<long long>(all.size())
+                                  + ((pb_lazy != nullptr && pb_lazy->active) ? pb_lazy->P : 0));
     PlanDomCensus(all);   // MTG_PLANDOM_CENSUS only; prunes nothing (see the census above)
     return all;
 }
@@ -86275,6 +86295,7 @@ namespace plancache
     {
         (void)&t_releaser;   // odr-use: guarantees this thread's exit-releaser is constructed
         local += n;
+        tier1::Add(&local == &t_bp_bytes ? tier1::kPlanBp : tier1::kPlanEnum, n);
         if (t_enum_bytes + t_bp_bytes > t_game_peak) { t_game_peak = t_enum_bytes + t_bp_bytes; }
         const long long now = PoolUsed().fetch_add(n, std::memory_order_relaxed) + n;
         long long hi = PoolHiwater().load(std::memory_order_relaxed);
@@ -86298,6 +86319,7 @@ namespace plancache
     inline void Release(long long& local)
     {
         if (local > 0) { PoolUsed().fetch_sub(local, std::memory_order_relaxed); }
+        if (local != 0) { tier1::Add(&local == &t_bp_bytes ? tier1::kPlanBp : tier1::kPlanEnum, -local); }
         local = 0;
         if (StatsOn())
         {
@@ -87316,6 +87338,8 @@ void TurnSolver::ClearPerGameCaches()
     plancache::RecordGamePeak();   // MTG_PLAN_POOL_STATS: the finished game's peak holding
     solvememo::t_cache.clear();
     solvememo::t_m2cache.clear();
+    solvememo::t_bytes = 0;
+    tier1::Set(tier1::kSolveMemo, 0);
     M1MemoClear();
     enummemo::t_cache.clear();
     plancache::Release(plancache::t_enum_bytes);
@@ -87361,6 +87385,8 @@ void TurnSolver::ClearPerGameCaches()
     ManaCacheClearPerGame();
     treereuse::ClearGame();   // MTG_TREE_REUSE_PROBE (diagnostic; empty when off)
     GameLineCacheClear();     // MTG_GAME_LINE_CACHE (empty when off)
+    tier1::BeginGame();       // the tier-1 ledger's per-game peak restarts here (core/Tier1Ledger.h)
+    workctr::BeginGame();     // per-game work counters (core/WorkCounters.h)
 }
 
 
@@ -88934,6 +88960,7 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
         // unless armed (m_overrun_limit==0 on the baseline path / normal decisions), so this
         // is byte-identical for every non-pathological rollout.
         ConsumeAt(budget, unitsite::kRolloutStep);
+        workctr::Inc(budget != nullptr ? workctr::kStepCharged : workctr::kStepFree);
         if (s_rollout_stats) { g_rollout_steps.fetch_add(1, std::memory_order_relaxed); }   // one simulated turn-step
         // Rollout board census (MTG_BOARD_CENSUS). THIS is the step the 58x-per-node cost is paid
         // on, so it is where the board that causes it has to be sampled. Off = one static load.
@@ -90214,13 +90241,14 @@ inline std::size_t ApproxFslBytes(const TurnSolver::SearchLine& line)
 inline bool FslPoolAcquire(long long kb)
 {
     const long long pool = FslPool();
-    if (pool <= 0) { return true; }   // pool off: only the per-cache cap applies
+    if (pool <= 0) { tier1::Add(tier1::kFsl, kb); return true; }   // pool off: only the per-cache cap applies
     const long long now = FslPoolUsed().fetch_add(kb, std::memory_order_relaxed) + kb;
     if (now <= pool)
     {
         long long hi = FslPoolHiwater().load(std::memory_order_relaxed);
         while (now > hi
                && !FslPoolHiwater().compare_exchange_weak(hi, now, std::memory_order_relaxed)) {}
+        tier1::Add(tier1::kFsl, kb);
         return true;
     }
     FslPoolUsed().fetch_sub(kb, std::memory_order_relaxed);
@@ -90284,6 +90312,7 @@ inline DeterminismReport g_determinism_report;
 // this allows is one entry's delta per updating worker: bounded and tiny against a GB-scale pool.
 inline void FslPoolAdjust(long long delta_kb)
 {
+    tier1::Add(tier1::kFsl, delta_kb);
     if (FslPool() > 0 && delta_kb != 0)
     {
         FslPoolUsed().fetch_add(delta_kb, std::memory_order_relaxed);
@@ -90291,6 +90320,7 @@ inline void FslPoolAdjust(long long delta_kb)
 }
 inline void FslPoolRelease(long long kb)
 {
+    tier1::Add(tier1::kFsl, -kb);
     if (FslPool() > 0 && kb != 0)
     {
         FslPoolUsed().fetch_sub(kb, std::memory_order_relaxed);
@@ -94119,7 +94149,7 @@ namespace gamelc
     struct StoreCtx { int turn, depth, cutoff, nest; long long used; };   // verify-only diagnostics
     inline thread_local std::unordered_map<TranspositionTable::Key, StoreCtx, TranspositionTable::KeyHash> t_ctx;
     inline thread_local TranspositionTable::Key t_hit_key{};
-    inline void Clear() { t_map.clear(); t_ctx.clear(); t_bytes = 0; }
+    inline void Clear() { t_map.clear(); t_ctx.clear(); t_bytes = 0; tier1::Set(tier1::kGameLc, 0); }
     // The node's answer context (see the block comment). `vm` mirrors the leaf code in FSLineWin exactly.
     inline TranspositionTable::Key Tag(TranspositionTable::Key k, const GameState& state)
     {
@@ -97319,6 +97349,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 else
                 {
                     gamelc::t_bytes += nb;
+                    tier1::Set(tier1::kGameLc, static_cast<long long>(gamelc::t_bytes));
                     gamelc::g_stores.fetch_add(1, std::memory_order_relaxed);
                     if (gamelc::Verify())
                     { gamelc::t_ctx[gk] = { state.turn_number, depth, cutoff, g_fsline_nest, static_cast<long long>(gamework::Used()) }; }
@@ -105209,10 +105240,16 @@ static TurnSolver::Plan SearchedSecondMainMemoized(const GameState& state, int d
     }
     if (cache.size() >= solvememo::Cap())
     {
+        for (const auto& kv : cache) { solvememo::NoteSet(-solvememo::EntryBytes(kv.second.plan)); }
         cache.clear();
         solvememo::g_m2_clears.fetch_add(1, std::memory_order_relaxed);
     }
     if (ko_hit && s_rollout_stats) { g_ko_memo_ns.fetch_add(1, std::memory_order_relaxed); }
+    {
+        const auto old = cache.find(k);
+        if (old != cache.end()) { solvememo::NoteSet(-solvememo::EntryBytes(old->second.plan)); }
+        solvememo::NoteSet(solvememo::EntryBytes(p));
+    }
     cache[k] = solvememo::Entry{ g_decision_epoch, p,
                                  static_cast<uint32_t>(g_condemn_drops - drops_before),
                                  static_cast<uint32_t>(g_fs_trunc_events - trunc_before),
@@ -105314,7 +105351,7 @@ namespace m1memo
     inline Dumper g_dumper;
 }
 
-static void M1MemoClear() { m1memo::t_cache.clear(); m1memo::t_bytes = 0; }
+static void M1MemoClear() { m1memo::t_cache.clear(); m1memo::t_bytes = 0; tier1::Set(tier1::kM1Memo, 0); }
 
 static TurnSolver::Plan RolloutPreCombatSolve(const GameState& state, int depth, int max_turns,
                                               SearchBudget* budget, bool second_main,
@@ -105342,6 +105379,7 @@ static TurnSolver::Plan RolloutPreCombatSolve(const GameState& state, int depth,
         if (!cache.empty())
         { cache.clear(); if (s_rollout_stats) { m1memo::g_epoch_clears.fetch_add(1, std::memory_order_relaxed); } }
         m1memo::t_bytes = 0;
+        tier1::Set(tier1::kM1Memo, 0);
         m1memo::t_epoch = g_decision_epoch;
     }
     auto it = cache.find(k);
@@ -105410,6 +105448,7 @@ static TurnSolver::Plan RolloutPreCombatSolve(const GameState& state, int depth,
         if (s_rollout_stats) { m1memo::g_cap_clears.fetch_add(1, std::memory_order_relaxed); }
     }
     m1memo::t_bytes += entry_bytes;
+    tier1::Set(tier1::kM1Memo, m1memo::t_bytes);
     if (ko_hit && s_rollout_stats) { g_ko_memo_ns.fetch_add(1, std::memory_order_relaxed); }
     cache[k] = solvememo::Entry{ g_decision_epoch, p,
                                  static_cast<uint32_t>(g_condemn_drops - drops_before),
