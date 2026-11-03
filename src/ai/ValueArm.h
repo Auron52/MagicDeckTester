@@ -154,7 +154,7 @@ struct Arm
     // PRICED DECISION CEILING (MTG_DECISION_PRICED_X; decisionwork::PricedLimitNs): X in units of L x REF_NS.
     // Per-job so the off arm and an X sweep share one pooled batch. -1 unset => env (default 0 = off) | 0 off.
     int         decision_priced_x = -1;
-    int         decision_priced_gate = -1;   // priced START GATE: -1 env (MTG_DECISION_PRICED_GATE, default on) | 0 off | 1 on
+    int         decision_priced_gate = -1;   // priced START GATE: -1 env (MTG_DECISION_PRICED_GATE, default OFF) | 0 off | 1 on
     // AA ROUTE WALK PRICE (MTG_AA_ROUTE_NODE_UNITS; aaroute::NodeUnits in DecisionProviders.cpp): units
     // per walk apply. Per-job so the off arm and a price sweep share one pooled batch.
     // -1 unset => env (default 0 = off) | 0 off | > 0 on at that price.

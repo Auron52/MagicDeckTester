@@ -48,10 +48,13 @@ inline thread_local long long t_pr_limit = 0;   // 0 == disarmed
 inline bool PricedExceeded() { return t_pr_limit > 0 && workctr::t_priced - t_pr_start >= t_pr_limit; }
 // The PRICED START GATE (FullSearchLine's ladder): decline to START a pass whose projected priced cost does not fit
 // the decision's remaining priced allowance. Per-job arm "decision_priced_gate" (ValueArm) else MTG_DECISION_PRICED_GATE
-// (default ON); only consulted while the priced ceiling is armed, so inert with it off.
+// (default OFF since 2026-11-03: it projects the next pass as prev x prev/prev2, which overshoots when the growth ratio
+// swings, and declined a pass the ceiling never cut -- FiveColour regression d5 s3003 gi103 T6 -> T7 at X=100, while gate
+// off == the uncapped game, units included. A/B v3 X=50 gate on vs off: same win turns, held-out wall 8,511 vs 8,461 s,
+// tail corpus 5,160 vs 5,143 s -- it bought nothing). Only consulted while the priced ceiling is armed.
 inline bool PricedGateOn()
 {
-    static const bool env = EnvOn("MTG_DECISION_PRICED_GATE", true);
+    static const bool env = EnvOn("MTG_DECISION_PRICED_GATE", false);
     const int a = valuearm::t_arm.decision_priced_gate;
     return a >= 0 ? a != 0 : env;
 }
