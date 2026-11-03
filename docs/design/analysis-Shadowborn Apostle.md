@@ -1176,3 +1176,13 @@ Scenarios 400/400.
 
 **INT-10 (playout P3) is NOT run tonight**: play is frozen here for the mulligan generation (the brief stays in
 logs/shadowborn/int10-brief.md for later).
+
+## Mulligan profile + value leaf (2026-11-03 overnight chain)
+
+- **Mulligan profile SHIPPED** (e9f0f100d; fast R30, K=15, generation setting d2 b1 screened by mullgen): keep -0.2715t
+  (4/4 seeds, t -9.6), confounded bottoming -0.0745t (4/4, t -13.1).
+- **Value leaf: none (USER 2026-11-03: "No leaf is okay, but heuristic ladder is not.").** Phase E vs no leaf, 8 paired
+  seeds x 1000 games: staged model -0.0091t at 1.89x units; emulated (heuristic) ladder -0.0228t at 1.13x; leafless
+  shapes nlesc +0.025t, nlfit +0.045t. Nothing adopted; the staged model stays in logs/eval/ only.
+- Owed: overnight ENTRY -> FULL resize (accept with the keep table absent), then the smoke/regression GT re-accept
+  for the keep-table adoption.
