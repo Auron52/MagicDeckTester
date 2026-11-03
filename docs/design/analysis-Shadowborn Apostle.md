@@ -708,3 +708,100 @@ showed 0 there). Real-game bottom tripwire: 2,053 ripple-bottomed, 648 read befo
    The lasting fix is to decide free-tutor picks at their resolution (a breakpoint) instead of a packed cross product.
 4. Finding 7 (ritual chain over-credit) left as known waste.
 5. The residual in-window unpinned answers (5,280 at d3 b10) take the playout policy below the late wave, by design.
+
+## INT-6 done (2026-11-03)
+Commits on `shadowborn-analysis` (not pushed): `9bb67b540` (provider, heurarm slot, tests) + this ledger commit.
+Scope: analyze-deck Stage 5i, the USER-designed cleanup-discard buckets (brief: `logs/shadowborn/int6-discard-brief.md`,
+the REVISED fill order). Summaries: `logs/shadowborn/int6/`.
+
+**Authority (USER 2026-11-03, verbatim):** *"We should bucket as usual, 1 Thumming Stone (or tutor if missing) between
+hand and battlefield, mana up to 6, 1-2 shadowborn. Tutors fill spots where something is missing including mana, though
+we need to keep a space for Shadowborns to be sacrificed to Diabolic Intent and Culling. 1 Shadowborn at least should go
+before 6 slow mana. I don't want to see it keep Thumming Stone and 6 lands."* / *"Fast mana like Dark Ritual is pretty
+much always a keep. Same with culling and lake of the dead in situations you mentioned. Naturally, we need to have fodder
+for the things that require it and at least a couple of land between hand and battlefield."* / *"Maybe with stone out,
+you would want to keep all Shadowborns and maybe even Reaper as a side threat to consider hardcasting."*
+
+**The rule** (`ShadowbornProvider::CleanupDiscardShedOrder`; roles from card data; keep set quota-first, NET OF BOARD;
+the shed is the overflow's first card, else the last card kept; ONE index through `CleanupDiscardRankingWithOrder`;
+re-asked per shed, `CleanupDiscardShedStable() == false`):
+
+| # | bucket | keeps |
+|---|---|---|
+| 1 | STONE | 1 ripple granter (`grants_ripple`) between hand + battlefield; with none in either, 1 TUTOR holds the slot (Demonic > Intent with fodder > Profane > Intent) |
+| 2 | LANDS | lands until 2 between hand + battlefield (a Lake in hand does not count; basics first) |
+| 3 | APOSTLE #1 | 1 `sac_named_count` creature; none in hand -> a tutor fills it (PROVISIONAL) |
+| 4 | FAST MANA + FODDER | NOT capped: every plain ritual (Dark Ritual); the first Lake when fuelled (>= 2 lands of its subtype on our battlefield, no Lake there); the first creature-sac ritual (Culling) when it has fodder. FODDER: each kept creature-sac card (Culling, a kept Diabolic Intent) claims one of our battlefield creatures, else keeps one more hand Apostle (never #1; a slot-1 Intent's claim is deferred until #1 is kept) |
+| 5 | MANA to quota | 6, or **4** with a granter ON OUR BATTLEFIELD; counted = `ShadowbornReachableMana(board_only)` + kept hand cards (land 1, ritual its net, Lake its crack surplus 3, a tutor 1); fills with lands, then a tutor |
+| 6 | APOSTLE #2 | no granter out: one more. Granter out: EVERY Apostle, then the first HARDCAST THREAT (a creature of the Apostle's searched subtype the activation does not fetch, no hand discard: Reaper) |
+| 7 | OVERFLOW (shed first) | unclassified; a granter in hand while one is out; Demons (colour-unreachable, then the hand-discarder, then higher MV); a second granter; Lotus Bloom; Lake / Culling outside their conditions; surplus lands; extra tutors; extra Apostles; rituals |
+
+Lever: `MTG_SHADOWBORN_BUCKET_DISCARD` (per-job heurarm slot, DEFAULT ON pending the USER; =0 -> `DeckProvider`'s generic
+max-MV ranking). `MTG_SHADOWBORN_DISCARD_FAN=1` = TESTING-ONLY fan for the 5i evidence run. `ShadowbornReachableMana`
+gains a `board_only` mode (existing callers unchanged).
+
+**Tests:** `test/unit/test_shadowborn_int6.cpp` (10 cases): lever off = generic (sheds the Stone, max MV) and
+prefix-stable; on = one index, re-asked; Stone + 6 lands + Apostle -> a land (and with 3 lands out, three surplus Swamps
+before the Apostle); a granter in hand with one out sheds FIRST (ahead of Jetmir / Overlord), and is the last card kept
+without one out; a second granter after the Demons, before Lotus Bloom; every Dark Ritual kept past the quota; Culling
+kept with its fodder Apostle (and with a battlefield creature), overflow with no fodder; a slot-1 Intent keeps a fodder
+Apostle ahead of the mana, Demonic Tutor preferred for the slot; Lake fuelled / unfuelled / Lake already out; granter
+out -> quota 4, every Apostle, Reaper over surplus lands (and Reaper shed first with no Stone out); the Demon order.
+**Unit 2481/2481. Scenarios 398/398. Smoke** (not accepted): 161 passed, 4 failed -- Merfolk d0/d3/d5 + merfolk2hg d3,
+the pre-existing drift (merfolk d3 digest 16290806e85e1728); every other case byte-identical (deck not a suite case yet).
+
+**Where this deck discards** (`MTG_TRACE=discard`, `MTG_SHED_STATS`): the cleanup is the only CHOICE site (Sire's
+end-step discard is the whole hand; no other card discards). REAL sheds are rare: 1 per 50 games (INT-5 / lever off),
+2 per 50 (lever on) at d3 b10; 5-6 labelled per 400 games in the evidence runs; hand size 8 every time. ROLLOUT sheds
+are ~31 per game (1,546 per 50 games, all "low-land" < 4 lands out), and the bucket pick differs from the generic index
+0 in **67.4%** of them -- so the rule's effect is almost entirely search/rollout fidelity, not real sheds.
+
+**5i evidence** (`analyze_deck.py --discard-analysis --no-rebuild`, 400 games d3 b10 single-thread, seed 930000):
+
+| arm | labelled decisions | rule picks optimal | mean regret | verdict |
+|---|---|---|---|---|
+| generic (lever =0, the stage's status quo) | 5 | 5/5 | 0.00 | STATUS_QUO_OK (no derived order, no A/B) |
+| bucket rule (`MTG_SHADOWBORN_DISCARD_FAN=1`) | 6 | **6/6** | **0.00** | STATUS_QUO_OK |
+
+Rule-vs-searched regret is ZERO. The bucket picks were: a second Stone (no Stone out), Overlord (Demon overflow) x2,
+a third Apostle (Stone + 4 lands + 2 Apostles kept), Reaper (no Stone out), Jetmir (colour-unreachable first). The
+alternatives the search refutes are exactly what the rule keeps: shedding the only Stone (win 9 vs 7 at seed 930223),
+Culling, Dark Ritual, the needed lands. All 6 decisions are multi-optimal (low stakes), and 6 labels is a thin sample.
+
+**Sanity** (d3 b10, seed 1001, 50 games, `--batch`, the deck's untracked profile picked up; INT-5 binary
+`build/scratch/shadowborn/int5/mtg.int5` = 684240425's src at 8 threads, the INT-6 binary's on + off arms as ONE pooled
+batch at 16 threads, run together):
+
+| | INT-5 `684240425` | INT-6, buckets ON | INT-6, `=0` |
+|---|---|---|---|
+| avg win turn | 5.42 | 5.42 | 5.42 |
+| batch digest | cbe610e63edc2f7f | be7da10f87c3ab2f | **cbe610e63edc2f7f** (byte-identical to INT-5) |
+| units total | 4,742,588 | 4,698,192 (-0.94%) | 4,742,588 |
+| per game vs `=0` | | 47 identical, 1 faster (gi32 6->5), 1 slower (gi2 5->6), 1 same-turn play change | |
+
+Both moved games turn on the same line: the search PASSES TURN 1 (no land drop with lands in hand, nothing cast) and sheds
+at cleanup -- gi2 does it under the buckets, gi32 under the generic rule; the other arm plays Swamp + Apostle. So the
+moves are the rollout policy tipping a near-tie, not a bad shed (gi2's shed was Jetmir, the right card).
+
+**FINDING (outside INT-6; surfaced, not fixed): the search sometimes passes turn 1 without a land drop.** Every labelled
+real shed in the evidence runs is a turn-1 (one turn-2) cleanup at hand size 8, i.e. a T1 on the draw with no land
+played: ~1.5% of games show it as a shed, and on the play the same pass would leave no shed to see. Declining a free land
+drop plus a castable 1-drop is near-dominated; likely a horizon tie the null plan wins at d3 b10. Owed: a single-game
+repro at `--depth 8 --budget-ms 0` (e.g. `--seed 1003 --game-index 2 --games 1`, buckets on) to see whether depth
+recovers it, then root-cause.
+
+**Provisional calls / questions for the USER (surfaced, not blocking):**
+1. **Adopt?** Default ON on this branch (non-inferior at the sanity: same avg, -0.94% units, zero label regret). The
+   lever-off arm is byte-identical to INT-5. A held-out A/B sized to the effect (rollout fidelity) is the adoption test
+   once the deck is in the suite.
+2. **Tutor fills a missing Apostle #1** (the USER's general "tutors fill spots where something is missing"; not in the
+   REVISED list). A tutor kept for a mana slot counts as **1** mana.
+3. **Fodder** = any creature we control on the battlefield (the INT-5 "expendable" reading), else a hand Apostle beyond #1.
+   A fodderless Intent still holds the Stone slot when it is the only tutor; it is not kept for a mana slot.
+4. **Lake counts +3** (its crack surplus) toward the quota when kept; "fuelled" = >= 2 Swamps on our battlefield (hand
+   Swamps do not count: the Lake and a Swamp compete for the same land drop).
+5. **Demon shed order** inside the overflow: colour-unreachable (Jetmir) > hand-discarder (Sire) > higher MV (Overlord
+   before Reaper). Reaper is kept (step 6) only with a granter out, after every Apostle and the 4-mana quota, ahead of
+   surplus lands (the brief's provisional placement).
+6. "Dark Ritual last of all" in the overflow list is inert: rituals are always kept, so among KEPT cards the shed order
+   is reverse fill order (a Ritual outlasts the quota lands but not the two-land floor, the Stone or Apostle #1).
