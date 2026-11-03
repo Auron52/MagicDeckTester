@@ -47,36 +47,33 @@ Started 2026-11-03.
   solvememo (+m2), gamelc, mana cache; BeginGame in ClearPerGameCaches; BatchRunner per-game dump
   `MTG_TIER1_STATS=<path>`; analysis `scripts/tier1_stats.py <dump> --by-deck`.
 
-## Current state / running (2026-11-03 ~01:25 UTC)
-- Commit 4794e6320 (local, branch budget-rebalance): ledger + work counters, play-inert (verified).
-- UNCOMMITTED in worktree, compiled OK in isolation, NOT yet built into build/Release:
-  * stage 2 tier-1 admission (MTG_TIER1, default ON; =0 legacy): Tier1Ledger.h AllocBytes/Fits/portable
-    constants (Action 544, Plan 552, PhasePlan 568, FSLineEntry 56, node 64); TT Store/StoreNoWin,
-    FslPoolAcquire/Adjust/Release (+FslBytes/FslHintBytes, FslCap fixed 2M), m1memo ByteCap + portable
-    entry bytes, gamelc CapBytes + portable nb, mana ByteCap + portable eb; DeterminismReport prints
-    [tier1] refusals. Default allocations MB: tt 8, fsl 16, m1memo 8, gamelc 24, mana 16 (plan_* and
-    solvememo not tier-1 admission categories).
-  * work counters kPay (ManaPayment.cpp TapForCostShared) + kSimKey (BuildSimKeyBase); priced sum
-    workctr::t_priced with kPriceNs table (pay/simkey prices 0 until refit).
-  * turn census columns w_step_c..w_simkey (thread_local, exact).
-  * PRICED DECISION CEILING: DecisionWorkMeter.h PricedScope / PricedExceeded / PricedLimitNs
-    (MTG_DECISION_PRICED_X default 0 = off; MTG_DECISION_PRICED_REF_NS default 25000), armed at both
-    decision roots (FullSearchLineHybrid _dwp_fs, SolveWithLookahead _dwp).
-- Purity run: build/scratch/budget/run_purity.sh. Arm A (default) DONE: reproduces t1_reg on all 260
-  jobs (1 game units 38292->38279, Alchemist d5 s3003 gi45 -- global plan pool refused 627 stores in
-  t1_reg => first evidence plan-cache residency is NOT perfectly pure). Arm B (MTG_PLAN_CACHE_KB=1024)
-  was on its last job (hinata_regression_d5_s3003) at 01:22; marker purity.DONE; compare with
-  `scripts/cmp_runs.py armA armB` in build/scratch/budget. Already visible: tiny pool makes games MUCH
-  slower (dragonstorm gi200 19 s -> 148 s; alchemist d3 gi26 -> 311 s) -> plan caches need big space.
+## Current state / running (2026-11-03 ~02:10 UTC)
+- Commits (local, branch budget-rebalance): 4794e6320 ledger + counters (play-inert); f168d5f17 stage 2 +
+  pay/simkey counters + priced decision ceiling (off) + census w_* columns; 68a709952 plan-cache route key
+  fold + diagnostics. Built into the worktree's build/Release (02:06).
+- PURITY VERDICT (armA vs armB, MTG_PLAN_CACHE_KB=1024, 259 of 260 jobs; armB's last Hinata game was
+  stopped): win turn identical in all 59,515 games, units differ in 78 (alchemist 5, bruna 1, edf 2,
+  kittyv3 36, melira 8, niv 14, snow 12), one digest (bruna d5 s3003). => the plan caches are NOT yet pure.
+  Deterministic repro: MTG_PLAN_CACHE_KB=1 (every store refused) vs default, single games in
+  build/scratch/budget/leak/*.json (runner leak/run.sh).
+  * CAUSE 1 (FIXED, MTG_PLAN_CACHE_ROUTE_KEY default on): lists derived inside an equip-route / AA-route
+    walk (route not re-emitted -> free) were served to ordinary frames, skipping the route trial a
+    recompute runs. The m1 memo already refused this; m2 memo + bp cache did not. Fixes kitty + alchemist
+    repros (5 of 10).
+  * CAUSE 2 (OPEN, subagent on it): the bp continuation cache serves CONTENT a fresh derivation does not
+    produce (MTG_BP_ENUM_VERIFY: EDF e68 36 CONTENT-DIFF, served 8 vs fresh 7, extra plan Overgrowth +
+    Overgrowth + Cloud of Faeries). Context word and a wide state fingerprint are EQUAL at store and hit;
+    an immediate re-derivation at store matches; ~25 memo knock-outs change nothing. History-dependent
+    input not yet found.
+  * Diagnostics added: MTG_PLAN_CACHE_COST_VERIFY (recompute every hit under a cost scope; EDF/Bruna/
+    Melira: 0 bad -> hits never skip charges, the leak is CONTENT), ctx/fingerprint print at
+    CONTENT-DIFF, STORE-REDERIVE-DIFF check, MTG_BP_DERIVE_ISOLATE_IN experiment.
+- RUNNING: build/scratch/budget/run_stage2.sh -> v0.* (MTG_TIER1=0 MTG_PLAN_CACHE_ROUTE_KEY=0: must equal
+  armA byte-for-byte; also refit data with pay/simkey) then v1.* (defaults); marker stage2.DONE.
 - Tail corpus READY: build/scratch/budget/tail_corpus.json (45 one-game jobs, mostly d5 b20; originals
-  up to 4.6 h) + tail_corpus_notes.md. Units overspend dominates generation tails (Niv vlq row 547M
-  units, EDF 904M at b20: no keep table -> bottoming trials x C(7,k), 25x per-pass ceilings); Kitty is
-  mispricing (2-27 ms/unit). NOT yet run on HEAD. Run it with MTG_MAX_GAME_WALL_SEC=3600 so a 1 h+ game
-  is reported, not waited on; alone on the box.
-- Primary checkout build/Release/mtg rebuilt to HEAD (00:49); the session-start build had failed
-  silently (`| tail`), see memory build-pipe-masks-failure.
-- Cyclone mulligan generation (NOT mine) in .claude/worktrees/cyclone-landing905 stopped ~23:44 UTC
-  11-02 mid-refine with no completion/error line; journal + .bak1/.bak2 intact. Reported to user.
+  up to 4.6 h) + tail_corpus_notes.md. Not yet run on HEAD (MTG_MAX_GAME_WALL_SEC=3600, alone on box).
+- Cyclone mulligan generation in .claude/worktrees/cyclone-landing905: stopped deliberately by the USER
+  (via another agent); restart planned by the user. Not ours.
 
 ## Next steps
 0. Read armA-vs-armB; build worktree (stage 2 + counters + priced ceiling); verify MTG_TIER1=0 is
