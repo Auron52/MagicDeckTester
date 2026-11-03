@@ -920,6 +920,11 @@ extern thread_local bool g_line_opens_unseen;
 // LineCastCostTotal. Returns false without looking unless MTG_LINE_FLOAT_UNSEEN_GUARD's rung is live
 // (LineFloatUnseenGuardOn), so a flag-off binary never pays for the scan.
 bool LineOpensUnseenCasts(const GameState& state, const std::vector<Action>& acts);
+// The line a breakpoint CONTINUATION's cast section owes (cont_line_armed / ExecBindContinuationLine): what the
+// invoking line still owes (`outer`, i.e. g_line_unpaid_cost) WITHOUT the casts the continuation takes over, plus
+// the continuation's own casts. See the definition (TurnSolver.cpp).
+ManaCost ContinuationLineOwed(const GameState& state, const ManaCost& outer,
+                              const std::vector<Action>* invoker, const std::vector<Action>& cont);
 // One action of it (a hand / graveyard cast of a ParamKeyedDrawClass card). No flag gate: callers gate.
 bool CastOpensUnseen(const GameState& state, const Action& a);
 

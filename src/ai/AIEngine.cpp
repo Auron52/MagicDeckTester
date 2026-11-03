@@ -493,13 +493,14 @@ static bool ExecFailedCastNoResolve()
 // cont_line_armed binding (TurnSolver.cpp), for the continuation appliers that do not replay a committed record
 // (resolve_draw_breakpoint, the pod chain, site 9). Bound right before the section's cast loop -- after its
 // CastSectionUnlock opened and its position-0 reveal outlets ran, both of which the rollout pays outside the
-// line -- to what the outer line still owes plus the continuation's casts.
-static void ExecBindContinuationLine(const GameState& state, const std::vector<Action>& acts,
+// line -- to what the outer line still owes, less the casts the continuation takes over from `invoker` (the list
+// whose hold is being carried), plus the continuation's casts (ContinuationLineOwed, the rollout's same helper).
+static void ExecBindContinuationLine(const GameState& state, const std::vector<Action>* invoker,
+                                     const std::vector<Action>& acts,
                                      std::optional<LineUnpaidCostScope>& luc,
                                      std::optional<LineOpensUnseenScope>& lou)
 {
-    ManaCost owed = g_line_unpaid_cost;
-    AddManaCost(owed, LineCastCostTotal(acts));
+    const ManaCost owed = ContinuationLineOwed(state, g_line_unpaid_cost, invoker, acts);
     const bool unseen = g_line_opens_unseen || LineOpensUnseenCasts(state, acts);
     luc.emplace(owed);
     lou.emplace(unseen);
@@ -5885,6 +5886,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         }
         return !rdb_leftovers.empty();
     };
+    // The list whose line hold the executor is carrying (ExecBindContinuationLine's `invoker`): the plan's,
+    // and a re-derived continuation's own while its cast loop runs (a nested breakpoint takes over from it).
+    // Twin of ApplyPlanDirect's line_section_acts.
+    const std::vector<Action>* exec_line_invoker = &plan.actions;
     std::function<void(int)> resolve_draw_breakpoint = [&](int bp_depth)
     {
         // Consumed on entry: a nested breakpoint inside this continuation re-enters here and is NOT
@@ -6302,7 +6307,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // The continuation's own line for its cast section (ApplyPlanDirect's cont_line_armed twin).
         std::optional<LineUnpaidCostScope>  cont_luc;
         std::optional<LineOpensUnseenScope> cont_lou;
-        ExecBindContinuationLine(state, extra.actions, cont_luc, cont_lou);
+        ExecBindContinuationLine(state, exec_line_invoker, extra.actions, cont_luc, cont_lou);
+        const std::vector<Action>* const saved_line_invoker = exec_line_invoker;
+        exec_line_invoker = &extra.actions;   // restored where the section's line closes, below
         for (std::size_t cpos = 0; cpos < cont_order.size(); ++cpos)
         {
             const int ci = cont_order[cpos];
@@ -6364,6 +6371,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         cont_unlock.reset();   // the cast section ends here, as the rollout's apply_plan_actions does
         cont_lou.reset();      // ...and with it the continuation's line
         cont_luc.reset();
+        exec_line_invoker = saved_line_invoker;
         // An unbranched-canon continuation dispatches no activations below, so the Equips its cast
         // section fired would leave no log line; every other route logs them in the trailing pass.
         if (extra.cont_canon && m_logger)
@@ -6822,7 +6830,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     exec_cont_reveal_precast(extra);   // position-0 reveal outlets (apply_continuation_plan's twin)
                     std::optional<LineUnpaidCostScope>  pod_luc;   // the continuation's own line (cont_line_armed twin)
                     std::optional<LineOpensUnseenScope> pod_lou;
-                    ExecBindContinuationLine(state, extra.actions, pod_luc, pod_lou);
+                    ExecBindContinuationLine(state, exec_line_invoker, extra.actions, pod_luc, pod_lou);
                     for (int ci : pod_cont_order)
                     {
                         const Action& ca = extra.actions[ci];
@@ -8636,7 +8644,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 exec_cont_reveal_precast(extra);   // position-0 reveal outlets (apply_continuation_plan's twin)
                 std::optional<LineUnpaidCostScope>  pe_luc;   // the continuation's own line (cont_line_armed twin)
                 std::optional<LineOpensUnseenScope> pe_lou;
-                ExecBindContinuationLine(state, extra.actions, pe_luc, pe_lou);
+                ExecBindContinuationLine(state, exec_line_invoker, extra.actions, pe_luc, pe_lou);
                 for (int ci : pe_cont_order)
                 {
                     if (extra.actions[ci].kind == Action::Kind::ActivateVial)

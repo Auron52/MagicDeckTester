@@ -1803,3 +1803,32 @@ recovers at d8 b0 (6 -> 5) and **2HG 191 does not** (5 at d8 b0, base 4). 2HG 19
 -1 deletion alone (a3) plays the same game as a1 (identical digest). The base's T4 kill rides a T3 Plated Sliver cast
 with replicate x2 by the resolution greedy loop: {W}{W}{W} from Mutavault ({C} only), Ancient Ziggurat and Sliver Hive
 -- two coloured sources. That reads as an over-payment in the greedy copy path (unconfirmed; to trace).
+
+**Follow-up: a continuation takes over the casts it re-names (2026-11-03, branch `wip/cyclone-bind`).** The binding
+above counted some casts TWICE. `g_line_unpaid_cost` still owes every cast of the invoking list that has not paid,
+including the ones the continuation, re-solved with the drawn card, re-names and casts itself. Each such card is cast
+once (by the continuation), and the invoking list's copy then finds no card. Unpredictable Cyclone held-out
+(seed 1810001+gi, base = before the binding): gi74 / gi514 / gi962 / gi1491 went 6/5/5/5 -> 7/6/6/6. In gi962 T5,
+{Seething Song, Ponder, Cyclone} re-solves at Ponder's draw to {Cyclone}, so the hold read {6}{R}{R}{R}{R}.
+`LineFloatTapFirstPlan` then tapped the last Steam Vents for Cyclone's generic, and the drawn Curator's cycling {U}
+was gone. That cost the Cyclone -> Emrakul kill.
+
+* **Fix.** `ContinuationLineOwed` (TurnSolver.cpp, used by the rollout's `cont_line_armed` bind and the
+  executor's `ExecBindContinuationLine`) takes the take-over off the outer remainder before adding the
+  continuation's casts. Per name N: live = min(invoking list's counted hand casts of N, hand(N)), and
+  taken = clamp(live + cont(N) - hand(N), 0, live). The costs of the `taken` latest such actions come off (clamped).
+  The invoking list is the section carrying the hold: the rollout's `line_section_acts`, and the executor's
+  `exec_line_invoker` (a re-derived continuation's own list while its cast loop runs). The hold only orders
+  payments, so this changes no payable set.
+* **Known approximation.** The count does not know which of the invoking list's casts already paid. If a same-name
+  copy was already cast and the continuation casts a spare copy from hand, one paid copy counts as live. Its cost
+  then comes off the hold, an under-count that is clamped.
+* **Repros.** gi514/962/1491 -> 5/5/5; gi74 stays 7 at play settings and recovers to 6 at `--depth 8
+  --budget-ms 0`. On gi74 the takeover fires in its rollouts, but the game is byte-identical with or without it.
+  What remains there is the binding's intended addition of the continuation's own casts. Restoring the outer
+  hold minus the taken casts at close (tried, dropped) does not move it either. The seven Auras APPLY-DROP repros
+  stay 0.
+* **Held-out A/B** (seed 2610001+gi, 2HG 2710001+gi; on vs the binding as landed; one pooled batch, 528 jobs /
+  24,000 games): Cyclone 3,000 net -1 (0 slower, 1 faster: gi1122 T6 -> T5; 22/120 jobs' digests moved; units
+  -0.032%); Cyclone 2HG 600 net 0 (1/24 jobs moved; -0.013%); Auras 3,000 and 20 scanned decks
+  byte-identical (units within +/-0.01%). No slower game.

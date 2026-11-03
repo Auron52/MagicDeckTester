@@ -59098,6 +59098,59 @@ bool LineOpensUnseenCasts(const GameState& state, const std::vector<Action>& act
     return false;
 }
 
+// A CONTINUATION TAKES OVER THE CASTS IT RE-NAMES. The invoking line's hold (`outer`) still owes every cast of
+// its list it has not paid -- including the ones the continuation, re-solved with the drawn card, now casts
+// itself. Each such card is cast once (by the continuation); the invoking line's copy of the cast then finds no
+// card. Adding the continuation's casts on top of `outer` therefore counted those casts TWICE, and the line-aware
+// payer rules paid the continuation for demand that does not exist. Unpredictable Cyclone held-out (seed
+// 1810001+gi): {Seething Song, Ponder, Cyclone} re-solves at Ponder's draw to {Cyclone}, the hold read
+// {6}{R}{R}{R}{R}, the float tap-first rung tapped the last Steam Vents for Cyclone's generic, and the {U} the
+// drawn Curator of Mysteries' cycling needed was gone -- the Cyclone -> Emrakul kill turn was lost (gi962 T5 ->
+// T6; gi74 / gi514 / gi1491 the same shape, Seething Song re-named after a cycling draw).
+//
+// Card identity, by name over the hand: of the invoking list's counted hand casts named N, min(count, hand(N))
+// can still find a card now; after the continuation takes cont(N) of the hand(N) copies, the surplus
+// live + cont - hand of them cannot, and their costs (the hold's own Action::cost, latest first) come off
+// `outer` (clamped, as every decrement of the hold is). A continuation cast of a card the invoking line does not
+// name, or a spare copy in hand, takes nothing over. Known approximation: the count does not know which of the
+// invoking list's casts already PAID, so with a same-name copy already cast AND a spare in hand that the
+// continuation casts, one paid copy is counted live and its cost comes off the hold (an under-count, clamped;
+// harmless while the hold owes none of those pips). The hold only ORDERS payments (each rule is a held first
+// attempt with an unrestricted retry), so this changes which sources pay first, never what can be paid.
+ManaCost ContinuationLineOwed(const GameState& state, const ManaCost& outer,
+                              const std::vector<Action>* invoker, const std::vector<Action>& cont)
+{
+    ManaCost owed = outer;
+    if (invoker != nullptr)
+    {
+        auto counted = [](const Action& a)
+        { return a.kind == Action::Kind::CastFromHand && !a.free_cast && !a.alt_cost; };
+        const auto& hand = state.ActivePlayer().hand;
+        std::vector<InternedName> done;   // names already handled
+        for (const Action& c : cont)
+        {
+            if (c.kind != Action::Kind::CastFromHand) { continue; }
+            const InternedName n = c.card_name;
+            bool seen = false;
+            for (const InternedName& d : done) { if (d == n) { seen = true; break; } }
+            if (seen) { continue; }
+            done.push_back(n);
+            int in_cont = 0;
+            for (const Action& x : cont) { if (x.kind == Action::Kind::CastFromHand && x.card_name == n) { ++in_cont; } }
+            int in_hand = 0;
+            for (const Card& h : hand) { if (h.m_name == n) { ++in_hand; } }
+            int in_inv = 0;
+            for (const Action& x : *invoker) { if (counted(x) && x.card_name == n) { ++in_inv; } }
+            const int live  = std::min(in_inv, in_hand);
+            int       taken = std::min(live, std::max(0, live + in_cont - in_hand));
+            for (auto it = invoker->rbegin(); it != invoker->rend() && taken > 0; ++it)
+            { if (counted(*it) && it->card_name == n) { SubManaCost(owed, it->cost); --taken; } }
+        }
+    }
+    AddManaCost(owed, LineCastCostTotal(cont));
+    return owed;
+}
+
 // ---- Prefix-scoped prepay (MTG_BP_PREFIX_PREPAY) ---------------------------------------------
 // See the call site inside ApplyPlanDirect for the why. Default OFF.
 // MTG_BP_NODE_D0ONLY: host the breakpoint node only at the ROOT search depth.
@@ -61219,6 +61272,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // outer line, as in the executor, which binds right before its cast loop). Executor twins: the stamped
     // record (Action::rec_line_hold) in replay_recorded, and the re-derived continuations' cast loops.
     bool cont_line_armed = false;
+    // ...and WHICH list the hold being carried belongs to (the section now casting), so the bind can take the
+    // continuation's re-named casts off it (ContinuationLineOwed). The main plan's outside any section: a
+    // deferred continuation runs after the main section's cast loop, under the main plan's hold.
+    const std::vector<Action>* line_section_acts = &plan.actions;
     // Every breakpoint CONTINUATION apply goes through here, never a bare apply_plan_actions(extra..),
     // so a continuation is applied under the same plan-level scopes it was scored with.
     // THE SEARCHED CYCLE CHAIN's one step (Unpredictable Cyclone phase 3; assigned after apply_one and
@@ -65408,12 +65465,18 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         std::optional<LineOpensUnseenScope> _cont_lou;
         if (cont_line)
         {
-            ManaCost owed = g_line_unpaid_cost;
-            AddManaCost(owed, LineCastCostTotal(acts));
+            const ManaCost owed = ContinuationLineOwed(state, g_line_unpaid_cost, line_section_acts, acts);
             const bool unseen = g_line_opens_unseen || LineOpensUnseenCasts(state, acts);
             _cont_luc.emplace(owed);
             _cont_lou.emplace(unseen);
         }
+        // This section now carries the hold: a continuation it invokes takes its re-named casts off THIS list.
+        struct SectionActsScope
+        {
+            const std::vector<Action>*& ref; const std::vector<Action>* const saved;
+            SectionActsScope(const std::vector<Action>*& r, const std::vector<Action>* now) : ref(r), saved(r) { r = now; }
+            ~SectionActsScope() { ref = saved; }
+        } _sec_acts(line_section_acts, &acts);
         // ONE Land's Edge action: discard `discard_lands` lands from hand and deal `rate` per land, rate
         // = the best discard_land_damage among controlled permanents (a no-op without a Land's Edge in
         // play, or for any other kind). The post-cast pass below fires the plan's count; the human's
