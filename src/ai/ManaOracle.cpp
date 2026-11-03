@@ -2015,6 +2015,62 @@ bool IsManaSourceNow(const GameState& s, const Permanent& p)
     return !o.free_faces.empty() || !o.fed_faces.empty() || o.why_not.find("may be spent only") != std::string::npos;
 }
 
+// The frontier prune (Realize): frontier i is dropped when a frontier j still kept, with the same key, covers it --
+// Covers(res[j], res[i]) -- strictly, or equally and j comes first; frontiers are taken in index order. Exactly that
+// pairwise rule, made cheap for a layer with thousands of frontiers on one key (LandfallElementals gi4793 T6 m1: a
+// 6,524-plan menu, the string-table Covers ~37% of the oracle): only a key's own bucket is compared (no other j can
+// prune i, so the buckets are independent), on dense integer rows over the bucket's resource names (a name a table
+// lacks reads 0, as Get does; `strict` counts only a name the COVERING table holds, as Covers' second loop does), and
+// a pair whose totals rule the cover out is skipped (a >= b on every resource implies sum a >= sum b).
+std::vector<char> ParetoKeep(const std::vector<std::uint64_t>& keys, const std::vector<Res>& res)
+{
+    const std::size_t n = keys.size();
+    std::vector<char> keep(n, 1);
+    std::unordered_map<std::uint64_t, std::vector<std::size_t>> buckets;
+    for (std::size_t i = 0; i < n; ++i) { buckets[keys[i]].push_back(i); }
+    for (const auto& kv : buckets)
+    {
+        const std::vector<std::size_t>& b = kv.second;   // ascending indices
+        const std::size_t g = b.size();
+        if (g < 2) { continue; }
+        std::map<std::string, std::size_t> col;
+        for (std::size_t i : b) { for (const auto& r : res[i]) { col.emplace(r.first, 0); } }
+        std::size_t w = 0;
+        for (auto& c : col) { c.second = w++; }
+        std::vector<int> val(g * w, 0);
+        std::vector<char> has(g * w, 0);
+        std::vector<long long> sum(g, 0);
+        for (std::size_t x = 0; x < g; ++x)
+        {
+            for (const auto& r : res[b[x]])
+            {
+                const std::size_t c = col.find(r.first)->second;
+                val[x * w + c] = r.second;
+                has[x * w + c] = 1;
+                sum[x] += r.second;
+            }
+        }
+        for (std::size_t x = 0; x < g; ++x)
+        {
+            const int* vi = &val[x * w];
+            for (std::size_t y = 0; y < g && keep[b[x]]; ++y)
+            {
+                if (y == x || !keep[b[y]] || sum[y] < sum[x]) { continue; }
+                const int* vj = &val[y * w];
+                const char* hj = &has[y * w];
+                bool covers = true, strict = false;
+                for (std::size_t c = 0; c < w; ++c)
+                {
+                    if (vj[c] < vi[c]) { covers = false; break; }
+                    if (hj[c] && vj[c] > vi[c]) { strict = true; }
+                }
+                if (covers && (strict || y < x)) { keep[b[x]] = 0; }
+            }
+        }
+    }
+    return keep;
+}
+
 struct FrontierRec
 {
     std::vector<PayOption> script;
@@ -2177,16 +2233,7 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                                                + (fronts[i].has_spell ? "|" + fronts[i].spell.m_name.str() : ""));
             res[i]  = Resources(fronts[i].st, /*with_float=*/true);
         }
-        std::vector<char> keep(n, 1);
-        for (std::size_t i = 0; i < n; ++i)
-        {
-            for (std::size_t j = 0; j < n && keep[i]; ++j)
-            {
-                if (i == j || !keep[j] || keys[i] != keys[j]) { continue; }
-                bool strict = false;
-                if (Covers(res[j], res[i], &strict) && (strict || j < i)) { keep[i] = 0; }
-            }
-        }
+        const std::vector<char> keep = ParetoKeep(keys, res);
         std::vector<std::vector<PayOption>> next;
         for (std::size_t i = 0; i < n; ++i)
         {
