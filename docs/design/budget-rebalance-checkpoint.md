@@ -140,6 +140,22 @@ Started 2026-11-03.
   tight X loses Alchemist turns); tier-1 sizes (tt 8, fsl 16, m1memo 8, gamelc 24, mana 16 MB); mana-cache
   context fold (MTG_MANA_CACHE_X_TRAITS / _X_PAYCTX); branch not pushed (push would also run Windows CI).
 
+## MERFOLK KEEP TABLE WAS NEVER COMMITTED (found 2026-11-03 08:20 UTC) -- do NOT accept merfolk rows
+- Every merfolk smoke/regression cell FAILs on origin's own binary with the same got= as ours. Bisect: the binary of
+  ff7a14850 (the commit that wrote those GT rows; same src as 43f7650d5) gives d0 4.6840 etc. -- NOT its own GT.
+- Cause: 43f7650d5 "Adopt Merfolk exhaustive mulligan profile" accepted GT measured WITH the keep table on disk
+  (docs/design/analysis-Merfolk.md: "live at decks/Merfolk/Merfolk.keepmodel.exhaustive.profile.json"; pre-table smoke
+  d0 4.6840 / d3 4.4400 / d5 4.4200 = exactly today's values) but never committed the gzipped .json.gz the repo tracks
+  (.gitignore:98 ignores the raw .json). No copy anywhere on this container. USER told; recovery is theirs
+  (another container?) or a mullgen regen (user's call).
+- Accept policy: accept smoke + regression for every deck EXCEPT merfolk/merfolk2hg (their red is the true signal).
+  antilife2hg / fluctuator2hg d5 s2002 are origin-stale too (origin binary got= identical, both better) -> accept, noted.
+- Gate-off tiers vs origin (07:38 binary): smoke 54,075 games 1 play-changed 0 win-turn; regression 75,244 games 5
+  play-changed (bruna x4, kittyv3) 0 win-turn. fivecolour gi103 back to T6.
+- Builds: 9p "Cannot allocate memory" fails -j32 builds when two run at once; run_final2.sh retries and ABORTS on a
+  stale binary (run_final.sh carried on with the old binary -- killed it).
+- CI on origin/budget-rebalance (pushed 9b813b4ac, USER OK for a separate branch): ubuntu, windows, parity all green.
+
 ## USER 2026-11-03: mana tier-1 24 MB; TIER-2 OVERFLOW wanted
 - USER: tier-1 total 50-100 MB per thread is flexible -> mana 16 -> 24 MB (a18ae02bf), total 80 MB. NOTE: solvememo
   is NOT byte-capped (portable entry cap) and peaks at 73 MB (p99.9 24 MB) -- outside that 80 MB; told the user.
