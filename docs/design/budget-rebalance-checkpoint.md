@@ -422,3 +422,10 @@ Branch base 3640b6bf1 is 44 commits behind origin (25 src files): rebase before 
      Then kill -0 waiter on the worker pid + replace cron 42d6d235 with one naming the worker.
   4. Close-out: delete cycprobe/, report to USER (tail result, push sha, CI, worker state). Later stages (re-price,
      pooled bottoming budget, EDF wastes) stay paused per USER.
+
+## Tail corpus on HEAD (2026-11-03 ~13:38 UTC) -- item 2 DONE
+
+45-game tail corpus, rebased build, alone on the box at 32 threads: **wall 247 s total**, 0 abandons,
+0 wall backstops. Max game edf_keepab_static_gi821 **240 s** (won T7; it was at the 3600 s wall at
+X=0 and X=100 before). Next slowest 87 s (kitty_v1vscur_2hg_cur gi20037), then 79 s, 67 s. Every game
+< 10 min. Items 1-2 complete -> pushing to phase-1-2-deck-analyzer, then Cyclone via the queue.
