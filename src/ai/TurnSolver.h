@@ -1672,6 +1672,9 @@ public:
         // upkeep_land_search_choice shape). An int16_t in the 3-byte hole after horizon_leaf (gdb
         // ptype /o: no size change); folded into the census Xaxes key by hand.
         std::int16_t upkeep_gy_reanimate_choice = -1;
+        // Next upkeep's paid tutor-to-top choice: 0 hold, positive index into the
+        // live payable source/target menu. The boundary fan chooses it before draw.
+        std::int16_t upkeep_tutor_choice = -1;
 
         // Ponder-style REORDER disposition: which candidate of TopDispositionCandidates(Reorder) the
         // reorder takes. -1 == the provider heuristic, byte-identical to no branch. The FULL set
@@ -3591,6 +3594,7 @@ public:
         // the plan of the turn that crossed -- the CALLER's main-1 plan, which this line does not contain. The
         // caller stamps it there (StampBoundaryPins); -2 = nothing chosen. Never set by FSLineWin itself.
         int boundary_doth = -2;
+        int boundary_tutor = -2;
     };
 
     // fd-oracle diagnostic (MTG_FD_ORACLE only, inert otherwise): the smallest WIN-CLAIMING estimate

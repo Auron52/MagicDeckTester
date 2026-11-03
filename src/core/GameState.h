@@ -1093,6 +1093,9 @@ struct GameState
     // folded value-gated in dominance::Build(), BuildDedupKey's pending pins and BuildBreakpointKey (the axis
     // reads the inherited coverage).
     std::int16_t             scripted_echo = -1;
+    // Index into GameEngine::UpkeepTutorOptions at the NEXT upkeep: 0 holds, positive
+    // choices pay for an instant tutor-to-top before the draw. Cleared at that upkeep.
+    std::int16_t             scripted_upkeep_tutor = -1;
     // ORDER-CONDEMNATION snapshot (USER model, 2026-08-19: the search decides what to cast,
     // "limited to what our order allows" -- a Main1-classified card the pre-combat decision
     // passed on is CONDEMNED for the rest of the turn; "main 2 should not re-litigate the whole

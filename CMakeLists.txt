@@ -304,6 +304,7 @@ add_executable(mtg-test
     test/unit/test_greedy_window.cpp
     test/unit/test_cumulative_upkeep.cpp
     test/unit/test_terastodon_k.cpp
+    test/unit/test_upkeep_tutor_search.cpp
     test/unit/test_swords_redirect.cpp
     test/unit/test_sac_rank_hook.cpp
     test/unit/test_provider_relocations.cpp

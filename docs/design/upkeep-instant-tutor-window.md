@@ -1,6 +1,6 @@
-# Upkeep instant window for tutors-to-top (Enlightened Tutor)
+# Upkeep instant window for tutors-to-top
 
-**STATUS: Human play implemented; autonomous search remains open.**
+**STATUS: Human play and autonomous search implemented.**
 
 ## The hole, in the USER's words (2026-08-19, verbatim)
 
@@ -28,24 +28,25 @@ replace that turn's draw with the chosen card. This is covered by a focused engi
 The prompt defaults to hold, so references saved before the new prompt replay their original
 main-phase tutor lines.
 
-The autonomous search and rollout still do not generate an upkeep-cast branch. Their main-phase
-casts and regression results remain unchanged. A full searched implementation needs a pre-draw
-choice that survives the previous turn's plan and is consumed in both executor and rollout; see
-the scope below. A viewer reference using the new window can therefore be faster than search.
+The full-depth search now fans at each turn boundary over hold and the provider-ranked payable
+instant tutor-to-top source/target pairs. The menu is built at the live upkeep after untap and
+upkeep obligations, so it sees mana spent by Call of the Wild, echo, and other effects. Each
+branch pays and resolves the tutor before the draw, then scores the following turn normally.
+That includes Stompy's World War Hulk and Ghalta cheat lines, not just hard casts. The winning
+rank rides on the crossing turn's plan and is consumed at the real next upkeep. The rollout and
+executor use the same paid cast and stack-resolution path.
 
-## Scope of the remaining search work
+The deck provider's `TutorSearchWidth` limits target names, as it does for main-phase tutor
+search. Search considers the hold branch too. At the horizon and at depth 0, holding remains
+the existing playout policy; no unsearched in-window upkeep cast is made.
+
+## Search implementation notes
 
 * A pre-draw decision point at the active player's upkeep, offered only when an instant-speed
   `tutor_to_top` card is in hand and payable — narrow on purpose, not a general instant system
   (the goldfish engine has no opponent-turn play; this is the one same-turn-relevant instant
   window a tutor-to-top creates).
-* The searched question is cast-now-vs-hold (upkeep cast commits mana before the draw is seen);
-  the greedy consumer likely needs a gate the same way the risky-wipe (c) term did — deliver to
-  the search first (see the cast-time-scoping lesson in `cast-order-rankings.md`, Anti-Lifegain).
-* Affects any deck holding an instant tutor-to-top; today that is Creature Giving and
-  Anti-Lifegain (both run Enlightened Tutor).
-
-## Trigger to build
-
-USER asks for it, or a review/measurement shows Enlightened Tutor lines losing turns to the
-missing window (the Creature Giving review predicts exactly this shape).
+* The choice is made at the crossing, before the draw. It commits mana and a library target
+  before the target is drawn. A next-turn main-phase search then scores deployment.
+* The same path covers Worldly Tutor (Stompy) and Enlightened Tutor (Creature Giving,
+  Anti-Lifegain, Fluctuator), plus any future instant tutor-to-top card with the shared param.

@@ -573,7 +573,7 @@ static_assert(sizeof(Player) == 208,
 // DECK CONSTANTS stamped once in StampDeckTraits -- nothing to fold. `gy_shuffle_batch` /
 // `pending_gy_shuffles[2]` are 0 outside one simultaneous event (GyShuffleBatch), never live at a
 // snapshot -- nothing to fold.
-static_assert(sizeof(GameState) == 1232,
+static_assert(sizeof(GameState) == 1240,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 
@@ -966,6 +966,8 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     // consumed at the NEXT upkeep -- value-gated with its own domain tag so every deck without the card keeps its key.
     if (s.scripted_doth_put >= 0)
     { fold(0xD0E700000000ull + static_cast<std::uint64_t>(s.scripted_doth_put)); }
+    if (s.scripted_upkeep_tutor >= 0)
+    { fold(0x555054555400ull + static_cast<std::uint64_t>(s.scripted_upkeep_tutor)); }
     // Moraug's queued additional combats (GameState::pending_extra_combats): future-determining, value-gated.
     if (s.pending_extra_combats != 0)
     { fold(0xE7C0000ull + static_cast<std::uint64_t>(s.pending_extra_combats)); }

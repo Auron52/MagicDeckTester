@@ -504,6 +504,43 @@ void GameEngine::UpkeepStep(GameState& state)
 // The rest of the upkeep, after the Vial charge loop. Its own function so a searched Vial charge
 // can resume here (ResumeAt::UpkeepTail) instead of jumping to the draw and losing this turn's
 // upkeep tokens / stack resolution. Called unconditionally by UpkeepStep -> byte-identical.
+std::vector<std::pair<int, std::string>> GameEngine::UpkeepTutorOptions(const GameState& state)
+{
+    std::vector<std::pair<int, std::string>> out{{-1, {}}};  // hold
+    std::vector<std::string> seen_sources;
+    for (const Card& c : state.ActivePlayer().hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (!d || !d->card.IsInstant() || !d->params.tutor_to_top) { continue; }
+        if (std::find(seen_sources.begin(), seen_sources.end(), c.m_name.str()) != seen_sources.end())
+        { continue; }
+        GameState trial = state;
+        bool payable = false;
+        {
+            RevealLogPause pause;
+            payable = TapForCostShared(trial, EffectiveSpellCost(*d, state, 1), /*for_creature=*/false,
+                                       nullptr, /*honor_legacy_cco=*/true);
+        }
+        if (!payable) { continue; }
+        seen_sources.push_back(c.m_name.str());
+        const auto names = RankedTutorCandidates(ResolveProvider(state), state,
+                                                   state.active_player_index, d->params);
+        const std::size_t width = HumanPlayActive() ? names.size()
+            : std::min(names.size(), static_cast<std::size_t>(std::max(1, ResolveProvider(state).TutorSearchWidth())));
+        for (std::size_t i = 0; i < width; ++i) { out.emplace_back(c.m_number, names[i]); }
+    }
+    return out;
+}
+
+bool GameEngine::CastUpkeepTutor(GameState& state, int hand_number, const std::string& target)
+{
+    if (!m_ai.CastUpkeepTutor(state, hand_number, target)) { return false; }
+    ResolveStack(state);
+    if (UpkeepFloatClearEnabled())
+    { state.floating_mana = ManaPool{}; state.floating_haste_c = 0; }
+    return true;
+}
+
 void GameEngine::UpkeepTail(GameState& state)
 {
     // #6 Dwarven Hold (storage_charge_mode "upkeep_if_tapped"): its tap-vs-charge commitment is made at
@@ -628,7 +665,7 @@ void GameEngine::UpkeepTail(GameState& state)
             bool payable = false;
             {
                 RevealLogPause pause;
-                payable = TapForCostShared(trial, d->card.m_mana_cost, /*for_creature=*/false,
+                payable = TapForCostShared(trial, EffectiveSpellCost(*d, state, 1), /*for_creature=*/false,
                                            nullptr, /*honor_legacy_cco=*/true);
             }
             if (!payable) { continue; }
@@ -639,18 +676,24 @@ void GameEngine::UpkeepTail(GameState& state)
             const int selected = (*g_play_tutor_chooser)(state, state.active_player_index,
                                                           source, names, /*default: hold=*/-1, {});
             if (selected < 0 || selected >= static_cast<int>(names.size())) { continue; }
-            if (!m_ai.CastUpkeepTutor(state, number, names[static_cast<std::size_t>(selected)]))
-            { continue; }
             // The upkeep prompt already selected the target. Suppress the normal cast's
             // redundant resolution-time repick while preserving event and reveal logging.
             auto* chooser = g_play_tutor_chooser;
             g_play_tutor_chooser = nullptr;
-            ResolveStack(state);
+            CastUpkeepTutor(state, number, names[static_cast<std::size_t>(selected)]);
             g_play_tutor_chooser = chooser;
-            if (UpkeepFloatClearEnabled())
-            { state.floating_mana = ManaPool{}; state.floating_haste_c = 0; }
         }
     }
+    else if (state.scripted_upkeep_tutor > 0)
+    {
+        ResolveStack(state);  // upkeep triggers resolve before the priority window
+        const auto options = UpkeepTutorOptions(state);
+        const int pick = state.scripted_upkeep_tutor;
+        if (pick < static_cast<int>(options.size()))
+        { CastUpkeepTutor(state, options[static_cast<std::size_t>(pick)].first,
+                          options[static_cast<std::size_t>(pick)].second); }
+    }
+    state.scripted_upkeep_tutor = -1;
 
     ResolveStack(state);
 }

@@ -22,6 +22,8 @@
 #include "../core/ManaPool.h"
 #include "../core/OpponentDeck.h"
 #include "../core/EffectHandler.h"
+#include "../core/GameEngine.h"
+#include "AIEngine.h"
 #include "../core/SpellEffects.h"
 #include "../core/Trace.h"
 #include <algorithm>
@@ -1598,6 +1600,7 @@ inline void Record(const GameState& s, const TurnSolver::Plan& first, const Turn
                   || first.land_search_act_slot != dup.land_search_act_slot);
     pl("looktop", first.look_top_pins != dup.look_top_pins);
     pl("upkreanim", first.upkeep_gy_reanimate_choice != dup.upkeep_gy_reanimate_choice);
+    pl("upktutor", first.upkeep_tutor_choice != dup.upkeep_tutor_choice);
     pl("echo", first.echo_choice != dup.echo_choice);
     pl("doth", first.doth_put_choice != dup.doth_put_choice);
     pl("atkrel", first.atk_dork_release != dup.atk_dork_release);
@@ -26267,6 +26270,8 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
     // Emeria's packed next-upkeep ranks: the same must-fold, value-gated rule.
     if (p.upkeep_gy_reanimate_choice >= 0)
     { fold(0x454D45524941ull); fold(static_cast<uint64_t>(p.upkeep_gy_reanimate_choice)); }   // "EMERIA"
+    if (p.upkeep_tutor_choice >= 0)
+    { fold(0x5550545554ull); fold(static_cast<uint64_t>(p.upkeep_tutor_choice)); }   // "UPTUT"
     // The searched echo pin (next upkeep's pay/decline): the same must-fold, value-gated rule.
     if (p.echo_choice >= 0) { fold(0x4543484Full); fold(static_cast<uint64_t>(p.echo_choice)); }   // "ECHO"
     // The searched Defense of the Heart put list (next upkeep): the same must-fold, value-gated rule.
@@ -26650,7 +26655,8 @@ static bool IsApplyEmptyPlan(const TurnSolver::Plan& p)
         && p.putback_choice == -1
         && p.etbcounter_choice == -1 && p.sweep_choice == -1 && p.le_fire_choice == -1
         && p.vial_charge_choice == -1 && p.saga_target_choice == -1 && p.grace_choice == -1
-        && p.upkeep_gy_reanimate_choice == -1 && p.echo_choice == -1 && p.doth_put_choice == -1
+        && p.upkeep_gy_reanimate_choice == -1 && p.upkeep_tutor_choice == -1
+        && p.echo_choice == -1 && p.doth_put_choice == -1
         && p.fling_victim_choice == -1 && p.tectonic_mode_choice == -1
         && p.tectonic_keep_choice == -1
         && p.bruna_gather_choice == -1 && p.combat_aura_swap_choice == -1
@@ -26698,6 +26704,7 @@ static bool PlanIsAxisVariantExceptOrder(const TurnSolver::Plan& p)
         // reach the graveyard can still clamp onto a sibling, by design (completeness).
         || p.grace_choice >= 0
         || p.upkeep_gy_reanimate_choice >= 0
+        || p.upkeep_tutor_choice >= 0
         // Look-top pins (Risen Reef): every variant is a clone of its base differing only in a land /
         // order entry, and an entry past the decisions the apply actually reaches (a nonland top, a
         // look that never happened) leaves it on its base plan's state -- the inert-duplicate shape.
@@ -27629,6 +27636,8 @@ inline std::uint64_t PlanH(const TurnSolver::Plan& p, int ax)
     if (p.grace_choice >= 0) { h = Mix(h, 0x4752ull + static_cast<std::uint64_t>(p.grace_choice)); }   // value-gated
     if (p.upkeep_gy_reanimate_choice >= 0)
     { h = Mix(h, 0x454Dull + static_cast<std::uint64_t>(p.upkeep_gy_reanimate_choice)); }   // value-gated
+    if (p.upkeep_tutor_choice >= 0)
+    { h = Mix(h, 0x555054ull + static_cast<std::uint64_t>(p.upkeep_tutor_choice)); }
     if (p.echo_choice >= 0) { h = Mix(h, 0xEC40ull + static_cast<std::uint64_t>(p.echo_choice)); }   // value-gated
     if (p.doth_put_choice >= 0)
     { h = Mix(h, 0xD0E70000ull + static_cast<std::uint64_t>(p.doth_put_choice)); }   // value-gated
@@ -50336,6 +50345,7 @@ namespace solvememo
             || a.saga_target_choice != b.saga_target_choice
             || a.grace_choice != b.grace_choice
             || a.upkeep_gy_reanimate_choice != b.upkeep_gy_reanimate_choice
+            || a.upkeep_tutor_choice != b.upkeep_tutor_choice
             || a.echo_choice != b.echo_choice
             || a.doth_put_choice != b.doth_put_choice
             || a.saga_ch1_choice != b.saga_ch1_choice
@@ -67510,6 +67520,7 @@ static void NoteDothUncoveredSearch(const GameState& s, int ordinal, int pin)
                      t_rollout_narrow ? 1 : 0, t_echo_rollout_turn_depth);
     }
 }
+static thread_local int* t_upkeep_tutor_width_probe = nullptr;
 static bool SimulateEndAndStartNextTurn(GameState& state)
 {
     Player& ap = state.ActivePlayer();
@@ -68049,6 +68060,25 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
                 // CR 500.4, same clear as echo's above and as the executor's twin.
                 if (UpkeepFloatClearEnabled()) { state.floating_mana = ManaPool{}; state.floating_haste_c = 0; }
             }
+        }
+    }
+
+    // The searched paid tutor-to-top cast happens after upkeep obligations and before the draw.
+    // Rank 0 is hold; positive ranks are (physical tutor, target) pairs on the LIVE upkeep
+    // state. The boundary fan probes that menu and scores every branch through the next turn.
+    if (state.scripted_upkeep_tutor >= 0 || t_upkeep_tutor_width_probe != nullptr)
+    {
+        const auto options = GameEngine::UpkeepTutorOptions(state);
+        if (t_upkeep_tutor_width_probe != nullptr)
+        { *t_upkeep_tutor_width_probe = static_cast<int>(options.size()); }
+        const int pick = state.scripted_upkeep_tutor;
+        state.scripted_upkeep_tutor = -1;
+        if (pick > 0 && pick < static_cast<int>(options.size()))
+        {
+            AIEngine tutor_ai(MulliganProfile::DefaultProfile(), g_searched_play ? 1 : 0);
+            GameEngine tutor_game(tutor_ai);
+            tutor_game.CastUpkeepTutor(state, options[static_cast<std::size_t>(pick)].first,
+                                      options[static_cast<std::size_t>(pick)].second);
         }
     }
 
@@ -84412,6 +84442,7 @@ static void PlanDomCensus(const std::vector<TurnSolver::Plan>& all)
             add(pl.saga_target_choice); add(pl.saga_ch1_choice); add(pl.dig_choice);
             add(pl.grace_choice);
             add(pl.upkeep_gy_reanimate_choice);   // Emeria: in padding, so the size pin cannot catch it
+            add(pl.upkeep_tutor_choice);
             add(pl.echo_choice);   // the searched echo pin: in padding, so the size pin cannot catch it
             add(pl.doth_put_choice);   // the searched DotH put list: in padding, so the size pin cannot catch it
             add(pl.land_slot); add(pl.landfall_target_choice); add(pl.combat_landfall_target_choice);
@@ -89698,7 +89729,8 @@ static TranspositionTable::Key BuildDedupKeyBeforeLandSearchPins(const GameState
                          static_cast<int>(state.scripted_echo),
                          // The searched Defense of the Heart put list, read at the next upkeep (appended:
                          // value-gated, own slot).
-                         static_cast<int>(state.scripted_doth_put) };
+                         static_cast<int>(state.scripted_doth_put),
+                         static_cast<int>(state.scripted_upkeep_tutor) };
     for (int i = 0; i < static_cast<int>(sizeof(pins) / sizeof(pins[0])); ++i)
     {
         if (pins[i] != -1)
@@ -92349,6 +92381,18 @@ public:
     BoundaryFan(const GameState& pre, bool with_echo)
     {
         if (with_echo) { echo_ = EchoBoundaryPins(pre); }
+        // The menu is learned at upkeep, after untap and all upkeep triggers. A tutor
+        // already pinned by main 1 is covered and must not be decided again in main 2.
+        if (pre.scripted_upkeep_tutor < 0 && !HumanPlayActive() && !t_rollout_narrow
+            && g_bp_enum_depth == 0 && !EchoEdgeFoldHere(pre))
+        {
+            for (const Card& c : pre.ActivePlayer().hand)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                if (d && d->card.IsInstant() && d->params.tutor_to_top)
+                { tutor_ = true; break; }
+            }
+        }
         if (DothAxisLiveHere(pre))
         {
             c0_ = DothPinCover(pre.scripted_doth_put);
@@ -92361,11 +92405,15 @@ public:
     }
     // Will the site cross more than once? Decided BEFORE the first crossing, so a live Defense of the Heart counts
     // (its menu is learned on the first crossing): the site then crosses per-crossing copies of its state.
-    bool Copies() const { return echo_.size() > 1 || doth_; }
+    bool Copies() const { return echo_.size() > 1 || doth_ || tutor_; }
     bool DothLive() const { return doth_; }
+    bool TutorLive() const { return tutor_; }
     bool Next()
     {
         if (!started_) { started_ = true; ResetDoth(); return true; }
+        if (tutor_ && tutor_rank_ + 1 < tutor_width_)
+        { ++tutor_rank_; return true; }
+        tutor_rank_ = 0;
         if (doth_ && nobs_ > c0_)
         {
             for (int j = std::min(nobs_, kDothPinMaxOrd) - 1; j >= c0_; --j)
@@ -92375,6 +92423,7 @@ public:
                     ++ranks_[j];
                     for (int k = j + 1; k < kDothPinMaxOrd; ++k) { ranks_[k] = 0; }
                     nobs_ = j + 1;   // the later ordinals are re-learned by the next crossing
+                    tutor_width_ = 1;
                     return true;
                 }
             }
@@ -92385,6 +92434,7 @@ public:
     void Stamp(GameState& sx) const
     {
         if (echo_.size() > 1) { sx.scripted_echo = static_cast<std::int16_t>(echo_[ei_]); }
+        if (tutor_) { sx.scripted_upkeep_tutor = static_cast<std::int16_t>(tutor_rank_); }
         // The crossing's pin covers every ordinal (unexplored ones at rank 0 = the provider's pick, which IS the
         // branch being scored), so nothing in it resolves uncovered.
         if (doth_) { sx.scripted_doth_put = DothPinPack(kDothPinMaxOrd, ranks_); }
@@ -92396,20 +92446,24 @@ public:
     // The pin to RECORD for this crossing: the ordinals it actually resolved, with their ranks (-2 = record
     // nothing: no Defense of the Heart live, or no trigger past the inherited cover resolved).
     int DothPin() const { return (doth_ && nobs_ > c0_) ? DothPinPack(nobs_, ranks_) : -2; }
+    int TutorPin() const { return (tutor_ && tutor_width_ > 1) ? tutor_rank_ : -2; }
     void Record(TurnSolver::Plan& p) const
     {
         if (EchoPin() != -2) { p.echo_choice = static_cast<std::int16_t>(EchoPin()); }
         if (DothPin() != -2) { p.doth_put_choice = DothPin(); }
+        if (TutorPin() != -2) { p.upkeep_tutor_choice = static_cast<std::int16_t>(TutorPin()); }
     }
     // Write the recorded pins onto a state (the one-rollout hosts re-cross their own copy with the winner).
-    void RecordOnState(GameState& sx, int echo_pin, int doth_pin) const
+    void RecordOnState(GameState& sx, int echo_pin, int doth_pin, int tutor_pin) const
     {
         if (echo_pin != -2) { sx.scripted_echo = static_cast<std::int16_t>(echo_pin); }
         if (doth_pin != -2) { sx.scripted_doth_put = doth_pin; }
+        if (tutor_pin != -2) { sx.scripted_upkeep_tutor = static_cast<std::int16_t>(tutor_pin); }
     }
 private:
     void ResetDoth()
     {
+        tutor_rank_ = 0; tutor_width_ = 1;
         for (int k = c0_; k < kDothPinMaxOrd; ++k) { ranks_[k] = 0; sizes_[k] = 1; }
         nobs_ = 0;
     }
@@ -92417,6 +92471,9 @@ private:
     std::size_t      ei_      = 0;
     bool             started_ = false;
     bool             doth_    = false;
+    bool             tutor_   = false;
+    int              tutor_rank_ = 0;
+    int              tutor_width_ = 1;
     int              c0_      = 0;                    // ordinals the state's pin already covers (kept fixed)
     int              nobs_    = 0;                    // ordinals the last crossing resolved
     int              ranks_[kDothPinMaxOrd] = {};
@@ -92427,14 +92484,21 @@ static void DothStatsFanCounts(long long* fans, long long* crossings)
 { *fans = g_doth_fans.load(); *crossings = g_doth_fan_crossings.load(); }
 bool BoundaryFan::Cross(GameState& sx)
 {
-    if (!doth_) { return SimulateEndAndStartNextTurn(sx); }
+    if (!doth_ && !tutor_) { return SimulateEndAndStartNextTurn(sx); }
     bool ok = false;
     DothProbe pr;
+    int tutor_width = 1;
+    int* prior_tutor_probe = t_upkeep_tutor_width_probe;
+    if (tutor_) { t_upkeep_tutor_width_probe = &tutor_width; }
+    if (doth_)
     {
         DothProbeScope scope;
         ok = SimulateEndAndStartNextTurn(sx);
         pr = scope.Read();
     }
+    else { ok = SimulateEndAndStartNextTurn(sx); }
+    t_upkeep_tutor_width_probe = prior_tutor_probe;
+    if (tutor_) { tutor_width_ = std::max(1, tutor_width); }
     nobs_ = std::min(pr.n, kDothPinMaxOrd);
     for (int j = c0_; j < nobs_; ++j) { sizes_[j] = std::max(1, pr.size[j]); }
     static const bool s_stats = EnvOn("MTG_DOTH_AXIS_STATS");
@@ -93828,10 +93892,11 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
     // fanned here (its documented single-main residual, docs/design/searched-echo.md: no echo deck is single-main).
     {
         BoundaryFan fan(state, /*with_echo=*/false);
-        if (fan.DothLive())
+        if (fan.DothLive() || fan.TutorLive())
         {
             TurnSolver::SearchLine best_tail{ max_turns + 1, {} };
             int  best_doth = -2;
+            int  best_tutor = -2;
             bool have      = false;
             while (fan.Next())
             {
@@ -93853,12 +93918,14 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                 {
                     best_tail = std::move(line);
                     best_doth = fan.DothPin();
+                    best_tutor = fan.TutorPin();
                     have      = true;
                     // First VERIFIED win -- the m2 loop's shortcut, same horizon edge.
                     if (FsHorizonExitOn() && best_tail.win_turn <= state.turn_number + depth) { ++g_fs_hexits; break; }
                 }
             }
             best_tail.boundary_doth = best_doth;
+            best_tail.boundary_tutor = best_tutor;
             return best_tail;
         }
     }
@@ -93880,6 +93947,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
         FSLineWin(s, DepthAcrossTurn(s, depth), max_turns, cutoff, second_main, tt, lc, budget);
     if (DomActive() && dom_arch) { domin::RecordWin(*dom_arch, dprobe, tail_line.win_turn); }
     tail_line.boundary_doth = -2;   // nothing crossed here was fanned (a deeper level's pin is not this one's)
+    tail_line.boundary_tutor = -2;
     return tail_line;
 }
 // The caller's half of the single-main boundary fan: the pin the tail chose belongs on the main-1 plan that
@@ -93887,6 +93955,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
 static void StampBoundaryPins(TurnSolver::Plan& p, const TurnSolver::SearchLine& tail)
 {
     if (tail.boundary_doth != -2) { p.doth_put_choice = tail.boundary_doth; }
+    if (tail.boundary_tutor != -2) { p.upkeep_tutor_choice = static_cast<std::int16_t>(tail.boundary_tutor); }
 }
 
 // `state` is positioned at the START of the active player's pre-combat main (land
@@ -101504,11 +101573,12 @@ static void VampCandCensus(const TurnSolver::Plan& plan, bool is_pre_combat)
 // Generalised to the BoundaryFan (searched echo + the searched Defense of the Heart put list, MTG_DOTH_AXIS): the
 // fan's crossings in its order (the provider's answers first), one rollout each, the strict best left on `copy`.
 // With no Defense of the Heart live this is the echo-only routine exactly (same pins, order, cutoff, result).
-struct BoundaryChoice { int echo = -2; int doth = -2; };
+struct BoundaryChoice { int echo = -2; int doth = -2; int tutor = -2; };
 static void RecordBoundaryChoice(TurnSolver::Plan& p, const BoundaryChoice& bc)
 {
     if (bc.echo != -2) { p.echo_choice = static_cast<std::int16_t>(bc.echo); }
     if (bc.doth != -2) { p.doth_put_choice = bc.doth; }
+    if (bc.tutor != -2) { p.upkeep_tutor_choice = static_cast<std::int16_t>(bc.tutor); }
 }
 static BoundaryChoice BoundaryChooseByRollout(GameState& copy, int sub_depth, int max_turns, SearchBudget* budget,
                                               int cutoff, bool second_main, TranspositionTable* tt)
@@ -101525,12 +101595,12 @@ static BoundaryChoice BoundaryChooseByRollout(GameState& copy, int sub_depth, in
         // A Defense of the Heart fan has many branches: each later one need only beat the best so far, and
         // SimulateToEnd aborts only AFTER its cutoff turn, so a STRICTLY earlier win is still found (only a
         // strict improvement is taken below). The echo-only fan keeps its historical cutoff.
-        const int cut = (fan.DothLive() && best_wt <= max_turns) ? std::min(cutoff, best_wt - 1) : cutoff;
+        const int cut = ((fan.DothLive() || fan.TutorLive()) && best_wt <= max_turns) ? std::min(cutoff, best_wt - 1) : cutoff;
         if (fan.Cross(ce))
         { wt = SimulateToEnd(std::move(ce), sub_depth, max_turns, budget, cut, second_main, tt); }
-        if (wt < best_wt) { best_wt = wt; best.echo = fan.EchoPin(); best.doth = fan.DothPin(); }
+        if (wt < best_wt) { best_wt = wt; best.echo = fan.EchoPin(); best.doth = fan.DothPin(); best.tutor = fan.TutorPin(); }
     }
-    fan.RecordOnState(copy, best.echo, best.doth);
+    fan.RecordOnState(copy, best.echo, best.doth, best.tutor);
     return best;
 }
 
@@ -104875,6 +104945,8 @@ static TranspositionTable::Key BuildBreakpointKey(const GameState& state, bool i
     // continuation list (the echo pin's reason, above).
     if (fold_upkeep_pins && state.scripted_doth_put >= 0)
     { Fold(k, 0xD0E7); Fold(k, static_cast<uint64_t>(state.scripted_doth_put)); }
+    if (fold_upkeep_pins && state.scripted_upkeep_tutor >= 0)
+    { Fold(k, 0x555054); Fold(k, static_cast<uint64_t>(state.scripted_upkeep_tutor)); }
     // LIVE ORDER-CONDEMNATION stamp (added 2026-08-20, when the m2-facing enum memo gained
     // coverage): a live stamp FILTERS the post-combat harvest, so two same-board states with
     // different stamp lists enumerate differently -- exactly the "same-turn m2 memo must fold
@@ -112090,6 +112162,7 @@ void TurnSolver::WritePostApplyStatePins(GameState& s, const Plan& p)
     // Emeria's packed upkeep ranks, read at the NEXT turn's upkeep (PerformUpkeepGyReanimate, both
     // worlds) -- write-when-set, so a main-2 plan without the axis leaves main 1's pin standing.
     if (p.upkeep_gy_reanimate_choice >= 0) { s.scripted_upkeep_gy_reanimate = p.upkeep_gy_reanimate_choice; }
+    if (p.upkeep_tutor_choice >= 0) { s.scripted_upkeep_tutor = p.upkeep_tutor_choice; }
     // The searched echo pin, read at the NEXT turn's upkeep (both worlds' echo loops) -- write-when-set, so a
     // main-2 plan with nothing new to decide leaves main 1's pin (and its cover) standing.
     if (p.echo_choice >= 0) { s.scripted_echo = p.echo_choice; }

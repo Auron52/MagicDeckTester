@@ -1,6 +1,9 @@
 #pragma once
 #include "GameState.h"
 #include "GameLogger.h"
+#include <string>
+#include <utility>
+#include <vector>
 
 class AIEngine;
 
@@ -54,6 +57,12 @@ public:
     void SetStopAfterTurn(int turn) { m_stop_after_turn = turn; }
 
     void SetLogger(GameLogger* logger);
+
+    // Index 0 holds the tutor. Later entries are payable (hand card number, library target)
+    // choices at the current upkeep, ordered by the deck provider.
+    static std::vector<std::pair<int, std::string>> UpkeepTutorOptions(const GameState& state);
+    // One shared paid-cast and stack-resolution path for the real game and search rollout.
+    bool CastUpkeepTutor(GameState& state, int hand_number, const std::string& target);
 
 private:
     AIEngine&    m_ai;
