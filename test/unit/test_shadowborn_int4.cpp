@@ -1,9 +1,11 @@
 // Shadowborn Apostle onboarding, integrator INT-4 (2026-11-03; docs/design/analysis-Shadowborn
 // Apostle.md): the USER's Demon and tutor rules in ShadowbornProvider -- RESTRICTIONS, not orders (USER:
 // "I would remove the others outright"): a name left out is not offered at any budget, --budget-ms 0
-// included. Demon: Abhorrent Overlord then Jetmir, nothing else, no activation with neither. Tutor: a
-// Thrumming Stone when none is held, the mana tier while short of 6 (Lake / Culling / Ritual / Lotus Bloom
-// with the multiples rules), Shadowborn Apostle; the generic list when none of those is in the library.
+// included. Demon: Abhorrent Overlord then Jetmir, nothing else, no activation with neither. Tutor (as
+// AMENDED by the USER at INT-5, 2026-11-03; test_shadowborn_int5.cpp pins the full table): with no granter on
+// the battlefield, a Thrumming Stone when none is held, the mana tier while short of 6 (Lake / Ritual /
+// Culling with the multiples rules; Lotus Bloom never), Shadowborn Apostle, then the mana tier as "extra
+// mana"; the generic list when none of those is in the library.
 #include <doctest/doctest.h>
 
 #include "ai/DecisionProviders.h"
@@ -152,7 +154,7 @@ TEST_CASE("Shadowborn INT-4 Demon: Jetmir fronts once Overlord is gone; NO activ
     }
 }
 
-TEST_CASE("Shadowborn INT-4 tutor: the tiers -- Stone, the mana tier (Lake > Culling > Ritual > Bloom), Apostle")
+TEST_CASE("Shadowborn INT-4 tutor: the tiers -- Stone, the mana tier (Lake > Ritual > Culling; no Bloom), Apostle")
 {
     GameState s = Base4();
     s.battlefield.push_back(Perm4("Swamp", 1));
@@ -160,34 +162,36 @@ TEST_CASE("Shadowborn INT-4 tutor: the tiers -- Stone, the mana tier (Lake > Cul
     Lib4(s, kFullLib);
     // Two Swamps, no Lake held -> Lake; no spare Apostles -> no Culling; short of 6 -> the mana tier.
     CHECK(Prov4().ShadowbornReachableMana(s, 0) == 2);
-    CHECK(Tut4(s) == VS{ kStone, kLake, kRitual, kBloom, kAp4 });
-    // Seven Apostles (one beyond the six) -> Culling joins, after Lake, before Ritual.
+    CHECK(Tut4(s) == VS{ kStone, kLake, kRitual, kAp4 });
+    // Seven Apostles (one beyond the six) -> Culling joins; neither ritual reaches 6 a turn earlier than the
+    // other here, so the plain Ritual leads (INT-5, USER: "otherwise Dark Ritual which has no drawbacks").
     GameState c = s;
     for (int k = 0; k < 7; ++k) { c.battlefield.push_back(Perm4(kAp4, 20 + k)); }
-    CHECK(Tut4(c) == VS{ kStone, kLake, kCulling, kRitual, kBloom, kAp4 });
+    CHECK(Tut4(c) == VS{ kStone, kLake, kRitual, kCulling, kAp4 });
     // Exactly six Apostles (none spare) -> no Culling.
     GameState six = s;
     for (int k = 0; k < 5; ++k) { six.battlefield.push_back(Perm4(kAp4, 20 + k)); }
     six.players[0].hand.push_back(Card4(kAp4, 40));
-    CHECK(Tut4(six) == VS{ kStone, kLake, kRitual, kBloom, kAp4 });
+    CHECK(Tut4(six) == VS{ kStone, kLake, kRitual, kAp4 });
     // Lake / Culling are bad in multiples: a held copy removes them (the Culling's net 3 leaves us at 5, still short).
     GameState held = c;
     held.players[0].hand.push_back(Card4(kCulling, 41));
     held.players[0].hand.push_back(Card4(kLake, 45));
     CHECK(Prov4().ShadowbornReachableMana(held, 0) == 5);
-    CHECK(Tut4(held) == VS{ kStone, kRitual, kBloom, kAp4 });
+    CHECK(Tut4(held) == VS{ kStone, kRitual, kAp4 });
     // One Swamp -> no Lake.
     GameState one = s;
     one.battlefield.pop_back();
-    CHECK(Tut4(one) == VS{ kStone, kRitual, kBloom, kAp4 });
+    CHECK(Tut4(one) == VS{ kStone, kRitual, kAp4 });
     // A Stone held (hand or battlefield) -> no Stone; Ritual stays even with a Ritual in hand (good in multiples).
     GameState st = s;
     st.players[0].hand.push_back(Card4(kStone, 42));
     st.players[0].hand.push_back(Card4(kRitual, 43));
-    CHECK(Tut4(st) == VS{ kLake, kRitual, kBloom, kAp4 });
+    CHECK(Tut4(st) == VS{ kLake, kRitual, kAp4 });
+    // A Stone on the BATTLEFIELD switches the table (INT-5): an Apostle first while none is in hand.
     GameState sb = s;
     sb.battlefield.push_back(Perm4(kStone, 44));
-    CHECK(Tut4(sb).front() == kLake);
+    CHECK(Tut4(sb) == VS{ kAp4, kLake, kRitual });
 }
 
 TEST_CASE("Shadowborn INT-4 tutor: reachable mana and the 6 threshold; the generic fallback")
@@ -196,13 +200,13 @@ TEST_CASE("Shadowborn INT-4 tutor: reachable mana and the 6 threshold; the gener
     for (int k = 0; k < 4; ++k) { s.battlefield.push_back(Perm4("Swamp", 1 + k)); }
     Lib4(s, kFullLib);
     CHECK(Prov4().ShadowbornReachableMana(s, 0) == 4);
-    CHECK(Tut4(s) == VS{ kStone, kLake, kRitual, kBloom, kAp4 });
+    CHECK(Tut4(s) == VS{ kStone, kLake, kRitual, kAp4 });
     // A land in hand (two drops left: this turn and next) + a Dark Ritual's net 2 -> 4 + 1 + 2 = 7: not short.
     GameState r = s;
     r.players[0].hand.push_back(Card4("Swamp", 50));
     r.players[0].hand.push_back(Card4(kRitual, 51));
     CHECK(Prov4().ShadowbornReachableMana(r, 0) == 7);
-    CHECK(Tut4(r) == VS{ kStone, kAp4 });
+    CHECK(Tut4(r) == VS{ kStone, kAp4, kLake, kRitual });   // not short: the mana tier follows as extra mana
     // Land drop already used: one drop left (next turn) -> still 7 with two lands in hand.
     GameState d = r;
     d.players[0].lands_played_this_turn = 1;
@@ -212,17 +216,18 @@ TEST_CASE("Shadowborn INT-4 tutor: reachable mana and the 6 threshold; the gener
     GameState lk = s;
     lk.battlefield.push_back(Perm4(kLake, 9));
     CHECK(Prov4().ShadowbornReachableMana(lk, 0) == 5 + 3);
-    // Six lands -> not short; Stone held -> Apostle only.
+    // Six lands -> not short; Stone ON THE BATTLEFIELD -> the Apostle, then extra mana (INT-5).
     GameState full = s;
     full.battlefield.push_back(Perm4("Swamp", 7));
     full.battlefield.push_back(Perm4("Swamp", 8));
     full.battlefield.push_back(Perm4(kStone, 9));
-    CHECK(Tut4(full) == VS{ kAp4 });
-    // Nothing of the early set left in the library -> the generic list (library order), never a whiff.
+    CHECK(Tut4(full) == VS{ kAp4, kLake, kRitual });
+    // Nothing of the early set left in the library -> the FALLBACK (INT-5, USER 2026-11-03): exactly one
+    // candidate, a basic land first (test_shadowborn_int5.cpp pins the order and the not-cast case).
     GameState g = Base4();
     g.battlefield = full.battlefield;
-    Lib4(g, { kReaper, "Swamp", kRitual, "Blood Crypt" });
-    CHECK(Tut4(g) == VS{ kReaper, "Swamp", kRitual, "Blood Crypt" });
+    Lib4(g, { kReaper, "Swamp", kBloom, "Blood Crypt" });
+    CHECK(Tut4(g) == VS{ "Swamp" });
 }
 
 TEST_CASE("Shadowborn INT-4 tutor: Profane Tutor's upkeep pin and the cast's searched variants use the early set only")
@@ -234,7 +239,7 @@ TEST_CASE("Shadowborn INT-4 tutor: Profane Tutor's upkeep pin and the cast's sea
         s.battlefield.push_back(Perm4("Swamp", 1));
         Lib4(s, kFullLib);
         const VS early = Tut4(s, "Profane Tutor");
-        REQUIRE(early == VS{ kStone, kRitual, kBloom, kAp4 });
+        REQUIRE(early == VS{ kStone, kRitual, kAp4 });
         s.scripted_upkeep_land_search = pin;
         CastOffSuspend(s, 0, Card4("Profane Tutor", 93));
         REQUIRE(s.players[0].hand.size() == 1);

@@ -356,6 +356,7 @@ add_executable(mtg-test
     test/unit/test_shadowborn_int2.cpp
     test/unit/test_shadowborn_int3.cpp
     test/unit/test_shadowborn_int4.cpp
+    test/unit/test_shadowborn_int5.cpp
     test/unit/test_etb_dig_breakpoint.cpp
     test/unit/test_etb_treasure_spend.cpp
     test/unit/test_payable_order.cpp

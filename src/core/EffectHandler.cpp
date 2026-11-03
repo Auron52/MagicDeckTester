@@ -1100,7 +1100,7 @@ void EffectHandler::ResolveDrawUntilNonland(GameState& state, const StackEntry& 
 // sequence inline (cascade walks before the spell's own effect, copy payload before the
 // original's, ETB walk right after entry), so both worlds realise identical states.
 
-void EffectHandler::PushCastTriggers(GameState& state, const CardDefinition& def, int controller)
+void EffectHandler::PushCastTriggers(GameState& state, const CardDefinition& def, int controller, int number)
 {
     // Cast triggers go on the stack ABOVE the just-pushed spell entry (CR 601.2i / 603.3b),
     // so they resolve first. No-op for every card without a cast-trigger param.
@@ -1173,7 +1173,10 @@ void EffectHandler::PushCastTriggers(GameState& state, const CardDefinition& def
     // granter on the battlefield NOW (RippleInstanceNs; the legend rule leaves at most one Stone). Pushed
     // LAST, so a ripple resolves before the other cast triggers of the same spell (the rollout twin runs
     // its block after the cascade one -- no card in the pool carries both). `source` keeps the spell's
-    // card NUMBER: ResolveRippleTrigger tests "directly above its own spell" (F2) by it.
+    // card NUMBER (the caller's `number`; def.card is the DATABASE card, number 0 -- the 2d review's finding
+    // 2: with it every executor trigger read "not adjacent" while the rollout's read adjacent, so a
+    // ripple_mask != 0 line played a different chain than the one the search valued): ResolveRippleTrigger
+    // tests "directly above its own spell" (F2) by it.
     // deck_has_ripple false -> RippleInstanceNs returns at once: byte-identical for every other deck.
     const std::vector<int> rns = RippleInstanceNs(state, controller, def);
     for (int n : rns)
@@ -1182,6 +1185,7 @@ void EffectHandler::PushCastTriggers(GameState& state, const CardDefinition& def
         te.type             = StackEntry::EntryType::Triggered;
         te.trigger_kind     = StackEntry::TriggerKind::Ripple;
         te.source           = def.card;
+        if (number >= 0) { te.source.m_number = number; }
         te.controller_index = controller;
         te.enchant_target   = n;   // ripple N
         state.stack.push_back(std::move(te));
@@ -1251,7 +1255,7 @@ bool EffectHandler::PushFreeCast(GameState& state, const Card& card, int control
     if (state.own_death_live && SelfHasLost(state)) { return true; }
     // ...including the free spell's OWN cast triggers, so cascade chains nest naturally -- unless the caller
     // pushes them itself after casting the rest of a reveal (ripple).
-    if (push_triggers) { PushCastTriggers(state, *def, controller); }
+    if (push_triggers) { PushCastTriggers(state, *def, controller, card.m_number); }
     return true;
 }
 
@@ -1338,7 +1342,7 @@ void EffectHandler::ResolveRippleTrigger(GameState& state, const StackEntry& ent
         && state.stack.back().source.m_number == entry.source.m_number;
     const int me = entry.controller_index;
     std::vector<Card> taken = RippleResolveTrigger(state, me, def, entry.enchant_target, adjacent);
-    std::vector<const CardDefinition*> cast_defs;
+    std::vector<std::pair<const CardDefinition*, int>> cast_defs;   // (definition, the cast copy's number)
     for (Card& c : taken)
     {
         const CardDefinition* md = CardDatabase::Instance().LookupCached(c);
@@ -1347,10 +1351,10 @@ void EffectHandler::ResolveRippleTrigger(GameState& state, const StackEntry& ent
         const std::string tut = IsLibraryTutor(md->params) ? RippleNextFreeTutorTarget(state) : std::string{};
         if (!PushFreeCast(state, c, me, /*push_triggers=*/false, victim, tut))
         { state.players[static_cast<std::size_t>(me)].library.push_back(c); continue; }
-        cast_defs.push_back(md);
+        cast_defs.emplace_back(md, c.m_number);
         if (state.own_death_live && SelfHasLost(state)) { return; }
     }
-    for (const CardDefinition* md : cast_defs) { PushCastTriggers(state, *md, me); }
+    for (const auto& cd : cast_defs) { PushCastTriggers(state, *cd.first, me, cd.second); }
 }
 
 void EffectHandler::ResolveEtbExileFreeCast(GameState& state, const StackEntry& entry,

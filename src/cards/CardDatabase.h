@@ -4685,6 +4685,19 @@ struct CardDefinition
     // would make every Bloodghast CAST a landfall-watcher cast (PutsLandfallWatcher) and spawn useless
     // land-position clones. FireLandfallTriggers walks the GRAVEYARD for this byte instead.
     bool gy_landfall_watcher = false;
+    // THE OVERLORD VICTIM FOLD's card-data premises (Shadowborn INT-5; the proof is at SpellEffects.h
+    // UpkeepSacFoldReps). Derived at load from the RAW JSON, so a param added tomorrow is NOT audited until
+    // someone audits it (fails toward "no fold"):
+    //   upkeep_fold_audited -- every `parameters` key, the template and every keyword are in the audited
+    //     set: none of this card's readers can tell a vanilla token creature from a "clean" creature
+    //     except through the channels the proof covers (power / toughness / keywords, the creature COUNT,
+    //     a NAME count, mana-symbol devotion, an excluded-subtype target test).
+    //   upkeep_fold_keeper -- an audited CREATURE with no self-binding drawback (no upkeep sacrifice, no
+    //     end-step destroy / discard) and only benign keywords: keeping it is at least as good as keeping
+    //     a weaker vanilla token.
+    // false for a Register-built definition (no JSON to audit).
+    bool upkeep_fold_audited = false;
+    bool upkeep_fold_keeper  = false;
     // BEHAVIOURAL IDENTITY -- a digest of everything the engine can READ about this card, used to
     // decide when two DIFFERENTLY-NAMED cards are interchangeable. Equal digests mean the engine
     // cannot tell the two apart; 0 means "unknown, never matches anything" (see below).

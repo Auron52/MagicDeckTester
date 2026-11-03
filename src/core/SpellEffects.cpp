@@ -205,12 +205,17 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
     // Read-and-reset at entry so the FIRST tutor of the apply consumes it on every path (named
     // replay, whiff, scripted), mirroring g_scripted_etbdig_choice's consumed-once semantics.
     // A RIPPLE free tutor's searched pick (RippleNextFreeTutorTarget, Shadowborn INT-3): the target string
-    // carries an INDEX into this resolution's candidate list -- exactly the scripted-pick path below, so
-    // re-enter through it with the index installed and no name.
-    if (const int rk = RippleTutorRankOf(target_name); rk >= 0)
+    // carries an INDEX into this resolution's candidate list (or the unpinned marker = the front) -- exactly
+    // the scripted-pick path below, so re-enter through it with the index installed and no name. SAVED AND
+    // RESTORED around it (INT-5): a free tutor resolves ABOVE the hard tutor whose chain cast it, so the
+    // hard cast's own searched pick (the plan's tutor_choice, installed for the whole apply) must still be
+    // there when the hard cast resolves -- the Profane Tutor upkeep path's discipline (CastOffSuspend).
+    if (const int rk = RippleTutorRankOf(target_name); rk != -1)
     {
-        g_scripted_tutor_choice = rk;
+        const int saved = g_scripted_tutor_choice;
+        g_scripted_tutor_choice = rk >= 0 ? rk : -1;
         PerformTutor(state, controller_index, pp, std::string{}, source_name, human_repick);
+        g_scripted_tutor_choice = saved;
         return;
     }
     tutorpin::NoteRead();   // MTG_BP_TUTOR_PIN_ALIAS's witness (core/SpellEffects.h)

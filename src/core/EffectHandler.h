@@ -36,7 +36,9 @@ public:
     // just-pushed spell entry, so they resolve first (CR 601.2i / 603.3b). Called by
     // AIEngine::CastSpellFromHand and by PushFreeCast, so nested free-cast chains fire their
     // own triggers. No-op for every card without a cast-trigger param -> byte-identical.
-    static void PushCastTriggers(GameState& state, const CardDefinition& def, int controller);
+    // `number` = the cast copy's card number (the spell entry's), stamped on the RIPPLE entries so
+    // ResolveRippleTrigger's "directly above its own spell" test can match it; -1 = def.card's.
+    static void PushCastTriggers(GameState& state, const CardDefinition& def, int controller, int number = -1);
 
     // A free cast is a REAL cast (CR 601.2): it increments spells_cast_this_turn, spends the
     // Irencrag budget, fires on-cast triggers/prowess, and pushes the spell's own cast

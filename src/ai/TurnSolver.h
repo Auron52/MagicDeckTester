@@ -3206,6 +3206,10 @@ public:
     // The raw candidate list CollectActions emits for `state` (test hook; what both subset walkers index).
     static Action ChandraNestedCastOption(const std::string& option);
     static std::vector<Action> CollectActionsForTest(const GameState& state, bool is_pre_combat);
+    // ...inside an open decision ROOT with `budget` (nullptr = unlimited): the budget-staged admissions
+    // (the ripple late / deep waves) read the root's budget.
+    static std::vector<Action> CollectActionsUnderRootForTest(const GameState& state, bool is_pre_combat,
+                                                              SearchBudget* budget);
     static void VampRulePreAgreeForTest(const GameState& state, const std::vector<Action>& cands,
                                         const std::vector<int>& sel, bool fold_from_odometer,
                                         bool& slow, bool& fast);

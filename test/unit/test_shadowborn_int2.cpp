@@ -287,17 +287,23 @@ TEST_CASE("Abhorrent Overlord: the upkeep sacrifice takes the pinned class; unpi
     CHECK(CountTokens(a) == 1);
     CHECK(CountOnBf(a, kApostle) == 1);
     CHECK(a.scripted_demon_trigger == -1);
+    // INT-5 THE OVERLORD VICTIM FOLD (SpellEffects.h UpkeepSacFoldReps): the Harpy class drops the Apostle
+    // class it dominates, so the ranks index [Harpy, Overlord]; with no Harpy the Apostle is rank 0.
     GameState b = s;
-    b.scripted_demon_trigger = static_cast<std::int16_t>(1 << kDemonOverlordShift);   // rank 1: the Apostle
+    b.scripted_demon_trigger = static_cast<std::int16_t>(1 << kDemonOverlordShift);   // rank 1: itself
     PerformUpkeepSacrificeCreature(b);
     CHECK(CountTokens(b) == 2);
-    CHECK(CountOnBf(b, kApostle) == 0);
+    CHECK(CountOnBf(b, kApostle) == 1);
+    CHECK(CountOnBf(b, "Abhorrent Overlord") == 0);
+    CHECK(b.creature_died_this_turn);
     CHECK(b.scripted_demon_trigger == -1);   // consumed
     GameState c = s;
-    c.scripted_demon_trigger = static_cast<std::int16_t>(2 << kDemonOverlordShift);   // rank 2: itself
+    c.battlefield.erase(std::remove_if(c.battlefield.begin(), c.battlefield.end(),
+                                       [](const Permanent& q) { return q.is_token; }), c.battlefield.end());
+    c.scripted_demon_trigger = -1;   // no Harpy: the front is the Apostle
     PerformUpkeepSacrificeCreature(c);
-    CHECK(CountOnBf(c, "Abhorrent Overlord") == 0);
-    CHECK(c.creature_died_this_turn);
+    CHECK(CountOnBf(c, kApostle) == 0);
+    CHECK(CountOnBf(c, "Abhorrent Overlord") == 1);
 }
 
 TEST_CASE("Reaper from the Abyss: morbid destroys OUR non-Demon creature when the opponent has none")

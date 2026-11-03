@@ -34930,7 +34930,8 @@ static RippleDry RippleChainDryRun(const GameState& s, int me, const CardDefinit
                 {
                     const CardDefinition* md = CardDatabase::Instance().LookupCached(rc);
                     const bool castable = md != nullptr && FreeCastHasLegalTargets(s, me, *md)
-                        && (!SacCreatureCostFoldsByReadiness(md->params) || bodies > 0);
+                        && (!SacCreatureCostFoldsByReadiness(md->params) || bodies > 0)
+                        && !TutorCastPruned(s, me, *md);
                     if (castable && prov.FreeCastTakeDominated(s, me, *md))
                     {
                         ++r.dom_seen;
@@ -34959,11 +34960,13 @@ static RippleDry RippleChainDryRun(const GameState& s, int me, const CardDefinit
     return r;
 }
 
-// THE LATE WAVE (USER 2026-11-03: "cast-all first with declining in a later budget wave"): declining a
-// take-dominated revealed card (a Shadowborn Apostle) is admitted only at a decision whose budget is
-// UNLIMITED or at least MTG_RIPPLE_LATE_WAVE_MS virtual ms (default 100 -- ten times the shipped d3 play
-// budget). A budget-staged admission, never a gate: a larger budget reaches the declines, an unlimited one
-// reaches everything (the completeness invariant), and a small one spends on the cast-all lines first. It
+// THE LATE WAVE: the menus a dry run on the pre-plan library cannot size -- the speculative free tutor /
+// victim / decline fan of a tutor-family chain, and an F1 name's finite budgets and decline bits past the
+// dry run (INT-5) -- are admitted only at a decision whose budget is UNLIMITED or at least
+// MTG_RIPPLE_LATE_WAVE_MS virtual ms (default 100 -- ten times the shipped d3 play budget). (INT-3 also
+// admitted the Apostle DECLINES here; the USER pruned those at every budget on 2026-11-03.) A budget-staged
+// admission, never a gate: a larger budget reaches more, an unlimited one reaches everything (the
+// completeness invariant), and a small one spends on the dry run's lines first. It
 // reads the decision ROOT's static budget, so one decision's enumeration (and its memo, scoped to the
 // decision epoch) always sees one answer. Not human play (the human answers each take at resolution).
 static bool RippleLateWaveAdmitted()
@@ -34971,6 +34974,19 @@ static bool RippleLateWaveAdmitted()
     if (HumanPlayActive() || !TurnSolver::DecisionRootOpen()) { return false; }
     static const long long thr =
         static_cast<long long>(std::max(0, EnvInt("MTG_RIPPLE_LATE_WAVE_MS", 100))) * SearchBudget::NODES_PER_VIRTUAL_MS;
+    const SearchBudget* b = TurnSolver::DecisionBudget();
+    if (b == nullptr || b->Unlimited()) { return true; }
+    return b->Limit() >= thr;
+}
+
+// THE DEEP WAVE (INT-5): the third and fourth free-tutor / free-victim ordinals of one cast's chain. Same
+// shape as the late wave, one step further out: unlimited, or a ROOT budget >= MTG_RIPPLE_DEEP_WAVE_MS
+// virtual ms (default 1000). Static per decision. Reachable at --budget-ms 0 (the completeness invariant).
+static bool RippleDeepWaveAdmitted()
+{
+    if (HumanPlayActive() || !TurnSolver::DecisionRootOpen()) { return false; }
+    static const long long thr =
+        static_cast<long long>(std::max(0, EnvInt("MTG_RIPPLE_DEEP_WAVE_MS", 1000))) * SearchBudget::NODES_PER_VIRTUAL_MS;
     const SearchBudget* b = TurnSolver::DecisionBudget();
     if (b == nullptr || b->Unlimited()) { return true; }
     return b->Limit() >= thr;
@@ -35060,25 +35076,46 @@ static void EmitRipplePins(const GameState& state, std::vector<Action>& actions)
             const int copies = static_cast<int>(it->slots.size());
             const RippleDry all = RippleChainDryRun(state, me, *d, copies, n);
             const int T = std::max(all.triggers, copies);
-            const int ms = std::min(all.srch, 3);
+            int ms = std::min(all.srch, 3);
+            // THE TOP OF THE MENU is ALL (kRippleRevealAll: every trigger reveals -- B = T in the dry run's
+            // world, and still "cast everything" when the plan's earlier casts lengthen the live chain), then
+            // B = T-1 .. 0. THE LATE WAVE adds what the dry run cannot see (the 2d review's finding 5): the
+            // finite budgets T .. Tmax-1 (Tmax = one trigger per copy of the name that could be cast -- hand
+            // copies + library copies, each granter instance) and decline bits for every library copy of a
+            // searched match -- so a chain the plan's earlier casts moved is still fully searched at a large /
+            // unlimited budget.
+            int Tmax = T;
+            if (late)
+            {
+                int lib_copies = 0;
+                for (const Card& lc : state.players[static_cast<std::size_t>(me)].library)
+                { if (lc.m_name == d->card.m_name) { ++lib_copies; } }
+                Tmax = std::max(T, copies + lib_copies);
+                if (!prov.FreeCastTakeDominated(state, me, *d)) { ms = std::min(std::max(all.srch, lib_copies), 3); }
+            }
             const bool ritual = IsManaRitual(*d);
             const int per = ritual ? RitualFloatAmount(state, *d, a.chosen_x) : 0;
-            std::vector<int> caps{ -1 };
-            if (late) { for (int c = all.dom_seen - 1; c >= 0; --c) { caps.push_back(c); } }
+            // A revealed take-dominated card (a Shadowborn Apostle) is ALWAYS cast: declining one is PRUNED at
+            // every budget, --budget-ms 0 included (USER 2026-11-03, a restriction: "We should heuristically
+            // prune the decline of Apostles. I can't see an advantage."). INT-3 admitted the declines in the late
+            // wave (take_cap); the script still honours a hand-built cap, the enumerator emits none.
+            const std::vector<int> caps{ -1 };
+            std::vector<int> budgets{ kRippleRevealAll };
+            for (int B = std::min(Tmax - 1, 126); B >= 0; --B) { budgets.push_back(B); }
             for (int cap : caps)
-            for (int B = T; B >= 0; --B)
+            for (int B : budgets)
             for (unsigned m = 0; m < (1u << ms); ++m)
             {
                 Action v = a;
                 v.ripple_pinned   = true;
-                v.ripple_reveals  = static_cast<std::int8_t>(std::min(B, 127));
+                v.ripple_reveals  = static_cast<std::int8_t>(B);
                 v.ripple_take_cap = static_cast<std::int8_t>(cap);
-                v.ripple_decline  = static_cast<std::uint8_t>(m);
+                v.ripple_decline  = RippleMenuByte(m, ms);
                 if (B == 0 && (m != 0 || cap != -1)) { continue; }   // nothing is revealed: one B = 0 line
                 v.ripple_granter_req = static_cast<std::int8_t>(granter_bf || B == 0 ? 0 : 1);
                 if (ritual && per > 0)
                 {
-                    const RippleDry dv = RippleChainDryRun(state, me, *d, copies, n, B, m, cap);
+                    const RippleDry dv = RippleChainDryRun(state, me, *d, copies, n, B == kRippleRevealAll ? -1 : B, m, cap);
                     v.ritual_float += per * (dv.srch_taken + dv.dom);
                 }
                 out.push_back(std::move(v));
@@ -35106,6 +35143,11 @@ static void EmitRipplePins(const GameState& state, std::vector<Action>& actions)
             if (sac) { all.sacs = std::max(all.sacs, lib_copies); }
         }
         const bool f2 = RippleResolutionShuffles(*d) && StableShuffleEnabled();
+        // FREE PICK / VICTIM ORDINALS PINNED PER CAST (the 2d review's finding 4): 2 below the deep wave, every
+        // packed ordinal (kRipplePinOrdinals) in it -- a third / fourth free tutor's pick and victim are
+        // searched at a large / unlimited budget instead of always taking the front. A budget-staged
+        // admission like the late wave (the cross product grows by a factor of wt * wv per ordinal).
+        const int pin_ords = RippleDeepWaveAdmitted() ? kRipplePinOrdinals : 2;
         const int mt = std::min(f2 ? all.nonadj : all.triggers, 3);
         const int ms = std::min(all.srch, 3);
         int wt = 1;
@@ -35134,8 +35176,8 @@ static void EmitRipplePins(const GameState& state, std::vector<Action>& actions)
             int declined = 0;
             for (unsigned b = dm; b != 0; b >>= 1) { declined += static_cast<int>(b & 1u); }   // portable popcount
             const int taken = ms - declined + std::max(0, all.srch - ms);
-            const int kt = std::min({ taken, all.tutors, 2 });
-            const int kv = std::min({ taken, all.sacs, 2 });
+            const int kt = std::min({ taken, all.tutors, pin_ords });
+            const int kv = std::min({ taken, all.sacs, pin_ords });
             long long combos = 1;
             for (int i = 0; i < kt; ++i) { combos *= wt; }
             for (int i = 0; i < kv; ++i) { combos *= wv; }
@@ -35149,8 +35191,8 @@ static void EmitRipplePins(const GameState& state, std::vector<Action>& actions)
                 const bool no_ripple = mask == (1u << mt) - 1 && dm == (1u << ms) - 1;
                 v.ripple_granter_req = static_cast<std::int8_t>(granter_bf || no_ripple ? 0 : 1);
                 v.ripple_pinned      = true;
-                v.ripple_mask        = static_cast<std::uint8_t>(mask);
-                v.ripple_decline     = static_cast<std::uint8_t>(dm);
+                v.ripple_mask        = RippleMenuByte(mask, mt);
+                v.ripple_decline     = RippleMenuByte(dm, ms);
                 v.ripple_free_tutor  = ft;
                 v.ripple_free_victim = fv;
                 out.push_back(std::move(v));
@@ -37632,6 +37674,11 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // both wrong and wasted work. One cast action, empty target; the fan-out in
             // EnumeratePlansWithLand adds Plan::tutor_choice variants. Human play keeps the name
             // path: the human picks among named variants, exactly as before.
+            // A provider that requires a candidate (DecisionProvider::TutorNeedsCandidate; Shadowborn, USER
+            // 2026-11-03: "or we should not cast the spell at all") gets NO cast when its list is empty.
+            if (ResolveProvider(state).TutorNeedsCandidate(state, state.active_player_index, def.params)
+                && RankedTutorCandidates(ResolveProvider(state), state, state.active_player_index, def.params).empty())
+            { continue; }
             if (TutorAxisResolveMode() && !HumanPlayActive() && TutorAxisEnabled()
                 && def.params.look_top_put_creature_count <= 0)   // Turntimber: named variants (below)
             {
@@ -37763,7 +37810,13 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     && !HumanPlayDefersTutorTarget(def))
                 { cands.push_back(kTutorDeclineTarget); }
             }
-            if (cands.empty()) { cands.push_back(std::string{}); }  // whiff: castable, fetches nothing
+            if (cands.empty())
+            {
+                // A provider that requires a candidate (Shadowborn, USER 2026-11-03: "or we should not cast the
+                // spell at all") gets no cast; every other deck keeps the whiff.
+                if (ResolveProvider(state).TutorNeedsCandidate(state, state.active_player_index, def.params)) { continue; }
+                cands.push_back(std::string{});   // whiff: castable, fetches nothing
+            }
             // Emit ONE target here (the provider's best) and search the rest as a post-dedup AXIS
             // (see the tutor fan-out in EnumeratePlansWithLand). Emitting them all was almost pure
             // WASTE: EnumeratePlans' autonomous plan_signature keys only on cast NAMES, so every
@@ -83155,7 +83208,34 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             if (d->params.upkeep_sacrifice_creature > 0) { ++over_bf; }
         }
         const int classes_destroy = static_cast<int>(DemonTriggerClassReps(state, me, true, reaper_excl).size());
-        const int classes_own     = static_cast<int>(DemonTriggerClassReps(state, me, false, std::string{}).size());
+        const std::vector<int> own_reps = DemonTriggerClassReps(state, me, false, std::string{});
+        const int classes_own     = static_cast<int>(own_reps.size());
+        // THE OVERLORD VICTIM FOLD's bound (SpellEffects.h UpkeepSacFoldReps has the proof). At the upkeep, a
+        // vanilla-token class present drops every clean-keeper class that dominates it, so the trigger's list
+        // is at most D + max(H, K): D = classes that are neither (the Overlord, a Demon keeper, Reaper, Sire),
+        // H = vanilla-token classes, K = keeper classes. A keeper counts toward K only when it dominates EVERY
+        // token shape that can be present (the board's and the devotion maker's: printed power / toughness >=,
+        // the token's keywords within its own + Flying); otherwise it is a D. An over-estimate only costs
+        // duplicates; this one is exact whenever both an H and every K are present at the upkeep.
+        const UpkeepFoldPool fold_pool = (UpkeepFoldOn() && classes_own > 0) ? UpkeepSacFoldPool(state, me) : UpkeepFoldPool{};
+        int h_now = 0, h_pow = 0, h_tou = 0;
+        std::uint64_t h_kw = 0;
+        for (int i : own_reps)
+        {
+            const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+            if (!UpkeepFoldVanillaToken(state, q)) { continue; }
+            ++h_now;
+            h_pow = std::max(h_pow, q.card.m_power.value_or(0));
+            h_tou = std::max(h_tou, q.card.m_toughness.value_or(0));
+            h_kw |= q.card.m_keyword_mask;
+        }
+        // Does a keeper definition (or a board keeper) dominate every token shape (p, t, kw)?
+        auto keeper_covers = [&](const CardDefinition* kd, int p, int t, std::uint64_t kw) -> bool
+        {
+            if (!fold_pool.ok || !UpkeepFoldKeeperDef(kd, fold_pool)) { return false; }
+            if (kd->card.m_power.value_or(0) < p || kd->card.m_toughness.value_or(0) < t) { return false; }
+            return (kw & ~(kd->card.m_keyword_mask | Card::Bit(Keyword::Flying))) == 0;
+        };
         const int inherited = state.scripted_demon_trigger;
         std::vector<TurnSolver::Plan> extra;
         for (std::size_t i = 0, n_base = all.size(); i < n_base; ++i)
@@ -83173,19 +83253,29 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 || p.demon_trigger_choice >= 0 || p.saga_ch1_choice != -1
                 || !p.sac_pins.empty()) { continue; }
             bool reaper = reaper_bf > 0, over = over_bf > 0, kills = state.creature_died_this_turn;
-            bool harpy = false;
+            bool harpy = false, harpy_plain = true;
+            int t_pow = h_pow, t_tou = h_tou;
             std::vector<std::string> new_names, new_nondemon;
+            std::vector<const CardDefinition*> new_defs;
             auto note_creature = [&](const CardDefinition* d)
             {
                 if (d == nullptr || !d->card.IsCreature()) { return; }
                 const std::string nm = d->card.m_name.str();
                 if (d->params.endstep_morbid_destroy_target_creature) { reaper = true; reaper_excl = d->params.endstep_destroy_excluded_subtype; }
                 if (d->params.upkeep_sacrifice_creature > 0) { over = true; }
-                if (!d->params.etb_tokens_per_devotion_color.empty()) { harpy = true; }
+                if (!d->params.etb_tokens_per_devotion_color.empty())
+                {
+                    harpy = true;
+                    t_pow = std::max(t_pow, d->params.etb_created_token_power);
+                    t_tou = std::max(t_tou, d->params.etb_created_token_toughness);
+                    for (const std::string& kw : d->params.etb_created_token_keywords)
+                    { if (kw != "Flying") { harpy_plain = false; } }   // only Flying is covered by the fold
+                }
                 if (std::find(own_names.begin(), own_names.end(), nm) != own_names.end()) { return; }
                 if (std::find(new_names.begin(), new_names.end(), nm) == new_names.end())
                 {
                     new_names.push_back(nm);
+                    new_defs.push_back(d);
                     if (reaper_excl.empty() || !CardHasSubtype(d->card, reaper_excl)) { new_nondemon.push_back(nm); }
                 }
             };
@@ -83208,8 +83298,24 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             if (!r_on && !over) { continue; }
             const int kr = r_on ? std::min(kDemonPinMask + 1,
                                            classes_destroy + static_cast<int>(new_nondemon.size()) + (harpy ? 1 : 0)) : 1;
-            const int ko = over ? std::min(kDemonPinMask + 1,
-                                           classes_own + static_cast<int>(new_names.size()) + (harpy ? 1 : 0)) : 1;
+            int ko_bound = classes_own + static_cast<int>(new_names.size()) + (harpy ? 1 : 0);
+            const int hc = h_now + (harpy ? 1 : 0);
+            if (over && fold_pool.ok && hc > 0 && harpy_plain)
+            {
+                const std::uint64_t t_kw = h_kw | (harpy ? Card::Bit(Keyword::Flying) : 0);
+                int kc = 0;
+                for (int i : own_reps)
+                {
+                    const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+                    if (UpkeepFoldVanillaToken(state, q) || q.is_animated || !q.counters.empty()
+                        || UpkeepFoldAttached(state, q) != 0) { continue; }
+                    if (keeper_covers(CardDatabase::Instance().LookupCached(q.card), t_pow, t_tou, t_kw)) { ++kc; }
+                }
+                for (const CardDefinition* nd : new_defs) { if (keeper_covers(nd, t_pow, t_tou, t_kw)) { ++kc; } }
+                const int dc = ko_bound - hc - kc;
+                ko_bound = dc + std::max(hc, kc);
+            }
+            const int ko = over ? std::min(kDemonPinMask + 1, ko_bound) : 1;
             for (int r = 0; r < std::max(1, kr); ++r)
             {
                 for (int o = 0; o < std::max(1, ko); ++o)
@@ -87975,6 +88081,13 @@ static void FoldPhysicalCards(TranspositionTable::Key& k, const GameState& state
     // the next lookup, with no traits installed, it did not -- 36 CONTENT-DIFFs and 5557 vs 6719 units
     // against MTG_PLAN_CACHE_KB=1. MTG_PLAN_CACHE_TRAITS_KEY=0 restores the pre-fix key (A/B control).
     if (PlanCacheTraitsKeyOn()) { mix(0x11B8); mix(CurrentPlanTraitsHash()); }
+    // ...and the RIPPLE WAVES (Shadowborn; the 2d review's finding 8): RippleLateWaveAdmitted /
+    // RippleDeepWaveAdmitted read the decision ROOT's budget, which this key does not otherwise see (it
+    // folds only whether a budget exists), and they change the pin menus EmitRipplePins emits -- so a list
+    // derived under one admission must not be served under the other (two decisions of one game straddling
+    // the thresholds: escalation, a budget ceiling). Ripple decks only, so every other key is unchanged.
+    if (state.deck_has_ripple)
+    { mix(0x11B8); mix((RippleLateWaveAdmitted() ? 1u : 0u) | (RippleDeepWaveAdmitted() ? 2u : 0u)); }
     // An unarmed list cannot skip armed meter-only work or a weighted greedy walk.
     Fold(k, 0x9417C0);
     Fold(k, h);
@@ -114931,5 +115044,11 @@ std::vector<PaidExileCastOption> CollectChandraPaidCastOptions(const GameState& 
 
 std::vector<Action> TurnSolver::CollectActionsForTest(const GameState& state, bool is_pre_combat)
 {
+    return CollectActions(state, is_pre_combat);
+}
+std::vector<Action> TurnSolver::CollectActionsUnderRootForTest(const GameState& state, bool is_pre_combat,
+                                                               SearchBudget* budget)
+{
+    DecisionBudgetScope root(true, budget, state.turn_number);
     return CollectActions(state, is_pre_combat);
 }

@@ -258,6 +258,14 @@ public:
     virtual bool SacNamedPutTargets(const GameState& /*s*/, int /*controller*/, const CardParams& /*pp*/,
                                     std::vector<std::string>& /*out*/) const { return false; }
 
+    // A library tutor whose candidate list (TutorCandidates) is EMPTY is NOT CAST -- neither from hand (no
+    // cast action is emitted) nor for free off a ripple reveal (the match is not castable) -- instead of
+    // the engine's default whiff ("castable, fetches nothing"). Default false = byte-identical for every
+    // deck. ShadowbornProvider (USER 2026-11-03: "There should always be a tutor fallback or we should not
+    // cast the spell at all").
+    virtual bool TutorNeedsCandidate(const GameState& /*s*/, int /*controller*/, const CardParams& /*pp*/) const
+    { return false; }
+
     // PutTargetPolicy / PutTargetOk -- put-tutor fetch NARROWING (Birthing Pod / Chord of
     // Calling), the one place the core invariant allows a narrowing to live (the EldraziFlicker
     // precedent, and its measured lesson applies: narrow only WITH a policy that keeps the

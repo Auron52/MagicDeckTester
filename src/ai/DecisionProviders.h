@@ -3963,40 +3963,72 @@ public:
     //   is the search's call -- no rule here.
     //
     // TUTOR (TutorCandidates, tutor_to_hand: Demonic Tutor, Diabolic Intent, Profane Tutor -- the cast,
-    // the ripple free cast and Profane Tutor's upkeep pin all read this one list). EARLY SET, in order:
-    //   1. a ripple granter (grants_ripple: Thrumming Stone) -- only when none is on our battlefield or in
-    //      hand (a second is legend-rule dead);
-    //   2. the MANA TIER, only while the mana reachable this or next turn (ShadowbornReachableMana) is
-    //      short of kManaGoal = 6 (the Stone's 5 + an Apostle's 1):
-    //        a. a land that enters by sacrificing a land of a subtype (etb_replace_sacrifice_land_subtype:
-    //           Lake of the Dead) -- only when NO copy of it is in hand or on our battlefield AND we control
-    //           >= 2 lands of that subtype (one fed to its entry, one to its sacrifice-for-mana);
-    //        b. a ritual with a creature-sacrifice additional cost (ritual_floating_mana +
-    //           sac_additional_creature: Culling the Weak) -- only when NO copy is in hand AND we have spare
-    //           Apostles (copies on our battlefield + in hand beyond the next activation's sac_named_count);
-    //        c. a plain ritual (ritual_floating_mana, no additional cost: Dark Ritual) -- ALWAYS (good in
-    //           multiples);
-    //        d. a suspended mana artifact (sac_for_mana_amount on a non-land suspend card: Lotus Bloom) --
-    //           last (PROVISIONAL, surfaced to the USER);
-    //      precedence a > b > c > d when several apply;
-    //   3. the sac-named creature (sac_named_count: Shadowborn Apostle).
+    // the ripple free cast and Profane Tutor's upkeep pin all read this one list). The USER's table
+    // (INT-4, amended INT-5, USER 2026-11-03: "Once thrumming stone is out we only need 3 or 4 mana maximum",
+    // "the likely maximum you might want to play is 2 apostles + 2 activations ... that mana is less
+    // important than having an apostle in hand", "Having a second apostle followed by extra mana is also
+    // worth it if there is nothing else to get", "The extra Apostle is actually probably better than the
+    // seventh mana, so we would put them both at 3 and combine 4 and 6", "We shouldn't search Lotus bloom").
+    // Two orders, switched by a ripple granter ON OUR BATTLEFIELD (one in hand does not switch it):
+    //
+    //   | tier | no granter on our battlefield               | a granter on our battlefield                |
+    //   |------|---------------------------------------------|---------------------------------------------|
+    //   | 1    | the granter, if none on bf or in hand       | the Apostle, if none in hand                |
+    //   | 2    | MANA, while reachable < kManaGoal (6)       | MANA, while reachable < kManaGoalRipple (3) |
+    //   | 3    | the Apostle (first or second: one tier)     | the Apostle, if one is in hand ("second")   |
+    //   | 4    | EXTRA MANA (the mana tier when not short)   | EXTRA MANA (the 4th mana and beyond)        |
+    //
+    //   * the granter = grants_ripple (Thrumming Stone; a second is legend-rule dead); the Apostle = the
+    //     sac-named creature (sac_named_count: Shadowborn Apostle); "reachable" = ShadowbornReachableMana.
+    //     The bar of 3 is the USER's final call: "Let's change 2 in the Stone on Battlefield case to be 3 mana.
+    //     4 is the most we need, but not as crucial as having the second apostle."
+    //   * MANA = the same names in tier 2 or tier 4 (never both). Order (USER 2026-11-03): a first; then c > b,
+    //     EXCEPT b > c when BOTH (i) an EXPENDABLE sacrifice target is out or castable from hand this turn --
+    //     after reserving one Apostle in hand for the granter (when one is on our battlefield or in hand;
+    //     none in hand -> nothing is expendable) and ONE creature for a creature-sacrificing tutor in hand
+    //     (Diabolic Intent) only while the granter is missing (none on our battlefield or in hand: that
+    //     tutor fetches it) -- AND (ii) Culling's extra net mana reaches the tier's bar a turn earlier than
+    //     the plain ritual's (this turn's reachable mana, then next turn's) -- "otherwise Dark Ritual which
+    //     has no drawbacks". The names:
+    //       a. a land that enters by sacrificing a land of a subtype (etb_replace_sacrifice_land_subtype:
+    //          Lake of the Dead) -- only when NO copy of it is in hand or on our battlefield AND we control
+    //          >= 2 lands of that subtype (one fed to its entry, one to its sacrifice-for-mana);
+    //       b. a ritual with a creature-sacrifice additional cost (ritual_floating_mana +
+    //          sac_additional_creature: Culling the Weak) -- only when NO copy is in hand AND we have spare
+    //          Apostles (copies on our battlefield + in hand beyond the next activation's sac_named_count);
+    //       c. a plain ritual (ritual_floating_mana, no additional cost: Dark Ritual) -- ALWAYS (good in
+    //          multiples).
+    //   * a suspended mana artifact (Lotus Bloom) is NEVER offered (too slow off a tutor).
     //   Everything else (Demons, other tutors, basic lands, Blood Crypt, a second Stone, a Lake / Culling
-    //   already held, the mana tier once 6 is reachable) is not offered. FALLBACK (PROVISIONAL): an empty
-    //   early set -> the generic list (library order), so a tutor never whiffs for want of a rule.
+    //   already held) is not offered.
+    //   FALLBACK (USER 2026-11-03: "There should always be a tutor fallback or we should not cast the spell
+    //   at all. A swamp would be okay, so would Reaper or Sire which we don't search for"; "we prune it, not
+    //   return a full list"; "Choose an order and return a small number of possibilities. Even better if
+    //   that number is 1 and it should be when we don't find much useful"): when every tier above is empty,
+    //   exactly ONE candidate -- the first in the library of (order PROVISIONAL): a BASIC land producing a
+    //   colour of the sac-named creature's cost (a Swamp), then a creature of the activation's searched
+    //   subtype that the activation does NOT fetch (not the devotion-token / count-anthem Demon) and does
+    //   not discard our hand (Reaper from the Abyss), then such a creature that does (Sire of Insanity).
+    //   None of those -> the list is EMPTY and the tutor is NOT CAST (TutorNeedsCandidate), from hand or
+    //   for free off a ripple reveal.
     std::vector<std::string> TutorCandidates(const GameState& s, int controller,
                                              const CardParams& pp) const override;
     bool SacNamedPutTargets(const GameState& s, int controller, const CardParams& pp,
                             std::vector<std::string>& out) const override;
-    static constexpr int kManaGoal = 6;
+    bool TutorNeedsCandidate(const GameState& s, int controller, const CardParams& pp) const override;
+    static constexpr int kManaGoal       = 6;   // no granter out: the Stone's 5 + an Apostle's 1
+    static constexpr int kManaGoalRipple = 3;   // a granter out (USER: "change 2 ... to be 3 mana"; 4 is the most needed)
     // "Reachable this or next turn" -- the most mana one of our next two turns can make, read off the
     // board + hand (documented approximation, no search): every land we control (1 each; they all untap
     // next turn) + one land drop per remaining turn of the two (lands_played_this_turn == 0 ? 2 : 1),
     // capped by the mana-making lands in hand (a land that enters by sacrificing another counts 0) +
     // a Lake crack's surplus (sac_for_mana_amount - 1) when a Lake is out with another land of its victim
     // subtype + every non-land sacrifice-for-mana permanent on the battlefield (Lotus Bloom, one-shot) +
-    // a suspended one arriving by next upkeep + each ritual in hand's NET gain (floating - mana value;
+    // a suspended one arriving by next upkeep (arrive_turn <= TurnSeq() + 1) + each ritual in hand's NET gain (floating - mana value;
     // a creature-sacrifice ritual only when a creature is on the battlefield or in hand).
-    static int ShadowbornReachableMana(const GameState& s, int controller);
+    // this_turn_only: the mana THIS turn can still make -- untapped lands, this turn's drop (if unused), the
+    // floating pool, the same Lake / Bloom / ritual terms, no suspend arrival (the Culling ordering rule).
+    static int ShadowbornReachableMana(const GameState& s, int controller, bool this_turn_only = false);
 };
 
 class PiratesProvider : public DeckProvider

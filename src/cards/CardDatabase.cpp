@@ -122,6 +122,67 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
             // 0 is reserved for "no identity" (Register-built definitions), so never hand it out.
             def.behaviour_identity = h ? h : 1ULL;
         }
+        // THE OVERLORD VICTIM FOLD's premises (CardDefinition::upkeep_fold_audited / _keeper; the proof
+        // and every audited key's reader are at SpellEffects.h UpkeepSacFoldReps). A WHITELIST of raw keys:
+        // anything not on it -- including a param invented tomorrow -- disables the fold for every state
+        // holding the card.
+        {
+            static const char* const kAuditedParams[] = {
+                // lands / mana (no creature reader)
+                "produces", "etb_pay_life_to_untap", "etb_replace_sacrifice_land_subtype", "sac_for_mana_amount",
+                "sac_for_mana_color", "sac_for_mana_victim_land_subtype", "suspend_time_counters", "suspend_cost",
+                "ritual_floating_mana", "ritual_float_color", "grants_ripple",
+                // library tutors (read the LIBRARY only)
+                "tutor_to_hand", "tutor_types", "tutor_shuffle_after", "tutor_required_subtype",
+                // a creature as sacrifice FODDER (any creature; the victim is searched)
+                "sac_additional_creature", "upkeep_sacrifice_creature",
+                // a NAME count (Shadowborn Apostle: creatures named like the source)
+                "sac_named_count", "sac_named_activation_cost",
+                // devotion-scaled token ETB (reads mana symbols: a token has none)
+                "etb_tokens_per_devotion_color", "etb_created_token_power", "etb_created_token_toughness",
+                "etb_created_token_subtypes", "etb_created_token_keywords", "created_token_color",
+                // end-step drawbacks (a target test by EXCLUDED SUBTYPE; our hand)
+                "endstep_morbid_destroy_target_creature", "endstep_destroy_excluded_subtype",
+                "endstep_each_player_discards_hand",
+                // the creature-COUNT anthem (every creature counts once, every creature is pumped)
+                "creature_count_anthem_tiers", "creature_count_anthem_power", "creature_count_anthem_keywords",
+            };
+            static const char* const kDrawbackParams[] = {
+                "upkeep_sacrifice_creature", "endstep_morbid_destroy_target_creature",
+                "endstep_destroy_excluded_subtype", "endstep_each_player_discards_hand",
+            };
+            static const char* const kAuditedTemplates[] = { "custom", "vanilla_creature", "basic_land" };
+            // Keywords: combat-only or inert tags (goldfish: nothing blocks; Flying USER-approved inert).
+            static const char* const kBenignKeywords[] = {
+                "Flying", "Trample", "Vigilance", "Double strike", "First strike", "Haste", "Menace", "Reach",
+                "Lifelink", "Deathtouch",
+            };
+            static const char* const kAuditedTagKeywords[] = { "Suspend", "Morbid" };
+            auto in = [](const auto& arr, const std::string& k)
+            { for (const char* a : arr) { if (k == a) { return true; } } return false; };
+            bool audited = in(kAuditedTemplates, entry.value("template", std::string("custom")));
+            bool drawback = false, benign_kw = true;
+            if (audited && entry.contains("parameters") && entry["parameters"].is_object())
+            {
+                for (auto it = entry["parameters"].begin(); it != entry["parameters"].end(); ++it)
+                {
+                    if (!in(kAuditedParams, it.key())) { audited = false; break; }
+                    if (in(kDrawbackParams, it.key())) { drawback = true; }
+                }
+            }
+            if (audited && entry.contains("keywords") && entry["keywords"].is_array())
+            {
+                for (const json& kw : entry["keywords"])
+                {
+                    const std::string k = kw.is_string() ? kw.get<std::string>() : std::string{};
+                    if (in(kBenignKeywords, k)) { continue; }
+                    if (in(kAuditedTagKeywords, k)) { benign_kw = false; continue; }
+                    audited = false; break;
+                }
+            }
+            def.upkeep_fold_audited = audited;
+            def.upkeep_fold_keeper  = audited && !drawback && benign_kw && def.card.IsCreature();
+        }
         // Pre-intern the subtype names used to build TOKEN subtypes at runtime, so the worker
         // threads only ever do read-only id lookups (SubtypeSet::operator=) and never insert into
         // the shared SubtypeRegistry mid-search -- an insert there reallocates the registry's name

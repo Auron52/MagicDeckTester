@@ -163,7 +163,7 @@ void ExecutorCast(GameState& s, const std::string& name, const Pins& p, const st
     ++s.spells_cast_this_turn;
     s.stack.push_back(e);
     StampRippleScript(s, d, true, p.reveals, p.take_cap, p.mask, p.decline, p.ft, p.fv);
-    EffectHandler::PushCastTriggers(s, d, 0);
+    EffectHandler::PushCastTriggers(s, d, 0, c.m_number);   // the cast copy's number, as AIEngine passes it
     ResolveAll3(s);
 }
 
@@ -342,8 +342,10 @@ TEST_CASE("Ripple: a free Diabolic Intent pays its sacrifice and searches with i
     DemonFill(s, 10);
     Pins p; p.ft = 1; p.fv = 1;   // free tutor rank 0, free victim rank 0
     GameState ro = s, ex = s;
-    RolloutCast(ro, CastAct(ro, kIntent, p, "Reaper from the Abyss", 60));
-    ExecutorCast(ex, kIntent, p, "Reaper from the Abyss", 60);
+    // INT-5: the free Intent's list is the tutor FALLBACK (one candidate: Reaper), so the hard Intent's named
+    // pick is a Sire (still in the library after the free one's search).
+    RolloutCast(ro, CastAct(ro, kIntent, p, "Sire of Insanity", 60));
+    ExecutorCast(ex, kIntent, p, "Sire of Insanity", 60);
     CHECK(CountBf(ro, kApostle3) == 0);   // one sacrifice per Intent
     CHECK(CountBf(ex, kApostle3) == 0);
     CHECK(ro.players[0].hand.size() == 2);   // two tutored cards
@@ -438,8 +440,9 @@ TEST_CASE("Ripple pins: the first Apostle carries the reveal budget, the other c
         budgets.push_back(a.ripple_reveals);
     }
     CHECK(cont == 1);
-    // Two hand copies + one revealed Apostle = three triggers: B = 3, 2, 1, 0.
-    CHECK(budgets == std::vector<int>{ 3, 2, 1, 0 });
+    // Two hand copies + one revealed Apostle = three triggers: B = ALL (INT-5: "every trigger", B = 3 in the dry
+    // run's world), 2, 1, 0.
+    CHECK(budgets == std::vector<int>{ kRippleRevealAll, 2, 1, 0 });
     // Stone only in HAND: every revealing variant needs the Stone cast in the same plan; B = 0 does not.
     GameState h = Base3(6);
     h.players[0].hand.push_back(Card3(kStone, 91));

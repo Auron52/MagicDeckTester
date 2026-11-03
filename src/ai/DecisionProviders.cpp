@@ -58109,7 +58109,7 @@ int ShadowbornProvider::CastOrderRank(const GameState& s, const CardDefinition& 
 
 // ---- ShadowbornProvider: the USER's tutor and Demon rules (Shadowborn INT-4; the rule table and its
 // authority are in the declaration) ----------------------------------------------------------------------
-int ShadowbornProvider::ShadowbornReachableMana(const GameState& s, int controller)
+int ShadowbornProvider::ShadowbornReachableMana(const GameState& s, int controller, bool this_turn_only)
 {
     const Player& ap = s.players[static_cast<std::size_t>(controller)];
     int lands = 0, perm_mana = 0, lake_surplus = 0;
@@ -58124,8 +58124,9 @@ int ShadowbornProvider::ShadowbornReachableMana(const GameState& s, int controll
         if (card.IsCreature() || p.is_animated) { creature = true; }
         if (card.IsLand())
         {
-            ++lands;
             bf_lands.push_back(&card);
+            // THIS TURN: only an untapped land still makes mana (the tutor that asks may have tapped some).
+            if (!this_turn_only || !p.tapped) { ++lands; }
             if (d != nullptr && !d->params.sac_for_mana_victim_land_subtype.empty() && d->params.sac_for_mana_amount > 1)
             { lakes.push_back(d); }
         }
@@ -58157,14 +58158,20 @@ int ShadowbornProvider::ShadowbornReachableMana(const GameState& s, int controll
         if (d->params.sac_additional_creature && !creature) { continue; }
         rituals += std::max(0, d->params.ritual_floating_mana - d->card.m_mana_cost.ManaValue());
     }
-    for (const SuspendedCard& sc : ap.suspended_cards)
+    if (!this_turn_only)
     {
-        if (sc.arrive_turn < 0 || sc.arrive_turn > s.turn_number + 1) { continue; }
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(sc.card);
-        if (d != nullptr && !d->card.IsLand() && d->params.sac_for_mana_amount > 0) { perm_mana += d->params.sac_for_mana_amount; }
+        for (const SuspendedCard& sc : ap.suspended_cards)
+        {
+            // arrive_turn is stamped with TurnSeq() (GameState.h: suspend arrivals "use this, never turn_number").
+            if (sc.arrive_turn < 0 || sc.arrive_turn > s.TurnSeq() + 1) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(sc.card);
+            if (d != nullptr && !d->card.IsLand() && d->params.sac_for_mana_amount > 0) { perm_mana += d->params.sac_for_mana_amount; }
+        }
     }
-    const int drops = ap.lands_played_this_turn == 0 ? 2 : 1;
-    return lands + std::min(hand_lands, drops) + lake_surplus + perm_mana + rituals;
+    const int drops = this_turn_only ? (ap.lands_played_this_turn == 0 ? 1 : 0)
+                                     : (ap.lands_played_this_turn == 0 ? 2 : 1);
+    const int pool = this_turn_only ? s.floating_mana.Total() : 0;
+    return lands + std::min(hand_lands, drops) + lake_surplus + perm_mana + rituals + pool;
 }
 
 bool ShadowbornProvider::SacNamedPutTargets(const GameState& s, int controller, const CardParams& pp,
@@ -58235,8 +58242,22 @@ ShadowbornProvider::TutorCandidates(const GameState& s, int controller, const Ca
         { ++apostles; sac_named_n = std::max(sac_named_n, d->params.sac_named_count); }
     }
     const bool spare_apostles = sac_named_n > 0 && apostles > sac_named_n;
-    const bool short_of_mana = ShadowbornReachableMana(s, controller) < kManaGoal;
-    std::vector<std::string> granter, lake, culling, ritual, bloom, apostle;
+    // The granter ON OUR BATTLEFIELD switches the table (USER 2026-11-03: "Once thrumming stone is out we only
+    // need 3 or 4 mana maximum", final bar 3: kManaGoalRipple); one in hand does not.
+    bool granter_bf = false, apostle_in_hand = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.grants_ripple > 0) { granter_bf = true; }
+    }
+    for (const Card& c : ap.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d != nullptr && d->params.sac_named_count > 0 && d->card.IsCreature()) { apostle_in_hand = true; }
+    }
+    const bool short_of_mana = ShadowbornReachableMana(s, controller) < (granter_bf ? kManaGoalRipple : kManaGoal);
+    std::vector<std::string> granter, lake, culling, ritual, apostle;
     for (const std::string& nm : uniq)
     {
         const CardDefinition* d = def_of(nm);
@@ -58244,7 +58265,6 @@ ShadowbornProvider::TutorCandidates(const GameState& s, int controller, const Ca
         const CardParams& p = d->params;
         if (p.grants_ripple > 0) { if (!granter_held) { granter.push_back(nm); } continue; }
         if (p.sac_named_count > 0 && d->card.IsCreature()) { apostle.push_back(nm); continue; }
-        if (!short_of_mana) { continue; }
         if (d->card.IsLand() && !p.etb_replace_sacrifice_land_subtype.empty())
         {
             int subtype_lands = 0;
@@ -58264,10 +58284,134 @@ ShadowbornProvider::TutorCandidates(const GameState& s, int controller, const Ca
             else { ritual.push_back(nm); }
             continue;
         }
-        if (!d->card.IsLand() && p.sac_for_mana_amount > 0 && p.suspend_time_counters > 0) { bloom.push_back(nm); }
+        // A suspended mana artifact (Lotus Bloom) is never offered (USER 2026-11-03: "We shouldn't search
+        // Lotus bloom as it is usually too slow if received from a tutor").
+    }
+    // THE MANA TIER'S ORDER (USER 2026-11-03): "Lake of the Dead is really good at hitting 6, so I like it
+    // first ... as long as you have the fuel for it. Culling the Weak is more arguable. It's better when a
+    // sacrifice target is down, not so much if they are in hand. ... check whether we have a sacrifice target
+    // out or played this turn and whether we need the extra culling mana to hit 6 a turn earlier based on
+    // what is in hand. In that case you take culling and otherwise Dark Ritual which has no drawbacks."
+    // So: Lake (fuelled) first; Culling AHEAD of the plain ritual only when BOTH (a) a creature is on our
+    // battlefield or castable from hand with this turn's mana, and (b) Culling's net (floating - mana value)
+    // reaches the bar a turn EARLIER than the plain ritual's net would (reachable mana this turn, then by next
+    // turn); otherwise the plain ritual first and Culling after it (still offered, still searched).
+    bool culling_first = false;
+    if (!culling.empty() && !ritual.empty())
+    {
+        auto net = [&](const std::string& nm)
+        {
+            const CardDefinition* d = def_of(nm);
+            return d ? std::max(0, d->params.ritual_floating_mana - d->card.m_mana_cost.ManaValue()) : 0;
+        };
+        const int now  = ShadowbornReachableMana(s, controller, /*this_turn_only=*/true);
+        const int next = ShadowbornReachableMana(s, controller);
+        const int bar  = granter_bf ? kManaGoalRipple : kManaGoal;
+        // (a) an EXPENDABLE sacrifice target (USER 2026-11-03: "the one we can cast or is out needs to be
+        // expendable. We need to have at least one more Shadowborn to play with Thrumming Stone. We also need
+        // to not need it for Diabolic Intent."): creatures on our battlefield + creatures in hand castable with
+        // this turn's mana (each against `now`), minus the RESERVATIONS -- one Apostle IN HAND for the granter
+        // when one is on our battlefield or in hand (with none in hand, no target is expendable), and ONE
+        // creature for a creature-sacrificing tutor in hand (sac_additional_creature: Diabolic Intent) only when
+        // that tutor is needed to fetch a MISSING piece, principally the granter (none on our battlefield or in
+        // hand) -- USER 2026-11-03: "we need to keep ones that are in the plan or ones that need to be cast to
+        // obtain other missing pieces in mind ... Thrumming Stone either needs to be in hand or have a ritual
+        // earmarked for it" -- confirmed: the reservation is for the Intent earmarked to fetch the missing
+        // Stone (and "we should usually get the Thrumming Stone rather than culling if you are missing it":
+        // tier 1 above). Other copies reserve nothing. A target remains -> (a) holds.
+        int bf_creatures = 0, hand_apostles = 0, castable_apostles = 0, castable_other = 0, intents = 0;
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != controller) { continue; }
+            if (p.card.IsCreature() || p.is_animated) { ++bf_creatures; }
+        }
+        for (const Card& c : ap.hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d == nullptr) { continue; }
+            if (IsLibraryTutor(d->params) && d->params.sac_additional_creature) { ++intents; continue; }
+            if (!d->card.IsCreature() || d->card.IsLand()) { continue; }
+            const bool apostle = d->params.sac_named_count > 0;
+            if (apostle) { ++hand_apostles; }
+            if (d->card.m_mana_cost.ManaValue() > now) { continue; }
+            if (apostle) { ++castable_apostles; } else { ++castable_other; }
+        }
+        bool target = false;
+        if (!(granter_held && hand_apostles == 0))
+        {
+            int avail = bf_creatures + castable_other + castable_apostles;
+            if (granter_held && castable_apostles == hand_apostles) { --avail; }   // the reserved Apostle is a castable one
+            const int reserved_for_tutor = (!granter_held && intents > 0) ? 1 : 0;   // fetching the missing granter
+            target = avail - reserved_for_tutor >= 1;
+        }
+        // The turn (0 = this, 1 = next, 2 = later) a ritual of net `g` brings the reachable mana to the bar.
+        auto turn_of = [&](int g) { return now + g >= bar ? 0 : next + g >= bar ? 1 : 2; };
+        culling_first = target && turn_of(net(culling.front())) < turn_of(net(ritual.front()));
+    }
+    std::vector<std::string> mana;
+    for (auto* v : { &lake, culling_first ? &culling : &ritual, culling_first ? &ritual : &culling })
+    { mana.insert(mana.end(), v->begin(), v->end()); }
+    const std::vector<std::string> none;
+    const std::vector<std::string>* tiers[4];
+    if (granter_bf)
+    {
+        // Apostle if none in hand > mana while short of 3 > a second Apostle > extra mana (USER 2026-11-03).
+        tiers[0] = apostle_in_hand ? &none : &apostle;
+        tiers[1] = short_of_mana ? &mana : &none;
+        tiers[2] = apostle_in_hand ? &apostle : &none;
+        tiers[3] = short_of_mana ? &none : &mana;
+    }
+    else
+    {
+        // Stone if none held > mana while short of 6 > Apostle (first or second: one tier) > extra mana.
+        tiers[0] = &granter;
+        tiers[1] = short_of_mana ? &mana : &none;
+        tiers[2] = &apostle;
+        tiers[3] = short_of_mana ? &none : &mana;
     }
     std::vector<std::string> early;
-    for (auto* v : { &granter, &lake, &culling, &ritual, &bloom, &apostle })
-    { early.insert(early.end(), v->begin(), v->end()); }
-    return early.empty() ? all : early;   // empty -> the generic list (the PROVISIONAL fallback)
+    for (const auto* v : tiers) { early.insert(early.end(), v->begin(), v->end()); }
+    if (!early.empty()) { return early; }
+    // THE FALLBACK (USER 2026-11-03; the table is in the declaration): exactly ONE candidate, or none.
+    // The deck's engine creature (sac_named_count) read off any copy we can see: its colours pick the basic
+    // land, its searched subtype picks the Demons the activation does not fetch.
+    const CardDefinition* engine = nullptr;
+    auto see = [&](const Card& c)
+    {
+        if (engine != nullptr) { return; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d != nullptr && d->card.IsCreature() && d->params.sac_named_count > 0) { engine = d; }
+    };
+    for (const Card& c : ap.hand) { see(c); }
+    for (const Permanent& p : s.battlefield) { if (p.controller_index == controller) { see(p.card); } }
+    for (std::size_t i = 0, n = ap.library.size(); engine == nullptr && i < n; ++i) { see(ap.library.RawAt(i)); }
+    for (const Card& c : ap.graveyard) { see(c); }
+    std::string basic, demon_keep, demon_discard;
+    for (const std::string& nm : uniq)
+    {
+        const CardDefinition* d = def_of(nm);
+        if (d == nullptr) { continue; }
+        if (d->card.IsLand() && d->card.HasSupertype(Supertype::Basic))
+        {
+            bool colour = engine == nullptr;
+            for (Color c : d->params.produces) { if (engine != nullptr && engine->card.HasColor(c)) { colour = true; } }
+            if (colour && basic.empty()) { basic = nm; }
+            continue;
+        }
+        if (engine == nullptr || !d->card.IsCreature() || engine->params.tutor_required_subtype.empty()) { continue; }
+        if (!CardHasSubtype(d->card, engine->params.tutor_required_subtype)) { continue; }
+        if (!d->params.etb_tokens_per_devotion_color.empty() || !d->params.creature_count_anthem_tiers.empty()) { continue; }
+        std::string& slot = d->params.endstep_each_player_discards_hand ? demon_discard : demon_keep;
+        if (slot.empty()) { slot = nm; }
+    }
+    for (const std::string* pick : { &basic, &demon_keep, &demon_discard })
+    { if (!pick->empty()) { return { *pick }; } }
+    return {};   // nothing useful: the tutor is not cast (TutorNeedsCandidate)
+}
+
+bool ShadowbornProvider::TutorNeedsCandidate(const GameState& /*s*/, int /*controller*/, const CardParams& pp) const
+{
+    if (DecisionUnpruned(UnprunedGate::Tutor)) { return false; }   // the viewer / audit arm: the generic whiff
+    if (HumanPlayActive()) { return false; }   // a HUMAN may cast any legal tutor (and choose at resolution)
+    return pp.tutor_to_hand && pp.sac_named_count == 0;
 }

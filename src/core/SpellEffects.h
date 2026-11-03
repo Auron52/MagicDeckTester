@@ -43177,6 +43177,135 @@ inline std::vector<int> DemonTriggerClassReps(const GameState& s, int controller
     }
     return out;
 }
+// ===== THE OVERLORD VICTIM FOLD (Shadowborn INT-5; the 2d review's finding 3, CORRECTED) =====================
+// The review proposed "a 1/1 Harpy token is weakly dominated as a keeper by EVERY other creature of ours". That
+// is false as stated: Abhorrent Overlord itself (keeping it means another forced sacrifice every upkeep),
+// Reaper from the Abyss (its forced end-step destroy can hit our own creature) and Sire of Insanity (discards
+// our hand) can each be worse to keep than a Harpy, and a DEMON keeper changes which of our creatures Reaper's
+// "target non-Demon creature" must hit. So the fold is narrower, and every premise is read off card data.
+//
+// CLAIM. At OUR upkeep's Overlord trigger, let H be a creature we control that is a VANILLA TOKEN (a token, no
+// CardDefinition, not animated, no counters, nothing attached) and K a creature we control that is a CLEAN
+// KEEPER (CardDefinition::upkeep_fold_keeper: audited params only, no self-binding drawback, benign keywords;
+// no counters, nothing attached, not animated; not of any subtype a card we own EXCLUDES from a destroy
+// target), with K at least as ready as H (untapped if H is, not summoning-sick if H is not), K's power and
+// toughness >= H's, and H's keywords within K's plus Flying. If every card we own is AUDITED
+// (upkeep_fold_audited), then sacrificing H is at least as good as sacrificing K.
+//
+// PROOF (simulation). World A sacrifices H and keeps K; world B sacrifices K and keeps H. Every other object is
+// identical. Map every later decision of B onto A with K standing in for H; show A's outcome is never worse.
+//   * Combat (goldfish: nothing blocks): K deals >= H's damage (power >=; a shared anthem pumps both the same;
+//     H's extra keywords are only Flying, inert without blockers -- USER-approved 2026-11-03); K can attack
+//     whenever H can (readiness).
+//   * Being a creature: every audited reader counts creatures ONCE each (Jetmir's tiers, sacrifice fodder for
+//     Diabolic Intent / Culling the Weak / the next Overlord trigger, Reaper's target pool) -- K fills every
+//     role H could. Reaper: neither carries an excluded subtype, so both are legal targets alike.
+//   * K's EXTRA characteristics are read only in K's favour: its NAME by a name count (Shadowborn Apostle's
+//     "six named" -- more is never worse, the activation is optional), its mana symbols by DEVOTION (Overlord's
+//     ETB token count -- more tokens is never worse in the audited pool: every reader of a creature is a count
+//     or fodder), its card-ness (graveyard: no audited card reads it; a token simply ceases to exist).
+//   * K has no drawback (the keeper flag excludes upkeep sacrifice, end-step destroy, end-step discard) and
+//     only benign keywords, so its continued existence imposes nothing H's would not.
+// Hence value(A) >= value(B). Ties are broken toward pruning K, never H, so at least one option survives.
+//
+// THE FOLD: when an H class is present, every K class that dominates some present H class is dropped from
+// the trigger's rank list (UpkeepSacFoldReps); ranks index the remaining classes, clamped as before. It
+// is a SOUND DOMINANCE FOLD (default ON; MTG_OVERLORD_VICTIM_FOLD=0 restores the full list, an A/B arm only).
+// Every non-dominated choice -- the Overlord itself, a Demon keeper, Reaper, Sire, a second token class --
+// stays searched. The enumerator's rank bound (TurnSolver.cpp "SEARCHED DEMON TRIGGERS") shrinks to match.
+inline bool UpkeepFoldOn() { static const bool v = EnvOn("MTG_OVERLORD_VICTIM_FOLD", true); return v; }
+struct UpkeepFoldPool
+{
+    bool ok = false;                     // every card we own is audited
+    std::vector<std::string> excluded;   // subtypes a card we own excludes from a destroy target
+};
+inline UpkeepFoldPool UpkeepSacFoldPool(const GameState& s, int controller)
+{
+    UpkeepFoldPool pool;
+    if (!UpkeepFoldOn()) { return pool; }
+    bool ok = true;
+    auto note = [&](const Card& c) -> bool
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr || !d->upkeep_fold_audited) { return false; }
+        const std::string& ex = d->params.endstep_destroy_excluded_subtype;
+        if (!ex.empty() && std::find(pool.excluded.begin(), pool.excluded.end(), ex) == pool.excluded.end())
+        { pool.excluded.push_back(ex); }
+        return true;
+    };
+    const Player& pl = s.players[static_cast<std::size_t>(controller)];
+    for (const Card& c : pl.hand)      { if (!note(c)) { ok = false; break; } }
+    for (std::size_t i = 0, n = pl.library.size(); ok && i < n; ++i) { if (!note(pl.library.RawAt(i))) { ok = false; } }
+    for (const Card& c : pl.graveyard) { if (ok && !note(c)) { ok = false; } }
+    for (const SuspendedCard& sc : pl.suspended_cards) { if (ok && !note(sc.card)) { ok = false; } }
+    for (const Card& c : s.exile)      { if (ok && !note(c)) { ok = false; } }
+    for (const Permanent& p : s.battlefield)
+    {
+        if (!ok) { break; }
+        if (p.controller_index != controller) { continue; }
+        if (p.is_token && CardDatabase::Instance().LookupCached(p.card) == nullptr) { continue; }   // tokens: by shape
+        if (!note(p.card)) { ok = false; }
+    }
+    pool.ok = ok;
+    return pool;
+}
+inline int UpkeepFoldAttached(const GameState& s, const Permanent& v)
+{
+    int n = 0;
+    for (const Permanent& q : s.battlefield)
+    { if (v.card.m_number != 0 && (q.equipped_to == v.card.m_number || q.aura_attached_to == v.card.m_number)) { ++n; } }
+    return n;
+}
+inline bool UpkeepFoldVanillaToken(const GameState& s, const Permanent& h)
+{
+    return h.is_token && !h.is_animated && h.counters.empty() && h.card.IsCreature()
+        && CardDatabase::Instance().LookupCached(h.card) == nullptr && UpkeepFoldAttached(s, h) == 0;
+}
+// The DEFINITION-level half of "clean keeper" (also read by the enumerator's bound).
+inline bool UpkeepFoldKeeperDef(const CardDefinition* d, const UpkeepFoldPool& pool)
+{
+    if (d == nullptr || !d->upkeep_fold_keeper) { return false; }
+    for (const std::string& ex : pool.excluded) { if (CardHasSubtype(d->card, ex)) { return false; } }
+    return true;
+}
+inline bool UpkeepFoldDominates(const GameState& s, const Permanent& k, const Permanent& h, const UpkeepFoldPool& pool)
+{
+    if (k.is_animated || !k.counters.empty() || UpkeepFoldAttached(s, k) != 0) { return false; }
+    if (!UpkeepFoldKeeperDef(CardDatabase::Instance().LookupCached(k.card), pool)) { return false; }
+    for (const std::string& ex : pool.excluded) { if (CardHasSubtype(h.card, ex)) { return false; } }
+    if (k.tapped && !h.tapped) { return false; }
+    if (k.entered_this_turn && !h.entered_this_turn) { return false; }
+    if (k.EffectivePower() < h.EffectivePower() || k.EffectiveToughness() < h.EffectiveToughness()) { return false; }
+    const std::uint64_t extra = h.card.m_keyword_mask & ~(k.card.m_keyword_mask | Card::Bit(Keyword::Flying));
+    return extra == 0;
+}
+// The Overlord trigger's rank list: DemonTriggerClassReps(destroy = false) with the dominated keepers dropped.
+inline std::vector<int> UpkeepSacFoldReps(const GameState& s, int controller)
+{
+    std::vector<int> reps = DemonTriggerClassReps(s, controller, /*destroy=*/false, std::string{});
+    if (reps.size() < 2) { return reps; }
+    bool any_h = false;
+    for (int i : reps) { if (UpkeepFoldVanillaToken(s, s.battlefield[static_cast<std::size_t>(i)])) { any_h = true; break; } }
+    if (!any_h) { return reps; }
+    const UpkeepFoldPool pool = UpkeepSacFoldPool(s, controller);
+    if (!pool.ok) { return reps; }
+    std::vector<int> out;
+    for (int i : reps)
+    {
+        const Permanent& k = s.battlefield[static_cast<std::size_t>(i)];
+        bool dominated = false;
+        if (!UpkeepFoldVanillaToken(s, k))
+        {
+            for (int j : reps)
+            {
+                const Permanent& h = s.battlefield[static_cast<std::size_t>(j)];
+                if (UpkeepFoldVanillaToken(s, h) && UpkeepFoldDominates(s, k, h, pool)) { dominated = true; break; }
+            }
+        }
+        if (!dominated) { out.push_back(i); }
+    }
+    return out;
+}
 // Reaper's intervening if (CR 603.4: "if a creature died this turn") is checked as the end step begins,
 // with every other beginning-of-end-step trigger: the caller SNAPSHOTS the number of triggering Reapers
 // at the top of the step (both worlds), before any of the step's effects resolve. 0 for every deck
@@ -43344,7 +43473,8 @@ inline void PerformUpkeepSacrificeCreature(GameState& state)
     }
     for (int j = 0; j < n; ++j)
     {
-        const std::vector<int> reps = DemonTriggerClassReps(state, me, /*destroy=*/false, std::string{});
+        // The rank list with the dominated keepers folded away (UpkeepSacFoldReps; proof above).
+        const std::vector<int> reps = UpkeepSacFoldReps(state, me);
         if (reps.empty()) { break; }
         const int k = std::min<int>(DemonPinRank(pin, kDemonOverlordShift, j), static_cast<int>(reps.size()) - 1);
         int bi = reps[static_cast<std::size_t>(k)];
@@ -45931,9 +46061,32 @@ inline int PerformDrawX(GameState& state, int controller, bool target_opponent, 
 //   ripple-bottomed card is later drawn or revealed before the next shuffle in a real game -- the
 //   tripwire the USER asked for.
 constexpr std::int8_t kRippleContinue   = -2;   // Action::ripple_reveals on a non-first copy of an F1 name
+// Action::ripple_reveals on the first copy: "EVERY trigger of the chain reveals" (INT-5; the 2d review's
+// finding 5). The dry run sizes B on the pre-plan library, and the plan's earlier casts can lengthen the
+// live chain past it; B = T then STOPPED revealing at T, and "reveal every time" -- the near-dominant
+// cast-everything line -- had no representation at any budget. ALL replaces the top of the menu (in the
+// dry run's world it IS B = T); the late wave adds the finite B's past T (RippleLateWaveAdmitted).
+constexpr std::int8_t kRippleRevealAll  = -3;
 constexpr int         kRipplePinBits    = 4;    // free_tutor / free_victim: (rank+1) per ordinal
 constexpr int         kRipplePinOrdinals = 4;
 constexpr int         kRippleMaskBits   = 8;    // mask / decline: one bit per ordinal
+// THE EMITTED MENU LENGTH (INT-5; the 2d review's finding 6). The enumerator fans at most kRippleMenuBits
+// mask / decline ordinals and says how many it fanned in the byte's HIGH nibble (count + 1); an ordinal
+// past that count was never searched, so it is answered by the playout policy AND counted by
+// MTG_RIPPLE_STATS (unpinned_in_window), instead of silently reading a 0 bit as "reveal / take". A high
+// nibble of 0 = a hand-built script (unit tests, the upkeep twin): every one of the 8 bits is a pin.
+constexpr int         kRippleMenuBits   = 4;
+inline std::uint8_t RippleMenuByte(unsigned bits, int fanned)
+{
+    fanned = std::max(0, std::min(fanned, kRippleMenuBits));
+    return static_cast<std::uint8_t>((bits & 0x0Fu) | (static_cast<unsigned>(fanned + 1) << 4));
+}
+// Is ordinal `ord` of a mask / decline byte a SEARCHED pin? (false -> the caller answers by policy)
+inline bool RippleMenuCovers(std::uint8_t byte, int ord)
+{
+    const int hi = byte >> 4;
+    return hi == 0 ? ord < kRippleMaskBits : ord < hi - 1;
+}
 inline const std::string& RippleTutorRankPrefix() { static const std::string p("\x01rk"); return p; }
 
 bool RippleCensusBeyondHorizon();   // TurnSolver.cpp: inside a horizon playout or the d0 runner (diagnostic)
@@ -46082,10 +46235,19 @@ inline bool RippleScriptCovers(const GameState& s, const CardDefinition& def)
 // A revealed card's castability for free (CR 601.2c targets, 601.2h additional costs, the Irencrag
 // budget). `bodies_left` = creatures still available to pay a "sacrifice a creature" cost (the reveal's
 // earlier takes already committed theirs).
+// A library tutor the provider will not cast with an empty candidate list (DecisionProvider::
+// TutorNeedsCandidate; Shadowborn, USER 2026-11-03) -- a ripple-revealed copy is then not castable.
+inline bool TutorCastPruned(const GameState& s, int controller, const CardDefinition& d)
+{
+    if (!IsLibraryTutor(d.params)) { return false; }
+    const DecisionProvider& prov = ResolveProvider(s);
+    return prov.TutorNeedsCandidate(s, controller, d.params) && RankedTutorCandidates(prov, s, controller, d.params).empty();
+}
 inline bool RippleMatchCastable(const GameState& s, int controller, const CardDefinition& md, int bodies_left,
                                 int casts_left)
 {
     if (casts_left == 0) { return false; }
+    if (TutorCastPruned(s, controller, md)) { return false; }
     if (!FreeCastHasLegalTargets(s, controller, md)) { return false; }
     if (SacCreatureCostFoldsByReadiness(md.params) && bodies_left <= 0) { return false; }
     return true;
@@ -46122,7 +46284,8 @@ inline bool RippleRevealDecision(GameState& s, int controller, const CardDefinit
     if (!RippleScriptCovers(s, spell)) { ripplestats::NoteUnpinned(0); reveal = policy(); }
     else if (sc.per_name)
     {
-        if (sc.reveals < 0) { ripplestats::NoteUnpinned(1); reveal = policy(); }
+        if (sc.reveals == kRippleRevealAll) { reveal = true; }
+        else if (sc.reveals < 0) { ripplestats::NoteUnpinned(1); reveal = policy(); }
         else if (sc.reveals > 0) { --sc.reveals; reveal = true; }
         else { reveal = false; }
     }
@@ -46130,7 +46293,7 @@ inline bool RippleRevealDecision(GameState& s, int controller, const CardDefinit
     else
     {
         const int ord = sc.fan_ord++;
-        if (ord >= kRippleMaskBits) { ripplestats::NoteUnpinned(2); reveal = policy(); }
+        if (!RippleMenuCovers(sc.mask, ord)) { ripplestats::NoteUnpinned(2); reveal = policy(); }
         else { reveal = ((sc.mask >> ord) & 1u) == 0; }
     }
     // HUMAN PLAY: the `dig` decision, "(ripple reveal)" -- the spell's own tile, 0 = reveal the top N,
@@ -46163,26 +46326,33 @@ inline bool RippleTakeDecision(GameState& s, int controller, const CardDefinitio
         return false;
     }
     const int ord = sc.match_ord++;
-    if (ord >= kRippleMaskBits) { ripplestats::NoteUnpinned(4); return prov.TakeFreeCast(s, controller, md); }
+    if (!RippleMenuCovers(sc.decline, ord)) { ripplestats::NoteUnpinned(4); return prov.TakeFreeCast(s, controller, md); }
     return ((sc.decline >> ord) & 1u) == 0;
 }
 
-// The chain's NEXT free tutor pick, as the tutor_target string PerformTutor decodes (an index into its
-// resolution-state candidate list, clamped); empty = unpinned (the front -- beyond the horizon only).
+// The chain's NEXT free tutor pick, as the tutor_target string PerformTutor decodes: the prefix + an index
+// into its resolution-state candidate list (clamped), or the prefix + "u" = UNPINNED (the front -- beyond
+// the horizon only). Never empty: a free tutor must be recognisable as one at its resolution, so it
+// resolves on ITS OWN pick and leaves the hard tutor's searched pick (g_scripted_tutor_choice, the plan's
+// tutor_choice) standing for the hard cast below it (INT-5; the 2d review's finding 1 -- an empty target
+// used to consume the hard cast's index).
+constexpr int kRippleTutorUnpinned = -2;
 inline std::string RippleNextFreeTutorTarget(GameState& s)
 {
     RippleScript& sc = s.ripple_script;
     const int ord = sc.tutor_ord++;
-    if (!sc.pinned || ord >= kRipplePinOrdinals) { ripplestats::NoteUnpinned(5); return std::string{}; }
+    if (!sc.pinned || ord >= kRipplePinOrdinals) { ripplestats::NoteUnpinned(5); return RippleTutorRankPrefix() + "u"; }
     const int v = (sc.free_tutor >> (ord * kRipplePinBits)) & ((1 << kRipplePinBits) - 1);
-    if (v == 0) { ripplestats::NoteUnpinned(5); return std::string{}; }
+    if (v == 0) { ripplestats::NoteUnpinned(5); return RippleTutorRankPrefix() + "u"; }
     return RippleTutorRankPrefix() + std::to_string(v - 1);
 }
-// Decode a RippleNextFreeTutorTarget string: the rank, or -1 when `t` is an ordinary target name.
+// Decode a RippleNextFreeTutorTarget string: the rank, kRippleTutorUnpinned for the unpinned marker, or -1
+// when `t` is an ordinary target name.
 inline int RippleTutorRankOf(const std::string& t)
 {
     const std::string& pre = RippleTutorRankPrefix();
     if (t.size() <= pre.size() || t.compare(0, pre.size(), pre) != 0) { return -1; }
+    if (t[pre.size()] == 'u') { return kRippleTutorUnpinned; }
     return std::atoi(t.c_str() + pre.size());
 }
 // The chain's NEXT free sacrifice victim (card m_number), a rank into SacReadinessVictimReps AT THE CAST

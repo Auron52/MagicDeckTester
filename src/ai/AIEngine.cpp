@@ -5316,7 +5316,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // call is what keeps retrace-cast Throes cascading at all). Its ripple chain carries no plan
         // pin (no retrace card shares a list with a ripple source): stamped UNPINNED.
         StampRippleScript(state, *def, false, -1, -1, 0, 0, 0, 0);
-        EffectHandler::PushCastTriggers(state, *def, state.active_player_index);
+        EffectHandler::PushCastTriggers(state, *def, state.active_player_index, number);
     };
 
     // Note whether an action casts a draw-engine spell (DrawUntilNonland / cascade /
@@ -10320,6 +10320,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
     }
 
     entry.haste_from_mana = haste_from_mana;   // Generator Servant: EnterBattlefield grants temp_haste
+    const int cast_number = entry.source.m_number;   // the ripple entries' "own spell" number (PushCastTriggers)
     state.stack.push_back(std::move(entry));
 
     // Paying life to zero is legal, but the SBA ends the game before any CAST
@@ -10338,7 +10339,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
     StampRippleScript(state, *def, riders.ripple_pinned, riders.ripple_reveals, riders.ripple_take_cap,
                       riders.ripple_mask, riders.ripple_decline, riders.ripple_free_tutor,
                       riders.ripple_free_victim);
-    EffectHandler::PushCastTriggers(state, *def, state.active_player_index);
+    EffectHandler::PushCastTriggers(state, *def, state.active_player_index, cast_number);
     FlushNoncombatTriggersAtPriorityBoundary(state);
     if (state.own_death_live && SelfHasLost(state)) { return; }
 
