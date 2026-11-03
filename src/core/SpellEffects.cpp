@@ -5365,6 +5365,26 @@ inline void McTier1Clear()
     if (tier2::On()) { g_mana_t2.SpillAll(g_mana_cache); }
     g_mana_cache.clear();
 }
+// The tier-2 CONTEXT WORD: the payer's context plus the board inputs the tier-1 key is known to miss. A tier-2
+// entry is served only when this word (and the plan traits) equal the lookup's. Known tier-1 key holes folded
+// here (2026-11-03, MTG_MANA_CACHE_VERIFY on Snow regression d5 s3003 gi27: stored-negative / fresh-positive
+// hits with identical payer context and traits):
+//   * an ETB-chosen colour (Coldsteel Heart: etb_choose_color -> Permanent::chosen_color) decides what the
+//     source can make, and the key's source descriptor does not carry it.
+inline std::uint64_t McT2PayWord(const GameState& state)
+{
+    std::uint64_t h = PayContextDigest();
+    const int a = state.active_player_index;
+    for (std::size_t i = 0; i < state.battlefield.size(); ++i)
+    {
+        const Permanent& p = state.battlefield[i];
+        if (p.controller_index != a || p.chosen_color < 0) { continue; }
+        h ^= (static_cast<std::uint64_t>(i) << 8 | static_cast<std::uint64_t>(p.chosen_color)) + 0x9E3779B97F4A7C15ull
+           + (h << 6) + (h >> 2);
+        h *= 0xBF58476D1CE4E5B9ull;
+    }
+    return h;
+}
 // PER-THREAD BYTE CAP (2026-10-17, Galadriel value-leaf phase C RSS abort). The 500,000-entry bound
 // below bounds nothing in BYTES: an entry carries its whole tap set, and a 40-land Galadriel board
 // makes ~40 taps per entry (massif: this map + its tap vectors = 15% of one d5 game's heap).
@@ -6215,7 +6235,7 @@ static void McVerifyHit(const GameState& state, const ManaCost& cost, bool for_c
                  out_leftover ? 1 : 0, e.payable ? 1 : 0, e.produced.Total(), e.leftover.Total(),
                  vok ? 1 : 0, vfull.Total(), vleft.Total(),
                  state.players[a].life_gained_this_turn,
-                 e.dbg_pay_ctx == PayContextDigest() ? "same" : "DIFF",
+                 e.dbg_pay_ctx == McT2PayWord(state) ? "same" : "DIFF",
                  e.dbg_traits == CurrentPlanTraitsHash() ? "same" : "DIFF", board.c_str());
 }
 
@@ -6383,7 +6403,7 @@ static bool TapForCostBacktrackTop(GameState& state, const ManaCost& cost,
         bool mc_from_t2 = false;
         if (!(it != g_mana_cache.end() && it->second.verify == mk2) && (tier2::On() || McVerifyOn()))
         {
-            mc_ctx_pay = PayContextDigest();
+            mc_ctx_pay = McT2PayWord(state);
             mc_ctx_traits = CurrentPlanTraitsHash();
             if (tier2::On() && g_mana_t2.Size() != 0)
             {
