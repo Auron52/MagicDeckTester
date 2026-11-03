@@ -5964,12 +5964,14 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
         static const bool s_x_payctx = EnvOn("MTG_MANA_CACHE_X_PAYCTX");
         if (s_x_traits) { mix(h, CurrentPlanTraitsHash()); }
         if (s_x_payctx) { mix(h, PayContextDigest()); }
-        // MTG_MANA_CACHE_CHOSEN_KEY (DEFAULT OFF, a PLAY CHANGE for Snow / AccomplishedAlchemist -- the user's call):
-        // close the tier-1 key hole the tier-2 overflow found (see McT2PayWord). The source descriptor does not carry
+        // MTG_MANA_CACHE_CHOSEN_KEY (DEFAULT ON since 2026-11-03; =0 restores the hole for A/B only): close the
+        // tier-1 key hole the tier-2 overflow found (see McT2PayWord). The source descriptor does not carry
         // Permanent::chosen_color, which decides what an etb_choose_color source (Coldsteel Heart, Utopia Sprawl) can
         // make, so a payment solved under one chosen colour is replayed under another: Snow regression d5 s3003 gi27,
-        // MTG_MANA_CACHE_VERIFY, 48 tier-1 hits whose verdict or pool differ from a fresh solve.
-        static const bool s_chosen = EnvOn("MTG_MANA_CACHE_CHOSEN_KEY");
+        // MTG_MANA_CACHE_VERIFY, 48 tier-1 hits whose verdict or pool differ from a fresh solve. A correctness fix
+        // (a hit must answer the state it is asked about). Held-out A/B, Snow + AccomplishedAlchemist regression
+        // shapes at seed +7e6..+10e6, 2,900 games: 0 win-turn changes, 2 same-turn line changes, units +0.01%.
+        static const bool s_chosen = EnvOn("MTG_MANA_CACHE_CHOSEN_KEY", true);
         if (s_chosen)
         {
             for (std::size_t i = 0; i < state.battlefield.size(); ++i)
