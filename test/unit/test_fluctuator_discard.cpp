@@ -434,3 +434,41 @@ TEST_CASE("Fluct discard: the shed order is re-ranked per shed while the buckets
     CHECK(Prov().CleanupDiscardShedStable());
     heurarm::t_arm[heurarm::FLUCT_BUCKET_DISCARD] = -1;
 }
+
+// FluctuatorProvider::PaymentHoldUp -- the ordered holds the shared payer prefers to keep payable (ProviderHoldUpHold).
+// {W} for Enlightened Tutor only while no Fluctuator is in hand or on the battlefield (USER 2026-11-03).
+TEST_CASE("Fluct hold-up: the Tutor's {W} is held only with no Fluctuator in hand or play")
+{
+    auto whites = [](const std::vector<ManaCost>& v)
+    {
+        int n = 0;
+        for (const ManaCost& c : v) { if (c.white == 1 && c.ManaValue() == 1) { ++n; } }
+        return n;
+    };
+    {
+        const GameState s = MakeFl({ kT }, {});
+        const std::vector<ManaCost> h = Prov().PaymentHoldUp(s, 0);
+        REQUIRE(h.size() == 1);
+        CHECK(whites(h) == 1);
+    }
+    {
+        const GameState s = MakeFl({ kT, kF }, {});
+        CHECK(whites(Prov().PaymentHoldUp(s, 0)) == 0);
+        CHECK(Prov().PaymentHoldUp(s, 0).empty());
+    }
+    {
+        // A Fluctuator on the battlefield suppresses it too (USER: "Or I guess out on the field.").
+        const GameState s = MakeFl({ kT }, { kF });
+        CHECK(Prov().PaymentHoldUp(s, 0).empty());
+    }
+    {
+        // Order: Unearth + Stinger together, then Unearth, then the Stinger, then the Tutor.
+        const GameState s = MakeFl({ kU, kS, kT }, {});
+        const std::vector<ManaCost> h = Prov().PaymentHoldUp(s, 0);
+        REQUIRE(h.size() == 4);
+        CHECK((h[0].black == 1 && h[0].red == 1 && h[0].generic == 1));
+        CHECK((h[1].black == 1 && h[1].ManaValue() == 1));
+        CHECK((h[2].red == 1 && h[2].generic == 1 && h[2].ManaValue() == 2));
+        CHECK((h[3].white == 1 && h[3].ManaValue() == 1));
+    }
+}

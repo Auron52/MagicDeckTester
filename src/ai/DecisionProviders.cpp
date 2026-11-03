@@ -28186,6 +28186,45 @@ static bool FluctuatorCanPayNow(const GameState& s, const ManaCost& cost);   // 
 // MTG_FLUCT_REBUY with the stop-on-threat exception above: the two are one line (the exception
 // keeps the chain alive so the Stinger gets cycled; this hook lands the Unearth immediately after)
 // and neither does anything useful alone.
+// THE FLUCTUATOR HOLD-UP (USER 2026-11-03). The mana-clean gate's residual APPLY-DROPs: Fluctuator's {2} paid with
+// the land whose colour a card still in HAND needed, and the turn's cycles then made that card castable (seed
+// 30104058 gi104058 T4: Festering Thicket's {B} spent with Unearth in hand, a cycled Drannith Stinger its target).
+// What to keep up is easy to name for this deck: {B} for Unearth, {1}{R} for Drannith Stinger, {W} for Enlightened
+// Tutor (only with no Fluctuator in hand or play), each only while the card is in hand; Unearth's and the Stinger's together if the board can, else Unearth's,
+// else the Stinger's, else the Tutor's. The payer prefers a payment that leaves it (ProviderHoldUpHold) and never refuses one.
+std::vector<ManaCost> FluctuatorProvider::PaymentHoldUp(const GameState& s, int controller) const
+{
+    if (controller < 0 || controller >= static_cast<int>(s.players.size())) { return {}; }
+    bool unearth = false, stinger = false, tutor = false, fluct = false;
+    for (const Card& c : s.players[controller].hand)
+    {
+        const std::string& n = c.m_name.str();
+        if (n == "Unearth") { unearth = true; }
+        else if (n == "Drannith Stinger") { stinger = true; }
+        else if (n == "Enlightened Tutor") { tutor = true; }
+        else if (n == "Fluctuator") { fluct = true; }
+    }
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index == controller && p.card.m_name.str() == "Fluctuator") { fluct = true; break; }
+    }
+    ManaCost b, r;
+    b.black = 1;
+    r.red = 1;
+    r.generic = 1;
+    std::vector<ManaCost> out;
+    if (unearth && stinger) { ManaCost br = r; br.black = 1; out.push_back(br); }
+    if (unearth) { out.push_back(b); }
+    if (stinger) { out.push_back(r); }
+    // Lowest priority: {W} for Enlightened Tutor, and only while no Fluctuator is in hand OR on the battlefield (USER
+    // 2026-11-03: "We should only hold for Enlightened tutor if we have no fluctuator in hand. Otherwise not." /
+    // "Or I guess out on the field."). Why: the Tutor's job is to find a Fluctuator -- "its purpose is to get
+    // Fluctuator and if we have one there is no need to hold W." Seed 30100666
+    // gi100666: Scattered Groves' {W} spent on Fluctuator's {2}, the Tutor then wanted.
+    if (tutor && !fluct) { ManaCost w; w.white = 1; out.push_back(w); }
+    return out;
+}
+
 bool FluctuatorProvider::DigResolveEvenOnLand(const GameState& s) const
 {
     static const bool s_rebuy = EnvOn("MTG_FLUCT_REBUY", true);

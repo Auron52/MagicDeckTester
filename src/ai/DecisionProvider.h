@@ -3025,6 +3025,13 @@ public:
     // header; GenericProvider implements it and every archetype inherits that.
     virtual int ManaSourceRank(const GameState& s, const CardDefinition& def) const = 0;
 
+    // PaymentHoldUp -- a cost the deck wants LEFT PAYABLE after a payment, because a card it names may become
+    // castable later in the turn (after a draw the payment cannot see). The shared payer PREFERS a payment of
+    // the same bill that keeps it payable and otherwise pays as it always does (ManaPayment.cpp,
+    // ProviderHoldUpHold): an ordering of the payments, never a refusal. Several holds are tried in the order
+    // given, the first the board can keep winning. Default: nothing held.
+    virtual std::vector<ManaCost> PaymentHoldUp(const GameState&, int /*controller*/) const { return {}; }
+
     // ManaSourceHoldValue -- the WITHIN-RANK tap-order key: among sources ManaSourceRank ties, the
     // one with the LOWER hold value pays first. What it prices is the body, not the mana: on a
     // pre-combat main with an eligible attacker (PlanTraits::attack_matters) a mana creature's

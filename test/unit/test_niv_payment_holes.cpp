@@ -337,3 +337,55 @@ TEST_CASE("Niv payment hole 2: a rock that can feed the ramp filter itself keeps
         CHECK_FALSE(InHandNp(*g, 70));
     }
 }
+
+// ---- The any-colour filter feed route: Fluctuator mana-clean gate, seed 30003033 gi3033 T3 ----------------------------
+// Glittering Massif ({R}/{W}) + Capital City #11 + a freshly drawn Capital City #9; a breakpoint continuation's
+// line {Unearth {B}, Enlightened Tutor {W}}, paid cast by cast (the continuation cycles, so the whole-turn prepay
+// declines). The greedy declines Unearth's {B} off the any-colour filter, and the backtracker's first covering set
+// fed Capital City #9 with Massif -- the line's only {W} -- so the Tutor was dropped (APPLY-DROP, 552 of the gate's
+// 591). The shared payer now holds Massif out of Unearth's payment: #11's free {C} feeds #9.
+TEST_CASE("Any-colour filter feed: Capital City feeds Capital City and keeps Massif's {W} for the line (Fluctuator s30003033 T3)")
+{
+    GameState s = FreshNp(3);
+    PutNp(s, "Glittering Massif", 34);
+    PutNp(s, "Capital City", 11);
+    PutNp(s, "Capital City", 9);
+    const ManaCost unearth = DefNp("Unearth").card.m_mana_cost;
+    const ManaCost tutor   = DefNp("Enlightened Tutor").card.m_mana_cost;
+    LineUnpaidCostScope _luc(AddManaCosts(unearth, tutor));
+    {
+        GameState g = s;
+        REQUIRE(TapForCostShared(g, unearth, false, nullptr, true));
+        CHECK_FALSE(FindNp(g, 34)->tapped);          // Massif kept for the Tutor
+        CHECK(FindNp(g, 11)->tapped);
+        CHECK(FindNp(g, 9)->tapped);
+        CHECK(TapForCostShared(g, tutor, false, nullptr, true));   // ...and the rest of the line pays
+    }
+    // Before the route, the backtracker's first covering set fed the filter with Massif and the Tutor had no {W}.
+}
+
+TEST_CASE("Any-colour filter feed: a line the greedy's payment still pays keeps the greedy's payment")
+{
+    // Same board, but the line owes only a generic {1} after Unearth: #11's {C} pays it whichever source fed #9,
+    // so nothing re-routes: the payment taps exactly what it taps when the line owes nothing after Unearth (the
+    // route's own early exit, so the greedy's payment).
+    GameState s = FreshNp(3);
+    PutNp(s, "Glittering Massif", 34);
+    PutNp(s, "Capital City", 11);
+    PutNp(s, "Capital City", 9);
+    const ManaCost unearth = DefNp("Unearth").card.m_mana_cost;
+    ManaCost one;
+    one.generic = 1;
+    GameState on = s;
+    {
+        LineUnpaidCostScope _luc(AddManaCosts(unearth, one));
+        REQUIRE(TapForCostShared(on, unearth, false, nullptr, true));
+    }
+    GameState off = s;
+    {
+        LineUnpaidCostScope _luc(unearth);
+        REQUIRE(TapForCostShared(off, unearth, false, nullptr, true));
+    }
+    for (int n : { 34, 11, 9 }) { CHECK(FindNp(on, n)->tapped == FindNp(off, n)->tapped); }
+    CHECK(TapForCostShared(on, one, false, nullptr, true));
+}

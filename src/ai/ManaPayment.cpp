@@ -8298,6 +8298,209 @@ static int HasteKeepUnits(const GameState& state, const ManaCost& cost_in, ManaP
     return 0;
 }
 
+// ---- THE ANY-COLOUR FILTER FEED ROUTE: re-pay a cast whose any-colour filter took a source the rest of its line needed ----
+//
+// THE HOLE (the mana-clean gate, Fluctuator, 100,000 games: 552 of its 591 APPLY-DROPs). Board Glittering Massif
+// ({R}/{W}), Capital City #11 and a freshly drawn Capital City #9 ("{T}: Add {C}. {1}, {T}: Add one mana of any
+// color"); a breakpoint continuation's line {Unearth {B}, Enlightened Tutor {W}}. The scarcity greedy declines a
+// coloured pip off an any-colour filter (its fed mode "is left to the backtracker"), so Unearth's {B} went to the
+// complete backtracker, which takes the FIRST covering set: Massif's {R} fed Capital City #9. The Tutor then met
+// Capital City #11 alone -- a {C}, or a colour only with a feed, and nothing was left to feed it -- and was
+// dropped. Feeding #9 with #11's free {C} pays the same {B} and keeps Massif's {W} for the Tutor (seed 30003033
+// gi3033 T3, and Blasted Landscape's / a red land's {C}/{R} the same way). The whole-turn prepay could not see it
+// either: the continuation cycles (PP_DIG) and Hollow One's cost falls with each cycle (PP_DYNAMIC_COST).
+//
+// THE REPAIR is RampFeedRouteRepay's shape for the any-colour filter, decided BEFORE the payment so a payment is
+// still made exactly once. When the line still owes mana after this payment and an any-colour filter of ours is
+// untapped, the payment is TRIED on a scratch board. Only when that trial TAPPED an any-colour filter AND leaves
+// the rest of the line unpayable -- while the board this payment found pays this bill and the rest of the line
+// together, so some payment of this bill does keep the line -- are the alternatives tried: the same payer with ONE
+// of the trial's sources held out, in battlefield order. The first whose board pays the rest of the line is the
+// payment made. "The rest of the line" is RampLaterBill (the line hold net of this payment), judged as one bill by
+// the complete backtracker. Held out means only "not tapped by this payment": the source stays for the casts the
+// line still owes, which is the point.
+//
+// Not a preference: it fires only where the greedy's payment drops a cast of the declared line and another payment
+// of the same bill realises the whole line; everywhere else the payment is the greedy's, byte for byte. Executor and
+// rollout share this payer (and so do the payability walks), so they take the same route. Human play too, on
+// RampFeedRouteRepay's argument: the human chose a line holding both casts.
+//
+// COST. A board scan unless an any-colour filter is untapped and the line owes more; then one trial and one
+// backtracker solve, and the alternatives (at most one per source the trial tapped) only when the greedy strands
+// the line. Decks holding an any-colour filter: Fluctuator (Capital City), Galadriel (Rumble Arena, Crystal Grotto),
+// Snow (Arcum's Astrolabe).
+namespace
+{
+std::atomic<unsigned long long> g_afr_trial{0}, g_afr_strand{0}, g_afr_fired{0};
+struct AnyFilterRouteStats
+{
+    ~AnyFilterRouteStats()
+    {
+        if (!EnvOn("MTG_ANY_FILTER_ROUTE_STATS")) { return; }
+        std::fprintf(stderr, "[any-filter-route] trials=%llu stranded=%llu fired=%llu\n",
+                     g_afr_trial.load(), g_afr_strand.load(), g_afr_fired.load());
+    }
+};
+AnyFilterRouteStats g_afr_stats;
+
+bool IsAnyColorFilterPerm(const Permanent& p)
+{
+    if (p.def_absent) { return false; }
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+    return d != nullptr && d->params.any_color_filter;
+}
+
+// The permanent with card number `num` (a payment may erase a sacrificed source, so indices are not stable).
+Permanent* PermByNumber(GameState& s, int num)
+{
+    for (Permanent& p : s.battlefield) { if (p.card.m_number == num) { return &p; } }
+    return nullptr;
+}
+
+// One payment of `cost_in` on `b` with the source `held` (card number, 0 = none) unable to pay it: tapped for the
+// span of the payment, then untapped again. The same mechanic as the land-Aura host reservation at the cast sites.
+bool PayHolding(GameState& b, int held, const ManaCost& cost_in, bool for_creature, ManaPool* available,
+                bool honor_legacy_cco)
+{
+    Permanent* hp = held != 0 ? PermByNumber(b, held) : nullptr;
+    const bool hold = hp != nullptr && !hp->tapped;
+    if (hold) { hp->tapped = true; }
+    const bool ok = TapForCostSharedDiag(b, cost_in, for_creature, available, honor_legacy_cco);
+    if (hold)
+    {
+        Permanent* hq = PermByNumber(b, held);
+        if (hq != nullptr) { hq->tapped = false; }
+    }
+    return ok;
+}
+}   // namespace
+
+// THE PROVIDER'S HOLD-UP (DecisionProvider::PaymentHoldUp; the Fluctuator rule, USER 2026-11-03). The deck names a
+// cost it wants left payable after this payment -- Fluctuator: {B} while Unearth is in hand, {1}{R} while Drannith
+// Stinger is, {W} while Enlightened Tutor is -- because the turn's cycles may make that card castable after the payment is made (the mana-clean
+// gate's residual APPLY-DROPs: Fluctuator's {2} paid with the land whose colour a card still in HAND needed, the
+// cycles then drew what made it castable). A PREFERENCE, never a restriction: the payment is tried as the greedy
+// makes it; only when that leaves the line's rest PLUS the hold-up unpayable, while the board pays the bill and both
+// together, is ONE of the trial's sources held out (battlefield order), and the first that keeps them payable is the
+// payment made. Otherwise the payment is the greedy's, byte for byte. A pip the bill itself carries is not held for
+// (paying Unearth does not hold {B} for Unearth). Executor and rollout share this payer.
+namespace
+{
+std::atomic<unsigned long long> g_phu_trial{0}, g_phu_fired{0};
+struct ProviderHoldStats
+{
+    ~ProviderHoldStats()
+    {
+        if (!EnvOn("MTG_ANY_FILTER_ROUTE_STATS")) { return; }
+        std::fprintf(stderr, "[provider-hold] trials=%llu fired=%llu\n", g_phu_trial.load(), g_phu_fired.load());
+    }
+};
+ProviderHoldStats g_phu_stats;
+}   // namespace
+
+// The source (card number) whose absence from this payment keeps a target payable after it, or 0. The targets are
+// tried in order, each exactly as if alone; the greedy trial does not depend on the target, so it is made ONCE for
+// all of them. `need_filter`: only a trial that tapped an any-colour filter qualifies (the any-colour filter route).
+static int HoldOutFor(const GameState& state, const ManaCost& cost_in, const std::vector<ManaCost>& targets,
+                      bool need_filter, bool for_creature, ManaPool* available, bool honor_legacy_cco, bool* stranded)
+{
+    const int active = state.active_player_index;
+    TapPrefChooser* const tap_pref = g_play_tap_pref_chooser;
+    RevealLogPause _quiet;
+    g_play_tap_pref_chooser = tap_pref;
+    RampScratch a(state);
+    ManaPool av_a = available ? *available : ManaPool{};
+    if (!TapForCostSharedDiag(a.Board(), cost_in, for_creature, available ? &av_a : nullptr, honor_legacy_cco))
+    { return 0; }
+    std::vector<int> tapped;
+    bool filter_tapped = false;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != active || p.tapped) { continue; }
+        const Permanent* q = PermByNumber(a.Board(), p.card.m_number);
+        if (q != nullptr && !q->tapped) { continue; }
+        tapped.push_back(p.card.m_number);
+        if (IsAnyColorFilterPerm(p)) { filter_tapped = true; }
+    }
+    if (need_filter && !filter_tapped) { return 0; }
+    for (const ManaCost& target : targets)
+    {
+        if (RampLaterPayable(a.Board(), target, nullptr)) { continue; }
+        // No payment of this bill keeps the target when the board cannot pay the two together.
+        if (!RampLaterPayable(state, AddManaCosts(cost_in, target), nullptr)) { continue; }
+        if (stranded != nullptr) { *stranded = true; }
+        for (int held : tapped)
+        {
+            RampScratch b(state);
+            ManaPool av_b = available ? *available : ManaPool{};
+            if (!PayHolding(b.Board(), held, cost_in, for_creature, available ? &av_b : nullptr, honor_legacy_cco))
+            { continue; }
+            if (!RampLaterPayable(b.Board(), target, nullptr)) { continue; }
+            return held;
+        }
+    }
+    return 0;
+}
+
+// The provider hold-up's held source, or 0 (see the note above HoldOutFor).
+static int ProviderHoldUpHold(const GameState& state, const ManaCost& cost_in, bool for_creature,
+                              ManaPool* available, bool honor_legacy_cco)
+{
+    if (state.dmg_events_armed) { return 0; }
+    if (cost_in.ManaValue() <= static_cast<int>(state.floating_mana.Total())) { return 0; }
+    const std::vector<ManaCost> holds = ResolveProvider(state).PaymentHoldUp(state, state.active_player_index);
+    // COST (Fluctuator A/B 2026-11-03: a hold-up card is in hand for ~3,100 payments a game, each a scratch trial). An
+    // entry the board cannot pay together with the bill is dropped on the payer's own AMOUNT bound before any scratch
+    // board (HoldOutFor returns 0 for it: RampLaterPayable's first test), and the trial is shared by every entry.
+    // Both are exact: the payment made is the same.
+    std::vector<ManaCost> targets;
+    const int floating = static_cast<int>(state.floating_mana.Total());
+    for (ManaCost hold : holds)
+    {
+        // The bill's own pips are not held for (paying the held card itself).
+        if (cost_in.black > 0) { hold.black = 0; }
+        if (cost_in.red > 0)   { hold.red = 0; hold.generic = 0; }
+        if (cost_in.white > 0) { hold.white = 0; }
+        if (hold.ManaValue() <= 0) { continue; }
+        // The target: the rest of the line, its pips raised to the hold-up's where the line holds fewer.
+        ManaCost target = RampLaterBill(cost_in);
+        if (target.black < hold.black) { target.black = hold.black; }
+        if (target.red < hold.red) { target.generic += hold.generic; target.red = hold.red; }
+        if (target.white < hold.white) { target.white = hold.white; }
+        if (!PaymentManaCovers(state, /*for_creature=*/false, AddManaCosts(cost_in, target).ManaValue() - floating))
+        { continue; }
+        targets.push_back(target);
+    }
+    if (targets.empty()) { return 0; }
+    g_phu_trial.fetch_add(1, std::memory_order_relaxed);
+    const int held = HoldOutFor(state, cost_in, targets, false, for_creature, available, honor_legacy_cco, nullptr);
+    if (held != 0) { g_phu_fired.fetch_add(1, std::memory_order_relaxed); }
+    return held;
+}
+
+// The card number of the source to hold out of this payment, or 0 to pay as the greedy does.
+static int AnyFilterFeedRouteHold(const GameState& state, const ManaCost& cost_in, bool for_creature,
+                                  ManaPool* available, bool honor_legacy_cco)
+{
+    const ManaCost later = RampLaterBill(cost_in);
+    if (later.ManaValue() <= 0 || state.dmg_events_armed) { return 0; }
+    // A payment the float covers taps nothing (a free cycle, a ritual's leftover).
+    if (cost_in.ManaValue() <= static_cast<int>(state.floating_mana.Total())) { return 0; }
+    const int active = state.active_player_index;
+    bool filter_up = false;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index == active && !p.tapped && IsAnyColorFilterPerm(p)) { filter_up = true; break; }
+    }
+    if (!filter_up) { return 0; }
+    g_afr_trial.fetch_add(1, std::memory_order_relaxed);
+    bool stranded = false;
+    const int held = HoldOutFor(state, cost_in, {later}, true, for_creature, available, honor_legacy_cco, &stranded);
+    if (stranded) { g_afr_strand.fetch_add(1, std::memory_order_relaxed); }
+    if (held != 0) { g_afr_fired.fetch_add(1, std::memory_order_relaxed); }
+    return held;
+}
+
 // ---- MTG_PAY_REFINE: the cheapest payment of the same bill out of the same taps --------------------------
 //
 // THE DEFECT (the mana oracle census, 39 decks x 30 games, seed 1100001). Every DOMINATED flag -- a payment of a
@@ -8495,6 +8698,14 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
     if (t_pay_nest == 1 && !_ramp_route && !for_creature && g_line_haste_takers > 0 && state.floating_haste_c > 0
         && PayingAbilitySource() == nullptr && !manaoracle::t_float_only && ServantHasteKeepOn())
     { haste_keep = HasteKeepUnits(state, cost_in, available, honor_legacy_cco); }
+    // THE ANY-COLOUR FILTER FEED ROUTE (see AnyFilterFeedRouteHold): the same decision for an any-colour filter's feed --
+    // the source the greedy would spend that the rest of the line needs, held out of this payment.
+    int afr_held = 0;
+    if (t_pay_nest == 1 && !_ramp_route && haste_keep == 0)
+    { afr_held = AnyFilterFeedRouteHold(state, cost_in, for_creature, available, honor_legacy_cco); }
+    // THE PROVIDER'S HOLD-UP (see ProviderHoldUpHold): the same hold-out, for a cost the deck wants left payable.
+    if (t_pay_nest == 1 && !_ramp_route && haste_keep == 0 && afr_held == 0)
+    { afr_held = ProviderHoldUpHold(state, cost_in, for_creature, available, honor_legacy_cco); }
     // MTG_PAY_REFINE (above): the board as this payment found it, for the dominance check once it has committed.
     // (The oracle's own copy never gets here -- its payments returned through ScriptedPay above -- and its
     // float-only probes, like the refine's own, are skipped.)
@@ -8512,6 +8723,12 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
         // The trial paid on an identical board, so this cannot fail; if it ever does, pay as usual.
         if (!ok) { ok = TapForCostSharedDiag(state, cost_in, for_creature, available, honor_legacy_cco); }
         if (ok && state.dmg_events_armed && t_pay_nest == 1) { dmgev::FlushDamageEvents(state); }
+    }
+    else if (afr_held != 0)
+    {
+        // The trial proved this payment; should the real board disagree, the greedy pays as it always did.
+        ok = PayHolding(state, afr_held, cost_in, for_creature, available, honor_legacy_cco);
+        if (!ok) { ok = TapForCostSharedDiag(state, cost_in, for_creature, available, honor_legacy_cco); }
     }
     else if (!state.dmg_events_armed)
     { ok = TapForCostSharedDiag(state, cost_in, for_creature, available, honor_legacy_cco); }

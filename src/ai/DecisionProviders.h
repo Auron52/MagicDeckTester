@@ -2442,6 +2442,10 @@ public:
     // graveyard, whatever the next draw is -- every pingless draw before the Unearth resolves is
     // a card the kill will not have. See DecisionProvider::DigResolveEvenOnLand.
     bool        DigResolveEvenOnLand(const GameState& s) const override;
+    // Hold up {B} while Unearth is in hand and {1}{R} while Drannith Stinger is (both, else Unearth's, else the
+    // Stinger's): the turn's cycles can make either castable after a payment made before them (USER 2026-11-03).
+    // See DecisionProvider::PaymentHoldUp.
+    std::vector<ManaCost> PaymentHoldUp(const GameState& s, int controller) const override;
     // A land the chain DRAWS can be the drop (USER 2026-10-14). MTG_FLUCT_DRAWN_LAND (default ON;
     // =0 -> byte-identical to 16dfb7e4). See DecisionProvider::DigUsesDrawnLandDrop.
     bool        DigUsesDrawnLandDrop(const GameState& s) const override;
