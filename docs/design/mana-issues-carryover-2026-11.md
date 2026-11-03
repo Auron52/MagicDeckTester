@@ -130,3 +130,11 @@ deck (`docs/design/mana-clean-gate.md`, `scripts/mana_clean.py`, `test/mana_clea
    hand, or in the plan), never against a card drawn after it. A drop that only a drawn card's knowledge would avoid
    is a candidate for a **hedge rule**: a provider hold for what to keep open when the next card is unknown (e.g.
    Dragonstorm's "hold 1 {B} when red is plentiful", Fluctuator's ordered {B} / {1}{R} / {W} holds).
+10. **Fluctuator's Enlightened Tutor {W} hold applies only with no Fluctuator in hand or on the battlefield.** USER:
+    "We should only hold for Enlightened tutor if we have no fluctuator in hand. Otherwise not." / "Or I guess out on
+    the field." / "Essentially, its purpose is to get Fluctuator and if we have one there is no need to hold W."
+    The {W} entry stays last in the hold list (`wip/mc-fluctuator`).
+11. **"Pay generic with colourless first" is a good general hedge, EXCEPT in EldraziDisplacerFlicker.** USER: "Pay
+    generic with Colourless is good EXCEPT for EDF. In that deck you need to be very careful with that." (EDF's {C}
+    pays {C}-pip costs.) Built in the shared provider default with an explicit EDF opt-out; measured on Dragons
+    first (the 23 Lathliss/Atsushi mid-line-draw drops), each further deck adopted on its own measurement.
