@@ -133,7 +133,7 @@ test_edf_goff_verify failure below.
   cases remain a USER question.
 
 ## Successor 3 (2026-11-03, stopped at the context cap) -- READ THIS FIRST
-State: all code below is in the WIP commit after d647743e3; NOT BUILT, NOT TESTED. A build of it is queued:
+State: all code below is in WIP commit a56a429ef. BUILT (build1.log rc=0; `build/Release/mtg` and `mtg-test` carry the memo/DRAW strings), NOT TESTED -- start at Task 1 NEXT (1). A build of it is queued:
 `buildq.sh` PID 2193594 (cwd = this worktree), log `/workspaces/MagicDeckTester/build/scratch/mcdragons3/build1.log`
 (prints `rc=` when done; the queue was ~9 deep at 12:25 UTC). If that PID is gone without `rc=`, rebuild:
 `cd <worktree> && bash /workspaces/MagicDeckTester/build/scratch/buildq.sh`. No other jobs of mine are running.
