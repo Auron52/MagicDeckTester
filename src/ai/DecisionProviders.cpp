@@ -58290,6 +58290,19 @@ void ShadowbornProvider::SacNamedTimingFilter(const GameState& s, int controller
         // them attack-ready); INT-8 fetched Jetmir in main 1 and won that turn (3 x 4 x 2 = 24 vs 16), INT-9 judged
         // the 3-Apostle pre-chain board, offered nothing in main 1 and won a turn later.
         if (pre_combat && static_cast<int>(six.size()) < n) { targets = anthem; return; }
+        // ...and the same when the six ARE on the battlefield but this plan can still cast more bodies before the
+        // activation (a sac-named creature in hand -- the ripple chain multiplies it): the pre-chain board under-prices
+        // Jetmir, because the chain's sick copies become the six and the attack-ready army survives. Held-out seed
+        // 7001 gi97: T4, six attack-ready Apostles, two Apostles in hand cast into the Stone (11 reveals); INT-8
+        // fetched Jetmir after the chain and won T4 (6 x 4 x 2 = 48), INT-9 read "six ready, none left to attack"
+        // and offered only the Overlord after combat (a T5 win, at --depth 8 --budget-ms 0 too).
+        if (pre_combat && !jet_gains)
+        {
+            for (const Card& c : s.players[static_cast<std::size_t>(controller)].hand)
+            {
+                if (SbIsSacNamedCreature(CardDatabase::Instance().LookupCached(c))) { targets = anthem; return; }
+            }
+        }
     }
     if (jet_gains) { targets = pre_combat ? anthem : std::vector<std::string>{}; }
     else           { targets = pre_combat ? std::vector<std::string>{} : (other.empty() ? anthem : other); }

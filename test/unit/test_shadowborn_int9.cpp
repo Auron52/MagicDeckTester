@@ -384,6 +384,24 @@ TEST_CASE("INT-9 timing: bodies still to come from a chain (pre-chain board shor
     CHECK(m2 == std::vector<std::string>{ kOver9 });
 }
 
+TEST_CASE("INT-9 timing: six attack-ready + an Apostle in hand (a chain can still add bodies) -> Jetmir offered in main 1")
+{
+    // Held-out seed 7001 gi97: the six are on the battlefield, but the plan's chain makes sick copies the six.
+    GameState s = Base9(1);
+    for (int k = 0; k < 6; ++k) { s.battlefield.push_back(Perm9(kAp9, 10 + k)); }
+    const CardParams& pp = Def9(kAp9).params;
+    std::vector<std::string> bare{ kOver9, kJet9 };
+    Prov9().SacNamedTimingFilter(s, 0, pp, /*pre_combat=*/true, bare);
+    CHECK(bare.empty());                               // nothing in hand: six ready, none left to attack -> main 2
+    s.players[0].hand.push_back(Card9(kAp9, 60));
+    std::vector<std::string> m1{ kOver9, kJet9 };
+    Prov9().SacNamedTimingFilter(s, 0, pp, /*pre_combat=*/true, m1);
+    CHECK(m1 == std::vector<std::string>{ kJet9 });
+    std::vector<std::string> m2{ kOver9, kJet9 };
+    Prov9().SacNamedTimingFilter(s, 0, pp, /*pre_combat=*/false, m2);
+    CHECK(m2 == std::vector<std::string>{ kOver9 });
+}
+
 // The kill arithmetic, read off card data: the activation, then everyone able to attack attacks.
 static bool JetmirKill9(int ready, int opp_life)
 {
