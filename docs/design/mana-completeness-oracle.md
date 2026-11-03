@@ -1366,3 +1366,45 @@ so neither wins by T4; the go-off is the difference). Unit suite 2,244 / 2,244; 
   chasing on its own -- a larger exact menu should never lose a line at an unlimited budget.
 * Proposal X as the general backstop: not needed for any flag on this census; the next census that shows a walk
   failure no payer rule explains is where it would start.
+
+### 13.9 Burn: the sac-land pin indexed twins, and a suicide counted as a paying order (2026-11-03, branch `wip/mc-burn`)
+
+The mana-clean gate's pass1 on burn (100,000 games, `logs/mana_clean/pass1-burn/report.md`) had 2,770 ISSUE flags:
+APPLY-DROP 2,270 (24 signatures), ORACLE-GAP 498 (31), APPLY-DROP-ORDER 2. Every APPLY-DROP and ORACLE-GAP vanished
+with `MTG_SAC_AXIS=0` -- they were one defect, in the searched sacrifice-a-land pin.
+
+**The pin indexed the raw ranking, i.e. twins (engine defect).** `Plan::sac_pins` entry k takes `ranked[k]` of
+`SacrificeLandCandidates` at resolution (`PerformSacrificeLandCost`, `src/core/SpellEffects.h`), and that ranking is
+tapped-first in battlefield order. On burn's all-Mountain board the axis (width = distinct names + 1 = 2) emits a
+pin-1 variant per Shard Volley, and pin 1 after a one-Mountain payment names the first UNTAPPED Mountain: Shard Volley
+eats the land the next spell needed while the tapped one survives. Seed 30000241 T3 `{land, Volley, Volley, Light Up
+the Stage}` on three Mountains: the second Volley tapped #40 and sacrificed untapped #36, so Light Up the Stage
+({R} spectacle) had no mana (APPLY-DROP x371, and every Skullcrack / Searing Blaze / Searing Blood / Eidolon drop
+signature is the same shape). The ORACLE-GAPs (seed 30000945 T6 x153, and the `{Volley, Light Up}` ones whose
+continuations differ) are the other face of it: the outcome depended on WHICH identical Mountain a payment tapped, so
+the oracle's source classes (identical untapped copies fold, lowest number taps first) could not reproduce the
+engine's board -- there it was the new Mountain kept vs an old one.
+
+**Fix (lossless).** A pin past the front now indexes the ranking's distinct land CLASSES (`SacLandClassRanking`;
+twins = `SacLandTwins`: same card, controller, token-ness, no counters / damage / riders / attachments, not a creature,
+and the same age unless the land can never be one), each class represented by its first TAPPED copy, else its first
+copy. Sacrificing the tapped copy of two otherwise identical lands is never worse (sound dominance), and a different
+land class is now one pin step away instead of behind its twins -- on `[Mountain(T), Mountain, Mountain, Forest]` the
+Forest sat at raw rank 3, past the axis width, and was unreachable. pin <= 0 is untouched (the provider's front), and
+the human chooser is untouched. On burn every pin variant now resolves to the base plan's state and is skipped by the
+axis-variant post-apply dedup (`PlanDupSkippable`). Shared by every world (executor cast path, `apply_one`, the
+oracle's realisations), so lockstep holds by construction. Other sac-land decks: Creature Giving (Crop Rotation).
+
+**APPLY-DROP-ORDER x2 was a suicide (oracle gap).** Seed 30017261 T5, two Eidolons, life 8, four Mountains: Searing
+Blaze (targeting us -- the goldfish has no creature) then Light Up the Stage is a Mountain short. The claimed order,
+Light Up first and Blaze off the staged Mountain, takes us 8 -> 4 -> 0 through the Eidolon triggers, a plan the search
+skips (TurnSolver "A plan that kills the active player"). `Outcome::Clean()` now also requires the active player
+alive, so no claim rests on a line that dies; the repro reads PHANTOM.
+
+**Validation.** Unit `test_sac_land_class_pin.cpp` (4 cases, incl. applying every menu variant of the 241 board --
+each casts Light Up the Stage); scenario `burn_volley_volley_lightup_sac_tapped.json` (pins the line and the T3 kill;
+it is not discriminating -- the base variant always won -- the unit test is). Unit 2,433 / 2,433, scenarios 392 / 392.
+Every report repro is clean. Fresh slice gi 100000-109999 (`MTG_MANA_ORACLE=2`): **0 ISSUE flags** (origin's binary
+on the same games: APPLY-DROP 220, ORACLE-GAP 45, DOMINATED-LAND 2,253, CONTINUATION-DIFFERS 192, DROP-COVERED 7,444
+-> 0 / 0 / 0 / 0 / 894); play byte-identical with the oracle off. Held-out A/B (seeds 41000000+gi, gi 0-4999, play
+settings): 13 digests moved, **0 games slower, 0 faster, net 0 turns** (mean 4.2910 both), CPU 319 s -> 305 s.

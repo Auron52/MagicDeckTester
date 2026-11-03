@@ -1921,9 +1921,17 @@ struct Outcome
     bool Full() const { return cast_drops.empty() && act_drops.empty(); }
     // ...AND no payment that had no option: the sense a CLAIM needs ("every action pays"), because an
     // unpayable step that is not a cast -- a suspend, an aura swap -- fails without a drop-sink entry.
+    //
+    // ...AND a line that leaves us alive. A realisation at 0 life is no line the engine could take: the
+    // search skips every plan that kills the active player through its own on-cast triggers (TurnSolver
+    // "A plan that kills the active player", CR 603.3 -- Eidolon's trigger resolves before the spell), so
+    // "this order pays every action" about it claims a lost line that is a suicide. Burn seed 30017261
+    // T5 (two Eidolons, life 8): Searing Blaze then Light Up the Stage is one Mountain short, and the
+    // claimed order -- Light Up first, Blaze off the staged Mountain -- takes us 8 -> 4 -> 0.
     bool Clean() const
     {
         if (!Full()) { return false; }
+        if (st.players[static_cast<std::size_t>(st.active_player_index)].life <= 0) { return false; }
         for (const PayOption& p : script) { if (p.fail) { return false; } }
         return true;
     }

@@ -41966,6 +41966,69 @@ inline void PerformFetch(GameState& state, int controller_index,
 // this BEFORE the search puts the fetched land onto the battlefield -- additional costs are paid
 // at cast time, before resolution (CR 601.2h), so the just-fetched land is never a legal
 // sacrifice target (2026-08-06 claude-play sweep flag, seeds 9012/9015).
+// Two lands the sacrifice-a-land cost cannot tell apart except by their TAPPED flag: same card,
+// controller and token-ness, no counters, damage or end-of-turn rider, nothing attached to either,
+// neither a creature -- and the same age unless the land can never be one (an animated land that
+// entered this turn cannot attack; for any other land the age only matters to summoning sickness,
+// CR 302.6). Fail closed: any field outside this list that differs keeps the two apart.
+inline bool SacLandTwins(const GameState& state, const Permanent& a, const Permanent& b)
+{
+    if (a.card.m_name_hash != b.card.m_name_hash || a.card.m_name != b.card.m_name
+        || a.controller_index != b.controller_index || a.is_token != b.is_token) { return false; }
+    for (const Permanent* p : { &a, &b })
+    {
+        if (p->card.IsCreature() || p->is_animated || !p->counters.empty() || p->damage != 0
+            || p->storage_counters != 0 || p->charge_counters != 0 || p->verse_counters != 0
+            || p->lore_counters != 0 || p->skip_next_untap || p->exile_at_end || p->sac_at_end_step
+            || p->marked_for_destruction || p->islandize_target != 0 || p->paired_with != 0
+            || p->aura_attached_to != 0 || p->equipped_to != 0) { return false; }
+    }
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.aura_attached_to == a.card.m_number || q.aura_attached_to == b.card.m_number
+            || q.equipped_to == a.card.m_number || q.equipped_to == b.card.m_number) { return false; }
+    }
+    if (a.entered_this_turn != b.entered_this_turn)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(a.card);
+        if (d == nullptr || d->params.can_animate) { return false; }
+    }
+    return true;
+}
+
+// The sacrifice ranking folded to its distinct land CLASSES (SacLandTwins), in ranking order, each
+// class represented by its first TAPPED copy, else its first copy. Burn (pass1, 100k games: 2270
+// APPLY-DROP + 465 ORACLE-GAP flags): the searched pin (Plan::sac_pins, MTG_SAC_AXIS) indexed the
+// RAW ranking, which is tapped-first -- so on a board of Mountains "pin 1" after a one-land payment
+// named the first UNTAPPED Mountain, and Shard Volley ate the land the turn's next spell needed
+// while a tapped Mountain survived (seed 30000241 T3: Shard Volley, Shard Volley, Light Up the Stage
+// on three Mountains dropped Light Up the Stage). Sacrificing the tapped copy of two otherwise
+// identical lands is never worse, so within a class the choice is a sound dominance, and the
+// variants the axis spends on a class are spent on a DIFFERENT land, not on a twin -- which is also
+// what makes the outcome independent of which identical copy a payment tapped (the mana oracle's
+// source classes assume exactly that). A pin past the last class clamps to it, as before.
+inline std::vector<int> SacLandClassRanking(const GameState& state, const std::vector<int>& ranked)
+{
+    std::vector<int> out;
+    std::vector<bool> used(ranked.size(), false);
+    for (std::size_t i = 0; i < ranked.size(); ++i)
+    {
+        if (used[i]) { continue; }
+        const Permanent& p = state.battlefield[static_cast<std::size_t>(ranked[i])];
+        int rep = p.tapped ? ranked[i] : -1;
+        for (std::size_t j = i + 1; j < ranked.size(); ++j)
+        {
+            if (used[j]) { continue; }
+            const Permanent& q = state.battlefield[static_cast<std::size_t>(ranked[j])];
+            if (!SacLandTwins(state, p, q)) { continue; }
+            used[j] = true;
+            if (rep < 0 && q.tapped) { rep = ranked[j]; }
+        }
+        out.push_back(rep >= 0 ? rep : ranked[i]);
+    }
+    return out;
+}
+
 inline void PerformSacrificeLandCost(GameState& state, const std::string& spell_name)
 {
     // Consume this call's ordinal from the searched pin list (Plan::sac_pins) FIRST,
@@ -41983,8 +42046,12 @@ inline void PerformSacrificeLandCost(GameState& state, const std::string& spell_
     int idx = -1;
     if (!lands.empty())
     {
-        const std::vector<int> ranked = ResolveProvider(state).SacrificeLandCandidates(
+        std::vector<int> ranked = ResolveProvider(state).SacrificeLandCandidates(
             state, state.active_player_index, lands);
+        // A pin past the front indexes the ranking's distinct LAND CLASSES, each represented by
+        // its tapped copy where it has one (SacLandClassRanking). pin <= 0 is untouched: the
+        // front is the provider's own pick.
+        if (pin > 0) { ranked = SacLandClassRanking(state, ranked); }
         if (!ranked.empty())
         {
             // pin >= 0 takes the k-th candidate of the ranking computed at THIS resolution

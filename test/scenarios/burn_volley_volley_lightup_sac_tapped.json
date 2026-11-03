@@ -1,0 +1,28 @@
+{
+  "_comment": [
+    "burn mana-clean pass1, seed 30000241 gi 241 T3 (docs/design/mana-completeness-oracle.md 13.9): the board of",
+    "the top APPLY-DROP signature (x371 of 2270). Two Mountains, Goblin Guide, Monastery Swiftspear; hand Shard",
+    "Volley x2, Mountain, Skullcrack, Light Up the Stage; opponent at 12. The only turn-3 kill is land, Shard",
+    "Volley, Shard Volley, Light Up the Stage for spectacle {R} -- three Mountains for three {R}, each Volley",
+    "sacrificing the Mountain it TAPPED -- then 3 + 3 to the face and Goblin Guide 2 + Swiftspear 1+3 = 12.",
+    "Under the old raw sac-pin indexing the plan's pin-1 variant sacrificed the untapped Mountain and dropped",
+    "Light Up the Stage; the search still won through the base variant, so this fixture pins the line and the",
+    "kill, and the variant itself is pinned in test/unit/test_sac_land_class_pin.cpp."
+  ],
+  "deck": "decks/burn/burn.txt",
+  "profile": "decks/burn/burn.profile.json",
+  "turn": 3, "on_the_play": true, "max_turns": 3,
+  "active_life": 20, "opponent_life": 12,
+  "battlefield": [
+    { "name": "Mountain", "controller": 0, "tapped": false },
+    { "name": "Goblin Guide", "controller": 0, "tapped": false, "sick": false },
+    { "name": "Mountain", "controller": 0, "tapped": false },
+    { "name": "Monastery Swiftspear", "controller": 0, "tapped": false, "sick": false }
+  ],
+  "hand": [ "Shard Volley", "Shard Volley", "Mountain", "Skullcrack", "Light Up the Stage" ],
+  "library_filler": "Mountain", "library_size": 30,
+  "depth": 5, "budget_ms": 0,
+  "validate_line": "land=Mountain;cast=Shard Volley;cast=Shard Volley;cast=Light Up the Stage",
+  "expect_verdict": "accept",
+  "expect_win_turn": 3
+}
