@@ -48,6 +48,10 @@ inline constexpr long long kPriceNs[kKinds] = {
 };
 inline thread_local long long t_n[kKinds] = {};
 inline thread_local long long t_priced = 0;   // running sum of price x count this game (ns)
-inline void Inc(int k, long long n = 1) { t_n[k] += n; t_priced += kPriceNs[k] * n; }
+// MUTE (> 0: count nothing). Held by the plan caches' PRICED LEDGER (TurnSolver.cpp, namespace pledger) over a
+// recompute that the unlimited-cache world would have served as a hit: there the work never ran, so it must not
+// reach t_priced (the priced decision ceiling reads it) or the per-kind counts. Zero outside such a recompute.
+inline thread_local int t_mute = 0;
+inline void Inc(int k, long long n = 1) { if (t_mute != 0) { return; } t_n[k] += n; t_priced += kPriceNs[k] * n; }
 inline void BeginGame() { for (int k = 0; k < kKinds; ++k) { t_n[k] = 0; } t_priced = 0; }
 }

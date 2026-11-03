@@ -87056,6 +87056,112 @@ static inline void PlanCacheNoteComputation(int cat, long long units)
 }
 static inline void PlanCacheNoteHit(int cat)
 { if (plancache::StatsOn()) { plancache::g_cu_hits[cat].fetch_add(1, std::memory_order_relaxed); } }
+// ---- THE PRICED LEDGER (MTG_PLAN_PRICED_LEDGER, DEFAULT ON; =0 restores residency-dependent priced counting) ----
+// The plan caches (the enum memo shared by the m1/m2 hosts, the breakpoint continuation cache, the canon-front
+// memo) are TIER 2: their residency depends on the RAM-derived shared byte pool (MTG_PLAN_CACHE_KB), on eviction
+// and on what other workers hold, so it must never change play. Cache-hit charging (cachecharge, mode 1) makes
+// UNITS residency-invariant: a computation that charged a unit is never stored. PRICED work is not covered: a
+// hit skips the enumeration calls, plans and odometer visits a recompute counts into workctr::t_priced, and the
+// priced decision ceiling (MTG_DECISION_PRICED_X) reads that -- so with the ceiling on, a refused store moved
+// the ceiling's trip point and play (regression tier, default vs MTG_PLAN_CACHE_KB=1: 6 job digests, 3 win
+// turns, 14 games' units; identical at X=0; docs/design/tier2-cache-overflow.md, last section).
+//
+// THE RULE: t_priced counts what it would count with an UNLIMITED plan cache -- the byte pool never refusing,
+// no pressure clears -- which is what a large box does today, so the X=100 calibration and ground truth hold
+// wherever nothing is refused. Per worker thread, a SHADOW of each cache's KEY STRUCTURE (64-bit key -> a flag
+// byte, no plans) replays that cache's unlimited-world store rule: the same count caps and clears, the same
+// epoch/game scope (all three plan caches are cleared per game in ClearPerGameCaches, so the unlimited world
+// is per game and independent of batch order), and every storable computation stored. Each lookup asks the
+// shadow first:
+//   * shadow HIT (an entry the unlimited cache would serve, CacheHitCharge's mode-1 test): free, as today. The
+//     real cache serves it if it holds it; if not (refused / cleared under pressure) the recompute runs with
+//     workctr MUTED, so it counts nothing, and stores nothing in the shadow -- in the unlimited world it, and
+//     every lookup nested in it, never ran.
+//   * shadow MISS: a real hit is NOT served (the unlimited world recomputes here, and counts it); the
+//     computation runs counted and the shadow records it by the unlimited store rule.
+// Nested lookups inside a muted recompute serve a real hit when there is one and otherwise compute; they touch
+// no shadow, so their first counted lookup later is still a miss. Real-cache stores are left as they are (a
+// real entry the shadow lacks is never served, so it cannot move a count).
+// Inert where it cannot matter: off when the pool is unbounded (MTG_PLAN_CACHE_KB=0: the real cache IS the
+// unlimited one), under MTG_CACHE_HIT_CHARGE != 1 (diagnostic pricing modes) and MTG_BP_ENUM_EPOCH (diagnostic
+// scope); at X=0 nothing in play reads t_priced, so it moves wall only.
+static bool BpEnumEpochScoped();   // defined with the bp cache, below
+namespace pledger
+{
+inline bool On()
+{
+    static const bool v = EnvOn("MTG_PLAN_PRICED_LEDGER", true) && cachecharge::Mode() == 1
+                       && plancache::BudgetBytes() > 0 && !BpEnumEpochScoped();
+    return v;
+}
+inline bool InShadow() { return workctr::t_mute > 0; }
+enum : std::uint8_t { kStored = 1, kHadDec = 2, kHadGreedy = 4, kNullAtt = 8, kPinUnread = 16 };
+using Map = std::unordered_map<std::uint64_t, std::uint8_t>;
+inline thread_local Map t_enum;    // enummemo::t_cache: 0 = first-visit marker, kStored|... = promoted
+inline thread_local Map t_bp;      // bpcache::t_plans (alias entries under the pin-cleared key, kPinUnread)
+inline thread_local Map t_front;   // bpcanon::t_fronts
+inline thread_local std::uint64_t t_enum_epoch = ~0ull;
+inline std::atomic<long long> g_peak{0}, g_muted{0}, g_forced{0};
+inline std::uint64_t K(const TranspositionTable::Key& k)
+{ return k.h1 ^ ((k.h2 + 0x632BE59BD9B4E019ULL) * 0x9E3779B97F4A7C15ULL); }
+// What CacheHitCharge reads of a stored MODE-1 cost (storable => dec = greedy = other = 0).
+inline std::uint8_t FlagsOf(const cachecharge::Cost& c, bool pin_unread = false)
+{
+    return static_cast<std::uint8_t>(kStored | (c.had_dec ? kHadDec : 0) | (c.had_greedy ? kHadGreedy : 0)
+                                     | (c.null_attempts > 0 ? kNullAtt : 0) | (pin_unread ? kPinUnread : 0));
+}
+// CacheHitCharge's verdict on such an entry, without its stats or charges (both zero for a mode-1 entry).
+inline bool WouldServe(std::uint8_t f)
+{
+    if ((f & kStored) == 0 || decisionwork::Exceeded()) { return false; }
+    if ((f & kNullAtt) != 0 && g_decision_budget != nullptr && (f & kHadDec) == 0) { return false; }
+    if ((f & kNullAtt) != 0 && g_greedy_charge_budget != nullptr && (f & kHadGreedy) == 0) { return false; }
+    return true;
+}
+inline void NotePeak()
+{
+    const long long n = static_cast<long long>(t_enum.size() + t_bp.size() + t_front.size());
+    long long p = g_peak.load(std::memory_order_relaxed);
+    while (n > p && !g_peak.compare_exchange_weak(p, n, std::memory_order_relaxed)) {}
+}
+// RAII: armed => everything until scope exit is the unlimited world's free hit (counts nothing).
+struct Mute
+{
+    bool on = false;
+    void Arm(bool stat = true)
+    {
+        if (on) { return; }
+        on = true;
+        ++workctr::t_mute;
+        if (stat) { g_muted.fetch_add(1, std::memory_order_relaxed); }
+    }
+    ~Mute() { if (on) { --workctr::t_mute; } }
+};
+inline void ClearGame() { t_enum.clear(); t_bp.clear(); t_front.clear(); t_enum_epoch = ~0ull; }
+struct Dump
+{
+    ~Dump()
+    {
+        if (!EnvOn("MTG_PLAN_POOL_STATS") && !EnvOn("MTG_PLAN_LEDGER_STATS")) { return; }
+        std::fprintf(stderr, "[plan-ledger] on=%d muted_recomputes=%lld forced_misses=%lld shadow_peak_keys=%lld"
+                     " (per thread, 3 caches)\n", On() ? 1 : 0, g_muted.load(), g_forced.load(), g_peak.load());
+    }
+};
+inline Dump g_dump;
+}   // namespace pledger
+// The enum memo's store rule with no byte budget, on its shadow: a first visit leaves a marker (clearing the
+// whole map at the entry cap, as the real cache does), a second visit promotes a storable computation.
+static void PledgerEnumStore(std::uint64_t lk, bool found, const cachecharge::Cost& c)
+{
+    if (found)
+    {
+        if (c.storable) { pledger::t_enum[lk] = pledger::FlagsOf(c); }
+        return;
+    }
+    if (pledger::t_enum.size() >= enummemo::Cap()) { pledger::t_enum.clear(); }
+    pledger::t_enum[lk] = 0;
+    pledger::NotePeak();
+}
 static long long PbLazyListBytes(const std::vector<TurnSolver::Plan>& real, const PbLazyLayout& lz)
 {
     std::size_t b = plancache::ApproxPlansBytes(real) + lz.P * sizeof(TurnSolver::Plan);
@@ -87172,9 +87278,24 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
     }
     FoldPhysicalCards(k, state);   // MTG_PLAN_CACHE_EXACT_KEY
     auto it = cache.find(k);
+    // MTG_PLAN_PRICED_LEDGER: the unlimited cache's verdict on this lookup (see pledger).
+    const bool led = pledger::On() && !pledger::InShadow();
+    const std::uint64_t lk = pledger::K(k);
+    bool sh_found = false, sh_hit = false;
+    if (led)
+    {
+        if (pledger::t_enum_epoch != g_decision_epoch) { pledger::t_enum.clear(); pledger::t_enum_epoch = g_decision_epoch; }
+        const auto st = pledger::t_enum.find(lk);
+        sh_found = st != pledger::t_enum.end();
+        sh_hit   = sh_found && pledger::WouldServe(st->second);
+    }
+    pledger::Mute led_mute;
+    if (it != cache.end() && it->second.epoch == g_decision_epoch && it->second.has_plans
+        && led && !sh_hit)
+    { pledger::g_forced.fetch_add(1, std::memory_order_relaxed); }   // the unlimited cache recomputes here
     // MTG_CACHE_HIT_CHARGE: a hit is served at the units its enumeration charged, or not at all.
     if (it != cache.end() && it->second.epoch == g_decision_epoch && it->second.has_plans
-        && CacheHitCharge(it->second.cost))
+        && (!led || sh_hit) && CacheHitCharge(it->second.cost))
     {
         enummemo::g_hits.fetch_add(1, std::memory_order_relaxed); PlanCacheNoteHit(plancache::kCatM1);
         if (pccv::On())   // MTG_PLAN_CACHE_COST_VERIFY (diagnostic)
@@ -87255,6 +87376,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
         return it->second.plans;
     }
 
+    if (sh_hit) { led_mute.Arm(); }   // MTG_PLAN_PRICED_LEDGER: a free hit in the unlimited world
     enummemo::g_misses.fetch_add(1, std::memory_order_relaxed);
     const bool second_visit = (it != cache.end() && it->second.epoch == g_decision_epoch);
     if (second_visit && enummemo::StatsOn()) { enummemo::g_second.fetch_add(1, std::memory_order_relaxed); }
@@ -87350,6 +87472,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
     // this enumeration's CollectActions made the list a function of the cut. Always false unless a unit
     // ceiling or a wall cap is armed.
     if (gamework::Abandoned()) { return plans; }
+    if (led && !led_mute.on) { PledgerEnumStore(lk, sh_found, m1_cost); }   // the unlimited store rule
     if (second_visit)
     {
         // Second visit this decision: the state provably recurs -- promote to full storage,
@@ -87422,8 +87545,23 @@ static std::vector<TurnSolver::Plan> EnumeratePlansM2Memoized(const GameState& s
     if (t_rollout_narrow) { Fold(k, kRolloutNarrowTag); }   // see MTG_ROLLOUT_FAN_NARROW
     FoldPhysicalCards(k, state);   // MTG_PLAN_CACHE_EXACT_KEY
     auto it = cache.find(k);
+    // MTG_PLAN_PRICED_LEDGER: the unlimited cache's verdict on this lookup (see pledger).
+    const bool led = pledger::On() && !pledger::InShadow();
+    const std::uint64_t lk = pledger::K(k);
+    bool sh_found = false, sh_hit = false;
+    if (led)
+    {
+        if (pledger::t_enum_epoch != g_decision_epoch) { pledger::t_enum.clear(); pledger::t_enum_epoch = g_decision_epoch; }
+        const auto st = pledger::t_enum.find(lk);
+        sh_found = st != pledger::t_enum.end();
+        sh_hit   = sh_found && pledger::WouldServe(st->second);
+    }
+    pledger::Mute led_mute;
     if (it != cache.end() && it->second.epoch == g_decision_epoch && it->second.has_plans
-        && CacheHitCharge(it->second.cost))   // MTG_CACHE_HIT_CHARGE
+        && led && !sh_hit)
+    { pledger::g_forced.fetch_add(1, std::memory_order_relaxed); }   // the unlimited cache recomputes here
+    if (it != cache.end() && it->second.epoch == g_decision_epoch && it->second.has_plans
+        && (!led || sh_hit) && CacheHitCharge(it->second.cost))   // MTG_CACHE_HIT_CHARGE
     {
         enummemo::g_hits.fetch_add(1, std::memory_order_relaxed); PlanCacheNoteHit(plancache::kCatM2);
         if (pccv::On())   // MTG_PLAN_CACHE_COST_VERIFY (diagnostic)
@@ -87489,6 +87627,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansM2Memoized(const GameState& s
         return it->second.plans;
     }
 
+    if (sh_hit) { led_mute.Arm(); }   // MTG_PLAN_PRICED_LEDGER: a free hit in the unlimited world
     enummemo::g_misses.fetch_add(1, std::memory_order_relaxed);
     const bool second_visit = (it != cache.end() && it->second.epoch == g_decision_epoch);
     const int saved_md = groupwave::g_state.max_dropped;
@@ -87498,7 +87637,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlansM2Memoized(const GameState& s
     // M1: the PROMOTION visit (the only one that stores) enumerates lazily and keeps the lazy form; the
     // caller still gets the whole list. Other visits enumerate whole, as before.
     PbLazyLayout m2_lz;
-    const bool m2_lazy = second_visit && BpLazyCandsOn();
+    // Under the ledger a COUNTED computation takes the unlimited cache's visit (its odometer may differ).
+    const bool m2_lazy = ((led && !led_mute.on) ? sh_found : second_visit) && BpLazyCandsOn();
     const long long m2_u0 = gamework::t_used;
     const std::uint64_t m2_ctx = pccv::On() ? PlanCacheCtxBits() : 0;   // MTG_PLAN_CACHE_COST_VERIFY
     cachecharge::Scope m2_ccs;
@@ -87514,6 +87654,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansM2Memoized(const GameState& s
     groupwave::g_state.max_dropped = std::max(saved_md, own_md);
     if (gamework::Abandoned())   // a VOID game stores nothing (see the m1 host)
     { if (m2_lz.active) { PbLazyMaterialize(plans, m2_lz); } return plans; }
+    if (led && !led_mute.on) { PledgerEnumStore(lk, sh_found, m2_cost); }   // the unlimited store rule
     if (second_visit)
     {
         // Same byte-budget gate as the m1 host above (over budget: stay a marker, recompute).
@@ -87738,6 +87879,7 @@ void TurnSolver::ClearPerGameCaches()
     bpcache::t_plans.clear();
     plancache::Release(plancache::t_bp_bytes);
     bpcanon::t_fronts.clear();   // the canon-front memo (BpCanonFront): same channel, same clear
+    pledger::ClearGame();        // MTG_PLAN_PRICED_LEDGER: the three caches' shadows share their per-game scope
     ++bplibcheck::t_game;   // MTG_BP_ENUM_LIBCHECK's game ordinal (diagnostic stamp only)
     // The EDF combo route's board-keyed trial memo -- same channel, see EdfComboRouteClearMemo.
     EdfComboRouteClearMemo();
@@ -107919,7 +108061,17 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
     // so the tally is residency-independent. `builds` here is therefore exactly `hits + misses`
     // -- the lookup count -- which is the second spec metric: a prune cannot raise lookups.
     if (keyed && BpKeyCensusOn()) { BpKeyCensusRecord(key); }
-    if (keyed)
+    // MTG_PLAN_PRICED_LEDGER (see pledger): the unlimited cache's verdict, exact key first, then the alias.
+    const bool led = keyed && pledger::On() && !pledger::InShadow();
+    bool sh_exact = false;
+    if (led)
+    {
+        const auto st = pledger::t_bp.find(pledger::K(key));
+        sh_exact = st != pledger::t_bp.end() && pledger::WouldServe(st->second);
+        if (!sh_exact && cache.find(key) != cache.end()) { pledger::g_forced.fetch_add(1, std::memory_order_relaxed); }
+    }
+    pledger::Mute led_mute;
+    if (keyed && (!led || sh_exact))   // a key the unlimited cache does not serve is not served from this one
     {
         BpEnumMap::iterator it = cache.find(key);
         // MTG_BP_ENUM_EPOCH: an entry filled by an EARLIER decision is treated as absent, so it is
@@ -108190,6 +108342,7 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
         }
     }
 
+    if (sh_exact) { led_mute.Arm(); }   // the unlimited cache served the exact key: nothing below counts
     // THE TUTOR-PIN ALIAS (MTG_BP_TUTOR_PIN_ALIAS, DEFAULT ON; =0 keys every list on its live tutor pin as
     // before). An IDENTITY FOLD, found on EldraziDisplacerFlicker seed 5826 gi821 (docs/design/
     // edf-tutor-pin-alias-2026-11-03.md): a Living Wish plan's tutor-axis variants (Plan::tutor_choice
@@ -108224,8 +108377,17 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
         g_scripted_tutor_choice = sv_pin;
         if (alias_ok)
         {
+            bool sh_alias = false;
+            if (led && !sh_exact)
+            {
+                const auto st = pledger::t_bp.find(pledger::K(alias_key));
+                sh_alias = st != pledger::t_bp.end() && (st->second & pledger::kPinUnread) != 0
+                        && pledger::WouldServe(st->second);
+            }
             BpEnumMap::iterator at = cache.find(alias_key);
             if (at != cache.end() && BpEnumEpochScoped() && at->second.epoch != g_decision_epoch) { at = cache.end(); }
+            if (led && !sh_exact && !sh_alias) { at = cache.end(); }   // the unlimited cache derives here
+            if (sh_alias) { led_mute.Arm(); }
             if (at != cache.end() && at->second.tutor_pin_unread && CacheHitCharge(at->second.cost))
             {
                 tutorpinalias::g_hits.fetch_add(1, std::memory_order_relaxed);
@@ -108459,6 +108621,15 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
         }
     }
 
+    // MTG_PLAN_PRICED_LEDGER: the unlimited cache's store rule on its shadow -- the entry cap's wholesale clear,
+    // never the byte pool's -- for a COUNTED derivation only (a muted one never ran in that world).
+    if (led && !led_mute.on && !bp_interrupted && !aa_cut_inside && bp_cost.storable)
+    {
+        if (pledger::t_bp.size() >= s_bp_enum_cap) { pledger::t_bp.clear(); }
+        const bool to_alias = alias_ok && pin_unread;
+        pledger::t_bp[pledger::K(to_alias ? alias_key : key)] = pledger::FlagsOf(bp_cost, pin_unread);
+        pledger::NotePeak();
+    }
     if (keyed && !bp_interrupted && !aa_cut_inside && bp_cost.storable)
     {
         if (BpEnumProbeOn())
@@ -108732,28 +108903,67 @@ static bool BpCanonFront(const GameState& state, bool is_pre_combat, TurnSolver:
     }
     TranspositionTable::Key key;
     const bool keyed = BpEnumBuildKey(state, is_pre_combat, &key);
+    // MTG_PLAN_PRICED_LEDGER (see pledger): this lookup as the unlimited caches would answer it.
+    const bool led = keyed && pledger::On() && !pledger::InShadow();
+    bool sh_hit = false;
+    pledger::Mute led_mute;
     if (keyed)
     {
         auto it = bpcache::t_plans.find(key);
+        bool sh_found = false;
+        std::uint8_t sh_f = 0;
+        if (led)
+        {
+            const auto st = pledger::t_bp.find(pledger::K(key));
+            if (st != pledger::t_bp.end()) { sh_found = true; sh_f = st->second; }
+        }
         // MTG_BP_TUTOR_PIN_ALIAS: a full list filed under the pin-cleared key (derived without reading the
         // pin, so valid under this one) serves the canon exactly as an exact-key entry does.
-        if (it == bpcache::t_plans.end() && g_scripted_tutor_choice >= 0 && tutorpinalias::On())
+        // Under the ledger the alias key is built when EITHER cache lacks the exact key, and its build is
+        // counted only when the unlimited one does (it builds it exactly when it lacks the key).
+        if ((it == bpcache::t_plans.end() || (led && !sh_found))
+            && g_scripted_tutor_choice >= 0 && tutorpinalias::On())
         {
             TranspositionTable::Key ak;
             const int sv_pin = g_scripted_tutor_choice;
             g_scripted_tutor_choice = -1;
-            const bool aok = BpEnumBuildKey(state, is_pre_combat, &ak);
+            bool aok = false;
+            {
+                pledger::Mute key_mute;
+                if (led && sh_found) { key_mute.Arm(/*stat=*/false); }
+                aok = BpEnumBuildKey(state, is_pre_combat, &ak);
+            }
             g_scripted_tutor_choice = sv_pin;
             if (aok)
             {
-                const auto at = bpcache::t_plans.find(ak);
-                if (at != bpcache::t_plans.end() && at->second.tutor_pin_unread) { it = at; }
+                if (it == bpcache::t_plans.end())
+                {
+                    const auto at = bpcache::t_plans.find(ak);
+                    if (at != bpcache::t_plans.end() && at->second.tutor_pin_unread) { it = at; }
+                }
+                if (led && !sh_found)
+                {
+                    const auto st = pledger::t_bp.find(pledger::K(ak));
+                    if (st != pledger::t_bp.end() && (st->second & pledger::kPinUnread) != 0)
+                    { sh_found = true; sh_f = st->second; }
+                }
             }
+        }
+        if (led)
+        {
+            sh_hit = sh_found && pledger::WouldServe(sh_f);
+            if (!sh_hit)
+            {
+                const auto ft = pledger::t_front.find(pledger::K(key));
+                sh_hit = ft != pledger::t_front.end() && pledger::WouldServe(ft->second);
+            }
+            if (!sh_hit && (it != bpcache::t_plans.end() || bpcanon::t_fronts.find(key) != bpcanon::t_fronts.end()))
+            { pledger::g_forced.fetch_add(1, std::memory_order_relaxed); }
         }
         // MTG_CACHE_HIT_CHARGE: a full entry's derivation and the front-only one charge the same units
         // (they differ only in the put-back / Ponder / look-top clones, which no charging site builds),
         // so the full entry's cost is what the front-only recompute here would charge.
-        if (it != bpcache::t_plans.end()
+        if (it != bpcache::t_plans.end() && (!led || sh_hit)
             && !(BpEnumEpochScoped() && it->second.epoch != g_decision_epoch)
             && CacheHitCharge(it->second.cost))
         {
@@ -108765,7 +108975,7 @@ static bool BpCanonFront(const GameState& state, bool is_pre_combat, TurnSolver:
             return true;
         }
         const auto jt = bpcanon::t_fronts.find(key);
-        if (jt != bpcanon::t_fronts.end()
+        if (jt != bpcanon::t_fronts.end() && (!led || sh_hit)
             && !(BpEnumEpochScoped() && jt->second.epoch != g_decision_epoch)
             && CacheHitCharge(jt->second.cost))
         {
@@ -108776,6 +108986,7 @@ static bool BpCanonFront(const GameState& state, bool is_pre_combat, TurnSolver:
             return true;
         }
     }
+    if (sh_hit) { led_mute.Arm(); }   // MTG_PLAN_PRICED_LEDGER: a free hit in the unlimited world
     const std::uint64_t aa_cuts0 = AlchemistComboRouteCuts();   // see BpEnumEntryFor's twin
     // An INTERRUPTED derivation (the per-game backstop, or MTG_BP_DERIVE_METER=2) returns EMPTY: served, never
     // stored -- BpEnumEntryFor's rule, which this twin did not apply until the backstop could interrupt here.
@@ -108806,10 +109017,16 @@ static bool BpCanonFront(const GameState& state, bool is_pre_combat, TurnSolver:
                          state.turn_number, is_pre_combat ? "m1" : "m2", full.size(), plans.size());
         }
     }
+    static const std::size_t s_cap = static_cast<std::size_t>(
+        std::max(1, EnvInt("MTG_BP_CANON_FRONT_CAP", 16384)));
+    if (led && !led_mute.on && !aa_cut_inside && !bp_interrupted && fr_cost.storable)
+    {   // MTG_PLAN_PRICED_LEDGER: the shadow's store, as below (this memo has no byte budget of its own)
+        if (pledger::t_front.size() >= s_cap) { pledger::t_front.clear(); }
+        pledger::t_front[pledger::K(key)] = pledger::FlagsOf(fr_cost);
+        pledger::NotePeak();
+    }
     if (keyed && !aa_cut_inside && !bp_interrupted && fr_cost.storable)
     {
-        static const std::size_t s_cap = static_cast<std::size_t>(
-            std::max(1, EnvInt("MTG_BP_CANON_FRONT_CAP", 16384)));
         if (bpcanon::t_fronts.size() >= s_cap)
         {
             bpcanon::t_fronts.clear();
