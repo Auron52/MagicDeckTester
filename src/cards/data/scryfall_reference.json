@@ -1,4 +1,15 @@
 {
+  "Abhorrent Overlord": {
+    "cmc": 7.0,
+    "keywords": [
+      "Flying"
+    ],
+    "mana_cost": "{5}{B}{B}",
+    "oracle_text": "Flying\nWhen this creature enters, create a number of 1/1 black Harpy creature tokens with flying equal to your devotion to black. (Each {B} in the mana costs of permanents you control counts toward your devotion to black.)\nAt the beginning of your upkeep, sacrifice a creature.",
+    "power": "6",
+    "toughness": "6",
+    "type_line": "Creature — Demon"
+  },
   "Abiding Grace": {
     "cmc": 3.0,
     "keywords": [],
@@ -1318,6 +1329,15 @@
     "toughness": "2",
     "type_line": "Creature — Sliver"
   },
+  "Culling the Weak": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{B}",
+    "oracle_text": "As an additional cost to cast this spell, sacrifice a creature.\nAdd {B}{B}{B}{B}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
+  },
   "Cultivate": {
     "cmc": 3.0,
     "keywords": [],
@@ -1359,6 +1379,15 @@
     "power": "2",
     "toughness": "2",
     "type_line": "Creature — Human Pirate"
+  },
+  "Dark Ritual": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{B}",
+    "oracle_text": "Add {B}{B}{B}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
   },
   "Darkbore Pathway": {
     "cmc": 0.0,
@@ -1456,6 +1485,15 @@
     "toughness": null,
     "type_line": "Enchantment"
   },
+  "Demonic Tutor": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{B}",
+    "oracle_text": "Search your library for a card, put that card into your hand, then shuffle.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
   "Desperate Ritual": {
     "cmc": 2.0,
     "keywords": [
@@ -1475,6 +1513,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Enchantment"
+  },
+  "Diabolic Intent": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{B}",
+    "oracle_text": "As an additional cost to cast this spell, sacrifice a creature.\nSearch your library for a card, put that card into your hand, then shuffle.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
   },
   "Dimensional Infiltrator": {
     "cmc": 2.0,
@@ -2969,6 +3016,15 @@
     "toughness": null,
     "type_line": "Land — Mountain Forest Plains"
   },
+  "Jetmir, Nexus of Revels": {
+    "cmc": 4.0,
+    "keywords": [],
+    "mana_cost": "{1}{R}{G}{W}",
+    "oracle_text": "Creatures you control get +1/+0 and have vigilance as long as you control three or more creatures.\nCreatures you control also get +1/+0 and have trample as long as you control six or more creatures.\nCreatures you control also get +1/+0 and have double strike as long as you control nine or more creatures.",
+    "power": "5",
+    "toughness": "4",
+    "type_line": "Legendary Creature — Cat Demon"
+  },
   "Jirina, Dauntless General": {
     "cmc": 2.0,
     "keywords": [],
@@ -3184,6 +3240,15 @@
     "power": "1",
     "toughness": "2",
     "type_line": "Legendary Creature — Dwarf Scout"
+  },
+  "Lake of the Dead": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "If this land would enter, sacrifice a Swamp instead. If you do, put this land onto the battlefield. If you don't, put it into its owner's graveyard.\n{T}: Add {B}.\n{T}, Sacrifice a Swamp: Add {B}{B}{B}{B}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
   },
   "Land's Edge": {
     "cmc": 3.0,
@@ -4261,6 +4326,17 @@
     "toughness": null,
     "type_line": "Enchantment — Aura"
   },
+  "Profane Tutor": {
+    "cmc": 0.0,
+    "keywords": [
+      "Suspend"
+    ],
+    "mana_cost": "",
+    "oracle_text": "Suspend 2—{1}{B} (Rather than cast this card from your hand, pay {1}{B} and exile it with two time counters on it. At the beginning of your upkeep, remove a time counter. When the last is removed, you may cast it without paying its mana cost.)\nSearch your library for a card, put that card into your hand, then shuffle.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
   "Progenitus": {
     "cmc": 10.0,
     "keywords": [
@@ -4455,6 +4531,18 @@
     "power": null,
     "toughness": null,
     "type_line": "Instant"
+  },
+  "Reaper from the Abyss": {
+    "cmc": 6.0,
+    "keywords": [
+      "Flying",
+      "Morbid"
+    ],
+    "mana_cost": "{3}{B}{B}{B}",
+    "oracle_text": "Flying\nMorbid — At the beginning of each end step, if a creature died this turn, destroy target non-Demon creature.",
+    "power": "6",
+    "toughness": "6",
+    "type_line": "Creature — Demon"
   },
   "Reborn Hope": {
     "cmc": 2.0,
@@ -4998,6 +5086,15 @@
     "toughness": "3",
     "type_line": "Creature — Djinn Cleric"
   },
+  "Shadowborn Apostle": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{B}",
+    "oracle_text": "A deck can have any number of cards named Shadowborn Apostle.\n{B}, Sacrifice six creatures named Shadowborn Apostle: Search your library for a Demon creature card, put it onto the battlefield, then shuffle.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Human Cleric"
+  },
   "Shadowspear": {
     "cmc": 1.0,
     "keywords": [
@@ -5145,6 +5242,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Instant"
+  },
+  "Sire of Insanity": {
+    "cmc": 6.0,
+    "keywords": [],
+    "mana_cost": "{4}{B}{R}",
+    "oracle_text": "At the beginning of each end step, each player discards their hand.",
+    "power": "6",
+    "toughness": "4",
+    "type_line": "Creature — Demon"
   },
   "Siren Stormtamer": {
     "cmc": 1.0,
@@ -5981,6 +6087,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Artifact"
+  },
+  "Thrumming Stone": {
+    "cmc": 5.0,
+    "keywords": [],
+    "mana_cost": "{5}",
+    "oracle_text": "Spells you cast have ripple 4. (Whenever you cast a spell, you may reveal the top four cards of your library. You may cast spells with the same name as that spell from among the revealed cards without paying their mana costs. Put the rest on the bottom of your library.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Legendary Artifact"
   },
   "Thundering Falls": {
     "cmc": 0.0,
