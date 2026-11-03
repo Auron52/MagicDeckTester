@@ -330,6 +330,27 @@ TEST_CASE("Cyclone phase 2: an extra turn owed at the last round is still played
     CHECK(ExecutorWin(s, GameEngine::ResumeAt::Main1, 8) == -1);   // no extra turn: no attack in time
 }
 
+TEST_CASE("Cyclone phase 2: the bottom-trial turn cut plays an extra turn owed in the cut round")
+{
+    // GameEngine::SetStopAfterTurn (MTG_BOTTOM_TURN_CUT) stops in ROUNDS; an extra turn owed in round `stop` is part
+    // of that round, and a win in it scores `stop` -- a tie of the incumbent, or under the strict stop a strict
+    // improvement (Cyclone seed 1710206 gi205: the bottom-Gyre trial won in Emrakul's extra turn and was cut).
+    EnsureCards2();
+    GameState s = Base2(5, 2, 10);
+    s.players[0].lands_played_this_turn = 1;
+    Put2(s, kHunger, 61, 0, /*sick=*/true);
+    s.pending_extra_turns = 1;
+    auto stopped = [](GameState g, int stop) {
+        AIEngine eng(MulliganProfile::DefaultProfile(), 0, 0);
+        GameEngine ge(eng);
+        ge.SetStopAfterTurn(stop);
+        return ge.PlayOutFrom(g, 8, GameEngine::ResumeAt::Main1);
+    };
+    CHECK(stopped(s, 5) == 5);    // round 5's extra turn is played and wins
+    s.pending_extra_turns = 0;
+    CHECK(stopped(s, 5) == -1);   // no extra turn owed: the round is over, the trial stops
+}
+
 TEST_CASE("Cyclone phase 2: the TurnSeq cap ends an extra-turn chain as a no-win in both worlds")
 {
     EnsureCards2();

@@ -175,9 +175,17 @@ int GameEngine::PlayOutFrom(GameState& state, int max_turns, ResumeAt from)
         if (state.player_lost_on_draw) { return -1; }
         // Extra-turn chain backstop (GameState::TurnSeqCapped; inert unless an extra turn was taken).
         if (state.TurnSeqCapped(max_turns)) { return tnote(-1); }
-        // SetStopAfterTurn, in ROUNDS: an extra turn still owed after round `stop` is not played --
-        // a win there would only TIE a round-`stop` win, never beat it (the caller's use: a bound).
-        if (m_stop_after_turn > 0 && state.turn_number >= m_stop_after_turn) { return tnote(-1); }
+        // SetStopAfterTurn, in ROUNDS: the game stops once round `stop` is over. An extra turn still owed
+        // in round `stop` is PART of that round (extra turns do not count toward the turn count), so it is
+        // played: a win there scores `stop` -- a tie of the incumbent the bottom pick reads (AIEngine::
+        // BottomCards' `allowed`), or under the strict order (stop = best - 1) a strict improvement. Stopping
+        // before it scored such a candidate as unwon (Cyclone seed 1710206 gi205: the bottom-Gyre trial
+        // won in the extra turn of Emrakul's cast trigger, round 5, and was cut -- T5 -> T6).
+        if (m_stop_after_turn > 0
+            && (state.turn_number > m_stop_after_turn
+                || (state.turn_number == m_stop_after_turn
+                    && state.pending_extra_turns == 0)))
+        { return tnote(-1); }
         // Stop playing a game that has already been voided. The search bails out of its recursion as
         // soon as the meter trips (SearchBudget::Overrun), but the game itself would otherwise keep
         // running turns on rolled-back lines -- cheap per turn, yet unbounded in count, and every one
