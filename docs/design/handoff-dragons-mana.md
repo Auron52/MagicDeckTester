@@ -10,6 +10,26 @@ Worktree: `/workspaces/MagicDeckTester/.claude/worktrees/agent-a9dab9fbcae918660
 origin/phase-1-2-deck-analyzer 980616e55. Scratch: `/workspaces/MagicDeckTester/build/scratch/mcdragons/`. Helper
 scripts (gitignored): `logs/mcdragons/{mk.py,gate.sh,batch.sh,repro.sh,abrep.py,scprobe.sh}`.
 
+## Successor 6 (2026-11-03, IN PROGRESS -- checkpoint)
+Scratch `build/scratch/mcdragons6/`. Findings so far:
+- Successor 5's A/B (`mcdragons5/ho`) had NOT finished: it died at manifest load (d0 jobs on value_play decks need
+  `ignore_play_profile`). Relaunched as `mcdragons5/ho2` (fixed mk.py) on mtg.p3, then KILLED at ~60% as superseded
+  (partial table `mcdragons6/ab_p3_partial.txt`: Angels units +3.3% with 0 digests moved, Dragons +7.5%, Bruna +4.2%
+  net +1, Stompy +5% net +2, Hinata wall 1.48x from one 18-min game, off400 gi403).
+- idv3 (VERIFY) was NOT clean: joint_mismatch=9443 inner_mismatch=3504. Two mechanisms (dump `[lr-mismatch]`,
+  `LineRepayDumpMismatch`, VERIFY-only):
+  (a) HYBRID bills in the joint: AddManaCost sums only the flat ints, where a hybrid pip is baked in as its first
+      colour -- Vexing Shusher {R/G}{R/G} joined as {R}{R}. Prune too strict. Fix: `LineRepayChain::FlatBills`.
+  (b) ENTRANT STATICS in a re-made payment (a PLAY bug, not a prune bug): Undo taps permanents that entered after
+      the payment, but their static effects stay -- Wild Growth, re-made with its own enchanted land, paid for itself
+      with its extra {G}. Fix: `LineRepayOnPastBoard` / `LineRepayRemakeAt` (entrants off the battlefield during the
+      table and the re-make; land-Aura memo unbound). Unit test "Wild Growth does not pay for itself".
+- RE-PRICE: probes/trials cost 5-21 us against 40-77 us an ordinary unit; one unit a probe inflated units 3-8% on
+  decks where nothing changed. Now `kLineRepayProbesPerUnit = 4` (`manaoracle::ProbeCharge::Admit`, per-decision
+  accumulator).
+Binary p4d = these three changes (`mcdragons6/mtg.p4d`). Running: VERIFY probe `mcdragons6/vprobe3` (pid file).
+Next: VERIFY clean -> A/B p4 (`mcdragons5/ho2/ho.json`), d8 b0 on slower games (`mcdragons6/mkd8.py`), Hinata gi403.
+
 ## READ FIRST: Successor 5 (2026-11-03, stopped at the context cap; successor 6 continues)
 Branch wip/mc-dragons; WIP commit "two-pass LINE_REPAY" on top of 3d62e85ec. Scratch `build/scratch/mcdragons5/`.
 Binary under test = `mcdragons5/mtg.p3` (= HEAD src). Not pushed, no GT accepted.

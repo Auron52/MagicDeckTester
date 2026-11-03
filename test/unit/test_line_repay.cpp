@@ -203,3 +203,25 @@ TEST_CASE("Line repay: a line the board cannot pay by amount is left alone")
         CHECK_FALSE((OnBattlefield(t, "Scourge of Valkas", 10) && OnBattlefield(t, "Mind Stone", 11)));
     }
 }
+
+TEST_CASE("Line repay: a re-made payment cannot use what entered after it (Wild Growth does not pay for itself)")
+{
+    EnsureCardsLoaded();
+    // One Forest makes one {G}: Wild Growth ({G}) or Llanowar Elves ({G}), never both. Re-making Wild Growth's
+    // payment on a board that still held Wild Growth (enchanting the Forest it was paid with) drew its own extra {G}
+    // and paid the Elves too: mana from nowhere (Bruna, MTG_LINE_REPAY_MEMO_VERIFY 2026-11-03). The re-made payment
+    // runs on the board it was made on, so the line stays dropped.
+    GameState s = BaseBoard();
+    s.deck_has_land_aura = true;
+    Put(s, "Forest", 1);
+    Hand(s, "Wild Growth", 10);
+    Hand(s, "Llanowar Elves", 11);
+    ArmPin on(heurarm::LINE_REPAY, true);
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true))
+    {
+        if (!PlanCasts(p, { "Wild Growth", "Llanowar Elves" })) { continue; }
+        GameState t = s;
+        TurnSolver::ApplyPlan(t, p, /*is_pre_combat=*/true);
+        CHECK_FALSE((OnBattlefield(t, "Wild Growth", 10) && OnBattlefield(t, "Llanowar Elves", 11)));
+    }
+}

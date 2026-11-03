@@ -201,17 +201,22 @@ namespace manaoracle
     // the payer does, so each tap set is one option.
     // `spell` (optional): the spell being paid for, set as the paying-spell scope (SpellSubtypePayScope) for the
     // table and every verification -- a subtype-restricted source (Giada) is offered only to a spell of its subtype.
-    // `charge` (optional): the table's work PRICED on a search budget (MTG_LINE_REPAY's second pass). Each probe
-    // charges `units` through TurnSolver::ChargeDecisionUnits (a null `budget` = unlimited: nothing is charged and
-    // nothing is cut, so the table is complete), and once `budget` is spent (Exhausted / Overrun) no further probe
-    // runs: `cut` is set and the table returned is PARTIAL -- every listed option still verified, but the list is
-    // not every minimal payment, so a caller must never read a cut table's absence of an option as a proof.
+    // `charge` (optional): the table's work PRICED on a search budget (MTG_LINE_REPAY's priced stages). Every
+    // `per_unit` probes charge one unit through TurnSolver::ChargeDecisionUnits (a null `budget` = unlimited:
+    // nothing is charged and nothing is cut, so the table is complete), and once `budget` is spent (Exhausted /
+    // Overrun) no further probe runs: `cut` is set and the table returned is PARTIAL -- every listed option still
+    // verified, but the list is not every minimal payment, so a caller must never read a cut table's absence of an
+    // option as a proof.
     struct ProbeCharge
     {
-        SearchBudget* budget = nullptr;
-        int           units  = 1;
-        bool          cut    = false;
-        long long     probes = 0;
+        SearchBudget* budget   = nullptr;
+        int           per_unit = 1;   // probes per unit charged (the remainder carries over within one decision)
+        bool          cut      = false;
+        long long     probes   = 0;
+        // One probe (or one trial of a re-made payment): false = the budget is spent (`cut` set), do not run it.
+        // The fractional price accumulates per thread and per decision (TurnSolver::DecisionEpoch), so a decision's
+        // charge depends only on the work that decision did.
+        bool Admit();
     };
     std::vector<PayOption> MinimalPayments(const GameState& state, const ManaCost& cost, bool for_creature,
                                            std::vector<std::string>* unmodeled, bool creature_ability = false,

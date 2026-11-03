@@ -8279,9 +8279,19 @@ struct LineRepayChain
     // which pays in its own scope (the depth-2 prune lost Bruna seed 1830069 gi68's re-pays that way: fired 220 ->
     // 60). No single context is a safe union either (the backtracker refuses to feed a filter from restricted
     // float, so "everything usable" is not monotone). So on such a board the condition is not checked at all.
+    // EXACT ONLY ON FLAT BILLS too. A hybrid, phyrexian, twobrid, snow or {X} pip is baked into the flat colour
+    // ints with its alternatives in side tables (ManaCost::IsFlat), and AddManaCost sums the flat ints only: Vexing
+    // Shusher's {R/G}{R/G} joined the joint bill as {R}{R}, refusing chains whose re-made Shusher paid {G}{G}
+    // (Bruna, MTG_LINE_REPAY_MEMO_VERIFY 2026-11-03). So any such bill in the chain: the condition is not checked.
+    bool FlatBills(int upto) const
+    {
+        if (!cost_in.IsFlat()) { return false; }
+        for (int k = 0; k < upto; ++k) { if (!rec[k]->cost.IsFlat()) { return false; } }
+        return true;
+    }
     bool JointPays(const GameState& b, int upto) const
     {
-        if (!LineRepayScopeFree(b)) { g_lr_scoped.fetch_add(1, std::memory_order_relaxed); return true; }
+        if (!FlatBills(upto) || !LineRepayScopeFree(b)) { g_lr_scoped.fetch_add(1, std::memory_order_relaxed); return true; }
         RampScratch j(b);
         for (int k = upto - 1; k >= 0; --k) { Release(j.Board(), k); }
         ManaCost all = cost_in;
@@ -8292,19 +8302,53 @@ struct LineRepayChain
     }
 };
 
+// chain[k] RE-MADE AS IT WAS MADE: on `b` (chain[0..k] undone) without the permanents that entered since, then those
+// permanents back as the next payment found them (Release). Undo taps them, so their own mana abilities are out, but
+// a static effect is not: Wild Growth, re-made with its enchanted land, paid for itself with its own extra {G} (Bruna,
+// MTG_LINE_REPAY_MEMO_VERIFY 2026-11-03 -- the joint bill rightly refused it). Off the battlefield they are not there
+// at all. The land-Aura memo of a walk bound to `b` is unbound meanwhile (its slots hold bonuses WITH them).
+template <class Fn>
+auto LineRepayOnPastBoard(GameState& b, std::size_t n, Fn&& fn)
+{
+    std::vector<Permanent> later;
+    if (b.battlefield.size() > n)
+    {
+        later.assign(std::make_move_iterator(b.battlefield.begin() + static_cast<std::ptrdiff_t>(n)),
+                     std::make_move_iterator(b.battlefield.end()));
+        b.battlefield.erase(b.battlefield.begin() + static_cast<std::ptrdiff_t>(n), b.battlefield.end());
+    }
+    LandAuraMemo* const memo = t_land_aura_memo;
+    t_land_aura_memo = nullptr;
+    auto r = fn(b);
+    t_land_aura_memo = memo;
+    b.battlefield.insert(b.battlefield.end(), std::make_move_iterator(later.begin()), std::make_move_iterator(later.end()));
+    return r;
+}
+bool LineRepayRemakeAt(GameState& b, const LineRepayChain& ch, int k, const manaoracle::PayOption& o)
+{
+    const LineRepayRec& r = *ch.rec[k];
+    const bool made = LineRepayOnPastBoard(b, r.n, [&](GameState& g)
+                                           { return LineRepayRemake(g, r, o, ch.LifePost(k), ch.EnergyPost(k)); });
+    ch.Release(b, k);
+    return made;
+}
+
 // THE TWO PASSES (a budget-staged admission order: CLAUDE.md, "A BUDGET MAY RE-PRICE WORK"). Pass 1 offers each
 // re-made payment its WHOLE-FLOAT options (MinimalPayments' fast form: one option per minimal tap set, the floating
 // pool drained as the payer drains it); at depth 1 that is cheap and always run, unpriced; at depth 2 it is priced
 // like pass 2 (LineRepayTry's stages). Pass 2, only when pass 1 re-made nothing, offers the FULL table (every set-aside of the floating pool, every leftover split of a multi-unit tap): on an
 // Aura'd-land board ~0.4-1.5 s a table (EDF seed 1064 gi63: 4.3x the game's wall with pass 1 alone, 160x with the
-// full table alone). Its probes and trials are PRICED -- kLineRepayProbeUnits each, through
+// full table alone). Its probes and trials are PRICED -- one unit per kLineRepayProbesPerUnit, through
 // TurnSolver::ChargeDecisionUnits on TurnSolver::DecisionBudget() -- and it stops when that budget is spent. At an
 // unlimited budget DecisionBudget() is null: nothing is charged and nothing is cut, so pass 2 runs to the end and
 // the re-pay is COMPLETE. A cut pass found nothing it can vouch for, so it is never memoised as a failure.
-// The price: one unit per probe (a board copy, the taps and a float-only payment) and per trial of a re-made payment.
-// Measured 2026-11-03 at 9-50 us a probe (Bruna seed 1830069 gi68, EDF smoke seed 1064 gi63) against 0.17-0.3 ms an
-// ordinary unit, so one unit is the smallest whole price and, if anything, dear -- the safe side for wall.
-constexpr int kLineRepayProbeUnits = 1;
+// The price: one unit per kLineRepayProbesPerUnit probes (a board copy, the taps and a float-only payment) or trials
+// of a re-made payment (manaoracle::ProbeCharge::Admit; the remainder carries over within the decision). Measured
+// 2026-11-03: 5-21 us a probe or trial (p2_ms / units charged: FiveColour 5, Dragons gate slice 12, Angels 11) against
+// 40-77 us an ordinary unit (Angels, MTG_TURN_CENSUS wall_us / units), i.e. 4-15 probes a unit. One unit a probe
+// over-charged 4-15x: the units census grew 3-8% on decks where nothing was re-made (Angels +3.3%, 0 digests moved)
+// and the decision budget lost that much search. 4 is the dear end of the measured range -- the safe side for wall.
+constexpr int kLineRepayProbesPerUnit = 4;
 // MTG_LINE_REPAY_MEMO_VERIFY (diagnostic; play-identical): every memo hit and every joint-bill prune is re-checked by
 // the complete, unpriced search, and a disagreement counted (LineRepayStats).
 bool LineRepayMemoVerify() { static const bool on = EnvOn("MTG_LINE_REPAY_MEMO_VERIFY"); return on; }
@@ -8314,15 +8358,70 @@ struct LineRepayPass
     manaoracle::ProbeCharge*   charge = nullptr;   // pass 2's price (null: pass 1, or a VERIFY re-run)
     bool Cut() const { return charge != nullptr && charge->cut; }
     // One trial of a re-made payment (a board copy, the re-make, the payer): priced like a probe.
-    bool Admit() const
-    {
-        if (charge == nullptr) { return true; }
-        SearchBudget* const b = charge->budget;
-        if (b != nullptr && (b->Exhausted() || b->Overrun())) { charge->cut = true; return false; }
-        TurnSolver::ChargeDecisionUnits(b, charge->units);
-        return true;
-    }
+    bool Admit() const { return charge == nullptr || charge->Admit(); }
 };
+
+// VERIFY diagnostic: a prune that refused a chain the complete search pays -- the board, the bills, the picks.
+void LineRepayDumpMismatch(const char* what, const LineRepayChain& ch, int depth, const GameState& b,
+                           const std::vector<manaoracle::PayOption>& picked)
+{
+    static std::atomic<int> n{0};
+    if (n.fetch_add(1, std::memory_order_relaxed) >= 40) { return; }
+    auto cs = [](const ManaCost& c) {
+        char buf[160];
+        std::snprintf(buf, sizeof buf, "g%d W%d U%d B%d R%d G%d C%d hy%d ph%d tw%d sn%d x%d", c.generic, c.white, c.blue,
+                      c.black, c.red, c.green, c.colorless, c.hybrid_count, c.phyrexian_count, c.twobrid_count,
+                      c.snow_pips, c.x_pips);
+        return std::string(buf);
+    };
+    auto ps = [](const ManaPool& f) {
+        char buf[96];
+        std::snprintf(buf, sizeof buf, "W%d U%d B%d R%d G%d C%d *%d", f.white, f.blue, f.black, f.red, f.green,
+                      f.colorless, f.wild);
+        return std::string(buf);
+    };
+    std::string o = std::string("[lr-mismatch] ") + what + " depth=" + std::to_string(depth) + " turn="
+                  + std::to_string(b.turn_number) + " cost_in={" + cs(ch.cost_in) + "} fc=" + std::to_string(ch.for_creature);
+    for (int k = 0; k < depth; ++k)
+    {
+        o += " | rec" + std::to_string(k) + " n=" + std::to_string(ch.rec[k]->n) + "={" + cs(ch.rec[k]->cost) + "} fc=" + std::to_string(ch.rec[k]->for_creature)
+           + " ab=" + std::to_string(ch.rec[k]->creature_ability)
+           + (ch.rec[k]->has_spell ? " spell=" + ch.rec[k]->spell.m_name : std::string(" nospell"));
+    }
+    o += " | chain_n:";
+    for (int k = 0; k < kLineRepayMaxDepth; ++k)
+    { if (ch.rec[k] != nullptr) { o += " " + std::to_string(ch.rec[k]->n) + (ch.rec[k]->has_spell ? "/" + ch.rec[k]->spell.m_name : std::string()); } }
+    o += " now_n=" + std::to_string(ch.now_bf.size());
+    o += " | float={" + ps(b.floating_mana) + "} | bf:";
+    for (const Permanent& p : b.battlefield)
+    {
+        o += " " + p.card.m_name + "#" + std::to_string(p.card.m_number) + (p.tapped ? "(T)" : "");
+        if (p.aura_attached_to != 0) { o += "->" + std::to_string(p.aura_attached_to); }
+    }
+    {   // the joint check's parts on this board (entrants released as JointPays releases them)
+        RampScratch j(b);
+        for (int k = depth - 1; k >= 0; --k) { ch.Release(j.Board(), k); }
+        ManaCost all = ch.cost_in;
+        bool fc = ch.for_creature;
+        for (int k = 0; k < depth; ++k) { AddManaCost(all, ch.rec[k]->cost); fc = fc || ch.rec[k]->for_creature; }
+        const bool amt = PaymentManaCovers(j.Board(), fc, all.ManaValue() - static_cast<int>(j.Board().floating_mana.Total()));
+        RampScratch j2(j.Board());
+        const bool bt = TapForCostBacktrack(j2.Board(), all, fc, j2.Board().floating_mana);
+        RampScratch j3(j.Board());
+        const bool pay = TapForCostSharedDiag(j3.Board(), all, fc, nullptr, false);
+        o += " | joint{" + cs(all) + "} amount=" + std::to_string(amt) + " backtrack=" + std::to_string(bt)
+           + " payer=" + std::to_string(pay) + " released:";
+        for (const Permanent& p : j.Board().battlefield) { o += p.tapped ? "T" : "u"; }
+    }
+    o += " | picks:";
+    for (std::size_t k = 0; k < picked.size(); ++k)
+    {
+        o += " [" + std::to_string(k) + "]";
+        for (const TurnSolver::PreTap& t : picked[k].taps) { o += " " + t.name + "/" + std::to_string(t.color); }
+        o += " stash={" + ps(picked[k].stash) + "}";
+    }
+    std::fprintf(stderr, "%s\n", o.c_str());
+}
 
 // Depth-first over the chain's options, oldest payment first; `b` has chain[0..k] undone. On success `picked[j]` is
 // the option chain[j] is re-made with. `try_now` pays the failing bill on the fully re-made board.
@@ -8330,9 +8429,12 @@ bool LineRepaySearch(const LineRepayChain& ch, int k, const GameState& b, std::v
                      const std::function<bool(GameState&)>& try_now, const LineRepayPass& pass)
 {
     const LineRepayRec& r = *ch.rec[k];
-    const std::vector<manaoracle::PayOption> opts =
-        manaoracle::MinimalPayments(b, r.cost, r.for_creature, nullptr, r.creature_ability, pass.whole_float,
-                                    r.has_spell ? &r.spell : nullptr, pass.charge);
+    RampScratch past(b);   // the board chain[k] was made on (LineRepayOnPastBoard)
+    const std::vector<manaoracle::PayOption> opts = LineRepayOnPastBoard(past.Board(), r.n, [&](GameState& g)
+    {
+        return manaoracle::MinimalPayments(g, r.cost, r.for_creature, nullptr, r.creature_ability, pass.whole_float,
+                                           r.has_spell ? &r.spell : nullptr, pass.charge);
+    });
     if (LineRepayStatsOn())
     {
         g_lr_mp_calls.fetch_add(1, std::memory_order_relaxed);
@@ -8344,8 +8446,7 @@ bool LineRepaySearch(const LineRepayChain& ch, int k, const GameState& b, std::v
         if (!pass.Admit()) { return false; }
         RampScratch t(b);
         GameState& nb = t.Board();
-        if (!LineRepayRemake(nb, r, o, ch.LifePost(k), ch.EnergyPost(k))) { continue; }
-        ch.Release(nb, k);
+        if (!LineRepayRemakeAt(nb, ch, k, o)) { continue; }
         // The newer payments' joint bill on the board this option leaves: when it does not pay, no re-making of
         // them can (the same necessary condition LineRepayTry checks on the oldest board, here per option; exact
         // only on a scope-free board -- JointPays).
@@ -8358,7 +8459,11 @@ bool LineRepaySearch(const LineRepayChain& ch, int k, const GameState& b, std::v
                 const LineRepayPass full{ false, nullptr };
                 if (LineRepaySearch(ch, k - 1, nb, scratch, try_now, LineRepayPass{ true, nullptr })
                     || LineRepaySearch(ch, k - 1, nb, scratch, try_now, full))
-                { g_lr_inner_bad.fetch_add(1, std::memory_order_relaxed); }
+                {
+                    g_lr_inner_bad.fetch_add(1, std::memory_order_relaxed);
+                    scratch[static_cast<std::size_t>(k)] = o;
+                    LineRepayDumpMismatch("inner", ch, k, nb, scratch);
+                }
             }
             continue;
         }
@@ -8523,11 +8628,7 @@ bool LineRepayTry(GameState& state, const ManaCost& cost_in, bool for_creature, 
         undo.Take(state, available);
         bool made = true;
         for (int k = 0; k < depth; ++k) { LineRepayUndo(state, *ch.rec[k]); }
-        for (int k = depth - 1; k >= 0 && made; --k)
-        {
-            made = LineRepayRemake(state, *ch.rec[k], pk[static_cast<std::size_t>(k)], ch.LifePost(k), ch.EnergyPost(k));
-            ch.Release(state, k);
-        }
+        for (int k = depth - 1; k >= 0 && made; --k) { made = LineRepayRemakeAt(state, ch, k, pk[static_cast<std::size_t>(k)]); }
         if (!made) { undo.Restore(state, available); }
         return made;
     };
@@ -8563,7 +8664,7 @@ bool LineRepayTry(GameState& state, const ManaCost& cost_in, bool for_creature, 
     const bool verify_rerun = memo_hit || ok_memo != nullptr;
     manaoracle::ProbeCharge price;
     price.budget = TurnSolver::DecisionBudget();
-    price.units  = kLineRepayProbeUnits;
+    price.per_unit = kLineRepayProbesPerUnit;
     std::vector<manaoracle::PayOption> picked;
     const bool p1_empty = memo.fail_p1.count(mkey) != 0;
     if (p1_empty) { g_lr_p1_memo.fetch_add(1, std::memory_order_relaxed); }
@@ -8593,7 +8694,10 @@ bool LineRepayTry(GameState& state, const ManaCost& cost_in, bool for_creature, 
                     std::vector<manaoracle::PayOption> scratch(static_cast<std::size_t>(depth));
                     if (LineRepaySearch(ch, depth - 1, *b, scratch, try_now, LineRepayPass{ true, nullptr })
                         || LineRepaySearch(ch, depth - 1, *b, scratch, try_now, LineRepayPass{ false, nullptr }))
-                    { g_lr_joint_bad.fetch_add(1, std::memory_order_relaxed); }
+                    {
+                        g_lr_joint_bad.fetch_add(1, std::memory_order_relaxed);
+                        LineRepayDumpMismatch("joint", ch, depth, *b, scratch);
+                    }
                 }
             }
         }

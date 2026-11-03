@@ -182,6 +182,19 @@ bool ScriptedTapAhead(GameState& state, int count, bool lands_only)
     return true;
 }
 
+bool ProbeCharge::Admit()
+{
+    SearchBudget* const b = budget;
+    if (b != nullptr && (b->Exhausted() || b->Overrun())) { cut = true; return false; }
+    ++probes;
+    if (b == nullptr) { TurnSolver::ChargeDecisionUnits(nullptr, 1); return true; }   // unlimited: nothing charged (noted)
+    thread_local std::uint64_t t_epoch = ~std::uint64_t{0};
+    thread_local int           t_acc   = 0;
+    if (t_epoch != TurnSolver::DecisionEpoch()) { t_epoch = TurnSolver::DecisionEpoch(); t_acc = 0; }
+    if (++t_acc >= per_unit) { t_acc = 0; TurnSolver::ChargeDecisionUnits(b, 1); }
+    return true;
+}
+
 namespace
 {
 const char kLetters[] = "WUBRGC";
@@ -1162,6 +1175,7 @@ std::uint64_t ResultKey(const GameState& sc)
     return k;
 }
 
+
 struct PayEnum
 {
     const GameState&                state;
@@ -1254,10 +1268,7 @@ struct PayEnum
         if (charge != nullptr)
         {
             // Priced: no probe once the budget is spent (the table is then partial: `cut`, and `capped` ends the walk).
-            SearchBudget* const b = charge->budget;
-            if (b != nullptr && (b->Exhausted() || b->Overrun())) { charge->cut = true; capped = true; return false; }
-            TurnSolver::ChargeDecisionUnits(b, charge->units);
-            ++charge->probes;
+            if (!charge->Admit()) { capped = true; return false; }
         }
         OracleScratch scr(state);
         GameState& sc = scr.Board();
