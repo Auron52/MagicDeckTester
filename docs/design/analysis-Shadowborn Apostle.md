@@ -469,3 +469,111 @@ cards, **619 read (drawn or re-revealed) before the next shuffle**; d5 621 / 207
    (3.81M units, win T5); the other three were still running after ~16 min and the probe (an agent experiment) was
    stopped. The late wave is fully open there (Apostle declines + the speculative Intent fan). This bears on the
    suite's unbudgeted backstop rows at Stage 4-bis (a degenerate row fails the tier) -- to be sized there, not here.
+
+## INT-4 done (2026-11-03)
+Commits on `shadowborn-analysis` (not pushed): the INT-4 code commit (provider, engine hook, tests) + the ledger commit adding this section.
+
+**Authority (USER 2026-11-03, verbatim):** *"I recommend we make a heuristic for demon search and for tutoring. Demon
+search is easy because you would go Abhorrent Overlord and Jetmir only, preferably in that order, but you need to make
+sure you have enough black this or next turn if you want both."* / *"Tutoring is also straightforward. You need 1
+Thumming stone, 6 mana and a shadowborn apostle. We should get things in that order for the most part."* / *"The mana
+is a little trickier since you might want to get Lake of the dead if you have 2 swamps, dark ritual if you need 2 extra
+mana. Culling if you have some extra shadowborns."* / *"We need to actually prune a bunch. Lake and Culling are bad in
+multiples, whereas ritual is good."* / *"I would remove the others outright."* (an explicit override of the
+completeness / late-wave rule for THESE TWO LISTS ONLY; the INT-3 ripple-decline late wave stays: *"Fair enough on the
+search. We'll go with that for now"*) / on the Demon fallback: *"sacrificing none may just be better or the same in
+goldfishing"*, *"Because sacrificing 6 to get a 6/6 doesn't actually add power and their abilities aren't useful."*
+
+So both lists are RESTRICTIONS (not orders, not waves): a name left out is offered at no budget, `--budget-ms 0`
+included. Everything offered stays searched; the order sets the front (playout default). Roles are read off card
+data. `MTG_UNPRUNED` / `UnprunedGate::Tutor` (the viewer's human play, the audit arm) get the generic lists.
+
+**Demon rule** (`ShadowbornProvider::SacNamedPutTargets`, new base hook `DecisionProvider::SacNamedPutTargets`; default
+`false` = the engine's own list, byte-identical for every other deck):
+
+| rank | role (card data) | card |
+|---|---|---|
+| 1 | `etb_tokens_per_devotion_color` (devotion tokens) | Abhorrent Overlord |
+| 2 | `creature_count_anthem_tiers` (count anthem) | Jetmir, Nexus of Revels |
+| -- | anything else, and the fail-to-find | not offered |
+
+With neither in the library the activation is NOT offered at all (no fallback; USER reasoning: in a goldfish six 1/1
+Apostles already make 6 power and can attack now while the Demon arrives sick; Reaper's end-step destroy can only hit
+our own creatures, Sire discards our hand). `EmitSacNamedVariants` sets `eval` by provider rank, so the leaf front is
+Overlord, Jetmir once Overlord is gone. The unpinned resolution (`PerformTutorToBattlefield`'s TutorCandidates fill)
+reads the same list (`TutorCandidates` for `sac_named_count > 0` params). The {B} per activation ("enough black ...
+if you want both") is left to the search -- no rule.
+
+**Tutor rule** (`ShadowbornProvider::TutorCandidates`, `tutor_to_hand`: Demonic Tutor, Diabolic Intent, Profane
+Tutor -- the cast's searched variants, the ripple free-cast rank pins and Profane Tutor's upkeep pin all index this
+one list). The early set, in order; nothing else is offered:
+
+| tier | role (card data) | card | admitted when |
+|---|---|---|---|
+| 1 | `grants_ripple` | Thrumming Stone | none on our battlefield or in hand (a second is legend-rule dead) |
+| 2a | land with `etb_replace_sacrifice_land_subtype` | Lake of the Dead | short of 6 AND no Lake in hand or on our battlefield AND >= 2 lands of that subtype (Swamps) |
+| 2b | `ritual_floating_mana` + `sac_additional_creature` | Culling the Weak | short of 6 AND no Culling in hand AND spare Apostles (copies on battlefield + hand > `sac_named_count`) |
+| 2c | `ritual_floating_mana`, no additional cost | Dark Ritual | short of 6 (always: good in multiples) |
+| 2d | non-land suspend with `sac_for_mana_amount` | Lotus Bloom | short of 6 -- last (PROVISIONAL) |
+| 3 | `sac_named_count` creature | Shadowborn Apostle | always |
+| -- | Demons, other tutors, basic lands, Blood Crypt, a second Stone, a held Lake / Culling, the mana tier at >= 6 | | not offered |
+
+Precedence inside the mana tier: Lake > Culling > Ritual > Bloom when several apply. FALLBACK (PROVISIONAL): an empty
+early set -> the generic list (library order), so a tutor never whiffs for want of a rule.
+
+**"Reachable this or next turn"** (`ShadowbornReachableMana`, documented approximation, no search): lands we control
+(1 each) + one land drop per remaining turn of the two (`lands_played_this_turn == 0 ? 2 : 1`), capped by mana lands in
+hand (a Lake in hand counts 0) + a Lake crack's surplus (`sac_for_mana_amount - 1`) when a Lake is out with another
+land of its victim subtype + every non-land sac-for-mana permanent out (Lotus Bloom) + a suspended one arriving by next
+upkeep + each ritual in hand's net gain (floating - mana value; Culling only with a creature available). Short = < 6
+(`kManaGoal`: the Stone's 5 + an Apostle's 1, the USER's number).
+
+**Tests:** `test/unit/test_shadowborn_int4.cpp` (6 cases): Demon list = [Overlord, Jetmir], no Reaper / Sire / fail-to-
+find, eval fronts Overlord, the unpinned resolution reads the same list, the front resolves to the Overlord; Jetmir
+fronts once Overlord is gone; NO activation with neither left, at enumeration and in every main plan of an UNLIMITED
+(`EnumerateMainPlansExhaustive`, budget nullptr) enumeration; the tutor tiers (Stone / Lake / Culling / Ritual / Bloom /
+Apostle, the precedence, six Apostles = no spare, a held Lake / Culling removes it, one Swamp = no Lake, a held Stone =
+no Stone, a held Ritual keeps Ritual); reachable-mana arithmetic (land drops, the Lake surplus, the 6 threshold) and the
+generic fallback; Profane Tutor's upkeep pin at ranks -1/0/1/2/9 stays inside the early set (clamps to its last) and
+every searched Demonic Tutor variant of a real enumeration indexes the early set; other decks (GenericProvider) keep
+the full Demon list + fail-to-find and the full tutor list. Existing tests adjusted: INT-2's activation-mechanics tests
+run on a test-local `ShadowbornProvider` with the generic Demon list (they exercise Reaper / Sire / the fail-to-find);
+INT-3's "chain Apostles count toward the six" fixture fetches the Overlord instead of the Reaper; INT-1's Profane pin
+fixture adds a Stone + an Apostle so the restricted list still has >= 2 names. **Unit 2459/2459.**
+
+**Scenarios 398/398. Smoke** (`test/regression.sh --smoke`, not accepted): 161 passed, 4 failed -- Merfolk d0/d3/d5 +
+merfolk2hg d3, the pre-existing drift (merfolk d3 digest 16290806e85e1728, as INT-1/2/3). Every other case
+byte-identical (this deck is not yet a suite case).
+
+**Sanity** (50 games, d3 b10, seed 1001, no profile, one `--batch` per binary run concurrently at 11 threads each;
+INT-3 HEAD `70109a8c1` built in `.claude/worktrees/sb-int3-base`; its units total equals the INT-3 ledger's sanity
+exactly, so INT-3's game logs were reused for the per-card counts):
+
+| | INT-3 HEAD | INT-4 |
+|---|---|---|
+| avg win turn | 5.58 | 5.60 (8 games faster, 9 slower, 33 same; within noise) |
+| batch digest | f186f9a7380b2c15 | afc1fd5324ff23f1 |
+| activations | 57 in 36 games | 52 in 39 games |
+| Demons put by activations | Jetmir 18, Sire 15, Overlord 14, Reaper 9 | Jetmir 28, Overlord 24 |
+| Demonic Tutor fetched | Apostle 5, Stone 3, Reaper 2, Ritual 2, Lake 1 | Stone 3, Lake 2, Apostle 2 |
+| Diabolic Intent fetched | Apostle 9, Demonic Tutor 6, Stone 5, Ritual 4, Swamp 3, Intent 3, Culling 2, Jetmir 2, Lake 1, Overlord 1 | Stone 11, Ritual 10, Apostle 7, Lake 4, Culling 4, Swamp 2, Blood Crypt 1 |
+| units/game mean / median / p90 / max | 363,261 / 226,882 / 1,007,436 / 1,991,713 | 145,369 / 65,699 / 457,262 / 1,146,902 |
+
+Units/game fall 60% (median 71%). The three land fetches are the tutor FALLBACK: late T5 boards with the Stone out, no
+Apostle left in the library and >= 6 mana reachable, so the early set was empty (gi28, gi38 x2) -- 3 of 46 tutor
+resolutions. The search picks Jetmir over the front Overlord in a good share of activations (the order is the default,
+not a pick). The sanity cannot say how often "neither Demon left" suppressed an activation directly; it is a late-game
+state (both 1-ofs already fetched by earlier activations).
+
+**Provisional calls / questions for the USER (surfaced, not blocking):**
+1. **Tutor fallback**: when no early-set card is in the library, the full generic list is offered (3 of 46 sanity
+   resolutions, all lands). Alternative: offer nothing better than a land (e.g. restrict the fallback to mana), or let
+   it whiff-proof with the front only.
+2. **Lotus Bloom** sits last in the mana tier (suspend 3 is slow for "this or next turn"); it could be dropped outright.
+3. **Reachable-mana definition** (above) and the threshold 6 regardless of whether a Stone is already out (the USER's
+   "6 mana" read literally). A Stone already on the battlefield arguably lowers the need to 1 per Apostle + {B} per
+   activation.
+4. **"Spare Apostles"** = copies on our battlefield + in hand beyond one activation's six (ripple-reachable copies in
+   the library are not counted).
+5. Demon: no activation when neither Overlord nor Jetmir is left -- implemented as the USER ruled; recorded here
+   with the USER's reasoning.
