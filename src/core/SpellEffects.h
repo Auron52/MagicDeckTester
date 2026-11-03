@@ -46102,6 +46102,16 @@ constexpr std::int8_t kRippleContinue   = -2;   // Action::ripple_reveals on a n
 // cast-everything line -- had no representation at any budget. ALL replaces the top of the menu (in the
 // dry run's world it IS B = T); the full menus add the finite B's past T (RippleFullMenusAdmitted; the INT-3 late wave, deleted at INT-9).
 constexpr std::int8_t kRippleRevealAll  = -3;
+// Under DecisionProvider::RippleFixed (Shadowborn INT-9's always-reveal pin), the first copy's KNOWN-STOP budget:
+// ripple_reveals = kRippleKnownStop + k (k = 0..kRippleKnownStopMax) = "reveal every trigger, except that once the
+// library holds no copy of the name AND every library card is known (the whole library is the placed bottom block:
+// the chain has revealed and bottomed all of it), reveal only k more". From that point a reveal can hit nothing and
+// only rotates a library the player has seen in full, so stopping is a decision on KNOWN information (held-out
+// gi97, seed 21001 series / 7001: INT-8 stopped with a Swamp on top and won T4; the pin buried it, T5). USER
+// 2026-11-03: verify the example is clairvoyance, "the only reasonable reason to ignore it" -- it is not.
+constexpr std::int8_t kRippleKnownStop    = -100;
+constexpr int         kRippleKnownStopMax = 8;
+inline bool RippleKnownStopValue(std::int8_t r) { return r >= kRippleKnownStop && r <= kRippleKnownStop + kRippleKnownStopMax; }
 constexpr int         kRipplePinBits    = 4;    // free_tutor / free_victim: (rank+1) per ordinal
 constexpr int         kRipplePinOrdinals = 4;
 constexpr int         kRippleMaskBits   = 8;    // mask / decline: one bit per ordinal
@@ -46374,7 +46384,22 @@ inline bool RippleRevealDecision(GameState& s, int controller, const CardDefinit
         return false;
     };
     bool reveal;
-    if (ResolveProvider(s).RippleFixed(s)) { reveal = true; }   // INT-9: every trigger reveals (one answer)
+    if (ResolveProvider(s).RippleFixed(s))
+    {
+        // INT-9: every trigger reveals (one answer) -- unless the plan's known-stop budget applies (kRippleKnownStop).
+        reveal = true;
+        if (sc.pinned && sc.per_name && sc.name == spell.card.m_name && RippleKnownStopValue(sc.reveals)
+            && pl.library.BottomPlaced() >= pl.library.size())
+        {
+            bool copy_left = false;
+            for (const Card& c : pl.library) { if (c.m_name == spell.card.m_name) { copy_left = true; break; } }
+            if (!copy_left)
+            {
+                if (sc.reveals > kRippleKnownStop) { --sc.reveals; }
+                else { reveal = false; }
+            }
+        }
+    }
     else if (!RippleScriptCovers(s, spell)) { ripplestats::NoteUnpinned(0); reveal = policy(); }
     else if (sc.per_name)
     {

@@ -88,7 +88,12 @@ GameState Base9(int swamps = 4)
 }
 void Lib9(GameState& s, const std::vector<std::string>& names, int first = 500)
 {
-    for (const std::string& nm : names) { s.players[0].library.push_back(Card9(nm, first++)); }
+    // assign(), not push_back: a game's library starts UNKNOWN to its owner (push_back is a bottom placement, which
+    // the ripple known stop reads as known information).
+    std::vector<Card> cards;
+    for (const Card& c : s.players[0].library) { cards.push_back(c); }
+    for (const std::string& nm : names) { cards.push_back(Card9(nm, first++)); }
+    s.players[0].library.assign(cards.begin(), cards.end());
 }
 int CountBf9(const GameState& s, const std::string& name)
 {
@@ -471,6 +476,40 @@ TEST_CASE("INT-9 enumerator: Stone out, a hard Intent with three Intents in the 
     const std::vector<Action> ap = Casts9(a, kAp9);
     REQUIRE(ap.size() == 1);
     CHECK(ap.front().ripple_reveals == kRippleRevealAll);
+}
+
+TEST_CASE("INT-9 known stop: once the Apostles are gone from a fully seen library, stopping the reveals is offered")
+{
+    // Two Apostles on top: the hard cast's trigger takes both; the first free trigger reveals the rest of the
+    // original library (a Ritual among Swamps) -- the library is now fully known and holds no Apostle, so the last
+    // trigger's reveal is a choice on known information (held-out gi97: INT-8 stopped with a Swamp on top).
+    GameState s = Base9();
+    s.battlefield.push_back(Perm9(kStone9, 40));
+    s.players[0].hand.push_back(Card9(kAp9, 60));
+    Lib9(s, { kAp9, kAp9, kSw9, kSw9, kRit9, kSw9, kSw9, kSw9 });
+    const std::vector<Action> casts = Casts9(s, kAp9);
+    REQUIRE(casts.size() == 2);   // ALL + the known stop (k = 0)
+    CHECK(casts[0].ripple_reveals == kRippleRevealAll);
+    CHECK(casts[1].ripple_reveals == kRippleKnownStop);
+    auto ritual_pos = [](const GameState& g)
+    {
+        int i = 0;
+        for (const Card& c : g.players[0].library) { if (c.m_name.str() == kRit9) { return i; } ++i; }
+        return -1;
+    };
+    GameState all = s;
+    Rollout9(all, casts[0]);
+    GameState stop = s;
+    Rollout9(stop, casts[1]);
+    CHECK(CountBf9(all, kAp9) == CountBf9(stop, kAp9));   // the same Apostles either way
+    CHECK(ritual_pos(stop) == 2);                         // stopped: Swamp, Swamp, Ritual, ...
+    CHECK(ritual_pos(all) == 4);                          // the last reveal moved the Ritual down
+    // Swamps only after the Apostles: every stop leaves the same order -> folded, ALL alone.
+    GameState f = Base9();
+    f.battlefield.push_back(Perm9(kStone9, 40));
+    f.players[0].hand.push_back(Card9(kAp9, 60));
+    Lib9(f, { kAp9, kAp9, kSw9, kAp9, kSw9, kSw9, kSw9, kSw9 });
+    CHECK(Casts9(f, kAp9).size() == 1);
 }
 
 // ---- F: the INT-8 5,488-variant state, re-measured with the waves OPEN (an unlimited root = the wave-deleted shape) --

@@ -34892,8 +34892,13 @@ struct RippleDry
     int tutors   = 0;     // free casts that tutor (each a free_tutor ordinal)
     int sacs     = 0;     // free casts with a sacrifice-a-creature cost (each a free_victim ordinal)
 };
+// `known_stops` (optional): the live library's name order at the start of every revealing trigger the KNOWN-STOP
+// condition covers (kRippleKnownStop: no copy of the name left in the live library, and every live card known --
+// revealed and bottomed by this chain, or already in the library's placed bottom block), followed by the order the
+// whole chain leaves (= ALL). Entry k is what the library looks like if the chain stops after k known reveals.
 static RippleDry RippleChainDryRun(const GameState& s, int me, const CardDefinition& def, int copies, int n,
-                                   int budget = -1, unsigned decline = 0, int take_cap = -1)
+                                   int budget = -1, unsigned decline = 0, int take_cap = -1,
+                                   std::vector<std::vector<InternedName>>* known_stops = nullptr)
 {
     RippleDry r;
     if (n <= 0 || copies <= 0) { return r; }
@@ -34902,6 +34907,20 @@ static RippleDry RippleChainDryRun(const GameState& s, int me, const CardDefinit
     lib.reserve(pl.library.size());
     for (const Card& c : pl.library) { lib.push_back(c); }
     std::size_t top = 0;   // lib[top..] is the live library (bottoming appends)
+    const std::size_t known_from = lib.size() - pl.library.BottomPlaced();   // first original position known
+    auto live_names = [&]()
+    {
+        std::vector<InternedName> v;
+        v.reserve(lib.size() - top);
+        for (std::size_t i = top; i < lib.size(); ++i) { v.push_back(lib[i].m_name); }
+        return v;
+    };
+    auto known_stop_point = [&]() -> bool
+    {
+        if (top < known_from) { return false; }
+        for (std::size_t i = top; i < lib.size(); ++i) { if (lib[i].m_name == def.card.m_name) { return false; } }
+        return true;
+    };
     const DecisionProvider& prov = ResolveProvider(s);
     int bodies = RippleCountBodies(s, me) + (def.card.IsCreature() ? copies : 0);
     int srch_ord = 0;
@@ -34916,6 +34935,7 @@ static RippleDry RippleChainDryRun(const GameState& s, int me, const CardDefinit
             ++r.triggers;
             if (!adjacent) { ++r.nonadj; }
             if (budget >= 0 && r.reveals >= budget) { continue; }
+            if (known_stops != nullptr && lib.size() > top && known_stop_point()) { known_stops->push_back(live_names()); }
             ++r.reveals;
             const std::size_t live = lib.size() - top;
             const std::size_t k = std::min<std::size_t>(static_cast<std::size_t>(n), live);
@@ -34959,6 +34979,7 @@ static RippleDry RippleChainDryRun(const GameState& s, int me, const CardDefinit
             for (int t = 0; t < taken; ++t) { stack.push_back(taken == 1 ? 1 : 0); }
         }
     }
+    if (known_stops != nullptr && !known_stops->empty()) { known_stops->push_back(live_names()); }
     return r;
 }
 
@@ -35089,7 +35110,22 @@ static void EmitRipplePins(const GameState& state, std::vector<Action>& actions)
             // wave (take_cap); the script still honours a hand-built cap, the enumerator emits none.
             const std::vector<int> caps{ -1 };
             std::vector<int> budgets{ kRippleRevealAll };
-            if (fixed) { if (!granter_bf) { budgets.push_back(0); } }   // ALL; B = 0 is the granter-free twin only
+            if (fixed)
+            {
+                if (!granter_bf) { budgets.push_back(0); }   // ALL; B = 0 is the granter-free twin only
+                // THE KNOWN-STOP VARIANTS (kRippleKnownStop): one per distinct library order the chain can leave by
+                // stopping after k reveals once the name is gone from a fully known library (k = the last entry is
+                // ALL itself). An order equal to an earlier k's or to ALL's is the same line, so it is not emitted.
+                std::vector<std::vector<InternedName>> stops;
+                (void)RippleChainDryRun(state, me, *d, copies, n, -1, 0, -1, &stops);
+                const int kn = std::min<int>(static_cast<int>(stops.size()) - 1, kRippleKnownStopMax + 1);
+                for (int k = 0; k < kn; ++k)
+                {
+                    bool dup = stops[static_cast<std::size_t>(k)] == stops.back();
+                    for (int j = 0; j < k && !dup; ++j) { dup = stops[static_cast<std::size_t>(j)] == stops[static_cast<std::size_t>(k)]; }
+                    if (!dup) { budgets.push_back(kRippleKnownStop + k); }
+                }
+            }
             else { for (int B = std::min(Tmax - 1, 126); B >= 0; --B) { budgets.push_back(B); } }
             // THE RITUAL CHAIN CREDIT FOLLOWS THE COPIES THE PLAN CASTS (INT-8, the 2d review's finding 7). The
             // free rituals a chain casts are credited on ritual_float (USER: "ritual-chain mana counted by the
@@ -35109,7 +35145,8 @@ static void EmitRipplePins(const GameState& state, std::vector<Action>& actions)
             const bool credit_chain = ritual && per > 0;
             auto chain_of = [&](int cp, int B, unsigned m, int cap)
             {
-                const RippleDry dv = RippleChainDryRun(state, me, *d, cp, n, B == kRippleRevealAll ? -1 : B, m, cap);
+                const RippleDry dv = RippleChainDryRun(state, me, *d, cp, n,
+                                                       (B == kRippleRevealAll || RippleKnownStopValue(static_cast<std::int8_t>(B))) ? -1 : B, m, cap);
                 return dv.srch_taken + dv.dom;
             };
             if (a.hand_index != it->first_slot)
