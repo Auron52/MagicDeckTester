@@ -495,7 +495,9 @@ TEST_CASE("INT-5 tutor table: Culling ahead of Dark Ritual only with an expendab
     for (int k = 0; k < 7; ++k) { s.battlefield.push_back(Perm5(kAp5, 10 + k)); }
     s.players[0].hand.push_back(Card5(kLake5, 45));
     Lib5(s, { kStone5, kCull5, kRit5, kAp5 });
-    CHECK(Tut5(s) == VS5{ kStone5, kRit5, kCull5, kAp5 });   // short of 6 (5): both reach 6 this turn -> Ritual ahead
+    // INT-8 (earliest turn to the bar): the held Lake drops and cracks THIS turn (5 + 1 + 3), so we are NOT short --
+    // the mana tier is extra mana after the Apostle; both rituals reach 6 this turn -> Ritual still ahead.
+    CHECK(Tut5(s) == VS5{ kStone5, kAp5, kRit5, kCull5 });
     // Three untapped Swamps: Ritual -> 5 this turn (short), Culling -> 6 this turn: Culling a turn earlier.
     GameState e = Base5(3);
     for (int k = 0; k < 7; ++k) { e.battlefield.push_back(Perm5(kAp5, 10 + k)); }

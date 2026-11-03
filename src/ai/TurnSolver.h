@@ -824,8 +824,8 @@ struct Action
     //   ripple_pinned      -- the enumerator attached a script (false = the playout policy decides).
     //   ripple_reveals     -- F1 names: the per-NAME reveal budget (0..T); kRippleContinue (-2) on every
     //                         copy but the first (the copies share the first copy's budget); -1 unused.
-    //   ripple_take_cap    -- take-dominated matches (Apostle-class) allowed; -1 = all (wave 0); >= 0
-    //                         only in the LATE wave (RippleLateWaveAdmitted).
+    //   ripple_take_cap    -- take-dominated matches (Apostle-class) allowed; -1 = all (the only value
+    //                         the enumerator emits: the USER pruned the Apostle decline); >= 0 hand-built.
     //   ripple_mask        -- non-F1 names: DON'T-REVEAL bits over the chain's fanned triggers.
     //   ripple_decline     -- DECLINE bits over the searched-class matches, by match ordinal.
     //   ripple_free_tutor  -- packed 4-bit (rank+1) tutor picks of the chain's free tutor casts.
@@ -841,6 +841,12 @@ struct Action
     // 1 = this variant's chain needs a ripple GRANTER cast by the same plan (the Stone is only in hand);
     // SubsetHasMissingTrickTarget rejects it otherwise. 0 = valid with or without one.
     std::int8_t   ripple_granter_req = 0;
+    // The part of ritual_float that is the ripple CHAIN's free rituals (INT-8, the 2d review's finding 7), so
+    // an ORDER walk (ManaPayment's FirstUnpayablePos family) credits it only when a ripple granter is on our
+    // battlefield or cast EARLIER in the walked order. The order-free bounds keep crediting the whole
+    // ritual_float (an upper bound, so their pruning stays sound). Derived from the variant's pins + the
+    // enumeration state, so no plan signature needs it. 0 for every non-ripple action.
+    std::int8_t   ripple_chain_float = 0;
 
     // Cached card definition for `card_name`, resolved ONCE by CollectActions (where the
     // name is assigned) so the hot subset evaluators (consider's max_casts_after loop, the

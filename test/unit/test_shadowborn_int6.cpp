@@ -161,7 +161,11 @@ TEST_CASE("Shadowborn INT-6 discard: a second granter (none out) sheds after the
     const Names6 o = Shed6(s);
     CHECK(o[0] == kSire6);
     CHECK(o[1] == kStone6);
-    CHECK(o[2] == kBloom6);
+    // INT-8 (earliest turn to the bar): 2 Swamps out + Bloom (suspended next turn, arriving 3 later) + ONE hand
+    // Swamp reach six on turn 4, and nothing faster exists -- the Bloom is ON the route (kept) and the second hand
+    // Swamp is the off-route surplus that goes next.
+    CHECK(o[2] == kSw6);
+    CHECK(Pos6(o, kBloom6) > 2);
 }
 
 TEST_CASE("Shadowborn INT-6 discard: every Dark Ritual is kept past the 6-mana quota (fast mana, not capped)")
@@ -224,7 +228,10 @@ TEST_CASE("Shadowborn INT-6 discard: Lake of the Dead is kept when fuelled (>= 2
     CHECK(First6(s) == kSw6);
     CHECK(Pos6(o, kLake6) > LastPos6(o, kSw6));   // 2 out + Lake 3 = 5: one Swamp kept for the quota, after it
     const GameState t = State6({ kSw6 }, { kStone6, kAp6, kLake6, kSw6, kSw6, kSw6, kSw6, kSw6 });
-    CHECK(First6(t) == kLake6);   // one Swamp out: not fuelled
+    // INT-8 (USER 4c + earliest turn): one Swamp out + one hand Swamp fuel it -- Swamp next turn, Lake + crack the
+    // turn after (2 + 1 + 3 = 6 on turn 2, against turn 5 on Swamps alone): the Lake is on the route and kept.
+    CHECK(First6(t) == kSw6);
+    CHECK(Pos6(Shed6(t), kLake6) == 4);   // after the four surplus Swamps (the floor Swamp is the route's land)
     const GameState u = State6({ kSw6, kSw6, kLake6 }, { kStone6, kAp6, kLake6, kSw6, kSw6, kSw6, kSw6, kSw6 });
     CHECK(First6(u) == kLake6);   // a Lake already out
 }

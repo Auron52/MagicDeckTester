@@ -14,6 +14,7 @@
 #include "HeuristicArm.h"   // per-job A/B levers read inline by the provider hooks below
 #include "../core/EnvFlags.h"   // EnvOn -- the env_default half of a per-job lever
 
+#include <algorithm>
 #include <array>
 #include <vector>
 
@@ -3918,9 +3919,9 @@ public:
     const char* Name() const override { return "ShadowbornApostle"; }
     int TutorSearchWidth() const override { return 32; }
     // RIPPLE TAKE (Shadowborn INT-3; USER-approved 2026-11-03 as a BUDGET-STAGED admission): a revealed
-    // Shadowborn Apostle is cast; DECLINING one is admitted only in the late wave (RippleLateWaveAdmitted,
-    // TurnSolver.cpp), so the decline stays findable at --budget-ms 0. The near-dominance argument (not a
-    // strict proof, hence the wave rather than a fold): an extra Apostle on the battlefield is a superset
+    // Shadowborn Apostle is cast; DECLINING one is PRUNED at every budget (USER 2026-11-03, INT-5: "We should
+    // heuristically prune the decline of Apostles. I can't see an advantage."; the late wave no longer
+    // admits it). The near-dominance argument (not a strict proof): an extra Apostle on the battlefield is a superset
     // resource -- sacrifice fodder (the six, Diabolic Intent, Culling the Weak), devotion for Abhorrent
     // Overlord, Jetmir's count, a spare Reaper target -- its own ripple trigger is optional (the reveal
     // budget), and under the stable shuffle the take-world library is the decline-world library minus one
@@ -3974,15 +3975,19 @@ public:
     //   | tier | no granter on our battlefield               | a granter on our battlefield                |
     //   |------|---------------------------------------------|---------------------------------------------|
     //   | 1    | the granter, if none on bf or in hand       | the Apostle, if none in hand                |
-    //   | 2    | MANA, while reachable < kManaGoal (6)       | MANA, while reachable < kManaGoalRipple (3) |
+    //   | 2    | MANA, while SHORT of kManaGoal (6)          | MANA, while SHORT of kManaGoalRipple (3)    |
     //   | 3    | the Apostle (first or second: one tier)     | the Apostle, if one is in hand ("second")   |
     //   | 4    | EXTRA MANA (the mana tier when not short)   | EXTRA MANA (the 4th mana and beyond)        |
     //
     //   * the granter = grants_ripple (Thrumming Stone; a second is legend-rule dead); the Apostle = the
-    //     sac-named creature (sac_named_count: Shadowborn Apostle); "reachable" = ShadowbornReachableMana.
+    //     sac-named creature (sac_named_count: Shadowborn Apostle); SHORT (INT-8, USER 2026-11-03: "look at when we
+    //     can hit 6 mana instead"; PROVISIONAL reading) = the EARLIEST TURN TO THE BAR (ShadowbornEarliestTurnToBar)
+    //     is later than next turn. (INT-4/5: "reachable this or next turn" < the bar.)
     //     The bar of 3 is the USER's final call: "Let's change 2 in the Stone on Battlefield case to be 3 mana.
     //     4 is the most we need, but not as crucial as having the second apostle."
-    //   * MANA = the same names in tier 2 or tier 4 (never both). Order (USER 2026-11-03): a first; then c > b,
+    //   * MANA = the same names in tier 2 or tier 4 (never both). INT-8: ranked by the earliest turn to the bar WITH
+    //     the candidate in hand, soonest first; the order below breaks ties (and Culling counts only with (i)).
+    //     Order (USER 2026-11-03): a first; then c > b,
     //     EXCEPT b > c when BOTH (i) an EXPENDABLE sacrifice target is out or castable from hand this turn --
     //     after reserving one Apostle in hand for the granter (when one is on our battlefield or in hand;
     //     none in hand -> nothing is expendable) and ONE creature for a creature-sacrificing tutor in hand
@@ -4054,6 +4059,49 @@ public:
     static int ShadowbornReachableMana(const GameState& s, int controller, bool this_turn_only = false,
                                        bool board_only = false);
 
+    // ---- INT-8: EARLIEST TURN TO THE BAR (USER 2026-11-03) ------------------------------------------------
+    // AUTHORITY. The USER: "my recommendation is to look at when we can hit 6 mana instead. If that is soon, then
+    // cards that cannot get online soon enough are removed from the equation. This means that if you had Lake of
+    // the Dead, 2 swamps in hand and nothing on the field, you would have enough to go off in 3 turns. So, Lake
+    // of the Dead would be kept as long as we didn't have a faster route. If we had 2 swamps and 2 dark ritual,
+    // though, the lake would be an easy pitch." / "So essentially you look at each card in terms of when it can
+    // be deployed. Same deal with Lotus Bloom."
+    //
+    // DEFINITION (a provider ESTIMATE off board + hand, never the library; no search). The EARLIEST turn t
+    // (0 = this turn, 1 = next, ...; at most kManaRouteHorizon, else kManaRouteNever) at which the mana ONE turn
+    // can make reaches `bar`, simulating one land drop per turn (this turn's only if unused; none this turn with
+    // start_next_turn -- the cleanup-discard reading). Turn t's mana, maximised over which hand lands are dropped
+    // by t (victim-subtype lands, other lands, Lakes; a Lake needs a victim-subtype land on the battlefield when it
+    // enters and sacrifices it):
+    //   * every land we control by t (this turn: only the untapped ones), 1 each; a Lake dropped ON turn t adds
+    //     its own 1 (the sacrificed Swamp was tapped first, TAP-FIRST);
+    //   * each Lake (this turn: untapped) cracked with a remaining victim-subtype land: + (sac_for_mana_amount - 1);
+    //   * this turn's floating pool (t = 0 only);
+    //   * every non-land sacrifice-for-mana permanent on our battlefield (Lotus Bloom) + a suspended one arriving
+    //     by turn t (arrive_turn - TurnSeq()) + a suspend card IN HAND suspended at the first turn we can
+    //     (this turn, or next with start_next_turn), arriving suspend_time_counters turns later;
+    //   * each ritual in hand, its NET (ritual_floating_mana - mana value), once the turn has at least one mana; a
+    //     creature-sacrifice ritual (Culling the Weak) only with fodder (`culling_fodder`: -1 = a creature on our
+    //     battlefield or in hand).
+    // THE ROUTE: the minimal set of hand mana cards with the same earliest turn -- from the full set, drop each card
+    // (in the order: suspend mana, creature-sacrifice rituals, Lakes, non-victim lands, non-basic victim lands,
+    // basic victim lands, plain rituals -- the least wanted first) whenever the earliest turn stays the same. A hand
+    // mana card NOT on the route is "off the route": its earliest contribution is no sooner than what the rest
+    // already reaches. With no route inside the horizon, every hand mana card is reported on it (nothing is
+    // pitchable on this ground). `extra` adds one hypothetical card to the hand (the tutor tiers: the candidate's
+    // earliest turn); it is reported as index hand.size().
+    static constexpr int kManaRouteHorizon = 6;
+    static constexpr int kManaRouteNever   = 99;
+    struct ManaRoute
+    {
+        int turn = kManaRouteNever;   // earliest turn to the bar
+        std::vector<int> route;       // hand indices (ascending) on the fastest route
+        bool On(int i) const { return std::find(route.begin(), route.end(), i) != route.end(); }
+    };
+    static ManaRoute ShadowbornEarliestTurnToBar(const GameState& s, int controller, int bar,
+                                                 bool start_next_turn = false, int culling_fodder = -1,
+                                                 const CardDefinition* extra = nullptr, bool want_route = true);
+
     // ---- INT-6: THE USER'S CLEANUP-DISCARD BUCKETS (analyze-deck 5i; USER 2026-11-03) ------------------
     // AUTHORITY. The USER: "We should bucket as usual, 1 Thumming Stone (or tutor if missing) between hand and
     // battlefield, mana up to 6, 1-2 shadowborn. Tutors fill spots where something is missing including mana,
@@ -4074,8 +4122,9 @@ public:
     //   |   |                 | either, 1 TUTOR holds the slot (Demonic > Intent w/ fodder > Profane > Intent)|
     //   | 2 | LANDS           | lands until 2 between hand + battlefield (a Lake -- a land entering by     |
     //   |   |                 | sacrificing a land -- does not count from hand; basics first)              |
-    //   | 3 | APOSTLE #1      | 1 sac-named creature (Shadowborn Apostle); none in hand -> a tutor fills it |
-    //   |   |                 | (PROVISIONAL: the USER's "tutors fill spots where something is missing")    |
+    //   | 3 | APOSTLE #1      | 1 sac-named creature (Shadowborn Apostle); none in hand -> a tutor WITHOUT a  |
+    //   |   |                 | creature-sacrifice cost fills it: Demonic > Profane, never Diabolic Intent   |
+    //   |   |                 | (INT-8, USER 4a: "since the intent kills an Apostle")                       |
     //   | 4 | FAST MANA       | NOT capped by the quota: every plain ritual (Dark Ritual); the first Lake   |
     //   |   | + FODDER        | when fuelled (>= 2 lands of its subtype on our battlefield, no Lake there); |
     //   |   |                 | the first creature-sac ritual (Culling the Weak) when it has fodder. FODDER: |
@@ -4084,6 +4133,14 @@ public:
     //   | 5 | MANA to quota   | quota 6, or 4 with a granter ON OUR BATTLEFIELD; counted = the board's own   |
     //   |   |                 | (ShadowbornReachableMana board_only) + kept hand cards (land 1, ritual its   |
     //   |   |                 | net, Lake its crack surplus, tutor 1). Fills with lands, then a tutor.      |
+    //   | 4-5 ROUTED (INT-8) | when the EARLIEST-TURN route to the quota exists (ShadowbornEarliestTurnToBar  |
+    //   |   |                 | from next turn): steps 4-5 keep EXACTLY the route's hand mana cards (step 4  |
+    //   |   |                 | its rituals / Lakes / Culling with fodder / suspend mana, step 5 its lands); |
+    //   |   |                 | the quota is met by the route. An OFF-route mana card is overflow in its     |
+    //   |   |                 | usual slot (USER: "2 swamps and 2 dark ritual ... the lake would be an easy  |
+    //   |   |                 | pitch"); a Ritual is nearly always on it and an off-route one sheds last.    |
+    //   |   |                 | No route inside the horizon: steps 4-5 as above, plus 4c -- a Lake fuelled  |
+    //   |   |                 | only with HAND Swamps (bf + hand >= 2) is kept in step 5 as a land (+1).    |
     //   | 6 | APOSTLE #2      | no granter on bf: one more Apostle. A granter on bf: EVERY Apostle, then    |
     //   |   |                 | the first HARDCAST THREAT (a creature of the Apostle's searched subtype the  |
     //   |   |                 | activation does not fetch and that does not discard our hand: Reaper)       |

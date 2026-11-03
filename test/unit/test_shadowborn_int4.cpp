@@ -178,7 +178,9 @@ TEST_CASE("Shadowborn INT-4 tutor: the tiers -- Stone, the mana tier (Lake > Rit
     held.players[0].hand.push_back(Card4(kCulling, 41));
     held.players[0].hand.push_back(Card4(kLake, 45));
     CHECK(Prov4().ShadowbornReachableMana(held, 0) == 5);
-    CHECK(Tut4(held) == VS{ kStone, kRitual, kAp4 });
+    // INT-8 (earliest turn to the bar): the held Lake drops THIS turn onto the two Swamps and cracks (2 + 1 + 3) and
+    // Culling adds 3 -- six this turn, so NOT short: the mana tier follows the Apostle as extra mana.
+    CHECK(Tut4(held) == VS{ kStone, kAp4, kRitual });
     // One Swamp -> no Lake.
     GameState one = s;
     one.battlefield.pop_back();

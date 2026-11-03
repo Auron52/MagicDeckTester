@@ -35015,8 +35015,9 @@ static int RippleReachableN(const GameState& s, int me)
 // carry the chain pins too). Decision space only: a rollout leaf (beyond the horizon) plays the playout
 // policy, the phyrexian / condemnation precedent. For every cast whose chain can ripple:
 //   * F1 name: the FIRST copy (lowest hand slot) carries the per-name budget B = T..0 (T = the dry run's
-//     trigger count for every copy in hand) x the searched-match decline masks; the take-dominated cap only
-//     in the late wave; every other copy carries kRippleContinue (one action, so the copies still fold).
+//     trigger count for every copy in hand) x the searched-match decline masks (no take-dominated cap: the
+//     USER pruned the Apostle decline); every other copy carries kRippleContinue (one action, so the copies
+//     still fold).
 //     A mana ritual's float credits the free rituals its variant's chain casts (USER: "ritual-chain mana
 //     counted by the planner"), so a line needing that mana survives the subset payability check.
 //   * any other name (a tutor): per cast -- don't-reveal bits over the triggers F2 cannot fold, decline
@@ -35066,7 +35067,7 @@ static void EmitRipplePins(const GameState& state, std::vector<Action>& actions)
         {
             auto it = std::find_if(names.begin(), names.end(), [&](const NameInfo& ni) { return ni.name == d->card.m_name; });
             if (it == names.end()) { out.push_back(std::move(a)); continue; }
-            if (a.hand_index != it->first_slot)
+            if (a.hand_index != it->first_slot && !IsManaRitual(*d))
             {
                 a.ripple_pinned  = true;
                 a.ripple_reveals = kRippleContinue;
@@ -35102,6 +35103,54 @@ static void EmitRipplePins(const GameState& state, std::vector<Action>& actions)
             const std::vector<int> caps{ -1 };
             std::vector<int> budgets{ kRippleRevealAll };
             for (int B = std::min(Tmax - 1, 126); B >= 0; --B) { budgets.push_back(B); }
+            // THE RITUAL CHAIN CREDIT FOLLOWS THE COPIES THE PLAN CASTS (INT-8, the 2d review's finding 7). The
+            // free rituals a chain casts are credited on ritual_float (USER: "ritual-chain mana counted by the
+            // planner"), split by copy so a plan casting ONE copy is not credited the other copies' chains:
+            //   * the FIRST copy's variant (budget B, decline mask m) carries c_1(B, m) -- the dry run of that
+            //     copy alone, which is exactly its share: the copies are cast in hand order and the first copy's
+            //     chain spends the shared per-name budget first;
+            //   * every CONTINUE copy (one action for every (B, m): the copies must still fold) carries
+            //     inc = max over the menu's (B, m) and over i = 2..k of c_i - c_(i-1), so a plan casting the
+            //     first copy and j continues is credited c_1 + j * inc >= c_(j+1) for its own (B, m) -- an UPPER
+            //     bound, so every order-free payability bound that sums ritual_float still prunes soundly. What
+            //     remains loose: a plan casting several copies under a (B, m) whose increments are below inc,
+            //     and a continue copy cast without the first (its budget reads 0 reveals: credited inc, realises 0).
+            // The chain share rides ripple_chain_float as well, so the ORDER walks credit it only after a granter
+            // is out (on our battlefield, or cast earlier in the walked order: a Ritual sequenced before the Stone
+            // ripples nothing) -- ManaPayment's CreditCastOutput.
+            const bool credit_chain = ritual && per > 0;
+            auto chain_of = [&](int cp, int B, unsigned m, int cap)
+            {
+                const RippleDry dv = RippleChainDryRun(state, me, *d, cp, n, B == kRippleRevealAll ? -1 : B, m, cap);
+                return dv.srch_taken + dv.dom;
+            };
+            if (a.hand_index != it->first_slot)
+            {
+                a.ripple_pinned  = true;
+                a.ripple_reveals = kRippleContinue;
+                if (credit_chain && copies > 1)
+                {
+                    int inc = 0;
+                    for (int cap : caps)
+                    for (int B : budgets)
+                    for (unsigned m = 0; m < (1u << ms); ++m)
+                    {
+                        if (B == 0 && (m != 0 || cap != -1)) { continue; }
+                        int prev = chain_of(1, B, m, cap);
+                        for (int cp = 2; cp <= copies; ++cp)
+                        {
+                            const int cur = chain_of(cp, B, m, cap);
+                            inc = std::max(inc, cur - prev);
+                            prev = cur;
+                        }
+                    }
+                    const int add = std::min(127, per * inc);
+                    a.ritual_float       += add;
+                    a.ripple_chain_float  = static_cast<std::int8_t>(add);
+                }
+                out.push_back(std::move(a));
+                continue;
+            }
             for (int cap : caps)
             for (int B : budgets)
             for (unsigned m = 0; m < (1u << ms); ++m)
@@ -35113,10 +35162,11 @@ static void EmitRipplePins(const GameState& state, std::vector<Action>& actions)
                 v.ripple_decline  = RippleMenuByte(m, ms);
                 if (B == 0 && (m != 0 || cap != -1)) { continue; }   // nothing is revealed: one B = 0 line
                 v.ripple_granter_req = static_cast<std::int8_t>(granter_bf || B == 0 ? 0 : 1);
-                if (ritual && per > 0)
+                if (credit_chain)
                 {
-                    const RippleDry dv = RippleChainDryRun(state, me, *d, copies, n, B == kRippleRevealAll ? -1 : B, m, cap);
-                    v.ritual_float += per * (dv.srch_taken + dv.dom);
+                    const int add = std::min(127, per * chain_of(1, B, m, cap));
+                    v.ritual_float       += add;
+                    v.ripple_chain_float  = static_cast<std::int8_t>(add);
                 }
                 out.push_back(std::move(v));
             }
@@ -35129,7 +35179,10 @@ static void EmitRipplePins(const GameState& state, std::vector<Action>& actions)
         // anywhere in the library can be revealed and cast. Sized by those copies (capped like the rest), so
         // at an unlimited / large budget every free cast's pick, victim and decline is a searched pin; a
         // small budget takes the dry run's sizing and leaves the unforeseen ones to the front (counted by
-        // MTG_RIPPLE_STATS as unpinned_in_window -- the disclosed residual).
+        // MTG_RIPPLE_STATS as unpinned_in_window -- the disclosed residual). INT-8 MEASURED deleting this wave
+        // (and the deep wave below) as the USER asked: far too wide at b10 / b20 (one Intent cast 5,488
+        // variants; games past 20 minutes at d5 b20). The sanctioned replacement -- deciding the free picks at
+        // RESOLUTION -- is docs/design/shadowborn-ripple-resolution-picks.md; the waves stay until it lands.
         if (late)
         {
             int lib_copies = 0;

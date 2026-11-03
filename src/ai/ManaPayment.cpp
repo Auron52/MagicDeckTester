@@ -4146,8 +4146,31 @@ static void PoRemoveFromHand(std::vector<PoHandCard>& hand, const InternedName& 
 
 // What a cast PRODUCES for the casts after it -- the credit half of FirstUnpayablePos's walk,
 // factored out so MTG_PAYABLE_ORDER's aggregate bound credits exactly the same terms.
+// RIPPLE CHAIN LIVENESS for an ORDER walk (Shadowborn INT-8, the 2d review's finding 7): a ritual's chain
+// share (Action::ripple_chain_float) materialises only when a ripple granter is on our battlefield or was cast
+// EARLIER in the walked order -- a Dark Ritual sequenced before the Thrumming Stone ripples nothing. Exact for
+// the order (it is what the executor and the rollout do), so the walk neither over-credits a pre-Stone Ritual
+// nor under-credits a post-Stone one. True (= credit as before) on every deck without ripple.
+static bool RippleGranterOnBattlefield(const GameState& state)
+{
+    if (!state.deck_has_ripple) { return true; }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.grants_ripple > 0) { return true; }
+    }
+    return false;
+}
+static bool IsRippleGranterCast(const Action& a)
+{
+    if (a.kind != Action::Kind::CastFromHand) { return false; }
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    return d != nullptr && d->params.grants_ripple > 0;
+}
+
 static void CreditCastOutput(const GameState& state, const std::vector<Action>& acts, const Action& a,
-                             ManaPool& pool)
+                             ManaPool& pool, bool ripple_live = true)
 {
     // Credit what this cast PRODUCES, so the rest of the line is projected against the mana it
     // will actually have. Same two terms the enumeration's subset math credits (Action carries
@@ -4161,7 +4184,10 @@ static void CreditCastOutput(const GameState& state, const std::vector<Action>& 
         const std::string& col = !a.chosen_float_color.str().empty()
                                ? a.chosen_float_color.str()
                                : (d ? d->params.ritual_float_color : std::string());
-        AddColorToPool(pool, col, a.ritual_float);
+        // The chain share only once a granter is out (an ORDER walk passes ripple_live; the order-free
+        // bounds leave it true, an upper bound).
+        const int amt = a.ritual_float - (ripple_live ? 0 : static_cast<int>(a.ripple_chain_float));
+        if (amt > 0) { AddColorToPool(pool, col, amt); }
     }
     if (a.rock_mana.Total() > 0) { pool.AddPool(a.rock_mana); }
     // Treasures minted by the cast (Gold Rush) are same-turn mana through the deferred
@@ -4268,6 +4294,7 @@ static int FirstUnpayablePosImpl(const GameState& state, const std::vector<Actio
 {
     bool held = la != nullptr;
     ManaPool resolved_bonus;
+    bool ripple_live = RippleGranterOnBattlefield(state);
     for (int pos = 0; pos < static_cast<int>(order.size()); ++pos)
     {
         const Action& a = acts[order[pos]];
@@ -4289,7 +4316,8 @@ static int FirstUnpayablePosImpl(const GameState& state, const std::vector<Actio
         }
         if (!pool.CanPay(cost)) { return pos; }
         PayFromPool(pool, cost);
-        CreditCastOutput(state, acts, a, pool);
+        CreditCastOutput(state, acts, a, pool, ripple_live);
+        if (IsRippleGranterCast(a)) { ripple_live = true; }
         if (held)
         {
             for (std::size_t k = 0; k < la->auras.size(); ++k)
@@ -4511,6 +4539,7 @@ static int ExactOrderWalkImpl(const GameState& state, const std::vector<Action>&
     ManaCost future{};
     for (int i : order) { if (!acts[i].alt_cost) { AddManaCost(future, acts[i].cost); } }
     future.generic = 0;
+    bool ripple_live = RippleGranterOnBattlefield(state);
     for (int pos = 0; pos < static_cast<int>(order.size()); ++pos)
     {
         const Action& a = acts[order[pos]];
@@ -4581,7 +4610,8 @@ static int ExactOrderWalkImpl(const GameState& state, const std::vector<Action>&
             { cco = std::max(0, cco - (wild_before - pool.wild)); }
             cco = std::min(cco, pool.wild);
         }
-        CreditCastOutput(state, acts, a, pool);
+        CreditCastOutput(state, acts, a, pool, ripple_live);
+        if (IsRippleGranterCast(a)) { ripple_live = true; }
         if (la_held)
         {
             for (std::size_t k = 0; k < la.auras.size(); ++k)

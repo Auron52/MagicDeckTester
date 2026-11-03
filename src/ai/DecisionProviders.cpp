@@ -58251,6 +58251,174 @@ int ShadowbornProvider::ShadowbornReachableMana(const GameState& s, int controll
     return lands + std::min(hand_lands, drops) + lake_surplus + perm_mana + rituals + pool;
 }
 
+// ---- ShadowbornProvider: EARLIEST TURN TO THE BAR (Shadowborn INT-8; the definition and its authority are in the
+// declaration) ---------------------------------------------------------------------------------------------------
+namespace
+{
+// A hand mana card, as the route simulation reads it.
+enum class SbMana : std::uint8_t { Bloom, Culling, Lake, OtherLand, VictimLand, VictimBasic, Ritual };
+struct SbManaCard { SbMana kind; int amount; int idx; };   // amount: ritual net / Lake surplus / Bloom mana; idx: hand index
+}   // namespace
+
+ShadowbornProvider::ManaRoute ShadowbornProvider::ShadowbornEarliestTurnToBar(
+    const GameState& s, int controller, int bar, bool start_next_turn, int culling_fodder,
+    const CardDefinition* extra, bool want_route)
+{
+    const Player& ap = s.players[static_cast<std::size_t>(controller)];
+    const CardDatabase& db = CardDatabase::Instance();
+    // The victim subtype a Lake sacrifices (entry and crack), read off any Lake we can see.
+    std::string victim_sub;
+    auto see_lake = [&](const CardDefinition* d)
+    {
+        if (!victim_sub.empty() || d == nullptr || !d->card.IsLand()) { return; }
+        if (!d->params.etb_replace_sacrifice_land_subtype.empty()) { victim_sub = d->params.etb_replace_sacrifice_land_subtype; }
+        else if (!d->params.sac_for_mana_victim_land_subtype.empty() && d->params.sac_for_mana_amount > 1)
+        { victim_sub = d->params.sac_for_mana_victim_land_subtype; }
+    };
+    for (const Permanent& p : s.battlefield) { if (p.controller_index == controller) { see_lake(db.LookupCached(p.card)); } }
+    for (const Card& c : ap.hand) { see_lake(db.LookupCached(c)); }
+    see_lake(extra);
+    // ---- the board ----
+    int L = 0, Lu = 0, V = 0, K = 0, Ku = 0, perm = 0, perm_u = 0, lake_surplus = 3;
+    bool creature = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = db.LookupCached(p.card);
+        const Card& card = d ? d->card : p.card;
+        if (card.IsCreature() || p.is_animated) { creature = true; }
+        if (card.IsLand())
+        {
+            ++L; if (!p.tapped) { ++Lu; }
+            if (!victim_sub.empty() && CardHasSubtype(card, victim_sub)) { ++V; }
+            if (d != nullptr && !d->params.sac_for_mana_victim_land_subtype.empty() && d->params.sac_for_mana_amount > 1)
+            { ++K; if (!p.tapped) { ++Ku; } lake_surplus = d->params.sac_for_mana_amount - 1; }
+        }
+        else if (d != nullptr && d->params.sac_for_mana_amount > 0)
+        { perm += d->params.sac_for_mana_amount; if (!p.tapped) { perm_u += d->params.sac_for_mana_amount; } }
+    }
+    const int t0 = start_next_turn ? 1 : 0;
+    // Suspended mana arrivals: (turn index, amount).
+    std::vector<std::pair<int, int>> arrivals;
+    for (const SuspendedCard& sc : ap.suspended_cards)
+    {
+        if (sc.arrive_turn < 0) { continue; }
+        const CardDefinition* d = db.LookupCached(sc.card);
+        if (d == nullptr || d->card.IsLand() || d->params.sac_for_mana_amount <= 0) { continue; }
+        arrivals.emplace_back(std::max(t0, sc.arrive_turn - s.TurnSeq()), d->params.sac_for_mana_amount);
+    }
+    // ---- the hand's mana cards ----
+    std::vector<SbManaCard> cards;
+    const int n_hand = static_cast<int>(ap.hand.size());
+    auto classify = [&](const CardDefinition* d, int idx)
+    {
+        if (d == nullptr) { return; }
+        const CardParams& p = d->params;
+        if (d->card.IsCreature()) { creature = true; }
+        if (d->card.IsLand())
+        {
+            if (!p.etb_replace_sacrifice_land_subtype.empty())
+            {
+                const int surplus = p.sac_for_mana_amount > 1 ? p.sac_for_mana_amount - 1 : 0;
+                cards.push_back({ SbMana::Lake, surplus, idx });
+            }
+            else if (!victim_sub.empty() && CardHasSubtype(d->card, victim_sub))
+            { cards.push_back({ d->card.HasSupertype(Supertype::Basic) ? SbMana::VictimBasic : SbMana::VictimLand, 1, idx }); }
+            else { cards.push_back({ SbMana::OtherLand, 1, idx }); }
+            return;
+        }
+        if (p.ritual_floating_mana > 0)
+        {
+            const int net = std::max(0, p.ritual_floating_mana - d->card.m_mana_cost.ManaValue());
+            cards.push_back({ p.sac_additional_creature ? SbMana::Culling : SbMana::Ritual, net, idx });
+            return;
+        }
+        if (p.sac_for_mana_amount > 0 && p.suspend_time_counters > 0)
+        { cards.push_back({ SbMana::Bloom, p.sac_for_mana_amount, idx }); }
+    };
+    for (int i = 0; i < n_hand; ++i)
+    {
+        const Card& c = ap.hand[static_cast<std::size_t>(i)];
+        if (c.m_is_staged) { continue; }
+        classify(db.LookupCached(c), i);
+    }
+    if (extra != nullptr) { classify(extra, n_hand); }
+    const bool fodder = culling_fodder < 0 ? creature : culling_fodder > 0;
+    const bool drop_now = ap.lands_played_this_turn == 0;
+    const int pool_now = s.floating_mana.Total();
+    // Bloom in hand: suspended at the first turn we can (t0), arriving suspend_time_counters later.
+    auto bloom_arrival = [&](int idx) -> int
+    {
+        const CardDefinition* d = idx < n_hand ? db.LookupCached(ap.hand[static_cast<std::size_t>(idx)]) : extra;
+        return t0 + (d ? d->params.suspend_time_counters : 0);
+    };
+
+    // ---- the earliest turn over an ACTIVE subset of the hand's mana cards ----
+    auto earliest = [&](const std::vector<char>& on) -> int
+    {
+        int hv = 0, ho = 0, hl = 0, rituals = 0, culling = 0;
+        std::vector<std::pair<int, int>> arr = arrivals;
+        for (std::size_t k = 0; k < cards.size(); ++k)
+        {
+            if (!on[k]) { continue; }
+            const SbManaCard& c = cards[k];
+            switch (c.kind)
+            {
+            case SbMana::VictimLand: case SbMana::VictimBasic: ++hv; break;
+            case SbMana::OtherLand: ++ho; break;
+            case SbMana::Lake:      ++hl; break;
+            case SbMana::Ritual:    rituals += c.amount; break;
+            case SbMana::Culling:   if (fodder) { culling += c.amount; } break;
+            case SbMana::Bloom:     arr.emplace_back(bloom_arrival(c.idx), c.amount); break;
+            }
+        }
+        for (int T = t0; T <= kManaRouteHorizon; ++T)
+        {
+            const bool now = T == 0;
+            const int drops = (T - t0 + 1) - ((t0 == 0 && !drop_now) ? 1 : 0);
+            const int Lb = now ? Lu : L, Kb = now ? Ku : K;
+            int other = (now ? pool_now + perm_u : perm);
+            for (const auto& a : arr) { if (a.first <= T) { other += a.second; } }
+            int best = 0;
+            for (int a = 0; a <= std::min(hv, drops); ++a)
+            for (int b = 0; b <= std::min(ho, drops - a); ++b)
+            for (int c = 0; c <= std::min(hl, drops - a - b); ++c)
+            {
+                if (c > V + a) { continue; }   // each Lake sacrifices a victim-subtype land on entry
+                const bool lake_on_t = c >= 1 && a + b + c == drops && drops > 0;
+                const int lands = Lb + a + b + (lake_on_t ? 1 : 0);
+                const int cracks = std::min(Kb + c, V + a - c);
+                int m = lands + lake_surplus * std::max(0, cracks) + other;
+                if (m >= 1) { m += rituals + culling; }
+                best = std::max(best, m);
+            }
+            if (best >= bar) { return T; }
+        }
+        return kManaRouteNever;
+    };
+
+    ManaRoute r;
+    std::vector<char> on(cards.size(), 1);
+    r.turn = earliest(on);
+    if (!want_route) { return r; }
+    if (r.turn != kManaRouteNever)
+    {
+        for (SbMana kind : { SbMana::Bloom, SbMana::Culling, SbMana::Lake, SbMana::OtherLand, SbMana::VictimLand,
+                             SbMana::VictimBasic, SbMana::Ritual })
+        {
+            for (std::size_t k = 0; k < cards.size(); ++k)
+            {
+                if (cards[k].kind != kind || !on[k]) { continue; }
+                on[k] = 0;
+                if (earliest(on) != r.turn) { on[k] = 1; }
+            }
+        }
+    }
+    for (std::size_t k = 0; k < cards.size(); ++k) { if (on[k]) { r.route.push_back(cards[k].idx); } }
+    std::sort(r.route.begin(), r.route.end());
+    return r;
+}
+
 bool ShadowbornProvider::SacNamedPutTargets(const GameState& s, int controller, const CardParams& pp,
                                             std::vector<std::string>& out) const
 {
@@ -58333,7 +58501,13 @@ ShadowbornProvider::TutorCandidates(const GameState& s, int controller, const Ca
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
         if (d != nullptr && d->params.sac_named_count > 0 && d->card.IsCreature()) { apostle_in_hand = true; }
     }
-    const bool short_of_mana = ShadowbornReachableMana(s, controller) < (granter_bf ? kManaGoalRipple : kManaGoal);
+    // SHORT OF MANA (INT-8, USER 2026-11-03: "look at when we can hit 6 mana instead"; PROVISIONAL reading,
+    // surfaced): the EARLIEST turn our board + hand reach the bar (ShadowbornEarliestTurnToBar) is LATER than next
+    // turn. (INT-4/5: "reachable this or next turn" < the bar -- the same question, now with the Lake's crack off
+    // hand Swamps, Culling's fodder and Lotus Bloom's arrival turn modelled.)
+    const int bar = granter_bf ? kManaGoalRipple : kManaGoal;
+    const int base_turn = ShadowbornEarliestTurnToBar(s, controller, bar, false, -1, nullptr, /*want_route=*/false).turn;
+    const bool short_of_mana = base_turn > 1;
     std::vector<std::string> granter, lake, culling, ritual, apostle;
     for (const std::string& nm : uniq)
     {
@@ -58369,33 +58543,25 @@ ShadowbornProvider::TutorCandidates(const GameState& s, int controller, const Ca
     // sacrifice target is down, not so much if they are in hand. ... check whether we have a sacrifice target
     // out or played this turn and whether we need the extra culling mana to hit 6 a turn earlier based on
     // what is in hand. In that case you take culling and otherwise Dark Ritual which has no drawbacks."
-    // So: Lake (fuelled) first; Culling AHEAD of the plain ritual only when BOTH (a) a creature is on our
-    // battlefield or castable from hand with this turn's mana, and (b) Culling's net (floating - mana value)
-    // reaches the bar a turn EARLIER than the plain ritual's net would (reachable mana this turn, then by next
-    // turn); otherwise the plain ritual first and Culling after it (still offered, still searched).
-    bool culling_first = false;
-    if (!culling.empty() && !ritual.empty())
+    // INT-8 (USER 2026-11-03: "look at when we can hit 6 mana instead"): every mana candidate is ranked by the
+    // EARLIEST TURN TO THE BAR with it in hand (ShadowbornEarliestTurnToBar, `extra` = the candidate), soonest
+    // first; the precedence Lake > Dark Ritual > Culling breaks ties. Culling counts its net only with an
+    // EXPENDABLE sacrifice target (a) -- so it moves ahead of Dark Ritual exactly when (a) holds AND its +3
+    // reaches the bar a turn earlier than the Ritual's +2 (b), the INT-5 rule, now read off the same helper.
+    // (a) an EXPENDABLE sacrifice target (USER 2026-11-03: "the one we can cast or is out needs to be
+    // expendable. We need to have at least one more Shadowborn to play with Thrumming Stone. We also need
+    // to not need it for Diabolic Intent."): creatures on our battlefield + creatures in hand castable with
+    // this turn's mana, minus the RESERVATIONS -- one Apostle IN HAND for the granter when one is on our
+    // battlefield or in hand (with none in hand, no target is expendable), and ONE creature for a
+    // creature-sacrificing tutor in hand (sac_additional_creature: Diabolic Intent) only when that tutor is
+    // needed to fetch a MISSING piece, principally the granter (none on our battlefield or in hand) -- USER
+    // 2026-11-03: "we need to keep ones that are in the plan or ones that need to be cast to obtain other
+    // missing pieces in mind ... Thrumming Stone either needs to be in hand or have a ritual earmarked for it"
+    // -- confirmed. Other copies reserve nothing. A target remains -> (a) holds.
+    bool target = false;
+    if (!culling.empty())
     {
-        auto net = [&](const std::string& nm)
-        {
-            const CardDefinition* d = def_of(nm);
-            return d ? std::max(0, d->params.ritual_floating_mana - d->card.m_mana_cost.ManaValue()) : 0;
-        };
-        const int now  = ShadowbornReachableMana(s, controller, /*this_turn_only=*/true);
-        const int next = ShadowbornReachableMana(s, controller);
-        const int bar  = granter_bf ? kManaGoalRipple : kManaGoal;
-        // (a) an EXPENDABLE sacrifice target (USER 2026-11-03: "the one we can cast or is out needs to be
-        // expendable. We need to have at least one more Shadowborn to play with Thrumming Stone. We also need
-        // to not need it for Diabolic Intent."): creatures on our battlefield + creatures in hand castable with
-        // this turn's mana (each against `now`), minus the RESERVATIONS -- one Apostle IN HAND for the granter
-        // when one is on our battlefield or in hand (with none in hand, no target is expendable), and ONE
-        // creature for a creature-sacrificing tutor in hand (sac_additional_creature: Diabolic Intent) only when
-        // that tutor is needed to fetch a MISSING piece, principally the granter (none on our battlefield or in
-        // hand) -- USER 2026-11-03: "we need to keep ones that are in the plan or ones that need to be cast to
-        // obtain other missing pieces in mind ... Thrumming Stone either needs to be in hand or have a ritual
-        // earmarked for it" -- confirmed: the reservation is for the Intent earmarked to fetch the missing
-        // Stone (and "we should usually get the Thrumming Stone rather than culling if you are missing it":
-        // tier 1 above). Other copies reserve nothing. A target remains -> (a) holds.
+        const int now = ShadowbornReachableMana(s, controller, /*this_turn_only=*/true);
         int bf_creatures = 0, hand_apostles = 0, castable_apostles = 0, castable_other = 0, intents = 0;
         for (const Permanent& p : s.battlefield)
         {
@@ -58413,7 +58579,6 @@ ShadowbornProvider::TutorCandidates(const GameState& s, int controller, const Ca
             if (d->card.m_mana_cost.ManaValue() > now) { continue; }
             if (apostle) { ++castable_apostles; } else { ++castable_other; }
         }
-        bool target = false;
         if (!(granter_held && hand_apostles == 0))
         {
             int avail = bf_creatures + castable_other + castable_apostles;
@@ -58421,13 +58586,27 @@ ShadowbornProvider::TutorCandidates(const GameState& s, int controller, const Ca
             const int reserved_for_tutor = (!granter_held && intents > 0) ? 1 : 0;   // fetching the missing granter
             target = avail - reserved_for_tutor >= 1;
         }
-        // The turn (0 = this, 1 = next, 2 = later) a ritual of net `g` brings the reachable mana to the bar.
-        auto turn_of = [&](int g) { return now + g >= bar ? 0 : next + g >= bar ? 1 : 2; };
-        culling_first = target && turn_of(net(culling.front())) < turn_of(net(ritual.front()));
     }
     std::vector<std::string> mana;
-    for (auto* v : { &lake, culling_first ? &culling : &ritual, culling_first ? &ritual : &culling })
-    { mana.insert(mana.end(), v->begin(), v->end()); }
+    for (auto* v : { &lake, &ritual, &culling }) { mana.insert(mana.end(), v->begin(), v->end()); }
+    if (mana.size() > 1)
+    {
+        std::vector<int> key(mana.size(), kManaRouteNever);
+        for (std::size_t k = 0; k < mana.size(); ++k)
+        {
+            const CardDefinition* d = def_of(mana[k]);
+            if (d == nullptr) { continue; }
+            const bool cull = !d->card.IsLand() && d->params.sac_additional_creature;
+            key[k] = ShadowbornEarliestTurnToBar(s, controller, bar, false, cull ? (target ? 1 : 0) : -1, d,
+                                                 /*want_route=*/false).turn;
+        }
+        std::vector<std::size_t> ord(mana.size());
+        for (std::size_t k = 0; k < ord.size(); ++k) { ord[k] = k; }
+        std::stable_sort(ord.begin(), ord.end(), [&](std::size_t x, std::size_t y) { return key[x] < key[y]; });
+        std::vector<std::string> sorted;
+        for (std::size_t k : ord) { sorted.push_back(mana[k]); }
+        mana.swap(sorted);
+    }
     const std::vector<std::string> none;
     const std::vector<std::string>* tiers[4];
     if (granter_bf)
@@ -58664,31 +58843,80 @@ std::vector<int> ShadowbornProvider::CleanupDiscardShedOrder(
     }
     // 2. LANDS: at least two between hand + battlefield.
     for (int need = 2 - lands_bf; need > 0; --need) { const int l = next_land(); if (l < 0) { break; } keep(l); }
-    // 3. APOSTLE #1 (none in hand: a tutor fills the slot -- PROVISIONAL).
+    // 3. APOSTLE #1 (none in hand: a tutor fills the slot -- PROVISIONAL). INT-8 (USER 2026-11-03, 4a: "a tutor can
+    // hold the Apostle slot if it is Profane or Demonic Tutor, not Diabolic Intent, since the intent kills an
+    // Apostle"): only a tutor WITHOUT an additional creature-sacrifice cost -- Demonic (castable now) > Profane.
     {
         const int a = first_of(SbRole::Apostle, any);
         if (a >= 0) { keep(a); }
-        else { const int t = best_tutor(/*allow_fodderless=*/false); if (t >= 0) { keep_tutor(t); } }
+        else
+        {
+            int t = first_of(SbRole::Tutor, [&](int i) { return !sac_tutor(i) && !suspend_only(i); });
+            if (t < 0) { t = first_of(SbRole::Tutor, [&](int i) { return !sac_tutor(i); }); }
+            if (t >= 0) { keep_tutor(t); }
+        }
         apostle1_done = true;
     }
+    // THE FASTEST MANA ROUTE (INT-8, USER 2026-11-03: "look at when we can hit 6 mana instead ... cards that cannot
+    // get online soon enough are removed from the equation"; "you look at each card in terms of when it can be
+    // deployed. Same deal with Lotus Bloom."): ShadowbornEarliestTurnToBar from NEXT turn (this is the cleanup) to
+    // the mana quota, Culling's fodder = a creature on our battlefield or a second hand Apostle (#1 is never fodder).
+    // PRECEDENCE (INT-8): when a route exists inside the horizon, the mana buckets keep EXACTLY the hand mana cards
+    // on it -- step 4 its rituals, Lakes, Culling (with fodder) and suspend mana, step 5 its lands -- and the quota is
+    // met by definition (no further fill). A mana card OFF the route (its earliest contribution is no sooner than the
+    // rest already reaches: USER, "2 swamps and 2 dark ritual ... the lake would be an easy pitch") is overflow in its
+    // usual overflow slot; this supersedes "fast mana always kept" ONLY there -- a Ritual is almost always on the
+    // route, and an off-route Ritual still sheds after every other overflow card. With NO route inside the horizon the
+    // INT-6 rules below apply unchanged (plus 4c's hand-fuelled Lake).
+    int hand_apostles = 0;
+    for (int i = 0; i < n; ++i)
+    {
+        if (role[static_cast<std::size_t>(i)] == SbRole::Apostle && !ap.hand[static_cast<std::size_t>(i)].m_is_staged) { ++hand_apostles; }
+    }
+    const int quota = granter_bf ? kDiscardManaQuotaRipple : kDiscardManaQuota;
+    const ManaRoute route = ShadowbornEarliestTurnToBar(s, me, quota, /*start_next_turn=*/true,
+                                                        (fodder_bf > 0 || hand_apostles >= 2) ? 1 : 0);
+    const bool routed = route.turn != kManaRouteNever;
+    auto on_route = [&](int i) { return route.On(i); };
     // 4. FAST MANA, not capped by the quota: every plain ritual; the fuelled Lake; Culling with fodder (+ its fodder).
-    for (int r = first_of(SbRole::Ritual, any); r >= 0; r = first_of(SbRole::Ritual, any)) { keep(r); }
+    //    ROUTED (INT-8): exactly the route's rituals / Lakes / Culling / suspend mana.
+    auto ok = [&](int i) { return !routed || on_route(i); };
+    for (int r = first_of(SbRole::Ritual, ok); r >= 0; r = first_of(SbRole::Ritual, ok)) { keep(r); }
     for (; pending_fodder > 0; --pending_fodder) { if (fodder_available()) { claim_fodder(); } }
-    int lake_victims = 0;
+    int lake_hand_fuelled = -1;   // 4c: a Lake fuelled only with hand Swamps (kept in step 5, counted as a land)
+    if (routed)
+    {
+        for (int lk = first_of(SbRole::Lake, on_route); lk >= 0; lk = first_of(SbRole::Lake, on_route)) { keep(lk); }
+        for (int cu = first_of(SbRole::Culling, on_route); cu >= 0 && fodder_available(); cu = first_of(SbRole::Culling, on_route))
+        { keep(cu); claim_fodder(); }
+        for (int bl = first_of(SbRole::SlowMana, on_route); bl >= 0; bl = first_of(SbRole::SlowMana, on_route)) { keep(bl); }
+    }
+    else
     {
         const int lk = first_of(SbRole::Lake, any);
-        if (lk >= 0)
+        if (lk >= 0 && !lake_bf)
         {
+            // FUELLED (INT-6): >= 2 lands of its subtype on our battlefield -> kept here, counted +3. INT-8 (USER
+            // 2026-11-03, 4c: "you might want to [consider lands in hand], but discount its value because a lake
+            // that has sufficient fuel next turn can be played the turn after for the full 6 mana"): Swamps in
+            // HAND fuel it too (battlefield + hand >= 2, the Lake's own drop competing), but such a Lake counts +1
+            // (a land, not +3) and ranks after a battlefield-fuelled one -- kept in step 5 with the lands.
             const std::string& sub = def[static_cast<std::size_t>(lk)]->params.etb_replace_sacrifice_land_subtype;
+            int lake_victims = 0, hand_victims = 0;
             for (const Card* c : bf_lands) { if (CardHasSubtype(*c, sub)) { ++lake_victims; } }
-            if (!lake_bf && lake_victims >= 2) { keep(lk); }
+            for (int i = 0; i < n; ++i)
+            {
+                if (role[static_cast<std::size_t>(i)] == SbRole::Land && !ap.hand[static_cast<std::size_t>(i)].m_is_staged
+                    && CardHasSubtype(def[static_cast<std::size_t>(i)]->card, sub)) { ++hand_victims; }
+            }
+            if (lake_victims >= 2) { keep(lk); }
+            else if (lake_victims + hand_victims >= 2) { lake_hand_fuelled = lk; }
         }
-    }
-    {
         const int cu = first_of(SbRole::Culling, any);
         if (cu >= 0 && fodder_available()) { keep(cu); claim_fodder(); }
     }
     // 5. MANA up to the quota (4 with a granter on our battlefield, else 6): lands, then a tutor.
+    //    ROUTED (INT-8): the route's lands, and nothing more (the route reaches the quota by its turn).
     auto hand_mana = [&](int i) -> int
     {
         const CardDefinition* d = def[static_cast<std::size_t>(i)];
@@ -58701,18 +58929,42 @@ std::vector<int> ShadowbornProvider::CleanupDiscardShedOrder(
         default:              return 0;
         }
     };
-    int mana = ShadowbornReachableMana(s, me, /*this_turn_only=*/false, /*board_only=*/true);
-    int mana_tutors = 0;   // a tutor kept in a mana slot counts 1 (PROVISIONAL)
-    for (int i : keep_order) { mana += hand_mana(i); }
-    const int quota = granter_bf ? kDiscardManaQuotaRipple : kDiscardManaQuota;
-    while (mana + mana_tutors < quota)
+    if (routed)
     {
-        const int l = next_land();
-        if (l >= 0) { keep(l); ++mana; continue; }
-        const int t = best_tutor(/*allow_fodderless=*/false);
-        if (t < 0) { break; }
-        keep_tutor(t);
-        ++mana_tutors;
+        // As many lands as the route plays (the two-land floor's may already be some of them), its own first.
+        int need = 0;
+        for (int i = 0; i < n; ++i)
+        {
+            if (role[static_cast<std::size_t>(i)] != SbRole::Land) { continue; }
+            if (on_route(i)) { ++need; }
+            if (kept[static_cast<std::size_t>(i)]) { --need; }
+        }
+        auto route_basic = [&](int i) { return on_route(i) && basic_first(i); };
+        for (; need > 0; --need)
+        {
+            int l = first_of(SbRole::Land, route_basic);
+            if (l < 0) { l = first_of(SbRole::Land, on_route); }
+            if (l < 0) { l = next_land(); }
+            if (l < 0) { break; }
+            keep(l);
+        }
+    }
+    else
+    {
+        int mana = ShadowbornReachableMana(s, me, /*this_turn_only=*/false, /*board_only=*/true);
+        int mana_tutors = 0;   // a tutor kept in a mana slot counts 1 (PROVISIONAL)
+        for (int i : keep_order) { mana += hand_mana(i); }
+        while (mana + mana_tutors < quota)
+        {
+            const int l = next_land();
+            if (l >= 0) { keep(l); ++mana; continue; }
+            if (lake_hand_fuelled >= 0 && !kept[static_cast<std::size_t>(lake_hand_fuelled)])
+            { keep(lake_hand_fuelled); ++mana; continue; }   // 4c: a hand-fuelled Lake counts as a land (+1)
+            const int t = best_tutor(/*allow_fodderless=*/false);
+            if (t < 0) { break; }
+            keep_tutor(t);
+            ++mana_tutors;
+        }
     }
     // 6. APOSTLE #2; with a granter on our battlefield every Apostle, then the hardcast threat (Reaper).
     if (granter_bf)

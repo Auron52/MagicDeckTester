@@ -46069,8 +46069,8 @@ inline int PerformDrawX(GameState& state, int controller, bool target_opponent, 
 //   is a per-trigger DON'T-REVEAL bit (RippleScript::mask), fanned by the enumerator.
 //
 //   TAKE. A same-name revealed card the PROVIDER proves take-dominated (FreeCastTakeDominated: a
-//   Shadowborn Apostle) is cast; declining one is admitted only in the LATE wave (take_cap, the USER's
-//   budget-staged admission, 2026-11-03) so it stays findable at --budget-ms 0. Every other match
+//   Shadowborn Apostle) is cast; declining one is PRUNED at every budget (USER 2026-11-03; take_cap is only
+//   ever hand-built now; the late wave no longer admits it). Every other match
 //   (Dark Ritual, Thrumming Stone, Diabolic Intent, Profane Tutor) is SEARCHED: a decline bit per match
 //   ordinal. A free tutor's pick and a free sacrifice's victim are pins too (free_tutor / free_victim,
 //   ranks at the resolution / cast state), never the provider's front inside the window.
