@@ -332,6 +332,7 @@ std::atomic<long long> g_rb[RB_N];
 // smarter first payment could have known), and whether MTG_PAY_ROLLBACK (forced on) recovers the line.
 std::atomic<long long> g_rb_need_plan{0}, g_rb_need_later{0}, g_rb_rescue_tried{0}, g_rb_rescued{0};
 std::mutex             g_print_mu;
+std::atomic<long long> g_cap_retry{0}, g_cap_retry_ok{0};   // the CAPPED escalation (see its site)
 std::mutex             g_reason_mu;
 std::map<std::string, long long> g_unmodeled_reasons;
 
@@ -364,6 +365,11 @@ struct Reporter
         {
             std::fprintf(stderr, "=== MANA ORACLE combo routes: %lld equip-route macros audited, %lld links, %lld ms ===\n",
                          g_route_macros.load(), g_route_links.load(), g_route_us.load() / 1000);
+        }
+        if (g_cap_retry.load() > 0)
+        {
+            std::fprintf(stderr, "=== MANA ORACLE capped-plan escalation: %lld retried, %lld finished ===\n",
+                         g_cap_retry.load(), g_cap_retry_ok.load());
         }
         for (const auto& kv : g_unmodeled_reasons)
         { std::fprintf(stderr, "=== MANA ORACLE unmodeled: %lld x %s ===\n", kv.second, kv.first.c_str()); }
@@ -3242,11 +3248,34 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
     for (const std::string& c : e_cast) { e_want.insert(c); }
     // ---- the complete side, in the engine's own order ----------------------------------------------
     Realization r = Realize(root, plan, pre, /*stop_at_full=*/false);
+    // ESCALATION (Fluctuator 2026-11-03), ALWAYS ON: a plan that hits the per-plan ceiling is realized again
+    // under a 20000-apply ceiling, so only the plans that need it pay for it. CAPPED fails the mana-clean gate
+    // (USER 2026-11-03), so the checker must be able to conclude. Fluctuator's cycling turns (each cycle a
+    // payment off several coloured lands) put 75 plans per 3,000 games past 2000 applies; at 20000 every one
+    // sampled finished. Checker-only: play never reads it. MTG_MANA_ORACLE_NODES_RETRY overrides the NUMBER
+    // only (a value <= 0 is ignored; it is not an off switch). Not under AuditLine's own ceiling (the viewer
+    // stays interactive).
+    static const int s_retry = []
+    {
+        const int v = EnvInt("MTG_MANA_ORACLE_NODES_RETRY", 20000);
+        return v > 0 ? v : 20000;
+    }();
+    int cap_used = NodeCap();
+    if (r.capped && t_node_cap == 0 && s_retry > cap_used)
+    {
+        const int saved = t_node_cap;
+        t_node_cap = s_retry;
+        r = Realize(root, plan, pre, /*stop_at_full=*/false);
+        t_node_cap = saved;
+        cap_used = s_retry;
+        g_cap_retry.fetch_add(1, std::memory_order_relaxed);
+        if (!r.capped) { g_cap_retry_ok.fetch_add(1, std::memory_order_relaxed); }
+    }
     for (const std::string& u : r.unmodeled) { NoteUnmodeled(u); }
     if (r.capped)
     {
-        Emit(C_CAPPED, root, pre, plan, "payment search hit MTG_MANA_ORACLE_NODES=" + std::to_string(NodeCap())
-                                        + " applies; the complete side is partial for this plan");
+        Emit(C_CAPPED, root, pre, plan, "payment search hit " + std::to_string(cap_used)
+                                        + " applies (MTG_MANA_ORACLE_NODES, then _RETRY); the complete side is partial for this plan");
     }
     std::string unscripted;
     for (const Outcome& o : r.outcomes) { if (!o.unscripted.empty()) { unscripted = o.unscripted; break; } }
