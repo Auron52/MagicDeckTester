@@ -94,8 +94,25 @@ Started 2026-11-03.
   the search ONLY through SearchBudget::Overrun (per-pass rollback path); Exceeded() is units-only again.
   goblins gi30 X=10 after fix: same units, priced 23.6 s (= no-ceiling), deep pass wasted (idwaste 69k,
   commit 749 units) -- overshoot because the uncharged path checks Overrun sparsely.
-- RUNNING (03:21 UTC): run_ab_x.sh again with the fixed trip -> abx.*; report:
-  `scripts/ab_x_report.py abx --tail0 ct` (in build/scratch/budget); marker ab_x.DONE.
+- A/B v2 (fixed trip, abx.*, 03:21-): tail corpus X=10/20/50 shrink kitty static 204->20/27/47 s, niv smoke
+  86->15/19/67, kittyv2 123->47/48/74, snow 71->34/46/68, all same win turn; BUT alchemist overnight d4 gi490
+  153 s t6 -> X=10 337 s t8, X=20 227 s t8, X=50 75 s t6, and edf lookahead gi214 121 s -> X=10/X=20 > 40 min
+  (X=50 105 s). Regression shapes (partial ~2.7k games): X=10 1 game worse, X=20/50 0. => tight X cuts a
+  CRITICAL decision (combo search) and the game then costs more; X=50 clean so far. Report:
+  `scripts/ab_x_report.py abx --tail0 ct` in build/scratch/budget.
+- PRICED START GATE (76a9e229d): FullSearchLine's ladder declines to START a pass whose projected priced cost
+  does not fit the remaining priced allowance (per-job "decision_priced_gate", env MTG_DECISION_PRICED_GATE,
+  default on when the ceiling is armed). Built 04:06, NOT yet measured.
+- PLAN-CACHE PURITY FIXED (subagent, branch bpleak-fix 5dce817c4, cherry-picked as 92685645b): four more leaks,
+  each with a =0 lever: MTG_PLAN_CACHE_TRAITS_KEY (applying plan's PlanTraits read by payment holds during a
+  mid-apply continuation derivation: edf e68, snow s91), MTG_PLAN_CACHE_PERM_KEY (per-permanent state by copy
+  number: melira m13), MTG_PLAN_CACHE_SCALAR_KEY (scripted_* + turn counters + m1_hand: bruna b134),
+  MTG_MANA_CACHE_RAMP_ALT (mana cache replays the ramp-feed-alt verdict a cached failure skipped: niv n83 --
+  that game also moved with MTG_MANA_CACHE=0 before). All 6 repros: default units == KB=1 units, CONTENT-DIFF 0.
+  OPEN (user's call): MTG_MANA_CACHE_X_TRAITS / _X_PAYCTX would close 40 colour-only mana-cache diffs on n83
+  (no unit effect measured; key cost on the hottest path).
+- RUNNING (04:07 UTC): run_purity2.sh -> p2a.* (default) vs p2b.* (MTG_PLAN_CACHE_KB=1), regression tier,
+  14 threads each concurrently; pure => identical digests AND per-game units. Marker purity2.DONE.
 - Per-job X lever for the A/B: manifest "decision_priced_x" (ValueArm), env MTG_DECISION_PRICED_X otherwise.
 - Tail corpus READY: build/scratch/budget/tail_corpus.json (45 one-game jobs, mostly d5 b20; originals
   up to 4.6 h) + tail_corpus_notes.md. Not yet run on HEAD (MTG_MAX_GAME_WALL_SEC=3600, alone on box).
