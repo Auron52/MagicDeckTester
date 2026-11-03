@@ -805,3 +805,52 @@ recovers it, then root-cause.
    surplus lands (the brief's provisional placement).
 6. "Dark Ritual last of all" in the overflow list is inert: rituals are always kept, so among KEPT cards the shed order
    is reverse fill order (a Ritual outlasts the quota lands but not the two-land floor, the Stone or Apostle #1).
+
+## INT-7 done (2026-11-03)
+Commits on `shadowborn-analysis` (not pushed): `969bfc8ab` (hooks, provider, tests) + this ledger commit.
+
+**Authority (USER 2026-11-03, verbatim):** *"Abhorrent Overlord can just sacrifice the first Harpy."* / *"The Overlord and
+Sire attack for 5 and 6. They hit hard enough to be worth keeping over a harpy."* / *"I don't think we should fully search
+that. Maybe choose a Shadowborn next and finally the Overlord?"* / *"It's worth testing out, anyway. This seems better than
+wasting search time."*
+
+**The rule** (`ShadowbornProvider::UpkeepSacrificeVictim`, through the new `DecisionProvider::UpkeepSacrificeVictim` /
+`UpkeepSacrificeVictimFixed` hooks; default false, so every other deck is byte-identical). The Overlord's upkeep sacrifice
+is NEVER searched: exactly ONE victim, roles off card data --
+1. a **Harpy**: a token creature (no CardDefinition) matching a devotion-token maker's `etb_created_token_*` spec;
+2. else a **`sac_named_count` creature** (Shadowborn Apostle);
+   within 1-2 the weakest copy (tapped, then summoning-sick, then the first -- equivalent at the upkeep);
+3. else the trigger's **own source** (the Overlord itself; `PerformUpkeepSacrificeCreature` now records each trigger's
+   source);
+4. else (the source already gone, e.g. a second Overlord's trigger ate it) the generic front of `UpkeepSacFoldReps`.
+Sire, Reaper, Jetmir and another Overlord are never offered while any of 1-3 exists. A USER restriction at every budget
+(`--budget-ms 0` included); the demon-trigger axis emits no Overlord victim variants (Reaper's target axis unchanged).
+Global `MTG_UNPRUNED` (the audit arm) declines the hook and restores the INT-5 searched fold. Human play keeps the full
+`sacrifice` click (this pick is its default). The INT-5 proof comment stays at `SpellEffects.h`, marked SUPERSEDED for
+this deck by the USER rule. `cards.json` Overlord bracket note updated.
+
+**Tests:** INT-5's fold tests now run the searched shape through a test subclass (`SearchedVictimProv5`) and also assert
+the shipped shape always takes the Harpy; new INT-7 cases: Harpy + Sire + Overlord -> the Harpy only, at every pin;
+no Harpy -> the (tapped) Apostle, a non-spec 2/2 token ignored, Sire / Jetmir / Overlord kept; no Harpy / Apostle -> the
+Overlord itself; two Overlords + one Harpy -> Harpy then the second trigger's own source; source gone -> the generic
+front; no enumerator victim variants. INT-2's Overlord test updated (a pin no longer moves the victim off the Harpy).
+**Unit 2485/2485. Scenarios 398/398. Smoke** (not accepted): 161 passed, 4 failed -- the same pre-existing Merfolk
+d0/d3/d5 + merfolk2hg d3 digests as INT-6; every other case byte-identical (deck not a suite case yet).
+
+**Measurement vs INT-6 `aa230c463`** (binary `build/scratch/shadowborn/int6/mtg.int6`, its own cards.json; INT-7 binary
+of `969bfc8ab`; Release, `MTG_PGO=0`; one pooled `--batch` per binary at 12 threads each, run together; the deck's
+untracked profile; summaries under `build/scratch/shadowborn/int7/ab/`). Avg = the batch's (non-wins penalised); both
+arms have the same non-wins (gi103 at d3; gi103, gi125 at d5):
+
+| cell | games | avg INT-6 | avg INT-7 | faster / slower (paired) | units/game INT-6 | units/game INT-7 |
+|---|---|---|---|---|---|---|
+| d3 b10, seed 1001 (sanity) | 50 | 5.420 | 5.420 | 0 / 0 (49 identical digests) | 93,977 | 69,007 (**-26.6%**) |
+| d3 b10, seed 7001 (held-out) | 200 | 5.455 | 5.435 | **3 / 0** (gi5 7->5, gi106 6->5, gi151 6->5) | 161,820 | 121,677 (**-24.8%**) |
+| d5 b20, seed 7001 (held-out) | 200 | 5.405 | 5.385 | **4 / 0** (gi29, gi46, gi82, gi152 6->5) | 271,482 | 192,934 (**-28.9%**) |
+
+No slower game in any cell, so the d5 b200 single-game recovery check had nothing to run. INT-7 is strictly better on
+the held-out sample at both cells and cheaper by a quarter of the units: the budget the searched victim axis was eating
+now goes to the rest of the turn.
+
+**Open (surfaced, not blocking):** the weakest-copy tie order (tapped > sick > first) is PROVISIONAL and inert at the
+upkeep; with no Harpy and no Apostle the Overlord sacrifices ITSELF ahead of Sire / Jetmir / Reaper, per the USER's order.
