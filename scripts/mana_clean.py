@@ -75,7 +75,10 @@ SEED_BASE = 30000000             # game g of a deck's sequence is seed SEED_BASE
 # life", Righteous Valkyrie's "at least 7 life more than your starting life total"), read off cards.json's oracle
 # text with the [bracket notes] cut, so the rule follows the list rather than a hand-kept deck set.
 DISCLOSED = ["DOMINATED-LIFE"]
-ISSUE = [c for c in mo.MISS if c not in DISCLOSED] + ["ORACLE-GAP"]
+# UNMODELED (the oracle cannot drive the plan) and CAPPED (its payment search hit the node cap) FAIL too (USER
+# 2026-11-03: "Even if this means an issue in our instrument it means something to fix"): a plan the oracle gave no
+# verdict on is a plan nobody has shown clean.
+ISSUE = [c for c in mo.MISS if c not in DISCLOSED] + ["ORACLE-GAP", "UNMODELED", "CAPPED"]
 LIFE_BREAKPOINT = re.compile(r"\bat least \d+ life\b|(?<!gained )\b\d+ or more life\b|\blife total is (?:less|greater) than \d+",
                              re.I)
 COUNTER = re.compile(r"^\[mana-oracle\] (?P<cls>[A-Z-]+) seed=\d+ job=(?P<job>\S+)")

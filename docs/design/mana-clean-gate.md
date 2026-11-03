@@ -31,12 +31,14 @@ A mana analysis is one run of `scripts/mana_clean.py` for the deck:
 - No flag of an ISSUE class:
   - every class the oracle counts as an engine miss (`mana_oracle.MISS`: ENUM-GAP, APPLY-DROP, APPLY-DROP-ORDER,
     and the DOMINATED-* payment classes except DOMINATED-LAND and DOMINATED-LIFE);
-  - ORACLE-GAP (the oracle could not reproduce the engine's own outcome, so the game was not fully audited).
+  - ORACLE-GAP (the oracle could not reproduce the engine's own outcome, so the game was not fully audited);
+  - UNMODELED (the oracle cannot drive something the plan needs) and CAPPED (its payment search hit
+    `MTG_MANA_ORACLE_NODES`). Either way the plan got no verdict, so it was never shown clean (USER 2026-11-03).
 - Play identity holds.
 - At least 5,000 games were played.
 
 The context classes are counted in the report but do not fail a run: PHANTOM, CONTINUATION-DIFFERS, DROP-COVERED,
-DOMINATED-LAND, HIDDEN-INFO, UNMODELED and CAPPED.
+DOMINATED-LAND and HIDDEN-INFO.
 
 **DOMINATED-LIFE is disclosed, not failed (USER 2026-11-03).** It flags a payment that bought the same options for
 more life (a painland's coloured face where a painless source pays). The USER: *"Life is not a huge worry here unless
@@ -126,9 +128,10 @@ first, or name the deck to force a run.
 
 ## Choices taken by default (USER to confirm)
 
-- **The ISSUE set is the oracle's MISS set minus DOMINATED-LIFE, plus ORACLE-GAP.** The USER settled DOMINATED-LIFE
+- **The ISSUE set is the oracle's MISS set minus DOMINATED-LIFE, plus ORACLE-GAP, UNMODELED and CAPPED.** The USER settled DOMINATED-LIFE
   on 2026-11-03 (above). DOMINATED-CREATURE, DOMINATED-ONESHOT, DOMINATED-HASTE and DOMINATED-OTHER still fail. Each
   spends a resource a later line can use (a creature, a one-shot source, haste-tagged mana, something else).
-- **UNMODELED and CAPPED are disclosed, not failed.** On a plan where either fires, the oracle gives no verdict. So
-  a deck can pass with some plans that were never verified. The report shows their counts per deck.
+- **UNMODELED and CAPPED fail (USER 2026-11-03).** On a plan where either fires, the oracle gives no verdict. The
+  USER: *"Even if this means an issue in our instrument it means something to fix."* The fix may be in the oracle
+  (drive the unmodeled mechanic, make the capped search cheaper) rather than the engine; either way the deck waits.
 - **Archived lists** (`decks/<Deck>/<Version>/`) have no record and stay beta. The tool runs shipping lists only.
