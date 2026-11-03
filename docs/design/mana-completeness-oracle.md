@@ -1408,3 +1408,66 @@ Every report repro is clean. Fresh slice gi 100000-109999 (`MTG_MANA_ORACLE=2`):
 on the same games: APPLY-DROP 220, ORACLE-GAP 45, DOMINATED-LAND 2,253, CONTINUATION-DIFFERS 192, DROP-COVERED 7,444
 -> 0 / 0 / 0 / 0 / 894); play byte-identical with the oracle off. Held-out A/B (seeds 41000000+gi, gi 0-4999, play
 settings): 13 digests moved, **0 games slower, 0 faster, net 0 turns** (mean 4.2910 both), CPU 319 s -> 305 s.
+
+### 13.10 The Vampires mana-clean findings (2026-11-03, branch `wip/mc-vampires`)
+
+The first mana-clean gate pass on Vampires (`logs/mana_clean/pass1-vampires`, 100,000 games, src `7ec55bb`) failed on
+ORACLE-GAP 7,208 and APPLY-DROP-ORDER 4 (DOMINATED-LIFE 41,682 is disclosed, USER 2026-11-03). Two mechanisms, one on
+each side of the invariant.
+
+**ORACLE-GAP: the oracle folded the plan's own Blood Estate into its twin (oracle incompleteness, not an engine
+miss).** The dominant shape is `{... cast:Markov Baron (or Falkenrath Pit Fighter) + act:Voldaren Estate(x1)}` with
+two Voldaren Estates: the engine pays the cast with Estate #58 (its {C}, or a coloured face for 1 life) and makes the
+Blood with #57. Item 11 already keys the plan's own source (#57) apart in the payment TABLE, but two places fold a
+payment's RESULT by keys that do not say which copy of identical permanents is tapped: the table's one-option-per-
+result dedupe (`PayEnum::PayAndRecord`, the engine's mid-turn key folds a permanent by name) and the frontier's Pareto
+prune (`Resources`, class counts). The table reaches #57 first (it is its own class), so "#57 taps for {C}" stood for
+"#58 taps for {C}"; the Blood then found #57 tapped and dropped, and the engine's line was never reached ("Voldaren
+Estate#58 tapped by engine only", and with the coloured face "life engine 16 oracle 17"). Fix (`ManaOracle.cpp`):
+a plan source's tapped flag is part of both identities (`Resources` keys it `|plan#N`, `PayAndRecord` folds it into
+the result key). The engine's payment is not worse here: Estate #58 untapped (a second Blood source) and Secluded
+Courtyard untapped (painless coloured creature mana) are incomparable, so the oracle now reproduces the engine and
+flags nothing. Oracle-only: play is byte-identical with the oracle on and off.
+
+**APPLY-DROP-ORDER: a Markov Baron short of the bodies its books counted (engine miss, fixed in the order).**
+Seed 30001869 T3, `{Swamp, Markov Baron, Markov Baron, Stromkirk Captain}` on four creatures and three lands. Subset
+rule 7 (`SubsetConvokeBodiesInvalid`) books the selection's convoke casts against every body it can count, the
+Captain included, but the dependency order only placed Baron B after the arrival its own arm names (Baron A). Baron A
+took three board bodies, Baron B found Baron A and Pit Fighter but not its third body, paid {1} off a land, and the
+Captain's {1}{B}{R} dropped; Baron A > Captain > Baron B convokes Baron B entirely. Fix
+(`ManaPayment.cpp ApplyConvokeShortfallOrder`, `MTG_CONVOKE_SHORTFALL_ORDER`, DEFAULT ON, a heurarm slot): walk the
+order counting the bodies there are at each cast-time convoke cast per colour class (as `ConvokeCastTaps` takes them);
+while one is short, move the first short one to the earliest later place that minimises the order's total shortfall,
+if that strictly lowers it, and never ahead of an arrival a plan-body arm names. Structural, the attach / arrival
+dependency precedent: it realises the line rule 7 booked and picks between no lines. A convoke cast placed later only
+finds more bodies. Called at the end of both forms of `ApplyPayableCastOrder` (both apply worlds, the enumerator's
+site-1 walk). Only Markov Baron taps at the cast, so only Vampires can move.
+
+Pinned by `test/unit/test_vampires_sweep.cpp` (the order on the witness board, the plan casting all three, and
+`CoversEngineOutcome` on the seed 30000337 T4 board for every plan where the engine taps the twin Estate).
+
+**Oracle census, Vampires, 2,000 games** (gate games 0-999 and the fresh block 100,000-100,999; before = PGO `7ec55bb`,
+after = this branch; `build/scratch` run, play identity oracle on/off byte-identical on the after binary):
+
+| class | before | after |
+|---|---|---|
+| ORACLE-GAP | 134 | 6 |
+| APPLY-DROP-ORDER | 0 | 0 |
+| PHANTOM | 56 | 39 |
+| CONTINUATION-DIFFERS | 707 | 193 |
+| DROP-COVERED | 557 | 484 |
+| DOMINATED-LIFE (disclosed) | 862 | 862 |
+
+The six repro commands of the pass-1 report (the four APPLY-DROP-ORDER seeds and the two ORACLE-GAP seeds) are clean
+of both classes after; the oracle fix alone (`MTG_CONVOKE_SHORTFALL_ORDER=0`) already clears the two ORACLE-GAP seeds.
+
+**Left open: the continuation's own Blood** (6 flags, 2 signatures, both pre-existing: seed 30000611 T3 `{Swamp,
+Baron, Pit Fighter}` and seed 30100014 T4). The engine's end board holds a Blood Token the PLAN does not name (made by
+the apply's continuation with the Swamp's {1}), and no oracle realisation makes it, though its "#58 pays the {R}"
+realisation leaves #57 and the Swamp untapped. Unverified hypothesis: the continuation replays a memoised plan that
+names an Estate BY NUMBER, which the oracle's equivalent board has tapped (the misindexed-replay class). In pass 1 that
+shape is about 54 of the 7,208 ORACLE-GAPs, so the gate's next Vampires run will still not be clean on it.
+
+**Play.** Held-out A/B (`MTG_CONVOKE_SHORTFALL_ORDER` per-job off/on, one pooled batch, seed 1710001, Vampires at its
+play settings): Standard 6,000 paired games and 2HG 2,000: **0 slower, 0 faster**, average win turn identical (4.2550,
+2HG 4.9370); 2 of 160 jobs changed play (digests), units +0.0004%.

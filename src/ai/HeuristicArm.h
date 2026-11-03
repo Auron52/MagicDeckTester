@@ -825,6 +825,7 @@ enum Slot : int
     PAINLAND_TAPAHEAD_CAST_AUTO, // MTG_PAINLAND_TAPAHEAD_CAST_AUTO  the cast-site painland tap-ahead (a painland banks its painless {C} + Aura bonus ahead of an ETB untap that gives it back, under the budget and reserve guards) runs in autonomous play too (was human-only): EDF seed 1100003 gi2 T3 {Cloud of Faeries, Peregrine Drake} a mana short with Brushland never banked (ENUM-GAP). Default ON; =0 -> human-only
     EF_SCALAR_REFUND,         // MTG_EF_SCALAR_REFUND  the sequential rescue's scalar ceiling (ef-scalar) counts the same-subset ETB untappers' refund (EtbUntapLandsCredit + the subset's largest land-Aura bonuses) as supply (EDF seed 1100006 gi5 T2 {Trace of Abundance, Cloud of Faeries x2}: ENUM-GAP). Upper bound. DEFAULT OFF pending the USER (held-out gi552 T3 -> T4 does not recover at d8 b0); =1 -> on
     ETB_BOUND_AURA,           // MTG_ETB_BOUND_AURA  the odometer bounds' ETB-untap refund (EtbUntapBoundCredit, both ManaPruneBound and the selection-exact gate) adds the N largest land-Aura bonuses in hand: a same-selection Aura on a refunded land yields again (EDF seed 1100009 gi8 T2 {Wild Growth -> Adarkar, Cloud, Displacer} cut at the odometer; ENUM-GAP). Upper bound. Default ON; =0 -> the board-only refund
+    CONVOKE_SHORTFALL_ORDER,  // MTG_CONVOKE_SHORTFALL_ORDER  a cast-time convoke cast (Markov Baron) that would find fewer bodies than its arm counts at its place in the cast order goes to the earliest later place that lowers the order's total body shortfall (after the creature arrival that supplies the body), never ahead of an arrival a plan-body arm names: the line subset rule 7 booked (mana-clean gate, Vampires seed 30001869 T3 {Baron, Baron, Stromkirk Captain}: APPLY-DROP-ORDER). Structural. Default ON; =0 -> the order as before
     COUNT
 };
 
@@ -1594,6 +1595,7 @@ inline const char* Name(int slot)
         "MTG_PAINLAND_TAPAHEAD_CAST_AUTO",
         "MTG_EF_SCALAR_REFUND",
         "MTG_ETB_BOUND_AURA",
+        "MTG_CONVOKE_SHORTFALL_ORDER",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

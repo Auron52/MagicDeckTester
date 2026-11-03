@@ -16,6 +16,8 @@
 #include "ai/AIEngine.h"
 #include "ai/DecisionProviders.h"
 #include "ai/HeuristicArm.h"
+#include "ai/ManaOracle.h"
+#include "ai/ManaPayment.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
 #include "core/GameSetup.h"
@@ -409,6 +411,124 @@ TEST_CASE("Sweep D: the convoke recorder names the bodies a cast really tapped (
         CHECK(recs[0].spell == "Markov Baron");
         REQUIRE(recs[0].bodies.size() == 1);
         CHECK(recs[0].bodies[0] == "Vampire of the Dire Moon #10");
+        ++checked;
+    }
+    CHECK(checked > 0);
+}
+
+// ---- The mana-clean gate's APPLY-DROP-ORDER (2026-11-03): a convoke cast short of the bodies its books
+// counted goes after the arrival that supplies them (MTG_CONVOKE_SHORTFALL_ORDER) --------------------------
+// Seed 30001869 T3: Blackcleave Cliffs, Voldaren Estate and a new Swamp; four creatures that can attack.
+// Baron A convokes Dire Moon + Baron #28 (pip) + Gorger; Baron B's arm counts Baron A (a plan body) + one
+// more pip body + Pit Fighter. Cast A > B > Captain, Baron B finds one pip body, pays {1} off a land and the
+// Captain's {1}{B}{R} drops; A > Captain > B convokes Baron B entirely and casts all three.
+namespace
+{
+GameState BaronsBoard(std::vector<Action>& acts)
+{
+    GameState s = Fresh();
+    s.turn_number = 3;
+    Put(s, "Blackcleave Cliffs", 7);
+    Put(s, "Falkenrath Gorger", 16);
+    Put(s, "Voldaren Estate", 57);
+    Put(s, "Vampire of the Dire Moon", 54);
+    Put(s, "Falkenrath Pit Fighter", 20);
+    Put(s, "Markov Baron", 28);
+    Put(s, "Swamp", 43, /*sick=*/true);
+    Hand(s, "Markov Baron", 29);
+    Hand(s, "Markov Baron", 30);
+    Hand(s, "Stromkirk Captain", 36);
+    Action a = Cast("Markov Baron", 0);      a.convoke_green = 2; a.convoke_other = 1; a.cost = ManaCost{};
+    Action b = Cast("Markov Baron", 1);      b.convoke_green = 2; b.convoke_other = 1; b.convoke_plan_pip = 1;
+    b.cost = ManaCost{};
+    Action c = Cast("Stromkirk Captain", 2);
+    acts = { a, b, c };
+    return s;
+}
+}   // namespace
+
+TEST_CASE("Convoke shortfall order: a Baron short of its booked bodies is cast after the arrival that supplies them")
+{
+    EnsureCardsLoaded();
+    std::vector<Action> acts;
+    const GameState s = BaronsBoard(acts);
+    std::vector<int> order = { 0, 1, 2 };
+    ApplyPayableCastOrder(s, acts, order);
+    CHECK(order == std::vector<int>{ 0, 2, 1 });
+    // An order with no shortfall is left alone: Baron B counting both arrivals is already after them.
+    std::vector<int> done = { 0, 2, 1 };
+    ApplyPayableCastOrder(s, acts, done);
+    CHECK(done == std::vector<int>{ 0, 2, 1 });
+}
+
+TEST_CASE("Convoke shortfall order: the plan {Baron, Baron, Stromkirk Captain} casts all three (seed 30001869 T3)")
+{
+    EnsureCardsLoaded();
+    std::vector<Action> acts;
+    const GameState s = BaronsBoard(acts);
+    TurnSolver::Plan p;
+    p.actions      = acts;
+    p.land_decided = true;
+    GameState c = s;
+    TurnSolver::ApplyPlan(c, p, true);
+    int barons = 0, captains = 0;
+    for (const Permanent& q : c.battlefield)
+    {
+        if (q.card.m_name.str() == "Markov Baron" && q.entered_this_turn) { ++barons; }
+        if (q.card.m_name.str() == "Stromkirk Captain") { ++captains; }
+    }
+    CHECK(barons == 2);
+    CHECK(captains == 1);
+    CHECK(c.players[0].hand.empty());
+}
+
+// ---- The mana-clean gate's ORACLE-GAP (2026-11-03): two Voldaren Estates, one tapped for mana and one
+// for the Blood. The oracle's result dedupe and frontier prune folded "#57 taps for mana" into "#58 taps for
+// mana", so the line the engine plays (the non-Blood Estate for mana) was unreachable (seed 30000337 T4).
+TEST_CASE("mana oracle: the plan's own Blood Estate is not its twin's equal (seed 30000337 T4)")
+{
+    EnsureCardsLoaded();
+    GameState s = Fresh();
+    s.turn_number = 4;
+    s.players[0].life = 17;
+    Put(s, "Voldaren Estate", 58);
+    Put(s, "Falkenrath Pit Fighter", 22);
+    Put(s, "Voldaren Estate", 57);
+    Put(s, "Falkenrath Pit Fighter", 21);
+    Put(s, "Vampire of the Dire Moon", 56);
+    Put(s, "Secluded Courtyard", 34);
+    Put(s, "Legion Lieutenant", 27);
+    Hand(s, "Swamp", 43);
+    Hand(s, "Secluded Courtyard", 33);
+    Hand(s, "Markov Baron", 30);
+    s.players[0].lands_played_this_turn = 1;   // no land: the flagged plans are the no-land ones
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true);
+    int checked = 0;
+    for (const TurnSolver::Plan& p : plans)
+    {
+        int bloods = 0;
+        bool baron = false;
+        for (const Action& a : p.actions)
+        {
+            if (a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::TapBlood) { ++bloods; }
+            if (a.kind == Action::Kind::CastFromHand && a.card_name.str() == "Markov Baron") { baron = true; }
+        }
+        if (bloods != 1 || !baron) { continue; }
+        // The gap's shape: the engine realises the plan in full AND taps the OTHER Estate for mana (both end
+        // tapped, one Blood). A drop is the DROP-* classes' business, not I1's.
+        GameState e = s;
+        TurnSolver::ApplyPlan(e, p, true);
+        int made = 0, estates_tapped = 0;
+        bool cast_baron = false;
+        for (const Permanent& q : e.battlefield)
+        {
+            if (q.card.m_name.str() == "Blood Token") { ++made; }
+            if (q.card.m_name.str() == "Markov Baron") { cast_baron = true; }
+            if (q.card.m_name.str() == "Voldaren Estate" && q.tapped) { ++estates_tapped; }
+        }
+        if (made != 1 || !cast_baron || estates_tapped != 2) { continue; }
+        CAPTURE(checked);
+        CHECK(manaoracle::CoversEngineOutcome(s, /*pre=*/true, p));
         ++checked;
     }
     CHECK(checked > 0);

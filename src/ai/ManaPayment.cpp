@@ -5669,12 +5669,121 @@ bool OrderingPlacesConvokeBeforeArrivals(const std::vector<Action>& acts)
     return false;
 }
 
+// ---- CONVOKE BODY SHORTFALL ORDER (MTG_CONVOKE_SHORTFALL_ORDER, DEFAULT ON; =0 restores the order above) ----
+// THE DEFECT (mana-clean gate, Vampires, 2026-11-03: 4 APPLY-DROP-ORDER in 100,000 games). Rule 7
+// (SubsetConvokeBodiesInvalid) books a selection's convoke casts against EVERY body it can count -- the
+// untapped board creatures plus every creature the selection puts onto the battlefield -- but the order
+// above places a convoke cast only after the arrivals its own arm names (convoke_plan_pip / _other). An arm
+// that counts a BOARD body another convoke cast also counts is then short at its cast when the body the
+// books relied on in its place is a later arrival. Seed 30001869 T3: {Swamp, Markov Baron, Markov Baron,
+// Stromkirk Captain} on four creatures and three lands. Baron A taps three board bodies, Baron B (cast next,
+// its arm counting Baron A) finds Baron A and Pit Fighter but not its third body, pays {1} from a land, and
+// the Captain's {1}{B}{R} is then a land short and drops. Baron A > Captain > Baron B convokes Baron B
+// entirely (Baron A, the Captain, Pit Fighter) and pays every action.
+// THE RULE: walk the order counting the bodies there are at each convoke cast, per colour class as the cast
+// taps them (ConvokeCastTaps: pip-coloured bodies for the pip-coloured count, the others for the rest; a
+// creature arriving earlier in the order is there, untapped and sick; a convoke cast takes what it asks for
+// and then is a body itself). While some convoke cast is short, move the FIRST short one to the earliest
+// later position that minimises the order's total shortfall, if that strictly lowers it, and never so that
+// a plan-body arm loses an arrival it names. A cast-time convoke cast placed later only ever finds MORE
+// bodies (the bodies before it are a superset), so it taps no costlier body and pays no more mana; the
+// arrivals it now follows pay the mana they paid anyway. Structural, the attach / arrival-dependency
+// precedent: it realises the line rule 7 booked, never picks between lines. A projection off counts -- a
+// body something else in the cast section taps first is still counted -- so it can only fail to move a
+// cast it could have, never make a cast short that was not. No-op without a cast-time convoke cast (every
+// deck but Vampires; Chord of Calling taps in its pre-pass and is not read here).
+static bool ConvokeShortfallOrderOn()
+{
+    static const bool v = EnvOn("MTG_CONVOKE_SHORTFALL_ORDER", true);   // DEFAULT ON; =0 disables
+    return heurarm::Flag(heurarm::CONVOKE_SHORTFALL_ORDER, v);           // per-job override (--batch flags)
+}
+static bool IsCastTimeConvoke(const Action& a)
+{
+    if (a.kind != Action::Kind::CastFromHand || (a.convoke_green <= 0 && a.convoke_other <= 0)) { return false; }
+    const CardDefinition* d = a.def != nullptr ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    return ConvokeTapsAtCast(d);
+}
+// Total bodies the order's convoke casts ask for and do not find, starting from `bp` / `bo` untapped board
+// bodies of the pip colour / other colours.
+static int ConvokeOrderShortfall(const std::vector<Action>& acts, const std::vector<int>& order, int bp, int bo,
+                                 Color pip, int* first_short)
+{
+    int sp = bp, so = bo, total = 0;
+    if (first_short != nullptr) { *first_short = -1; }
+    for (std::size_t q = 0; q < order.size(); ++q)
+    {
+        const Action& a = acts[static_cast<std::size_t>(order[q])];
+        if (IsCastTimeConvoke(a))
+        {
+            const int gp = std::min<int>(a.convoke_green, sp), go = std::min<int>(a.convoke_other, so);
+            sp -= gp; so -= go;
+            const int sh = (a.convoke_green - gp) + (a.convoke_other - go);
+            total += sh;
+            if (sh > 0 && first_short != nullptr && *first_short < 0) { *first_short = static_cast<int>(q); }
+        }
+        const int cls = ConvokeArrivalClass(a, pip);
+        if (cls == 1) { ++sp; } else if (cls == 2) { ++so; }
+    }
+    return total;
+}
+static void ApplyConvokeShortfallOrder(const GameState& state, const std::vector<Action>& acts, std::vector<int>& order)
+{
+    if (!ConvokeShortfallOrderOn() || order.size() < 2) { return; }
+    const CardDefinition* cd = nullptr;
+    for (int i : order)
+    {
+        const Action& a = acts[static_cast<std::size_t>(i)];
+        if (IsCastTimeConvoke(a)) { cd = a.def != nullptr ? a.def : CardDatabase::Instance().Lookup(a.card_name); break; }
+    }
+    if (cd == nullptr) { return; }
+    const Color pip = ConvokePipColor(*cd);
+    const int me = state.active_player_index;
+    int bp = 0, bo = 0;   // rule 7's eligibility (and ClassifyConvokeBodiesEx's): untapped, not a live mana dork
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != me || q.tapped || !q.card.IsCreature()) { continue; }
+        const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+        if (qd != nullptr && qd->tmpl == CardTemplate::ManaDork && CanTapNow(q, state.battlefield, nullptr)) { continue; }
+        (q.card.HasColor(pip) ? bp : bo) += 1;
+    }
+    auto needs_kept = [&](const std::vector<int>& ord)
+    {
+        for (std::size_t p = 0; p < ord.size(); ++p)
+        {
+            if (ConvokeNeedsArrivals(acts[static_cast<std::size_t>(ord[p])]) && ConvokeNeedMetAt(acts, ord, p) > p)
+            { return false; }
+        }
+        return true;
+    };
+    for (std::size_t guard = 0; guard <= order.size() * order.size(); ++guard)
+    {
+        int p = -1;
+        const int cur = ConvokeOrderShortfall(acts, order, bp, bo, pip, &p);
+        if (cur == 0 || p < 0) { return; }
+        int best = cur;
+        std::vector<int> best_ord;
+        for (std::size_t q = static_cast<std::size_t>(p) + 1; q < order.size(); ++q)
+        {
+            std::vector<int> cand = order;
+            const int v = cand[static_cast<std::size_t>(p)];
+            cand.erase(cand.begin() + p);
+            cand.insert(cand.begin() + static_cast<std::ptrdiff_t>(q), v);   // just after the element at q
+            if (!needs_kept(cand)) { continue; }
+            const int s = ConvokeOrderShortfall(acts, cand, bp, bo, pip, nullptr);
+            if (s < best) { best = s; best_ord.swap(cand); }
+        }
+        if (best_ord.empty()) { return; }
+        order.swap(best_ord);
+    }
+}
+
 void ApplyPayableCastOrder(const GameState& state, const std::vector<Action>& acts, std::vector<int>& order)
 {
     if (!PayableOrderOn()) { ApplyEtbTreasureFundingOrder(state, acts, order); }
     else { PayableCastOrderCore(state, acts, order, nullptr, 0, /*site=*/0); }
     ApplyAttachSpellDependencyOrder(acts, order);   // structural, last (see ManaPayment.h)
     ApplyConvokeArrivalDependencyOrder(acts, order);   // structural (Vampires item B)
+    ApplyConvokeShortfallOrder(state, acts, order);    // structural (mana-clean gate, Vampires)
 }
 
 void ApplyPayableCastOrderAt(const GameState& state, const std::vector<Action>& acts,
@@ -5685,6 +5794,7 @@ void ApplyPayableCastOrderAt(const GameState& state, const std::vector<Action>& 
     else { PayableCastOrderCore(state, acts, order, &hand_exits, extra_wild, /*site=*/1); }
     ApplyAttachSpellDependencyOrder(acts, order);   // structural, last (see ManaPayment.h)
     ApplyConvokeArrivalDependencyOrder(acts, order);   // structural (Vampires item B)
+    ApplyConvokeShortfallOrder(state, acts, order);    // structural (mana-clean gate, Vampires)
 }
 
 void ApplyCastOrderRangeLadder(const GameState& state, const std::vector<Action>& acts,

@@ -569,8 +569,25 @@ std::string AttachedKey(const GameState& s, const Permanent& p)
     return k;
 }
 
+// The permanents the plan being realised taps or sacrifices itself (Realize's plan_srcs). Such a copy is
+// not its twins' equal -- tapping it for mana strands that action -- so BuildSources keys it apart. EDF
+// seed 3508 T4: Wild Growth, then Conservatory #13's {4},{T}: investigate. The fold tapped #13 (the lower
+// of two Conservatories) for the Wild Growth, the activation lost its source, and the oracle missed the
+// painless line the engine pays with #14 (an ORACLE-GAP, "life engine 20 oracle 19").
+// The same holds where a payment's RESULT is folded (2026-11-03, Vampires): the frontier's Pareto prune
+// (Resources, below) and the payment table's one-option-per-result dedupe (PayEnum::PayAndRecord). Both
+// read keys that do not say WHICH copy of identical permanents is tapped (the class counts; the engine's
+// mid-turn key folds a permanent by name), so "Voldaren Estate #58 taps for {C}" and "#57 taps for {C}"
+// were one result. The table reaches the plan's own Blood source #57 first (keyed apart, it is its own
+// class), so #57 stood for both; the Blood activation then found #57 tapped and dropped, and the line the
+// engine plays -- #58 for the mana, #57 for the Blood -- was never reached: 7,208 ORACLE-GAPs in 100,000
+// Vampires games ("Voldaren Estate#58 tapped by engine only"). A plan source's tapped flag is now part of
+// both identities.
+thread_local const std::set<int>* t_plan_srcs = nullptr;
+
 // The resources. `with_float`: mid-plan (a frontier) the floating pools are resources; at the END of
 // the apply they are not -- the plan is the whole main phase, and the pool empties when it ends.
+// A copy the plan being realised uses itself (t_plan_srcs) is its own resource, never its twins'.
 using Res = std::map<std::string, int>;
 Res Resources(const GameState& s, bool with_float)
 {
@@ -579,7 +596,9 @@ Res Resources(const GameState& s, bool with_float)
     for (const Permanent& p : s.battlefield)
     {
         if (p.controller_index != a) { continue; }
-        const std::string k = ResClassKey(p) + AttachedKey(s, p);
+        std::string k = ResClassKey(p) + AttachedKey(s, p);
+        if (t_plan_srcs != nullptr && t_plan_srcs->count(p.card.m_number) != 0)
+        { k += "|plan#" + std::to_string(p.card.m_number); }
         if (!p.tapped)    { ++r["U:" + k]; }
         if (p.temp_haste) { ++r["H:" + k]; }
     }
@@ -905,12 +924,7 @@ int UsefulColorMask(const GameState& s, const ManaCost& cost)
     return m;
 }
 
-// The permanents the plan being realised taps or sacrifices itself (Realize's plan_srcs). Such a copy is
-// not its twins' equal -- tapping it for mana strands that action -- so BuildSources keys it apart. EDF
-// seed 3508 T4: Wild Growth, then Conservatory #13's {4},{T}: investigate. The fold tapped #13 (the lower
-// of two Conservatories) for the Wild Growth, the activation lost its source, and the oracle missed the
-// painless line the engine pays with #14 (an ORACLE-GAP, "life engine 20 oracle 19").
-thread_local const std::set<int>* t_plan_srcs = nullptr;
+// (t_plan_srcs -- the plan's own sources, which BuildSources keys apart -- is defined above Resources.)
 
 // THE ENUM-GAP PASS PAYS AS THE ENGINE CAN. A SacAction source -- Generator Servant, an on-board Lotus Bloom or Black
 // Lotus -- makes its mana only through a plan's own SacForMana action (both apply worlds crack it in their pre-pass;
@@ -1255,8 +1269,19 @@ struct PayEnum
         sf.white += o.stash.white; sf.blue += o.stash.blue; sf.black += o.stash.black;
         sf.red += o.stash.red; sf.green += o.stash.green; sf.colorless += o.stash.colorless;
         sc.floating_haste_c += o.stash_haste;
-        // One option per distinct RESULT: two set-asides the payment never touched are one payment.
-        if (seen.insert(TurnSolver::MidTurnStateKeyOf(sc)).second) { out.push_back(std::move(o)); }
+        // One option per distinct RESULT: two set-asides the payment never touched are one payment. The
+        // engine's key does not say which copy of identical permanents is tapped, so a plan source's tapped
+        // flag is folded in (see t_plan_srcs): tapping it is not the same result as tapping its twin.
+        std::uint64_t rkey = TurnSolver::MidTurnStateKeyOf(sc);
+        if (t_plan_srcs != nullptr && !t_plan_srcs->empty())
+        {
+            for (const Permanent& p : sc.battlefield)
+            {
+                if (!p.tapped || t_plan_srcs->count(p.card.m_number) == 0) { continue; }
+                rkey = (rkey ^ (0x51A9ull + static_cast<std::uint64_t>(p.card.m_number))) * 0x9E3779B97F4A7C15ULL;
+            }
+        }
+        if (seen.insert(rkey).second) { out.push_back(std::move(o)); }
         return true;
     }
 
