@@ -39,8 +39,8 @@ inline thread_local int       t_charge_acc = 0;
 // which miss most of a decision's real cost on some decks (plan enumeration, applies, mana payment are
 // charged nothing or one unit regardless of size; see core/WorkCounters.h). This second ceiling counts
 // PRICED work -- every kind, charged or not -- from workctr::t_priced, so it bounds what a decision
-// actually costs. Same trip path (Exceeded -> SearchBudget::Overrun -> running passes roll back, the
-// ladder commits the deepest COMPLETED pass), same scoping. Inert at an unlimited budget: only a
+// actually costs. Trip path: SearchBudget::Overrun (NOT Exceeded, see there) -> running passes roll back, the
+// ladder commits the deepest COMPLETED pass; same scoping. Inert at an unlimited budget: only a
 // budgeted decision root arms it. Kept apart from Armed(), which gates the unit meter's own billing.
 inline thread_local long long t_pr_start = 0;
 inline thread_local long long t_pr_limit = 0;   // 0 == disarmed
@@ -48,7 +48,13 @@ inline bool PricedExceeded() { return t_pr_limit > 0 && workctr::t_priced - t_pr
 
 inline void Add(long long n) { t_used += n; }
 inline bool Armed() { return t_limit > 0; }
-inline bool Exceeded() { return (t_limit > 0 && t_used >= t_limit) || PricedExceeded(); }
+// UNITS ONLY. The priced trip is NOT folded in here: Exceeded() also means "the unit meter is spent" to the
+// plan caches (no store, no served hit), the unbudgeted rollouts (instant no-win) and the no-win stores, and
+// routing the priced trip through it made a tripped decision lose its caches and score every remaining
+// rollout as a loss -- measured 2026-11-03, Goblins 2HG seed 2032 gi30 at X=10: 13.5 s priced limit, 104 s
+// spent (23.6 s with no ceiling), 230k units vs 141k. The priced trip reaches the search through
+// SearchBudget::Overrun() only (the per-pass ceiling's rollback path), see SearchBudget.h.
+inline bool Exceeded() { return t_limit > 0 && t_used >= t_limit; }
 
 // Arm (limit_units <= 0 disarms) and reset for one decision. Only the decision ROOT calls this.
 inline void Begin(long long limit_units)

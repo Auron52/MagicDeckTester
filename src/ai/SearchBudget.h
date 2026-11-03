@@ -102,8 +102,10 @@ public:
         // decisionwork::Exceeded is the per-DECISION total ceiling (see DecisionWorkMeter.h):
         // tripping it makes every running pass bail through this existing rollback path and
         // iterative deepening commits the deepest COMPLETED pass. Disarmed by default.
+        // decisionwork::PricedExceeded is the PRICED per-decision ceiling (MTG_DECISION_PRICED_X): it trips the
+        // same rollback, and nothing else -- unlike Exceeded() it does not switch off caches or rollouts.
         const bool b = (m_overrun_limit > 0 && m_used >= m_overrun_limit) || gamework::Abandoned()
-                    || decisionwork::Exceeded();
+                    || decisionwork::Exceeded() || decisionwork::PricedExceeded();
         if (b) { ++budgetbind::t_binds; }
         return b;
     }
