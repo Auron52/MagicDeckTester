@@ -371,3 +371,25 @@ Branch base 3640b6bf1 is 44 commits behind origin (25 src files): rebase before 
   arms concurrent at 16 threads. Output lb_on/lb_off.{log,err}, marker ledgerbench.DONE.
 - NEXT after test 5: re-price stage (charge uncharged work; moves every deck -> held-out A/B per deck), pool the
   bottoming-trial budget, EDF wastes.
+
+## Live 2026-11-03 ~13:30 UTC: test 5 PASSED; FINISH LINE running; then Cyclone via the artifact queue (USER)
+- Test 5 (ledger ON vs OFF, same binary, regression manifest, concurrent 16+16 threads): core-ms 0.998, units identical
+  (358,188,724), 0 unit-diff jobs. The ledger is free.
+- USER 2026-11-03: pause the rebalance after items 1-2 (test 5 + tail corpus on HEAD), push to the SHARED branch, then run
+  the pipeline overnight picking up Cyclone THROUGH THE ARTIFACT QUEUE. Re-price / pooled bottoming / EDF wastes = later.
+- Rebased onto origin 50b685d98 (ManaOracle conflict: origin's AgeIsInert end-board fold + our MidTurnStateKeyOfPayment;
+  GT conflicts taken from origin, to be re-accepted). 0e41b20ba commits Cyclone's screened value_play d1/b1 K=21 block
+  (the queue freezes on the tip, so it must be committed).
+- RUNNING build/scratch/budget/run_finish.sh (task bb9lbw8j8 -> finish.DONE): build, smoke+regression, wins_diff vs
+  origin GT (origin_gt/), then tail_corpus.json alone at 32 threads (tail_fin.log/.err, MTG_MAX_GAME_WALL_SEC=3600).
+  Prior tail (abx3, pre-EDF-collapse binary): 44/45 < 10 min; edf_keepab_static_gi821 hit the 3600 s wall at X=0 and X=100.
+- RUNNING run_cycprobe.sh (task bqvz10tep): scratch COPY of the Cyclone journal under the rebased binary -> does the
+  resume gate accept play digest a7b3171c556b4179? If not, MTG_KEEP_RETAIN_FOREIGN=a7b3171c556b4179 is a USER decision
+  (asked 13:20 UTC; rec: retain).
+- Cyclone journal: originals in .claude/worktrees/cyclone-landing905 (+ .prestart-20261103T1300 copies, .bak1/.bak2,
+  archive build/scratch/cyclone-mullgen-run-20261031/cyclone-paused-journal-20261102.tgz sha e35aeaf1...).
+- QUEUE ROUTE after the push: (1) worker tree .claude/worktrees/artifact-queue/.claude/worktrees/artifact-worker-
+  artifact-queue-d7d6a5 (clean, no inflight) -> checkout --detach origin tip; (2) copy journal + gencache.json into its
+  deck dir; (3) drop "unpredictable_cyclone" from exclude in scripts/artifact_queue.json on artifact-queue-tool (+
+  mulligan_env MTG_KEEP_RETAIN_FOREIGN if the USER says so), push, pull into the tool checkout; (4) start the worker
+  harness-tracked with the GIT_CONFIG gh-credential env + MTG_RSS_CAP_GB=20, confirm gen.log says RESUME(journal).
