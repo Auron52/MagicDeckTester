@@ -58,12 +58,13 @@ record = int32 comp[K] | uint8 flags[F_keep] | uint32 bottom_mask | int32 rows[F
 * **Where it lives.** `MTG_KEEP_TABLE_DIR` if set, else the per-user cache dir
   (`$XDG_CACHE_HOME/mtg/keeptable`, `~/.cache/mtg/keeptable`, `%LOCALAPPDATA%\mtg\keeptable`),
   else the temp dir. **Never beside the sidecar**: this checkout is a 9p/drvfs share (whole-second
-  mtimes, rename not atomic against an open fd, slow small reads). The file is named
-  `<sidecar filename>-<fnv1a64(canonical path)>.keeptable` and validated by the source's
-  `(canonical path, size, mtime)` stored in the header — a regenerated sidecar overwrites its own
-  table, nothing accumulates, and a **symlinked** sidecar (deck_compare's apparatus dirs,
-  keep_delta's link) shares the real file's table without the `.bincache`-symlink dance those
-  scripts used to do.
+  mtimes, rename not atomic against an open fd, slow small reads). **Superseded 2026-11-03 (format
+  v2):** the file was named `<sidecar filename>-<fnv1a64(canonical path)>.keeptable`, validated by
+  the source's `(canonical path, size, mtime)`, and the claim here that "nothing accumulates" was
+  wrong: every worktree path built its own copy and nothing was deleted (800 GB, disk full). It is
+  now `<sidecar filename>-<fnv1a64(sidecar bytes)>.keeptable`, validated by content hash + size, with
+  a per-path `.keepref` remembering the hash, use-stamped mtimes and an LRU sweep under
+  `MTG_KEEP_TABLE_CACHE_GB` — see `keeptable-cache-accumulation.md`.
 * **Positioned reads, not mmap.** A mapping over a file another process is rebuilding turns a
   rejected cache into a SIGBUS, and mmap needs per-platform code (the play viewer runs `mtg` on
   Windows). One `std::ifstream` per table, mutex-serialised; portable and, at this call rate,

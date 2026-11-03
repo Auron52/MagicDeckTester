@@ -903,14 +903,14 @@ inline bool SaveDeckProfile(const std::filesystem::path& path, const MulliganPro
 // in-memory load for A/B or debugging: slow and large, never wrong.
 inline std::shared_ptr<const keeptable::Table>
 BuildKeepTable(const std::filesystem::path& sidecar, const std::filesystem::path& table_path,
-               const std::string& src_key, uint64_t src_size, uint64_t src_mtime)
+               const std::string& src_key, uint64_t src_size, uint64_t src_mtime, uint64_t content_hash,
+               uint64_t nonce)
 {
     std::error_code ec;
     std::filesystem::create_directories(table_path.parent_path(), ec);
     // Uniquified temp so concurrent launches (the play server spawns one mtg per keep-hint) cannot
-    // write into each other's file; a torn or failed build leaves no temp behind.
-    std::random_device rd;
-    const uint64_t nonce = (static_cast<uint64_t>(rd()) << 32) ^ rd();
+    // write into each other's file; a torn or failed build leaves no temp behind (and a killed one
+    // leaves a temp the cache sweep removes after a day).
     const std::filesystem::path tmp = table_path.string() + "." + std::to_string(nonce) + ".tmp";
     const auto t0 = std::chrono::steady_clock::now();
     std::cerr << "[keeptable] building " << table_path.filename().string() << " from " << sidecar.string() << " ...\n";
@@ -940,8 +940,14 @@ BuildKeepTable(const std::filesystem::path& sidecar, const std::filesystem::path
     if (!w.ok())              { return give_up(w.error()); }
     if (!head.exhaustive_keep){ return give_up("no exhaustive_keep block"); }
     if (w.count() == 0)       { return give_up("no entries"); }
+    {   // The table is named by the bytes ResolveContentHash hashed; refuse it if the sidecar moved since.
+        std::error_code e1, e2;
+        const uint64_t sz = static_cast<uint64_t>(std::filesystem::file_size(sidecar, e1));
+        const uint64_t mt = keeptable::detail::MtimeKey(std::filesystem::last_write_time(sidecar, e2));
+        if (e1 || e2 || sz != src_size || mt != src_mtime) { return give_up("sidecar changed during the build"); }
+    }
     keeptable::Header h;
-    h.src_path = src_key; h.src_size = src_size; h.src_mtime = src_mtime;
+    h.src_path = src_key; h.src_size = src_size; h.src_mtime = src_mtime; h.content_hash = content_hash;
     const ExhaustiveKeepPolicy& ek = *head.exhaustive_keep;
     h.buckets = ek.buckets; h.max_mull = ek.max_mull; h.bottoming_enabled = ek.bottoming_enabled;
     h.commit = ek.commit; h.play_digest = ek.play_digest; h.effective_R = ek.effective_R;
@@ -954,7 +960,7 @@ BuildKeepTable(const std::filesystem::path& sidecar, const std::filesystem::path
         std::error_code rmec; std::filesystem::remove(tmp, rmec);
     }
     std::string why;
-    auto t = keeptable::Table::Open(table_path, src_key, src_size, src_mtime, &why);
+    auto t = keeptable::Table::Open(table_path, content_hash, src_size, &why);
     const double secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
     if (t)
     {
@@ -993,15 +999,32 @@ inline std::shared_ptr<const ExhaustiveKeepPolicy> CachedExhaustiveKeep(const st
     std::error_code ec_sz, ec_mt, ec_cn;
     const uint64_t src_size  = static_cast<uint64_t>(std::filesystem::file_size(path, ec_sz));
     const auto     wt        = std::filesystem::last_write_time(path, ec_mt);
-    const uint64_t src_mtime = static_cast<uint64_t>(wt.time_since_epoch().count());
+    const uint64_t src_mtime = keeptable::detail::MtimeKey(wt);
     const std::filesystem::path canon = std::filesystem::weakly_canonical(path, ec_cn);
-    if (use_table && !ec_sz && !ec_mt && !ec_cn)
+    // The table is keyed by the sidecar's CONTENT (KeepTable.h), so the same keep model in N worktrees
+    // shares one table; the hash is computed once per (path, size, mtime) and remembered in a ref.
+    std::random_device rd;
+    const uint64_t nonce = (static_cast<uint64_t>(rd()) << 32) ^ rd();
+    const std::filesystem::path dir = keeptable::KeepTableDir();
+    uint64_t content_hash = 0;
+    if (use_table && !ec_sz && !ec_mt && !ec_cn
+        && keeptable::ResolveContentHash(dir, path, canon.string(), src_size, src_mtime, nonce, content_hash))
     {
         const std::string src_key = canon.string();
-        const std::filesystem::path table_path = keeptable::KeepTableDir() / keeptable::TableFileName(src_key);
+        const std::string table_name = keeptable::TableFileName(src_key, content_hash);
+        const std::filesystem::path table_path = dir / table_name;
         std::string why;
-        auto t = keeptable::Table::Open(table_path, src_key, src_size, src_mtime, &why);
-        if (!t) { t = BuildKeepTable(path, table_path, src_key, src_size, src_mtime); }
+        auto t = keeptable::Table::Open(table_path, content_hash, src_size, &why);
+        const bool built = !t;
+        if (!t) { t = BuildKeepTable(path, table_path, src_key, src_size, src_mtime, content_hash, nonce); }
+        if (t)
+        {
+            // Last-use stamp for the sweep, and never swept by THIS process while it holds the table.
+            keeptable::MarkUsed(table_path);
+            keeptable::ProtectedTables(&table_name);
+        }
+        // Bound the cache: always after a build (it just grew by a whole table), else at most hourly.
+        keeptable::MaybeCollect(dir, built);
         if (t)
         {
             ExhaustiveKeepPolicy ek;

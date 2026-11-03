@@ -10,6 +10,7 @@
 // with no bottom table at all, and absent compositions. The payload is deliberately larger than the
 // writer's 8 MB buffer so the multi-flush path is what gets tested.
 #include <doctest/doctest.h>
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <random>
@@ -61,7 +62,7 @@ std::vector<std::string> HandFor(const ExhaustiveKeepPolicy& ek, const std::vect
 
 // The test-side table builder: what the production loader does from JSON, done from the maps.
 bool WriteTable(const std::filesystem::path& p, const ExhaustiveKeepPolicy& ek,
-                const std::string& src, uint64_t sz, uint64_t mt, std::string* err = nullptr)
+                uint64_t hash, uint64_t sz, std::string* err = nullptr, const std::string& src = "src.gz")
 {
     keeptable::Writer w(p);
     for (const auto& kv : ek.keep)
@@ -71,7 +72,7 @@ bool WriteTable(const std::filesystem::path& p, const ExhaustiveKeepPolicy& ek,
         { if (err) { *err = w.error(); } return false; }
     }
     keeptable::Header h;
-    h.src_path = src; h.src_size = sz; h.src_mtime = mt;
+    h.src_path = src; h.src_size = sz; h.src_mtime = 1; h.content_hash = hash;
     h.buckets = ek.buckets; h.max_mull = ek.max_mull; h.bottoming_enabled = ek.bottoming_enabled;
     h.commit = ek.commit; h.play_digest = ek.play_digest; h.effective_R = ek.effective_R;
     const bool ok = w.Finish(h);
@@ -134,11 +135,11 @@ TEST_CASE("keep table: the on-disk backing decides identically to the in-memory 
     const std::filesystem::path p = TmpDir() / "agree.keeptable";
     Cleanup(p);
     std::string err;
-    REQUIRE_MESSAGE(WriteTable(p, mem, "src.gz", 1234, 5678, &err), err);
+    REQUIRE_MESSAGE(WriteTable(p, mem, 5678, 1234, &err), err);
     CHECK(std::filesystem::file_size(p) > (8u << 20));
     {   // scoped so the table's handle is closed before the file is removed
         std::string why;
-        auto t = keeptable::Table::Open(p, "src.gz", 1234, 5678, &why);
+        auto t = keeptable::Table::Open(p, 5678, 1234, &why);
         REQUIRE_MESSAGE(t, why);
         CHECK(t->size() == mem.keep.size());
         CHECK(t->header().K == 4);
@@ -179,9 +180,9 @@ TEST_CASE("keep table: a table with no bottom rows anywhere is keep-only")
     mem.bottom_keep.clear();
     const std::filesystem::path p = TmpDir() / "keeponly.keeptable";
     Cleanup(p);
-    REQUIRE(WriteTable(p, mem, "s", 1, 1));
+    REQUIRE(WriteTable(p, mem, 1, 1));
     {
-        auto t = keeptable::Table::Open(p, "s", 1, 1);
+        auto t = keeptable::Table::Open(p, 1, 1);
         REQUIRE(t);
         CHECK(t->header().F_bot == 0);
         const ExhaustiveKeepPolicy dsk = DiskBacked(t);
@@ -241,21 +242,26 @@ TEST_CASE("keep table: source fingerprint and length exactness gate Open")
     const ExhaustiveKeepPolicy mem = MakePolicy(300);
     const std::filesystem::path p = TmpDir() / "gate.keeptable";
     Cleanup(p);
-    REQUIRE(WriteTable(p, mem, "the/source.gz", 100, 200));
-    CHECK(keeptable::Table::Open(p, "the/source.gz", 100, 200));
-    CHECK_FALSE(keeptable::Table::Open(p, "the/source.gz", 101, 200));   // size moved
-    CHECK_FALSE(keeptable::Table::Open(p, "the/source.gz", 100, 201));   // mtime moved
-    CHECK_FALSE(keeptable::Table::Open(p, "other/source.gz", 100, 200)); // different sidecar
-    CHECK_FALSE(keeptable::Table::Open(TmpDir() / "missing.keeptable", "the/source.gz", 100, 200));
+    REQUIRE(WriteTable(p, mem, 200, 100, nullptr, "the/source.gz"));
+    CHECK(keeptable::Table::Open(p, 200, 100));
+    CHECK_FALSE(keeptable::Table::Open(p, 200, 101));   // size moved
+    CHECK_FALSE(keeptable::Table::Open(p, 201, 100));   // content moved
+    CHECK_FALSE(keeptable::Table::Open(TmpDir() / "missing.keeptable", 200, 100));
+    // The table's OWN mtime is the cache's last-use stamp, not part of the fingerprint: refreshing it
+    // (MarkUsed) or ageing it must not invalidate the table.
+    keeptable::MarkUsed(p);
+    CHECK(keeptable::Table::Open(p, 200, 100));
+    std::filesystem::last_write_time(p, std::filesystem::file_time_type::clock::now() - std::chrono::hours(1000));
+    CHECK(keeptable::Table::Open(p, 200, 100));
 
     // A byte short (a torn write / a concurrent rebuild shrinking the file) and a byte long (a tail
     // from a non-atomic rename) must both be rejected: the trailer and the record region no longer
     // account for the file exactly. (Every Open above returned a temporary, so no handle is open.)
     const auto sz = std::filesystem::file_size(p);
     std::filesystem::resize_file(p, sz - 1);
-    CHECK_FALSE(keeptable::Table::Open(p, "the/source.gz", 100, 200));
+    CHECK_FALSE(keeptable::Table::Open(p, 200, 100));
     std::filesystem::resize_file(p, sz + 1);
-    CHECK_FALSE(keeptable::Table::Open(p, "the/source.gz", 100, 200));
+    CHECK_FALSE(keeptable::Table::Open(p, 200, 100));
     Cleanup(p);
 }
 
@@ -301,8 +307,34 @@ TEST_CASE("keep table: the loader builds the table from a JSON sidecar and it ma
     { if (e.path().extension() == ".keeptable") { ++n_tables; table = e.path(); } }
     CHECK(n_tables == 1);
     const uint64_t sz = std::filesystem::file_size(sidecar);
-    const uint64_t mt = static_cast<uint64_t>(std::filesystem::last_write_time(sidecar).time_since_epoch().count());
-    CHECK(keeptable::Table::Open(table, std::filesystem::weakly_canonical(sidecar).string(), sz, mt));
+    uint64_t hash = 0;
+    REQUIRE(keeptable::ContentHash(sidecar, hash));
+    CHECK(table.filename().string() == keeptable::TableFileName(sidecar.string(), hash));
+    CHECK(keeptable::Table::Open(table, hash, sz));
+    // ...and its content ref names that hash for this path's (size, mtime).
+    keeptable::Ref kref;
+    REQUIRE(keeptable::ReadRef(dir / "cache" / keeptable::RefFileName(std::filesystem::weakly_canonical(sidecar).string()), kref));
+    CHECK(kref.content_hash == hash);
+    CHECK(kref.src_size == sz);
+
+    // A byte-identical copy at ANOTHER path (another worktree's checkout of the same keep model)
+    // shares the table: no second build, one more ref.
+    const std::filesystem::path copy_dir = dir / "other_worktree";
+    std::filesystem::create_directories(copy_dir);
+    const std::filesystem::path copy = copy_dir / sidecar.filename();
+    std::filesystem::copy_file(sidecar, copy);
+    auto shared = CachedExhaustiveKeep(copy);
+    REQUIRE(shared);
+    REQUIRE(shared->disk);
+    CHECK(shared->table_size() == 3000);
+    int n_tables2 = 0, n_refs = 0;
+    for (const auto& e : std::filesystem::directory_iterator(dir / "cache"))
+    {
+        if (e.path().extension() == ".keeptable") { ++n_tables2; }
+        if (e.path().extension() == ".keepref")   { ++n_refs; }
+    }
+    CHECK(n_tables2 == 1);
+    CHECK(n_refs == 2);
     // `cached` lives on in CachedExhaustiveKeep's process-global cache with the table open, so on
     // Windows the table file itself cannot be removed here; everything else is, best-effort.
     EnvPut("MTG_KEEP_TABLE_DIR", "", true);
@@ -362,4 +394,125 @@ TEST_CASE("keep table: a keep_table_alias parses from the profile JSON, and an e
     CHECK(bad.keep_table_alias.empty());
     CHECK(bad.min_lands == 2);
     std::filesystem::remove_all(dir);
+}
+
+namespace
+{
+// A real (small) v2 table named as the loader would name it, with its mtime set `idle` into the past.
+std::filesystem::path CacheTable(const std::filesystem::path& cache, const ExhaustiveKeepPolicy& mem,
+                                 const std::string& src, uint64_t hash, std::chrono::hours idle)
+{
+    const std::filesystem::path p = cache / keeptable::TableFileName(src, hash);
+    REQUIRE(WriteTable(p, mem, hash, 1, nullptr, src));
+    std::filesystem::last_write_time(p, std::filesystem::file_time_type::clock::now() - idle);
+    return p;
+}
+// A ref for an on-disk sidecar `src` claiming content `hash`.
+void CacheRef(const std::filesystem::path& cache, const std::filesystem::path& src, uint64_t hash)
+{
+    keeptable::Ref r;
+    r.src_path = src.string();
+    r.src_size = std::filesystem::file_size(src);
+    r.src_mtime = keeptable::detail::MtimeKey(std::filesystem::last_write_time(src));
+    r.content_hash = hash;
+    keeptable::WriteRef(cache / keeptable::RefFileName(r.src_path), r, 1);
+}
+bool Exists(const std::filesystem::path& p) { return std::filesystem::exists(p); }
+}  // namespace
+
+TEST_CASE("keep table cache sweep: orphans, stale temps, and LRU eviction over the cap")
+{
+    namespace fs = std::filesystem;
+    const fs::path dir = TmpDir() / "sweep";
+    Cleanup(dir);
+    const fs::path cache = dir / "cache";
+    fs::create_directories(cache);
+    const ExhaustiveKeepPolicy mem = MakePolicy(300);
+    auto sidecar = [&](const std::string& name, const std::string& body)
+    { const fs::path p = dir / name; std::ofstream(p, std::ios::binary) << body; return p; };
+    const fs::path a = sidecar("a.json", "aaaa"), b = sidecar("b.json", "bbbbb"), c = sidecar("c.json", "cccccc");
+    const fs::path gone = sidecar("gone.json", "gone");
+
+    // Referenced tables: a (idle 5 h), b (idle 3 h), c (idle 1 h). One unreferenced table idle 2 h, one
+    // unreferenced table just used (inside the grace), and one whose only ref points at a deleted sidecar.
+    const fs::path ta = CacheTable(cache, mem, a.string(), 0xa, std::chrono::hours(5));
+    const fs::path tb = CacheTable(cache, mem, b.string(), 0xb, std::chrono::hours(3));
+    const fs::path tc = CacheTable(cache, mem, c.string(), 0xc, std::chrono::hours(1));
+    const fs::path t_unref = CacheTable(cache, mem, "x.json", 0xd, std::chrono::hours(2));
+    const fs::path t_fresh = CacheTable(cache, mem, "y.json", 0xe, std::chrono::hours(0));
+    const fs::path t_gone = CacheTable(cache, mem, gone.string(), 0xf, std::chrono::hours(2));
+    CacheRef(cache, a, 0xa); CacheRef(cache, b, 0xb); CacheRef(cache, c, 0xc); CacheRef(cache, gone, 0xf);
+    fs::remove(gone);
+    // A ref whose sidecar CHANGED since (size moved): stale, so its table (0xb is still named by b's ref)
+    // is unaffected, but the ref itself goes.
+    const fs::path changed = sidecar("changed.json", "12");
+    CacheRef(cache, changed, 0xb);
+    std::ofstream(changed, std::ios::binary | std::ios::app) << "345";
+    // Build temps: a dead process's partial (2 days old) and a live build's (just written).
+    const fs::path tmp_old = cache / "a.json-000000000000000a.keeptable.123.tmp";
+    const fs::path tmp_new = cache / "a.json-000000000000000a.keeptable.456.tmp";
+    std::ofstream(tmp_old) << "partial";
+    std::ofstream(tmp_new) << "partial";
+    fs::last_write_time(tmp_old, fs::file_time_type::clock::now() - std::chrono::hours(48));
+    // Something the sweep does not own.
+    std::ofstream(cache / "notes.txt") << "keep me";
+
+    keeptable::CollectOptions o;
+    o.space_fraction = 0;   // deterministic: the test sets the cap itself
+
+    SUBCASE("unbounded: only orphans, stale refs and stale temps go")
+    {
+        o.cap_bytes = 0;
+        const keeptable::CollectStats st = keeptable::Collect(cache, {}, o);
+        CHECK(st.removed_orphan == 2);
+        CHECK(st.removed_ref == 2);
+        CHECK(st.removed_tmp == 1);
+        CHECK(st.removed_lru == 0);
+        CHECK_FALSE(Exists(t_unref));
+        CHECK_FALSE(Exists(t_gone));
+        CHECK_FALSE(Exists(tmp_old));
+        CHECK(Exists(tmp_new));
+        CHECK(Exists(t_fresh));   // unreferenced but used within the grace: a ref may be about to land
+        CHECK(Exists(ta)); CHECK(Exists(tb)); CHECK(Exists(tc));
+        CHECK_FALSE(Exists(cache / keeptable::RefFileName(gone.string())));
+        CHECK_FALSE(Exists(cache / keeptable::RefFileName(changed.string())));
+        CHECK(Exists(cache / keeptable::RefFileName(a.string())));
+        CHECK(Exists(cache / "notes.txt"));
+    }
+    const uint64_t sa = fs::file_size(ta), sb = fs::file_size(tb), sc = fs::file_size(tc);
+    const uint64_t sf = fs::file_size(t_fresh), st_new = fs::file_size(tmp_new);
+    SUBCASE("a cap evicts least-recently-used first, never a protected or recently used table")
+    {
+        // Survivors of the orphan pass: ta (idle 5 h), tb (3 h), tc (1 h), t_fresh (0 h) + the young
+        // temp, which counts toward the total but is never evicted. The cap leaves room for ta alone:
+        // ta is PROTECTED (this process holds it), so tb and then tc go, and t_fresh is inside
+        // lru_min_idle, so it stays and the cache ends over the cap -- the cap is soft by design.
+        o.cap_bytes = sa + st_new;
+        const keeptable::CollectStats st = keeptable::Collect(cache, { ta.filename().string() }, o);
+        CHECK(st.removed_lru == 2);
+        CHECK(Exists(ta));
+        CHECK_FALSE(Exists(tb));
+        CHECK_FALSE(Exists(tc));
+        CHECK(Exists(t_fresh));
+        CHECK(st.total_after == sa + sf + st_new);
+    }
+    SUBCASE("eviction stops as soon as the cache fits")
+    {
+        o.cap_bytes = sb + sc + sf + st_new;
+        const keeptable::CollectStats st = keeptable::Collect(cache, {}, o);
+        CHECK(st.removed_lru == 1);
+        CHECK_FALSE(Exists(ta));   // the least recently used
+        CHECK(Exists(tb)); CHECK(Exists(tc)); CHECK(Exists(t_fresh));
+        CHECK(st.total_after == o.cap_bytes);
+    }
+    SUBCASE("a table used just before the sweep is the most recent, not the least")
+    {
+        keeptable::MarkUsed(ta);   // the loader stamps every table it opens
+        o.cap_bytes = sa + sc + sf + st_new;
+        const keeptable::CollectStats st = keeptable::Collect(cache, {}, o);
+        CHECK(st.removed_lru == 1);
+        CHECK(Exists(ta));
+        CHECK_FALSE(Exists(tb));   // now the least recently used
+    }
+    Cleanup(dir);
 }
