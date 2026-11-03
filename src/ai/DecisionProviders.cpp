@@ -58219,7 +58219,9 @@ void ShadowbornProvider::SacNamedTimingFilter(const GameState& s, int controller
         if (p.controller_index != controller || p.entered_this_turn || p.def_absent) { continue; }
         if (SbIsSacNamedCreature(CardDatabase::Instance().LookupCached(p.card))) { attack_turn = true; break; }
     }
-    if (!attack_turn) { return; }   // sick turn: the INT-4 order (devotion Demon, then count anthem), either main
+    // SICK turn: the INT-4 order (devotion Demon, then count anthem), MAIN 1 ONLY (USER CONFIRMED 2026-11-03: "On a
+    // summoning sick turn you can do demon search main 1 if you want." -- main 1 vs main 2 was an equal twin).
+    if (!attack_turn) { if (!pre_combat) { targets.clear(); } return; }
     std::vector<std::string> anthem, other;
     const CardDefinition* jet = nullptr;
     for (const std::string& nm : targets)
@@ -58280,6 +58282,14 @@ void ShadowbornProvider::SacNamedTimingFilter(const GameState& s, int controller
         for (int pw : left_power) { d1 += static_cast<long long>(pw + bonus) * (ds ? 2 : 1); }
         const int life = s.players[static_cast<std::size_t>(1 - controller)].life;
         jet_gains = static_cast<int>(six.size()) == n && (d1 >= life || d1 > d0);
+        // The bodies are NOT all on the battlefield yet: the activation rides a cast chain in the same plan (INT-3,
+        // "the chain's Apostles reach the six"), so this pre-chain board cannot say what Jetmir adds. Before combat
+        // the count-anthem Demon stays offered (the search compares "chain + Jetmir before combat" against the
+        // devotion Demon after combat, which main 2 offers off the real post-chain board). Found by the INT-9
+        // held-out A/B, seed 7001 gi126: T4 cast an Apostle into a Stone chain (15 reveals -> 18 Apostles, 3 of
+        // them attack-ready); INT-8 fetched Jetmir in main 1 and won that turn (3 x 4 x 2 = 24 vs 16), INT-9 judged
+        // the 3-Apostle pre-chain board, offered nothing in main 1 and won a turn later.
+        if (pre_combat && static_cast<int>(six.size()) < n) { targets = anthem; return; }
     }
     if (jet_gains) { targets = pre_combat ? anthem : std::vector<std::string>{}; }
     else           { targets = pre_combat ? std::vector<std::string>{} : (other.empty() ? anthem : other); }

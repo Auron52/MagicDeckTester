@@ -4070,7 +4070,7 @@ public:
     //   |   (USER CONFIRMED 2026-11-03)          |  Jetmir ONLY, main 1 only, when fetching it raises THIS     |
     //   |                                        |  turn's attack over not activating (lethal first); else the |
     //   |                                        |  devotion-token Demon (Overlord), main 2 only. SICK TURN:   |
-    //   |                                        |  the INT-4 list (Overlord, then Jetmir), either main        |
+    //   |                                        |  the INT-4 list (Overlord, then Jetmir), main 1 only (USER) |
     //   | ripple reveal (every trigger)          | reveal                                                      |
     //   | ripple take: Apostle, plain ritual,    | TAKE                                                        |
     //   |   granter, tutor without a sac cost    |                                                             |

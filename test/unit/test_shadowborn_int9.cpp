@@ -365,6 +365,23 @@ TEST_CASE("INT-9 timing: attack turn -> Jetmir main 1 only; no Jetmir -> Overlor
     for (int i = 0; i < 6; ++i) { k.battlefield.push_back(Perm9(kAp9, 10 + i, /*fresh=*/true)); }
     Lib9(k, { kOver9, kJet9, kSw9, kSw9 });
     CHECK(Targets9(Activations9(k, true)) == std::vector<std::string>{ kOver9, kJet9 });
+    // ...in main 1 ONLY (USER CONFIRMED: "On a summoning sick turn you can do demon search main 1 if you want.").
+    CHECK(Activations9(k, false).empty());
+}
+
+TEST_CASE("INT-9 timing: bodies still to come from a chain (pre-chain board short of six) -> Jetmir offered in main 1")
+{
+    // Held-out seed 7001 gi126: three attack-ready Apostles, then a Stone chain in main 1 makes the six. The pre-chain
+    // board cannot price Jetmir, so it stays offered before combat; after combat the devotion Demon is the pick.
+    GameState s = Base9(1);
+    for (int k = 0; k < 3; ++k) { s.battlefield.push_back(Perm9(kAp9, 10 + k)); }
+    const CardParams& pp = Def9(kAp9).params;
+    std::vector<std::string> m1{ kOver9, kJet9 };
+    Prov9().SacNamedTimingFilter(s, 0, pp, /*pre_combat=*/true, m1);
+    CHECK(m1 == std::vector<std::string>{ kJet9 });
+    std::vector<std::string> m2{ kOver9, kJet9 };
+    Prov9().SacNamedTimingFilter(s, 0, pp, /*pre_combat=*/false, m2);
+    CHECK(m2 == std::vector<std::string>{ kOver9 });
 }
 
 // The kill arithmetic, read off card data: the activation, then everyone able to attack attacks.
