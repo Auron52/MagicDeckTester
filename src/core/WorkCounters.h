@@ -31,16 +31,20 @@ inline const char* KindName(int k)
 // simulated turn-step / plan applied) does not: units-only mispredicts a game's wall by up to ~6000x,
 // the priced sum by ~3x at p95. Deterministic (integer constants x counts), so anything bounded in this
 // currency trips at the same event on every machine.
+// Fit 2026-11-03 (scripts/cost_fit.py on the regression tier, 16,369 searched games >= 50 ms, NNLS weighted
+// by 1/ms; wall CONTENDED by concurrent builds, so treat as provisional). Shares of fitted time: simkey 41.5%,
+// enum 16.7%, apply 14.6%, pay 13.8%, plans 4.8%, step 3.6%, odo 3.4%, greedy 0.8% (interior unit 0.3 us,
+// 0.8%, not a work kind). Slowest 1% of games: actual/pred p95 3.7 (units-only 15.4).
 inline constexpr long long kPriceNs[kKinds] = {
-    17900,   // step_c
-    17900,   // step_f   (same work as a charged step)
-      751,   // greedy
-    22972,   // enum
-     5916,   // plans
-     1131,   // odo
-    20376,   // apply
-        0,   // pay      (fit pending)
-        0,   // simkey   (fit pending)
+    20322,   // step_c
+    20322,   // step_f   (same work as a charged step)
+      697,   // greedy
+    26807,   // enum
+     2098,   // plans
+      967,   // odo
+     5560,   // apply
+     2170,   // pay
+     7768,   // simkey
 };
 inline thread_local long long t_n[kKinds] = {};
 inline thread_local long long t_priced = 0;   // running sum of price x count this game (ns)

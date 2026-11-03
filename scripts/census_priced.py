@@ -17,8 +17,8 @@ import collections
 import sys
 
 KINDS = ["step_c", "step_f", "greedy", "enum", "plans", "odo", "apply", "pay", "simkey"]
-DEFAULT_PRICE_NS = {"step_c": 17900, "step_f": 17900, "greedy": 751, "enum": 22972, "plans": 5916,
-                    "odo": 1131, "apply": 20376, "pay": 0, "simkey": 0}
+DEFAULT_PRICE_NS = {"step_c": 20322, "step_f": 20322, "greedy": 697, "enum": 26807, "plans": 2098,
+                    "odo": 967, "apply": 5560, "pay": 2170, "simkey": 7768}
 
 
 def pct(v, q):
