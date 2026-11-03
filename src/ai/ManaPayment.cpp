@@ -8205,6 +8205,8 @@ bool LineRepayRemake(GameState& b, const LineRepayRec& r, const manaoracle::PayO
     std::optional<CreatureAbilityPayScope> cap;
     if (r.creature_ability) { cap.emplace(); }
     SpellSubtypePayScope ssp(r.has_spell ? &r.spell : nullptr);
+    const int a0 = b.active_player_index;
+    const std::size_t bf0 = b.battlefield.size(), gy0 = b.players[a0].graveyard.size();
     if (!manaoracle::PerformPayTaps(b, o)) { return false; }
     ManaPool& f = b.floating_mana;
     const ManaPool& st = o.stash;
@@ -8222,7 +8224,12 @@ bool LineRepayRemake(GameState& b, const LineRepayRec& r, const manaoracle::PayO
     f.colorless += st.colorless;
     b.floating_haste_c += o.stash_haste;
     const int a = b.active_player_index;
-    return paid && b.players[a].life == life_post && b.players[a].energy_counters == energy_post;
+    // A re-made payment is one the record could have been: field by field undoable, so nothing sacrificed (the
+    // mana oracle's table offers Generator Servant's "{T}, Sacrifice: Add {C}{C}", which the payer never takes --
+    // NivMizzetCombo, MTG_LINE_REPAY_MEMO_VERIFY 2026-11-03 -- and a smaller battlefield misplaces every later
+    // permanent Release puts back). Same test as LineRepayRecord's barrier.
+    return paid && b.battlefield.size() == bf0 && b.players[a].graveyard.size() == gy0
+        && b.players[a].life == life_post && b.players[a].energy_counters == energy_post;
 }
 
 // THE CHAIN. chain[0] is the payment just before this one, chain[1] the one before that (depth 2: the census put
@@ -8595,6 +8602,11 @@ bool LineRepayTry(GameState& state, const ManaCost& cost_in, bool for_creature, 
     GameState& undone = undone_scr.Board();
     LineRepayUndo(undone, *ch.rec[0]);
     ch.rec[1] = LineRepayFind(undone, ch.rec, 1);
+    // A chain is one board growing: a permanent that left between the two payments (the depth-2 record holds more
+    // permanents than the newer one) shifts every later one, so the positions the records restore no longer name the
+    // same permanents -- and a bounced land replayed into its old slot even matches the digest (Bruna, Boseiju
+    // around Sol Ring and Wild Growth, MTG_LINE_REPAY_MEMO_VERIFY 2026-11-03). No depth 2 then.
+    if (ch.rec[1] != nullptr && ch.rec[1]->n > ch.rec[0]->n) { ch.rec[1] = nullptr; }
     LineRepayMemo& memo = t_lr_memo;
     const std::uint64_t epoch = TurnSolver::DecisionEpoch();
     if (memo.epoch != epoch || memo.fail.size() + memo.ok.size() + memo.fail_p1.size() >= kLineRepayMemoCap)

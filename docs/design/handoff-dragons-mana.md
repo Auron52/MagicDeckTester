@@ -10,25 +10,59 @@ Worktree: `/workspaces/MagicDeckTester/.claude/worktrees/agent-a9dab9fbcae918660
 origin/phase-1-2-deck-analyzer 980616e55. Scratch: `/workspaces/MagicDeckTester/build/scratch/mcdragons/`. Helper
 scripts (gitignored): `logs/mcdragons/{mk.py,gate.sh,batch.sh,repro.sh,abrep.py,scprobe.sh}`.
 
-## Successor 6 (2026-11-03, IN PROGRESS -- checkpoint)
-Scratch `build/scratch/mcdragons6/`. Findings so far:
-- Successor 5's A/B (`mcdragons5/ho`) had NOT finished: it died at manifest load (d0 jobs on value_play decks need
-  `ignore_play_profile`). Relaunched as `mcdragons5/ho2` (fixed mk.py) on mtg.p3, then KILLED at ~60% as superseded
-  (partial table `mcdragons6/ab_p3_partial.txt`: Angels units +3.3% with 0 digests moved, Dragons +7.5%, Bruna +4.2%
-  net +1, Stompy +5% net +2, Hinata wall 1.48x from one 18-min game, off400 gi403).
-- idv3 (VERIFY) was NOT clean: joint_mismatch=9443 inner_mismatch=3504. Two mechanisms (dump `[lr-mismatch]`,
-  `LineRepayDumpMismatch`, VERIFY-only):
-  (a) HYBRID bills in the joint: AddManaCost sums only the flat ints, where a hybrid pip is baked in as its first
-      colour -- Vexing Shusher {R/G}{R/G} joined as {R}{R}. Prune too strict. Fix: `LineRepayChain::FlatBills`.
-  (b) ENTRANT STATICS in a re-made payment (a PLAY bug, not a prune bug): Undo taps permanents that entered after
-      the payment, but their static effects stay -- Wild Growth, re-made with its own enchanted land, paid for itself
-      with its extra {G}. Fix: `LineRepayOnPastBoard` / `LineRepayRemakeAt` (entrants off the battlefield during the
-      table and the re-make; land-Aura memo unbound). Unit test "Wild Growth does not pay for itself".
-- RE-PRICE: probes/trials cost 5-21 us against 40-77 us an ordinary unit; one unit a probe inflated units 3-8% on
-  decks where nothing changed. Now `kLineRepayProbesPerUnit = 4` (`manaoracle::ProbeCharge::Admit`, per-decision
-  accumulator).
-Binary p4d = these three changes (`mcdragons6/mtg.p4d`). Running: VERIFY probe `mcdragons6/vprobe3` (pid file).
-Next: VERIFY clean -> A/B p4 (`mcdragons5/ho2/ho.json`), d8 b0 on slower games (`mcdragons6/mkd8.py`), Hinata gi403.
+## READ FIRST: Successor 6 (2026-11-03, stopped at the context cap; successor 7 continues)
+Worktree head = the commit carrying this section (branch wip/mc-dragons; not pushed, no GT accepted). Scratch
+`build/scratch/mcdragons6/`. Binary under test = `mcdragons6/mtg.p5` / `mtg-test.p5` (= HEAD src).
+
+WHAT SUCCESSOR 5's JOBS ACTUALLY PRODUCED
+- A/B `mcdragons5/ho`: DID NOT RUN -- died at manifest load (d0 jobs on value_play decks need `ignore_play_profile`).
+  Fixed generator `mcdragons5/ho2/mk.py`; rerun on mtg.p3 as `ho2`, KILLED at ~60% as superseded by the fixes below.
+  Partial p3 table `mcdragons6/ab_p3_partial.txt` (report script `mcdragons6/abrep.py <dir>`): Angels units +3.3% with
+  0 digests moved; Dragons 2000 paired 18 dig 1 slow/1 fast units +7.5%; Bruna 1800 41 dig 5/4 (net +1) +4.2%;
+  FiveColour 800 8 dig 0/1 +3.2%; Stompy 2000 8 dig 2/0 (net +2) +5.1%; Hinata 575 11 dig 1/0 wall 1.48x (one game,
+  off400 gi403 = --seed 1870404 --game-index 403: on 1,105 s vs off 18 s); Goblins/Melira/TreasureHunt ~identical.
+  Slower p3 games: bruna 539/574/837/1166/1613, dragons 1678, hinata 129, stompy 1868/1987 (seed_base 1870001).
+  NO d0 cells finished; no d8 b0 run yet (`mcdragons6/mkd8.py <abrep out> <manifest>` writes .nc0/.nc1 manifests;
+  MTG_NC_SEARCH is env-only, so run the .nc1 manifest under MTG_NC_SEARCH=1).
+- idv3 (VERIFY on p3) NOT clean: joint_mismatch=9443 inner_mismatch=3504 (memo/ok/p1 mismatches 0). Plain-vs-base
+  digests: 6 of 1,600 differ (alchemist gi145 8->7, niv gi121 5->6, niv gi147 4->5, 3 same-turn).
+- Gate slice p3 (`mcdragons3/gate_s5p3.err`): ENUM-GAP 1, APPLY-DROP 147 (need_later 144 = mechanism 3, USER
+  decision; need_in_plan 3), ORACLE-GAP 6, CAPPED 7 (same as base), UNMODELED 0. Base 247/564/316/CAPPED 7; s1 new
+  1/142/28. Unit suite p3 (`mcdragons5/ut3.log`): 2,435/2,435 pass.
+
+FIXES (commit 30a5e901b + the one carrying this section), all in src/ai/ManaPayment.cpp unless noted:
+  (a) `LineRepayChain::FlatBills` (:8293): the joint prune skips hybrid/phyrexian/twobrid/snow/X bills (AddManaCost
+      sums flat ints; Vexing Shusher {R/G}{R/G} joined as {R}{R}). Prune exactness only.
+  (b) PLAY BUG: `LineRepayOnPastBoard` / `LineRepayRemakeAt` (:8318/:8334, used at :8439 and in commit): entrants are
+      OFF the battlefield while an earlier payment's table is built and it is re-made (Wild Growth paid for itself
+      with its own extra {G}). Unit test "Wild Growth does not pay for itself" (test_line_repay.cpp; bite NOT verified).
+  (c) PLAY BUG: `LineRepayRemake` (:8231) rejects a re-make that changes battlefield/graveyard size (Generator
+      Servant sacrificed, NivMizzet).
+  (d) PLAY BUG: depth 2 dropped when rec[1]->n > rec[0]->n (:8609; a bounced land replayed into its slot matched the
+      digest, Bruna Boseiju/Sol Ring/Wild Growth).
+  (e) RE-PRICE: `kLineRepayProbesPerUnit = 4` (:8358) via `manaoracle::ProbeCharge::Admit` (ManaOracle.cpp:185,
+      per-decision accumulator; null budget still notes CacheChargeNoteNull). Probes cost 5-21 us vs 40-77 us a unit.
+  Diagnostic `LineRepayDumpMismatch` (:8372, VERIFY only, 40 lines max, `[lr-mismatch]`). EngineFlags.h/HeuristicArm.h
+  LINE_REPAY descriptions updated (staged passes).
+
+RUNNING (my experiments; kill freely): VERIFY probe on p5 pid 2760953 -> `mcdragons6/vprobe5.{out,err}` (7 decks x
+50 games; answers: are joint/inner_mismatch now 0? grep `LINE REPAY` and `lr-mismatch`). Hinata gi403 on-arm repro on
+p4d (= p5 minus (c),(d)) pid 2758560 -> `mcdragons6/hin403_p4_1.{out,err}` (off arm took 18 s; answers: is the 9x wall
+gone after the re-price? p3 LR stats: tried 8.08M, memo_hit 6.2M, p2 736k of which cut 735k, LR ms only 63 s -> the
+rest is likely the cache-charge NoteChargingSubsearch on every fail-memo hit / priced entry making enclosing caches
+unstorable; compare `[cache-hit-charge]` vs the off arm: unstorable=0).
+
+NEXT
+1. vprobe5 counters all 0 (else read `[lr-mismatch]` dumps: they print board, chain n, joint parts, picks).
+2. Hinata gi403: if still slow, candidate lossless trim: note the charging subsearch on a fail-memo hit only when that
+   failure entered a priced stage (track a `fail_priced` set); measure.
+3. A/B p5: `mcdragons6/ab5/ho.json` (copied, 17 decks, 1,168 jobs, ~12 nominal core-h) ->
+   `cd <worktree>; MTG_RSS_CAP_GB=43 mcdragons6/mtg.p5 --batch mcdragons6/ab5/ho.json --threads 8 --game-log-dir
+   mcdragons6/ab5/w > ab5/ho.out 2> ab5/ho.err`; report with abrep.py (searched and d0 tags separately).
+4. d8 b0 (+NC) on every slower game, one pooled batch per NC setting; net <= 0 per deck; units/wall per deck.
+5. Identity: rerun `mcdragons3/id/id.json` under VERIFY on the final binary (all mismatch counters 0); gate slice
+   `mcdragons3/gate.sh <bin> s7 8`; unit suite; `THREADS=8 bash test/regression.sh --smoke`.
+6. Squash 24c31d4da..HEAD (and the earlier WIP) into landable commits; do not push or accept GT.
 
 ## READ FIRST: Successor 5 (2026-11-03, stopped at the context cap; successor 6 continues)
 Branch wip/mc-dragons; WIP commit "two-pass LINE_REPAY" on top of 3d62e85ec. Scratch `build/scratch/mcdragons5/`.
