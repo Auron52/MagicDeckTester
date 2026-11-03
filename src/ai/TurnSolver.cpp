@@ -86539,6 +86539,13 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
         // Fortified Beachhead: untapped while we CONTROL a listed subtype -- an ETB condition, so a
         // real behavioural difference (not optional) and it belongs here, not in land_bonus.
         for (const std::string& cs : pp.etb_untap_control_subtypes) { s += "cu" + cs; }
+        // Lake of the Dead: "If this land would enter, sacrifice a Swamp instead. If you do, put this land onto the
+        // battlefield. If you don't, put it into its owner's graveyard." -- an ETB that COSTS a land, so it is a real
+        // behavioural difference (not optional). Without it Lake and a basic Swamp shared one signature, and the
+        // group's representative (the first in hand order) was the only one ever enumerated: with both in hand the
+        // other could never be played at any budget (Shadowborn INT-9, found by the P1 Swamp + Lake test). Only Lake
+        // sets the param, so every other deck is byte-identical.
+        if (!pp.etb_replace_sacrifice_land_subtype.empty()) { s += "er" + pp.etb_replace_sacrifice_land_subtype; }
         // NOTE: strictly-OPTIONAL extra activated abilities (Mutavault's animate, Sliver Hive's
         // token) are deliberately NOT discriminated here -- see land_bonus below. Splitting on them
         // doubles the land branch for no new line and measured +61% instructions on slivers_vial.

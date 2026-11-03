@@ -299,20 +299,28 @@ TEST_CASE("INT-9 activation: ONE body code (the weakest six) per Demon")
 {
     GameState s = Base9(1);
     for (int k = 0; k < 4; ++k) { s.battlefield.push_back(Perm9(kAp9, 10 + k, /*fresh=*/true)); }
-    for (int k = 0; k < 4; ++k) { s.battlefield.push_back(Perm9(kAp9, 20 + k)); }
+    for (int k = 0; k < 12; ++k) { s.battlefield.push_back(Perm9(kAp9, 20 + k)); }
     Lib9(s, { kOver9, kJet9, kReaper9, kSw9, kSw9 });
-    // Sick + ready Apostles on the board: an ATTACK turn -> Jetmir only, main 1.
+    // 4 sick + 12 ready: an ATTACK turn. The six weakest are the 4 sick + 2 ready, leaving 10 attackers + Jetmir = 11
+    // creatures (double strike: 10 x 4 x 2 = 80) vs 12 without -> Jetmir, main 1, ONE body code.
     const std::vector<Action> m1 = Activations9(s, true);
     REQUIRE(m1.size() == 1);
     CHECK(m1.front().sac_victim_id == kSacNamedWeakestCode);
     CHECK(m1.front().tutor_target.str() == kJet9);
     GameState t = s;
     Rollout9(t, m1.front());
-    // The four sick copies and the two lowest-numbered ready ones went; two ready attackers stay.
+    // The four sick copies and the two lowest-numbered ready ones went; ten ready attackers stay.
     int ready = 0;
-    for (const Permanent& p : t.battlefield) { if (p.card.m_name.str() == kAp9 && !p.entered_this_turn) { ++ready; } }
-    CHECK(CountBf9(t, kAp9) == 2);
-    CHECK(ready == 2);
+    bool low_ready_gone = true;
+    for (const Permanent& p : t.battlefield)
+    {
+        if (p.card.m_name.str() != kAp9) { continue; }
+        if (!p.entered_this_turn) { ++ready; }
+        if (p.card.m_number == 20 || p.card.m_number == 21) { low_ready_gone = false; }
+    }
+    CHECK(CountBf9(t, kAp9) == 10);
+    CHECK(ready == 10);
+    CHECK(low_ready_gone);
     CHECK(CountBf9(t, kJet9) == 1);
 }
 
@@ -396,11 +404,19 @@ TEST_CASE("INT-9 Jetmir kill: the enumeration collapses to the one verified kill
     Lib9(s, { kOver9, kJet9, kSw9, kSw9, kSw9, kSw9 });
     const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true);
     MESSAGE("plans on the kill turn: ", plans.size());
-    REQUIRE(plans.size() == 1);
-    bool act = false;
-    for (const Action& a : plans.front().actions)
-    { if (a.ability_mode == Action::AbilityMode::SacNamedTutorPut && a.tutor_target.str() == kJet9) { act = true; } }
-    CHECK(act);
+    // The land family's "cast nothing" baseline (EnumeratePlansWithLand's idle plan, pushed before EnumeratePlans
+    // runs) rides along; EnumeratePlans itself returns the ONE verified killing plan (no Apostle / Ritual casts).
+    REQUIRE(plans.size() == 2);
+    int idle = 0, kill = 0;
+    for (const TurnSolver::Plan& p : plans)
+    {
+        if (p.actions.empty()) { ++idle; continue; }
+        REQUIRE(p.actions.size() == 1);
+        const Action& a = p.actions.front();
+        if (a.ability_mode == Action::AbilityMode::SacNamedTutorPut && a.tutor_target.str() == kJet9) { ++kill; }
+    }
+    CHECK(idle == 1);
+    CHECK(kill == 1);
 }
 
 // ---- the enumerator: one ripple variant per cast ------------------------------------------------------------------
@@ -494,4 +510,28 @@ TEST_CASE("INT-9 P1: a Swamp or Blood Crypt in hand drops the no-land plans; a L
     GameState d = s;
     d.players[0].lands_played_this_turn = 1;
     CHECK(!Prov9().NoLandPlanDominated(d));
+}
+
+// P1, the Lake case (USER CONFIRMED: "We don't have a good reason to hold lands." + "(beyond the Lake of the Dead case
+// you mentioned. That is held for the burst turn)"): only the NO-LAND plans are dropped. With a Swamp AND a Lake of the
+// Dead in hand both land plays stay on the menu -- holding the Lake for the burst turn is still reachable by playing
+// the Swamp -- and no plan plays no land.
+TEST_CASE("INT-9 P1: Swamp + Lake in hand -> a Swamp plan AND a Lake plan, no no-land plan")
+{
+    GameState s = Base9(2);
+    s.players[0].hand.push_back(Card9(kSw9, 60));
+    s.players[0].hand.push_back(Card9("Lake of the Dead", 61));
+    s.players[0].hand.push_back(Card9(kAp9, 62));
+    Lib9(s, { kSw9, kSw9, kSw9 });
+    CHECK(Prov9().NoLandPlanDominated(s));
+    int swamp = 0, lake = 0, none = 0;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true))
+    {
+        if (p.land_to_play.empty()) { ++none; }
+        else if (p.land_to_play == kSw9) { ++swamp; }
+        else if (p.land_to_play == "Lake of the Dead") { ++lake; }
+    }
+    CHECK(swamp > 0);
+    CHECK(lake > 0);
+    CHECK(none == 0);
 }

@@ -4095,6 +4095,9 @@ public:
     // is dropped while a land playable WITHOUT a cost is in hand (Swamp, Blood Crypt -- not Lake of the Dead, whose
     // entry costs a Swamp). Sound for this deck: no landfall, no bounce lands, nothing counts lands in hand, and a
     // held land only adds a cleanup discard. ~22 such passes per 200 held-out games at d3 b10, ~0.7 turns each.
+    // ONLY the no-land plans go -- every land PLAY stays (USER: "(beyond the Lake of the Dead case you mentioned. That
+    // is held for the burst turn)"): with a Swamp and a Lake in hand, the Swamp plan (holding the Lake) and the Lake
+    // plan are both offered (test_shadowborn_int9.cpp "Swamp + Lake in hand").
     bool NoLandPlanDominated(const GameState& s) const override;
     static constexpr int kManaGoal       = 6;   // no granter out: the Stone's 5 + an Apostle's 1
     static constexpr int kManaGoalRipple = 3;   // a granter out (USER: "change 2 ... to be 3 mana"; 4 is the most needed)

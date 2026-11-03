@@ -63,7 +63,14 @@ Permanent Perm4(const std::string& name, int number, bool fresh = false)
     p.entered_this_turn = fresh;
     return p;
 }
-const ShadowbornProvider& Prov4() { static const ShadowbornProvider p; return p; }
+// INT-9 added the Demon-search TIMING (Jetmir main 1 only when it raises this turn's attack, else the Overlord main 2;
+// test_shadowborn_int9.cpp pins it). These INT-4 tests pin the USER's Demon and tutor LISTS, so they run with the
+// timing filter off (the lists as INT-4 left them, in either main).
+struct ShadowbornNoTimingSb4 : ShadowbornProvider
+{
+    void SacNamedTimingFilter(const GameState&, int, const CardParams&, bool, std::vector<std::string>&) const override {}
+};
+const ShadowbornProvider& Prov4() { static const ShadowbornNoTimingSb4 p; return p; }
 GameState Base4()
 {
     Ensure4();
