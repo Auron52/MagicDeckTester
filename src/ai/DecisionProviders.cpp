@@ -28195,18 +28195,20 @@ static bool FluctuatorCanPayNow(const GameState& s, const ManaCost& cost);   // 
 std::vector<ManaCost> FluctuatorProvider::PaymentHoldUp(const GameState& s, int controller) const
 {
     if (controller < 0 || controller >= static_cast<int>(s.players.size())) { return {}; }
+    // Interned names compare by pointer (CPU: this runs on every outermost payment of the deck).
+    static const InternedName k_unearth("Unearth"), k_stinger("Drannith Stinger"), k_tutor("Enlightened Tutor"),
+        k_fluct("Fluctuator");
     bool unearth = false, stinger = false, tutor = false, fluct = false;
     for (const Card& c : s.players[controller].hand)
     {
-        const std::string& n = c.m_name.str();
-        if (n == "Unearth") { unearth = true; }
-        else if (n == "Drannith Stinger") { stinger = true; }
-        else if (n == "Enlightened Tutor") { tutor = true; }
-        else if (n == "Fluctuator") { fluct = true; }
+        if (c.m_name == k_unearth) { unearth = true; }
+        else if (c.m_name == k_stinger) { stinger = true; }
+        else if (c.m_name == k_tutor) { tutor = true; }
+        else if (c.m_name == k_fluct) { fluct = true; }
     }
     for (const Permanent& p : s.battlefield)
     {
-        if (p.controller_index == controller && p.card.m_name.str() == "Fluctuator") { fluct = true; break; }
+        if (p.controller_index == controller && p.card.m_name == k_fluct) { fluct = true; break; }
     }
     ManaCost b, r;
     b.black = 1;

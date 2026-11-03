@@ -17,6 +17,8 @@
 #include "core/GameState.h"
 #include "core/HeuristicDefaults.h"
 #include "core/SpellEffects.h"
+#include "core/GameLogger.h"
+#include "ai/ManaPayment.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -471,4 +473,44 @@ TEST_CASE("Fluct hold-up: the Tutor's {W} is held only with no Fluctuator in han
         CHECK((h[2].red == 1 && h[2].generic == 1 && h[2].ManaValue() == 2));
         CHECK((h[3].white == 1 && h[3].ManaValue() == 1));
     }
+}
+
+// The payer's two routes to the provider hold-up make the same payment: paid FIRST on the real board where the trial's
+// quiet scope is a no-op (search, rollouts, autonomous play), the scratch-board trial where it is not (here: a real
+// resolution). Fluctuator's {2} off three lands with the hold cards in hand, against the greedy's payment with none.
+TEST_CASE("Fluct hold-up: the pay-first route and the scratch trial make the same payment")
+{
+    const std::vector<std::vector<std::string>> boards = {
+        { "Polluted Mire", "Smoldering Crater", "Drifting Meadow" },
+        { "Canyon Slough", "Polluted Mire", "Drifting Meadow" },
+        { "Fetid Pools", "Smoldering Crater", "Irrigated Farmland" },
+        { "Drifting Meadow", "Smoldering Crater", "Polluted Mire", "Canyon Slough" },
+    };
+    const std::vector<std::vector<std::string>> hands = { { kU }, { kS }, { kU, kS }, { kT } };
+    const ManaCost fluct = CardDatabase::Instance().Lookup(kF)->card.m_mana_cost;
+    LineUnpaidCostScope _luc(fluct);
+    auto pay = [&](const std::vector<std::string>& hand, const std::vector<std::string>& board, bool real)
+    {
+        GameState g = MakeFl(hand, board);
+        const bool old_real = g_real_resolution;
+        g_real_resolution = real;
+        const bool ok = TapForCostShared(g, fluct, false, nullptr, true);
+        g_real_resolution = old_real;
+        REQUIRE(ok);
+        std::vector<int> tapped;
+        for (const Permanent& p : g.battlefield) { if (p.tapped) { tapped.push_back(p.card.m_number); } }
+        return tapped;
+    };
+    int held = 0;
+    for (const auto& board : boards)
+    {
+        const std::vector<int> greedy = pay({ kH }, board, false);
+        for (const auto& hand : hands)
+        {
+            const std::vector<int> first = pay(hand, board, false);
+            CHECK(first == pay(hand, board, true));
+            if (first != greedy) { ++held; }
+        }
+    }
+    CHECK(held > 0);   // some payment held a source out (the route that restores the board and pays again)
 }
