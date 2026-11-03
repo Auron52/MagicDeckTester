@@ -35151,6 +35151,7 @@ static void EmitRipplePins(const GameState& state, std::vector<Action>& actions)
                 out.push_back(std::move(a));
                 continue;
             }
+            const std::size_t f1_before = out.size();
             for (int cap : caps)
             for (int B : budgets)
             for (unsigned m = 0; m < (1u << ms); ++m)
@@ -35170,6 +35171,9 @@ static void EmitRipplePins(const GameState& state, std::vector<Action>& actions)
                 }
                 out.push_back(std::move(v));
             }
+            ripplestats::NoteSite(prov.FreeCastTakeDominated(state, me, *d) ? ripplestats::kSiteF1Apostle
+                                  : ritual ? ripplestats::kSiteF1Ritual : ripplestats::kSiteF1Other,
+                                  static_cast<long long>(out.size() - f1_before));
             continue;
         }
         // Per-cast pins (a tutor-family name).
@@ -35223,6 +35227,7 @@ static void EmitRipplePins(const GameState& state, std::vector<Action>& actions)
             }
             wv = std::max(1, std::min<int>(static_cast<int>(SacReadinessVictimReps(state, me).size() + hn.size()), 15));
         }
+        const std::size_t tf_before = out.size();
         for (unsigned mask = 0; mask < (1u << mt); ++mask)
         for (unsigned dm = 0; dm < (1u << ms); ++dm)
         {
@@ -35250,6 +35255,14 @@ static void EmitRipplePins(const GameState& state, std::vector<Action>& actions)
                 v.ripple_free_victim = fv;
                 out.push_back(std::move(v));
             }
+        }
+        if (ripplestats::On())
+        {
+            ripplestats::NoteSite(ripplestats::kSiteTutorCast, static_cast<long long>(out.size() - tf_before));
+            ripplestats::NoteSite(ripplestats::kSiteTutorMask, 1LL << mt);
+            ripplestats::NoteSite(ripplestats::kSiteTutorDecline, 1LL << ms);
+            if (all.tutors > 0) { ripplestats::NoteSite(ripplestats::kSiteTutorPick, wt); }
+            if (all.sacs > 0) { ripplestats::NoteSite(ripplestats::kSiteTutorVictim, wv); }
         }
     }
     actions.swap(out);
@@ -35360,6 +35373,7 @@ static void EmitSacNamedVariants(const GameState& state, std::vector<Action>& ac
         else { codes.push_back(Code{ -1, 0, 0 }); }   // unpinned (bodies asked at resolution)
         const bool leaf = !HumanPlayActive() && !(g_search_candidate_enum || g_condemn_root_turn < 0);
         if (leaf && codes.size() > 1) { codes.resize(1); }   // the playout policy: the front code only
+        ripplestats::NoteSite(ripplestats::kSiteSacNamed, static_cast<long long>(targets.size() * codes.size()));
         Action base;
         base.kind           = Action::Kind::ActivatePermAbility;
         base.card_name      = src.m_name;
@@ -46330,6 +46344,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 { d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name); }
                 if (d == nullptr || !SacCreatureCostFoldsByReadiness(d->params) || a.soulfire_own_targets != 0)
                 { out.push_back(std::move(a)); continue; }
+                const std::size_t sv_before = out.size();
                 for (int v : bf_victims)
                 {
                     Action c = a;
@@ -46344,6 +46359,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     c.trick_hand_target    = hv.name;   // the co-cast requirement (see above)
                     out.push_back(std::move(c));
                 }
+                ripplestats::NoteSite(ripplestats::kSiteSacVictim, static_cast<long long>(out.size() - sv_before));
                 // No victim on the battlefield or in hand: not castable -- nothing emitted.
             }
             actions.swap(out);
@@ -80934,6 +80950,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 // fetching the worst candidate.
                 const bool decline = d->params.tutor_optional;
                 const std::size_t nv = (k > 1 ? k - 1 : 0) + (decline ? 1 : 0);
+                ripplestats::NoteSite(ripplestats::kSiteTutorAxis, static_cast<long long>(nv + 1));
                 if (nv > 0) { emits.push_back(TutorEmit{ ti, k, decline }); n_extra += nv; }
                 break;   // vary ONE tutor per variant; the first to resolve consumes the pin
             }

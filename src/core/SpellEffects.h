@@ -46136,11 +46136,48 @@ namespace ripplestats
         { if (e.first == s.game_seed && e.second == number) { g_bottom_read.fetch_add(1); return; } }
     }
     inline void NoteShuffle() { if (g_real_resolution) { t_bottomed.clear(); } }
+    // THE ENUMERATION SITE CENSUS (Shadowborn INT-9; diagnostic, never read by play): per decision SITE, how often
+    // the enumerator built its menu (calls), the summed menu width and the widest menu -- "menu width x frequency".
+    // Counted at emission in every host that enumerates (search and rollout), so it measures where the work is.
+    enum Site : int
+    {
+        kSiteF1Apostle = 0,   // ripple per-name menu on the first copy of a take-dominated (Apostle) name
+        kSiteF1Ritual,        // ...of a mana ritual (Dark Ritual, Culling)
+        kSiteF1Other,         // ...of any other order-inert name (Thrumming Stone)
+        kSiteTutorCast,       // ripple pin variants of ONE tutor-family cast (masks x declines x picks x victims)
+        kSiteTutorMask,       //   its don't-reveal mask factor (2^mt)
+        kSiteTutorDecline,    //   its decline factor (2^ms)
+        kSiteTutorPick,       //   its free-tutor pick width wt (per ordinal)
+        kSiteTutorVictim,     //   its free-victim width wv (per ordinal)
+        kSiteSacVictim,       // "sacrifice a creature" additional-cost victim variants of one cast (Intent, Culling)
+        kSiteSacNamed,        // the Apostle activation: Demons x readiness codes
+        kSiteTutorAxis,       // a hard tutor's searched pick width (the plan's tutor axis)
+        kSiteCount
+    };
+    inline std::atomic<long long> g_site_calls[kSiteCount], g_site_width[kSiteCount], g_site_max[kSiteCount];
+    inline void NoteSite(int site, long long width)
+    {
+        if (!On()) { return; }
+        g_site_calls[site].fetch_add(1);
+        g_site_width[site].fetch_add(width);
+        long long m = g_site_max[site].load();
+        while (width > m && !g_site_max[site].compare_exchange_weak(m, width)) {}
+    }
     struct Dumper
     {
         ~Dumper()
         {
             if (!On()) { return; }
+            static const char* const kSiteNames[kSiteCount] = {
+                "f1_apostle", "f1_ritual", "f1_other", "tutor_cast", "tutor_cast.mask", "tutor_cast.decline",
+                "tutor_cast.pick", "tutor_cast.victim", "sac_victim", "sac_named", "tutor_axis" };
+            for (int i = 0; i < kSiteCount; ++i)
+            {
+                const long long c = g_site_calls[i].load();
+                std::fprintf(stderr, "[sbsite] %-20s calls=%lld width_sum=%lld mean=%.2f max=%lld\n", kSiteNames[i], c,
+                             g_site_width[i].load(), c > 0 ? static_cast<double>(g_site_width[i].load()) / c : 0.0,
+                             g_site_max[i].load());
+            }
             std::fprintf(stderr, "[ripple] triggers=%lld reveals=%lld free_casts=%lld unpinned_in_window=%lld "
                          "unpinned_beyond=%lld real_bottomed=%lld real_bottom_reads_before_shuffle=%lld\n",
                          g_triggers.load(), g_reveals.load(), g_free_casts.load(), g_unpinned_in_window.load(),
