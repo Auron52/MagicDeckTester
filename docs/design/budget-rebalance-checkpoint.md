@@ -140,6 +140,19 @@ Started 2026-11-03.
   tight X loses Alchemist turns); tier-1 sizes (tt 8, fsl 16, m1memo 8, gamelc 24, mana 16 MB); mana-cache
   context fold (MTG_MANA_CACHE_X_TRAITS / _X_PAYCTX); branch not pushed (push would also run Windows CI).
 
+## USER 2026-11-03: mana tier-1 24 MB; TIER-2 OVERFLOW wanted
+- USER: tier-1 total 50-100 MB per thread is flexible -> mana 16 -> 24 MB (a18ae02bf), total 80 MB. NOTE: solvememo
+  is NOT byte-capped (portable entry cap) and peaks at 73 MB (p99.9 24 MB) -- outside that 80 MB; told the user.
+- Fill cost measured: Snow regression d5 s2002 gi80 (only game > 24 MB uncapped, 33.7 MB): play identical (unwon,
+  527,310 units) at uncapped / 24 / 16 MB / cache off; wall 14.7 / 15.0 / 15.9 / 16.5 s (contended).
+- USER: "be ready to use the tier 2 caching if we need it ... for any caches that will hit us heavily". Subagent
+  (worktree .claude/worktrees/tier2-overflow, branch tier2-overflow from a18ae02bf) building a generic tier-2
+  overflow store: shared, RAM-sized, a tier-2 hit charges exactly the miss's units (mana: 0, pure wall); wire mana,
+  then m1memo, fsl; evaluate solvememo; purity bar = tier-2 size tiny vs large at a shrunk fixed tier-1 => 0 unit diffs.
+  Mana caveat: colour-only hit diffs (niv n83) could become machine-dependent in tier 2 -> X_TRAITS/X_PAYCTX folds.
+- RUNNING: build/scratch/budget/run_final.sh -> final.DONE (gate-off tiers vs origin; mana-24 build; tiers again;
+  mana24 vs gate-off must be 0 play changes; then accept smoke + regression with the origin-stale note).
+
 ## TIERS vs ORIGIN (2026-11-03 07:00-07:45 UTC)
 - Baseline arm: worktree .claude/worktrees/origin-baseline (origin 980616e55, Release), smoke + regression; diff
   per game with build/scratch/budget/wins_diff.py <base wins> <new wins>.
