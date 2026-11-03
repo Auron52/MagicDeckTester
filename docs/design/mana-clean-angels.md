@@ -58,10 +58,19 @@ so play does not move.
   Ring keeps Remote Farm's floating {W}". Each fails with its own flag at 0. Full suite 2,432 / 2,432.
 * Scenario `test/scenarios/angels_giada_serra_leftover_general.json` (the x208 board; T4 on both bookings -- the
   search finds another T4 line -- so it guards the board, the unit tests pin the mechanism).
-* Fresh slice, gi 100,000-104,999 (seed 30,000,000 + gi): fixes 1+2 -> 16 ISSUE flags (APPLY-DROP 7 in one
-  position, ORACLE-GAP 4, DOMINATED-CREATURE 4, ENUM-GAP 1) against a pass-1 rate of ~115 per 5,000.
-* Held-out A/B, Angels 3,000 games (seed 53,000,000 + gi), origin vs fixes 1+2: 2 game digests changed, 0 slower,
-  0 faster; units 3,337,277 -> 3,338,714.
+* Fresh slice, gi 100,000-104,999 (seed 30,000,000 + gi; 5,000 games, the final build): **12 ISSUE flags** --
+  APPLY-DROP 7 (one position, remaining item 1), DOMINATED-CREATURE 4 (two positions, item 2), ENUM-GAP 1 (item 3),
+  ORACLE-GAP 0, UNMODELED 0 -- against a pass-1 rate of ~115 per 5,000. Fixes 1+2 alone left ORACLE-GAP 4 there;
+  fix 3 took it to 0 at no measurable oracle cost (applies +0.7%, oracle ms within noise on a loaded box). Play is
+  byte-identical with the oracle off (every job digest).
+* Pass-1 repros (seeds 30010687, 30001531, 30003841, 30004912, 30024991; slice 30100074, 30101613, 30102540): no
+  ISSUE flag left but gi 1531's ENUM-GAP (item 3).
+* Smoke (7 threads): only Angels d0, Dragons d0 (2 games faster), EDF d0 and Niv d5 move among the cases this
+  change touches; no searched game slower. The Merfolk / Merfolk 2HG failures are pre-existing on origin (the
+  origin binary gives the same digests: ground truth not re-accepted after the single-pass Merfolk profile).
+* Held-out A/B (seed 53,000,000 + gi, 3,000 games per deck at the shipped profile; origin b9247dcc3 vs the fixes):
+  Angels 2 / Dragons 1 / EDF 6 / Niv 13 game digests changed; **0 slower**, 1 faster (Niv gi1146 T5 -> T4); per deck
+  net 0, 0, 0, -1. Units: Angels +0.04%, Dragons +0.004%, EDF -0.008%, Niv +0.002%.
 
 ## Remaining (not fixed here)
 
