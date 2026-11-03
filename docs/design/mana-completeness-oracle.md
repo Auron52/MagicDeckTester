@@ -1449,24 +1449,55 @@ Pinned by `test/unit/test_vampires_sweep.cpp` (the order on the witness board, t
 **Oracle census, Vampires, 2,000 games** (gate games 0-999 and the fresh block 100,000-100,999; before = PGO `7ec55bb`,
 after = this branch; `build/scratch` run, play identity oracle on/off byte-identical on the after binary):
 
-| class | before | after |
-|---|---|---|
-| ORACLE-GAP | 134 | 6 |
-| APPLY-DROP-ORDER | 0 | 0 |
-| PHANTOM | 56 | 39 |
-| CONTINUATION-DIFFERS | 707 | 193 |
-| DROP-COVERED | 557 | 484 |
-| DOMINATED-LIFE (disclosed) | 862 | 862 |
+| class | before | after (oracle + convoke) | after (+ twin tap binding) |
+|---|---|---|---|
+| ORACLE-GAP | 134 | 6 | **0** |
+| APPLY-DROP-ORDER | 0 | 0 | 0 |
+| PHANTOM | 56 | 39 | 39 |
+| CONTINUATION-DIFFERS | 707 | 193 | 195 |
+| DROP-COVERED | 557 | 484 | 458 |
+| UNMODELED (context) | 82 | 82 | 86 |
+| DOMINATED-LIFE (disclosed) | 862 | 862 | 861 |
 
 The six repro commands of the pass-1 report (the four APPLY-DROP-ORDER seeds and the two ORACLE-GAP seeds) are clean
 of both classes after; the oracle fix alone (`MTG_CONVOKE_SHORTFALL_ORDER=0`) already clears the two ORACLE-GAP seeds.
 
-**Left open: the continuation's own Blood** (6 flags, 2 signatures, both pre-existing: seed 30000611 T3 `{Swamp,
-Baron, Pit Fighter}` and seed 30100014 T4). The engine's end board holds a Blood Token the PLAN does not name (made by
-the apply's continuation with the Swamp's {1}), and no oracle realisation makes it, though its "#58 pays the {R}"
-realisation leaves #57 and the Swamp untapped. Unverified hypothesis: the continuation replays a memoised plan that
-names an Estate BY NUMBER, which the oracle's equivalent board has tapped (the misindexed-replay class). In pass 1 that
-shape is about 54 of the 7,208 ORACLE-GAPs, so the gate's next Vampires run will still not be clean on it.
+**The continuation's own Blood: a misindexed memo replay (engine defect, fixed in the key).** The 6 flags left after
+the two fixes above (seed 30000611 T3 `{Swamp, Baron, Pit Fighter}`, seed 30100014 T4; about 54 of pass 1's 7,208)
+are breakpoint VARIANTS (`bp_choice = 0`): the plan names no Blood, its continuation (candidate 0 of the list
+derived at the breakpoint) makes one. That list is memoised (the bp-enum cache), keyed by the canonical sim key plus
+`FsOrderSig`. The canonical key folds each permanent's state as a multiset and `FsOrderSig` its (name, number) per
+position, so nothing binds a twin's TAPPED flag to its number: "#57 tapped, #58 untapped" (the engine paid
+Pit Fighter's {R} with #57) and "#58 tapped, #57 untapped" (the oracle's realisation paying it with #58) were one
+key. The list derived on the first holds "Blood with #58"; served on the second, the source is tapped and the
+activation drops. Confirmed three ways: `MTG_NO_BP_ENUM_CACHE=1` clears both seeds' ORACLE-GAPs; a unit test on the
+seed 30000611 T3 board (`test_vampires_sweep.cpp`, "a memoised continuation's Blood source is not served to its
+tapped twin") fails with the fix off; and with it on, every such plan is covered by an oracle realisation. The same
+hole is in every canonical-key consumer `FsOrderSig` guards (FSL win lines, dedup drops, the rollout TT): any answer
+naming a {T} source by number could be replayed on its tapped twin, in play as much as in the oracle.
+
+Fix (`TurnSolver.cpp FsOrderSig`, `MTG_ORDER_SIG_TAP_BIND`, DEFAULT ON, heurarm slot): a permanent with a {T}-cost
+activation a plan names by its number (PermAbilityTaps' modes, Blood's crack, the token / put-from-hand {T}
+abilities, a tapping land search) that has a same-name twin on the battlefield folds its tapped flag at its
+position. Without such a twin the signature is exactly the old one, so only boards holding two copies of such a
+permanent can key differently (in the shipping decks: Vampires' Voldaren Estate and Bloodline Keeper, EDF's
+Conservatory / Mariposa / Kitchen, Snow's Scrying Sheets / Frost Augur, the Myriad / Evolving Wilds / Terramorphic
+decks, Blighted Steppe, Sliver Hive, Niv-Mizzet, Staff of Domination, Speaker of the Heavens). It only ever splits a
+key, so a memo answers a strict subset of what it answered, each on a board where its numbers mean the same thing.
+
+After all three fixes the 2,000-game census reads **ORACLE-GAP 0** and no issue class (the MISS count is
+DOMINATED-LIFE, disclosed). The six flags became UNMODELED, joining 80 pre-existing flags of one shape: "a mana
+choice the oracle does not drive: Voldaren Estate" -- the continuation's own Blood source taps as its activation's
+{T}, and the oracle's unscripted-tap check (which exempts only the PLAN's sources) reads it as an undriven mana tap.
+UNMODELED is context, not a gate class; making the check exempt a continuation's activation sources would turn
+those 86 into verdicts and is the natural next oracle step.
+
+Play under the binding: held-out A/B (`MTG_ORDER_SIG_TAP_BIND` per-job off/on, one pooled batch, seed 1720001, every
+deck at its play settings) over every deck holding two copies of such a permanent -- Vampires 4,000 + 2HG 2,000, EDF
+2,000, Colossus Hammer 2,000, SelesnyaLifegain 2,000, slivers_vial 2,000, Landfall 1,000, LandfallElementals 1,000,
+Snow 600, NivMizzetCombo 600, AccomplishedAlchemist 600, Unpredictable Cyclone 200 (18,000 paired games): **every job
+byte-identical** (0 of 360 digests changed), units at most +0.005% (vampires2hg; the split keys re-derive a few
+lists). Smoke identical to GT apart from the four Merfolk keys that drift on the unchanged base too.
 
 **Play.** Held-out A/B (`MTG_CONVOKE_SHORTFALL_ORDER` per-job off/on, one pooled batch, seed 1710001, Vampires at its
 play settings): Standard 6,000 paired games and 2HG 2,000: **0 slower, 0 faster**, average win turn identical (4.2550,

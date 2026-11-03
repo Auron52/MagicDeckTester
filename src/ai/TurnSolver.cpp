@@ -87362,6 +87362,39 @@ inline bool CanonSimKeyOn()
 // index-encoded lines/plans (FSL win entries, the bp-enum memo), enumeration-dedup drops, and
 // rollout VALUES (SimulateToEnd's TT -- greedy rollouts read vector order, so a win turn cached
 // from a permuted sibling can differ; mirrorwing gi=363, leaf-verify cached=8 fresh=7).
+//
+// TWIN TAP BINDING (MTG_ORDER_SIG_TAP_BIND, DEFAULT ON; =0 -> the names-and-numbers signature alone).
+// The canonical key folds each permanent's state as a MULTISET and this signature its (name, number)
+// per position, so between them nothing says WHICH of two identical permanents holds which state: a
+// board with Voldaren Estate #58 tapped and #57 untapped keys exactly as the board with #58 untapped
+// and #57 tapped. An answer that names a permanent BY NUMBER through a {T} cost is then replayed on the
+// twin board against the tapped copy. Mana-clean gate, Vampires seed 30000611 T3: the breakpoint
+// continuation list derived after the engine paid Falkenrath Pit Fighter's {R} with Estate #57 holds
+// "create a Blood with #58"; the board where #58 paid the {R} hit the same bp-enum entry, the Blood's
+// source was tapped and the activation dropped -- in play and in every oracle realisation, which is
+// why the oracle could not reach the engine's line (ORACLE-GAP "Blood Token only in engine"). Each
+// permanent with a {T}-cost activation that a plan names by its number (PermAbilityTaps' modes, the
+// token / put-from-hand {T} abilities) and a same-name twin on the battlefield now folds its tapped
+// flag at its position. Gated on such a twin being present: every other board keeps the exact prior
+// signature, so a deck without two copies of such a permanent is byte-identical.
+inline bool OrderSigTapBindOn()
+{
+    static const bool v = EnvOn("MTG_ORDER_SIG_TAP_BIND", true);   // DEFAULT ON; =0 disables
+    return heurarm::Flag(heurarm::ORDER_SIG_TAP_BIND, v);         // per-job override (--batch flags)
+}
+inline bool NumberedTapSource(const Permanent& perm)
+{
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(perm.card);
+    if (d == nullptr) { return false; }
+    const CardParams& pp = d->params;
+    return pp.tap_damage_cost.has_value()     || pp.tap_investigate_cost.has_value()
+        || pp.tap_draw_cost.has_value()       || pp.tap_lifegain_cost.has_value()
+        || pp.tap_blood_cost.has_value()      || pp.blood_draw_cost.has_value()
+        || pp.tap_target_pump_cost.has_value() || pp.tap_token_cost.has_value()
+        || pp.tap_put_from_hand_cost.has_value()
+        || pp.life_gated_put_creatures_cost.has_value() || pp.sac_lifegain_per_creature_cost.has_value()
+        || (pp.land_search_activation_taps && pp.land_search_activation_cost.has_value());
+}
 inline std::uint64_t FsOrderSig(const GameState& state)
 {
     std::uint64_t h = 1469598103934665603ull;
@@ -87371,6 +87404,25 @@ inline std::uint64_t FsOrderSig(const GameState& state)
     mix(0xB1F1);
     for (const Permanent& perm : state.battlefield)
     { mix(perm.card.m_name_hash); mix(static_cast<std::uint64_t>(perm.card.m_number)); }
+    if (OrderSigTapBindOn())
+    {
+        const std::size_t n = state.battlefield.size();
+        bool tagged = false;
+        for (std::size_t i = 0; i < n; ++i)
+        {
+            const Permanent& p = state.battlefield[i];
+            if (!NumberedTapSource(p)) { continue; }
+            bool twin = false;
+            for (std::size_t j = 0; j < n && !twin; ++j)
+            {
+                const Permanent& q = state.battlefield[j];
+                twin = j != i && q.card.m_name_hash == p.card.m_name_hash && q.controller_index == p.controller_index;
+            }
+            if (!twin) { continue; }
+            if (!tagged) { mix(0x7A9B1D); tagged = true; }
+            mix(static_cast<std::uint64_t>(i) * 2 + (p.tapped ? 1u : 0u));
+        }
+    }
     return h | 1ull;   // never 0 (0 = unset)
 }
 

@@ -533,3 +533,53 @@ TEST_CASE("mana oracle: the plan's own Blood Estate is not its twin's equal (see
     }
     CHECK(checked > 0);
 }
+
+// ---- The mana-clean gate's last ORACLE-GAP shape (2026-11-03): a memoised breakpoint continuation names
+// Voldaren Estate #58 by number; the board where #58 (not its twin #57) paid the earlier cast keyed the same
+// (the canonical key bound neither twin's tapped flag to its number), so the Blood dropped there. Seed 30000611
+// T3: every plan whose continuation makes the Blood is covered by an oracle realisation under
+// MTG_ORDER_SIG_TAP_BIND; with the binding off the oracle cannot reach the engine's line.
+TEST_CASE("mana oracle: a memoised continuation's Blood source is not served to its tapped twin (seed 30000611 T3)")
+{
+    EnsureCardsLoaded();
+    GameState s = Fresh();
+    s.turn_number = 3;
+    s.players[0].life = 19;
+    s.players[1].life = 19;
+    s.players[0].lands_played_this_turn = 0;
+    Put(s, "Voldaren Estate", 58);
+    Put(s, "Vampire of the Dire Moon", 55);
+    Put(s, "Voldaren Estate", 57);
+    Put(s, "Asylum Visitor", 6);
+    Hand(s, "Swamp", 45);
+    Hand(s, "Markov Baron", 31);
+    Hand(s, "Swamp", 44);
+    Hand(s, "Falkenrath Pit Fighter", 21);
+    auto run = [&](int arm, int& checked, int& covered)
+    {
+        heurarm::t_arm[heurarm::ORDER_SIG_TAP_BIND] = static_cast<std::int8_t>(arm);
+        checked = covered = 0;
+        const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true);
+        for (const TurnSolver::Plan& p : plans)
+        {
+            bool named = false;
+            for (const Action& a : p.actions) { if (a.kind == Action::Kind::ActivatePermAbility) { named = true; } }
+            if (named || p.bp_choice < 0) { continue; }
+            GameState e = s;
+            TurnSolver::ApplyPlan(e, p, true);
+            bool blood = false;
+            for (const Permanent& q : e.battlefield) { if (q.card.m_name.str() == "Blood Token") { blood = true; } }
+            if (!blood) { continue; }
+            ++checked;
+            if (manaoracle::CoversEngineOutcome(s, /*pre=*/true, p)) { ++covered; }
+        }
+        heurarm::t_arm[heurarm::ORDER_SIG_TAP_BIND] = -1;
+    };
+    int checked = 0, covered = 0;
+    run(1, checked, covered);
+    CHECK(checked > 0);
+    CHECK(covered == checked);
+    run(0, checked, covered);   // the defect, for the record: the twin board is served #58's Blood
+    CHECK(checked > 0);
+    CHECK(covered < checked);
+}
