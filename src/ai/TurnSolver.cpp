@@ -87962,6 +87962,18 @@ inline bool NumberedTapSource(const Permanent& perm)
         || pp.life_gated_put_creatures_cost.has_value() || pp.sac_lifegain_per_creature_cost.has_value()
         || (pp.land_search_activation_taps && pp.land_search_activation_cost.has_value());
 }
+inline bool TwinnedNumberedTapSource(const GameState& state, std::size_t i)
+{
+    const Permanent& p = state.battlefield[i];
+    if (!NumberedTapSource(p)) { return false; }
+    for (std::size_t j = 0; j < state.battlefield.size(); ++j)
+    {
+        const Permanent& q = state.battlefield[j];
+        if (j != i && q.card.m_name_hash == p.card.m_name_hash && q.controller_index == p.controller_index)
+        { return true; }
+    }
+    return false;
+}
 inline std::uint64_t FsOrderSig(const GameState& state)
 {
     std::uint64_t h = 1469598103934665603ull;
@@ -87973,24 +87985,19 @@ inline std::uint64_t FsOrderSig(const GameState& state)
     { mix(perm.card.m_name_hash); mix(static_cast<std::uint64_t>(perm.card.m_number)); }
     if (OrderSigTapBindOn())
     {
-        const std::size_t n = state.battlefield.size();
         bool tagged = false;
-        for (std::size_t i = 0; i < n; ++i)
+        for (std::size_t i = 0; i < state.battlefield.size(); ++i)
         {
-            const Permanent& p = state.battlefield[i];
-            if (!NumberedTapSource(p)) { continue; }
-            bool twin = false;
-            for (std::size_t j = 0; j < n && !twin; ++j)
-            {
-                const Permanent& q = state.battlefield[j];
-                twin = j != i && q.card.m_name_hash == p.card.m_name_hash && q.controller_index == p.controller_index;
-            }
-            if (!twin) { continue; }
+            if (!TwinnedNumberedTapSource(state, i)) { continue; }
             if (!tagged) { mix(0x7A9B1D); tagged = true; }
-            mix(static_cast<std::uint64_t>(i) * 2 + (p.tapped ? 1u : 0u));
+            mix(static_cast<std::uint64_t>(i) * 2 + (state.battlefield[i].tapped ? 1u : 0u));
         }
     }
     return h | 1ull;   // never 0 (0 = unset)
+}
+bool TurnSolver::IsTwinnedNumberedTapSource(const GameState& state, std::size_t idx)
+{
+    return TwinnedNumberedTapSource(state, idx);
 }
 
 // M2 COARSE-KEY MODE (MTG_M2_KEY_COARSE; set ONLY inside BuildM2CoarseKey): drop the three

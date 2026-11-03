@@ -281,7 +281,9 @@ namespace manaoracle
     // THE COMPLETENESS SELF-CHECK for one plan the engine realises in full (AuditPlan's I1, whose miss is an
     // ORACLE-GAP): does the oracle's own payment search reach an outcome on the engine's line that covers the
     // engine's end board? For the unit tests that pin the shapes the search once missed. Quiet; copies only.
-    bool CoversEngineOutcome(const GameState& state, bool pre, const TurnSolver::Plan& plan);
+    // `scripted_only`: count only an outcome resting on no mana choice the oracle does not drive (an UNMODELED
+    // realisation is no verdict) -- the census's own reading of I1.
+    bool CoversEngineOutcome(const GameState& state, bool pre, const TurnSolver::Plan& plan, bool scripted_only = false);
 
     // THE ENUM-GAP VERDICT for one plan a mana gate kept off `menu` (AuditDecision's per-plan check), for the unit
     // tests that pin its false-positive rules: the class it would report ("ENUM-GAP", "HIDDEN-INFO", a

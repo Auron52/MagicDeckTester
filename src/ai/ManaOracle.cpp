@@ -598,6 +598,22 @@ std::string AttachedKey(const GameState& s, const Permanent& p)
 // Vampires games ("Voldaren Estate#58 tapped by engine only"). A plan source's tapped flag is now part of
 // both identities.
 thread_local const std::set<int>* t_plan_srcs = nullptr;
+// ...and, while a realisation runs, every TWINNED permanent a {T}-cost activation names by number
+// (TurnSolver::IsTwinnedNumberedTapSource), judged on the board at hand -- a land drop can make the twin
+// mid-plan. A breakpoint CONTINUATION, which the plan does not list, can name one: a positional bp_choice
+// indexes a list derived on the board as it stands, so the same plan continues differently depending on
+// WHICH of two Voldaren Estates the payments left untapped (Vampires seed 30000159 T5: the engine pays Aether
+// Vial with Estate #57 and its continuation makes a Blood with #59; the board where #59 paid the Vial
+// continued with no Blood, and the prune had dropped the #57 branch as the same resources -- ORACLE-GAP).
+thread_local bool t_key_twin_taps = false;
+bool KeyedApart(const GameState& s, const Permanent& p)
+{
+    if (t_plan_srcs != nullptr && t_plan_srcs->count(p.card.m_number) != 0) { return true; }
+    if (!t_key_twin_taps || s.battlefield.empty()) { return false; }
+    const std::ptrdiff_t i = &p - s.battlefield.data();
+    return i >= 0 && static_cast<std::size_t>(i) < s.battlefield.size()
+        && TurnSolver::IsTwinnedNumberedTapSource(s, static_cast<std::size_t>(i));
+}
 
 // The resources. `with_float`: mid-plan (a frontier) the floating pools are resources; at the END of
 // the apply they are not -- the plan is the whole main phase, and the pool empties when it ends.
@@ -611,8 +627,7 @@ Res Resources(const GameState& s, bool with_float)
     {
         if (p.controller_index != a) { continue; }
         std::string k = ResClassKey(p) + AttachedKey(s, p);
-        if (t_plan_srcs != nullptr && t_plan_srcs->count(p.card.m_number) != 0)
-        { k += "|plan#" + std::to_string(p.card.m_number); }
+        if (KeyedApart(s, p)) { k += "|plan#" + std::to_string(p.card.m_number); }
         if (!p.tapped)    { ++r["U:" + k]; }
         if (p.temp_haste) { ++r["H:" + k]; }
     }
@@ -1037,8 +1052,7 @@ std::vector<SrcClass> BuildSources(const GameState& state, bool for_creature, st
         key += "|" + p.counters.KeyFragment() + "|" + std::to_string(p.storage_counters) + ","
              + std::to_string(p.charge_counters) + "|" + std::to_string(n_auras)
              + (p.entered_this_turn ? "|new" : "|old");
-        if (t_plan_srcs != nullptr && t_plan_srcs->count(p.card.m_number) != 0)
-        { key += "|plan#" + std::to_string(p.card.m_number); }
+        if (KeyedApart(state, p)) { key += "|plan#" + std::to_string(p.card.m_number); }
         auto it = by_key.find(key);
         if (it != by_key.end()) { out[it->second].nums.push_back(p.card.m_number); continue; }
         SrcClass sc;
@@ -1287,11 +1301,11 @@ struct PayEnum
         // engine's key does not say which copy of identical permanents is tapped, so a plan source's tapped
         // flag is folded in (see t_plan_srcs): tapping it is not the same result as tapping its twin.
         std::uint64_t rkey = TurnSolver::MidTurnStateKeyOfPayment(sc);
-        if (t_plan_srcs != nullptr && !t_plan_srcs->empty())
+        if ((t_plan_srcs != nullptr && !t_plan_srcs->empty()) || t_key_twin_taps)
         {
             for (const Permanent& p : sc.battlefield)
             {
-                if (!p.tapped || t_plan_srcs->count(p.card.m_number) == 0) { continue; }
+                if (!p.tapped || !KeyedApart(sc, p)) { continue; }
                 rkey = (rkey ^ (0x51A9ull + static_cast<std::uint64_t>(p.card.m_number))) * 0x9E3779B97F4A7C15ULL;
             }
         }
@@ -2045,9 +2059,11 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
     struct PlanSrcScope
     {
         const std::set<int>* saved;
-        explicit PlanSrcScope(const std::set<int>* s) : saved(t_plan_srcs) { t_plan_srcs = s; }
-        ~PlanSrcScope() { t_plan_srcs = saved; }
-    } _plan_src_scope(&plan_srcs);
+        bool                 saved_twin;
+        explicit PlanSrcScope(const std::set<int>* s) : saved(t_plan_srcs), saved_twin(t_key_twin_taps)
+        { t_plan_srcs = s; t_key_twin_taps = true; }
+        ~PlanSrcScope() { t_plan_srcs = saved; t_key_twin_taps = saved_twin; }
+    } _plan_src_scope(&plan_srcs);   // + t_key_twin_taps: the continuation's twinned {T} sources (KeyedApart)
     const int act = root.active_player_index;
     while (!layer.empty())
     {
@@ -2071,9 +2087,18 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
             g_act_drop_sink          = &act_drops;
             const long long ta0 = g_tap_ahead_calls;
             const long long uc0 = g_untap_choice_calls;
+            // The {T}-cost activation sources the apply resolved on this copy -- the plan's AND its
+            // continuations' (a breakpoint continuation's Voldaren Estate Blood) -- for the unscripted check.
+            std::vector<int> act_tap_srcs;
+            const GameState*  saved_tap_target = g_perm_ability_tap_target;
+            std::vector<int>* saved_tap_sink   = g_perm_ability_tap_sink;
+            g_perm_ability_tap_target = &copy;
+            g_perm_ability_tap_sink   = &act_tap_srcs;
             t_hook = &h;
             TurnSolver::ApplyPlan(copy, plan, pre);
             t_hook = nullptr;
+            g_perm_ability_tap_target = saved_tap_target;
+            g_perm_ability_tap_sink   = saved_tap_sink;
             // (A tap-ahead inside an ENGINE step is the engine's step, not a tap outside the script.)
             const bool engine_tapahead = (g_tap_ahead_calls - ta0) != h.engine_tapaheads;
             const bool engine_untap    = g_untap_choice_calls != uc0;
@@ -2119,6 +2144,9 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
             {
                 if (p0.controller_index != act || p0.tapped || by_script.count(p0.card.m_number) != 0) { continue; }
                 if (plan_srcs.count(p0.card.m_number) != 0 || plan_names.count(p0.card.m_name.str()) != 0) { continue; }
+                // ...nor one a continuation tapped as its own activation's {T} cost (not a mana choice).
+                if (std::find(act_tap_srcs.begin(), act_tap_srcs.end(), p0.card.m_number) != act_tap_srcs.end())
+                { continue; }
                 for (const Permanent& p1 : copy.battlefield)
                 {
                     if (p1.card.m_number != p0.card.m_number) { continue; }
@@ -3128,7 +3156,7 @@ GapVerdict EnumGapPlan(const GameState& state, bool pre, const TurnSolver::Plan&
 }
 } // namespace
 
-bool CoversEngineOutcome(const GameState& state, bool pre, const TurnSolver::Plan& plan)
+bool CoversEngineOutcome(const GameState& state, bool pre, const TurnSolver::Plan& plan, bool scripted_only)
 {
     RevealLogPause pause;
     const EngineReal er = EngineApply(state, pre, plan);
@@ -3140,6 +3168,7 @@ bool CoversEngineOutcome(const GameState& state, bool pre, const TurnSolver::Pla
     for (const Outcome& o : r.outcomes)
     {
         if (!o.Full() || o.line != e_line || CoreKey(o.st) != ek) { continue; }
+        if (scripted_only && !o.unscripted.empty()) { continue; }
         if (Covers(Resources(o.st, /*with_float=*/false), eres, nullptr)) { return true; }
     }
     return false;

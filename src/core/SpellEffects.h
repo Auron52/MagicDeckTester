@@ -29648,6 +29648,15 @@ inline std::string PermAbilityLabelFor(PermAbilityMode mode, const CardDefinitio
 // m_number.
 bool TapForCostDirect(GameState& state, const ManaCost& cost_in, bool for_creature);   // TurnSolver
 inline bool PingAllSelfSafe(const GameState& state, int controller, const CardDefinition& def);   // below
+// MANA ORACLE INSTRUMENT (read only by ManaOracle.cpp Realize; null everywhere else, so play never reads it): the
+// sources whose {T} was the COST of an activation resolved on `g_perm_ability_tap_target` -- the oracle's own copy
+// of the board. Its unscripted-tap check asks "did the engine tap a mana source the script did not drive?"; a
+// Voldaren Estate a breakpoint CONTINUATION activates for its Blood (a plan the oracle never sees) taps as that
+// activation's {T}, not for mana, and without this it read as an undriven mana choice (UNMODELED, 86 flags on the
+// Vampires 2,000-game census, 2026-11-03). Pointer-matched, so a nested search's applies on other states record
+// nothing.
+inline thread_local const GameState* g_perm_ability_tap_target = nullptr;
+inline thread_local std::vector<int>*  g_perm_ability_tap_sink   = nullptr;
 inline void ApplyPermAbility(GameState& state, int controller, int source_id, PermAbilityMode mode)
 {
     DrawTriggerFlushScope _dtf(state);   // the Niv loop: this effect's draws ping AFTER it resolves
@@ -29658,6 +29667,8 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
             && state.battlefield[i].controller_index == controller) { idx = i; break; }
     }
     if (idx < 0) { return; }
+    if (g_perm_ability_tap_sink != nullptr && &state == g_perm_ability_tap_target && PermAbilityTaps(mode))
+    { g_perm_ability_tap_sink->push_back(source_id); }
     const CardDefinition* d = CardDatabase::Instance().LookupCached(state.battlefield[idx].card);
     if (!d) { return; }
     const std::string src_name = state.battlefield[idx].card.m_name.str();

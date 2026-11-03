@@ -1492,6 +1492,43 @@ choice the oracle does not drive: Voldaren Estate" -- the continuation's own Blo
 UNMODELED is context, not a gate class; making the check exempt a continuation's activation sources would turn
 those 86 into verdicts and is the natural next oracle step.
 
+**The continuation's activation sources are exempt; twinned numbered {T} sources are keyed apart (oracle only).**
+That step is taken. `ApplyPermAbility` records the source of every {T}-cost activation it resolves into a
+thread-local sink (`g_perm_ability_tap_target` / `_sink`, `SpellEffects.h`; null outside the oracle and
+pointer-matched to the oracle's own copy of the board, so play and nested searches never record), and Realize's
+unscripted-tap check skips those sources: the Estate a continuation taps for its Blood is that activation's cost,
+not a mana choice. The exemption exposed one ORACLE-GAP shape (seed 30000159 T5, 2 flags on the 2,000): the plan
+`{land=Voldaren Estate + Pit Fighter + Aether Vial + act:Bloodline Keeper + tapfortokenpay}` -- the engine pays
+Vial with Estate #57 and its continuation makes a Blood with #59, but the frontier prune (`Resources`, which drops
+a land's age) folded "#57 tapped" into "#59 tapped", and the board where #59 paid the Vial continued with no Blood
+(a positional `bp_choice` indexes a list derived on the board at hand). Fix (`ManaOracle.cpp KeyedApart`): while a
+realisation runs, every permanent that `TurnSolver::IsTwinnedNumberedTapSource` names -- a {T}-cost activation a
+plan or continuation names by number, with a same-name twin of the same controller -- is keyed apart in the payment
+table, the result dedupe and the prune, judged on the board at hand (a land drop makes the twin mid-plan). It is
+the same predicate `FsOrderSig`'s binding uses, kept general (any twinned numbered {T} source, not Vampires') so
+other decks' twins can share it. A side effect pinned in the seed 30000611 unit test: with the binding OFF the
+oracle now reaches the engine's line through the payment whose memo agrees, so the key hole is pinned directly on
+`MidTurnStateKeyOf` instead. The test's covering realisation must also be scripted (`CoversEngineOutcome(...,
+scripted_only)`).
+
+Census, Vampires, `MTG_MANA_ORACLE=2`, the same 2,000 games plus a fresh 5,000 (gi 110,000+, seed 30110000+):
+
+| class | 2k before (`1d8ceae3c`) | 2k exemption only | 2k final | 5k before | 5k exemption only | 5k final |
+|---|---|---|---|---|---|---|
+| ORACLE-GAP | 0 | 2 | **0** | 0 | 0 | **0** |
+| UNMODELED (context) | 86 | 0 | **0** | 133 | 14 | **14** |
+| PHANTOM | 39 | 39 | 39 | 278 | 284 | 284 |
+| CONTINUATION-DIFFERS | 195 | 195 | 195 | 510 | 510 | 509 |
+| DROP-COVERED | 458 | 458 | 458 | 638 | 638 | 638 |
+| DOMINATED-LAND | 40 | 40 | 40 | 218 | 218 | 218 |
+| DOMINATED-LIFE (disclosed) | 861 | 861 | 861 | 1762 | 1762 | 1762 |
+
+No issue class. The one CONTINUATION-DIFFERS that went (seed 30114200 T5, a plan dropping a second Voldaren
+Estate) is the mid-plan-twin case `KeyedApart` covers. The 14 UNMODELED left are one older shape, all seed
+30111212 T5: "engine dropped [cast Bloodline Keeper (activation)]; ... too many actions to try every order" (the
+more-than-5-movable-actions limit of `OtherOrders`), not the exemption's. Play: 0 of 400 job digests changed against
+`1d8ceae3c` on all 7,000 games (oracle on, units ratio 1.0000); oracle on vs off on the final binary: 0 of 400 digests changed, units identical.
+
 Play under the binding: held-out A/B (`MTG_ORDER_SIG_TAP_BIND` per-job off/on, one pooled batch, seed 1720001, every
 deck at its play settings) over every deck holding two copies of such a permanent -- Vampires 4,000 + 2HG 2,000, EDF
 2,000, Colossus Hammer 2,000, SelesnyaLifegain 2,000, slivers_vial 2,000, Landfall 1,000, LandfallElementals 1,000,

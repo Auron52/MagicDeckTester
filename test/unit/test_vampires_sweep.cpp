@@ -539,7 +539,8 @@ TEST_CASE("mana oracle: the plan's own Blood Estate is not its twin's equal (see
 // Voldaren Estate #58 by number; the board where #58 (not its twin #57) paid the earlier cast keyed the same
 // (the canonical key bound neither twin's tapped flag to its number), so the Blood dropped there. Seed 30000611
 // T3: every plan whose continuation makes the Blood is covered by an oracle realisation under
-// MTG_ORDER_SIG_TAP_BIND; with the binding off the oracle cannot reach the engine's line.
+// MTG_ORDER_SIG_TAP_BIND (the key hole itself is pinned on MidTurnStateKeyOf below). The covering
+// realisation is a VERDICT, not UNMODELED: the continuation's own Blood source is exempt from the unscripted-tap check.
 TEST_CASE("mana oracle: a memoised continuation's Blood source is not served to its tapped twin (seed 30000611 T3)")
 {
     EnsureCardsLoaded();
@@ -572,7 +573,10 @@ TEST_CASE("mana oracle: a memoised continuation's Blood source is not served to 
             for (const Permanent& q : e.battlefield) { if (q.card.m_name.str() == "Blood Token") { blood = true; } }
             if (!blood) { continue; }
             ++checked;
-            if (manaoracle::CoversEngineOutcome(s, /*pre=*/true, p)) { ++covered; }
+            // scripted_only: the covering realisation must rest on no undriven mana choice -- the continuation's
+            // Estate taps as its Blood's {T} cost, which the unscripted-tap check now exempts (it read as an
+            // undriven mana tap: UNMODELED, no verdict, 86 flags on the 2,000-game census).
+            if (manaoracle::CoversEngineOutcome(s, /*pre=*/true, p, /*scripted_only=*/true)) { ++covered; }
         }
         heurarm::t_arm[heurarm::ORDER_SIG_TAP_BIND] = -1;
     };
@@ -580,11 +584,26 @@ TEST_CASE("mana oracle: a memoised continuation's Blood source is not served to 
     run(1, checked, covered);
     CHECK(checked > 0);
     CHECK(covered == checked);
-    // With the binding off, the plan cache's per-permanent key fold (MTG_PLAN_CACHE_PERM_KEY, default ON, read
-    // once per process) keys the twins apart on its own, so the oracle still covers every Blood line. Only with
-    // both off is the twin board served #58's Blood -- the defect, for the record (MTG_PLAN_CACHE_PERM_KEY=0).
+    // The key hole itself, pinned directly: the boards "#57 tapped" and "#58 tapped" share the memo key with the
+    // binding off (and the plan cache's per-permanent fold MTG_PLAN_CACHE_PERM_KEY off) and are told apart with
+    // the binding on.
+    GameState t57 = s, t58 = s;
+    for (Permanent& q : t57.battlefield) { if (q.card.m_number == 57) { q.tapped = true; } }
+    for (Permanent& q : t58.battlefield) { if (q.card.m_number == 58) { q.tapped = true; } }
+    heurarm::t_arm[heurarm::ORDER_SIG_TAP_BIND] = 0;
+    if (!EnvOn("MTG_PLAN_CACHE_PERM_KEY", true))
+    {
+        CHECK(TurnSolver::MidTurnStateKeyOf(t57) == TurnSolver::MidTurnStateKeyOf(t58));
+    }
+    heurarm::t_arm[heurarm::ORDER_SIG_TAP_BIND] = 1;
+    CHECK(TurnSolver::MidTurnStateKeyOf(t57) != TurnSolver::MidTurnStateKeyOf(t58));
+    heurarm::t_arm[heurarm::ORDER_SIG_TAP_BIND] = -1;
+    // With the binding off the oracle used to miss the engine's line here (the twin board was served #58's
+    // Blood). The oracle's KeyedApart now keys the twinned Estates apart while it realises, so it keeps both
+    // payments ("#57 paid" and "#58 paid") and reaches the engine's line through the one whose memo agrees:
+    // its coverage no longer depends on the engine's key (nor on MTG_PLAN_CACHE_PERM_KEY). Without KeyedApart
+    // this reads covered < checked when both keys are off.
     run(0, checked, covered);
     CHECK(checked > 0);
-    if (EnvOn("MTG_PLAN_CACHE_PERM_KEY", true)) { CHECK(covered == checked); }
-    else { CHECK(covered < checked); }
+    CHECK(covered == checked);
 }

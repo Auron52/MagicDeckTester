@@ -3066,6 +3066,10 @@ public:
     // ABILITY entry, OUTSIDE the play digest: these cracks used to run unlogged, so a game log showed a
     // land vanishing into the graveyard with no action naming it (ref_promote had to infer them).
     static bool IsLandSearchActivation(const Action& a);
+    // A permanent with a {T}-cost activation that a plan (or a breakpoint continuation) names by its NUMBER, with
+    // a same-name twin of the same controller on the battlefield -- the copies FsOrderSig binds (twin tap
+    // binding) and the mana oracle keys apart. `idx` indexes state.battlefield.
+    static bool IsTwinnedNumberedTapSource(const GameState& state, std::size_t idx);
     static void ApplyLandSearchActs(GameState& state, const std::vector<Action>& acts,
                                     GameLogger* log = nullptr);
     static std::vector<Action> WithoutLandSearchActs(const std::vector<Action>& acts);
