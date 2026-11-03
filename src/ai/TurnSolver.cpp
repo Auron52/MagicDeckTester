@@ -4069,6 +4069,8 @@ struct Cost
     // so a hit that skipped them made the game depend on whether the lookup hit (BpSideBegin / End / Replay).
     int md = 0;
     unsigned long long condemn = 0, trunc = 0, binds = 0;
+    // MTG_PLAN_CACHE_COST_VERIFY (diagnostic): PlanCacheCtxBits() when the computation ran.
+    std::uint64_t ctx = 0;
 };
 inline std::atomic<long long> g_hits_replayed{0}, g_units_replayed{0}, g_hits_refused{0}, g_unstorable{0},
                               g_computations{0}, g_charging{0};
@@ -5318,6 +5320,7 @@ struct BpEnumEntry
     // flag; never read by play.
     std::uint8_t use_born = 0;
     std::uint8_t use_branched = 0;
+    std::string dbg;   // MTG_PLAN_CACHE_COST_VERIFY + MTG_BP_ENUM_VERIFY: the state fingerprint it was derived on
 };
 // MTG_BP_USE_CENSUS (DIAGNOSTIC, print-only, default OFF): breakpoint continuation-list USE. Each
 // BpEnumEntryFor lookup is tagged with its consumer (t_reason, bound by the call sites) and counted as a
@@ -86664,6 +86667,11 @@ static bool PlanCacheExactKeyOn()
     static const bool v = EnvOn("MTG_PLAN_CACHE_EXACT_KEY", true);
     return v;
 }
+static bool PlanCacheRouteKeyOn()
+{
+    static const bool v = EnvOn("MTG_PLAN_CACHE_ROUTE_KEY", true);
+    return v;
+}
 static void FoldPhysicalCards(TranspositionTable::Key& k, const GameState& state)
 {
     if (!PlanCacheExactKeyOn()) { return; }
@@ -86705,10 +86713,120 @@ static void FoldPhysicalCards(TranspositionTable::Key& k, const GameState& state
         | (decisionwork::Armed() ? 16u : 0u) | (g_greedy_charge_budget != nullptr ? 32u : 0u)
         // A canon-wave enumeration bills every odometer visit even when MTG_ENUM_CHARGE is off.
         // A free list derived outside that subtree must not skip this work on a cache hit inside it.
-        | (g_cw_bill_budget != nullptr ? 64u : 0u));
+        | (g_cw_bill_budget != nullptr ? 64u : 0u)
+        // ...and WHETHER A ROUTE WALK IS IN PROGRESS. Inside the equip route (and the AA untap-loop
+        // route) the route is not re-emitted, so a list derived there reaches no charging trial and is
+        // stored free; an ordinary frame hitting it skipped the trial (and its units) a recompute runs.
+        // The m1 memo already refused to trade across this line (memo_ok); the m2 memo and the bp
+        // continuation cache did not. Found by the 2026-11-03 purity A/B (MTG_PLAN_CACHE_KB=1 vs
+        // default: KittyEquipment seed 2145 gi143 d5, one extra 2-unit route SEARCH at t3).
+        // MTG_PLAN_CACHE_ROUTE_KEY=0 restores the pre-fix key (A/B control).
+        | (PlanCacheRouteKeyOn() ? ((EquipRouteInProgress() ? 128u : 0u) | (EquipRouteDfsActive() ? 256u : 0u)
+                                    | (AlchemistComboRouteInProgress() ? 512u : 0u)) : 0u));
     // An unarmed list cannot skip armed meter-only work or a weighted greedy walk.
     Fold(k, 0x9417C0);
     Fold(k, h);
+}
+// ---- MTG_PLAN_CACHE_COST_VERIFY (DIAGNOSTIC, default off; 2026-11-03) ----------------------------------------
+// The plan caches may move WALL only (tier 2, docs/design/two-tier-search-cache.md): a served hit must cost
+// exactly what a recompute at the hit site costs. This re-derives every served hit under its own cost scope
+// and reports one whose recompute charges (or reaches a charging sub-search) although the entry was stored
+// free -- i.e. some input the key does not fold differs between the store and the hit. The recompute's
+// charges are REAL (the game diverges after the first report), so read the first reports, not the totals.
+// Each report names the context bits (PlanCacheCtxBits) that differ between the store and the hit.
+namespace pccv
+{
+inline bool On() { static const bool v = EnvOn("MTG_PLAN_CACHE_COST_VERIFY"); return v; }
+inline thread_local bool t_in = false;
+inline std::atomic<long long> g_checked{0}, g_bad{0};
+struct Dump
+{
+    ~Dump()
+    { if (On()) { std::fprintf(stderr, "[pc-cost-verify] checked=%lld bad=%lld\n", g_checked.load(), g_bad.load()); } }
+};
+inline Dump g_dump;
+static const char* const kCtxNames[] = {
+    "dec", "dec_exh", "dec_ovr", "greedy", "greedy_exh", "greedy_ovr", "cw_bill", "meter_armed", "meter_exc",
+    "rollout_playout", "d0_runner", "root_open", "rollout_nest", "fsline_nest", "solver_nest", "bp_depth",
+    "bp_root_enum", "tranche", "cand_enum", "rollout_narrow", "fresh_axis", "condemn_suppress",
+    "equip_route", "equip_dfs", "aa_route", "abandoned" };
+}
+static std::uint64_t PlanCacheCtxBits()
+{
+    SearchBudget* const d = g_decision_budget;
+    SearchBudget* const g = g_greedy_charge_budget;
+    std::uint64_t b = 0;
+    int i = 0;
+    auto put = [&](bool v) { if (v) { b |= (1ull << i); } ++i; };
+    put(d != nullptr); put(d != nullptr && d->Exhausted()); put(d != nullptr && d->Overrun());
+    put(g != nullptr); put(g != nullptr && g->Exhausted()); put(g != nullptr && g->Overrun());
+    put(g_cw_bill_budget != nullptr); put(decisionwork::Armed()); put(decisionwork::Exceeded());
+    put(TurnSolver::InRolloutPlayout()); put(TurnSolver::InD0Runner()); put(TurnSolver::DecisionRootOpen());
+    put(g_rollout_nest > 0); put(g_fsline_nest > 0); put(g_cs_solver_nest > 0); put(g_bp_enum_depth > 0);
+    put(g_bp_root_enum); put(groupwave::g_state.tranche_rank >= 0); put(g_search_candidate_enum);
+    put(t_rollout_narrow); put(g_fresh_axis_enum); put(g_condemn_suppress);
+    put(EquipRouteInProgress()); put(EquipRouteDfsActive()); put(AlchemistComboRouteInProgress());
+    put(gamework::Abandoned());
+    return b;
+}
+// MTG_PLAN_CACHE_COST_VERIFY + MTG_BP_ENUM_VERIFY: a wider state fingerprint than the enum memo's, for
+// locating an input a plan-cache key does not fold (printed beside a CONTENT-DIFF when it differs).
+static std::string BpDbgFingerprint(const GameState& s)
+{
+    std::string r = enummemo::Fingerprint(s);
+    char b[200];
+    for (const Permanent& p : s.battlefield)
+    {
+        std::snprintf(b, sizeof b, "|%s#%d c%d t%d e%d au%d eq%d dm%d tp%d/%d sk%d etp%d ch%d ct%zu",
+                      p.card.m_name.c_str(), p.card.m_number, p.controller_index, p.tapped ? 1 : 0,
+                      p.entered_this_turn ? 1 : 0, p.aura_attached_to, p.equipped_to, p.damage,
+                      p.temp_power_bonus, p.temp_tough_bonus, p.skip_next_untap ? 1 : 0,
+                      p.etb_tap_pending ? 1 : 0, p.charge_counters, p.counters.size());
+        r += b;
+    }
+    for (int pi = 0; pi < 2; ++pi)
+    {
+        const Player& pl = s.players[pi];
+        std::snprintf(b, sizeof b, "|P%d life%d lib%zu hand:", pi, pl.life, pl.library.size());
+        r += b;
+        for (const Card& c : pl.hand) { r += std::to_string(c.m_number) + ","; }
+    }
+    std::snprintf(b, sizeof b, "|cast%d", s.spells_cast_this_turn);
+    r += b;
+    return r;
+}
+// Re-derive a served hit (`recompute`) and report it if the re-derivation is not free. True = reported.
+template <class F>
+static bool PlanCacheVerifyHit(const char* cache, const GameState& state, const cachecharge::Cost& stored, F&& recompute)
+{
+    if (!pccv::On() || pccv::t_in || !cachecharge::On()) { return false; }
+    pccv::t_in = true;
+    const std::uint64_t now = PlanCacheCtxBits();
+    const long long dec0 = g_decision_budget != nullptr ? g_decision_budget->Used() : -1;
+    cachecharge::Scope sc;
+    recompute();
+    const cachecharge::Cost c = sc.Done();
+    pccv::t_in = false;
+    pccv::g_checked.fetch_add(1, std::memory_order_relaxed);
+    if (c.dec + c.greedy + c.other == 0 && c.storable) { return false; }
+    const long long n = pccv::g_bad.fetch_add(1, std::memory_order_relaxed);
+    if (n < 40)
+    {
+        std::string diff;
+        for (int i = 0; i < static_cast<int>(sizeof(pccv::kCtxNames) / sizeof(pccv::kCtxNames[0])); ++i)
+        {
+            const bool s = (stored.ctx >> i) & 1u, h = (now >> i) & 1u;
+            if (s != h) { diff += std::string(" ") + pccv::kCtxNames[i] + (h ? "+" : "-"); }
+        }
+        std::string on;
+        for (int i = 0; i < static_cast<int>(sizeof(pccv::kCtxNames) / sizeof(pccv::kCtxNames[0])); ++i)
+        { if ((now >> i) & 1u) { on += std::string(" ") + pccv::kCtxNames[i]; } }
+        std::fprintf(stderr, "[pc-cost-verify] BAD %s t%d recompute dec=%lld greedy=%lld other=%lld storable=%d"
+                     " (stored dec=%lld greedy=%lld other=%lld) dec_used0=%lld | ctx diff(hit vs store):%s | hit ctx:%s\n",
+                     cache, state.turn_number, c.dec, c.greedy, c.other, c.storable ? 1 : 0,
+                     stored.dec, stored.greedy, stored.other, dec0, diff.empty() ? " (none)" : diff.c_str(), on.c_str());
+    }
+    return true;
 }
 // The plan-pool unit census (MTG_PLAN_POOL_STATS): one computation a cache could have served.
 static inline void PlanCacheNoteComputation(int cat, long long units)
@@ -86844,6 +86962,15 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
         && CacheHitCharge(it->second.cost))
     {
         enummemo::g_hits.fetch_add(1, std::memory_order_relaxed); PlanCacheNoteHit(plancache::kCatM1);
+        if (pccv::On())   // MTG_PLAN_CACHE_COST_VERIFY (diagnostic)
+        {
+            const cachecharge::Cost stored = it->second.cost;
+            const int saved_md = groupwave::g_state.max_dropped;
+            PlanCacheVerifyHit("m1", state, stored, [&] { (void)EnumeratePlansWithLandUncached(state, is_pre_combat); });
+            groupwave::g_state.max_dropped = saved_md;
+            it = cache.find(k);
+            if (it == cache.end() || !it->second.has_plans) { return EnumeratePlansWithLandUncached(state, is_pre_combat, pb_lazy); }
+        }
         if (enummemo::VerifyOn())
         {
             const int saved_md = groupwave::g_state.max_dropped;
@@ -86921,10 +87048,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
     const unsigned long long drops_before = g_condemn_drops;
     const unsigned long long trunc_before = g_fs_trunc_events;
     const long long m1_u0 = gamework::t_used;
+    const std::uint64_t m1_ctx = pccv::On() ? PlanCacheCtxBits() : 0;   // MTG_PLAN_CACHE_COST_VERIFY
     cachecharge::Scope m1_ccs;
     std::vector<TurnSolver::Plan> plans;
     { enummemo::BodyScope body; plans = EnumeratePlansWithLandUncached(state, is_pre_combat, pb_lazy); }
-    const cachecharge::Cost m1_cost = m1_ccs.Done();
+    cachecharge::Cost m1_cost = m1_ccs.Done();
+    m1_cost.ctx = m1_ctx;
     PlanCacheNoteComputation(plancache::kCatM1, gamework::t_used - m1_u0);
     plancache::ReportHiwater("m1", state, plans);
     const bool lazy_now = pb_lazy != nullptr && pb_lazy->active;
@@ -87082,6 +87211,15 @@ static std::vector<TurnSolver::Plan> EnumeratePlansM2Memoized(const GameState& s
         && CacheHitCharge(it->second.cost))   // MTG_CACHE_HIT_CHARGE
     {
         enummemo::g_hits.fetch_add(1, std::memory_order_relaxed); PlanCacheNoteHit(plancache::kCatM2);
+        if (pccv::On())   // MTG_PLAN_CACHE_COST_VERIFY (diagnostic)
+        {
+            const cachecharge::Cost stored = it->second.cost;
+            const int saved_md = groupwave::g_state.max_dropped;
+            PlanCacheVerifyHit("m2", state, stored, [&] { (void)EnumerateM2PlansBody(state, nullptr); });
+            groupwave::g_state.max_dropped = saved_md;
+            it = cache.find(k);
+            if (it == cache.end() || !it->second.has_plans) { return EnumerateM2PlansBody(state); }
+        }
         if (enummemo::VerifyOn())
         {
             const int saved_md = groupwave::g_state.max_dropped;
@@ -87147,10 +87285,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlansM2Memoized(const GameState& s
     PbLazyLayout m2_lz;
     const bool m2_lazy = second_visit && BpLazyCandsOn();
     const long long m2_u0 = gamework::t_used;
+    const std::uint64_t m2_ctx = pccv::On() ? PlanCacheCtxBits() : 0;   // MTG_PLAN_CACHE_COST_VERIFY
     cachecharge::Scope m2_ccs;
     std::vector<TurnSolver::Plan> plans;
     { enummemo::BodyScope body; plans = EnumerateM2PlansBody(state, m2_lazy ? &m2_lz : nullptr); }
-    const cachecharge::Cost m2_cost = m2_ccs.Done();
+    cachecharge::Cost m2_cost = m2_ccs.Done();
+    m2_cost.ctx = m2_ctx;
     PlanCacheNoteComputation(plancache::kCatM2, gamework::t_used - m2_u0);
     plancache::ReportHiwater("m2", state, plans);
     const uint32_t own_drops = static_cast<uint32_t>(g_condemn_drops - drops_before);
@@ -107184,6 +107324,15 @@ struct BpChannels
         any = g_bp_any_last; classon = g_bp_classon_last; latent9 = g_bp_latent9_last; truncasym = g_bp_truncasym_last;
         look = g_look_top_resolved; seen = g_bp_seen_last; fired = g_bp_fired_last; cands = g_bp_cands_last;
         demoted = g_bp_demoted_last; chain_ci = g_bp_chain_ci_last;
+        // EXPERIMENT (MTG_BP_DERIVE_ISOLATE_IN, default off): isolate the INPUT side too -- the derivation
+        // starts from the channels' initial values, not from whatever the caller's last apply left there.
+        static const bool s_in = EnvOn("MTG_BP_DERIVE_ISOLATE_IN");
+        if (s_in)
+        {
+            g_bp_any_last = 0; g_bp_classon_last = 0; g_bp_latent9_last = 0; g_bp_truncasym_last = 0;
+            g_look_top_resolved = 0; g_bp_seen_last = 0; g_bp_fired_last = 0; g_bp_cands_last = 0;
+            g_bp_demoted_last = 0; g_bp_chain_ci_last = -2;
+        }
     }
     void Restore() const
     {
@@ -107281,8 +107430,10 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
             if (BpEnumVerifyOn() && !t_bp_enum_verifying)
             {
                 t_bp_enum_verifying = true;
+                BpChannels vch; vch.Save();   // derive exactly as the store path does (MTG_BP_DERIVE_ISOLATE)
                 std::vector<TurnSolver::Plan> fresh =
                     BpDeriveContinuationList(state, is_pre_combat, /*count_stats=*/false);
+                vch.Restore();
                 t_bp_enum_verifying = false;
                 const std::vector<TurnSolver::Plan> served = it->second.View().Materialised();   // M1
                 std::vector<std::uint64_t> fa, sa;
@@ -107378,6 +107529,24 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
                                      g_bp_plan_casts
                                          ? static_cast<int>(g_bp_plan_casts->size()) : -1,
                                      g_bp_site_def ? g_bp_site_def->card.m_name.c_str() : "(none)");
+                        if (pccv::On())   // MTG_PLAN_CACHE_COST_VERIFY records the store-time context
+                        {
+                            const std::uint64_t sc = it->second.cost.ctx, hc = PlanCacheCtxBits();
+                            std::string d;
+                            for (int i = 0; i < static_cast<int>(sizeof(pccv::kCtxNames) / sizeof(pccv::kCtxNames[0])); ++i)
+                            {
+                                if (((sc >> i) & 1u) != ((hc >> i) & 1u))
+                                { d += std::string(" ") + pccv::kCtxNames[i] + (((hc >> i) & 1u) ? "+" : "-"); }
+                            }
+                            std::fprintf(stderr, "[bp-enum-verify]   ctx diff (hit vs store):%s\n", d.empty() ? " (none)" : d.c_str());
+                            if (!it->second.dbg.empty())
+                            {
+                                const std::string now = BpDbgFingerprint(state);
+                                if (now != it->second.dbg)
+                                { std::fprintf(stderr, "[bp-enum-verify]   FP-DIFF\n     stored %s\n     now    %s\n", it->second.dbg.c_str(), now.c_str()); }
+                                else { std::fprintf(stderr, "[bp-enum-verify]   FP-EQUAL\n"); }
+                            }
+                        }
                     }
                     // MTG_BP_ENUM_VERIFY=2 -- NAME THE PLANS THAT DIFFER, not just the counts.
                     // The header above says a diff happened and nothing about WHAT, and three
@@ -107485,7 +107654,18 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
             }
             // MTG_CACHE_HIT_CHARGE: served only where a recompute would run the same way, and then at the
             // units a recompute would charge; otherwise this lookup derives afresh (below), like a miss.
-            if (CacheHitCharge(it->second.cost))
+            if (pccv::On())   // MTG_PLAN_CACHE_COST_VERIFY (diagnostic)
+            {
+                const cachecharge::Cost stored = it->second.cost;
+                const bool saved_ver = t_bp_enum_verifying;
+                t_bp_enum_verifying = true;
+                BpChannels ch; ch.Save();
+                PlanCacheVerifyHit("bp", state, stored, [&] { (void)BpDeriveContinuationList(state, is_pre_combat, /*count_stats=*/false); });
+                ch.Restore();
+                t_bp_enum_verifying = saved_ver;
+                it = cache.find(key);
+            }
+            if (it != cache.end() && CacheHitCharge(it->second.cost))
             {
                 BpSideReplay(it->second.cost);
                 PlanCacheNoteHit(plancache::kCatBp);
@@ -107536,6 +107716,7 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
     PbLazyLayout plans_lz;   // M1: the list's lazy blocks and its selection (BpEnumEntry)
     CandOrder    plans_ord;
     const long long bp_u0 = gamework::t_used;
+    const std::uint64_t bp_ctx = pccv::On() ? PlanCacheCtxBits() : 0;   // MTG_PLAN_CACHE_COST_VERIFY
     cachecharge::Scope bp_ccs;   // MTG_CACHE_HIT_CHARGE: what this derivation charges, by budget
     const BpSide bp_side = BpSideBegin();
     BpChannels bp_chan;   // MTG_BP_DERIVE_ISOLATE
@@ -107546,6 +107727,7 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
                                                                   &plans_lz, &plans_ord);
     bp_chan.Restore();
     cachecharge::Cost bp_cost = bp_ccs.Done();
+    bp_cost.ctx = bp_ctx;
     BpSideEnd(bp_side, bp_cost);
     PlanCacheNoteComputation(plancache::kCatBp, gamework::t_used - bp_u0);
     if (bpderive::On()) { --bpderive::t_depth; }
@@ -107726,6 +107908,28 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
                 bpuse::g_stats.born_plans[bpuse::t_reason].fetch_add(static_cast<long long>(ent.Size()),
                                                                      std::memory_order_relaxed);
                 if (ent.use_branched) { bpuse::g_stats.branched[bpuse::t_reason].fetch_add(1, std::memory_order_relaxed); }
+            }
+            if (pccv::On() && BpEnumVerifyOn())
+            {
+                ent.dbg = BpDbgFingerprint(state);
+                // Derive AGAIN, immediately, on the same state: a mismatch here is history, not an input.
+                const bool sv = t_bp_enum_verifying;
+                t_bp_enum_verifying = true;
+                BpChannels rch; rch.Save();
+                const std::vector<TurnSolver::Plan> again = BpDeriveContinuationList(state, is_pre_combat, /*count_stats=*/false);
+                rch.Restore();
+                t_bp_enum_verifying = sv;
+                const std::vector<TurnSolver::Plan> first = ent.View().Materialised();
+                std::vector<std::uint64_t> fa, fb;
+                for (const TurnSolver::Plan& q : first) { fa.push_back(BpCandFingerprint(q)); }
+                for (const TurnSolver::Plan& q : again) { fb.push_back(BpCandFingerprint(q)); }
+                std::sort(fa.begin(), fa.end()); std::sort(fb.begin(), fb.end());
+                if (fa != fb)
+                {
+                    static std::atomic<int> s_n{0};
+                    if (s_n.fetch_add(1) < 10)
+                    { std::fprintf(stderr, "[bp-enum-verify] STORE-REDERIVE-DIFF turn=%d first=%zu again=%zu\n", state.turn_number, first.size(), again.size()); }
+                }
             }
             if (bplibcheck::On())
             {
