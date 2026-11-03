@@ -153,7 +153,14 @@ the budget work's A/B to run, not settled here.
 ## 7. Wall clock
 
 Quiet box (load ~1-3), final binary: the repro game in **178 s** (units 3,290,793, t7, digest
-6dcbeeee3de462ad); the worst decision 12.4 s. The 1,802 s baseline was on a loaded box (load ~30); the
-priced ratio (2,595 s -> 529 s, 4.9x) is the load-independent comparison. EDF regression jobs back to
+6dcbeeee3de462ad); the worst decision 12.4 s. The base binary on the same quiet box: **767 s** (same
+units, digest, win) -- 4.3x. The 1,802 s figure above was on a loaded box (load ~30); the priced ratio
+(2,595 s -> 529 s, 4.9x) is the load-independent comparison.
+
+The second tail game (`build/scratch/budget/ab_x3.json`, EDF seed 1014228 gi214, d5 b20, keep table on),
+final binary, 2 threads: X=0 44.9 s / 170,364 units / t4; X=20 47.2 s / 188,269 units / t4 (the
+budget-rebalance binary: 136 s and 3,147 s, 206k units at X=20). Caution: the priced ceiling trips on
+the work counters these collapses reduce, so at X > 0 the trip points -- and therefore play and units
+-- differ from that binary's; X=0 is the like-for-like comparison. EDF regression jobs back to
 back on the quiet box, 4 threads: base 72.8 s / final 61.3 s batch wall (d5 jobs 64.0 + 49.7 s vs
 61.6 + 50.2 s core time) -- neutral, as expected: the suite's games rarely reach the go-off boards.
