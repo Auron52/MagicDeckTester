@@ -71,13 +71,32 @@ Permanent Perm5(const std::string& name, int number, bool fresh = false, bool ta
     p.tapped            = tapped;
     return p;
 }
-const ShadowbornProvider& Prov5() { static const ShadowbornProvider p; return p; }
+struct SearchedProv5 : ShadowbornProvider
+{
+    // INT-9's fixed answers OFF (the MTG_UNPRUNED audit arm's shape): these tests exercise the searched mechanics.
+    bool RippleFixed(const GameState&) const override { return false; }
+    bool SacCostVictimFixed(const GameState&) const override { return false; }
+    bool SacNamedBodiesFixed(const GameState&) const override { return false; }
+    bool NoLandPlanDominated(const GameState&) const override { return false; }
+    void SacNamedTimingFilter(const GameState&, int, const CardParams&, bool, std::vector<std::string>&) const override {}
+    int  RippleFreeCastAnswer(const GameState& s, int c, const CardDefinition& h) const override
+    { return DeckProvider::RippleFreeCastAnswer(s, c, h); }
+};
+const ShadowbornProvider& Prov5() { static const SearchedProv5 p; return p; }
 // INT-7: the provider with the USER's fixed Overlord victim switched off -- the MTG_UNPRUNED audit arm's shape,
 // where the INT-5 fold's searched rank list decides. Used to keep the fold's own tests meaningful.
 struct SearchedVictimProv5 : ShadowbornProvider
 {
     bool UpkeepSacrificeVictim(const GameState&, int, int, int&) const override { return false; }
     bool UpkeepSacrificeVictimFixed(const GameState&) const override { return false; }
+    // INT-9's fixed answers OFF (the MTG_UNPRUNED audit arm's shape): these tests exercise the searched mechanics.
+    bool RippleFixed(const GameState&) const override { return false; }
+    bool SacCostVictimFixed(const GameState&) const override { return false; }
+    bool SacNamedBodiesFixed(const GameState&) const override { return false; }
+    bool NoLandPlanDominated(const GameState&) const override { return false; }
+    void SacNamedTimingFilter(const GameState&, int, const CardParams&, bool, std::vector<std::string>&) const override {}
+    int  RippleFreeCastAnswer(const GameState& s, int c, const CardDefinition& h) const override
+    { return DeckProvider::RippleFreeCastAnswer(s, c, h); }
 };
 const ShadowbornProvider& ProvSearched5() { static const SearchedVictimProv5 p; return p; }
 GameState Base5(int swamps)
@@ -626,7 +645,7 @@ TEST_CASE("INT-7 Overlord victim: no Harpy -> an Apostle (the weakest copy); Sir
     CHECK(CountBf5(g, kOver5) == 1);
 }
 
-TEST_CASE("INT-7 Overlord victim: no Harpy, no Apostle -> the Overlord itself; source gone -> the generic front")
+TEST_CASE("INT-7 Overlord victim: no Harpy, no Apostle -> the Overlord itself; source gone -> the sacrifice order tail")
 {
     GameState s = Upkeep7();
     s.battlefield.push_back(Perm5(kSire5, 8));
@@ -649,16 +668,16 @@ TEST_CASE("INT-7 Overlord victim: no Harpy, no Apostle -> the Overlord itself; s
     CHECK(CountBf5(two, kOver5) == 1);
     CHECK(CountBf5(two, kSire5) == 1);
     CHECK(CountBf5(two, kJet5) == 1);
-    // The trigger's source already gone and neither a Harpy nor an Apostle: the generic front.
+    // The trigger's source already gone and neither a Harpy nor an Apostle: the deck's sacrifice order's tail
+    // (INT-9, USER CONFIRMED): Sire before Jetmir.
     GameState gone = s;
     gone.battlefield.erase(std::remove_if(gone.battlefield.begin(), gone.battlefield.end(),
                                           [](const Permanent& q) { return q.card.m_name.str() == kOver5; }),
                            gone.battlefield.end());
     int pick = -1;
     REQUIRE(Prov5().UpkeepSacrificeVictim(gone, 0, 5, pick));
-    const std::vector<int> reps = UpkeepSacFoldReps(gone, 0);
-    REQUIRE(!reps.empty());
-    CHECK(pick == reps.front());
+    REQUIRE(pick >= 0);
+    CHECK(gone.battlefield[static_cast<std::size_t>(pick)].card.m_name.str() == kSire5);
 }
 
 TEST_CASE("INT-7 Overlord victim: the enumerator emits no Overlord victim variants")

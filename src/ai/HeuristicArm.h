@@ -828,6 +828,7 @@ enum Slot : int
     CONVOKE_SHORTFALL_ORDER,  // MTG_CONVOKE_SHORTFALL_ORDER  a cast-time convoke cast (Markov Baron) that would find fewer bodies than its arm counts at its place in the cast order goes to the earliest later place that lowers the order's total body shortfall (after the creature arrival that supplies the body), never ahead of an arrival a plan-body arm names: the line subset rule 7 booked (mana-clean gate, Vampires seed 30001869 T3 {Baron, Baron, Stromkirk Captain}: APPLY-DROP-ORDER). Structural. Default ON; =0 -> the order as before
     ORDER_SIG_TAP_BIND,       // MTG_ORDER_SIG_TAP_BIND  FsOrderSig (the canonical key's order guard for index-encoded answers: the bp-enum continuation memo, FSL win lines, dedup drops, the rollout TT) folds the tapped flag of each permanent with a {T}-cost activation a plan names by number that has a same-name twin, so a memoised answer naming twin #58 is never served to the board where #58 is the tapped twin (mana-clean gate, Vampires seed 30000611 T3: Voldaren Estate's Blood dropped, ORACLE-GAP). Exact prior signature without such a twin. Default ON; =0 -> names and numbers only
     SHADOWBORN_BUCKET_DISCARD, // MTG_SHADOWBORN_BUCKET_DISCARD  Shadowborn Apostle: the USER-designed cleanup-discard buckets (INT-6, analyze-deck 5i; ShadowbornProvider::CleanupDiscardShedOrder). DEFAULT ON (pending the USER's adoption); =0 -> DeckProvider's generic max-MV ranking
+    SHADOWBORN_FREE_INTENT_TAKE, // MTG_SHADOWBORN_FREE_INTENT_TAKE  Shadowborn Apostle INT-9: a ripple-revealed (FREE) creature-sacrificing spell (Diabolic Intent) is TAKEN iff an expendable victim exists (a Harpy token, or Apostles on the battlefield + in hand beyond one activation's six) and, for a tutor, the USER table has a non-fallback pick. DEFAULT OFF = never take one (USER 2026-11-03: "I'm considering whether we should just never cast it"); the measured alternative arm, pending the USER
     COUNT
 };
 
@@ -1600,6 +1601,7 @@ inline const char* Name(int slot)
         "MTG_CONVOKE_SHORTFALL_ORDER",
         "MTG_ORDER_SIG_TAP_BIND",
         "MTG_SHADOWBORN_BUCKET_DISCARD",
+        "MTG_SHADOWBORN_FREE_INTENT_TAKE",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

@@ -58109,6 +58109,7 @@ int ShadowbornProvider::CastOrderRank(const GameState& s, const CardDefinition& 
 
 // ---- ShadowbornProvider: the USER's Overlord upkeep-sacrifice order (Shadowborn INT-7; authority and the
 // order are in the declaration) ------------------------------------------------------------------------------
+namespace { int SbSacrificeOrderPick(const GameState& s, int controller, int min_rank = 0); }   // INT-9, below
 bool ShadowbornProvider::UpkeepSacrificeVictimFixed(const GameState& /*s*/) const
 {
     return !DecisionUnpruned();   // the audit arm (global MTG_UNPRUNED) searches the INT-5 fold's list
@@ -58173,12 +58174,240 @@ bool ShadowbornProvider::UpkeepSacrificeVictim(const GameState& s, int controlle
     }
     if (bi < 0)
     {
-        const std::vector<int> reps = UpkeepSacFoldReps(s, controller);   // the generic front
-        if (reps.empty()) { return false; }
-        bi = reps.front();
+        // Step 4 (USER CONFIRMED 2026-11-03, INT-9): the deck's one sacrifice order's tail -- another Overlord, then
+        // Sire, Reaper, Jetmir last (SbSacrificeOrderPick; was UpkeepSacFoldReps' generic front).
+        bi = SbSacrificeOrderPick(s, controller, /*min_rank=*/5 * 4);
+        if (bi < 0)
+        {
+            const std::vector<int> reps = UpkeepSacFoldReps(s, controller);
+            if (reps.empty()) { return false; }
+            bi = reps.front();
+        }
     }
     pick = bi;
     return true;
+}
+
+// ---- ShadowbornProvider: INT-9, a prune for every search effect (authority and the table are in the declaration) --
+static bool ShadowbornFreeIntentTakeOn()
+{
+    // DEFAULT OFF (USER 2026-11-03: never take a free Diabolic Intent); =1 -> the measured alternative arm.
+    static const bool on = EnvOn("MTG_SHADOWBORN_FREE_INTENT_TAKE");
+    return heurarm::Flag(heurarm::SHADOWBORN_FREE_INTENT_TAKE, on);
+}
+static bool ShadowbornPrunesOn() { return !DecisionUnpruned() && !HumanPlayActive(); }
+static bool SbIsSacNamedCreature(const CardDefinition* d)
+{
+    return d != nullptr && d->card.IsCreature() && d->params.sac_named_count > 0;
+}
+bool ShadowbornProvider::SacNamedBodiesFixed(const GameState& /*s*/) const { return ShadowbornPrunesOn(); }
+bool ShadowbornProvider::SacNamedKillShortCircuit() const { return ShadowbornPrunesOn(); }
+bool ShadowbornProvider::UseLethalShortCircuit() const { return !DecisionUnpruned(); }
+bool ShadowbornProvider::RippleFixed(const GameState& /*s*/) const { return ShadowbornPrunesOn(); }
+bool ShadowbornProvider::SacCostVictimFixed(const GameState& /*s*/) const { return ShadowbornPrunesOn(); }
+
+// THE DEMON TIMING (USER 2026-11-03; brief E-bis). ATTACK TURN = we control a sac-named creature (Shadowborn
+// Apostle) that did NOT enter this turn: it could attack this turn (no haste in the deck), so the army can attack.
+// SICK TURN = every one we control entered this turn: nothing sacrificed could have attacked.
+void ShadowbornProvider::SacNamedTimingFilter(const GameState& s, int controller, const CardParams& /*pp*/,
+                                              bool pre_combat, std::vector<std::string>& targets) const
+{
+    if (!ShadowbornPrunesOn() || DecisionUnpruned(UnprunedGate::Tutor)) { return; }
+    bool attack_turn = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller || p.entered_this_turn || p.def_absent) { continue; }
+        if (SbIsSacNamedCreature(CardDatabase::Instance().LookupCached(p.card))) { attack_turn = true; break; }
+    }
+    if (!attack_turn) { return; }   // sick turn: the INT-4 order (devotion Demon, then count anthem), either main
+    std::vector<std::string> anthem, other;
+    const CardDefinition* jet = nullptr;
+    for (const std::string& nm : targets)
+    {
+        const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
+        const bool is_anthem = d != nullptr && !d->params.creature_count_anthem_tiers.empty();
+        (is_anthem ? anthem : other).push_back(nm);
+        if (is_anthem && jet == nullptr) { jet = d; }
+    }
+    // THE JETMIR TEST (USER CONFIRMED 2026-11-03: "That rule sounds reasonable to me"): on an attack turn the
+    // count-anthem Demon is the ONLY pick, before combat, exactly when fetching it raises THIS turn's attack over not
+    // activating (a lethal one first). Read off card data: the six = the weakest copies (X, T, U, S -- the activation's
+    // fixed code); the army = every creature of ours that did not enter this turn (so main 2, after the attack, reads
+    // the same army main 1 did); the tier counts every creature left + Jetmir (sick ones and Harpies included); a
+    // tier's keyword "Double strike" doubles. Otherwise (e.g. 7-10 attack-ready Apostles and nothing else -- USER:
+    // "Jetmir is not that good in the situation where we lose almost all of the creatures") the devotion-token Demon
+    // is the pick, after combat only.
+    bool jet_gains = false;
+    if (jet != nullptr)
+    {
+        const InternedName& apostle_name = [&]() -> const InternedName&
+        {
+            for (const Permanent& p : s.battlefield)
+            {
+                if (p.controller_index == controller && SbIsSacNamedCreature(CardDatabase::Instance().LookupCached(p.card)))
+                { return p.card.m_name; }
+            }
+            return s.battlefield.front().card.m_name;
+        }();
+        const CardDefinition* ad = CardDatabase::Instance().Lookup(apostle_name.str());
+        const int n = ad != nullptr ? ad->params.sac_named_count : 6;
+        const std::vector<int> six = ResolveSacNamedBodies(s, controller, apostle_name, n, kSacNamedWeakestCode);
+        long long d0 = 0;
+        std::vector<int> left_power;
+        int creatures_left = 1;   // Jetmir
+        for (int i = 0; i < static_cast<int>(s.battlefield.size()); ++i)
+        {
+            const Permanent& p = s.battlefield[static_cast<std::size_t>(i)];
+            if (p.controller_index != controller || !(p.card.IsCreature() || p.is_animated)) { continue; }
+            const int pw = std::max(0, p.card.m_power.value_or(0));
+            const bool army = !p.entered_this_turn;
+            if (army) { d0 += pw; }
+            if (std::find(six.begin(), six.end(), i) != six.end()) { continue; }
+            ++creatures_left;
+            if (army) { left_power.push_back(pw); }
+        }
+        const CardParams& jp = jet->params;
+        int bonus = 0;
+        bool ds = false;
+        for (std::size_t t = 0; t < jp.creature_count_anthem_tiers.size(); ++t)
+        {
+            if (creatures_left < jp.creature_count_anthem_tiers[t]) { break; }
+            bonus += jp.creature_count_anthem_power;
+            if (t < jp.creature_count_anthem_keywords.size() && jp.creature_count_anthem_keywords[t] == "Double strike")
+            { ds = true; }
+        }
+        long long d1 = 0;
+        for (int pw : left_power) { d1 += static_cast<long long>(pw + bonus) * (ds ? 2 : 1); }
+        const int life = s.players[static_cast<std::size_t>(1 - controller)].life;
+        jet_gains = static_cast<int>(six.size()) == n && (d1 >= life || d1 > d0);
+    }
+    if (jet_gains) { targets = pre_combat ? anthem : std::vector<std::string>{}; }
+    else           { targets = pre_combat ? std::vector<std::string>{} : (other.empty() ? anthem : other); }
+}
+
+bool ShadowbornProvider::NoLandPlanDominated(const GameState& s) const
+{
+    if (!ShadowbornPrunesOn()) { return false; }
+    const Player& ap = s.players[static_cast<std::size_t>(s.active_player_index)];
+    if (ap.lands_played_this_turn > 0) { return false; }
+    for (const Card& c : ap.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d != nullptr && d->card.IsLand() && d->params.etb_replace_sacrifice_land_subtype.empty()) { return true; }
+    }
+    return false;
+}
+
+// THE DECK'S ONE SACRIFICE ORDER (USER CONFIRMED 2026-11-03: "The sacrifice for other effects (than Overlord) can
+// use the same order. We prioritize Shadowborns over Harpies and other demons over Overlord." / "Sire, Reaper,
+// Jetmir in that order would be fine if we want a full list. Jetmir is essentially the only one without a drawback
+// in this deck."). Every creature-sacrifice choice this deck makes -- the Intent / Culling additional cost (hard or
+// free) and the tail of the Overlord upkeep (INT-7 step 4) -- eats, first to last: 0 a vanilla token creature (no
+// CardDefinition: the Overlord's Harpies); 1 a sac-named creature (Shadowborn Apostle), the WEAKEST copy first
+// (tapped, then summoning-sick -- INT-7's tie order); then the Demons by role: the devotion-token maker (Abhorrent
+// Overlord), the hand-discarder (Sire of Insanity), one with neither (Reaper from the Abyss), the count anthem
+// (Jetmir) kept longest. Lowest card number breaks ties.
+namespace
+{
+int SbVictimRank(const Permanent& q, const CardDefinition* d)
+{
+    // class * 4 + (3 - weakness): within a class the weakest copy first (tapped 2 + summoning-sick 1).
+    const int weak = (q.tapped ? 2 : 0) + (q.entered_this_turn ? 1 : 0);
+    int cls;
+    if (q.is_token && d == nullptr)                              { cls = 0; }   // Harpy
+    else if (SbIsSacNamedCreature(d))                            { cls = 1; }   // Shadowborn Apostle
+    else if (d == nullptr)                                       { cls = 5; }   // a creature we cannot read: first Demon slot
+    else if (!d->params.etb_tokens_per_devotion_color.empty())   { cls = 5; }   // Abhorrent Overlord
+    else if (d->params.endstep_each_player_discards_hand)        { cls = 6; }   // Sire of Insanity
+    else if (!d->params.creature_count_anthem_tiers.empty())     { cls = 8; }   // Jetmir, kept longest
+    else                                                         { cls = 7; }   // Reaper from the Abyss
+    return cls * 4 + (3 - weak);
+}
+// The best victim among our creatures with rank >= `min_rank` (battlefield index, -1 = none).
+int SbSacrificeOrderPick(const GameState& s, int controller, int min_rank)
+{
+    int best = -1, best_r = 1 << 30, best_n = 0;
+    for (int i = 0; i < static_cast<int>(s.battlefield.size()); ++i)
+    {
+        const Permanent& q = s.battlefield[static_cast<std::size_t>(i)];
+        if (q.controller_index != controller || !(q.card.IsCreature() || q.is_animated)) { continue; }
+        const int r = SbVictimRank(q, q.def_absent ? nullptr : CardDatabase::Instance().LookupCached(q.card));
+        if (r < min_rank) { continue; }
+        if (r < best_r || (r == best_r && q.card.m_number < best_n)) { best = i; best_r = r; best_n = q.card.m_number; }
+    }
+    return best;
+}
+}   // namespace
+int ShadowbornProvider::SacCostVictimLive(const GameState& s, int controller) const
+{
+    return SbSacrificeOrderPick(s, controller);
+}
+void ShadowbornProvider::SacCostVictimVariant(const GameState& s, int controller, int& bf_number,
+                                              std::string& hand_name) const
+{
+    bf_number = 0;
+    hand_name.clear();
+    const int bi = SacCostVictimLive(s, controller);
+    int bf_rank = 1 << 30;
+    if (bi >= 0)
+    {
+        const Permanent& q = s.battlefield[static_cast<std::size_t>(bi)];
+        bf_rank = SbVictimRank(q, q.def_absent ? nullptr : CardDatabase::Instance().LookupCached(q.card));
+    }
+    // A Harpy / an Apostle on the battlefield: that one. Otherwise an Apostle in HAND (cast first, then eaten) ranks
+    // ahead of a battlefield Demon; with neither, the battlefield pick, else any creature in hand.
+    std::string hand_apostle, hand_other;
+    for (const Card& c : s.players[static_cast<std::size_t>(controller)].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr || !d->card.IsCreature() || d->card.IsLand()) { continue; }
+        if (SbIsSacNamedCreature(d)) { if (hand_apostle.empty()) { hand_apostle = c.m_name.str(); } }
+        else if (hand_other.empty()) { hand_other = c.m_name.str(); }
+    }
+    if (bi >= 0 && bf_rank < 2 * 4) { bf_number = s.battlefield[static_cast<std::size_t>(bi)].card.m_number; return; }
+    if (!hand_apostle.empty()) { hand_name = hand_apostle; return; }
+    if (bi >= 0) { bf_number = s.battlefield[static_cast<std::size_t>(bi)].card.m_number; return; }
+    hand_name = hand_other;
+}
+
+// THE FREE CASTS (brief B; USER 2026-11-03). Every castable revealed match is TAKEN except a creature-sacrificing
+// spell (Diabolic Intent; Culling the Weak is a 1-of and never matches), which is DECLINED -- or, on the
+// MTG_SHADOWBORN_FREE_INTENT_TAKE arm, taken iff an EXPENDABLE victim exists (a vanilla token creature -- a
+// Harpy -- or sac-named copies on our battlefield + in hand beyond one activation's sac_named_count) and, for a
+// tutor, the USER table offers a non-fallback pick (any candidate other than a basic land or a creature the
+// activation does not fetch). The granter's free copy is taken: it ripples on cast, then the legend rule keeps one.
+int ShadowbornProvider::RippleFreeCastAnswer(const GameState& s, int controller, const CardDefinition& hit) const
+{
+    if (!RippleFixed(s)) { return DeckProvider::RippleFreeCastAnswer(s, controller, hit); }
+    if (FreeCastTakeDominated(s, controller, hit)) { return 1; }
+    if (!hit.params.sac_additional_creature) { return 1; }   // Dark Ritual, Thrumming Stone, Profane Tutor
+    if (!ShadowbornFreeIntentTakeOn()) { return 0; }
+    bool expendable = false;
+    int copies = 0, need = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller || !p.card.IsCreature()) { continue; }
+        const CardDefinition* d = p.def_absent ? nullptr : CardDatabase::Instance().LookupCached(p.card);
+        if (p.is_token && d == nullptr) { expendable = true; }
+        if (SbIsSacNamedCreature(d)) { ++copies; need = std::max(need, d->params.sac_named_count); }
+    }
+    for (const Card& c : s.players[static_cast<std::size_t>(controller)].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (SbIsSacNamedCreature(d)) { ++copies; need = std::max(need, d->params.sac_named_count); }
+    }
+    if (need > 0 && copies > need) { expendable = true; }
+    if (!expendable) { return 0; }
+    if (!IsLibraryTutor(hit.params)) { return 1; }
+    for (const std::string& nm : TutorCandidates(s, controller, hit.params))
+    {
+        const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
+        if (d == nullptr) { continue; }
+        const bool fallback = (d->card.IsLand() && d->card.HasSupertype(Supertype::Basic))
+                           || (d->card.IsCreature() && !SbIsSacNamedCreature(d));
+        if (!fallback) { return 1; }
+    }
+    return 0;
 }
 
 // ---- ShadowbornProvider: the USER's tutor and Demon rules (Shadowborn INT-4; the rule table and its

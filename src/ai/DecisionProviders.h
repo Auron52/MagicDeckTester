@@ -4031,10 +4031,15 @@ public:
     //      spec (etb_tokens_per_devotion_color + etb_created_token_power / _toughness / _subtypes);
     //   2. else a SAC-NAMED creature (sac_named_count > 0: Shadowborn Apostle);
     //      within 1 and 2 the weakest copy (tapped first, then summoning-sick, then the first -- at the
-    //      upkeep every copy is untapped and none is sick, so they are equivalent);
-    //   3. else the trigger's own SOURCE (the Overlord itself);
-    //   4. the source gone before resolution (a second Overlord's trigger ate it) and neither 1 nor 2:
-    //      the engine's generic front (UpkeepSacFoldReps' rank 0).
+    //      upkeep every copy is untapped and none is sick, so they are equivalent) -- USER CONFIRMED 2026-11-03
+    //      ("The Apostle rule is also good.");
+    //   3. else the trigger's own SOURCE (the Overlord itself) -- USER CONFIRMED 2026-11-03 ("Didn't I approve the
+    //      Overlord sacrificing itself first after the small critters are gone already? I actually suggested that.
+    //      ... Jetmir is the only one that could do less than Abhorrent and it has a great pump when you have more
+    //      critters out and is impossible to hardcast.");
+    //   4. the source gone before resolution (a second Overlord's trigger ate it) and neither 1 nor 2: the
+    //      deck's one sacrifice order's tail (INT-9, USER CONFIRMED 2026-11-03) -- another Overlord, then Sire of
+    //      Insanity, Reaper from the Abyss, Jetmir last; UpkeepSacFoldReps' front only if none of those is out.
     // Sire, Reaper, Jetmir, another Overlord are never offered while any of 1-3 exists. A USER-ordered
     // provider RESTRICTION (not a proof, not a budget wave): no other victim at any budget, --budget-ms 0
     // included. It SUPERSEDES the INT-5 victim fold (SpellEffects.h UpkeepSacFoldReps), which stays as the
@@ -4042,6 +4047,55 @@ public:
     // Human play keeps the full `sacrifice` board click (this pick is its default).
     bool UpkeepSacrificeVictim(const GameState& s, int controller, int source, int& pick) const override;
     bool UpkeepSacrificeVictimFixed(const GameState& s) const override;
+
+    // ---- INT-9: A PRUNE FOR EVERY SEARCH EFFECT (USER 2026-11-03) -----------------------------------------
+    // AUTHORITY. The USER: "I can't see any tricky-enough decisions with this deck to cause us real performance
+    // issues. If there are, we likely just need some stricter pruning. In particular, we should have prunes for
+    // every search effect in the deck and for obvious decisions like whether to cast free spells off Thumming
+    // Stone." / "Diabolic Intent is the only one you may not want to cast because of the sacrifice." / on the free
+    // Intent: "honestly I'm considering whether we should just never cast it. Sacrificing an extra spare creature
+    // when we already have a search happening seems kind of poor." / on the Demon timing: "if you have Jetmir in
+    // the library and are looking for a creature on the turn the shadowborn army can attack it is the only option
+    // to consider. The Overlord is solid, but only as a backup or when you are able to drop it while the
+    // Shadowborns are summoning sick. Sacrificing creatures that can attack is too costly compared to the powerful
+    // pump from Jetmir." / "sacrifice to search for Abhorrent Overlord on a turn where the Shadowborns can attack
+    // should happen second main". USER-ordered RESTRICTIONS (one answer, never searched, every budget incl.
+    // --budget-ms 0); the global MTG_UNPRUNED audit arm and human play keep the engine's searched menus. Roles off
+    // CARD DATA.
+    //
+    //   | site                                   | the one answer                                              |
+    //   |----------------------------------------|-------------------------------------------------------------|
+    //   | Apostle activation: the six bodies     | the WEAKEST six at activation (kSacNamedWeakestCode)        |
+    //   | Apostle activation: Demon x phase      | ATTACK TURN (an Apostle we control did not enter this turn):|
+    //   |   (USER CONFIRMED 2026-11-03)          |  Jetmir ONLY, main 1 only, when fetching it raises THIS     |
+    //   |                                        |  turn's attack over not activating (lethal first); else the |
+    //   |                                        |  devotion-token Demon (Overlord), main 2 only. SICK TURN:   |
+    //   |                                        |  the INT-4 list (Overlord, then Jetmir), either main        |
+    //   | ripple reveal (every trigger)          | reveal                                                      |
+    //   | ripple take: Apostle, plain ritual,    | TAKE                                                        |
+    //   |   granter, tutor without a sac cost    |                                                             |
+    //   | ripple take: a creature-sacrificing    | DECLINE (MTG_SHADOWBORN_FREE_INTENT_TAKE=1: take iff an     |
+    //   |   spell (Diabolic Intent)              |   expendable victim + a non-fallback tutor pick)            |
+    //   | a free tutor's pick                    | the FRONT of the USER table at its resolution               |
+    //   | "sacrifice a creature" additional cost | THE DECK'S ONE SACRIFICE ORDER (USER CONFIRMED): a Harpy     |
+    //   |   (Intent / Culling, hard or free) and |   token > the weakest Apostle > Abhorrent Overlord > Sire   |
+    //   |   the Overlord upkeep's step 4         |   > Reaper > Jetmir (kept longest)                          |
+    //   | a one-activation verified kill         | the frame's only plan (SacNamedKillShortCircuit)            |
+    bool SacNamedBodiesFixed(const GameState& s) const override;
+    void SacNamedTimingFilter(const GameState& s, int controller, const CardParams& pp, bool pre_combat,
+                              std::vector<std::string>& targets) const override;
+    bool SacNamedKillShortCircuit() const override;
+    bool UseLethalShortCircuit() const override;
+    bool SacCostVictimFixed(const GameState& s) const override;
+    int  SacCostVictimLive(const GameState& s, int controller) const override;
+    void SacCostVictimVariant(const GameState& s, int controller, int& bf_number, std::string& hand_name) const override;
+    bool RippleFixed(const GameState& s) const override;
+    int  RippleFreeCastAnswer(const GameState& s, int controller, const CardDefinition& hit) const override;
+    // P1 (rc8 root cause; USER CONFIRMED 2026-11-03: "That makes sense. We don't have a good reason to hold lands."): the no-land pass
+    // is dropped while a land playable WITHOUT a cost is in hand (Swamp, Blood Crypt -- not Lake of the Dead, whose
+    // entry costs a Swamp). Sound for this deck: no landfall, no bounce lands, nothing counts lands in hand, and a
+    // held land only adds a cleanup discard. ~22 such passes per 200 held-out games at d3 b10, ~0.7 turns each.
+    bool NoLandPlanDominated(const GameState& s) const override;
     static constexpr int kManaGoal       = 6;   // no granter out: the Stone's 5 + an Apostle's 1
     static constexpr int kManaGoalRipple = 3;   // a granter out (USER: "change 2 ... to be 3 mana"; 4 is the most needed)
     // "Reachable this or next turn" -- the most mana one of our next two turns can make, read off the

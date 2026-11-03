@@ -58,7 +58,15 @@ Permanent PermSb(const std::string& name, int number, bool fresh = false, bool t
     return p;
 }
 
-const ShadowbornProvider& Prov() { static const ShadowbornProvider p; return p; }
+// INT-9's fixed answers OFF (the MTG_UNPRUNED audit arm's shape): these tests exercise the searched victim fan and
+// the readiness-route mapping; INT-9's one-victim order is pinned in test_shadowborn_int9.cpp.
+struct SearchedProv1 : ShadowbornProvider
+{
+    bool SacCostVictimFixed(const GameState&) const override { return false; }
+    bool RippleFixed(const GameState&) const override { return false; }
+    bool NoLandPlanDominated(const GameState&) const override { return false; }
+};
+const ShadowbornProvider& Prov() { static const SearchedProv1 p; return p; }
 
 GameState BaseState()
 {

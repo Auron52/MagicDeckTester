@@ -258,6 +258,45 @@ public:
     virtual bool SacNamedPutTargets(const GameState& /*s*/, int /*controller*/, const CardParams& /*pp*/,
                                     std::vector<std::string>& /*out*/) const { return false; }
 
+    // ---- SHADOWBORN INT-9 (USER 2026-11-03: "we should have prunes for every search effect in the deck and for
+    // obvious decisions like whether to cast free spells off Thumming Stone"). Every hook below defaults to the
+    // engine's own (searched) behaviour, so every deck without an override is byte-identical. A provider that
+    // overrides one is making a USER-ordered RESTRICTION for its deck (one answer, never searched); it must
+    // return the default under MTG_UNPRUNED and in human play.
+    //
+    // SacNamedBodiesFixed -- the six bodies of a SacNamedTutorPut activation are the WEAKEST six on the live
+    // board at activation (tapped-and-new, tapped, new-untapped, then attack-ready; lowest number first), ONE
+    // code (kSacNamedWeakestCode) instead of the searched readiness-count codes.
+    virtual bool SacNamedBodiesFixed(const GameState& /*s*/) const { return false; }
+    // SacNamedTimingFilter -- restrict the activation's (already ordered) Demon list by the main phase it is
+    // offered in (`pre_combat`: main 1). An empty result offers no activation in this phase. Default: unchanged.
+    virtual void SacNamedTimingFilter(const GameState& /*s*/, int /*controller*/, const CardParams& /*pp*/,
+                                      bool /*pre_combat*/, std::vector<std::string>& /*targets*/) const {}
+    // SacNamedKillShortCircuit -- opt in to the verified one-activation kill cut (TurnSolver EnumeratePlans):
+    // when a single SacNamedTutorPut activation (bodies already on the battlefield) followed by the attack is a
+    // VERIFIED win this turn, that plan is the frame's only plan (a win this turn is the minimum win turn).
+    virtual bool SacNamedKillShortCircuit() const { return false; }
+    // SacCostVictimFixed / SacCostVictimLive / SacCostVictimVariant -- the victim of a readiness-route "sacrifice
+    // a creature" ADDITIONAL COST (sac_additional_creature: Diabolic Intent, Culling the Weak), hard or free.
+    // Fixed = exactly ONE victim, chosen on the LIVE board at the cast (SacCostVictimLive: a battlefield index,
+    // -1 = none); the enumerator emits one cast variant (SacCostVictimVariant: a battlefield creature's number
+    // in `bf_number`, or a creature NAME in hand in `hand_name` -- the co-cast requirement -- or neither).
+    virtual bool SacCostVictimFixed(const GameState& /*s*/) const { return false; }
+    virtual int  SacCostVictimLive(const GameState& /*s*/, int /*controller*/) const { return -1; }
+    virtual void SacCostVictimVariant(const GameState& /*s*/, int /*controller*/, int& bf_number,
+                                      std::string& hand_name) const { bf_number = 0; hand_name.clear(); }
+    // RippleFixed -- every ripple decision of this deck is a fixed answer (SpellEffects.h "RIPPLE"): every trigger
+    // reveals, every castable match is taken or declined by RippleFreeCastAnswer (never -1), a free tutor takes
+    // the FRONT of its candidate list at its resolution, a free sacrifice the SacCostVictimLive pick. The
+    // enumerator then emits ONE ripple variant per cast (plus the granter-free twin when the granter is only in
+    // hand) and no upkeep ripple fan.
+    virtual bool RippleFixed(const GameState& /*s*/) const { return false; }
+    // NoLandPlanDominated -- drop the pre-main "play no land" plan family (EnumeratePlansWithLandUncached's
+    // add_for_land("", ""), alone and with casts) on this state: TRUE only where holding the drop can never pay for
+    // this deck while a land playable at no cost is in hand (no landfall, no bounce land, nothing counts lands in
+    // hand -- a held land only adds a cleanup discard). Default false = every deck byte-identical.
+    virtual bool NoLandPlanDominated(const GameState& /*s*/) const { return false; }
+
     // UpkeepSacrificeVictim -- the victim of a MANDATORY upkeep "sacrifice a creature" trigger (Abhorrent
     // Overlord, CardParams::upkeep_sacrifice_creature; PerformUpkeepSacrificeCreature, both worlds). `source`
     // = the battlefield card number of the permanent whose trigger this is (0 = unknown). Returning TRUE
@@ -1133,6 +1172,11 @@ public:
     // every offer's take / decline is branched -- the sound default.
     virtual bool FreeCastTakeDominated(const GameState& /*s*/, int /*controller*/,
                                        const CardDefinition& /*hit*/) const { return false; }
+    // RippleFreeCastAnswer -- a ripple-revealed castable match: 1 = TAKE (honouring a hand-built take cap), 0 =
+    // DECLINE, -1 = SEARCHED (a decline bit). Default: take-dominated (FreeCastTakeDominated) -> 1, else -1.
+    // Shadowborn INT-9 answers every match (RippleFixed).
+    virtual int RippleFreeCastAnswer(const GameState& s, int controller, const CardDefinition& hit) const
+    { return FreeCastTakeDominated(s, controller, hit) ? 1 : -1; }
     // AdmitRemandOnFreeCast -- may a Remand (counters_target_spell_to_hand) in hand answer this FREE
     // cast (Unpredictable Cyclone's walk hit, on the stack)? A RESTRICTION hook (default: admit all);
     // the take / decline / take-and-Remand choice itself is searched (the DigDraw seed's free-cast pin).

@@ -34932,7 +34932,9 @@ static RippleDry RippleChainDryRun(const GameState& s, int me, const CardDefinit
                     const bool castable = md != nullptr && FreeCastHasLegalTargets(s, me, *md)
                         && (!SacCreatureCostFoldsByReadiness(md->params) || bodies > 0)
                         && !TutorCastPruned(s, me, *md);
-                    if (castable && prov.FreeCastTakeDominated(s, me, *md))
+                    const int answer = castable ? prov.RippleFreeCastAnswer(s, me, *md) : -1;
+                    if (castable && answer == 0) {}   // a provider-fixed decline (INT-9): bottomed, no bit
+                    else if (castable && answer == 1)
                     {
                         ++r.dom_seen;
                         take = take_cap < 0 || r.dom < take_cap;
@@ -35028,8 +35030,11 @@ static void EmitRipplePins(const GameState& state, std::vector<Action>& actions)
     const int me = state.active_player_index;
     const int n = RippleReachableN(state, me);
     if (n <= 0) { return; }
-    const bool late = RippleLateWaveAdmitted();
     const DecisionProvider& prov = ResolveProvider(state);
+    // INT-9 (DecisionProvider::RippleFixed): every ripple answer is fixed, so each cast gets ONE variant (plus the
+    // granter-free twin below); the late / deep waves widen nothing.
+    const bool fixed = prov.RippleFixed(state);
+    const bool late = !fixed && RippleLateWaveAdmitted();
     // A granter only in HAND: ripple is live only in a plan that casts it (first -- the deck's cast order).
     // Every variant that can reveal or cast is then marked ripple_granter_req (SubsetHasMissingTrickTarget
     // rejects it in a plan without a granter cast), and ONE variant per cast -- the one equal to "no ripple"
@@ -35092,7 +35097,7 @@ static void EmitRipplePins(const GameState& state, std::vector<Action>& actions)
                 for (const Card& lc : state.players[static_cast<std::size_t>(me)].library)
                 { if (lc.m_name == d->card.m_name) { ++lib_copies; } }
                 Tmax = std::max(T, copies + lib_copies);
-                if (!prov.FreeCastTakeDominated(state, me, *d)) { ms = std::min(std::max(all.srch, lib_copies), 3); }
+                if (prov.RippleFreeCastAnswer(state, me, *d) < 0) { ms = std::min(std::max(all.srch, lib_copies), 3); }
             }
             const bool ritual = IsManaRitual(*d);
             const int per = ritual ? RitualFloatAmount(state, *d, a.chosen_x) : 0;
@@ -35102,7 +35107,8 @@ static void EmitRipplePins(const GameState& state, std::vector<Action>& actions)
             // wave (take_cap); the script still honours a hand-built cap, the enumerator emits none.
             const std::vector<int> caps{ -1 };
             std::vector<int> budgets{ kRippleRevealAll };
-            for (int B = std::min(Tmax - 1, 126); B >= 0; --B) { budgets.push_back(B); }
+            if (fixed) { if (!granter_bf) { budgets.push_back(0); } }   // ALL; B = 0 is the granter-free twin only
+            else { for (int B = std::min(Tmax - 1, 126); B >= 0; --B) { budgets.push_back(B); } }
             // THE RITUAL CHAIN CREDIT FOLLOWS THE COPIES THE PLAN CASTS (INT-8, the 2d review's finding 7). The
             // free rituals a chain casts are credited on ritual_float (USER: "ritual-chain mana counted by the
             // planner"), split by copy so a plan casting ONE copy is not credited the other copies' chains:
@@ -35171,7 +35177,8 @@ static void EmitRipplePins(const GameState& state, std::vector<Action>& actions)
                 }
                 out.push_back(std::move(v));
             }
-            ripplestats::NoteSite(prov.FreeCastTakeDominated(state, me, *d) ? ripplestats::kSiteF1Apostle
+            ripplestats::NoteSite(prov.RippleFreeCastAnswer(state, me, *d) == 1 && !ritual
+                                  && d->card.IsCreature() ? ripplestats::kSiteF1Apostle
                                   : ritual ? ripplestats::kSiteF1Ritual : ripplestats::kSiteF1Other,
                                   static_cast<long long>(out.size() - f1_before));
             continue;
@@ -35187,13 +35194,24 @@ static void EmitRipplePins(const GameState& state, std::vector<Action>& actions)
         // (and the deep wave below) as the USER asked: far too wide at b10 / b20 (one Intent cast 5,488
         // variants; games past 20 minutes at d5 b20). The sanctioned replacement -- deciding the free picks at
         // RESOLUTION -- is docs/design/shadowborn-ripple-resolution-picks.md; the waves stay until it lands.
-        if (late)
+        // A provider-FIXED answer for this name (RippleFreeCastAnswer >= 0) means no library copy is a searched
+        // match: a fixed decline casts nothing (no pick, no victim), a fixed take answers its own decline.
+        const int name_answer = prov.RippleFreeCastAnswer(state, me, *d);
+        if (late && name_answer == 0)
+        {
+            int lib_copies = 0;
+            for (const Card& lc : state.players[static_cast<std::size_t>(me)].library)
+            { if (lc.m_name == d->card.m_name) { ++lib_copies; } }
+            all.triggers = std::max(all.triggers, 1 + lib_copies);
+            all.nonadj  = std::max(all.nonadj, lib_copies > 1 ? lib_copies : 0);
+        }
+        else if (late)
         {
             int lib_copies = 0;
             for (const Card& lc : state.players[static_cast<std::size_t>(me)].library)
             { if (lc.m_name == d->card.m_name) { ++lib_copies; } }
             const bool tut = IsLibraryTutor(d->params), sac = SacCreatureCostFoldsByReadiness(d->params);
-            all.srch    = std::max(all.srch, lib_copies);
+            if (name_answer < 0) { all.srch = std::max(all.srch, lib_copies); }
             all.triggers = std::max(all.triggers, 1 + lib_copies);
             all.nonadj  = std::max(all.nonadj, lib_copies > 1 ? lib_copies : 0);
             if (tut) { all.tutors = std::max(all.tutors, lib_copies); }
@@ -35204,11 +35222,11 @@ static void EmitRipplePins(const GameState& state, std::vector<Action>& actions)
         // packed ordinal (kRipplePinOrdinals) in it -- a third / fourth free tutor's pick and victim are
         // searched at a large / unlimited budget instead of always taking the front. A budget-staged
         // admission like the late wave (the cross product grows by a factor of wt * wv per ordinal).
-        const int pin_ords = RippleDeepWaveAdmitted() ? kRipplePinOrdinals : 2;
-        const int mt = std::min(f2 ? all.nonadj : all.triggers, 3);
+        const int pin_ords = fixed ? 0 : RippleDeepWaveAdmitted() ? kRipplePinOrdinals : 2;
+        const int mt = fixed ? 0 : std::min(f2 ? all.nonadj : all.triggers, 3);
         const int ms = std::min(all.srch, 3);
         int wt = 1;
-        if (all.tutors > 0)
+        if (all.tutors > 0 && !fixed)
         {
             std::vector<std::string> uniq;
             for (const std::string& c : RankedTutorCandidates(prov, state, me, d->params))
@@ -35216,7 +35234,7 @@ static void EmitRipplePins(const GameState& state, std::vector<Action>& actions)
             wt = std::max(1, std::min<int>(static_cast<int>(uniq.size()), 15));
         }
         int wv = 1;
-        if (all.sacs > 0)
+        if (all.sacs > 0 && !fixed)
         {
             std::vector<std::string> hn;
             for (const Card& hc : state.players[static_cast<std::size_t>(me)].hand)
@@ -35268,7 +35286,7 @@ static void EmitRipplePins(const GameState& state, std::vector<Action>& actions)
     actions.swap(out);
 }
 
-static void EmitSacNamedVariants(const GameState& state, std::vector<Action>& actions)
+static void EmitSacNamedVariants(const GameState& state, std::vector<Action>& actions, bool is_pre_combat)
 {
     const int me = state.active_player_index;
     const Player& ap = state.players[static_cast<std::size_t>(me)];
@@ -35337,6 +35355,8 @@ static void EmitSacNamedVariants(const GameState& state, std::vector<Action>& ac
         {
             prov_targets.erase(std::remove_if(prov_targets.begin(), prov_targets.end(), [&](const std::string& nm)
             { return std::find(targets.begin(), targets.end(), nm) == targets.end(); }), prov_targets.end());
+            // INT-9 (USER 2026-11-03, the Demon search TIMING): the provider may restrict the list by main phase.
+            ResolveProvider(state).SacNamedTimingFilter(state, me, sd->params, is_pre_combat, prov_targets);
             if (prov_targets.empty()) { return; }
             targets.swap(prov_targets);
         }
@@ -35349,7 +35369,9 @@ static void EmitSacNamedVariants(const GameState& state, std::vector<Action>& ac
         // Readiness-count codes.
         struct Code { int s, t, arr; };
         std::vector<Code> codes;
-        if (!HumanPlayActive())
+        const bool bodies_fixed = !HumanPlayActive() && ResolveProvider(state).SacNamedBodiesFixed(state);
+        if (bodies_fixed) { codes.push_back(Code{ -2, 0, 0 }); }   // INT-9: the weakest six at activation
+        else if (!HumanPlayActive())
         {
             const int r = N - std::min(N, X);
             for (int t = 0; t <= std::min(T, r); ++t)
@@ -35394,7 +35416,7 @@ static void EmitSacNamedVariants(const GameState& state, std::vector<Action>& ac
             {
                 Action a = base;
                 a.tutor_target  = tg;
-                a.sac_victim_id = c.s < 0 ? 0 : SacNamedSpecCode(c.s, c.t);
+                a.sac_victim_id = c.s == -2 ? kSacNamedWeakestCode : c.s < 0 ? 0 : SacNamedSpecCode(c.s, c.t);
                 a.eval          = pw * DMG - std::max(0, c.s) * 10 - c.arr;
                 actions.push_back(std::move(a));
             }
@@ -45452,7 +45474,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // Shadowborn Apostle's "{B}, Sacrifice six creatures named ~: put a Demon" (INT-2; see
         // EmitSacNamedVariants). One emission per board; inert for every deck without the param (a board
         // + hand walk testing one int).
-        if (state.deck_has_sac_named) { EmitSacNamedVariants(state, actions); }
+        if (state.deck_has_sac_named) { EmitSacNamedVariants(state, actions, is_pre_combat); }
 
         // HAND GO-OFF (MTG_EDF_HAND_GOFF, USER 2026-09-14: "detecting when our current board + hand
         // can go off"). The blink loop above is enumerated per OUTLET ON THE BATTLEFIELD, so a
@@ -46335,6 +46357,11 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 if (fresh_on_bf) { continue; }
                 hand_victims.push_back({ h, hc.m_number, nm });
             }
+            const DecisionProvider& sv_prov = ResolveProvider(state);
+            const bool sv_fixed = sv_prov.SacCostVictimFixed(state);
+            int sv_bf = 0;
+            std::string sv_hand;
+            if (sv_fixed) { sv_prov.SacCostVictimVariant(state, me, sv_bf, sv_hand); }
             std::vector<Action> out;
             out.reserve(actions.size() + 8);
             for (Action& a : actions)
@@ -46345,6 +46372,32 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 if (d == nullptr || !SacCreatureCostFoldsByReadiness(d->params) || a.soulfire_own_targets != 0)
                 { out.push_back(std::move(a)); continue; }
                 const std::size_t sv_before = out.size();
+                // INT-9 (DecisionProvider::SacCostVictimFixed, a USER-ordered restriction for Shadowborn): ONE
+                // variant -- the provider's battlefield pick, or a creature in hand it names (the co-cast
+                // requirement); the payment re-picks on the live board, so the variant only gates castability.
+                if (sv_fixed)
+                {
+                    if (sv_bf > 0)
+                    {
+                        Action c = a;
+                        c.soulfire_own_targets = sv_bf;
+                        out.push_back(std::move(c));
+                    }
+                    else if (!sv_hand.empty())
+                    {
+                        for (const HandVictim& hv : hand_victims)
+                        {
+                            if (hv.name != sv_hand || hv.hand_index == a.hand_index) { continue; }
+                            Action c = a;
+                            c.soulfire_own_targets = hv.number;
+                            c.trick_hand_target    = hv.name;
+                            out.push_back(std::move(c));
+                            break;
+                        }
+                    }
+                    ripplestats::NoteSite(ripplestats::kSiteSacVictim, static_cast<long long>(out.size() - sv_before));
+                    continue;
+                }
                 for (int v : bf_victims)
                 {
                     Action c = a;
@@ -74246,6 +74299,45 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         if (plans.size() > before) { plans.pop_back(); }    // not a confirmed win -> enumerate normally (no dup)
     }
 
+    // ONE-ACTIVATION KILL SHORT-CIRCUIT (Shadowborn INT-9, DecisionProvider::SacNamedKillShortCircuit; USER
+    // 2026-11-03: "If you have 13-18 Shadowborn Apostle on the field from the last turn and can search Jetmir
+    // that ends the game immediately against 20 life" -- "avoid wasting time on the turn after going off"). The
+    // board-lethal cut's sibling: when ONE sac-named activation (its bodies already on the battlefield) and the
+    // attack are a VERIFIED kill this turn (the plan applied on a copy, its combat simulated), that plan is the
+    // frame's only plan -- a win this turn is the minimum win turn, so nothing else can be better (sound). The
+    // necessary pre-test is cheap: an upper bound on the attack (every attack-ready creature at its power + 3,
+    // doubled -- Jetmir's top tier) must reach the opponent's life. A refused trial is popped.
+    if (is_pre_combat && !s_no_lethal_cut && state.deck_has_sac_named
+        && !DecisionUnpruned(UnprunedGate::ComboLine) && ResolveProvider(state).SacNamedKillShortCircuit())
+    {
+        const int me = state.active_player_index;
+        long long bound = 0;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != me || p.tapped || p.entered_this_turn || !p.card.IsCreature()) { continue; }
+            bound += 2LL * (std::max(0, p.card.m_power.value_or(0)) + 3);
+        }
+        if (bound >= state.Opponent().life)
+        {
+            for (int j = 0; j < static_cast<int>(cands.size()); ++j)
+            {
+                const Action& ca = cands[static_cast<std::size_t>(j)];
+                if (ca.kind != Action::Kind::ActivatePermAbility
+                    || ca.ability_mode != Action::AbilityMode::SacNamedTutorPut || ca.def == nullptr) { continue; }
+                if (CountSacNamed(state, me, ca.card_name) < ca.def->params.sac_named_count) { continue; }
+                const size_t before = plans.size();
+                eval_and_push(std::vector<int>{ j });
+                if (plans.size() > before
+                    && LethalCutKillIsReal(state, plans.back(), is_pre_combat, /*land_played=*/true,
+                                           pending_atk, "sacnamed-kill"))
+                {
+                    return { std::move(plans.back()) };   // verified one-activation kill -> skip the powerset
+                }
+                if (plans.size() > before) { plans.pop_back(); }
+            }
+        }
+    }
+
     // EQUIP-CHAIN GO-OFF SHORT-CIRCUIT (lockstep twin in SolveUncached). Third member of the family
     // directly above, and built as one for a reason: a verified kill this turn DOMINATES under
     // turn-to-win, so the frame owes no other plan and the odometer is pure waste from here.
@@ -84880,8 +84972,10 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     bool copy_in_lib = false;
                     for (const Card& lc : sp.library) { if (lc.m_name == d->card.m_name) { copy_in_lib = true; break; } }
                     const bool f2 = RippleResolutionShuffles(*d) && StableShuffleEnabled();
-                    uw_r.push_back(f2 ? (copy_in_lib ? 2u : 1u) : (copy_in_lib ? 3u : 2u));
-                    uw_r.push_back(copy_in_lib && own_w > 0 ? own_w : 1u);   // the free copy's own search
+                    // INT-9 (RippleFixed): the decision and a free copy's pick are fixed answers -- width 1.
+                    const bool rfix = ResolveProvider(state).RippleFixed(state);
+                    uw_r.push_back(rfix ? 1u : f2 ? (copy_in_lib ? 2u : 1u) : (copy_in_lib ? 3u : 2u));
+                    uw_r.push_back(!rfix && copy_in_lib && own_w > 0 ? own_w : 1u);   // the free copy's own search
                     if (own_w > 0) { uw_r.push_back(own_w); }
                 }
                 if (own_w > 0 && static_cast<int>(uw.size()) < kLandSearchPinOrdinals) { uw.push_back(own_w); }
@@ -86988,7 +87082,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
     // drawn Reliquary as the drop, play a hand land, cast Land's Edge for the win, or nothing. That
     // is the whole of "don't play a land before TH/Throes"; nothing here dictates the after-play.
     const std::size_t defer_begin = all.size();
-    add_for_land("", "");
+    // Shadowborn INT-9 P1 (DecisionProvider::NoLandPlanDominated): a deck where holding a free land drop can
+    // never pay skips the no-land family while such a land is in hand. Default false: byte-identical elsewhere.
+    if (!ResolveProvider(state).NoLandPlanDominated(state)) { add_for_land("", ""); }
     const std::size_t defer_end = all.size();
 
     // ---- SEARCHED LAND-DROP POSITION: "cast the landfall payoff, THEN play the land" -------------

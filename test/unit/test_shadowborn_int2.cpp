@@ -79,6 +79,14 @@ struct ShadowbornGenericDemonsSb2 : ShadowbornProvider
 {
     bool SacNamedPutTargets(const GameState&, int, const CardParams&, std::vector<std::string>&) const override
     { return false; }
+    // INT-9's fixed answers OFF (the MTG_UNPRUNED audit arm's shape): these tests exercise the searched mechanics.
+    bool RippleFixed(const GameState&) const override { return false; }
+    bool SacCostVictimFixed(const GameState&) const override { return false; }
+    bool SacNamedBodiesFixed(const GameState&) const override { return false; }
+    bool NoLandPlanDominated(const GameState&) const override { return false; }
+    void SacNamedTimingFilter(const GameState&, int, const CardParams&, bool, std::vector<std::string>&) const override {}
+    int  RippleFreeCastAnswer(const GameState& s, int c, const CardDefinition& h) const override
+    { return DeckProvider::RippleFreeCastAnswer(s, c, h); }
 };
 const ShadowbornProvider& ProvSb2() { static const ShadowbornGenericDemonsSb2 p; return p; }
 

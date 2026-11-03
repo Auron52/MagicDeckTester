@@ -29538,6 +29538,11 @@ inline int SacNamedReadiness(const Permanent& q)
     return q.entered_this_turn ? 2 : 3;
 }
 inline int SacNamedSpecCode(int s, int t) { return 1 + s + 8 * t; }
+// THE FIXED CODE (Shadowborn INT-9; DecisionProvider::SacNamedBodiesFixed, a USER-ordered restriction: "Apostles
+// are interchangeable except summoning-sick/tapped status, which does not matter for a sacrifice"): the six are
+// the WEAKEST on the live board at activation -- X, then T, then U, then S, lowest number first (the code-0
+// order) -- ONE code for every plan, however many copies the plan casts first. Above every 1 + s + 8t (<= 55).
+constexpr int kSacNamedWeakestCode = 64;
 inline int SacNamedSpecS(int code) { return code > 0 ? (code - 1) % 8 : 0; }
 inline int SacNamedSpecT(int code) { return code > 0 ? (code - 1) / 8 : 0; }
 // Copies of `name` we control, as battlefield indices bucketed by readiness code, lowest number first.
@@ -29581,7 +29586,7 @@ inline std::vector<int> ResolveSacNamedBodies(const GameState& state, int contro
     const int x = std::min<int>(n, static_cast<int>(b[0].size()));
     out.insert(out.end(), b[0].begin(), b[0].begin() + x);
     const int r = n - x;
-    if (code <= 0)
+    if (code <= 0 || code == kSacNamedWeakestCode)
     {
         for (int c = 1; c <= 3 && static_cast<int>(out.size()) < n; ++c)
         {
@@ -42990,8 +42995,20 @@ inline std::vector<int> SacReadinessVictimReps(const GameState& state, int contr
 // caller's fallback).
 inline int ResolveSacReadinessVictimId(const GameState& state, int victim_id)
 {
-    if (victim_id <= 0) { return victim_id; }
     const int active = state.active_player_index;
+    // SHADOWBORN INT-9 (DecisionProvider::SacCostVictimFixed, a USER-ordered restriction): ONE victim, picked on
+    // the LIVE board at the cast -- the hard cast's enumeration-time pin only names the variant; a creature the
+    // plan cast earlier is on the board by now (USER 2026-11-03: Harpy token first, then a spare Apostle, a
+    // Demon only if nothing else).
+    {
+        const DecisionProvider& prov = ResolveProvider(state);
+        if (prov.SacCostVictimFixed(state))
+        {
+            const int bi = prov.SacCostVictimLive(state, active);
+            if (bi >= 0) { return state.battlefield[static_cast<std::size_t>(bi)].card.m_number; }
+        }
+    }
+    if (victim_id <= 0) { return victim_id; }
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index == active && p.card.m_number == victim_id && p.card.IsCreature())
@@ -46336,7 +46353,8 @@ inline bool RippleRevealDecision(GameState& s, int controller, const CardDefinit
         return false;
     };
     bool reveal;
-    if (!RippleScriptCovers(s, spell)) { ripplestats::NoteUnpinned(0); reveal = policy(); }
+    if (ResolveProvider(s).RippleFixed(s)) { reveal = true; }   // INT-9: every trigger reveals (one answer)
+    else if (!RippleScriptCovers(s, spell)) { ripplestats::NoteUnpinned(0); reveal = policy(); }
     else if (sc.per_name)
     {
         if (sc.reveals == kRippleRevealAll) { reveal = true; }
@@ -46369,12 +46387,15 @@ inline bool RippleTakeDecision(GameState& s, int controller, const CardDefinitio
 {
     RippleScript& sc = s.ripple_script;
     const DecisionProvider& prov = ResolveProvider(s);
+    const int answer = prov.RippleFreeCastAnswer(s, controller, md);   // 1 take, 0 decline, -1 searched
+    if (answer == 0) { return false; }
     if (!RippleScriptCovers(s, spell))
     {
+        if (answer == 1 && prov.RippleFixed(s)) { return true; }   // INT-9: a fixed take needs no script
         ripplestats::NoteUnpinned(3);
         return prov.TakeFreeCast(s, controller, md);
     }
-    if (prov.FreeCastTakeDominated(s, controller, md))
+    if (answer == 1)
     {
         if (sc.take_cap < 0) { return true; }
         if (sc.take_cap > 0) { --sc.take_cap; return true; }
@@ -46396,6 +46417,9 @@ inline std::string RippleNextFreeTutorTarget(GameState& s)
 {
     RippleScript& sc = s.ripple_script;
     const int ord = sc.tutor_ord++;
+    // INT-9 (RippleFixed): a free tutor takes the FRONT of its list at its resolution -- ONE answer, the USER
+    // table's head for this deck ("Even better if that number is 1").
+    if (ResolveProvider(s).RippleFixed(s)) { return RippleTutorRankPrefix() + "0"; }
     if (!sc.pinned || ord >= kRipplePinOrdinals) { ripplestats::NoteUnpinned(5); return RippleTutorRankPrefix() + "u"; }
     const int v = (sc.free_tutor >> (ord * kRipplePinBits)) & ((1 << kRipplePinBits) - 1);
     if (v == 0) { ripplestats::NoteUnpinned(5); return RippleTutorRankPrefix() + "u"; }
@@ -46416,6 +46440,15 @@ inline int RippleNextFreeVictimId(GameState& s, int controller)
 {
     RippleScript& sc = s.ripple_script;
     const int ord = sc.sac_ord++;
+    {
+        // INT-9 (SacCostVictimFixed): ONE victim, the provider's live pick (the payment re-reads it too).
+        const DecisionProvider& prov = ResolveProvider(s);
+        if (prov.SacCostVictimFixed(s))
+        {
+            const int bi = prov.SacCostVictimLive(s, controller);
+            return bi >= 0 ? s.battlefield[static_cast<std::size_t>(bi)].card.m_number : 0;
+        }
+    }
     int rank = 0;
     if (sc.pinned && ord < kRipplePinOrdinals)
     {

@@ -58,7 +58,18 @@ Permanent Perm3(const std::string& name, int number, bool fresh = false)
     return p;
 }
 
-const ShadowbornProvider& Prov3() { static const ShadowbornProvider p; return p; }
+struct SearchedProv3 : ShadowbornProvider
+{
+    // INT-9's fixed answers OFF (the MTG_UNPRUNED audit arm's shape): these tests exercise the searched mechanics.
+    bool RippleFixed(const GameState&) const override { return false; }
+    bool SacCostVictimFixed(const GameState&) const override { return false; }
+    bool SacNamedBodiesFixed(const GameState&) const override { return false; }
+    bool NoLandPlanDominated(const GameState&) const override { return false; }
+    void SacNamedTimingFilter(const GameState&, int, const CardParams&, bool, std::vector<std::string>&) const override {}
+    int  RippleFreeCastAnswer(const GameState& s, int c, const CardDefinition& h) const override
+    { return DeckProvider::RippleFreeCastAnswer(s, c, h); }
+};
+const ShadowbornProvider& Prov3() { static const SearchedProv3 p; return p; }
 
 GameState Base3(int swamps = 4)
 {
