@@ -131,3 +131,21 @@ test_edf_goff_verify failure below.
   refusing when it was drawn. (3) Re-run the gate slice + the A/B with units. Optional: payer preference "spend the
   floating colour the hand needs least on a generic pip" (a payment-order change, same A/B). Only the drawn-card
   cases remain a USER question.
+
+## Successor 3 (2026-11-03, in progress)
+- FOUND: the line re-pay costs EDF ~20-40x WALL with units unchanged (ab1 EDF ON/OFF ms 26x; games up to 3,600 s
+  at 7,526 units, e.g. EDF seed 1830138 gi 137: 2,737 s ON vs ~100 s OFF). perf: 99% in MinimalPayments under
+  LineRepaySearch, called from EdfRangeAurasBehindUntappers -> OrderPaysSequentially -> SeqWalkFixedOrder (the
+  enumerator's walk; Aura'd lands make every leftover split a verified probe). Units never saw it. Held-out A/B
+  must wait for the fix.
+- Fix in progress (uncommitted, ManaPayment.cpp): (a) a decision-scoped memo of FAILED re-pays keyed on
+  MidTurnStateKeyOf + digest + record content + bill + every payer thread-local + heurarm arms
+  (MTG_LINE_REPAY_MEMO_VERIFY=1 re-runs hits and counts mismatches); (b) the joint-bill necessary condition per
+  depth-2 option (LineRepayChain::JointPays); (c) more MTG_LINE_REPAY_STATS counters + a slow-try line.
+- NEXT 2 code also in (temporary lever MTG_LINE_REPAY_DRAW, default on, =0 = old barrier): library size out of the
+  digest; a record across a draw matches only when the failing spell's name was in the record's hand beyond the
+  copies cast since (LineRepayAcrossDraw). Split of the 138 (by name in the pre-plan hand): 115 in hand, 23 drawn;
+  107 of the 115 involve Mind Stone (its crack sacrifices, so the record is likely skipped by the battlefield-size
+  check anyway -- measure).
+- Scratch: /workspaces/MagicDeckTester/build/scratch/mcdragons3/ (mtg.cur = HEAD 3d3b067c1 binary; edfslow/ repro;
+  ho/mk.py = held-out manifest, seed block 1840001; nl/split.py = the need-later split).
