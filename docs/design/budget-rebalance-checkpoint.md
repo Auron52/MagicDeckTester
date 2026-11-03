@@ -324,3 +324,15 @@ Branch base 3640b6bf1 is 44 commits behind origin (25 src files): rebase before 
 - NEXT: expect the 6 known play changes (Bruna x4, Kitty v3 x2, all better); anything else -> check on the origin
   binary (stale GT vs ours); explain the slower/changed games; accept smoke+regression for ALL decks; check_gt_logs;
   commit; force-push budget-rebalance. Then the tier-2 overflow subagent's patches.
+
+## ACCEPTED + PUSHED 2026-11-03 09:31 UTC (727dea8dd on origin/budget-rebalance, force-pushed after the rebase)
+- Smoke + regression accepted for ALL decks incl. Merfolk (table shipped on origin). 0 win-turn changes from this
+  branch; 6 same-turn line changes (bruna x4, kittyv3 x2); antilife2hg/fluctuator2hg d5 s2002 origin-stale (the
+  12a476cda binary plays our line). Plain --accept dropped origin's 3 notes -> restored verbatim.
+- Tier makespans looked 1.7x origin's (smoke 8m18 vs 5m54, regression 11m13 vs 6m49) at IDENTICAL units: the
+  tier-2 subagent ran 2x8 threads beside them. PAIRED bench (run_pairbench.sh: 6 heavy smoke jobs, both binaries
+  concurrently, 11 thr each): CPU 1447 -> 1470 s (+1.5%), wall 159 -> 167 s, maxrss 1.16 -> 1.12 GB, units equal.
+  The residual +1.5% (hinata +3.7%, niv +5%) is consistent with the tier-1 caps (mana 24 MB measured +2% on snow80)
+  -- what the tier-2 overflow is meant to recover. Re-bench after integrating it.
+- NEXT: tier-2 overflow subagent's patches (rebase onto 727dea8dd, verify 0 play/unit change, re-bench); then
+  the re-price stage (charge uncharged work).
