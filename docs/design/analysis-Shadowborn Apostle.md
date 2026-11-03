@@ -1127,3 +1127,52 @@ case byte-identical (this deck is not a suite case yet).
    what keeps the chains narrow.)
 3. **Free Intent**: never (default) vs take-iff-expendable measured identical in turns. Keep never?
 4. gi117 / gi120 are new non-wins at the shipped budget (both win T6 at d8 b0). Budget-bound, not a lost line.
+
+## INT-9 follow-ups (2026-11-03): rulings, gi97, the INT-8 larger test, the rebase, suite entry
+
+**USER rulings:** the chain exception to the Demon timing rule is kept ("If we have a Shadowborn in hand, we can play it
+and potentially drop more off thumming stone ... particularly if we sacrifice the summoning sick ones"); free Diabolic
+Intent is never taken ("let's decline it"); always-reveal is fine ("arguably not correct only in 1v1"); the lethal check
+stays; gi97: "dig into the actual example and verify that it is clairvoyance. That is th only reasonable reason to
+ignore it."
+
+**gi97 is NOT clairvoyance; the pin is amended (the ripple KNOWN STOP).** INT-8's T3 (seed 7001 gi97, d3 b10): Lake +
+Stone + Dark Ritual (ripple keeps a second Ritual) + Apostle, whose chain reveals 23 times -- every card of the library is
+revealed and bottomed, then the chain keeps revealing with no Apostle left, and INT-8 stops exactly when Swamp #46 is on
+top (T4: Swamp, sac six, win). At that point every library card has been seen and placed by the player, so the stop is
+a decision on known information. (The blind ensemble could not settle it: blinding also re-decides the London bottom
+and the T1 play, so 7 of 8 salts were different games; the one with the same keep cast its Ritual on T1.) Amendment, in
+the RippleFixed path only: the first copy of an F1 name also carries `ripple_reveals = kRippleKnownStop + k`, "reveal
+every trigger, but once the library holds no copy of the name AND is wholly the placed bottom block, reveal only k
+more"; the enumerator emits one variant per DISTINCT library order a stop after k known reveals leaves (a dry-run pass
+records the orders; an order equal to an earlier k's or to ALL's is not emitted, so all-Swamp tails add nothing).
+Commit e8b1f26fd (pre-rebase hash), test `INT-9 known stop`.
+- gi97: T4 again at d3 b10 and d5 b20.
+- Held-out A/B, seed 21001, 800 games per cell, pooled per binary (build/scratch/shadowborn/int10b/):
+
+| cell | INT-9 | + known stop | faster / slower | units |
+|---|---|---|---|---|
+| d3 b10 | 5.1063 | **5.1013** | 8 / 4 | 23.71M -> 25.11M (+5.9%) |
+| d5 b20 | 5.0375 | **5.0350** | 6 / 4 | 42.53M -> 45.30M (+6.5%) |
+
+- Every slower game at d8 b0 (amended binary; INT-9's shipped turn in brackets): gi1 5 [5], gi189 5 [5], gi201 5 [5],
+  gi241 4 [4], gi492 5 [6/5], gi510 5 [5], gi653 4 [4] -- all recover (budget-bound). Better overall, no lost line: adopted.
+
+**INT-8 larger test (USER: "show that it helps slightly ... adopt it if it can match the average with no
+unrecoverables").** Seed 21001, 800 games per cell, INT-7 vs INT-8 binaries (build/scratch/shadowborn/int8/ab2/): d3 b10
+5.4350 -> 5.4337, d5 b20 5.3587 -> 5.3625 (batch avg, non-wins penalised); units -1.2% / -0.6%; slower 6 / 10, faster
+8 / 8. INT-8 alone is neutral within noise. **Every INT-8-slower game, replayed on INT-9 (which carries every INT-8 rule)
+at the cell's own budget, wins at INT-7's turn or earlier**: d3 gi141 5 [5], gi214 4 [5], gi438 4 [5], gi454 5 [5], gi632 4
+[4], gi752 4 [5]; d5 gi141 5, gi214 4, gi437 5, gi454 5, gi483 5, gi494 4, gi604 4, gi632 4, gi739 6, gi752 4 (all <= INT-7);
+d8 b0 likewise (all <= INT-7). So no INT-8 rule removes a line INT-7 found: each rule meets the bar in its INT-9 form,
+and the per-rule ablation is not needed (the slower INT-8 games were the depth-1 tail noise RC-8 described, which
+INT-9's narrower menus removed).
+
+**Rebased onto origin/phase-1-2-deck-analyzer (2406875c9)**: conflicts were all additive (upstream's upkeep_tutor pin
+beside our demon-trigger pin, the plan-cache traits key beside the ripple-wave mix later deleted, two heurarm slots);
+sizeof(GameState) 1272. Unit: 2542/2543 -- `mana oracle: a memoised continuation's Blood source is not served to its
+tapped twin` fails its arm-0 "defect for the record" check (covered == checked with the fix OFF); see smoke below.
+Scenarios 400/400.
+
+**INT-10 (playout P3) is NOT run tonight**: play is frozen here for the mulligan generation (the brief stays in
+logs/shadowborn/int10-brief.md for later).

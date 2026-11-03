@@ -969,6 +969,17 @@ selesnyav2_regression_d5_s30061	620
 selesnyav2_smoke_d0_s1001	1
 selesnyav2_smoke_d3_s1001	4415
 selesnyav2_smoke_d5_s1001	2708
+shadowborn2hg_smoke_d3_s1001	35475
+shadowborn_regression_d0_s2002	1
+shadowborn_regression_d3_s2002	33708
+shadowborn_regression_d3_s3003	29984
+shadowborn_regression_d3_s30073	74598
+shadowborn_regression_d5_s2002	63824
+shadowborn_regression_d5_s3003	55816
+shadowborn_regression_d5_s30073	47670
+shadowborn_smoke_d0_s1001	1
+shadowborn_smoke_d3_s1001	31126
+shadowborn_smoke_d5_s1001	52097
 slivers2hg_smoke_d3_s1001	7538
 slivers2hg_smoke_d5_s1001	4500
 slivers_overnight_d0_s10010	1

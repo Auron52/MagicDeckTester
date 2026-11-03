@@ -41,6 +41,7 @@ declare -A DECK_FILE=(
   [antilife]=decks/Anti-Lifegain/Anti-Lifegain.cod
   [hinata]=decks/Hinata2/Hinata2.cod
   [cyclone]="decks/Unpredictable Cyclone/Unpredictable Cyclone.cod"
+  [shadowborn]="decks/Shadowborn Apostle/Shadowborn Apostle.cod"
   [dragonstorm]=decks/Dragonstorm/Dragonstorm.cod
   [auras]=decks/Auras/Auras.cod
   [goblins]=decks/Goblins/Goblins.cod
@@ -95,6 +96,7 @@ declare -A DECK_PROF=(
   [antilife]=decks/Anti-Lifegain/Anti-Lifegain.profile.json
   [hinata]=decks/Hinata2/Hinata2.profile.json
   [cyclone]="decks/Unpredictable Cyclone/Unpredictable Cyclone.profile.json"
+  [shadowborn]="decks/Shadowborn Apostle/Shadowborn Apostle.profile.json"
   [dragonstorm]=decks/Dragonstorm/Dragonstorm.profile.json
   [auras]=decks/Auras/Auras.profile.json
   [goblins]=decks/Goblins/Goblins.profile.json
@@ -228,6 +230,14 @@ SMOKE_CASES=(
   "cyclone 3 1001   50 10"
   "cyclone 5 1001  100 20"
   "cyclone2hg 3 1001 50 10"
+  # shadowborn: ADDED 2026-11-03 by the analysis (docs/design/analysis-Shadowborn Apostle.md), all three tiers at
+  # once (the all-or-none rule), at the cyclone gate shape and the overnight ENTRY set. Mono-black Shadowborn
+  # Apostle + Thrumming Stone ripple chains into the four Demons. No keep table / value leaf yet, so GT WILL move
+  # when they land. 2HG canary: Jetmir / Demon attacks read the 2HG life total.
+  "shadowborn 0 1001 1000 0"
+  "shadowborn 3 1001   50 10"
+  "shadowborn 5 1001  100 20"
+  "shadowborn2hg 3 1001 50 10"
   # dragonstorm: cheap storm/combo deck (d0 ~0.24ms/game; d3 ~0.17 s/game, d5 ~0.28 s/game measured).
   # Small d3/d5 gate mirroring th/hinata; deeper coverage lives in regression/overnight.
   "dragonstorm 0 1001 1000 0"
@@ -645,6 +655,10 @@ REGRESSION_CASES=(
   # finished below the 2e6-unit per-game cap. Keep this block fixed as a regression signal.
   "cyclone          3 30031 3 0"
   "cyclone          5 30031 3 0"
+  # Shadowborn unlimited backstop: screened 30071..30075 at d3 and d5 (abandon_units 2e6, MTG_SLOW_GAME_MS=5000);
+  # 30072 hit the cap at d5, so the block is 30073..30075 (every game < 2e6 units, max ~4 s).
+  "shadowborn       3 30073 3 0"
+  "shadowborn       5 30073 3 0"
   # Midrange Burn screened backstop: 30021..30023, with
   # abandon_units=2000000 and MTG_SLOW_GAME_MS=5000; preserve screened blocks thereafter.
   # Screen: build/midrange-burn-analysis/backstop-screen.log; max game 10.2 s.
@@ -807,6 +821,12 @@ REGRESSION_CASES=(
   "cyclone 3 3003   75 10"
   "cyclone 5 2002  150 20"
   "cyclone 5 3003  150 20"
+  # Shadowborn: both seeds at each searched shape, before its keep table and value leaf.
+  "shadowborn 0 2002 1000 0"
+  "shadowborn 3 2002   75 10"
+  "shadowborn 3 3003   75 10"
+  "shadowborn 5 2002  150 20"
+  "shadowborn 5 3003  150 20"
   # dragonstorm: two seeds at d3/d5 (~0.17/0.28 s/game -> ~4 min added; well under the 45-min budget).
   "dragonstorm 0 2002 1000 0"
   "dragonstorm 3  2002   100 10"
@@ -1035,6 +1055,9 @@ OVERNIGHT_CASES=(
   # finished below the 2e6-unit per-game cap. Disjoint from the regression block.
   "cyclone          3 30051 3 0"
   "cyclone          5 30051 3 0"
+  # Shadowborn unlimited backstop: screened 30081..30085 at d3 and d5, all under the 2e6 cap; disjoint from regression.
+  "shadowborn       3 30081 3 0"
+  "shadowborn       5 30081 3 0"
   # Midrange Burn backstop candidates: screen BEFORE admission as above (2e6 units).
   # 30041..30043 is disjoint from regression 30021..30023; both screened under 2e6 units.
   "midrangeburn     3 30041 3 0"
@@ -1249,6 +1272,19 @@ OVERNIGHT_CASES=(
   "cyclone 5 5005  300 20"
   "cyclone 5 6006  300 20"
   "cyclone 5 7007  300 20"
+  # Shadowborn ENTRY set before its keep table (regression-testing skill); expand at keep-table adoption.
+  "shadowborn 0 4004 2000 0"
+  "shadowborn 0 6006 2000 0"
+  "shadowborn 0 8008 2000 0"
+  "shadowborn 0 10010 2000 0"
+  "shadowborn 3 4004  400 10"
+  "shadowborn 3 5005  400 10"
+  "shadowborn 3 6006  400 10"
+  "shadowborn 3 7007  400 10"
+  "shadowborn 5 4004  300 20"
+  "shadowborn 5 5005  300 20"
+  "shadowborn 5 6006  300 20"
+  "shadowborn 5 7007  300 20"
   # dragonstorm: 4-seed sweep at modest gate budgets (10/20) -- it's cheap, ~11 min total across seeds.
   "dragonstorm 0 4004 2000 0"
   "dragonstorm 0  6006 2000 0"
