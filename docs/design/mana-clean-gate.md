@@ -30,13 +30,25 @@ A mana analysis is one run of `scripts/mana_clean.py` for the deck:
 
 - No flag of an ISSUE class:
   - every class the oracle counts as an engine miss (`mana_oracle.MISS`: ENUM-GAP, APPLY-DROP, APPLY-DROP-ORDER,
-    and the DOMINATED-* payment classes except DOMINATED-LAND);
+    and the DOMINATED-* payment classes except DOMINATED-LAND and DOMINATED-LIFE);
   - ORACLE-GAP (the oracle could not reproduce the engine's own outcome, so the game was not fully audited).
 - Play identity holds.
 - At least 5,000 games were played.
 
 The context classes are counted in the report but do not fail a run: PHANTOM, CONTINUATION-DIFFERS, DROP-COVERED,
 DOMINATED-LAND, HIDDEN-INFO, UNMODELED and CAPPED.
+
+**DOMINATED-LIFE is disclosed, not failed (USER 2026-11-03).** It flags a payment that bought the same options for
+more life (a painland's coloured face where a painless source pays). The USER: *"Life is not a huge worry here unless
+it loses lines"*, and *"In goldfishing life is minor at best. We very rarely run into issues there."* When the lost
+life does cost a line, the oracle flags that later payment with a lost-option class (ENUM-GAP, APPLY-DROP and so on),
+and that class still fails. The report counts DOMINATED-LIFE per deck. The filtered stderr keeps its whole flag lines,
+up to the same cap as the ISSUE classes.
+
+**Deferred (USER 2026-11-03):** *"in the future we may need to dig further into those cases (for 1v1 for example)"*.
+Against an opponent, life is a resource, and a payment a life short is a real loss even when no later payment
+needs that life. When 1v1 play arrives, revisit the class. Either fail on it again, or score the life against what
+the opponent's clock makes of it. The disclosed counts and kept lines in each run are the starting sample.
 
 **Fresh games every run.** Game `g` of a deck's sequence is seed `30000000 + g`, game index `g`. Run `k` plays the
 games after run `k-1`'s. So once issues are fixed, the re-check is on games the fixes were not fitted to.
@@ -97,12 +109,9 @@ first, or name the deck to force a run.
 
 ## Choices taken by default (USER to confirm)
 
-- **The ISSUE set is the oracle's full MISS set plus ORACLE-GAP.** This is the literal reading of "no issues found".
-  The DOMINATED-LIFE class (a painland's coloured face where a painless source pays) is common on painland decks:
-  EDF showed 325 in 20 games after the 2026-10-31 fixes. Under this definition those decks cannot pass until it is
-  fixed. The narrower alternative is to fail only on lost options (ENUM-GAP, APPLY-DROP, APPLY-DROP-ORDER) plus
-  ORACLE-GAP, and report the DOMINATED-* classes without failing on them. That is a one-line change to `ISSUE` in
-  `scripts/mana_clean.py`.
+- **The ISSUE set is the oracle's MISS set minus DOMINATED-LIFE, plus ORACLE-GAP.** The USER settled DOMINATED-LIFE
+  on 2026-11-03 (above). DOMINATED-CREATURE, DOMINATED-ONESHOT, DOMINATED-HASTE and DOMINATED-OTHER still fail. Each
+  spends a resource a later line can use (a creature, a one-shot source, haste-tagged mana, something else).
 - **UNMODELED and CAPPED are disclosed, not failed.** On a plan where either fires, the oracle gives no verdict. So
   a deck can pass with some plans that were never verified. The report shows their counts per deck.
 - **Archived lists** (`decks/<Deck>/<Version>/`) have no record and stay beta. The tool runs shipping lists only.

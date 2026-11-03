@@ -62,7 +62,13 @@ DETAIL_CAP = 5000                # whole ISSUE lines kept per deck and class (a 
                                  # LIFE hundreds of times per 20 games); the rest are counters, so counts stay exact
 CHUNK_MS = 120000                # ...and a job's target cost, so an expensive deck's tail stays short
 SEED_BASE = 30000000             # game g of a deck's sequence is seed SEED_BASE + g, game index g
-ISSUE = mo.MISS + ["ORACLE-GAP"]
+# DOMINATED-LIFE (the same options bought for more life) is DISCLOSED, not failed (USER 2026-11-03: "Life is
+# not a huge worry here unless it loses lines. That said, in the future we may need to dig further into those
+# cases (for 1v1 for example)"). A payment whose lost life DOES cost a later line shows up at that later payment
+# as a lost-option class (ENUM-GAP, APPLY-DROP ...), which still fails. Its whole lines are kept (to the same
+# cap) in the filtered stderr so the 1v1 dig has its samples: docs/design/mana-clean-gate.md.
+DISCLOSED = ["DOMINATED-LIFE"]
+ISSUE = [c for c in mo.MISS if c not in DISCLOSED] + ["ORACLE-GAP"]
 COUNTER = re.compile(r"^\[mana-oracle\] (?P<cls>[A-Z-]+) seed=\d+ job=(?P<job>\S+)")
 
 
@@ -92,6 +98,7 @@ def save_state(st):
                    "leaves beta only when its latest run is clean on >= games_required games of its current list.")
     st["games_required"] = GAMES
     st["issue_classes"] = ISSUE
+    st["disclosed_classes"] = DISCLOSED
     st.setdefault("decks", {})
     tmp = STATE + ".tmp"
     with open(tmp, "w") as fh:
@@ -164,7 +171,7 @@ def pick(names, decks):
 
 def run_arm(mtg, manifest, level, out_path, err_path, threads):
     """One pooled batch. stdout (the per-job result lines) to `out_path`; stderr filtered into `err_path`:
-    ISSUE flag lines whole (the first DETAIL_CAP per deck and class), every other flag cut to a one-line
+    ISSUE and DISCLOSED flag lines whole (the first DETAIL_CAP per deck and class), every other flag cut to a one-line
     counter, everything else as is. The counters keep every count exact."""
     env = dict(os.environ, MTG_MANA_ORACLE=str(level))
     whole = collections.Counter()
@@ -175,7 +182,7 @@ def run_arm(mtg, manifest, level, out_path, err_path, threads):
             m = COUNTER.match(ln)
             if m and m.group("cls") != "DECISION":
                 key = (m.group("job").split("__")[0], m.group("cls"))
-                if m.group("cls") in ISSUE and whole[key] < DETAIL_CAP:
+                if m.group("cls") in ISSUE + DISCLOSED and whole[key] < DETAIL_CAP:
                     whole[key] += 1
                     se.write(ln)
                 else:
@@ -398,10 +405,10 @@ def cmd_run(args, decks):
     blocks = ", ".join("%s %d-%d" % (pd["key"], pd["game_index"], pd["game_index"] + pd["games"] - 1)
                        for pd in plan["decks"])
     header = ("Mana-clean gate run: %d decks, games (seed %d + game index) %s; src `%s`, binary `%s`, "
-              "`MTG_MANA_ORACLE=2`. ISSUE classes: %s. The sections below the verdict table read only the first "
+              "`MTG_MANA_ORACLE=2`. ISSUE classes: %s (disclosed, not failed: %s). The sections below the verdict table read only the first "
               "%d whole flag lines per deck and class; the table's counts are exact.\n\n%s"
               % (len(plan["decks"]), SEED_BASE, blocks, plan["src"][:12], os.path.relpath(mtg, ROOT),
-                 ", ".join(ISSUE), DETAIL_CAP, "\n".join(head)))
+                 ", ".join(ISSUE), ", ".join(DISCLOSED), DETAIL_CAP, "\n".join(head)))
     identity_all = all(r[1] != "invalid" for r in rows)
     text, _, _, _ = mo.report("Mana-clean gate `%s`" % name, header, [pd["key"] for pd in plan["decks"]], deck_of,
                               flags, decisions, plans_seen, summary, identity_all, rc.get("on", 0), args.top)
