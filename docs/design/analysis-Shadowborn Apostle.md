@@ -154,3 +154,91 @@ record).
 - INT-2: Shadowborn Apostle activation + `tutor_required_subtype`, the four Demons, second-main hook.
 - INT-3: Thrumming Stone / ripple (executor + rollout + planner + suspend hook + viewer).
 - Then: 2d review, 2d-bis cost/field audits, Stage 3 coverage, Stage 4 profile, 4a, 4-bis, Stage 5.
+
+## INT-1 done (2026-11-03)
+Commits on `shadowborn-analysis` (not pushed): `42aadf696` (engine, cards, tests) + the ledger commit that adds this section.
+
+**Cards (cards.json; cost + oracle verbatim from Scryfall, bracket notes appended):** Dark Ritual
+(`ritual_floating_mana 3`, `ritual_float_color B`), Demonic Tutor (`tutor_to_hand`, any card), Diabolic
+Intent (`tutor_to_hand` + `sac_additional_creature`), Culling the Weak (`ritual_floating_mana 4` / `B` +
+`sac_additional_creature`), Lake of the Dead (`basic_land` B + `etb_replace_sacrifice_land_subtype Swamp` +
+`sac_for_mana_amount 4` / `sac_for_mana_color B` / `sac_for_mana_victim_land_subtype Swamp`), Profane Tutor
+(`suspend_time_counters 2`, `suspend_cost {1}{B}`, `tutor_to_hand`).
+
+**New params:** `sac_additional_creature` (bool), `etb_replace_sacrifice_land_subtype` (string),
+`sac_for_mana_victim_land_subtype` (string). All default-off; no existing card carries them.
+
+**Engine:**
+- Shared readers `HasSacCreatureAdditionalCost` / `SacCreatureCostFoldsByReadiness` /
+  `SacCreatureCostLegacyRoute` (CardDatabase.h) replace every `sac_additional_creature_color` gate except
+  the Stompy routing signature. The legacy colour route (Natural Order) is untouched: same victim fold,
+  same rollout position, same same-plan axis (`MTG_SAC_CREATURE_AXIS`).
+- Generic route: the rollout pays the sacrifice at the CAST site right after the hand erase (the
+  executor already paid at its cast site), for every resolution shape (lockstep fix). A cast with no
+  creature to sacrifice is dropped before any mana moves, in both worlds, and graded Illegal by CheckLine.
+- Victims (CollectActions' SAC-ANY-CREATURE post-pass): battlefield classes from
+  `SacReadinessVictimReps` (identity fold + readiness dominance: a strong copy, i.e. untapped and not new
+  this turn, is not offered while a weak copy of the same identity exists; proofs in the code comment), plus
+  one variant per distinct creature NAME in hand (`Action::trick_hand_target` = the co-cast requirement,
+  `SubsetHasMissingTrickTarget`), so "cast an Apostle, then Culling it" is enumerable on an empty board.
+  `ResolveSacReadinessVictimId` maps a hand pin onto the copy the plan cast. `ApplyAttachSpellDependency
+  Order` now also keeps such a spell after its victim's cast.
+- Morbid: `GameState::creature_died_this_turn`, set in `OnCreatureDies` for a dying CREATURE (the shared
+  `SacrificePermanentAt` also routes land sacrifices there, hence the type check), cleared in
+  `GameEngine::UntapStep` and `SimulateEndAndStartNextTurn`. Write-only today: no reader, no key fold.
+- Lake of the Dead: the entry replacement in `PlayLandCore` (no Swamp -> graveyard, drop spent, no
+  landfall); the crack as a branch of `ApplySacForMana` (source tapped and kept, another Swamp eaten);
+  shared `ChooseSubtypeLandSacrifice` (identity fold + basic-subset dominance: basic Swamp before Blood
+  Crypt), `FloatLandBeforeSacrifice` (factored out of the Karoo float, which keeps its lever) and
+  `SacrificeLandAt` (attachments fall off, sacrifice watchers, never the creature death cascade). Cracks
+  are emitted at most once per available victim. `LakeDropWithoutVictim` keeps every autonomous land
+  choice off a Lake with no Swamp (human play still offers it). Viewer: the crack keeps a board chip
+  (`sacout=Lake of the Dead`, "Lake of the Dead: tap, sacrifice a Swamp"), not an implicit mana source.
+- Profane Tutor: `CastOffSuspend` tutor branch; its target is the packed upkeep pin stream Search for
+  Tomorrow uses (one ordinal per search-bearing arrival). The upkeep-pin fan counts a tutor arrival
+  (width = distinct fetchable names, capped by `TutorSearchWidth`) and opens on a deck without land search
+  when such an arrival is due; fans (0)-(2) of that block stay gated on `deck_has_land_search`.
+- `ShadowbornProvider : DeckProvider` (Certificate NotAssessed with what a proof must count;
+  `TutorSearchWidth() = 32`, PROVISIONAL). Routed FIRST in `DetectDecisionProvider` by the `shadowborn`
+  flag. **Expected params for INT-2 / INT-3 (add them to the same OR):** `sac_named_count > 0` (Shadowborn
+  Apostle's "sacrifice six creatures named ~" activation) and `grants_ripple > 0` (Thrumming Stone). Both are
+  named in the code comment at the flag.
+- Viewer: `scripts/audit_viewer_decisions.py` MANIFEST + text-coverage rows for the three params
+  (`sacrifice`); `tools/play/DECISIONS.md` rows (`sacrifice` reuse x2, `tutor` reuse for Profane at upkeep).
+
+**Tests:** `test/unit/test_shadowborn_int1.cpp` (8 cases: routing + width; morbid set / land-sac not /
+rollout clear; readiness fold; Culling emission with no creature / hand victim / board victim; hand-pin
+mapping at payment; Lake victim choice + `LakeDropWithoutVictim`; Lake crack tap-first + no-victim no-op;
+Profane upkeep pin). `test_pirates_provider.cpp` routing table pins `Shadowborn Apostle ->
+ShadowbornApostle` (the table was failing since the Stage 1 commit added the deck folder). Scenarios (7):
+`shadowborn_culling_same_plan_victim`, `..._unpaid`, `shadowborn_culling_no_creature_uncastable`,
+`shadowborn_intent_sacrifices_board_creature`, `shadowborn_lake_tap_first_float`,
+`shadowborn_lake_crack_sacrifices_other_swamp`, `shadowborn_profane_suspend_upkeep_tutor`. Unit suite
+2433/2433, scenarios 398/398.
+
+**Smoke:** `test/regression.sh --smoke` (not accepted): 161 passed, 4 failed. All four failures are Merfolk (merfolk d0/d3/d5, merfolk2hg d3), and they are NOT INT-1's: HEAD's own binary (aa2b668da, built in a scratch worktree) reproduces the same merfolk_smoke_d3 digest (16290806e85e1728, avg 4.44 vs GT 4.18). The Merfolk ground truth committed with ff7a14850 does not match its own tree. Every other deck is byte-identical (play-changed only on Merfolk). Flag for whoever owns Merfolk; nothing was accepted.
+
+**Left for INT-2 / INT-3 / review:**
+- INT-3: `PushFreeCast` must pay the additional sacrifice for a free Intent / Culling (and drop it with no
+  creature); the readiness victim needs a searched pin there too. `CastOffSuspend` ripple hook.
+- INT-2: Reaper's reader of `creature_died_this_turn` must add the state-key folds (BuildSimKey / dedup /
+  breakpoint / dominance) gated on a `deck_has_morbid` stamp; the six-Apostle sacrifice must go through
+  `SacrificePermanentAt`. The second-main hook (`DeckUsesSecondMain`) is INT-2's.
+- 2d review: the same-plan-victim plan can be over-admitted by the flat subset math when the victim's cost
+  would need the ritual's own float (Culling's {B}{B}{B}{B} credited against the creature it eats). The
+  realisation drops the cast (`shadowborn_culling_same_plan_victim_unpaid` pins that no free cast happens),
+  so it is a menu/search-waste gap, not an illegal line. A sequential-walk gate was not added because
+  `SubsetPayableSequential` refuses any subset holding a SacForMana (the Lake crack), which would make real
+  lines unfindable.
+- Generality gap (unreachable for this list): `ChooseSubtypeLandSacrifice` takes the front class when its
+  folds leave more than one (two non-basic Swamps of different names); no searched axis feeds it.
+- CheckLine treats an UNDECLARED Lake crack like other SacForMana sources (implicit, added when the line
+  needs the mana); the summary names it, so the human sees it. Revisit in 5h if it surprises the user.
+
+**Provisional calls (surfaced, not blocking; USER sign-off owed):**
+1. `TutorSearchWidth 32` for this deck (coverage fix; held-out A/B owed).
+2. Profane Tutor "you may cast it" collapsed to cast (ledger call, implemented).
+3. Culling the Weak at main-phase timing only (ledger call, implemented as a bracket note).
+4. Victim-fold fix scoped to the new flag; Natural Order (Stompy) keeps the name fold pending its own A/B.
+5. Lake of the Dead: basic Swamp before Blood Crypt as a sound dominance (disclosed caveat: a card that
+   rewards basic-ness or reads graveyard lands would break it; none in this pool).
