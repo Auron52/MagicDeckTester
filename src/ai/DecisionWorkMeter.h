@@ -45,6 +45,16 @@ inline thread_local int       t_charge_acc = 0;
 inline thread_local long long t_pr_start = 0;
 inline thread_local long long t_pr_limit = 0;   // 0 == disarmed
 inline bool PricedExceeded() { return t_pr_limit > 0 && workctr::t_priced - t_pr_start >= t_pr_limit; }
+// The PRICED START GATE (FullSearchLine's ladder): decline to START a pass whose projected priced cost does not fit
+// the decision's remaining priced allowance. Per-job arm "decision_priced_gate" (ValueArm) else MTG_DECISION_PRICED_GATE
+// (default ON); only consulted while the priced ceiling is armed, so inert with it off.
+inline bool PricedGateOn()
+{
+    static const bool env = EnvOn("MTG_DECISION_PRICED_GATE", true);
+    const int a = valuearm::t_arm.decision_priced_gate;
+    return a >= 0 ? a != 0 : env;
+}
+inline thread_local long long t_pr_gate_refusals = 0;   // diagnostic: passes the priced gate declined (this thread)
 
 inline void Add(long long n) { t_used += n; }
 inline bool Armed() { return t_limit > 0; }

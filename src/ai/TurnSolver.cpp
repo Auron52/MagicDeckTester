@@ -98269,6 +98269,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
 
     long long c_prev = 0, c_prev2 = 0;       // work units of passes k-1, k-2
     bool      have_prev = false, have_prev2 = false;
+    long long pr_prev = 0, pr_prev2 = 0;     // PRICED work (workctr::t_priced, ns) of passes k-1, k-2: the priced gate
 
     // Value-leaf start-gate relaxation (MTG_VALUE_STARTGATE_ALPHA, ADOPTED default 8.0; 1.0 == off): when the
     // CHEAP value-leaf is driving this search (free leaves), a pass whose estimate slightly overshoots the
@@ -98894,10 +98895,25 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                 const double est_h = estimate * (1.0 + g_single_reserve_R * lpu);
                 if (est_h > kStartGateAlpha * (remaining - estimate)) { fits = false; g_sres_refused.fetch_add(1, std::memory_order_relaxed); }
             }
+            // PRICED START GATE (decisionwork::PricedGateOn; only while the priced decision ceiling is armed): the same
+            // estimate-and-skip in the priced currency. A pass whose projected priced cost does not fit what is left of
+            // the decision's priced allowance is not STARTED -- the prior pass commits now -- instead of being started,
+            // tripping the ceiling near its end and rolling back (measured: goblins 2hg gi30 X=10 spent the full 23.6 s
+            // priced and then discarded a 69k-unit pass). Turn-complete: it never cuts a pass, it declines to begin one.
+            if (fits && decisionwork::t_pr_limit > 0 && decisionwork::PricedGateOn() && pr_prev > 0)
+            {
+                const double pratio = (have_prev2 && pr_prev2 > 0)
+                                    ? static_cast<double>(pr_prev) / static_cast<double>(pr_prev2) : kDefaultGrowth;
+                const double pest = static_cast<double>(pr_prev) * pratio;
+                const double prem = static_cast<double>(decisionwork::t_pr_limit
+                                                        - (workctr::t_priced - decisionwork::t_pr_start));
+                if (pest > kStartGateAlpha * std::max(0.0, prem)) { fits = false; ++decisionwork::t_pr_gate_refusals; }
+            }
             if (!fits) { break; }
         }
 
         long long used_before = budget ? budget->Used() : 0;
+        const long long pr_before = workctr::t_priced;   // priced start gate (see above)
         long long leaves_before = g_fs_leaf_evals;   // K-predictor: per-pass leaf-count delta (probe recording)
         const long long lad_tl0 = g_tt_look_n, lad_th0 = g_tt_hit_n;
         // Arm the OVERRUN guard: this pass may exceed its estimate, but if its real cost blows past
@@ -98999,6 +99015,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
 
         c_prev2 = c_prev;   have_prev2 = have_prev;
         c_prev  = cost;     have_prev  = true;
+        pr_prev2 = pr_prev; pr_prev = workctr::t_priced - pr_before;
 
         // Jump-ladder: with a measured growth ratio, extrapolate to the deepest affordable K and skip the
         // intermediate passes d(pass+1)..d(K-1) -- go straight to K. K is chosen by the SAME start-gate math
