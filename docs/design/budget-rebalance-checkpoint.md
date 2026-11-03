@@ -107,7 +107,7 @@ Started 2026-11-03.
   each with a =0 lever: MTG_PLAN_CACHE_TRAITS_KEY (applying plan's PlanTraits read by payment holds during a
   mid-apply continuation derivation: edf e68, snow s91), MTG_PLAN_CACHE_PERM_KEY (per-permanent state by copy
   number: melira m13), MTG_PLAN_CACHE_SCALAR_KEY (scripted_* + turn counters + m1_hand: bruna b134),
-  MTG_MANA_CACHE_RAMP_ALT (mana cache replays the ramp-feed-alt verdict a cached failure skipped: niv n83 --
+  MTG_MANA_CACHE_RAMP_ALT [superseded at rebase by origin's MTG_MC_FEED_ALT] (mana cache replays the ramp-feed-alt verdict a cached failure skipped: niv n83 --
   that game also moved with MTG_MANA_CACHE=0 before). All 6 repros: default units == KB=1 units, CONTENT-DIFF 0.
   OPEN (user's call): MTG_MANA_CACHE_X_TRAITS / _X_PAYCTX would close 40 colour-only mana-cache diffs on n83
   (no unit effect measured; key cost on the hottest path).
@@ -139,6 +139,15 @@ Started 2026-11-03.
 - Surface to USER (not decided): X choice for the priced ceiling (X=50 clean on quality so far, small tail gain;
   tight X loses Alchemist turns); tier-1 sizes (tt 8, fsl 16, m1memo 8, gamelc 24, mana 16 MB); mana-cache
   context fold (MTG_MANA_CACHE_X_TRAITS / _X_PAYCTX); branch not pushed (push would also run Windows CI).
+
+## REBASED onto origin/phase-1-2-deck-analyzer (2026-11-03 06:40 UTC; pre-rebase ref budget-rebalance-prerebase)
+- One conflict, src/core/SpellEffects.cpp: origin had landed the SAME ramp-feed hit fix independently
+  (MTG_MC_FEED_ALT, ManaCacheEntry::feed_alt, stored only for negatives). Took origin's; DROPPED ours
+  (MTG_MANA_CACHE_RAMP_ALT / ramp_feed_alt no longer exist). Equivalent: the public entry reads the flag only
+  after a FAILED first pass. Kept our verify-only additions (dbg_pay_ctx/dbg_traits, out_vok, McBoardCmp).
+- NOT yet built: run_edf.sh is running on the PRE-rebase 06:24 binary (same path); build after edf.DONE
+  (a -j32 compile beside two batches risks OOM on this 23.5 GB box). Then unit tests, smoke/regression A/B
+  vs origin GT, accept (play changes: route key, purity fixes, tier 1, X=100, EDF collapses).
 
 ## USER DECISION 2026-11-03: priced ceiling X=100 (default now 100 in DecisionWorkMeter.h; "for now").
 
