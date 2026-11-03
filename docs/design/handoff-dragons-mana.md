@@ -257,3 +257,49 @@ Scratch `/workspaces/MagicDeckTester/build/scratch/mcdragons4/`. Binary of a56a4
 - Next: id run again (VERIFY: memo/ok/max mismatches 0; gi68 back to 86bc...), wall run, then decide the inner prune
   (find why it is not necessary on gi68, or drop it), then the held-out A/B.
 - The 23 "drawn" need-later drops do not exist (split.py comma bug; see USER questions above).
+
+### Successor 4 -- results after v2/v3 (READ THIS FIRST, successor 5)
+Branch head: the WIP commit "success memo; inner joint prune OFF; precheck OFF; temp whole-float probe lever" (on top
+of f0d43afc9 / 484acb761). Binaries: `mcdragons4/mtg.v2` (success memo, prune off, precheck on),
+`mcdragons4/mtg.v3` (= HEAD src: precheck behind MTG_LR_MAX_PRECHECK, whole-float behind MTG_LR_WHOLE_FLOAT).
+TEMP levers still in the code (delete before landing): MTG_LINE_REPAY_DRAW, MTG_LR_INNER_JOINT, MTG_LR_MAX_PRECHECK,
+MTG_LR_WHOLE_FLOAT.
+
+Correctness (identity slice `mcdragons3/id/id.json`, 1,600 games vs ab2 ON, DRAW=0):
+- v2 under MEMO_VERIFY: 20/20 jobs byte-identical; memo_mismatch 0 (213,832 hits), ok_mismatch 0 (58,002 success
+  hits), ok_stale 0. Bruna gi68 back to ab2's 86bc663936b9ccc5.
+- Inner joint prune (MTG_LR_INNER_JOINT=1) is LOSSY: alone it moves Bruna gi68 to the OFF game (fired 220 -> 60).
+  Likely mechanism (unverified): JointPays runs in the FAILING spell's pay scope, so mana only an earlier chain bill
+  may spend (Troyan's big-spell pool, MV>=5; subtype-restricted sources) is invisible to it. The TOP-LEVEL joint
+  check uses the same function, so it may be lossy the same way (pre-existing; check with a verify counter).
+- Freest-board precheck (MTG_LR_MAX_PRECHECK=1) is LOSSY: 83 verify mismatches (the real payer is not monotone in
+  free sources). Off.
+- Whole-float (MTG_LR_WHOLE_FLOAT=1, no set-aside enumeration in the re-made payment's options) is LOSSY: 1 of 1,600
+  games moved, AccomplishedAlchemist seed 1830146 gi145 (job off100) T7 -> T8 (slower).
+
+Wall (`mcdragons4/wall/run.sh`, ON vs MTG_LINE_REPAY=0, same batch):
+| build | g137 on/off | smoke63 on/off | ds45 on/off |
+| a56a429ef (fail memo + inner prune) | 2,153 / 5.0 s | 4,368 / 4.1 s | 7.7 / 5.0 s |
+| v2 (+ success memo, prune off) | 1,666 / 41.5 s (box load ~68) | 6,214 / 38 s | 41 / 50 s |
+| v3 + MTG_LR_WHOLE_FLOAT=1 | 5.0 / 4.1 s | 16.7 / 3.9 s | 4.2 / 4.4 s |
+Identity-slice EDF wall: whole-float 354 s vs ab2 ON 9,900 s; line-repay ms 58 s vs 10,566 s (v2, verify).
+smoke63 with whole-float is still 4.3x: 2,034 failing searches (d1 669, d2 1,365), 69,678 MinimalPayments calls --
+the depth-2 recursion with no sound inner prune. g137 (391 depth-2 successes, 185 served by the success memo) is fixed.
+
+WHERE THE COST IS: MinimalPayments' set-aside / leftover-split enumeration (PayEnum::Verify, BuildSimKeyBase, board
+copies) -- an oracle-grade table used in play; ~0.4-1.5 s per call on Aura'd-land EDF boards, ~1,000x the
+whole-float table.
+
+RECOMMENDATION (successor 4): a budget-staged admission order, the CLAUDE.md "waves" shape. Wave 1 = the whole-float
+options (cheap, always run). Wave 2 = the full set-aside table, only if wave 1 found nothing, with its work CHARGED
+through TurnSolver::ChargeDecisionUnits to DecisionBudget() and cut when that budget is spent. At an unlimited budget
+DecisionBudget() is null: nothing is charged or cut, so it is complete. A cut is never memoised as a failure. Plus a
+SOUND inner prune: JointPays evaluated per bill's own scope, or skipped when the board holds a scoped source. That
+removes most of smoke63's 69,678 recursion calls.
+OPEN for the USER/coordinator: the "finish the turn first" rule says a cut must not fall on the decision's own turn
+(the AA route precedent: charge always, cut only on later turns). If wave 2 is never cut on the own turn, smoke63's
+own-turn failures still cost the full table. That is a policy call: report it, do not settle it.
+Option (a), an exact necessary condition for the failing class, was tried twice and both attempts were lossy (the
+precheck and the inner prune). Neither is a candidate as built.
+Not done: held-out A/B (blocked on wall), draw-narrowing gate slice, CAPPED rerun, ENUM-GAP depth-3 write-up, smoke.
+Units on a56a429ef: 2,435/2,435 pass (`mcdragons4/ut1.log`); `ut2.log` = v2.
