@@ -5371,9 +5371,13 @@ inline void McTier1Clear()
 // hits with identical payer context and traits):
 //   * an ETB-chosen colour (Coldsteel Heart: etb_choose_color -> Permanent::chosen_color) decides what the
 //     source can make, and the key's source descriptor does not carry it.
+// MTG_TIER2_MANA_CTX (DEFAULT ON; =0 is a DIAGNOSTIC arm only): drop the payer-context and plan-traits halves of
+// the match (the X_PAYCTX / X_TRAITS folds), keeping the board-hole folds -- the arm that measures whether those
+// two folds are needed for tier-2 purity.
+inline bool McT2CtxOn() { static const bool v = EnvOn("MTG_TIER2_MANA_CTX", true); return v; }
 inline std::uint64_t McT2PayWord(const GameState& state)
 {
-    std::uint64_t h = PayContextDigest();
+    std::uint64_t h = McT2CtxOn() ? PayContextDigest() : 0x7E2ull;
     const int a = state.active_player_index;
     for (std::size_t i = 0; i < state.battlefield.size(); ++i)
     {
@@ -6410,10 +6414,7 @@ static bool TapForCostBacktrackTop(GameState& state, const ManaCost& cost,
                 auto t2 = g_mana_t2.Find(mk1);
                 if (t2 != g_mana_t2.End() && t2->second.verify == mk2)
                 {
-                    // MTG_TIER2_MANA_CTX (DEFAULT ON; =0 is a DIAGNOSTIC arm only: serve a tier-2 entry whatever the
-                    // context, i.e. the tier-1 rule -- the arm that measures whether the context match is needed).
-                    static const bool s_t2_ctx = EnvOn("MTG_TIER2_MANA_CTX", true);
-                    if (!s_t2_ctx || (t2->second.dbg_pay_ctx == mc_ctx_pay && t2->second.dbg_traits == mc_ctx_traits))
+                    if (t2->second.dbg_pay_ctx == mc_ctx_pay && (!McT2CtxOn() || t2->second.dbg_traits == mc_ctx_traits))
                     {
                         g_mana_t2.NoteHit();
                         auto nh = g_mana_t2.Take(t2);
