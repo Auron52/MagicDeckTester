@@ -336,3 +336,23 @@ Branch base 3640b6bf1 is 44 commits behind origin (25 src files): rebase before 
   -- what the tier-2 overflow is meant to recover. Re-bench after integrating it.
 - NEXT: tier-2 overflow subagent's patches (rebase onto 727dea8dd, verify 0 play/unit change, re-bench); then
   the re-price stage (charge uncharged work).
+
+## Live at compaction #4 (2026-11-03 ~12:00 UTC) -- branch HEAD de98b05a5 (pushed to origin/budget-rebalance)
+- DONE since #3: tier-2 overflow series cherry-picked (4a10eaf60..d00d39b0f; mana only; pure + isolated, no wall
+  gain; docs/design/tier2-cache-overflow.md). MTG_MANA_CACHE_CHOSEN_KEY default ON 2e64c6b5f (correctness: ETB
+  chosen colour missing from the tier-1 mana key; held-out Snow+Alchemist 2,900 games 0 win-turn changes);
+  GT accepted 26dbad212 (smoke 165/165 identical; regression only snow d5 s3003 gi52 T7 cast order).
+  USER rule: subagents <= ~250K context, then handoff doc + NEW subagent (memory subagent-context-cap-250k).
+- PLAN-CACHE PRICED DEFECT (found by the tier-2 agent): under X=100 a plan-cache hit skipped priced work, so
+  tier-2 residency (RAM) moved play (KB=1: 3 win turns). FIX = priced ledger 3f7e31665 (MTG_PLAN_PRICED_LEDGER,
+  default ON; per-game seen-key shadows make t_priced as-if-unlimited-cache; handoff
+  docs/design/plan-priced-ledger-handoff.md). plan5 probe: KB=1 == default in all 5. FSL is NOT affected (tier 1:
+  fixed per-thread 16 MB + 2M-entry cap).
+- RUNNING: build/scratch/budget/run_ledger.sh -> ledger.DONE (harness task b5bslqeqf). Builds; tiers at default vs
+  GT (test 4: expect 0 or few diffs -> explain each, accept); concurrent regression manifest at MTG_PLAN_CACHE_KB=1
+  -> kb1_wins/kb1.log vs the default tier run (test 3: MUST be 0 digest/unit/win-turn diffs). CI watch b7n9t1mq0.
+- NEXT: read ledger.DONE output; if test 3 != 0, root-cause (do not accept). Else accept any test-4 changes
+  (save/restore the '# accepted-with-regressions' notes -- plain --accept drops them), check_gt_logs, commit,
+  push budget-rebalance. Then a paired wall bench vs 26dbad212 (run_pairbench.sh pattern) -- test 5.
+  Then: re-price stage (charge uncharged work); pooled bottoming budget; EDF remaining wastes.
+  Shared-branch push only when the feature is complete (USER).
