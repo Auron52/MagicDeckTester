@@ -35,7 +35,8 @@ inline thread_local long long t_limit = 0;   // 0 == disarmed
 // first. Begin() zeroes it and Scope restores it, exactly as for t_used.
 inline thread_local int       t_charge_acc = 0;
 
-// PRICED CEILING (MTG_DECISION_PRICED_X, default 0 = off). The unit ceiling above counts budget units,
+// PRICED CEILING (MTG_DECISION_PRICED_X, default 100 -- USER 2026-11-03 after A/B v3: X=100 moved no win turn in
+// ~31.4k held-out games or the 45-game tail corpus, held-out wall -5%; X<=50 lost turns on heavy games; 0 = off). The unit ceiling above counts budget units,
 // which miss most of a decision's real cost on some decks (plan enumeration, applies, mana payment are
 // charged nothing or one unit regardless of size; see core/WorkCounters.h). This second ceiling counts
 // PRICED work -- every kind, charged or not -- from workctr::t_priced, so it bounds what a decision
@@ -106,7 +107,7 @@ struct PricedScope
 inline long long PricedLimitNs(long long limit_units);
 inline long long PricedLimitNs(long long limit_units)
 {
-    static const long long env_x = EnvInt("MTG_DECISION_PRICED_X", 0);
+    static const long long env_x = EnvInt("MTG_DECISION_PRICED_X", 100);
     static const long long ref   = EnvInt("MTG_DECISION_PRICED_REF_NS", 25000);
     const long long x = valuearm::t_arm.decision_priced_x >= 0 ? valuearm::t_arm.decision_priced_x : env_x;   // per-job arm wins
     if (x <= 0 || limit_units <= 0) { return 0; }

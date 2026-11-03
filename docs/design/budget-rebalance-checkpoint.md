@@ -140,6 +140,8 @@ Started 2026-11-03.
   tight X loses Alchemist turns); tier-1 sizes (tt 8, fsl 16, m1memo 8, gamelc 24, mana 16 MB); mana-cache
   context fold (MTG_MANA_CACHE_X_TRAITS / _X_PAYCTX); branch not pushed (push would also run Windows CI).
 
+## USER DECISION 2026-11-03: priced ceiling X=100 (default now 100 in DecisionWorkMeter.h; "for now").
+
 ## Live at compaction #2 (2026-11-03 ~06:40 UTC)
 - EDF subagent 2 DONE (write-up docs/design/edf-tutor-pin-alias-2026-11-03.md). Cherry-picked its 4 commits
   (55ddfc4a7 MTG_BP_TUTOR_PIN_ALIAS, e3d46c06f MTG_SPWF_CANON_MEMO + MTG_RH_MOVED_VIA_CANDS, 36f12368c
