@@ -68,8 +68,19 @@ Started 2026-11-03.
   * Diagnostics added: MTG_PLAN_CACHE_COST_VERIFY (recompute every hit under a cost scope; EDF/Bruna/
     Melira: 0 bad -> hits never skip charges, the leak is CONTENT), ctx/fingerprint print at
     CONTENT-DIFF, STORE-REDERIVE-DIFF check, MTG_BP_DERIVE_ISOLATE_IN experiment.
-- RUNNING: build/scratch/budget/run_stage2.sh -> v0.* (MTG_TIER1=0 MTG_PLAN_CACHE_ROUTE_KEY=0: must equal
-  armA byte-for-byte; also refit data with pay/simkey) then v1.* (defaults); marker stage2.DONE.
+- STAGE 2 VALIDATED (run_stage2.sh, 02:07-02:23 UTC): V0 (MTG_TIER1=0, ROUTE_KEY=0) == armA on all 260
+  digests; 1 game's units differ (alchemist d5 s3003 gi45, the plan-pool game that also flipped t1_reg->armA).
+  V1 (defaults) vs V0: only alchemist (6) + kittyv3 (151) games move (route-key fix; win turns identical, one
+  kitty digest) + snow d5 s2002 gi76 +2 units (plan pool, 590 refusals). ZERO tier-1 refusals: no allocation
+  binds. Per-cache max (MB) vs allocation: tt 5.0/8, fsl 14.7/16, m1memo 6.0/8, gamelc 14.5/24, mana 16.0/16
+  (wholesale-clears in 10 games; content-pure per MTG_MANA_CACHE_VERIFY, charges no units -> wall only).
+- PRICES REFIT (v0.txt, contended): simkey 7.8 us 41.5%, enum 26.8 us 16.7%, apply 5.6 us 14.6%, pay 2.2 us
+  13.8%, plans 2.1 us, step 20.3 us, odo 1.0 us, greedy 0.7 us. Slowest 1%: actual/pred p95 3.7 (units 15.4).
+  In WorkCounters.h kPriceNs (commit after 4901452e4).
+- RUNNING (02:29 UTC): run_census_tail.sh -> ct.* + census.tsv: tail corpus (45, weight-first) + regression
+  (260) pooled, defaults, MTG_MAX_GAME_WALL_SEC=3600, census MIN_UNITS 2000 or MIN_PRICED_MS 50, job-tagged.
+  Analyse: scripts/census_priced.py census.tsv --by-deck; marker census_tail.DONE.
+- Per-job X lever for the A/B: manifest "decision_priced_x" (ValueArm), env MTG_DECISION_PRICED_X otherwise.
 - Tail corpus READY: build/scratch/budget/tail_corpus.json (45 one-game jobs, mostly d5 b20; originals
   up to 4.6 h) + tail_corpus_notes.md. Not yet run on HEAD (MTG_MAX_GAME_WALL_SEC=3600, alone on box).
 - Cyclone mulligan generation in .claude/worktrees/cyclone-landing905: stopped deliberately by the USER
