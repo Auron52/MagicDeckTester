@@ -140,6 +140,19 @@ Started 2026-11-03.
   tight X loses Alchemist turns); tier-1 sizes (tt 8, fsl 16, m1memo 8, gamelc 24, mana 16 MB); mana-cache
   context fold (MTG_MANA_CACHE_X_TRAITS / _X_PAYCTX); branch not pushed (push would also run Windows CI).
 
+## TIERS vs ORIGIN (2026-11-03 07:00-07:45 UTC)
+- Baseline arm: worktree .claude/worktrees/origin-baseline (origin 980616e55, Release), smoke + regression; diff
+  per game with build/scratch/budget/wins_diff.py <base wins> <new wins>.
+- ORIGIN'S OWN GT IS STALE for merfolk (all smoke + regression cells; ff7a14850 adopted a value sidecar and
+  re-accepted only part), antilife2hg d5 s2002 and fluctuator2hg d5 s2002: the origin binary FAILs them too,
+  with the same got= as ours. Accepting our run promotes those; the note must say they are origin's.
+- Ours (gate ON, X=100) vs origin, paired: smoke 54,075 games, 4 play-changed, 0 win-turn changes; regression
+  75,244 games, 6 play-changed (bruna x4, kittyv3, fivecolour), ONE win turn: fivecolour d5 s3003 gi103 6->7.
+  Bisect: X=0 => origin units exactly; X=100 with MTG_DECISION_PRICED_GATE=0 => origin too; X=200/1000 gate on
+  => origin. So the START GATE declined a pass the ceiling never cut (projection prev x prev/prev2 overshoots).
+  A/B v3 X=50 vs 50ng had shown the gate buys nothing (held-out 8,511 vs 8,461 s, tail 5,160 vs 5,143 s, same
+  turns). => gate default OFF (commit after 0833e3502). Re-running both tiers on that build.
+
 ## EDF COLLAPSES VALIDATED (run_edf.sh, 06:24 pre-rebase binary, done 06:40 UTC)
 - Regression tier ea vs p2a: 260 jobs / 59,369 games, win-turn diffs 0, UNIT diffs 0 => the collapses
   (TUTOR_PIN_ALIAS, SPWF_CANON_MEMO, RH_MOVED_VIA_CANDS) are exact at scale. Wall B/A 0.857 (edf 0.617).
