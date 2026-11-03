@@ -60,6 +60,13 @@ struct ContPins
     }
 };
 
+// The line hold a recorded continuation cast was paid under (Action::rec_line_hold).
+struct LineHoldStamp
+{
+    ManaCost unpaid;               // g_line_unpaid_cost
+    bool     opens_unseen = false; // g_line_opens_unseen
+};
+
 struct Action
 {
     enum class Kind
@@ -846,6 +853,12 @@ struct Action
     // Unengaged = legacy/unrecorded; engaged nullptr = explicitly no traits. The separate
     // rec_pump_target also records zero, overriding any surrounding pump hold.
     std::optional<std::shared_ptr<const PlanTraits>> rec_payment_traits;
+    // ...and the LINE HOLD it was paid under: g_line_unpaid_cost and g_line_opens_unseen (ManaPayment.h) as the
+    // rollout's payment of this recorded cast began. A breakpoint continuation's cast section binds its own line
+    // (ApplyPlanDirect's apply_continuation_plan), and its casts may be realised one nesting level down, so the
+    // records alone cannot rebuild it; replay_recorded installs this value for the cast and keeps it through the
+    // rest of that cast section, as the rollout's scope did. Null = legacy record: the replay keeps its own.
+    std::shared_ptr<const LineHoldStamp> rec_line_hold;
     // Which MAIN-LEVEL breakpoint of the apply produced this TOP-LEVEL breakpoint record (0 = the
     // first). The executor replays each recorded segment at the matching main-level breakpoint.
     // Before 2026-09-30 the whole top-level list replayed at the FIRST one, which is right only

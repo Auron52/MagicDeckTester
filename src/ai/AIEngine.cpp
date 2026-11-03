@@ -489,6 +489,22 @@ static bool ExecFailedCastNoResolve()
     return heurarm::Flag(heurarm::EXEC_FAILED_CAST_NO_RESOLVE, on);
 }
 
+// A re-derived breakpoint continuation's cast section owes its own line: the executor twin of ApplyPlanDirect's
+// cont_line_armed binding (TurnSolver.cpp), for the continuation appliers that do not replay a committed record
+// (resolve_draw_breakpoint, the pod chain, site 9). Bound right before the section's cast loop -- after its
+// CastSectionUnlock opened and its position-0 reveal outlets ran, both of which the rollout pays outside the
+// line -- to what the outer line still owes plus the continuation's casts.
+static void ExecBindContinuationLine(const GameState& state, const std::vector<Action>& acts,
+                                     std::optional<LineUnpaidCostScope>& luc,
+                                     std::optional<LineOpensUnseenScope>& lou)
+{
+    ManaCost owed = g_line_unpaid_cost;
+    AddManaCost(owed, LineCastCostTotal(acts));
+    const bool unseen = g_line_opens_unseen || LineOpensUnseenCasts(state, acts);
+    luc.emplace(owed);
+    lou.emplace(unseen);
+}
+
 // Commit-the-line fidelity oracle (MTG_FD_ORACLE): when a recomputed line's searched
 // win exceeds an earlier line's, the committed line we just replayed did NOT realise
 // its predicted win — a rollout/real-execution divergence. Flag the seed + turn so it
@@ -5619,6 +5635,13 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             { if (recs[i].kind == Action::Kind::CastFromHand && !recs[i].sacrifice_land) { ro.push_back(i); } }
             TraceUserCastOrder(state, recs, ro, "replay", is_pre_combat_main);
         }
+        // The LINE HOLD each recorded cast was paid under (Action::rec_line_hold), installed at the cast and kept
+        // through the rest of its cast section -- the twin of ApplyPlanDirect's continuation line (cont_line_armed),
+        // which the rollout's apply_plan_actions bound for that whole section. The executor's own cast decrements it
+        // exactly as the rollout's did. Closed where the section closes (a dig, the end of the records).
+        std::optional<LineUnpaidCostScope>  rec_luc;
+        std::optional<LineOpensUnseenScope> rec_lou;
+        auto rec_line_close = [&]() { rec_lou.reset(); rec_luc.reset(); };
         for (const Action& a : recs)
         {
             // Inline continuations can inherit an outer scope with fewer casts and no
@@ -5643,7 +5666,16 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             }
             if (a.kind == Action::Kind::CastFromHand || a.kind == Action::Kind::CastFromGraveyard
                 || a.kind == Action::Kind::ActivateVial)
-            { rec_section(a.rec_bp_ord); }
+            {
+                if (rec_unlock && rec_unlock_ord != a.rec_bp_ord) { rec_line_close(); }   // a new section: its own line
+                rec_section(a.rec_bp_ord);
+            }
+            if ((a.kind == Action::Kind::CastFromHand || a.kind == Action::Kind::CastFromGraveyard) && a.rec_line_hold)
+            {
+                rec_line_close();
+                rec_luc.emplace(a.rec_line_hold->unpaid);
+                rec_lou.emplace(a.rec_line_hold->opens_unseen);
+            }
             if (a.kind == Action::Kind::PlayLand)
             { std::optional<ScriptedTopChoice> _rstc;   // the continuation land's own scry pin
               if (rec_scry >= 0) { _rstc.emplace(rec_scry); rec_scry = -1; }
@@ -5680,6 +5712,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             { ApplySuspend(state, state.active_player_index, a.card_name); }
             else if (a.kind == Action::Kind::DigDraw)
             {
+                rec_line_close();   // the rollout's dig runs after the cast section (outside its line)
                 // ORDER: the rollout cycles AFTER the board activations of everything recorded before
                 // this dig (a continuation's activations follow its casts; the dig loop and the searched
                 // cycle chain run after the trailing pass), so those activations must be dispatched NOW,
@@ -5736,6 +5769,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // A cast-less continuation still opened its section (the rollout's up-front fire).
         if (!rec_unlock && !recs.empty()) { rec_section(recs.front().rec_bp_ord); }
         rec_unlock.reset();  // ...which ends before the trailing activations, as apply_plan_actions does
+        rec_line_close();    // ...and so does its line
         if (!rec_acts.empty()) { exec_continuation_activations(rec_acts); }
     };
 
@@ -6262,6 +6296,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                                is_pre_combat_main);
         }
         exec_cont_reveal_precast(extra);   // position-0 reveal outlets (apply_continuation_plan's twin)
+        // The continuation's own line for its cast section (ApplyPlanDirect's cont_line_armed twin).
+        std::optional<LineUnpaidCostScope>  cont_luc;
+        std::optional<LineOpensUnseenScope> cont_lou;
+        ExecBindContinuationLine(state, extra.actions, cont_luc, cont_lou);
         for (std::size_t cpos = 0; cpos < cont_order.size(); ++cpos)
         {
             const int ci = cont_order[cpos];
@@ -6321,6 +6359,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // rollout's apply_continuation_plan plays it.
         exec_cont_land_finish(rdb_land);
         cont_unlock.reset();   // the cast section ends here, as the rollout's apply_plan_actions does
+        cont_lou.reset();      // ...and with it the continuation's line
+        cont_luc.reset();
         // An unbranched-canon continuation dispatches no activations below, so the Equips its cast
         // section fired would leave no log line; every other route logs them in the trailing pass.
         if (extra.cont_canon && m_logger)
@@ -6777,6 +6817,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         ApplyPayableCastOrder(state, extra.actions, pod_cont_order);   // MTG_ETB_TREASURE_SPEND / MTG_PAYABLE_ORDER (lockstep with ApplyPlanDirect)
                     }
                     exec_cont_reveal_precast(extra);   // position-0 reveal outlets (apply_continuation_plan's twin)
+                    std::optional<LineUnpaidCostScope>  pod_luc;   // the continuation's own line (cont_line_armed twin)
+                    std::optional<LineOpensUnseenScope> pod_lou;
+                    ExecBindContinuationLine(state, extra.actions, pod_luc, pod_lou);
                     for (int ci : pod_cont_order)
                     {
                         const Action& ca = extra.actions[ci];
@@ -6807,6 +6850,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     }
                     exec_cont_land_finish(pod_land);   // a positioned land whose watcher never came
                     pod_unlock.reset();   // the cast section ends before the trailing activations
+                    pod_lou.reset();      // ...and with it the continuation's line
+                    pod_luc.reset();
                     exec_trailing_activations(extra.actions);
                 }
             }
@@ -8569,6 +8614,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     return true;
                 };
                 exec_cont_reveal_precast(extra);   // position-0 reveal outlets (apply_continuation_plan's twin)
+                std::optional<LineUnpaidCostScope>  pe_luc;   // the continuation's own line (cont_line_armed twin)
+                std::optional<LineOpensUnseenScope> pe_lou;
+                ExecBindContinuationLine(state, extra.actions, pe_luc, pe_lou);
                 for (int ci : pe_cont_order)
                 {
                     if (extra.actions[ci].kind == Action::Kind::ActivateVial)
@@ -8587,6 +8635,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 }
                 exec_cont_land_finish(pe_land);   // a positioned land whose watcher never came
                 pe_unlock.reset();   // the cast section ends before the trailing activations
+                pe_lou.reset();      // ...and with it the continuation's line
+                pe_luc.reset();
                 exec_trailing_activations(extra.actions);
             }
             if (!pe_searched || !s9_reopen || reopen >= kSite9ReopenCeiling || extra.actions.empty()

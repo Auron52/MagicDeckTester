@@ -830,3 +830,74 @@ TEST_CASE("Angels s30001531 T2: Lightning Greaves' {2} off Sol Ring keeps Remote
     CHECK(a.engine_full);
     CHECK(a.dropped.empty());
 }
+
+// A plain land's AGE is not part of the end board (Auras pass1, ORACLE-GAP x11,688 in 98,000 games, every one this
+// shape). Seed 30000073 T3: Brushland and Horizon Canopy #2 in play, a second Canopy the land drop, Slippery Bogle and
+// the searched Canopy dig. The engine pays the Bogle off the old Canopy and sacrifices the new one to dig, paying the
+// {1} with Brushland's painless {C}; the oracle's frontier prune keeps only "new Canopy tapped, old one up" (the two
+// frontiers hold the same resources), so its dig sacrifices the OLD copy. Both end on one tapped Canopy, Brushland
+// tapped for {C}, a life down -- and differed only in whether the surviving Canopy entered this turn.
+TEST_CASE("mana oracle: the surviving copy's age does not tell two end boards apart (Auras Horizon Canopy dig)")
+{
+    EnsureOracleCards();
+    static const AurasProvider prov;
+    GameState s = Board({ "Brushland", "Horizon Canopy", "Light-Paws, Emperor's Voice" });
+    s.m_provider  = &prov;
+    s.turn_number = 3;
+    s.players[0].life = 19;
+    s.players[1].life = 20;
+    Hand(s, { "Horizon Canopy", "Slippery Bogle", "Armadillo Cloak" });
+    SetLibrary(s, std::vector<std::string>(20, "Plains"));
+    TurnSolver::Plan plan = PlanOf({ CastAction(s, "Slippery Bogle") });
+    plan.land_to_play = "Horizon Canopy";
+    plan.dig_choice   = 1;
+    {
+        // (the premise: the engine's line digs with the new Canopy and pays the {1} painlessly)
+        GameState g = s;
+        TurnSolver::ApplyPlan(g, plan, /*is_pre_combat=*/true);
+        int canopies = 0;
+        bool survivor_new = true;
+        for (const Permanent& p : g.battlefield)
+        { if (p.card.m_name.str() == "Horizon Canopy") { ++canopies; survivor_new = p.entered_this_turn; } }
+        REQUIRE(canopies == 1);
+        REQUIRE(g.players[0].life == 18);
+        REQUIRE_FALSE(survivor_new);
+    }
+    CHECK(manaoracle::CoversEngineOutcome(s, /*pre=*/true, plan));
+}
+
+// A breakpoint CONTINUATION's cast section owes its own line (TurnSolver.cpp cont_line_armed; Auras pass1, APPLY-DROP
+// x25, every one this shape). Seed 30013411 T4: Forest, Plains, Branchloft Pathway, Kor Spiritdancer (Slippery Bogle
+// and a Rancor in play); the land drop is a Pathway as Boulderloft {W}, the plan casts Rancor on Kor. Kor's draw
+// re-solves to {Light-Paws, Rancor}. With the continuation unbound, the payer read the line as owing nothing more and
+// paid Light-Paws' {1}{W} with Plains + the Branchloft's {G}, the board's last green, so the continuation's Rancor was
+// dropped -- while Plains + Boulderloft pay Light-Paws and leave the {G} for it.
+TEST_CASE("payment: a breakpoint continuation's first cast keeps the colour its later cast needs (Auras Kor draw)")
+{
+    EnsureOracleCards();
+    static const AurasProvider prov;
+    GameState s = Board({ "Forest", "Plains", "Kor Spiritdancer", "Branchloft Pathway", "Slippery Bogle", "Rancor" });
+    s.m_provider  = &prov;
+    s.turn_number = 4;
+    s.players[0].life = 20;
+    s.players[1].life = 20;
+    s.battlefield[5].aura_attached_to = 3;   // Rancor on Kor Spiritdancer
+    Hand(s, { "Rancor", "Rancor", "Light-Paws, Emperor's Voice", "Daybreak Coronet", "Branchloft Pathway" });
+    SetLibrary(s, { "Horizon Canopy", "Horizon Canopy", "Ethereal Armor", "Plains", "Plains", "Plains", "Plains",
+                    "Plains", "Plains", "Plains", "Plains", "Plains", "Plains", "Plains" });
+    Action rancor = CastAction(s, "Rancor");
+    rancor.enchant_target = 3;
+    TurnSolver::Plan plan = PlanOf({ rancor });
+    plan.land_to_play = "Branchloft Pathway";
+    plan.land_face    = "back";
+    GameState g = s;
+    TurnSolver::ApplyPlan(g, plan, /*is_pre_combat=*/true);
+    int rancors_in_hand = 0;
+    bool light_paws = false;
+    for (const Card& c : g.players[0].hand) { if (c.m_name.str() == "Rancor") { ++rancors_in_hand; } }
+    for (const Permanent& p : g.battlefield) { if (p.card.m_name.str() == "Light-Paws, Emperor's Voice") { light_paws = true; } }
+    REQUIRE(light_paws);              // (the premise: the continuation casts Light-Paws)
+    CHECK(rancors_in_hand == 0);      // ...and its Rancor too
+    const manaoracle::LineAudit au = manaoracle::AuditLine(s, /*pre=*/true, plan);
+    CHECK(au.engine_full);
+}

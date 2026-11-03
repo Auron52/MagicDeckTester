@@ -1502,3 +1502,72 @@ lists). Smoke identical to GT apart from the four Merfolk keys that drift on the
 **Play.** Held-out A/B (`MTG_CONVOKE_SHORTFALL_ORDER` per-job off/on, one pooled batch, seed 1710001, Vampires at its
 play settings): Standard 6,000 paired games and 2HG 2,000: **0 slower, 0 faster**, average win turn identical (4.2550,
 2HG 4.9370); 2 of 160 jobs changed play (digests), units +0.0004%.
+
+### 13.11 Auras: a plain land's age on the end board, and a continuation that owed nothing (2026-11-03, branch `wip/mc-auras`)
+
+The mana-clean gate's pass1 on Auras (98,000 games, `logs/mana_clean/pass1-auras-r2/report.md`, src `7ec55bb`) had
+11,713 ISSUE flags: ORACLE-GAP 11,688 and APPLY-DROP 25. Two mechanisms, one on each side.
+
+**ORACLE-GAP: the end board told a new Horizon Canopy from an old one (oracle defect).** Every kept flag reads
+"Horizon Canopy#31 only in engine; Horizon Canopy#32 only in oracle", often with "life engine 18 oracle 17". Seed
+30000073 T3: Brushland and Canopy #31 in play, Canopy #32 the land drop, Slippery Bogle, and the searched Canopy dig
+(`Plan::dig_choice` 1). The engine pays the Bogle off #31 and the dig sacrifices #32 (the first untapped copy), its
+{1} paid with Brushland's painless {C}. The oracle's frontier prune keeps only one of "#31 tapped, #32 up" and "#32
+tapped, #31 up" -- the resources forget a plain land's age (`ResClassKey`) and the mid-plan core clears the tapped
+flags -- so its dig sacrificed #31, and its end board (one tapped Canopy, Brushland tapped for {C}, 18 life) differed
+from the engine's only in whether the surviving Canopy entered this turn. The oracle did hold that board; the
+"nearest" it printed was a Brushland {G} variant a life lower. The end-board core (`CoreKey`, canonical) now applies
+`ResClassKey`'s rule too: a land that can never be a creature (`AgeIsInert`) forgets `entered_this_turn`. Sound for
+the same reason the resources already forget it: the marker matters to summoning sickness only (CR 302.6), and the
+landfall condition reads the player's history bit and land-drop count, which stay in the key. The engine was right;
+nothing in play changes. Pinned by "the surviving copy's age does not tell two end boards apart".
+
+**APPLY-DROP: a breakpoint continuation's cast section bound no line (engine defect).** All 25 flags (11
+signatures) are one shape: Kor Spiritdancer in play, an Aura cast, Kor's draw re-solves the rest of the main
+(`apply_continuation_plan`), and the continuation's first cast pays its generic pip with the colour its second
+cast needs. Seed 30013411 T4: Forest, Plains, Branchloft Pathway; the land drop a Pathway as Boulderloft {W}; the
+plan casts Rancor on Kor and the draw re-solves to {Light-Paws, Rancor}. Light-Paws' {1}{W} took Plains + the
+Branchloft's {G}, the board's last green, so the continuation's Rancor was dropped -- Plains + Boulderloft pay it
+and leave the {G}. The Pathway is incidental: seeds 30022178 / 30054013 strand a {W} the same way with a drawn
+Forest. The payer HAS the rule for this (`MTG_LINE_SPARE_GENERIC_FIRST` with `MTG_LINE_SPARE_TIGHT`: a colour-short
+line's generic pip taps a spare source first), but every line-aware payer rule reads the line hold
+(`g_line_unpaid_cost`), and only a TOP-LEVEL apply binds it: a continuation applied inside the plan saw the outer
+line's remainder (zero once the outer Rancor was paid) and so owed nothing. `ManaPayment.cpp` even said so ("a hold
+left over from an outer line, e.g. during a breakpoint continuation whose casts are not in it"). PlanTraits already
+treat a continuation as its own mini-plan; the line hold now does too.
+
+* **Fix.** `apply_continuation_plan` arms `cont_line_armed`; the `apply_plan_actions` call it wraps binds, right
+  after its `CastSectionUnlock` opens, `g_line_unpaid_cost` = the outer line's remainder + `LineCastCostTotal` of
+  the continuation's actions and `g_line_opens_unseen` = either line's opener, for the rest of that cast section.
+  Every one of the twelve continuation sites goes through it.
+* **Lockstep.** The executor replays a committed continuation from its records, which can hold the planned tail one
+  nesting level down, so the records alone cannot rebuild the line. Each recorded cast now carries the hold its
+  payment began under (`Action::rec_line_hold`, captured at `apply_one`'s entry), and `replay_recorded` installs it at
+  that cast and keeps it through the rest of the section, closing it where the rollout's section closes (a dig, the
+  end of the records); the executor's own cast decrements it exactly as the rollout's did. The three appliers that
+  re-derive a continuation instead (`resolve_draw_breakpoint`, the pod chain, site 9) bind it with
+  `ExecBindContinuationLine` right before their cast loops.
+* Pinned by "a breakpoint continuation's first cast keeps the colour its later cast needs (Auras Kor draw)".
+
+**Validation.** Every report repro is clean: the eleven ORACLE-GAP games (seeds 30000004, 73, 121, 458, 652, 1545,
+2507, 2631, 3743, 3829, 9279) and the seven APPLY-DROP games (13411, 22178, 54013, 59069, 71422, 74169, 87009) read
+no ISSUE class (DOMINATED-LIFE stays, disclosed). Fresh slice gi 100000-103999 (seed 30000000+gi,
+`MTG_MANA_ORACLE=2`): the gate's binary (src `7ec55bb`) ORACLE-GAP 418, APPLY-DROP 6, CONTINUATION-DIFFERS 20,
+DOMINATED-LIFE 6,724; this branch **0 / 0 / 0**, DOMINATED-LIFE 6,724.
+
+Play identity on that slice with the oracle off: byte-identical (40/40 job digests).
+
+**Play movement.** The ORACLE-GAP fix is oracle-only. The line binding moves play wherever a continuation's first
+cast used to strand its second. Held-out A/B (seed 52000000+gi, every suite deck at its shipped play settings,
+300 games each and Auras 3,000; 15,300 paired games; base = the same binary with the binding off): **0 slower, 1
+faster** (Unpredictable Cyclone gi296 T7 -> T6), 6 jobs' play digests moved (Colossus Hammer 1, NivMizzetCombo 3,
+Cyclone 2), Auras 0 of 3,000; work +0.027% (Cyclone +0.07%, Niv +0.09%, every other deck within 0.05%). No deck
+has a positive net. The Colossus Hammer digest (gi274, T3 both arms) is the mechanism itself: after Steelshaper's
+Gift tutors the Hammer, the continuation {Colossus Hammer, Magnetic Theft} now casts both (the Hammer's {1} no
+longer takes the Mountain's {R}). Smoke (THREADS=12): 12 rows FAIL. Seven are this change -- cyclone d3/d5,
+colossus2hg d5, edf d5, niv d5, niv2hg d5 with the same average and moved play, and colossus d3/d5 with one game
+FASTER, gi15 T4 -> T3 (the same Gift -> {Hammer, Magnetic Theft} continuation, attaching the Hammer to Lizard Blades
+for the T3 kill) -- each confirmed by re-running the row with the binding off, which reproduces its ground truth.
+The other five (merfolk d0/d3/d5, merfolk2hg d3; 294 d0 games moved) reproduce identically with the binding off:
+Merfolk's committed smoke GT does not match origin's own src, independent of this change. No searched game is
+slower, so there is nothing to recover at d8 b0. Unit 2,433 / 2,433, scenarios 391 / 391.

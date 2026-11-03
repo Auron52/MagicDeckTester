@@ -60163,6 +60163,20 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // its activations are recorded by apply_continuation_activations, and the executor's replay
     // fires the same unlock over its records. Only the RECORD changes; the apply is untouched.
     bool cont_canon_cast_section = false;
+    // A BREAKPOINT CONTINUATION'S CAST SECTION OWES ITS OWN LINE. Armed by apply_continuation_plan, consumed at
+    // the entry of the apply_plan_actions call it wraps, which then binds the line hold (g_line_unpaid_cost) to
+    // what the outer line still owes PLUS this continuation's casts, and g_line_opens_unseen to either line's
+    // opener -- exactly what a top-level plan apply binds for its own casts (LineUnpaidCostScope /
+    // LineOpensUnseenScope at the top of this function). Without it every line-aware rule of the shared payer
+    // (MTG_LINE_SPARE_GENERIC_FIRST, the float tap-first rung, the line-generic orders, the ramp-feed route)
+    // read the continuation as owing nothing more, and its first cast spent a colour its second needed. Auras
+    // pass1 (APPLY-DROP x25, every one this shape): Kor Spiritdancer in play, {land=Boulderloft Pathway, Rancor};
+    // Rancor's draw re-solves to {Light-Paws, Rancor}, and Light-Paws' {1}{W} took Plains + Branchloft Pathway's
+    // {G} -- the board's last green -- so the continuation's Rancor was dropped while Plains + Boulderloft paid
+    // Light-Paws and left the {G}. Bound AFTER the section's CastSectionUnlock opens (its up-front fire keeps the
+    // outer line, as in the executor, which binds right before its cast loop). Executor twins: the stamped
+    // record (Action::rec_line_hold) in replay_recorded, and the re-derived continuations' cast loops.
+    bool cont_line_armed = false;
     // Every breakpoint CONTINUATION apply goes through here, never a bare apply_plan_actions(extra..),
     // so a continuation is applied under the same plan-level scopes it was scored with.
     // THE SEARCHED CYCLE CHAIN's one step (Unpredictable Cyclone phase 3; assigned after apply_one and
@@ -60196,7 +60210,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 apply_trailing_activations(std::vector<Action>{ ra });
             }
         }
+        cont_line_armed = true;   // consumed by the apply_plan_actions call just below
         apply_plan_actions(cp.actions, cp.searched_order);
+        cont_line_armed = false;
         if (owns_land && cont_land.pending && cont_land.owner == &cp) { play_cont_land(); }
         cont_canon_cast_section = saved_canon;
         // A continuation's CYCLE SEED (the next step of a searched cycle chain, or a cycle a mid-turn
@@ -60979,6 +60995,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         cascade_free = false;
         const bool     no_cast_record = suppress_cast_record;   // ...and its recording twin (Cyclone R2)
         suppress_cast_record = false;
+        // The line hold as this cast's payment begins (Action::rec_line_hold, stamped on its record below).
+        const ManaCost cast_line_unpaid = g_line_unpaid_cost;
+        const bool     cast_line_unseen = g_line_opens_unseen;
         const ManaPool cast_put_credit = riders.land_put;
         const int      cast_loyalty    = riders.loyalty_ability;
         const int      cast_devour     = riders.devour_count;
@@ -61892,6 +61911,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 rec.rec_payment_traits = CapturePlanTraitsForRecord(pt);
                 rec.rec_pump_target = g_tap_keep_last_card;
             }
+            rec.rec_line_hold = std::make_shared<const LineHoldStamp>(LineHoldStamp{ cast_line_unpaid, cast_line_unseen });
             sink_stack.back()->push_back(rec);
             my_bp_sink = &sink_stack.back()->back().breakpoint_casts;
         }
@@ -64185,10 +64205,23 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // No-ops for every other plan.
         const bool rec_unlock = cont_canon_cast_section;   // consumed: a nested section re-arms its own
         cont_canon_cast_section = false;
+        const bool cont_line = cont_line_armed;            // consumed likewise (see cont_line_armed)
+        cont_line_armed = false;
         auto unlock_sink = [&]() -> std::vector<Action>*
         { return (rec_unlock && out_breakpoint != nullptr && !sink_stack.empty()) ? sink_stack.back() : nullptr; };
         CastSectionUnlock _unlock(state, acts, unlock_sink());
         auto fire_unlock = [&]() { _unlock.Fire(unlock_sink()); };
+        // The continuation's own line (cont_line_armed), for the rest of this cast section.
+        std::optional<LineUnpaidCostScope>  _cont_luc;
+        std::optional<LineOpensUnseenScope> _cont_lou;
+        if (cont_line)
+        {
+            ManaCost owed = g_line_unpaid_cost;
+            AddManaCost(owed, LineCastCostTotal(acts));
+            const bool unseen = g_line_opens_unseen || LineOpensUnseenCasts(state, acts);
+            _cont_luc.emplace(owed);
+            _cont_lou.emplace(unseen);
+        }
         // ONE Land's Edge action: discard `discard_lands` lands from hand and deal `rate` per land, rate
         // = the best discard_land_damage among controlled permanents (a no-op without a Land's Edge in
         // play, or for any other kind). The post-cast pass below fires the plan's count; the human's
@@ -86120,6 +86153,7 @@ inline std::size_t ApproxReplayTraitsBytes(const std::vector<Action>& records)
     {
         if (a.rec_payment_traits && *a.rec_payment_traits)
         { bytes += sizeof(PlanTraits) + 32; }   // control block / allocation overhead
+        if (a.rec_line_hold) { bytes += sizeof(LineHoldStamp) + 32; }
         bytes += ApproxReplayTraitsBytes(a.breakpoint_casts);
     }
     return bytes;
@@ -86133,6 +86167,7 @@ inline std::size_t ApproxPlanBytes(const TurnSolver::Plan& p)
         b += a.breakpoint_casts.capacity() * sizeof(Action);
         b += a.trick_hand_target.capacity();
         if (a.rec_payment_traits && *a.rec_payment_traits) { b += sizeof(PlanTraits) + 32; }
+        if (a.rec_line_hold) { b += sizeof(LineHoldStamp) + 32; }
         b += ApproxReplayTraitsBytes(a.breakpoint_casts);
     }
     b += p.breakpoint_actions.capacity() * sizeof(Action);

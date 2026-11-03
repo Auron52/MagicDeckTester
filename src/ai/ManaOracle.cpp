@@ -447,14 +447,15 @@ std::string ClassKey(const Permanent& p, bool age = true)
 // realisation leaving the other copy up compared as INCOMPARABLE with the menu's board instead of reaching it
 // (Colossus Hammer eg1, `U:Mountain|L||0,0|old|card 1>0`; Slivers, the new against the old Sliver Hive). A manland
 // (Mutavault, can_animate) keeps it: an animated Mutavault that entered this turn cannot attack.
+bool AgeIsInert(const Permanent& p)
+{
+    if (!p.card.IsLand() || p.card.IsCreature() || p.is_animated) { return false; }
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+    return d != nullptr && !d->params.can_animate;
+}
 std::string ResClassKey(const Permanent& p)
 {
-    if (p.card.IsLand() && !p.card.IsCreature() && !p.is_animated)
-    {
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        if (d != nullptr && !d->params.can_animate) { return ClassKey(p, /*age=*/false); }
-    }
-    return ClassKey(p);
+    return AgeIsInert(p) ? ClassKey(p, /*age=*/false) : ClassKey(p);
 }
 
 // Everything but the resources: a COPY with the resources cleared, folded by the engine's own full
@@ -487,6 +488,19 @@ std::uint64_t CoreKey(const GameState& s, bool canonical = true)
     // Mid-plan (the frontier's Pareto prune) ids DO matter: a later action can name a permanent by
     // number (a sac source), so two states that differ only in which copy is where may not finish alike.
     if (!canonical) { return TurnSolver::MidTurnStateKeyOf(n); }
+    // AGE IS NOT IDENTITY for a land that can never be a creature (ResClassKey's rule, applied to the END board). The
+    // frontier prune already folds "old copy tapped, new copy up" with "new copy tapped, old copy up" (the resources
+    // forget a plain land's age, and mid-plan cores clear the tapped flags), so the end board must not tell them apart
+    // either: Auras seed 30000073 T3 (Horizon Canopy #31 in play, #32 the land drop, Brushland): the engine pays Slippery
+    // Bogle off #31 and the dig sacrifices #32, the oracle's surviving frontier pays off #32 and the dig sacrifices #31,
+    // and the two end boards -- one tapped Canopy, Brushland tapped for {C}, 18 life -- differed only in whether the
+    // surviving Canopy entered this turn (ORACLE-GAP x11,688 on 98,000 games, every one this shape). The marker matters
+    // to summoning sickness only (CR 302.6); the landfall condition reads the player's history bit and land-drop count,
+    // which stay in the key (LandEnteredUnderControlThisTurn).
+    for (Permanent& p : n.battlefield)
+    {
+        if (p.controller_index == a && p.entered_this_turn && AgeIsInert(p)) { p.entered_this_turn = false; }
+    }
     // IDENTITY, NOT IDS. The engine's key mixes each permanent's m_number and the zone ORDER (it
     // replays index-encoded plans), so two boards that differ only in which copy is where -- Shard
     // Volley sacrificing Mountain #21 or the identical #22, two creatures cast in the other order --
