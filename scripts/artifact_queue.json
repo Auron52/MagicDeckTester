@@ -13,7 +13,7 @@
     }
   },
   "leaf_follows_mulligan": false,
-  "exclude": ["unpredictable_cyclone"],
+  "exclude": [],
   "lease_hours": 3,
   "heartbeat_minutes": 20,
   "idle_poll_minutes": 5,
