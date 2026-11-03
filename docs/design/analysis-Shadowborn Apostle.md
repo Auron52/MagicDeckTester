@@ -854,3 +854,136 @@ now goes to the rest of the turn.
 
 **Open (surfaced, not blocking):** the weakest-copy tie order (tapped > sick > first) is PROVISIONAL and inert at the
 upkeep; with no Harpy and no Apostle the Overlord sacrifices ITSELF ahead of Sire / Jetmir / Reaper, per the USER's order.
+
+## INT-8 done (2026-11-03)
+Commits on `shadowborn-analysis` (not pushed): `b15fe7f37` (provider, engine, tests, design doc) + this ledger commit.
+Brief: `logs/shadowborn/int8-brief.md`. Scratch: `build/scratch/shadowborn/int8/`.
+
+**A. Deleting the ripple late / deep waves: MEASURED TOO WIDE, NOT SHIPPED (USER decision owed).** Both waves were
+deleted as asked, so every speculative menu and every packed pick ordinal was emitted at every budget. Measured result:
+- One probe state (Stone out, a hard Diabolic Intent, three Intents in the library): **5,488 variants of that single
+  cast**. The cross product is 8 don't-reveal masks x 8 decline masks x 3^k free-tutor ranks x 2^k victim ranks, with
+  k up to 3. For comparison: 2,608 / 2,744 with the deep or the late part alone, and 1,304 in the dry-run-only shape.
+- Real play: in the d5 b20 held-out cell, single games ran **past 20 minutes**. INT-7 plays the whole 200-game cell in
+  ~2,000 game-seconds. The A/B arm was stopped. Most of that cost is uncharged enumeration and per-variant applies.
+So the waves are back exactly as at INT-7. The brief's sanctioned fix is to decide the free picks at RESOLUTION
+instead of pre-building the cross product. That needs a mid-chain choice point, i.e. a resumable ripple stack in
+`GameState` so the rollout can branch mid-resolution. It is a lockstep engine change across the executor, the rollout
+and the viewer, written up as deferred work in `docs/design/shadowborn-ripple-resolution-picks.md`. It is NOT a new
+threshold.
+
+**B. Discard amendments.**
+- **4a** (USER: *"a tutor can hold the Apostle slot if it is Profane or Demonic Tutor, not Diabolic Intent, since the
+  intent kills an Apostle"*): Apostle #1 accepts only a tutor with no creature-sacrifice cost (Demonic > Profane).
+- **4c** (USER: *"discount its value because a lake that has sufficient fuel next turn can be played the turn after for
+  the full 6 mana"*): Swamps in HAND now fuel a Lake.
+  - In practice this goes through E's route: a Lake fuelled from hand is valued by the turn it can crack, which is
+    exactly the discount the USER describes.
+  - In the no-route fallback, a Lake with battlefield + hand >= 2 Swamps is kept in step 5 as a land (+1), after a
+    battlefield-fuelled one.
+  - That fallback sub-branch cannot fire at the shipped quotas: any fuelled Lake reaches 4 / 6 inside the horizon.
+
+**C. USER confirmations recorded (no code change).**
+- 4d Demon shed order CONFIRMED (USER: *"Jetmir sounds like the first discard and Sire also makes sense, particularly
+  because it also requires Red. Overlord vs Reaper is arguable but I'm okay with your idea. It makes sense to keep the
+  cheaper creature even if sometimes the 7-mana one can be dropped after we go off."*).
+- 4b fodder, 4e (Ritual always kept) and 4f (buckets on by default, pending the held-out A/B) stand as INT-6 wrote
+  them. 4e is now qualified by E: an OFF-route Ritual is pitchable, last of the overflow.
+
+**D. Finding 7 fixed (ritual chain credit).** The chain's free-Ritual mana is split by copy:
+- The FIRST copy's variant (B, m) carries c_1(B, m), its own chain.
+- Each CONTINUE copy carries inc = max over the menu and copies of c_i - c_(i-1). So c_1 + j*inc >= c_(j+1): still an
+  UPPER bound for every order-free payability bound, which therefore stays sound.
+- The chain share also rides the new `Action::ripple_chain_float`. ManaPayment's ORDER walks (`FirstUnpayablePos`, the
+  exact walk) credit it only once a ripple granter is on our battlefield or was cast EARLIER in the walked order. A
+  Ritual sequenced before the Stone ripples nothing, so the payable-order rescue no longer re-sequences onto phantom
+  mana. That part is exact.
+- What remains loose:
+  - a multi-copy plan whose (B, m) increments are below inc;
+  - a continue copy cast without the first (its budget reads 0, but it is credited inc);
+  - the dry run's pre-plan library (as before).
+
+**E. EARLIEST TURN TO THE BAR** (`ShadowbornProvider::ShadowbornEarliestTurnToBar`; USER: *"look at when we can hit 6
+mana instead ... So essentially you look at each card in terms of when it can be deployed. Same deal with Lotus
+Bloom."*). The full definition is in the declaration. In short:
+- The earliest turn (0 = this turn) at which one turn's mana reaches the bar, simulated with one land drop per turn
+  (this turn's drop only if unused; none this turn when called from the cleanup). It counts:
+  - lands;
+  - the Lake's entry (sacrifices a Swamp, tapped first) and crack (+3 per remaining Swamp);
+  - the floating pool (this turn only);
+  - Lotus Bloom on the battlefield, already suspended (arrive_turn - TurnSeq()), or IN HAND (suspended now, arriving
+    suspend_time_counters turns later);
+  - each ritual's net once the turn has a mana;
+  - Culling only with fodder.
+- The ROUTE is the minimal set of hand mana cards that keeps the same earliest turn. Cards are dropped least-wanted
+  first: suspend mana, Culling, Lakes, other lands, non-basic Swamps, basic Swamps, Rituals.
+- No route inside the 6-turn horizon -> every mana card is on it.
+- **Discard precedence (chosen):**
+  - When a route exists, steps 4-5 keep EXACTLY its mana cards: step 4 its rituals / Lakes / Culling (with fodder) /
+    suspend mana, step 5 its lands (net of the two-land floor). The quota is treated as met.
+  - Off-route mana is overflow in its usual slot (Lake / Bloom early, surplus lands, an off-route Ritual last of all).
+  - No route -> the INT-6 rules.
+- **Tutor tiers (PROVISIONAL reading, surfaced):** "short" = the earliest turn to the bar (6, or 3 with a granter out)
+  is LATER than next turn. Mana candidates are ranked by the earliest turn with the candidate in hand, soonest first.
+  Lake > Dark Ritual > Culling breaks ties.
+- **Culling vs Ritual:** Culling counts its +3 only with the expendable target (a), so it leads only when (a) holds
+  and it reaches the bar a turn earlier: the INT-5 rule, now read off the same helper.
+
+**Tests:** new `test/unit/test_shadowborn_int8.cpp` (11 cases), covering:
+- the USER's two examples verbatim: the helper (turn 2 with the Lake on the route; turn 1 with the Lake off it) AND
+  at the cleanup (the Lake is kept / the Lake is the first shed);
+- Lotus Bloom by its deploy turn (turn 3 on the route; off it once a Ritual + Swamp reach turn 1; a suspended Bloom
+  arriving next upkeep);
+- a granter-out bar of 3 (tapped lands, start_next_turn);
+- Bloom kept / pitched in the buckets;
+- 4a (Intent not kept for the slot, Demonic / Profane kept, Demonic over Profane);
+- the tutor tier order (Ritual ahead of a fuelled Lake when it is a turn sooner; a tie keeps Lake first);
+- the chain credit split (first copy 0, continue copy 3);
+- the order walk (no rescue onto the phantom chain; the rescue does use the chain once the Stone is out).
+
+Existing tests updated where the better model changes the answer:
+- INT-4 / INT-5: a held Lake cracking this turn means not short.
+- INT-6: a Bloom on the only route is kept; a Lake fuelled by hand Swamps is kept.
+
+**Unit 2496/2496. Scenarios 398/398. Smoke** (not accepted): 161 passed, 4 failed. The failures are the pre-existing
+Merfolk d0/d3/d5 + merfolk2hg d3 (merfolk d3 digest 16290806e85e1728). Every other case is byte-identical.
+
+**Measurement vs INT-7** (`mtg.int7` = 969bfc8ab src = HEAD 8a5d2b884 src; Release, `MTG_PGO=0`; the deck's untracked
+profile; pooled `--batch` per binary; INT-7 at 12 threads, the INT-8 arm re-run alone at 24 after the wave revert;
+units are deterministic). Avg = the batch's (non-wins penalised):
+
+| cell | games | avg INT-7 | avg INT-8 | faster / slower (paired) | identical digests | units/game INT-7 | units/game INT-8 |
+|---|---|---|---|---|---|---|---|
+| d3 b10, seed 1001 (sanity) | 50 | 5.420 | 5.420 | 0 / 0 | 47 | 69,007 | 69,883 (+1.3%) |
+| d3 b10, seed 7001 (held-out) | 200 | 5.435 | 5.445 | 1 / 3 (gi132 5->4; gi8, gi28, gi159 5->6) | 181 | 121,677 | 119,059 (-2.2%) |
+| d5 b20, seed 7001 (held-out) | 200 | 5.385 | 5.390 | 1 / 2 (gi132 5->4; gi8, gi159 5->6) | 184 | 192,934 | 188,887 (-2.1%) |
+
+- **Plan counts** (MTG_TURN_CENSUS, sanity cell, single-threaded, uncontended): cand_scored 2,180,683 -> 2,198,778
+  (+0.8%), enum_emitted 1,993,342 -> 2,010,651 (+0.9%).
+- **Slower d5 games replayed at d5 b200: both recover.**
+  - gi8: INT-8 5 = INT-7 5.
+  - gi159: 4 = 4.
+  - gi28 (d3-only): 5 = 5.
+- **gi8's divergence:** on T1 INT-8 holds the Apostle (Swamp only) and casts Demonic Tutor on T2. INT-7 casts the
+  Apostle on T1. It is a near-tie that budget resolves, the same T1-pass family INT-6 recorded.
+- **Net:** +2 / +1 turn-quanta on 200 held-out games (worse by one or two games), 2% fewer units. NOT a strict
+  improvement on this sample, and too small to read as a regression.
+- **Budget-0 d3 singles** (seed 1001 gi0-3, one thread each, both binaries):
+  - gi3: 2.2 s / 94,785 units.
+  - gi2: 72 s / 3.45M units.
+  - Both identical across arms (same digests).
+  - **gi0 and gi1 were still running after 10 minutes in BOTH arms and were stopped.** Unbudgeted cost is unchanged by
+    INT-8 (the waves are back) and stays degenerate for half the probe, as INT-3 note 8 reported. This is for the
+    unbudgeted backstop rows at Stage 4-bis.
+
+**Decisions for the USER (surfaced, not blocking):**
+1. **A, the waves.** Deleting them is unplayable (numbers above). They stay at INT-7's thresholds until the
+   resolution-time picks land (`docs/design/shadowborn-ripple-resolution-picks.md`). Build that next, or accept the
+   waves meanwhile?
+2. **E's tutor reading:** "mana while the earliest turn is later than next turn" (provisional), and ranking mana
+   candidates by their own earliest turn (this can put Dark Ritual ahead of a fuelled Lake when the Ritual is a turn
+   sooner).
+3. **E's discard precedence:** route cards replace the quota fill; an off-route Ritual is pitchable, but last of the
+   overflow.
+4. **The held-out result is +1 / +2 turn-quanta worse on 200 games at -2% units.** Every slower game recovers at
+   d5 b200. A larger held-out A/B can size it if you want adoption evidence.
