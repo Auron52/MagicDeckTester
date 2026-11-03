@@ -140,6 +140,28 @@ Started 2026-11-03.
   tight X loses Alchemist turns); tier-1 sizes (tt 8, fsl 16, m1memo 8, gamelc 24, mana 16 MB); mana-cache
   context fold (MTG_MANA_CACHE_X_TRAITS / _X_PAYCTX); branch not pushed (push would also run Windows CI).
 
+## Live at compaction #3 (2026-11-03 ~08:25 UTC)
+- RUNNING (harness-tracked bah6y2896): build/scratch/budget/run_final2.sh -> final.DONE. Builds a18ae02bf+ (mana 24 MB,
+  gate OFF, X=100) with retries; ABORTs on a stale binary; runs smoke + regression in this worktree; prints
+  "mana24 vs gate-off" (EXPECT 0 play changes; gate-off wins saved in build/scratch/budget/gateoff_wins/) and
+  "mana24 vs origin" (expect the 6 known play changes, 0 win-turn changes).
+- RUNNING: tier-2 overflow SUBAGENT, worktree .claude/worktrees/tier2-overflow (branch tier2-overflow from a18ae02bf);
+  user ruled the mana key folds OK "as long as truly isolated" (relayed). Its result arrives as a notification.
+- NEXT after final.DONE: (1) confirm "build ok" + 0 play changes mana24 vs gate-off; (2) explain the 6 play-changed
+  games (bruna regression d3 s2002 / d5 s2002 / d5 s3003 x2, kittyv3 smoke d5 + regression d5 s2002) with
+  `python3 test/explain_game.py <mode> <case> <gi> --old-bin <origin-baseline build/Release/mtg>`; (3) accept smoke +
+  regression with --deck= every deck EXCEPT merfolk,merfolk2hg (check the filter keeps merfolk rows untouched; one-line
+  ACCEPT note naming antilife2hg/fluctuator2hg as origin-stale); run test/check_gt_logs.py; commit GT; push
+  budget-rebalance (separate branch OK; shared branch only when the feature is complete -- USER).
+- USER RULINGS today: X=100; Q1 PRICED_STOP stays OFF ("only for things expensive enough to be a real issue"); Q2 mana
+  24 MB fine (tier-1 50-100 MB flexible); Q3 key folds OK if truly isolated; Q4 accept via the normal process, focus
+  on slower games; Q5 push to a separate branch now, shared branch when complete; tier-2 overflow wanted for caches
+  that would hit us heavily.
+- Scratch worktrees (mine, no unique work): .claude/worktrees/origin-baseline (origin 980616e55, its test/logs hold
+  the baseline wins), .claude/worktrees/mf-bisect (at ff7a14850). Remove with scripts/safe_worktree_remove.sh later.
+- Later stages: re-price the budget (moves every deck's play; full held-out A/B per deck), pool bottoming-trial
+  budget, EDF remaining wastes (whole-list derivation for one entry, copy-twin subset skip, payment refine 22%).
+
 ## MERFOLK KEEP TABLE WAS NEVER COMMITTED (found 2026-11-03 08:20 UTC) -- do NOT accept merfolk rows
 - Every merfolk smoke/regression cell FAILs on origin's own binary with the same got= as ours. Bisect: the binary of
   ff7a14850 (the commit that wrote those GT rows; same src as 43f7650d5) gives d0 4.6840 etc. -- NOT its own GT.
