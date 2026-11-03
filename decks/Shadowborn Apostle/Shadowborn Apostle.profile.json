@@ -1,4 +1,5 @@
 {
+  "value_play": { "expected_buckets": 15, "mull_gen_depth": 2, "mull_gen_budget_ms": 1 },
   "card_scores": {
     "Abhorrent Overlord": [
       -0.06692414841078875
