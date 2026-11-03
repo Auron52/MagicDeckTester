@@ -5,6 +5,7 @@
 #include <map>
 #include "HeuristicArm.h"
 #include "ValueArm.h"
+#include "ManaOracle.h"
 #include "../core/EnvFlags.h"
 #include <iostream>
 #include <cstdlib>
@@ -41682,6 +41683,7 @@ static bool PregateRefuses(const GameState& s, int me, PregateDiag* dg = nullptr
 
 int EdfComboRouteTrial(const GameState& s, int me)
 {
+    manaoracle::GateObserveSuspend _gate_observe;   // a route verdict is a sub-search, not the oracle's observed menu
     if (!comboroute::On()) { return 0; }
     const bool rs = comboroute::RouteStatsOn();
     if (rs) { comboroute::g_rs_calls.fetch_add(1, std::memory_order_relaxed); }
@@ -41792,6 +41794,7 @@ int EdfComboRouteFirstAuraPick(const GameState& s, int me)
 
 int EdfComboRouteApply(GameState& s, int me)
 {
+    manaoracle::GateObserveSuspend _gate_observe;   // a route verdict is a sub-search, not the oracle's observed menu
     if (!comboroute::On()) { return 0; }
     // ALL-OR-NOTHING: the silent trial on a copy decides; only a kill (or a develop) is played on
     // the real state, and that live run narrates each step into the play history (the same
@@ -43013,6 +43016,7 @@ static int RunSearch(GameState& s, int me, RunMode mode)
 // THIS function and nothing else, which is the lockstep guarantee.
 static int Run(GameState& s, int me, Adv adv, RunMode mode)
 {
+    manaoracle::GateObserveSuspend _gate_observe;   // a route verdict is a sub-search, not the oracle's observed menu
     if (adv == Adv::Search) { return RunSearch(s, me, mode); }
     Scope _guard;                       // no nested route emission for the whole playout
     int iters = 0, links = 0;
@@ -50283,6 +50287,7 @@ bool AccomplishedAlchemistProvider::UntapLoopRouteEnabled() const { return Alche
 
 int AlchemistComboRouteOffer(const GameState& s, int me)
 {
+    manaoracle::GateObserveSuspend _gate_observe;   // a route verdict is a sub-search, not the oracle's observed menu
     if (!AlchemistComboRouteOn()) { return 0; }
     if (aaroute::t_in_route > 0)
     {
@@ -50308,6 +50313,7 @@ int AlchemistComboRouteOffer(const GameState& s, int me)
 static std::string OriginExtText(const GameState& s, int me);   // MTG_AA_ROUTE_ORIGIN (defined below)
 int AlchemistComboRouteApply(GameState& s, int me)
 {
+    manaoracle::GateObserveSuspend _gate_observe;   // a route verdict is a sub-search, not the oracle's observed menu
     if (!AlchemistComboRouteOn() || aaroute::t_in_route > 0) { return 0; }
     // ALL-OR-NOTHING: only a proven path is played on the live state.
     if (aaroute::StatsOn()) { aaroute::g_ap_calls[aaroute::StatArm()].fetch_add(1, std::memory_order_relaxed); }

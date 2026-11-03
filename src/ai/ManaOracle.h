@@ -151,6 +151,24 @@ namespace manaoracle
     // the menu it builds is "every plan the NON-mana rules allow". Set only by the oracle, around its
     // own EnumerateMainPlans call on its own thread; false everywhere else.
     extern thread_local bool  t_gate_observe;
+    // OBSERVE IS THE MENU'S, NEVER A ROUTE SEARCH'S. The enumerator runs whole sub-searches inside
+    // itself to decide whether to offer a route macro -- the equip-route trial and its unbounded APPLY
+    // replay (equiproute::Run), the EDF and Alchemist combo routes -- and each enumerates again at every
+    // link. Under observe those menus admit every mana-rejected subset, so the route DFS walks plans the
+    // engine never offers (most fail to pay and leave the board as it was), loses lockstep with the
+    // trial that proved its kill, and the replay walks a 128-link tree uncharged and uncapped:
+    // KittyEquipment seeds 30000026/30000033 ran 3+ h on one T3 decision (0.2 s with the oracle off).
+    // Each route entry holds this scope, so a route's verdict is the engine's own. Enumerations that
+    // BUILD the menu (continuations, sequential walks, subdecision axes) keep observing: their gates are
+    // the menu's gates, and suspending them hid real ENUM-GAPs (Puresteel Paladin's free equips).
+    struct GateObserveSuspend
+    {
+        bool saved;
+        GateObserveSuspend() : saved(t_gate_observe) { if (saved) { t_gate_observe = false; } }
+        ~GateObserveSuspend() { if (saved) { t_gate_observe = true; } }
+        GateObserveSuspend(const GateObserveSuspend&) = delete;
+        GateObserveSuspend& operator=(const GateObserveSuspend&) = delete;
+    };
     // Pay from the floating pools only: the payer drains them as usual and then FAILS (atomically)
     // instead of tapping anything. Set by the oracle around scripted payments and payment probes.
     extern thread_local bool  t_float_only;
