@@ -22,6 +22,7 @@
 // machine. Disarmed (multiplier 0/unset) nothing is ever tripped and play is byte-identical.
 #include "../core/WorkCounters.h"
 #include "../core/EnvFlags.h"
+#include "ValueArm.h"
 namespace decisionwork
 {
 inline thread_local long long t_used  = 0;
@@ -89,8 +90,9 @@ struct PricedScope
 inline long long PricedLimitNs(long long limit_units);
 inline long long PricedLimitNs(long long limit_units)
 {
-    static const long long x   = EnvInt("MTG_DECISION_PRICED_X", 0);
-    static const long long ref = EnvInt("MTG_DECISION_PRICED_REF_NS", 25000);
+    static const long long env_x = EnvInt("MTG_DECISION_PRICED_X", 0);
+    static const long long ref   = EnvInt("MTG_DECISION_PRICED_REF_NS", 25000);
+    const long long x = valuearm::t_arm.decision_priced_x >= 0 ? valuearm::t_arm.decision_priced_x : env_x;   // per-job arm wins
     if (x <= 0 || limit_units <= 0) { return 0; }
     return limit_units * ref * x;
 }

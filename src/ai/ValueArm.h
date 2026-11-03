@@ -151,6 +151,9 @@ struct Arm
     // odometer visits per charged unit. Per-job so the off arm and a W sweep share one pooled batch.
     // -1 unset => env (MTG_ENUM_CHARGE, default off) | 0 off | > 0 on at that W.
     int         enum_charge_w     = -1;
+    // PRICED DECISION CEILING (MTG_DECISION_PRICED_X; decisionwork::PricedLimitNs): X in units of L x REF_NS.
+    // Per-job so the off arm and an X sweep share one pooled batch. -1 unset => env (default 0 = off) | 0 off.
+    int         decision_priced_x = -1;
     // AA ROUTE WALK PRICE (MTG_AA_ROUTE_NODE_UNITS; aaroute::NodeUnits in DecisionProviders.cpp): units
     // per walk apply. Per-job so the off arm and a price sweep share one pooled batch.
     // -1 unset => env (default 0 = off) | 0 off | > 0 on at that price.

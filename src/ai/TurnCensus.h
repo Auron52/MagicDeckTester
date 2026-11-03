@@ -64,6 +64,7 @@
 
 #include "../core/EnvFlags.h"
 #include "DecisionWorkMeter.h"
+#include "HeuristicArm.h"
 
 namespace turncensus
 {
@@ -79,6 +80,15 @@ inline bool On() { return PathOrNull() != nullptr; }
 inline long long MinUnits()
 {
     static const long long n = EnvInt("MTG_TURN_CENSUS_MIN_UNITS", 0);
+    return n;
+}
+// MTG_TURN_CENSUS_MIN_PRICED_MS=<ms> (default 0 = unused): ALSO keep a row whose PRICED work (workctr::t_priced,
+// every work kind at its fitted price, charged or not) reached this many ms, whatever its units. A units-only
+// filter hides exactly the mispriced decisions -- cheap in units, expensive in uncharged work -- which are
+// what the priced decision ceiling (decisionwork::PricedScope) is sized from.
+inline long long MinPricedNs()
+{
+    static const long long n = static_cast<long long>(EnvInt("MTG_TURN_CENSUS_MIN_PRICED_MS", 0)) * 1000000LL;
     return n;
 }
 
@@ -187,7 +197,11 @@ inline void WriteRow(unsigned long long seed, int turn, int pre_combat, int root
                  seed, turn, pre_combat, root_kind, depth, budget_units, units, wall_us, contended,
                  site, probe, skey);
     for (long long d : deltas) { std::fprintf(f, "\t%lld", d); }
-    std::fprintf(f, "\t%s\n", board.c_str());
+    // MTG_TURN_CENSUS_JOB=1: prefix the batch job name (heurarm::t_job_name) to the board, so a pooled
+    // multi-deck batch attributes each row (seeds repeat across jobs).
+    static const bool s_job = EnvOn("MTG_TURN_CENSUS_JOB");
+    if (s_job && heurarm::t_job_name != nullptr) { std::fprintf(f, "\t[%s] %s\n", heurarm::t_job_name, board.c_str()); }
+    else { std::fprintf(f, "\t%s\n", board.c_str()); }
     // Flushed per row: a census run is routinely killed once its tail is interesting enough, and a
     // buffered last-few-thousand rows is exactly the part worth having. Rows are decision-scale
     // (milliseconds apart at minimum), so the fflush is not on any hot path.
@@ -203,6 +217,7 @@ struct Scope
     int                                   turn = 0, pre = 0, root = 0, depth = 0;
     long long                             budget = 0;
     long long                             units0 = 0;
+    long long                             priced0 = 0;   // workctr::t_priced at entry (ns)
     std::chrono::steady_clock::time_point t0;
     int                                   contended = 0;
     int                                   site = kSiteMain;
@@ -222,6 +237,7 @@ struct Scope
         site = t_site; probe = t_probe > 0 ? 1 : 0; skey = state_key;
         board = t_board;
         units0 = decisionwork::t_used;
+        priced0 = workctr::t_priced;
         if (g_live.fetch_add(1, std::memory_order_acq_rel) != 0)
         {
             contended = 1;
@@ -254,7 +270,8 @@ struct Scope
         if (g_live.load(std::memory_order_acquire) != 1) { contended = 1; }
         g_live.fetch_sub(1, std::memory_order_acq_rel);
         --t_nest;
-        if (units < MinUnits()) { return; }
+        const long long priced = workctr::t_priced - priced0;   // < 0 only if a game began inside (not a real root)
+        if (units < MinUnits() && !(MinPricedNs() > 0 && priced >= MinPricedNs())) { return; }
         std::vector<long long>& before = scratch();
         const std::size_t n = now.size() < before.size() ? now.size() : before.size();
         std::vector<long long> deltas(n, 0);
