@@ -113,3 +113,20 @@ test_edf_goff_verify failure below.
 4. Optional: chase the 28 ORACLE-GAPs with the `gap-outcome` diagnostic, and the 4 need-in-plan / 1 ENUM-GAP residue.
 5. Amend/commit (end with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`), `git push origin wip/mc-dragons`,
    watch CI (Windows) in the background. Report to the coordinator; surface mechanism 3 as a USER decision.
+
+## Successor 2 status (2026-11-03 ~10:00 UTC)
+- ab1 FINAL (`python3 logs/mcdragons/abrep.py`; abrep now ranks a non-win (-1) after every win turn): Dragons 6000
+  0 slower / 1 faster units 1.0011; Dragons2HG 6000 0/4 units 1.0012; movers Niv 0/2 (0.9975), Selesnya 0/1 (0.9814),
+  Bruna 0/1 (1.0096), Pirates 0/1, EDF 1/1 (1.0165), Alchemist 1/0 (1.0044), FiveColour/Galadriel/Stompy digests only.
+- Scenarios 392/392 (the 47 Permission-denied re-run, all PASS). Unit: 5 failures, all LINE_REPAY.
+- 4 tests pinned the drop the re-pay now fixes -> rewritten to assert the re-paid line (dragonstorm_followups x2,
+  niv_payment_holes, mana_oracle viewer check). UNCOMMITTED in the worktree.
+- `test_edf_goff_verify` was a REAL regression: inside ApplyBlinkLoop the finisher's affordability trial passed by
+  re-making the Essence Depleter's {2}{B}; the loop deployed early and lost the 53-blink kill. Fix (uncommitted):
+  `LineRepaySuspendScope` (SpellEffects.h) in ApplyBlinkLoop; payments inside record barriers only.
+- Also (uncommitted, defensive): `PayRollbackLedger::untap_effect` bool -> `untap_effects` count (sizeof unchanged),
+  folded into LineRepayDigest so an untap cannot make an older record match again (ABA). Did NOT change the EDF case.
+- d8 b0 OFF arm: Alchemist s1830246 gi245 T4, EDF s1830002 gi1 T4 (`build/scratch/mcdragons/d8/`).
+- NEXT: build (`r/build_fix2.log`), run unit suite, ab2 = `ab/ab2.json` (new-binary ON arm of every non-Dragons job +
+  2 Dragons identity jobs) via `logs/mcdragons/batch.sh <bin> ab/ab2.json ab2 8`, pair ab1 OFF vs ab2 ON, d8 ON arms,
+  doc section 14 numbers, commit.

@@ -38677,7 +38677,7 @@ static void RouteSig(const GameState& s, std::vector<long long>& v)
     }
     {
         const PayRollbackLedger& l = s.pay_ledger;
-        v.push_back(l.n); v.push_back(l.player); v.push_back(l.rollbacks); v.push_back(l.untap_effect); v.push_back(l.turn);
+        v.push_back(l.n); v.push_back(l.player); v.push_back(l.rollbacks); v.push_back(l.untap_effects != 0); v.push_back(l.turn);
         for (int i = 0; i < l.n && i < PayRollbackLedger::kMax; ++i)
         { v.push_back(l.e[i].source_num); v.push_back(l.e[i].produced); v.push_back(l.e[i].generic); }
     }

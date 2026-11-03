@@ -1422,6 +1422,21 @@ inline void LineOwedAfterOwnPips(int out[5])
 // Hunt} kept the second Hunt's {U} and spent the {R} on the first's generic; the first Hunt revealed Land's Edge
 // {1}{R}{R}, the kill, and the continuation could not pay it. Such a line keeps the historical order.
 extern thread_local bool g_line_opens_unseen;   // ManaPayment.cpp (see ManaPayment.h); false outside a line
+// MTG_LINE_REPAY is suspended while > 0 (ManaPayment.cpp; LineRepaySuspendScope below).
+extern thread_local int g_line_repay_suspend;
+// A resolving ability's own payment loop (ApplyBlinkLoop): its payments are not a line's casts, so MTG_LINE_REPAY
+// neither re-makes one of them nor lets a later payment re-make one -- every payment inside records a barrier. The
+// re-pay's premise is that nothing between two payments depended on how the first was paid; the loop's own policy
+// reads exactly that between iterations (the finisher deploy's affordability trial, probe_pay). EDF seed 1651677
+// gi 1676 T4 (test_edf_goff_verify.cpp): the trial passed by re-making the Essence Depleter's {2}{B}, the loop
+// deployed Living Wish -> Depleter early and stopped (opponent at 19); without the re-pay the 53-blink kill lands.
+struct LineRepaySuspendScope
+{
+    LineRepaySuspendScope() { ++g_line_repay_suspend; }
+    ~LineRepaySuspendScope() { --g_line_repay_suspend; }
+    LineRepaySuspendScope(const LineRepaySuspendScope&) = delete;
+    LineRepaySuspendScope& operator=(const LineRepaySuspendScope&) = delete;
+};
 inline bool LineGenericOrderLive()
 {
     return HumanPlayActive() || (AutoLineGenericOn() && !g_line_opens_unseen);
@@ -31361,6 +31376,7 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
                           const StateManaPayer* probe_pay = nullptr)
 {
     if (!outlet.blink_cost.has_value()) { return 0; }
+    LineRepaySuspendScope _no_line_repay;   // the loop's payments are not a line's (see LineRepaySuspendScope)
     // The outlet can CHANGE mid-loop (see DeployPipFreeOutletFromHand): a Displacer loop that runs
     // out of colourless switches to a held Emiel rather than dying. Everything below reads these
     // two rather than the parameters, so an unswitched loop is byte-identical.

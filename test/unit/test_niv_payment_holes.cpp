@@ -294,7 +294,9 @@ TEST_CASE("Niv payment hole 2: Izzet Signet's {2} routes the last feeder through
         CHECK(FindNp(*g, 56)->tapped);
     }
 
-    // Lever OFF: the feed-blind greedy strands the Lake and the Servant stays in hand (the hole).
+    // Lever OFF: the feed-blind greedy strands the Lake on the Signet's payment and the Servant's fails -- and
+    // MTG_LINE_REPAY re-makes the Signet's payment so that the Servant's pays (the Lake fed after all): the hole
+    // is closed by the line re-pay too (docs/design/mana-completeness-oracle.md section 14).
     {
         ArmNp off(heurarm::RAMP_FEED_ROUTE, false);
         GameState r0 = s;
@@ -304,9 +306,9 @@ TEST_CASE("Niv payment hole 2: Izzet Signet's {2} routes the last feeder through
         {
             INFO("lever OFF, world: " << WorldNp(g, &r0));
             CHECK(FindNp(*g, 24) != nullptr);
-            CHECK(FindNp(*g, 12) == nullptr);
-            CHECK(InHandNp(*g, 12));
-            CHECK_FALSE(FindNp(*g, 11)->tapped);     // the stranded Lake
+            CHECK(FindNp(*g, 12) != nullptr);
+            CHECK_FALSE(InHandNp(*g, 12));
+            CHECK(FindNp(*g, 11)->tapped);           // the Lake, no longer stranded
         }
     }
 }

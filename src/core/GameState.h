@@ -247,7 +247,7 @@ struct StackEntry
 // payment taps, so a later same-turn line short of a colour can re-pay one earlier pip from another
 // source. On the STATE rather than thread-local so every rollout branch and the executor carry their
 // own copy in lockstep. Stamped by (turn, player); ~110 bytes; written only with the lever on except
-// the untap-effect flag, which the untap effects always set (one store).
+// the untap-effect count, which the untap effects always bump (one store).
 struct PayRollbackLedger
 {
     struct Entry { int source_num = 0; signed char produced = -1; bool generic = false; };
@@ -256,13 +256,18 @@ struct PayRollbackLedger
     signed char n            = 0;
     signed char player       = -1;
     signed char rollbacks    = 0;       // rescues fired this turn (capped at one)
-    bool        untap_effect = false;   // an untap EFFECT fired this turn: a retroactive re-pay is unsound
+    // Untap EFFECTS fired this turn, saturating at 255 (it took the old bool's byte: sizeof unchanged). Nonzero:
+    // a retroactive re-pay is unsound (the rollback refuses). The count, not just the flag, because MTG_LINE_REPAY
+    // folds it into its board digest: an untap puts the mana fields back where an earlier payment left them, and
+    // without the count a record older than the payment the untap undid would match again (EDF: Cloud of Faeries
+    // re-entering off every blink untaps the lands the blink paid with).
+    std::uint8_t untap_effects = 0;
     int         turn         = -1;
     void Stamp(int t, int p)
-    { if (t != turn || p != player) { n = 0; turn = t; player = static_cast<signed char>(p); rollbacks = 0; untap_effect = false; } }
+    { if (t != turn || p != player) { n = 0; turn = t; player = static_cast<signed char>(p); rollbacks = 0; untap_effects = 0; } }
     void Push(int t, int p, int num, int col, bool gen)
     { Stamp(t, p); if (n < kMax) { e[n].source_num = num; e[n].produced = static_cast<signed char>(col); e[n].generic = gen; ++n; } }
-    void NoteUntapEffect(int t, int p) { Stamp(t, p); untap_effect = true; }
+    void NoteUntapEffect(int t, int p) { Stamp(t, p); if (untap_effects < 255) { ++untap_effects; } }
 };
 
 struct IncineratorDamageTrigger

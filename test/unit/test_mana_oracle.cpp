@@ -220,8 +220,11 @@ Action CastAction(const GameState& s, const char* nm)
 // (MTG_PAY_SHRINK) fixes that over-tap, and the whole-turn prepay (MTG_PREPAY_COLOURS) settles Fertile
 // Ground's any-colour bonus to {U} and pays both casts jointly -- and since 2026-10-28 the per-payment refine
 // (MTG_PAY_REFINE) gives the over-tapped Conservatory back too. So the case runs with all three off, the
-// historical payer; the next test is the fixed one.
-TEST_CASE("viewer line check: the search's payment drops a cast the board pays for, and says how to pay it")
+// historical payer. Since 2026-11-03 the line re-pay (MTG_LINE_REPAY, section 14) re-makes the Grounds' payment when
+// the Displacer's fails, so even the historical payer now casts both: the audit reports the line in full and the
+// board untouched. (The audit's drop report -- payable / pays / rollback -- needs a board that still drops; the
+// remaining drops are the need-later shape of section 14, which the re-pay refuses across a draw.)
+TEST_CASE("viewer line check: the historical payer's drop on EDF seed 3000 T4 is re-paid by the line re-pay")
 {
     EnsureOracleCards();
     const GameState s = Edf3000T4();
@@ -239,22 +242,8 @@ TEST_CASE("viewer line check: the search's payment drops a cast the board pays f
     heurarm::t_arm[heurarm::PREPAY_COLOURS] = saved_pc;
     heurarm::t_arm[heurarm::PAY_REFINE]     = saved_rf;
     REQUIRE(a.audited);
-    CHECK_FALSE(a.engine_full);
-    CHECK(a.sibling == -1);
-    CHECK(a.dropped == "cast Eldrazi Displacer");
-    REQUIRE(a.payable);
-    CHECK(a.other_order.empty());
-    REQUIRE(a.pays.size() == 2);
-    CHECK(a.pays[0].what == "{U}");
-    CHECK(a.pays[1].what == "{2}{W}");
-    // The Grounds' {U} comes from Mariposa alone (its {C} face plus Fertile Ground's {U}); Conservatory is
-    // left for the Displacer.
-    REQUIRE(a.pays[0].taps.size() == 1);
-    CHECK(a.pays[0].taps[0].rfind("tap=Mariposa Military Base#2:", 0) == 0);
-    CHECK(a.rollback == "depth1");
-    CHECK(a.keep == 0);
-    CHECK(a.failed == 1);
-    CHECK_FALSE(a.later);
+    CHECK(a.engine_full);
+    CHECK(a.dropped.empty());
     // ...and nothing it did leaked: the board it was asked about is untouched.
     for (const Permanent& p : s.battlefield) { CHECK_FALSE(p.tapped); }
 }

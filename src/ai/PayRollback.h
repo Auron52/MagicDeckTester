@@ -118,7 +118,7 @@ inline bool TryRescue(GameState& s, const ManaCost& cost, const char* for_card)
     PayRollbackLedger& L = s.pay_ledger;
     L.Stamp(s.TurnSeq(), active);
     if (L.n == 0)           { Declined(s, "empty ledger", for_card); return false; }
-    if (L.untap_effect)     { Declined(s, "an untap effect fired this turn", for_card); return false; }
+    if (L.untap_effects != 0) { Declined(s, "an untap effect fired this turn", for_card); return false; }
     if (L.rollbacks >= 1)   { Declined(s, "already rolled back this turn", for_card); return false; }
     if (s.floating_mana.Total() > 0) { Declined(s, "mana floating", for_card); return false; }
     // The restricted floats are a committed tap's surplus too: re-assigning that tap would leave its

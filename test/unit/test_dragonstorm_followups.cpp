@@ -945,8 +945,10 @@ TEST_CASE("Line-spare generic: a colour-short line pays a generic pip with the s
             CHECK(PermFu(s, "Sandstone Needle").tapped);
             CHECK(PermFu(s, "Unclaimed Territory").tapped == on);
             CHECK(s.floating_mana.red == (on ? 1 : 0));
-            // ...so Rite of Flame's {R} is payable next (off: only the Territory's {C} is left).
-            CHECK(TapForCostDirect(s, rite, /*for_creature=*/false) == on);
+            // ...so Rite of Flame's {R} is payable next. Off, only the Territory's {C} is left, and Rite pays
+            // anyway: MTG_LINE_REPAY re-makes the Medallion's payment (Territory {C} + one Needle {R}, the other {R}
+            // floating) when Rite's fails (docs/design/mana-completeness-oracle.md section 14).
+            CHECK(TapForCostDirect(s, rite, /*for_creature=*/false));
         }
         {
             // No live line: the historical tap on both arms (the Needle pays both pips, the Territory stays up).
@@ -981,7 +983,9 @@ TEST_CASE("Line-spare generic, apply level: the USER order's T2 line on Needle +
 {
     // The rollout apply (ApplyPlanDirect) pays through the same shared payer as the executor: the whole
     // ordered line "Medallion, Rite, Seething, Seething, Dragonstorm" resolves (s3104 gi101's T2 kill).
-    // Lever off: the Medallion's {2} takes both of the Needle's {R}, Rite is unpayable and the line dies.
+    // Lever off: the Medallion's {2} takes both of the Needle's {R} and Rite's {R} fails -- and the line still
+    // resolves, because MTG_LINE_REPAY re-makes the Medallion's payment so that Rite's pays (section 14 of
+    // docs/design/mana-completeness-oracle.md). Both arms cast Dragonstorm.
     for (const bool on : { true, false })
     {
         CAPTURE(on);
@@ -998,8 +1002,8 @@ TEST_CASE("Line-spare generic, apply level: the USER order's T2 line on Needle +
             if (c.m_name.str() == "Dragonstorm")   { ++in_hand_storm; }
             if (c.m_name.str() == "Rite of Flame") { ++in_hand_rite; }
         }
-        CHECK(in_hand_storm == (on ? 0 : 1));
-        CHECK(in_hand_rite == (on ? 0 : 1));
+        CHECK(in_hand_storm == 0);
+        CHECK(in_hand_rite == 0);
     }
 }
 

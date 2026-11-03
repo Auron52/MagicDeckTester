@@ -7959,6 +7959,7 @@ void PayRefineAfter(GameState& state, const ManaCost& cost_in, bool for_creature
 //
 // Not here: human play (the human chose those taps), the reference replay's tap preference, the mana oracle's own
 // copies and float-only probes, an armed damage board, a payment the earlier one cannot be undone around.
+thread_local int g_line_repay_suspend = 0;   // SpellEffects.h LineRepaySuspendScope
 namespace
 {
 std::atomic<long long> g_lr_record{0}, g_lr_try{0}, g_lr_amount{0}, g_lr_joint{0}, g_lr_fired{0}, g_lr_fired_d2{0},
@@ -8013,6 +8014,11 @@ std::uint64_t LineRepayDigest(const GameState& s, std::size_t n)
     mix(static_cast<std::uint64_t>(static_cast<std::uint32_t>(s.players[a].life))
         | (static_cast<std::uint64_t>(static_cast<std::uint32_t>(s.players[a].energy_counters)) << 32));
     mix(static_cast<std::uint64_t>(s.players[a].library.size()));
+    // The untap effects since the turn began (PayRollbackLedger::untap_effects): an untap can put every field above
+    // back where an EARLIER payment left them (Cloud of Faeries' ETB after a blink untaps the lands the blink paid
+    // with), and that payment is then no longer the last one on the board. EDF seed 1651677 gi 1676 T4: without the
+    // count the Essence Depleter's {2}{B} was "re-made" under a later blink and the 53-blink kill was lost.
+    mix(static_cast<std::uint64_t>(s.pay_ledger.untap_effects) | (static_cast<std::uint64_t>(static_cast<std::uint32_t>(s.pay_ledger.turn)) << 8));
     return h;
 }
 
@@ -8037,11 +8043,16 @@ thread_local LineRepayRec t_lr_ring[kLineRepayRing];
 thread_local int          t_lr_next = 0;
 thread_local bool         t_lr_active = false;   // inside a re-payment's own trials: no recording, no nesting
 
-bool LineRepayContext(const GameState& s)
+// Recording context: every committed outermost payment here pushes a record (a barrier when it cannot be re-made).
+bool LineRepayRecordContext(const GameState& s)
 {
     return LineRepayOn() && !t_lr_active && !t_pay_refining && !manaoracle::t_float_only && !s.dmg_events_armed
         && !HumanPlayActive() && g_play_tap_pref_chooser == nullptr;
 }
+
+// Re-pay context: as above, and not inside a resolving ability's own payment loop (LineRepaySuspendScope,
+// SpellEffects.h), where every payment records a barrier instead.
+bool LineRepayContext(const GameState& s) { return g_line_repay_suspend == 0 && LineRepayRecordContext(s); }
 
 // Record a committed outermost payment. `pre` (null = a barrier) is the board before it, given when the payment is
 // part of a line that still owes more after it.
@@ -8075,6 +8086,7 @@ const LineRepayRec* LineRepayFind(const GameState& s, const LineRepayRec* const*
     {
         const LineRepayRec& r = t_lr_ring[(t_lr_next - k + kLineRepayRing) % kLineRepayRing];
         if (!r.live || s.battlefield.size() < r.n) { continue; }
+        if (s.pay_ledger.untap_effects == 255) { return nullptr; }   // saturated count: the digest cannot tell untaps apart
         bool used = false;
         for (int i = 0; i < nskip; ++i) { if (skip[i] == &r) { used = true; } }
         if (used) { continue; }
@@ -8319,7 +8331,7 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
         }
     }
     if (ok && refine_pre) { PayRefineAfter(state, cost_in, for_creature, available, honor_legacy_cco, *refine_pre); }
-    if (ok && t_pay_nest == 1 && LineRepayContext(state))
+    if (ok && t_pay_nest == 1 && LineRepayRecordContext(state))
     {
         const bool undoable = line_ctx && RampLaterBill(cost_in).ManaValue() > 0;
         LineRepayRecord(state, undoable ? (refine_pre ? &*refine_pre : &*line_pre) : nullptr, cost_in, for_creature);
