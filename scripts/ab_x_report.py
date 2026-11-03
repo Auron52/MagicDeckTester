@@ -45,7 +45,7 @@ def main():
             r = ARM.match(job)
             if r:
                 reg[r.group(2)][(r.group(1), gi)] = (ms, wt, u)
-    if a.tail0:
+    if a.tail0 and "0" not in tail:   # a same-binary tailx0 arm wins over the older separate run
         with open(a.tail0 + ".err") as f:
             for ln in f:
                 m = GAME.search(ln)

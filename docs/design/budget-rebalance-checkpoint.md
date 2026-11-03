@@ -140,6 +140,20 @@ Started 2026-11-03.
   tight X loses Alchemist turns); tier-1 sizes (tt 8, fsl 16, m1memo 8, gamelc 24, mana 16 MB); mana-cache
   context fold (MTG_MANA_CACHE_X_TRAITS / _X_PAYCTX); branch not pushed (push would also run Windows CI).
 
+## A/B v3 partial reading (2026-11-03 04:55 UTC; abx3 ~1% of 189,870 games, all tail-corpus arms in)
+- READ WITHOUT --tail0: abx3 has its own same-binary tailx0 arm (ab_x_report.py now prefers it).
+- Tail corpus, win turn per X (0/20/30/50/100): alchemist gi490 6/**8**/6/6/6; kittyv2arch r8 gi1723
+  4/4/**6**/**6**/4 (also 6 at 50ng). Every other tail game keeps its win turn at every X.
+- Mechanism (single-game censuses, leak/a490_x*, leak/k1723_x*): (a) Alchemist t2 is NOT a tail decision -- 12 s,
+  2.3x L units, but 33x the reference price per unit; X=20 cuts the pass that finds the line (commits a 21-unit
+  pass). The game's real outlier, t4 (121 s, 26x L), trips at X>=30 harmlessly. (b) Kitty gi1723's first three
+  decisions are genuinely heavy (ratios 70/185/34, 25/61/10 s); at X=50 all trip and t4 discards a 47k-unit pass
+  for a 1.6k one; anytime rescue fired (idwaste_rescuable) but cannot recover what a cut pass never reached.
+  At X=100 only the 61-s decision trips; t4 holds, 96 s -> 73 s.
+- => a ratio-of-L ceiling cannot tell a useful deep pass from a wasted one; X <= 50 is lossy on the tail corpus.
+- Tier-1: per-cache peaks are under allocation everywhere except mana (16/16, wholesale clear in 10 games, wall
+  only) -> candidate: mana 24 MB. Peak per-thread total ~56 MB of 72 MB allocated.
+
 ## Next steps
 0. Read armA-vs-armB; build worktree (stage 2 + counters + priced ceiling); verify MTG_TIER1=0 is
    byte-identical to armA and MTG_TIER1=1 play-identical where no allocation binds; refit prices with
