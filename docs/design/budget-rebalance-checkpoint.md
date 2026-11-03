@@ -140,6 +140,15 @@ Started 2026-11-03.
   tight X loses Alchemist turns); tier-1 sizes (tt 8, fsl 16, m1memo 8, gamelc 24, mana 16 MB); mana-cache
   context fold (MTG_MANA_CACHE_X_TRAITS / _X_PAYCTX); branch not pushed (push would also run Windows CI).
 
+## EDF COLLAPSES VALIDATED (run_edf.sh, 06:24 pre-rebase binary, done 06:40 UTC)
+- Regression tier ea vs p2a: 260 jobs / 59,369 games, win-turn diffs 0, UNIT diffs 0 => the collapses
+  (TUTOR_PIN_ALIAS, SPWF_CANON_MEMO, RH_MOVED_VIA_CANDS) are exact at scale. Wall B/A 0.857 (edf 0.617).
+- Tail corpus (45 games; pool A 24 thr stop OFF, pool B 8 thr MTG_BP_DERIVE_PRICED_STOP=1), wall s (turn):
+  gi821 A0 468.5(7) A100 463.1(7) B50 492.0(7) B100 492.8(7) -- was the 3,600 s cap in every A/B v3 arm.
+  gi214 105/113/104/110 (4). Win turns X=100 == X=0 on all 45. Sums A0 2025, A100 1861, B50 1796, B100 1876;
+  max game under 8.5 min in every arm (loaded box; gi821 178 s quiet). PRICED_STOP at X=100 buys nothing;
+  at X=50 it shows kittyv2 gi1723 4->6 (the known X=50 loss). Recommendation to USER: leave it OFF.
+
 ## REBASED onto origin/phase-1-2-deck-analyzer (2026-11-03 06:40 UTC; pre-rebase ref budget-rebalance-prerebase)
 - One conflict, src/core/SpellEffects.cpp: origin had landed the SAME ramp-feed hit fix independently
   (MTG_MC_FEED_ALT, ManaCacheEntry::feed_alt, stored only for negatives). Took origin's; DROPPED ours
