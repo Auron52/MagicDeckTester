@@ -53,8 +53,14 @@ import mana_oracle as mo  # noqa: E402
 from engine_bin import engine_bin, pgo_ensure, pgo_fresh  # noqa: E402
 
 STATE = os.path.join(ROOT, "test", "mana_clean.json")
-GAMES = 5000                     # per run (USER 2026-11-02: "An example could be 5000 games")
-CHUNK = 250                      # games per batch job: the resume granularity
+GAMES = 5000                     # the gate's minimum per run (USER 2026-11-02: "An example could be 5000 games")
+MAX_GAMES = 100000               # USER 2026-11-02: "if we can easily run 50000-100000 without it taking a long
+                                 # time that would be even better" -- a run is sized to --minutes, in [GAMES, MAX]
+MINUTES = 30                     # the wall a run of one deck is sized to (both arms, every thread)
+CHUNK = 250                      # the largest batch job (games): the resume granularity
+DETAIL_CAP = 5000                # whole ISSUE lines kept per deck and class (a painland deck can flag DOMINATED-
+                                 # LIFE hundreds of times per 20 games); the rest are counters, so counts stay exact
+CHUNK_MS = 120000                # ...and a job's target cost, so an expensive deck's tail stays short
 SEED_BASE = 30000000             # game g of a deck's sequence is seed SEED_BASE + g, game index g
 ISSUE = mo.MISS + ["ORACLE-GAP"]
 COUNTER = re.compile(r"^\[mana-oracle\] (?P<cls>[A-Z-]+) seed=\d+ job=(?P<job>\S+)")
@@ -158,18 +164,66 @@ def pick(names, decks):
 
 def run_arm(mtg, manifest, level, out_path, err_path, threads):
     """One pooled batch. stdout (the per-job result lines) to `out_path`; stderr filtered into `err_path`:
-    ISSUE flag lines whole, every other flag cut to a one-line counter, everything else as is."""
+    ISSUE flag lines whole (the first DETAIL_CAP per deck and class), every other flag cut to a one-line
+    counter, everything else as is. The counters keep every count exact."""
     env = dict(os.environ, MTG_MANA_ORACLE=str(level))
+    whole = collections.Counter()
     with open(out_path, "w") as so, open(err_path, "w") as se:
         p = subprocess.Popen([mtg, "--batch", manifest, "--threads", str(threads)], stdout=so,
                              stderr=subprocess.PIPE, env=env, cwd=ROOT, text=True, errors="replace", bufsize=1)
         for ln in p.stderr:
             m = COUNTER.match(ln)
-            if m and m.group("cls") not in ISSUE and m.group("cls") != "DECISION":
-                se.write("[mana-oracle] %s seed=0 job=%s\n" % (m.group("cls"), m.group("job")))
+            if m and m.group("cls") != "DECISION":
+                key = (m.group("job").split("__")[0], m.group("cls"))
+                if m.group("cls") in ISSUE and whole[key] < DETAIL_CAP:
+                    whole[key] += 1
+                    se.write(ln)
+                else:
+                    se.write("[mana-oracle] %s seed=0 job=%s\n" % (m.group("cls"), m.group("job")))
             else:
                 se.write(ln)
         return p.wait()
+
+
+def job_ms(out_path):
+    """{job: (played, ms)} from a batch's per-job result lines."""
+    out = {}
+    for ln in open(out_path, errors="replace"):
+        m = re.match(r"(\S+): played=(\d+) .* ms=(\d+)", ln)
+        if m:
+            out[m.group(1)] = (int(m.group(2)), int(m.group(3)))
+    return out
+
+
+def cost_per_game(d, g0, threads, scratch, prior):
+    """(on, off) core-ms per game for deck `d`: its last record's measurement, else a probe of the block's
+    first 2*threads games as one-game jobs on both arms (the run replays them; a probe only sizes)."""
+    if prior and prior.get("ms_on") and prior.get("games"):
+        return prior["ms_on"] / prior["games"], prior.get("ms_off", 0) / prior["games"]
+    n = 2 * threads
+    jobs = [{"name": "%s__p%d" % (d.key, g0 + i), "deck": os.path.relpath(d.deck_file, ROOT),
+             "profile": os.path.relpath(d.profile, ROOT), "games": 1, "seed": SEED_BASE + g0 + i,
+             "game_index": g0 + i} for i in range(n)]
+    manifest = os.path.join(scratch, "probe.%s.json" % d.key)
+    json.dump({"jobs": jobs}, open(manifest, "w"), indent=1)
+    cost = []
+    for arm, level in (("on", 2), ("off", 0)):
+        o = os.path.join(scratch, "probe.%s.%s.out" % (d.key, arm))
+        print("mana_clean: sizing %s: %d games, %s arm" % (d.key, n, arm), file=sys.stderr, flush=True)
+        run_arm(engine_bin("mtg"), manifest, level, o, os.devnull, threads)
+        r = job_ms(o).values()
+        cost.append(sum(ms for _, ms in r) / max(1, sum(p for p, _ in r)))
+    return cost[0], cost[1]
+
+
+def size_run(on, off, threads, minutes):
+    """-> (games, chunk). Games fill `minutes` of wall on `threads`, in [GAMES, MAX_GAMES], rounded down to
+    1000; a chunk is at most CHUNK games and CHUNK_MS of work, and small enough for 8 jobs per thread."""
+    per = max(on + off, 1e-3)
+    games = int(minutes * 60000 * threads / per) // 1000 * 1000
+    games = max(GAMES, min(MAX_GAMES, games))
+    chunk = max(1, min(CHUNK, games // (8 * threads), int(CHUNK_MS / max(on, 1e-3))))
+    return games, chunk
 
 
 def done_jobs(path):
@@ -200,17 +254,6 @@ def cmd_run(args, decks):
         name = args.name or datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d-%H%M%S")
         out_dir = os.path.join(ROOT, "logs", "mana_clean", name)
         os.makedirs(out_dir, exist_ok=True)
-        plan = {"name": name, "src": src_now, "commit": git("rev-parse", "HEAD"), "games": args.games,
-                "chunk": args.chunk,
-                "started": now_iso(), "decks": []}
-        for d in chosen:
-            deck = os.path.relpath(d.deck_file, ROOT)
-            g0 = next_game(st["decks"].get(d.key))
-            plan["decks"].append({"key": d.key, "deck": deck, "deck_sha": deck_sha(deck),
-                                  "profile": os.path.relpath(d.profile, ROOT), "game_index": g0,
-                                  "seed": SEED_BASE + g0, "games": args.games})
-        json.dump(plan, open(os.path.join(out_dir, "run.json"), "w"), indent=1)
-
     pgo_ensure()
     if not pgo_fresh():
         sys.exit("mana_clean: build/PGO is not built from HEAD:src (MTG_PGO=0, or its build failed) -- a gate "
@@ -219,9 +262,32 @@ def cmd_run(args, decks):
     scratch = os.path.join(ROOT, "build", "scratch", "mana_clean", name)
     os.makedirs(scratch, exist_ok=True)
 
-    chunk = plan.get("chunk", CHUNK)      # a resume must rebuild the SAME job names
+    if not args.resume:
+        plan = {"name": name, "src": src_now, "commit": git("rev-parse", "HEAD"), "minutes": args.minutes,
+                "started": now_iso(), "decks": []}
+        for d in chosen:
+            deck = os.path.relpath(d.deck_file, ROOT)
+            e = st["decks"].get(d.key)
+            g0 = next_game(e)
+            last = (e or {}).get("runs", [None])[-1] if e and e.get("runs") else None
+            on, off = ((0.0, 0.0) if args.games and args.chunk
+                       else cost_per_game(d, g0, args.threads, scratch, last))
+            games, chunk = size_run(on, off, args.threads, args.minutes)
+            if args.games:
+                games = args.games
+            if args.chunk:
+                chunk = args.chunk
+            print("mana_clean: %s: %.0f + %.0f core-ms/game -> %d games in chunks of %d (games %d-%d)"
+                  % (d.key, on, off, games, chunk, g0, g0 + games - 1), file=sys.stderr, flush=True)
+            plan["decks"].append({"key": d.key, "deck": deck, "deck_sha": deck_sha(deck),
+                                  "profile": os.path.relpath(d.profile, ROOT), "game_index": g0,
+                                  "seed": SEED_BASE + g0, "games": games, "chunk": chunk,
+                                  "est_ms_per_game": [round(on, 1), round(off, 1)]})
+        json.dump(plan, open(os.path.join(out_dir, "run.json"), "w"), indent=1)
+
     jobs = []
     for pd in plan["decks"]:
+        chunk = pd.get("chunk", plan.get("chunk", CHUNK))   # a resume must rebuild the SAME job names
         for off in range(0, pd["games"], chunk):
             gi = pd["game_index"] + off
             jobs.append({"name": "%s__g%d" % (pd["key"], gi), "deck": pd["deck"], "profile": pd["profile"],
@@ -257,10 +323,13 @@ def cmd_run(args, decks):
         return out
 
     dig = {"on": {}, "off": {}}
+    ms = {"on": {}, "off": {}}
     for arm in dig:
         for o, _ in attempts(arm):
             for job, v in mo.digests(o).items():
                 dig[arm].setdefault(job, v)
+            for job, v in job_ms(o).items():
+                ms[arm].setdefault(job, v[1])
     owner = {}
     for i, (o, _) in enumerate(attempts("on")):
         for job in mo.digests(o):
@@ -312,6 +381,7 @@ def cmd_run(args, decks):
                "deck": pd["deck"], "deck_sha": pd["deck_sha"], "game_index": pd["game_index"], "seed": pd["seed"],
                "games": played, "issues": issues, "identity": identical, "verdict": v,
                "by_class": {k: c[k] for k in sorted(c)}, "decisions": decisions[pd["key"]],
+               "ms_on": sum(ms["on"].get(j, 0) for j in mine), "ms_off": sum(ms["off"].get(j, 0) for j in mine),
                "report": os.path.relpath(os.path.join(out_dir, "report.md"), ROOT)}
         e = st["decks"].setdefault(pd["key"], {"runs": []})
         e["runs"] = [r for r in e["runs"] if r.get("run") != name] + [rec]
@@ -328,9 +398,10 @@ def cmd_run(args, decks):
     blocks = ", ".join("%s %d-%d" % (pd["key"], pd["game_index"], pd["game_index"] + pd["games"] - 1)
                        for pd in plan["decks"])
     header = ("Mana-clean gate run: %d decks, games (seed %d + game index) %s; src `%s`, binary `%s`, "
-              "`MTG_MANA_ORACLE=2`. ISSUE classes: %s.\n\n%s"
+              "`MTG_MANA_ORACLE=2`. ISSUE classes: %s. The sections below the verdict table read only the first "
+              "%d whole flag lines per deck and class; the table's counts are exact.\n\n%s"
               % (len(plan["decks"]), SEED_BASE, blocks, plan["src"][:12], os.path.relpath(mtg, ROOT),
-                 ", ".join(ISSUE), "\n".join(head)))
+                 ", ".join(ISSUE), DETAIL_CAP, "\n".join(head)))
     identity_all = all(r[1] != "invalid" for r in rows)
     text, _, _, _ = mo.report("Mana-clean gate `%s`" % name, header, [pd["key"] for pd in plan["decks"]], deck_of,
                               flags, decisions, plans_seen, summary, identity_all, rc.get("on", 0), args.top)
@@ -349,12 +420,15 @@ def main():
     s.add_argument("decks", nargs="*")
     r = sub.add_parser("run")
     r.add_argument("decks", nargs="*", help="deck keys / folders (default: every DUE shipping deck)")
-    r.add_argument("--games", type=int, default=GAMES)
+    r.add_argument("--games", type=int, default=None,
+                   help="games per deck (default: sized to --minutes from the deck's measured cost, %d-%d)"
+                   % (GAMES, MAX_GAMES))
+    r.add_argument("--minutes", type=float, default=MINUTES, help="the wall one deck's run is sized to")
     r.add_argument("--threads", type=int, default=os.cpu_count() or 8)
     r.add_argument("--name", default=None)
     r.add_argument("--resume", default=None, help="finish an interrupted run of this name")
     r.add_argument("--top", type=int, default=12)
-    r.add_argument("--chunk", type=int, default=CHUNK, help="games per batch job (the resume granularity)")
+    r.add_argument("--chunk", type=int, default=None, help="games per batch job (default: sized per deck)")
     for p in (s, r):
         p.add_argument("--state", default=None, help="the record file (default test/mana_clean.json; a test run "
                        "points it elsewhere so it does not spend a deck's game blocks)")

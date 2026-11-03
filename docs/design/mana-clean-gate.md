@@ -16,8 +16,13 @@ Beta -> stable needs three things:
 
 A mana analysis is one run of `scripts/mana_clean.py` for the deck:
 
-- **Games:** 5,000, at the deck's shipped play settings (its profile), with the mana completeness oracle on
-  (`MTG_MANA_ORACLE=2`, `docs/design/mana-completeness-oracle.md`).
+- **Games:** at least 5,000, at the deck's shipped play settings (its profile), with the mana completeness oracle
+  on (`MTG_MANA_ORACLE=2`, `docs/design/mana-completeness-oracle.md`). USER, same day: *"5000 would probably be the
+  minimum, but if we can easily run 50000-100000 without it taking a long time that would be even better."* So a
+  run is sized per deck to about 30 minutes of wall on every thread (`--minutes`), clamped to 5,000-100,000 games
+  (rounded down to 1,000). The cost per game comes from the deck's last record, else from a probe of 2 x threads
+  games on both arms. Census3 costs put about 25 decks at 100,000 games, the mid decks at 25,000-50,000, and
+  Hinata2, Eldrazi, Selesnya and Melira at the 5,000 floor (Melira about 4 h).
 - **Identity check:** the same games are also played with the oracle off. Play must be byte-identical (the per-job
   play digests), because an oracle that moves play is auditing games the deck does not play.
 
@@ -34,7 +39,7 @@ The context classes are counted in the report but do not fail a run: PHANTOM, CO
 DOMINATED-LAND, HIDDEN-INFO, UNMODELED and CAPPED.
 
 **Fresh games every run.** Game `g` of a deck's sequence is seed `30000000 + g`, game index `g`. Run `k` plays the
-5,000 games after run `k-1`'s. So once issues are fixed, the re-check is on games the fixes were not fitted to.
+games after run `k-1`'s. So once issues are fixed, the re-check is on games the fixes were not fitted to.
 
 **The latest run is the verdict.** Each record is stamped with `HEAD:src` and the decklist's hash (line endings
 folded).
@@ -67,7 +72,8 @@ first, or name the deck to force a run.
 
 - **The binary:** `build/PGO` from a clean `src/`. The PGO stamp is the record's proof of which engine ran, so the
   tool refuses a dirty src or a stale PGO build.
-- **Pooling:** each deck's games are split into 250-game jobs. Both arms are each ONE pooled `mtg --batch` over every
+- **Pooling:** each deck's games are split into jobs of at most 250 games, about 2 minutes of work each and at
+  least 8 jobs per thread, so one deck alone still fills the box and its tail stays short. Both arms are each ONE pooled `mtg --batch` over every
   deck, with no barrier between decks.
 - **Resume:** the jobs are also the resume granularity. `--resume` reruns only the jobs no earlier attempt finished.
   A job's flags are counted only from the attempt that finished it.

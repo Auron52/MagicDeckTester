@@ -6,6 +6,16 @@ and hold the NO-GREEDY rule. The adoption bar: every slower held-out game recove
 `--depth 8 --budget-ms 0 --ignore-play-profile`, or is CLEAR clairvoyance (equal on both arms under
 `MTG_NC_SEARCH=1`); and each deck's net is <= 0 on held-out games (suite metric, unwon = max_turns+1).
 
+## NOW (2026-11-02): the per-deck mana-clean pass
+
+USER, 2026-11-02: analyze every deck one at a time with the mana analyzer, fix every issue found, and mark each
+deck (`docs/design/mana-clean-gate.md`, `scripts/mana_clean.py`, `test/mana_clean.json`). Runs are sized per deck,
+5,000-100,000 games. Loop per deck: `python3 scripts/mana_clean.py run <deck>` -> read
+`logs/mana_clean/<run>/report.md` -> fix by mechanism -> land -> run the deck again on its next block. Progress is
+`python3 scripts/mana_clean.py status`. Order: cheapest decks first (census3 cost), Melira last.
+
+- Landed: `MTG_MC_FEED_ALT` default ON (48382a7bb; the mana cache is transparent); the gate (3397a7502 + sizing).
+
 ## Landed this week (phase-1-2-deck-analyzer)
 
 - The sac-outlet payer stack (`MTG_SAC_OUTLET_PAY` default ON), the Goblins GT (22544d5f4), and the featurizer
