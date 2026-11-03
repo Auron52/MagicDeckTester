@@ -429,3 +429,12 @@ Branch base 3640b6bf1 is 44 commits behind origin (25 src files): rebase before 
 0 wall backstops. Max game edf_keepab_static_gi821 **240 s** (won T7; it was at the 3600 s wall at
 X=0 and X=100 before). Next slowest 87 s (kitty_v1vscur_2hg_cur gi20037), then 79 s, 67 s. Every game
 < 10 min. Items 1-2 complete -> pushing to phase-1-2-deck-analyzer, then Cyclone via the queue.
+
+## Overnight chain DONE (2026-11-03 ~13:58 UTC)
+
+- Pushed budget-rebalance to phase-1-2-deck-analyzer: 50b685d98..0b7d581f5 (fast-forward; origin had not moved).
+- Cyclone via the queue: `exclude` emptied on artifact-queue-tool, worker artifact-queue-d7d6a5 started
+  (harness-tracked), journal copied into the worker tree (cmp OK) -> RESUME(journal) ... continuing.
+- `build/scratch/budget/cycprobe/` deleted. Later stages (re-price uncharged work, pooled bottoming budget,
+  EDF wastes) remain PAUSED per the USER. Scratch worktrees still to clean via safe_worktree_remove.sh:
+  origin-baseline, mf-bisect, tier2-overflow, plan-priced-ledger, plan-priced-ledger-base.
