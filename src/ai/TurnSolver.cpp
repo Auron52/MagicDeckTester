@@ -58093,7 +58093,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         }
         if (!staged_ok) { restore_big(); return Pp(PP_BIGMANA_MIXED); }
     }
-    // MIXED-BATCH TWO-STAGE SOLVE (MTG_PREPAY_MIXED, default off; =1 enables). A mixed batch's
+    // MIXED-BATCH TWO-STAGE SOLVE (MTG_PREPAY_MIXED, DEFAULT ON since 2026-09-03; =0 reverts). A mixed batch's
     // single combined solve runs with for_creature=false, so a colored_creature_only land
     // (Sliver Hive / Cavern of Souls / Unclaimed Territory / Secluded Courtyard) contributes only
     // {C} and a creature_mana_only land (Ancient Ziggurat) contributes nothing -- an Aether Vial
@@ -58126,6 +58126,55 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         // for_creature=false and may have failed on the creature pips alone): one creature-only
         // stage is the whole retry then.
         const bool have_nonc = c_nonc.ManaValue() > 0;
+        // A STAGE NEVER TAPS A SOURCE THAT CANNOT PAY IT. The backtracker returns the FIRST payment
+        // its DFS reaches, and that DFS taps candidates in order with no test that a tap helps: for a
+        // bill of coloured pips only, a source listed ahead of the one that pays is tapped anyway and
+        // its mana rides along as surplus. Pirates s30000154 T2, {Goblin Tomb Raider, Lightning Bolt}
+        // on Secluded Courtyard + Mountain: the noncreature stage paid Bolt's {R} with the Courtyard's
+        // {C} AND the Mountain, so the creature stage met an empty board and both orders failed
+        // (combined UNPAYABLE), although Mountain -> Bolt, Courtyard -> Raider pays. `idle` is the set
+        // of sources whose every payment-legal colour (for that stage) is one the bill does not name.
+        // When the bill has no generic, {C}, X or hybrid pip such a tap pays nothing of it -- unless
+        // some source converts floating mana (a filter, a ramp feed, a scaled land, an untap burst),
+        // in which case `idle` is empty. Reserving them is therefore SOUND (every payment of the stage
+        // stays reachable, minus the useless taps) and leaves those sources to the other stage.
+        auto idle = [&](const ManaCost& bill, bool for_crea) -> std::uint64_t
+        {
+            if (bill.generic != 0 || bill.colorless != 0 || bill.has_x || bill.x_pips != 0
+                || bill.hybrid_count != 0 || bill.twobrid_count != 0)
+            { return 0; }
+            unsigned named = 0;
+            if (bill.white > 0) { named |= 1u << static_cast<int>(Color::White); }
+            if (bill.blue  > 0) { named |= 1u << static_cast<int>(Color::Blue); }
+            if (bill.black > 0) { named |= 1u << static_cast<int>(Color::Black); }
+            if (bill.red   > 0) { named |= 1u << static_cast<int>(Color::Red); }
+            if (bill.green > 0) { named |= 1u << static_cast<int>(Color::Green); }
+            for (int k = 0; k < bill.phyrexian_count; ++k) { named |= 1u << bill.phyrexian_color[k]; }
+            std::uint64_t m = 0;
+            for (std::size_t i = 0; i < bf_snap.size(); ++i)
+            {
+                const Permanent& bp = bf_snap[i];
+                if (bp.controller_index != active || bp.tapped || bp.def_absent) { continue; }
+                const CardDefinition* bd = CardDatabase::Instance().LookupCached(bp.card);
+                if (bd == nullptr) { continue; }
+                if (bd->params.is_filter || bd->params.ramp_filter || bd->params.any_color_filter
+                    || IsScaledManaLand(*bd) || bd->params.untap_creature_cost.has_value())
+                { return 0; }   // a converter can turn an unnamed colour into a named one
+                if (i >= 64) { continue; }
+                // Colours resolved at tap time (or added by a land Aura) are never called idle.
+                if (bd->params.reflecting || bd->params.domain_mana || bd->params.mana_colors_of_graveyard_legends
+                    || bd->params.produces_any_combination || LandAuraColorMask(state, bp) != 0)
+                { continue; }
+                const std::vector<Color>& pr = ProducesForPayment(state, active, *bd, for_crea, &bp);
+                if (pr.empty()) { continue; }
+                bool any_named = false;
+                for (Color c : pr) { if (named & (1u << static_cast<int>(c))) { any_named = true; break; } }
+                if (!any_named) { m |= 1ull << i; }
+            }
+            return m;
+        };
+        const std::uint64_t idle_crea = idle(c_crea, /*for_crea=*/true);
+        const std::uint64_t idle_nonc = have_nonc ? idle(c_nonc, /*for_crea=*/false) : 0;
         // Same hold ladder as the single solve -- every rung, then unreserved -- so a dork or
         // depletion counter the turn can spare is still spared on this path.
         for (int r = 0; r <= n_rungs && !mixed_ok; ++r)
@@ -58140,7 +58189,8 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                 bool o = TapForCostBacktrack(state, first, first_c, ManaPool{},
                                              /*rp_colors=*/nullptr, /*fail_memo=*/nullptr,
                                              /*out_leftover=*/nullptr, /*tapped_mask=*/0,
-                                             /*untapped_max=*/-1, /*reserved_mask=*/hold,
+                                             /*untapped_max=*/-1,
+                                             /*reserved_mask=*/hold | (first_c ? idle_crea : idle_nonc),
                                              /*out_full_pool=*/&p1);
                 if (o && have_nonc)
                 {
@@ -58148,7 +58198,8 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                     o = TapForCostBacktrack(state, second, !first_c, ManaPool{},
                                             /*rp_colors=*/nullptr, /*fail_memo=*/nullptr,
                                             /*out_leftover=*/nullptr, /*tapped_mask=*/0,
-                                            /*untapped_max=*/-1, /*reserved_mask=*/hold,
+                                            /*untapped_max=*/-1,
+                                            /*reserved_mask=*/hold | (first_c ? idle_nonc : idle_crea),
                                             /*out_full_pool=*/&p2);
                 }
                 if (!o) { continue; }

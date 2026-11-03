@@ -341,3 +341,25 @@ TEST_CASE("depletion hold: the whole-turn prepay's partial rung keeps the Needle
     const GameState off = run(false);
     CHECK(TappedDh(off) == std::vector<bool>{ true, true, false, false });
 }
+
+// Not a depletion case: it borrows this file's board helpers. The mixed two-stage prepay (MTG_PREPAY_MIXED).
+TEST_CASE("prepay mixed: a stage never taps a source that cannot pay it -- Pirates s30000154 T2, Courtyard + Mountain")
+{
+    EnsureCardsDh();
+    // {Goblin Tomb Raider {R}, Lightning Bolt {R}} on Secluded Courtyard (creature-only colours) listed
+    // ahead of a Mountain. The noncreature stage used to pay Bolt's {R} with the Courtyard's {C} AND the
+    // Mountain (the backtracker's first payment, battlefield order), so the creature stage met an empty
+    // board in both orders and the batch read combined-UNPAYABLE. Mountain -> Bolt, Courtyard -> Raider.
+    for (int order = 0; order < 2; ++order)
+    {
+        GameState s = BoardDh({ LandDh("Secluded Courtyard"), LandDh("Mountain") });
+        Card c1 = CardDatabase::Instance().Lookup("Goblin Tomb Raider")->card; c1.m_number = 1;
+        Card c2 = CardDatabase::Instance().Lookup("Lightning Bolt")->card;     c2.m_number = 2;
+        s.players[0].hand = { c1, c2 };
+        const std::vector<Action> line = order == 0
+            ? std::vector<Action>{ CastDh("Goblin Tomb Raider", 0), CastDh("Lightning Bolt", 1) }
+            : std::vector<Action>{ CastDh("Lightning Bolt", 1), CastDh("Goblin Tomb Raider", 0) };
+        CHECK(TurnSolver::BatchPrepayMainCasts(s, line));
+        CHECK(TappedDh(s) == std::vector<bool>{ true, true });
+    }
+}
