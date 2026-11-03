@@ -140,6 +140,25 @@ Started 2026-11-03.
   tight X loses Alchemist turns); tier-1 sizes (tt 8, fsl 16, m1memo 8, gamelc 24, mana 16 MB); mana-cache
   context fold (MTG_MANA_CACHE_X_TRAITS / _X_PAYCTX); branch not pushed (push would also run Windows CI).
 
+## A/B v3 FINAL (2026-11-03 05:47 UTC; pure binary, gate on unless "ng"; MTG_MAX_GAME_WALL_SEC=3600)
+Held-out regression shapes (seed+7e6), ~31,400 paired games per arm vs X=0:
+| X | moved (worse) | sum wall | p99.9 | max |
+| 0 | - | 8845 s | 24.9 s | 102.5 s |
+| 20 | 2 (2, elementals) | 8715 | 22.3 | 97.4 |
+| 30 | 1 (1, elementals) | 8528 | 21.5 | 81.6 |
+| 50 | 0 | 8511 | 22.1 | 70.8 |
+| 50ng | 0 | 8461 | 20.9 | 72.3 |
+| 100 | 0 | 8406 | 22.3 | 69.6 |
+Tail corpus (45 games; gi821 hits the 3600 s game cap in EVERY arm, sums below exclude it): X=0 1881 s,
+X=20 4549, X=30 2928, X=50 1560, X=50ng 1543, X=100 1668. Quality: X=20 alchemist gi490 6->8; X=30/50/50ng
+kittyv2arch gi1723 4->6; X=100 none.
+**EDF gi214 BLOWS UP under a tight ceiling:** X=0 136 s / 170k units; X=30 1655 s / 188k; X=20 3147 s / 206k. The
+trip changes play (units +21%) into states where UNCHARGED work explodes (pay 28M -> 984M calls, plans 112k ->
+93M, odo 6.7M -> 481M) -- the same land-aura enumeration explosion as gi821, and the ceiling cannot stop it
+because that work never reaches an Overrun check. => the ceiling does NOT bound the real tail; the EDF route
+must reach a budget check first (subagent 2's question). gi821 itself: 2.6-2.9M units in 3600 s at every X.
+Branch base 3640b6bf1 is 44 commits behind origin (25 src files): rebase before any GT accept.
+
 ## PURITY CONFIRMED (2026-11-03 ~05:00 UTC): plan caches are tier 2
 - p2a (default) vs p2b (MTG_PLAN_CACHE_KB=1, every plan store refused), regression tier on the pure binary:
   260/260 jobs identical, 50,760 games, 0 win-turn and **0 unit** differences. Plan caches buy 2.57x wall
