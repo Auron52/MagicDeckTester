@@ -114,19 +114,20 @@ test_edf_goff_verify failure below.
 5. Amend/commit (end with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`), `git push origin wip/mc-dragons`,
    watch CI (Windows) in the background. Report to the coordinator; surface mechanism 3 as a USER decision.
 
-## Successor 2 status (2026-11-03 ~10:00 UTC)
-- ab1 FINAL (`python3 logs/mcdragons/abrep.py`; abrep now ranks a non-win (-1) after every win turn): Dragons 6000
-  0 slower / 1 faster units 1.0011; Dragons2HG 6000 0/4 units 1.0012; movers Niv 0/2 (0.9975), Selesnya 0/1 (0.9814),
-  Bruna 0/1 (1.0096), Pirates 0/1, EDF 1/1 (1.0165), Alchemist 1/0 (1.0044), FiveColour/Galadriel/Stompy digests only.
-- Scenarios 392/392 (the 47 Permission-denied re-run, all PASS). Unit: 5 failures, all LINE_REPAY.
-- 4 tests pinned the drop the re-pay now fixes -> rewritten to assert the re-paid line (dragonstorm_followups x2,
-  niv_payment_holes, mana_oracle viewer check). UNCOMMITTED in the worktree.
-- `test_edf_goff_verify` was a REAL regression: inside ApplyBlinkLoop the finisher's affordability trial passed by
-  re-making the Essence Depleter's {2}{B}; the loop deployed early and lost the 53-blink kill. Fix (uncommitted):
-  `LineRepaySuspendScope` (SpellEffects.h) in ApplyBlinkLoop; payments inside record barriers only.
-- Also (uncommitted, defensive): `PayRollbackLedger::untap_effect` bool -> `untap_effects` count (sizeof unchanged),
-  folded into LineRepayDigest so an untap cannot make an older record match again (ABA). Did NOT change the EDF case.
-- d8 b0 OFF arm: Alchemist s1830246 gi245 T4, EDF s1830002 gi1 T4 (`build/scratch/mcdragons/d8/`).
-- NEXT: build (`r/build_fix2.log`), run unit suite, ab2 = `ab/ab2.json` (new-binary ON arm of every non-Dragons job +
-  2 Dragons identity jobs) via `logs/mcdragons/batch.sh <bin> ab/ab2.json ab2 8`, pair ab1 OFF vs ab2 ON, d8 ON arms,
-  doc section 14 numbers, commit.
+## Successor 2 status (2026-11-03, final)
+- Commits: 65d6c2525 (blink-loop scope + untap count + 4 test rewrites), then the doc/handoff commit on top.
+  Not pushed, GT not accepted.
+- Unit 2435/2435, scenarios 392/392 (`build/scratch/mcdragons/r/{ut_fix2,sc_fix2}.txt`, binary `mtg.fix2`).
+- A/B final = ab1 OFF vs ab2 ON (`bash logs/mcdragons/mkabx.sh`): table in mana-completeness-oracle.md section 14.
+  Slower: Alchemist s1830246 gi245 (7->8), EDF s1830002 gi1 (4->5); both T4/T4 at d8 b0. Units on unchanged-play
+  jobs x1.0003. Alchemist net +1 on 150 games -> the >= 5,000/arm held-out run decides it.
+- NEXT 1: held-out >= 5,000 games/arm for Niv, SelesnyaV2, Bruna, Pirates, EDF, AccomplishedAlchemist (one pooled
+  batch, THREADS <= 8 while the box is loaded, new seed base; Bruna ~2.4 s/game-thread).
+- NEXT 2 (coordinator, 2026-11-03): the 138 need-later APPLY-DROPs. Claim: in every APPLY-DROP line of
+  `build/scratch/mcdragons/gate_new.err` the dropped card is in hand= on the pre-plan board (e.g. seed 30100059 gi59
+  T4: Bolt x2 in hand, Mind Stone's {1} draw paid with the floating {R}). (1) Verify the split across all 138:
+  failing card in hand before the draw vs drawn in between. (2) Narrow LineRepayTry's draw barrier (the library size
+  in LineRepayDigest): allow the re-pay across a draw when the failing cast's card was in hand before the draw; keep
+  refusing when it was drawn. (3) Re-run the gate slice + the A/B with units. Optional: payer preference "spend the
+  floating colour the hand needs least on a generic pip" (a payment-order change, same A/B). Only the drawn-card
+  cases remain a USER question.

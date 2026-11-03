@@ -1437,3 +1437,58 @@ Haven -- so the post-draw Lightning Bolt has no {R}. Paying the {1} with the Hav
 whether that was right depends on what the draw shows, so re-paying it after the draw is clairvoyant (the line repay
 refuses it by its library-size check). The lossless shape is a searched payment variant at a breakpoint opener's
 payment -- the LOST-FOLLOW-UP design of section 2.3 and question 1 of section 5 -- which is the USER's call.
+
+**4. The re-pay is not for a resolving ability's own payment loop (found by the A/B's unit suite).** Inside
+`ApplyBlinkLoop` the finisher deploy is decided by an affordability trial (`probe_pay`) BETWEEN two of the loop's
+payments, so the re-pay's premise -- nothing between the two payments depended on how the first was paid -- fails
+there. EDF seed 1651677 gi 1676 T4 (`test_edf_goff_verify.cpp`): the trial passed by re-making the Essence Depleter's
+{2}{B}, the loop deployed Living Wish -> Depleter early and stopped, opponent at 19 instead of the 53-blink kill.
+`LineRepaySuspendScope` (SpellEffects.h) now wraps the loop: its payments record barriers and re-make nothing. Also:
+`PayRollbackLedger::untap_effects` (the old flag, now a saturating count in the same byte) is folded into the record
+digest, so an untap that puts the mana fields back where an older payment left them cannot make that record match
+again (the payroll already treats an untap effect as making a retroactive re-pay unsound).
+
+**Measurements (2026-11-03).**
+
+Gate slice, Dragons games 100000-109999, `MTG_MANA_ORACLE=2`:
+
+| binary | ENUM-GAP | APPLY-DROP | ORACLE-GAP | total |
+|---|---|---|---|---|
+| base 980616e55 | 247 | 564 | 316 | 1,127 |
+| new (lever on) | 1 | 142 | 28 | 171 |
+
+Residue: APPLY-DROP 138 need-later (mechanism 3) + 4 need-in-plan; ENUM-GAP 1 (likely depth 3); ORACLE-GAP 28 (20 on
+{Mind Stone + another cast}, 8 on {creature + Haven rebuy} with two Havens). Not chased.
+
+A/B, one pooled batch per arm, per-job `MTG_LINE_REPAY` off/on, games paired by (seed, game index); OFF arm and the
+Dragons ON arm from `ab1`, every other ON arm re-run on the final binary (`ab2`; its two Dragons identity jobs are
+byte-identical to `ab1`'s -- the loop scope and the untap count are inert on a deck with neither). Seeds: Dragons
+1810001, Dragons 2HG 1820001 (life 30, two heads), every other suite deck 1830001.
+
+| deck | paired | play changed | slower | faster | net turns | units on/off |
+|---|---|---|---|---|---|---|
+| Dragons | 6,000 | 57 | 0 | 1 | -1 | 1.0011 |
+| Dragons 2HG | 6,000 | 65 | 0 | 4 | -4 | 1.0012 |
+| Niv | 150 | 18 | 0 | 2 | -2 | 0.9975 |
+| SelesnyaV2 | 300 | 14 | 0 | 1 | -1 | 0.9814 |
+| Bruna | 150 | 6 | 0 | 1 | -1 | 1.0096 |
+| Pirates | 300 | 1 | 0 | 1 | -1 | 0.9982 |
+| EDF | 150 | 3 | 1 | 1 | 0 | 1.0153 |
+| AccomplishedAlchemist | 150 | 1 | 1 | 0 | +1 | 1.0044 |
+| FiveColour / Galadriel / Stompy | 60 / 300 / 300 | 2 / 2 / 1 | 0 | 0 | 0 | ~1.000 |
+| every other suite deck (31) | 60-300 | 0 | 0 | 0 | 0 | 1.000-1.002 |
+
+Work: over the 106 job pairs whose play did not move, units on/off = **1.0003** -- the re-pay adds no search
+branching (it runs only on a failed payment, outside the search's own choices). The deck-level ratios above 1% (EDF,
+Bruna) are play moving: EDF's job holding the slower game is x1.07, its neighbour x0.96; the 72 moved-play job pairs
+pool to x1.0012.
+
+Slower games at `--depth 8 --budget-ms 0 --ignore-play-profile`, both arms: AccomplishedAlchemist seed 1830246 gi 245
+(T7 -> T8 at play settings) T4 / T4; EDF seed 1830002 gi 1 (T4 -> T5) T4 / T4. Both recover.
+
+Unit suite 2435/2435 (four tests that pinned the drop now assert the re-paid line: `test_dragonstorm_followups.cpp`
+line-spare x2, `test_niv_payment_holes.cpp` hole 2, `test_mana_oracle.cpp` viewer line check); scenarios 392/392,
+including `dragons_incubator_lathliss_gruul_repay.json` (fails with the lever off).
+
+Owed before adoption: the movers (Niv, SelesnyaV2, Bruna, Pirates, EDF, AccomplishedAlchemist) at >= 5,000 held-out
+games per arm; the need-later narrowing below.
