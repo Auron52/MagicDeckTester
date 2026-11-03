@@ -242,3 +242,26 @@ ShadowbornApostle` (the table was failing since the Stage 1 commit added the dec
 4. Victim-fold fix scoped to the new flag; Natural Order (Stompy) keeps the name fold pending its own A/B.
 5. Lake of the Dead: basic Swamp before Blood Crypt as a sound dominance (disclosed caveat: a card that
    rewards basic-ness or reads graveyard lands would break it; none in this pool).
+
+## USER sign-off (2026-11-03)
+USER, replying to the list of provisional calls: *"Yes, those deferrals and calls sound reasonable for
+now."* Covered (all now APPROVED for now, revisit-able):
+- Culling the Weak at main-phase timing only.
+- Apostle fail-to-find stays offered; Demon order across two activations searched.
+- Better sac-victim fold scoped to the new flag only (Natural Order / Stompy untouched).
+- Ripple: cast-all-revealed-Apostles first with declining in a later budget wave; bottom order = reveal
+  order (with a counter); ritual-chain mana counted by the planner; no instant-speed interleaving inside
+  a chain; viewer reveal prompt ON by default.
+- "Each end step" reduced to our end step for Reaper + Sire (Sire's opponent-end-step discard still wired).
+- Flying / trample / vigilance disclosed inert.
+- Second main enabled for this deck via the Apostle param (to be measured at the matrix).
+- `TutorSearchWidth()` = 32 (A/B still owed); Profane Tutor always cast off suspend; Lake sacrifices a
+  basic Swamp before Blood Crypt.
+
+## Approved deferrals
+- Culling the Weak instant timing (main-phase only) — USER 2026-11-03.
+- Ripple bottom order fixed to reveal order — USER 2026-11-03.
+- No instant-speed interleaving inside a ripple chain — USER 2026-11-03.
+- Profane Tutor "you may cast" collapsed to always-cast — USER 2026-11-03.
+- Reaper / Sire "each end step" reduced to our end step — USER 2026-11-03.
+- Flying / trample / vigilance inert in goldfish — USER 2026-11-03.
