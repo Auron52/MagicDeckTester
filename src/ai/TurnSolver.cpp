@@ -34854,7 +34854,10 @@ static void EmitStealVariants(const GameState& state, const Card& src_card, cons
 //     before the trailing pass, sick), so "cast two, sacrifice those two and four old ones" is a code of
 //     its own. A code whose arrivals the plan does not make is a clean no-op at apply.
 //   * DEMON: one variant per distinct legal library card (the card's own tutor filter: "Demon creature
-//     card") plus the fail-to-find (kSacNamedNoFetch -- legal, and it still shuffles). Unnarrowed.
+//     card") plus the fail-to-find (kSacNamedNoFetch -- legal, and it still shuffles) -- unless the deck
+//     provider's SacNamedPutTargets returns its own ordered list (Shadowborn INT-4, a USER-ruled
+//     restriction to the devotion-token Demon then the count-anthem Demon, and NO activation with neither
+//     left), which is then emitted as is.
 //   * HUMAN PLAY: one entry per Demon (+ fail to find), unpinned bodies -- the six are board clicks at
 //     resolution (`sacrifice`), the Demon is the plan variant (the main-phase menu lists every legal one).
 //   * ORDER ONLY (the eval): the Demon's power, then the fewest strong copies given up. A ROLLOUT LEAF
@@ -35215,9 +35218,26 @@ static void EmitSacNamedVariants(const GameState& state, std::vector<Action>& ac
             const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
             return (d != nullptr && d->card.m_power.has_value()) ? *d->card.m_power : 0;
         };
-        std::stable_sort(targets.begin(), targets.end(),
-                         [&](const std::string& x, const std::string& y) { return power_of(x) > power_of(y); });
-        targets.push_back(kSacNamedNoFetch);
+        // THE PROVIDER'S LIST (Shadowborn INT-4, DecisionProvider::SacNamedPutTargets): an override returns the
+        // ordered, possibly restricted targets and the eval follows its rank (the front is the playout
+        // default) -- an empty restricted list offers no activation at all; no override = the engine's own
+        // list below (every legal Demon by power, then the fail-to-find), byte-identical for every deck
+        // without one. Only names that are legal library targets are kept, so a provider cannot invent one.
+        std::vector<std::string> prov_targets;
+        const bool ranked_by_provider = ResolveProvider(state).SacNamedPutTargets(state, me, sd->params, prov_targets);
+        if (ranked_by_provider)
+        {
+            prov_targets.erase(std::remove_if(prov_targets.begin(), prov_targets.end(), [&](const std::string& nm)
+            { return std::find(targets.begin(), targets.end(), nm) == targets.end(); }), prov_targets.end());
+            if (prov_targets.empty()) { return; }
+            targets.swap(prov_targets);
+        }
+        else
+        {
+            std::stable_sort(targets.begin(), targets.end(),
+                             [&](const std::string& x, const std::string& y) { return power_of(x) > power_of(y); });
+            targets.push_back(kSacNamedNoFetch);
+        }
         // Readiness-count codes.
         struct Code { int s, t, arr; };
         std::vector<Code> codes;
@@ -35256,9 +35276,11 @@ static void EmitSacNamedVariants(const GameState& state, std::vector<Action>& ac
         base.cost           = sd->params.sac_named_activation_cost.value_or(ManaCost{});
         base.is_noncreature = true;
         constexpr int DMG = 100;
-        for (const std::string& tg : targets)
+        for (std::size_t ti = 0; ti < targets.size(); ++ti)
         {
-            const int pw = tg == kSacNamedNoFetch ? 0 : power_of(tg);
+            const std::string& tg = targets[ti];
+            const int pw = ranked_by_provider ? static_cast<int>(targets.size() - ti)
+                         : (tg == kSacNamedNoFetch ? 0 : power_of(tg));
             for (const Code& c : codes)
             {
                 Action a = base;

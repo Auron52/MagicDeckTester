@@ -245,6 +245,19 @@ public:
     TutorToBattlefieldPutOrder(const GameState& /*s*/, int /*controller*/,
                                const CardParams& /*pp*/, int /*max_puts*/) const { return {}; }
 
+    // SacNamedPutTargets -- the target list of a "sacrifice N creatures named ~: put a <subtype> card
+    // onto the battlefield" activation (Shadowborn Apostle, PermAbilityMode::SacNamedTutorPut;
+    // TurnSolver.cpp EmitSacNamedVariants). Returning TRUE means `out` is the ORDERED, possibly
+    // RESTRICTED list of library card names the activation offers, best first: the engine emits exactly
+    // these (no fail-to-find; names that are not legal library targets are dropped) and sets the playout
+    // eval by list rank, so the front is the leaf default -- and an EMPTY list means the activation is not
+    // offered at all. FALSE (the default) = the engine's own list: every legal library target by power,
+    // then the fail-to-find -- so every deck without an override is byte-identical. The unpinned
+    // resolution (PerformTutorToBattlefield's TutorCandidates fill) must agree: a provider overriding this
+    // also returns the same list from TutorCandidates for the same params.
+    virtual bool SacNamedPutTargets(const GameState& /*s*/, int /*controller*/, const CardParams& /*pp*/,
+                                    std::vector<std::string>& /*out*/) const { return false; }
+
     // PutTargetPolicy / PutTargetOk -- put-tutor fetch NARROWING (Birthing Pod / Chord of
     // Calling), the one place the core invariant allows a narrowing to live (the EldraziFlicker
     // precedent, and its measured lesson applies: narrow only WITH a policy that keeps the

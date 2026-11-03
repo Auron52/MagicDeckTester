@@ -459,7 +459,8 @@ TEST_CASE("Ripple + INT-2: Apostles a chain will cast count toward the six")
     s.battlefield.push_back(Perm3(kStone, 90));
     for (int k = 0; k < 3; ++k) { s.battlefield.push_back(Perm3(kApostle3, 60 + k)); }
     s.players[0].hand.push_back(Card3(kApostle3, 100));
-    Lib(s, { kApostle3, "Swamp", "Swamp", "Swamp", kApostle3, "Swamp", "Swamp", "Swamp", "Reaper from the Abyss" });
+    // Abhorrent Overlord: INT-4 offers the activation only for the USER's two Demons (Overlord, Jetmir).
+    Lib(s, { kApostle3, "Swamp", "Swamp", "Swamp", kApostle3, "Swamp", "Swamp", "Swamp", "Abhorrent Overlord" });
     SwampFill(s, 12);
     auto activations = [](const GameState& g)
     {

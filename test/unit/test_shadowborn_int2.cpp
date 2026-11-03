@@ -71,7 +71,16 @@ Permanent SpawnSb2(int number, int pw, int tg)
     return p;
 }
 
-const ShadowbornProvider& ProvSb2() { static const ShadowbornProvider p; return p; }
+// INT-4 restricted the deck's Demon list to Abhorrent Overlord then Jetmir (USER 2026-11-03). These INT-2
+// tests exercise the activation's MECHANICS for every Demon and the fail-to-find, so they run on the
+// deck provider with the engine's generic Demon list (no SacNamedPutTargets restriction); the USER's
+// list itself is pinned in test_shadowborn_int4.cpp.
+struct ShadowbornGenericDemonsSb2 : ShadowbornProvider
+{
+    bool SacNamedPutTargets(const GameState&, int, const CardParams&, std::vector<std::string>&) const override
+    { return false; }
+};
+const ShadowbornProvider& ProvSb2() { static const ShadowbornGenericDemonsSb2 p; return p; }
 
 GameState BaseSb2()
 {

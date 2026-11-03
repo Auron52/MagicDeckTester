@@ -3936,6 +3936,67 @@ public:
     // -- and when the Stone needs a ritual's mana first, the payable-order fallback (MTG_PAYABLE_ORDER)
     // re-sequences the plan. Every other card keeps the generic rank.
     int CastOrderRank(const GameState& s, const CardDefinition& def) const override;
+
+    // ---- INT-4: THE USER'S TUTOR AND DEMON RULES (USER 2026-11-03) -------------------------------------
+    // AUTHORITY. The USER: "I recommend we make a heuristic for demon search and for tutoring. Demon search
+    // is easy because you would go Abhorrent Overlord and Jetmir only, preferably in that order";
+    // "Tutoring is also straightforward. You need 1 Thrumming stone, 6 mana and a shadowborn apostle. We
+    // should get things in that order for the most part"; "We need to actually prune a bunch. Lake and
+    // Culling are bad in multiples, whereas ritual is good"; and, on the late-wave alternative, "I would
+    // remove the others outright". So these are RESTRICTIONS of the candidate lists (a USER override of
+    // the completeness rule for these two lists only -- not a budget wave): a name left out is not
+    // offered at any budget, --budget-ms 0 included. Everything that IS offered stays searched (the
+    // engine branches every returned candidate; the order only sets the front / playout default).
+    // Roles are read off CARD DATA, never names. Human play under MTG_UNPRUNED (the viewer) and the
+    // UnprunedGate::Tutor audit arm get the generic lists.
+    //
+    // DEMON (SacNamedPutTargets; also the unpinned resolution through TutorCandidates for the same params):
+    //   1. the devotion-token Demon (etb_tokens_per_devotion_color: Abhorrent Overlord),
+    //   2. the count-anthem Demon (creature_count_anthem_tiers: Jetmir).
+    //   Nothing else: no other Demon, no fail-to-find, and NO FALLBACK -- with neither in the library the
+    //   activation is not offered at all. The USER: "sacrificing none may just be better or the same in
+    //   goldfishing", "Because sacrificing 6 to get a 6/6 doesn't actually add power and their abilities
+    //   aren't useful" (goldfish: six 1/1 Apostles already make 6 power and can attack now while the Demon
+    //   arrives sick; Reaper from the Abyss's end-step destroy can only hit our own creatures, Sire of
+    //   Insanity discards our hand).
+    //   The {B} per activation (USER: "make sure you have enough black this or next turn if you want both")
+    //   is the search's call -- no rule here.
+    //
+    // TUTOR (TutorCandidates, tutor_to_hand: Demonic Tutor, Diabolic Intent, Profane Tutor -- the cast,
+    // the ripple free cast and Profane Tutor's upkeep pin all read this one list). EARLY SET, in order:
+    //   1. a ripple granter (grants_ripple: Thrumming Stone) -- only when none is on our battlefield or in
+    //      hand (a second is legend-rule dead);
+    //   2. the MANA TIER, only while the mana reachable this or next turn (ShadowbornReachableMana) is
+    //      short of kManaGoal = 6 (the Stone's 5 + an Apostle's 1):
+    //        a. a land that enters by sacrificing a land of a subtype (etb_replace_sacrifice_land_subtype:
+    //           Lake of the Dead) -- only when NO copy of it is in hand or on our battlefield AND we control
+    //           >= 2 lands of that subtype (one fed to its entry, one to its sacrifice-for-mana);
+    //        b. a ritual with a creature-sacrifice additional cost (ritual_floating_mana +
+    //           sac_additional_creature: Culling the Weak) -- only when NO copy is in hand AND we have spare
+    //           Apostles (copies on our battlefield + in hand beyond the next activation's sac_named_count);
+    //        c. a plain ritual (ritual_floating_mana, no additional cost: Dark Ritual) -- ALWAYS (good in
+    //           multiples);
+    //        d. a suspended mana artifact (sac_for_mana_amount on a non-land suspend card: Lotus Bloom) --
+    //           last (PROVISIONAL, surfaced to the USER);
+    //      precedence a > b > c > d when several apply;
+    //   3. the sac-named creature (sac_named_count: Shadowborn Apostle).
+    //   Everything else (Demons, other tutors, basic lands, Blood Crypt, a second Stone, a Lake / Culling
+    //   already held, the mana tier once 6 is reachable) is not offered. FALLBACK (PROVISIONAL): an empty
+    //   early set -> the generic list (library order), so a tutor never whiffs for want of a rule.
+    std::vector<std::string> TutorCandidates(const GameState& s, int controller,
+                                             const CardParams& pp) const override;
+    bool SacNamedPutTargets(const GameState& s, int controller, const CardParams& pp,
+                            std::vector<std::string>& out) const override;
+    static constexpr int kManaGoal = 6;
+    // "Reachable this or next turn" -- the most mana one of our next two turns can make, read off the
+    // board + hand (documented approximation, no search): every land we control (1 each; they all untap
+    // next turn) + one land drop per remaining turn of the two (lands_played_this_turn == 0 ? 2 : 1),
+    // capped by the mana-making lands in hand (a land that enters by sacrificing another counts 0) +
+    // a Lake crack's surplus (sac_for_mana_amount - 1) when a Lake is out with another land of its victim
+    // subtype + every non-land sacrifice-for-mana permanent on the battlefield (Lotus Bloom, one-shot) +
+    // a suspended one arriving by next upkeep + each ritual in hand's NET gain (floating - mana value;
+    // a creature-sacrifice ritual only when a creature is on the battlefield or in hand).
+    static int ShadowbornReachableMana(const GameState& s, int controller);
 };
 
 class PiratesProvider : public DeckProvider

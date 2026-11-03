@@ -58106,3 +58106,168 @@ int ShadowbornProvider::CastOrderRank(const GameState& s, const CardDefinition& 
     if (def.params.grants_ripple > 0) { return 1; }   // the granter first (PROVISIONAL deck order)
     return DeckProvider::CastOrderRank(s, def);
 }
+
+// ---- ShadowbornProvider: the USER's tutor and Demon rules (Shadowborn INT-4; the rule table and its
+// authority are in the declaration) ----------------------------------------------------------------------
+int ShadowbornProvider::ShadowbornReachableMana(const GameState& s, int controller)
+{
+    const Player& ap = s.players[static_cast<std::size_t>(controller)];
+    int lands = 0, perm_mana = 0, lake_surplus = 0;
+    bool creature = false;
+    std::vector<const CardDefinition*> lakes;
+    std::vector<const Card*> bf_lands;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        const Card& card = d ? d->card : p.card;
+        if (card.IsCreature() || p.is_animated) { creature = true; }
+        if (card.IsLand())
+        {
+            ++lands;
+            bf_lands.push_back(&card);
+            if (d != nullptr && !d->params.sac_for_mana_victim_land_subtype.empty() && d->params.sac_for_mana_amount > 1)
+            { lakes.push_back(d); }
+        }
+        else if (d != nullptr && d->params.sac_for_mana_amount > 0) { perm_mana += d->params.sac_for_mana_amount; }
+    }
+    for (const CardDefinition* lk : lakes)
+    {
+        int victims = 0;
+        for (const Card* c : bf_lands)
+        { if (c->m_name != lk->card.m_name && CardHasSubtype(*c, lk->params.sac_for_mana_victim_land_subtype)) { ++victims; } }
+        if (victims > 0) { lake_surplus = std::max(lake_surplus, lk->params.sac_for_mana_amount - 1); }
+    }
+    int hand_lands = 0, rituals = 0;
+    for (const Card& c : ap.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr) { continue; }
+        if (d->card.IsCreature()) { creature = true; }
+        if (d->card.IsLand())
+        {
+            if (d->params.etb_replace_sacrifice_land_subtype.empty()) { ++hand_lands; }
+            continue;
+        }
+    }
+    for (const Card& c : ap.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr || d->params.ritual_floating_mana <= 0) { continue; }
+        if (d->params.sac_additional_creature && !creature) { continue; }
+        rituals += std::max(0, d->params.ritual_floating_mana - d->card.m_mana_cost.ManaValue());
+    }
+    for (const SuspendedCard& sc : ap.suspended_cards)
+    {
+        if (sc.arrive_turn < 0 || sc.arrive_turn > s.turn_number + 1) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(sc.card);
+        if (d != nullptr && !d->card.IsLand() && d->params.sac_for_mana_amount > 0) { perm_mana += d->params.sac_for_mana_amount; }
+    }
+    const int drops = ap.lands_played_this_turn == 0 ? 2 : 1;
+    return lands + std::min(hand_lands, drops) + lake_surplus + perm_mana + rituals;
+}
+
+bool ShadowbornProvider::SacNamedPutTargets(const GameState& s, int controller, const CardParams& pp,
+                                            std::vector<std::string>& out) const
+{
+    out.clear();
+    if (DecisionUnpruned(UnprunedGate::Tutor)) { return false; }   // the generic list (viewer / audit arm)
+    std::vector<std::string> anthem;
+    for (const Card& lc : s.players[static_cast<std::size_t>(controller)].library)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(lc);
+        if (d == nullptr || !d->card.IsCreature()) { continue; }
+        if (!pp.tutor_required_subtype.empty() && !CardHasSubtype(d->card, pp.tutor_required_subtype)) { continue; }
+        const std::string nm = lc.m_name.str();
+        std::vector<std::string>* bucket = !d->params.etb_tokens_per_devotion_color.empty() ? &out
+                                         : !d->params.creature_count_anthem_tiers.empty()    ? &anthem : nullptr;
+        if (bucket != nullptr && std::find(bucket->begin(), bucket->end(), nm) == bucket->end()) { bucket->push_back(nm); }
+    }
+    out.insert(out.end(), anthem.begin(), anthem.end());
+    return true;   // empty -> the activation is not offered (USER 2026-11-03: no fallback)
+}
+
+std::vector<std::string>
+ShadowbornProvider::TutorCandidates(const GameState& s, int controller, const CardParams& pp) const
+{
+    std::vector<std::string> all = DeckProvider::TutorCandidates(s, controller, pp);
+    if (DecisionUnpruned(UnprunedGate::Tutor)) { return all; }
+    // The Apostle's Demon search (the unpinned resolution fill of PerformTutorToBattlefield): the same list
+    // SacNamedPutTargets gives the enumerator, so the two agree.
+    if (pp.sac_named_count > 0)
+    {
+        std::vector<std::string> dm;
+        return SacNamedPutTargets(s, controller, pp, dm) ? dm : all;
+    }
+    if (!pp.tutor_to_hand) { return all; }
+    const Player& ap = s.players[static_cast<std::size_t>(controller)];
+    std::vector<std::string> uniq;
+    for (const std::string& n : all) { if (std::find(uniq.begin(), uniq.end(), n) == uniq.end()) { uniq.push_back(n); } }
+    auto def_of = [](const std::string& n) { return CardDatabase::Instance().Lookup(n); };
+    auto held = [&](const std::string& nm, bool count_bf) -> bool
+    {
+        for (const Card& c : ap.hand) { if (c.m_name == nm) { return true; } }
+        if (count_bf)
+        {
+            for (const Permanent& p : s.battlefield)
+            { if (p.controller_index == controller && p.card.m_name == nm) { return true; } }
+        }
+        return false;
+    };
+    // Board / hand facts the rules read.
+    bool granter_held = false;
+    int sac_named_n = 0, apostles = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        if (d->params.grants_ripple > 0) { granter_held = true; }
+        if (d->params.sac_named_count > 0 && (d->card.IsCreature() || p.is_animated))
+        { ++apostles; sac_named_n = std::max(sac_named_n, d->params.sac_named_count); }
+    }
+    for (const Card& c : ap.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr) { continue; }
+        if (d->params.grants_ripple > 0) { granter_held = true; }
+        if (d->params.sac_named_count > 0 && d->card.IsCreature())
+        { ++apostles; sac_named_n = std::max(sac_named_n, d->params.sac_named_count); }
+    }
+    const bool spare_apostles = sac_named_n > 0 && apostles > sac_named_n;
+    const bool short_of_mana = ShadowbornReachableMana(s, controller) < kManaGoal;
+    std::vector<std::string> granter, lake, culling, ritual, bloom, apostle;
+    for (const std::string& nm : uniq)
+    {
+        const CardDefinition* d = def_of(nm);
+        if (d == nullptr) { continue; }
+        const CardParams& p = d->params;
+        if (p.grants_ripple > 0) { if (!granter_held) { granter.push_back(nm); } continue; }
+        if (p.sac_named_count > 0 && d->card.IsCreature()) { apostle.push_back(nm); continue; }
+        if (!short_of_mana) { continue; }
+        if (d->card.IsLand() && !p.etb_replace_sacrifice_land_subtype.empty())
+        {
+            int subtype_lands = 0;
+            for (const Permanent& q : s.battlefield)
+            {
+                if (q.controller_index != controller) { continue; }
+                const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+                const Card& qc = qd ? qd->card : q.card;
+                if (qc.IsLand() && CardHasSubtype(qc, p.etb_replace_sacrifice_land_subtype)) { ++subtype_lands; }
+            }
+            if (!held(nm, /*count_bf=*/true) && subtype_lands >= 2) { lake.push_back(nm); }
+            continue;
+        }
+        if (!d->card.IsLand() && p.ritual_floating_mana > 0)
+        {
+            if (p.sac_additional_creature) { if (!held(nm, /*count_bf=*/false) && spare_apostles) { culling.push_back(nm); } }
+            else { ritual.push_back(nm); }
+            continue;
+        }
+        if (!d->card.IsLand() && p.sac_for_mana_amount > 0 && p.suspend_time_counters > 0) { bloom.push_back(nm); }
+    }
+    std::vector<std::string> early;
+    for (auto* v : { &granter, &lake, &culling, &ritual, &bloom, &apostle })
+    { early.insert(early.end(), v->begin(), v->end()); }
+    return early.empty() ? all : early;   // empty -> the generic list (the PROVISIONAL fallback)
+}

@@ -226,6 +226,9 @@ TEST_CASE("Profane Tutor off suspend: the upkeep pin is a rank into the resoluti
         s.players[0].library.push_back(FullCardSb("Dark Ritual", 90));
         s.players[0].library.push_back(FullCardSb("Demonic Tutor", 91));
         s.players[0].library.push_back(FullCardSb("Culling the Weak", 92));
+        // INT-4 restricted the deck's tutor list (USER 2026-11-03): a Stone + an Apostle give it >= 2 names.
+        s.players[0].library.push_back(FullCardSb("Thrumming Stone", 94));
+        s.players[0].library.push_back(FullCardSb("Shadowborn Apostle", 95));
         // One packed ordinal: rank `pin` for the first search-bearing arrival (-1 = unpinned = front).
         s.scripted_upkeep_land_search = pin;
         const std::vector<std::string> cands =
