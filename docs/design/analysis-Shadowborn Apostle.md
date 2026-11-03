@@ -350,3 +350,122 @@ chain's expected Apostles. Free ripple casts of Intent / Culling must still pay 
    `endstep_destroy_excluded_subtype`, `endstep_each_player_discards_hand`, `etb_tokens_per_devotion_color`,
    `creature_count_anthem_tiers/_power/_keywords`.
 3. Demon-trigger default order (branch order only): Reaper -> opponent creatures first; Overlord -> tokens first.
+
+## INT-3 done (2026-11-03)
+Commits on `shadowborn-analysis` (not pushed): `465851b04` (engine, card, tests, viewer) + the ledger commit adding this section.
+
+**Card (cards.json; cost + oracle verbatim from Scryfall, bracket note appended):** Thrumming Stone (`{5}`,
+Legendary Artifact, `grants_ripple 4`). **New params:** `grants_ripple` (int; Thrumming Stone) and `ripple` (int;
+innate ripple, no card yet). `ShadowbornProvider` routing OR gains `grants_ripple > 0`. **New GameState:**
+`deck_has_ripple` (deck stamp) + `ripple_script` (the chain script); 1232 -> 1264 bytes, classified in Dominance.h
+(not folded: a chain finishes inside the cast that stamped it). **New Action fields:** `ripple_pinned / _reveals /
+_take_cap / _mask / _decline / _free_tutor / _free_victim / _granter_req` (+ CastRiders, both plan signatures `#RP`,
+ActionFoldSig, the breakpoint record). **New TriggerKind:** `Ripple`.
+
+**Engine (one set of decisions, three sites, same order):**
+- Executor: `EffectHandler::PushCastTriggers` pushes one `Triggered{Ripple}` per instance (`RippleInstanceNs`:
+  innate + one per granter; the legend rule leaves at most one Stone) above EVERY cast -- hand casts and every
+  `PushFreeCast`, so ripple-cast spells ripple again. `ResolveRippleTrigger` casts all of a reveal's takes FIRST
+  (`PushFreeCast` with deferred triggers), then pushes their triggers: stack `[.., S2, S3, R2, R3]`, so one reveal
+  casting two tutors reveals both chains before either shuffles (test: a 4th Diabolic Intent is found only in that
+  order). `PushFreeCast` now PAYS a readiness-route "sacrifice a creature" additional cost (pinned victim), and a
+  free tutor's searched pick rides its stack entry (`RippleTutorRankPrefix`, decoded in `PerformTutor` as the
+  scripted-index path).
+- Rollout + viewer (`apply_one`): the inline block stamps the hard cast's script and resolves each instance
+  through `ripple_trigger` -- cast the takes (PushFreeCast's checks and bookkeeping, same order), resolve their
+  chains top of stack first, then resolve the spells through `apply_one` with one-shots (`ripple_precast`: free,
+  already counted / paid / triggered; `ripple_cast_number`: THAT copy, not a same-name hand copy; not recorded).
+- Upkeep: `CastOffSuspend` now ripples (`ResolveSuspendRipple`, inline, before the draw): Lotus Bloom arrivals
+  (reveal y/n is a real choice: rotation before the draw) and Profane Tutor arrivals (F2: take/decline of a
+  revealed twin). Pinned on the packed upkeep stream (`scripted_upkeep_land_search`): per ripple-live arrival a
+  DECISION ordinal then a FREE-SEARCH ordinal (discarded when unused, so the fan stays aligned); fan (3) in
+  `AppendSubdecisionAxes` extended, the fan block opens on a ripple deck for any arrival.
+- Decisions (SpellEffects.h "RIPPLE", proofs in the comment): reveal = F1 per-NAME budget for order-inert names
+  (`RippleChainOrderInert`: Apostle, Dark Ritual, Culling, Stone, Demons; adjacent copies share it, so n copies cost
+  B+1 variants, not (B+1)^n -- continue copies fold), F2 "always reveal" for a trigger directly above a
+  searching/shuffling spell under the stable shuffle (equal up to which identical copy the search takes), a
+  per-trigger don't-reveal bit otherwise. Take: Apostle-class (`ShadowbornProvider::FreeCastTakeDominated`) cast;
+  declines (`take_cap`) only in the LATE wave; Ritual / Stone / Intent / Profane takes are decline bits; free tutor
+  picks and free sacrifice victims are rank pins. Playout policy (beyond the horizon only): reveal iff a castable
+  same-name card is in the top N, take all, the front pick.
+- Planner (`EmitRipplePins`, CollectActions after the victim pass, decision space only): menus sized by a
+  library-copy dry run (`RippleChainDryRun`). A Stone only in HAND marks every revealing variant
+  `ripple_granter_req` (SubsetHasMissingTrickTarget rejects it without a granter cast in the plan); the
+  "no ripple" variant carries no requirement. Dark Ritual variants credit the chain's free Rituals on
+  `ritual_float` (approved ahead-of-time credit). `EmitSacNamedVariants` counts the chain's free Apostles as
+  arrivals, so the activation is in the SAME plan as the chain (INT-2's gap closed); the site-9 crossing-a-multiple
+  -of-six breakpoint still covers the rest (observed: gi15 T5, an 18-reveal chain casting 17 Apostles, two
+  activations -- Sire main 1, Overlord main 2 -- win T6).
+- LATE WAVE (`RippleLateWaveAdmitted`): a decision whose ROOT budget is unlimited or >= `MTG_RIPPLE_LATE_WAVE_MS`
+  (default 100 virtual ms) also gets the Apostle declines and a speculative sub-pin fan for chains the dry run
+  cannot see (the plan's earlier casts move the library). Static per decision, so the epoch-scoped memos agree.
+- Cast order: `ShadowbornProvider::CastOrderRank` puts the granter first (rank 1); the payable-order fallback
+  re-sequences when the Stone needs a ritual first.
+- Viewer: `dig` "(ripple reveal)" (spell tile; ON by default, no toggle) and `free_cast` "(ripple)" re-asked after
+  each cast ("Cast no more"), asked in the shared `RippleRevealDecision` / `RippleResolveTrigger` (all three sites).
+  `WriteDigDecisionJson` note, `digPanelHtml` + `freeCastPanelHtml` branches, DECISIONS.md rows, audit MANIFEST
+  `grants_ripple -> dig`; static audit clean.
+
+**Tests:** `test/unit/test_shadowborn_int3.cpp` (10 cases): card data + provider hooks + instances (no Stone /
+lands); an Apostle chain casting free Apostles that ripple again, executor == rollout zones, bottom in reveal order,
+budget 1 and take-cap 0; Dark Ritual ripple (6 black floating, decline -> 3 and bottomed); no-match reveal bottoms
+in reveal order, budget 0 moves nothing, fewer than four cards; Stone legend rule (second Stone ripples, one stays);
+free Intent pays its sacrifice + pinned search, uncastable without a creature (bottomed); two tutors from one
+reveal (stack order: 4 casts); Lotus Bloom upkeep reveal / don't, Profane Tutor taking / declining its twin; pin
+emission (budgets 3..0 on the first copy, continue on the other, granter requirement with the Stone in hand);
+the chain's Apostles reach the six (activation emitted; none without the Stone). Unit 2453/2453, scenarios 398/398.
+
+**Smoke** (`test/regression.sh --smoke`, not accepted): 161 passed, 4 failed -- Merfolk d0/d3/d5 + merfolk2hg d3,
+the pre-existing drift (merfolk d3 digest 16290806e85e1728, as INT-1/INT-2). Every other case byte-identical,
+including Dragonstorm (Lotus Bloom off suspend: ripple inert without a granter).
+
+**Sanity** (50 games, d3 b10, seed 1001, no profile): **avg 5.58** (INT-2: 6.34). **57 activations in 36/50
+games** (INT-2: 2). 600 real ripple reveals, 527 free casts. Read game: gi15 T5 one Apostle -> 18 reveals, 17
+free Apostles (the chain wraps the library), activation -> Sire main 1, activation -> Overlord (9 Harpies) main 2,
+win T6. One game > 30 s at d3 (gi38 2.0M units).
+
+**Branching cost** (per-game work units, MTG_SLOW_GAME_MS=1; "NoStone" = the list with the four Stones as Swamps,
+same binary, so ripple is the only difference -- not paired, the shuffle differs):
+
+| cell | list | avg | mean units/game | median | p90 | mean s/game |
+|---|---|---|---|---|---|---|
+| d3 b10 x50 | shipped | 5.58 | 363,261 | 226,882 | 1,007,436 | 8.3 |
+| d3 b10 x50 | NoStone | 6.44 | 128,160 | 50,837 | 324,246 | 2.6 |
+| d5 b20 x20 | shipped | 5.60 | 360,241 | 174,526 | 1,061,894 | 5.9 |
+| d5 b20 x20 | NoStone | 6.40 | 150,765 | 50,831 | 484,926 | 2.3 |
+
+So ripple costs ~2.4-2.8x units per game. The plan set does NOT explode with identical Apostles: a T4 dump with two
+Apostles + a Diabolic Intent in hand and the Stone out enumerates 26 main plans (5 budget variants of the two-Apostle
+cast, the rest the existing Intent target/victim fan). The cost is the bigger turns themselves (MTG_RIPPLE_STATS d3:
+45.4M search triggers, 35.0M reveals, 33.6M free casts over 50 games). Whether this fits the 3x-Hinata suite rule is
+Stage 4-bis's measurement.
+
+**Census (MTG_RIPPLE_STATS=1):** unpinned answers INSIDE the window: d3 x50 = 33,784 (of 45.4M triggers), d5 x20 =
+30,490 -- ALL free-tutor picks + free victims of a Diabolic Intent revealed by a chain the enumeration-time dry run
+did not foresee (the plan's earlier casts moved the library). They take the front at b10/b20; the late wave fans
+them (findable at unlimited / large budget). Every other site 0. Real-game bottom tripwire: d3 1,888 ripple-bottomed
+cards, **619 read (drawn or re-revealed) before the next shuffle**; d5 621 / 207.
+
+**New provisional calls (surfaced, USER sign-off owed):**
+1. **Bottom order binds more than expected.** The tripwire the USER asked for: ~1/3 of ripple-bottomed cards are
+   read again before a shuffle (long Apostle chains wrap the library; turns without an activation draw into the
+   block). The approved deferral (reveal order) stands; the name-folded permutation axis or a lazy unordered segment
+   is the fix if the USER wants it.
+2. Granter cast FIRST in this deck's cast order (`ShadowbornProvider::CastOrderRank` rank 1) -- a cast-order call,
+   USER-owned. Reasoning: every ripple is optional, so Stone-first is weakly dominant given payability.
+3. Late-wave threshold `MTG_RIPPLE_LATE_WAVE_MS = 100` (a budget-SIZE admission, static per decision): Apostle
+   declines and the speculative free-tutor/victim fan. Measurable alternative: the TURN-staged wave the USER prefers.
+4. The in-window residual above (free Intent picks/victims on unforeseen chains take the front below the late wave).
+   Alternative: fan them at every budget (~x30 on each Intent cast with a Stone out).
+5. F1's order-inert list is a blacklist of library-touching params (a new library-touching param must be added).
+6. Upkeep pins ride the existing ONE-HOT packed-stream fan (each ordinal varies alone), capped at 5 ordinals; a
+   free card cast off a suspend reveal answers its own ripple at rank 0 without an ordinal (unreachable with two
+   Profane Tutors).
+7. Rollout/executor timing differences that are inert for the pool, disclosed: on-cast triggers of a ripple-cast
+   spell fire at its cast in both worlds (match); a spell with both cascade and ripple would order them differently
+   (none exists); a precast spell whose target became illegal before it resolves is not modelled as fizzling (no
+   targeted spell in the deck).
+8. **Unbudgeted cost is high.** A 4-game `--depth 2 --budget-ms 0` probe (seed 1001): one game finished in 265 s
+   (3.81M units, win T5); the other three were still running after ~16 min and the probe (an agent experiment) was
+   stopped. The late wave is fully open there (Apostle declines + the speculative Intent fan). This bears on the
+   suite's unbudgeted backstop rows at Stage 4-bis (a degenerate row fails the tier) -- to be sized there, not here.
