@@ -23,6 +23,7 @@
 #include <functional>
 #include <initializer_list>   // ManaCostDigest packs byte fields
 #include <optional>    // TapForCostShared's MTG_RAMP_FEED_ROUTE scope
+#include <unordered_map>   // LineRepayTry's memo of successful re-pays
 #include <unordered_set>   // LineRepayTry's memo of failed re-pays
 #include <vector>
 
@@ -7965,7 +7966,8 @@ namespace
 {
 std::atomic<long long> g_lr_record{0}, g_lr_try{0}, g_lr_amount{0}, g_lr_joint{0}, g_lr_fired{0}, g_lr_fired_d2{0},
                        g_lr_fail{0}, g_lr_search[2] = {}, g_lr_mp_calls{0}, g_lr_mp_opts{0}, g_lr_inner_joint{0},
-                       g_lr_ns{0}, g_lr_memo_hit{0}, g_lr_memo_bad{0};
+                       g_lr_ns{0}, g_lr_memo_hit{0}, g_lr_memo_bad{0}, g_lr_ok_hit{0},
+                       g_lr_ok_bad{0}, g_lr_ok_stale{0}, g_lr_max_short{0}, g_lr_max_bad{0};
 bool LineRepayStatsOn() { static const bool on = EnvOn("MTG_LINE_REPAY_STATS"); return on; }
 struct LineRepayStats
 {
@@ -7974,10 +7976,11 @@ struct LineRepayStats
         if (!LineRepayStatsOn()) { return; }
         std::fprintf(stderr, "=== LINE REPAY: recorded=%lld tried=%lld amount_short=%lld joint_short=%lld fired=%lld "
                      "(depth2=%lld) commit_failed=%lld searched d1=%lld d2=%lld minimal_payments=%lld (options %lld) "
-                     "inner_joint_short=%lld memo_hit=%lld memo_mismatch=%lld ms=%.0f ===\n", g_lr_record.load(), g_lr_try.load(), g_lr_amount.load(),
+                     "inner_joint_short=%lld memo_hit=%lld memo_mismatch=%lld ok_hit=%lld ok_mismatch=%lld ok_stale=%lld max_short=%lld max_mismatch=%lld ms=%.0f ===\n", g_lr_record.load(), g_lr_try.load(), g_lr_amount.load(),
                      g_lr_joint.load(), g_lr_fired.load(), g_lr_fired_d2.load(), g_lr_fail.load(), g_lr_search[0].load(),
                      g_lr_search[1].load(), g_lr_mp_calls.load(), g_lr_mp_opts.load(), g_lr_inner_joint.load(),
-                     g_lr_memo_hit.load(), g_lr_memo_bad.load(),
+                     g_lr_memo_hit.load(), g_lr_memo_bad.load(), g_lr_ok_hit.load(), g_lr_ok_bad.load(), g_lr_ok_stale.load(),
+                     g_lr_max_short.load(), g_lr_max_bad.load(),
                      static_cast<double>(g_lr_ns.load()) / 1e6);
     }
 } g_lr_stats;
@@ -8258,6 +8261,18 @@ struct LineRepayChain
     }
 };
 
+// TEMPORARY A/B lever (removed before landing): the per-option joint-bill prune at depth 2. DEFAULT OFF: with it on,
+// Bruna seed 1830069 gi68 lost line re-pays the unpruned search makes (fired 220 -> 60 on that game, the game's
+// digest moved), so the condition is not necessary there and the prune is lossy. =1 restores it for attribution.
+bool LineRepayInnerJointOn() { static const bool on = EnvOn("MTG_LR_INNER_JOINT"); return on; }
+// TEMPORARY A/B lever (removed before landing): the re-made payment's options without the floating pool's set-aside
+// enumeration (MinimalPayments' whole_float, the refine's fast form). A perf probe: EDF's ~0.4-1.5 s per table.
+bool LineRepayWholeFloatOn() { static const bool on = EnvOn("MTG_LR_WHOLE_FLOAT"); return on; }
+// TEMPORARY A/B lever (removed before landing): the freest-board precheck in LineRepayTry. DEFAULT OFF: it is NOT a
+// necessary condition (the real payer is not monotone in free sources: VERIFY counted 83 searches that paid where it
+// said no, over the 1,600-game identity slice).
+bool LineRepayMaxPrecheckOn() { static const bool on = EnvOn("MTG_LR_MAX_PRECHECK"); return on; }
+
 // Depth-first over the chain's options, oldest payment first; `b` has chain[0..k] undone. On success `picked[j]` is
 // the option chain[j] is re-made with. `try_now` pays the failing bill on the fully re-made board.
 bool LineRepaySearch(const LineRepayChain& ch, int k, const GameState& b, std::vector<manaoracle::PayOption>& picked,
@@ -8265,8 +8280,8 @@ bool LineRepaySearch(const LineRepayChain& ch, int k, const GameState& b, std::v
 {
     const LineRepayRec& r = *ch.rec[k];
     const std::vector<manaoracle::PayOption> opts =
-        manaoracle::MinimalPayments(b, r.cost, r.for_creature, nullptr, r.creature_ability, /*whole_float=*/false,
-                                    r.has_spell ? &r.spell : nullptr);
+        manaoracle::MinimalPayments(b, r.cost, r.for_creature, nullptr, r.creature_ability,
+                                    /*whole_float=*/LineRepayWholeFloatOn(), r.has_spell ? &r.spell : nullptr);
     if (LineRepayStatsOn())
     {
         g_lr_mp_calls.fetch_add(1, std::memory_order_relaxed);
@@ -8280,7 +8295,8 @@ bool LineRepaySearch(const LineRepayChain& ch, int k, const GameState& b, std::v
         ch.Release(nb, k);
         // The newer payments' joint bill on the board this option leaves: when it does not pay, no re-making of
         // them can (the same necessary condition LineRepayTry checks on the oldest board, here per option).
-        if (k > 0 && !ch.JointPays(nb, k)) { g_lr_inner_joint.fetch_add(1, std::memory_order_relaxed); continue; }
+        if (k > 0 && LineRepayInnerJointOn() && !ch.JointPays(nb, k))
+        { g_lr_inner_joint.fetch_add(1, std::memory_order_relaxed); continue; }
         picked[static_cast<std::size_t>(k)] = o;
         if (k == 0 ? try_now(nb) : LineRepaySearch(ch, k - 1, nb, picked, try_now)) { return true; }
     }
@@ -8296,15 +8312,29 @@ bool LineRepaySearch(const LineRepayChain& ch, int k, const GameState& b, std::v
 // payment context (every thread-local the payer reads, and the per-job lever arms). So a key already seen to fail
 // fails again, and is answered without the search. Scoped to one decision (TurnSolver::DecisionEpoch, the
 // enumeration memo's scope: entries never outlive the decision, so a game's work cannot depend on which games
-// shared its thread); a success is never memoised (it is made for real, from the trial's options). Verify gate:
-// MTG_LINE_REPAY_MEMO_VERIFY=1 re-runs every hit and counts a disagreement (`memo_mismatch` in the stats line).
+// shared its thread). A success is memoised as the options it picked and re-made from them on a hit (a re-make that
+// fails -- impossible when the key is complete -- falls through to the search, `ok_stale`). Verify gate:
+// MTG_LINE_REPAY_MEMO_VERIFY=1 re-runs every hit and counts a disagreement (`memo_mismatch` for a memoised failure,
+// `ok_mismatch` for a memoised success whose options differ).
 bool LineRepayMemoVerify() { static const bool on = EnvOn("MTG_LINE_REPAY_MEMO_VERIFY"); return on; }
 struct LineRepayMemo
 {
     std::unordered_set<std::uint64_t> fail;
+    // SUCCESSES too (EDF seed 1830138 gi137: 391 tries, every one a depth-2 success of ~6 s, the same re-pay found
+    // again and again inside one decision): the key's chain re-made with the options the search picked, oldest last.
+    std::unordered_map<std::uint64_t, std::vector<manaoracle::PayOption>> ok;
     std::uint64_t                     epoch = ~0ULL;
 };
+bool SamePayOption(const manaoracle::PayOption& a, const manaoracle::PayOption& b)
+{
+    const ManaPool& x = a.stash;
+    const ManaPool& y = b.stash;
+    return a.taps == b.taps && a.creature_route == b.creature_route && a.stash_haste == b.stash_haste && a.fail == b.fail
+        && x.white == y.white && x.blue == y.blue && x.black == y.black && x.red == y.red && x.green == y.green
+        && x.colorless == y.colorless && x.wild == y.wild;
+}
 thread_local LineRepayMemo t_lr_memo;
+thread_local std::uint64_t t_lr_last_key = 0;   // MTG_LINE_REPAY_STATS' slow-try line
 constexpr std::size_t kLineRepayMemoCap = std::size_t{1} << 16;   // a same-decision backstop only
 std::uint64_t LineRepayMemoKey(const GameState& s, const LineRepayChain& ch, bool honor_legacy_cco)
 {
@@ -8368,7 +8398,8 @@ bool LineRepayTry(GameState& state, const ManaCost& cost_in, bool for_creature, 
             g_lr_ns.fetch_add(ns, std::memory_order_relaxed);
             if (ns > 100000000LL)
             {
-                std::fprintf(stderr, "[line-repay] slow try %.0f ms: failing %s, chain %s / %s\n", ns / 1e6,
+                std::fprintf(stderr, "[line-repay] slow try %.0f ms: key %016llx failing %s, chain %s / %s\n", ns / 1e6,
+                             static_cast<unsigned long long>(t_lr_last_key),
                              ch.cost_in.ToString().c_str(), ch.rec[0] ? ch.rec[0]->cost.ToString().c_str() : "-",
                              ch.rec[1] ? ch.rec[1]->cost.ToString().c_str() : "-");
             }
@@ -8391,8 +8422,10 @@ bool LineRepayTry(GameState& state, const ManaCost& cost_in, bool for_creature, 
     ch.rec[1] = LineRepayFind(undone, ch.rec, 1);
     LineRepayMemo& memo = t_lr_memo;
     const std::uint64_t epoch = TurnSolver::DecisionEpoch();
-    if (memo.epoch != epoch || memo.fail.size() >= kLineRepayMemoCap) { memo.fail.clear(); memo.epoch = epoch; }
+    if (memo.epoch != epoch || memo.fail.size() + memo.ok.size() >= kLineRepayMemoCap)
+    { memo.fail.clear(); memo.ok.clear(); memo.epoch = epoch; }
     const std::uint64_t mkey = LineRepayMemoKey(state, ch, honor_legacy_cco);
+    t_lr_last_key = mkey;
     const bool memo_hit = memo.fail.count(mkey) != 0;
     if (memo_hit)
     {
@@ -8410,6 +8443,57 @@ bool LineRepayTry(GameState& state, const ManaCost& cost_in, bool for_creature, 
             m.fail.insert(k);
         }
     } note_fail{ memo, mkey, memo_hit };
+    // Re-make the chain's first `depth` payments on the real board with `pk` (oldest last); false = restored.
+    auto commit = [&](const std::vector<manaoracle::PayOption>& pk) -> bool
+    {
+        const int depth = static_cast<int>(pk.size());
+        undo.Take(state, available);
+        bool made = true;
+        for (int k = 0; k < depth; ++k) { LineRepayUndo(state, *ch.rec[k]); }
+        for (int k = depth - 1; k >= 0 && made; --k)
+        {
+            made = LineRepayRemake(state, *ch.rec[k], pk[static_cast<std::size_t>(k)], ch.LifePost(k), ch.EnergyPost(k));
+            ch.Release(state, k);
+        }
+        if (!made) { undo.Restore(state, available); }
+        return made;
+    };
+    const auto ok_it = memo.ok.find(mkey);
+    const std::vector<manaoracle::PayOption>* ok_memo = ok_it != memo.ok.end() ? &ok_it->second : nullptr;
+    if (ok_memo != nullptr && !LineRepayMemoVerify())
+    {
+        g_lr_ok_hit.fetch_add(1, std::memory_order_relaxed);
+        const bool d2 = ok_memo->size() > 1;
+        if (commit(*ok_memo))
+        {
+            note_fail.armed = false;
+            g_lr_fired.fetch_add(1, std::memory_order_relaxed);
+            if (d2) { g_lr_fired_d2.fetch_add(1, std::memory_order_relaxed); }
+            return true;
+        }
+        g_lr_ok_stale.fetch_add(1, std::memory_order_relaxed);   // cannot happen if the key is complete: search
+    }
+    // THE FREEST BOARD (perf): the failing bill paid by the real payer on the board with every payment of the chain
+    // UNDONE and not re-made -- each re-making leaves a subset of that board's sources, float, life and energy, so when
+    // even it does not pay, no re-making does. One payer call against a search of MinimalPayments tables (EDF smoke
+    // seed 1064 gi63: ~2,000 failing searches of ~2 s each, 4,368 s against 4 s off). The raw joint check above is
+    // weaker here: it does not see the real payer's holds. VERIFY runs the search anyway and counts a search that
+    // pays where this said no (`max_mismatch`).
+    bool max_short = false;
+    if (LineRepayMaxPrecheckOn())
+    {
+        RampScratch mx(undone);
+        GameState& mb = mx.Board();
+        const int deepest = ch.rec[1] != nullptr ? 2 : 1;
+        if (deepest == 2) { LineRepayUndo(mb, *ch.rec[1]); }
+        for (int k = deepest - 1; k >= 0; --k) { ch.Release(mb, k); }
+        if (!try_now(mb))
+        {
+            max_short = true;
+            g_lr_max_short.fetch_add(1, std::memory_order_relaxed);
+            if (!LineRepayMemoVerify()) { return false; }
+        }
+    }
     std::vector<manaoracle::PayOption> picked;
     for (int depth = 1; depth <= kLineRepayMaxDepth; ++depth)
     {
@@ -8425,26 +8509,27 @@ bool LineRepayTry(GameState& state, const ManaCost& cost_in, bool for_creature, 
         picked.assign(static_cast<std::size_t>(depth), manaoracle::PayOption{});
         if (!LineRepaySearch(ch, depth - 1, undone, picked, try_now)) { continue; }
         // Found: re-make the chain on the real board that way, oldest first.
-        undo.Take(state, available);
-        bool made = true;
-        for (int k = 0; k < depth; ++k) { LineRepayUndo(state, *ch.rec[k]); }
-        for (int k = depth - 1; k >= 0 && made; --k)
+        if (ok_memo != nullptr)   // MTG_LINE_REPAY_MEMO_VERIFY: the memoised success must be this one
         {
-            made = LineRepayRemake(state, *ch.rec[k], picked[static_cast<std::size_t>(k)], ch.LifePost(k), ch.EnergyPost(k));
-            ch.Release(state, k);
+            g_lr_ok_hit.fetch_add(1, std::memory_order_relaxed);
+            bool same = ok_memo->size() == picked.size();
+            for (std::size_t k = 0; same && k < picked.size(); ++k) { same = SamePayOption((*ok_memo)[k], picked[k]); }
+            if (!same) { g_lr_ok_bad.fetch_add(1, std::memory_order_relaxed); }
         }
-        if (!made)
+        if (!commit(picked))
         {
             g_lr_fail.fetch_add(1, std::memory_order_relaxed);
-            undo.Restore(state, available);
             return false;
         }
+        memo.ok[mkey] = picked;
         note_fail.armed = false;
         if (memo_hit) { g_lr_memo_bad.fetch_add(1, std::memory_order_relaxed); }   // the memo said "fails"
+        if (max_short) { g_lr_max_bad.fetch_add(1, std::memory_order_relaxed); }   // the freest board said "fails"
         g_lr_fired.fetch_add(1, std::memory_order_relaxed);
         if (depth > 1) { g_lr_fired_d2.fetch_add(1, std::memory_order_relaxed); }
         return true;
     }
+    if (ok_memo != nullptr) { g_lr_ok_bad.fetch_add(1, std::memory_order_relaxed); }   // VERIFY: memo said "pays"
     return false;
 }
 } // namespace

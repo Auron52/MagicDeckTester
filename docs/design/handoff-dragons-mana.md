@@ -231,3 +231,29 @@ pre-fix line re-pay; same bytes as `mcdragons/mtg.fix2`).
   {C} first today. An explicit EDF opt-out in autonomous play is a play change for EDF (EDF_C_CONSERVE's comment
   records that demoting {C} in the autonomous loop measured worse: edf_blink_loop_cashes_deckout t4 -> t5). Not
   built: USER question whether to A/B it.
+
+## Successor 4 (2026-11-03) -- state
+Scratch `/workspaces/MagicDeckTester/build/scratch/mcdragons4/`. Binary of a56a429ef: `mcdragons4/mtg.new`.
+- Units (a56a429ef): 2,435/2,435 pass.
+- Identity (`mcdragons4/id`, MEMO_VERIFY=1, DRAW=0, 1,600 games vs ab2's ON arm): 19/20 jobs byte-identical,
+  memo_mismatch 0 over 213,929 failure-memo hits. ONE game moved: Bruna seed 1830069 gi68 (T6 both, digest differs).
+  The new binary's ON game equals the OFF game; mtg.cur (pre-WIP) fires 220 re-pays (170 depth-2) on it, the WIP 60
+  (10). Prime suspect: the WIP's per-option joint prune at depth 2 (lossy). Now behind a TEMP lever
+  `MTG_LR_INNER_JOINT` (default OFF) for attribution: `mcdragons4/b68/runb.sh <bin> <tag> [ENV]` (1-game batch, prints
+  the digest; ab2 ON = 86bc663936b9ccc5, OFF = 273ccb2f789b92f9).
+- WALL (a56a429ef, `mcdragons4/wall/run.sh <bin> <tag>`, ON vs MTG_LINE_REPAY=0, concurrent, loaded box):
+  EDF g137 (s1830138) 2,153 s vs 5.0 s; smoke63 (s1064 d5 b20) 4,368 s vs 4.1 s; Dragonstorm ab3 gi45 (s1930046)
+  7.7 s vs 5.0 s. The failure memo does NOT fix it:
+  * g137: 391 tries, EVERY one a depth-2 SUCCESS of ~6 s ({2}{W}{W} failing, chain {2}{W}/{2}{W}); successes were
+    not memoised -> success memo added (re-make from the stored options; VERIFY compares options: ok_mismatch).
+  * smoke63: 16,616 tries, 2,044 searches (d1 679, d2 1,365), only 19 fired; ~1.5 s per MinimalPayments call
+    (3,265 calls, 110 options each; perf: PayEnum::Verify 14%, BuildSimKeyBase 19%, memmove 10%,
+    LandTypeChangedToIsland 8%). Distinct keys, so no memo helps -> "freest board" precheck added: the failing bill
+    paid by the REAL payer with the whole chain undone and not re-made; no pay -> no re-making pays (VERIFY counts
+    max_mismatch). The raw joint check passes these because it does not see the real payer's holds.
+  * With the inner joint prune OFF, smoke63 would also lose its 86,520 inner prunes (each a recursion with a
+    MinimalPayments call) -- MEASURE before keeping it off.
+- Build of the above queued: log `mcdragons4/build2.log` (target mtg + mtg-test).
+- Next: id run again (VERIFY: memo/ok/max mismatches 0; gi68 back to 86bc...), wall run, then decide the inner prune
+  (find why it is not necessary on gi68, or drop it), then the held-out A/B.
+- The 23 "drawn" need-later drops do not exist (split.py comma bug; see USER questions above).
