@@ -311,3 +311,16 @@ Branch base 3640b6bf1 is 44 commits behind origin (25 src files): rebase before 
   2. RE-PRICE the budget itself (charge priced work, renormalise NODES_PER_VIRTUAL_MS so the median deck
      searches as much as today) -- moves every deck's play; full held-out A/B bar per deck.
   3. Bottoming trials: pool their budget (they multiply a mulligan's cost by C(7,k)).
+
+## Live 2026-11-03 ~08:45 UTC: REBASED onto origin 12a476cda (Merfolk keep table shipped)
+- USER: the Merfolk keep table is on origin now (12a476cda); merfolk/merfolk2hg come back INTO the accept.
+- Origin also brought engine fixes (keep-table cache 6f6b0a8e7, sac-land class pin, Vampires mana-clean), so the
+  pre-rebase final run (run_final2.sh) was stopped (my own run) and superseded.
+- One conflict, src/ai/ManaOracle.cpp PayEnum dedup: kept BOTH -- base key MidTurnStateKeyOfPayment(sc) (ours,
+  tutor-pin cleared) then origin's t_plan_srcs tapped-flag fold.
+- origin/budget-rebalance (9b813b4ac) is now behind a REBASED history: force-push it (own branch, no one else uses it).
+- RUNNING: build/scratch/budget/run_final3.sh -> final3.DONE. Builds, runs smoke+regression, diffs vs committed GT
+  (test/gt_logs), then moves origin-baseline to 12a476cda and builds it (for explain_game --old-bin).
+- NEXT: expect the 6 known play changes (Bruna x4, Kitty v3 x2, all better); anything else -> check on the origin
+  binary (stale GT vs ours); explain the slower/changed games; accept smoke+regression for ALL decks; check_gt_logs;
+  commit; force-push budget-rebalance. Then the tier-2 overflow subagent's patches.
