@@ -29712,11 +29712,13 @@ static bool BpDeriveMeterOn() { return BpDeriveMeterMode() > 0; }
 static thread_local bool g_bp_derive_interrupted = false;
 namespace bpmeter
 {
-inline std::atomic<long long> g_interrupted{0}, g_visits_billed{0};
+inline std::atomic<long long> g_interrupted{0}, g_visits_billed{0}, g_priced_stops{0};
 struct Dump
 {
     ~Dump()
     {
+        if (g_priced_stops.load() > 0)   // MTG_BP_DERIVE_PRICED_STOP (see eval_and_push)
+        { std::fprintf(stderr, "[bp-derive-priced-stop] subset visits refused=%lld\n", g_priced_stops.load()); }
         if (!BpDeriveMeterOn()) { return; }
         std::fprintf(stderr, "[bp-derive-meter] visits_billed=%lld derivations_interrupted=%lld\n",
                      g_visits_billed.load(), g_interrupted.load());
@@ -71287,6 +71289,25 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 if (g_bp_enum_depth > 0) { g_bp_derive_interrupted = true; }   // a derivation: report it
                 return;
             }
+        }
+        // MTG_BP_DERIVE_PRICED_STOP (DEFAULT OFF -- a PROPOSAL for the priced per-decision ceiling, not
+        // adopted; docs/design/edf-tutor-pin-alias-2026-11-03.md section 4). A breakpoint-continuation
+        // derivation is an enumeration, not a search node: it charges no unit and nothing inside it polls
+        // SearchBudget::Overrun(), so a decision whose priced ceiling (MTG_DECISION_PRICED_X) has tripped keeps
+        // deriving 10k-plan lists inside its horizon rollouts until each one completes. This stops the
+        // derivation at its next subset once decisionwork::PricedExceeded() -- exactly the condition under which
+        // Overrun() is already true for the running pass, so the pass rolls back at its next poll
+        // (SimulateToEndImpl's per-step test / FSLineWin's entry test). The derivation is reported INTERRUPTED,
+        // so its partial list is never cached (the mode-2 MTG_BP_DERIVE_METER mechanism). Inert unless the
+        // priced ceiling is armed, and the ceiling is never armed at an unlimited budget, so this re-prices
+        // work under a finite budget and cannot make a line unfindable at a large one. Same lockstep caveat as
+        // MTG_BP_DERIVE_METER mode 2: an interrupted list can reach play only through the anytime rescue.
+        static const bool s_priced_stop = EnvOn("MTG_BP_DERIVE_PRICED_STOP");
+        if (s_priced_stop && g_bp_enum_depth > 0 && decisionwork::PricedExceeded())
+        {
+            g_bp_derive_interrupted = true;
+            bpmeter::g_priced_stops.fetch_add(1, std::memory_order_relaxed);
+            return;
         }
         // MTG_BP_DERIVE_METER (default OFF; see BpDeriveMeterOn): bill this visit to the armed decision
         // meter while deriving a breakpoint continuation list, and stop the derivation once it is spent.
