@@ -393,3 +393,32 @@ Branch base 3640b6bf1 is 44 commits behind origin (25 src files): rebase before 
   deck dir; (3) drop "unpredictable_cyclone" from exclude in scripts/artifact_queue.json on artifact-queue-tool (+
   mulligan_env MTG_KEEP_RETAIN_FOREIGN if the USER says so), push, pull into the tool checkout; (4) start the worker
   harness-tracked with the GIT_CONFIG gh-credential env + MTG_RSS_CAP_GB=20, confirm gen.log says RESUME(journal).
+
+## Live at compaction #5 (2026-11-03 ~13:55 UTC) -- USER going to bed; overnight = tail -> shared push -> Cyclone queue
+- DONE: test 5 (ledger free). Rebased onto 50b685d98, GT accepted 82b9ea50f (pushed to budget-rebalance; CI watch task
+  bfqr14wry). All 5 combination-only changes are ORIGIN-STALE (origin-baseline worktree now at 50b685d98, built,
+  reproduces hinata d0 gi60/gi316, alchemist d0 gi430, elementals gi46, th gi467 digests).
+- Cyclone digest PROBE PASSED on the rebased binary: play digest a7b3171c556b4179 unchanged, discovery cache hit (21
+  buckets), RESUME(journal) reloaded 1,647,274 cell-sides. NO MTG_KEEP_RETAIN_FOREIGN needed. (USER: "It should resume on
+  the branch.") Scratch copy build/scratch/budget/cycprobe/ (disposable).
+- RUNNING: build/scratch/budget/run_tail.sh (task bbig4axnz -> tail.DONE; tail_fin.log/.err). Item 2 = no game at the
+  3600 s wall backstop except possibly edf_keepab_static_gi821 (EDF combo route has no budget checks; known, surface it).
+- NEXT (in order, all mine):
+  1. Read tail.DONE: report max wall / which games > 10 min. A game at the wall other than gi821 -> investigate before push.
+  2. PUSH TO SHARED: git fetch; if origin moved, rebase budget-rebalance onto it (src change -> rebuild + smoke check;
+     GT conflict -> regenerate per CLAUDE.md); then `git push origin budget-rebalance:phase-1-2-deck-analyzer`.
+     Watch CI (do not wait on it).
+  3. CYCLONE VIA QUEUE: worker tree .claude/worktrees/artifact-queue/.claude/worktrees/artifact-worker-artifact-queue-d7d6a5
+     (clean, no inflight.json) -> `git -C <wt> checkout -q --detach origin/phase-1-2-deck-analyzer`; copy
+     `Unpredictable Cyclone.keepmodel.exhaustive.raw.json.journal` + `.keepmodel.gencache.json` from
+     .claude/worktrees/cyclone-landing905/decks/Unpredictable Cyclone/ into <wt>/decks/Unpredictable Cyclone/ (cmp after);
+     in the artifact-queue tool checkout (check `git status -sb` == origin/artifact-queue-tool) drop
+     "unpredictable_cyclone" from "exclude" in scripts/artifact_queue.json, commit, push; start harness-tracked from that
+     checkout: `MTG_RSS_CAP_GB=20 GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0=credential.helper GIT_CONFIG_VALUE_0=
+     GIT_CONFIG_KEY_1=credential.helper GIT_CONFIG_VALUE_1='!gh auth git-credential' python3 scripts/artifact_queue.py run`;
+     set logs/artifact_queue/artifact-queue-d7d6a5/worker.pid; remove the stale STOP file there if `run` refuses.
+     Confirm <state>/unpredictable_cyclone.mulligan.log / the deck's logs/*_mullgen/gen.log says RESUME(journal) ... continuing
+     and NOT a fingerprint MISMATCH -- if it does, `artifact_queue.py stop` at once (journal originals stay in landing905).
+     Then kill -0 waiter on the worker pid + replace cron 42d6d235 with one naming the worker.
+  4. Close-out: delete cycprobe/, report to USER (tail result, push sha, CI, worker state). Later stages (re-price,
+     pooled bottoming budget, EDF wastes) stay paused per USER.
