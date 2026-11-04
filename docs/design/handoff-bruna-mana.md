@@ -248,3 +248,27 @@ from memory). Commit WIP before any revert, and revert hunks by editing.
 - Smoke (THREADS=8 MTG_PGO=0, build/scratch/mc-bruna/smoke_s3.txt): 167 pass, 2 FAIL, both Bruna: bruna d0
   digest-only (5.9380), bruna d5 4.7133 -> 4.7067; searched slower=0 faster=1. Every other deck byte-identical.
   GT NOT accepted.
+- Scoped regression (`--deck=bruna,bruna2hg`, reg_s3.txt): 2 PASS (the s30221 rows), 4 FAIL, all bruna and all
+  digest-only at an unchanged average (d0 s2002 5.8900, d3 s2002 4.7400, d5 s2002 4.8600, d5 s3003 4.7000).
+  Searched slower=0 faster=0, play-changed=4 at the same score (gi30 x2, gi136, gi58); d0 slower=0. bruna2hg has a
+  smoke row only (PASS, identical). Viewer protocol: 0 play-drift/board-diverged/enum-gap. GT NOT accepted.
+- No slower game in smoke or regression, so there was nothing to recover at --depth 8 --budget-ms 0.
+- PGO built for HEAD:src a232e4274a61 (PGO_THREADS=8).
+- Gate `bruna-mc-s3` (state build/scratch/mc-bruna/mana_clean_state3.json; report logs/mana_clean/bruna-mc-s3/report.md):
+  5,000 games gi 41000-45999, seed 30041000, identity byte-identical, verdict issues, 3,975 issues.
+
+  | class (per game)     | pass1 (23k, invalid) | pass1-r2 (18k) | s3 (5k) | s3 vs r2 |
+  |----------------------|------:|------:|------:|------:|
+  | APPLY-DROP           | 0.4098 | 0.4341 | 0.3644 | -16% |
+  | APPLY-DROP-ORDER     | 0.1244 | 0.1140 | 0.1244 | +9% |
+  | DOMINATED-CREATURE   | 0.1481 | 0.1399 | 0.1542 | +10% |
+  | ORACLE-GAP           | 0.0382 | 0.0371 | 0.0176 | -53% |
+  | UNMODELED            | 0.0309 | 0.0136 | 0.0344 | (one game) |
+  | CAPPED               | 0.1012 | 0.0930 | 0.0884 | -5% |
+  | ENUM-GAP             | 0.0133 | 0.0128 | 0.0116 | -9% |
+  | **issues**           | 0.8658 | 0.8445 | 0.7950 | -5.9% |
+
+  UNMODELED: 110 of the 172 flags are ONE game (gi43577, T4 "too many actions to try every order"); without it
+  0.0124/g. No "restricted-mana source" Troyan note remains. ORDER/DOMC up is consistent with BIG_SPELL exposing
+  real Troyan-for-Bruna payer gaps (held for the USER). Confounds: different game block, and the base moved
+  (r2 src 644270cdc4ce; s3 includes wip/mc-lfe + origin's equip-route audit).
