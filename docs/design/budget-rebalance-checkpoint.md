@@ -477,3 +477,17 @@ X=0 and X=100 before). Next slowest 87 s (kitty_v1vscur_2hg_cur gi20037), then 7
   3. Tier-2 purity under priced on: regression manifest, priced on, MTG_TIER2_OVERFLOW_KB=1 vs default -> 0 unit diffs.
   4. Then pooled bottoming budget; EDF remaining wastes.
 - Cyclone mulligan PAUSED (resumable via `artifact_queue.py start` in the artifact-queue checkout).
+
+## Live 2026-11-04 00:40 UTC: priced-budget A/B RUNNING (pb_ab.json, 126,580 games, 32 threads)
+- Build trap: the first build_pb binary was compiled while ValueArm.h was mid-edit -> mixed Arm layouts across TUs
+  (per-job priced_unit_ns never reached the reader; 9 Cyclone remand unit tests read a shifted ceiling). A clean
+  rebuild fixed both: 2450/2450 tests. WIP 9f94d1087 (comment on the right field) is the A/B binary's tree.
+- Sanity (sanity.json, 5 decks d3): budget-0 games byte-identical priced on vs off (digest + units, all 5); budgeted
+  games move (EDF, Snow digests change), no hang.
+- Arm meaning (corrected): R is priced ns per billed unit, so LOWER R = LESS search. x28 = median deck unchanged,
+  x20 ~0.7x, x14 ~0.5x priced work per budget. Heavy decks (EDF 103.5k ns/unit) get ~0.27x at x28.
+- Running: build/scratch/budget/run_pb.sh -> pb.log / pb.err / pb.txt, pb.DONE at the end (harness task blhevfl4r).
+  Read: python3 scripts/ab_x_report.py build/scratch/budget/pb
+- NEXT: report per-deck quality + tail per R to the USER (heavy-deck budget raise is the USER's call); then the
+  tier-2 purity test under priced on (regression manifest, MTG_TIER2_OVERFLOW_KB=1 vs default, 0 unit diffs);
+  then pooled bottoming budget; then EDF wastes. GT accept owed before any shared push (refit prices move play).
