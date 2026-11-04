@@ -585,6 +585,14 @@ inline bool OracleFaceFoldOn()
     static const bool env_on = EnvOn("MTG_ORACLE_FACE_FOLD", true);
     return heurarm::Flag(heurarm::ORACLE_FACE_FOLD, env_on);
 }
+// MTG_ORACLE_BIG_SPELL (2026-11-04; DEFAULT ON, =0 -> a big-spell-only source is no oracle supply and is noted
+// UNMODELED): the oracle's table offers Troyan's {G}{U} bundle to a spell the payer's own predicate lets it pay
+// (BigSpellManaUsable), booked into the big-spell reserve. See BuildSources / OracleCreatureTap (ManaOracle.cpp).
+inline bool OracleBigSpellOn()
+{
+    static const bool env_on = EnvOn("MTG_ORACLE_BIG_SPELL", true);
+    return env_on;
+}
 
 // MTG_PAY_NARROW_RESTRICTED_FIRST (Vampires sweep L, 2026-10-18; DEFAULT ON, =0 -> battlefield order) --
 // among colored_creature_only sources, spend one WITHOUT colored_creature_ability_ok (Unclaimed Territory,

@@ -78,12 +78,29 @@ std::string OracleCreatureTap(GameState& state, const TurnSolver::PreTap& t)
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (d == nullptr) { return "'" + t.name + "' has no definition"; }
         const CardParams& q = d->params;
-        if (!q.creature_mana_only && !q.colored_creature_only) { return "'" + t.name + "' is not a creature-only source"; }
+        const bool big = BigSpellOnlySource(q) && OracleBigSpellOn();
+        if (!q.creature_mana_only && !q.colored_creature_only && !big)
+        { return "'" + t.name + "' is not a creature-only source"; }
         if (!CanTapNow(p, state.battlefield)) { return "'" + t.name + "' is summoning sick"; }
         if (t.color < 0 || t.color > 5) { return "no colour"; }
         const Color c = static_cast<Color>(t.color);
         const std::vector<Color>& prod = EffectiveProducesFor(state, a, *d, &p);
         if (std::find(prod.begin(), prod.end(), c) == prod.end()) { return "'" + t.name + "' cannot make that colour"; }
+        // BIG-SPELL-ONLY (Troyan): only for a qualifying spell (the payer's predicate, real-payment site), and its whole
+        // bundle goes into the big-spell reserve -- where the payer's commit_leftover books what such a tap leaves over,
+        // and which the payment drains first (RestrictedFloatUsableNow), so no unit can launder into a small spell.
+        if (big)
+        {
+            if (!BigSpellManaUsable(q, /*site=*/1)) { return "'" + t.name + "' makes mana only for big spells"; }
+            if (state.floating_bigspell_mana.Total() > 0 && state.floating_bigspell_pp != &q)
+            { return "the restricted reserve holds another restriction"; }
+            const Card* spell = PayingSpellCard();
+            ManaPool units;
+            TapSourceIntoFloat(state, a, p, *d, c, units, /*available=*/nullptr,
+                               /*for_creature=*/spell != nullptr && spell->IsCreature());
+            AddBigSpellFloat(state, units, q);
+            return std::string();
+        }
         // Paying a CREATURE'S ACTIVATED ABILITY (Secluded Courtyard's clause, colored_creature_ability_ok):
         // that payment never reads the creature-only pool, so the unit goes where it is about to be spent.
         const bool ability = q.colored_creature_ability_ok && PayingCreatureAbility();
@@ -1116,16 +1133,23 @@ std::vector<SrcClass> BuildSources(const GameState& state, bool for_creature, st
         const bool sub_wild = d != nullptr && d->params.creature_mana_only && !d->params.mana_only_subtype.empty()
                            && d->params.produces_any_combination;
         const bool can_tap = d != nullptr && CanTapNow(p, state.battlefield);
+        // BIG-SPELL-ONLY mana (Troyan, Gutsy Explorer: "only to cast spells with mana value 5 or greater or spells with
+        // {X}"): offered exactly where the payer's own predicate admits it -- the paying spell qualifies
+        // (BigSpellManaUsable at the real-payment site; an ability, or an unset identity, never does). Its {G}{U} is one
+        // BUNDLE, so one face is the whole tap; OracleCreatureTap books it into the big-spell reserve, the payer's home
+        // for it, and the float-only payment spends that reserve first, as the payer does.
+        const bool big = d != nullptr && BigSpellOnlySource(d->params);
+        const bool big_ok = big && OracleBigSpellOn() && BigSpellManaUsable(d->params, /*site=*/1);
         if (can_tap
             && ((for_creature && subtype_ok && (d->params.creature_mana_only || d->params.colored_creature_only))
-                || ability_ok || sub_ability_ok))
+                || ability_ok || sub_ability_ok || big_ok))
         {
             for (Color c : EffectiveProducesFor(state, a, *d, &p))
             {
                 if (d->params.colored_creature_only && c == Color::Colorless) { continue; }   // its plain {C} face
                 const char l = kLetters[static_cast<int>(c)];
                 if (restricted.find(l) == std::string::npos) { restricted.push_back(l); }
-                if (sub_wild) { break; }
+                if (sub_wild || big_ok) { break; }
             }
         }
         if (o.free_faces.empty() && o.fed_faces.empty() && restricted.empty())
@@ -1134,7 +1158,9 @@ std::vector<SrcClass> BuildSources(const GameState& state, bool for_creature, st
             // source's for a creature spell outside its subtype; nor a summoning-sick creature source's, which
             // makes no mana at all (CR 302.6) -- that was 4.07M of LandfallElementals' notes, a Smokebraider cast
             // this turn.
+            // A big-spell-only source is modelled (above): for a spell that does not qualify it is not supply.
             if (unmodeled != nullptr && for_creature && subtype_ok && o.why_not.find("may be spent only") != std::string::npos
+                && !(big && OracleBigSpellOn())
                 && !(d != nullptr && (d->params.creature_mana_only || d->params.colored_creature_only) && !can_tap))
             { unmodeled->push_back("restricted-mana source " + p.card.m_name.str()); }
             continue;
@@ -2179,7 +2205,9 @@ bool RefinePayment(const GameState& pre, const GameState& post, const ManaCost& 
         {
             if (p.controller_index != pre.active_player_index || p.tapped || p.def_absent) { continue; }
             const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-            if (d != nullptr && d->params.creature_mana_only && !d->params.mana_only_subtype.empty()) { add(d->params); }
+            if (d != nullptr && ((d->params.creature_mana_only && !d->params.mana_only_subtype.empty())
+                                 || (BigSpellOnlySource(d->params) && OracleBigSpellOn())))   // Troyan: the spell's MV
+            { add(d->params); }
         }
         if (pre.floating_bigspell_pp != nullptr && pre.floating_bigspell_mana.Total() > 0)
         { add(*pre.floating_bigspell_pp); }
