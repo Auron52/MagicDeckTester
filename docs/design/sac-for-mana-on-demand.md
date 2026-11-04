@@ -1,6 +1,10 @@
 # Sacrifice-for-mana ON DEMAND (Lotus Bloom, Lake of the Dead): deferred design
 
-Status: DEFERRED (2026-11-04). Not built. This is the write-up the USER ruling below asked for. The
+Status: DEFERRED (2026-11-04), queued after the main-phase/cast-order work. Not built.
+
+USER 2026-11-04 (verbatim): *"Yes, it should be on-demand and only done that way."* The payer is the ONLY route for
+these cracks: retire the Lotus Bloom / Lake of the Dead SacForMana action (step 5 below is required, not optional), and
+delete `MTG_IDLE_CRACK_FOLD` (`FoldIdleLandCracks`, default off since 2026-11-04 for its probe cost) together with it. This is the write-up the USER ruling below asked for. The
 interim Lake of the Dead fix that shipped is the sound identity fold `MTG_IDLE_CRACK_FOLD`
 (`TurnSolver.cpp` `FoldIdleLandCracks`), described in "Lake fold + Profane fetch timing (2026-11-04)" in
 `docs/design/analysis-Shadowborn Apostle.md`.

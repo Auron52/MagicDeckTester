@@ -1431,3 +1431,7 @@ deterministic; thread-ms ran on a shared box.
    sidecar via the DECISIONS.txt route (copy, delete the E7_playset / E7b_trust / E6_skipcal markers, re-run
    `valueleaf.sh run`), alone on the box and after the main-phase play change lands (its emul_r is fitted to play).
    The nlfit pricing fix continues as a FLEET tool (judged across decks, not against emul on Shadowborn).
+10. Lake of the Dead / Lotus Bloom route: *"Yes, it should be on-demand and only done that way."* So the on-demand
+    payer (`docs/design/sac-for-mana-on-demand.md`) is the ONLY route for these cracks: the SacForMana plan action
+    for both cards is retired, not kept beside the payer. The Lake fold (`MTG_IDLE_CRACK_FOLD`, default off) is not
+    made cheaper; it is deleted with the action when the payer lands. Order unchanged: after the main-phase work.
