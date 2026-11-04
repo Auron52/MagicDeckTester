@@ -119,3 +119,36 @@ Run `build/scratch/mc-pd/m4.{out,err}` (binary `mtg.b`, before levers 3 and the 
 - Adoption bar: every slower game recovers at `--depth 8 --budget-ms 0`; each moved deck net <= 0 on a held-out
   A/B. Never accept GT (the coordinator does). Never touch references/. THREADS <= 8, MTG_RSS_CAP_GB=43, builds only
   via `build/scratch/buildq.sh`, wait ~200 s after src edits (9p lag).
+
+## Successor 3 (PARKED 2026-11-04 ~11:05 UTC, USER: parked until next week for budget)
+- **3-arm run m5** (games 0-395, build6 = WIP b46d2ce4c, `build/scratch/mc-pd/m5.{out,err}`): `base` and `both`
+  reproduce m4 exactly; `all` (+ `MTG_PD_DEFER_SAME`) is IDENTICAL to `both` in every class, unit count
+  (11,979,313) and all 12 chunk digests. So lever 3 added nothing and is **DELETED** (code, heurarm slot,
+  unit-split cover; no flag left). Stale "named Zenith fetch joins the after-chain" comments corrected (no
+  code does that; GSZ target prediction is held for the USER).
+- **USER ruling 2026-11-04** (verbatim): "That seems reasonable except that we need to take into account whether
+  Tamanoa is out at the time." Status: both remaining levers ALREADY read Tamanoa at the moment the damage is
+  dealt -- the payer's mode (`SelfDamageUseful` -> `SelfDamageGainEngine`, `CountTamanoa` on the live
+  battlefield) and the deferral's Now chain read the board at the payment; the After chain is the sweep's
+  board (owed permanent casts join, named sac victims leave; victims are always battlefield ids or 0 /
+  the same-line-token sentinel). No code change needed; two unit tests added and passing in both arms:
+  "a payment BEFORE the line's Tamanoa resolves is plain damage" and "a payment AFTER Dina sacrifices the
+  last Tamanoa is plain damage".
+- **Commits** (wip/mc-pd, rebased cleanly onto origin `19d9d85e8`; pre-squash backup branch
+  `wip/mc-pd-presquash-s3` = b46d2ce4c): `92c3b0287` oracle (checker), `0358107d0` docs findings, `dad56f708`
+  pay(PD) USEFUL_LINE_OK + DEFER_LINE + tests (squashed), `e3e92cb15` handoff (succ. 2), plus this section.
+- **Verified on the rebased tree** (build9, Release): `mtg-test` 2568/2568 pass.
+- **Running at park time (left to finish, nothing depends on it):** chain `build/scratch/mc-pd/run_s3a.sh`
+  PID 3382976 -> smoke `THREADS=8 MTG_PGO=0` into `build/scratch/mc-pd/smoke2.log` (`rc=` line at its end),
+  marker `build/scratch/mc-pd/s3a.done`. Binary of this tree: `build/scratch/mc-pd/mtg.e`.
+- **Next steps, in order:** (1) read smoke2.log: every moved row listed; only `pd*` rows (pd, pd2hg) may move;
+  (2) scoped regression `--deck=pd` and `--deck=pd2hg` (no accept); (3) slower-game recovery at `--depth 8
+  --budget-ms 0` (MTG_NC_SEARCH=1 for clairvoyance); (4) held-out A/B, manifest READY:
+  `build/scratch/mc-pd/ab.json` (from `mkab.py ab.json 61000000 2000 1000 20`: PD 2000 g + PD 2HG 1000 g per
+  arm, seeds 61000000+ / 61500000+, arms off/on of both levers, chunk 20); run `mtg.e --batch ab.json --threads 8
+  --game-log-dir <dir>` (per-game .wins for slower games), net <= 0; plus `perf stat -e instructions:u` both arms
+  on a fixed sample; (5) PGO build + gate: copy `/workspaces/MagicDeckTester/test/mana_clean.json` to
+  `build/scratch/mc-pd/mana_clean_state3.json`, `MTG_RSS_CAP_GB=43 python3 scripts/mana_clean.py run
+  prevent_damage --games 5000 --threads 8 --state <that> --name pd-mc-s3`; compare per-game rates with pass 1
+  (`pass1-prevent_damage-r2`, 12,000 games: DOMINATED-LIFE 30,558, APPLY-DROP 538, APPLY-DROP-ORDER 183,
+  CAPPED 6,525). Expected to still fail on CAPPED (parked).
