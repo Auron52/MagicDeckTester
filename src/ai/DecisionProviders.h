@@ -981,9 +981,6 @@ public:
     // MTG_SLIVERS_REPLICATE_TOPK -- the USER's replicate prune (2026-11-03): one count per replicate cast,
     // the most copies the plan's leftover mana pays (DecisionProvider::ReplicateTopCountOnly). DEFAULT ON.
     bool        ReplicateTopCountOnly(const GameState&) const override;
-    // MTG_SLIVERS_REPLICATE_MANLAND -- AGENT AMENDMENT to the USER's prune (2026-11-03, for USER review): also
-    // keep the top count that leaves an untapped Mutavault its animate mana. DEFAULT OFF until the USER rules.
-    bool        ReplicateManlandReserve(const GameState&) const override;
 };
 
 // Knights (Aether Vial knight tribal). Rode VialProvider and STILL DOES -- it derives from it, so

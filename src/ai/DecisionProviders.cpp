@@ -10767,15 +10767,6 @@ bool SliversProvider::ReplicateTopCountOnly(const GameState&) const
     return heurarm::Flag(heurarm::SLIVERS_REPLICATE_TOPK, on);
 }
 
-// MTG_SLIVERS_REPLICATE_MANLAND -- an AGENT amendment to the USER's top-count prune (2026-11-03), measured, for the
-// USER's ruling: every slower game of the top-count A/B was "a one-pip Sliver with NO copy, the spare mana animating
-// Mutavault" (TurnSolver.cpp, THE MANLAND RESERVE). DEFAULT OFF: the USER's rule as stated stands until they answer.
-bool SliversProvider::ReplicateManlandReserve(const GameState&) const
-{
-    static const bool on = EnvOn("MTG_SLIVERS_REPLICATE_MANLAND", false);
-    return heurarm::Flag(heurarm::SLIVERS_REPLICATE_MANLAND, on);
-}
-
 // =================================================================================================
 // ---- THE AETHER-VIAL FAMILY'S CLEANUP DISCARD: the shared 3-turn CURVE FILL ----------------------
 // =================================================================================================

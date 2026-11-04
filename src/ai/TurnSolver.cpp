@@ -76648,7 +76648,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 if (it == top.end()) { top.emplace(keys[i], cs[i]); }
                 else if (cs[i] > it->second) { it->second = cs[i]; }
             }
-            // THE MANLAND RESERVE (DecisionProvider::ReplicateManlandReserve; SliversProvider: MTG_SLIVERS_REPLICATE_MANLAND).
+            // THE MANLAND RESERVE (ADOPTED, always on with the top-count fold; USER 2026-11-04: "Sure, that makes sense. In
+            // that case we might need to search the two options."). Both counts survive the fold and are SEARCHED.
             // The top count spends every spare mana on copies, and the one thing outside the plan's casts that
             // spare mana buys is an animated manland's attack (Mutavault: a 2/2 Sliver every anthem pumps). The
             // 2026-11-03 A/B's slower games were all that line -- T3 Galerider/Plated with NO copy, the spare mana
@@ -76657,17 +76658,14 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             // manland its own mana plus its animate cost (m manlands: the m cheapest reserves). A coarse mana-value
             // read; it only ADDS survivors to the fold, so it can never lose a line the fold keeps.
             std::vector<int> reserves;
-            if (ResolveProvider(state).ReplicateManlandReserve(state))
+            for (const Permanent& q : state.battlefield)
             {
-                for (const Permanent& q : state.battlefield)
-                {
-                    if (q.controller_index != state.active_player_index || q.tapped || q.entered_this_turn) { continue; }
-                    const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
-                    if (qd == nullptr || !qd->params.can_animate || !q.card.IsLand() || q.card.IsCreature()) { continue; }
-                    reserves.push_back(1 + (qd->params.animate_cost ? qd->params.animate_cost->ManaValue() : 0));
-                }
-                std::sort(reserves.begin(), reserves.end());
+                if (q.controller_index != state.active_player_index || q.tapped || q.entered_this_turn) { continue; }
+                const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+                if (qd == nullptr || !qd->params.can_animate || !q.card.IsLand() || q.card.IsCreature()) { continue; }
+                reserves.push_back(1 + (qd->params.animate_cost ? qd->params.animate_cost->ManaValue() : 0));
             }
+            std::sort(reserves.begin(), reserves.end());
             std::vector<int> bill(deduped.size(), 0), avail(deduped.size(), 0);
             std::vector<std::unordered_map<std::string, std::vector<int>>> top_res(reserves.size());
             if (!reserves.empty())

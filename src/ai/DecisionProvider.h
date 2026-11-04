@@ -3560,10 +3560,9 @@ public:
     // saved for an activation -- is not searched); the deck opts in. false = every count, the default.
     // Human play and MTG_UNPRUNE=replicate always see every count.
     virtual bool ReplicateTopCountOnly(const GameState& /*s*/) const { return false; }
-    // ReplicateManlandReserve -- with ReplicateTopCountOnly, ALSO keep, per untapped manland that was on the
-    // battlefield at the start of the turn, the top count among the plans whose cast bill leaves that manland its
-    // own mana plus its animate cost (the "fewer copies so Mutavault attacks" line). false = the bare top count.
-    virtual bool ReplicateManlandReserve(const GameState& /*s*/) const { return false; }
+    // The fold ALSO keeps, per untapped manland that was on the battlefield at the start of the turn, the top count
+    // among the plans whose cast bill leaves that manland its own mana plus its animate cost (THE MANLAND RESERVE,
+    // TurnSolver.cpp; adopted always-on USER 2026-11-04), so the "fewer copies so Mutavault attacks" line is searched.
 
     // ---- Remaining engine built-ins, ported byte-identically -----------------------------------
     // Every hook below returns candidates in PREFERENCE order with index 0 equal to the historical

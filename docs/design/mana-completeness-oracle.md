@@ -1797,8 +1797,9 @@ the post-deletion binary reproduce all 200 job digests and units):
 
 a2's slower games: Std 1891 / 4064 / 4771, 2HG 191 / 1145 / 1570; at d8 b0 only Std 1891 recovers. In Std 4064/4771 the
 base casts a one-pip Sliver with NO copy on T3 and animates Mutavault with the spare mana while the top count taps out.
-**THE MANLAND RESERVE** (`MTG_SLIVERS_REPLICATE_MANLAND`, default OFF, a CANDIDATE amendment to the USER's rule awaiting
-the USER) also keeps the top count whose bill leaves an untapped start-of-turn manland its own mana + animate cost. It
+**THE MANLAND RESERVE** (ADOPTED 2026-11-04, always on with the top-count fold; the flag `MTG_SLIVERS_REPLICATE_MANLAND`
+and its heurarm slot are deleted. USER: *"Sure, that makes sense. In that case we might need to search the two
+options."* Both counts survive the fold as separate plans and the search branches on them) also keeps the top count whose bill leaves an untapped start-of-turn manland its own mana + animate cost. It
 removes four of the six at the shipped setting (Std 1891/4064/4771, 2HG 1145) and adds none; of the two left, 2HG 1570
 recovers at d8 b0 (6 -> 5) and **2HG 191 does not** (5 at d8 b0, base 4). 2HG 191 is not a B5 or MANLAND loss: the
 -1 deletion alone (a3) plays the same game as a1 (identical digest). The base's T4 kill rides a T3 Plated Sliver cast
