@@ -748,3 +748,14 @@ problem that doesn't happen as much anymore." Start with every slow rollout on r
 - Remaining heavy tail: Melira d3/b3 (6 lines > 600 s, max 3,690 s with the stop; Carrion Feeder family) -- NEXT.
   Goblins 996 s max -> the sac-fold subagent (worktree sac-fold) is on it. LFE replays hit 5-6 GB RSS caps (exit 137)
   at 4-7 threads: a memory question to look at.
+
+### 12:25 UTC -- PRICED_STOP default ON stands (USER); Melira tail is not SAC_OUTLETS
+- USER 11-04 on the 11-03 reversal: "If I ruled on it and there is new information that shows it is worthwhile then
+  that can be retracted. What matters to me is the impact in terms of quality and performance." -> default ON stays.
+- Melira d3/b3, three ~650 s lines (hist/mel/run_mel.sh, single core, X=1000): default vs MTG_SUBSET_SAC_OUTLETS=0
+  274/276, 294/291, 517/520 s, win turns equal -> NOT the Goblins mechanism. Solo cost is ~2.4x below the contended
+  4-thread replay. Turn census on the two worst lines running (hist/mel/run_mcen.sh -> cen_<seed>.tsv, cores 6-7).
+- Sac-fold: first subagent hit the 250K cap; commit 9984a7572 on local branch sac-fold, exact (verify: 19,983,527
+  flagged, 0 passed the dup check, 0 brute mismatches; 25-job regression sample digests = GT, units equal, wall
+  354 -> 148 s) but does NOT fire on the Goblins gen line (other walk). Handoff build/scratch/budget/sacfold/HANDOFF.md;
+  a second subagent continues from it.
