@@ -801,6 +801,7 @@ Job ParseJob(const json& jspec, ProfileCache& cache)
     if (jspec.contains("priced_unit_ns")) { j.arm.priced_unit_ns = jspec["priced_unit_ns"].get<int>(); }
     if (jspec.contains("decision_priced_gate")) { j.arm.decision_priced_gate = jspec["decision_priced_gate"].get<bool>() ? 1 : 0; }
     if (jspec.contains("bp_priced_stop")) { j.arm.bp_priced_stop = jspec["bp_priced_stop"].get<bool>() ? 1 : 0; }
+    if (jspec.contains("sac_dup_fold")) { j.arm.sac_dup_fold = jspec["sac_dup_fold"].get<bool>() ? 1 : 0; }
     if (jspec.contains("aa_route_units")) { j.arm.aa_route_units = jspec["aa_route_units"].get<int>(); }
     if (jspec.contains("bp_chain_slot")) { j.arm.bp_chain_slot = jspec["bp_chain_slot"].get<int>(); }
     if (jspec.contains("cyclone_remand_max_mv"))

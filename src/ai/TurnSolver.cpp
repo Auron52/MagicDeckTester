@@ -18467,7 +18467,13 @@ inline bool Take() { const bool b = g_from_odometer; g_from_odometer = false; re
 // what the fold assumed it would). Both must be 0; printed at exit.
 namespace sacdupfold
 {
-inline bool On() { static const bool on = EnvOn("MTG_SAC_DUP_WALK_FOLD", true); return on; }
+// The per-job arm (valuearm sac_dup_fold) wins, else the env.
+inline bool On()
+{
+    static const bool env = EnvOn("MTG_SAC_DUP_WALK_FOLD", true);
+    const int a = valuearm::t_arm.sac_dup_fold;
+    return a >= 0 ? a != 0 : env;
+}
 inline bool VerifyOn() { static const bool v = EnvOn("MTG_SAC_DUP_WALK_FOLD_VERIFY"); return v; }
 inline thread_local bool t_expect_reject = false;
 inline std::atomic<long long> g_flagged{0}, g_brute_mismatch{0}, g_passed_dup{0}, g_reached_dup{0}, g_missed{0};
