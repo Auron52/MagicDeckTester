@@ -4765,6 +4765,9 @@ bool EquipRouteDfsActive();                                   // ...and inside i
 int  AlchemistComboRouteOffer(const GameState& s, int controller);
 int  AlchemistComboRouteApply(GameState& s, int controller);  // 1 WIN, 0 nothing played
 void AlchemistComboRouteClearMemo();
+// The mana oracle's isolation scope (TurnSolver::ObserverIsolationScope): swap this file's route memos with an
+// empty per-thread stash; restore=true swaps them back and drops what the observer stored.
+void RouteMemosObserverSwap(bool restore);
 bool AlchemistComboRouteInProgress();
 // Walks this THREAD has CUT for budget (MTG_AA_ROUTE_NODE_UNITS; monotonic; always 0 with the price off).
 // A cache whose entry's content can include the route's verdict snapshots it around the work it stores

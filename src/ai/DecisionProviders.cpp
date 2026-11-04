@@ -43331,6 +43331,10 @@ namespace equiproute
 // MostCasts, so the common path still pays exactly one playout; a rung is reached only by a board
 // that has already been proven NOT to win the cheap way, which is the same cost discipline the
 // PayloadFirst retry was built with.
+// TrialPolicy's per-decision verdict memo (namespace scope so the mana oracle's isolation scope can stash it:
+// RouteMemosObserverSwap).
+struct DecisionMemo { std::uint64_t epoch = ~0ULL; std::unordered_map<std::uint64_t, int> memo; };
+inline DecisionMemo& TheDecisionMemo() { static thread_local DecisionMemo dm; return dm; }
 int TrialPolicy(const GameState& s, int me)
 {
     // MTG_CACHE_HIT_CHARGE: the verdict is memoised per DECISION and its walk charges the decision budget,
@@ -43342,8 +43346,7 @@ int TrialPolicy(const GameState& s, int me)
     // same hand and battlefield can sit on a different deck order, and a cached "no" would then
     // suppress a kill that is there. Within a decision a budget-cut "no" may be reused too -- the
     // budget only shrinks, so a re-run could not do better.
-    struct DecisionMemo { std::uint64_t epoch = ~0ULL; std::unordered_map<std::uint64_t, int> memo; };
-    static thread_local DecisionMemo dm;
+    DecisionMemo& dm = TheDecisionMemo();
     const bool use_memo = MemoEnabled();
     const std::uint64_t key = RouteStateKey(s, me);
     std::unordered_map<std::uint64_t, int>& memo = dm.memo;
@@ -50326,6 +50329,31 @@ bool AlchemistComboRouteOn()
 bool AlchemistComboRouteInProgress() { return aaroute::t_in_route > 0; }
 std::uint64_t AlchemistComboRouteCuts() { return aaroute::t_cuts; }
 void AlchemistComboRouteClearMemo() { aaroute::TheMemo().m.clear(); aaroute::TheMemo().epoch = ~0ULL; aaroute::t_blind_seen.clear(); }
+// The mana oracle's isolation (TurnSolver::ObserverIsolationScope): swap every route memo this file keeps --
+// the EDF trial memo and attempt cache, the equip route's decision transposition set and verdict memo, the
+// Alchemist route memo -- with an empty stash. Called twice: on entry (the observer starts empty), then with
+// restore=true (the game's memos come back, and what the observer stored is dropped). Hit/miss counters are
+// stats and are left alone.
+void RouteMemosObserverSwap(bool restore)
+{
+    static thread_local std::unordered_map<std::uint64_t, int> s_edf;
+    static thread_local std::unordered_multimap<std::uint64_t, comboroute::TrialAttempt> s_att;
+    static thread_local equiproute::DecisionSeen s_seen;
+    static thread_local equiproute::DecisionMemo s_dm;
+    static thread_local aaroute::Memo s_aa;
+    static thread_local decltype(aaroute::t_blind_seen) s_blind;
+    std::swap(comboroute::Memo().m, s_edf);
+    std::swap(comboroute::AttemptCache().m, s_att);
+    std::swap(equiproute::DSeen(), s_seen);
+    std::swap(equiproute::TheDecisionMemo(), s_dm);
+    std::swap(aaroute::TheMemo(), s_aa);
+    std::swap(aaroute::t_blind_seen, s_blind);
+    if (restore)
+    {
+        s_edf.clear(); s_att.clear(); s_seen = equiproute::DecisionSeen{}; s_dm = equiproute::DecisionMemo{};
+        s_aa = aaroute::Memo{}; s_blind.clear();
+    }
+}
 std::string AlchemistComboRouteStatsBrief();
 // MTG_AA_ROUTE_STATS_EVERY_S=<s> (diagnostic, print-only; needs MTG_AA_ROUTE_STATS): a watchdog thread prints the
 // cumulative brief every <s> seconds -- the only view into a label search that runs for hours inside ONE decision.

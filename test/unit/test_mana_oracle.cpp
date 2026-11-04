@@ -273,6 +273,55 @@ TEST_CASE("viewer line check: with the give-back the search's own payment casts 
     CHECK(a.dropped.empty());
 }
 
+// THE ORACLE IS A CHECKER: play must be byte-identical with it on or off. It drives the engine's own
+// enumeration and applies on copies, on the game's thread, so everything it touched in the engine's per-game
+// caches (the plan memos, the breakpoint-continuation cache, the payable-mana cache, the route memos, the
+// decision epoch, the work counters) used to stay behind for the play that followed. Mana-clean gate, Bruna
+// seed 30003487 gi3487: the T4 main replayed a committed line's positional bp_choice, the bp-enum cache served
+// a list a fresh derivation would not, and the oracle's 51st menu apply had changed that cache -- T5 win with
+// the oracle off, T4 with it on. TurnSolver::ObserverIsolationScope now stashes all of it for the check's
+// duration and puts it back.
+TEST_CASE("mana oracle is checker-only: a line check leaves the engine's per-game caches exactly as it found them")
+{
+    EnsureOracleCards();
+    const GameState s = Edf3000T4();
+    // Warm the caches the way the search does at this decision: its menu, each entry applied once.
+    const std::vector<TurnSolver::Plan> menu = TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true);
+    REQUIRE_FALSE(menu.empty());
+    for (const TurnSolver::Plan& p : menu) { GameState c = s; TurnSolver::ApplyPlan(c, p, /*is_pre_combat=*/true); }
+    TurnSolver::Plan plan;
+    plan.actions      = { CastAction(s, "Training Grounds"), CastAction(s, "Eldrazi Displacer") };
+    plan.land_decided = true;
+    const std::uint64_t before = TurnSolver::PerGameCacheDigestForTest();
+    for (const TurnSolver::Plan& p : menu) { (void)manaoracle::AuditLine(s, /*pre=*/true, p, &menu, 400, /*deep=*/true); }
+    (void)manaoracle::AuditLine(s, /*pre=*/true, plan, &menu, 400, /*deep=*/true);
+    CHECK(TurnSolver::PerGameCacheDigestForTest() == before);
+}
+
+TEST_CASE("observer isolation: the observer starts on empty caches, and closing the scope restores the game's")
+{
+    EnsureOracleCards();
+    const GameState s = Edf3000T4();
+    const std::vector<TurnSolver::Plan> menu = TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true);
+    for (const TurnSolver::Plan& p : menu) { GameState c = s; TurnSolver::ApplyPlan(c, p, /*is_pre_combat=*/true); }
+    const std::uint64_t before = TurnSolver::PerGameCacheDigestForTest();
+    const std::uint64_t epoch  = TurnSolver::DecisionEpoch();
+    {
+        TurnSolver::ObserverIsolationScope iso;
+        CHECK(TurnSolver::DecisionEpoch() != epoch);
+        CHECK(TurnSolver::PerGameCacheDigestForTest() != before);
+        {
+            TurnSolver::ObserverIsolationScope nested;   // a no-op inside the outer scope
+            const std::vector<TurnSolver::Plan> again = TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true);
+            CHECK(again.size() == menu.size());
+            for (const TurnSolver::Plan& p : again) { GameState c = s; TurnSolver::ApplyPlan(c, p, /*is_pre_combat=*/true); }
+        }
+        TurnSolver::ClearPerGameCaches();   // even a wholesale clear inside the scope reaches only the observer's
+    }
+    CHECK(TurnSolver::DecisionEpoch() == epoch);
+    CHECK(TurnSolver::PerGameCacheDigestForTest() == before);
+}
+
 // MTG_REAL_PAY_SCRIPT never pays a DROP: the search scored the plan by the engine's own apply, the drop included,
 // so paying the dropped cast would play a line nobody evaluated (the A/B: 17 slower, 0 faster, 15 of them drops).
 // The historical payer (the give-back, the joint colours and the refine off) drops Eldrazi Displacer here; no

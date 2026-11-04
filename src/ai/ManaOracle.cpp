@@ -3497,6 +3497,10 @@ void AuditDecision(const GameState& state, bool is_pre_combat)
     const auto t0 = std::chrono::steady_clock::now();
     g_decisions.fetch_add(1, std::memory_order_relaxed);
     RevealLogPause pause;   // quiet: no logger, no viewer sink, not the real game (g_real_resolution)
+    // CHECKER ONLY: the engine's caches, decision epoch and work counters come back exactly as they were, so
+    // play is byte-identical with the oracle on or off (TurnSolver::ObserverIsolationScope; Bruna seed
+    // 30003487 gi3487 won T4 on / T5 off before it).
+    TurnSolver::ObserverIsolationScope isolate;
     std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(state, is_pre_combat);
     const std::size_t cap = MaxPlans() > 0 ? static_cast<std::size_t>(MaxPlans()) : plans.size();
     if (plans.size() > cap)
@@ -3589,6 +3593,7 @@ LineAudit AuditLine(const GameState& state, bool pre, const TurnSolver::Plan& pl
     // viewer sink, no human chooser asked anything, not the real game.
     ComboOffApplyPause co_quiet;
     RevealLogPause     quiet;
+    TurnSolver::ObserverIsolationScope isolate;   // a validation leaves the engine's caches as it found them
     struct CapScope
     {
         int saved;

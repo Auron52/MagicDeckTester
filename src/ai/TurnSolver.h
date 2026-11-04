@@ -2490,6 +2490,31 @@ public:
     // Diagnostic: the breakpoint-continuation caches only (MTG_AA_ROUTE_APPLY_CLEARBP).
     static void ClearBreakpointCachesForDiagnostic();
 
+    // OBSERVER ISOLATION. A checker that drives the engine's own enumeration and applies on COPIES of a real
+    // decision's board (the mana oracle: manaoracle::AuditDecision, manaoracle::AuditLine) still runs on the
+    // game's thread, so everything ClearPerGameCaches lists -- the plan memos, the breakpoint-continuation
+    // cache, the game-line cache, the payable-mana cache, the route memos, the hybrid's learned R/G -- plus
+    // the decision epoch and the game's work counters would carry what it did into the play that follows.
+    // Bruna seed 30003487 gi3487 (mana-clean gate, 2026-11-04): the T4 main was a committed line's phase
+    // with a positional bp_choice, the bp-enum cache served the executor a list a fresh derivation would not
+    // (MTG_BP_ENUM_VERIFY CONTENT-DIFF), and the oracle's 51st menu apply changed what that cache held -- T5
+    // win off, T4 win on. While this scope is open the observer runs on EMPTY caches under a decision epoch
+    // no real decision can hold; on close every one of those is swapped back exactly as it was and whatever
+    // the observer stored is dropped. Only the outermost scope acts (nesting is a no-op).
+    class ObserverIsolationScope
+    {
+    public:
+        ObserverIsolationScope();
+        ~ObserverIsolationScope();
+        ObserverIsolationScope(const ObserverIsolationScope&) = delete;
+        ObserverIsolationScope& operator=(const ObserverIsolationScope&) = delete;
+    private:
+        bool m_outer;
+    };
+    // Test seam: a digest of the per-game cache state the scope above protects (sizes, byte counts,
+    // epochs) -- equal before and after anything that must leave play untouched.
+    static std::uint64_t PerGameCacheDigestForTest();
+
     // Committed-depth telemetry (MTG_ROLLOUT_STATS; counters only, no behaviour). Called once per
     // top-level main-phase decision with the depth iterative deepening actually COMMITTED. See the
     // g_cdepth_hist comment in TurnSolver.cpp for why a units total cannot show this.

@@ -6014,6 +6014,18 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
 // MTG_MANA_CACHE_VERIFY instead of surfacing as pool flicker. docs/design/batch-run-to-run-
 // nondeterminism.md. A game whose result moves with this flag has found the next key hole.
 // (Defined OUTSIDE the anonymous namespace above: it is the header's ::ManaCacheClearPerGame.)
+void ManaCacheObserverSwap(bool restore)
+{
+    using Map = std::unordered_map<std::uint64_t, ManaCacheEntry>;
+    static thread_local Map       s_map;
+    static thread_local long long s_bytes = 0;
+    static thread_local tier2::Overflow<Map, &McEntryBytes> s_t2(tier2::kMana);
+    std::swap(g_mana_cache, s_map);
+    std::swap(g_mana_cache_bytes, s_bytes);
+    g_mana_t2.SwapContents(s_t2);
+    if (restore) { s_map.clear(); s_bytes = 0; s_t2.Clear(); }
+}
+
 void ManaCacheClearPerGame()
 {
     static const bool s_keep = EnvOn("MTG_LEGACY_MANA_CACHE_ACROSS_GAMES");

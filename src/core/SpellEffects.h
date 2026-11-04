@@ -44851,6 +44851,10 @@ inline std::uint64_t ReservableSpecialMask(const GameState& state)
 // TurnSolver::ClearPerGameCaches; see the definition for why. MTG_LEGACY_MANA_CACHE_ACROSS_GAMES=1
 // keeps the old cross-game retention (A/B hatch for the wall cost).
 void ManaCacheClearPerGame();
+// The mana oracle's isolation scope (TurnSolver::ObserverIsolationScope): swap the payable-mana cache (tier 1,
+// its byte count, tier 2) with an empty per-thread stash; restore=true swaps it back and drops what the
+// observer stored (its tier-2 bytes return to the shared pool).
+void ManaCacheObserverSwap(bool restore);
 
 // TapForCostBacktrack -- body in SpellEffects.cpp (see the header note above).
 // `src_cands` (threaded, nullptr at the top-level call) is the controller's structural mana sources

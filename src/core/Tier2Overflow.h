@@ -159,6 +159,10 @@ public:
     }
     std::size_t Size() const { return m_map.size(); }
     long long Bytes_() const { return m_bytes; }
+    // Exchange the stored entries (and their byte count) with another store of the same category and pool
+    // -- the bytes stay reserved in the shared pool, they only change owner. The mana oracle's isolation
+    // scope stashes a game's tier 2 this way (ManaCacheObserverSwap).
+    void SwapContents(Overflow& o) { m_map.swap(o.m_map); std::swap(m_bytes, o.m_bytes); }
 
 private:
     void Drop(typename Map::iterator it)

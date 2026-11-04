@@ -115556,3 +115556,165 @@ std::vector<Action> TurnSolver::CollectActionsUnderRootForTest(const GameState& 
     DecisionBudgetScope root(true, budget, state.turn_number);
     return CollectActions(state, is_pre_combat);
 }
+
+// ---- OBSERVER ISOLATION (TurnSolver::ObserverIsolationScope; see TurnSolver.h) ------------------------------
+// Every per-game cache ClearPerGameCaches empties is SWAPPED with an empty stash on entry and swapped back on
+// exit (std::swap of the containers: O(1), nothing copied), then the stash -- now holding what the observer
+// stored -- is dropped. The plan-pool byte counters are borrowed from a GLOBAL pool, so the observer's bytes are
+// released through plancache::Release and the game's own counters restored; the tier-1 ledger and the work
+// counters are restored outright. The decision epoch moves to a range no real decision reaches (bit 63 set), so
+// an epoch-scoped memo this list does not cover can never serve the observer's entries to play.
+namespace observeriso
+{
+struct Stash
+{
+    decltype(solvememo::t_cache)    solve;
+    decltype(solvememo::t_m2cache)  solve_m2;
+    std::remove_cv_t<decltype(solvememo::t_bytes)> solve_bytes{};
+    decltype(m1memo::t_cache)       m1;
+    std::uint64_t                   m1_epoch = 0;
+    long long                       m1_bytes = 0;
+    decltype(enummemo::t_cache)     enm;
+    std::uint64_t                   enm_epoch = 0;
+    bpallpaths::Map                 allpaths;
+    std::remove_reference_t<decltype(BpLenMemo())> bplen;
+    bool                            derive_interrupted = false;
+    bpcache::Map                    bp;
+    decltype(bpcanon::t_fronts)     fronts;
+    decltype(pledger::t_enum)       pl_enum, pl_bp, pl_front;
+    std::uint64_t                   pl_epoch = ~0ull;
+    decltype(gamelc::t_map)         glc;
+    decltype(gamelc::t_ctx)         glc_ctx;
+    std::size_t                     glc_bytes = 0;
+    decltype(pastcut::t_rec)        pastcut;
+    decltype(xmmemo::t_map)         xm;
+    std::uint64_t                   xm_epoch = 0;
+    const SearchBudget*             xm_budget = nullptr;
+    // the hybrid's learned cost model (HybridLearnedStateClear's set, plus the arrays it re-learns)
+    double esc_R = 0.0, emul_R = 0.0, emul_deck_R = 0.0, single_R = 0.0;
+    double emul_Rd[16] = {0}, emul_G[16] = {0};
+    int    emul_Rn[16] = {0}, emul_Gn[16] = {0};
+    int    single_R_n = 0;
+    std::string emul_key, single_R_key;
+};
+inline thread_local int           t_depth = 0;
+inline thread_local std::uint64_t t_seq = 0;
+inline thread_local Stash         t_stash;
+// Saved (not swapped): restored on exit.
+struct Saved
+{
+    std::uint64_t epoch = 0;
+    long long enum_bytes = 0, bp_bytes = 0;
+    long long tier1_cur[tier1::kCats] = {};
+    long long tier1_total = 0;
+    long long game_used = 0;
+    long long dec_used = 0;
+    int       dec_charge_acc = 0;
+    long long work_n[workctr::kKinds] = {};
+    long long work_priced = 0;
+};
+inline thread_local Saved t_saved;
+
+template <class T> inline void SwapArr(T* a, T* b, int n) { for (int i = 0; i < n; ++i) { std::swap(a[i], b[i]); } }
+
+void SwapAll(bool restore)
+{
+    Stash& s = t_stash;
+    std::swap(solvememo::t_cache, s.solve);
+    std::swap(solvememo::t_m2cache, s.solve_m2);
+    std::swap(solvememo::t_bytes, s.solve_bytes);
+    std::swap(m1memo::t_cache, s.m1);
+    std::swap(m1memo::t_epoch, s.m1_epoch);
+    std::swap(m1memo::t_bytes, s.m1_bytes);
+    std::swap(enummemo::t_cache, s.enm);
+    std::swap(enummemo::t_epoch_seen, s.enm_epoch);
+    std::swap(bpallpaths::t_acc, s.allpaths);
+    std::swap(BpLenMemo(), s.bplen);
+    std::swap(g_bp_derive_interrupted, s.derive_interrupted);
+    std::swap(bpcache::t_plans, s.bp);
+    std::swap(bpcanon::t_fronts, s.fronts);
+    std::swap(pledger::t_enum, s.pl_enum);
+    std::swap(pledger::t_bp, s.pl_bp);
+    std::swap(pledger::t_front, s.pl_front);
+    std::swap(pledger::t_enum_epoch, s.pl_epoch);
+    std::swap(gamelc::t_map, s.glc);
+    std::swap(gamelc::t_ctx, s.glc_ctx);
+    std::swap(gamelc::t_bytes, s.glc_bytes);
+    std::swap(pastcut::t_rec, s.pastcut);
+    std::swap(xmmemo::t_map, s.xm);
+    std::swap(xmmemo::t_epoch, s.xm_epoch);
+    std::swap(xmmemo::t_budget, s.xm_budget);
+    std::swap(g_esc_R, s.esc_R);
+    std::swap(g_emul_R, s.emul_R);
+    std::swap(g_emul_deck_R, s.emul_deck_R);
+    std::swap(g_single_R, s.single_R);
+    std::swap(g_single_R_n, s.single_R_n);
+    std::swap(g_emul_key, s.emul_key);
+    std::swap(g_single_R_key, s.single_R_key);
+    SwapArr(g_emul_Rd, s.emul_Rd, 16);
+    SwapArr(g_emul_G, s.emul_G, 16);
+    SwapArr(g_emul_Rn, s.emul_Rn, 16);
+    SwapArr(g_emul_Gn, s.emul_Gn, 16);
+    ManaCacheObserverSwap(restore);
+    RouteMemosObserverSwap(restore);
+    if (restore) { s = Stash{}; }   // what the observer stored
+}
+}   // namespace observeriso
+
+TurnSolver::ObserverIsolationScope::ObserverIsolationScope() : m_outer(observeriso::t_depth++ == 0)
+{
+    if (!m_outer) { return; }
+    observeriso::Saved& v = observeriso::t_saved;
+    v.epoch = g_decision_epoch;
+    v.enum_bytes = plancache::t_enum_bytes;   // still reserved in the global pool: the entries are only stashed
+    v.bp_bytes   = plancache::t_bp_bytes;
+    plancache::t_enum_bytes = 0;
+    plancache::t_bp_bytes   = 0;
+    for (int c = 0; c < tier1::kCats; ++c) { v.tier1_cur[c] = tier1::t_cur[c]; }
+    v.tier1_total    = tier1::t_total;
+    v.game_used      = gamework::t_used;
+    v.dec_used       = decisionwork::t_used;
+    v.dec_charge_acc = decisionwork::t_charge_acc;
+    for (int k = 0; k < workctr::kKinds; ++k) { v.work_n[k] = workctr::t_n[k]; }
+    v.work_priced    = workctr::t_priced;
+    observeriso::SwapAll(/*restore=*/false);
+    g_decision_epoch = (1ull << 63) | (++observeriso::t_seq << 24);
+}
+
+TurnSolver::ObserverIsolationScope::~ObserverIsolationScope()
+{
+    --observeriso::t_depth;
+    if (!m_outer) { return; }
+    observeriso::Saved& v = observeriso::t_saved;
+    observeriso::SwapAll(/*restore=*/true);
+    plancache::Release(plancache::t_enum_bytes);   // the observer's own entries, dropped with the stash
+    plancache::Release(plancache::t_bp_bytes);
+    plancache::t_enum_bytes = v.enum_bytes;
+    plancache::t_bp_bytes   = v.bp_bytes;
+    for (int c = 0; c < tier1::kCats; ++c) { tier1::t_cur[c] = v.tier1_cur[c]; }
+    tier1::t_total             = v.tier1_total;
+    gamework::t_used           = v.game_used;
+    decisionwork::t_used       = v.dec_used;
+    decisionwork::t_charge_acc = v.dec_charge_acc;
+    for (int k = 0; k < workctr::kKinds; ++k) { workctr::t_n[k] = v.work_n[k]; }
+    workctr::t_priced          = v.work_priced;
+    g_decision_epoch           = v.epoch;
+}
+
+std::uint64_t TurnSolver::PerGameCacheDigestForTest()
+{
+    std::uint64_t h = 0xC0FFEEull;
+    auto mix = [&h](std::uint64_t x) { h ^= x + 0x9E3779B97F4A7C15ull + (h << 6) + (h >> 2); };
+    mix(g_decision_epoch);
+    mix(solvememo::t_cache.size()); mix(solvememo::t_m2cache.size()); mix(static_cast<std::uint64_t>(solvememo::t_bytes));
+    mix(m1memo::t_cache.size()); mix(m1memo::t_epoch); mix(static_cast<std::uint64_t>(m1memo::t_bytes));
+    mix(enummemo::t_cache.size()); mix(enummemo::t_epoch_seen);
+    mix(bpallpaths::t_acc.size()); mix(BpLenMemo().size());
+    mix(bpcache::t_plans.size()); mix(bpcanon::t_fronts.size());
+    mix(pledger::t_enum.size()); mix(pledger::t_bp.size()); mix(pledger::t_front.size());
+    mix(gamelc::t_map.size()); mix(pastcut::t_rec.size()); mix(xmmemo::t_map.size()); mix(xmmemo::t_epoch);
+    mix(static_cast<std::uint64_t>(plancache::t_enum_bytes)); mix(static_cast<std::uint64_t>(plancache::t_bp_bytes));
+    mix(static_cast<std::uint64_t>(gamework::t_used)); mix(static_cast<std::uint64_t>(workctr::t_priced));
+    mix(static_cast<std::uint64_t>(g_single_R_n)); mix(g_emul_key.size());
+    return h;
+}
