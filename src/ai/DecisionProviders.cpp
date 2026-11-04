@@ -28929,17 +28929,33 @@ static bool FluctuatorSecondThreatLive(const GameState& s)
 // battlefield (each permanent's copy number, name, tapped and entered-this-turn state), the floating
 // mana, life, turn and the drop count. A 4-entry thread_local cache keyed on exactly those keeps the
 // GameState copies off the chain's hot path. Pure read; a hit returns what the copies would.
+// The KEY is address- and platform-free (names by FNV-1a over their bytes, never a pointer or std::hash) and the
+// cache is emptied per game (FluctKeepPayableClearMemo): its slot is h & 3, so a pointer in the key made which
+// entries evicted each other -- and so how many payments the copies counted (workctr::kPay) -- vary with ASLR
+// and batch order. Play never read that count; the priced budget and the priced ceiling do (2026-11-04).
+namespace fluctkeep
+{
+struct Entry { std::uint64_t key = 0; bool val = false; bool used = false; };
+inline thread_local Entry t_cache[4];
+inline std::uint64_t Str(const std::string& v)
+{
+    std::uint64_t h = 1469598103934665603ULL;
+    for (unsigned char c : v) { h = (h ^ c) * 1099511628211ULL; }
+    return h;
+}
+}
+void FluctKeepPayableClearMemo() { for (fluctkeep::Entry& e : fluctkeep::t_cache) { e = fluctkeep::Entry{}; } }
 static bool FluctKeepPayable(const GameState& s, const CardDefinition& cost_def, const std::string* land)
 {
-    struct Entry { std::uint64_t key = 0; bool val = false; bool used = false; };
-    static thread_local Entry t_cache[4];
+    fluctkeep::Entry* const t_cache = fluctkeep::t_cache;
     std::uint64_t h = 1469598103934665603ULL;
     auto mix = [&h](std::uint64_t v) { h ^= v + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2); };
     const int me = s.active_player_index;
     mix(static_cast<std::uint64_t>(s.TurnSeq()));
     mix(static_cast<std::uint64_t>(me));
     mix(static_cast<std::uint64_t>(s.players[me].life));
-    mix(static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(&cost_def)));
+    mix(fluctkeep::Str(cost_def.card.m_name.str()));
+    mix(static_cast<std::uint64_t>(cost_def.card.IsCreature() ? 1u : 0u));
     const ManaPool& f = s.floating_mana;
     for (int v : { f.white, f.blue, f.black, f.red, f.green, f.colorless, f.wild })
     { mix(static_cast<std::uint64_t>(v)); }
@@ -28947,16 +28963,16 @@ static bool FluctKeepPayable(const GameState& s, const CardDefinition& cost_def,
     {
         if (p.controller_index != me) { continue; }
         mix(static_cast<std::uint64_t>(p.card.m_number));
-        mix(std::hash<std::string>{}(p.card.m_name.str()));
+        mix(fluctkeep::Str(p.card.m_name.str()));
         mix((p.tapped ? 1u : 0u) | (p.entered_this_turn ? 2u : 0u));
     }
     if (land != nullptr)
     {
-        mix(std::hash<std::string>{}(*land));
+        mix(fluctkeep::Str(*land));
         mix(static_cast<std::uint64_t>(s.players[me].lands_played_this_turn));
         mix(0x5bd1e995ULL);
     }
-    Entry& e = t_cache[h & 3u];
+    fluctkeep::Entry& e = t_cache[h & 3u];
     if (e.used && e.key == h) { return e.val; }
     const ManaCost& cost = cost_def.card.m_mana_cost;
     const bool v = land != nullptr

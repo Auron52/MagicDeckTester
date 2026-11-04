@@ -4816,6 +4816,8 @@ int  EdfComboRouteApply(GameState& s, int controller);        // same codes; liv
 // Drop the trial's board-keyed memo. Called once per game from TurnSolver::ClearPerGameCaches so a
 // reused batch worker thread starts every game with an empty memo (see the memo's own comment).
 void EdfComboRouteClearMemo();
+// Empty Fluctuator's keep-needed payability memo (FluctKeepPayable), per game from ClearPerGameCaches.
+void FluctKeepPayableClearMemo();
 // Test seam (MTG_EDF_ROUTE_AURA_ORDER): the HAND INDEX of the land Aura the route's deploy step 2 casts
 // first on this board, -1 when the hand holds none. Reads only; plays nothing.
 int  EdfComboRouteFirstAuraPick(const GameState& s, int controller);

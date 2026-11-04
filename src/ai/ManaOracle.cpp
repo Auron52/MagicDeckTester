@@ -2195,6 +2195,11 @@ bool SameOption(bool fa, const PayOption& a, bool fb, const PayOption& b)
 }
 } // namespace
 
+// Per game (TurnSolver::ClearPerGameCaches): the refine memo is pure, but a memo that outlives the game makes
+// how often RefinePaymentImpl runs -- and so the payments it counts (workctr::kPay), which the priced budget and
+// the priced ceiling read -- depend on which games shared the worker thread (2026-11-04).
+void ClearRefineMemoPerGame() { t_refine_memo.clear(); }
+
 bool RefinePayment(const GameState& pre, const GameState& post, const ManaCost& cost, bool for_creature,
                    bool creature_ability, PayOption& out)
 {

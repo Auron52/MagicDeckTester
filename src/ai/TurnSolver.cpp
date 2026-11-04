@@ -90616,6 +90616,9 @@ void TurnSolver::ClearPerGameCaches()
     // The EDF combo route's board-keyed trial memo -- same channel, see EdfComboRouteClearMemo.
     EdfComboRouteClearMemo();
     AlchemistComboRouteClearMemo();
+    FluctKeepPayableClearMemo();               // Fluctuator's keep-needed payability memo
+    g_incinerator_pin_cursor = 0;              // advances unpinned on every Incinerator trigger (see BuildBreakpointKey)
+    manaoracle::ClearRefineMemoPerGame();      // the mana oracle's payment-refine memo
     // The hybrid's per-game learned cost model (emulated ladder R/G, single-pass R, research R).
     HybridLearnedStateClear();
     // The payable-mana cache (SpellEffects.cpp): pure in design, but every key hole it has had was a
@@ -108431,8 +108434,15 @@ static TranspositionTable::Key BuildBreakpointKey(const GameState& state, bool i
         for (const auto& e : state.pending_incinerator_damage)
         { Fold(k, e.source.m_number); Fold(k, e.source.m_name_hash); Fold(k, e.controller); Fold(k, e.damaged_player); Fold(k, e.amount); }
         Fold(k, state.noncombat_trigger_depth);
-        Fold(k, static_cast<uint64_t>(g_incinerator_pin_cursor));
-        if (g_incinerator_pins) { for (int id : *g_incinerator_pins) { Fold(k, id); } }
+        // The cursor only means something while pins are installed (it indexes them); with none it still advances
+        // on every resolved trigger and outlives the game on the worker thread, so folding it unconditionally made
+        // identical states key apart by how many Incinerator triggers EARLIER GAMES resolved -- pure caches, but
+        // their hit rates (and the priced work the budget reads) then depended on batch order (2026-11-04).
+        if (g_incinerator_pins)
+        {
+            Fold(k, static_cast<uint64_t>(g_incinerator_pin_cursor));
+            for (int id : *g_incinerator_pins) { Fold(k, id); }
+        }
     }
 
     Fold(k, static_cast<uint64_t>(state.casts_remaining_this_turn + 1));   // -1 == unset

@@ -41,6 +41,8 @@ namespace manaoracle
 {
     // 0 = off; 1 = summary + the first few flags per class; 2 = every flag; 3 = + per-plan trace.
     int  Level();
+    // Empty the payment-refine memo; once per game from TurnSolver::ClearPerGameCaches.
+    void ClearRefineMemoPerGame();
     inline bool On() { return Level() > 0; }
 
     // One way to pay one payment: the taps to make (in order), and the floating units to set aside
