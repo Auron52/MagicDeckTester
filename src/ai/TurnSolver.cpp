@@ -58741,6 +58741,41 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // Snapshot exactly what a tap can touch so a declined solve (wild output) rolls back cleanly.
     const std::vector<Permanent> bf_snap = state.battlefield;
     const ManaPool               fm_snap = state.floating_mana;
+    // A PHYSICAL {C} STAYS {C}: the {C} this prepay has tapped so far that is PHYSICALLY colourless -- out of a
+    // source with no colour mode at all (Mutavault, Sol Ring, Wastes). Only that {C} must stay `colorless`.
+    // A {C} out of a source that could have made a colour for this spell instead (Sliver Hive, Cavern of
+    // Souls, Secluded Courtyard: C or any colour for the creature type) is any-colour mana whose colour is
+    // committed at spend (USER: no per-colour branching), so booking it `wild` is legal -- and keeping it
+    // `colorless` would refuse a line the board pays (Slivers gi1106 T4: Courtyard x2 + Cavern + Hive,
+    // the replicate copy's {G} is a Courtyard tap). A land Aura's bonus is not counted (base yield only).
+    auto pure_c_tapped = [&state, &bf_snap]() -> int
+    {
+        int pure = 0;
+        const int nb = static_cast<int>(std::min(bf_snap.size(), state.battlefield.size()));
+        for (int bi = 0; bi < nb; ++bi)
+        {
+            const Permanent& bp = state.battlefield[static_cast<std::size_t>(bi)];
+            if (!bp.tapped || bf_snap[static_cast<std::size_t>(bi)].tapped || bp.def_absent) { continue; }
+            const CardDefinition* bd = CardDatabase::Instance().LookupCached(bp.card);
+            if (bd == nullptr || bd->params.produces.empty()) { continue; }
+            bool only_c = true;
+            for (Color c : bd->params.produces) { if (c != Color::Colorless) { only_c = false; break; } }
+            if (!only_c) { continue; }
+            const int y = LandAuraColorMask(state, bp) != 0 ? ManaProducedPerTap(*bd)
+                                                            : PermanentManaYield(state, bp, *bd);
+            pure += (y >= 0 ? y : ManaProducedPerTap(*bd));
+        }
+        return pure;
+    };
+    // How many of `c_fund` generic-funding {C} units (out of `free_c` free {C}, after `pin_c` {C} pips)
+    // must stay `colorless`: the physically colourless ones. Pips take the physical {C} first, the
+    // generic takes the flexible {C} first, so as much as is legal rides `wild` as before.
+    auto c_must_stay = [](int c_fund, int free_c, int pin_c, int pure_c) -> int
+    {
+        const int pure_free = std::max(0, pure_c - pin_c);
+        const int flex_free = std::max(0, free_c - pure_free);
+        return std::max(0, c_fund - flex_free);
+    };
     // The joint solve's STARTING pool: the counted float (MTG_PREPAY_FLOAT_POOL), else empty -- the
     // literal empty pool, so every float-free call is byte-identical to the pre-lever solve.
     const ManaPool               bt_start = float_in ? fm_snap : ManaPool{};
@@ -59731,10 +59766,16 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                     ManaPool pre;
                     if (!PrepayColoursFit(p1, c_aura, &sc, &pre)) { continue; }
                     ManaCost spent = sc;
+                    // The generic's {C} funding, as the pre-load below books it (a PHYSICAL {C} stays
+                    // `colorless`): the keep_flexible drain pays generic colourless-first.
+                    const int c_fund =
+                        c_must_stay(std::min(sc.generic, std::max(0, pre.colorless - sc.colorless)),
+                                    std::max(0, pre.colorless - sc.colorless), sc.colorless,
+                                    pure_c_tapped());
                     SpendFloatingTowardCost(pre, spent, /*keep_flexible=*/true);
                     pre.white += sc.white; pre.blue += sc.blue; pre.black += sc.black;
-                    pre.red   += sc.red;   pre.green += sc.green; pre.colorless += sc.colorless;
-                    pre.wild  += sc.generic;
+                    pre.red   += sc.red;   pre.green += sc.green; pre.colorless += sc.colorless + c_fund;
+                    pre.wild  += sc.generic - c_fund;
                     if (!rest_first_ok(pre, hold))
                     {
                         const std::vector<Permanent> bf1  = state.battlefield;
@@ -60084,6 +60125,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     const int pinned = combined.white + combined.blue + combined.black
                      + combined.red + combined.green + combined.colorless;
     static const bool s_true_colours = EnvOn("MTG_PREPAY_TRUE_COLOURS", true);
+    int c_funded_kept = 0;   // generic-funding {C} kept as `colorless` (a physical {C}, below)
     if (!s_true_colours)
     {
         pool.wild = produced.Total() - pinned;
@@ -60119,6 +60161,38 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         // arithmetic above drifted; give it back to `wild` so the pool total is preserved either way.
         pool.wild -= need;
         pool.wild += produced.Total() - pool.Total();
+        // A PHYSICAL {C} NEVER BECOMES `wild` (CORRECTNESS, 2026-11-03). The loop above
+        // funds the generic colourless-first and books the funding as `wild` -- and `wild` pays any COLOUR
+        // pip (SpendFloatingTowardCost step 2). The bill's own casts never reach that step with it (their
+        // generic pips drain wild first), but a spend OUTSIDE the bill does: Slivers 2HG gi191 T3, bill
+        // Plated Sliver {W} + Sinew Sliver {1}{W} off Mutavault + Ancient Ziggurat + Sliver Hive, pool W:2
+        // wild:1 -> creature float; Hatchery's replicate copy of Plated ({W}, not in the bill) drained W,
+        // then the `wild` -- Mutavault's {C} paying {W}. CR 106.1b/107.4: {W} needs white mana, and
+        // Mutavault makes only {C}. The over-production fix above already said it: keeping {C} in
+        // `colorless` makes that unrepresentable.
+        //
+        // WHY it was `wild`: draining generic pips WILD first is what keeps each pinned colour for its own
+        // pip (the drain's step-3 note). A {C} booked as `colorless` keeps that property, because generic
+        // drains colourless right after wild -- EXCEPT while a {C} pip holds colourless back (a cost's own
+        // {C} pip, or one the line still owes: MTG_HOLD_C_FOR_LINE), when generic eats colours before the
+        // {C}. That is the reservation the relabel stepped around (the haste give-back below declines that
+        // case for the same reason). Under the hold the {C} goes to the {C} pip the hold exists for, and
+        // the generic pays with a colour -- both LEGAL. Laundering it would instead let it pay a colour pip,
+        // which no hold can make legal. Colour-funded generic stays `wild` (unchanged here).
+        //
+        // ONLY the PHYSICALLY colourless {C} (c_must_stay / pure_c_tapped above). A {C} tapped out of a source
+        // that could have made a colour for these spells instead (Sliver Hive, Cavern of Souls, Secluded
+        // Courtyard) is any-colour mana committed at spend, so it keeps riding `wild` exactly as before:
+        // first cut of this fix kept those as `colorless` too, and lost lines the board legally pays
+        // (Slivers 87301106 / 2HG 87300294 / 87301008: the replicate copy's {G} from a Courtyard tap).
+        {
+            const int free_c = std::max(0, produced.colorless - combined.colorless);
+            const int c_keep = std::min(c_must_stay(c_funded, free_c, combined.colorless, pure_c_tapped()),
+                                        pool.wild);
+            pool.wild      -= c_keep;
+            pool.colorless += c_keep;
+            c_funded_kept   = c_keep;
+        }
         // GENERATOR SERVANT'S HASTE TAG survives a counted float (MTG_PREPAY_FLOAT_POOL). The tag is a
         // subset count of floating {C} (GameState::floating_haste_c), and a creature spell takes ONE
         // tagged {C} on its own bill first (TakeHasteFloatForCreatureSpell) -- so the units must still
@@ -60171,8 +60245,10 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         int* col[6] = { &pool.green, &pool.blue, &pool.white, &pool.black, &pool.red, &pool.colorless };
         int* dst[6] = { &big_moved.green, &big_moved.blue, &big_moved.white, &big_moved.black,
                         &big_moved.red, &big_moved.colorless };
+        // The generic-funding {C} kept as `colorless` (a physical {C}, above) is owed to this batch exactly
+        // like the `wild` it replaces, so it is pinned here too: never moved out as surplus.
         const int pin[6] = { combined.green, combined.blue, combined.white, combined.black,
-                             combined.red, combined.colorless };
+                             combined.red, combined.colorless + c_funded_kept };
         for (int k = 0; k < 6 && drop > 0; ++k)
         {
             const int t = std::min(drop, std::max(0, *col[k] - pin[k]));
@@ -60215,7 +60291,11 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         {
             // Per-stage twin of the true-colours pre-load above: pins at their colours, the stage's
             // generic as `wild`, the stage's over-production funded colourless-first then largest.
-            auto stage_pool = [](const ManaCost& c, const ManaPool& prod) -> ManaPool
+            // The stage's generic-funding PHYSICAL {C} stays `colorless`, as in the pre-load.
+            // The batch's physical {C} is shared by the two stages: each stage's {C} pips, then its
+            // generic, draw on it (the noncreature stage is booked first, as called below).
+            int pure_left = pure_c_tapped();
+            auto stage_pool = [&pure_left, &c_must_stay](const ManaCost& c, const ManaPool& prod) -> ManaPool
             {
                 ManaPool pl;
                 pl.white = c.white; pl.blue = c.blue; pl.black = c.black;
@@ -60225,7 +60305,8 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                                   prod.red - c.red, prod.green - c.green, prod.colorless - c.colorless };
                 for (int i = 0; i < 6; ++i) { if (free_[i] < 0) { free_[i] = 0; } }
                 int need = c.generic;
-                while (need > 0 && free_[5] > 0) { --free_[5]; --need; }
+                int c_fund = 0;
+                while (need > 0 && free_[5] > 0) { --free_[5]; --need; ++c_fund; }
                 while (need > 0)
                 {
                     int best = -1;
@@ -60234,6 +60315,12 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                     --free_[best]; --need;
                 }
                 pl.wild = c.generic - need;
+                {
+                    const int stay = c_must_stay(c_fund, std::max(0, prod.colorless - c.colorless),
+                                                 c.colorless, pure_left);
+                    pure_left = std::max(0, pure_left - std::min(pure_left, c.colorless + stay));
+                    pl.wild -= stay; pl.colorless += stay;
+                }
                 for (int i = 0; i < 6; ++i) { *dst[i] += free_[i]; }
                 pl.wild += prod.Total() - pl.Total();   // preserve the stage total exactly
                 return pl;

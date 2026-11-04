@@ -475,6 +475,7 @@ add_executable(mtg-test
     test/unit/test_edf_untap_credit.cpp
     test/unit/test_edf_prepay_energy.cpp
     test/unit/test_prepay_colours.cpp
+    test/unit/test_prepay_c_not_wild.cpp
     test/unit/test_line_generic.cpp
     test/unit/test_pay_refine.cpp
     test/unit/test_edf_aura_payer.cpp
