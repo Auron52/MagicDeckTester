@@ -18458,6 +18458,40 @@ inline thread_local bool g_from_odometer = false;
 inline bool Take() { const bool b = g_from_odometer; g_from_odometer = false; return b; }
 }   // namespace foldsel
 
+// MTG_SAC_DUP_WALK_FOLD (DEFAULT ON; =0 walks every same-source pair as before) and its verifier
+// MTG_SAC_DUP_WALK_FOLD_VERIFY=1. See SacDupFold above EnumeratePlanPositions for the fold and the
+// argument that it is exact. The verifier keeps the unfolded walk, flags each selection the fold
+// would have skipped (t_expect_reject, set around that selection's emit), and counts (a) a flagged
+// selection that holds NO same-source SacForMana pair by a brute-force scan (a wrong mask), and (b) a
+// flagged selection that got PAST a site's SubsetHasDuplicateSacSource test (the rule did not reject
+// what the fold assumed it would). Both must be 0; printed at exit.
+namespace sacdupfold
+{
+inline bool On() { static const bool on = EnvOn("MTG_SAC_DUP_WALK_FOLD", true); return on; }
+inline bool VerifyOn() { static const bool v = EnvOn("MTG_SAC_DUP_WALK_FOLD_VERIFY"); return v; }
+inline thread_local bool t_expect_reject = false;
+inline std::atomic<long long> g_flagged{0}, g_brute_mismatch{0}, g_passed_dup{0}, g_reached_dup{0}, g_missed{0};
+// Called right after a site's duplicate-source test let `sel` through.
+inline void NotePassedDupCheck()
+{ if (t_expect_reject) { g_passed_dup.fetch_add(1, std::memory_order_relaxed); } }
+// Called right before a site's duplicate-source test (how many flagged selections it actually judged).
+inline void NoteReachedDupCheck()
+{ if (t_expect_reject) { g_reached_dup.fetch_add(1, std::memory_order_relaxed); } }
+struct Dump
+{
+    ~Dump()
+    {
+        if (!VerifyOn()) { return; }
+        std::fprintf(stderr, "[sac-dup-walk-fold] verify: flagged=%lld reached_dup_check=%lld "
+                     "PASSED_DUP_CHECK=%lld BRUTE_MISMATCH=%lld unfolded_dups=%lld\n",
+                     g_flagged.load(), g_reached_dup.load(), g_passed_dup.load(), g_brute_mismatch.load(),
+                     g_missed.load());
+    }
+};
+// NOT `inline`: an unreferenced inline variable is never emitted, so its destructor never runs.
+static Dump g_dump;
+}   // namespace sacdupfold
+
 // MTG_FOLD_SEARCH_ODO -- DEFAULT OFF; =1 enables. Arms the flag above on the SEARCH's own
 // subset walk, which is a second, private copy of the odometer that was never wired to it. See
 // the set site in EnumeratePlansWithLandUncached for the measurement that found the gap.
@@ -50895,6 +50929,180 @@ static void MeasureManaSideCollapse(const std::vector<Action>& cands,
     enumstats::g_m_manaonly.fetch_add(manaonly.size(), std::memory_order_relaxed);
 }
 
+// ---- SAME-SOURCE SacForMana WALK FOLD (MTG_SAC_DUP_WALK_FOLD, DEFAULT ON; =0 disables) -----------
+// A repeatable creature sac OUTLET (Skirk Prospector, Utopia Mycon) reaches the walk as SEVERAL
+// SacForMana actions on ONE sac_source_id -- the single sac, the demand burst k, the activation-demand
+// bursts, the lethal burst -- all in one colour. CollectMultiVariantSacSources deliberately leaves
+// same-colour variants as INDEPENDENT bits (grouping them reorders the enumeration: 14 Goblins d0 games
+// moved, 11 worse), so m variants cost 2^m odometer positions of which only m+1 are legal: every
+// position holding two of them is generated, folded, paired, handed to eval_and_push / consider and
+// only then rejected by SubsetHasDuplicateSacSource's kSacForMana clause. MTG_SUBSET_SAC_OUTLETS
+// (d2184261b) made those outlets' boards reachable far more often, and on the Goblins gen line
+// dupc_sac_for_mana went 1.5M -> 66.1M per rollout.
+// THE FOLD: the walk drops those positions itself -- a Stage-A mana line (or a flat-fallback position)
+// holding two SacForMana candidates with the same sac_source_id is never built, so none of its pairs
+// is formed, sorted or emitted.
+// WHY IT IS EXACT (an identity fold, not a narrowing): every selection containing that pair is a
+// selection the receiving site REJECTS. Both sites (Solve::consider site 0, EnumeratePlans'
+// eval_and_push site 1) run `pre.dup_source && SubsetHasDuplicateSacSource(...)` unconditionally, and
+// BuildSubsetFilterPre raises dup_source for ANY SacForMana candidate and kDupSacMana for two or more
+// (the caller passes that verdict in as `live`); the clause's test is exactly "kind == SacForMana on both
+// and equal sac_source_id" (id 0 included). Everything a site does before that test is either another
+// rejection or a charge/instrument, never a push, so the emitted plan list -- set AND order: the pairs
+// are still sorted by the flat key -- is unchanged. Dropping mana lines also lowers Stage B's row-skip
+// bound (best_head / min_mcost), which only drops a payoff line no SURVIVING mana line can fund, and
+// its pairs with the dropped lines were rejected anyway.
+// WHAT IT DOES MOVE: the visits the sites bill. A skipped selection no longer increments
+// enum_charge.visits (canon-wave billing, MTG_ENUM_CHARGE, workctr kOdoVisit -> the priced decision
+// ceiling) or Solve's greedy-walk charge, so a FINITE budget runs out later than before. That is the
+// sound-collapse shape (CLAUDE.md, COLLAPSE WASTED SEARCH): at an unlimited budget nothing is billed and
+// play is identical by the argument above. Payoff-side SacForMana (ritual_float 0) are not folded; the
+// rule still rejects them at the site, as before.
+struct SacDupFold
+{
+    bool on = false, verify = false;
+    // independent SLOT -> mask of the OTHER independent slots sharing its SacForMana source (0 = none).
+    std::vector<unsigned> ind_conf;
+    // candidate -> its colliding source's bit (0 = not a SacForMana on a source held twice), for group
+    // options; and that bit's independent slots.
+    std::vector<std::uint64_t> cand_bit;
+    std::uint64_t bit_ind[64] = {};
+    bool any_group = false;   // some group option carries a bit
+};
+static void BuildSacDupFold(const std::vector<Action>& cands, const std::vector<std::vector<int>>& groups,
+                            const std::vector<int>& independent, bool live, SacDupFold& f)
+{
+    f = SacDupFold{};
+    const bool verify = sacdupfold::VerifyOn();
+    if (!live || !(sacdupfold::On() || verify)) { return; }
+    const int num_ind = static_cast<int>(independent.size());
+    if (num_ind > 31) { return; }   // the walkers' imask is a 32-bit int
+    // Mana-side SacForMana members of the walk (groups + independent), by source id.
+    std::vector<std::pair<int, int>> src_n;   // (sac_source_id, count); tiny -> linear scan
+    auto note = [&](int j)
+    {
+        const Action& a = cands[static_cast<std::size_t>(j)];
+        if (a.kind != Action::Kind::SacForMana || !IsManaSideAction(a)) { return; }
+        for (auto& sn : src_n) { if (sn.first == a.sac_source_id) { ++sn.second; return; } }
+        src_n.push_back({ a.sac_source_id, 1 });
+    };
+    for (const std::vector<int>& g : groups) { for (int j : g) { note(j); } }
+    for (int j : independent) { note(j); }
+    std::vector<int> bit_src;   // bit index -> source id (sources held at least twice)
+    for (const auto& sn : src_n) { if (sn.second >= 2 && bit_src.size() < 64) { bit_src.push_back(sn.first); } }
+    if (bit_src.empty()) { return; }
+    auto bit_of = [&](int j) -> std::uint64_t
+    {
+        const Action& a = cands[static_cast<std::size_t>(j)];
+        if (a.kind != Action::Kind::SacForMana || !IsManaSideAction(a)) { return 0; }
+        for (std::size_t k = 0; k < bit_src.size(); ++k)
+        { if (bit_src[k] == a.sac_source_id) { return 1ull << k; } }
+        return 0;
+    };
+    f.cand_bit.assign(cands.size(), 0);
+    std::vector<std::uint64_t> ind_bit(static_cast<std::size_t>(num_ind), 0);
+    for (int b = 0; b < num_ind; ++b)
+    {
+        ind_bit[static_cast<std::size_t>(b)] = bit_of(independent[static_cast<std::size_t>(b)]);
+        for (std::size_t k = 0; k < 64; ++k)
+        { if (ind_bit[static_cast<std::size_t>(b)] & (1ull << k)) { f.bit_ind[k] |= 1ull << b; } }
+    }
+    f.ind_conf.assign(static_cast<std::size_t>(num_ind), 0);
+    for (int b = 0; b < num_ind; ++b)
+    {
+        const std::uint64_t bb = ind_bit[static_cast<std::size_t>(b)];
+        if (bb == 0) { continue; }
+        for (int c = 0; c < num_ind; ++c)
+        { if (c != b && ind_bit[static_cast<std::size_t>(c)] == bb) { f.ind_conf[static_cast<std::size_t>(b)] |= 1u << c; } }
+    }
+    for (const std::vector<int>& g : groups)
+    {
+        for (int j : g)
+        {
+            f.cand_bit[static_cast<std::size_t>(j)] = bit_of(j);
+            if (f.cand_bit[static_cast<std::size_t>(j)] != 0) { f.any_group = true; }
+        }
+    }
+    f.on = true;
+    f.verify = verify;
+}
+// The group half of a position: false when two chosen group options share a source (the whole position
+// is a duplicate); else `forbid` = the independent slots that collide with a chosen option.
+// `choice[t]` indexes `gidx[t]` (a side's group list, or every group when gidx is null).
+static bool SacDupGroupsOk(const SacDupFold& f, const std::vector<std::vector<int>>& groups,
+                           const std::vector<int>* gidx, const std::vector<int>& choice, unsigned& forbid)
+{
+    forbid = 0;
+    if (!f.any_group) { return true; }
+    std::uint64_t seen = 0;
+    for (std::size_t t = 0; t < choice.size(); ++t)
+    {
+        if (choice[t] <= 0) { continue; }
+        const int g = gidx != nullptr ? (*gidx)[t] : static_cast<int>(t);
+        const std::uint64_t bit = f.cand_bit[static_cast<std::size_t>(groups[static_cast<std::size_t>(g)][static_cast<std::size_t>(choice[t] - 1)])];
+        if (bit == 0) { continue; }
+        if ((seen & bit) != 0) { return false; }
+        seen |= bit;
+    }
+    for (std::uint64_t s = seen; s != 0; s &= s - 1)
+    { forbid |= static_cast<unsigned>(f.bit_ind[std::countr_zero(s)]); }
+    return true;
+}
+// The independent half: true when `imask` (FULL slot positions) holds a colliding pair, or a slot the
+// chosen group options forbid.
+static inline bool SacDupImaskDup(const SacDupFold& f, unsigned imask, unsigned forbid)
+{
+    if ((imask & forbid) != 0) { return true; }
+    for (unsigned s = imask; s != 0; s &= s - 1)
+    { if ((imask & f.ind_conf[static_cast<std::size_t>(std::countr_zero(s))]) != 0) { return true; } }
+    return false;
+}
+// The verifier's brute-force answer for a flagged selection.
+static bool SelHasSameSourceSacForMana(const std::vector<Action>& cands, const std::vector<int>& sel)
+{
+    for (std::size_t x = 0; x < sel.size(); ++x)
+    {
+        const Action& p = cands[static_cast<std::size_t>(sel[x])];
+        if (p.kind != Action::Kind::SacForMana) { continue; }
+        for (std::size_t y = x + 1; y < sel.size(); ++y)
+        {
+            const Action& q = cands[static_cast<std::size_t>(sel[y])];
+            if (q.kind == Action::Kind::SacForMana && q.sac_source_id == p.sac_source_id) { return true; }
+        }
+    }
+    return false;
+}
+// Verify mode: a same-source pair the dup test rejected WITHOUT the walk having flagged it -- a selection
+// the fold does not cover (a walk it does not run in, or a payoff-side SacForMana). Coverage, not
+// soundness: such a selection is still rejected, only not skipped. The first few are printed.
+static void SacDupNoteUnfolded(const std::vector<Action>& cands, const std::vector<int>& sel, int site)
+{
+    if (!sacdupfold::VerifyOn() || sacdupfold::t_expect_reject || !SelHasSameSourceSacForMana(cands, sel)) { return; }
+    if (sacdupfold::g_missed.fetch_add(1, std::memory_order_relaxed) >= 8) { return; }
+    std::string d;
+    for (int j : sel)
+    {
+        const Action& a = cands[static_cast<std::size_t>(j)];
+        d += a.card_name.str() + "(k" + std::to_string(static_cast<int>(a.kind)) + ",src" + std::to_string(a.sac_source_id)
+           + ",rf" + std::to_string(a.ritual_float) + ",rock" + std::to_string(a.rock_mana.Total()) + ") ";
+    }
+    bool any_rf = false;
+    for (const Action& a : cands) { if (a.ritual_float > 0 || a.rock_mana.Total() > 0) { any_rf = true; break; } }
+    std::fprintf(stderr, "[sac-dup-walk-fold] UNFOLDED site=%d cands=%zu any_mana_side=%d sel=[%s]\n",
+                 site, cands.size(), any_rf ? 1 : 0, d.c_str());
+}
+// Verify-mode emission wrapper: flag the selection around its emit (see namespace sacdupfold).
+template <class Emit>
+static inline void SacDupVerifyEmit(const std::vector<Action>& cands, std::vector<int>& sel, const Emit& emit)
+{
+    sacdupfold::g_flagged.fetch_add(1, std::memory_order_relaxed);
+    if (!SelHasSameSourceSacForMana(cands, sel))
+    { sacdupfold::g_brute_mismatch.fetch_add(1, std::memory_order_relaxed); }
+    sacdupfold::t_expect_reject = true;
+    emit(sel);
+    sacdupfold::t_expect_reject = false;
+}
+
 // ---- Two-stage plan-position enumeration: mana side x payoff side ------------------------------
 //
 // The flat odometer walks ONE mixed-radix counter over every candidate group, so a hand holding k
@@ -50945,6 +51153,9 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
                                    // equip digit -> the cast groups its pieces need; see
                                    // BuildEquipPieceDeps.
                                    const EquipPieceDeps& equip_deps,
+                                   // The caller's verdict that its duplicate-source rule is live for
+                                   // SacForMana (pre.dup_source && kDupSacMana); arms SacDupFold.
+                                   bool sac_dup_live,
                                    // By const reference, NOT by value: Solve's `consider` closure
                                    // captures a dozen locals, and this is called once per rollout
                                    // node -- copying it per call is measurable.
@@ -50975,6 +51186,12 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
     };
 
     std::vector<int> sel;
+
+    // MTG_SAC_DUP_WALK_FOLD: see SacDupFold. Off (f.on false) unless a mana-side source holds two
+    // SacForMana candidates and the caller's rule is live.
+    SacDupFold sdf;
+    BuildSacDupFold(cands, groups, independent, sac_dup_live, sdf);
+    const bool sdf_skip = sdf.on && !sdf.verify;   // verify keeps every position, flags the duplicates
 
     // Partition the odometer's digits. `mi`/`pi` hold SLOTS into `independent` so each side can
     // rebuild its bits at their original positions (the flat imask must be reproduced exactly).
@@ -51131,7 +51348,10 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
                     dep_audit.Visit(equip_deps, choice, choice, rejected, dep_adv, dep_jump,
                                     EquipPieceDepViolated(equip_deps, choice, sel_mask));
                 }
-                if (!rejected)
+                // MTG_SAC_DUP_WALK_FOLD: the group half of the duplicate-source test, once per position.
+                unsigned sd_forbid = 0;
+                const bool sd_gdup = sdf.on && !SacDupGroupsOk(sdf, groups, nullptr, choice, sd_forbid);
+                if (!rejected && !(sd_gdup && sdf_skip))
                 {
                     Agg ga;
                     for (int g = 0; g < num_groups; ++g)
@@ -51142,6 +51362,8 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
                             && IndependentAccelPrefixViolated(cands, independent,
                                                               static_cast<int>(imask)))
                         { continue; }
+                        const bool sd_dup = sdf.on && (sd_gdup || SacDupImaskDup(sdf, imask, sd_forbid));
+                        if (sd_dup && sdf_skip) { continue; }
                         Agg t = ga;
                         for (int b = 0; b < num_ind; ++b)
                         { if (imask & (1u << b)) { fold(t, independent[b]); } }
@@ -51151,7 +51373,11 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
                         { if (choice[g] > 0) { sel.push_back(groups[g][choice[g] - 1]); } }
                         for (int b = 0; b < num_ind; ++b)
                         { if (imask & (1u << b)) { sel.push_back(independent[b]); } }
-                        if (!sel.empty() && extra_ok(sel)) { foldsel::g_from_odometer = true; emit(sel); }
+                        if (!sel.empty() && extra_ok(sel))
+                        {
+                            foldsel::g_from_odometer = true;
+                            if (sd_dup) { SacDupVerifyEmit(cands, sel, emit); } else { emit(sel); }
+                        }
                     }
                 }
                 // RADIX CUT: skip the entire run of positions that must violate the same pair,
@@ -51190,7 +51416,7 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
         }
     }
 
-    struct Line { Agg agg; std::uint64_t pos = 0; unsigned imask = 0; int digits = 0; };
+    struct Line { Agg agg; std::uint64_t pos = 0; unsigned imask = 0; int digits = 0; bool sd_dup = false; };
     std::vector<Line> mlines, plines;
     std::vector<int>  mdig, pdig;      // flat digit storage, |side groups| ints per line
 
@@ -51230,7 +51456,12 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
                 dep_audit.Visit(equip_deps, choice, full, rejected, dep_adv && dep_t >= 0, dep_t,
                                 EquipPieceDepViolated(equip_deps, full));
             }
-            if (!rejected)
+            // MTG_SAC_DUP_WALK_FOLD: the group half of the duplicate-source test, once per mana line
+            // family. SacForMana is mana-side by IsManaSideAction (the fold only marks those), so a
+            // duplicate pair always lies wholly inside Stage A.
+            unsigned sd_forbid = 0;
+            const bool sd_gdup = sdf.on && !SacDupGroupsOk(sdf, groups, &mg, choice, sd_forbid);
+            if (!rejected && !(sd_gdup && sdf_skip))
             {
                 for (int imask = 0; imask < (1 << ni); ++imask)
                 {
@@ -51239,7 +51470,10 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
                     if (has_ind_accel
                         && IndependentAccelPrefixViolated(cands, independent, static_cast<int>(full_imask)))
                     { continue; }
+                    const bool sd_dup = sdf.on && (sd_gdup || SacDupImaskDup(sdf, full_imask, sd_forbid));
+                    if (sd_dup && sdf_skip) { continue; }
                     Line L;
+                    L.sd_dup = sd_dup;
                     L.imask  = full_imask;
                     L.digits = static_cast<int>(mdig.size());
                     for (int t = 0; t < ng; ++t)
@@ -51381,7 +51615,11 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
         { if (choice[g] > 0) { sel.push_back(groups[g][choice[g] - 1]); } }
         for (int b = 0; b < num_ind; ++b)
         { if (imask & (1u << b)) { sel.push_back(independent[b]); } }
-        if (!sel.empty() && extra_ok(sel)) { foldsel::g_from_odometer = true; emit(sel); }
+        if (!sel.empty() && extra_ok(sel))
+        {
+            foldsel::g_from_odometer = true;
+            if (M.sd_dup) { SacDupVerifyEmit(cands, sel, emit); } else { emit(sel); }
+        }
     }
 }
 
@@ -53706,10 +53944,15 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         if (ritual_spend_prune_on && SubsetRitualSpendsNothing(cands, sel, &pool, ritual_spend_granter_bf, ritual_spend_named_bf)) { return; }
         // Reject two SacForMana of the same source (its colour variants are mutually exclusive). Inert
         // without a SacForMana action (Lotus Bloom) -> byte-identical.
+        // EnumeratePlanPositions' SacDupFold relies on this test being reached unconditionally by
+        // every selection that gets this far (MTG_SAC_DUP_WALK_FOLD); keep it that way.
+        sacdupfold::NoteReachedDupCheck();
         if (pre.dup_source
             && SubsetHasDuplicateSacSource(cands, sel, /*site=*/0, fold_from_odometer,
                                            pre.dup_clause, pre.DupM(cands), &pre.copy_cap))
-        { if (shape != nullptr) { shapestats::Bump(shape->rej_dup); ++callf.rej_dup; } return; }
+        { if (shape != nullptr) { shapestats::Bump(shape->rej_dup); ++callf.rej_dup; }
+          SacDupNoteUnfolded(cands, sel, 0); return; }
+        sacdupfold::NotePassedDupCheck();
         // Reject an Equip whose equipment/host is in hand and uncast by this subset (silent no-op).
         // Inert without an Equip candidate -> byte-identical. Kept in lockstep with the twin below.
         if (pre.equip && SubsetHasStrandedEquip(state, cands, sel,
@@ -56090,7 +56333,9 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     {
         EnumeratePlanPositions(cands, groups, independent, gate, mana_bound, *sidx, accel_order,
                                any_splice, splice_collapse_on, accel_prefix_on && any_accel,
-                               has_ind_accel, copy_class, equip_deps, vial_ok, consider);
+                               has_ind_accel, copy_class, equip_deps,
+                               /*sac_dup_live=*/pre.dup_source && (pre.dup_clause & kDupSacMana) != 0,
+                               vial_ok, consider);
     }
 
     // THE HOLD LINE (HoldLineEnabled -- see that helper for the measurement that chose ONE plan over
@@ -73653,6 +73898,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         if (ritual_spend_prune_on && SubsetRitualSpendsNothing(cands, sel, &pool, ritual_spend_granter_bf, ritual_spend_named_bf)) { return; }
         // Reject two SacForMana of the same source (mutually-exclusive colour variants). Inert
         // without a SacForMana action -> byte-identical.
+        // EnumeratePlanPositions' SacDupFold relies on this test being reached unconditionally by
+        // every selection that gets this far (MTG_SAC_DUP_WALK_FOLD); keep it that way.
+        sacdupfold::NoteReachedDupCheck();
         if (pre.dup_source
             && SubsetHasDuplicateSacSource(cands, sel, /*site=*/1, fold_from_odometer, pre.dup_clause,
                                            pre.DupM(cands), &pre.copy_cap))
@@ -73663,7 +73911,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
           // table should move onto it; see the note on rej_dup_s1's declaration.
           if (shapestats::Enabled())
           { shapestats::Bump(shapestats::g_turn[shapestats::Clamp(state.turn_number)].rej_dup_s1); }
-          return; }
+          SacDupNoteUnfolded(cands, sel, 1); return; }
+        sacdupfold::NotePassedDupCheck();
         // Reject an Equip whose equipment/host is in hand and uncast by this subset (silent no-op).
         // Inert without an Equip candidate -> byte-identical. Kept in lockstep with Solve's twin.
         if (pre.equip && SubsetHasStrandedEquip(state, cands, sel,
@@ -76280,6 +76529,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         EnumeratePlanPositions(cands, groups, independent, gate, mana_bound, *sidx, accel_order,
                                any_splice, splice_collapse_on, accel_prefix_on && any_accel,
                                has_ind_accel, copy_class, equip_deps,
+                               /*sac_dup_live=*/pre.dup_source && (pre.dup_clause & kDupSacMana) != 0,
                                [](const std::vector<int>&) { return true; },
                                eval_and_push);
     }
