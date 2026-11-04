@@ -83,6 +83,10 @@ namespace manaoracle
         // can apply a subtype restriction -- Giada, Font of Hope's {W} "only to cast an Angel spell".
         bool                   f_has_spell = false;
         Card                   f_spell;
+        // The SOURCE of the activated ability being paid for (PayingAbilitySource() at the frontier), so the table can
+        // apply Smokebraider's ability half ("...or activate abilities of Elementals": SubtypeAbilityManaOk).
+        bool                   f_has_ability_src = false;
+        Card                   f_ability_src;
         int                    f_tapahead = 0;          // > 0: the frontier is a TAP-AHEAD (up to N sources)
         bool                   f_lands_only = true;     // ...of lands only (an ETB "untap N lands")
         // Every newly tapped mana source the script tapped (Card::m_number), for the unscripted-tap check.
@@ -203,9 +207,13 @@ namespace manaoracle
     // the payer does, so each tap set is one option.
     // `spell` (optional): the spell being paid for, set as the paying-spell scope (SpellSubtypePayScope) for the
     // table and every verification -- a subtype-restricted source (Giada) is offered only to a spell of its subtype.
+    // `ability_src` (optional, with creature_ability): the activated ability's source permanent's card, set as the
+    // paying-ability source (CreatureAbilityPayScope(src)) -- a mana_only_subtype_abilities source (Smokebraider)
+    // pays an ability only of a source with its subtype.
     std::vector<PayOption> MinimalPayments(const GameState& state, const ManaCost& cost, bool for_creature,
                                            std::vector<std::string>* unmodeled, bool creature_ability = false,
-                                           bool whole_float = false, const Card* spell = nullptr);
+                                           bool whole_float = false, const Card* spell = nullptr,
+                                           const Card* ability_src = nullptr);
 
     // PAY REFINE (MTG_PAY_REFINE; TapForCostShared, ManaPayment.cpp). `pre` / `post`: the board before and after
     // ONE outermost payment of `cost` the engine just made. Returns true and `out` = the payment to make instead

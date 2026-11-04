@@ -1282,7 +1282,25 @@ static void SpendRestrictedWildTowardCost(const GameState& state, int active, Ma
     drain(cost.black, reserve.black);   drain(cost.red,   reserve.red);
     drain(cost.green, reserve.green);   drain(cost.colorless, reserve.colorless);
     int* pips[5] = { &cost.white, &cost.blue, &cost.black, &cost.red, &cost.green };
-    while (reserve.wild > 0)
+    // THE MANA ORACLE'S FLOAT-ONLY PAYMENT spends what is already floating and taps nothing, so "where the board is
+    // short" is exactly where the FLOAT is short: each wild unit goes to a coloured pip the general float (and, for a
+    // creature spell, the any-creature float) cannot cover, then to generic. That is the exact cover -- a wild unit is
+    // any colour, and every other floating unit is spent after it -- where the untapped-provider count below would
+    // hand the wild to {R} with only a {R} floating and then fail {G}. Oracle threads only (t_float_only).
+    if (manaoracle::t_float_only)
+    {
+        const ManaPool& gf = state.floating_mana;
+        const ManaPool& cf = state.floating_creature_mana;
+        const int have[5] = { gf.white + (for_creature ? cf.white : 0), gf.blue + (for_creature ? cf.blue : 0),
+                              gf.black + (for_creature ? cf.black : 0), gf.red + (for_creature ? cf.red : 0),
+                              gf.green + (for_creature ? cf.green : 0) };
+        for (int c = 0; c < 5 && reserve.wild > 0; ++c)
+        {
+            int short_by = std::max(0, *pips[c] - have[c]);
+            while (short_by > 0 && reserve.wild > 0) { --short_by; --reserve.wild; --*pips[c]; }
+        }
+    }
+    while (reserve.wild > 0 && !manaoracle::t_float_only)
     {
         int best = -1, best_prov = 1 << 30;
         for (int c = 0; c < 5; ++c)
@@ -1638,6 +1656,17 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     // MANA ORACLE's float-only payment (ManaOracle.h): whatever the floating pools did not cover, the
     // oracle's script did not pay for -- fail atomically instead of tapping. Nothing has been tapped
     // yet, so returning the four pools is the whole restore. False on every thread but the oracle's.
+    // A float-only payment that pays leaves an ANY-COMBINATION subtype source's units in its reserve as WILD -- the
+    // payer's own form (commit_leftover's sub_any_combo: their colour was the player's pick), so the oracle's board
+    // is the board the engine's payment leaves. Oracle threads only.
+    if (manaoracle::t_float_only && cost.ManaValue() == 0 && state.floating_bigspell_pp != nullptr
+        && state.floating_bigspell_pp->produces_any_combination && !BigSpellOnlySource(*state.floating_bigspell_pp)
+        && state.floating_bigspell_mana.Total() > state.floating_bigspell_mana.wild)
+    {
+        const int n = state.floating_bigspell_mana.Total();
+        state.floating_bigspell_mana = ManaPool{};
+        state.floating_bigspell_mana.wild = n;
+    }
     if (manaoracle::t_float_only && cost.ManaValue() > 0)
     {
         state.floating_mana          = reserve_pre;
@@ -8459,6 +8488,8 @@ bool manaoracle::ScriptedPay(GameState& state, const ManaCost& cost_in, bool for
         // ...and the spell it pays for (the cast site's scope), so the table can keep a subtype restriction.
         h.f_has_spell = PayingSpellCard() != nullptr;
         if (h.f_has_spell) { h.f_spell = *PayingSpellCard(); }
+        h.f_has_ability_src = PayingAbilitySource() != nullptr;
+        if (h.f_has_ability_src) { h.f_ability_src = *PayingAbilitySource(); }
         return false;
     }
     const PayOption& opt = h.script[h.next++];

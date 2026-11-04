@@ -66,8 +66,30 @@ std::string OracleCreatureTap(GameState& state, const TurnSolver::PreTap& t)
         // outside the subtype -- the engine's own predicate on the paying spell's scope (permissive when unset,
         // exactly as the engine's payer is). Angels seed 1100020 gi19 T3: the oracle paid Bishop of Wings (a Human
         // Cleric) with Giada's {W} and reported a plan no legal payment realises as an ENUM-GAP.
-        if (!ability && !q.mana_only_subtype.empty() && !SubtypeManaOk(q))
-        { return "'" + t.name + "' makes mana only for " + q.mana_only_subtype + " spells"; }
+        if (!ability && !q.mana_only_subtype.empty())
+        {
+            // ...and its ABILITY half (Smokebraider: "or activate abilities of Elementals"): an ability payment may
+            // spend it only when the ability's SOURCE has the subtype (SubtypeAbilityManaOk, the payer's predicate).
+            if (PayingCreatureAbility())
+            {
+                if (!q.mana_only_subtype_abilities || !SubtypeAbilityManaOk(q, 1))
+                { return "'" + t.name + "' makes mana only for abilities of " + q.mana_only_subtype + "s"; }
+            }
+            else if (!SubtypeManaOk(q))
+            { return "'" + t.name + "' makes mana only for " + q.mana_only_subtype + " spells"; }
+            // A SUBTYPE source's units go where the payer books them: the restricted reserve that keeps THIS source's
+            // restriction (floating_bigspell_mana + _pp, RestrictedFloatUsableNow), never the any-creature pool -- from
+            // which a unit this payment leaves over would pay a Metallic Mimic (a Shapeshifter in hand) the engine
+            // cannot. "Any COMBINATION of colors" (Smokebraider) books every unit WILD: the colours are the player's
+            // to pick, and the float-only payment puts each where the bill is short (SpendRestrictedWildTowardCost).
+            if (state.floating_bigspell_mana.Total() > 0 && state.floating_bigspell_pp != &q)
+            { return "the restricted reserve holds another restriction"; }
+            ManaPool units;
+            TapSourceIntoFloat(state, a, p, *d, c, units, /*available=*/nullptr, /*for_creature=*/true);
+            if (q.produces_any_combination) { const int n = units.Total(); units = ManaPool{}; units.wild = n; }
+            AddBigSpellFloat(state, units, q);
+            return std::string();
+        }
         TapSourceIntoFloat(state, a, p, *d, c, ability ? state.floating_mana : state.floating_creature_mana,
                            /*available=*/nullptr, /*for_creature=*/!ability);
         return std::string();
@@ -397,7 +419,17 @@ std::string TapsText(const PayOption& o)
         if (!t.combo.empty()) { for (int c : t.combo) { s.push_back(kLetters[c]); } }
         else if (t.color >= 0 && t.color < 6) { s.push_back(kLetters[t.color]); }
         for (int ac : t.aura_colors) { s += "+"; s.push_back(kLetters[ac]); }
-        if (i < o.creature_route.size() && o.creature_route[i]) { s += "(creature-only)"; }
+        if (i < o.creature_route.size() && o.creature_route[i])
+        {
+            // A SUBTYPE source names its subtype, and an any-combination one its wild yield (OracleCreatureTap).
+            const CardDefinition* d = CardDatabase::Instance().Lookup(t.name);
+            if (d != nullptr && d->params.creature_mana_only && !d->params.mana_only_subtype.empty())
+            {
+                if (d->params.produces_any_combination) { s.pop_back(); s += "*"; }
+                s += "(" + d->params.mana_only_subtype + "-only)";
+            }
+            else { s += "(creature-only)"; }
+        }
     }
     if (o.stash.Total() > 0) { s += (s.empty() ? "" : " ") + std::string("keep-floating ") + PoolText(o.stash, o.stash_haste); }
     return s.empty() ? "(float only)" : s;
@@ -1013,30 +1045,42 @@ std::vector<SrcClass> BuildSources(const GameState& state, bool for_creature, st
         std::string restricted;   // the coloured faces the creature route adds ("" = none)
         const bool ability_ok = d != nullptr && d->params.colored_creature_ability_ok && PayingCreatureAbility();
         const bool subtype_ok = d == nullptr || d->params.mana_only_subtype.empty() || SubtypeManaOk(d->params);
-        if (d != nullptr && CanTapNow(p, state.battlefield)
+        // ...and the ABILITY half of a subtype restriction (Smokebraider: "...or activate abilities of Elementals"):
+        // an activated ability whose SOURCE has the subtype -- the payer's own predicate (RestrictedManaUsable's
+        // !for_creature branch, SubtypeAbilityManaOk at the real-payment site), the source riding the frontier's
+        // CreatureAbilityPayScope(src). An unnamed ability (an Aether Vial tick, a land's activation) may not.
+        const bool sub_ability_ok = d != nullptr && !for_creature && d->params.creature_mana_only
+                                 && d->params.mana_only_subtype_abilities && SubtypeAbilityManaOk(d->params, 1);
+        // "Two mana in any COMBINATION of colors" under a subtype restriction: OracleCreatureTap books every unit
+        // WILD into the subtype reserve (the payer's own form for this source's float, commit_leftover's
+        // sub_any_combo), and the float-only payment spends each where the bill is short. One face is every colour
+        // pair, exactly -- so the table holds one, not one per colour.
+        const bool sub_wild = d != nullptr && d->params.creature_mana_only && !d->params.mana_only_subtype.empty()
+                           && d->params.produces_any_combination;
+        const bool can_tap = d != nullptr && CanTapNow(p, state.battlefield);
+        if (can_tap
             && ((for_creature && subtype_ok && (d->params.creature_mana_only || d->params.colored_creature_only))
-                || ability_ok))
+                || ability_ok || sub_ability_ok))
         {
             for (Color c : EffectiveProducesFor(state, a, *d, &p))
             {
                 if (d->params.colored_creature_only && c == Color::Colorless) { continue; }   // its plain {C} face
                 const char l = kLetters[static_cast<int>(c)];
                 if (restricted.find(l) == std::string::npos) { restricted.push_back(l); }
+                if (sub_wild) { break; }
             }
         }
         if (o.free_faces.empty() && o.fed_faces.empty() && restricted.empty())
         {
             // Restricted mana for a noncreature spell is simply not supply -- not a gap; nor is a subtype-restricted
-            // source's for a creature spell outside its subtype.
-            if (unmodeled != nullptr && for_creature && subtype_ok && o.why_not.find("may be spent only") != std::string::npos)
+            // source's for a creature spell outside its subtype; nor a summoning-sick creature source's, which
+            // makes no mana at all (CR 302.6) -- that was 4.07M of LandfallElementals' notes, a Smokebraider cast
+            // this turn.
+            if (unmodeled != nullptr && for_creature && subtype_ok && o.why_not.find("may be spent only") != std::string::npos
+                && !(d != nullptr && (d->params.creature_mana_only || d->params.colored_creature_only) && !can_tap))
             { unmodeled->push_back("restricted-mana source " + p.card.m_name.str()); }
             continue;
         }
-        // The spell half of a subtype restriction is modelled (above, and OracleCreatureTap); the ABILITY half
-        // (Smokebraider: "...or activate abilities of Elementals") is not.
-        if (d != nullptr && !d->params.mana_only_subtype.empty() && d->params.mana_only_subtype_abilities
-            && unmodeled != nullptr)
-        { unmodeled->push_back("subtype-restricted mana from " + p.card.m_name.str()); }
         const std::size_t n_auras = HumanPreTapAuraFaces(state, p, o).size();
         // THE SAME TAP, SPELLED TWICE. The Auras' colours multiply the faces (Brushland under two Fertile Grounds:
         // 3 faces x 25 colour pairs, EDF seed 1130464), and when the two Auras are interchangeable a pair and its
@@ -1468,13 +1512,17 @@ std::vector<PayOption> StashChoices(const GameState& s, std::vector<std::string>
 
 std::vector<PayOption> MinimalPayments(const GameState& state, const ManaCost& cost, bool for_creature,
                                        std::vector<std::string>* unmodeled, bool creature_ability, bool whole_float,
-                                       const Card* spell)
+                                       const Card* spell, const Card* ability_src)
 {
     // The payment's context, as the frontier saw it: a creature's activated ability being paid (the
     // Secluded Courtyard clause), the spell being paid for (a subtype restriction). Replayed around every
     // measure and verification below.
     std::optional<CreatureAbilityPayScope> _cap;
-    if (creature_ability) { _cap.emplace(); }
+    if (creature_ability)
+    {
+        if (ability_src != nullptr) { _cap.emplace(ability_src); }
+        else                        { _cap.emplace(); }
+    }
     std::optional<SpellSubtypePayScope> _ssp;
     if (spell != nullptr) { _ssp.emplace(spell); }
     std::vector<PayOption> out;
@@ -1514,8 +1562,10 @@ std::vector<PayOption> MinimalPayments(const GameState& state, const ManaCost& c
         int col[6] = { f.white - st.stash.white, f.blue - st.stash.blue, f.black - st.stash.black,
                        f.red - st.stash.red, f.green - st.stash.green, f.colorless - st.stash.colorless };
         for (int c = 0; c < 6; ++c) { col[c] += extra[c]; }
-        int total = col[0] + col[1] + col[2] + col[3] + col[4] + col[5] + f.wild;
-        if (f.wild > 0) { for (int c = 0; c < 5; ++c) { col[c] += f.wild; } }
+        // ...and their WILD units too (Smokebraider's leftover floats wild in its reserve): optimistic, like f.wild.
+        const int wild = f.wild + fbg.wild + (for_creature ? fc.wild : 0);
+        int total = col[0] + col[1] + col[2] + col[3] + col[4] + col[5] + wild;
+        if (wild > 0) { for (int c = 0; c < 5; ++c) { col[c] += wild; } }
         PayEnum pe{ state, cost, for_creature, srcs, suffix_max, st, seen, out };
         pe.whole_float = whole_float;
         pe.Dfs(0, col, total);
@@ -1739,8 +1789,9 @@ static bool RefinePaymentImpl(const GameState& pre, const GameState& post, const
                    f.black + (for_creature ? fc.black : 0) + fbg.black, f.red + (for_creature ? fc.red : 0) + fbg.red,
                    f.green + (for_creature ? fc.green : 0) + fbg.green,
                    f.colorless + (for_creature ? fc.colorless : 0) + fbg.colorless };
-    const int total = col[0] + col[1] + col[2] + col[3] + col[4] + col[5] + f.wild;
-    if (f.wild > 0) { for (int c = 0; c < 5; ++c) { col[c] += f.wild; } }
+    const int wild = f.wild + fbg.wild + (for_creature ? fc.wild : 0);   // the restricted reserves' wild (MinimalPayments)
+    const int total = col[0] + col[1] + col[2] + col[3] + col[4] + col[5] + wild;
+    if (wild > 0) { for (int c = 0; c < 5; ++c) { col[c] += wild; } }
     // THE LAZY SURPLUS. A paying set holding a multi-unit tap is also tried with one more one-unit tap (PayEnum's
     // ExtendSurplus) -- the bulk of the work on a big board (FiveColour's Nicol Bolas over six taps: 830 sets,
     // 3,267 supersets, and the 4,096-probe cap hit). A superset taps one more of the engine's own sources, so with
@@ -1939,6 +1990,25 @@ bool RefinePayment(const GameState& pre, const GameState& post, const ManaCost& 
     k.bill     = ManaCostDigest(cost);
     k.ctx      = (for_creature ? 1 : 0) | (creature_ability ? 2 : 0) | (PayingCreatureAbility() ? 4 : 0)
                | (useful << 3) | (no_trade ? (1 << 12) : 0);
+    // The PAYING identity, where a SUBTYPE source reads it (Giada / Smokebraider: the spell's subtype, the ability
+    // source's): the same bill on the same board is a different table for an Elemental and for a Metallic Mimic. One
+    // bit per such source on the board (or holding the reserve), so every other board keeps its key.
+    {
+        int bit = 13;
+        auto add = [&](const CardParams& q)
+        {
+            if (bit < 30 && RestrictedManaUsable(q, for_creature, 1)) { k.ctx |= 1 << bit; }
+            ++bit;
+        };
+        for (const Permanent& p : pre.battlefield)
+        {
+            if (p.controller_index != pre.active_player_index || p.tapped || p.def_absent) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d != nullptr && d->params.creature_mana_only && !d->params.mana_only_subtype.empty()) { add(d->params); }
+        }
+        if (pre.floating_bigspell_pp != nullptr && pre.floating_bigspell_mana.Total() > 0)
+        { add(*pre.floating_bigspell_pp); }
+    }
     auto it = t_refine_memo.find(k);
     if (it != t_refine_memo.end())
     {
@@ -2086,6 +2156,8 @@ struct FrontierRec
     bool                   creature_ability = false;
     bool                   has_spell = false;   // the spell the frontier payment is for (Hook::f_spell)
     Card                   spell;
+    bool                   has_ability_src = false;   // the ability's source (Hook::f_ability_src)
+    Card                   ability_src;
 };
 
 // Apply `plan` to a copy of `root` once per payment script, LAYERED by payment index: every script of
@@ -2180,6 +2252,8 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                 fr.creature_ability = h.f_creature_ability;
                 fr.has_spell    = h.f_has_spell;
                 if (h.f_has_spell) { fr.spell = h.f_spell; }
+                fr.has_ability_src = h.f_has_ability_src;
+                if (h.f_has_ability_src) { fr.ability_src = h.f_ability_src; }
                 fronts.push_back(std::move(fr));
                 continue;
             }
@@ -2245,7 +2319,7 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
             std::vector<PayOption> opts = f.tapahead > 0
                 ? TapAheadOptions(f.st, f.tapahead, f.lands_only, &r.unmodeled)
                 : MinimalPayments(f.st, f.cost, f.for_creature, &r.unmodeled, f.creature_ability, /*whole_float=*/false,
-                                  f.has_spell ? &f.spell : nullptr);
+                                  f.has_spell ? &f.spell : nullptr, f.has_ability_src ? &f.ability_src : nullptr);
             g_options.fetch_add(static_cast<long long>(opts.size()), std::memory_order_relaxed);
             if (Level() >= 3 && (TraceTurn() == 0 || TraceTurn() == root.turn_number))
             {
