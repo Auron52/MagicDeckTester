@@ -10,6 +10,46 @@ Worktree: `/workspaces/MagicDeckTester/.claude/worktrees/agent-a9dab9fbcae918660
 origin/phase-1-2-deck-analyzer 980616e55. Scratch: `/workspaces/MagicDeckTester/build/scratch/mcdragons/`. Helper
 scripts (gitignored): `logs/mcdragons/{mk.py,gate.sh,batch.sh,repro.sh,abrep.py,scprobe.sh}`.
 
+## READ FIRST: Successor 11 (2026-11-04) -- host-untap fix VERIFIED on 323/365/935; larger EDF A/B still FAILS (+11 / +3)
+Scratch `build/scratch/mcdragons11/` (binaries `mtg.p13`/`mtg-test.p13` = 3d0b1f9ba with traces, `mtg.p14`/`mtg-test.p14`
+= 3eedb3e0c, traces removed; `src`/`decks` symlinks there point at this worktree -- see TEST-PATH TRAP below).
+DONE:
+  * Unit suite p13 and p14: 2437/2437. New test "a land Aura paid under its host hold can still be re-made (EDF gi323
+    T2)" FAILS with the fix reverted (`mtg-test.rev`, CHECK(line_pays(true) == 1) 0 == 1) and passes with it.
+  * 323 / 365 / 935 (`mcdragons11/d8`, d8 b0): off 3/4/4, on 3/4/3 (was 4/5/5). Shipped settings (`ship/`): off
+    3/4/4, on 3/4/3. Executor now fires LR on 323 T2 (`tr323.err`: [lr-fire] after "before Eldrazi Displacer", ED cast).
+  * 3eedb3e0c: TEMP diagnostics removed (MTG_LINE_REPAY_TRACE, MTG_EDF_ROUTE_SIGDUMP). p14 == p13 digests+units on 13
+    jobs (1-thread vs 8-thread too). Price lever lr_probes_per_unit still in place (USER).
+  * A/B ab11 (`mcdragons11/ab11`, ONE pooled batch p13, 640 jobs, 8 threads, shipped settings, off vs on@4):
+      deck     paired dig slow fast net   units  wall(contended)
+      bruna      1500  33    0    2  -2  1.0146  0.9906   (seed 2870001+off; only ab9 deck with Wild Growth)
+      edf        5000 195   13    2 +11  1.2681  1.1965   (seed 2810001+off)
+      edf2hg     1500  61    4    1  +3  1.2460  1.1508   (seed 2830001+off, starting_life 30, opponent_heads 2)
+    instructions:u (perf stat, p14, 1 thread, same jobs per arm; ab11/ins_*.perf): EDF 100 g on/off 2.288x
+    (units 1.325x), EDF2HG 50 g 1.919x (units 1.561x), Bruna 50 g 1.065x (units 1.033x).
+  * Slower-game recovery at d8 b0 (`d8s`, p14): 13 of 17 recover (identical digest). NOT recovered plain: edf 3280
+    (5->6), 3295 (4->5), 4144 (4->5), edf2hg 1194 (4->5). With MTG_NC_SEARCH=1 (`d8nc`): 3280 5/5, 3295 4/4,
+    4144 4/4, 1194 4/4 -- all four recover (identical digests on/off; NC on wall 1.6-2.3x off). By the memo test they are NOT clear clairvoyance.
+ROOT CAUSE CANDIDATE for the 4 (traces `g3295/`, `gx/`, p13 + MTG_EXEC_TAP_TRACE + MTG_LINE_REPAY_TRACE): every one
+  casts several land Auras (Fertile Ground / Trace of Abundance / Overgrowth / Wild Growth) in the decisive turn and the
+  executor ends with every land tapped, so Eldrazi Displacer's {2}{C} / {C} blink fails (line_ctx=0) and the combo
+  never starts. On 3280 T5 the executor's Overgrowth payment misses LR with find=null: the HOLD on Overgrowth's host
+  (Conservatory, also Fertile Ground's host) taps it BEFORE the payment, so the board no longer matches the previous
+  record's post (ring-1 Fertile Ground post 78fbbbea.. vs now 7b0ad7ca..; the printed perms are identical except the
+  held host). It is the INVERSE of successor 10's defect: the hold perturbs the digest at the FIND, not at the
+  RECORD. The executor then pays Overgrowth with its own host after the release, consuming the mana the search kept
+  for the blink. Not yet fixed or tested. Candidate fix: LineRepayFind/LineRepayDigest read a currently-held host as
+  untapped (thread_local held-host number set across the hold), keeping the host unavailable to the re-made payment.
+TEST-PATH TRAP (new): mtg-test resolves src/cards/data/cards.json and decks/ by walking up from the EXECUTABLE
+  (ResolveHeuristicDefaultsPath); a binary under /workspaces/MagicDeckTester/build/... finds the PRIMARY checkout's
+  cards.json (has "Morbid" -> 5 Line repay tests throw) and decks/ (45 folders -> Pirates routing fails). Run test
+  binaries from `mcdragons11/` (symlinks src, decks -> this worktree). mtg itself reads cards.json CWD-relative (ok).
+REMAINING before LINE_REPAY could land: (1) fix + unit-test the find-side hold mismatch, re-run d8s on the 4, then
+  a fresh-seed EDF A/B (std + 2HG); EDF must be net <= 0; (2) USER: price (4 vs 12) and pricing pass 1 -- EDF on costs
+  1.27x units / ~2x instructions; (3) remove lr_probes_per_unit or replace the constant; (4) smoke, scoped regression,
+  mana-clean gate slice, squash. Fungus (3 Wild Growth) and AccomplishedAlchemist (Utopia Sprawl, Wild Growth) also
+  take the host-hold path and were not in any LR A/B.
+
 ## READ FIRST: Successor 10 (2026-11-04) -- EDF slower games ROOT-CAUSED: a lockstep defect, fix built, NOT yet measured
 Stopped at the 250K context cap. Scratch `build/scratch/mcdragons10/` (diag binaries `mtg.diag1..4` = p12 + traces).
 ROOT CAUSE (all three EDF slower games, 323 / 365 / 935; class (a) LOCKSTEP, not clairvoyance, not budget):
