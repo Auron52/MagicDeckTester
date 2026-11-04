@@ -31,21 +31,24 @@ inline const char* KindName(int k)
 // simulated turn-step / plan applied) does not: units-only mispredicts a game's wall by up to ~6000x,
 // the priced sum by ~3x at p95. Deterministic (integer constants x counts), so anything bounded in this
 // currency trips at the same event on every machine.
-// Fit 2026-11-03 (scripts/cost_fit.py on the regression tier, 16,369 searched games >= 50 ms, NNLS weighted
-// by 1/ms; wall CONTENDED by concurrent builds, so treat as provisional). Shares of fitted time: simkey 41.5%,
-// enum 16.7%, apply 14.6%, pay 13.8%, plans 4.8%, step 3.6%, odo 3.4%, greedy 0.8% (interior unit 0.3 us,
-// 0.8%, not a work kind). Slowest 1% of games: actual/pred p95 3.7 (units-only 15.4).
+// Fit 2026-11-04 (scripts/cost_fit.py on the regression tier, 13,525 searched games >= 50 ms, NNLS weighted by
+// 1/ms; QUIET box, HEAD fa6aeb086 src, 32 threads, nothing else running -- replaces the contended 2026-11-03 fit).
+// Shares of fitted time: apply 25.2%, simkey 23.8%, pay 19.6%, enum 14.1%, plans 7.9%, step 4.5%, odo 2.2%,
+// interior unit 1.8% (586 ns; kInteriorNs below, not a work kind), greedy 0.8%. actual/pred p95 1.57 overall and
+// 1.78 on the slowest 1% (units-only 3.29 / 7.45); per-deck median ratio 0.81-1.31 (units-only 1.02-4.69).
 inline constexpr long long kPriceNs[kKinds] = {
-    20322,   // step_c
-    20322,   // step_f   (same work as a charged step)
-      697,   // greedy
-    26807,   // enum
-     2098,   // plans
-      967,   // odo
-     5560,   // apply
-     2170,   // pay
-     7768,   // simkey
+    21426,   // step_c
+    21426,   // step_f   (same work as a charged step)
+      569,   // greedy
+    18455,   // enum
+     2866,   // plans
+      511,   // odo
+     8097,   // apply
+     2561,   // pay
+     3749,   // simkey
 };
+// The fitted price of one CHARGED budget unit beyond the work kinds above (the fit's `interior` regressor).
+inline constexpr long long kInteriorNs = 586;
 inline thread_local long long t_n[kKinds] = {};
 inline thread_local long long t_priced = 0;   // running sum of price x count this game (ns)
 // MUTE (> 0: count nothing). Held by the plan caches' PRICED LEDGER (TurnSolver.cpp, namespace pledger) over a

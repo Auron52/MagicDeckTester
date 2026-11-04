@@ -1934,14 +1934,25 @@ inline thread_local bool t_active = false;
 // runs, every unit charged is also attributed to it (and to every computation enclosing it).
 namespace cachecharge { struct Rec; inline thread_local Rec* t_rec = nullptr; }
 static void CacheChargeNote(SearchBudget* budget, long long n);   // defined with cachecharge
+// PRICED BUDGET (MTG_PRICED_BUDGET; namespace pricedbudget in DecisionWorkMeter.h): a FINITE budget is charged the priced
+// work since the previous charge instead of the n units. An unlimited or null budget is charged exactly as before
+// and the work is dropped. The cache recorder still notes n (whether a computation charged at all is what decides
+// its storability), and a cache-hit REPLAY consumes its recorded units unbilled (`bill` false).
+static inline long long PricedUnits(SearchBudget* budget, long long n)
+{
+    if (!pricedbudget::On()) { return n; }
+    if (budget == nullptr || budget->Unlimited() || !pricedbudget::Active()) { pricedbudget::Drop(); return n; }
+    return pricedbudget::Bill(n);
+}
 static inline void ConsumeAt(SearchBudget* budget, unitsite::Site site)
 {
-    if (budget == nullptr) { return; }
+    if (budget == nullptr) { if (pricedbudget::On()) { pricedbudget::Drop(); } return; }
     if (s_rollout_stats && !budget->Unlimited() && budget->Used() >= budget->Limit())
     { g_units_after_spent.fetch_add(1, std::memory_order_relaxed); }
-    budget->Consume(1);
-    if (s_rollout_stats) { unitsite::g_units[site].fetch_add(1, std::memory_order_relaxed); }
-    if (g_dvs_in_p2 > 0) { g_dvs_p2_site[site].fetch_add(1, std::memory_order_relaxed); }
+    const long long u = PricedUnits(budget, 1);
+    budget->Consume(u);
+    if (s_rollout_stats) { unitsite::g_units[site].fetch_add(u, std::memory_order_relaxed); }
+    if (g_dvs_in_p2 > 0) { g_dvs_p2_site[site].fetch_add(u, std::memory_order_relaxed); }
     if (cachecharge::t_rec != nullptr) { CacheChargeNote(budget, 1); }
 }
 // MTG_LA_HIST=1 (diagnostic, never read by play): a histogram of SolveWithLookahead's candidate loops by
@@ -1975,12 +1986,13 @@ struct Dumper
 };
 inline Dumper g_dumper;
 }
-static inline void ConsumeAtN(SearchBudget* budget, unitsite::Site site, long long n)
+static inline void ConsumeAtN(SearchBudget* budget, unitsite::Site site, long long n, bool bill = true)
 {
-    if (budget == nullptr || n <= 0) { return; }
-    budget->Consume(n);
-    if (s_rollout_stats) { unitsite::g_units[site].fetch_add(n, std::memory_order_relaxed); }
-    if (g_dvs_in_p2 > 0) { g_dvs_p2_site[site].fetch_add(n, std::memory_order_relaxed); }
+    if (budget == nullptr || n <= 0) { if (budget == nullptr && pricedbudget::On()) { pricedbudget::Drop(); } return; }
+    const long long u = bill ? PricedUnits(budget, n) : n;
+    budget->Consume(u);
+    if (s_rollout_stats) { unitsite::g_units[site].fetch_add(u, std::memory_order_relaxed); }
+    if (g_dvs_in_p2 > 0) { g_dvs_p2_site[site].fetch_add(u, std::memory_order_relaxed); }
     if (cachecharge::t_rec != nullptr) { CacheChargeNote(budget, n); }
 }
 
@@ -4202,9 +4214,9 @@ static bool CacheHitCharge(const cachecharge::Cost& c)
     if (!ok) { cachecharge::g_hits_refused.fetch_add(1, std::memory_order_relaxed); return false; }
     cachecharge::g_hits_replayed.fetch_add(1, std::memory_order_relaxed);
     if (c.dec > 0 && d != nullptr)
-    { ConsumeAtN(d, unitsite::kCacheHit, c.dec); cachecharge::g_units_replayed.fetch_add(c.dec, std::memory_order_relaxed); }
+    { ConsumeAtN(d, unitsite::kCacheHit, c.dec, /*bill=*/false); cachecharge::g_units_replayed.fetch_add(c.dec, std::memory_order_relaxed); }
     if (c.greedy > 0 && g != nullptr)
-    { ConsumeAtN(g, unitsite::kCacheHit, c.greedy); cachecharge::g_units_replayed.fetch_add(c.greedy, std::memory_order_relaxed); }
+    { ConsumeAtN(g, unitsite::kCacheHit, c.greedy, /*bill=*/false); cachecharge::g_units_replayed.fetch_add(c.greedy, std::memory_order_relaxed); }
     return true;
 }
 
@@ -102809,6 +102821,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
     // The PRICED ceiling (MTG_DECISION_PRICED_X, default 0 = off; DecisionWorkMeter.h): same root, same
     // trip path, but in real-cost currency, so a decision whose work the unit misses is bounded too.
     decisionwork::PricedScope _dwp_fs(fs_decision_root ? decisionwork::PricedLimitNs(budget->Limit()) : 0);
+    pricedbudget::Scope _pb_fs(fs_decision_root);   // MTG_PRICED_BUDGET: bill this decision only its own work
     // PER-DECISION WORK CENSUS (MTG_TURN_CENSUS; TurnCensus.h). Hung on the SAME root predicate as
     // the work ceiling above, deliberately: the ceiling's root is the definition of "one real
     // decision" this engine already commits to, and a census with its own notion of a decision
@@ -105236,6 +105249,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
     decisionwork::Scope _dws((decision_root && s_decision_work_x > 0)
                              ? budget->Limit() * s_decision_work_x : 0);
     decisionwork::PricedScope _dwp(decision_root ? decisionwork::PricedLimitNs(budget->Limit()) : 0);   // see the hybrid root's twin
+    pricedbudget::Scope _pb(decision_root);   // MTG_PRICED_BUDGET (see the hybrid root's twin)
     // PER-DECISION WORK CENSUS -- see the twin in FullSearchLineHybrid. root=1 is this host.
     if (decision_root && turncensus::On()) { turncensus::t_board = CensusBoardDesc(state); }
     turncensus::Scope _tc(decision_root, state.game_seed, state.turn_number,
