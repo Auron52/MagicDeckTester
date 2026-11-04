@@ -7998,23 +7998,30 @@ struct LineRepayStats
 // The mana-relevant content of `s` over its first `n` permanents: what a payment and nothing else may change
 // between the earlier payment and this one. Equal digests = the earlier payment is still the last thing that
 // touched the board's mana.
-std::uint64_t LineRepayDigest(const GameState& s, std::size_t n)
+// Built in two halves so LineRepayFind can digest every record's prefix in ONE pass over the battlefield: the
+// permanents' running hash (LineRepayDigestStep, from LineRepayDigestSeed), then the prefix length and the board-wide
+// fields (LineRepayDigestFinish). LineRepayDigest is the two in sequence.
+inline void LineRepayMix(std::uint64_t& h, std::uint64_t v) { h ^= v + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2); }
+std::uint64_t LineRepayDigestSeed(const GameState& s)
 {
     std::uint64_t h = 0xcbf29ce484222325ULL;
-    auto mix = [&](std::uint64_t v) { h ^= v + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2); };
+    LineRepayMix(h, static_cast<std::uint64_t>(s.TurnSeq())); LineRepayMix(h, static_cast<std::uint64_t>(s.active_player_index));
+    return h;
+}
+void LineRepayDigestStep(std::uint64_t& h, const Permanent& p, int a)
+{
+    int dep = -1;
+    for (const Counter& c : p.counters) { if (c.type == Counter::Type::Depletion) { dep = c.count; break; } }
+    LineRepayMix(h, static_cast<std::uint64_t>(p.card.m_number) * 4u + (p.tapped ? 1u : 0u) + (p.controller_index == a ? 2u : 0u));
+    LineRepayMix(h, static_cast<std::uint64_t>(static_cast<std::uint32_t>(p.storage_counters))
+                    | (static_cast<std::uint64_t>(static_cast<std::uint32_t>(p.charge_counters)) << 32));
+    LineRepayMix(h, static_cast<std::uint64_t>(static_cast<std::uint32_t>(dep)));
+}
+std::uint64_t LineRepayDigestFinish(const GameState& s, std::uint64_t h, std::size_t n)
+{
+    auto mix = [&](std::uint64_t v) { LineRepayMix(h, v); };
     const int a = s.active_player_index;
-    mix(static_cast<std::uint64_t>(s.TurnSeq())); mix(static_cast<std::uint64_t>(a));
     mix(static_cast<std::uint64_t>(n));
-    for (std::size_t i = 0; i < n; ++i)
-    {
-        const Permanent& p = s.battlefield[i];
-        int dep = -1;
-        for (const Counter& c : p.counters) { if (c.type == Counter::Type::Depletion) { dep = c.count; break; } }
-        mix(static_cast<std::uint64_t>(p.card.m_number) * 4u + (p.tapped ? 1u : 0u) + (p.controller_index == a ? 2u : 0u));
-        mix(static_cast<std::uint64_t>(static_cast<std::uint32_t>(p.storage_counters))
-            | (static_cast<std::uint64_t>(static_cast<std::uint32_t>(p.charge_counters)) << 32));
-        mix(static_cast<std::uint64_t>(static_cast<std::uint32_t>(dep)));
-    }
     auto pool = [&](const ManaPool& f)
     {
         mix(static_cast<std::uint64_t>(static_cast<std::uint16_t>(f.white))
@@ -8041,12 +8048,20 @@ std::uint64_t LineRepayDigest(const GameState& s, std::size_t n)
     mix(static_cast<std::uint64_t>(s.pay_ledger.untap_effects) | (static_cast<std::uint64_t>(static_cast<std::uint32_t>(s.pay_ledger.turn)) << 8));
     return h;
 }
+std::uint64_t LineRepayDigest(const GameState& s, std::size_t n)
+{
+    std::uint64_t h = LineRepayDigestSeed(s);
+    for (std::size_t i = 0; i < n; ++i) { LineRepayDigestStep(h, s.battlefield[i], s.active_player_index); }
+    return LineRepayDigestFinish(s, h, n);
+}
 
 struct LineRepayRec
 {
     bool          live = false;
     bool          undoable = false;   // false: a BARRIER -- the last payment on that board, which cannot be re-made
     std::uint64_t post = 0;       // LineRepayDigest right after the payment
+    int           seq  = -1;      // TurnSeq and active player then: both are in `post`, so a mismatch skips the digest
+    int           act  = -1;
     std::size_t   n    = 0;       // battlefield size then (permanents past it entered later)
     PayRefineSnap pre;            // the board as the payment found it
     ManaCost      cost;
@@ -8087,6 +8102,8 @@ void LineRepayRecord(const GameState& s, const PayRefineSnap* pre, const ManaCos
     r.live = true;
     r.n    = s.battlefield.size();
     r.post = LineRepayDigest(s, r.n);
+    r.seq  = s.TurnSeq();
+    r.act  = a;
     r.lib  = s.players[a].library.size();
     // A sacrifice, a graveyard, a drip or haste mana is not undoable field by field: a barrier.
     r.undoable = pre != nullptr && s.battlefield.size() == pre->bf.size() && s.players[a].graveyard.size() == pre->gy
@@ -8166,15 +8183,25 @@ bool LineRepayAcrossDraw(const LineRepayRec& r, const LineRepayRec* const* newer
 // when LineRepayAcrossDraw allows it (the chain's newer records are `skip`).
 const LineRepayRec* LineRepayFind(const GameState& s, const LineRepayRec* const* skip = nullptr, int nskip = 0)
 {
+    thread_local std::vector<std::uint64_t> prefix;   // prefix[i]: the permanents hash over the first i (valid to prefix_n)
+    std::size_t prefix_n = 0;
+    if (prefix.size() < s.battlefield.size() + 1) { prefix.resize(s.battlefield.size() + 1); }
+    prefix[0] = LineRepayDigestSeed(s);
     for (int k = 1; k <= kLineRepayRing; ++k)
     {
         const LineRepayRec& r = t_lr_ring[(t_lr_next - k + kLineRepayRing) % kLineRepayRing];
         if (!r.live || s.battlefield.size() < r.n) { continue; }
         if (s.pay_ledger.untap_effects == 255) { return nullptr; }   // saturated count: the digest cannot tell untaps apart
+        if (r.seq != s.TurnSeq() || r.act != s.active_player_index) { continue; }   // the digest's own first fields
         bool used = false;
         for (int i = 0; i < nskip; ++i) { if (skip[i] == &r) { used = true; } }
         if (used) { continue; }
-        if (LineRepayDigest(s, r.n) != r.post) { continue; }
+        for (; prefix_n < r.n; ++prefix_n)   // the running permanents hash, extended to this record's prefix: one pass
+        {
+            prefix[prefix_n + 1] = prefix[prefix_n];
+            LineRepayDigestStep(prefix[prefix_n + 1], s.battlefield[prefix_n], s.active_player_index);
+        }
+        if (LineRepayDigestFinish(s, prefix[r.n], r.n) != r.post) { continue; }
         if (s.players[s.active_player_index].library.size() != r.lib && !(r.undoable && LineRepayAcrossDraw(r, skip, nskip)))
         { continue; }
         return r.undoable ? &r : nullptr;

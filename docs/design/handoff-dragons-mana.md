@@ -47,6 +47,58 @@ FIX (commit d0149cac8, lossless, budgeted and unbudgeted alike): two NARROWER ca
   SOUNDNESS of the epoch-bound hits: MTG_BP_ENUM_VERIFY=1 (re-derives EVERY bp hit and diffs it) on p6, Hinata gi403 +
   8 Hinata games: 269,074 hits re-derived, CONTENT-DIFF 0, order-only 0 (`mcdragons7/bv2.err`).
 
+P6 PARTIAL A/B (`mcdragons7/ab6_partial.txt`, killed ~45% for p7): units on/off Angels 1.0039 (was +3.3% on p3), Bruna
+1.0153, Dragons 1.0046, FiveColour 1.0225, Goblins 1.0000, Hinata 1.0054 (375 g; wall 1.097), Melira 1.0003, Stompy
+1.0175, TreasureHunt 1.0000. Slower: bruna 539 (5->6) and 837 (4->5), stompy 1868 (4->5); net +1 only on Stompy.
+d8 b0 on p6 (`mcdragons7/d8a/nc0.out`; valid for p7/p8 too -- at b0 nothing is priced and the p7/p8 changes are exact):
+ALL THREE RECOVER (bruna 539 5/5, 837 4/4, stompy 1868 4/4, identical digests on/off).
+STOMPY 1868 ROOT CAUSE: LR fired 0 times; 3,974 fruitless priced probes (~1k units) displaced search. 60% of them were
+FULL-table stages repeating the whole-float search exactly (Sol Ring paid by the only Forest, then a {G}: no float, no
+multi-unit leftover -> the full table IS the whole-float table).
+P7 (commit b534d1277), exact: manaoracle::t_full_table_differs (ManaOracle.h after ProbeCharge; set in MinimalPayments
+on a non-empty floating pool or a capped walk, and in PayEnum::Verify on a multi-unit leftover the full form would
+split). LR stage loop (ManaPayment.cpp, `wf_equiv` / `fulleq_check`): a whole-float stage that searched to its end with
+the flag unset sets bit d-1; the full stage at that depth is skipped (VERIFY runs it unpriced and counts
+`full_eq_mismatch`). The bits ride in the p1 memo (fail_p1 is now a map key -> bits). The p1 memo hit is now
+NoteEpochMemoHit and its insert NoteEpochMemoWrite (with the skip, a p1 hit can leave nothing priced, so the
+computation would otherwise be stored across decisions while a recompute there charges st1's probes). Stompy 1868 on
+p7: wins T4 (recovered at budget), probes 3,974 -> 1,244, full_eq_skip 422. Unit suite p7: 2,436/2,436 pass
+(`mcdragons7/ut7.log`).
+HINATA LR CPU (3 games seed 1870011 gi10, same digest both arms, units +1.5%): perf on-vs-off cycles +19% (+7.9 G of
+41 G): LineRepayDigest +0.98 G (LineRepayFind: up to 16 records, a digest each), BuildSimKeyBase +0.86 G
+(LineRepayMemoKey -> MidTurnStateKeyOf, once per try past the amount check; ~200k tries / 3 games, fired 28),
+TapForCostShared self +0.48 G, memmove +0.40 G (record snapshots), ManaCacheKey +0.18, LineRepayRecord +0.15.
+P8 (commit carrying this section; perf only, play-identical to p7: same digest + units on the Hinata 3-game sample): LineRepayDigest split into
+Seed/Step/Finish, LineRepayFind hashes every record's prefix in ONE pass (thread_local prefix array) and skips a record
+whose TurnSeq/active player differ (both are in the digest).
+  Instructions (perf stat -e instructions:u, the same 3 Hinata games): p7 on 53.67 G, p8 on 52.28 G (-2.6%), p8 OFF
+  40.87 G -> LR still costs +28% INSTRUCTIONS on Hinata at +1.5% units. Caches are NOT the cause (bp/m1 computations
+  equal on/off, unstorable 102 vs 2). Remaining named costs: LineRepayMemoKey's MidTurnStateKeyOf (BuildSimKeyBase,
+  once per try past the amount check), record snapshots in TapForCostShared (PayRefineSnap::Take, SnapPayFields,
+  memmove), ManaCacheKey; ~200k tries / 3 games for 28 fires. Wall is useless on this box (load ~50/32: the same arm
+  varies 22.6-32.1 s); use instructions:u. THIS IS THE OPEN WALL ITEM (USER: justify or trim anything above ~1%).
+
+RUNNING AT HANDOFF (all mine; kill freely):
+  * A/B on p7 (play-identical to p8): pid in `mcdragons7/ab7/ho.pid`, `ab7/ho.{out,err}`, logs `ab7/w`, 6 threads,
+    1,168 jobs. Report: `python3 mcdragons6/abrep.py mcdragons7/ab7`. Partial at ~30%: Angels units 1.0051, Bruna 1.0123
+    net -1, Dragons 1.0002 net -1, FiveColour 1.0222 net -1, Goblins 1.0000, Stompy 1.0071 net 0; slower: bruna 539 only
+    (already recovers at d8 b0).
+  * Identity on p7: `mcdragons7/id7/{verify,plain}.{out,err}` (pids in `id7/*.pid`, 1 thread each,
+    mcdragons3/id/id.json = 1,600 games, 7 decks). Pass = every job's digest equal between verify.out and plain.out, and
+    in verify.err's LINE REPAY line memo/ok/joint/inner/p1_memo/full_eq mismatch all 0.
+
+NEXT (successor 8)
+1. When ab7 finishes: abrep; every deck net <= 0? `mcdragons6/mkd8.py <abrep out> <prefix>` for any NEW slower game, run
+   `<prefix>.nc0.json` (and `.nc1.json` under MTG_NC_SEARCH=1 if a game does not recover) on mtg.p8, one pooled batch.
+2. Units above ~1% (FiveColour ~+2.2%, Bruna ~+1.2%): get `fired` and `p2_probes` per deck (MTG_LINE_REPAY_STATS=1 on
+   a 20-game sample); justify as found re-pays or trim like p7 (find the fruitless priced stage with a temporary
+   LineRepayDumpMismatch call after LineRepaySearch when probes>0 && !found; DELETE it after).
+3. Hinata +28% instructions: profile p8 on vs off with `perf record -e instructions:u` and diff per symbol; candidates
+   above. Any trim must stay exact (the memo key is what makes memo hits exact).
+4. Gate slice `mcdragons3/gate.sh mcdragons7/mtg.p8 s8 8`; smoke `THREADS=8 bash test/regression.sh --smoke` (needs the
+   8 threads: run after ab7 + id7); unit suite on p8 (`mcdragons7/mtg-test.p8`; p7 passed 2,436/2,436).
+5. Squash 24c31d4da..HEAD into landable commits; do not push, do not accept GT.
+
 ## READ FIRST: Successor 6 (2026-11-03, stopped at the context cap; successor 7 continues)
 Worktree head = the commit carrying this section (branch wip/mc-dragons; not pushed, no GT accepted). Scratch
 `build/scratch/mcdragons6/`. Binary under test = `mcdragons6/mtg.p5` / `mtg-test.p5` (= HEAD src).
