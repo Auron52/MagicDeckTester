@@ -30012,6 +30012,14 @@ static int BpDeriveMeterMode()
     return v;
 }
 static bool BpDeriveMeterOn() { return BpDeriveMeterMode() > 0; }
+// MTG_BP_DERIVE_PRICED_STOP (see eval_and_push): the per-job arm (valuearm bp_priced_stop) wins, else the env.
+// Read only once the priced ceiling has tripped, so its cost never lands on an ordinary subset visit.
+static bool BpDerivePricedStopOn()
+{
+    static const bool env = EnvOn("MTG_BP_DERIVE_PRICED_STOP");
+    const int a = valuearm::t_arm.bp_priced_stop;
+    return a >= 0 ? a != 0 : env;
+}
 static thread_local bool g_bp_derive_interrupted = false;
 namespace bpmeter
 {
@@ -73504,8 +73512,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // priced ceiling is armed, and the ceiling is never armed at an unlimited budget, so this re-prices
         // work under a finite budget and cannot make a line unfindable at a large one. Same lockstep caveat as
         // MTG_BP_DERIVE_METER mode 2: an interrupted list can reach play only through the anytime rescue.
-        static const bool s_priced_stop = EnvOn("MTG_BP_DERIVE_PRICED_STOP");
-        if (s_priced_stop && g_bp_enum_depth > 0 && decisionwork::PricedExceeded())
+        if (g_bp_enum_depth > 0 && decisionwork::PricedExceeded() && BpDerivePricedStopOn())
         {
             g_bp_derive_interrupted = true;
             bpmeter::g_priced_stops.fetch_add(1, std::memory_order_relaxed);
