@@ -220,7 +220,9 @@ Overlord is never left for after an activation in the same main.
 **ANSWERED (USER 2026-11-04):** *"Good point, if we activate for Overlord and Jetmir they should remain in that
 order."* Fixed: when one main activates for both, the Overlord fetch precedes the Jetmir fetch (the
 Jetmir-then-Overlord order is pruned in the same main). Cross-main (Jetmir main 1, Overlord main 2 on an attack
-turn, the INT-9 table) is unchanged.
+turn, the INT-9 table) is unchanged. USER 2026-11-04: *"I thought about it and the Overlord after Jetmir is pretty bad on an attack turn, but
+the best play on those turns is just Jetmir anyway, so we can leave it and let the search determine that."*
+So the main-2 Overlord activation after a main-1 Jetmir stays offered; no prune there.
 
 ## 3. Activations and the land drop (both mains, as on Fungus)
 
