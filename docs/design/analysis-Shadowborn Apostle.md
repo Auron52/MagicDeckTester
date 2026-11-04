@@ -1269,3 +1269,139 @@ T5 (T2 pass 3, 61,822 units, finds the Profane line). `ref_bench --deck shadowbo
 depth 3 and the overrun ceiling lets that pass finish. Caveats for the decision: the keep table was generated under
 the 1-ply leaf (a leaf change is a play change; Rule 0 of mulligan-profile.md applies to whether to regenerate), and
 the per-deck leaf K is what the value-leaf pipeline's leaf calibration measures -- Shadowborn's value leaf is still open.
+
+## Lake fold + Profane fetch timing (2026-11-04)
+
+USER rulings: on the Lake waste, *"For 2 I agree that it should not be sacrificing the land unless we need it. We
+should sort that out if possible."* On Profane Tutor, *"The card that the tutor fetches should not be staged upfront
+particularily for Profane Tutor. For other things that happen immediately it potentially could be, but I think we
+have been inconsistent about this, which isn't great."* Later the same day, on Lotus Bloom: *"It should be land ->
+Dark Ritual -> other spells. Lotus bloom should be sacrificed on demand by the mana system. not a direct activation.
+Land drop should happen main 1 unless we searched it up in main 2."* Branch `sb-lakeprof` (local). Commits
+48448ddad, 24774b850 and the commit carrying this section. Scratch is `build/scratch/sb-lakeprof/`.
+
+**1. `MTG_IDLE_CRACK_FOLD` (default ON; a SOUND identity fold).** Take a plan C holding a land sac-for-mana crack
+(Lake of the Dead; also Dwarven Ruins and Svyelunite Temple) and its sibling S, which is C without that crack and
+equal in every other field. If activating the crack on S's end state gives exactly C's end state (`BuildDedupKey`), C
+is dropped (`FoldIdleLandCracks`, TurnSolver.cpp). The crack is a mana ability. S still has the untapped Lake and the
+Swamp, so any later decision of the phase can crack from S's state; if nothing does, the float empties and S keeps a
+Swamp. A crack whose float pays a cast keeps C, because S paid differently, so the keys differ. This also covers
+"crack, Demonic Tutor, continuation casts the fetch". Without a sibling the plan is never folded. A two-crack plan
+chains onto the one-crack plan, then onto the no-crack plan.
+* **Where it runs:** on the full land-tagged menu (`EnumeratePlansWithLand`, the no-drop path), before breakpoint
+  variants and axes. A copy inside `EnumeratePlans` folded slightly more (units 22.09M vs 22.23M per 1000 games)
+  but cost about +16% thread-ms, so it was removed.
+* **What it is not:** the USER's on-demand payer rule for Lotus Bloom (and, by the same shape, Lake). That one is
+  written up as deferred work in `docs/design/sac-for-mana-on-demand.md`, not built. This fold is its
+  sound-identity subset and stays correct until the payer replaces the action.
+
+**2. `MTG_PROFANE_RESOLVE_FAN` (default ON): Profane Tutor's fetch is decided at resolution.**
+* **How the pin was created:** fan (3) in `AppendSubdecisionAxes` gave every base pre-combat plan with a suspended
+  tutor arriving next upkeep one variant per fetch rank (`Plan::upkeep_land_search_choice`, the Search for Tomorrow
+  stream). The T3 menu was x3 for a pick resolved at T4's upkeep, often beyond the horizon. That was the ledger's
+  24 of 52.
+* **What it is now:**
+  * No main-phase variant is created.
+  * The fetch is decided where the search CROSSES into that upkeep. `BoundaryFan`, the Defense of the Heart and
+    upkeep-tutor route, crosses once per rank of the resolution-state candidate list: the provider's ranked,
+    USER-table-restricted `TutorCandidates`, deduped, capped by `TutorSearchWidth`, front first.
+  * It records the winner on the plan of the turn that crossed: `Plan::suspend_tutor_choice` ->
+    `GameState::scripted_suspend_tutor`. This is packed per suspended-tutor search at that upkeep, with a ripple
+    free copy's own search before the arrival's.
+  * The second main is never skipped while a fetch is pending (the DotH rule).
+* **Beyond the horizon** (narrowed playout, d0 runner, constant-leaf edge) the provider's front is the permitted
+  policy.
+* **Human play** is untouched: the fan and the old axis are both off there. `CastOffSuspend` with no pin asks the
+  `tutor` prompt at the upkeep.
+* **Census (`MTG_STUT_AXIS_STATS=1`), 200 held-out games:** searched-frame uncovered picks with more than one
+  candidate = **0**, and playout = 58,604.
+* **real-upkeep = 1.** One executor upkeep (seed 940184 T5) resolved an unpinned fetch. The turn that crossed
+  committed a line whose crossing was beyond its horizon (an early ladder pass), so the front was taken, which is
+  the permitted playout pick. The old design priced it through a variant's leaf instead. **Open for the USER:** a
+  real-game upkeep search node, if even this case should be searched.
+* **Lever off:** `=0` restores the old pin.
+* **Unit tests:** `test_shadowborn_lakeprof.cpp`; the INT-1 and INT-4 Profane tests now use the new pin.
+
+**3. Audit: when each tutor-like pick is decided** (read-only; nothing else changed):
+
+| Effect (cards) | Where the pick is fixed | When it resolves vs. that plan | Verdict |
+|---|---|---|---|
+| To-hand / to-top / Nth tutors cast in main: Demonic Tutor, Diabolic Intent, Idyllic, Eladamri's, Beseech, Gamble, Long-Term Plans, Sylvan Scrying, Steelshaper's, Open the Armory, graveyard regrowths | `Plan::tutor_choice` RANK (`MTG_TUTOR_AXIS_RESOLVE` default ON), `AppendSubdecisionAxes`; consumed in `PerformTutor` | inside the plan's apply | sound identity (rank re-ranked at resolution) |
+| Creature ETB / Vial-put tutors: Stoneforge, Ranger-Captain, Recruiter, Matron, Harbingers | same axis (put-tutor branch) | ETB inside the apply | sound identity |
+| Tutor to battlefield: Natural Order, Chord, Green Sun's Zenith | same axis; `PerformTutorToBattlefield` | inside the apply | sound identity |
+| Crop Rotation (`tutor_land_to_battlefield`) | fanned by the same axis | inside the apply | **likely bug**: `PerformLandTutorToBattlefield` never reads the pin (all variants take the front; the pin leaks to the next tutor in that apply) |
+| Wishes (`wish_from_sideboard`) | same axis | inside the apply | sound identity |
+| Fetchlands | `Plan::fetch_target` by name | at the land play inside the apply | sound identity |
+| Hard-cast land searches, Titan ETB, Evolving Wilds-style cracks | `Plan::land_search_pins` ranks | inside the apply | sound identity |
+| Primeval Titan attack trigger, in-combat Khalni crack | `Plan::attack_land_search_choice` | same turn, at declare-attackers | pinned for a later step (mild; rank, nothing new in goldfish between main 1 and attackers) |
+| **Search for Tomorrow off suspend** | `Plan::upkeep_land_search_choice` (main-phase fan (3)) | NEXT upkeep | **timing defect** (Profane's old shape) |
+| **Emeria, the Sky Ruin** | `Plan::upkeep_gy_reanimate_choice` | NEXT upkeep | **timing defect** |
+| **Abiding Grace** | `Plan::grace_choice` | end step (main 1's pin spans combat + main 2) | **timing defect** (mild, rank) |
+| Birthing Pod; Shadowborn's Demon fetch (`SacNamedTutorPut`); ripple free tutors; graveyard picks (Haven, Ooze, Garth) | `Action::tutor_target` / `ripple_free_tutor` per action | inside the apply | sound identity |
+| Upkeep tutor-to-top (Enlightened / Worldly at next upkeep) | `BoundaryFan` -> `upkeep_tutor_choice` | NEXT upkeep, before the draw | decided at the crossing |
+| Defense of the Heart | `BoundaryFan` -> `doth_put_choice` | NEXT upkeep | decided at the crossing |
+| **Profane Tutor (this change)** | `BoundaryFan` -> `suspend_tutor_choice` | NEXT upkeep | decided at the crossing (was a timing defect) |
+| Dragonstorm put order; Ranger of Eos multi-tutor; Light-Paws; Regrowth auto-pick | not searched: provider pick at resolution | inside the apply | not searched (in-window provider pick; outside this audit's pin question, flagged) |
+
+Every fan is off in human play; the person is prompted at resolution (`g_play_tutor_chooser`, the sac-tutor chooser). Beyond the horizon every unpinned pick is the provider front.
+
+**Recommended consistent rule (USER decision):** a pick may be fanned inside a plan only if it resolves inside that
+plan's apply, and then as a RANK computed at resolution. Any pick resolving after the apply returns is decided where
+it resolves: combat, end step, or next upkeep via the BoundaryFan. By that rule, Search for Tomorrow off suspend,
+Emeria and Abiding Grace are timing defects of Profane's shape, and Titan's attack trigger is a mild one. The audit
+also found Crop Rotation's fanned pick is never read at resolution (a likely bug) and several in-window provider
+picks that are not searched (Dragonstorm's put order, Ranger of Eos, Light-Paws). None was changed.
+
+**4. Validation.**
+
+Everything below was run at d5 b20 with the deck profile (`ignore_play_profile`, the shipped play shape). Units are
+deterministic; thread-ms ran on a shared box.
+
+* **Unit tests:** `mtg-test`, 2567 cases pass. One test, `test_vampires_madness`, hit a cards.json read race while the
+  file was being edited; it passes when re-run.
+* **Scenarios:** `bash test/scenarios.sh`, 401/401.
+* **Held-out A/B:** one pooled `mtg --batch`, 4 arms x 1000 paired games, seeds 940000..940999, arms set by per-job
+  heurarm flags. Runs: `build/scratch/sb-lakeprof/ab2/`.
+
+| arm | avg turn | paired vs base | units/game | thread-ms |
+|---|---|---|---|---|
+| base (both levers off) | 4.8990 | | 22,619 | 749,232 |
+| lake only | 4.8990 | 0 faster / 0 slower | 22,226 (-1.7%) | 780,882 (+4.2%) |
+| profane only | 4.8920 | -0.0070 (t -1.94; 8 faster, 2 slower) | 22,744 (+0.6%) | 764,324 |
+| both (shipped default) | 4.8900 | **-0.0090 (t -2.33; 10 faster, 2 slower)** | 22,370 (-1.1%) | 811,075 (+8.3%) |
+
+* **Slower games:** the same two in both profane arms, gi427 and gi842 (4 -> 5). At `--depth 8 --budget-ms 0` both
+  win T4 under the new engine, equal to the base engine's d5 b20 turn and its d8 b0 turn. Both recover.
+* **s7 at b20** (seed 7, gi6, force_mulligan 1:16): still T6 on both arms (same decision digest). Units 34,695 ->
+  31,986 (-7.8%). At b80 both arms win T5. As the s7-miss section predicted, neither collapse closes the 7.5x
+  pass-2 gap, so the greedy-leaf decision stays open.
+* **Thread-ms:** the lake fold's +4% is the price of its extra trial applies. Two more applies per crack plan
+  against a sibling, on Shadowborn and the Dwarven Ruins decks only.
+
+* **Smoke** (`smoke.final.log`; GT was NOT accepted): 6 rows moved, 163 pass.
+  * shadowborn d5 s1001: 4.96 -> 4.94 (gi8 7->6, gi58 5->4).
+  * shadowborn d3 and shadowborn2hg d3: same score, play differs.
+  * breaching d3, d5 and 2hg d5: same score, play differs (Dwarven Ruins / Svyelunite Temple: the crack fold).
+* **Regression** (`regr.log`): 9 rows moved, 262 pass.
+  * shadowborn d5 s3003: 4.8667 -> 4.8400 (gi15 8->5, gi43 6->5).
+  * shadowborn d3 and d5 s2002: same score.
+  * breaching x3: same score.
+  * Viewer protocol: 0 play-drift / 0 enum-gap / 0 board-diverged. REQUIRE-BEAT passes.
+* **Three rows of decks without these cards also moved:**
+  * th d5 s2002: same score.
+  * hinata d0 s2002: 6.848 -> 6.847, gi60 no-win -> T8.
+  * bruna d0 s2002: same score.
+  * th d5 reproduces with BOTH levers off, so it is not either lever. It is either a non-lever side effect
+    (struct/key shape) or GT drift that predates this change.
+  * **ATTRIBUTION PENDING:** this needs the base-commit binary (b379c41b4), which is being built in a scratch worktree.
+    See `logs/lakeprof-handoff.md`.
+* **Every moved Shadowborn/Breaching row is net <= 0.** `ref_bench --deck shadowborn_apostle` has not been run yet
+  (pending, same hand-off).
+
+**Open for the USER:**
+1. Adopt the two levers. Both are default ON.
+2. Whether an executor upkeep should be its own search node for an unpinned fetch. This is the 1-in-200 real-upkeep
+   case above.
+3. The consistent pick-timing rule. The rows it would move are Search for Tomorrow, Emeria, Grace and Titan's attack.
+4. The Crop Rotation pin bug.
+5. When to build the on-demand sac-for-mana payer (`docs/design/sac-for-mana-on-demand.md`).
