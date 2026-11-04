@@ -59419,6 +59419,14 @@ static bool HumanStepFromCard(Action::Kind k)
 // the exact one (two identical Clue Tokens: the plan cracks #1, the human clicked #2 -- same play).
 static bool HumanStepMatches(const HumanStepToken& st, const Action& a, const GameState* state, bool twins)
 {
+    // `sacnamed=` (Shadowborn Apostle) names the DEMON it fetches -- the action's tutor_target, or kSacNamedNoFetch --
+    // never the source card (the viewer's payload rule, index.html). Matching card_name here refused every queued
+    // Apostle activation as "matches nothing in the committed plan" (USER rejection artifact s2 gi1 T4, 2026-11-04).
+    if (st.verb == "sacnamed")
+    {
+        return a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::SacNamedTutorPut
+            && a.tutor_target.str() == st.name;
+    }
     if (a.card_name.str() != st.name || !HumanVerbMatchesKind(st.verb, a.kind)) { return false; }
     if (a.kind == Action::Kind::CastFromHand && (a.kicked != st.kicked || a.adventure != st.adventure))
     { return false; }

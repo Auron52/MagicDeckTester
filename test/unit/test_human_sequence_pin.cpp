@@ -388,6 +388,30 @@ TEST_CASE("human sequence: hand copies differing only in the variant's sub-decis
     CHECK(p.actions[3].chosen_x == 2);
 }
 
+TEST_CASE("human sequence: sacnamed= names the fetched Demon, not the Shadowborn Apostle source")
+{
+    // USER rejection artifact (Shadowborn s2 gi1 T4, 2026-11-04): `sacnamed=Jetmir, Nexus of Revels` was refused as
+    // "matches nothing in the committed plan" -- the matcher compared the token with card_name (the Apostle).
+    Action jet = Act(K::ActivatePermAbility, "Shadowborn Apostle");
+    jet.ability_mode = Action::AbilityMode::SacNamedTutorPut;
+    jet.tutor_target = "Jetmir, Nexus of Revels";
+    Action ov = jet;
+    ov.tutor_target = "Abhorrent Overlord";
+    TurnSolver::Plan p = PlanOf("Swamp", { ov, jet });
+    std::vector<std::string> errors;
+    TurnSolver::ApplyHumanSequencePin(p, { "land=Swamp", "sacnamed=Jetmir, Nexus of Revels",
+                                           "sacnamed=Abhorrent Overlord" }, nullptr, &errors);
+    CHECK(errors.empty());
+    REQUIRE(p.actions.size() == 2);
+    CHECK(p.actions[0].tutor_target.str() == "Jetmir, Nexus of Revels");
+    CHECK(p.actions[1].tutor_target.str() == "Abhorrent Overlord");
+    // The source's name is not a sacnamed= value.
+    TurnSolver::Plan q = PlanOf("", { jet });
+    std::vector<std::string> e2;
+    TurnSolver::ApplyHumanSequencePin(q, { "sacnamed=Shadowborn Apostle" }, nullptr, &e2);
+    CHECK(!e2.empty());
+}
+
 TEST_CASE("human sequence: a stated permanent matches its indistinguishable twin")
 {
     // Re-review item C: two identical Clue Tokens; the plan cracks #1, the human clicked #2.
