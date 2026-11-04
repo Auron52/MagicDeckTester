@@ -562,3 +562,19 @@ Same manifest/arms as 01:04. Numbers reproduce the non-deterministic run almost 
 - DECISION OWED BY THE USER: R, and any per-deck budget raise (kittyv3 first). Default taken meanwhile: priced budget
   stays OFF on the branch (nothing ships until the USER picks); work continues on the pooled bottoming budget.
 
+
+## 2026-11-04 ~03:40 UTC: USER "leave Cyclone alone, focus on the fully complete decks"; plan items re-scoped
+- Priced-budget A/B EXCLUDING Cyclone (held-out, ~31.1k games/arm):
+  off 8500 s p99 4.65 p99.9 15.3 max 79 | x28 15/24 +8, 8130 s (-4%) 4.26/14.4/63 | x20 5/66 +66, 7160 s (-16%)
+  3.60/12.6/65 | x14 10/124 +129, 6425 s (-24%) 3.13/11.2/39. Cyclone's -10 was what made x28 look neutral.
+- POOLED BOTTOMING BUDGET -- DEFERRED (no target on complete decks). MTG_ROLLOUT_STATS + MTG_BOTTOM_TRIAL_TRACE (now
+  names job/gi) on the x0 arm: with Cyclone 2,656 s of 12,368 s user (21.5%), 1,883 trials; WITHOUT Cyclone 286 s of
+  9,516 s (3.0%), 39 trials, ALL in two tail-corpus EDF games played deliberately without the keep table
+  (edf_keepab_static gi821, edf_keepab_lookahead gi214). No shipped config of a complete deck runs a bottoming trial
+  (all have keep tables). It matters only for table-less decks (new decks, Cyclone, generation) -- revisit there.
+- EDF REMAINING WASTES -- DEFERRED. They were found on edf_keepab_static gi821 (no keep table). Shipped EDF is 4.1% of
+  held-out wall, max game 15.9 s. Held-out wall by complete deck: hinata 12.4%, snow 11.4% (max 78 s), melira 6.6%,
+  alchemist 6.1%, fivecolour 5.4% (max 55 s), landfall, edf, niv ...
+- NOW: rebased budget-rebalance onto origin 68a94b54d; rebuild OK, 2544/2544 tests. Running smoke then regression
+  (priced budget OFF: refit prices + determinism fixes move budgeted play through the X=100 ceiling) -> accept -> the
+  increment can land on the shared branch once the USER is happy. R / per-deck raise still the USER's call.
