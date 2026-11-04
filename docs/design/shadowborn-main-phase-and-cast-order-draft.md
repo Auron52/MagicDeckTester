@@ -139,13 +139,13 @@ fine in my opinion. I sometimes cast it late, but that doesn't really matter at 
 |---|---|---|---|
 | land | the land drop (Lake of the Dead: tap-first, a basic Swamp before Blood Crypt, as today) | none | USER ruling: land first. |
 | 1 | Dark Ritual | **moved to the front** (15 to 1) | USER ruling 2026-11-04. Also your practice in all 6 reference plans that held it. |
-| 2 | Thrumming Stone | one place later (was 1) | Granter: every later cast wants it out first. The payable-order fallback still pulls Culling ahead when the Stone needs its mana. |
-| 3 | Shadowborn Apostle | none in effect (10) | Starts the chain. Bodies go down before anything that sacrifices or counts them. |
-| 4 | Abhorrent Overlord (hard cast) | **ordered** (was a plan-order tie at 10) | After the Apostles: devotion counts each Apostle's {B}, so more Harpies. |
-| 5 | Reaper from the Abyss (hard cast) | **ordered** (tie at 10) | Body; no cast-order interaction. |
-| 6 | Sire of Insanity (hard cast) | **ordered** (tie at 10) | Body; the discard is at the end step. |
-| 7 | Jetmir (cannot be cast) | **ordered** (tie at 10) | Listed only so the order is total. |
-| 8 / early | Culling the Weak | **two searched positions** (was 15) | USER 2026-11-04: *"Culling the weak needs to be earlier than Thrumming stone some of the time and that means the shadowborn for it to sacrifice also needs to be considered there."* *"(actually often)"*. So both are offered and the search compares them: **early** = land, Dark Ritual, [an Apostle cast as its victim, or a body already on the board], Culling, Thrumming Stone, rest (Culling's {B}{B}{B}{B} pays the Stone; the victim Apostle is cast without the Stone's ripple); **late** = rank 8, after the chain, eating a fresh sick Apostle. Not left to the payable-order fallback: "often" means it is a real choice, not only a rescue for an unpayable order. |
+| 2 | Culling the Weak | **moved ahead of the Stone** (was 15, behind it) | USER 2026-11-04: *"Culling the weak needs to be earlier than Thrumming stone some of the time and that means the shadowborn for it to sacrifice also needs to be considered there."* *"(actually often)"* *"Having the culling later than Thrumming stone isn't a good idea."* *"So it should be Dark Ritual, <shadowborn sacrifice for culling if needed>, Culling, Thrumming stone..."* So Culling always precedes the Stone. Its victim (already a searched variant: a body on the board, or an Apostle from hand) comes just before it, so a hand victim is cast ahead of the Stone, without its ripple. |
+| 3 | Thrumming Stone | one place later (was 1) | Granter: every later cast wants it out first. |
+| 4 | Shadowborn Apostle | none in effect (10) | Starts the chain. Bodies go down before anything that sacrifices or counts them. |
+| 5 | Abhorrent Overlord (hard cast) | **ordered** (was a plan-order tie at 10) | After the Apostles: devotion counts each Apostle's {B}, so more Harpies. |
+| 6 | Reaper from the Abyss (hard cast) | **ordered** (tie at 10) | Body; no cast-order interaction. |
+| 7 | Sire of Insanity (hard cast) | **ordered** (tie at 10) | Body; the discard is at the end step. |
+| 8 | Jetmir (cannot be cast) | **ordered** (tie at 10) | Listed only so the order is total. |
 | 9 | Demonic Tutor | ordered (tie at 20) | After the bodies; the shuffle comes after the chain has used the top of the library. |
 | 10 | Diabolic Intent | ordered (tie at 20) | Victim is a sick Apostle from this turn's chain. DT before Intent is an arbitrary tie-break (q6). |
 | 11 | Profane Tutor (suspend) | ordered (tie at 20) | A suspend; position only decides which mana pays {1}{B}. |
@@ -256,12 +256,12 @@ wall time):
    **ANSWERED (USER 2026-11-04):** *"Casting the Dark Ritual early in a line is totally fine in my opinion. I
    sometimes cast it late, but that doesn't really matter at all."* Ritual first (rank 1, right after the land) stands. The user is
    indifferent to its position, so an order-only arm is a cost/quality check, not a question for the user.
-4. **Culling the Weak position: ANSWERED (USER 2026-11-04)** -- both early (before the Stone, with its
-   victim Apostle cast ahead of it) and late (after the chain), searched. See rank 8 in section 2. Build
-   note: the victim is already a searched variant (TurnSolver.cpp SAC-ANY-CREATURE post-pass, hand or board
-   victim) and `ApplyAttachSpellDependencyOrder` moves Culling to just after its hand victim, but nothing
-   today puts that victim + Culling ahead of the Stone. That needs a cast-order variant, plus a check that
-   the early line is reachable (scenario test) before the A/B.
+4. **Culling the Weak position: ANSWERED (USER 2026-11-04)** -- always before the Thrumming Stone, with its
+   victim ahead of it (*"Having the culling later than Thrumming stone isn't a good idea."*). Build note: the
+   victim is already a searched variant (TurnSolver.cpp SAC-ANY-CREATURE post-pass, hand or board victim) and
+   `ApplyAttachSpellDependencyOrder` moves Culling to just after a hand victim; the new part is that the hand
+   victim Apostle and Culling both go ahead of the Stone. Check with a scenario test that the line
+   "land, Dark Ritual, Apostle, Culling (eating it), Stone, Apostles" is reached before the A/B.
 5. **Scope:** searched play only (d0 keeps its greedy second chance, as Fungus does), or every
    depth? Default: searched only.
 6. **The tutor ties:** Demonic Tutor before Diabolic Intent, both after the bodies; suspends last.
