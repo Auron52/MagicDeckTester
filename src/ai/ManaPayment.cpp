@@ -8151,29 +8151,8 @@ std::uint64_t LineRepayContentOf(const LineRepayRec& r)
 // Record a committed outermost payment. `pre` (null = a barrier) is the board before it, given when the payment is
 // part of a line that still owes more after it.
 
-// TEMPORARY DIAGNOSTIC (successor 10)
-static void LrBoardDumpTmp(const char* tag, const GameState& s, std::size_t n)
-{
-    static const bool on = EnvOn("MTG_LINE_REPAY_TRACE");
-    if (!on) { return; }
-    const int a = s.active_player_index;
-    auto P = [](const ManaPool& f) { char b[160]; std::snprintf(b, sizeof b, "w%d u%d b%d r%d g%d c%d *%d sn%d wc%d wp%d wv%d", f.white, f.blue, f.black, f.red, f.green, f.colorless, f.wild, f.snow_units, f.wild_c, f.wild_phantom, f.wild_conv); return std::string(b); };
-    std::string perms;
-    for (std::size_t i = 0; i < n && i < s.battlefield.size(); ++i)
-    {
-        const Permanent& p = s.battlefield[i];
-        int dep = -1;
-        for (const Counter& c : p.counters) { if (c.type == Counter::Type::Depletion) { dep = c.count; break; } }
-        char b[96]; std::snprintf(b, sizeof b, "%d%s/s%d/c%d/d%d ", p.card.m_number, p.tapped ? "T" : "", p.storage_counters, p.charge_counters, dep);
-        perms += b;
-    }
-    std::fprintf(stderr, "[lr-board] %s t%d seq=%d n=%zu fm{%s} fcm{%s} fbm{%s} haste=%d life=%d en=%d untap=%d lturn=%d | %s\n", tag, s.turn_number, s.TurnSeq(), n,
-                 P(s.floating_mana).c_str(), P(s.floating_creature_mana).c_str(), P(s.floating_bigspell_mana).c_str(), s.floating_haste_c,
-                 s.players[a].life, s.players[a].energy_counters, static_cast<int>(s.pay_ledger.untap_effects), static_cast<int>(s.pay_ledger.turn), perms.c_str());
-}
 void LineRepayRecord(const GameState& s, const PayRefineSnap* pre, const ManaCost& cost, bool for_creature)
 {
-    LrBoardDumpTmp("record", s, s.battlefield.size());
     const int a = s.active_player_index;
     LineRepayRec& r = t_lr_ring[t_lr_next];
     t_lr_next = (t_lr_next + 1) % kLineRepayRing;
@@ -8669,22 +8648,6 @@ std::uint64_t LineRepayMemoKey(const GameState& s, const LineRepayChain& ch, boo
 // that this one pays; true = re-made on `state` (`undo` holds the board as it was; the caller pays `cost_in`
 // again, which then succeeds).
 
-// TEMPORARY DIAGNOSTIC (successor 10): MTG_LINE_REPAY_TRACE=1 prints every fired re-pay.
-static void LrTraceFireTmp(const GameState& s, const LineRepayChain& ch, int depth, const char* how)
-{
-    static const bool on = EnvOn("MTG_LINE_REPAY_TRACE");
-    if (!on) { return; }
-    const Card* sp = PayingSpellCard();
-    std::string b;
-    for (const Permanent& p : s.battlefield)
-    { if (p.controller_index == s.active_player_index) { b += p.card.m_name.str(); b += p.tapped ? "(T) " : " "; } }
-    std::fprintf(stderr, "[lr-fire] t%d %s depth=%d failing=%s for=%s rec0=%s(%s) rec1=%s(%s) | %s\n", s.turn_number, how, depth,
-                 ch.cost_in.ToString().c_str(), sp ? sp->m_name.str().c_str() : "-",
-                 ch.rec[0] ? ch.rec[0]->cost.ToString().c_str() : "-",
-                 ch.rec[0] && ch.rec[0]->has_spell ? ch.rec[0]->spell.m_name.str().c_str() : "-",
-                 ch.rec[1] && depth > 1 ? ch.rec[1]->cost.ToString().c_str() : "-",
-                 ch.rec[1] && depth > 1 && ch.rec[1]->has_spell ? ch.rec[1]->spell.m_name.str().c_str() : "-", b.c_str());
-}
 bool LineRepayTry(GameState& state, const ManaCost& cost_in, bool for_creature, ManaPool* available,
                   bool honor_legacy_cco, PayRefineSnap& undo)
 {
@@ -8808,7 +8771,6 @@ bool LineRepayTry(GameState& state, const ManaCost& cost_in, bool for_creature, 
             note_fail.armed = false;
             g_lr_fired.fetch_add(1, std::memory_order_relaxed);
             if (d2) { g_lr_fired_d2.fetch_add(1, std::memory_order_relaxed); }
-            LrTraceFireTmp(state, ch, d2 ? 2 : 1, "okmemo");
             return true;
         }
         g_lr_ok_stale.fetch_add(1, std::memory_order_relaxed);   // cannot happen if the key is complete: search
@@ -8982,7 +8944,6 @@ bool LineRepayTry(GameState& state, const ManaCost& cost_in, bool for_creature, 
         if (memo_hit) { g_lr_memo_bad.fetch_add(1, std::memory_order_relaxed); }   // the memo said "fails"
         g_lr_fired.fetch_add(1, std::memory_order_relaxed);
         if (depth > 1) { g_lr_fired_d2.fetch_add(1, std::memory_order_relaxed); }
-        LrTraceFireTmp(state, ch, depth, whole_float ? "p1" : "p2");
         return true;
     }
     if (ok_memo != nullptr) { g_lr_ok_bad.fetch_add(1, std::memory_order_relaxed); }   // VERIFY: memo said "pays"
@@ -9095,29 +9056,6 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
         // The retry still failed: a failed payment must leave the game exactly as it found it,
         // so the re-pay is undone too (its own taps were restored by the failure path above).
         if (!ok) { payroll::UndoLast(state); }
-    }
-    {   // TEMPORARY DIAGNOSTIC (successor 10)
-        static const bool s_lrt = EnvOn("MTG_LINE_REPAY_TRACE");
-        if (s_lrt && !ok && t_pay_nest == 1)
-        {
-            const Card* sp = PayingSpellCard();
-            const LineRepayRec* r0 = LineRepayFind(state);
-            std::fprintf(stderr, "[lr-miss] t%d failing=%s for=%s line_ctx=%d unpaid=%s ctx=%d rec_ctx=%d suspend=%d find=%s lib=%zu\n",
-                         state.turn_number, cost_in.ToString().c_str(), sp ? sp->m_name.str().c_str() : "-", line_ctx ? 1 : 0,
-                         g_line_unpaid_cost.ToString().c_str(), LineRepayContext(state) ? 1 : 0, LineRepayRecordContext(state) ? 1 : 0,
-                         g_line_repay_suspend, r0 ? (r0->has_spell ? r0->spell.m_name.str().c_str() : "rec") : "null",
-                         state.players[state.active_player_index].library.size());
-            LrBoardDumpTmp("miss", state, state.battlefield.size());
-            for (int k = 1; k <= kLineRepayRing; ++k)
-            {
-                const LineRepayRec& r = t_lr_ring[(t_lr_next - k + kLineRepayRing) % kLineRepayRing];
-                if (!r.live || r.seq != state.TurnSeq()) { continue; }
-                std::fprintf(stderr, "[lr-miss]   ring-%d undo=%d n=%zu bf=%zu lib=%zu/%zu cost=%s spell=%s post=%016llx now=%016llx\n", k, r.undoable ? 1 : 0, r.n,
-                             state.battlefield.size(), r.lib, state.players[state.active_player_index].library.size(), r.cost.ToString().c_str(),
-                             r.has_spell ? r.spell.m_name.str().c_str() : "-", static_cast<unsigned long long>(r.post),
-                             static_cast<unsigned long long>(state.battlefield.size() >= r.n ? LineRepayDigest(state, r.n) : 0));
-            }
-        }
     }
     // MTG_LINE_REPAY: the line's previous payment re-made so that this one pays (LineRepayTry), then this one paid.
     if (!ok && line_ctx)
