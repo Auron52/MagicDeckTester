@@ -164,6 +164,8 @@
      row (the tapped one is just wider). */
   .thumb.tapped { width:126px; }
   .thumb.tapped img { width:90px; margin:0 auto; transform:rotate(90deg); opacity:.82; filter:saturate(.85); }
+  .thumb .sickbadge { position:absolute; top:2px; right:2px; background:rgba(200,150,40,.92); color:#0c1116;
+                      font-size:11px; font-weight:700; border-radius:3px; padding:0 3px; line-height:14px; z-index:3; }
   .thumb .tapbadge { position:absolute; top:2px; left:2px; background:rgba(120,120,130,.92); color:#0c1116;
       border-radius:4px; font-size:10px; font-weight:700; padding:0 4px; z-index:2; }
   .thumb em { font-style:normal; font-size:10px; color:var(--muted); display:block; line-height:1.12; margin-top:3px; }
@@ -2223,6 +2225,9 @@ function bfThumb(o) {   // battlefield entry {name, is_land, is_le, counters?}
     (eqDrag?`<span class="eqbadge" title="drag onto one of your creatures to equip it">⚔ drag${eqN?` ×${eqN}`:''}</span>`:'')+
     (feqN?`<span class="feqbadge" title="click ${esc(o.name)} to attach all ${feqN} free Equipment to it">⚔ +${feqN} free</span>`:'')+
     (o.tapped?`<span class="tapbadge" title="tapped">⤵</span>`:'')+
+    // SUMMONING SICK (USER 2026-11-04): entered this turn and cannot attack -- the board said nothing, so a
+    // sacrifice of six identical Apostles could not tell the attack-ready ones apart.
+    (o.sick?`<span class="sickbadge" title="summoning sick: entered this turn, cannot attack">💤 sick</span>`:'')+
     ((tapOpts.length&&S.tapMode)?`<span class="pretapbadge" title="click to ${o.tap_sac?'sacrifice':'tap'} ${esc(o.name)} yourself for ${esc(tapOpts.map(preTapFaceText).join(' or '))}${(o.tap_fed||[]).length?` — ${esc(o.tap_feed||'its feed')} comes out of your floating mana, so tap its feeder first`:''}${o.tap_note?` — ${esc(o.tap_note)}`:''}${(o.tap_auras||[]).length?` — you will also pick the colour of ${esc((o.tap_auras||[]).map(a=>a.name).join(' and '))}’s bonus mana`:''}${o.tap_energy?` — a COLOURED tap costs ${o.tap_energy} energy, its {C} mode is free`:''}">⛏${tapN?` ×${tapN}`:''}</span>`:'')+
     // Copy-entrant provenance (Sakashima's Protege): the art/name ARE the copied card — without
     // this badge a Protege-copy of Boarding Party is indistinguishable from a real one and the
@@ -4117,13 +4122,16 @@ function sacBurstAuto(d){
   const got=(d.options||[]).map(o=>o.name);
   if (!sameNameMultiset(got, q.expect)) { S.sacBurst=null; return false; }   // board moved -- ask
   const want=q.want[0];
-  const oi=got.indexOf(want);
+  const opts=d.options||[];
+  // The exact body (stable card number), else a same-name body in the same state (sick / tapped), else none.
+  let oi = want.num>0 ? opts.findIndex(o=>(+o.num||0)===want.num && o.name===want.name) : -1;
+  if (oi<0) oi = opts.findIndex(o=>o.name===want.name && !!o.sick===want.sick && !!o.tapped===want.tapped);
   if (oi<0) { S.sacBurst=null; return false; }
   q.want.shift(); q.expect=got.slice(); q.expect.splice(oi,1);
   if (!q.want.length) S.sacBurst=null;
   d._autoStep = true;   // no user rest -> undo pops it with the click that opened the multi-select
   pushChoice(d, ((d.options||[])[oi]||{}).index,
-             `${d.source||'Sacrifice'}: sacrifice ${want} (${(+d.pick_index||0)+1} of ${+d.pick_total})`);
+             `${d.source||'Sacrifice'}: sacrifice ${want.name} (${(+d.pick_index||0)+1} of ${+d.pick_total})`);
   return true;
 }
 // Seed the board selection from the AI's heuristic-default option (so targeting/bounce start on
@@ -5986,7 +5994,9 @@ function commitBoardSel(d, dec){
       if (picked.length!==need){ flashHint(`Pick ${need} to sacrifice (you have ${picked.length}).`); return; }
       const expect=(d.options||[]).map(o=>o.name);
       expect.splice(expect.indexOf(picked[0].name), 1);
-      const rest=picked.slice(1).map(o=>o.name);
+      // Each queued pick carries its IDENTITY, not just its name: same-name bodies differ when some are
+      // summoning sick (Shadowborn s4 gi3: a name-only replay sacrificed the attack-ready Apostles).
+      const rest=picked.slice(1).map(o=>({ name:o.name, num:+o.num||0, sick:!!o.sick, tapped:!!o.tapped }));
       S.sacBurst = rest.length ? { source:d.source, turn:turnKey(d), want:rest, expect } : null;
       return pushChoice(d, picked[0].index,
         `${d.source}: sacrifice ${picked.map(o=>o.name).join(' + ')}`

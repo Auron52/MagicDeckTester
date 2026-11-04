@@ -223,7 +223,7 @@ function testSacBurstMultiSelect(win) {
   sb.commit(d1, 'sacrifice');
   chk(S.choices.length === 1 && S.choices[0] === 1,
       '2-of-3: THIS frame is answered with the first pick only (one int per frame)');
-  chk(S.sacBurst && S.sacBurst.want.length === 1 && S.sacBurst.want[0] === 'Tukatongue Thallid',
+  chk(S.sacBurst && S.sacBurst.want.length === 1 && S.sacBurst.want[0].name === 'Tukatongue Thallid',
       '2-of-3: the remaining pick is queued for the next frame');
   chk(S.sacBurst && S.sacBurst.expect.join('|') === 'Shroofus Sproutsire|Tukatongue Thallid',
       '2-of-3: the queue predicts the next option list (previous list minus the victim taken)');
@@ -237,6 +237,24 @@ function testSacBurstMultiSelect(win) {
       '2-of-3: the follow-up answers the QUEUED name at ITS re-enumerated index (1, not 2)');
   chk(d2._autoStep === true, '2-of-3: the auto answer is an auto step (undo pops it with the click above)');
   chk(S.sacBurst === null, '2-of-3: the queue is emptied once every pick is spent');
+
+  // --- same-name bodies are NOT fungible: the queued pick is the exact body (num), never the first name ---
+  // Shadowborn s4 gi3 T4 (USER 2026-11-04): six of 17 Apostles chosen, the name-only replay ate the attack-ready ones.
+  reset();
+  const ap = (i, pi, num, sick) => ({ index: i, perm_index: pi, tapped: false, name: 'Shadowborn Apostle',
+                                      label: 'Shadowborn Apostle', num, sick });
+  const a1 = { type: 'sacrifice', source: 'Shadowborn Apostle', turn: 4, decision_index: 47, heuristic_default: 2,
+               pick_index: 0, pick_total: 2, me: bf([8, 9, 10, 11], false),
+               options: [ap(0, 8, 26, false), ap(1, 9, 30, false), ap(2, 10, 40, true), ap(3, 11, 41, true)] };
+  S.boardSel = new Set(['m:10', 'm:11']); S.decision = a1;
+  sb.commit(a1, 'sacrifice');
+  chk(S.choices.length === 1 && S.choices[0] === 2, 'apostles: the first pick is the clicked sick body');
+  const a2 = { type: 'sacrifice', source: 'Shadowborn Apostle', turn: 4, decision_index: 48, heuristic_default: 0,
+               pick_index: 1, pick_total: 2, me: bf([8, 9, 10], false),
+               options: [ap(0, 8, 26, false), ap(1, 9, 30, false), ap(2, 10, 41, true)] };
+  chk(sb.auto(a2) === true, 'apostles: the follow-up frame is auto-answered');
+  chk(S.choices.length === 2 && S.choices[1] === 2,
+      'apostles: the queued pick is the clicked body #41 (index 2), not the first-listed attack-ready Apostle');
 
   // --- the board moved: DROP the queue and surface the frame rather than answer the wrong one ---
   reset();

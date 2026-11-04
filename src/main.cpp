@@ -146,7 +146,10 @@ static void JsonBattlefield(std::ostream& os, const GameState& s, int controller
                  int yield;
                  // CURRENT power / toughness of a creature (printed + counters + until-EOT pumps + lords
                  // + Auras + Equipment -- what combat reads); has_pt false for a non-creature.
-                 bool has_pt; int power; int toughness; };
+                 bool has_pt; int power; int toughness;
+                 // SUMMONING SICK (USER 2026-11-04: "it would be nice to see which are summoning sick on the field"):
+                 // a creature that entered this turn and cannot attack (no haste from any source). Emitted only when true.
+                 bool sick; };
     std::vector<Row> rows;
     for (int pi = 0; pi < static_cast<int>(s.battlefield.size()); ++pi)
     {
@@ -249,10 +252,17 @@ static void JsonBattlefield(std::ostream& os, const GameState& s, int controller
         const bool has_pt = p.card.IsCreature() || p.is_animated;
         const int  pw     = has_pt ? CombatPowerOf(p, s) : 0;
         const int  tf     = has_pt ? LethalToughness(p, s) : 0;
+        bool sick = false;
+        if (has_pt && p.entered_this_turn)
+        {
+            Permanent q = p;
+            q.tapped = false;   // sickness, not the tap state, is the question
+            sick = !CanAttackFull(q, s.battlefield, p.controller_index);
+        }
         rows.push_back({ p.card.m_name, p.card.IsLand(), is_le, std::move(cs), pi, p.tapped,
                          p.card.m_number, is_aura, is_equip, att, p.copy_printed_name.str(),
                          std::move(taps), std::move(tap_fed), std::move(tap_feed), tap_sac,
-                         std::move(tap_note), std::move(tap_auras), tap_energy, yield, has_pt, pw, tf });
+                         std::move(tap_note), std::move(tap_auras), tap_energy, yield, has_pt, pw, tf, sick });
     }
     std::sort(rows.begin(), rows.end(),
               [](const Row& a, const Row& b){ return a.name < b.name; });
@@ -264,6 +274,7 @@ static void JsonBattlefield(std::ostream& os, const GameState& s, int controller
         os << ", \"idx\": " << rows[i].idx;
         os << ", \"num\": " << rows[i].num;
         if (rows[i].tapped) { os << ", \"tapped\": true"; }
+        if (rows[i].sick)   { os << ", \"sick\": true"; }
         if (rows[i].is_aura)  { os << ", \"is_aura\": true"; }
         if (rows[i].is_equip) { os << ", \"is_equip\": true"; }
         if (rows[i].attached_to > 0)
@@ -3824,6 +3835,21 @@ static void WriteBounceDecisionJson(std::ostream& os, const GameState& s, const 
         os << "{ \"index\": " << i << ", \"perm_index\": " << legal[i] << ", \"tapped\": "
            << (p.tapped ? "true" : "false") << ", \"name\": "; JsonStr(os, p.card.m_name.str());
         os << ", \"label\": "; JsonStr(os, p.card.m_name.str());
+        // A BURST's victims are told apart by the viewer when it replays picks 2..N onto the frames that
+        // follow: same-name bodies are NOT fungible when some are summoning sick (Shadowborn s4 gi3 T4: the
+        // name-only replay sacrificed the three attack-ready Apostles the USER had kept). `num` is the stable
+        // card number (0 for tokens), `sick` the board's flag. Burst prompts only, like pick_total.
+        if (sacrifice && !legend_keep && g_sac_burst_disclosure.total > 1)
+        {
+            bool sick = false;
+            if ((p.card.IsCreature() || p.is_animated) && p.entered_this_turn)
+            {
+                Permanent q = p;
+                q.tapped = false;
+                sick = !CanAttackFull(q, s.battlefield, p.controller_index);
+            }
+            os << ", \"num\": " << p.card.m_number << ", \"sick\": " << (sick ? "true" : "false");
+        }
         if (legend_keep)
         {
             os << ", \"card_num\": " << p.card.m_number << ", \"loyalty\": " << p.loyalty
