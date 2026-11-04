@@ -208,7 +208,8 @@ TEST_CASE("Apostle activation: the readiness code searches how many attack-ready
     // Two strong copies must go (4 weak + 2 strong); a code giving up more strong copies while a weak one
     // is left over is dominated and not emitted.
     for (const Action& a : Activations(s)) { CHECK(SacNamedSpecS(a.sac_victim_id) == 2); }
-    const Action* rp = FindAct(Activations(s), "Reaper from the Abyss");
+    const std::vector<Action> acts_rp = Activations(s);   // named: FindAct points into the vector
+    const Action* rp = FindAct(acts_rp, "Reaper from the Abyss");
     REQUIRE(rp != nullptr);
     GameState t = s;
     ApplyOne(t, *rp);
@@ -238,12 +239,14 @@ TEST_CASE("Apostle activation: two activations in one turn fetch two Demons; the
     s.battlefield.push_back(PermSb2("Swamp", 2));
     for (int k = 0; k < 12; ++k) { s.battlefield.push_back(PermSb2(kApostle, 10 + k, /*fresh=*/true)); }
     DemonLibrary(s);
-    const Action* first = FindAct(Activations(s), "Abhorrent Overlord");
+    const std::vector<Action> acts1 = Activations(s);   // named: FindAct points into the vector
+    const Action* first = FindAct(acts1, "Abhorrent Overlord");
     REQUIRE(first != nullptr);
     ApplyOne(s, *first);
     CHECK(CountOnBf(s, kApostle) == 6);
     CHECK(CountTokens(s) == 8);   // Overlord FIRST: 2 + six Apostles still out
-    const Action* second = FindAct(Activations(s), "Reaper from the Abyss");
+    const std::vector<Action> acts2 = Activations(s);
+    const Action* second = FindAct(acts2, "Reaper from the Abyss");
     REQUIRE(second != nullptr);
     ApplyOne(s, *second);
     CHECK(CountOnBf(s, kApostle) == 0);
@@ -266,7 +269,8 @@ TEST_CASE("Apostle activation: fail to find sacrifices six, puts nothing and sti
     s.battlefield.push_back(PermSb2("Swamp", 1));
     for (int k = 0; k < 6; ++k) { s.battlefield.push_back(PermSb2(kApostle, 10 + k, true)); }
     DemonLibrary(s);
-    const Action* none = FindAct(Activations(s), kSacNamedNoFetch);
+    const std::vector<Action> acts_none = Activations(s);   // named: FindAct points into the vector
+    const Action* none = FindAct(acts_none, kSacNamedNoFetch);
     REQUIRE(none != nullptr);
     const int sc = s.search_count;
     const std::size_t lib = s.players[0].library.size();
