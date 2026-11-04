@@ -145,7 +145,7 @@ fine in my opinion. I sometimes cast it late, but that doesn't really matter at 
 | 5 | Reaper from the Abyss (hard cast) | **ordered** (tie at 10) | Body; no cast-order interaction. |
 | 6 | Sire of Insanity (hard cast) | **ordered** (tie at 10) | Body; the discard is at the end step. |
 | 7 | Jetmir (cannot be cast) | **ordered** (tie at 10) | Listed only so the order is total. |
-| 8 | Culling the Weak | **moved after the creatures** (15 to 8) | After the chain its victim is a fresh sick Apostle. The payable fallback pulls it ahead when its {B}{B}{B}{B} is needed for the Stone or a Demon. |
+| 8 / early | Culling the Weak | **two searched positions** (was 15) | USER 2026-11-04: *"Culling the weak needs to be earlier than Thrumming stone some of the time and that means the shadowborn for it to sacrifice also needs to be considered there."* *"(actually often)"*. So both are offered and the search compares them: **early** = land, Dark Ritual, [an Apostle cast as its victim, or a body already on the board], Culling, Thrumming Stone, rest (Culling's {B}{B}{B}{B} pays the Stone; the victim Apostle is cast without the Stone's ripple); **late** = rank 8, after the chain, eating a fresh sick Apostle. Not left to the payable-order fallback: "often" means it is a real choice, not only a rescue for an unpayable order. |
 | 9 | Demonic Tutor | ordered (tie at 20) | After the bodies; the shuffle comes after the chain has used the top of the library. |
 | 10 | Diabolic Intent | ordered (tie at 20) | Victim is a sick Apostle from this turn's chain. DT before Intent is an arbitrary tie-break (q6). |
 | 11 | Profane Tutor (suspend) | ordered (tie at 20) | A suspend; position only decides which mana pays {1}{B}. |
@@ -256,8 +256,12 @@ wall time):
    **ANSWERED (USER 2026-11-04):** *"Casting the Dark Ritual early in a line is totally fine in my opinion. I
    sometimes cast it late, but that doesn't really matter at all."* Ritual first (rank 1, right after the land) stands. The user is
    indifferent to its position, so an order-only arm is a cost/quality check, not a question for the user.
-4. **Culling the Weak after the Apostle chain** (so it eats a fresh sick Apostle), with the payable
-   fallback pulling it ahead only when its mana is needed for the Stone or a Demon? Default: yes.
+4. **Culling the Weak position: ANSWERED (USER 2026-11-04)** -- both early (before the Stone, with its
+   victim Apostle cast ahead of it) and late (after the chain), searched. See rank 8 in section 2. Build
+   note: the victim is already a searched variant (TurnSolver.cpp SAC-ANY-CREATURE post-pass, hand or board
+   victim) and `ApplyAttachSpellDependencyOrder` moves Culling to just after its hand victim, but nothing
+   today puts that victim + Culling ahead of the Stone. That needs a cast-order variant, plus a check that
+   the early line is reachable (scenario test) before the A/B.
 5. **Scope:** searched play only (d0 keeps its greedy second chance, as Fungus does), or every
    depth? Default: searched only.
 6. **The tutor ties:** Demonic Tutor before Diabolic Intent, both after the bodies; suspends last.
