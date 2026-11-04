@@ -1,11 +1,9 @@
-# Regression ground truth -- commit 496d91733  date 2026-11-04
+# Regression ground truth -- commit 6f091e547  date 2026-11-04
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-10-27): Overnight rebaseline 2026-10-27 on af6bfce94 (PGO, 22m20s): the USER Hinata floor (keep-table decks >= Hinata's play-row games: edf/landfall/melira/niv/pd/snow + 2hg), the USER adoptions (LandfallElementals staged b20, NivMizzetCombo emulnl b20) and upstream MTG_PAY_SHRINK default ON + mana oracle. Overlapping games: searched 185 faster / 28 slower, d0 50 / 46; classify 24 churn / 4 PERSISTS (edf s5005 gi328 draws diverge T3; elementals s5005 gi399, s7007 gi376 and niv s4004 gi151 on the adopted shapes, measured better held out).
 # accepted-with-regressions (overnight, 2026-10-28): Bruna TUTOR FIT (USER 2026-10-11) + keep table ADOPTED (see the smoke note). TUTOR FIT alone, table absent: searched 4 slower / 3 faster (all 4 PERSIST at 4x/16x and pass a Glittering Wish / Open the Armory before diverging; net +1 turn over 2,000 d5 games), d0 net faster. With the table: d5 s4004-7007 4.956->4.806 / 5.030->4.852 / 4.936->4.790 / 5.120->4.808, d3 s4004 5.104->4.696, d0 -0.26..-0.29 on all 4 seeds; backstop d3/d5 s30231 (3 games) 3.667->4.333 = 1 game, different mulligan count. Attribution 5176 mull-count + 928 bottom + 25 bottom-order; the 5 d5 'unexplained' games (same hand and bottom, play differs) are the lookahead bottoming's residue, not a table leak: each reproduces singly and matches the table-off digest with the table keeping and MTG_EXHAUSTIVE_BOTTOM=0. Units/game 3.8-5.3x lower.
-# accepted-with-regressions (regression, 2026-11-03): budget rebalance (tier-1/tier-2 caches, priced ceiling X=100, plan priced ledger, mana chosen-colour key) rebased on 50b685d98: Hinata d0 gi60 T8->unwon and gi316 T7->T8 are ORIGIN-STALE (origin 50b685d98's own binary reproduces both digests; d0, no search, no cache toggle moves them); antilife2hg/fluctuator2hg d5 s2002 origin-stale as before; net vs origin +1 turn over 75,244 games
-# accepted-with-regressions (regression, 2026-11-03): upkeep tutor search: 3 Creature Giving one-turn slowdowns at b20 recover at b80; net faster across the four tutor decks
-# accepted-with-regressions (smoke, 2026-11-04): Shadowborn keep-table adoption (mullgen: keep -0.2715t 4/4, bottoming -0.0745t 4/4): regression searched d5 -0.20/-0.16, d3 -0.12/+0.04; smoke s1001 d3 +0.14 (50g) d5 +0.09 (100g) and d0 rows worse (no-search play, not shipped); better overall (USER bar: overall improvement)
-# accepted-with-regressions (regression, 2026-11-04): Shadowborn keep-table adoption (mullgen: keep -0.2715t 4/4, bottoming -0.0745t 4/4): regression searched d5 -0.20/-0.16, d3 -0.12/+0.04; smoke s1001 d3 +0.14 (50g) d5 +0.09 (100g) and d0 rows worse (no-search play, not shipped); better overall (USER bar: overall improvement)
+# accepted-with-regressions (smoke, 2026-11-04): Profane resolve fan (held-out -0.007): shadowborn d3 s2002 gi10 T5->T6 recovers T5 at d8 b0; th d5 s2002, alchemist d0 s2002/d5 s3003 and snow d0 s2002 are pre-existing origin drift (same got-digests from origin's own binary; none of these decks holds Profane Tutor or Lake of the Dead)
+# accepted-with-regressions (regression, 2026-11-04): Profane resolve fan (held-out -0.007): shadowborn d3 s2002 gi10 T5->T6 recovers T5 at d8 b0; th d5 s2002, alchemist d0 s2002/d5 s3003 and snow d0 s2002 are pre-existing origin drift (same got-digests from origin's own binary; none of these decks holds Profane Tutor or Lake of the Dead)
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -48,9 +46,9 @@ cyclone_smoke_d3_s1001=5.0000/1935802853619c5d
 cyclone_smoke_d5_s1001=4.9100/5cd7cddf08debac2
 cyclone2hg_smoke_d3_s1001=5.0600/fe8c305f3a540709
 shadowborn_smoke_d0_s1001=7.7990/43382607e354fd46
-shadowborn_smoke_d3_s1001=5.2200/47e394be40a1daf5
-shadowborn_smoke_d5_s1001=4.9600/cfd408848a189ba1
-shadowborn2hg_smoke_d3_s1001=5.5200/2fbb8b5b89d2652f
+shadowborn_smoke_d3_s1001=5.2200/554c3e02bd0a76f8
+shadowborn_smoke_d5_s1001=4.9400/52fe062fc20b34cd
+shadowborn2hg_smoke_d3_s1001=5.5200/f1abef42a21e682d
 dragonstorm_smoke_d0_s1001=4.9790/dc745ef2a7e0828c
 dragonstorm_smoke_d3_s1001=4.5000/7cf4ded3804f4228
 dragonstorm_smoke_d5_s1001=4.4600/a33c29a2f7ee08e7
@@ -277,7 +275,7 @@ burn_regression_d5_s2002=4.2956/0a3caa75cba7e438
 burn_regression_d5_s3003=4.2544/e38b574e9e24de86
 th_regression_d0_s2002=5.5420/e24d3ceb60f57a76
 th_regression_d3_s2002=4.0229/0988bdef8b048519
-th_regression_d5_s2002=4.1267/43fabc1160d598e8
+th_regression_d5_s2002=4.1267/51b2caec1a1788b8
 th_regression_d5_s3003=3.9767/fa8b91c26342b2eb
 knights_regression_d0_s2002=4.5610/d71421c58495ca0a
 knights_regression_d3_s2002=4.2800/2d0134810fce8b08
@@ -301,10 +299,10 @@ cyclone_regression_d3_s3003=4.9467/99499f4a298db8f0
 cyclone_regression_d5_s2002=4.8867/3130aff4703b6a8e
 cyclone_regression_d5_s3003=4.8800/828aafd6689d6e43
 shadowborn_regression_d0_s2002=7.8800/8c5b82fbe68aad4b
-shadowborn_regression_d3_s2002=4.8800/41372bfbb7089332
+shadowborn_regression_d3_s2002=4.8933/248b869ee9c7bd9f
 shadowborn_regression_d3_s3003=5.0267/a2d45e59b2f1bc72
-shadowborn_regression_d5_s2002=4.8267/9796ad685fa6bf96
-shadowborn_regression_d5_s3003=4.8667/0399f5d86c8c340c
+shadowborn_regression_d5_s2002=4.8267/a81ccb3b8d11f08f
+shadowborn_regression_d5_s3003=4.8400/a057e87f548823f3
 dragonstorm_regression_d0_s2002=5.0010/a7f021373380920f
 dragonstorm_regression_d3_s2002=4.2300/8acf33bfdd6cfb35
 dragonstorm_regression_d5_s2002=4.3106/8ecd14e879216387
@@ -408,7 +406,7 @@ edf_regression_d0_s2002=5.3210/c8b0bd2050a50636
 edf_regression_d3_s2002=3.9200/9714f65d77852488
 edf_regression_d5_s2002=4.0533/f05160882f89c629
 edf_regression_d5_s3003=4.1200/b373cce581cffdb5
-snow_regression_d0_s2002=6.1590/79c57f2cb162e553
+snow_regression_d0_s2002=6.1590/fa00891c72447e01
 snow_regression_d3_s2002=5.6800/5f194ad4bb44224b
 snow_regression_d5_s2002=5.6267/d2fb1e59a8b335ca
 snow_regression_d5_s3003=5.7000/6eab8a3d48ac6255
@@ -435,10 +433,10 @@ vampires_regression_d3_s2002=4.2600/96180fa583262ac2
 vampires_regression_d5_s2002=4.2150/e9396351b747758c
 vampires_regression_d5_s3003=4.2900/fbb3082458e4e49c
 vampires2hg_regression_d5_s2002=4.9200/b5822aeb40b5db7c
-alchemist_regression_d0_s2002=6.3480/14722554975f5905
+alchemist_regression_d0_s2002=6.3470/407b9849c33c9806
 alchemist_regression_d3_s2002=4.8600/fdcc7686ef7fe521
 alchemist_regression_d5_s2002=4.9429/35e058e62bf925a9
-alchemist_regression_d5_s3003=5.0171/b21f4151bb4be3e3
+alchemist_regression_d5_s3003=5.0171/87767cc90d01d6c3
 elementals_regression_d0_s2002=5.6140/11f3cfe01cabc9ae
 elementals_regression_d3_s2002=4.3600/0b4dc26a36d7ea94
 elementals_regression_d5_s2002=4.2800/1edf4efa85cc2607
