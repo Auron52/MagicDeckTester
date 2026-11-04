@@ -1408,9 +1408,15 @@ inline void AttachValueSidecar(MulliganProfile& profile, const std::filesystem::
                 profile.value_play.escalation_r   = vp.value("escalation_r", 0.0);
                 profile.value_play.regime       = vp.value("regime", std::string(""));
                 // Optional mulligan-gen depth/budget override (0 => inherit the play depth/budget).
-                profile.value_play.mull_gen_depth     = vp.value("mull_gen_depth", 0);
-                profile.value_play.mull_gen_budget_ms = vp.value("mull_gen_budget_ms", 0);
-                profile.value_play.expected_buckets   = vp.value("expected_buckets", 0);
+                // A key the sidecar does not carry keeps the PROFILE's value (parsed above) instead of
+                // zeroing it: a sidecar written before the gen keys moved to the profile (Colossus
+                // Hammer, EDF, Landfall, LFE, Midrange Burn) otherwise dropped a direct mtg-analyze
+                // --gen-mulligan to the d5/b20 gen default. mullgen.sh copies the profile's keys into
+                // the sidecar first, so this only aligns the direct call with it. Generation-only keys:
+                // play reads none of them.
+                profile.value_play.mull_gen_depth     = vp.value("mull_gen_depth", profile.value_play.mull_gen_depth);
+                profile.value_play.mull_gen_budget_ms = vp.value("mull_gen_budget_ms", profile.value_play.mull_gen_budget_ms);
+                profile.value_play.expected_buckets   = vp.value("expected_buckets", profile.value_play.expected_buckets);
                 auto parse_costs = [](const nlohmann::json& arr) {
                     std::vector<double> v;
                     if (arr.is_array()) { for (const auto& e : arr) { v.push_back(e.is_number() ? e.get<double>() : 0.0); } }
