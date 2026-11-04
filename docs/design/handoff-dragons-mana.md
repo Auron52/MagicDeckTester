@@ -93,8 +93,15 @@ NEXT (successor 8)
 2. Units above ~1% (FiveColour ~+2.2%, Bruna ~+1.2%): get `fired` and `p2_probes` per deck (MTG_LINE_REPAY_STATS=1 on
    a 20-game sample); justify as found re-pays or trim like p7 (find the fruitless priced stage with a temporary
    LineRepayDumpMismatch call after LineRepaySearch when probes>0 && !found; DELETE it after).
-3. Hinata +28% instructions: profile p8 on vs off with `perf record -e instructions:u` and diff per symbol; candidates
-   above. Any trim must stay exact (the memo key is what makes memo hits exact).
+3. Hinata +28% instructions (+11.17 G of 40.23 G; `mcdragons7/hi8_{0,1}.perf`, per-symbol `i{0,1}.sym`): BuildSimKeyBase
+   +2.06 G (LineRepayMemoKey -> TurnSolver::MidTurnStateKeyOf, every try past the amount check), LineRepayTry self
+   +1.39 G (inlined: the `RampScratch undone_scr(state)` full board copy + LineRepayUndo + the depth-2 LineRepayFind,
+   all done BEFORE the memo lookup because the key folds rec[1]; memmove +0.34, new +0.16), digests +1.05 G
+   (DigestFinish +0.49 re-mixes the board-wide pools per record: make the digest Combine(prefix[n], n, board_hash) with
+   board_hash computed once per Find), ManaCacheKey +0.31, SnapPayFields +0.23, TapForCostShared(+Once) +0.41; search
+   growth ~1.5 G (units +1.5%). Ideas, all exact: (a) key the memo on rec[0] first and look up a rec[1]-free "fail for
+   every rec[1]" entry before building the undone board; (b) a cheaper exact key prefix (e.g. a two-level map: the
+   LineRepayDigest + cost + records first, MidTurnStateKeyOf only on a first-level hit); (c) board_hash above.
 4. Gate slice `mcdragons3/gate.sh mcdragons7/mtg.p8 s8 8`; smoke `THREADS=8 bash test/regression.sh --smoke` (needs the
    8 threads: run after ab7 + id7); unit suite on p8 (`mcdragons7/mtg-test.p8`; p7 passed 2,436/2,436).
 5. Squash 24c31d4da..HEAD into landable commits; do not push, do not accept GT.
