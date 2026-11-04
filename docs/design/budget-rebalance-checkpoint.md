@@ -671,3 +671,28 @@ problem that doesn't happen as much anymore." Start with every slow rollout on r
 - Side finding: a direct `mtg-analyze --gen-mulligan` on a deck whose value sidecar lacks mull_gen_* runs at
   gen-default d5/b20 (sidecar value_play replaces the profile's keys). mullgen.sh carries the setting over
   first, so production is fine; affects Colossus Hammer, EDF, Landfall, LFE, Midrange Burn on direct calls.
+
+### 08:55 UTC -- Goblins: a 35-50x ENGINE cost regression on the same play; bisect RUNNING
+- Worst Goblins line (seed 12671395107054027213, size7 draw r=26; logged 43 s at d6/b10 on 719cffd38,
+  10-25). Same line, d6/b10, cap 20 GB, single core, win turn 4 in EVERY run (same play, only cost moved):
+  old binary 719cffd38: 42.7 s (10-25 deck inputs) / 39.6 s (current inputs) -- reproduces the log;
+  primary build/Release (built 11-03): 1,103 s; this branch: 1,479 s (current inputs) / 2,164 s (old inputs).
+  Inputs barely matter -> it is CODE, landed between 719cffd38 and 11-03. (At b6, today's setting: primary 586 s,
+  branch 970 s; branch at a 2 GB RSS cap 1,624 s -> small caps cost another ~1.7x.)
+- BISECT (RUNNING, background): worktree `.claude/worktrees/gob-bisect` (detached, scratch), `git bisect start
+  68a94b54d 719cffd38 -- src`, `git bisect run build/scratch/budget/hist/probe/bisect_step.sh` (build Release,
+  replay the line; GOOD < 120 s, a probe still running at 240 s is stopped and logged BAD). Progress:
+  `build/scratch/budget/hist/probe/bisect.log`; full output `probe/bisect_run.log` (prints "first bad commit").
+  Step 1: 9ebe3df41 BAD. When done: `git -C .claude/worktrees/gob-bisect bisect reset`, read the culprit,
+  then remove the worktree with scripts/safe_worktree_remove.sh.
+- Melira (all 1,239 lines, d3/b3, branch binary, 6 GB cap): total 7.5 core-h vs 64.1 logged (12%), but the
+  tail stays: 4,167 s (logged 1,994 s), 3,965 s (logged 6.1 h), 2,296 s (logged 226 s), 1,396 s, 872 s ...
+  -- the Carrion Feeder family; several got WORSE, likely the same regression as Goblins.
+- STILL RUNNING: Kitty (~8k of 19,442 lines; max 79 s, ratio ~3.7%) and EDF at d1/b1 (`run_hist3.sh`,
+  stuck on its 6 worst hands > 80 min). EDF single-hand probe d1/b1 (census) still running (> 60 min on a hand
+  that is 59 ms at d5/b20); d1/b3 and d1/b20 probes stopped by me at > 60 min. LFE d1/b1 aborted at its 6 GB
+  cap with four rollouts in flight at 17-31 min.
+- OPEN USER CALLS (new, in addition to the four above): (5) the Goblins regression fix once bisected;
+  (6) the depth-1 playout explosion -- bound the in-playout work by the decision's priced ceiling (a play change
+  at low budgets; held-out A/B) and/or EDF/LFE's generation depth (a settings call); (7) hold decisions 1-4
+  until 5-6 are settled (recommended).
