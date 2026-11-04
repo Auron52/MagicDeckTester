@@ -582,3 +582,23 @@ Same manifest/arms as 01:04. Numbers reproduce the non-deterministic run almost 
   (references included), BOTH with 0 play-changed / 0 slower / 0 faster games vs committed GT. Nothing to accept: the
   refit prices + determinism fixes + tier-2 work replay are byte-identical on both tiers. Not pushed to the shared
   branch (feature not complete until the USER rules on R / per-deck raise).
+
+## 2026-11-04 ~05:00 UTC: USER direction + per-deck R result
+- USER: lower R + price the budget appropriately makes sense, BUILT IN so budget settings do not change; the TOP point is
+  that expensive cases must be priced so a LOWER BUDGET BRINGS COST DOWN ("far too many examples of us using budget 1-3
+  and it taking hours"). Also: show any cases giving up a little quality for much better tail/total.
+- Per-deck R (each deck's own aggregate ns/unit from fit.txt; ps_ab.json, Cyclone excluded, fresh x0 on the rebased
+  binary): 31,082 paired, 27 better / 10 worse, summed -20 (sign p~0.01); wall 8789 -> 8866 s (+0.9%), p99.9 14.8 ->
+  16.3, max 78 -> 75. Within-deck redistribution is a QUALITY win at ~same cost; it does not shrink the tail.
+- Low-quality-cost candidates (pb.err per deck, R lowered for that deck == budget x0.71 / x0.5): snow x14 0.61x wall
+  +1/325 max 79->39 s; fivecolour x20 0.85x +1, max 52->14; melira x20 0.89x +0 / x14 0.78x +2; landfall x20 0.85x +0;
+  dragonstorm x20 0.69x -2; alchemist x20 0.83x +3; colossus/selesnyav2/pd/mirrorwing 0.59-0.90x, 0..+1. NOT: hinata,
+  edf, kittyv3, niv, bruna, elementals, creature. CONFIRMING: conf_ab.json (4x games, seeds +2e6, x0/x20/x14) ->
+  conf.{log,err}, conf.DONE; report with ab_x_report.py build/scratch/budget/conf.
+- Leak: fungusB 2hg gi4525 (d7 b1000) 109 s -> 373 s under pricing (units 4.8M -> 9.3M): priced work escapes the bill
+  somewhere. Single-game census running: leak/f4525_x{0,1}.census.tsv.
+- Low-budget generation replay (the USER's top point): build/scratch/budget/replay/Melira Pod (copy: cod, profile,
+  buckets, value.json, gencache) + melira_slow.log (302 SLOW-ROLLOUTs, 19,153 s logged, d3 b3). Replay =
+  MTG_DECISION_WORK_X=1000 MTG_KEEP_BENCH=1 MTG_KEEP_REPLAY_LIST=<log> [MTG_KEEP_BENCH_BUDGET=b] mtg-analyze <copy>.cod
+  --gen-mulligan fast. The gencache fingerprint MISMATCHES -> discovery reruns once (11,200 rollouts); do it on a
+  quiet box at 32 threads, then arms budget {1,3,10} x priced {off,on}.
