@@ -1707,3 +1707,45 @@ TEST_CASE("Board-lethal cut: a lethal projected with main-phase floating mana do
     for (const TurnSolver::Plan& p : plans) { if (PlanCasts(p, "Avacyn's Pilgrim")) { pilgrim = true; } }
     CHECK(pilgrim);
 }
+
+// THE BREAKPOINT-CONTINUATION CACHE MUST NOT SERVE ACROSS A COMBAT-SWAP PIN (gate binary 3fbb52daa, Bruna
+// seed 30003487 gi3487 T4 and seed 30008829 gi8829 T5). The continuation list depends on
+// GameState::scripted_combat_aura_swap (the pinned Arcanum Wings combat swap: its variants and the main-phase
+// swap it supersedes), and the cache (BpEnumEntryFor) is not epoch-scoped. Its key lacked the pin until
+// MTG_PLAN_CACHE_SCALAR_KEY (5ea636a46): an entry derived with no pin (5 plans) was served at the executor's
+// pinned state (a fresh derivation: 4), the committed line's POSITIONAL bp_choice=3 then named another
+// continuation, and a checked T4 win landed T5. Here: fill the cache unpinned, then read the pinned state --
+// it must get exactly what a cold derivation of the pinned state gets.
+TEST_CASE("bp continuation cache: an unpinned entry is never served to a combat-swap-pinned state")
+{
+    BoardBs b;
+    const int pilgrim = b.Put("Avacyn's Pilgrim");
+    Permanent w;
+    w.card = CardBs("Arcanum Wings", 70); w.controller_index = 0; w.owner_index = 0;
+    w.aura_attached_to = pilgrim;
+    b.s.battlefield.push_back(w);
+    b.Put("Birds of Paradise");
+    b.Put("Boseiju, Who Endures");
+    b.Put("Plains");
+    b.Put("Forest");
+    b.Hand("Colossification");
+    b.Hand("Lightning Greaves");
+    b.s.players[1].life = 18;
+    GameState pinned = b.s;
+    pinned.scripted_combat_aura_swap = 70;
+
+    TurnSolver::ClearPerGameCaches();
+    const std::vector<TurnSolver::Plan> cold_pinned = TurnSolver::EnumerateBreakpointPlans(pinned, true);
+    TurnSolver::ClearPerGameCaches();
+    const std::vector<TurnSolver::Plan> cold_free = TurnSolver::EnumerateBreakpointPlans(b.s, true);
+    MESSAGE("unpinned list " << cold_free.size() << " plans, pinned list " << cold_pinned.size());
+    // Power: the pin really changes the list on this board, so a key without it serves the wrong one.
+    REQUIRE_FALSE(cold_free == cold_pinned);
+    // Warm: the unpinned entry is resident (cold_free above); the pinned read must not be served it.
+    const std::vector<TurnSolver::Plan> warm_pinned = TurnSolver::EnumerateBreakpointPlans(pinned, true);
+    CHECK(warm_pinned == cold_pinned);
+    // ...and the other direction.
+    const std::vector<TurnSolver::Plan> warm_free = TurnSolver::EnumerateBreakpointPlans(b.s, true);
+    CHECK(warm_free == cold_free);
+    TurnSolver::ClearPerGameCaches();
+}
