@@ -300,4 +300,4 @@ wall time):
    depth? Default: searched only.
 6. **The tutor ties:** Demonic Tutor before Diabolic Intent, both after the bodies; suspends last.
    Fine as a total order? (I found no interaction that decides it.)
-7. **Order of the hard-cast Demons: ANSWERED (USER 2026-11-04)** -- Reaper, Sire, then Overlord last (devotion).
+7. **Order of the hard-cast Demons: ANSWERED (USER 2026-11-04)** -- Reaper, Sire, then Overlord last (devotion). Also: *"The flip side to that is that if we sacrifice things to get there then it could end up with less harpies, but overall I don't think this matters."* (Hard-cast Reaper and Sire sacrifice nothing; Diabolic Intent is ranked after the Overlord; only Culling, ranked before the Stone by ruling, eats a body first.)
