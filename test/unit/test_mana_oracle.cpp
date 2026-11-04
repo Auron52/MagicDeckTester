@@ -1077,3 +1077,47 @@ TEST_CASE("mana oracle: a replicate drop whose board a same-actions sibling reac
     CHECK_FALSE(Has(v, "APPLY-DROP"));
     CHECK(Has(v, "DROP-COVERED"));
 }
+
+// THE EQUIP ROUTE'S TAPE (KittyEquipment mana-clean, 2026-11-04). The route's links go through RouteLinkApply: with no
+// tape armed (all of play) it is ApplyPlan and nothing else; armed, it records the link -- the board before and after,
+// the plan, the DFS frame -- and a DFS branch that does not win is rewound off it.
+TEST_CASE("route tape: a link is ApplyPlan, recorded only while the oracle's tape is armed; the DFS rewind drops a branch")
+{
+    EnsureOracleCards();
+    GameState s = Board({ "Plains", "Plains" });
+    s.players[0].life = 20;
+    s.players[1].life = 20;
+    Hand(s, { "Bone Saw", "Accorder's Shield" });
+    const TurnSolver::Plan saw    = PlanOf({ CastAction(s, "Bone Saw") });
+    GameState plain = s, taped = s;
+    REQUIRE(manaoracle::t_route_tape == nullptr);
+    TurnSolver::ApplyPlan(plain, saw, /*is_pre_combat=*/true);
+    GameState untaped = s;
+    manaoracle::RouteLinkApply(untaped, saw, /*in_dfs=*/false);
+    CHECK(untaped.battlefield.size() == plain.battlefield.size());
+    CHECK(untaped.players[0].hand.size() == plain.players[0].hand.size());
+
+    manaoracle::RouteTape tape;
+    manaoracle::t_route_tape = &tape;
+    manaoracle::RouteLinkApply(taped, saw, /*in_dfs=*/true);
+    REQUIRE(tape.links.size() == 1);
+    CHECK(tape.links[0].in_dfs);
+    CHECK(tape.links[0].before.players[0].hand.size() == s.players[0].hand.size());
+    CHECK(tape.links[0].after.battlefield.size() == plain.battlefield.size());
+    CHECK(taped.battlefield.size() == plain.battlefield.size());
+    const std::size_t mark = manaoracle::RouteTapeMark();
+    const TurnSolver::Plan shield = PlanOf({ CastAction(taped, "Accorder's Shield") });
+    manaoracle::RouteLinkApply(taped, shield, /*in_dfs=*/true);
+    CHECK(tape.links.size() == 2);
+    manaoracle::RouteTapeRewind(mark);
+    CHECK(tape.links.size() == 1);
+    {
+        manaoracle::RouteTapeSuspend trial;   // a trial records nothing
+        GameState probe = s;
+        manaoracle::RouteLinkApply(probe, saw, /*in_dfs=*/false);
+        CHECK(manaoracle::t_route_tape == nullptr);
+    }
+    CHECK(manaoracle::t_route_tape == &tape);
+    CHECK(tape.links.size() == 1);
+    manaoracle::t_route_tape = nullptr;
+}

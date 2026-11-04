@@ -5,6 +5,7 @@
 #include "EscStats.h"
 #include "HeuristicArm.h"
 #include "ManaPayment.h"
+#include "DecisionProviders.h"   // EquipRouteLinkFrame (the route tape's link audit)
 #include "Combat.h"
 #include "../cards/CardDatabase.h"
 #include "../core/EnvFlags.h"
@@ -35,6 +36,31 @@ thread_local Hook* t_hook         = nullptr;
 thread_local bool  t_float_only   = false;
 thread_local bool  t_gate_observe = false;
 thread_local int   t_seq_step     = -1;
+thread_local RouteTape* t_route_tape = nullptr;
+
+void RouteLinkApply(GameState& s, const TurnSolver::Plan& plan, bool in_dfs)
+{
+    RouteTape* const tape = t_route_tape;
+    if (tape == nullptr) { TurnSolver::ApplyPlan(s, plan, /*is_pre_combat=*/true); return; }
+    RouteLink l;
+    l.before = s;
+    l.plan   = plan;
+    l.in_dfs = in_dfs;
+    std::vector<std::string>* const saved_cast = g_play_dropped_cast_sink;
+    std::vector<std::string>* const saved_act  = g_act_drop_sink;
+    g_play_dropped_cast_sink = &l.cast;
+    g_act_drop_sink          = &l.act;
+    t_route_tape             = nullptr;   // the link's own nested applies are not links
+    TurnSolver::ApplyPlan(s, plan, /*is_pre_combat=*/true);
+    t_route_tape             = tape;
+    g_play_dropped_cast_sink = saved_cast;
+    g_act_drop_sink          = saved_act;
+    // The replay's own drop lists read exactly as they did untaped.
+    if (saved_cast != nullptr) { saved_cast->insert(saved_cast->end(), l.cast.begin(), l.cast.end()); }
+    if (saved_act != nullptr)  { saved_act->insert(saved_act->end(), l.act.begin(), l.act.end()); }
+    l.after = s;
+    tape->links.push_back(std::move(l));
+}
 
 int Level()
 {
@@ -268,6 +294,8 @@ std::atomic<long long> g_decisions{0}, g_plans{0}, g_plans_skipped{0}, g_applies
 // (hidden); the menu reaches its board with every land Aura's host aside and at least its resources (host_blind).
 // (cont_land): a land drop the plan did not make paid for it.
 std::atomic<long long> g_eg_noop{0}, g_eg_hidden{0}, g_eg_host_blind{0}, g_eg_cont_land{0};
+// The equip route's macros audited link by link (AuditRoute), and the links audited.
+std::atomic<long long> g_route_macros{0}, g_route_links{0}, g_route_us{0};   // ...and the audit's wall (us)
 // ROLLBACK CENSUS (USER 2026-10-27: "how many lines are fully inaccessible and which are accessible only
 // with rollbacks to the previous line"). One bucket per LOST line -- a plan the oracle realises in full that
 // the search cannot reach. DEPTH k = how many of the engine's mana decisions before the one that failed
@@ -315,6 +343,11 @@ struct Reporter
         std::fprintf(stderr, "=== MANA ORACLE classes:%s ===\n", by.empty() ? " (none)" : by.c_str());
         std::fprintf(stderr, "=== MANA ORACLE enum-gap rejections: noop=%lld hidden=%lld host_blind=%lld cont_land=%lld ===\n",
                      g_eg_noop.load(), g_eg_hidden.load(), g_eg_host_blind.load(), g_eg_cont_land.load());
+        if (g_route_macros.load() != 0)
+        {
+            std::fprintf(stderr, "=== MANA ORACLE combo routes: %lld equip-route macros audited, %lld links, %lld ms ===\n",
+                         g_route_macros.load(), g_route_links.load(), g_route_us.load() / 1000);
+        }
         for (const auto& kv : g_unmodeled_reasons)
         { std::fprintf(stderr, "=== MANA ORACLE unmodeled: %lld x %s ===\n", kv.second, kv.first.c_str()); }
         long long lost = 0;
@@ -2465,14 +2498,17 @@ Cls DominanceClass(const Res& o, const Res& e, bool pre, std::string* what)
 
 // DropVerdict's capture (unit tests): while set, Emit records the class here instead of counting or printing.
 thread_local std::vector<std::string>* t_emit_capture = nullptr;
+// Prefixed to every flag's detail: where inside a macro the audited plan sits (a combo route's link).
+thread_local const std::string* t_emit_prefix = nullptr;
 
 void Emit(Cls c, const GameState& root, bool pre, const TurnSolver::Plan& plan, const std::string& detail)
 {
     if (t_emit_capture != nullptr) { t_emit_capture->push_back(kClsName[c]); return; }
     if (!Count(c)) { return; }
     std::lock_guard<std::mutex> lk(g_print_mu);
-    std::fprintf(stderr, "[mana-oracle] %s %s plan={%s} | %s | %s\n", kClsName[c], Ctx(root, pre).c_str(),
-                 PlanText(plan).c_str(), detail.c_str(), BoardText(root).c_str());
+    std::fprintf(stderr, "[mana-oracle] %s %s plan={%s} | %s%s | %s\n", kClsName[c], Ctx(root, pre).c_str(),
+                 PlanText(plan).c_str(), t_emit_prefix != nullptr ? t_emit_prefix->c_str() : "", detail.c_str(),
+                 BoardText(root).c_str());
 }
 
 // A plan's casts permuted (searched_order: the apply casts them in vector order).
@@ -2529,18 +2565,30 @@ struct EngineReal
 {
     GameState                st;
     std::vector<std::string> cast, act;
+    std::shared_ptr<const RouteTape> route;   // a ComboRoute plan's recorded links (RouteTape)
     bool Full() const { return cast.empty() && act.empty(); }
 };
+bool HasComboRoute(const TurnSolver::Plan& plan)
+{
+    for (const Action& a : plan.actions) { if (a.kind == Action::Kind::ComboRoute) { return true; } }
+    return false;
+}
 EngineReal EngineApply(const GameState& root, bool pre, const TurnSolver::Plan& plan)
 {
-    EngineReal e{ root, {}, {} };
+    EngineReal e{ root, {}, {}, nullptr };
     std::vector<std::string>* saved_cast = g_play_dropped_cast_sink;
     std::vector<std::string>* saved_act  = g_act_drop_sink;
     g_play_dropped_cast_sink = &e.cast;
     g_act_drop_sink          = &e.act;
+    // A combo-route macro's links are recorded (RouteTape) so the audit can check each payment it made.
+    std::shared_ptr<RouteTape> tape = HasComboRoute(plan) ? std::make_shared<RouteTape>() : nullptr;
+    RouteTape* const saved_tape = t_route_tape;
+    t_route_tape = tape.get();
     TurnSolver::ApplyPlan(e.st, plan, pre);
+    t_route_tape = saved_tape;
     g_play_dropped_cast_sink = saved_cast;
     g_act_drop_sink          = saved_act;
+    e.route = std::move(tape);
     return e;
 }
 
@@ -2689,23 +2737,40 @@ bool ReplayScript(const GameState& root, bool pre, const TurnSolver::Plan& plan,
 // continuation replaced (Brainstorm put the card back -- NivMizzetCombo, 2). Such an outcome realises the plan WITHOUT
 // that action, paid this way. Test: an action whose removal, replayed with the same payment script, ends on the same
 // board -- exact identity, every resource, the floating pools, the whole script consumed -- did nothing here. Returns
-// the plan less every such action (the plan itself when it performed them all).
-TurnSolver::Plan PerformedPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, const Outcome& o)
+// the plan less every such action (the plan itself when it performed them all), and -- `chain` -- every plan the
+// removals passed through on the way, each realised by the same script on the same board.
+// ACTIVATIONS BEFORE CASTS. Removal is one action at a time, so which goes first decides which plans the chain holds:
+// a cast a continuation would re-make anyway also "does nothing", so trying the casts first can drop one copy of a
+// card cast twice and reach a plan no enumeration offers. KittyEquipment mana-clean r2, 36 ENUM-GAPs: {Cathar's
+// Shield, Sram, Sigarda's Aid, Bone Saw x2 + equip:Bone Saw} lost a Bone Saw first and then the equip (Aid had
+// attached it), ending on {.. + one Bone Saw}; the menu holds {.. + Bone Saw x2}, the plan less the equip alone.
+// `acts_first` = false: one pass in the plan's own order (how it always ran; the noop test takes both chains).
+TurnSolver::Plan PerformedPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, const Outcome& o,
+                               std::vector<TurnSolver::Plan>* chain = nullptr, bool acts_first = false)
 {
     TurnSolver::Plan cur = plan;
     const std::uint64_t k0 = CoreKey(o.st, /*canonical=*/false);
     const Res           r0 = Resources(o.st, /*with_float=*/true);
     GameState out;
-    for (std::size_t i = 0; i < cur.actions.size();)
+    for (int pass = acts_first ? 0 : 2; pass < 3; ++pass)
     {
-        const Action& a = cur.actions[i];
-        if (a.kind == Action::Kind::PlayLand || a.sacrifice_land) { ++i; continue; }
-        TurnSolver::Plan t = cur;
-        t.actions.erase(t.actions.begin() + static_cast<std::ptrdiff_t>(i));
-        if (ReplayScript(root, pre, t, o.script, out) && CoreKey(out, /*canonical=*/false) == k0
-            && Resources(out, /*with_float=*/true) == r0)
-        { cur = std::move(t); continue; }
-        ++i;
+        for (std::size_t i = 0; i < cur.actions.size();)
+        {
+            const Action& a = cur.actions[i];
+            if (a.kind == Action::Kind::PlayLand || a.sacrifice_land
+                || (pass < 2 && (a.kind == Action::Kind::CastFromHand) != (pass == 1))) { ++i; continue; }
+            TurnSolver::Plan t = cur;
+            t.actions.erase(t.actions.begin() + static_cast<std::ptrdiff_t>(i));
+            if (ReplayScript(root, pre, t, o.script, out) && CoreKey(out, /*canonical=*/false) == k0
+                && Resources(out, /*with_float=*/true) == r0)
+            {
+                cur = std::move(t);
+                if (chain != nullptr) { chain->push_back(cur); }
+                continue;
+            }
+            ++i;
+        }
+        if (acts_first && pass == 1) { break; }
     }
     return cur;
 }
@@ -2870,17 +2935,60 @@ std::string RollbackCensus(const GameState& root, bool pre, const TurnSolver::Pl
 
 void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, const EngineReal& er_in,
                const std::vector<const EngineReal*>& full_sibs,
-               const std::vector<const TurnSolver::Plan*>& sib_plans)
+               const std::vector<const TurnSolver::Plan*>& sib_plans);
+
+// A COMBO-ROUTE MACRO, AUDITED LINK BY LINK (KittyEquipment mana-clean, 2026-11-04). The equip route
+// (equiproute::Run) realises its macro as a chain of plain menu plans, each applied with ApplyPlan on the board the
+// last one left -- so every mana decision it makes is one of the shared payer's, inside one link. The replay
+// (EngineApply) taped them (RouteTape); each link is audited here as the plain plan it is, on the board it was
+// applied to and in the frame it ran in (EquipRouteLinkFrame), against the engine's own apply of it as the route
+// made it. A link's menu is the route's own walk, not a decision's menu, so it has no siblings and no ENUM-GAP
+// pass: the macro is emitted only when that walk proves a kill, and a kill is maximal. The EDF and Alchemist
+// routes hand-roll their casts and payments and are not taped: they stay UNMODELED.
+void AuditRoute(const GameState& root, bool pre, const TurnSolver::Plan& plan, const EngineReal& er)
 {
-    g_plans.fetch_add(1, std::memory_order_relaxed);
-    for (const Action& a : plan.actions)
+    const RouteTape* tape = er.route.get();
+    if (tape == nullptr || !tape->equip_route)
     {
-        if (a.kind != Action::Kind::ComboRoute) { continue; }
         NoteUnmodeled("combo-route macro");
         Emit(C_UNMODELED, root, pre, plan, "a combo-route macro (a loop with its own payment and tap-ahead "
                                            "machinery) -- not driven by the oracle");
         return;
     }
+    if (tape->result != 1)
+    {
+        NoteUnmodeled("equip route: the replay found no kill");
+        Emit(C_UNMODELED, root, pre, plan, "the equip route's apply did not realise the kill its trial proved ("
+                                           + std::to_string(tape->links.size()) + " links)");
+        return;
+    }
+    g_route_macros.fetch_add(1, std::memory_order_relaxed);
+    const auto t0 = std::chrono::steady_clock::now();
+    static const std::vector<const EngineReal*>       kNoSibs;
+    static const std::vector<const TurnSolver::Plan*> kNoSibPlans;
+    const std::string* const saved_prefix = t_emit_prefix;
+    for (std::size_t i = 0; i < tape->links.size(); ++i)
+    {
+        const RouteLink& l = tape->links[i];
+        const std::string prefix = (saved_prefix != nullptr ? *saved_prefix : std::string()) + "equip-route link "
+                                 + std::to_string(i + 1) + "/" + std::to_string(tape->links.size()) + " of {"
+                                 + PlanText(plan) + "}: ";
+        t_emit_prefix = &prefix;
+        EquipRouteLinkFrame frame(l.in_dfs);
+        g_route_links.fetch_add(1, std::memory_order_relaxed);
+        AuditPlan(l.before, /*pre=*/true, l.plan, EngineReal{ l.after, l.cast, l.act, nullptr }, kNoSibs, kNoSibPlans);
+        t_emit_prefix = saved_prefix;
+    }
+    g_route_us.fetch_add(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t0)
+                             .count(), std::memory_order_relaxed);
+}
+
+void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, const EngineReal& er_in,
+               const std::vector<const EngineReal*>& full_sibs,
+               const std::vector<const TurnSolver::Plan*>& sib_plans)
+{
+    g_plans.fetch_add(1, std::memory_order_relaxed);
+    if (HasComboRoute(plan)) { AuditRoute(root, pre, plan, er_in); return; }
     // ---- the engine's own realisation (no hook: exactly what the search scores) --------------------
     const GameState& e = er_in.st;
     const std::vector<std::string>& e_cast = er_in.cast;
@@ -3181,6 +3289,18 @@ GapVerdict JudgeHit(const GameState& state, bool pre, const TurnSolver::Plan& t,
                     const std::multiset<std::string>& want, int n_casts, const MenuView& mv)
 {
     GapVerdict v;
+    // KEYED AS THE MENU IS. JudgeHit runs inside Realize, which keys the plan's own sources apart (t_plan_srcs: an
+    // equip's Equipment and its creature, a sac source; t_key_twin_taps) -- but the menu's boards were keyed outside
+    // any realisation (MakeMenuView). Compared that way, the same board reads "fewer resources" on exactly the keyed
+    // entries ("U:Golem-Skin Gauntlets|..|plan#25 1>0"): 147 of KittyEquipment's 183 ENUM-GAPs (mana-clean r2,
+    // 2026-11-04) were Sigarda's Aid boards a menu entry reaches. Another plan's sources mean nothing here.
+    struct Unkeyed
+    {
+        const std::set<int>* saved_srcs = t_plan_srcs;
+        bool                 saved_twin = t_key_twin_taps;
+        Unkeyed()  { t_plan_srcs = nullptr; t_key_twin_taps = false; }
+        ~Unkeyed() { t_plan_srcs = saved_srcs; t_key_twin_taps = saved_twin; }
+    } _unkeyed;
     // Every hand card the plan names really used (not put back on the library), and every cast really cast (an
     // action can also be skipped silently -- its card no longer in hand -- which no drop sink reports).
     if (!Includes(UsedFromHand(state, o.st), want)) { return v; }
@@ -3274,8 +3394,10 @@ GapVerdict EnumGapPlan(const GameState& state, bool pre, const TurnSolver::Plan&
         {
             w = JudgeHit(state, pre, t, ti > 0, o, want, n_casts, mv);
             if (w.cls == C_N) { return true; }
-            const TurnSolver::Plan done = PerformedPlan(state, pre, t, o);
-            if (done.actions.size() < t.actions.size())
+            std::vector<TurnSolver::Plan> chain;   // every plan the removals pass through, in both orders (PerformedPlan)
+            PerformedPlan(state, pre, t, o, &chain, /*acts_first=*/true);
+            PerformedPlan(state, pre, t, o, &chain, /*acts_first=*/false);
+            for (const TurnSolver::Plan& done : chain)
             {
                 const std::string dk = SiblingKey(done);
                 if (mv.on_menu.count(dk) != 0 || mv.observed.count(dk) != 0)

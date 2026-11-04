@@ -4750,6 +4750,17 @@ bool EquipRouteInProgress();                                  // true inside a r
 // kill on a counterless board (2026-10-05).
 std::uint64_t EquipRouteStateKey(const GameState& s, int controller);
 bool EquipRouteDfsActive();                                   // ...and inside its DFS specifically (not the certificate)
+// The mana oracle's audit of one recorded route link (manaoracle::RouteLink) runs in the frame the link was
+// applied in -- inside the route (no nested emission, the route's own plan-cache key) and, for a DFS link, with
+// its empty breakpoint continuations -- so its applies replay the route's own apply of the link.
+struct EquipRouteLinkFrame
+{
+    bool saved_in, saved_dfs;
+    explicit EquipRouteLinkFrame(bool in_dfs);
+    ~EquipRouteLinkFrame();
+    EquipRouteLinkFrame(const EquipRouteLinkFrame&) = delete;
+    EquipRouteLinkFrame& operator=(const EquipRouteLinkFrame&) = delete;
+};
 
 // THE MECHANICAL UNTAP-LOOP GO-OFF (DecisionProvider::UntapLoopRouteEnabled; AccomplishedAlchemist,
 // 2026-10-20). The USER's three stages played out link by link through the engine's OWN plans:

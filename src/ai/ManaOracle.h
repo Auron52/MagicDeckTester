@@ -173,6 +173,44 @@ namespace manaoracle
         GateObserveSuspend(const GateObserveSuspend&) = delete;
         GateObserveSuspend& operator=(const GateObserveSuspend&) = delete;
     };
+    // THE EQUIP ROUTE'S TAPE (KittyEquipment mana-clean, 2026-11-04). The equip-chain go-off
+    // (equiproute::Run, DecisionProviders.cpp) is a macro whose realisation is a chain of plain menu plans,
+    // each enumerated on the board the previous one left and applied with TurnSolver::ApplyPlan -- the
+    // shared payer, link by link. While the oracle replays a ComboRoute plan (EngineApply) it arms a tape,
+    // and the route's APPLY run records every link it realises: the board before it, the plan, the board
+    // after it and what that apply dropped, plus whether it ran inside the route's DFS (whose breakpoint
+    // continuations are empty by design). AuditPlan then audits each link as the plain plan it is.
+    // Recording only: nullptr everywhere but the oracle's own replay, so play is byte-identical.
+    struct RouteLink
+    {
+        GameState                before, after;
+        TurnSolver::Plan         plan;
+        std::vector<std::string> cast, act;   // the link apply's drops (the drop sinks, as EngineApply reads them)
+        bool                     in_dfs = false;
+    };
+    struct RouteTape
+    {
+        std::vector<RouteLink> links;
+        bool                   equip_route = false;   // the equip route ran its apply (the only route taped)
+        int                    result = -1;           // its verdict: 1 = the realised board is lethal
+    };
+    extern thread_local RouteTape* t_route_tape;
+    // One route link: ApplyPlan(s, plan, pre-combat), recorded on the armed tape (if any).
+    void RouteLinkApply(GameState& s, const TurnSolver::Plan& plan, bool in_dfs);
+    // The DFS backtracks: links recorded past `mark` belong to a branch that did not win.
+    inline std::size_t RouteTapeMark() { return t_route_tape != nullptr ? t_route_tape->links.size() : 0; }
+    inline void RouteTapeRewind(std::size_t mark)
+    { if (t_route_tape != nullptr && t_route_tape->links.size() > mark) { t_route_tape->links.resize(mark); } }
+    // The route's TRIAL (a sub-search on copies, run inside the apply) records nothing.
+    struct RouteTapeSuspend
+    {
+        RouteTape* saved;
+        RouteTapeSuspend() : saved(t_route_tape) { t_route_tape = nullptr; }
+        ~RouteTapeSuspend() { t_route_tape = saved; }
+        RouteTapeSuspend(const RouteTapeSuspend&) = delete;
+        RouteTapeSuspend& operator=(const RouteTapeSuspend&) = delete;
+    };
+
     // Pay from the floating pools only: the payer drains them as usual and then FAILS (atomically)
     // instead of tapping anything. Set by the oracle around scripted payments and payment probes.
     extern thread_local bool  t_float_only;

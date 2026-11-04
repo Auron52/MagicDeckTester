@@ -42707,7 +42707,7 @@ static int RunSearchRec(GameState& s, int me, int iters_left, DfsBounds& b, Seen
     {
         if (p.wins_this_turn)
         {
-            TurnSolver::ApplyPlan(s, p, /*is_pre_combat=*/true);
+            manaoracle::RouteLinkApply(s, p, /*in_dfs=*/true);   // = ApplyPlan (+ the oracle's tape)
             return 1;
         }
     }
@@ -42906,7 +42906,8 @@ static int RunSearchRec(GameState& s, int me, int iters_left, DfsBounds& b, Seen
         ++b.nodes_used;
         TurnSolver::ChargeDecisionUnits(b.budget, b.unit_price > 0 ? b.unit_price : NodeUnits());
         GameState next = s;
-        TurnSolver::ApplyPlan(next, *reps[order[i]], /*is_pre_combat=*/true);
+        const std::size_t tape_mark = manaoracle::RouteTapeMark();   // the oracle's tape keeps the winning path only
+        manaoracle::RouteLinkApply(next, *reps[order[i]], /*in_dfs=*/true);   // = ApplyPlan (+ the oracle's tape)
         if (Trace() && TracePlans() && iters_left == kDfsMaxLinks && !HumanPlayActive())
         {
             // The plan the branch APPLIED and the board it PRODUCED, side by side.
@@ -42927,6 +42928,7 @@ static int RunSearchRec(GameState& s, int me, int iters_left, DfsBounds& b, Seen
                 ++DSeen().hits;
                 if (Trace() && iters_left == kDfsMaxLinks)
                 { std::fprintf(stderr, "[equip-route]     branch[%d] = transposition, skipped\n", i); }
+                manaoracle::RouteTapeRewind(tape_mark);
                 continue;
             }
         }
@@ -42960,6 +42962,7 @@ static int RunSearchRec(GameState& s, int me, int iters_left, DfsBounds& b, Seen
             s = next;
             return 1;
         }
+        manaoracle::RouteTapeRewind(tape_mark);
     }
     return 0;
 }
@@ -43122,7 +43125,7 @@ static int Run(GameState& s, int me, Adv adv, RunMode mode)
         { if (p.wins_this_turn) { win = &p; break; } }
         if (win != nullptr)
         {
-            TurnSolver::ApplyPlan(s, *win, /*is_pre_combat=*/true);
+            manaoracle::RouteLinkApply(s, *win, /*in_dfs=*/false);   // = ApplyPlan (+ the oracle's tape)
             if (Trace())
             {
                 std::fprintf(stderr, "[equip-route] t%d LETHAL after %d link(s), %d iter(s)\n",
@@ -43214,7 +43217,7 @@ static int Run(GameState& s, int me, Adv adv, RunMode mode)
             }
         }
         const auto ta0 = std::chrono::steady_clock::now();
-        TurnSolver::ApplyPlan(s, *best, /*is_pre_combat=*/true);
+        manaoracle::RouteLinkApply(s, *best, /*in_dfs=*/false);   // = ApplyPlan (+ the oracle's tape)
         if (Trace())
         {
             const double apply_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - ta0).count();
@@ -43406,21 +43409,34 @@ int EquipRouteApply(GameState& s, int me)
     // ALL-OR-NOTHING, like the EDF apply: the silent trial on a copy decides, and only a verified
     // kill is played on the live state. Without this an emitted-then-unwound route would leave the
     // real board mid-chain, which is the one outcome worse than not finding the line.
-    const int verdict = EquipRouteTrial(s, me);
-    if (equiproute::Trace())
+    int verdict = 0, pol = 0;
     {
-        std::fprintf(stderr, "[equip-route] APPLY real=%d t%d trial=%d\n",
-                     g_real_resolution ? 1 : 0, s.turn_number, verdict);
+        manaoracle::RouteTapeSuspend _no_tape;   // the trial is a sub-search on copies: nothing it applies is the route's line
+        verdict = EquipRouteTrial(s, me);
+        if (equiproute::Trace())
+        {
+            std::fprintf(stderr, "[equip-route] APPLY real=%d t%d trial=%d\n",
+                         g_real_resolution ? 1 : 0, s.turn_number, verdict);
+        }
+        if (verdict != 1) { return 0; }
+        // Replay the policy that actually won on the live state (see TrialPolicy).
+        pol = equiproute::TrialPolicy(s, me);
     }
-    if (verdict != 1) { return 0; }
-    // Replay the policy that actually won on the live state (see TrialPolicy).
-    const int pol = equiproute::TrialPolicy(s, me);
     const equiproute::Adv adv = pol == 4 ? equiproute::Adv::Search
                               : pol == 3 ? equiproute::Adv::ChainFirst
                               : pol == 2 ? equiproute::Adv::PayloadFirst
                                          : equiproute::Adv::MostCasts;
-    return equiproute::Run(s, me, adv, equiproute::RunMode::Apply);
+    if (manaoracle::t_route_tape != nullptr) { manaoracle::t_route_tape->equip_route = true; }
+    const int r = equiproute::Run(s, me, adv, equiproute::RunMode::Apply);
+    if (manaoracle::t_route_tape != nullptr) { manaoracle::t_route_tape->result = r; }
+    return r;
 }
+
+EquipRouteLinkFrame::EquipRouteLinkFrame(bool in_dfs)
+    : saved_in(equiproute::InRouteFlag()), saved_dfs(equiproute::InRouteDfsFlag())
+{ equiproute::InRouteFlag() = true; equiproute::InRouteDfsFlag() = in_dfs; }
+EquipRouteLinkFrame::~EquipRouteLinkFrame()
+{ equiproute::InRouteFlag() = saved_in; equiproute::InRouteDfsFlag() = saved_dfs; }
 
 
 // SAME-MAIN GO-OFF (USER directive, 2026-09-08: "There should be no need to use multiple mains"
