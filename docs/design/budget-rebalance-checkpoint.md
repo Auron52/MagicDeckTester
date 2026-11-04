@@ -652,3 +652,22 @@ problem that doesn't happen as much anymore." Start with every slow rollout on r
   (`MTG_KEEP_BUCKETS_FROM`, no discovery), Release, disjoint cores. Report: `python3 hist/report.py`.
 - First results (worst-logged first): Melira 10.2 h -> 1.2 s, 8.4 h -> 0.7 s, 2.1 h -> 21.6 s; Goblins
   37.6 min -> 0.7 s; Kitty 1 h-class -> 23-37 s; still-slow: Goblins 98 s / 90 s, Creature Giving 46 s.
+
+### 08:00 UTC -- interim: the tail is NOT gone; it moved, and depth 1 is where it lives
+- 5,064 lines replayed so far. Deep gen settings (Melira d3/b3, Kitty d2/b3, Goblins d6/b6): the famous
+  hours-long rollouts are now seconds-minutes (Melira 10.2 h -> 1.2 s; Kitty ~1 h -> 23-79 s, ratio 3%).
+  But 31 lines got SLOWER than logged, 11 of them Goblins >2x and >60 s (worst 43 s -> 1,624 s; Melira
+  405 s -> 1,396 s). Confound to rule out first: the replay's per-process RSS caps (2-6 GB) shrink the
+  shared plan / tier-2 pools vs generation's 20 GB (`probe/run_gob.sh`: branch vs primary binary, cap 20).
+- d1/b1 decks (EDF, LFE -- their real gen setting): the worst hands STILL run 20-30+ min (LFE four in flight
+  at 17-31 min when it hit a 6 GB cap; EDF six in flight > 20 min). Budget-independent: one EDF hand is
+  59 ms at d5/b20 and 357 ms at d5/b1 but > 20 min at d1/b1, d1/b3 AND d1/b20 (`probe/run_probe.sh`).
+- MECHANISM (perf on the stuck d1 probe; census shows ONE decision that never closes): SolveWithLookahead ->
+  FullSearchLineHybrid -> FSLineWinComplete -> FSLineWin -> SimulateToEnd -> GameEngine::RunTurnFrom ->
+  AIEngine::TakeTurn -> BpDeriveContinuationList / EnumeratePlansWithLand (+ TapForCostSharedOnce). At depth 1
+  every root candidate is followed by a whole-game playout INSIDE the decision; the playout's per-turn plan
+  enumeration explodes on Displacer/Drake boards. The priced ceiling (X=100 => ~2.25 s at b1) is only checked
+  between passes (budget->Overrun()), never inside the playout, so nothing bounds it.
+- Side finding: a direct `mtg-analyze --gen-mulligan` on a deck whose value sidecar lacks mull_gen_* runs at
+  gen-default d5/b20 (sidecar value_play replaces the profile's keys). mullgen.sh carries the setting over
+  first, so production is fine; affects Colossus Hammer, EDF, Landfall, LFE, Midrange Burn on direct calls.
