@@ -2883,21 +2883,11 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         }
         return v;
     }();
-    auto run_one = [&](AIEngine& ai, int w, int pd, long long r,
-                       std::vector<char>* hit = nullptr) -> double
+    // One keep-rollout of an explicit (hand composition, seed): the whole game identity. run_one derives
+    // rs from (seed_base, r, w, pd); the replay list's MTG_KEEP_REPLAY_LOGGED_SEED path passes a logged rs.
+    auto run_rs = [&](AIEngine& ai, int H, const std::vector<int>& comp, int pd, long long r, uint64_t rs,
+                      std::vector<char>* hit) -> double
     {
-        // FAILED OUT => do no more work. Breaking the PRODUCER alone is not enough: the queue holds up
-        // to QCAP (8 x threads = 256) already-dispatched tasks, and draining those normally would keep
-        // abandoning rollouts at a full cap each -- at 1800 s that is hours of pointless work after the
-        // decision to stop. Bailing HERE is deadlock-free, which stopping the workers is not: a worker
-        // that stops popping leaves the producer blocked in `q_nf.wait(q.size() < QCAP)` with nobody
-        // left to notify it. Measured: with the fail-out at 3 the run reached #28 before this existed.
-        if (abandon_failed.load()) { return std::numeric_limits<double>::quiet_NaN(); }
-        const int H = work[w].H, idx = work[w].idx;
-        const std::vector<int>& comp = tables[HAND - H].comps[idx];
-        const uint64_t rs = cfg.seed + 21'000'000ULL
-                          + 0x9E3779B97F4A7C15ULL * (static_cast<uint64_t>(r) + 1)
-                          + 1000003ULL * static_cast<uint64_t>(w) + static_cast<uint64_t>(pd);
         GameState s = GoldFishRunner::SetupGame(deck, rs);
         s.m_required_pieces = &rollout_profile.required_pieces;
         s.m_card_scores     = rollout_profile.card_scores.empty()
@@ -2930,6 +2920,25 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         // folds it deterministically, so it needs a value it can recognise as absent rather than a
         // truncated win-turn; NaN is that value and every consumer below tests for it explicitly.
         if (note_if_abandoned(H, comp, pd, r, rs)) { return std::numeric_limits<double>::quiet_NaN(); }
+        return wt;
+    };
+    auto run_one = [&](AIEngine& ai, int w, int pd, long long r,
+                       std::vector<char>* hit = nullptr) -> double
+    {
+        // FAILED OUT => do no more work. Breaking the PRODUCER alone is not enough: the queue holds up
+        // to QCAP (8 x threads = 256) already-dispatched tasks, and draining those normally would keep
+        // abandoning rollouts at a full cap each -- at 1800 s that is hours of pointless work after the
+        // decision to stop. Bailing HERE is deadlock-free, which stopping the workers is not: a worker
+        // that stops popping leaves the producer blocked in `q_nf.wait(q.size() < QCAP)` with nobody
+        // left to notify it. Measured: with the fail-out at 3 the run reached #28 before this existed.
+        if (abandon_failed.load()) { return std::numeric_limits<double>::quiet_NaN(); }
+        const int H = work[w].H, idx = work[w].idx;
+        const std::vector<int>& comp = tables[HAND - H].comps[idx];
+        const uint64_t rs = cfg.seed + 21'000'000ULL
+                          + 0x9E3779B97F4A7C15ULL * (static_cast<uint64_t>(r) + 1)
+                          + 1000003ULL * static_cast<uint64_t>(w) + static_cast<uint64_t>(pd);
+        const double wt = run_rs(ai, H, comp, pd, r, rs, hit);
+        if (std::isnan(wt)) { return wt; }
         for (const DiagSlow& d : diag_slow)
         {
             if ((d.w < 0 || d.w == w) && (d.pd < 0 || d.pd == pd) && (d.r < 0 || d.r == r))
@@ -3087,11 +3096,19 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     // checked) on one shared work queue across this process's threads, prints one line per rollout
     // (new ms, logged ms, win turn) and EXITS. One process, one tail -- not one mtg per line. Pure
     // diagnostic; unset => skipped. Used to measure docs/design/selesnya-keepgen-tail.md.
+    // MTG_KEEP_REPLAY_LOGGED_SEED=1 (diagnostic): replay each line from its LOGGED seed and hand instead of
+    // re-deriving the seed from today's work index, so a log written under OLDER buckets (or another
+    // --seed) still replays -- the game identity is (hand composition, rs), see run_rs. A hand label that
+    // is not a current bucket rep falls back to the bucket holding that card name; under changed merges
+    // the pulled copy may then be a different card of the same bucket, so such a line is the logged
+    // hand only up to today's bucketing. Used for docs/design/budget-rebalance-checkpoint.md.
     if (const char* lp = std::getenv("MTG_KEEP_REPLAY_LIST"); lp && *lp)
     {
+        const bool logged_seed = EnvOn("MTG_KEEP_REPLAY_LOGGED_SEED");
         std::map<std::string, int> label_to_b;
         for (int b = 0; b < K; ++b) { label_to_b[label[b]] = b; }
-        struct RItem { std::string line; int w; int pd; long long r; unsigned long long seed; long long logged_ms; };
+        struct RItem { std::string line; int w; int pd; long long r; unsigned long long seed; long long logged_ms;
+                       bool own = false; int H = 0; std::vector<int> comp; };
         std::vector<RItem> items;
         std::ifstream in(lp);
         std::string ln;
@@ -3123,11 +3140,20 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 std::size_t xp = e.rfind(" x");
                 if (xp == std::string::npos) { continue; }
                 const int cnt = std::atoi(e.c_str() + xp + 2);
-                auto f = label_to_b.find(e.substr(0, xp));
-                if (f == label_to_b.end()) { ok = false; break; }
-                comp[f->second] += cnt; HH += cnt;
+                const std::string nm = e.substr(0, xp);
+                int bi = -1;
+                if (auto f = label_to_b.find(nm); f != label_to_b.end()) { bi = f->second; }
+                else if (logged_seed) { if (auto g = bof.find(nm); g != bof.end()) { bi = g->second; } }
+                if (bi < 0) { ok = false; break; }
+                comp[bi] += cnt; HH += cnt;
             }
             if (!ok || HH != H || H < min_size || H > HAND) { std::cerr << "[replay-list] skip: " << ln << "\n"; continue; }
+            if (logged_seed)
+            {
+                it.own = true; it.H = H; it.comp = std::move(comp); it.w = -1;
+                items.push_back(std::move(it));
+                continue;
+            }
             auto& t = tables[HAND - H];
             auto f = t.index.find(comp);
             if (f == t.index.end()) { std::cerr << "[replay-list] comp not found: " << ln << "\n"; continue; }
@@ -3215,7 +3241,8 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 if (k >= items.size()) { break; }
                 const RItem& it = items[k];
                 const auto t0 = std::chrono::steady_clock::now();
-                const double wt = run_one(ai, it.w, it.pd, it.r);
+                const double wt = it.own ? run_rs(ai, it.H, it.comp, it.pd, it.r, it.seed, nullptr)
+                                         : run_one(ai, it.w, it.pd, it.r);
                 const double ms = std::chrono::duration<double, std::milli>(
                                       std::chrono::steady_clock::now() - t0).count();
                 std::lock_guard<std::mutex> lk(out_mtx);

@@ -631,3 +631,24 @@ Same manifest/arms as 01:04. Numbers reproduce the non-deterministic run almost 
 - OPEN, ALL USER CALLS: (1) build-in shape for per-deck R (fit table in the profile vs derived in-engine); (2) Snow 0.7x /
   Selesnya v2 + Colossus 0.5x search; (3) a tighter priced ceiling (X30) at low budgets; (4) push the tier-neutral
   increment (refit + determinism fixes) to the shared branch now or with the feature.
+
+## 2026-11-04 07:00 UTC -- do the historical slow GENERATION rollouts still happen? (RUNNING)
+
+USER: the "budget 1-3 taking hours" cases are mulligan-generation rollouts (Melira d3 b3 single rollouts of
+10.2 h / 8.4 h / 6.1 h; EDF 3.9 h; Kitty ~1 h). "If they don't really anymore then we may be optimizing for a
+problem that doesn't happen as much anymore." Start with every slow rollout on record.
+
+- New diagnostic `MTG_KEEP_REPLAY_LOGGED_SEED=1` (ExhaustiveKeep.cpp): the replay list runs each line from
+  its LOGGED seed + hand (`run_rs`, split out of `run_one`), so logs written under older buckets replay
+  (the earlier Melira replay lost 215 of 302 lines to SEED MISMATCH). Labels that are not current bucket
+  reps fall back to the card name's bucket.
+- Corpus (`build/scratch/budget/hist/mk_corpus.py`): union of every slow log of the CURRENT lists, deduped:
+  Melira 1,243 (64 core-h logged), EDF 3,959 (126), Kitty v3 19,442 (661), Snow 685 (457 replayable:
+  Kaldring left the list), LFE 372, Goblins 187, Creature Giving 30, slivers 6. Archived lists (Kitty v2,
+  Selesnya v1, Mirrorwing v1/v2) excluded. Cyclone has NO slow log: its gen is d1 b1 and its worst rollout
+  is 8.3 s. Hinata2's log holds only discovery / play-digest lines.
+- Run: `hist/run_hist.sh` (+ `run_hist2.sh`, Melira/LFE relaunched at 6 GB after 3/2 GB RSS caps
+  aborted them), each deck at its CURRENT gen setting, buckets from the shipped table
+  (`MTG_KEEP_BUCKETS_FROM`, no discovery), Release, disjoint cores. Report: `python3 hist/report.py`.
+- First results (worst-logged first): Melira 10.2 h -> 1.2 s, 8.4 h -> 0.7 s, 2.1 h -> 21.6 s; Goblins
+  37.6 min -> 0.7 s; Kitty 1 h-class -> 23-37 s; still-slow: Goblins 98 s / 90 s, Creature Giving 46 s.
