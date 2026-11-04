@@ -4052,9 +4052,16 @@ struct Rec
     long long dec = 0, greedy = 0, other = 0;
     long long null_attempts = 0;   // a charging site reached with no budget to charge
     long long subsearch = 0;       // a decision-memoising charging sub-search ran (TurnSolver::NoteChargingSubsearch)
+    long long epoch_memo = 0;      // a per-decision memo answered (TurnSolver::NoteEpochMemoHit)
+    long long spent_cut = 0;       // a priced stage cut because the budget was spent (TurnSolver::NoteSpentCutSubsearch)
     bool had_dec = false, had_greedy = false;
     Rec* outer = nullptr;
 };
+// Bumped by TurnSolver::NoteEpochMemoWrite: an entry bound to the epoch's memos is served only while it is unchanged.
+inline thread_local std::uint64_t t_memo_gen = 0;
+// The decision budget is spent: a priced stage started now is cut at its first probe. Reads the budget without
+// SearchBudget::Exhausted()'s bind count (the entry replays the binds its computation counted).
+bool DecisionSpentNow();
 // What an entry stores.
 struct Cost
 {
@@ -4067,6 +4074,10 @@ struct Cost
     // so a hit that skipped them made the game depend on whether the lookup hit (BpSideBegin / End / Replay).
     int md = 0;
     unsigned long long condemn = 0, trunc = 0, binds = 0;
+    // EPOCH-BOUND (TurnSolver::NoteEpochMemoHit / NoteSpentCutSubsearch): a hit is served only in decision epoch
+    // `bound_epoch` with t_memo_gen == `bound_gen`, and, if `needs_spent`, with the decision budget spent.
+    bool bound = false, needs_spent = false;
+    std::uint64_t bound_epoch = 0, bound_gen = 0;
 };
 inline std::atomic<long long> g_hits_replayed{0}, g_units_replayed{0}, g_hits_refused{0}, g_unstorable{0},
                               g_computations{0}, g_charging{0};
@@ -4093,10 +4104,13 @@ struct Scope
     long long meter_used = 0;
     int meter_acc = 0;
     int greedy_acc = 0;
+    std::uint64_t epoch0 = 0, gen0 = 0;
     Scope()
     {
         if (!On()) { return; }
         live = true;
+        epoch0 = TurnSolver::DecisionEpoch();
+        gen0 = t_memo_gen;
         meter_armed = decisionwork::Armed();
         meter_used = decisionwork::t_used;
         meter_acc = decisionwork::t_charge_acc;
@@ -4107,7 +4121,9 @@ struct Scope
         t_rec = &rec;
     }
     ~Scope() { if (live && t_rec == &rec) { t_rec = rec.outer; } }
-    Cost Done()
+    // `side_replayed`: the caller records and replays the side counters (BpSideEnd / BpSideReplay), the condition
+    // for storing an epoch-bound computation at all.
+    Cost Done(bool side_replayed = false)
     {
         Cost c;
         if (!live) { return c; }
@@ -4128,6 +4144,15 @@ struct Scope
         c.storable = c.other == 0 && !dec_cut && !gr_cut
                   && !meter_changed && !greedy_residual_changed && !decisionwork::Exceeded()
                   && (Mode() != 1 || (c.dec == 0 && c.greedy == 0 && rec.subsearch == 0));
+        if (Mode() == 1 && (rec.epoch_memo > 0 || rec.spent_cut > 0))
+        {
+            c.bound = true;
+            c.needs_spent = rec.spent_cut > 0;
+            c.bound_epoch = epoch0;
+            c.bound_gen = gen0;
+            // The memos the computation read must be the ones a recompute reads: written by no one while it ran.
+            if (!side_replayed || TurnSolver::DecisionEpoch() != epoch0 || t_memo_gen != gen0) { c.storable = false; }
+        }
         g_computations.fetch_add(1, std::memory_order_relaxed);
         if (c.dec + c.greedy + c.other > 0) { g_charging.fetch_add(1, std::memory_order_relaxed); }
         if (!c.storable) { g_unstorable.fetch_add(1, std::memory_order_relaxed); }
@@ -4150,6 +4175,16 @@ static void CacheChargeNoteNull()
 { for (cachecharge::Rec* r = cachecharge::t_rec; r != nullptr; r = r->outer) { ++r->null_attempts; } }
 void TurnSolver::NoteChargingSubsearch()
 { for (cachecharge::Rec* r = cachecharge::t_rec; r != nullptr; r = r->outer) { ++r->subsearch; } }
+void TurnSolver::NoteEpochMemoHit()
+{ for (cachecharge::Rec* r = cachecharge::t_rec; r != nullptr; r = r->outer) { ++r->epoch_memo; } }
+void TurnSolver::NoteSpentCutSubsearch()
+{ for (cachecharge::Rec* r = cachecharge::t_rec; r != nullptr; r = r->outer) { ++r->spent_cut; } }
+void TurnSolver::NoteEpochMemoWrite() { ++cachecharge::t_memo_gen; }
+bool cachecharge::DecisionSpentNow()
+{
+    const SearchBudget* const d = g_decision_budget;
+    return d != nullptr && !d->Unlimited() && d->Used() >= d->Limit();
+}
 // A cache HIT on an entry costing `c`: true = serve it (its units charged here, as a recompute would);
 // false = a recompute here could run differently, so the caller treats the lookup as a miss.
 static bool CacheHitCharge(const cachecharge::Cost& c)
@@ -4162,8 +4197,18 @@ static bool CacheHitCharge(const cachecharge::Cost& c)
     if (ok && g != nullptr && !c.had_greedy && c.null_attempts > 0) { ok = false; }
     if (ok && !cachecharge::Affordable(d, c.dec)) { ok = false; }
     if (ok && !cachecharge::Affordable(g, c.greedy)) { ok = false; }
+    if (ok && c.bound && cachecharge::Mode() == 1)
+    {
+        ok = c.bound_epoch == TurnSolver::DecisionEpoch() && c.bound_gen == cachecharge::t_memo_gen
+          && (!c.needs_spent || cachecharge::DecisionSpentNow());
+    }
     if (!ok) { cachecharge::g_hits_refused.fetch_add(1, std::memory_order_relaxed); return false; }
     cachecharge::g_hits_replayed.fetch_add(1, std::memory_order_relaxed);
+    if (c.bound && cachecharge::Mode() == 1)   // the enclosing computation now depends on what this one did
+    {
+        if (c.needs_spent) { TurnSolver::NoteSpentCutSubsearch(); }
+        TurnSolver::NoteEpochMemoHit();
+    }
     if (c.dec > 0 && d != nullptr)
     { ConsumeAtN(d, unitsite::kCacheHit, c.dec); cachecharge::g_units_replayed.fetch_add(c.dec, std::memory_order_relaxed); }
     if (c.greedy > 0 && g != nullptr)
@@ -107374,7 +107419,7 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
                                                                   /*front_only=*/false, &bp_interrupted,
                                                                   &plans_lz, &plans_ord);
     bp_chan.Restore();
-    cachecharge::Cost bp_cost = bp_ccs.Done();
+    cachecharge::Cost bp_cost = bp_ccs.Done(/*side_replayed=*/true);
     BpSideEnd(bp_side, bp_cost);
     PlanCacheNoteComputation(plancache::kCatBp, gamework::t_used - bp_u0);
     if (bpderive::On()) { --bpderive::t_depth; }
@@ -107695,7 +107740,7 @@ static bool BpCanonFront(const GameState& state, bool is_pre_combat, TurnSolver:
         BpDeriveContinuationList(state, is_pre_combat, /*count_stats=*/true, /*demoted_out=*/nullptr,
                                  /*front_only=*/true, &bp_interrupted);
     fr_chan.Restore();
-    cachecharge::Cost fr_cost = fr_ccs.Done();
+    cachecharge::Cost fr_cost = fr_ccs.Done(/*side_replayed=*/true);
     BpSideEnd(fr_side, fr_cost);
     const bool aa_cut_inside = AlchemistComboRouteCuts() != aa_cuts0;
     if (s_rollout_stats) { bpcanon::g_derives.fetch_add(1, std::memory_order_relaxed); }

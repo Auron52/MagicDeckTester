@@ -8610,15 +8610,19 @@ bool LineRepayTry(GameState& state, const ManaCost& cost_in, bool for_creature, 
     LineRepayMemo& memo = t_lr_memo;
     const std::uint64_t epoch = TurnSolver::DecisionEpoch();
     if (memo.epoch != epoch || memo.fail.size() + memo.ok.size() + memo.fail_p1.size() >= kLineRepayMemoCap)
-    { memo.fail.clear(); memo.ok.clear(); memo.ok_p2.clear(); memo.fail_p1.clear(); memo.epoch = epoch; }
+    {
+        if (!memo.fail.empty() || !memo.ok_p2.empty()) { TurnSolver::NoteEpochMemoWrite(); }
+        memo.fail.clear(); memo.ok.clear(); memo.ok_p2.clear(); memo.fail_p1.clear(); memo.epoch = epoch;
+    }
     const std::uint64_t mkey = LineRepayMemoKey(state, ch, honor_legacy_cco);
     t_lr_last_key = mkey;
     const bool memo_hit = memo.fail.count(mkey) != 0;
     if (memo_hit)
     {
-        // A failure is memoised only once pass 2 ran to its end: what a recompute would cost depends on the budget
-        // (MTG_CACHE_HIT_CHARGE -- an enclosing cacheable computation is not stored).
-        TurnSolver::NoteChargingSubsearch();
+        // A failure is memoised only once pass 2 ran to its end, so a recompute in a later decision would run it
+        // again: an enclosing cacheable computation is served only within this decision while the memo stands
+        // (MTG_CACHE_HIT_CHARGE, TurnSolver::NoteEpochMemoHit).
+        TurnSolver::NoteEpochMemoHit();
         g_lr_memo_hit.fetch_add(1, std::memory_order_relaxed);
         if (!LineRepayMemoVerify()) { return false; }
     }
@@ -8630,7 +8634,7 @@ bool LineRepayTry(GameState& state, const ManaCost& cost_in, bool for_creature, 
         {
             if (!armed) { return; }
             if (hit) { return; }
-            m.fail.insert(k);
+            if (m.fail.insert(k).second) { TurnSolver::NoteEpochMemoWrite(); }
         }
     } note_fail{ memo, mkey, memo_hit };
     // Re-make the chain's first `depth` payments on the real board with `pk` (oldest last); false = restored.
@@ -8646,7 +8650,8 @@ bool LineRepayTry(GameState& state, const ManaCost& cost_in, bool for_creature, 
     };
     const auto ok_it = memo.ok.find(mkey);
     const std::vector<manaoracle::PayOption>* ok_memo = ok_it != memo.ok.end() ? &ok_it->second : nullptr;
-    if (ok_memo != nullptr && memo.ok_p2.count(mkey) != 0) { TurnSolver::NoteChargingSubsearch(); }
+    // A success pass 2 found: a later decision's recompute would search (priced) again; this one's answers the same.
+    if (ok_memo != nullptr && memo.ok_p2.count(mkey) != 0) { TurnSolver::NoteEpochMemoHit(); }
     if (ok_memo != nullptr && !LineRepayMemoVerify())
     {
         g_lr_ok_hit.fetch_add(1, std::memory_order_relaxed);
@@ -8685,6 +8690,20 @@ bool LineRepayTry(GameState& state, const ManaCost& cost_in, bool for_creature, 
     // The depth-2 whole-float stage is priced too: on EDF smoke seed 1064 gi63 it was the whole of the re-pay's cost
     // (1,365 searches of ~60 re-made options each, 12 s of an 18 s game against 5.7 s off) once pass 2 was priced.
     bool entered_priced = false;
+    // MTG_CACHE_HIT_CHARGE, on every exit: a priced stage that ran a probe made the result (and the per-decision
+    // remainder of ProbeCharge) depend on the budget -- not stored. One cut at its first probe ran nothing: a
+    // recompute while the budget is still spent cuts there too (TurnSolver::NoteSpentCutSubsearch). No probe and
+    // no cut: the priced stages never reached the budget, and nothing depends on it.
+    struct PricedNote
+    {
+        const bool& entered; const manaoracle::ProbeCharge& pr;
+        ~PricedNote()
+        {
+            if (!entered) { return; }
+            if (pr.probes > 0) { TurnSolver::NoteChargingSubsearch(); }
+            else if (pr.cut)   { TurnSolver::NoteSpentCutSubsearch(); }
+        }
+    } priced_note{ entered_priced, price };
     for (int st = 0; st < 2 * kLineRepayMaxDepth; ++st)
     {
         const bool whole_float = st < kLineRepayMaxDepth;
@@ -8719,7 +8738,7 @@ bool LineRepayTry(GameState& state, const ManaCost& cost_in, bool for_creature, 
         if (st > 0)
         {
             // A priced stage is the budget's: its cost (and, once cut, its result) depend on the decision's budget.
-            if (!entered_priced) { TurnSolver::NoteChargingSubsearch(); g_lr_p2.fetch_add(1, std::memory_order_relaxed); }
+            if (!entered_priced) { g_lr_p2.fetch_add(1, std::memory_order_relaxed); }
             entered_priced = true;
             // (A VERIFY re-check of a memoised empty pass 1 runs unpriced too: the plain run skipped it.)
             if (!verify_rerun && !(whole_float && p1_empty)) { pass.charge = &price; }
@@ -8765,7 +8784,7 @@ bool LineRepayTry(GameState& state, const ManaCost& cost_in, bool for_creature, 
             return false;
         }
         memo.ok[mkey] = picked;
-        if (st > 0) { memo.ok_p2.insert(mkey); }
+        if (st > 0) { memo.ok_p2.insert(mkey); TurnSolver::NoteEpochMemoWrite(); }
         note_fail.armed = false;
         if (memo_hit) { g_lr_memo_bad.fetch_add(1, std::memory_order_relaxed); }   // the memo said "fails"
         g_lr_fired.fetch_add(1, std::memory_order_relaxed);

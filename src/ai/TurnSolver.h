@@ -2472,6 +2472,15 @@ public:
     // (the equip-route DFS's SeenForThisDecision, the AA route walk) ran inside the cacheable computation in
     // flight -- its cost depends on that memo's warmth, so the computation is not stored (mode 1).
     static void              NoteChargingSubsearch();
+    // MTG_CACHE_HIT_CHARGE, the two narrower notes (mode 1). A sub-search whose outcome depends on the decision
+    // only through a per-DECISION memo and through whether the decision budget is SPENT: an enclosing computation
+    // is stored, and a hit is served only where a recompute takes the same path -- in the same decision epoch,
+    // with no outcome-bearing memo write since (NoteEpochMemoWrite), and, for NoteSpentCutSubsearch, with the
+    // decision budget still spent. Stored only by a computation that replays its side counters (the bp
+    // derivations: a spent cut bumps budgetbind::t_binds). Anything else: NoteChargingSubsearch.
+    static void              NoteEpochMemoHit();        // a per-decision memo answered, nothing charged
+    static void              NoteSpentCutSubsearch();   // a priced stage cut at its first probe: the budget was spent
+    static void              NoteEpochMemoWrite();      // a write that changes what a later lookup answers
     // The same for the AccomplishedAlchemist untap-loop route walk (MTG_AA_ROUTE_NODE_UNITS), attributed
     // to the census's own `aa_route` bucket. No-op on nullptr or n <= 0.
     static void              ChargeAaRouteUnits(SearchBudget* budget, int n);
