@@ -243,6 +243,9 @@ wall time):
    (today's engine)? When the Stone is out each one's reveal bottoms the other's cards, so the order
    changes what the chain finds. My default follows your references (Ritual first), and I propose
    measuring both as arms.
+   **ANSWERED (USER 2026-11-04):** *"Casting the Dark Ritual early in a line is totally fine in my opinion. I
+   sometimes cast it late, but that doesn't really matter at all."* Ritual first (rank 2) stands. The user is
+   indifferent to its position, so an order-only arm is a cost/quality check, not a question for the user.
 4. **Culling the Weak after the Apostle chain** (so it eats a fresh sick Apostle), with the payable
    fallback pulling it ahead only when its mana is needed for the Stone or a Demon? Default: yes.
 5. **Scope:** searched play only (d0 keeps its greedy second chance, as Fungus does), or every
