@@ -696,3 +696,23 @@ problem that doesn't happen as much anymore." Start with every slow rollout on r
   (6) the depth-1 playout explosion -- bound the in-playout work by the decision's priced ceiling (a play change
   at low budgets; held-out A/B) and/or EDF/LFE's generation depth (a settings call); (7) hold decisions 1-4
   until 5-6 are settled (recommended).
+
+### 09:45 UTC -- USER RULINGS on 5-7; 6(a) step 1 RUNNING
+- USER 2026-11-04: (5) wait for the actual commit; a mistake -> just fix it; intentional -> still dig for ways
+  to avoid paying such a high cost. (6) try (a), bound in-playout work by the decision's priced ceiling (the
+  others are less connected to budgeting). (7) HOLD 1-3 unless they are shown to help the HEAVY TAIL; not keen
+  on a new per-deck setting for a few percent.
+- Replay results (report.py): Kitty v3 16,984/19,442 lines, max 79 s, 5% of logged -- its tail is gone.
+  EDF d1/b1: 7,838 s (logged 7,125) and 6,058 s (logged 14,213) still; 7 more lines in flight > 2 h.
+  Melira d3/b3 max 4,167 s. Snow / Creature Giving / slivers max 47 s.
+- Bisect step 2: 4df5e5201 GOOD (28.6 s); culprit in (4df5e5201, 9ebe3df41].
+- The stuck d1/b1 decision (perf, live): SolveWithLookahead -> SimulateToEnd -> ApplyPlanDirect -> ApplyPlanDirect
+  -> BpDeriveContinuationList -> BpEnumEntryFor -> EnumeratePlansWithLand -> EnumeratePlans -> TapForCostSharedOnce:
+  a breakpoint-continuation DERIVATION inside one rollout step. The existing MTG_BP_DERIVE_PRICED_STOP (11-03,
+  OFF by USER ruling "only for things expensive enough to be a real issue"; it bought nothing on d5/b20 play)
+  polls exactly this walk. Step 1 of (a): measure it on the d1/b1 gen tail -- `hist/stop/run_stop.sh` (EDF top
+  14 lines on cores 20-23, LFE top 30 on 24-27, X=100) vs the off arm in hist/*.out. Out: hist/stop/{EDF,LFE}.out.
+- CAUTION reading probe/census_d1b1.tsv: its rows are the PLAY-DIGEST games, which ran at d5/b20 (the sidecar
+  mull_gen bug), not the d1/b1 replay; the d1/b1 decision never closed, so it has no row.
+- Small fix EDITED, NOT BUILT (the running replays use this worktree's binary): MulliganProfileIO.h -- a sidecar
+  without mull_gen_* / expected_buckets keeps the profile's values (generation-only keys; play-neutral).
