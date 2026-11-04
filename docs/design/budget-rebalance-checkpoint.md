@@ -491,3 +491,18 @@ X=0 and X=100 before). Next slowest 87 s (kitty_v1vscur_2hg_cur gi20037), then 7
 - NEXT: report per-deck quality + tail per R to the USER (heavy-deck budget raise is the USER's call); then the
   tier-2 purity test under priced on (regression manifest, MTG_TIER2_OVERFLOW_KB=1 vs default, 0 unit diffs);
   then pooled bottoming budget; then EDF wastes. GT accept owed before any shared push (refit prices move play).
+
+## RESULT 2026-11-04 01:04 UTC: priced-budget A/B DONE (logs/budget/pb_report.txt)
+Held-out regression shapes, ~31.5k paired games per arm (sub-1ms games carry no SLOW-GAME line: 9/44/53/63 games
+unpaired at x0/x28/x20/x14 -- all played). Win-turn delta vs x0 (+ = slower), wall over the held-out games:
+| R (ns/unit)   | moved | better/worse | summed delta | /game   | wall sum | p99   | p99.9 | max   | tail corpus sum/max |
+| off (x0)      |   -   |      -       |      -       |    -    | 11853 s  | 6.6 s | 30.2 s| 90 s  | 1635 s / 314 s      |
+| 28300 (x28)   |  55   |   27 / 28    |     -1       | -0.0000 | 11572 s  | 6.3 s | 31.0 s| 98 s  | 1278 s / 275 s      |
+| 20000 (x20)   |  84   |    9 / 75    |    +75       | +0.0024 | 10076 s  | 5.4 s | 25.9 s| 84 s  |  999 s / 171 s      |
+| 14150 (x14)   | 162   |   21 / 141   |   +136       | +0.0043 |  8908 s  | 4.7 s | 21.6 s| 74 s  |  874 s / 162 s      |
+- x28 per deck: kittyv3 +6 (0/6), edf +3, niv +3, alchemist +1 worse; cyclone -9 (12 better), goblins -4, landfall -2
+  better. Heavy decks lose as expected; cheap-per-unit decks gain.
+- The held-out TAIL is Cyclone's (23 of the 32 slowest games in every arm, ~27% of wall); at x28 Cyclone gets MORE
+  search (+8% wall) and plays better. So x28 does not shorten the held-out tail; the tail corpus drops 22%.
+- Decision is the USER's (R, and any per-deck budget raise for kittyv3/edf/niv). Running now: tier-2 purity under
+  priced on (run_purity_pb.sh -> pp_a/pp_b, purity_pb.DONE).
