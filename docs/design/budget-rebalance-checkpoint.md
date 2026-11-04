@@ -445,3 +445,35 @@ X=0 and X=100 before). Next slowest 87 s (kitty_v1vscur_2hg_cur gi20037), then 7
 - Stage now: RE-PRICE (plan item 2). Step 1 = quiet-box cost fit on HEAD: build/scratch/budget/run_fit.sh -> fit.txt /
   fit.DONE (regression manifest, 32 thr, MTG_TIER1_STATS). Then `scripts/cost_fit.py fit.txt` vs the provisional
   contended prices in src/core/WorkCounters.h.
+
+## Live at compaction #6 (2026-11-04 ~00:50 UTC) -- RE-PRICE stage, prototype built, A/B not yet launched
+- USER 2026-11-04: approved the plan -- renormalise on the MEDIAN deck, let the curve show what the heavy decks lose;
+  "the 'raise budget' option is still on the table" per deck.
+- QUIET-BOX FIT DONE (build/scratch/budget/fit.txt, run_fit.sh; 13,525 searched games >= 50 ms): prices ns
+  step 21426, greedy 569, enum 18455, plans 2866, odo 511, apply 8097, pay 2561, simkey 3749, interior 586.
+  priced actual/pred p95 1.57 (slowest 1%: 1.78) vs units-only 3.29 (7.45). Per-deck priced ns/unit (aggregate):
+  goblins 14.8k ... median 28.3k ... hinata 40.4k, alchemist 45.7k, kittyv3 54.9k, dragonstorm 63.8k, edf 103.5k.
+- UNCOMMITTED SRC in this worktree (prototype, default OFF => only the price constants change default play, via
+  the X=100 priced ceiling's trip points):
+  * src/core/WorkCounters.h: kPriceNs refit + kInteriorNs=586.
+  * src/ai/DecisionWorkMeter.h: namespace pricedbudget at end of file -- UnitNs() (per-job arm valuearm
+    priced_unit_ns wins, else MTG_PRICED_BUDGET + MTG_PRICED_UNIT_NS default 28300; 0 = off), Bill(n) = (t_acc +
+    n*kInteriorNs + (t_priced - t_wm)) / R with carry, Drop(), Scope (decision-root RAII; t_active gate so only a
+    FINITE decision root's work is billed; nested roots keep the outer's pending).
+  * src/ai/TurnSolver.cpp ~1935: PricedUnits() in ConsumeAt / ConsumeAtN (null/unlimited/inactive => n, Drop);
+    cache-hit replays (kCacheHit, ~4185) pass bill=false; CacheChargeNote still notes raw n (storability).
+    pricedbudget::Scope at both decision roots (FullSearchLineHybrid fs_decision_root ~99949, SolveWithLookahead
+    decision_root ~102372).
+  * src/ai/ValueArm.h priced_unit_ns arm; src/runner/BatchRunner.cpp parses "priced_unit_ns".
+- BUILD: first build OK (without the arm); rebuild WITH the arm running (task brnefxshf -> build_pb2.log). Check exit.
+- NEXT:
+  1. Sanity: one budgeted game priced on vs off (units must differ, no hang); one budget-0 game on vs off (must be
+     byte-identical: inert at unlimited); unit tests (build/Release/mtg-test, 2450 expected).
+  2. LAUNCH build/scratch/budget/run_pb.sh (harness-tracked) -> pb.DONE; manifest pb_ab.json from mk_pb.py: 736 jobs /
+     126,580 games, arms x0 (off) / x28 (R=28300) / x20 / x14, held-out reg shapes seed+7e6 (budget-0 excluded) + 45
+     tail-corpus games each. Runs from the budget-rebalance worktree. Read: `python3 scripts/ab_x_report.py
+     build/scratch/budget/pb` (x0 = baseline). Report per-deck quality + tail per R to the USER; heavy decks (edf,
+     dragonstorm, kitty, alchemist, hinata) are the ones expected to lose -> per-deck budget raise is the USER's call.
+  3. Tier-2 purity under priced on: regression manifest, priced on, MTG_TIER2_OVERFLOW_KB=1 vs default -> 0 unit diffs.
+  4. Then pooled bottoming budget; EDF remaining wastes.
+- Cyclone mulligan PAUSED (resumable via `artifact_queue.py start` in the artifact-queue checkout).
