@@ -256,6 +256,20 @@ function testSacBurstMultiSelect(win) {
   chk(S.choices.length === 2 && S.choices[1] === 2,
       'apostles: the queued pick is the clicked body #41 (index 2), not the first-listed attack-ready Apostle');
 
+  // --- the AI's suggestion seeds the engine's WHOLE default (burst_default), not heuristic pick + board order ---
+  // USER 2026-11-04: the six-Apostle suggestion kept offering the attack-ready (lowest-index) bodies.
+  reset();
+  const a0 = { type: 'sacrifice', source: 'Shadowborn Apostle', turn: 4, decision_index: 46, heuristic_default: 2,
+               pick_index: 0, pick_total: 2, burst_default: [2, 3], me: bf([8, 9, 10, 11], false),
+               options: [ap(0, 8, 26, false), ap(1, 9, 30, false), ap(2, 10, 40, true), ap(3, 11, 41, true)] };
+  sb.init(a0);
+  chk(S.boardSel.size === 2 && S.boardSel.has('m:10') && S.boardSel.has('m:11'),
+      'apostles: the suggestion is the two sick bodies the engine chose, not the first-listed attack-ready one');
+  const a0b = Object.assign({}, a0, { burst_default: undefined });
+  sb.init(a0b);
+  chk(S.boardSel.size === 2 && S.boardSel.has('m:10') && S.boardSel.has('m:8'),
+      'no burst_default (outlet bursts): heuristic pick first, then board order -- unchanged');
+
   // --- the board moved: DROP the queue and surface the frame rather than answer the wrong one ---
   reset();
   S.boardSel = new Set(['m:6', 'm:7']); S.decision = d1;

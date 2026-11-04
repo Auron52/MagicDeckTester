@@ -3828,6 +3828,18 @@ static void WriteBounceDecisionJson(std::ostream& os, const GameState& s, const 
     {
         d.Int("pick_index", g_sac_burst_disclosure.index)
          .Int("pick_total", g_sac_burst_disclosure.total);
+        // The engine's whole default for the bodies still owed, as option indices (see
+        // SacBurstDisclosure::preferred). Absent when the site picks one victim at a time.
+        if (const std::vector<int>* pref = g_sac_burst_disclosure.preferred)
+        {
+            std::vector<int> opt;
+            for (int bi : *pref)
+            {
+                const auto it = std::find(legal.begin(), legal.end(), bi);
+                if (it != legal.end()) { opt.push_back(static_cast<int>(it - legal.begin())); }
+            }
+            d.Array("burst_default", opt.size(), [&](std::size_t i) { os << opt[i]; });
+        }
     }
     d.Array("options", legal.size(), [&](std::size_t i)
     {

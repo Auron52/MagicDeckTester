@@ -30811,15 +30811,16 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
                     if (static_cast<int>(legal.size()) == n - k)
                     { picked.insert(picked.end(), legal.begin(), legal.end()); break; }   // forced
                     int heur = 0;
+                    std::vector<int> rest;   // the default bodies still owed, in default order (disclosed)
                     for (int ci : chosen)
                     {
                         if (std::find(picked.begin(), picked.end(), ci) != picked.end()) { continue; }
-                        bool hit = false;
-                        for (int j = 0; j < static_cast<int>(legal.size()); ++j)
-                        { if (legal[static_cast<std::size_t>(j)] == ci) { heur = j; hit = true; break; } }
-                        if (hit) { break; }
+                        if (std::find(legal.begin(), legal.end(), ci) == legal.end()) { continue; }
+                        if (rest.empty())
+                        { heur = static_cast<int>(std::find(legal.begin(), legal.end(), ci) - legal.begin()); }
+                        rest.push_back(ci);
                     }
-                    SacBurstScope _burst(k, n);   // discloses "pick 6" on the `sacrifice` frame
+                    SacBurstScope _burst(k, n, &rest);   // discloses "pick 6" + the whole default on the frame
                     const int c = (*g_play_sacrifice_chooser)(state, controller, src_name, legal, heur);
                     const int pick = (c >= 0 && c < static_cast<int>(legal.size())) ? c : heur;
                     picked.push_back(legal[static_cast<std::size_t>(pick)]);

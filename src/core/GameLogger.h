@@ -393,6 +393,12 @@ struct SacBurstDisclosure
 {
     int index = 0;   // 0-based: which victim of this activation this prompt decides
     int total = 1;   // how many bodies the activation eats in all
+    // The engine's WHOLE default for the victims still owed (battlefield indices, default order), when the
+    // site knows it up front (Shadowborn's six). Null = only this frame's default is known (the outlet
+    // bursts pick each victim from the board left by the last). Disclosure only: the viewer seeds its
+    // multi-select from it instead of filling picks 2..N in board order, which put the attack-ready
+    // Apostles in the AI's suggestion (USER 2026-11-04).
+    const std::vector<int>* preferred = nullptr;
 };
 extern thread_local SacBurstDisclosure g_sac_burst_disclosure;
 
@@ -402,8 +408,11 @@ extern thread_local SacBurstDisclosure g_sac_burst_disclosure;
 struct SacBurstScope
 {
     SacBurstDisclosure saved;
-    SacBurstScope(int index, int total) : saved(g_sac_burst_disclosure)
-    { g_sac_burst_disclosure.index = index; g_sac_burst_disclosure.total = total; }
+    SacBurstScope(int index, int total, const std::vector<int>* preferred = nullptr) : saved(g_sac_burst_disclosure)
+    {
+        g_sac_burst_disclosure.index = index; g_sac_burst_disclosure.total = total;
+        g_sac_burst_disclosure.preferred = preferred;
+    }
     ~SacBurstScope() { g_sac_burst_disclosure = saved; }
 };
 

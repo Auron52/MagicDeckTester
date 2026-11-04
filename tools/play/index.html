@@ -4156,9 +4156,13 @@ function initBoardSel(d){
   } else if (d.type==='bounce' || d.type==='sacrifice' || d.type==='legend_keep' || d.type==='attach_host' || d.type==='flicker'){
     const def=(d.options||[]).find(o=>o.index===d.heuristic_default)||(d.options||[])[0];
     if (def) S.boardSel.add('m:'+def.perm_index);
-    // Multi-victim burst: seed the WHOLE cost, not one body of it -- the heuristic pick first, then
-    // board order. When every candidate dies (sacBurstForced) that seed already IS the answer.
+    // Multi-victim burst: seed the WHOLE cost, not one body of it -- the engine's whole default when it
+    // sends one (burst_default: Shadowborn's six -- board order put the attack-ready Apostles in the
+    // suggestion, USER 2026-11-04), then board order. When every candidate dies (sacBurstForced) that
+    // seed already IS the answer.
     const need=sacBurstNeed(d);
+    for (const k of (Array.isArray(d.burst_default)?d.burst_default:[]))
+    { const o=(d.options||[])[k]; if (o && S.boardSel.size<need) S.boardSel.add('m:'+o.perm_index); }
     for (let k=0; k<(d.options||[]).length && S.boardSel.size<need; ++k)
     { S.boardSel.add('m:'+d.options[k].perm_index); }
   }
