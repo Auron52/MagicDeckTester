@@ -759,3 +759,19 @@ problem that doesn't happen as much anymore." Start with every slow rollout on r
   flagged, 0 passed the dup check, 0 brute mismatches; 25-job regression sample digests = GT, units equal, wall
   354 -> 148 s) but does NOT fire on the Goblins gen line (other walk). Handoff build/scratch/budget/sacfold/HANDOFF.md;
   a second subagent continues from it.
+
+### 12:55 UTC -- sac-dup fold ADOPTED on the branch; budget work PARKED for the Cyclone queue run (USER)
+- 118b8ef36 MTG_SAC_DUP_WALK_FOLD (default ON, exact; cherry-picked from local branch sac-fold 9984a7572) + f8e7f0f64
+  per-job arm `sac_dup_fold`. Verify: 91.6M flagged on the Goblins gen line / 20.0M on the 25-job regression sample,
+  0 passed the dup check, 0 brute mismatches, 0 unfolded. 25-job sample digests = GT. Held-out A/B (mk_sdf.py ->
+  sdf_ab.json, goblins+goblins2hg, +8e6, X=100): 675 paired, 0 moved, wall 208 -> 95 s. mtg-test 2544/2544.
+  Gen line: dupc_sac_for_mana 40.3M -> 0, enum_enter -29%, wall only -2% (cost there = 140M pay_calls).
+- Not done, candidate exact skip: dupc_fold_prefix (61M/line with the fold) in the two-stage driver; needs a
+  straddle-aware prefix map (see build/scratch/budget/sacfold/HANDOFF.md RESOLVED section).
+- MELIRA TAIL (hist/mel/cen_<seed>.tsv, solo single core): worst lines 1,729 s / 1,568 s, 3-4 decisions on T5-T6 hold
+  ~95%. Each: enum_emitted / space_plans ~1.1e8 plans, space_odo ~2.2e8, w_odo 3.5-5.7M -- but units 3.2K-148K
+  (~100 ms/unit). So the cost is a huge UNBILLED plan space (likely Carrion Feeder / Kitchen Finks sac-target
+  subsets), not rejection waste. NEXT: name the plan family (enum census of one heavy decision), check whether it is
+  an identity fold candidate, and whether the priced ceiling (X) bills w_odo here -- replays ran X=1000.
+- PARKED: the box goes to the artifact queue (Cyclone mulligan resume) per USER 2026-11-04. No engine runs of mine
+  are active. Branch budget-rebalance is NOT on the shared branch (feature incomplete).
