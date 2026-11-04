@@ -139,7 +139,7 @@ fine in my opinion. I sometimes cast it late, but that doesn't really matter at 
 |---|---|---|---|
 | land | the land drop (Lake of the Dead: tap-first, a basic Swamp before Blood Crypt, as today) | none | USER ruling: land first. |
 | 1 | Dark Ritual | **moved to the front** (15 to 1) | USER ruling 2026-11-04. Also your practice in all 6 reference plans that held it. |
-| 2 | Culling the Weak | **moved ahead of the Stone** (was 15, behind it) | USER 2026-11-04: *"Culling the weak needs to be earlier than Thrumming stone some of the time and that means the shadowborn for it to sacrifice also needs to be considered there."* *"(actually often)"* *"Having the culling later than Thrumming stone isn't a good idea."* *"So it should be Dark Ritual, <shadowborn sacrifice for culling if needed>, Culling, Thrumming stone..."* So Culling always precedes the Stone. Its victim (already a searched variant: a body on the board, or an Apostle from hand) comes just before it, so a hand victim is cast ahead of the Stone, without its ripple. |
+| 2 | Culling the Weak | **moved ahead of the Stone** (was 15, behind it) | USER 2026-11-04: *"Culling the weak needs to be earlier than Thrumming stone some of the time and that means the shadowborn for it to sacrifice also needs to be considered there."* *"(actually often)"* *"Having the culling later than Thrumming stone isn't a good idea."* *"So it should be Dark Ritual, <shadowborn sacrifice for culling if needed>, Culling, Thrumming stone..."* So Culling always precedes the Stone. Victim, USER 2026-11-04: *"If needed here is pretty much just so that you can cast culling when no shadowborn is out. If you have a good sacrifice already you can just use it and cast the apostle later. It's probably not worth worrying about the 1 damage from an attacker."* So: with a creature already on the board, Culling eats a board body and every Apostle waits for the Stone (the hand-victim variant is not offered); with no creature out, one Apostle from hand is cast first as its victim. |
 | 3 | Thrumming Stone | one place later (was 1) | Granter: every later cast wants it out first. |
 | 4 | Shadowborn Apostle | none in effect (10) | Starts the chain. Bodies go down before anything that sacrifices or counts them. |
 | 5 | Abhorrent Overlord (hard cast) | **ordered** (was a plan-order tie at 10) | After the Apostles: devotion counts each Apostle's {B}, so more Harpies. |
@@ -256,12 +256,12 @@ wall time):
    **ANSWERED (USER 2026-11-04):** *"Casting the Dark Ritual early in a line is totally fine in my opinion. I
    sometimes cast it late, but that doesn't really matter at all."* Ritual first (rank 1, right after the land) stands. The user is
    indifferent to its position, so an order-only arm is a cost/quality check, not a question for the user.
-4. **Culling the Weak position: ANSWERED (USER 2026-11-04)** -- always before the Thrumming Stone, with its
-   victim ahead of it (*"Having the culling later than Thrumming stone isn't a good idea."*). Build note: the
-   victim is already a searched variant (TurnSolver.cpp SAC-ANY-CREATURE post-pass, hand or board victim) and
-   `ApplyAttachSpellDependencyOrder` moves Culling to just after a hand victim; the new part is that the hand
-   victim Apostle and Culling both go ahead of the Stone. Check with a scenario test that the line
-   "land, Dark Ritual, Apostle, Culling (eating it), Stone, Apostles" is reached before the A/B.
+4. **Culling the Weak position: ANSWERED (USER 2026-11-04)** -- land, Dark Ritual, [an Apostle from hand ONLY
+   when no creature is on the board], Culling, Thrumming Stone, rest. With a body already out, Culling eats it
+   (an attacker is fine: *"probably not worth worrying about the 1 damage from an attacker"*). Build: a
+   provider prune of Culling's hand-victim variants (TurnSolver.cpp SAC-ANY-CREATURE post-pass) when the
+   battlefield offers a victim, and a cast-order rule that puts a hand victim + Culling ahead of the Stone.
+   A scenario test of "land, Ritual, Apostle, Culling (eating it), Stone, Apostles" on an empty board first.
 5. **Scope:** searched play only (d0 keeps its greedy second chance, as Fungus does), or every
    depth? Default: searched only.
 6. **The tutor ties:** Demonic Tutor before Diabolic Intent, both after the bodies; suspends last.
