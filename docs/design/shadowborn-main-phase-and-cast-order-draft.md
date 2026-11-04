@@ -190,6 +190,37 @@ fall back to plan order. That follows your cross-deck ruling of 2026-10-14: *"Le
 cards in each list inasmuch as possible."* Mana activations (Lake crack, Lotus Bloom's sacrifice) are
 not casts. The payer spends them as payments need, exactly as today.
 
+## 2b. Where the activations go in the order (USER question 2026-11-04: *"Where do the activations go in the order? That is much more important."*)
+
+**Today's engine.** Within one main, every cast of the plan runs first (section 2's order), then the plan's
+activations in a trailing pass. A plan holds at most ONE Apostle sacrifice-six. A second one in the same main
+is reached only through a continuation (breakpoint site 9), which re-opens when six more Apostles are on the
+battlefield; that continuation can cast more before activating again. Which Demon each activation fetches
+is a searched choice, so the Overlord-vs-Jetmir order between two activations is searched, not fixed.
+
+**Your references.** Every activation came after that main's casts. In each of s3, s6 and s9 (T3) you
+fetched the Overlord, then Jetmir, in the same main. s1, s10 (T4) and s8 (T5): land, Apostle(s), then one
+activation. s2 T4: land, Apostle, Jetmir.
+
+**USER 2026-11-04:** *"Overlord should go before any activations Shadowborn activations when it is cast. This
+would only rarely come up, but you want to use the shadowborn devotion before they die."* Today's trailing
+pass already does this inside a plan. The build must keep it true across a continuation: a hard-cast
+Overlord is never left for after an activation in the same main.
+
+**Proposed order within a main (draft):**
+
+| step | what | why |
+|---|---|---|
+| 1 | land, Dark Ritual, [Apostle victim], Culling, Thrumming Stone, Apostles, Reaper, Sire, Overlord (hard cast), Demonic Tutor, Diabolic Intent, suspends | section 2 |
+| 2 | Apostle activation fetching **Abhorrent Overlord** | Its devotion counts the Apostles still alive; doing it before the Jetmir sacrifice keeps the second six alive for it (more Harpies), and the Harpies then count toward Jetmir's 3/6/9. Jetmir has no {B}, so fetching it first only lowers devotion. |
+| 3 | Apostle activation fetching **Jetmir** | Last before combat, on a Jetmir turn (section 1), leaving at least one attacker. |
+| 4 | more Apostles (continuation) | Pump Jetmir's count (*"Getting more Shadowborns to pump up his effect"*); a further activation only if six more arrive. |
+| -- | Lake of the Dead / Lotus Bloom | Not steps: the payer spends them when a cost needs them. |
+
+Question for you: **fix "Overlord fetch before Jetmir fetch" in the same main**, which prunes the
+Jetmir-then-Overlord order, or keep both orders searched? I believe Overlord-first dominates (above), so my
+default is to fix it, and the A/B's slower games at d8 b0 would show any line it loses.
+
 ## 3. Activations and the land drop (both mains, as on Fungus)
 
 Fungus §7c: the post-combat half drops only CASTS. Activations and the land drop stay in both mains.
