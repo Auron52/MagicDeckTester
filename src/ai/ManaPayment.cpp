@@ -7972,7 +7972,7 @@ std::atomic<long long> g_lr_record{0}, g_lr_try{0}, g_lr_amount{0}, g_lr_joint{0
                        g_lr_fail{0}, g_lr_search[2] = {}, g_lr_mp_calls{0}, g_lr_mp_opts{0}, g_lr_inner_joint{0},
                        g_lr_ns{0}, g_lr_memo_hit{0}, g_lr_memo_bad{0}, g_lr_ok_hit{0},
                        g_lr_ok_bad{0}, g_lr_ok_stale{0}, g_lr_found[2] = {}, g_lr_p2{0}, g_lr_p2_cut{0},
-                       g_lr_p2_probes{0}, g_lr_p2_ns{0}, g_lr_scoped{0}, g_lr_joint_bad{0}, g_lr_inner_bad{0},
+                       g_lr_p2_probes{0}, g_lr_st_probes[4] = {}, g_lr_st_entered[4] = {}, g_lr_p2_ns{0}, g_lr_scoped{0}, g_lr_joint_bad{0}, g_lr_inner_bad{0},
                        g_lr_p1_memo{0}, g_lr_p1_memo_bad{0}, g_lr_fulleq{0}, g_lr_fulleq_bad{0};
 bool LineRepayStatsOn() { static const bool on = EnvOn("MTG_LINE_REPAY_STATS"); return on; }
 struct LineRepayStats
@@ -7984,14 +7984,17 @@ struct LineRepayStats
                      "(depth2=%lld) commit_failed=%lld searched d1=%lld d2=%lld minimal_payments=%lld (options %lld) "
                      "inner_joint_short=%lld memo_hit=%lld memo_mismatch=%lld ok_hit=%lld ok_mismatch=%lld ok_stale=%lld "
                      "found_p1=%lld found_p2=%lld p2=%lld p2_cut=%lld p2_probes=%lld p2_ms=%.0f joint_scoped=%lld "
-                     "joint_mismatch=%lld inner_mismatch=%lld p1_memo_hit=%lld p1_memo_mismatch=%lld full_eq_skip=%lld full_eq_mismatch=%lld ms=%.0f ===\n", g_lr_record.load(), g_lr_try.load(), g_lr_amount.load(),
+                     "joint_mismatch=%lld inner_mismatch=%lld p1_memo_hit=%lld p1_memo_mismatch=%lld full_eq_skip=%lld full_eq_mismatch=%lld "
+                     "stage(entered/probes) wf2=%lld/%lld full1=%lld/%lld full2=%lld/%lld ms=%.0f ===\n", g_lr_record.load(), g_lr_try.load(), g_lr_amount.load(),
                      g_lr_joint.load(), g_lr_fired.load(), g_lr_fired_d2.load(), g_lr_fail.load(), g_lr_search[0].load(),
                      g_lr_search[1].load(), g_lr_mp_calls.load(), g_lr_mp_opts.load(), g_lr_inner_joint.load(),
                      g_lr_memo_hit.load(), g_lr_memo_bad.load(), g_lr_ok_hit.load(), g_lr_ok_bad.load(), g_lr_ok_stale.load(),
                      g_lr_found[0].load(), g_lr_found[1].load(), g_lr_p2.load(), g_lr_p2_cut.load(), g_lr_p2_probes.load(),
                      static_cast<double>(g_lr_p2_ns.load()) / 1e6, g_lr_scoped.load(), g_lr_joint_bad.load(),
                      g_lr_inner_bad.load(), g_lr_p1_memo.load(), g_lr_p1_memo_bad.load(), g_lr_fulleq.load(),
-                     g_lr_fulleq_bad.load(), static_cast<double>(g_lr_ns.load()) / 1e6);
+                     g_lr_fulleq_bad.load(), g_lr_st_entered[1].load(), g_lr_st_probes[1].load(), g_lr_st_entered[2].load(),
+                     g_lr_st_probes[2].load(), g_lr_st_entered[3].load(), g_lr_st_probes[3].load(),
+                     static_cast<double>(g_lr_ns.load()) / 1e6);
     }
 } g_lr_stats;
 
@@ -8000,7 +8003,8 @@ struct LineRepayStats
 // touched the board's mana.
 // Built in two halves so LineRepayFind can digest every record's prefix in ONE pass over the battlefield: the
 // permanents' running hash (LineRepayDigestStep, from LineRepayDigestSeed), then the prefix length and the board-wide
-// fields (LineRepayDigestFinish). LineRepayDigest is the two in sequence.
+// fields (LineRepayDigestBoard, hashed once per board; LineRepayDigestFinish joins the two). LineRepayDigest is the
+// three in sequence.
 inline void LineRepayMix(std::uint64_t& h, std::uint64_t v) { h ^= v + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2); }
 std::uint64_t LineRepayDigestSeed(const GameState& s)
 {
@@ -8017,11 +8021,12 @@ void LineRepayDigestStep(std::uint64_t& h, const Permanent& p, int a)
                     | (static_cast<std::uint64_t>(static_cast<std::uint32_t>(p.charge_counters)) << 32));
     LineRepayMix(h, static_cast<std::uint64_t>(static_cast<std::uint32_t>(dep)));
 }
-std::uint64_t LineRepayDigestFinish(const GameState& s, std::uint64_t h, std::size_t n)
+// The board-wide fields, hashed once per board (LineRepayFind compares several prefixes of one board).
+std::uint64_t LineRepayDigestBoard(const GameState& s)
 {
+    std::uint64_t h = 0x84222325cbf29ce4ULL;
     auto mix = [&](std::uint64_t v) { LineRepayMix(h, v); };
     const int a = s.active_player_index;
-    mix(static_cast<std::uint64_t>(n));
     auto pool = [&](const ManaPool& f)
     {
         mix(static_cast<std::uint64_t>(static_cast<std::uint16_t>(f.white))
@@ -8048,11 +8053,17 @@ std::uint64_t LineRepayDigestFinish(const GameState& s, std::uint64_t h, std::si
     mix(static_cast<std::uint64_t>(s.pay_ledger.untap_effects) | (static_cast<std::uint64_t>(static_cast<std::uint32_t>(s.pay_ledger.turn)) << 8));
     return h;
 }
+std::uint64_t LineRepayDigestFinish(std::uint64_t h, std::size_t n, std::uint64_t board)
+{
+    LineRepayMix(h, static_cast<std::uint64_t>(n));
+    LineRepayMix(h, board);
+    return h;
+}
 std::uint64_t LineRepayDigest(const GameState& s, std::size_t n)
 {
     std::uint64_t h = LineRepayDigestSeed(s);
     for (std::size_t i = 0; i < n; ++i) { LineRepayDigestStep(h, s.battlefield[i], s.active_player_index); }
-    return LineRepayDigestFinish(s, h, n);
+    return LineRepayDigestFinish(h, n, LineRepayDigestBoard(s));
 }
 
 struct LineRepayRec
@@ -8181,12 +8192,25 @@ bool LineRepayAcrossDraw(const LineRepayRec& r, const LineRepayRec* const* newer
 // The newest record whose digest matches `s` and is not one of `skip` (a chain does not revisit a payment). A barrier
 // (the last payment on that board cannot be re-made) ends the search: null. A record across a draw matches only
 // when LineRepayAcrossDraw allows it (the chain's newer records are `skip`).
-const LineRepayRec* LineRepayFind(const GameState& s, const LineRepayRec* const* skip = nullptr, int nskip = 0)
+// `full` (optional): LineRepayDigest(s, s.battlefield.size()), from the same pass (LineRepayMemoKey folds it).
+const LineRepayRec* LineRepayFind(const GameState& s, const LineRepayRec* const* skip = nullptr, int nskip = 0,
+                                  std::uint64_t* full = nullptr)
 {
     thread_local std::vector<std::uint64_t> prefix;   // prefix[i]: the permanents hash over the first i (valid to prefix_n)
     std::size_t prefix_n = 0;
     if (prefix.size() < s.battlefield.size() + 1) { prefix.resize(s.battlefield.size() + 1); }
     prefix[0] = LineRepayDigestSeed(s);
+    std::uint64_t board = 0;
+    bool board_done = false;
+    auto board_hash = [&]() { if (!board_done) { board = LineRepayDigestBoard(s); board_done = true; } return board; };
+    auto extend = [&](std::size_t to)   // the running permanents hash, extended to `to` permanents: one pass in all
+    {
+        for (; prefix_n < to; ++prefix_n)
+        {
+            prefix[prefix_n + 1] = prefix[prefix_n];
+            LineRepayDigestStep(prefix[prefix_n + 1], s.battlefield[prefix_n], s.active_player_index);
+        }
+    };
     for (int k = 1; k <= kLineRepayRing; ++k)
     {
         const LineRepayRec& r = t_lr_ring[(t_lr_next - k + kLineRepayRing) % kLineRepayRing];
@@ -8196,15 +8220,17 @@ const LineRepayRec* LineRepayFind(const GameState& s, const LineRepayRec* const*
         bool used = false;
         for (int i = 0; i < nskip; ++i) { if (skip[i] == &r) { used = true; } }
         if (used) { continue; }
-        for (; prefix_n < r.n; ++prefix_n)   // the running permanents hash, extended to this record's prefix: one pass
-        {
-            prefix[prefix_n + 1] = prefix[prefix_n];
-            LineRepayDigestStep(prefix[prefix_n + 1], s.battlefield[prefix_n], s.active_player_index);
-        }
-        if (LineRepayDigestFinish(s, prefix[r.n], r.n) != r.post) { continue; }
+        extend(r.n);
+        if (LineRepayDigestFinish(prefix[r.n], r.n, board_hash()) != r.post) { continue; }
         if (s.players[s.active_player_index].library.size() != r.lib && !(r.undoable && LineRepayAcrossDraw(r, skip, nskip)))
         { continue; }
-        return r.undoable ? &r : nullptr;
+        if (!r.undoable) { return nullptr; }
+        if (full != nullptr)
+        {
+            extend(s.battlefield.size());
+            *full = LineRepayDigestFinish(prefix[s.battlefield.size()], s.battlefield.size(), board_hash());
+        }
+        return &r;
     }
     return nullptr;
 }
@@ -8523,7 +8549,8 @@ bool LineRepaySearch(const LineRepayChain& ch, int k, const GameState& b, std::v
 // `ok_mismatch` for a memoised success whose options differ).
 struct LineRepayMemo
 {
-    std::unordered_set<std::uint64_t> fail;
+    // value: the failure CHARGED (see LineRepayTry's NoteFail): only such a hit or insert binds enclosing computations.
+    std::unordered_map<std::uint64_t, bool> fail;
     // SUCCESSES too (EDF seed 1830138 gi137: 391 tries, every one a depth-2 success of ~6 s, the same re-pay found
     // again and again inside one decision): the key's chain re-made with the options the search picked, oldest last.
     std::unordered_map<std::uint64_t, std::vector<manaoracle::PayOption>> ok;
@@ -8547,11 +8574,37 @@ bool SamePayOption(const manaoracle::PayOption& a, const manaoracle::PayOption& 
 thread_local LineRepayMemo t_lr_memo;
 thread_local std::uint64_t t_lr_last_key = 0;   // MTG_LINE_REPAY_STATS' slow-try line
 constexpr std::size_t kLineRepayMemoCap = std::size_t{1} << 16;   // a same-decision backstop only
-std::uint64_t LineRepayMemoKey(const GameState& s, const LineRepayChain& ch, bool honor_legacy_cco)
+// The per-job lever arms, folded once per arm (perf: re-folding every byte of the arm on every try was half of
+// LineRepayTry's own instructions on Hinata). Re-folded whenever the arm differs from the one last folded (a job
+// switch, or ManaOracle's temporary PAY_ROLLBACK arm), so the fold is always the current arm's.
+std::uint64_t LineRepayArmFold()
+{
+    thread_local heurarm::Arm last = heurarm::Unset();
+    thread_local std::uint64_t fold = 0;
+    thread_local bool valid = false;
+    const heurarm::Arm& arm = heurarm::t_arm;
+    if (!valid || std::memcmp(last.data(), arm.data(), arm.size()) != 0)
+    {
+        last = arm;
+        std::uint64_t h = 0x2545f4914f6cdd1dULL;
+        for (std::size_t i = 0; i < arm.size(); i += 8)
+        {
+            std::uint64_t w = 0;
+            for (std::size_t j = i; j < i + 8 && j < arm.size(); ++j) { w = (w << 8) | static_cast<std::uint8_t>(arm[j]); }
+            LineRepayMix(h, w);
+            h *= 0xbf58476d1ce4e5b9ULL;
+        }
+        fold = h;
+        valid = true;
+    }
+    return fold;
+}
+// `digest` = LineRepayDigest(s, s.battlefield.size()) (LineRepayFind's `full`).
+std::uint64_t LineRepayMemoKey(const GameState& s, const LineRepayChain& ch, bool honor_legacy_cco, std::uint64_t digest)
 {
     std::uint64_t h = TurnSolver::MidTurnStateKeyOf(s);
     auto mix = [&](std::uint64_t v) { h ^= v + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2); h *= 0xbf58476d1ce4e5b9ULL; };
-    mix(LineRepayDigest(s, s.battlefield.size()));
+    mix(digest);
     mix(static_cast<std::uint64_t>(s.players[s.active_player_index].library.size()));
     mix(ch.rec[0]->content);
     mix(ch.rec[1] != nullptr ? ch.rec[1]->content : 0x51ULL);
@@ -8570,13 +8623,7 @@ std::uint64_t LineRepayMemoKey(const GameState& s, const LineRepayChain& ch, boo
     mix(g_seed_pay_hold);
     mix(static_cast<std::uint64_t>(g_plan_reserved_sources.size()));
     for (int x : g_plan_reserved_sources) { mix(static_cast<std::uint64_t>(static_cast<std::uint32_t>(x))); }
-    for (std::size_t i = 0; i < heurarm::t_arm.size(); i += 8)
-    {
-        std::uint64_t w = 0;
-        for (std::size_t j = i; j < i + 8 && j < heurarm::t_arm.size(); ++j)
-        { w = (w << 8) | static_cast<std::uint8_t>(heurarm::t_arm[j]); }
-        mix(w);
-    }
+    mix(LineRepayArmFold());
     return h;
 }
 
@@ -8587,7 +8634,8 @@ bool LineRepayTry(GameState& state, const ManaCost& cost_in, bool for_creature, 
                   bool honor_legacy_cco, PayRefineSnap& undo)
 {
     LineRepayChain ch;
-    ch.rec[0] = LineRepayFind(state);
+    std::uint64_t digest_now = 0;
+    ch.rec[0] = LineRepayFind(state, nullptr, 0, &digest_now);
     if (ch.rec[0] == nullptr) { return false; }
     g_lr_try.fetch_add(1, std::memory_order_relaxed);
     const int a = state.active_player_index;
@@ -8627,10 +8675,15 @@ bool LineRepayTry(GameState& state, const ManaCost& cost_in, bool for_creature, 
     // chain[0] found; the record of the payment before it must match that board (found here, before the search, so
     // the memo key holds the whole chain: nothing is recorded while a re-pay runs, so the depth-2 attempt would
     // find the same record).
-    RampScratch undone_scr(state);
-    GameState& undone = undone_scr.Board();
-    LineRepayUndo(undone, *ch.rec[0]);
-    ch.rec[1] = LineRepayFind(undone, ch.rec, 1);
+    // Found IN PLACE (undone, then put back field by field: PayRefineSnap covers every field LineRepayUndo writes, the
+    // contract `commit` below rests on too), so a memo hit copies no board; the undone copy is made past the memo.
+    {
+        thread_local PayRefineSnap t_find_snap;
+        t_find_snap.Take(state, nullptr);
+        LineRepayUndo(state, *ch.rec[0]);
+        ch.rec[1] = LineRepayFind(state, ch.rec, 1);
+        t_find_snap.Restore(state, nullptr);
+    }
     // A chain is one board growing: a permanent that left between the two payments (the depth-2 record holds more
     // permanents than the newer one) shifts every later one, so the positions the records restore no longer name the
     // same permanents -- and a bounced land replayed into its old slot even matches the digest (Bruna, Boseiju
@@ -8643,29 +8696,39 @@ bool LineRepayTry(GameState& state, const ManaCost& cost_in, bool for_creature, 
         if (!memo.fail.empty() || !memo.ok_p2.empty() || !memo.fail_p1.empty()) { TurnSolver::NoteEpochMemoWrite(); }
         memo.fail.clear(); memo.ok.clear(); memo.ok_p2.clear(); memo.fail_p1.clear(); memo.epoch = epoch;
     }
-    const std::uint64_t mkey = LineRepayMemoKey(state, ch, honor_legacy_cco);
+    const std::uint64_t mkey = LineRepayMemoKey(state, ch, honor_legacy_cco, digest_now);
     t_lr_last_key = mkey;
-    const bool memo_hit = memo.fail.count(mkey) != 0;
+    const auto fail_it = memo.fail.find(mkey);
+    const bool memo_hit = fail_it != memo.fail.end();
     if (memo_hit)
     {
-        // A failure is memoised only once pass 2 ran to its end, so a recompute in a later decision would run it
-        // again: an enclosing cacheable computation is served only within this decision while the memo stands
-        // (MTG_CACHE_HIT_CHARGE, TurnSolver::NoteEpochMemoHit).
-        TurnSolver::NoteEpochMemoHit();
+        // A CHARGED failure (a priced stage admitted a probe, or pass 1 was skipped off the p1 memo) would be
+        // re-searched, priced, by a recompute in a later decision: an enclosing cacheable computation is then served
+        // only within this decision while the memo stands (MTG_CACHE_HIT_CHARGE, TurnSolver::NoteEpochMemoHit). An
+        // UNCHARGED one never read the budget: a recompute anywhere runs the same unpriced stages to the same failure
+        // and charges nothing, so the hit binds nothing (Hinata gi18: binding every hit served 10,309 bp-cache hits
+        // as misses and doubled the bp derivations).
+        if (fail_it->second) { TurnSolver::NoteEpochMemoHit(); }
         g_lr_memo_hit.fetch_add(1, std::memory_order_relaxed);
         if (!LineRepayMemoVerify()) { return false; }
     }
     // Every return below that re-made nothing: a failure, memoised.
+    // CHARGED: set when the search read the budget (a priced probe admitted; a cut is never memoised) or ran off a
+    // memoised empty pass 1 (whose skipped stages a fresh recompute would run, priced). An uncharged failure's insert
+    // changes no recompute's answer or charge, so it does not invalidate bound entries either.
+    bool fail_charged = false;
     struct NoteFail
     {
-        LineRepayMemo& m; std::uint64_t k; bool hit; bool armed = true;
+        LineRepayMemo& m; std::uint64_t k; bool hit; const bool& charged; bool armed = true;
         ~NoteFail()
         {
             if (!armed) { return; }
             if (hit) { return; }
-            if (m.fail.insert(k).second) { TurnSolver::NoteEpochMemoWrite(); }
+            const auto ins = m.fail.emplace(k, charged);
+            if (ins.second) { if (charged) { TurnSolver::NoteEpochMemoWrite(); } }
+            else if (charged && !ins.first->second) { ins.first->second = true; TurnSolver::NoteEpochMemoWrite(); }
         }
-    } note_fail{ memo, mkey, memo_hit };
+    } note_fail{ memo, mkey, memo_hit, fail_charged };
     // Re-make the chain's first `depth` payments on the real board with `pk` (oldest last); false = restored.
     auto commit = [&](const std::vector<manaoracle::PayOption>& pk) -> bool
     {
@@ -8696,6 +8759,9 @@ bool LineRepayTry(GameState& state, const ManaCost& cost_in, bool for_creature, 
     }
     // The boards the depths search from: [0] = chain[0] undone, [1] = chain[0] and chain[1] undone. Each depth's
     // joint bill (a necessary condition) is decided once, for both passes.
+    RampScratch undone_scr(state);
+    GameState& undone = undone_scr.Board();
+    LineRepayUndo(undone, *ch.rec[0]);
     std::optional<RampScratch> undone2_scr;
     const GameState* from[kLineRepayMaxDepth] = { &undone, nullptr };
     if (ch.rec[1] != nullptr)
@@ -8708,6 +8774,7 @@ bool LineRepayTry(GameState& state, const ManaCost& cost_in, bool for_creature, 
     // A VERIFY re-run (a memo hit being re-checked) runs complete and unpriced, so it neither charges the budget
     // nor can be cut: a diagnostic run stays play-identical to a plain one.
     const bool verify_rerun = memo_hit || ok_memo != nullptr;
+    if (verify_rerun) { fail_charged = true; }   // (VERIFY only: kept as binding as before)
     manaoracle::ProbeCharge price;
     price.budget = TurnSolver::DecisionBudget();
     price.per_unit = kLineRepayProbesPerUnit;
@@ -8715,7 +8782,7 @@ bool LineRepayTry(GameState& state, const ManaCost& cost_in, bool for_creature, 
     const auto p1_it = memo.fail_p1.find(mkey);
     const bool p1_empty = p1_it != memo.fail_p1.end();
     // A memoised empty pass 1 changes which stages run (and so what a recompute charges): epoch-bound.
-    if (p1_empty) { g_lr_p1_memo.fetch_add(1, std::memory_order_relaxed); TurnSolver::NoteEpochMemoHit(); }
+    if (p1_empty) { g_lr_p1_memo.fetch_add(1, std::memory_order_relaxed); TurnSolver::NoteEpochMemoHit(); fail_charged = true; }
     // FULL-TABLE EQUIVALENCE (exact; manaoracle::t_full_table_differs): a whole-float stage that searched to its end on
     // tables identical to the full ones has already run the full stage's search, option for option -- on a board with
     // no floating pool and no multi-unit tap's leftover (Sol Ring paid by a Forest, Stompy) the full table adds
@@ -8732,20 +8799,24 @@ bool LineRepayTry(GameState& state, const ManaCost& cost_in, bool for_creature, 
     // no cut: the priced stages never reached the budget, and nothing depends on it.
     struct PricedNote
     {
-        const bool& entered; const manaoracle::ProbeCharge& pr;
+        const bool& entered; const manaoracle::ProbeCharge& pr; bool& charged;
         ~PricedNote()
         {
+            if (pr.probes > 0 || pr.cut) { charged = true; }
             if (!entered) { return; }
             if (pr.probes > 0) { TurnSolver::NoteChargingSubsearch(); }
             else if (pr.cut)   { TurnSolver::NoteSpentCutSubsearch(); }
         }
-    } priced_note{ entered_priced, price };
+    } priced_note{ entered_priced, price, fail_charged };
+    bool p1_pending = false;
     for (int st = 0; st < 2 * kLineRepayMaxDepth; ++st)
     {
         const bool whole_float = st < kLineRepayMaxDepth;
         const int  depth = st % kLineRepayMaxDepth + 1;
-        if (st == kLineRepayMaxDepth && !p1_empty)   // pass 1 ran out, empty and uncut
-        { memo.fail_p1.emplace(mkey, wf_equiv); TurnSolver::NoteEpochMemoWrite(); }
+        // Pass 1 ran out, empty and uncut. Memoised only if pass 2 is then CUT (below): a try that ends in a failure or a
+        // success is answered by `fail` / `ok` before fail_p1 is ever read, so writing it there would only bump the
+        // memo generation and unbind nothing usefully.
+        if (st == kLineRepayMaxDepth && !p1_empty) { p1_pending = true; }
         const GameState* b = from[depth - 1];
         if (b == nullptr) { continue; }
         if (whole_float && p1_empty && !LineRepayMemoVerify()) { continue; }   // pass 1 already re-made nothing here
@@ -8814,6 +8885,8 @@ bool LineRepayTry(GameState& state, const ManaCost& cost_in, bool for_creature, 
         if (st > 0)
         {
             g_lr_p2_probes.fetch_add(price.probes - probes0, std::memory_order_relaxed);
+            g_lr_st_probes[st].fetch_add(price.probes - probes0, std::memory_order_relaxed);
+            g_lr_st_entered[st].fetch_add(1, std::memory_order_relaxed);
             if (LineRepayStatsOn())
             {
                 g_lr_p2_ns.fetch_add(static_cast<long long>(std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -8827,6 +8900,7 @@ bool LineRepayTry(GameState& state, const ManaCost& cost_in, bool for_creature, 
                 // The budget ran out inside a priced stage: nothing found, nothing refuted -- not memoised as a failure.
                 g_lr_p2_cut.fetch_add(1, std::memory_order_relaxed);
                 note_fail.armed = false;
+                if (p1_pending) { memo.fail_p1.emplace(mkey, wf_equiv); TurnSolver::NoteEpochMemoWrite(); }
                 return false;
             }
             continue;

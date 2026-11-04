@@ -10,6 +10,21 @@ Worktree: `/workspaces/MagicDeckTester/.claude/worktrees/agent-a9dab9fbcae918660
 origin/phase-1-2-deck-analyzer 980616e55. Scratch: `/workspaces/MagicDeckTester/build/scratch/mcdragons/`. Helper
 scripts (gitignored): `logs/mcdragons/{mk.py,gate.sh,batch.sh,repro.sh,abrep.py,scprobe.sh}`.
 
+## READ FIRST: Successor 8 (2026-11-04, checkpoint)
+Scratch `build/scratch/mcdragons8/`. Binaries: p9 (in-place rec[1] find + digest board hash), p10 (+ arm fold cached),
+p11 (+ per-stage priced-probe stats `stage(entered/probes)` + UNCHARGED fail-memo entries do not bind/bump).
+HINATA INSTRUCTIONS (perf stat instructions:u, MTG_PGO=0, 3 games seed 1870011 gi10): off 40.87 G; p8 52.28; p9 51.68;
+p10 51.00. PER GAME (gi12..21, p10, `mcdragons8/pg/`): the +25% is NOT LR's own cost -- games whose tree is unchanged
+(m1/bp computation counts equal) cost +1.0% / +2.6% (gi11 +2.2%: off 11.92, p8 12.21, p10 12.18 G); the excess sits in
+games whose tree changed: gi12 +49% (fired 20, memo_hit 196k), gi18 +139% (fired 3,683; bp-cont computations 4,033 ->
+8,386, hits_served_as_misses 10,309, unstorable 784 -- every fail-memo hit was NoteEpochMemoHit, so bp entries bound
+to the epoch got re-derived next decision). p11's fix: a fail entry is CHARGED only if a priced probe ran / pass 2 was
+cut / it ran off the p1 memo; an uncharged hit or insert binds nothing (ManaPayment.cpp LineRepayMemo.fail is now
+key -> charged; fail_p1 is written only when pass 2 is then cut).
+FIVECOLOUR units +2.2%: caches equal on/off (20 games); LR's priced probes = 401 (~100 units) of ~10k units delta;
+fired 70 / 20 games -> the delta is search over re-paid lines. BRUNA +1.2%: p2_probes 23,575 (~5.9k units / 20 g)
+for found_p2=2 -- the priced pass 2 is the cost; p11 stage stats say which stage.
+
 ## READ FIRST: Successor 7 (2026-11-04)
 Worktree head = the commit carrying this section (branch wip/mc-dragons; not pushed, no GT accepted). Scratch
 `build/scratch/mcdragons7/`. Binary under test = `mcdragons7/mtg.p6` / `mtg-test.p6` (= HEAD src, commit d0149cac8).
