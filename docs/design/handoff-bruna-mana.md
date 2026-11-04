@@ -237,3 +237,14 @@ USER questions: (a) raise MTG_MANA_ORACLE_NODES default (8000 cleared every CAPP
 ## Lesson
 `git checkout <file>` to revert one hunk wiped every uncommitted edit in that file (burst lead had to be re-applied
 from memory). Commit WIP before any revert, and revert hunks by editing.
+
+## Successor 3 (2026-11-04 ~10:45 UTC) -- fixes 1, 3, 4 made landable; fix 2 DROPPED
+- Coordinator decision: moved-deck A/B moved1 (seed 42000000, A = fixes off, B = all on) -- Dragons/EDF/FiveColour/
+  Galadriel/Pirates/Melira net 0, Unpredictable Cyclone 300 g 4.9100 -> 4.9200 (net +3). Fix 2 (LINE_CRITICAL_LAND)
+  caused it and was inert on its own target, so its code and unit test are DELETED (no flag left).
+- Pre-squash HEAD kept as `backup/mc-bruna-pre-squash-3` (77d8c7e9f). Squashed to: BIG_SPELL, AURA_HOST_APART,
+  BURST_LEAD (+ test), docs; rebased onto origin/phase-1-2-deck-analyzer 19d9d85e8 with no conflicts.
+- Release build of the rebased tree: mtg-test 2564/2564 pass; the BURST_LEAD test FAILS with MTG_PAY_BURST_LEAD=0.
+- Smoke (THREADS=8 MTG_PGO=0, build/scratch/mc-bruna/smoke_s3.txt): 167 pass, 2 FAIL, both Bruna: bruna d0
+  digest-only (5.9380), bruna d5 4.7133 -> 4.7067; searched slower=0 faster=1. Every other deck byte-identical.
+  GT NOT accepted.
