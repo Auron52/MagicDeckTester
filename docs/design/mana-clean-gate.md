@@ -51,14 +51,26 @@ up to the same cap as the ISSUE classes.
 matters' deck that needs to reach certain breakpoints."* In such a deck a payment a life short can be the breakpoint
 missed. A deck counts when a card on either board reads its controller's life total against a threshold. The test is
 `LIFE_BREAKPOINT` in `scripts/mana_clean.py`, run on the cards.json oracle text with the bracket notes cut. A "gained N
-or more life this turn" clause does not count, because paying life does not reduce life gained. As of 2026-11-03 the
-shipping decks this catches are:
+or more life this turn" clause does not count, because paying life does not reduce life gained. Cards whose clause is
+no goldfish breakpoint are listed in `NOT_A_BREAKPOINT` (USER 2026-11-04): Elderscale Wurm (*"It doesn't mind you being
+injured."*), Ajani, Strength of the Pride (*"only relevant in 1v1, not goldfish"*) and Bilbo, Birthday Celebrant
+(*"drop from consideration for this just to save unnecessary work"*). As of 2026-11-04 the shipping decks this catches
+are:
 
 - Angels (Righteous Valkyrie)
 - Colossus Hammer (Speaker of the Heavens)
-- CritterLifegain and LifegainHeliodCombo (Serra Ascendant, Ajani, Strength of the Pride)
-- Prevent Damage (Bilbo, Birthday Celebrant)
-- StompySurprise (Elderscale Wurm)
+- CritterLifegain and LifegainHeliodCombo (Serra Ascendant)
+
+Prevent Damage and StompySurprise left the list on 2026-11-04 (Bilbo, Elderscale Wurm).
+
+**Per-deck allowances (USER 2026-11-04).** *"Sure, you can build it. I would rather minimize the exceptions, though, as
+using this too much could get in the way of actually finding issues."* A deck may carry
+`decks/<Deck>/<stem>.mana_clean.json`:
+`{"allow": [{"class": "CAPPED", "match": "<regex on the whole flag line>", "reason": "...", "approved": "USER <date>:
+<quote>"}]}`. A flag of a failing class whose whole line matches an entry is scored as `ALLOWED` (counted and disclosed,
+never failed). Every entry needs the USER's approval and the gate refuses a file with an unapproved one; an agent
+proposes an entry, never adds one. Entries apply when a run is scored (the whole flag line is needed), so a new entry
+takes effect on the next run, not on `rescore`. As of 2026-11-04 no deck has one.
 
 Each record stores the deck's `issue_classes` and the `life_breakpoints` cards that put it there. The USER noted that
 CritterLifegain plays no card that costs life, so the class cannot fire there; it passed its first 100,000 games

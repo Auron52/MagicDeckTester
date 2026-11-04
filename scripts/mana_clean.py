@@ -81,6 +81,37 @@ DISCLOSED = ["DOMINATED-LIFE"]
 ISSUE = [c for c in mo.MISS if c not in DISCLOSED] + ["ORACLE-GAP", "UNMODELED", "CAPPED"]
 LIFE_BREAKPOINT = re.compile(r"\bat least \d+ life\b|(?<!gained )\b\d+ or more life\b|\blife total is (?:less|greater) than \d+",
                              re.I)
+# Cards whose life clause is NOT a goldfish breakpoint (USER 2026-11-04), so they do not make DOMINATED-LIFE fail.
+NOT_A_BREAKPOINT = {
+    "Elderscale Wurm": "USER: \"I wouldn't check against Elderscale Wurm. It doesn't mind you being injured.\"",
+    "Ajani, Strength of the Pride": "USER: \"Ajani, Strength of the Pride's ability is only relevant in 1v1, not goldfish.\"",
+    "Bilbo, Birthday Celebrant": "USER: \"Bilbo I would also drop from consideration for this just to save unnecessary "
+                                 "work.\"",
+}
+# PER-DECK ALLOWANCES (USER 2026-11-04: "Sure, you can build it. I would rather minimize the exceptions, though, as
+# using this too much could get in the way of actually finding issues"). `<deck dir>/<stem>.mana_clean.json`:
+#   {"allow": [{"class": "CAPPED", "match": "<regex on the whole flag line>", "reason": "...",
+#               "approved": "USER <date>: <quote>"}]}
+# A flag of a failing class whose whole line matches an entry is recorded as ALLOWED (counted and disclosed, never
+# failed). An entry needs the USER's approval; an agent never adds one. Applied when a run is scored (the whole line
+# is needed), so a new entry takes effect on the next run, not on `rescore`.
+ALLOWED = "ALLOWED"
+
+
+def allowances(deck_path):
+    """-> [(class, compiled regex)] from the deck's allowance file, [] when it has none."""
+    path = Path(os.path.join(ROOT, deck_path))
+    f = path.with_name(path.stem + ".mana_clean.json")
+    if not f.exists():
+        return []
+    out = []
+    for e in json.load(open(f)).get("allow", []):
+        if not e.get("approved", "").startswith("USER"):
+            sys.exit("mana_clean: %s: an allowance needs the USER's approval (\"approved\": \"USER ...\")" % f)
+        out.append((e["class"], re.compile(e["match"])))
+    return out
+
+
 COUNTER = re.compile(r"^\[mana-oracle\] (?P<cls>[A-Z-]+) seed=\d+ job=(?P<job>\S+)")
 
 
@@ -97,7 +128,7 @@ def life_breakpoints(deck_path):
         _CARDS = {c.get("name"): (c.get("oracle_text") or "").split("[")[0] for c in rows if isinstance(c, dict)}
     path = Path(os.path.join(ROOT, deck_path))
     names = set(LoadDeckCounts(path, "main")) | set(LoadDeckCounts(path, "side"))
-    return sorted(n for n in names if LIFE_BREAKPOINT.search(_CARDS.get(n, "")))
+    return sorted(n for n in names if n not in NOT_A_BREAKPOINT and LIFE_BREAKPOINT.search(_CARDS.get(n, "")))
 
 
 def issue_classes(deck_path):
@@ -202,7 +233,7 @@ def pick(names, decks):
     return out
 
 
-def run_arm(mtg, manifest, level, out_path, err_path, threads):
+def run_arm(mtg, manifest, level, out_path, err_path, threads, allow=None):
     """One pooled batch. stdout (the per-job result lines) to `out_path`; stderr filtered into `err_path`:
     ISSUE and DISCLOSED flag lines whole (the first DETAIL_CAP per deck and class), every other flag cut to a one-line
     counter, everything else as is. The counters keep every count exact."""
@@ -213,9 +244,13 @@ def run_arm(mtg, manifest, level, out_path, err_path, threads):
                              stderr=subprocess.PIPE, env=env, cwd=ROOT, text=True, errors="replace", bufsize=1)
         for ln in p.stderr:
             m = COUNTER.match(ln)
+            if m and m.group("cls") in ISSUE and any(c == m.group("cls") and rx.search(ln)
+                                                      for c, rx in (allow or {}).get(m.group("job").split("__g")[0], [])):
+                ln = ln.replace("[mana-oracle] %s " % m.group("cls"), "[mana-oracle] %s " % ALLOWED, 1)
+                m = COUNTER.match(ln)
             if m and m.group("cls") != "DECISION":
                 key = (m.group("job").split("__")[0], m.group("cls"))
-                if m.group("cls") in ISSUE + DISCLOSED and whole[key] < DETAIL_CAP:
+                if m.group("cls") in ISSUE + DISCLOSED + [ALLOWED] and whole[key] < DETAIL_CAP:
                     whole[key] += 1
                     se.write(ln)
                 else:
@@ -369,7 +404,8 @@ def cmd_run(args, decks):
               % (arm, k, len(todo), sum(j["games"] for j in todo), len({group(j["name"]) for j in todo}), mtg),
               file=sys.stderr, flush=True)
         rc[arm] = run_arm(mtg, manifest, level, os.path.join(scratch, "%s.%d.out" % (arm, k)),
-                          os.path.join(scratch, "%s.%d.err" % (arm, k)), args.threads)
+                          os.path.join(scratch, "%s.%d.err" % (arm, k)), args.threads,
+                          {pd["key"]: allowances(pd["deck"]) for pd in plan["decks"]})
 
     # Gather, counting each chunk only from the attempt that finished it (an interrupted attempt's
     # partial lines for a chunk that a later attempt re-ran must not count twice).
