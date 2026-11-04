@@ -1405,3 +1405,24 @@ deterministic; thread-ms ran on a shared box.
 3. The consistent pick-timing rule. The rows it would move are Search for Tomorrow, Emeria, Grace and Titan's attack.
 4. The Crop Rotation pin bug.
 5. When to build the on-demand sac-for-mana payer (`docs/design/sac-for-mana-on-demand.md`).
+
+### USER rulings on the Lake/Profane decisions (2026-11-04, verbatim)
+
+1. Main-phase split scope: *"With no search that is fine."* (searched play only; the d0 runner keeps main 2.)
+2. DT vs Intent order: *"Yes, this order doesn't matter. Stick with what you have."*
+3. Adopt the Lake fold + Profane change: *"Sure, if there is no performance drawbacks that sounds like an
+   improvement."* OWED before landing: a clean timing A/B (the pooled A/B showed thread-ms +6.7% to +18.6% on the
+   fold arms against -1.7% units; the arms disagree with each other, so it is noise or a real fold cost to fix).
+4. The executor's upkeep falling back to the provider's Profane pick: *"We should search and use a heuristic on
+   that decision like any other."* OWED: make that upkeep a searched decision (provider order), not a fallback.
+5. Search for Tomorrow / Emeria / Abiding Grace / Titan attack trigger: *"Yes, I agree that this is a separate
+   change, but really it makes the most sense to decide what you need in the context of the situation at the
+   time it is cast."* OWED as a separate change: decide at resolution.
+6. Crop Rotation: *"If that is in the engine there should be search, but the only deck with the card (Creature
+   Giving) has a serious pruning heuristic which should remain."* OWED: wire the searched pick at resolution;
+   keep Creature Giving's prune.
+7. On-demand Lotus/Lake payer timing: *"Any order is fine from my perspective, so after seems good."* After the
+   main-phase work (`docs/design/sac-for-mana-on-demand.md`).
+8. Greedy leaf: *"When done with some other work we should measure and decide. I would like to compare it to
+   budget changes etc., since it seems like the deck is budget-starved."* OWED: one comparison of leaf0, the
+   leafless shapes and plain budget increases (same cost axis), after the main-phase and Lake/Profane cuts.
