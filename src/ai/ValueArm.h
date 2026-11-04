@@ -155,6 +155,8 @@ struct Arm
     // per walk apply. Per-job so the off arm and a price sweep share one pooled batch.
     // -1 unset => env (default 0 = off) | 0 off | > 0 on at that price.
     int         aa_route_units    = -1;
+    // TEMPORARY DIAGNOSTIC (LINE_REPAY re-pricing A/B, successor 9): probes per charged unit; -1 => env/default.
+    int         lr_probes_per_unit = -1;
     // CHAIN-SLOT COUNT (MTG_BP_CHAIN_SLOT): how many chain continuations get a reserved breakpoint
     // slot. Here rather than in heurarm for the same reason as solve_charge_w -- the knob is an int
     // (0 = arm off, 1 = shipped default, 2 = reachable) and heurarm::Arm is boolean-only -- and for

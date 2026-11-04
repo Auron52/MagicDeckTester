@@ -8,6 +8,7 @@
 #include "PayLedger.h"            // MTG_PAY_ROLLBACK_AUDIT: the rollback's count-only instrument
 #include "PayRollback.h"          // MTG_PAY_ROLLBACK: the rollback itself (ledger on the state)
 #include "ManaOracle.h"           // MTG_MANA_ORACLE: the scripted-payment hook (null unless the oracle runs)
+#include "ValueArm.h"             // TEMP: lr_probes_per_unit (re-pricing A/B)
 #include "../cards/CardDatabase.h"
 #include "../core/SpellEffects.h"
 #include "../core/GameLogger.h"   // g_real_resolution (TEMP MTG_TAPDBG diagnostic)
@@ -18,6 +19,7 @@
 #include <bit>          // std::popcount (the ramp-filter feed charge; MSVC has no __builtin_popcount)
 #include <atomic>
 #include <cstdio>
+#include <cstdlib>   // TEMP: std::getenv / std::atoi (MTG_LR_PROBES_PER_UNIT)
 #include <cstring>   // std::strchr -- the pre-tap colour alphabet lookup
 #include <deque>     // PaySnapScratch's stable-address pool
 #include <functional>
@@ -8409,6 +8411,13 @@ bool LineRepayRemakeAt(GameState& b, const LineRepayChain& ch, int k, const mana
 // over-charged 4-15x: the units census grew 3-8% on decks where nothing was re-made (Angels +3.3%, 0 digests moved)
 // and the decision budget lost that much search. 4 is the dear end of the measured range -- the safe side for wall.
 constexpr int kLineRepayProbesPerUnit = 4;
+// TEMPORARY DIAGNOSTIC (successor 9): MTG_LR_PROBES_PER_UNIT=<n> overrides the price for a re-pricing A/B.
+int LineRepayProbesPerUnit()
+{
+    static const int n = [] { const char* e = std::getenv("MTG_LR_PROBES_PER_UNIT"); const int v = e ? std::atoi(e) : 0;
+                               return v > 0 ? v : kLineRepayProbesPerUnit; }();
+    return valuearm::t_arm.lr_probes_per_unit > 0 ? valuearm::t_arm.lr_probes_per_unit : n;
+}
 // MTG_LINE_REPAY_MEMO_VERIFY (diagnostic; play-identical): every memo hit and every joint-bill prune is re-checked by
 // the complete, unpriced search, and a disagreement counted (LineRepayStats).
 bool LineRepayMemoVerify() { static const bool on = EnvOn("MTG_LINE_REPAY_MEMO_VERIFY"); return on; }
@@ -8777,7 +8786,7 @@ bool LineRepayTry(GameState& state, const ManaCost& cost_in, bool for_creature, 
     if (verify_rerun) { fail_charged = true; }   // (VERIFY only: kept as binding as before)
     manaoracle::ProbeCharge price;
     price.budget = TurnSolver::DecisionBudget();
-    price.per_unit = kLineRepayProbesPerUnit;
+    price.per_unit = LineRepayProbesPerUnit();
     std::vector<manaoracle::PayOption> picked;
     const auto p1_it = memo.fail_p1.find(mkey);
     const bool p1_empty = p1_it != memo.fail_p1.end();
@@ -8932,6 +8941,20 @@ bool LineRepayTry(GameState& state, const ManaCost& cost_in, bool for_creature, 
     return false;
 }
 } // namespace
+
+// Drop this thread's LINE_REPAY records and memo at the start of a game (TurnSolver::ClearPerGameCaches). The ring is
+// found by CONTENT (TurnSeq, active player, digest), so a record left by an earlier game on the same batch worker
+// could match a board of this one while the game has pushed fewer than kLineRepayRing records of its own -- and be
+// re-made from the OTHER game's pre-board. That is a correctness hazard and makes a game's play and units depend on
+// which games shared its thread. The memo is DecisionEpoch-scoped (a thread-monotonic counter) and cannot match
+// across games; it is cleared too so a new game starts from empty storage by construction.
+void LineRepayClearPerGame()
+{
+    for (LineRepayRec& r : t_lr_ring) { r = LineRepayRec{}; }
+    t_lr_next = 0;
+    t_lr_memo.fail.clear(); t_lr_memo.ok.clear(); t_lr_memo.ok_p2.clear(); t_lr_memo.fail_p1.clear();
+    t_lr_memo.epoch = ~0ULL;
+}
 
 bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creature,
                       ManaPool* available, bool honor_legacy_cco)

@@ -10,6 +10,15 @@ Worktree: `/workspaces/MagicDeckTester/.claude/worktrees/agent-a9dab9fbcae918660
 origin/phase-1-2-deck-analyzer 980616e55. Scratch: `/workspaces/MagicDeckTester/build/scratch/mcdragons/`. Helper
 scripts (gitignored): `logs/mcdragons/{mk.py,gate.sh,batch.sh,repro.sh,abrep.py,scprobe.sh}`.
 
+## READ FIRST: Successor 9 (2026-11-04; LAST ROUND before the line is parked for the USER) -- CHECKPOINT
+Scratch `build/scratch/mcdragons9/`. p12 = HEAD src + (a) LineRepayClearPerGame (ring + memo cleared in
+TurnSolver::ClearPerGameCaches) and (b) a TEMPORARY per-job price lever (`lr_probes_per_unit` manifest key /
+MTG_LR_PROBES_PER_UNIT; ValueArm.h) for a re-pricing A/B. In progress: id11s (1-thread p11) vs id11 (4-thread p11):
+11/11 equal digests AND units so far -- the p7-vs-p11 unit diffs are p11's own charging change, not thread history.
+EDF LR stats (ab7 job off25, 25 g): full1 = 1,818 entries / 219,685 probes, found_p2 = 0; 243k probes / 4 = ~61k units
+= the whole +58.8k units delta. d8 b0: EDF 323 off 3 / on 4 (nc0), 3 / 3 under MTG_NC_SEARCH=1; niv 372/419 recover.
+A/B ab9 (off / on@4 / on@12, seed 1880001, EDF Hinata Niv Bruna Dragons): see `mcdragons9/ab9/`.
+
 ## READ FIRST: Successor 8 (2026-11-04; stopped at the context cap -- successor 9 continues)
 Worktree head = the commit carrying this section (wip/mc-dragons, not pushed, no GT accepted). Scratch
 `build/scratch/mcdragons8/`. Binary under test = `mcdragons8/mtg.p11` / `mtg-test.p11` (= HEAD src).

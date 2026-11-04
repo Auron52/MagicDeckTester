@@ -87337,6 +87337,8 @@ void TurnSolver::ClearBreakpointCachesForDiagnostic()
     bpcanon::t_fronts.clear();
 }
 
+void LineRepayClearPerGame();   // ManaPayment.cpp: the MTG_LINE_REPAY record ring and memo
+
 void TurnSolver::ClearPerGameCaches()
 {
     plancache::RecordGamePeak();   // MTG_PLAN_POOL_STATS: the finished game's peak holding
@@ -87385,6 +87387,8 @@ void TurnSolver::ClearPerGameCaches()
     // The payable-mana cache (SpellEffects.cpp): pure in design, but every key hole it has had was a
     // cross-game channel because it outlived the game -- see ManaCacheClearPerGame.
     ManaCacheClearPerGame();
+    // The LINE_REPAY record ring (found by content, so an earlier game's record could be re-made) -- see the definition.
+    LineRepayClearPerGame();
     treereuse::ClearGame();   // MTG_TREE_REUSE_PROBE (diagnostic; empty when off)
     GameLineCacheClear();     // MTG_GAME_LINE_CACHE (empty when off)
 }
