@@ -83,6 +83,40 @@ counted.
 
 ## 1. Proposed main phase per card
 
+**SUPERSEDED by the USER ruling below (2026-11-04).** The per-card "main 1 by default" table that follows is
+kept for the record; the rule that will be built is this one.
+
+USER 2026-11-04 (verbatim): *"Main 1 is usually okay I think. Realistically all of the good acceleration is to
+land Thrumming Stone as soon as possible. The chip damage is rarely relevant, though you do make a good point
+that perhaps it would make sense to play this a bit differently and do most things in main 2 instead. The only
+cases main 1 is required are: 1. Sacrifice for Jetmir when you have attackers. 2. Drop a bunch of shadowborns
+off Thrumming stone to enable 1. (note that this must not sacrifice all of the attackers) What it really comes
+down to is that you don't need to do it main 1 unless you are deploying Jetmir with current-turn attackers. If
+you aren't, then you do it main 2 instead."* and *"(or I guess if Jetmir is already out)"*.
+
+**The rule.** A main-1 plan (beyond the land drop) is admitted only on a **Jetmir turn**: this turn has
+attack-ready creatures AND either (a) the plan deploys Jetmir (the Apostle activation), with at least one
+attacker still on the battlefield after the plan's sacrifices (Culling, Intent, the six), or (b) Jetmir is
+already on the battlefield, so every body added in main 1 raises its 3/6/9 count for this combat. On every
+other turn, all casts, suspends and activations are made in main 2.
+
+**Why it is sound (a dominance fold, default ON).** Off a Jetmir turn, nothing cast in main 1 changes this
+combat: the Apostles and Harpies enter summoning sick, no anthem reads the count, and land / Lake / Lotus mana
+is still there after combat. A main-1 sacrifice can only cost an attacker's damage. So the main-2 version of
+every such plan is at least as good, and the fold removes the main-1 duplicate of the whole turn.
+
+**Interactions.**
+* The INT-9 Demon-timing table said "sick turn: Overlord then Jetmir, main 1 only". Under this rule a turn with
+  no attackers is not a Jetmir turn, so that turn moves to main 2 (same result, the other main). The
+  attack-turn rows (Jetmir main 1 when it raises this turn's damage; Overlord main 2) are unchanged and are
+  exactly case (a).
+* The land drop stays main 1 (earlier ruling), except a land fetched in main 2.
+* Section 2's cast order applies inside whichever main the turn uses.
+* **Build:** this is a PLAN-level test (it reads whether the plan fetches Jetmir and what survives its
+  sacrifices), so the per-action `CollectedActionAllowed` hook is not enough; it needs a provider hook that
+  admits or folds a whole main-1 plan, applied in the search, the rollout and the executor alike. Questions 1
+  and 2 in section 6 are answered by this rule.
+
 **Why main 1 is always at least as good** (the dominance argument the table relies on). In this
 goldfish, combat creates nothing a later cast can use:
 
