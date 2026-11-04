@@ -453,7 +453,7 @@ X=0 and X=100 before). Next slowest 87 s (kitty_v1vscur_2hg_cur gi20037), then 7
   step 21426, greedy 569, enum 18455, plans 2866, odo 511, apply 8097, pay 2561, simkey 3749, interior 586.
   priced actual/pred p95 1.57 (slowest 1%: 1.78) vs units-only 3.29 (7.45). Per-deck priced ns/unit (aggregate):
   goblins 14.8k ... median 28.3k ... hinata 40.4k, alchemist 45.7k, kittyv3 54.9k, dragonstorm 63.8k, edf 103.5k.
-- UNCOMMITTED SRC in this worktree (prototype, default OFF => only the price constants change default play, via
+- SRC committed as WIP on budget-rebalance ONLY (NOT shared; prototype, default OFF => only the price constants change default play, via
   the X=100 priced ceiling's trip points):
   * src/core/WorkCounters.h: kPriceNs refit + kInteriorNs=586.
   * src/ai/DecisionWorkMeter.h: namespace pricedbudget at end of file -- UnitNs() (per-job arm valuearm
