@@ -67,6 +67,18 @@ static std::vector<std::string> LiveTutorCandidates(const GameState& state, int 
     return cands;
 }
 
+// The menu width of a suspended tutor's fetch at THIS resolution state: the distinct names PerformTutor's scripted
+// index ranks over (LiveTutorCandidates, deduped in list order), capped by the provider's TutorSearchWidth -- the
+// width every tutor axis uses. Read only by the crossing's probe (BoundaryFan), never by play.
+int SuspendTutorPickWidth(const GameState& state, int controller, const CardParams& pp)
+{
+    const std::vector<std::string> cands = LiveTutorCandidates(state, controller, pp);
+    std::vector<std::string> uniq;
+    for (const std::string& c : cands) { if (std::find(uniq.begin(), uniq.end(), c) == uniq.end()) { uniq.push_back(c); } }
+    const int w = std::max(1, ResolveProvider(state).TutorSearchWidth());
+    return std::max(1, std::min(static_cast<int>(uniq.size()), std::min(w, kLandSearchPinMask + 1)));
+}
+
 static TutorAskResult AskHumanTutorPick(GameState& state, int controller_index,
                                         const CardParams& pp, const std::string& source_name,
                                         const std::string& baked, std::string& out)

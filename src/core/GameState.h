@@ -1155,6 +1155,14 @@ struct GameState
     // Index into GameEngine::UpkeepTutorOptions at the NEXT upkeep: 0 holds, positive
     // choices pay for an instant tutor-to-top before the draw. Cleared at that upkeep.
     std::int16_t             scripted_upkeep_tutor = -1;
+    // PROFANE TUTOR's off-suspend FETCH (MTG_PROFANE_RESOLVE_FAN, default ON): a suspended tutor_to_hand card
+    // arriving at the NEXT upkeep. PACKED kLandSearchPinBits per tutor-search ordinal at that upkeep, in
+    // resolution order (a ripple free copy's own search first, then the arrival's), each a rank into the
+    // resolution-state candidate list. Decided where the search CROSSES into that upkeep (TurnSolver
+    // BoundaryFan, the Defense of the Heart route), never staged in a main-phase plan. -1 = unpinned = the
+    // provider's front (beyond the horizon only: the permitted playout). Consumed in CastOffSuspend; whatever is
+    // left expires with the upkeep (ProcessSuspendArrivals). FUTURE-DETERMINING: folded value-gated.
+    std::int16_t             scripted_suspend_tutor = -1;
     // ORDER-CONDEMNATION snapshot (USER model, 2026-08-19: the search decides what to cast,
     // "limited to what our order allows" -- a Main1-classified card the pre-combat decision
     // passed on is CONDEMNED for the rest of the turn; "main 2 should not re-litigate the whole

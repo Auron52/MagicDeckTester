@@ -2630,6 +2630,24 @@ inline int ConsumePackedLandSearchPin(int& packed)
     if (packed == 0) { packed = -1; }
     return k;
 }
+// PROFANE TUTOR's fetch at RESOLUTION (MTG_PROFANE_RESOLVE_FAN, DEFAULT ON; =0 -> the old main-phase pin on the
+// upkeep land-search stream). See GameState::scripted_suspend_tutor and TurnSolver's BoundaryFan.
+inline bool ProfaneResolveFanOn()
+{
+    static const bool e = EnvOn("MTG_PROFANE_RESOLVE_FAN", true);
+    return heurarm::Flag(heurarm::PROFANE_RESOLVE_FAN, e);
+}
+// At most this many suspended-tutor searches per upkeep are pinned (two ordinals fit the int16 pin; a deck with two
+// Profane Tutors never resolves more -- two arrivals leave no copy to ripple into, one arrival + one free copy is two).
+constexpr int kSuspendTutorPinOrdinals = 2;
+// The crossing's width probe (BoundaryFan::Cross): each suspended-tutor search at the upkeep records its menu width
+// (the distinct resolution-state candidates, capped by the provider's TutorSearchWidth). nullptr outside a probe.
+struct SuspendTutorProbe { int n = 0; int size[kSuspendTutorPinOrdinals] = { 1, 1 }; };
+inline thread_local SuspendTutorProbe* t_suspend_tutor_probe = nullptr;
+// Diagnostic hook (MTG_STUT_AXIS_STATS, TurnSolver): an UNPINNED suspended-tutor search, so the search can count
+// the ones resolved inside the window (must read 0) apart from the permitted playout ones.
+inline void (*g_stut_unpinned_hook)(const GameState&) = nullptr;
+int SuspendTutorPickWidth(const GameState& state, int controller, const CardParams& pp);   // SpellEffects.cpp
 // `put_credit` (land-search gap 2): the land-put mana credit the CAST was emitted with
 // (Action::rock_mana on a LandSearchPutsUntapped cast), which restricts the pick to the picks earning
 // exactly that credit -- see LandSearchCreditGroups. nullptr / empty = unrestricted (every other site).
@@ -21708,7 +21726,22 @@ inline void CastOffSuspend(GameState& state, int controller, const Card& card)
         // suspended tutor never takes this branch -> byte-identical.
         else if (def->params.tutor_to_hand)
         {
-            const int pin   = ConsumePackedLandSearchPin(state.scripted_upkeep_land_search);
+            int pin = -1;
+            if (ProfaneResolveFanOn())
+            {
+                // The fetch decided at the crossing into THIS upkeep (scripted_suspend_tutor), never in a plan.
+                int packed = state.scripted_suspend_tutor;
+                pin = ConsumePackedLandSearchPin(packed);
+                state.scripted_suspend_tutor = static_cast<std::int16_t>(packed);
+                if (SuspendTutorProbe* pr = t_suspend_tutor_probe)
+                {
+                    if (pr->n < kSuspendTutorPinOrdinals)
+                    { pr->size[pr->n] = SuspendTutorPickWidth(state, controller, def->params); }
+                    ++pr->n;
+                }
+                if (pin < 0 && g_stut_unpinned_hook != nullptr) { g_stut_unpinned_hook(state); }
+            }
+            else { pin = ConsumePackedLandSearchPin(state.scripted_upkeep_land_search); }
             const int saved = g_scripted_tutor_choice;
             g_scripted_tutor_choice = pin;
             PerformTutor(state, controller, def->params, /*target_name=*/std::string{}, card.m_name.str(),
@@ -22065,7 +22098,7 @@ inline void ProcessSuspendArrivals(GameState& state, int controller)
     struct UpkeepPinExpiry
     {
         GameState& st;
-        ~UpkeepPinExpiry() { st.scripted_upkeep_land_search = -1; }
+        ~UpkeepPinExpiry() { st.scripted_upkeep_land_search = -1; st.scripted_suspend_tutor = -1; }
     } _upkeep_pin_expiry{ state };
     if (pl.suspended_cards.empty()) { return; }
     std::vector<SuspendedCard> remaining;
@@ -46721,7 +46754,8 @@ inline void ResolveSuspendRipple(GameState& state, int controller, const CardDef
         {
             const CardDefinition* md = CardDatabase::Instance().LookupCached(c);
             if (md != nullptr && !md->card.IsPermanentCard()
-                && (IsLibraryTutor(md->params) || md->params.land_search_on_resolve)) { consumed_search = true; }
+                && ((IsLibraryTutor(md->params) && !ProfaneResolveFanOn()) || md->params.land_search_on_resolve))
+            { consumed_search = true; }   // a free TUTOR's search rides scripted_suspend_tutor (MTG_PROFANE_RESOLVE_FAN)
             ++t_suspend_ripple_depth;
             CastOffSuspend(state, controller, c);
             --t_suspend_ripple_depth;

@@ -710,7 +710,7 @@ inline bool CarriesPostApplyPin(const TurnSolver::Plan& p)
         || p.attack_land_search_choice >= 0 || p.combat_crack_choice >= 0 || p.discard_choice >= 0
         || p.vial_charge_choice >= 0 || p.saga_target_choice >= 0 || p.upkeep_land_search_choice >= 0
         || p.grace_choice >= 0 || p.upkeep_gy_reanimate_choice >= 0 || p.demon_trigger_choice >= 0
-        || p.upkeep_tutor_choice >= 0 || p.echo_choice >= 0
+        || p.upkeep_tutor_choice >= 0 || p.suspend_tutor_choice >= 0 || p.echo_choice >= 0
         || p.doth_put_choice >= 0
         || p.atk_dork_release >= 0 || p.combat_landfall_target_choice >= 0 || p.landfall_target_choice >= 0
         || p.cast_trigger_target_choice >= 0
@@ -758,6 +758,7 @@ inline void RecordReSolveRealized(const GameState& s, const TurnSolver::Plan& p,
     if (p.upkeep_gy_reanimate_choice >= 0
         && s.scripted_upkeep_gy_reanimate != p.upkeep_gy_reanimate_choice)                       { ok = false; }
     if (p.upkeep_tutor_choice >= 0 && s.scripted_upkeep_tutor != p.upkeep_tutor_choice)            { ok = false; }
+    if (p.suspend_tutor_choice >= 0 && s.scripted_suspend_tutor != p.suspend_tutor_choice)          { ok = false; }
     if (p.demon_trigger_choice >= 0 && s.scripted_demon_trigger != p.demon_trigger_choice)      { ok = false; }
     if (p.upkeep_land_search_choice >= 0 && s.scripted_upkeep_land_search != p.upkeep_land_search_choice) { ok = false; }
     if (p.echo_choice >= 0             && s.scripted_echo != p.echo_choice)                        { ok = false; }

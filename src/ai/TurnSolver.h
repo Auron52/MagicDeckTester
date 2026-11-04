@@ -1786,6 +1786,10 @@ public:
         // Next upkeep's paid tutor-to-top choice: 0 hold, positive index into the
         // live payable source/target menu. The boundary fan chooses it before draw.
         std::int16_t upkeep_tutor_choice = -1;
+        // Profane Tutor's off-suspend fetch at the NEXT upkeep (MTG_PROFANE_RESOLVE_FAN), packed per tutor-search
+        // ordinal: chosen by the BOUNDARY FAN where the search crosses into that upkeep and recorded on the plan of
+        // the turn that crossed (never a main-phase axis variant); written to GameState::scripted_suspend_tutor.
+        std::int16_t suspend_tutor_choice = -1;
 
         // Ponder-style REORDER disposition: which candidate of TopDispositionCandidates(Reorder) the
         // reorder takes. -1 == the provider heuristic, byte-identical to no branch. The FULL set
@@ -2657,6 +2661,14 @@ public:
     // reports: [0] F2 exactly sized fans, [1] F3 mirror ranks declined, [2] F4 stranding ranks declined, [3] F5
     // cross-base ranks declined, [4] Q36 seed variants not emitted. Monotonic; a caller diffs around its work.
     static void              SoundFoldCounters(long long out[5]);
+    // The idle land-crack fold (MTG_IDLE_CRACK_FOLD, TurnSolver.cpp FoldIdleLandCracks): process-wide counts of
+    // crack plans tested against a crack-less sibling and folded onto it. Monotonic.
+    static void              IdleCrackFoldCounters(long long* tested, long long* folded);
+    // Test hook: every crossing BoundaryFan makes from `state` -> (Profane-fetch pin recorded or -1, hand.front()).
+    static std::vector<std::pair<int, std::string>> SuspendTutorBoundaryForTest(const GameState& state);
+    // Test hook: run the fold over an explicit plan list (the list EnumeratePlans would return).
+    static std::vector<Plan> FoldIdleLandCracksForTest(const GameState& state, bool is_pre_combat,
+                                                       std::vector<Plan> plans);
     // True inside a horizon playout -- beyond the search window, where a greedy policy is permitted.
     static bool              InRolloutPlayout();
     // True inside the depth-0 executor's greedy pick (a GreedyPermit(D0Runner) is live) -- the
@@ -3749,6 +3761,7 @@ public:
         // caller stamps it there (StampBoundaryPins); -2 = nothing chosen. Never set by FSLineWin itself.
         int boundary_doth = -2;
         int boundary_tutor = -2;
+        int boundary_stut = -2;   // ...and Profane Tutor's off-suspend fetch (Plan::suspend_tutor_choice)
     };
 
     // fd-oracle diagnostic (MTG_FD_ORACLE only, inert otherwise): the smallest WIN-CLAIMING estimate

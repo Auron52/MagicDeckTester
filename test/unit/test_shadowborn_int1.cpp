@@ -237,8 +237,9 @@ TEST_CASE("Profane Tutor off suspend: the upkeep pin is a rank into the resoluti
         // INT-4 restricted the deck's tutor list (USER 2026-11-03): a Stone + an Apostle give it >= 2 names.
         s.players[0].library.push_back(FullCardSb("Thrumming Stone", 94));
         s.players[0].library.push_back(FullCardSb("Shadowborn Apostle", 95));
-        // One packed ordinal: rank `pin` for the first search-bearing arrival (-1 = unpinned = front).
-        s.scripted_upkeep_land_search = pin;
+        // One packed ordinal: rank `pin` for the first suspended-tutor search (-1 = unpinned = front). Since
+        // MTG_PROFANE_RESOLVE_FAN (2026-11-04) it is the crossing's pin, not the main-phase upkeep stream.
+        s.scripted_suspend_tutor = static_cast<std::int16_t>(pin);
         const std::vector<std::string> cands =
             RankedTutorCandidates(Prov(), s, 0, CardDatabase::Instance().Lookup("Profane Tutor")->params);
         REQUIRE(cands.size() >= 2);
@@ -250,6 +251,6 @@ TEST_CASE("Profane Tutor off suspend: the upkeep pin is a rank into the resoluti
         bool in_gy = false;
         for (const Card& c : s.players[0].graveyard) { if (c.m_name.str() == "Profane Tutor") { in_gy = true; } }
         CHECK(in_gy);
-        CHECK(s.scripted_upkeep_land_search == -1);   // the ordinal was consumed
+        CHECK(s.scripted_suspend_tutor == -1);   // the ordinal was consumed
     }
 }

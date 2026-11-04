@@ -1603,6 +1603,7 @@ inline void Record(const GameState& s, const TurnSolver::Plan& first, const Turn
     pl("looktop", first.look_top_pins != dup.look_top_pins);
     pl("upkreanim", first.upkeep_gy_reanimate_choice != dup.upkeep_gy_reanimate_choice);
     pl("upktutor", first.upkeep_tutor_choice != dup.upkeep_tutor_choice);
+    pl("stut", first.suspend_tutor_choice != dup.suspend_tutor_choice);
     pl("demontrig", first.demon_trigger_choice != dup.demon_trigger_choice);
     pl("echo", first.echo_choice != dup.echo_choice);
     pl("doth", first.doth_put_choice != dup.doth_put_choice);
@@ -6872,6 +6873,7 @@ static bool M2SkipEmptyApplyOn()
 
 static bool EchoUncoveredPending(const GameState& state);   // fwd (the searched echo axis, with the axes)
 static bool DothUncoveredPending(const GameState& state);   // fwd (the searched DotH put list, with BoundaryFan)
+static bool SuspendTutorUncoveredPending(const GameState& state);   // fwd (Profane's fetch, with BoundaryFan)
 static bool SecondMainUnproductive(const GameState& state)
 {
     static const bool s_kill  = EnvOn("MTG_NO_M2_PRODUCTIVE");
@@ -6884,6 +6886,8 @@ static bool SecondMainUnproductive(const GameState& state)
     // ...and the same for a Defense of the Heart trigger the state's pin does not cover (MTG_DOTH_AXIS): the
     // second main's crossing is where it is decided. False for every deck without the card.
     if (DothUncoveredPending(state)) { return false; }
+    // ...and Profane Tutor's fetch at the next upkeep (MTG_PROFANE_RESOLVE_FAN): decided at the second main's crossing.
+    if (SuspendTutorUncoveredPending(state)) { return false; }
     // Moraug: any landfall main 2 can make (a held land, a ramp spell main 1 could have cast, a fetch to crack)
     // buys an additional combat, so the phase is never skipped as a re-run of main 1 while the source is ours.
     if (ExtraCombatSecondMainLive(state)) { return false; }
@@ -26408,6 +26412,8 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
     { fold(0x454D45524941ull); fold(static_cast<uint64_t>(p.upkeep_gy_reanimate_choice)); }   // "EMERIA"
     if (p.upkeep_tutor_choice >= 0)
     { fold(0x5550545554ull); fold(static_cast<uint64_t>(p.upkeep_tutor_choice)); }   // "UPTUT"
+    if (p.suspend_tutor_choice >= 0)
+    { fold(0x5354555455ull); fold(static_cast<uint64_t>(p.suspend_tutor_choice)); }   // "STUTU"
     // Shadowborn INT-2's demon-trigger pin -- same must-fold rule, value-gated (own domain tag).
     if (p.demon_trigger_choice >= 0)
     { fold(0x44454D4F4Eull); fold(static_cast<uint64_t>(p.demon_trigger_choice)); }   // "DEMON"
@@ -26795,6 +26801,7 @@ static bool IsApplyEmptyPlan(const TurnSolver::Plan& p)
         && p.etbcounter_choice == -1 && p.sweep_choice == -1 && p.le_fire_choice == -1
         && p.vial_charge_choice == -1 && p.saga_target_choice == -1 && p.grace_choice == -1
         && p.upkeep_gy_reanimate_choice == -1 && p.upkeep_tutor_choice == -1 && p.demon_trigger_choice == -1
+        && p.suspend_tutor_choice == -1
         && p.echo_choice == -1 && p.doth_put_choice == -1
         && p.fling_victim_choice == -1 && p.tectonic_mode_choice == -1
         && p.tectonic_keep_choice == -1
@@ -26843,7 +26850,7 @@ static bool PlanIsAxisVariantExceptOrder(const TurnSolver::Plan& p)
         // reach the graveyard can still clamp onto a sibling, by design (completeness).
         || p.grace_choice >= 0
         || p.upkeep_gy_reanimate_choice >= 0 || p.demon_trigger_choice >= 0
-        || p.upkeep_tutor_choice >= 0
+        || p.upkeep_tutor_choice >= 0 || p.suspend_tutor_choice >= 0
         // Look-top pins (Risen Reef): every variant is a clone of its base differing only in a land /
         // order entry, and an entry past the decisions the apply actually reaches (a nonland top, a
         // look that never happened) leaves it on its base plan's state -- the inert-duplicate shape.
@@ -27777,6 +27784,8 @@ inline std::uint64_t PlanH(const TurnSolver::Plan& p, int ax)
     { h = Mix(h, 0x454Dull + static_cast<std::uint64_t>(p.upkeep_gy_reanimate_choice)); }   // value-gated
     if (p.upkeep_tutor_choice >= 0)
     { h = Mix(h, 0x555054ull + static_cast<std::uint64_t>(p.upkeep_tutor_choice)); }
+    if (p.suspend_tutor_choice >= 0)
+    { h = Mix(h, 0x535455ull + static_cast<std::uint64_t>(p.suspend_tutor_choice)); }
     if (p.demon_trigger_choice >= 0)
     { h = Mix(h, 0x444Dull + static_cast<std::uint64_t>(p.demon_trigger_choice)); }   // value-gated (Shadowborn)
     if (p.echo_choice >= 0) { h = Mix(h, 0xEC40ull + static_cast<std::uint64_t>(p.echo_choice)); }   // value-gated
@@ -51348,6 +51357,7 @@ namespace solvememo
             || a.grace_choice != b.grace_choice
             || a.upkeep_gy_reanimate_choice != b.upkeep_gy_reanimate_choice
             || a.upkeep_tutor_choice != b.upkeep_tutor_choice
+            || a.suspend_tutor_choice != b.suspend_tutor_choice
             || a.demon_trigger_choice != b.demon_trigger_choice
             || a.echo_choice != b.echo_choice
             || a.doth_put_choice != b.doth_put_choice
@@ -71844,6 +71854,128 @@ void TurnSolver::SoundFoldCounters(long long out[5])
     out[4] = seedwalk::g_folded.load();
 }
 
+// ---- THE IDLE LAND-CRACK FOLD (MTG_IDLE_CRACK_FOLD, DEFAULT ON; =0 -> every crack plan offered) ---------------
+// USER 2026-11-04 (Shadowborn s7, Lake of the Dead): "it should not be sacrificing the land unless we need it."
+// A SacForMana whose source is a LAND (Lake of the Dead's "{T}, Sacrifice a Swamp: {B}{B}{B}{B}", Dwarven Ruins,
+// Svyelunite Temple) is a MANA ABILITY: it can be activated at any later priority of the phase. Plan C holds such a
+// crack and plan S is C with that crack removed (all other fields equal). Apply both on copies, then activate the
+// crack on S's end state. If that state's dedup key equals C's end state (BuildDedupKey, the engine's own
+// duplicate test), C is exactly "S, and then the same mana ability later". Every future of C is therefore a
+// future of S: a later decision of the phase (a breakpoint continuation, an activation) can activate the crack
+// from S's state, because the Lake is still untapped and the victim is still there. Without that, the float
+// empties at the end of the phase and S keeps a Swamp and an untapped Lake. So C is dropped. This is a SOUND
+// IDENTITY fold, not a projection. It never removes a crack whose mana the plan spent in a way S cannot
+// reproduce: then the keys differ (C paid from the float while S tapped another source, or S tapped the Lake
+// itself), and C stays. It fires only when S is in the same list, so the line is never lost. A plan with two cracks
+// folds onto the one-crack plan, which folds onto the no-crack plan, a chain that ends at a plan without cracks.
+// Not in human play (the viewer's menu is never narrowed). Inert for every deck without a land SacForMana source.
+static bool IdleCrackFoldOn()
+{
+    static const bool on = EnvOn("MTG_IDLE_CRACK_FOLD", true);
+    return heurarm::Flag(heurarm::IDLE_CRACK_FOLD, on);
+}
+static std::atomic<long long> g_idle_crack_folded{0}, g_idle_crack_tested{0};
+static bool ActionIsLandCrack(const GameState& state, const Action& a)
+{
+    if (a.kind != Action::Kind::SacForMana || a.sac_source_id == 0) { return false; }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index || p.card.m_number != a.sac_source_id) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        return d != nullptr && d->card.IsLand() && d->params.sac_for_mana_amount > 0;
+    }
+    return false;
+}
+static std::string PbVerifyFieldDiff(const TurnSolver::Plan& a, const TurnSolver::Plan& b);
+static void FoldIdleLandCracks(const GameState& state, bool is_pre_combat, std::vector<TurnSolver::Plan>& v,
+                               bool clear_land = true)
+{
+    {
+        static const bool s_dbg0 = EnvOn("MTG_IDLE_CRACK_DEBUG");
+        if (s_dbg0)
+        {
+            int n_sac = 0, src0 = -1;
+            for (const TurnSolver::Plan& p : v) { for (const Action& a : p.actions) { if (a.kind == Action::Kind::SacForMana) { ++n_sac; src0 = a.sac_source_id; } } }
+            std::fprintf(stderr, "[idle-crack] enter T%d n=%zu sac_actions=%d src=%d human=%d on=%d\n", state.turn_number, v.size(), n_sac, src0,
+                         HumanPlayActive() ? 1 : 0, IdleCrackFoldOn() ? 1 : 0);
+        }
+    }
+    if (HumanPlayActive() || !IdleCrackFoldOn() || v.size() < 2) { return; }
+    bool any = false;
+    for (const TurnSolver::Plan& p : v)
+    {
+        for (const Action& a : p.actions) { if (ActionIsLandCrack(state, a)) { any = true; break; } }
+        if (any) { break; }
+    }
+    if (!any) { return; }
+    // The trial applies must not play a land the plan does not make (drop_partial_vamp's probe rule).
+    // Inside EnumeratePlans the state already holds the frame's land choice and the plans are not land-tagged
+    // yet, so the trial applies must not play a land the plan does not make (drop_partial_vamp's probe rule).
+    // On a land-tagged list (EnumeratePlansWithLand) the plans apply as they are.
+    auto probe_of = [clear_land](const TurnSolver::Plan& p)
+    {
+        TurnSolver::Plan q = p;
+        if (clear_land) { q.land_decided = true; q.land_to_play.clear(); }
+        return q;
+    };
+    std::vector<char> drop(v.size(), 0);
+    for (std::size_t i = 0; i < v.size(); ++i)
+    {
+        const TurnSolver::Plan& c = v[i];
+        for (std::size_t k = 0; k < c.actions.size() && !drop[i]; ++k)
+        {
+            const Action& crack = c.actions[k];
+            if (!ActionIsLandCrack(state, crack)) { continue; }
+            TurnSolver::Plan s = c;
+            s.actions.erase(s.actions.begin() + static_cast<std::ptrdiff_t>(k));
+            std::size_t j = 0;
+            for (; j < v.size(); ++j) { if (j != i && v[j] == s) { break; } }
+            static const bool s_dbg = EnvOn("MTG_IDLE_CRACK_DEBUG");
+            if (s_dbg)
+            {
+                std::fprintf(stderr, "[idle-crack] T%d plan %zu/%zu acts=%zu sibling=%s\n", state.turn_number, i, v.size(),
+                             c.actions.size(), j == v.size() ? "none" : "found");
+                if (j == v.size())
+                {
+                    for (std::size_t q = 0; q < v.size(); ++q)
+                    {
+                        if (v[q].actions == s.actions)
+                        { std::fprintf(stderr, "[idle-crack]   same-actions #%zu differs:%s\n", q, PbVerifyFieldDiff(v[q], s).c_str()); }
+                    }
+                }
+            }
+            if (j == v.size()) { continue; }   // no sibling without the crack: never fold onto nothing
+            g_idle_crack_tested.fetch_add(1, std::memory_order_relaxed);
+            GameState gc = state;
+            ApplyPlanDirect(gc, probe_of(c), is_pre_combat);
+            GameState gs = state;
+            ApplyPlanDirect(gs, probe_of(v[j]), is_pre_combat);
+            ApplySacForMana(gs, gs.active_player_index, crack.sac_source_id,
+                            TurnSolver::SacFloatColorFor(gs, c.actions, crack), crack.ritual_float,
+                            crack.sac_victim_id);
+            if (s_dbg)
+            {
+                std::fprintf(stderr, "[idle-crack]   keys %s  C: pool=%d bf=%zu  S+crack: pool=%d bf=%zu\n",
+                             BuildDedupKey(gs) == BuildDedupKey(gc) ? "EQUAL" : "differ", gc.floating_mana.Total(),
+                             gc.battlefield.size(), gs.floating_mana.Total(), gs.battlefield.size());
+            }
+            if (BuildDedupKey(gs) == BuildDedupKey(gc))
+            {
+                drop[i] = 1;
+                g_idle_crack_folded.fetch_add(1, std::memory_order_relaxed);
+            }
+        }
+    }
+    std::size_t w = 0;
+    for (std::size_t i = 0; i < v.size(); ++i) { if (!drop[i]) { if (w != i) { v[w] = std::move(v[i]); } ++w; } }
+    v.resize(w);
+}
+void TurnSolver::IdleCrackFoldCounters(long long* tested, long long* folded)
+{ *tested = g_idle_crack_tested.load(); *folded = g_idle_crack_folded.load(); }
+std::vector<TurnSolver::Plan> TurnSolver::FoldIdleLandCracksForTest(const GameState& state, bool is_pre_combat,
+                                                                    std::vector<Plan> plans)
+{ FoldIdleLandCracks(state, is_pre_combat, plans, /*clear_land=*/false); return plans; }
+
 static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool is_pre_combat)
 {
     routetape::Suspend _rts;       // an enumeration's trial applies are not a route link's own resolutions
@@ -77117,6 +77249,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     {
         drop_attach_illegal_core(v);
         drop_partial_vamp(v);
+        FoldIdleLandCracks(state, is_pre_combat, v);   // MTG_IDLE_CRACK_FOLD (sound identity; inert without a land crack)
     };
     // AN EVOKE NOTHING READS (PlanHasDeadOptionalEvoke; LandfallElementals s61001 / s61007): a plan that
     // evokes Foundation Breaker while no enter watcher / opponent target / death payoff is on the board
@@ -77297,6 +77430,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     }
 
     drop_partial_vamp(ordered);
+    FoldIdleLandCracks(state, is_pre_combat, ordered);   // MTG_IDLE_CRACK_FOLD, on the ORDERED list (per ordering)
     return ordered;
 }
 
@@ -84882,7 +85016,8 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             const CardDefinition* d = CardDatabase::Instance().LookupCached(sc.card);
             // ...and ANY arrival on a ripple deck (Lotus Bloom): its upkeep ripple is a searched pin on the same
             // stream (ResolveSuspendRipple). Fan (3) opens it only when a granter can be live.
-            if (d != nullptr && ((!d->card.IsPermanentCard() && d->params.tutor_to_hand) || state.deck_has_ripple))
+            if (d != nullptr && ((!d->card.IsPermanentCard() && d->params.tutor_to_hand && !ProfaneResolveFanOn())
+                                 || state.deck_has_ripple))
             { upkeep_tutor_due = true; break; }
         }
     }
@@ -85500,7 +85635,9 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 // (Search for Tomorrow) or a to-hand tutor (Profane Tutor), so only those count.
                 const bool perm        = d->card.IsPermanentCard();
                 const bool ls_arrival  = !perm && d->params.land_search_on_resolve && d->params.land_search_count > 0;
-                const bool tut_arrival = !perm && !ls_arrival && d->params.tutor_to_hand;
+                // MTG_PROFANE_RESOLVE_FAN: a to-hand tutor's fetch is no longer on this stream -- it is decided at
+                // the crossing (BoundaryFan, GameState::scripted_suspend_tutor), so it adds no main-phase variant.
+                const bool tut_arrival = !perm && !ls_arrival && d->params.tutor_to_hand && !ProfaneResolveFanOn();
                 const std::size_t own_w = (ls_arrival || tut_arrival)
                     ? std::min<std::size_t>(ls_arrival ? width_of(d) : tutor_width_of(d), kLandSearchPinMask + 1) : 0;
                 if (rip_possible)
@@ -86461,6 +86598,7 @@ static void PlanDomCensus(const std::vector<TurnSolver::Plan>& all)
             add(pl.grace_choice);
             add(pl.upkeep_gy_reanimate_choice);   // Emeria: in padding, so the size pin cannot catch it
             add(pl.upkeep_tutor_choice);
+            add(pl.suspend_tutor_choice);   // Profane's crossing-recorded fetch: in padding, so the size pin cannot catch it
             add(pl.demon_trigger_choice);   // Shadowborn's demon triggers: in padding, so the size pin cannot catch it
             add(pl.echo_choice);   // the searched echo pin: in padding, so the size pin cannot catch it
             add(pl.doth_put_choice);   // the searched DotH put list: in padding, so the size pin cannot catch it
@@ -86896,6 +87034,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
         AppendHumanPlayLandsEdgePlans(state, plans);
         AppendHumanPlayDigPlans(state, plans);
         for (TurnSolver::Plan& p : plans) { p.land_decided = true; }
+        FoldIdleLandCracks(state, is_pre_combat, plans, /*clear_land=*/false);   // MTG_IDLE_CRACK_FOLD (no-drop menu)
         AppendBreakpointVariants(state, plans);
         // Sub-decision axes on the no-drop path, BOTH mains (unconditional since 2026-09-30, USER
         // HARD RULE docs/design/no-greedy-in-search-window.md). The interior m2 solve arrives here
@@ -88089,6 +88228,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
     // QR1: the tapland stable_sort above can interleave the human cycle-seed plans among the older ones again, and
     // the breakpoint fan below caps its base plans IN LIST ORDER (MTG_BP_MAXBASE) -- so restore "older plans
     // first" here, or the seeds take the fan an older plan always had (EldraziDisplacerFlicker claude_s16_gi15 T4).
+    // MTG_IDLE_CRACK_FOLD on the FULL land-tagged menu (the land-only baselines and the land-less plans live here,
+    // not in EnumeratePlans' list), before any breakpoint variant or axis is derived from a base plan.
+    FoldIdleLandCracks(state, is_pre_combat, all, /*clear_land=*/false);
     OrderHumanCycleSeedPlans(state, all);
     AppendBreakpointVariants(state, all);
     PbAxesAndTwins(state, is_pre_combat, all, pb_lazy);   // the axes, then the soulbond decline twins
@@ -92225,6 +92367,8 @@ static TranspositionTable::Key BuildDedupKeyBeforeLandSearchPins(const GameState
                          // value-gated, own slot).
                          static_cast<int>(state.scripted_doth_put),
                          static_cast<int>(state.scripted_upkeep_tutor),
+                         // Profane Tutor's crossing-chosen fetch (appended: value-gated, own slot).
+                         static_cast<int>(state.scripted_suspend_tutor),
                          // Shadowborn's packed demon-trigger pin (end step + next upkeep; appended:
                          // value-gated, own slot).
                          static_cast<int>(state.scripted_demon_trigger) };
@@ -94914,6 +95058,54 @@ static bool DothUncoveredPending(const GameState& state)
     return DothAxisLiveHere(state) && UpkeepSacTutorsOnBattlefield(state) > DothPinCover(state.scripted_doth_put);
 }
 
+// PROFANE TUTOR's fetch pending at the next upkeep and not covered by the state's pin (MTG_PROFANE_RESOLVE_FAN): the
+// crossing into that upkeep must fan it (BoundaryFan), so the second main is never skipped while one is due (the
+// Defense of the Heart rule). Scope = DothAxisLiveHere's: not in human play (the person picks at the `tutor` prompt
+// when the spell resolves), not in a narrowed playout / the d0 runner / a breakpoint enumeration, not at a
+// constant-leaf edge. False for every deck without a suspended to-hand tutor.
+static bool SuspendTutorUncoveredPending(const GameState& state)
+{
+    if (state.scripted_suspend_tutor >= 0 || g_bp_enum_depth != 0 || t_rollout_narrow || HumanPlayActive()) { return false; }
+    const Player& ap = state.players[static_cast<std::size_t>(state.active_player_index)];
+    if (ap.suspended_cards.empty() || !ProfaneResolveFanOn()) { return false; }
+    bool due = false;
+    for (const SuspendedCard& sc : ap.suspended_cards)
+    {
+        if (sc.arrive_turn < 0 || sc.arrive_turn > state.TurnSeq() + 1) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(sc.card);
+        if (d != nullptr && !d->card.IsPermanentCard() && d->params.tutor_to_hand && !d->params.land_search_on_resolve)
+        { due = true; break; }
+    }
+    return due && !EchoEdgeFoldHere(state);
+}
+// MTG_STUT_AXIS_STATS: the no-greedy census for Profane's fetch -- an UNPINNED suspended-tutor search resolved while
+// the innermost search frame still had depth, in a searched frame (a crossing no BoundaryFan covered: must read 0),
+// in the playout beyond the horizon (permitted), or at a constant-leaf edge (the identity fold). Printed at exit.
+namespace stutcensus
+{
+inline std::atomic<long long> g_searched{0}, g_narrow{0}, g_edge{0}, g_outside{0};
+static void Note(const GameState& s)
+{
+    if (HumanPlayActive() || !greedywindow::InWindow(0)) { g_outside.fetch_add(1, std::memory_order_relaxed); return; }
+    if (t_rollout_narrow || (g_rollout_nest > 0 && t_echo_rollout_turn_depth <= 0))
+    { g_narrow.fetch_add(1, std::memory_order_relaxed); return; }
+    if (EchoEdgeFoldHere(s)) { g_edge.fetch_add(1, std::memory_order_relaxed); return; }
+    g_searched.fetch_add(1, std::memory_order_relaxed);
+}
+struct Installer
+{
+    Installer() { if (EnvOn("MTG_STUT_AXIS_STATS")) { g_stut_unpinned_hook = &Note; } }
+    ~Installer()
+    {
+        if (g_stut_unpinned_hook == nullptr) { return; }
+        std::fprintf(stderr, "[stut-axis] unpinned suspended-tutor searches: searched-frame=%lld (must be 0) "
+                             "playout=%lld edge=%lld outside-window=%lld\n",
+                     g_searched.load(), g_narrow.load(), g_edge.load(), g_outside.load());
+    }
+};
+static Installer s_installer;
+}
+
 // THE BOUNDARY FAN, generalised (searched echo + searched Defense of the Heart). Every in-window crossing site
 // iterates it:
 //     BoundaryFan fan(pre, with_echo);
@@ -94942,6 +95134,10 @@ public:
                 { tutor_ = true; break; }
             }
         }
+        // PROFANE TUTOR's fetch (MTG_PROFANE_RESOLVE_FAN): a suspended to-hand tutor arriving at the next upkeep,
+        // its fetch not yet covered. Same scope as the tutor-to-top axis above (beyond the horizon -- a narrowed
+        // playout, the d0 runner -- and at a constant-leaf edge the provider's front is the permitted policy).
+        if (SuspendTutorUncoveredPending(pre)) { stut_ = true; }
         if (DothAxisLiveHere(pre))
         {
             c0_ = DothPinCover(pre.scripted_doth_put);
@@ -94954,15 +95150,33 @@ public:
     }
     // Will the site cross more than once? Decided BEFORE the first crossing, so a live Defense of the Heart counts
     // (its menu is learned on the first crossing): the site then crosses per-crossing copies of its state.
-    bool Copies() const { return echo_.size() > 1 || doth_ || tutor_; }
+    bool Copies() const { return echo_.size() > 1 || doth_ || tutor_ || stut_; }
     bool DothLive() const { return doth_; }
     bool TutorLive() const { return tutor_; }
+    bool StutLive() const { return stut_; }
     bool Next()
     {
         if (!started_) { started_ = true; ResetDoth(); return true; }
         if (tutor_ && tutor_rank_ + 1 < tutor_width_)
         { ++tutor_rank_; return true; }
         tutor_rank_ = 0;
+        // Profane's fetch: an odometer over the suspended-tutor searches the last crossing resolved (their
+        // widths learned by that crossing's probe), the provider's front (rank 0) first so it keeps every tie.
+        if (stut_)
+        {
+            for (int j = std::min(s_nobs_, kSuspendTutorPinOrdinals) - 1; j >= 0; --j)
+            {
+                if (s_ranks_[j] + 1 < s_sizes_[j])
+                {
+                    ++s_ranks_[j];
+                    for (int k = j + 1; k < kSuspendTutorPinOrdinals; ++k) { s_ranks_[k] = 0; }
+                    s_nobs_ = j + 1;
+                    tutor_width_ = 1;
+                    return true;
+                }
+            }
+            ResetStut();
+        }
         if (doth_ && nobs_ > c0_)
         {
             for (int j = std::min(nobs_, kDothPinMaxOrd) - 1; j >= c0_; --j)
@@ -94984,6 +95198,7 @@ public:
     {
         if (echo_.size() > 1) { sx.scripted_echo = static_cast<std::int16_t>(echo_[ei_]); }
         if (tutor_) { sx.scripted_upkeep_tutor = static_cast<std::int16_t>(tutor_rank_); }
+        if (stut_) { sx.scripted_suspend_tutor = static_cast<std::int16_t>(StutPack(kSuspendTutorPinOrdinals)); }
         // The crossing's pin covers every ordinal (unexplored ones at rank 0 = the provider's pick, which IS the
         // branch being scored), so nothing in it resolves uncovered.
         if (doth_) { sx.scripted_doth_put = DothPinPack(kDothPinMaxOrd, ranks_); }
@@ -94996,22 +95211,44 @@ public:
     // nothing: no Defense of the Heart live, or no trigger past the inherited cover resolved).
     int DothPin() const { return (doth_ && nobs_ > c0_) ? DothPinPack(nobs_, ranks_) : -2; }
     int TutorPin() const { return (tutor_ && tutor_width_ > 1) ? tutor_rank_ : -2; }
+    // Profane's fetch to RECORD: the ranks of the searches this crossing resolved, when any had a choice.
+    int StutPin() const
+    {
+        if (!stut_) { return -2; }
+        bool wide = false;
+        for (int j = 0; j < std::min(s_nobs_, kSuspendTutorPinOrdinals); ++j) { if (s_sizes_[j] > 1) { wide = true; } }
+        return wide ? StutPack(s_nobs_) : -2;
+    }
     void Record(TurnSolver::Plan& p) const
     {
         if (EchoPin() != -2) { p.echo_choice = static_cast<std::int16_t>(EchoPin()); }
         if (DothPin() != -2) { p.doth_put_choice = DothPin(); }
         if (TutorPin() != -2) { p.upkeep_tutor_choice = static_cast<std::int16_t>(TutorPin()); }
+        if (StutPin() != -2) { p.suspend_tutor_choice = static_cast<std::int16_t>(StutPin()); }
     }
     // Write the recorded pins onto a state (the one-rollout hosts re-cross their own copy with the winner).
-    void RecordOnState(GameState& sx, int echo_pin, int doth_pin, int tutor_pin) const
+    void RecordOnState(GameState& sx, int echo_pin, int doth_pin, int tutor_pin, int stut_pin) const
     {
         if (echo_pin != -2) { sx.scripted_echo = static_cast<std::int16_t>(echo_pin); }
         if (doth_pin != -2) { sx.scripted_doth_put = doth_pin; }
         if (tutor_pin != -2) { sx.scripted_upkeep_tutor = static_cast<std::int16_t>(tutor_pin); }
+        if (stut_pin != -2) { sx.scripted_suspend_tutor = static_cast<std::int16_t>(stut_pin); }
     }
 private:
+    int StutPack(int n) const
+    {
+        int v = 0;
+        for (int j = 0; j < std::min(n, kSuspendTutorPinOrdinals); ++j) { v |= s_ranks_[j] << (kLandSearchPinBits * j); }
+        return v;
+    }
+    void ResetStut()
+    {
+        s_nobs_ = 0;
+        for (int k = 0; k < kSuspendTutorPinOrdinals; ++k) { s_ranks_[k] = 0; s_sizes_[k] = 1; }
+    }
     void ResetDoth()
     {
+        ResetStut();
         tutor_rank_ = 0; tutor_width_ = 1;
         for (int k = c0_; k < kDothPinMaxOrd; ++k) { ranks_[k] = 0; sizes_[k] = 1; }
         nobs_ = 0;
@@ -95023,6 +95260,10 @@ private:
     bool             tutor_   = false;
     int              tutor_rank_ = 0;
     int              tutor_width_ = 1;
+    bool             stut_    = false;                // Profane's fetch is decided at this crossing
+    int              s_nobs_  = 0;                    // suspended-tutor searches the last crossing resolved
+    int              s_ranks_[kSuspendTutorPinOrdinals] = {};
+    int              s_sizes_[kSuspendTutorPinOrdinals] = { 1, 1 };
     int              c0_      = 0;                    // ordinals the state's pin already covers (kept fixed)
     int              nobs_    = 0;                    // ordinals the last crossing resolved
     int              ranks_[kDothPinMaxOrd] = {};
@@ -95033,12 +95274,15 @@ static void DothStatsFanCounts(long long* fans, long long* crossings)
 { *fans = g_doth_fans.load(); *crossings = g_doth_fan_crossings.load(); }
 bool BoundaryFan::Cross(GameState& sx)
 {
-    if (!doth_ && !tutor_) { return SimulateEndAndStartNextTurn(sx); }
+    if (!doth_ && !tutor_ && !stut_) { return SimulateEndAndStartNextTurn(sx); }
     bool ok = false;
     DothProbe pr;
     int tutor_width = 1;
     int* prior_tutor_probe = t_upkeep_tutor_width_probe;
     if (tutor_) { t_upkeep_tutor_width_probe = &tutor_width; }
+    SuspendTutorProbe stut_probe;
+    SuspendTutorProbe* prior_stut_probe = t_suspend_tutor_probe;
+    if (stut_) { t_suspend_tutor_probe = &stut_probe; }
     if (doth_)
     {
         DothProbeScope scope;
@@ -95047,7 +95291,13 @@ bool BoundaryFan::Cross(GameState& sx)
     }
     else { ok = SimulateEndAndStartNextTurn(sx); }
     t_upkeep_tutor_width_probe = prior_tutor_probe;
+    t_suspend_tutor_probe = prior_stut_probe;
     if (tutor_) { tutor_width_ = std::max(1, tutor_width); }
+    if (stut_)
+    {
+        s_nobs_ = std::min(stut_probe.n, kSuspendTutorPinOrdinals);
+        for (int j = 0; j < s_nobs_; ++j) { s_sizes_[j] = std::max(1, stut_probe.size[j]); }
+    }
     nobs_ = std::min(pr.n, kDothPinMaxOrd);
     for (int j = c0_; j < nobs_; ++j) { sizes_[j] = std::max(1, pr.size[j]); }
     static const bool s_stats = EnvOn("MTG_DOTH_AXIS_STATS");
@@ -95071,6 +95321,22 @@ std::vector<int> TurnSolver::DothBoundaryPinsForTest(const GameState& state)
         fan.Stamp(sx);
         fan.Cross(sx);
         out.push_back(fan.DothPin() == -2 ? -1 : fan.DothPin());
+    }
+    return out;
+}
+std::vector<std::pair<int, std::string>> TurnSolver::SuspendTutorBoundaryForTest(const GameState& state)
+{
+    // Every crossing the fan makes from `state`: the Profane-fetch pin it would record (-1 = none) and the first
+    // card of the crossed hand (the tutored card, when `state`'s hand is empty: the fetch enters before the draw).
+    std::vector<std::pair<int, std::string>> out;
+    BoundaryFan fan(state, /*with_echo=*/false);
+    while (fan.Next())
+    {
+        GameState sx = state;
+        fan.Stamp(sx);
+        fan.Cross(sx);
+        const Player& ap = sx.players[static_cast<std::size_t>(state.active_player_index)];
+        out.emplace_back(fan.StutPin() == -2 ? -1 : fan.StutPin(), ap.hand.empty() ? std::string() : ap.hand.front().m_name.str());
     }
     return out;
 }
@@ -95289,7 +95555,8 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
         // (Not with an uncovered echo obligation or Defense of the Heart trigger pending: the second main must
         // decide it at its crossing, so it runs the loop.)
         if (m2_deferred_only && M2EmptyFastOn() && M2FixModeFor(state) == 0
-            && SecondMainUnproductive(state) && !EchoUncoveredPending(state) && !DothUncoveredPending(state))
+            && SecondMainUnproductive(state) && !EchoUncoveredPending(state) && !DothUncoveredPending(state)
+            && !SuspendTutorUncoveredPending(state))
         {
             if (ConstantLeafExhausted(budget)) { ++g_fs_trunc_events; return { max_turns + 1, {} }; }
             ConsumeAt(budget, unitsite::kFsMain2);   // the one interior node this decision is worth
@@ -96441,11 +96708,12 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
     // fanned here (its documented single-main residual, docs/design/searched-echo.md: no echo deck is single-main).
     {
         BoundaryFan fan(state, /*with_echo=*/false);
-        if (fan.DothLive() || fan.TutorLive())
+        if (fan.DothLive() || fan.TutorLive() || fan.StutLive())
         {
             TurnSolver::SearchLine best_tail{ max_turns + 1, {} };
             int  best_doth = -2;
             int  best_tutor = -2;
+            int  best_stut = -2;
             bool have      = false;
             while (fan.Next())
             {
@@ -96468,6 +96736,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                     best_tail = std::move(line);
                     best_doth = fan.DothPin();
                     best_tutor = fan.TutorPin();
+                    best_stut  = fan.StutPin();
                     have      = true;
                     // First VERIFIED win -- the m2 loop's shortcut, same horizon edge.
                     if (FsHorizonExitOn() && best_tail.win_turn <= state.turn_number + depth) { ++g_fs_hexits; break; }
@@ -96475,6 +96744,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             }
             best_tail.boundary_doth = best_doth;
             best_tail.boundary_tutor = best_tutor;
+            best_tail.boundary_stut = best_stut;
             return best_tail;
         }
     }
@@ -96497,6 +96767,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
     if (DomActive() && dom_arch) { domin::RecordWin(*dom_arch, dprobe, tail_line.win_turn); }
     tail_line.boundary_doth = -2;   // nothing crossed here was fanned (a deeper level's pin is not this one's)
     tail_line.boundary_tutor = -2;
+    tail_line.boundary_stut = -2;
     return tail_line;
 }
 // The caller's half of the single-main boundary fan: the pin the tail chose belongs on the main-1 plan that
@@ -96505,6 +96776,7 @@ static void StampBoundaryPins(TurnSolver::Plan& p, const TurnSolver::SearchLine&
 {
     if (tail.boundary_doth != -2) { p.doth_put_choice = tail.boundary_doth; }
     if (tail.boundary_tutor != -2) { p.upkeep_tutor_choice = static_cast<std::int16_t>(tail.boundary_tutor); }
+    if (tail.boundary_stut != -2) { p.suspend_tutor_choice = static_cast<std::int16_t>(tail.boundary_stut); }
 }
 
 // `state` is positioned at the START of the active player's pre-combat main (land
@@ -104150,12 +104422,13 @@ static void VampCandCensus(const TurnSolver::Plan& plan, bool is_pre_combat)
 // Generalised to the BoundaryFan (searched echo + the searched Defense of the Heart put list, MTG_DOTH_AXIS): the
 // fan's crossings in its order (the provider's answers first), one rollout each, the strict best left on `copy`.
 // With no Defense of the Heart live this is the echo-only routine exactly (same pins, order, cutoff, result).
-struct BoundaryChoice { int echo = -2; int doth = -2; int tutor = -2; };
+struct BoundaryChoice { int echo = -2; int doth = -2; int tutor = -2; int stut = -2; };
 static void RecordBoundaryChoice(TurnSolver::Plan& p, const BoundaryChoice& bc)
 {
     if (bc.echo != -2) { p.echo_choice = static_cast<std::int16_t>(bc.echo); }
     if (bc.doth != -2) { p.doth_put_choice = bc.doth; }
     if (bc.tutor != -2) { p.upkeep_tutor_choice = static_cast<std::int16_t>(bc.tutor); }
+    if (bc.stut != -2) { p.suspend_tutor_choice = static_cast<std::int16_t>(bc.stut); }
 }
 static BoundaryChoice BoundaryChooseByRollout(GameState& copy, int sub_depth, int max_turns, SearchBudget* budget,
                                               int cutoff, bool second_main, TranspositionTable* tt)
@@ -104172,12 +104445,12 @@ static BoundaryChoice BoundaryChooseByRollout(GameState& copy, int sub_depth, in
         // A Defense of the Heart fan has many branches: each later one need only beat the best so far, and
         // SimulateToEnd aborts only AFTER its cutoff turn, so a STRICTLY earlier win is still found (only a
         // strict improvement is taken below). The echo-only fan keeps its historical cutoff.
-        const int cut = ((fan.DothLive() || fan.TutorLive()) && best_wt <= max_turns) ? std::min(cutoff, best_wt - 1) : cutoff;
+        const int cut = ((fan.DothLive() || fan.TutorLive() || fan.StutLive()) && best_wt <= max_turns) ? std::min(cutoff, best_wt - 1) : cutoff;
         if (fan.Cross(ce))
         { wt = SimulateToEnd(std::move(ce), sub_depth, max_turns, budget, cut, second_main, tt); }
-        if (wt < best_wt) { best_wt = wt; best.echo = fan.EchoPin(); best.doth = fan.DothPin(); best.tutor = fan.TutorPin(); }
+        if (wt < best_wt) { best_wt = wt; best.echo = fan.EchoPin(); best.doth = fan.DothPin(); best.tutor = fan.TutorPin(); best.stut = fan.StutPin(); }
     }
-    fan.RecordOnState(copy, best.echo, best.doth, best.tutor);
+    fan.RecordOnState(copy, best.echo, best.doth, best.tutor, best.stut);
     return best;
 }
 
@@ -107533,6 +107806,8 @@ static TranspositionTable::Key BuildBreakpointKey(const GameState& state, bool i
     { Fold(k, 0xD0E7); Fold(k, static_cast<uint64_t>(state.scripted_doth_put)); }
     if (fold_upkeep_pins && state.scripted_upkeep_tutor >= 0)
     { Fold(k, 0x555054); Fold(k, static_cast<uint64_t>(state.scripted_upkeep_tutor)); }
+    if (fold_upkeep_pins && state.scripted_suspend_tutor >= 0)
+    { Fold(k, 0x535455); Fold(k, static_cast<uint64_t>(state.scripted_suspend_tutor)); }
     // Shadowborn's demon-trigger pin (Reaper end step + Overlord next upkeep): the axis skips the variant
     // equal to the inherited pin, so a memoised list under one pin is not another's. Value-gated.
     if (fold_upkeep_pins && state.scripted_demon_trigger >= 0)
@@ -115263,7 +115538,8 @@ static std::string PlanDumpApplyLosses(const GameState& state, const TurnSolver:
         const std::pair<const char*, long long> pins[] = {
             {"demon_trigger", copy.scripted_demon_trigger}, {"doth_put", copy.scripted_doth_put},
             {"fb_hold", copy.scripted_fb_hold}, {"echo", copy.scripted_echo},
-            {"upkeep_tutor", copy.scripted_upkeep_tutor}, {"discard", copy.scripted_discard_choice},
+            {"upkeep_tutor", copy.scripted_upkeep_tutor}, {"suspend_tutor", copy.scripted_suspend_tutor},
+            {"discard", copy.scripted_discard_choice},
             {"vial", copy.scripted_vial_charge}, {"saga", copy.scripted_saga_target},
             {"attack_land_search", copy.scripted_attack_land_search},
             {"upkeep_land_search", copy.scripted_upkeep_land_search},
@@ -115486,6 +115762,8 @@ void TurnSolver::WritePostApplyStatePins(GameState& s, const Plan& p)
     // worlds) -- write-when-set, so a main-2 plan without the axis leaves main 1's pin standing.
     if (p.upkeep_gy_reanimate_choice >= 0) { s.scripted_upkeep_gy_reanimate = p.upkeep_gy_reanimate_choice; }
     if (p.upkeep_tutor_choice >= 0) { s.scripted_upkeep_tutor = p.upkeep_tutor_choice; }
+    // Profane Tutor's fetch, chosen where the turn's line crossed into the next upkeep (BoundaryFan) -- write-when-set.
+    if (p.suspend_tutor_choice >= 0) { s.scripted_suspend_tutor = p.suspend_tutor_choice; }
     // Shadowborn's demon triggers (Reaper end step + Overlord next upkeep): the end step and the upkeep
     // consume their own halves (PerformEndStepMorbidDestroy / PerformUpkeepSacrificeCreature).
     if (p.demon_trigger_choice >= 0) { s.scripted_demon_trigger = p.demon_trigger_choice; }

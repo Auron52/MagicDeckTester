@@ -990,6 +990,10 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     { fold(0xD0E700000000ull + static_cast<std::uint64_t>(s.scripted_doth_put)); }
     if (s.scripted_upkeep_tutor >= 0)
     { fold(0x555054555400ull + static_cast<std::uint64_t>(s.scripted_upkeep_tutor)); }
+    // Profane Tutor's off-suspend fetch (GameState::scripted_suspend_tutor): set at a crossing, consumed at the
+    // upkeep -- the same class, value-gated with its own domain tag.
+    if (s.scripted_suspend_tutor >= 0)
+    { fold(0x5354555400000ull + static_cast<std::uint64_t>(s.scripted_suspend_tutor)); }
     // Moraug's queued additional combats (GameState::pending_extra_combats): future-determining, value-gated.
     if (s.pending_extra_combats != 0)
     { fold(0xE7C0000ull + static_cast<std::uint64_t>(s.pending_extra_combats)); }
