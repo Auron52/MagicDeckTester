@@ -836,6 +836,7 @@ enum Slot : int
     SLIVERS_REPLICATE_MANLAND, // MTG_SLIVERS_REPLICATE_MANLAND  AGENT amendment (2026-11-03, for USER review): with the top-count prune, also keep the top count that leaves an untapped Mutavault its own mana + animate cost. Default OFF
     SLIVERS_ORDER,            // MTG_SLIVERS_ORDER        Slivers TOTAL cast order, USER-APPROVED 2026-11-03 (docs/design/cast-order-drafts-2026-10-14/slivers_vial.md section 3, one row per card): Hatchery first, Thrumming Hivepool last. Default ON; =0 -> VialProvider's generic tiers
     REFINE_VICTIM_SPENT,      // MTG_REFINE_VICTIM_SPENT  the payment refine (MTG_PAY_REFINE) reads a cast's sacrifice victim (g_pay_sac_victim) as tapped: it leaves with the cost, so giving it back is no source released and no strict gain (ManaOracle.cpp RefinePaymentImpl). StompySurprise mana-clean APPLY-DROP, seed 31000062 T3: Natural Order's {2}{G}{G} kept {Forest, Archdruid} over {Mystic (the victim), Archdruid} and Worldly Tutor had no {G}. DEFAULT ON; =0 -> the victim counts like any source
+    PREPAY_SCALER_GROWN,      // MTG_PREPAY_SCALER_GROWN  the whole-turn prepay (BatchPrepayMainCasts) declines when the batch casts a creature an untapped subtype-scaled dork counts (Priest of Titania, Elvish Archdruid) and the board without those dorks cannot pay the batch and its joint solve would tap a flat creature: the prepay taps everything before the first cast resolves, so the dork pays at its plan-start count; the per-cast payer taps it after the food lands (TurnSolver.cpp, PP_SCALER_GROWN). StompySurprise mana-clean DOMINATED-CREATURE, seed 30004002 T3. DEFAULT ON; =0 -> the prepay as before
     COUNT
 };
 
@@ -1616,6 +1617,7 @@ inline const char* Name(int slot)
         "MTG_SLIVERS_REPLICATE_MANLAND",
         "MTG_SLIVERS_ORDER",
         "MTG_REFINE_VICTIM_SPENT",
+        "MTG_PREPAY_SCALER_GROWN",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

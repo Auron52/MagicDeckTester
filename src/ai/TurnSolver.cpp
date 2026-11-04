@@ -56103,7 +56103,7 @@ namespace
 enum PrepayOutcome { PP_OK = 0, PP_DIG, PP_FLOOD, PP_FLOAT_NZ, PP_PRODUCER, PP_NO_DEF, PP_XSPELL,
                      PP_SOULFIRE, PP_HINATA, PP_FEW_CASTS, PP_UNPAYABLE, PP_WILD, PP_OK_MIXED,
                      PP_MINT_HOLD, PP_BIGMANA_MIXED, PP_PD_TIMING, PP_LIFE_SCALED, PP_SUBTYPE_MANA,
-                     PP_AURA_PARTIAL, PP_DYNAMIC_COST, PP_N };
+                     PP_AURA_PARTIAL, PP_DYNAMIC_COST, PP_SCALER_GROWN, PP_N };
 const char* const kPrepayName[PP_N] = {
     "PREPAID (no per-cast search)", "declined: dig-draw", "declined: flood engine",
     "declined: float non-empty", "declined: producer (ritual/rock)", "declined: no card def",
@@ -56117,7 +56117,8 @@ const char* const kPrepayName[PP_N] = {
     "declined: a life-scaled source the batch's lifegain grows (LifeScaledManaInOrderWalk)",
     "declined: subtype-restricted mana live (Smokebraider)",
     "partial: the held land Auras' bills (MTG_PREPAY_AURA_STAGE)",
-    "declined: a cast in the line can reduce a later cast's cost" };
+    "declined: a cast in the line can reduce a later cast's cost",
+    "declined: a subtype-scaled dork the batch's creatures grow (MTG_PREPAY_SCALER_GROWN)" };
 struct PrepayProbe
 {
     std::atomic<std::uint64_t> n[PP_N];
@@ -58738,6 +58739,88 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         }
     }
 
+    // SUBTYPE-SCALED DORK GROWN BY THE BATCH (MTG_PREPAY_SCALER_GROWN, heurarm lever, DEFAULT ON; =0 the prepay as
+    // before). The life-scaled decline's shape (PP_LIFE_SCALED, above), for Priest of Titania / Elvish Archdruid: the
+    // prepay taps every source the batch needs BEFORE the first cast resolves, so a scaled dork the batch's own
+    // creatures feed pays at its plan-start count, and the bodies that make up the difference are tapped with it.
+    // Declined when the committed solve tapped a creature that is NOT a scaled dork, the batch casts a creature an
+    // untapped, able-to-tap subtype-scaled dork of ours counts, and the board WITHOUT those dorks cannot pay the
+    // batch: the board rolls back as a declined solve's does, and the per-cast payer taps the dork when a cast needs
+    // it, for the count by then. A solve whose hold ladder kept every flat body up (test_stompy_order's gi287
+    // boards) stands. StompySurprise mana-clean DOMINATED-CREATURE, seed 30004002 T3 {Elvish Mystic, Elvish
+    // Archdruid} on {Forest, Llanowar Elves, Elvish Archdruid}: the prepay tapped all three (Archdruid for 2); Forest
+    // for Mystic, then Archdruid alone for 3, keeps Llanowar Elves up to attack. A payment-order choice only (no
+    // option is added or removed); the same function serves both apply worlds -> lockstep. Judged here, after the
+    // solve, so a batch that taps no flat creature pays one battlefield scan for the check.
+    static const bool s_scaler_grown = EnvOn("MTG_PREPAY_SCALER_GROWN", true);
+    if (!aura_staged && heurarm::Flag(heurarm::PREPAY_SCALER_GROWN, s_scaler_grown))
+    {
+        bool flat_tapped = false;
+        const int lim = std::min<int>(static_cast<int>(state.battlefield.size()), static_cast<int>(bf_snap.size()));
+        for (int i = 0; i < lim && !flat_tapped; ++i)
+        {
+            const Permanent& b = bf_snap[static_cast<std::size_t>(i)];
+            if (b.controller_index != active || b.tapped || !state.battlefield[static_cast<std::size_t>(i)].tapped
+                || !b.card.IsCreature())
+            { continue; }
+            const CardDefinition* bd = CardDatabase::Instance().LookupCached(b.card);
+            flat_tapped = bd == nullptr || !IsScaledManaDork(*bd);
+        }
+        if (flat_tapped)
+        {
+            // The solve, kept aside; the board rolled back exactly as a declined solve rolls it back.
+            const std::vector<Permanent> bf_solved = state.battlefield;
+            const ManaPool fm_solved = state.floating_mana;
+            const int  la_solved  = state.players[active].life;
+            const int  lo_solved  = state.players[1 - active].life;
+            const bool oll_solved = state.opponent_lost_life_this_turn;
+            auto nc_solved = NoncombatStateSnapshot(state);
+            const int  ea_solved  = state.players[active].energy_counters;
+            state.battlefield                  = bf_snap;
+            state.floating_mana                = fm_snap;
+            state.players[active].life         = la;
+            state.players[1 - active].life     = lo;
+            state.opponent_lost_life_this_turn = oll; oll_noncombat.Restore(state);
+            if (energy_restore) { state.players[active].energy_counters = ea; }
+            // The scaled dorks the batch feeds, and the board without them.
+            bool fed_any = false;
+            ManaPool full, rest;
+            for (const Permanent& p : state.battlefield)
+            {
+                if (p.controller_index != active || p.tapped || p.def_absent) { continue; }
+                const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+                if (pd == nullptr || pd->params.mana_per_life_gained || !IsScaledManaDork(*pd)
+                    || !CanTapNow(p, state.battlefield))
+                { continue; }
+                bool fed = false;
+                for (const Action& a : acts)
+                {
+                    if (a.kind != Action::Kind::CastFromHand) { continue; }
+                    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+                    if (d != nullptr && d->card.IsCreature()
+                        && CardHasSubtype(d->card, pd->params.mana_per_creature_subtype))
+                    { fed = true; break; }
+                }
+                if (!fed) { continue; }
+                if (!fed_any) { full = AvailableManaPool(state); rest = full; fed_any = true; }
+                const ManaPool without = AvailableManaPool(state, &p);
+                rest.white     -= full.white     - without.white;
+                rest.blue      -= full.blue      - without.blue;
+                rest.black     -= full.black     - without.black;
+                rest.red       -= full.red       - without.red;
+                rest.green     -= full.green     - without.green;
+                rest.colorless -= full.colorless - without.colorless;
+                rest.wild      -= full.wild      - without.wild;
+            }
+            if (fed_any && !rest.CanPay(combined)) { return Pp(PP_SCALER_GROWN); }
+            state.battlefield                  = bf_solved;
+            state.floating_mana                = fm_solved;
+            state.players[active].life         = la_solved;
+            state.players[1 - active].life     = lo_solved;
+            state.opponent_lost_life_this_turn = oll_solved; nc_solved.Restore(state);
+            state.players[active].energy_counters = ea_solved;
+        }
+    }
     // MTG_PREPAY_COLOURS: settle the hybrid pips and the any-colour units (PrepayColoursFit) before the
     // pre-load pins them. Every solve accepted above passed the same test, so this always succeeds; with
     // no hybrid pip and no `wild` it hands both back unchanged.

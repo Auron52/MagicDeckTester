@@ -1168,3 +1168,41 @@ TEST_CASE("payment: Natural Order's victim pays before a land (sac-fodder first,
     CHECK(s.battlefield[3].tapped);         // Archdruid, three Elves
     CHECK_FALSE(s.battlefield[2].tapped);   // the Forest Worldly Tutor needs
 }
+
+// StompySurprise mana-clean (DOMINATED-CREATURE, seed 30004002 T3): {Elvish Mystic, Elvish Archdruid} on {Forest,
+// Llanowar Elves, Elvish Archdruid}. The whole-turn prepay taps before the first cast resolves, so the Archdruid pays
+// for two Elves and the batch's four mana takes all three sources. Mystic is food the Archdruid counts and the board
+// without it cannot pay the batch, so the prepay declines (MTG_PREPAY_SCALER_GROWN) and the per-cast payer pays
+// Mystic off the Forest, then the Archdruid alone (three Elves) pays {2}{G}: Llanowar Elves stays up to attack.
+TEST_CASE("prepay: declines when the batch grows a scaled dork it needs")
+{
+    EnsureOracleCards();
+    auto run = [](int arm, bool* prepaid) -> GameState
+    {
+        GameState s = Board({ "Forest", "Llanowar Elves", "Elvish Archdruid" });
+        Card c1 = CardDatabase::Instance().Lookup("Elvish Mystic")->card;    c1.m_number = 11;
+        Card c2 = CardDatabase::Instance().Lookup("Elvish Archdruid")->card; c2.m_number = 12;
+        s.players[0].hand = { c1, c2 };
+        const std::vector<Action> line = { CastAction(s, "Elvish Mystic"), CastAction(s, "Elvish Archdruid") };
+        const std::int8_t saved = heurarm::t_arm[heurarm::PREPAY_SCALER_GROWN];
+        heurarm::t_arm[heurarm::PREPAY_SCALER_GROWN] = static_cast<std::int8_t>(arm);
+        *prepaid = TurnSolver::BatchPrepayMainCasts(s, line);
+        heurarm::t_arm[heurarm::PREPAY_SCALER_GROWN] = saved;
+        return s;
+    };
+    bool prepaid = true;
+    const GameState on = run(1, &prepaid);
+    CHECK_FALSE(prepaid);
+    for (const Permanent& p : on.battlefield) { CHECK_FALSE(p.tapped); }   // a decline leaves the board untouched
+    const GameState off = run(0, &prepaid);
+    CHECK(prepaid);
+    CHECK(off.battlefield[1].tapped);   // the old prepay: Llanowar Elves tapped with the rest
+    // No food in the batch: the prepay runs as before.
+    GameState t = Board({ "Forest", "Forest", "Llanowar Elves", "Elvish Archdruid" });
+    Card w1 = CardDatabase::Instance().Lookup("Worldly Tutor")->card; w1.m_number = 21;
+    Card w2 = CardDatabase::Instance().Lookup("Worldly Tutor")->card; w2.m_number = 22;
+    t.players[0].hand = { w1, w2 };
+    std::vector<Action> line2 = { CastAction(t, "Worldly Tutor"), CastAction(t, "Worldly Tutor") };
+    line2[1].hand_index = 1;
+    CHECK(TurnSolver::BatchPrepayMainCasts(t, line2));
+}

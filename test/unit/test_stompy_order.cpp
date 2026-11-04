@@ -470,6 +470,9 @@ TEST_CASE("Payment fix (MTG_HOLD_RELEASE_YIELD): the prepay keeps both 1/1 elves
         { kPriest, kFyndhorn, kMystic },
         { kMystic, kPriest, kFyndhorn },
         { kFyndhorn, kPriest, kMystic } };
+    // The joint solve's own hold ladder is under test: pin MTG_PREPAY_SCALER_GROWN off, which would otherwise decline
+    // the off arm's prepay (it taps a 1/1 while Archdruid, Priest's food, is in the batch) to the per-cast payer.
+    heurarm::t_arm[heurarm::PREPAY_SCALER_GROWN] = 0;
     for (const bool fix : { true, false })
     {
         heurarm::t_arm[heurarm::HOLD_RELEASE_YIELD] = fix ? 1 : 0;
@@ -489,6 +492,7 @@ TEST_CASE("Payment fix (MTG_HOLD_RELEASE_YIELD): the prepay keeps both 1/1 elves
         if (!fix) { CHECK_FALSE(every_order_keeps_both); }
     }
     heurarm::t_arm[heurarm::HOLD_RELEASE_YIELD] = -1;
+    heurarm::t_arm[heurarm::PREPAY_SCALER_GROWN] = -1;
 }
 
 TEST_CASE("Payment fix (MTG_HOLD_RELEASE_YIELD): gi287's 6-mana turn holds BOTH Fyndhorns and taps Priest, wherever it sits")
