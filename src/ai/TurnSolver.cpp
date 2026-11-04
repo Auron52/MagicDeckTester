@@ -66990,6 +66990,17 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // loop, then pay it here. Applies as mode 2 (+P/+T to the subtype).
             ManaCost pump_cost = OutletOwnCost(a);
             bool     pump_ok   = true;
+            int      pump_k    = a.chosen_x;
+            // Discard rider (mode 1): pay only for the activations the hand can still pay the discard of
+            // (PumpPayableActivations; lockstep with the executor's twin).
+            if (a.gy_exile_mode == 1)
+            {
+                const int n = PumpPayableActivations(state, state.active_player_index, a);
+                if (n <= 0) { ++g_trailing_act_skips; continue; }
+                if (n < std::max(1, a.chosen_x) && a.madness_mv == 0 && a.def != nullptr
+                    && a.def->params.firebreathing_cost.has_value())
+                { pump_cost = PumpCostForActivations(a, n); pump_k = n; }
+            }
             if (a.gy_exile_mode == 5)
             {
                 pump_ok = LoopFundedPumpCost(state, state.active_player_index, a.sac_source_id, a.chosen_x, pump_cost)
@@ -66999,7 +67010,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 const MadnessHostScope _mh(&RolloutMadnessPayer(), MadnessPinOf(a));   // A1 (executor twin)
                 ApplyActivatePump(state, state.active_player_index, a.sac_source_id,
-                                  a.gy_exile_mode == 5 ? 2 : a.gy_exile_mode, a.chosen_x, a.discard_name.str());
+                                  a.gy_exile_mode == 5 ? 2 : a.gy_exile_mode, pump_k, a.discard_name.str());
             }
             else { ++g_trailing_act_skips; }
         }

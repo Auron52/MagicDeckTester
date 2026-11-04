@@ -4,6 +4,7 @@
 #include "PlanContext.h"   // PlanTraits (ComputePlanTraits below); header is Action-free on purpose
 #include "SearchBudget.h"
 #include "../core/MadnessTypes.h"   // MadnessPin (Action's madness pin helpers)
+#include "../core/EnvFlags.h"      // EnvOn (MTG_PUMP_HAND_CAP)
 #include <chrono>
 #include <functional>
 #include <memory>
@@ -914,6 +915,35 @@ inline ManaCost OutletOwnCost(const Action& a)
 {
     ManaCost c = a.cost;
     if (a.madness_mv > 0) { c.generic = std::max(0, c.generic - a.madness_mv); }
+    return c;
+}
+// BURNING-FIST'S DISCARD IS A COST (mode 1, firebreathing_discard): "{1}{R}, Discard a card: +2/+0". An activation
+// with no card to discard cannot be activated (CR 602.2b, 601.2h), so it must not be paid for either. The search
+// enumerates K activations off the hand it SEES; a cast earlier in the same line can empty that hand before the
+// trailing pass reaches the pump, and both pay sites used to pay all K x {1}{R} and then let ApplyActivatePump stop
+// at the empty hand -- {1}{R} per missing card spent on nothing (Minotaur mana-clean: 32 ORACLE-GAPs rest on it).
+// The number of activations the hand can still pay for: min(K, hand size) for mode 1, K for every other mode.
+// MTG_PUMP_HAND_CAP=0 restores the old pay-all-K.
+inline int PumpPayableActivations(const GameState& s, int controller, const Action& a)
+{
+    const int k = std::max(1, a.chosen_x);
+    static const bool s_on = EnvOn("MTG_PUMP_HAND_CAP", true);
+    if (!s_on || a.gy_exile_mode != 1) { return k; }
+    return std::min(k, static_cast<int>(s.players[controller].hand.size()));
+}
+// The cost of `n` activations of a mode-1 pump (n < K), built exactly as the enumerator builds K's (per-activation
+// firebreathing_cost x n, hybrid entries replicated). Only called with no madness pin folded in (madness_mv == 0).
+inline ManaCost PumpCostForActivations(const Action& a, int n)
+{
+    const ManaCost per = a.def->params.firebreathing_cost.value();
+    ManaCost c = per;
+    c.generic *= n; c.white *= n; c.blue *= n; c.black *= n; c.red *= n; c.green *= n; c.colorless *= n;
+    c.hybrid_count = 0;
+    for (int rep = 0; rep < n; ++rep)
+    {
+        for (int hi = 0; hi < per.hybrid_count && c.hybrid_count < 4; ++hi)
+        { c.hybrid_pair[c.hybrid_count++] = per.hybrid_pair[hi]; }
+    }
     return c;
 }
 inline MadnessPin MadnessPinOf(const Action& a) { return MadnessPin{ a.madness_choice, a.madness_arm }; }

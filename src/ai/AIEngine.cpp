@@ -7157,6 +7157,16 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // world's payer.
             ManaCost pump_cost = OutletOwnCost(a);
             bool     pump_ok   = true;
+            int      pump_k    = a.chosen_x;
+            // Discard rider (mode 1): lockstep twin of ApplyPlanDirect's trailing pass (PumpPayableActivations).
+            if (a.gy_exile_mode == 1)
+            {
+                const int n = PumpPayableActivations(state, state.active_player_index, a);
+                if (n <= 0) { continue; }
+                if (n < std::max(1, a.chosen_x) && a.madness_mv == 0 && a.def != nullptr
+                    && a.def->params.firebreathing_cost.has_value())
+                { pump_cost = PumpCostForActivations(a, n); pump_k = n; }
+            }
             if (a.gy_exile_mode == 5)
             {
                 pump_ok = LoopFundedPumpCost(state, state.active_player_index, a.sac_source_id, a.chosen_x, pump_cost)
@@ -7167,7 +7177,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             {
                 const MadnessHostScope _mh(&MadnessPayer(), MadnessPinOf(a));   // A1 (rollout twin)
                 const int n = ApplyActivatePump(state, state.active_player_index, a.sac_source_id,
-                                                a.gy_exile_mode == 5 ? 2 : a.gy_exile_mode, a.chosen_x, a.discard_name.str());
+                                                a.gy_exile_mode == 5 ? 2 : a.gy_exile_mode, pump_k, a.discard_name.str());
                 // Label built from the PARAMS, not hardcoded. It used to read "team pump + haste"
                 // for every mode != 1, which was already wrong for mode 3 (Resplendent Angel's self
                 // pump + lifelink) and became wrong again for Valiant Knight's double-strike grant
