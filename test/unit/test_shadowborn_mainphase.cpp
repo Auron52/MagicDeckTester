@@ -1,0 +1,340 @@
+// Shadowborn Apostle: the USER's main-1 rule and cast order (2026-11-04; docs/design/shadowborn-main-phase-and-cast-
+// order-draft.md). Two levers, each measured on its own:
+//   * MTG_SB_MAIN1_RULE -- a ROOT pre-combat plan beyond the land drop is admitted only on a JETMIR TURN (an
+//     attack-ready creature AND Jetmir on our battlefield, or a plan that can still deploy him before combat);
+//     everything else is folded to its main-2 twin (ShadowbornProvider::Main1PlanAdmitted). The sick-turn Demon
+//     search is offered after combat with it.
+//   * MTG_SB_CAST_ORDER -- land, Dark Ritual, [Culling's hand victim], Culling, Thrumming Stone, Apostle, Reaper,
+//     Sire, Overlord, Jetmir, Demonic Tutor, Diabolic Intent, Profane Tutor, Lotus Bloom; within one main no
+//     Overlord (fetch or hard cast) after a Jetmir fetch.
+#include <doctest/doctest.h>
+
+#include "ai/DecisionProviders.h"
+#include "ai/HeuristicArm.h"
+#include "ai/ManaPayment.h"
+#include "ai/TurnSolver.h"
+#include "cards/CardDatabase.h"
+#include "core/GameSetup.h"
+#include "core/GameState.h"
+#include "core/HeuristicDefaults.h"
+#include "core/SpellEffects.h"
+
+#include <algorithm>
+#include <string>
+#include <vector>
+
+namespace
+{
+const char* const kApM     = "Shadowborn Apostle";
+const char* const kStoneM  = "Thrumming Stone";
+const char* const kRitM    = "Dark Ritual";
+const char* const kCullM   = "Culling the Weak";
+const char* const kDtM     = "Demonic Tutor";
+const char* const kIntentM = "Diabolic Intent";
+const char* const kJetM    = "Jetmir, Nexus of Revels";
+const char* const kOverM   = "Abhorrent Overlord";
+const char* const kSwM     = "Swamp";
+const char* const kLakeM   = "Lake of the Dead";
+
+const CardDefinition& DefM(const std::string& n)
+{
+    static const bool loaded = []
+    {
+        CardDatabase::Instance().LoadFromJson(ResolveHeuristicDefaultsPath("src/cards/data/cards.json"));
+        return true;
+    }();
+    REQUIRE(loaded);
+    const CardDefinition* d = CardDatabase::Instance().Lookup(n);
+    REQUIRE_MESSAGE(d != nullptr, "card not in cards.json: ", n);
+    return *d;
+}
+Card CardM(const std::string& name, int number)
+{
+    Card c     = DefM(name).card;
+    c.m_number = number;
+    return c;
+}
+Permanent PermM(const std::string& name, int number, bool fresh = false)
+{
+    Permanent p;
+    p.card              = CardM(name, number);
+    p.controller_index  = 0;
+    p.owner_index       = 0;
+    p.entered_this_turn = fresh;
+    return p;
+}
+const ShadowbornProvider& ProvM() { static const ShadowbornProvider p; return p; }
+
+struct ArmM
+{
+    heurarm::Arm saved;
+    ArmM() : saved(heurarm::t_arm) {}
+    ArmM& Set(heurarm::Slot slot, int v) { heurarm::t_arm[static_cast<int>(slot)] = static_cast<std::int8_t>(v); return *this; }
+    ~ArmM() { heurarm::t_arm = saved; }
+};
+struct SearchedM
+{
+    bool saved;
+    SearchedM() : saved(g_searched_play) { TurnSolver::SetSearchedPlay(true); }
+    ~SearchedM() { TurnSolver::SetSearchedPlay(saved); }
+};
+
+GameState BaseM(int swamps)
+{
+    (void)DefM(kSwM);
+    GameState s;
+    s.m_provider          = &ProvM();
+    s.active_player_index = 0;
+    s.turn_number         = 4;
+    s.phase               = Phase::PreCombatMain;
+    s.uses_second_main    = true;
+    s.players[0].life     = gamesetup::StartingLife();
+    s.players[1].life     = gamesetup::StartingLife();
+    for (int k = 0; k < swamps; ++k) { s.battlefield.push_back(PermM(kSwM, 1 + k)); }
+    return s;
+}
+void LibM(GameState& s, const std::vector<std::string>& names, int first = 500)
+{
+    std::vector<Card> cards;
+    for (const std::string& nm : names) { cards.push_back(CardM(nm, first++)); }
+    s.players[0].library.assign(cards.begin(), cards.end());
+}
+bool CastsName(const TurnSolver::Plan& p, const std::string& name)
+{
+    for (const Action& a : p.actions)
+    { if (a.kind == Action::Kind::CastFromHand && a.card_name.str() == name) { return true; } }
+    return false;
+}
+struct Census { int plans = 0, with_actions = 0, casting = 0; };
+Census CensusM(const GameState& s, const std::string& name)
+{
+    Census c;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true))
+    {
+        ++c.plans;
+        if (!p.actions.empty()) { ++c.with_actions; }
+        if (CastsName(p, name)) { ++c.casting; }
+    }
+    return c;
+}
+std::vector<std::string> ActTargetsM(const GameState& s, bool pre_combat)
+{
+    std::vector<std::string> out;
+    for (const Action& a : TurnSolver::CollectActionsForTest(s, pre_combat))
+    {
+        if (a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::SacNamedTutorPut)
+        { out.push_back(a.tutor_target.str()); }
+    }
+    return out;
+}
+int CastCountM(const GameState& s, const std::string& name, bool pre_combat)
+{
+    int n = 0;
+    for (const Action& a : TurnSolver::CollectActionsForTest(s, pre_combat))
+    { if (a.kind == Action::Kind::CastFromHand && a.card_name.str() == name) { ++n; } }
+    return n;
+}
+}   // namespace
+
+// ---- the main-1 rule ----------------------------------------------------------------------------------------------
+TEST_CASE("SB main-1 rule: no attack-ready creature -> main 1 is the land drop alone")
+{
+    SearchedM sp;
+    GameState s = BaseM(1);
+    s.players[0].hand.push_back(CardM(kSwM, 60));
+    s.players[0].hand.push_back(CardM(kApM, 61));
+    s.players[0].hand.push_back(CardM(kRitM, 62));
+    LibM(s, { kJetM, kSwM, kSwM, kSwM });
+    {
+        ArmM arm; arm.Set(heurarm::SB_MAIN1_RULE, 0);
+        const Census off = CensusM(s, kApM);
+        CHECK(off.casting > 0);
+    }
+    ArmM arm; arm.Set(heurarm::SB_MAIN1_RULE, 1);
+    const Census on = CensusM(s, kApM);
+    CHECK(on.plans > 0);
+    CHECK(on.with_actions == 0);
+    // ...and the land is still played in main 1 (every plan that remains plays the Swamp: the no-land plan is P1's).
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true)) { CHECK(p.land_to_play == kSwM); }
+}
+
+TEST_CASE("SB main-1 rule: the d0 runner and human play keep the full menu (searched play only)")
+{
+    GameState s = BaseM(1);
+    s.players[0].hand.push_back(CardM(kSwM, 60));
+    s.players[0].hand.push_back(CardM(kApM, 61));
+    LibM(s, { kJetM, kSwM, kSwM });
+    ArmM arm; arm.Set(heurarm::SB_MAIN1_RULE, 1);
+    const bool saved = g_searched_play;
+    TurnSolver::SetSearchedPlay(false);
+    const Census c = CensusM(s, kApM);
+    TurnSolver::SetSearchedPlay(saved);
+    CHECK(c.casting > 0);
+}
+
+TEST_CASE("SB main-1 rule: attackers + Jetmir in the library, no granter -> a lone Apostle folds, a tutor stays")
+{
+    SearchedM sp;
+    ArmM arm; arm.Set(heurarm::SB_MAIN1_RULE, 1);
+    GameState s = BaseM(2);
+    s.battlefield.push_back(PermM(kApM, 41));          // attack-ready
+    s.players[0].hand.push_back(CardM(kSwM, 60));
+    s.players[0].hand.push_back(CardM(kApM, 61));
+    s.players[0].hand.push_back(CardM(kDtM, 62));
+    LibM(s, { kJetM, kStoneM, kSwM, kSwM, kSwM });
+    int lone_apostle = 0, tutor = 0;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
+    {
+        if (CastsName(p, kDtM)) { ++tutor; }
+        else if (CastsName(p, kApM)) { ++lone_apostle; }
+    }
+    CHECK(lone_apostle == 0);   // 1 + 1 Apostles cannot reach the six, and nothing can reveal: main 2 does it
+    CHECK(tutor > 0);           // the tutor's continuation could still find the Stone and go off before combat
+}
+
+TEST_CASE("SB main-1 rule: Jetmir on the battlefield with an attacker -> nothing folds (bodies pump him)")
+{
+    SearchedM sp;
+    ArmM arm; arm.Set(heurarm::SB_MAIN1_RULE, 1);
+    GameState s = BaseM(2);
+    s.battlefield.push_back(PermM(kJetM, 40));
+    s.battlefield.push_back(PermM(kApM, 41));
+    s.players[0].hand.push_back(CardM(kSwM, 60));
+    s.players[0].hand.push_back(CardM(kApM, 61));
+    LibM(s, { kOverM, kSwM, kSwM });
+    CHECK(CensusM(s, kApM).casting > 0);
+    // The same board with Jetmir summoning sick and no other old creature: no attacker, so it folds.
+    GameState t = BaseM(2);
+    t.battlefield.push_back(PermM(kJetM, 40, /*fresh=*/true));
+    t.players[0].hand.push_back(CardM(kSwM, 60));
+    t.players[0].hand.push_back(CardM(kApM, 61));
+    LibM(t, { kOverM, kSwM, kSwM });
+    CHECK(CensusM(t, kApM).casting == 0);
+}
+
+TEST_CASE("SB main-1 rule: a granter on the battlefield -> a cast stays in main 1 (a reveal chain may reach Jetmir)")
+{
+    SearchedM sp;
+    ArmM arm; arm.Set(heurarm::SB_MAIN1_RULE, 1);
+    GameState s = BaseM(2);
+    s.battlefield.push_back(PermM(kStoneM, 40));
+    s.battlefield.push_back(PermM(kApM, 41));
+    s.players[0].hand.push_back(CardM(kSwM, 60));
+    s.players[0].hand.push_back(CardM(kRitM, 61));
+    LibM(s, { kApM, kApM, kSwM, kJetM, kSwM, kSwM, kSwM, kSwM });
+    CHECK(CensusM(s, kRitM).casting > 0);
+    // ...but not once Jetmir has left the library (nothing in main 1 can change combat any more).
+    GameState t = s;
+    LibM(t, { kApM, kApM, kSwM, kSwM, kSwM, kSwM, kSwM, kSwM });
+    CHECK(CensusM(t, kRitM).casting == 0);
+}
+
+TEST_CASE("SB main-1 rule: a Lake of the Dead drop keeps its main-1 casts (the eaten Swamp's float empties at combat)")
+{
+    SearchedM sp;
+    ArmM arm; arm.Set(heurarm::SB_MAIN1_RULE, 1);
+    GameState s = BaseM(2);
+    s.players[0].hand.push_back(CardM(kLakeM, 60));
+    s.players[0].hand.push_back(CardM(kApM, 61));
+    LibM(s, { kSwM, kSwM, kSwM });
+    int lake_cast = 0;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
+    { if (p.land_to_play == kLakeM && CastsName(p, kApM)) { ++lake_cast; } }
+    CHECK(lake_cast > 0);
+}
+
+TEST_CASE("SB main-1 rule: the sick-turn Demon search is offered after combat too")
+{
+    GameState s = BaseM(1);
+    for (int k = 0; k < 6; ++k) { s.battlefield.push_back(PermM(kApM, 10 + k, /*fresh=*/true)); }
+    LibM(s, { kOverM, kJetM, kSwM, kSwM });
+    {
+        ArmM arm; arm.Set(heurarm::SB_MAIN1_RULE, 0);
+        CHECK(ActTargetsM(s, /*pre_combat=*/false).empty());
+        CHECK(!ActTargetsM(s, /*pre_combat=*/true).empty());
+    }
+    ArmM arm; arm.Set(heurarm::SB_MAIN1_RULE, 1);
+    const std::vector<std::string> m2 = ActTargetsM(s, /*pre_combat=*/false);
+    CHECK(std::find(m2.begin(), m2.end(), kOverM) != m2.end());
+    CHECK(std::find(m2.begin(), m2.end(), kJetM) != m2.end());   // USER: "in main 2 we should still allow Overlord -> Jetmir"
+}
+
+// ---- the activation order -----------------------------------------------------------------------------------------
+TEST_CASE("SB order: Jetmir fetched this main -> no Overlord fetch and no Overlord hard cast after it")
+{
+    GameState s = BaseM(8);
+    s.battlefield.push_back(PermM(kJetM, 30, /*fresh=*/true));
+    for (int k = 0; k < 6; ++k) { s.battlefield.push_back(PermM(kApM, 10 + k, /*fresh=*/true)); }
+    s.players[0].hand.push_back(CardM(kOverM, 60));
+    LibM(s, { kOverM, kSwM, kSwM });
+    {
+        ArmM arm; arm.Set(heurarm::SB_CAST_ORDER, 0);
+        const std::vector<std::string> t = ActTargetsM(s, true);
+        CHECK(std::find(t.begin(), t.end(), kOverM) != t.end());
+        CHECK(CastCountM(s, kOverM, true) > 0);
+    }
+    ArmM arm; arm.Set(heurarm::SB_CAST_ORDER, 1);
+    CHECK(ActTargetsM(s, true).empty());
+    CHECK(CastCountM(s, kOverM, true) == 0);
+}
+
+TEST_CASE("SB order: a MAIN-2 Overlord after a main-1 Jetmir stays offered (attack turn)")
+{
+    ArmM arm;
+    arm.Set(heurarm::SB_CAST_ORDER, 1).Set(heurarm::SB_MAIN1_RULE, 1);
+    GameState s = BaseM(8);
+    s.phase = Phase::PostCombatMain;
+    s.battlefield.push_back(PermM(kJetM, 30, /*fresh=*/true));
+    for (int k = 0; k < 6; ++k) { s.battlefield.push_back(PermM(kApM, 10 + k, /*fresh=*/true)); }
+    s.battlefield.push_back(PermM(kApM, 20));   // an old Apostle: it attacked, Jetmir may have come in main 1
+    s.players[0].hand.push_back(CardM(kOverM, 60));
+    LibM(s, { kOverM, kSwM, kSwM });
+    const std::vector<std::string> t = ActTargetsM(s, /*pre_combat=*/false);
+    CHECK(std::find(t.begin(), t.end(), kOverM) != t.end());
+    CHECK(CastCountM(s, kOverM, false) > 0);
+    // No old creature at all after combat under the main-1 rule: main 1 was land-only, so Jetmir came in THIS main.
+    GameState u = s;
+    u.battlefield.pop_back();
+    u.players[0].hand.clear();
+    CHECK(ActTargetsM(u, /*pre_combat=*/false).empty());
+}
+
+// ---- the cast order -----------------------------------------------------------------------------------------------
+TEST_CASE("SB order: the ranks follow the USER's table")
+{
+    ArmM arm; arm.Set(heurarm::SB_CAST_ORDER, 1);
+    GameState s = BaseM(1);
+    const ShadowbornProvider& p = ProvM();
+    const std::vector<std::string> want = { kRitM, kCullM, kStoneM, kApM, "Reaper from the Abyss", "Sire of Insanity",
+                                            kOverM, kJetM, kDtM, kIntentM, "Profane Tutor", "Lotus Bloom" };
+    for (std::size_t i = 0; i < want.size(); ++i)
+    { CHECK_MESSAGE(p.CastOrderRank(s, DefM(want[i])) == static_cast<int>(i) + 1, want[i]); }
+    CHECK(p.CastOrderTotalByName());
+    ArmM off; off.Set(heurarm::SB_CAST_ORDER, 0);
+    CHECK(p.CastOrderRank(s, DefM(kStoneM)) == 1);   // the shipped order: the granter first
+    CHECK(!p.CastOrderTotalByName());
+}
+
+TEST_CASE("SB order: Culling's hand victim is cast right before Culling, ahead of the Stone")
+{
+    ArmM arm; arm.Set(heurarm::SB_CAST_ORDER, 1);
+    GameState s = BaseM(1);
+    auto cast = [](const char* nm, int hi)
+    {
+        Action a;
+        a.kind       = Action::Kind::CastFromHand;
+        a.card_name  = InternedName(nm);
+        a.def        = &DefM(nm);
+        a.hand_index = hi;
+        return a;
+    };
+    std::vector<Action> acts = { cast(kApM, 0), cast(kStoneM, 1), cast(kCullM, 2), cast(kApM, 3), cast(kRitM, 4) };
+    acts[2].trick_hand_target = kApM;
+    std::vector<int> order = { 0, 1, 2, 3, 4 };
+    std::stable_sort(order.begin(), order.end(), [&](int x, int y) { return CastOrderLess(s, acts[x], acts[y]); });
+    ProvM().ArrangeCastOrder(s, acts, order);
+    std::vector<std::string> got;
+    for (int i : order) { got.push_back(acts[static_cast<std::size_t>(i)].card_name.str()); }
+    const std::vector<std::string> want = { kRitM, kApM, kCullM, kStoneM, kApM };
+    CHECK(got == want);
+}

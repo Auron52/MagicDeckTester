@@ -87345,6 +87345,30 @@ static std::string VampDumpAction(const Action& a)
     if (a.equiv_tag) { s += " e" + std::to_string(a.equiv_tag) + "." + std::to_string(a.equiv_ord); }
     return s;
 }
+// MTG_SB_MAIN1_STATS=1 (DIAGNOSTIC, print-only, default off): how many root pre-combat plans the provider's
+// plan-level main-1 fold (Main1PlanFoldLive / Main1PlanAdmitted) saw and kept, printed at exit.
+namespace sbmain1
+{
+inline bool On() { static const bool on = EnvOn("MTG_SB_MAIN1_STATS"); return on; }
+inline std::atomic<long long> g_lists{0}, g_seen{0}, g_kept{0};
+inline void Note(std::size_t seen, std::size_t kept)
+{
+    g_lists.fetch_add(1, std::memory_order_relaxed);
+    g_seen.fetch_add(static_cast<long long>(seen), std::memory_order_relaxed);
+    g_kept.fetch_add(static_cast<long long>(kept), std::memory_order_relaxed);
+}
+struct Printer
+{
+    ~Printer()
+    {
+        if (!On()) { return; }
+        std::fprintf(stderr, "[sb-main1] folded lists=%lld plans seen=%lld kept=%lld dropped=%lld\n",
+                     g_lists.load(), g_seen.load(), g_kept.load(), g_seen.load() - g_kept.load());
+    }
+};
+inline Printer g_printer;
+}   // namespace sbmain1
+
 static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameState& state,
                                                                     bool is_pre_combat,
                                                                     PbLazyLayout* pb_lazy = nullptr)
@@ -87374,6 +87398,36 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
             kept.reserve(all.size());
             for (TurnSolver::Plan& p : all) { if (!p.land_to_play.empty()) { kept.push_back(std::move(p)); } }
             if (!kept.empty()) { all.swap(kept); }
+        }
+    }
+    // A PROVIDER'S PLAN-LEVEL MAIN-1 FOLD (DecisionProvider::Main1PlanFoldLive / Main1PlanAdmitted; Shadowborn's
+    // USER main-1 rule, MTG_SB_MAIN1_RULE). ROOT pre-combat enumeration only: a breakpoint continuation's list
+    // (g_bp_enum_depth > 0, or a greedy continuation's scope) belongs to a main-1 plan the fold already admitted,
+    // so it is never filtered. Searched play only (the depth-0 runner keeps the full menu, as the Fungus split
+    // does), never in human play, only on a deck that plays a second main (the dropped plans' twins live there).
+    if (is_pre_combat && !all.empty() && !HumanPlayActive() && SearchedPlayActive() && state.uses_second_main
+        && g_bp_enum_depth == 0 && !TurnSolver::InBpContinuation())
+    {
+        const DecisionProvider& mprov = ResolveProvider(state);
+        if (mprov.Main1PlanFoldLive(state))
+        {
+            if (pb_lazy != nullptr) { PbLazyMaterialize(all, *pb_lazy); }
+            std::vector<char> admit(all.size(), 0);
+            std::size_t n_admit = 0;
+            for (std::size_t i = 0; i < all.size(); ++i)
+            {
+                const TurnSolver::Plan& p = all[i];
+                if (p.actions.empty() || mprov.Main1PlanAdmitted(state, p.actions, p.land_to_play))
+                { admit[i] = 1; ++n_admit; }
+            }
+            if (sbmain1::On()) { sbmain1::Note(all.size(), n_admit); }
+            if (n_admit > 0 && n_admit < all.size())
+            {
+                std::size_t w = 0;
+                for (std::size_t i = 0; i < all.size(); ++i)
+                { if (admit[i]) { if (w != i) { all[w] = std::move(all[i]); } ++w; } }
+                all.resize(w);
+            }
         }
     }
     // MTG_VAMP_PLAN_DUMP=<min plans> (inert by default; Vampires Stage 5f): print every enumeration of at

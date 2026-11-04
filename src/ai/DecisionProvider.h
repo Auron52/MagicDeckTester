@@ -2974,6 +2974,21 @@ public:
     virtual bool CollectedActionAllowed(const GameState& s, const Action& a, bool is_pre_combat) const
     { (void)s; (void)a; (void)is_pre_combat; return true; }
 
+    // Main1PlanFoldLive / Main1PlanAdmitted -- a provider's PLAN-level fold of the PRE-combat main (first user:
+    // Shadowborn's USER main-1 rule, MTG_SB_MAIN1_RULE). Where CollectedActionAllowed judges one action, this
+    // judges a whole ROOT main-1 plan: a plan it refuses is dropped from the pre-combat menu because its
+    // post-combat twin (the same casts and activations in main 2, after a land-only main 1) is at least as good.
+    // Applied once per root pre-combat enumeration (EnumeratePlansWithLandUncached; never inside a breakpoint
+    // continuation, never in human play, searched play only), so the search, the searched rollout and the
+    // executor (which plays the search's plan) read one menu. Main1PlanFoldLive is asked ONCE per enumeration
+    // and may cache per-state facts for the Main1PlanAdmitted calls that immediately follow it (same thread, no
+    // enumeration in between). A plan with no actions (the land drop alone) must always be admitted. Defaults
+    // false / true -> byte-identical.
+    virtual bool Main1PlanFoldLive(const GameState& s) const { (void)s; return false; }
+    virtual bool Main1PlanAdmitted(const GameState& s, const std::vector<Action>& actions,
+                                   const std::string& land_to_play) const
+    { (void)s; (void)actions; (void)land_to_play; return true; }
+
     // FetchSearchCandidates -- the fetch targets the SEARCH actually branches on. The provider
     // returns a list of VARYING SIZE and the engine fans over exactly what comes back -- no
     // engine-side cap (USER design 2026-08-21: "the return IS the candidate set", the doctrine

@@ -58631,10 +58631,226 @@ bool ShadowbornProvider::FreeCastTakeDominated(const GameState& /*s*/, int /*con
     return hit.card.IsCreature() && p.sac_named_count > 0 && p.etb_scry == 0 && p.etb_dig_count == 0
         && p.etb_self_draw == 0 && p.etb_tutor_hand_count == 0;
 }
+// ---- ShadowbornProvider: the USER's cast order and main-1 rule (2026-11-04; authority and tables in the
+// declaration) ------------------------------------------------------------------------------------------------
+static bool SbCastOrderOn()
+{
+    // The USER's cast order (2026-11-04). =1 / =0 select the arm; see the default note at the read.
+    static const bool on = EnvOn("MTG_SB_CAST_ORDER");
+    return heurarm::Flag(heurarm::SB_CAST_ORDER, on);
+}
+static bool SbMain1RuleOn()
+{
+    // The USER's main-1 rule (2026-11-04). =1 / =0 select the arm; see the default note at the read.
+    static const bool on = EnvOn("MTG_SB_MAIN1_RULE");
+    return heurarm::Flag(heurarm::SB_MAIN1_RULE, on);
+}
+static bool SbPrunesOn();   // ShadowbornPrunesOn, below (the viewer and the MTG_UNPRUNED audit arm keep the full menus)
+static bool SbIsSacNamedCreature(const CardDefinition* d);   // below
+// A creature of `controller`'s that can attack THIS turn as far as sickness goes (CR 302.6) -- the tap is ignored, so
+// the post-combat main reads the same army the pre-combat main did.
+static bool SbAttackReady(const Permanent& p, int controller)
+{
+    if (p.controller_index != controller || (!p.card.IsCreature() && !p.is_animated)) { return false; }
+    if (p.card.HasKeyword(Keyword::Defender)) { return false; }
+    if (p.is_animated || p.card.HasKeyword(Keyword::Haste)) { return true; }
+    return !(p.entered_this_turn || p.gained_control_this_turn);
+}
+static bool SbIsCountAnthem(const CardDefinition* d)
+{
+    return d != nullptr && d->card.IsCreature() && !d->params.creature_count_anthem_tiers.empty();
+}
+static bool SbIsDevotionDemon(const CardDefinition* d)
+{
+    return d != nullptr && d->card.IsCreature() && !d->params.etb_tokens_per_devotion_color.empty();
+}
+// "Jetmir was fetched EARLIER IN THIS MAIN" (the activation order, MTG_SB_CAST_ORDER): the count anthem is on our
+// battlefield and entered this turn, and this main is the one it entered in. Before combat that is certain (nothing
+// puts it onto the battlefield in an upkeep). After combat it is certain only under the main-1 rule on a turn with
+// no attack-ready creature of ours left: such a turn's main 1 is land-only (Main1PlanAdmitted), so Jetmir entered
+// in main 2. Otherwise a main-2 state cannot tell a main-1 Jetmir from a main-2 one, and the main-1 one keeps its
+// main-2 Overlord (USER: "let the search determine that") -- so the test errs towards offering. Disclosed edge: a
+// main-1 Jetmir whose main 2 has lost every old creature (all of them sacrificed) reads as main 2 and loses the
+// main-2 Overlord fetch.
+static bool SbJetmirFetchedThisMain(const GameState& s, int controller, bool pre_combat)
+{
+    bool jet_new = false, ready = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        if (SbAttackReady(p, controller)) { ready = true; }
+        if (p.entered_this_turn && !p.def_absent && SbIsCountAnthem(CardDatabase::Instance().LookupCached(p.card)))
+        { jet_new = true; }
+    }
+    if (!jet_new) { return false; }
+    return pre_combat || (SbMain1RuleOn() && !ready);
+}
+
 int ShadowbornProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
 {
+    if (SbCastOrderOn())
+    {
+        // THE USER'S ORDER (2026-11-04), read off card data. The land drop is not a cast (it goes first).
+        const CardParams& p = def.params;
+        if (p.suspend_time_counters > 0) { return p.tutor_to_hand ? 11 : 12; }   // Profane Tutor : Lotus Bloom (suspend only)
+        if (p.ritual_floating_mana > 0) { return p.sac_additional_creature ? 2 : 1; }   // Culling : Dark Ritual
+        if (p.grants_ripple > 0) { return 3; }                                           // Thrumming Stone
+        if (def.card.IsCreature())
+        {
+            if (p.sac_named_count > 0)                         { return 4; }   // Shadowborn Apostle
+            if (!p.creature_count_anthem_tiers.empty())        { return 8; }   // Jetmir (cannot be cast here)
+            if (!p.etb_tokens_per_devotion_color.empty())      { return 7; }   // Abhorrent Overlord, last for devotion
+            if (p.endstep_each_player_discards_hand)           { return 6; }   // Sire of Insanity
+            return 5;                                                          // Reaper from the Abyss
+        }
+        if (p.tutor_to_hand) { return p.sac_additional_creature ? 10 : 9; }   // Diabolic Intent : Demonic Tutor
+        return DeckProvider::CastOrderRank(s, def);
+    }
     if (def.params.grants_ripple > 0) { return 1; }   // the granter first (PROVISIONAL deck order)
     return DeckProvider::CastOrderRank(s, def);
+}
+bool ShadowbornProvider::CastOrderTotalByName() const { return SbCastOrderOn(); }
+void ShadowbornProvider::ArrangeCastOrder(const GameState& /*s*/, const std::vector<Action>& actions,
+                                          std::vector<int>& order) const
+{
+    if (!SbCastOrderOn() || order.size() < 2) { return; }
+    // "Dark Ritual, <shadowborn sacrifice for culling if needed>, Culling, Thrumming stone": a creature-sacrifice
+    // spell whose victim is a SAME-PLAN hand creature (Action::trick_hand_target, the SAC-ANY-CREATURE post-pass)
+    // takes that creature's first cast to just BEFORE itself, so the spell keeps its rank (Culling ahead of the
+    // Stone) and the cost is payable at its cast (CR 601.2h). Structural: the realised line is the one the plan
+    // names. A spell already after its victim (Diabolic Intent behind the Apostles) is untouched.
+    for (std::size_t p = 0; p < order.size(); ++p)
+    {
+        const Action& t = actions[static_cast<std::size_t>(order[p])];
+        if (t.kind != Action::Kind::CastFromHand || t.trick_hand_target.empty() || t.attach_equip_id != 0) { continue; }
+        const CardDefinition* td = t.def ? t.def : CardDatabase::Instance().Lookup(t.card_name);
+        if (td == nullptr || !td->params.sac_additional_creature) { continue; }
+        for (std::size_t q = 0; q < order.size(); ++q)
+        {
+            const Action& c = actions[static_cast<std::size_t>(order[q])];
+            if (q == p || c.kind != Action::Kind::CastFromHand || c.attach_equip_id != 0
+                || c.card_name.str() != t.trick_hand_target) { continue; }
+            if (q > p)
+            {
+                const int v = order[q];
+                order.erase(order.begin() + static_cast<std::ptrdiff_t>(q));
+                order.insert(order.begin() + static_cast<std::ptrdiff_t>(p), v);
+                ++p;   // the spell moved one slot later
+            }
+            break;   // the first cast of the victim's name is the one the cost eats
+        }
+    }
+}
+bool ShadowbornProvider::RestrictsCollectedActions() const { return SbCastOrderOn(); }
+bool ShadowbornProvider::CollectedActionAllowed(const GameState& s, const Action& a, bool is_pre_combat) const
+{
+    // "Overlord should go before any activations Shadowborn activations when it is cast": no hard cast of the
+    // devotion-token Demon once an Apostle activation has fetched Jetmir in this main (the only activations this
+    // deck offers fetch the Overlord itself -- a 1-of, then not in hand -- or Jetmir).
+    if (!SbCastOrderOn() || !SbPrunesOn() || a.kind != Action::Kind::CastFromHand) { return true; }
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    if (!SbIsDevotionDemon(d)) { return true; }
+    return !SbJetmirFetchedThisMain(s, s.active_player_index, is_pre_combat);
+}
+
+namespace
+{
+// Main1PlanFoldLive's per-state facts, read by the Main1PlanAdmitted calls that immediately follow it on the same
+// thread (DecisionProvider::Main1PlanFoldLive's contract). `state` guards a stale read.
+struct SbMain1Ctx
+{
+    const GameState* state = nullptr;
+    bool        jet_reachable = false;   // an attack-ready creature + Jetmir in our library (not on the battlefield)
+    bool        granter_bf    = false;   // a ripple granter on our battlefield
+    int         apostles_bf   = 0;       // sac-named creatures on our battlefield
+    int         need          = 6;       // the activation's sac_named_count
+    std::string jet_name;
+};
+thread_local SbMain1Ctx t_sb_main1;
+}   // namespace
+
+// THE MAIN-1 RULE (MTG_SB_MAIN1_RULE; USER 2026-11-04, the authority is in the declaration). The fold, and why it is
+// SOUND (a dominance fold, never a pick): in this goldfish nothing cast or activated before combat changes combat
+// EXCEPT through Jetmir's count anthem -- the list has no haste, no anthem but Jetmir's, no attack trigger, no draw;
+// every body cast in main 1 is summoning sick; lands, Lake of the Dead and Lotus Bloom keep their mana across combat
+// while floating mana empties at the end of the phase. So with no attack-ready creature, or with Jetmir neither on our
+// battlefield nor reachable this turn, the main-2 version of a main-1 plan (land-only main 1, the same actions after
+// combat) is at least as good: the same mana, the same bodies, and a main-1 sacrifice (Culling, Diabolic Intent, the
+// six) can only cost an attacker's damage. What the fold must NOT drop, and therefore admits:
+//   * every plan while Jetmir is ON our battlefield with an attack-ready creature (each body cast raises his count);
+//   * a plan that deploys Jetmir (an Apostle activation fetching him) -- the INT-9 Demon-timing table already offers
+//     that only when it raises this turn's attack (lethal first) or a chain can still add bodies, i.e. with an
+//     attacker left over;
+//   * a plan whose BREAKPOINT CONTINUATION can still deploy him before combat, because the fold judges the root plan
+//     only: a library tutor (Demonic Tutor / Diabolic Intent: the fetched card opens a continuation), a spell cast
+//     with a ripple granter live (a reveal chain can reach the six and arm breakpoint site 9), or enough Apostles
+//     cast to reach the six from hand (site 9 again). Erring wide only costs fold;
+//   * a plan whose land drop is Lake of the Dead (its entry taps the Swamp it eats first -- TAP-FIRST -- and that
+//     float empties if main 1 casts nothing, so the main-2 twin would be a mana short).
+// The land drop itself stays in main 1 on every turn (USER: "Land drop should happen main 1 unless we searched it up
+// in main 2"; HeldLandBarredFromMain2 already bars a held land from the main-2 drop).
+bool ShadowbornProvider::Main1PlanFoldLive(const GameState& s) const
+{
+    t_sb_main1.state = nullptr;
+    if (!SbMain1RuleOn() || !SbPrunesOn()) { return false; }
+    const int me = s.active_player_index;
+    SbMain1Ctx c;
+    bool attackers = false, jet_bf = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        if (SbAttackReady(p, me)) { attackers = true; }
+        const CardDefinition* d = p.def_absent ? nullptr : CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        if (SbIsCountAnthem(d)) { jet_bf = true; }
+        if (d->params.grants_ripple > 0) { c.granter_bf = true; }
+        if (SbIsSacNamedCreature(d)) { ++c.apostles_bf; c.need = d->params.sac_named_count; }
+    }
+    if (attackers && jet_bf) { return false; }   // every body raises Jetmir's count: nothing to fold
+    if (attackers)
+    {
+        for (const Card& lc : s.players[static_cast<std::size_t>(me)].library)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(lc);
+            if (SbIsCountAnthem(d)) { c.jet_reachable = true; c.jet_name = lc.m_name.str(); break; }
+        }
+    }
+    c.state = &s;
+    t_sb_main1 = c;
+    return true;
+}
+bool ShadowbornProvider::Main1PlanAdmitted(const GameState& s, const std::vector<Action>& actions,
+                                           const std::string& land_to_play) const
+{
+    if (actions.empty()) { return true; }
+    if (t_sb_main1.state != &s) { return true; }   // no context for this state: never fold blind
+    const SbMain1Ctx& c = t_sb_main1;
+    if (!land_to_play.empty())
+    {
+        const CardDefinition* ld = CardDatabase::Instance().Lookup(land_to_play);
+        if (ld != nullptr && !ld->params.etb_replace_sacrifice_land_subtype.empty()) { return true; }   // the Lake
+    }
+    if (!c.jet_reachable) { return false; }
+    int casts = 0, apostle_casts = 0;
+    bool granter_cast = false;
+    for (const Action& a : actions)
+    {
+        if (a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::SacNamedTutorPut)
+        {
+            if (a.tutor_target.str() == c.jet_name) { return true; }   // deploys Jetmir before combat
+            continue;
+        }
+        if (a.kind != Action::Kind::CastFromHand) { continue; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        if (d == nullptr) { return true; }                       // a cast we cannot read: never fold blind
+        if (IsLibraryTutor(d->params)) { return true; }           // its continuation may deploy Jetmir
+        ++casts;
+        if (d->params.grants_ripple > 0) { granter_cast = true; }
+        if (SbIsSacNamedCreature(d)) { ++apostle_casts; }
+    }
+    if (c.granter_bf ? casts > 0 : (granter_cast && casts > 1)) { return true; }   // a reveal chain may follow
+    if (c.need > 0 && c.apostles_bf + apostle_casts >= c.need) { return true; }     // the six, from hand
+    return false;
 }
 
 // ---- ShadowbornProvider: the USER's Overlord upkeep-sacrifice order (Shadowborn INT-7; authority and the
@@ -58726,6 +58942,7 @@ static bool ShadowbornFreeIntentTakeOn()
     return heurarm::Flag(heurarm::SHADOWBORN_FREE_INTENT_TAKE, on);
 }
 static bool ShadowbornPrunesOn() { return !DecisionUnpruned() && !HumanPlayActive(); }
+static bool SbPrunesOn() { return ShadowbornPrunesOn(); }
 static bool SbIsSacNamedCreature(const CardDefinition* d)
 {
     return d != nullptr && d->card.IsCreature() && d->params.sac_named_count > 0;
@@ -58751,7 +58968,23 @@ void ShadowbornProvider::SacNamedTimingFilter(const GameState& s, int controller
     }
     // SICK turn: the INT-4 order (devotion Demon, then count anthem), MAIN 1 ONLY (USER CONFIRMED 2026-11-03: "On a
     // summoning sick turn you can do demon search main 1 if you want." -- main 1 vs main 2 was an equal twin).
-    if (!attack_turn) { if (!pre_combat) { targets.clear(); } return; }
+    // MAIN-1 RULE (MTG_SB_MAIN1_RULE, USER 2026-11-04): a turn with no attack-ready Apostle is no longer a
+    // main-1-only search -- the plan-level fold (Main1PlanAdmitted) moves it to main 2 unless it deploys Jetmir
+    // with an attacker of another kind -- so both mains offer the list. Same-main order (MTG_SB_CAST_ORDER): no
+    // Overlord fetch after a Jetmir fetch in this main (USER: "if we activate for Overlord and Jetmir they should
+    // remain in that order"; "in main 2 we should still allow Overlord -> Jetmir").
+    auto same_main_order = [&]()
+    {
+        if (!SbCastOrderOn() || targets.empty() || !SbJetmirFetchedThisMain(s, controller, pre_combat)) { return; }
+        targets.erase(std::remove_if(targets.begin(), targets.end(), [](const std::string& nm)
+        { return SbIsDevotionDemon(CardDatabase::Instance().Lookup(nm)); }), targets.end());
+    };
+    if (!attack_turn)
+    {
+        if (!pre_combat && !SbMain1RuleOn()) { targets.clear(); }
+        same_main_order();
+        return;
+    }
     std::vector<std::string> anthem, other;
     const CardDefinition* jet = nullptr;
     for (const std::string& nm : targets)
@@ -58836,6 +59069,7 @@ void ShadowbornProvider::SacNamedTimingFilter(const GameState& s, int controller
     }
     if (jet_gains) { targets = pre_combat ? anthem : std::vector<std::string>{}; }
     else           { targets = pre_combat ? std::vector<std::string>{} : (other.empty() ? anthem : other); }
+    same_main_order();
 }
 
 bool ShadowbornProvider::NoLandPlanDominated(const GameState& s) const

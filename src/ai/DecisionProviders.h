@@ -3990,6 +3990,47 @@ public:
     // re-sequences the plan. Every other card keeps the generic rank.
     int CastOrderRank(const GameState& s, const CardDefinition& def) const override;
 
+    // ---- THE USER'S CAST ORDER AND MAIN-1 RULE (USER 2026-11-04; docs/design/shadowborn-main-phase-and-cast-
+    // order-draft.md) -----------------------------------------------------------------------------------------
+    // CAST ORDER (MTG_SB_CAST_ORDER). The USER: "It should be land -> Dark Ritual -> other spells." / "So it should
+    // be Dark Ritual, <shadowborn sacrifice for culling if needed>, Culling, Thrumming stone..." / "If needed here
+    // is pretty much just so that you can cast culling when no shadowborn is out. If you have a good sacrifice
+    // already you can just use it and cast the apostle later." / (the Demons) Overlord last for devotion. Ranks,
+    // read off CARD DATA (roles, never names):
+    //   1 a plain ritual (Dark Ritual)            2 a creature-sacrifice ritual (Culling the Weak)
+    //   3 the ripple granter (Thrumming Stone)   4 the sac-named creature (Shadowborn Apostle)
+    //   5 a Demon with no other role (Reaper)    6 the hand-discarder (Sire of Insanity)
+    //   7 the devotion-token maker (Overlord)    8 the count anthem (Jetmir, uncastable here)
+    //   9 a tutor with no sacrifice (Demonic Tutor) 10 a creature-sacrificing tutor (Diabolic Intent)
+    //  11 a suspend tutor (Profane Tutor)        12 a suspend mana artifact (Lotus Bloom)
+    // Total by name (CastOrderTotalByName) for anything the table does not place. ArrangeCastOrder moves the
+    // hand victim of a creature-sacrifice spell (Culling's same-plan Apostle, Action::trick_hand_target) to just
+    // BEFORE that spell, so "Ritual, Apostle, Culling (eating it), Stone, Apostles" is the realised line, not
+    // "Ritual, Stone, Apostle, Culling" (the generic dependency pass moves the spell after its victim instead).
+    // The victim itself is unchanged (SacCostVictimVariant: a Harpy / Apostle on the battlefield, else a hand
+    // Apostle -- the one-variant prune already never offers the hand victim when the board has one).
+    // ACTIVATION ORDER within one main (USER: "Overlord should go before any activations Shadowborn activations
+    // when it is cast." / "if we activate for Overlord and Jetmir they should remain in that order." / "in main
+    // 2 we should still allow Overlord -> Jetmir."): with Jetmir fetched EARLIER IN THIS MAIN, neither an
+    // Overlord fetch (SacNamedTimingFilter) nor an Overlord hard cast (CollectedActionAllowed) is offered. A
+    // main-2 Overlord after a MAIN-1 Jetmir stays searched (USER: "let the search determine that").
+    bool CastOrderTotalByName() const override;
+    void ArrangeCastOrder(const GameState& s, const std::vector<Action>& actions,
+                          std::vector<int>& order) const override;
+    bool RestrictsCollectedActions() const override;
+    bool CollectedActionAllowed(const GameState& s, const Action& a, bool is_pre_combat) const override;
+    // MAIN-1 RULE (MTG_SB_MAIN1_RULE). The USER: "What it really comes down to is that you don't need to do it main
+    // 1 unless you are deploying Jetmir with current-turn attackers. If you aren't, then you do it main 2 instead."
+    // / "(or I guess if Jetmir is already out)" / "Getting more Shadowborns to pump up his effect." / "Yes,
+    // exactly, we need attackers as well." / "Land drop should happen main 1 unless we searched it up in main 2."
+    // / scope: "With no search that is fine." A SOUND dominance fold (the proof is at Main1PlanAdmitted): a ROOT
+    // main-1 plan beyond the land drop is admitted only on a JETMIR TURN -- an attack-ready creature of ours AND
+    // (Jetmir on our battlefield, or the plan can still deploy him before combat). Every other plan's twin is the
+    // same plan in main 2, after a land-only main 1.
+    bool Main1PlanFoldLive(const GameState& s) const override;
+    bool Main1PlanAdmitted(const GameState& s, const std::vector<Action>& actions,
+                           const std::string& land_to_play) const override;
+
     // ---- INT-4: THE USER'S TUTOR AND DEMON RULES (USER 2026-11-03) -------------------------------------
     // AUTHORITY. The USER: "I recommend we make a heuristic for demon search and for tutoring. Demon search
     // is easy because you would go Abhorrent Overlord and Jetmir only, preferably in that order";
