@@ -166,7 +166,8 @@ any MISS or ORACLE-GAP is found, 0 when clean.
 **Engine flags** (all default off / inert): `MTG_MANA_ORACLE=1|2|3|4` (1 = summary + first 25 per class,
 2 = every flag, 3 = + per-plan frontier trace, 4 = + the mana table and failed verifications);
 `MTG_MANA_ORACLE_TURN=<t>` limits the level-3/4 trace to one turn; `MTG_MANA_ORACLE_NODES` (per-plan
-apply cap, default 2000); `MTG_MANA_ORACLE_GATE_MAX` (gate-rejected plans checked per decision, default
+apply cap, default 2000; a plan that hits it is realized once more under `MTG_MANA_ORACLE_NODES_RETRY`, default
+20000, always on -- the env changes the number only, see 13.14); `MTG_MANA_ORACLE_GATE_MAX` (gate-rejected plans checked per decision, default
 400); `MTG_MANA_ORACLE_MAX_PLANS` (menu cap, default all).
 
 **Where the code is.** `src/ai/ManaOracle.{h,cpp}` (the oracle), plus four guarded hooks, each a
@@ -1867,3 +1868,185 @@ No ENUM-GAP was an engine enumeration miss; every one examined was oracle-side.
 | **gate `mc-kitty-pass2`, fresh block gi 42000-46999 (PGO, src `2d767a1caac7`)** | **clean: 5,000 games, 0 issues**; DOMINATED-LAND 5,796 (disclosed); 6,774 macros audited, 23,425 links; play identical with the oracle off |
 
 Cost: the route audit is 8.4 s of 2,153 s oracle CPU over the gate (0.39%).
+
+### 13.14 Fluctuator: a breakpoint continuation paid blind to its own line (2026-11-03, branch `wip/mc-fluctuator`)
+
+The mana-clean gate's first Fluctuator run (`logs/mana_clean/pass1-fluctuator/`, 100,000 games, src 7ec55bb) failed on
+APPLY-DROP alone: 591 flags, 121 signatures, every one `need-later` (rollback depth1 568, depth2 15, depth3+ 8).
+
+**Real engine misses, not a misclassification.** The obvious suspicion -- Enlightened Tutor and the free cycles draw,
+so the boards might differ only through hidden information -- does not hold. Seed 30003033 gi3033 T3 (the top
+signature): plan `{no land}`, a free cycle (Drannith Stinger, cycling {1} under Fluctuator = {0}) draws Capital City
+#9, the breakpoint's continuation plays it and casts {Unearth, Enlightened Tutor}. Both payments come AFTER the draw,
+with no draw between them: the continuation was chosen on a board that already showed the City. The oracle's line
+feeds Capital City #9 with #11's free {C} for Unearth's {B} and pays the Tutor with Glittering Massif's {W}; the engine
+fed #9 with Massif's {R} and the Tutor met #11 alone. The HIDDEN-INFO rule (`TapsHiddenCard`) is about a GATE deciding
+before the draw; here the payer decides after it, so APPLY-DROP is the right class.
+
+**Root cause: a continuation's casts were paid under the OUTER line hold.** A continuation is applied inline
+(`apply_continuation_plan` in ApplyPlanDirect; AIEngine's `resolve_draw_breakpoint`, pod chain and site-9 loops, and
+the committed-line replay), so `g_line_unpaid_cost` held only what the outer plan still owed -- zero for `{no land}`.
+Every line-aware payer rule (the line-spare generic, the line-float hold, the ramp-filter route) was blind to the
+continuation's own line. The greedy declines a coloured pip off an any-colour filter, so Unearth's {B} went to the
+complete backtracker, whose first covering set feeds the filter with Massif.
+
+**That half is 13.10's binding.** This branch first fixed it with its own scope (`ContinuationLineHold`, flag
+`MTG_CONT_LINE_HOLD`). The Auras fix (13.10, c4b7ea18d) landed the same mechanism first: `cont_line_armed` in
+`apply_plan_actions`, `ExecBindContinuationLine` at the executor's three continuation cast sections, and the
+`Action::rec_line_hold` stamp installed by `replay_recorded`. This branch is rebased onto it and its own copy is
+deleted. 13.10's version covers every site the deleted one did and two more: the replay keeps the stamped hold for
+the rest of the cast section, not only for the stamped cast, and it stamps `CastFromGraveyard` too. The two differ in
+one respect: 13.10 binds after the section's `CastSectionUnlock` up-front fire and restores the outer hold unchanged
+on exit, where the deleted scope wrapped the whole section and restored the outer hold minus what the section paid.
+Every number below is measured on the rebased build, i.e. with 13.10's binding.
+
+**The fix on top: the any-colour filter feed route** (`AnyFilterFeedRouteHold`, ManaPayment.cpp, called from
+`TapForCostShared`; no flag -- it was `MTG_ANY_FILTER_FEED_ROUTE` for the A/B only). RampFeedRouteRepay's shape for the
+any-colour filter: when the line still owes mana and an any-colour filter is untapped, the payment is tried on a
+scratch board; if the trial tapped an any-colour filter and the rest of the line is no longer payable (one
+backtracker solve), while the board pays the bill and the rest together, the payment is re-tried with ONE of the
+trial's sources held out (battlefield order) and the first that leaves the line payable is made. Otherwise the
+payment is the greedy's, byte for byte. It can only fire where an any-colour filter is on the battlefield: in the
+suite, Fluctuator (Capital City), Galadriel (Crystal Grotto, Rumble Arena) and Snow (Arcum's Astrolabe).
+
+Attribution on the slice below: 13.10's binding alone leaves the same 51 APPLY-DROPs as the base, flag for flag (it
+gives the route a line to read, but the backtracker still takes the first covering set); the route on top of it
+clears 49. On the named repros the binding alone does clear the generic-pip shape (seed 30081285 T4, Drannith
+Stinger's {1} off Irrigated Farmland, the line's only {W}: the line-spare generic now sees the Tutor). The route without a
+binding cannot fire at all (its `later` bill is zero). The named repros (oracle level 2, one game each) go from
+APPLY-DROP 3033:2, 9815:4, 4938:1, 81285:4 to 0 each; 4350:1 and 11214:1 stay (mechanism 4, below).
+
+**Census, a fresh slice** (Fluctuator games gi 100000-104999, seed 30000000 + gi, `MTG_MANA_ORACLE=2`; base =
+980616e55's binary, `build/scratch/mcf/slice_base.*`; c4b7ea18d alone = the rebased binary with the route switched
+off, and this branch, one pooled batch, `build/scratch/mcf/slice_rb1.*`):
+
+| build | APPLY-DROP | depth1 | depth3+ | play digests changed vs c4b7ea18d | units |
+|---|---|---|---|---|---|
+| base (980616e55) | 51 | 49 | 2 | -- | 17,347,203 |
+| c4b7ea18d alone | 51 (the same 51) | 49 | 2 | -- | 17,347,124 |
+| this branch | **2** | 0 | 2 | 1 of 20 jobs (gi 104750-104999) | 17,347,192 |
+
+**Held-out A/B, the route alone** (c4b7ea18d alone vs this branch: one pooled batch, the rebased build with the
+route switched off by its temporary A/B flag; seed 1810001 + gi, shipped play settings, `build/scratch/mcf/ab2/r.*`).
+The route can only fire where an any-colour filter is on the battlefield, so the three decks that hold one are the
+whole scope:
+
+| deck | paired | net turns | slower | faster | play digests changed | work units |
+|---|---|---|---|---|---|---|
+| Fluctuator | 4,000 | 0 | 0 | 0 | 0 of 16 jobs | +0.000% |
+| Galadriel | 1,000 | 0 | 0 | 0 | 0 of 10 | +0.001% |
+| Snow | 300 | 0 | 0 | 0 | 0 of 12 | -0.186% |
+
+No searched branching is added: the route is a re-payment of a bill the search already chose, not a new option, and
+it runs only where the greedy's payment strands the declared line. The fresh slice's one moved job (above) is the
+whole play effect seen so far. The final code (no flag) is identical to the flagged build with the route on (job
+digests and units, Fluctuator 250 + Galadriel 100 games).
+
+**The one slower game, root-caused: Unpredictable Cyclone seed 1710206 gi205, T5 -> T6** (the first, pre-rebase A/B;
+it is 13.10's binding, not the route: the rebased build is T6 with the route on or off, and Cyclone holds no
+any-colour filter). It recovers at `--depth 8 --budget-ms 0 --ignore-play-profile` (T5 on base, pre-rebase and
+rebased builds). The two games diverge before turn 1, at the MULLIGAN BOTTOM: Cyclone has no keep table, so the bottom
+of the 7-card mull-to-6 hand is chosen by playing each candidate out (`MTG_BOTTOM_TRIAL_TRACE`). Base: bottom Emrakul
+wins T7, bottom Ulamog the Infinite Gyre wins T5, so it bottoms the Gyre and the game wins T5. With the binding, the
+bottom-Emrakul trial plays BETTER (T7 -> T6), so the incumbent best is 6 and the remaining trials run under the
+bottom turn cut's strict stop, 5. The bottom-Gyre trial plays the same game as base, unit for unit, and wins in
+the EXTRA turn Emrakul's cast trigger grants in round 5. `GameEngine::PlayOutFrom` does not play an extra turn owed
+after round `stop`, so the trial reads "no win", and Emrakul (T6) is bottomed instead. With `MTG_BOTTOM_TURN_CUT=0`
+both builds bottom the Gyre and win T5. **So it is a pre-existing defect in the bottom turn cut**, which the binding
+only exposed. The stop check's comment ("a win there would only TIE a round-`stop` win") holds for a non-strict stop
+(= best), but under the strict stop (= best - 1) an extra-turn win in round `stop` is a strict improvement and is
+cut. The repair is below (its own commit).
+
+**The bottom turn cut plays an extra turn owed in the cut round** (commit "engine: the bottom-trial turn cut plays an
+extra turn owed in the cut round"). `GameEngine::PlayOutFrom` now stops only when `turn_number > stop`, or
+`turn_number == stop` with no extra turn pending. Extra turns do not count toward the turn count, so a win in one is a
+round-`stop` win: a tie under the non-strict stop and a strict improvement under the strict one. Unit test in
+`test_cyclone_phase2.cpp`. Held-out A/B (seed 1810001 + gi for Cyclone and 2010001 + gi for Cyclone 2HG, shipped play
+settings; fix off = the c4b7ea18d + route arm of the A/B above, fix on = the same jobs on the hold-up build with the
+fix, which is byte-identical to it elsewhere, checked on 50 games; the 2HG pair ran in one pooled batch,
+`build/scratch/mcf/ab4/xt.*`):
+
+| deck | paired | mean on / off | net turns | slower | faster | job digests moved | work units | CPU ms on / off |
+|---|---|---|---|---|---|---|---|---|
+| Cyclone | 3,000 | 4.9417 / 5.0663 | **-374** | 5 | 369 | 118 of 120 | **-3.858%** | 52.7M / 72.3M (different runs, unreliable) |
+| Cyclone 2HG | 600 | 5.1000 / 5.2117 | **-67** | 2 | 66 | 23 of 24 | **-3.190%** | 18.81M / 19.15M (-1.8%, one batch) |
+
+gi2278 (5 -> 6 under the binding) is restored, T5. Every slower game recovers at `--depth 8 --budget-ms 0
+--ignore-play-profile` (fix on, d8 b0 vs the fix-off arm's shipped turn): Cyclone gi332 5 vs 5, gi1217 5 vs 6, gi2241 5
+vs 6, gi2516 4 vs 4, gi2879 4 vs 4; 2HG gi394 6 vs 6, gi549 5 vs 6 (`build/scratch/mcf/c3/slowx2.txt`). The size of
+the gain says how often it fired: Cyclone has no keep table, so every mulligan's bottom is chosen by trial playouts,
+and Emrakul's cast trigger puts an extra turn in many of them. Units fall because games end sooner. The fix adds no
+search and no branching. Smoke: cyclone d3 5.16 -> 5.00, d5 5.06 -> 4.91, cyclone2hg d3 5.22 -> 5.06, no slower game.
+
+**Mechanism 4: a payment made BEFORE a draw for a cast chosen AFTER it** (both remaining flags, and the repros
+seed 30004350 gi4350 / 30011214 gi11214). Plan `{no land, Fluctuator}`: Fluctuator's {2} is the only cast the line
+names, and the greedy pays it with the land whose colour a card still in hand needs (gi58: Festering Thicket's {B},
+Unearth in hand; gi166: Scattered Groves' {W}, Enlightened Tutor in hand). The cycles then draw what makes that card
+castable (a Drannith Stinger to Unearth, a reason to Tutor), and the continuation's cast is dropped. Still
+APPLY-DROP, correctly: this is exactly the USER's rollback case ("keeping up blue instead of white so that we can
+cast a blue spell only after we discover that blue is needed", section 9), need-later at depth 3+, and the mana the
+oracle spends is on the board at the plan's start -- nothing hidden is tapped. No line hold can see it (the card is
+not in the line); the candidate remedies are a hand-demand tie-break for a generic pip in autonomous play (today
+`MTG_HUMAN_TAP_DEMAND` is human-only, by measurement) or the item-C search-level fallback. Both are trade-offs and
+the USER's call. The USER chose a third, the deck hold-up below.
+
+**The USER's deck hold-up, for mechanism 4** (commit "mana(fluctuator): any-colour filter feed route; the
+deck's payment hold-up"). `DecisionProvider::PaymentHoldUp` returns an ordered list of costs the deck wants left
+payable after a payment; `ProviderHoldUpHold` (ManaPayment.cpp, after the route in `TapForCostShared`) makes the
+greedy's payment on a scratch board and, only if that leaves the line's rest plus the hold-up unpayable while the
+board pays the bill and both together, holds ONE of the trial's sources out (battlefield order), taking the first
+that keeps them payable. A preference, never a refusal, and no new searched option: the payment is the greedy's
+whenever the hold-up does not bind. Fluctuator's list, each entry only while the card is in hand: {1}{B}{R} (Unearth
+and Drannith Stinger), else {B} (Unearth), else {1}{R} (Stinger), else {W} for Enlightened Tutor only while NO
+Fluctuator is in hand or on the battlefield (USER: "its purpose is to get Fluctuator and if we have one there is no
+need to hold W"). A pip the bill itself carries is not held for.
+
+Repros, oracle level 2, one game each: 30004350 gi4350 0, 30011214 gi11214 0, 30104058 gi104058 0 APPLY-DROP (it
+was 1 each without the hold-up). 30100666 gi100666 stays APPLY-DROP 1 with the Tutor entry on, off, and with every
+hold off: the drop is the payment of Fluctuator's own {2} at T4, and a Fluctuator is in hand, so the USER's condition
+keeps the {W} hold off. That is the rule working as stated, not a miss.
+
+Census, the fresh slice (gi 100000-104999, `MTG_MANA_ORACLE=2`, hold-up on and off in one pooled batch,
+`build/scratch/mcf/c3/slice_h3.*`): APPLY-DROP on 1 (gi100666, above) vs off 2 (gi100666, gi104058); CAPPED 0 (the
+escalation below retried 10 plans, all 10 finished); 8 UNMODELED per arm, all one game (seed 30101162 gi1162 T4,
+plans {Stinger, Unearth, Unearth}), "scripted payment did not pay {1}{R}": the oracle's script taps Canyon Slough
+for {B}, Glittering Massif for {R} and Capital City for its any-colour mode, and applied, the City is fed the
+Massif's {R} (float {W}{B} after the taps). An oracle-side defect in how a scripted any-colour filter tap picks its
+feed; it is the same in both arms, so it is not this branch's, and it is owed to the checker (UNMODELED now fails the
+gate).
+
+Held-out A/B, hold-up on vs off (seed 1910001 + gi; Fluctuator 2HG at 30 life, two heads; one pooled batch,
+`build/scratch/mcf/c3/hold.*`):
+
+| deck | paired | mean on / off | net turns | slower | faster | job digests moved | work units | CPU ms on / off |
+|---|---|---|---|---|---|---|---|---|
+| Fluctuator | 4,000 | 3.5455 / 3.5463 | -3 | 0 | 3 | 16 of 16 | +0.238% | 564,675 / 484,539 (+16.5%) |
+| Fluctuator 2HG | 2,000 | 3.4950 / 3.4960 | -2 | 0 | 2 | 16 of 16 | -0.242% | 239,691 / 201,389 (+19.0%) |
+
+The CPU rise is real (on was dearer in every one of the 32 interleaved job pairs) and sits outside the unit meter:
+on 250 games the hold-up ran 782,769 trials (~3,100 per game, 3.9% fired), each a scratch GameState copy, a greedy
+payment and a backtracker solve, because a hold-up card is in hand on most Fluctuator payments, in the search's
+rollouts as well as the executor (the payer is shared, as it must be). Two exact cuts are in the commit: an entry the board cannot pay together with the bill
+is dropped on the payer's AMOUNT bound before any scratch board, and one greedy trial serves every entry (trials
+21.4M -> 7.0M on the 6,000 on-arm games; digests, means and units identical on all 32 jobs). Measured as three
+binaries side by side on the 6,000 on-arm games (`build/scratch/mcf/c3/cost/`; loaded box, a few points of noise):
+CPU vs hold-up off was +13.3% before the cuts and +9% to +14% after them, over two runs. A third exact cut (solving
+the last entry on the trial board, one copy fewer) measured nothing and was dropped. **What is left is the rule's
+own price: about one scratch payment and one backtracker solve per Fluctuator payment while Unearth, Drannith
+Stinger or (without a Fluctuator) Enlightened Tutor is in hand.** It is confined to Fluctuator (every other
+provider's list is empty, so the hook returns before any work), adds no searched branching, and buys the gate's
+APPLY-DROPs for mechanism 4 plus net -3 / -2 turns. A later exact cut (commit "perf(fluctuator hold-up): pay first on
+the real board where the trial's quiet scope is a no-op"; byte-identical on all 32 jobs) makes the payment first on
+the real board wherever the trial's quiet scope is a no-op (search, rollouts, autonomous play) and decides the hold on
+the board it left: instructions over hold-up off **+6.8% / +6.9%** (was +10.9% / +11.0%).
+**ADOPTED by the USER 2026-11-04 at that +6.8%** (asked whether the hold-up is worth its cost: *"I suppose so."*).
+It is unconditional: there is no `MTG_PROVIDER_HOLD_UP` lever.
+
+Smoke (c4b7ea18d's 12 failing rows are unchanged): fluctuator d0 4.989 -> 4.982, d3 and d5 same score with the
+digest moved; no slower game.
+
+**The oracle's CAPPED escalation** (commit "mana-oracle: a CAPPED plan is realized again under a 20000-apply
+ceiling"). CAPPED now fails the gate (USER 2026-11-03), so a plan that hits `MTG_MANA_ORACLE_NODES` (2000) is
+realized once more at 20000. It is always on; `MTG_MANA_ORACLE_NODES_RETRY` overrides the number and is not an off
+switch. Checker-only. The 7 CAPPED Fluctuator games of 3,000 (seed 30000000 + gi: 651 2139 2391 2655 2670 2772 2802)
+all finish at 20000 with wall about unchanged, and the slice above has 10 retried, 10 finished, CAPPED 0.
