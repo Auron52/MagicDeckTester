@@ -835,6 +835,7 @@ enum Slot : int
     SLIVERS_REPLICATE_TOPK,   // MTG_SLIVERS_REPLICATE_TOPK  SliversProvider: of the plans that differ ONLY in their replicate counts, search the one whose counts, read in cast order, are largest (the USER's "max remaining mana" prune, 2026-11-03). Default ON; =0 -> every enumerated count
     SLIVERS_REPLICATE_MANLAND, // MTG_SLIVERS_REPLICATE_MANLAND  AGENT amendment (2026-11-03, for USER review): with the top-count prune, also keep the top count that leaves an untapped Mutavault its own mana + animate cost. Default OFF
     SLIVERS_ORDER,            // MTG_SLIVERS_ORDER        Slivers TOTAL cast order, USER-APPROVED 2026-11-03 (docs/design/cast-order-drafts-2026-10-14/slivers_vial.md section 3, one row per card): Hatchery first, Thrumming Hivepool last. Default ON; =0 -> VialProvider's generic tiers
+    REFINE_VICTIM_SPENT,      // MTG_REFINE_VICTIM_SPENT  the payment refine (MTG_PAY_REFINE) reads a cast's sacrifice victim (g_pay_sac_victim) as tapped: it leaves with the cost, so giving it back is no source released and no strict gain (ManaOracle.cpp RefinePaymentImpl). StompySurprise mana-clean APPLY-DROP, seed 31000062 T3: Natural Order's {2}{G}{G} kept {Forest, Archdruid} over {Mystic (the victim), Archdruid} and Worldly Tutor had no {G}. DEFAULT ON; =0 -> the victim counts like any source
     COUNT
 };
 
@@ -1614,6 +1615,7 @@ inline const char* Name(int slot)
         "MTG_SLIVERS_REPLICATE_TOPK",
         "MTG_SLIVERS_REPLICATE_MANLAND",
         "MTG_SLIVERS_ORDER",
+        "MTG_REFINE_VICTIM_SPENT",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

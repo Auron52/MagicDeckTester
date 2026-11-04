@@ -1146,3 +1146,25 @@ TEST_CASE("mana oracle: scaled dorks counting the sacrifice victim can all tap a
                                                   t.battlefield[2].card.m_number);
     CHECK(none.size() == manaoracle::MinimalPayments(t, Cost(0, 0, 0, 0, 0, 2), false, nullptr).size());
 }
+
+// StompySurprise mana-clean (APPLY-DROP, seed 31000062 T3 {Elvish Mystic, Natural Order, Worldly Tutor}): Natural
+// Order's {2}{G}{G} with its victim Elvish Mystic #2 untapped. The victim's mana is free (MTG_SAC_FODDER_PAYS):
+// Mystic + Archdruid (three Elves) pay the bill and the Forest stays up for Worldly Tutor.
+TEST_CASE("payment: Natural Order's victim pays before a land (sac-fodder first, scaled Archdruid beside it)")
+{
+    EnsureOracleCards();
+    GameState s = Board({ "Forest", "Elvish Mystic", "Forest", "Elvish Archdruid", "Elvish Mystic" });
+    s.deck_has_mana_untapper = false;   // StompySurprise has none: the payment refine may trade a float for a source
+    s.battlefield[0].tapped = true;
+    s.battlefield[4].entered_this_turn = true;
+    Hand(s, { "Worldly Tutor" });
+    bool ok = false;
+    {
+        PaySacVictimScope _psv(s.battlefield[1].card.m_number);
+        ok = TapForCostDirect(s, Cost(2, 0, 0, 0, 0, 2), /*for_creature=*/false);
+    }
+    REQUIRE(ok);
+    CHECK(s.battlefield[1].tapped);         // the victim
+    CHECK(s.battlefield[3].tapped);         // Archdruid, three Elves
+    CHECK_FALSE(s.battlefield[2].tapped);   // the Forest Worldly Tutor needs
+}

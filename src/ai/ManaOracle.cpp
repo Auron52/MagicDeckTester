@@ -1846,6 +1846,14 @@ namespace
 std::atomic<long long> g_refine_wild_out{0};   // refines the wild cap answered (MTG_PAY_REFINE_STATS)
 }
 
+// MTG_REFINE_VICTIM_SPENT (DEFAULT ON; =0 the victim counts like any source) -- see RefinePaymentImpl. A heurarm lever,
+// so it is also in the refine memo's key (a pooled batch runs both arms on one thread).
+static bool RefineVictimSpentOn()
+{
+    static const bool s_on = EnvOn("MTG_REFINE_VICTIM_SPENT", true);
+    return heurarm::Flag(heurarm::REFINE_VICTIM_SPENT, s_on);
+}
+
 static bool RefinePaymentImpl(const GameState& pre, const GameState& post, const ManaCost& cost, bool for_creature,
                               bool creature_ability, int useful, bool no_trade, PayOption& out)
 {
@@ -1921,6 +1929,26 @@ static bool RefinePaymentImpl(const GameState& pre, const GameState& post, const
     if (PayRefineLazyOn() && all_regular) { pe.defer = &slots; }
     t_trc_v[0] = t_trc_v[1] = t_trc_v[2] = 0;
     pe.Dfs(0, col, total);
+    // THE SACRIFICE VICTIM IS NOT A RESOURCE (MTG_REFINE_VICTIM_SPENT, DEFAULT ON; =0 the victim counts like any
+    // source). While this payment's cast sacrifices a creature as an additional cost (g_pay_sac_victim, Natural
+    // Order), that creature leaves as the cost is paid, so leaving it untapped buys nothing -- the reason the payer
+    // taps it first (MTG_SAC_FODDER_PAYS). The dominance test below counted it as a source released all the same:
+    // StompySurprise mana-clean, seed 31000062 T3, Natural Order's {2}{G}{G} off {Elvish Mystic (the victim),
+    // Forest, Elvish Archdruid (three Elves)} floated one {G}; the refine kept {Forest, Archdruid} (the victim
+    // "released", first in order) over {Mystic, Archdruid} (the Forest released), and Worldly Tutor's {G} had no
+    // source left (APPLY-DROP). Read as tapped, the victim neither counts toward `rel` nor makes a candidate strictly
+    // better, so a candidate giving back a real source wins and one giving back only the victim is no improvement.
+    int victim_idx = -1;
+    {
+        if (RefineVictimSpentOn() && g_pay_sac_victim != 0)
+        {
+            for (std::size_t i = 0; i < n; ++i)
+            {
+                if (pre.battlefield[i].card.m_number == g_pay_sac_victim && taps.count(g_pay_sac_victim) != 0)
+                { victim_idx = static_cast<int>(i); break; }
+            }
+        }
+    }
     static const bool s_trc = EnvOn("MTG_PAY_REFINE_TRACE");
     std::size_t expanded = 0;
     bool found = false;
@@ -1949,12 +1977,19 @@ static bool RefinePaymentImpl(const GameState& pre, const GameState& post, const
         if (!PayOptionOn(c, o, cost, for_creature) || c.battlefield.size() != n) { return; }
         int rel = 0;
         bool subset = true;
+        int vi = -1;   // the sacrifice victim this candidate gives back (see victim_idx above)
         for (std::size_t i = 0; i < n && subset; ++i)
         {
             if (c.battlefield[i].tapped && !post.battlefield[i].tapped) { subset = false; }
-            if (!c.battlefield[i].tapped && post.battlefield[i].tapped) { ++rel; }
+            if (!c.battlefield[i].tapped && post.battlefield[i].tapped)
+            {
+                if (static_cast<int>(i) == victim_idx) { vi = victim_idx; } else { ++rel; }
+            }
         }
         if (!subset) { return; }
+        // A given-back victim is no resource: the cover tests read it as tapped, so it neither counts as a source
+        // released nor makes a payment strictly better (restored for ReachesByTapping below, which may re-tap it).
+        if (vi >= 0) { c.battlefield[static_cast<std::size_t>(vi)].tapped = true; }
         const int life = c.players[a].life, energy = c.players[a].energy_counters;
         // Only a candidate the choice would take is worth proving: the acceptance below is the costly part (the
         // resource tables, the re-tapping), and a candidate it would not take changes nothing either way.
@@ -1969,6 +2004,7 @@ static bool RefinePaymentImpl(const GameState& pre, const GameState& post, const
         bool strict_end = false, strict_mid = false;
         if (!CoversBoards(c, post, false, &strict_end)) { return; }
         if (rel == 0 && !strict_end && !(CoversBoards(c, post, true, &strict_mid) && strict_mid)) { return; }
+        if (vi >= 0) { c.battlefield[static_cast<std::size_t>(vi)].tapped = false; }
         // NO FLOAT FOR A SOURCE WHERE A SAME-PHASE UNTAPPER LIVES (GameState::deck_has_mana_untapper). An
         // untapped source is worth the mana it would float only while nothing can untap it again this phase:
         // Cloud of Faeries' enter untaps two lands, so the engine's {1}{U} off Brushland AND Adarkar Wastes
@@ -2102,12 +2138,12 @@ bool RefinePayment(const GameState& pre, const GameState& post, const ManaCost& 
     k.payer    = PayContextDigest();
     k.bill     = ManaCostDigest(cost);
     k.ctx      = (for_creature ? 1 : 0) | (creature_ability ? 2 : 0) | (PayingCreatureAbility() ? 4 : 0)
-               | (useful << 3) | (no_trade ? (1 << 12) : 0);
+               | (useful << 3) | (no_trade ? (1 << 12) : 0) | (RefineVictimSpentOn() ? (1 << 13) : 0);
     // The PAYING identity, where a SUBTYPE source reads it (Giada / Smokebraider: the spell's subtype, the ability
     // source's): the same bill on the same board is a different table for an Elemental and for a Metallic Mimic. One
     // bit per such source on the board (or holding the reserve), so every other board keeps its key.
     {
-        int bit = 13;
+        int bit = 14;
         auto add = [&](const CardParams& q)
         {
             if (bit < 30 && RestrictedManaUsable(q, for_creature, 1)) { k.ctx |= 1 << bit; }
