@@ -1272,19 +1272,17 @@ OVERNIGHT_CASES=(
   "cyclone 5 5005  300 20"
   "cyclone 5 6006  300 20"
   "cyclone 5 7007  300 20"
-  # Shadowborn ENTRY set before its keep table (regression-testing skill); expand at keep-table adoption.
+  # Shadowborn FULL set (keep table adopted 2026-11-04): play rows at Hinata's floor (4 x 425), one d3 b10
+  # sanity row (USER 2026-10-27: play settings over d3). Cost 0.55x Hinata per game.
   "shadowborn 0 4004 2000 0"
   "shadowborn 0 6006 2000 0"
   "shadowborn 0 8008 2000 0"
   "shadowborn 0 10010 2000 0"
-  "shadowborn 3 4004  400 10"
-  "shadowborn 3 5005  400 10"
-  "shadowborn 3 6006  400 10"
-  "shadowborn 3 7007  400 10"
-  "shadowborn 5 4004  300 20"
-  "shadowborn 5 5005  300 20"
-  "shadowborn 5 6006  300 20"
-  "shadowborn 5 7007  300 20"
+  "shadowborn 3 4004  125 10"
+  "shadowborn 5 4004  425 20"
+  "shadowborn 5 5005  425 20"
+  "shadowborn 5 6006  425 20"
+  "shadowborn 5 7007  425 20"
   # dragonstorm: 4-seed sweep at modest gate budgets (10/20) -- it's cheap, ~11 min total across seeds.
   "dragonstorm 0 4004 2000 0"
   "dragonstorm 0  6006 2000 0"

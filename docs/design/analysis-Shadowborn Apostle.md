@@ -1192,3 +1192,9 @@ logs/shadowborn/int10-brief.md for later).
   the single pass commits an unverified depth-3 "win 5" dump-everything line; the ladder commits a depth-2 T4 line).
 - Owed: overnight ENTRY -> FULL resize (accept with the keep table absent), then the smoke/regression GT re-accept
   for the keep-table adoption.
+
+## Overnight rows resized ENTRY -> FULL (2026-11-04)
+
+The keep table shipped, so the overnight ENTRY set expanded per the regression-testing skill's floor: d5 b20 play
+rows 4 x 300 -> 4 x 425 (Hinata's floor), the four d3 b10 400-game rows -> one 125-game sanity row (s4004), d0 rows
+unchanged. No overnight GT existed yet for Shadowborn; the next periodic overnight run accepts these rows as new.
