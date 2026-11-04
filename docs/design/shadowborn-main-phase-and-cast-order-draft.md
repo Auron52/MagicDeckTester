@@ -217,9 +217,10 @@ Overlord is never left for after an activation in the same main.
 | 4 | more Apostles (continuation) | Pump Jetmir's count (*"Getting more Shadowborns to pump up his effect"*); a further activation only if six more arrive. |
 | -- | Lake of the Dead / Lotus Bloom | Not steps: the payer spends them when a cost needs them. |
 
-Question for you: **fix "Overlord fetch before Jetmir fetch" in the same main**, which prunes the
-Jetmir-then-Overlord order, or keep both orders searched? I believe Overlord-first dominates (above), so my
-default is to fix it, and the A/B's slower games at d8 b0 would show any line it loses.
+**ANSWERED (USER 2026-11-04):** *"Good point, if we activate for Overlord and Jetmir they should remain in that
+order."* Fixed: when one main activates for both, the Overlord fetch precedes the Jetmir fetch (the
+Jetmir-then-Overlord order is pruned in the same main). Cross-main (Jetmir main 1, Overlord main 2 on an attack
+turn, the INT-9 table) is unchanged.
 
 ## 3. Activations and the land drop (both mains, as on Fungus)
 
