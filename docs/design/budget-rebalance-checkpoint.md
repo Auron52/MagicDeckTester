@@ -736,3 +736,15 @@ problem that doesn't happen as much anymore." Start with every slow rollout on r
   OFF / _x1 = stop ON, X=100); run build/scratch/budget/run_pstop.sh (cores 0-25, threads 26) once the stop2/stop3
   replays finish; stop my EDF off-arm replay (run_hist3.sh, pid 907159) at launch. Read: scripts/ab_x_report.py
   build/scratch/budget/pstop. Adoption = default ON if every deck net <= 0, then smoke/regression GT accept.
+
+### 11:50 UTC -- 6(a) ADOPTED on the branch: MTG_BP_DERIVE_PRICED_STOP default ON (7d44be043, pushed)
+- Gen tail (stop/pair.py, final): 4,936 paired lines over 7 decks, 0 win-turn diffs (EDF 10, LFE 13, Melira 1,239,
+  Goblins 187, Kitty top-3000, Snow 457, CG 30). EDF 47,146 s -> 236 s on its paired lines.
+- Play A/B (pstop_ab.json, 26 thr, 20 min): 31,588 paired held-out games, 0 win turns, 0 UNITS moved; tail corpus 45/45
+  identical -> in play at shipped settings the stop never trips, so smoke/regression GT should be byte-identical.
+- REVERSES the 11-03 USER ruling ("PRICED_STOP stays OFF") on the strength of the gen-tail data + USER's 11-04 "give (a)
+  a try" -- SURFACED to the USER for confirm/veto; one-line revert (EnvOn default in BpDerivePricedStopOn).
+- Also committed: 31170cccd (sidecar mull_gen fix), 73afdd405 (per-job arm bp_priced_stop). mtg-test 2544/2544.
+- Remaining heavy tail: Melira d3/b3 (6 lines > 600 s, max 3,690 s with the stop; Carrion Feeder family) -- NEXT.
+  Goblins 996 s max -> the sac-fold subagent (worktree sac-fold) is on it. LFE replays hit 5-6 GB RSS caps (exit 137)
+  at 4-7 threads: a memory question to look at.
