@@ -2390,6 +2390,10 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
     {
         if (a.sac_source_id != 0) { plan_srcs.insert(a.sac_source_id); }
         if (a.sac_victim_id != 0) { plan_srcs.insert(a.sac_victim_id); }
+        // ...and an Aura's HOST (Wild Growth@13): it is not its twins' equal -- the engine pays the Aura with the
+        // other copy and keeps the host up for the bonus (Bruna seed 30000319 gi319 T4, two Botanical Sanctums: the
+        // fold let #13 stand for #12, and the engine's "#12 pays, #13 carries Wild Growth" was an ORACLE-GAP).
+        if (a.enchant_target > 0 && OracleAuraHostApartOn()) { plan_srcs.insert(a.enchant_target); }
         if (a.kind != Action::Kind::CastFromHand) { plan_names.insert(a.card_name.str()); }
     }
     struct PlanSrcScope

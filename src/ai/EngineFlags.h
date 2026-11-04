@@ -593,6 +593,13 @@ inline bool OracleBigSpellOn()
     static const bool env_on = EnvOn("MTG_ORACLE_BIG_SPELL", true);
     return env_on;
 }
+// MTG_ORACLE_AURA_HOST_APART (2026-11-04; DEFAULT ON, =0 -> an Aura's host folds with its twins): the realiser keys a
+// plan Aura's host apart from identical copies, as it does a plan's {T}/sacrifice sources. Oracle threads only.
+inline bool OracleAuraHostApartOn()
+{
+    static const bool env_on = EnvOn("MTG_ORACLE_AURA_HOST_APART", true);
+    return env_on;
+}
 
 // MTG_PAY_NARROW_RESTRICTED_FIRST (Vampires sweep L, 2026-10-18; DEFAULT ON, =0 -> battlefield order) --
 // among colored_creature_only sources, spend one WITHOUT colored_creature_ability_ok (Unclaimed Territory,
