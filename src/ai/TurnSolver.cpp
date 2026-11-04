@@ -30016,7 +30016,7 @@ static bool BpDeriveMeterOn() { return BpDeriveMeterMode() > 0; }
 // Read only once the priced ceiling has tripped, so its cost never lands on an ordinary subset visit.
 static bool BpDerivePricedStopOn()
 {
-    static const bool env = EnvOn("MTG_BP_DERIVE_PRICED_STOP");
+    static const bool env = EnvOn("MTG_BP_DERIVE_PRICED_STOP", true);
     const int a = valuearm::t_arm.bp_priced_stop;
     return a >= 0 ? a != 0 : env;
 }
@@ -73500,8 +73500,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 return;
             }
         }
-        // MTG_BP_DERIVE_PRICED_STOP (DEFAULT OFF -- a PROPOSAL for the priced per-decision ceiling, not
-        // adopted; docs/design/edf-tutor-pin-alias-2026-11-03.md section 4). A breakpoint-continuation
+        // MTG_BP_DERIVE_PRICED_STOP (DEFAULT ON since 2026-11-04; docs/design/budget-rebalance-checkpoint.md 11:45 and
+        // docs/design/edf-tutor-pin-alias-2026-11-03.md section 4). Measured: mulligan-generation rollouts at d1/b1 (EDF,
+        // LFE) whose derivations ran for HOURS end in seconds (EDF 6,058 s -> 22 s, 8,613 s -> 11 s) with the win turn
+        // identical on all 4,936 paired gen-tail lines (7 decks); in play at the shipped settings it never trips
+        // (held-out A/B, 31,588 paired games: 0 win turns and 0 UNITS moved). A breakpoint-continuation
         // derivation is an enumeration, not a search node: it charges no unit and nothing inside it polls
         // SearchBudget::Overrun(), so a decision whose priced ceiling (MTG_DECISION_PRICED_X) has tripped keeps
         // deriving 10k-plan lists inside its horizon rollouts until each one completes. This stops the
