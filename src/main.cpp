@@ -5779,11 +5779,20 @@ struct ClaudePlayHarness
     // and "-> Hornet Queen" at depth 6; the review's human line and hand-off rungs left the game).
     int         auto_depth     = -1;
     int         auto_budget_ms = -1;
+    // The searched SECOND MAIN the shipped goldfish runner turns on for this deck
+    // (GoldFishRunner::DeckUsesSecondMain -> AIEngine::SetSearchPostCombat; BatchRunner sets it per job,
+    // the scenario harness mirrors it). Applied at the hand-back. Before 2026-11-04 the hand-off never
+    // set it, so for every second-main deck "what the search does from here" was a DIFFERENT engine
+    // from the one the suite and ref_bench run: Shadowborn Apostle s7_gi6 at d5 b20 handed off at T1
+    // frame 0 won T5 while the real game (CLI and --batch) wins T6. Prefix frames are unaffected (the
+    // human answers both mains regardless).
+    bool        auto_second_main = false;
     AIEngine*   engine         = nullptr;   // set by Install; needed to uninstall its own choosers
     int HandBackToSearch(const GameState& s)
     {
         handed_back = true;
         if (engine && auto_depth >= 0) { engine->SetSearchSettings(auto_depth, auto_budget_ms); }
+        if (engine) { engine->SetSearchPostCombat(auto_second_main); }
         // The rest of the game is AUTONOMOUS: HumanPlayActive() false and MTG_UNPRUNED suppressed
         // (DecisionUnpruned reads the same flag), exactly as inside the engine's own rollouts --
         // set permanently rather than scoped.
@@ -8398,6 +8407,7 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     h.then_auto            = then_auto;
     h.auto_depth           = auto_depth;
     h.auto_budget_ms       = auto_budget_ms;
+    h.auto_second_main     = GoldFishRunner::DeckUsesSecondMain(deck);
     // Belt-and-braces (see g_play_hooks_installed): this process drives human choosers, so it must
     // never take the pause fast path even if a future chooser is installed outside Install().
     g_play_hooks_installed = true;
@@ -8405,6 +8415,10 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
 
     GameEngine engine(ai);
     if (log_then_auto) { engine.SetLogger(&then_auto_logger); }
+    // MTG_CLAUDE_STOP_AFTER_TURN=<n> (diagnostic): stop the game after round n, so a hand-off's
+    // whole-process counters ([sbsite], [rollout-stats]) describe only the decisions up to that turn.
+    // The search's horizon is still --max-turns; only the game stops. Unset = 0 = off.
+    if (const int st = EnvInt("MTG_CLAUDE_STOP_AFTER_TURN", 0); st > 0) { engine.SetStopAfterTurn(st); }
     int win_turn = engine.RunGame(state, max_turns);
     ClearClaudePlayChoosers(/*keep_sinks=*/false);
     if (log_then_auto)

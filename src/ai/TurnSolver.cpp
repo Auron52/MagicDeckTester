@@ -1943,6 +1943,37 @@ static inline void ConsumeAt(SearchBudget* budget, unitsite::Site site)
     if (g_dvs_in_p2 > 0) { g_dvs_p2_site[site].fetch_add(1, std::memory_order_relaxed); }
     if (cachecharge::t_rec != nullptr) { CacheChargeNote(budget, 1); }
 }
+// MTG_LA_HIST=1 (diagnostic, never read by play): a histogram of SolveWithLookahead's candidate loops by
+// (turn, phase, remaining depth, FSLine nest, rollout nest, bp-enum nest): calls and candidates. Answers
+// "which nodes of a decision score the candidates" (the la_cand unit site) -- printed at exit.
+namespace lahist
+{
+inline bool On() { static const bool on = EnvOn("MTG_LA_HIST"); return on; }
+struct Rec { long long calls = 0, cands = 0; };
+inline std::mutex g_mu;
+inline std::map<std::tuple<int, int, int, int, int, int>, Rec> g_hist;
+inline void Note(int turn, bool pre, int depth, int fsn, int rn, int bpn, long long n)
+{
+    if (!On()) { return; }
+    std::lock_guard<std::mutex> lk(g_mu);
+    Rec& r = g_hist[std::make_tuple(turn, pre ? 1 : 0, depth, std::min(fsn, 9), std::min(rn, 9), std::min(bpn, 9))];
+    ++r.calls; r.cands += n;
+}
+struct Dumper
+{
+    ~Dumper()
+    {
+        if (!On()) { return; }
+        for (const auto& kv : g_hist)
+        {
+            std::fprintf(stderr, "[lahist] T%d pre=%d depth=%d fsnest=%d rnest=%d bpnest=%d calls=%lld cands=%lld\n",
+                         std::get<0>(kv.first), std::get<1>(kv.first), std::get<2>(kv.first), std::get<3>(kv.first),
+                         std::get<4>(kv.first), std::get<5>(kv.first), kv.second.calls, kv.second.cands);
+        }
+    }
+};
+inline Dumper g_dumper;
+}
 static inline void ConsumeAtN(SearchBudget* budget, unitsite::Site site, long long n)
 {
     if (budget == nullptr || n <= 0) { return; }
@@ -101602,15 +101633,19 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
     // boundary would attribute work to turns the ceiling bills elsewhere. root=2 tags the hybrid
     // host so a row can be told from SolveWithLookahead's (root=1) without inferring it.
     if (fs_decision_root && turncensus::On()) { turncensus::t_board = CensusBoardDesc(state); }
+    // pre=1 ALWAYS: this host is reached only from the PRE-COMBAT main (AIEngine: `is_pre_combat_main &&
+    // m_committed_line.empty()`). `second_main` is "the line also searches the second main", not the
+    // phase -- before 2026-11-04 both this row and the dump below keyed the phase off it, so every
+    // second-main deck's rows read pre=0 and MTG_PLAN_DUMP printed the second-main menu (no land drop).
     turncensus::Scope _tc_fs(fs_decision_root, state.game_seed, state.turn_number,
-                             second_main ? 0 : 1, /*root_kind=*/2, depth,
+                             1, /*root_kind=*/2, depth,
                              budget != nullptr ? budget->Limit() : 0,
                              fs_decision_root ? CensusStateKey(state) : 0);
     // DECISION DUMP (MTG_PLAN_DUMP=<turn>): the same root predicate again, so the dump describes
     // exactly the decision the census bills and the work ceiling bounds -- not a rollout's copy of
     // it. Before the search runs, so the board printed is the board the menu was built from.
     if (fs_decision_root && PlanDumpTurn() > 0 && PlanDumpTurn() == state.turn_number && PlanDumpSeedOk(state.game_seed))
-    { TurnSolver::PlanDumpAt(state, !second_main, depth,
+    { TurnSolver::PlanDumpAt(state, /*is_pre_combat=*/true, depth,
                              budget != nullptr ? budget->Limit() : 0); }
     static const bool s_dw_debug_fs = EnvOn("MTG_DECISION_WORK_DEBUG");
     struct DwDbgFs
@@ -105040,6 +105075,8 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         // are `ci`).
         Plan pb_syn;
         const std::size_t n_cands = cands.size();
+        lahist::Note(state.turn_number, is_pre_combat, depth, g_fsline_nest, g_rollout_nest, g_bp_enum_depth,
+                     static_cast<long long>(n_cands));
         for (std::size_t ci = 0; ci < n_cands; ++ci)
         {
             // The pass ceiling tripped inside an earlier candidate's rollout: every rollout from here
@@ -115022,6 +115059,46 @@ static std::string PlanDumpApplyLosses(const GameState& state, const TurnSolver:
 
     std::string out;
     if (fired > 0) { out += "fired=" + std::to_string(fired); }
+    // MTG_PLAN_DUMP_STATE=1: also print WHAT the plan reaches (hand, our permanents, graveyard, the top
+    // four of the library), so two entries with the same action list can be told apart by the state they
+    // build -- a tutor pick, a sacrifice victim, a keyed-shuffle order. Diagnostic only.
+    static const bool s_dump_state = EnvOn("MTG_PLAN_DUMP_STATE");
+    if (s_dump_state)
+    {
+        const Player& me = copy.players[copy.active_player_index];
+        std::string st = "hand{";
+        for (std::size_t i = 0; i < me.hand.size(); ++i) { st += (i ? "," : "") + me.hand[i].m_name.str(); }
+        st += "} bf{";
+        bool first = true;
+        for (const Permanent& q : copy.battlefield)
+        {
+            if (q.controller_index != copy.active_player_index) { continue; }
+            st += (first ? "" : ",") + q.card.m_name.str() + (q.tapped ? "(T)" : "");
+            first = false;
+        }
+        st += "} gy{";
+        for (std::size_t i = 0; i < me.graveyard.size(); ++i) { st += (i ? "," : "") + me.graveyard[i].m_name.str(); }
+        st += "} pool=" + std::to_string(copy.floating_mana.Total()) + " top{";
+        for (std::size_t i = 0; i < me.library.size() && i < 4; ++i)
+        { st += (i ? "," : "") + me.library.RawAt(i).m_name.str() + "#" + std::to_string(me.library.RawAt(i).m_number); }
+        st += "}";
+        // Every scripted next-phase pin the apply left set (they ride the dedup key, so two entries
+        // with identical zones differ here when anywhere).
+        const std::pair<const char*, long long> pins[] = {
+            {"demon_trigger", copy.scripted_demon_trigger}, {"doth_put", copy.scripted_doth_put},
+            {"fb_hold", copy.scripted_fb_hold}, {"echo", copy.scripted_echo},
+            {"upkeep_tutor", copy.scripted_upkeep_tutor}, {"discard", copy.scripted_discard_choice},
+            {"vial", copy.scripted_vial_charge}, {"saga", copy.scripted_saga_target},
+            {"attack_land_search", copy.scripted_attack_land_search},
+            {"upkeep_land_search", copy.scripted_upkeep_land_search},
+            {"attack_attach", copy.scripted_attack_attach}, {"grace", copy.scripted_grace_choice},
+            {"upkeep_gy_reanimate", copy.scripted_upkeep_gy_reanimate}, {"cheat", copy.scripted_cheat_choice} };
+        for (const auto& pr : pins)
+        { if (pr.second != -1) { st += std::string(" ") + pr.first + "=" + std::to_string(pr.second); } }
+        for (const SuspendedCard& sc : me.suspended_cards)
+        { st += " suspended{" + sc.card.m_name.str() + "@T" + std::to_string(sc.arrive_turn) + "}"; }
+        out += out.empty() ? st : " " + st;
+    }
     if (!cast_drops.empty())
     {
         out += out.empty() ? "" : " ";
