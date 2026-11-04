@@ -463,6 +463,18 @@ inline bool PrepayColoursOn()
     return heurarm::Flag(heurarm::PREPAY_COLOURS, env_on);
 }
 
+// MTG_HYBRID_FLOAT_ORDER (2026-11-04; DEFAULT ON, =0 -> ExpandHybrids' bits order, all-first-colour first): a
+// hybrid cost paid while mana FLOATS tries first the colour assignment that leaves the float covering the most
+// of what the rest of the line still owes (LineOwedAfterOwnPips' rule). Every assignment is still tried; only
+// the ORDER moves. Minotaur: the joint prepay settles Boros Reckoner's {R/W} pips as {W}, and the per-cast
+// payment's first-colour-first order then took the {R} the prepay had made for Slaughter-Priest / Rageblood
+// (372 of 403 gate APPLY-DROPs). See the hybrid wrapper in TapForCostSharedImpl (ManaPayment.cpp).
+inline bool HybridFloatOrderOn()
+{
+    static const bool env_on = EnvOn("MTG_HYBRID_FLOAT_ORDER", true);
+    return env_on;
+}
+
 // MTG_PREPAY_AURA_HOST (2026-10-27; DEFAULT ON, =0 -> the host is an ordinary source of the joint solve):
 // the whole-turn prepay holds the untapped host of every land Aura the batch casts out of its solve --
 // see PrepayAuraHostHold (TurnSolver.cpp). The per-cast payer's twin is AIEngine's RESERVE THE AURA'S

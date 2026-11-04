@@ -9108,12 +9108,47 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
             state.players[1 - a].life          = lo;
             state.opponent_lost_life_this_turn = oll; oll_noncombat.Restore(state);
         };
-        if (TapForCostShared(state, cost_in.ExpandHybrids(0), for_creature,
-                             available, honor_legacy_cco)) { return true; }
-        for (unsigned bits = 1; bits < (1u << cost_in.hybrid_count); ++bits)
+        // FLOAT-AWARE ORDER (MTG_HYBRID_FLOAT_ORDER, default ON). bits 0 pays every hybrid pip with its FIRST
+        // colour, which is blind to what the rest of the line needs from the float. The joint prepay
+        // (BatchPrepayMainCasts) pre-loads the whole batch's mana with each pip pinned -- it settles Boros
+        // Reckoner's {R/W}{R/W}{R/W} to the {W} the board can spare (PrepayColoursFit) -- and then each cast
+        // pays from that float; first-colour-first took the {R} pinned for Slaughter-Priest of Mogis, whose
+        // own payment then failed and the cast dropped (Minotaur gate: 372 of 403 APPLY-DROPs; seed 30000038
+        // gi38 T5). So when mana floats and the live line owes more after this payment, the assignments are
+        // tried in order of the shortfall each leaves against that later demand (the float after a dry-run
+        // drain, wild covering any colour), ties in bits order. ORDERING ONLY: every assignment is still
+        // tried, so a payable cost is never refused, and with no float or no later demand every score is 0
+        // and the order is the historical one exactly.
+        const unsigned n_assign = 1u << cost_in.hybrid_count;
+        unsigned order[16];
+        for (unsigned b = 0; b < n_assign; ++b) { order[b] = b; }
+        if (HybridFloatOrderOn() && state.floating_mana.Total() > 0)
         {
-            restore();
-            if (TapForCostShared(state, cost_in.ExpandHybrids(bits), for_creature,
+            const ManaCost& lu = g_line_unpaid_cost;
+            const int later[5] = { std::max(0, lu.white - cost_in.white), std::max(0, lu.blue - cost_in.blue),
+                                   std::max(0, lu.black - cost_in.black), std::max(0, lu.red - cost_in.red),
+                                   std::max(0, lu.green - cost_in.green) };
+            if (later[0] + later[1] + later[2] + later[3] + later[4] > 0)
+            {
+                int score[16];
+                for (unsigned b = 0; b < n_assign; ++b)
+                {
+                    ManaPool f = state.floating_mana;
+                    ManaCost c = cost_in.ExpandHybrids(b);
+                    SpendFloatingTowardCost(f, c);
+                    const int fl[5] = { f.white, f.blue, f.black, f.red, f.green };
+                    int short_ = 0;
+                    for (int k = 0; k < 5; ++k) { short_ += std::max(0, later[k] - fl[k]); }
+                    score[b] = std::max(0, short_ - static_cast<int>(f.wild));
+                }
+                std::stable_sort(order, order + n_assign,
+                                 [&](unsigned x, unsigned y) { return score[x] < score[y]; });
+            }
+        }
+        for (unsigned i = 0; i < n_assign; ++i)
+        {
+            if (i > 0) { restore(); }
+            if (TapForCostShared(state, cost_in.ExpandHybrids(order[i]), for_creature,
                                  available, honor_legacy_cco)) { return true; }
         }
         restore();
