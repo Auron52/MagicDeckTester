@@ -615,3 +615,14 @@ Same manifest/arms as 01:04. Numbers reproduce the non-deterministic run almost 
   (10x budget = 2.6x cost: a FLOOR). Pricing ~no effect (Melira ~median price).
 - RUNNING: scale_ab.json -- 40 complete decks, d3, b{1,3,10,30} x {x0, x1=per-deck R}, 100 games each, MTG_TIER1_STATS
   -> scale.{log,err,txt}, scale.DONE. Question: where does cost stop falling with budget, and which work is the floor.
+- SCALING SWEEP (scale_ab.json, 40 complete decks, d3, 100 games/cell): total wall b1/b3/b10/b30 = 690/964/1531/2332 s
+  (x0) and 695/950/1459/2342 (per-deck R); max game b1 15 s, b3 28 s -- NO hours-long games on HEAD. Budget 1 = 30% of
+  budget 30 (a FLOOR). Worst floors: giants 75%, edf 57%, galadriel 55%, angels 52%, alchemist 47% (giants/galadriel/
+  angels are cheap in absolute; EDF/alchemist/hinata ~0.8-1 s/game at b1). EDF b1: pay = 60% of priced work.
+- FLOOR MECHANISM (leak/edf_b1_x28.census.tsv): at b1 the decision budget is L=900 units; EDF decisions bill p50 6x,
+  p90 26x, max 129x L under median R (overrun ceiling 25x L, escalation, fresh budgets per bp re-solve). Median R cuts
+  EDF only 0.90x at b1 (billed units 3.4x, priced 0.89x): the work is not stopped by the budget.
+- PRICED CEILING SWEEP (ceil_ab.json; 8 expensive decks x 200 games, priced budget OFF; dq vs X=100):
+  b1: X30 0.92x +10, X10 0.70x +48 | b3: X30 0.92x +1 (hinata max 27.4 -> 13.5 s), X10 0.82x +17.
+  X30 at b3 ~free; earlier play-budget tail corpus found X30 lossy (kittyv2arch gi1723 4->6) -> low-budget-only = USER.
+- RUNNING: c40_ab.json -- all 40 decks, b1/b3, X100 vs X30, 200 games -> c40.*, c40.DONE.
