@@ -1426,3 +1426,8 @@ deterministic; thread-ms ran on a shared box.
 8. Greedy leaf: *"When done with some other work we should measure and decide. I would like to compare it to
    budget changes etc., since it seems like the deck is budget-starved."* OWED: one comparison of leaf0, the
    leafless shapes and plain budget increases (same cost axis), after the main-phase and Lake/Profane cuts.
+9. Shape for this deck: *"emul is probably good enough for this deck. Any nlfit work is more focused on making that
+   a useful tool."* OWED: adopt `logs/vlq_shadowborn_apostle/Shadowborn Apostle.value.EMUL.json` as the deck's
+   sidecar via the DECISIONS.txt route (copy, delete the E7_playset / E7b_trust / E6_skipcal markers, re-run
+   `valueleaf.sh run`), alone on the box and after the main-phase play change lands (its emul_r is fitted to play).
+   The nlfit pricing fix continues as a FLEET tool (judged across decks, not against emul on Shadowborn).
