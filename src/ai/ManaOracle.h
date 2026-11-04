@@ -218,6 +218,12 @@ namespace manaoracle
         // charge depends only on the work that decision did.
         bool Admit();
     };
+    // LINE_REPAY's FULL-TABLE EQUIVALENCE (exact). While non-null, a whole-float MinimalPayments sets it when the FULL
+    // table on the same board could hold an option the whole-float one does not: a non-empty floating pool to set
+    // aside (StashChoices), or a verified multi-unit tap whose plain leftover the full table splits (PayEnum::Verify),
+    // or a capped walk. Those are the only two places the forms differ, so an unset flag means the full table is the
+    // whole-float one, option for option and in order. Set only, never cleared: a spurious set costs a skip, no more.
+    extern thread_local bool* t_full_table_differs;
     std::vector<PayOption> MinimalPayments(const GameState& state, const ManaCost& cost, bool for_creature,
                                            std::vector<std::string>* unmodeled, bool creature_ability = false,
                                            bool whole_float = false, const Card* spell = nullptr,

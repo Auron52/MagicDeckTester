@@ -7973,7 +7973,7 @@ std::atomic<long long> g_lr_record{0}, g_lr_try{0}, g_lr_amount{0}, g_lr_joint{0
                        g_lr_ns{0}, g_lr_memo_hit{0}, g_lr_memo_bad{0}, g_lr_ok_hit{0},
                        g_lr_ok_bad{0}, g_lr_ok_stale{0}, g_lr_found[2] = {}, g_lr_p2{0}, g_lr_p2_cut{0},
                        g_lr_p2_probes{0}, g_lr_p2_ns{0}, g_lr_scoped{0}, g_lr_joint_bad{0}, g_lr_inner_bad{0},
-                       g_lr_p1_memo{0}, g_lr_p1_memo_bad{0};
+                       g_lr_p1_memo{0}, g_lr_p1_memo_bad{0}, g_lr_fulleq{0}, g_lr_fulleq_bad{0};
 bool LineRepayStatsOn() { static const bool on = EnvOn("MTG_LINE_REPAY_STATS"); return on; }
 struct LineRepayStats
 {
@@ -7984,14 +7984,14 @@ struct LineRepayStats
                      "(depth2=%lld) commit_failed=%lld searched d1=%lld d2=%lld minimal_payments=%lld (options %lld) "
                      "inner_joint_short=%lld memo_hit=%lld memo_mismatch=%lld ok_hit=%lld ok_mismatch=%lld ok_stale=%lld "
                      "found_p1=%lld found_p2=%lld p2=%lld p2_cut=%lld p2_probes=%lld p2_ms=%.0f joint_scoped=%lld "
-                     "joint_mismatch=%lld inner_mismatch=%lld p1_memo_hit=%lld p1_memo_mismatch=%lld ms=%.0f ===\n", g_lr_record.load(), g_lr_try.load(), g_lr_amount.load(),
+                     "joint_mismatch=%lld inner_mismatch=%lld p1_memo_hit=%lld p1_memo_mismatch=%lld full_eq_skip=%lld full_eq_mismatch=%lld ms=%.0f ===\n", g_lr_record.load(), g_lr_try.load(), g_lr_amount.load(),
                      g_lr_joint.load(), g_lr_fired.load(), g_lr_fired_d2.load(), g_lr_fail.load(), g_lr_search[0].load(),
                      g_lr_search[1].load(), g_lr_mp_calls.load(), g_lr_mp_opts.load(), g_lr_inner_joint.load(),
                      g_lr_memo_hit.load(), g_lr_memo_bad.load(), g_lr_ok_hit.load(), g_lr_ok_bad.load(), g_lr_ok_stale.load(),
                      g_lr_found[0].load(), g_lr_found[1].load(), g_lr_p2.load(), g_lr_p2_cut.load(), g_lr_p2_probes.load(),
                      static_cast<double>(g_lr_p2_ns.load()) / 1e6, g_lr_scoped.load(), g_lr_joint_bad.load(),
-                     g_lr_inner_bad.load(), g_lr_p1_memo.load(), g_lr_p1_memo_bad.load(),
-                     static_cast<double>(g_lr_ns.load()) / 1e6);
+                     g_lr_inner_bad.load(), g_lr_p1_memo.load(), g_lr_p1_memo_bad.load(), g_lr_fulleq.load(),
+                     g_lr_fulleq_bad.load(), static_cast<double>(g_lr_ns.load()) / 1e6);
     }
 } g_lr_stats;
 
@@ -8504,7 +8504,9 @@ struct LineRepayMemo
     // PASS 1 PROVEN EMPTY (a key whose whole-float pass re-made nothing): a pure, budget-free fact, so a repeat try --
     // one whose pass 2 was cut the first time, and is therefore not in `fail` -- goes straight to pass 2. EDF smoke
     // seed 1064 gi63: 1,963 of 4,433 second passes were cut, each repeat re-running a whole pass 1 for nothing.
-    std::unordered_set<std::uint64_t> fail_p1;
+    // The value: per depth (bit d-1), the whole-float stage's tables were the full ones (manaoracle::
+    // t_full_table_differs unset), so the full stage at that depth is the same search and is skipped.
+    std::unordered_map<std::uint64_t, std::uint8_t> fail_p1;
     std::uint64_t                     epoch = ~0ULL;
 };
 bool SamePayOption(const manaoracle::PayOption& a, const manaoracle::PayOption& b)
@@ -8611,7 +8613,7 @@ bool LineRepayTry(GameState& state, const ManaCost& cost_in, bool for_creature, 
     const std::uint64_t epoch = TurnSolver::DecisionEpoch();
     if (memo.epoch != epoch || memo.fail.size() + memo.ok.size() + memo.fail_p1.size() >= kLineRepayMemoCap)
     {
-        if (!memo.fail.empty() || !memo.ok_p2.empty()) { TurnSolver::NoteEpochMemoWrite(); }
+        if (!memo.fail.empty() || !memo.ok_p2.empty() || !memo.fail_p1.empty()) { TurnSolver::NoteEpochMemoWrite(); }
         memo.fail.clear(); memo.ok.clear(); memo.ok_p2.clear(); memo.fail_p1.clear(); memo.epoch = epoch;
     }
     const std::uint64_t mkey = LineRepayMemoKey(state, ch, honor_legacy_cco);
@@ -8683,8 +8685,15 @@ bool LineRepayTry(GameState& state, const ManaCost& cost_in, bool for_creature, 
     price.budget = TurnSolver::DecisionBudget();
     price.per_unit = kLineRepayProbesPerUnit;
     std::vector<manaoracle::PayOption> picked;
-    const bool p1_empty = memo.fail_p1.count(mkey) != 0;
-    if (p1_empty) { g_lr_p1_memo.fetch_add(1, std::memory_order_relaxed); }
+    const auto p1_it = memo.fail_p1.find(mkey);
+    const bool p1_empty = p1_it != memo.fail_p1.end();
+    // A memoised empty pass 1 changes which stages run (and so what a recompute charges): epoch-bound.
+    if (p1_empty) { g_lr_p1_memo.fetch_add(1, std::memory_order_relaxed); TurnSolver::NoteEpochMemoHit(); }
+    // FULL-TABLE EQUIVALENCE (exact; manaoracle::t_full_table_differs): a whole-float stage that searched to its end on
+    // tables identical to the full ones has already run the full stage's search, option for option -- on a board with
+    // no floating pool and no multi-unit tap's leftover (Sol Ring paid by a Forest, Stompy) the full table adds
+    // nothing. Bit d-1: depth d.
+    std::uint8_t wf_equiv = p1_empty ? p1_it->second : 0;
     // THE STAGES, in admission order: (whole-float, depth 1) unpriced; then, priced on the decision's budget,
     // (whole-float, depth 2), (full table, depth 1), (full table, depth 2). Pass 1 = the two whole-float stages.
     // The depth-2 whole-float stage is priced too: on EDF smoke seed 1064 gi63 it was the whole of the re-pay's cost
@@ -8708,7 +8717,8 @@ bool LineRepayTry(GameState& state, const ManaCost& cost_in, bool for_creature, 
     {
         const bool whole_float = st < kLineRepayMaxDepth;
         const int  depth = st % kLineRepayMaxDepth + 1;
-        if (st == kLineRepayMaxDepth && !p1_empty) { memo.fail_p1.insert(mkey); }   // pass 1 ran out, empty and uncut
+        if (st == kLineRepayMaxDepth && !p1_empty)   // pass 1 ran out, empty and uncut
+        { memo.fail_p1.emplace(mkey, wf_equiv); TurnSolver::NoteEpochMemoWrite(); }
         const GameState* b = from[depth - 1];
         if (b == nullptr) { continue; }
         if (whole_float && p1_empty && !LineRepayMemoVerify()) { continue; }   // pass 1 already re-made nothing here
@@ -8733,9 +8743,17 @@ bool LineRepayTry(GameState& state, const ManaCost& cost_in, bool for_creature, 
             }
         }
         if (joint[depth - 1] == 0) { continue; }
+        // The full stage at a depth whose whole-float tables were the full ones: already searched (wf_equiv).
+        bool fulleq_check = false;
+        if (!whole_float && ((wf_equiv >> (depth - 1)) & 1u) != 0)
+        {
+            g_lr_fulleq.fetch_add(1, std::memory_order_relaxed);
+            if (!LineRepayMemoVerify()) { continue; }
+            fulleq_check = true;   // VERIFY: run it, complete and unpriced (the plain run skipped it); it must fail
+        }
         LineRepayPass pass{ whole_float, nullptr };
         std::chrono::steady_clock::time_point t2{};
-        if (st > 0)
+        if (st > 0 && !fulleq_check)
         {
             // A priced stage is the budget's: its cost (and, once cut, its result) depend on the decision's budget.
             if (!entered_priced) { g_lr_p2.fetch_add(1, std::memory_order_relaxed); }
@@ -8747,7 +8765,25 @@ bool LineRepayTry(GameState& state, const ManaCost& cost_in, bool for_creature, 
         if (LineRepayStatsOn() && whole_float) { g_lr_search[depth - 1].fetch_add(1, std::memory_order_relaxed); }
         picked.assign(static_cast<std::size_t>(depth), manaoracle::PayOption{});
         const long long probes0 = price.probes;
+        bool differs = false;
+        bool* const prev_differs = manaoracle::t_full_table_differs;
+        if (whole_float) { manaoracle::t_full_table_differs = &differs; }
         const bool found = LineRepaySearch(ch, depth - 1, *b, picked, try_now, pass);
+        manaoracle::t_full_table_differs = prev_differs;
+        if (whole_float && !found && !pass.Cut())
+        {
+            const std::uint8_t bit = static_cast<std::uint8_t>(1u << (depth - 1));
+            wf_equiv = differs ? static_cast<std::uint8_t>(wf_equiv & ~bit) : static_cast<std::uint8_t>(wf_equiv | bit);
+        }
+        if (fulleq_check)
+        {
+            if (found)
+            {
+                g_lr_fulleq_bad.fetch_add(1, std::memory_order_relaxed);
+                LineRepayDumpMismatch("fulleq", ch, depth, *b, picked);
+            }
+            continue;   // what the plain run did: nothing
+        }
         if (st > 0)
         {
             g_lr_p2_probes.fetch_add(price.probes - probes0, std::memory_order_relaxed);

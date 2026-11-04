@@ -182,6 +182,8 @@ bool ScriptedTapAhead(GameState& state, int count, bool lands_only)
     return true;
 }
 
+thread_local bool* t_full_table_differs = nullptr;
+
 bool ProbeCharge::Admit()
 {
     SearchBudget* const b = budget;
@@ -1235,9 +1237,14 @@ struct PayEnum
         if (!PayAndRecord(o, &offered, &left)) { return false; }
         // Only a multi-unit tap makes a leftover of its own: a set of one-unit taps pays exactly, and
         // the floating pool it was offered is already split by the outer set-aside enumeration.
-        if (whole_float || !HasMultiUnit(picks)) { return true; }
+        if (!HasMultiUnit(picks)) { return true; }
         const int n = left.white + left.blue + left.black + left.red + left.green + left.colorless;
         if (n == 0 || offered.wild != 0 || left.wild != 0) { return true; }
+        if (whole_float)   // the full table would split this leftover (t_full_table_differs)
+        {
+            if (t_full_table_differs != nullptr) { *t_full_table_differs = true; }
+            return true;
+        }
         const int have[6] = { offered.white, offered.blue, offered.black, offered.red, offered.green, offered.colorless };
         const int was[6]  = { left.white, left.blue, left.black, left.red, left.green, left.colorless };
         int k[6] = { 0, 0, 0, 0, 0, 0 };
@@ -1492,6 +1499,11 @@ std::vector<PayOption> MinimalPayments(const GameState& state, const ManaCost& c
                            (for_creature ? fc.green : 0) + fbg.green,
                            (for_creature ? fc.colorless : 0) + fbg.colorless };
     std::unordered_set<std::uint64_t> seen;
+    if (whole_float && t_full_table_differs != nullptr)
+    {
+        const ManaPool& f = state.floating_mana;   // StashChoices' counts: all zero -> the one empty set-aside
+        if (f.white + f.blue + f.black + f.red + f.green + f.colorless != 0) { *t_full_table_differs = true; }
+    }
     for (const PayOption& st : whole_float ? std::vector<PayOption>(1) : StashChoices(state, unmodeled))
     {
         const ManaPool& f = state.floating_mana;
@@ -1504,6 +1516,7 @@ std::vector<PayOption> MinimalPayments(const GameState& state, const ManaCost& c
         pe.whole_float = whole_float;
         pe.charge = charge;
         pe.Dfs(0, col, total);
+        if (pe.capped && whole_float && t_full_table_differs != nullptr) { *t_full_table_differs = true; }
         if (charge != nullptr && charge->cut) { break; }   // the budget is spent: a partial table
         if (pe.capped && unmodeled != nullptr) { unmodeled->push_back("payment enumeration capped"); }
     }

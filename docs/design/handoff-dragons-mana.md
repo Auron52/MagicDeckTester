@@ -10,6 +10,43 @@ Worktree: `/workspaces/MagicDeckTester/.claude/worktrees/agent-a9dab9fbcae918660
 origin/phase-1-2-deck-analyzer 980616e55. Scratch: `/workspaces/MagicDeckTester/build/scratch/mcdragons/`. Helper
 scripts (gitignored): `logs/mcdragons/{mk.py,gate.sh,batch.sh,repro.sh,abrep.py,scprobe.sh}`.
 
+## READ FIRST: Successor 7 (2026-11-04)
+Worktree head = the commit carrying this section (branch wip/mc-dragons; not pushed, no GT accepted). Scratch
+`build/scratch/mcdragons7/`. Binary under test = `mcdragons7/mtg.p6` / `mtg-test.p6` (= HEAD src, commit d0149cac8).
+
+SUCCESSOR 6's JOBS: vprobe5 (VERIFY on p5, 7 decks x 50 games) is CLEAN -- memo/ok/joint/inner/p1_memo mismatch all 0,
+no `[lr-mismatch]` lines (`mcdragons6/vprobe5.err`). Its EDF off30 gi37 took 1,401 s under VERIFY only; plain p5 is a
+few seconds (`mcdragons7/edf37_p5.err`). Hinata gi403 on p4d (re-price only): STILL 876 s (`mcdragons6/hin403_p4_1.err`).
+
+THE HINATA 1.48x ROOT CAUSE (gi403 = --seed 1870404 --game-index 403): not LR's own work (LR ms 80 s of 876 s). p2=5.02M
+priced stages entered, p2_cut=5.02M -- nearly every one cut at once because the DECISION BUDGET WAS ALREADY SPENT --
+and every entry called TurnSolver::NoteChargingSubsearch, as did every fail-memo hit (2.0M). Under MTG_CACHE_HIT_CHARGE
+mode 1 that makes every enclosing cacheable computation UNSTORABLE (unstorable=27,957 vs 0 off), so the game-scoped
+bp-continuation cache re-derived every lookup, recursively (perf: EnumeratePlans/BpDeriveContinuationList/ApplyPlanDirect).
+FIX (commit d0149cac8, lossless, budgeted and unbudgeted alike): two NARROWER cache-charge notes.
+  * TurnSolver.cpp:4055-4064 (Rec.epoch_memo / spent_cut, t_memo_gen, DecisionSpentNow), :4077 (Cost.bound /
+    needs_spent / bound_epoch / bound_gen), Scope::Done(side_replayed) stores a bound computation only when its caller
+    replays side counters (bp + front derivations pass true: a spent cut bumps budgetbind::t_binds, which BpSideReplay
+    replays; m1/m2 enum caches do not, so they stay unstorable), and only if neither the epoch nor t_memo_gen moved while
+    it ran. CacheHitCharge (:4200) serves a bound entry only in the SAME decision epoch, with t_memo_gen unchanged, and
+    (needs_spent) with the decision budget still spent; a served bound hit re-notes the enclosing computations (:4209).
+  * ManaPayment.cpp: fail-memo hit -> NoteEpochMemoHit (:8625); ok_p2 hit -> NoteEpochMemoHit (:8654); memo writes that
+    change an answer bump the generation (fail insert :8637, ok_p2 insert :8787, a clear of a non-empty fail/ok_p2 :8614);
+    PricedNote (:8697) on every exit: a priced stage that admitted a probe -> NoteChargingSubsearch (as before); cut at
+    its first probe (0 probes) -> NoteSpentCutSubsearch; no probe and no cut -> nothing (the budget was never read).
+  Why exact: within one epoch with the memo unchanged a recompute takes the same memo path, and with the budget spent
+  every priced stage cuts at its first Admit (one bind each, same as the original). Pass 1 (st 0) is unpriced and
+  deterministic, so pass-1 ok inserts and fail_p1 inserts need no generation bump.
+  RESULT: Hinata gi403 on-arm 876 s -> 18 s (= the off arm's 18 s), same win turn 6, unstorable 27,957 -> 1,419
+  (`mcdragons7/hin403_p6on.err`).
+  Coordinator's data point (Breaching's mtg.v2 hung >16 h on Hinata seed 31000423 gi 423, job hinata_on__g400): on p6 it
+  FINISHES -- on 440 s wall / 231 s user, units 77,634, win T7; off 228 s / 102 s user, units 48,855, win T7
+  (`mcdragons7/hin423_p6{on,off}.err`, script `hin423.sh`). Still a 2.26x CPU / 1.59x units game: LR fired 18,914
+  re-pays (4,936 depth 2), so the trees differ; p2_probes 116,429 (= ~29k units at 4 a unit, ~ the whole units delta),
+  memo_hit 1.42M, LR ms 37 s. Not investigated further (coordinator: no separate investigation).
+  SOUNDNESS of the epoch-bound hits: MTG_BP_ENUM_VERIFY=1 (re-derives EVERY bp hit and diffs it) on p6, Hinata gi403 +
+  8 Hinata games: 269,074 hits re-derived, CONTENT-DIFF 0, order-only 0 (`mcdragons7/bv2.err`).
+
 ## READ FIRST: Successor 6 (2026-11-03, stopped at the context cap; successor 7 continues)
 Worktree head = the commit carrying this section (branch wip/mc-dragons; not pushed, no GT accepted). Scratch
 `build/scratch/mcdragons6/`. Binary under test = `mcdragons6/mtg.p5` / `mtg-test.p5` (= HEAD src).
