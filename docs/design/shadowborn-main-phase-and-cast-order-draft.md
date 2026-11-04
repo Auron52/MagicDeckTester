@@ -176,9 +176,9 @@ fine in my opinion. I sometimes cast it late, but that doesn't really matter at 
 | 2 | Culling the Weak | **moved ahead of the Stone** (was 15, behind it) | USER 2026-11-04: *"Culling the weak needs to be earlier than Thrumming stone some of the time and that means the shadowborn for it to sacrifice also needs to be considered there."* *"(actually often)"* *"Having the culling later than Thrumming stone isn't a good idea."* *"So it should be Dark Ritual, <shadowborn sacrifice for culling if needed>, Culling, Thrumming stone..."* So Culling always precedes the Stone. Victim, USER 2026-11-04: *"If needed here is pretty much just so that you can cast culling when no shadowborn is out. If you have a good sacrifice already you can just use it and cast the apostle later. It's probably not worth worrying about the 1 damage from an attacker."* So: with a creature already on the board, Culling eats a board body and every Apostle waits for the Stone (the hand-victim variant is not offered); with no creature out, one Apostle from hand is cast first as its victim. |
 | 3 | Thrumming Stone | one place later (was 1) | Granter: every later cast wants it out first. |
 | 4 | Shadowborn Apostle | none in effect (10) | Starts the chain. Bodies go down before anything that sacrifices or counts them. |
-| 5 | Abhorrent Overlord (hard cast) | **ordered** (was a plan-order tie at 10) | After the Apostles: devotion counts each Apostle's {B}, so more Harpies. |
-| 6 | Reaper from the Abyss (hard cast) | **ordered** (tie at 10) | Body; no cast-order interaction. |
-| 7 | Sire of Insanity (hard cast) | **ordered** (tie at 10) | Body; the discard is at the end step. |
+| 5 | Reaper from the Abyss (hard cast) | **ordered** (tie at 10) | Body; no cast-order interaction. |
+| 6 | Sire of Insanity (hard cast) | **ordered** (tie at 10) | Body; the discard is at the end step. |
+| 7 | Abhorrent Overlord (hard cast) | **ordered** (was a plan-order tie at 10) | Last of the Demons: its devotion count includes the Apostles' {B} and the other Demons' pips. USER 2026-11-04: *"I guess technically Overlord should go last of the demons because of devotion, but this is such a minor detail and I doubt if it would ever come up by turn 8."* |
 | 8 | Jetmir (cannot be cast) | **ordered** (tie at 10) | Listed only so the order is total. |
 | 9 | Demonic Tutor | ordered (tie at 20) | After the bodies; the shuffle comes after the chain has used the top of the library. |
 | 10 | Diabolic Intent | ordered (tie at 20) | Victim is a sick Apostle from this turn's chain. DT before Intent is an arbitrary tie-break (q6). |
@@ -300,5 +300,4 @@ wall time):
    depth? Default: searched only.
 6. **The tutor ties:** Demonic Tutor before Diabolic Intent, both after the bodies; suspends last.
    Fine as a total order? (I found no interaction that decides it.)
-7. **Order of the hard-cast Demons:** Overlord (after the Apostles, for devotion), then Reaper, then
-   Sire. Fine? It rarely matters (Overlord 3 and Reaper 6 hard casts in 100 games).
+7. **Order of the hard-cast Demons: ANSWERED (USER 2026-11-04)** -- Reaper, Sire, then Overlord last (devotion).
