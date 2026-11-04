@@ -222,7 +222,9 @@ order."* Fixed: when one main activates for both, the Overlord fetch precedes th
 Jetmir-then-Overlord order is pruned in the same main). Cross-main (Jetmir main 1, Overlord main 2 on an attack
 turn, the INT-9 table) is unchanged. USER 2026-11-04: *"I thought about it and the Overlord after Jetmir is pretty bad on an attack turn, but
 the best play on those turns is just Jetmir anyway, so we can leave it and let the search determine that."*
-So the main-2 Overlord activation after a main-1 Jetmir stays offered; no prune there.
+So the main-2 Overlord activation after a main-1 Jetmir stays offered; no prune there. And *"Yeah, in main 2 we should still allow Overlord -> Jetmir."*: the same-main
+order rule applies in main 2 too, and a main-2 Jetmir fetch (after the Overlord fetch) stays offered, e.g.
+the no-attacker turn the INT-9 table used to put in main 1.
 
 ## 3. Activations and the land drop (both mains, as on Fungus)
 
