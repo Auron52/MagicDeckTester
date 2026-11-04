@@ -602,3 +602,16 @@ Same manifest/arms as 01:04. Numbers reproduce the non-deterministic run almost 
   MTG_DECISION_WORK_X=1000 MTG_KEEP_BENCH=1 MTG_KEEP_REPLAY_LIST=<log> [MTG_KEEP_BENCH_BUDGET=b] mtg-analyze <copy>.cod
   --gen-mulligan fast. The gencache fingerprint MISMATCHES -> discovery reruns once (11,200 rollouts); do it on a
   quiet box at 32 threads, then arms budget {1,3,10} x priced {off,on}.
+- CONFIRM (conf_ab.json, 4x games, seeds +2e6; dq = summed win-turn delta, + worse): snow x20 +1/1300 0.72x wall p99
+  28.3->18.5 (CANDIDATE); selesnyav2 x14 0/1800 0.74x; colossus x14 -1/1767 0.77x; mirrorwing x20 +3/2100 0.86x
+  (marginal). NOT small: alchemist +13, landfall +14, dragonstorm +8, fivecolour +8, melira +6, pd +3 at x20.
+  The 325-game first read was too small. Proposed to the USER (their call): Snow 0.7x, Selesnya v2 / Colossus 0.5x.
+- fungusB gi4525 is NOT a leak: billing exact (each big decision ~2.4-2.7M billed units both arms); the deck is cheap
+  per unit (21.9k) so pricing at 28.3k gives each decision 1.4x priced work, and the game went a turn longer.
+  Per-deck R removes it by construction.
+- MELIRA LOW-BUDGET REPLAY (replay/mrep_b{1,3,10}_p{0,1}.out; 6 arms concurrent, 5 cores each): only 32 of 302 slow
+  lines replay (215 seed mismatches + 55 label skips: bucketing changed). Those 32 logged 2,468 s at b3; now 28 s
+  (max 12 s): the historical hours-long cases are FIXED on HEAD. Ordinary rollouts: b1 0.21 s, b3 0.35 s, b10 0.54 s
+  (10x budget = 2.6x cost: a FLOOR). Pricing ~no effect (Melira ~median price).
+- RUNNING: scale_ab.json -- 40 complete decks, d3, b{1,3,10,30} x {x0, x1=per-deck R}, 100 games each, MTG_TIER1_STATS
+  -> scale.{log,err,txt}, scale.DONE. Question: where does cost stop falling with budget, and which work is the floor.
