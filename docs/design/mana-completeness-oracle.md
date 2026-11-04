@@ -1832,3 +1832,38 @@ was gone. That cost the Cyclone -> Emrakul kill.
   24,000 games): Cyclone 3,000 net -1 (0 slower, 1 faster: gi1122 T6 -> T5; 22/120 jobs' digests moved; units
   -0.032%); Cyclone 2HG 600 net 0 (1/24 jobs moved; -0.013%); Auras 3,000 and 20 scanned decks
   byte-identical (units within +/-0.01%). No slower game.
+
+### 13.13 KittyEquipment: the equip route audited link by link (2026-11-04, branch `wip/mc-kitty`)
+
+Pass 1 r2 (`logs/mana_clean/pass1-kittyequipment-r2`, 42,000 games, src `644270cdc4ce`) failed on UNMODELED 56,506
+(every one "combo-route macro") and ENUM-GAP 183. All three fixes are ORACLE-ONLY: play is byte-identical.
+
+**UNMODELED: the equip route's macro is now audited.** `equiproute::Run` realises its macro as a chain of plain menu
+plans, each applied with `ApplyPlan`. Each link apply now goes through `manaoracle::RouteLinkApply`, which is
+`ApplyPlan` plus a tape armed only by the oracle's `EngineApply` (`RouteTape`, `ManaOracle.h`). The trial inside
+`EquipRouteApply` runs under `RouteTapeSuspend`, and a losing DFS branch is rewound (`RouteTapeMark/Rewind`).
+`AuditRoute` audits each recorded link with `AuditPlan(before, plan, after/drops)` inside `EquipRouteLinkFrame`, so the
+oracle's applies replay the route's. Flags carry the prefix `equip-route link k/n of {...}:`; the summary line is
+`=== MANA ORACLE combo routes: N equip-route macros audited, M links, X ms ===`. The EDF and Alchemist routes (which
+hand-roll their payments) stay UNMODELED.
+
+**ENUM-GAP, 147 of 183 ("fewer resources: ...plan#N 1>0"): oracle keying asymmetry.** `JudgeHit` runs inside
+`Realize`, which keys the plan's own sources apart (`t_plan_srcs`, `t_key_twin_taps`), while the menu's boards
+(`MakeMenuView`) are keyed outside it. The same board then compares as "fewer resources". `JudgeHit` now computes
+unkeyed. Repro seed 30009252 T3.
+
+**ENUM-GAP, the other 36: the noop reduction order.** `PerformedPlan` removed actions greedily in plan order. A cast
+that the Sram-draw continuation re-makes anyway also "does nothing", so it dropped a Bone Saw first and ended on a plan
+no enumeration offers. It now returns its whole reduction chain, and the noop test runs it activations-first and in
+the old order, accepting any chain plan that is on the menu (each is realised by the same script on the same board, so
+the test is sound; the old final is still checked, so flags can only go). Repro seed 30001917 T2.
+
+No ENUM-GAP was an engine enumeration miss; every one examined was oracle-side.
+
+| check | result |
+|---|---|
+| the 108 games holding r2's 183 ENUM-GAPs | ENUM-GAP 0, UNMODELED 0; 137 macros audited, 454 links, no ISSUE flag |
+| play identity, oracle off, gi 0-1999 (20 jobs) | 20/20 digests and units identical |
+| **gate `mc-kitty-pass2`, fresh block gi 42000-46999 (PGO, src `2d767a1caac7`)** | **clean: 5,000 games, 0 issues**; DOMINATED-LAND 5,796 (disclosed); 6,774 macros audited, 23,425 links; play identical with the oracle off |
+
+Cost: the route audit is 8.4 s of 2,153 s oracle CPU over the gate (0.39%).
