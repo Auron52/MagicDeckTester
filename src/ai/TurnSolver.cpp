@@ -56598,6 +56598,52 @@ PlanTraits TurnSolver::ComputePlanTraits(const GameState& state, const std::vect
     }
     t.bodies_are_multipliers = t.plan_has_own_pump && t.copy_magnet_live;
 
+    // PREVENT DAMAGE PAIN DEFERRAL inputs (PlanTraits::pd_*; MTG_PD_DEFER_LINE, read by PainDeferQuery).
+    // Armed boards only, so every other deck's traits are unchanged. The hazard split mirrors
+    // own_board_hazard above exactly, except that a sac outlet naming its victim is a plan FACT (the
+    // victim leaves the chain), not an unknown.
+    if (state.dmg_events_armed)
+    {
+        const std::vector<Card>& hand = state.players[active].hand;
+        for (const Action& a : acts)
+        {
+            if (a.kind == Action::Kind::SacCreatureOutlet)
+            {
+                if (a.sac_victim_id > 0 && t.pd_victim_count < PlanTraits::kMaxPdVictims)
+                { t.pd_victims[t.pd_victim_count++] = a.sac_victim_id; }
+                else { t.pd_hazard_other = true; }
+                continue;
+            }
+            if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard
+                && a.kind != Action::Kind::PlayLand && a.kind != Action::Kind::ActivateVial
+                && a.kind != Action::Kind::ActivatePump)
+            { t.pd_hazard_other = true; continue; }
+            if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard) { continue; }
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+            if (!d) { t.pd_hazard_other = true; continue; }
+            if (d->params.x_damage_each_creature_and_player || d->params.etb_destroy_nonartifact_nonblack
+                || d->params.etb_destroy_artifact_enchantment_land || HasSacCreatureAdditionalCost(d->params))
+            { t.pd_hazard_other = true; }
+            // A permanent cast from hand joins the battlefield before the sweep (counted by its hand
+            // copies; a graveyard cast has none, so it is left out -- an under-estimate of the growth).
+            if (a.kind != Action::Kind::CastFromHand || d->card.IsInstant() || d->card.IsSorcery()
+                || d->card.IsLand())
+            { continue; }
+            int k = 0;
+            while (k < t.pd_amp_count && t.pd_amp_key[k] != d) { ++k; }
+            if (k == t.pd_amp_count)
+            {
+                if (k >= PlanTraits::kMaxPdAmps) { continue; }
+                t.pd_amp_key[k] = d; t.pd_amp_def[k] = d;
+                int copies = 0;
+                for (const Card& c : hand) { if (c.m_name == d->card.m_name) { ++copies; } }
+                t.pd_amp_key_hand0[k] = copies;
+                ++t.pd_amp_count;
+            }
+            ++t.pd_amp_key_plan_n[k];
+        }
+    }
+
     // RESTRICTED-FIRST LINE TEST inputs (PlanTraits::restr_pp; read by ManaPayment.cpp's
     // RestrictedMayHoldForAttack). Only a board holding an untapped SUBTYPE-restricted creature source
     // (Smokebraider, Giada) runs the plan half -- every other deck's traits are unchanged.

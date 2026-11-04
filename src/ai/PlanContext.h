@@ -209,6 +209,24 @@ struct PlanTraits
     // (PainDeferQuery, SpellEffects.h): it moves pain past the plan's casts on the premise that the
     // damage->lifegain->drain chain only GROWS until the sweep, and such an action could shrink it.
     bool own_board_hazard      = false;
+    // --- PREVENT DAMAGE PAIN DEFERRAL inputs (MTG_PD_DEFER_LINE, dmgev::DeferLineEnabled; read by
+    // PainDeferQuery, SpellEffects.h). Filled on dmg_events_armed boards only -- zero everywhere else.
+    // What the line does to the damage->lifegain->drain chain between a payment and the end-of-main sweep:
+    // the PERMANENTS it casts onto our battlefield (key == def; a tutor's fetch is not a plan fact here:
+    // Green Sun's Zenith's target is picked at resolution), each still owed while fewer copies
+    // of its key than the plan casts have left the hand (the restr_inelig_* convention), and the
+    // creatures its sac outlets sacrifice. pd_hazard_other = an own-board hazard that is NOT a named
+    // sac-outlet victim (a ping, a Rolling Earthquake...): what it removes is not a plan fact.
+    static constexpr int kMaxPdAmps = 8;
+    const struct CardDefinition* pd_amp_key[kMaxPdAmps] = {};
+    const struct CardDefinition* pd_amp_def[kMaxPdAmps] = {};
+    int  pd_amp_key_plan_n[kMaxPdAmps] = {};   // casts of pd_amp_key in the whole plan
+    int  pd_amp_key_hand0[kMaxPdAmps]  = {};   // copies of pd_amp_key in hand when the apply began
+    int  pd_amp_count          = 0;
+    static constexpr int kMaxPdVictims = 4;
+    int  pd_victims[kMaxPdVictims] = {};       // sac-outlet victims (card.m_number)
+    int  pd_victim_count       = 0;
+    bool pd_hazard_other       = false;
 };
 
 // Null when no plan apply is in scope (or every consumer lever is off -- the builder is not run).

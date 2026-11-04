@@ -73,6 +73,18 @@ std::uint64_t PlanTraitsContentHash(const PlanTraits& t)
     }
     mix(static_cast<std::uint64_t>(t.act_restr_elig_mana));
     mix(static_cast<std::uint64_t>(t.act_restr_inelig_mana));
+    // Prevent Damage deferral inputs: mixed only when present, so every other deck's hash is unchanged.
+    if (t.pd_amp_count > 0 || t.pd_victim_count > 0 || t.pd_hazard_other)
+    {
+        mix(static_cast<std::uint64_t>(t.pd_amp_count) | (static_cast<std::uint64_t>(t.pd_victim_count) << 8)
+            | (static_cast<std::uint64_t>(t.pd_hazard_other) << 16));
+        for (int i = 0; i < t.pd_amp_count; ++i)
+        {
+            mix_def(t.pd_amp_key[i]); mix_def(t.pd_amp_def[i]);
+            mix(static_cast<std::uint64_t>(t.pd_amp_key_plan_n[i]) | (static_cast<std::uint64_t>(t.pd_amp_key_hand0[i]) << 16));
+        }
+        for (int i = 0; i < t.pd_victim_count; ++i) { mix(static_cast<std::uint64_t>(t.pd_victims[i])); }
+    }
     return h | 1ull;   // never 0: 0 is "no traits installed"
 }
 

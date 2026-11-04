@@ -681,7 +681,8 @@ namespace paystats
 inline bool On() { static const bool v = EnvOn("MTG_PD_PAY_STATS"); return v; }
 enum { kPolicy, kUseful, kUsefulSkip, kUsefulFail, kHarm, kHarmFirstOk, kHarmAtFloor, kExactRetry,
        kExactRetryFail, kDescRetry, kDescFail, kDeferLive, kDeferSame, kDeferTried, kDeferKept,
-       kDeferRejected, kN };
+       kDeferRejected, kLineStrand, kLineRepaired, kQOffGate, kQOffHazard, kQSame, kQNotExact, kDeferNoPred,
+       kDeferNoCover, kN };
 inline std::atomic<std::uint64_t>* C()
 {
     static std::atomic<std::uint64_t> c[kN];
@@ -693,7 +694,8 @@ inline std::atomic<std::uint64_t>* C()
             static const char* names[kN] = { "policy", "useful", "useful_skip(lethal floor)",
                 "useful_capped_fail", "harmful", "harm_first_ok", "harm_at_floor", "exact_retry",
                 "exact_retry_fail", "desc_retry", "desc_fail", "defer_live", "defer_same",
-                "defer_tried", "defer_kept", "defer_rejected" };
+                "defer_tried", "defer_kept", "defer_rejected", "useful_line_strand", "useful_line_repaired", "q_off_gate", "q_off_hazard", "q_same_chain",
+                "q_not_exact", "defer_no_pred", "defer_no_cover" };
             std::fprintf(stderr, "[pd-pay-stats]");
             for (int i = 0; i < kN; ++i)
             { std::fprintf(stderr, " %s=%llu", names[i], (unsigned long long)C()[i].load()); }
@@ -760,6 +762,40 @@ inline bool PainDeferEnabled()
 {
     static const bool v = EnvOn("MTG_PD_PAIN_DEFER", true);   // DEFAULT ON; =0 = the pain-first payer
     return heurarm::Flag(heurarm::PD_PAIN_DEFER, v) && !g_play_legacy_pain_pay;
+}
+
+// THE WHOLE LINE'S AFTER-CHAIN (MTG_PD_DEFER_LINE, default ON; =0 = the paying spell / the batch only,
+// and every own-board hazard keeps the deferral off). Mana-clean gate, Prevent Damage, 2026-11-04:
+// the deferral read only the spell being paid for (and the whole-turn batch), so on the per-cast path
+// the LINE's later casts were invisible -- "Green Sun's Zenith X=3 for Tamanoa, then the sweep"
+// (seed 30000065 T6) paid Zenith with the Citadel the sweep would have fired at two Tamanoas -- and a
+// plan with a sac outlet was refused outright, so "{1}, sacrifice a Tamanoa" paid with City of Brass
+// (1 pain at two Tamanoas) and left Tarnished Citadel (3) for a sweep at one (seed 30000020 T6). The
+// after-chain is the chain AT THE SWEEP, so it is computed from the plan (PainDeferQuery, the plan's
+// PlanTraits::pd_* inputs): every permanent cast the line still owes joins it, and a sac-outlet victim still on the battlefield leaves it. A plan with any OTHER own-board
+// hazard (a Pyrohemia ping, a Rolling Earthquake: which creatures die is not a plan fact) stays off.
+// Nothing else changes: DeferredPainPay still keeps the deferred payment only when its REALISED value
+// is no worse in both terms and its leftovers cover the pain-first payment's (CapabilityCovers).
+inline bool DeferLineEnabled()
+{
+    static const bool v = EnvOn("MTG_PD_DEFER_LINE", true);   // DEFAULT ON; =0 = the paying spell only
+    return heurarm::Flag(heurarm::PD_DEFER_LINE, v);
+}
+
+// REST OF LINE IN THE USEFUL MODE (MTG_PD_USEFUL_LINE_OK, default ON; =0 = the unchecked payment).
+// Mana-clean gate, Prevent Damage, seed 30006387 T4: plan {Ancient Tomb, Dina {B}{G}, Rolling Earthquake
+// X=2 {2}{R}} on City of Brass, Karplusan Forest, Brushland, Tomb, one Tamanoa out. The pain-useful
+// payment is the plain pain-first attempt, and only the HARMFUL mode carried the rest-of-line check
+// (`line_ok`); Dina's {G} took Karplusan -- with City on {B}, the board's only other {R} -- and the
+// Earthquake was dropped, while City {B} + Brushland {G} pays both. Now the useful mode asks the same
+// exact question after its payment; on "strands" it re-pays holding each source the payment tapped,
+// one at a time (at most one retry per tapped source, only on a stranding payment), and keeps the
+// first payment that leaves the line payable. None does -> the original payment, exactly as before.
+// It can only turn a payment that drops a cast of the line into one that does not.
+inline bool UsefulLineOkEnabled()
+{
+    static const bool v = EnvOn("MTG_PD_USEFUL_LINE_OK", true);   // DEFAULT ON; =0 = unchecked
+    return heurarm::Flag(heurarm::PD_USEFUL_LINE_OK, v);
 }
 
 // The board's damage -> lifegain -> drain chain, read off card params (never names).
@@ -960,9 +996,9 @@ inline bool DeferredPainPay(GameState& s, ManaPool* available, Attempt&& attempt
     if (dp_up == base_up) { paystats::Inc(paystats::kDeferSame); return true; }   // same sources: nothing to gain
     // Predicted no better in either term, or it would strand a later payment: keep the pain-first payment.
     if (!(q.pred.opp >= base.opp && q.pred.life >= base.life
-          && (q.pred.opp > base.opp || q.pred.life > base.life))
-        || !CapabilityCovers(dp_up, base_up, q))
-    { return true; }
+          && (q.pred.opp > base.opp || q.pred.life > base.life)))
+    { paystats::Inc(paystats::kDeferNoPred); return true; }
+    if (!CapabilityCovers(dp_up, base_up, q)) { paystats::Inc(paystats::kDeferNoCover); return true; }
     const ManaPool base_float = s.floating_mana;
     paystats::Inc(paystats::kDeferTried);
     pre.Restore(s, available);
@@ -1034,6 +1070,37 @@ inline bool PainAwarePay(GameState& s, ManaPool* available, bool allow_lethal, A
         // executor's `available` accounting pool, deliberately left charged (ManaPayment.h) -- so
         // only that pool needs saving before the bounded attempt.
         paystats::Inc(paystats::kUseful);
+        // REST OF LINE (UsefulLineOkEnabled): snapshot only when a line is being applied.
+        const bool line_chk = UsefulLineOkEnabled() && line_ok(/*probe=*/true) != -1;
+        PayAttemptSnap pre_line;
+        if (line_chk) { pre_line.Take(s, available); }
+        auto repair = [&](bool ok) -> bool
+        {
+            if (!ok || !line_chk || line_ok(false) != 0) { return ok; }
+            paystats::Inc(paystats::kLineStrand);
+            if (s.battlefield.size() != pre_line.bf.size()) { return true; }
+            std::uint64_t tapped = 0;
+            for (std::size_t i = 0; i < s.battlefield.size() && i < 64; ++i)
+            {
+                if (s.battlefield[i].tapped && !pre_line.bf[i].tapped
+                    && s.battlefield[i].card.m_number == pre_line.bf[i].card.m_number)
+                { tapped |= (1ull << i); }
+            }
+            PayAttemptSnap strand_post;
+            strand_post.Take(s, available);
+            const PayDmgCap cap = t_pay_cap;
+            for (std::uint64_t m = tapped; m != 0; m &= m - 1)
+            {
+                pre_line.Restore(s, available);
+                t_pay_cap = cap;
+                bool r;
+                { PayHoldScope hs(t_pay_hold | (m & (~m + 1))); r = attempt(); }
+                if (r && line_ok(false) == 1) { paystats::Inc(paystats::kLineRepaired); return true; }
+            }
+            strand_post.Restore(s, available);
+            t_pay_cap = cap;
+            return true;
+        };
         // Nothing to bound: even every pain source this payment could tap cannot reach 0 (the old
         // whole-board test) -> the plain attempt, damaging mode first, no per-tap cap checks.
         if (PaymentPainSafe(s, ctrl))
@@ -1045,9 +1112,9 @@ inline bool PainAwarePay(GameState& s, ManaPool* available, bool allow_lethal, A
             {
                 DeferPlan q;
                 defer(q);
-                if (q.live && q.exact) { return DeferredPainPay(s, available, attempt, q); }
+                if (q.live && q.exact) { return repair(DeferredPainPay(s, available, attempt, q)); }
             }
-            return attempt();
+            return repair(attempt());
         }
         const ManaPool av0 = available ? *available : ManaPool{};
         const int room = s.players[ctrl].life - 1;
@@ -1057,7 +1124,7 @@ inline bool PainAwarePay(GameState& s, ManaPool* available, bool allow_lethal, A
         if (!(fl.floor > room))
         {
             t_pay_cap = { true, base + room, barbs, /*pain_first=*/true, barb_total };
-            if (attempt()) { return true; }
+            if (attempt()) { return repair(true); }
             paystats::Inc(paystats::kUsefulFail);
             if (available) { *available = av0; }
         }

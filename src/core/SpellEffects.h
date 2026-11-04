@@ -44674,11 +44674,34 @@ inline void PainDeferQuery(const GameState& s, const ManaCost& cost, const ManaP
                            std::uint64_t reserved_mask, dmgev::DeferPlan& q)
 {
     q.live = false; q.exact = false;
-    if (s.phase != Phase::PreCombatMain || s.uses_second_main || g_endm1_sweep_pin == 0) { return; }
-    if (const PlanTraits* t = CurrentPlanTraits(); t != nullptr && t->own_board_hazard) { return; }
+    if (s.phase != Phase::PreCombatMain || s.uses_second_main || g_endm1_sweep_pin == 0)
+    { dmgev::paystats::Inc(dmgev::paystats::kQOffGate); return; }
+    const PlanTraits* pt = CurrentPlanTraits();
+    // The whole line's after-chain (dmgev::DeferLineEnabled): a named sac-outlet victim is a plan fact;
+    // any other own-board hazard still keeps the deferral off.
+    const bool line = dmgev::DeferLineEnabled();
+    // (A hazard with no victim recorded is unknown too: traits built without the armed inputs.)
+    if (pt != nullptr
+        && (line ? (pt->pd_hazard_other || (pt->own_board_hazard && pt->pd_victim_count == 0))
+                 : pt->own_board_hazard))
+    { dmgev::paystats::Inc(dmgev::paystats::kQOffHazard); return; }
     const int ctrl = s.active_player_index;
     q.now   = dmgev::ReadGainChain(s, ctrl);
     q.after = q.now;
+    if (line && pt != nullptr && pt->pd_victim_count > 0)
+    {
+        // A victim still on the battlefield is sacrificed after this payment: the sweep's chain lacks it.
+        dmgev::GainChain c;
+        for (const Permanent& p : s.battlefield)
+        {
+            bool victim = false;
+            for (int i = 0; i < pt->pd_victim_count; ++i) { if (pt->pd_victims[i] == p.card.m_number) { victim = true; } }
+            if (victim) { continue; }
+            const CardDefinition* d = dmgev::Def(p);
+            if (d) { dmgev::ChainAdd(c, d->params, p.controller_index == ctrl); }
+        }
+        q.after = c;
+    }
     const CardDefinition* seen[9] = {};
     int nseen = 0;
     auto pend = [&](const CardDefinition* d)
@@ -44700,9 +44723,25 @@ inline void PainDeferQuery(const GameState& s, const ManaCost& cost, const ManaP
     if (const Card* c = PayingSpellCard()) { pend(CardDatabase::Instance().LookupCached(*c)); }
     if (const dmgev::PendingCasts* pc = dmgev::t_pending_casts)
     { for (int i = 0; i < pc->n; ++i) { pend(pc->d[i]); } }
-    if (q.after == q.now) { return; }
+    if (line && pt != nullptr)
+    {
+        // The line's permanent casts it still owes (fewer copies than it casts have left the hand).
+        const std::vector<Card>& hand = s.players[ctrl].hand;
+        for (int k = 0; k < pt->pd_amp_count; ++k)
+        {
+            int now = 0;
+            for (const Card& c : hand) { if (c.m_name == pt->pd_amp_key[k]->card.m_name) { ++now; } }
+            if (now > pt->pd_amp_key_hand0[k] - pt->pd_amp_key_plan_n[k]) { pend(pt->pd_amp_def[k]); }
+        }
+    }
+    if (q.after == q.now)
+    {
+        dmgev::paystats::Inc(dmgev::paystats::kQSame);
+        return;
+    }
     q.live = true;
     PaymentDeferralDP(s, cost, floating, reserved_mask, q);
+    if (!q.exact) { dmgev::paystats::Inc(dmgev::paystats::kQNotExact); }
     // {C} IS GENERIC while no {C} pip is live (dmgev::DeferCGenericEnabled): the deferral's payability
     // test (CapabilityCovers) must not ask the held sources for a colour no cost this turn can spend.
     if (q.exact && dmgev::DeferCGenericEnabled() && !ColorlessPipLiveThisTurn(s, ctrl))

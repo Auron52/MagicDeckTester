@@ -1240,3 +1240,205 @@ TEST_CASE("Fixed burn: stable target pins preserve Fireblast costs and any-targe
     CHECK(s.battlefield[0].loyalty == 2);
     CHECK(Opp(s) == 20);
 }
+
+// ---- Mana-clean gate, Prevent Damage, 2026-11-04 (MTG_PD_DEFER_LINE / MTG_PD_USEFUL_LINE_OK) ----------
+namespace
+{
+struct HeurArmSet
+{
+    heurarm::Slot slot; std::int8_t prev;
+    HeurArmSet(heurarm::Slot s, bool on) : slot(s), prev(heurarm::t_arm[s]) { heurarm::t_arm[s] = on ? 1 : 0; }
+    ~HeurArmSet() { heurarm::t_arm[slot] = prev; }
+};
+
+// Seed 30000020 T6: 8 life, two Tamanoas and Dina out, City of Brass before Tarnished Citadel.
+GameState S20T6Board(int& victim)
+{
+    GameState s = Board();
+    s.turn_number = 6;
+    s.phase = Phase::PreCombatMain;
+    s.players[0].life = 8;
+    Put(s, "City of Brass");
+    Put(s, "Tamanoa");
+    victim = s.battlefield.back().card.m_number;
+    Put(s, "Tamanoa");
+    Put(s, "Dina, Soul Steeper");
+    Put(s, "Tarnished Citadel");
+    return s;
+}
+
+// Pay Dina's {1}, sacrifice the victim, end main 1 (the sweep).
+void SacTamanoaAndEndMain1(GameState& s, int victim, bool line)
+{
+    HeurArmSet arm(heurarm::PD_DEFER_LINE, line);
+    PlanTraits t;
+    t.own_board_hazard = true;     // what ComputePlanTraits records for {sacoutlet: Dina, victim Tamanoa}
+    t.pd_victims[0] = victim;
+    t.pd_victim_count = 1;
+    PlanTraitsScope ts(&t);
+    REQUIRE(Pay(s, Cost(1)));
+    for (std::size_t i = 0; i < s.battlefield.size(); ++i)
+    {
+        if (s.battlefield[i].card.m_number == victim) { s.battlefield.erase(s.battlefield.begin() + static_cast<long>(i)); break; }
+    }
+    TapPainSourcesIfUseful(s, 0);
+}
+}   // namespace
+
+TEST_CASE("Prevent Damage pain deferral: a sac-outlet victim leaves the sweep's chain (seed 30000020 T6)")
+{
+    PainPayArm pay(true);
+    PainDeferArm defer(true);
+    int v_off = 0, v_on = 0;
+    GameState off_s = S20T6Board(v_off), on_s = S20T6Board(v_on);
+    SacTamanoaAndEndMain1(off_s, v_off, /*line=*/false);
+    SacTamanoaAndEndMain1(on_s, v_on, /*line=*/true);
+    // Control: the hazard keeps the deferral off; City (1 pain) pays at two Tamanoas, Citadel's 3 is swept at one.
+    // Fix: Citadel's 3 is taken while both Tamanoas are out (+3) and City is swept at one (+0).
+    CHECK(Me(on_s) == Me(off_s) + 2);
+    CHECK(Opp(on_s) <= Opp(off_s));
+}
+
+TEST_CASE("Prevent Damage useful-mode payment: the rest of the line stays payable (seed 30006387 T4)")
+{
+    // City of Brass, Karplusan Forest, Brushland, Ancient Tomb; Tamanoa out; 16 life. Line: Dina {B}{G}, then
+    // Rolling Earthquake X=2 {2}{R}. City must pay {B}, so Dina's {G} has to come off Brushland: Karplusan is
+    // the Earthquake's only {R} left.
+    PainPayArm pay(true);
+    PlanTraits t;
+    t.mana_casts    = 2;
+    t.cast_mv_total = 5;
+    t.cast_pips[2]  = 1;   // B
+    t.cast_pips[3]  = 1;   // R
+    t.cast_pips[4]  = 1;   // G
+    PlanTraitsScope ts(&t);
+    auto board = []()
+    {
+        GameState s = Board();
+        s.turn_number = 4;
+        s.phase = Phase::PreCombatMain;
+        s.players[0].life = 16;
+        Put(s, "City of Brass");
+        Put(s, "Karplusan Forest");
+        Put(s, "Brushland");
+        Put(s, "Tamanoa");
+        Put(s, "Ancient Tomb");
+        return s;
+    };
+    const CardDefinition* dina = CardDatabase::Instance().Lookup("Dina, Soul Steeper");
+    REQUIRE(dina != nullptr);
+    bool control_strands = false;
+    {
+        HeurArmSet off(heurarm::PD_USEFUL_LINE_OK, false);
+        GameState s = board();
+        { SpellSubtypePayScope sc(&dina->card); REQUIRE(Pay(s, Cost(0, 0, /*b=*/1, 0, /*g=*/1))); }
+        control_strands = !Pay(s, Cost(2, 0, 0, /*r=*/1));
+    }
+    HeurArmSet on(heurarm::PD_USEFUL_LINE_OK, true);
+    GameState s = board();
+    { SpellSubtypePayScope sc(&dina->card); REQUIRE(Pay(s, Cost(0, 0, /*b=*/1, 0, /*g=*/1))); }
+    CHECK_FALSE(TappedNamed(s, "Karplusan Forest"));
+    CHECK(Pay(s, Cost(2, 0, 0, /*r=*/1)));
+    CHECK_FALSE(SelfHasLost(s));
+    CHECK(control_strands);   // the control arm reproduces the drop (else this test has no power)
+}
+
+// ---- USER ruling 2026-11-04: damage is useful only if a Tamanoa is on the battlefield WHEN it is dealt ----
+// The payer's mode (SelfDamageUseful -> dmgev::SelfDamageGainEngine) and the deferral's Now chain read the
+// LIVE battlefield at the payment; the deferral's After chain is the board at the end-of-main-1 sweep (a
+// Tamanoa the line still casts joins it, a sacrificed one leaves it). Both levers ON and OFF must agree.
+namespace
+{
+struct PdLeversArm
+{
+    HeurArmSet a, b;
+    explicit PdLeversArm(bool on) : a(heurarm::PD_USEFUL_LINE_OK, on), b(heurarm::PD_DEFER_LINE, on) {}
+};
+}   // namespace
+
+TEST_CASE("Prevent Damage: a payment BEFORE the line's Tamanoa resolves is plain damage (USER 2026-11-04)")
+{
+    PainPayArm pay(true);
+    PainDeferArm defer(true);
+    EnsureCardsPd();
+    const CardDefinition* tam = CardDatabase::Instance().Lookup("Tamanoa");
+    REQUIRE(tam != nullptr);
+    for (const bool on : {false, true})
+    {
+        PdLeversArm arm(on);
+        GameState s = Board();
+        s.turn_number = 5;
+        s.phase = Phase::PreCombatMain;
+        s.players[0].life = 12;
+        s.players[1].life = 15;
+        Put(s, "Dina, Soul Steeper");
+        Put(s, "City of Brass");
+        Put(s, "Brushland");
+        Put(s, "Karplusan Forest");
+        // The line casts Tamanoa after this payment (one copy in hand, one cast in the plan).
+        Card hand_tam = tam->card;
+        hand_tam.m_number = 900;
+        s.players[0].hand.push_back(hand_tam);
+        PlanTraits t;
+        t.pd_amp_key[0] = tam; t.pd_amp_def[0] = tam;
+        t.pd_amp_key_hand0[0] = 1; t.pd_amp_key_plan_n[0] = 1; t.pd_amp_count = 1;
+        PlanTraitsScope ts(&t);
+        REQUIRE(Pay(s, Cost(1)));
+        // No Tamanoa on the battlefield: the {1} comes off a painless {C} face; no damage, no gain, no drain.
+        CHECK(Me(s) == 12);
+        CHECK(Opp(s) == 15);
+        CHECK_FALSE(TappedNamed(s, "City of Brass"));
+        // Tamanoa resolves; the end-of-main-1 sweep's damage IS dealt with it out: gained back, Dina drains.
+        s.players[0].hand.clear();
+        Put(s, "Tamanoa");
+        TapPainSourcesIfUseful(s, 0);
+        CHECK(Me(s) >= 12);
+        CHECK(Opp(s) < 15);
+    }
+}
+
+TEST_CASE("Prevent Damage: a payment AFTER Dina sacrifices the last Tamanoa is plain damage (USER 2026-11-04)")
+{
+    PainPayArm pay(true);
+    PainDeferArm defer(true);
+    for (const bool on : {false, true})
+    {
+        PdLeversArm arm(on);
+        GameState s = Board();
+        s.turn_number = 5;
+        s.phase = Phase::PreCombatMain;
+        s.players[0].life = 12;
+        s.players[1].life = 15;
+        Put(s, "Tamanoa");
+        const int victim = s.battlefield.back().card.m_number;
+        Put(s, "Dina, Soul Steeper");
+        Put(s, "City of Brass");
+        Put(s, "City of Brass");
+        Put(s, "Brushland");
+        PlanTraits t;
+        t.own_board_hazard = true;     // {sacoutlet: Dina, victim Tamanoa}
+        t.pd_victims[0] = victim;
+        t.pd_victim_count = 1;
+        PlanTraitsScope ts(&t);
+        // Dina's {1} while the Tamanoa is still out: the pain is dealt with it on the battlefield, so the
+        // useful mode takes it (1 damage, 1 gained, Dina drains 1).
+        REQUIRE(Pay(s, Cost(1)));
+        CHECK(Me(s) == 12);
+        CHECK(Opp(s) == 14);
+        for (std::size_t i = 0; i < s.battlefield.size(); ++i)
+        {
+            if (s.battlefield[i].card.m_number == victim) { s.battlefield.erase(s.battlefield.begin() + static_cast<long>(i)); break; }
+        }
+        // The next {1} of the line: no Tamanoa now, so the payer is in the harmful mode -- Brushland's {C}
+        // if it is still up, else the one City's unavoidable 1 -- and nothing is gained or drained.
+        const bool brush_up = !TappedNamed(s, "Brushland");
+        REQUIRE(Pay(s, Cost(1)));
+        CHECK(Me(s) == (brush_up ? 12 : 11));
+        CHECK(Opp(s) == 14);
+        // The sweep after the sacrifice taps nothing: no gain engine is out.
+        const int me = Me(s);
+        TapPainSourcesIfUseful(s, 0);
+        CHECK(Me(s) == me);
+        CHECK(Opp(s) == 14);
+    }
+}
