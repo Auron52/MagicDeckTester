@@ -71854,7 +71854,11 @@ void TurnSolver::SoundFoldCounters(long long out[5])
     out[4] = seedwalk::g_folded.load();
 }
 
-// ---- THE IDLE LAND-CRACK FOLD (MTG_IDLE_CRACK_FOLD, DEFAULT ON; =0 -> every crack plan offered) ---------------
+// ---- THE IDLE LAND-CRACK FOLD (MTG_IDLE_CRACK_FOLD, DEFAULT OFF; =1 -> the fold) ------------------------------
+// DEFAULT OFF 2026-11-04: sound, but on Shadowborn its probes (two ApplyPlanDirect + dedup keys per crack plan) cost
+// ~2.8% of CPU against -1.7% units and no game changed; the USER adopted it only "if there is no performance
+// drawbacks". Superseded by the on-demand sac-for-mana payer (docs/design/sac-for-mana-on-demand.md), which removes
+// crack plans altogether; revive only with a cheaper probe.
 // USER 2026-11-04 (Shadowborn s7, Lake of the Dead): "it should not be sacrificing the land unless we need it."
 // A SacForMana whose source is a LAND (Lake of the Dead's "{T}, Sacrifice a Swamp: {B}{B}{B}{B}", Dwarven Ruins,
 // Svyelunite Temple) is a MANA ABILITY: it can be activated at any later priority of the phase. Plan C holds such a
@@ -71871,7 +71875,7 @@ void TurnSolver::SoundFoldCounters(long long out[5])
 // Not in human play (the viewer's menu is never narrowed). Inert for every deck without a land SacForMana source.
 static bool IdleCrackFoldOn()
 {
-    static const bool on = EnvOn("MTG_IDLE_CRACK_FOLD", true);
+    static const bool on = EnvOn("MTG_IDLE_CRACK_FOLD", false);
     return heurarm::Flag(heurarm::IDLE_CRACK_FOLD, on);
 }
 static std::atomic<long long> g_idle_crack_folded{0}, g_idle_crack_tested{0};
