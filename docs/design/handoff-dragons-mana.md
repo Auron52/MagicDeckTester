@@ -10,14 +10,62 @@ Worktree: `/workspaces/MagicDeckTester/.claude/worktrees/agent-a9dab9fbcae918660
 origin/phase-1-2-deck-analyzer 980616e55. Scratch: `/workspaces/MagicDeckTester/build/scratch/mcdragons/`. Helper
 scripts (gitignored): `logs/mcdragons/{mk.py,gate.sh,batch.sh,repro.sh,abrep.py,scprobe.sh}`.
 
-## READ FIRST: Successor 9 (2026-11-04; LAST ROUND before the line is parked for the USER) -- CHECKPOINT
-Scratch `build/scratch/mcdragons9/`. p12 = HEAD src + (a) LineRepayClearPerGame (ring + memo cleared in
-TurnSolver::ClearPerGameCaches) and (b) a TEMPORARY per-job price lever (`lr_probes_per_unit` manifest key /
-MTG_LR_PROBES_PER_UNIT; ValueArm.h) for a re-pricing A/B. In progress: id11s (1-thread p11) vs id11 (4-thread p11):
-11/11 equal digests AND units so far -- the p7-vs-p11 unit diffs are p11's own charging change, not thread history.
-EDF LR stats (ab7 job off25, 25 g): full1 = 1,818 entries / 219,685 probes, found_p2 = 0; 243k probes / 4 = ~61k units
-= the whole +58.8k units delta. d8 b0: EDF 323 off 3 / on 4 (nc0), 3 / 3 under MTG_NC_SEARCH=1; niv 372/419 recover.
-A/B ab9 (off / on@4 / on@12, seed 1880001, EDF Hinata Niv Bruna Dragons): see `mcdragons9/ab9/`.
+## READ FIRST: Successor 9 (2026-11-04) -- LINE PARKED FOR THE USER (stop rule hit on EDF)
+Worktree head = the commit carrying this section (wip/mc-dragons, NOT pushed, no GT accepted, no smoke run).
+Scratch `build/scratch/mcdragons9/`. Binary under test = `mcdragons9/mtg.p12` / `mtg-test.p12` (= HEAD src).
+WHAT P12 CHANGED (on top of p11):
+  * `LineRepayClearPerGame()` (ManaPayment.cpp), called from TurnSolver::ClearPerGameCaches: resets t_lr_ring (all 16
+    records), t_lr_next and t_lr_memo. KEEP THIS -- it is a correctness/determinism fix in principle (the ring is found
+    by content, so an earlier game's record could be re-made from the other game's pre-board).
+  * TEMPORARY lever `lr_probes_per_unit` (manifest key; ValueArm.h field; env MTG_LR_PROBES_PER_UNIT) overriding
+    kLineRepayProbesPerUnit = 4. REMOVE before landing (or replace the constant if the USER picks a price).
+DETERMINISM (task 1): the suspected ring leak is NOT observed. p11 1-thread (`mcdragons8/id11s`) == p11 4-thread
+  (`mcdragons8/id11`) on all 20 id jobs, digests AND units; the 8 unit diffs vs p7 are p11's own charging change
+  (deterministic). p12 1-thread (`id12s`) == p11 1-thread (20/20 digests+units: the clear is play/unit-neutral there),
+  and p12 1-thread == p12 8-thread (`id12m`) 20/20 digests AND units. Units p12 2,436/2,436 (`ut12.log`).
+EDF +15% UNITS -- ROOT CAUSE: the priced pass 2's full table at depth 1 ("full1"). ab7 job off25 (25 g, p11,
+  MTG_LINE_REPAY_STATS): full1 1,818 entries / 219,685 probes (wf2 3,649, full2 20,000), found_p2 = 0, p2_cut 164;
+  243,334 probes / 4 per unit = ~61k units = the whole +58.8k units delta (133,391 -> 192,208). p2_ms 804 ms ->
+  3.3 us a probe on EDF, i.e. the price (4 probes a unit, against 40-77 us a unit) over-charges EDF ~3-6x. Pass 1
+  (unpriced) is where EDF's re-pays are found (found_p1 182 / 25 g; game 935 alone fired 474, found_p1 326).
+A/B ab9 (p12, held-out seed block 1880001, ONE pooled batch, arms off / on@4 / on@12; `mcdragons9/ab9/report.txt`):
+  deck     arm   paired dig slow fast net  units   wall
+  bruna    on      900   15   0    2  -2  1.0102  1.0038 | on12  900  14  0  2  -2  1.0027  0.9685
+  dragons  on     1000    4   0    1  -1  1.0664  1.0969 | on12 1000   4  0  1  -1  1.0211  1.0744
+  edf      on     1000   23   1    0  +1  1.1496  1.1374 | on12 1000  19  1  0  +1  1.0918  1.1704
+  hinata   on      600   14   0    3  -3  1.0037  1.0451 | on12  600  11  0  3  -3  0.9999  1.0534
+  niv      on      425   49   1    7  -6  1.0072  1.0872 | on12  425  48  1  7  -6  0.9964  1.0971
+  Slower: edf 935 4->5 (both arms), niv 341 4->5 (both arms). (wall is contended: other agents' runs shared the box.)
+  Hinata on fresh seeds is -3 (ab7 was +2 at 1,200 g): Hinata passes. EDF fails on both A/Bs: ab7 +2 / 1,000 g, ab9
+  +1 / 1,000 g, and ZERO faster EDF games in 2,000 held-out games -- LR never helps EDF and occasionally hurts.
+d8 b0 recoveries (`mcdragons9/d8`, `d8b`; seed = base + gi, game_index = gi):
+  * niv 372, 419 (ab7) and niv 341 (ab9): RECOVER (identical digests on/off).
+  * edf 323 (ab7): plain d8 b0 off 3 / on 4 (NOT recovered); MTG_NC_SEARCH=1 off 3 / on 3 (recovers).
+  * edf 365 (ab7): plain off 4 / on 5 (NOT recovered); NC off 4 / on 4 (identical digest). NC on took 1,092 s vs
+    361 s off (LR's unpriced unlimited-budget completeness on EDF: ~3x wall).
+  * edf 935 (ab9): plain off 4 / on 5 (NOT recovered); NC off 4 / on 4 (identical digest; NC on 941 s vs 393 s off).
+  So the EDF slower games recover only without clairvoyance. By the memo test ("if NC finds it -> honest loss") they
+  are NOT clear clairvoyance: the clairvoyant on-arm search misses a win a non-clairvoyant search finds. USER call.
+EDF per-game causes (not fully root-caused): 323 diverges at T2 (off: Aether Hub + Eldrazi Displacer {2}{W}; on:
+  Mariposa + 2nd Wild Growth -> T3 Peregrine Drake, no Cloud of Faeries loop). The EDF combo route
+  (MTG_EDF_COMBO_ROUTE_TRACE) says TRIAL no on every t2/t3 trial in BOTH arms, so the route is not what picks the
+  T2 line; it is the search's own T2 comparison. LR memo VERIFY on 323: 0 mismatches. 935 diverges at T2 (off:
+  Training Grounds {U} + Living Wish; on: Wild Growth + Living Wish -> T3 "Combo Off" without the win).
+STOP RULE HIT: one concrete fix attempted (re-price 4 -> 12 probes a unit: EDF units +15% -> +9%, net unchanged +1).
+  EDF is still net > 0 and I have no clear next lever. NOT run: smoke, scoped regression, mana-clean gate slice,
+  squash. NOT pushed.
+OPTIONS FOR THE USER:
+  (1) Re-price kLineRepayProbesPerUnit 4 -> 12 (legit: a price, inert at budget 0). Measured: units Dragons
+      1.066 -> 1.021, EDF 1.150 -> 1.092, Bruna 1.010 -> 1.003, Hinata 1.004 -> 1.000, Niv 1.007 -> 0.996; nets
+      identical. Does not fix EDF's net.
+  (2) Price pass 1 too (currently unpriced at depth 1): EDF's re-pays are all pass-1 finds and the unlimited-budget
+      NC run shows LR at ~3x wall on EDF; an honest price would make LR compete with the search for the budget. Not
+      measured.
+  (3) Root-cause the EDF T2 divergences (323, 935) further: compare the T2 root scores on/off at d8 b0 (clairvoyant),
+      i.e. which T3 line the on arm's search believes; the NC recovery says the line is findable.
+  (4) Accept EDF at +1/+2 per 1,000 (fails the bar: "+1 is not neutral").
+  Out of scope (proposals only, unchanged): engine-wide SubsetPayableSequential verdict memo; Bruna symmetric-split fold.
+STILL RUNNING (not mine, left alive): ab7 on p7 (pid 2856514), successor 7's identity verify (pid 2871154).
 
 ## READ FIRST: Successor 8 (2026-11-04; stopped at the context cap -- successor 9 continues)
 Worktree head = the commit carrying this section (wip/mc-dragons, not pushed, no GT accepted). Scratch
