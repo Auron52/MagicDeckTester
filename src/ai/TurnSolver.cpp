@@ -68715,8 +68715,46 @@ std::vector<int> RolloutCombatDeclaration(GameState& state)
     return DeclareAttackerIndices(state);
 }
 
+// STAGED CARDS ARE OUT OF HAND DURING COMBAT (a lockstep fix, unconditional).
+// The executor holds an unplayed staged card (a Rundvelt Hordemaster impulse, Light Up the Stage, ...) in
+// Player::staged_cards from the tail of each TakeTurn pass (ReturnStagedFromHand) to the head of the next
+// (MergeStagedIntoHand), so its COMBAT runs on a hand without them. The rollout kept them in hand flagged
+// m_is_staged, and every combat-time reader of the hand saw a different hand in the two worlds. The one that
+// bit: a Goblin Lackey put's Goblin Matron ETB ranks its tutor (GoblinsProvider::TutorCandidates) off the
+// hand -- Goblins in hand (buff_targets), an affordable lord in hand (swing_atk), a deployable body
+// (hand_has_play) -- so the search fetched Goblin Warchief where the real combat fetched Goblin King
+// (Goblins seed 2514835 gi4834 at d8 b0: the root's verified T3 kill realised as T4). Held out here for the
+// combat's duration and re-appended AFTER everything combat put in hand (a combat-time impulse stage or
+// draw) -- the executor's main-2-head layout. A card staged DURING combat goes straight to hand in both
+// worlds and stays visible, exactly as in the executor.
+struct CombatStagedOutScope
+{
+    GameState& s;
+    std::vector<Card> held;
+    explicit CombatStagedOutScope(GameState& st) : s(st)
+    {
+        std::vector<Card>& hand = s.ActivePlayer().hand;
+        bool any = false;
+        for (const Card& c : hand) { if (c.m_is_staged) { any = true; break; } }
+        if (!any) { return; }
+        std::vector<Card> keep;
+        keep.reserve(hand.size());
+        for (Card& c : hand) { (c.m_is_staged ? held : keep).push_back(std::move(c)); }
+        hand = std::move(keep);
+    }
+    ~CombatStagedOutScope()
+    {
+        if (held.empty()) { return; }
+        std::vector<Card>& hand = s.ActivePlayer().hand;
+        for (Card& c : held) { hand.push_back(std::move(c)); }
+    }
+    CombatStagedOutScope(const CombatStagedOutScope&) = delete;
+    CombatStagedOutScope& operator=(const CombatStagedOutScope&) = delete;
+};
+
 static void SimulateOneCombat(GameState& state, bool additional)
 {
+    CombatStagedOutScope staged_out(state);   // the executor's combat-time hand (see the scope)
     CombatPreDeclare(state, additional);
     const int active = state.active_player_index;
 
