@@ -595,6 +595,15 @@ inline bool OracleFaceFoldOn()
 // its first-found assignment taps the leading sources whenever a solution exists below them (the
 // generic-representative colour is explored first), so an order among two cco lands it taps either way
 // decides nothing -- the shrink is what returns a surplus source. Same shared payer, same lockstep.
+// MTG_PAY_CCO_LINE_RESERVE (2026-11-04; DEFAULT ON, =0 -> the plain ladder): while the rest of the applying line owes a
+// colour the unrestricted untapped sources cannot make, a colored_creature_only land that makes it taps after the
+// creature band, for every pip. Ordering only. See the key block in TapForCostSharedOnce's scarcity loop.
+inline bool PayCcoLineReserveOn()
+{
+    static const bool env_on = EnvOn("MTG_PAY_CCO_LINE_RESERVE", true);
+    return env_on;
+}
+
 inline bool PayNarrowRestrictedFirstOn()
 {
     static const bool env_on = EnvOn("MTG_PAY_NARROW_RESTRICTED_FIRST", true);

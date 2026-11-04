@@ -1712,6 +1712,11 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     // first pip that reaches the scarcity loop and decremented as taps land. See
     // ComputeNeedsDemandSupply at the top of this file.
     bool nd_ready = false;
+    // CCO LINE RESERVE (MTG_PAY_CCO_LINE_RESERVE): colours the rest of the line owes beyond what the UNRESTRICTED
+    // untapped sources and the general float can make -- computed lazily at the first colored_creature_only
+    // candidate (cco_ready), see the key block in the scarcity loop.
+    bool cco_ready = false;
+    int  cco_short_mask = 0;
     int  nd_left[7] = { 0, 0, 0, 0, 0, 0, 0 };   // W,U,B,R,G,C pips + generic still owed by THIS payment (needs lever)
     int  nd_D[6] = { 0, 0, 0, 0, 0, 0 };
     int  nd_S[6] = { 0, 0, 0, 0, 0, 0 };
@@ -2507,6 +2512,68 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                     if (pay_narrow_first && def->params.colored_creature_only
                         && def->params.colored_creature_ability_ok) { broad = 1; }
                 }
+                // CCO LINE RESERVE (MTG_PAY_CCO_LINE_RESERVE, default ON). A colored_creature_only land (Secluded
+                // Courtyard, Unclaimed Territory) is the ONLY source of a colour whenever the unrestricted untapped
+                // sources cannot make it, and the plain ladder spends it like any rainbow land -- ahead of every
+                // creature, and ahead of a painful land by the pain band. LandfallElementals seed 30000033 gi33 T4,
+                // {land=Mountain, Risen Reef, Mossborn Hydra}: Reef's {U} took the Courtyard (Fiery Islet's {U} costs
+                // a life, Smokebraider sits in the creature band), Smokebraider paid {G} and the generic, and Hydra's
+                // {G} -- which nothing unrestricted on that board makes -- was gone, so the Hydra dropped (143 of the
+                // 145 LFE slice APPLY-DROPs pay through this shape). So while the rest of the line (LineOwedAfterOwnPips:
+                // the line hold minus this payment's own pips) owes a colour beyond the unrestricted supply (untapped
+                // unrestricted lands / rocks / ready dorks, counted per tap, plus the general float and its wild),
+                // a cco source that can make that colour taps after every other LAND (key[2] += 2 x kPainBand: past
+                // the painful lands; still in the land band, ahead of the creatures), for every pip. Seed 33: Reef's
+                // {U} goes to the Islet, its {G} to the Courtyard, its generic to Myriad (rank 5), and Smokebraider
+                // stays up for Hydra. A first build put the held land BEHIND the creature band (key[0] = 66): 145 ->
+                // 583 slice APPLY-DROPs -- Smokebraider then paid Hydra's {G} and its generic tie (Mountain vs
+                // Island, both rank 10) took the Mountain the line's {R} pips needed (seed 30000097 gi97 T4). ORDERING ONLY: it still pays when nothing else
+                // can, so a payable cost is never refused (the backtracker runs on any greedy failure); outside a
+                // line (no hold) the shortfall is empty and the key is the historical one.
+                int cco_hold = 0;
+                if (kind == 1 && def->params.colored_creature_only && PayCcoLineReserveOn() && rank >= 0 && rank < 60)
+                {
+                    if (!cco_ready)
+                    {
+                        cco_ready = true;
+                        int later[5];
+                        LineOwedAfterOwnPips(later);
+                        if (later[0] + later[1] + later[2] + later[3] + later[4] > 0)
+                        {
+                            const ManaPool& fl = state.floating_mana;
+                            int sup[5] = { fl.white, fl.blue, fl.black, fl.red, fl.green };
+                            for (const Permanent& q : state.battlefield)
+                            {
+                                if (q.controller_index != active || q.tapped) { continue; }
+                                const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+                                if (qd == nullptr || qd->params.colored_creature_only || qd->params.creature_mana_only)
+                                { continue; }
+                                const bool dork = qd->tmpl == CardTemplate::ManaDork && CanTapNow(q, state.battlefield);
+                                if (!dork && !q.card.IsLand() && !qd->params.mana_rock) { continue; }
+                                const int amt = std::max(1, ManaProducedPerTap(*qd));
+                                int seen = 0;
+                                for (Color c : EffectiveProduces(state, active, *qd))
+                                {
+                                    const int ci = static_cast<int>(c);
+                                    if (ci < 0 || ci > 4 || (seen & (1 << ci))) { continue; }
+                                    seen |= 1 << ci;
+                                    sup[ci] += amt;
+                                }
+                            }
+                            int deficit = 0;
+                            for (int ci = 0; ci < 5; ++ci)
+                            { if (later[ci] > sup[ci]) { cco_short_mask |= 1 << ci; deficit += later[ci] - sup[ci]; } }
+                            if (deficit <= static_cast<int>(fl.wild)) { cco_short_mask = 0; }
+                        }
+                    }
+                    if (cco_short_mask != 0)
+                    {
+                        int mine = 0;
+                        for (Color c : def->params.produces)
+                        { const int ci = static_cast<int>(c); if (ci >= 0 && ci < 5) { mine |= 1 << ci; } }
+                        if (mine & cco_short_mask & state.deck_creature_pip_colors) { cco_hold = 1; }
+                    }
+                }
                 // DEPLETION WASTE (MTG_PAY_DEPLETION_WASTE / _ANY, default OFF): a depletion land whose
                 // tap makes more mana than this payment and the rest of the line can still use is banded
                 // with pain. Niv seed 1 (2026-10-22): {2}{U} took Skerry's {U}{U} and the Needle's LAST
@@ -2551,7 +2618,8 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                                    && DepletionCountersOn(p) > 0 && dep_held(i)) ? kDepletionHoldBand : 0;
                 int key[4];
                 if (kind != 5 && rank >= 0 && rank < 60)
-                { key[0] = 0;    key[1] = harm / kNdScale; key[2] = rank + ((pain || waste) ? kPainBand : 0) + dhold;
+                { key[0] = 0;    key[1] = harm / kNdScale;
+                  key[2] = rank + ((pain || waste) ? kPainBand : 0) + dhold + (cco_hold ? 2 * kPainBand : 0);
                   key[3] = (harm % kNdScale) * 2 + broad; }
                 else                                     { key[0] = rank; key[1] = hold; key[2] = harm; key[3] = 0;    }
                 int cmp = 0;
