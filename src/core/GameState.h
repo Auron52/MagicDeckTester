@@ -505,6 +505,24 @@ struct GameState
     // main + sideboard -- it only gates a scan that would find nothing): DiscardScryTriggers' battlefield
     // scan at every discard and cycle runs only while set. DEFAULT FALSE.
     bool                     deck_has_discard_scry_watcher = false;
+    // CAN THIS DECK SPEND {C} ON A {C} PIP (a cost carrying CardParams' blink_cost / drain_cost /
+    // exile_opponent_top_cost / tap_damage_cost {C}, or a {C} in a mana cost: Eldrazi Displacer, Essence
+    // Depleter, Dimensional Infiltrator -- EldraziDisplacerFlicker)? DECK CONSTANT (StampDeckTraits, main +
+    // sideboard). A clear bit PROVES {C} can pay only generic pips, which is what licenses the shared payer
+    // to spend floating {C} on a generic pip BEFORE `wild` (GenericCFirstScope, SpellEffects.h). DEFAULT
+    // TRUE (an unstamped state keeps the historical wild-first order). Never folded into any key.
+    bool                     deck_spends_c_pip = true;
+    // THE PREPAY'S KEPT {C} (EDF only; 0 in every deck without deck_spends_c_pip). How many of the floating {C}
+    // (floating_mana + floating_creature_mana) are generic funding the whole-turn prepay booked `colorless`
+    // because their source could not make every colour (TurnSolver::BatchPrepayMainCasts, c_must_stay) --
+    // units the historical booking put in `wild`, where the generic drain spent them FIRST. In a deck that can
+    // spend {C} on a {C} pip the payer keeps the wild-first order for every OTHER {C} (a banked {C} may be a
+    // Displacer's), but drains these first, exactly where they used to drain (GenericCFirstScope): Brushland /
+    // Yavimaya Coast {C} stranded as `colorless` refused Emiel's {W}{W} (EDF smoke d0 gi316 / gi486).
+    // Honoured only in the turn + phase stamped (floating mana empties between phases); a subset count, read
+    // through min(colorless). FUTURE-DETERMINING: mixed value-gated into the main-phase key (TurnSolver).
+    std::uint8_t             floating_prepay_c = 0;
+    std::uint8_t             floating_prepay_c_stamp = 0xFF;   // (TurnSeq*5 + phase) & 0xFF; 0xFF = never
     // Graveyard-shuffle trigger BATCHING (FireGraveyardEntryTriggers / GyShuffleBatch, SpellEffects.h):
     // a trigger fired inside one simultaneous event (the cleanup discard, a legend-rule SBA batch) waits
     // until the event completes, so its shuffle takes EVERY card that moved with it (CR 603.2 / 603.3:

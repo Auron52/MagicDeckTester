@@ -154,3 +154,77 @@ TEST_CASE("prepay: a {C} from a source that could make the colour still pays the
     CHECK(TapForCostDirect(s, CostCw("Plated Sliver"), /*for_creature=*/true));
 }
 
+
+// GENERIC PAYS {C} BEFORE `wild` (GenericCFirstScope; Slivers smoke d0 gi190). With the physical {C} now
+// booked `colorless`, the old wild-first generic order spent the FLEXIBLE unit on a generic and stranded the
+// {C}, refusing a later colour pip (Predatory Sliver's replicate {G}) the board pays. In a deck that cannot
+// spend {C} on a {C} pip, generic takes the untagged {C} first; EDF (deck_spends_c_pip) and Generator
+// Servant's haste-tagged {C} keep the old order.
+namespace
+{
+GameState FloatOnlyCw(bool deck_spends_c_pip)
+{
+    static const VialProvider vp;
+    EnsureCardsCw();
+    GameState s;
+    s.m_provider          = &vp;
+    s.active_player_index = 0;
+    s.turn_number         = 4;
+    s.deck_spends_c_pip   = deck_spends_c_pip;
+    s.floating_mana.colorless = 1;
+    s.floating_mana.wild      = 1;
+    return s;
+}
+ManaCost GenericCw(int n) { ManaCost c; c.generic = n; return c; }
+ManaCost GreenCw()        { ManaCost c; c.green = 1;  return c; }
+}   // namespace
+
+TEST_CASE("payer: a generic pip spends the {C} before the wild, so a later {G} is still payable")
+{
+    GameState s = FloatOnlyCw(/*deck_spends_c_pip=*/false);
+    REQUIRE(TapForCostDirect(s, GenericCw(1), /*for_creature=*/true));
+    CHECK(s.floating_mana.colorless == 0);
+    CHECK(s.floating_mana.wild == 1);
+    CHECK(TapForCostDirect(s, GreenCw(), /*for_creature=*/true));
+}
+
+TEST_CASE("payer: a deck that spends {C} on a {C} pip (EDF) keeps the wild-first generic order")
+{
+    GameState s = FloatOnlyCw(/*deck_spends_c_pip=*/true);
+    REQUIRE(TapForCostDirect(s, GenericCw(1), /*for_creature=*/false));
+    CHECK(s.floating_mana.colorless == 1);
+    CHECK(s.floating_mana.wild == 0);
+}
+
+TEST_CASE("payer: Generator Servant's haste-tagged {C} is not spent ahead of the wild")
+{
+    GameState s = FloatOnlyCw(/*deck_spends_c_pip=*/false);
+    s.floating_haste_c = 1;
+    REQUIRE(TapForCostDirect(s, GenericCw(1), /*for_creature=*/false));
+    CHECK(s.floating_mana.colorless == 1);
+    CHECK(s.floating_haste_c == 1);
+    CHECK(s.floating_mana.wild == 0);
+}
+
+// A {C} from a source with only SOME colours (Caves of Koilos: {W}/{B}/{C}) is not any-colour mana: booked
+// `wild` it could pay a {G} the land cannot make (Melira Pod smoke d0 gi738: Birds of Paradise's {G}). It
+// stays `colorless` like Mutavault's.
+TEST_CASE("prepay: a {C} from a two-colour land (Caves of Koilos) never becomes `wild`")
+{
+    GameState s = PrepaidCw("Caves of Koilos");
+    const ManaPool f = FloatCw(s);
+    CHECK(f.Total() == 3);
+    CHECK(f.wild == 0);
+}
+
+TEST_CASE("payer: in a {C}-pip deck the prepay's kept {C} still drains before the wild")
+{
+    GameState s = FloatOnlyCw(/*deck_spends_c_pip=*/true);
+    s.phase = Phase::PreCombatMain;
+    SetPrepayKeptC(s, 1);
+    REQUIRE(PrepayKeptC(s) == 1);
+    REQUIRE(TapForCostDirect(s, GenericCw(1), /*for_creature=*/false));
+    CHECK(s.floating_mana.colorless == 0);
+    CHECK(s.floating_mana.wild == 1);
+    CHECK(PrepayKeptC(s) == 0);
+}

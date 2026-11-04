@@ -1255,6 +1255,25 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         }
         return false;
     }();
+    // A {C} PIP anywhere in the deck's costs (GameState::deck_spends_c_pip): BOTH ZONES, the conservative
+    // direction (a set bit keeps the historical wild-first generic drain; a clear bit lets the payer spend
+    // floating {C} on a generic before `wild`, sound only when no {C} pip can ever want that {C}).
+    state.deck_spends_c_pip = [&deck]{
+        for (const std::vector<Card>* zone : { &deck.mainboard, &deck.sideboard })
+        {
+            for (const Card& c : *zone)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                if (d == nullptr) { return true; }   // unknown card: keep the safe order
+                if (d->card.m_mana_cost.colorless > 0) { return true; }
+                const CardParams& q = d->params;
+                for (const std::optional<ManaCost>* oc : { &q.blink_cost, &q.drain_cost,
+                                                           &q.exile_opponent_top_cost, &q.tap_damage_cost })
+                { if (oc->has_value() && oc->value().colorless > 0) { return true; } }
+            }
+        }
+        return false;
+    }();
     // Jorn's per-turn main 2 (UntapSecondMainLive) is only ever live in a deck that runs the card.
     state.deck_has_attack_untap = [&deck]{
         for (const Card& c : deck.mainboard)

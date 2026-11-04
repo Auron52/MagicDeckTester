@@ -1509,6 +1509,58 @@ struct HoldColorlessScope
     ~HoldColorlessScope() { g_hold_colorless_for_pips = prev; }
 };
 
+// GENERIC PAYS {C} BEFORE `wild` -- up to this many colourless units (0 = the historical wild-first order;
+// the drain counts it down as it spends).
+// Set ONLY by the shared payer (TapForCostSharedOnceImpl) around its spend of the general and creature-only
+// floats; every other SpendFloatingTowardCost caller sees 0 and is unchanged.
+//
+// WHY (Slivers smoke d0 gi190, 2026-11-04). The whole-turn prepay books a PHYSICAL {C} (Mutavault, Sol Ring)
+// as `colorless` -- it may not pay a colour pip -- while a flexible unit (Cavern of Souls, Unclaimed
+// Territory: any colour for a Sliver) rides `wild`. Wild-first then spent the Cavern unit on Predatory
+// Sliver's generic and stranded Mutavault's {C}, so the replicate copy's {G} -- payable on that board
+// (Mutavault -> generic, Cavern -> {G}) -- was refused. {C} pays only a generic or a {C} pip; `wild` pays
+// either AND any colour. So when nothing can ever want a {C} pip, spending the {C} first on a generic is
+// a sound dominance fold: the pool left over is identical or strictly more flexible.
+//
+// The two cases where that is NOT a dominance, and the caller's cap excludes both:
+//   * a deck that can spend {C} on a {C} pip (GameState::deck_spends_c_pip: Eldrazi Displacer's {2}{C},
+//     Essence Depleter, Dimensional Infiltrator -- EldraziDisplacerFlicker). USER 2026-11-04: "Pay generic
+//     with Colourless is good EXCEPT for EDF. In that deck you need to be very careful with that." There
+//     the {C} may be the bank for a later activation, so the old wild-first order stays for every {C} EXCEPT
+//     the prepay's kept {C} (GameState::floating_prepay_c): those units used to be booked `wild` and drained
+//     first, so draining them first is the old order exactly (EDF smoke d0 gi316/gi486: a Brushland {C} left
+//     as `colorless` refused Emiel's {W}{W}).
+//   * a Generator Servant HASTE-TAGGED {C} (HasteFloatUnits): it carries "the creature gains haste", so it
+//     is not interchangeable with wild for a later creature spell (Niv smoke d0 gi436: draining it first
+//     cast the second Generator Servant without haste). Only the UNTAGGED {C} goes first.
+// And a {C} pip this cost or the line still owes (the drain's own `hold_c` test) also keeps wild-first.
+inline thread_local int t_generic_c_first = 0;
+struct GenericCFirstScope
+{
+    int prev;
+    explicit GenericCFirstScope(int n) : prev(t_generic_c_first) { t_generic_c_first = n; }
+    ~GenericCFirstScope() { t_generic_c_first = prev; }
+};
+// GameState::floating_prepay_c's stamp: the turn + phase the prepay booked it in (floating mana empties between
+// phases, so a count from another phase is dead). 0xFF is reserved for "never".
+inline std::uint8_t PrepayCStampNow(const GameState& s)
+{
+    const std::uint8_t v = static_cast<std::uint8_t>((s.TurnSeq() * 5 + static_cast<int>(s.phase)) & 0xFF);
+    return v == 0xFF ? std::uint8_t{0xFE} : v;
+}
+// The prepay's kept {C} still floating (GameState::floating_prepay_c), 0 when stale. A subset count of both floats.
+inline int PrepayKeptC(const GameState& s)
+{
+    if (s.floating_prepay_c == 0 || s.floating_prepay_c_stamp != PrepayCStampNow(s)) { return 0; }
+    return std::min<int>(s.floating_prepay_c, s.floating_mana.colorless + s.floating_creature_mana.colorless);
+}
+inline void SetPrepayKeptC(GameState& s, int n)
+{
+    n = std::max(0, std::min({ n, 255, s.floating_mana.colorless + s.floating_creature_mana.colorless }));
+    s.floating_prepay_c       = static_cast<std::uint8_t>(n);
+    s.floating_prepay_c_stamp = n > 0 ? PrepayCStampNow(s) : std::uint8_t{0xFF};
+}
+
 // HOLD BACK {C} INSIDE THE PAYMENT'S OWN LOCAL POOL (human play only).
 //
 // `g_hold_colorless_for_pips` above reorders SpendFloatingTowardCost, i.e. the mana that was already
@@ -39612,6 +39664,21 @@ inline void SpendFloatingTowardCost(ManaPool& reserve, ManaCost& cost, bool keep
         drain(cost.generic, reserve.green);
         drain(cost.generic, reserve.wild);
         return;
+    }
+    // {C} BEFORE `wild` on a generic pip, capped by the payer (t_generic_c_first: see GenericCFirstScope).
+    // Only when wild is there to be saved (no wild -> colourless is next in the order anyway), and never
+    // while a {C} pip holds colourless back (the `hold_c` test below, evaluated the same way).
+    if (t_generic_c_first > 0 && reserve.wild > 0 && cost.generic > 0 && reserve.colorless > 0)
+    {
+        static const bool s_hold_c_own_pre = EnvOn("MTG_HOLD_C_FOR_PIPS", true);
+        const bool hold_c_pre = g_hold_colorless_for_pips || (s_hold_c_own_pre && _own_c)
+                             || g_line_unpaid_cost.colorless > 0;
+        if (!hold_c_pre)
+        {
+            // t_generic_c_first counts DOWN, so the payer can read how many it took (floating_prepay_c).
+            while (cost.generic > 0 && t_generic_c_first > 0 && reserve.colorless > 0)
+            { --cost.generic; --reserve.colorless; --t_generic_c_first; }
+        }
     }
     drain(cost.generic, reserve.wild);
     // g_hold_colorless_for_pips moves colourless to the BACK of the generic order, so a bank being

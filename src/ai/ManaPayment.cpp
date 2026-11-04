@@ -1624,12 +1624,27 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     const ManaPool cre_reserve_pre = state.floating_creature_mana;
     const ManaPool big_reserve_pre = state.floating_bigspell_mana;
     const int      haste_reserve_pre = state.floating_haste_c;   // Generator Servant's tag (restored with the float)
+    const std::uint8_t prepay_c_pre = state.floating_prepay_c;   // the prepay's kept {C} (restored with the float)
     ManaCost cost = cost_in;
     // A CREATURE spell spends the creature-only reserve FIRST (it can pay nothing else, so using it
     // first is never worse); a noncreature payment never touches it. Empty for every deck without a
     // multi-yield creature_mana_only source -> byte-identical.
+    // {C} before `wild` on a generic pip (GenericCFirstScope, SpellEffects.h): a sound fold unless the deck can
+    // spend {C} on a {C} pip (deck_spends_c_pip, EDF) or the {C} is Generator Servant's haste-tagged unit
+    // (the tag rides the GENERAL float only, so the creature-only reserve is uncapped).
+    // In a {C}-pip deck (EDF) only the PREPAY'S KEPT {C} goes first (GameState::floating_prepay_c: the units the
+    // historical booking put in `wild`, so they drain exactly where they used to); every other {C} keeps the
+    // wild-first order there.
+    const bool cpip_deck = state.deck_spends_c_pip;
+    int prepay_c = cpip_deck ? PrepayKeptC(state) : 0;
     if (for_creature && state.floating_creature_mana.Total() > 0)
-    { SpendFloatingTowardCost(state.floating_creature_mana, cost); }
+    {
+        const int cap = cpip_deck ? std::min(prepay_c, state.floating_creature_mana.colorless)
+                                  : state.floating_creature_mana.colorless;
+        GenericCFirstScope _gcf(cap);
+        SpendFloatingTowardCost(state.floating_creature_mana, cost);
+        prepay_c -= cap - t_generic_c_first;
+    }
     // Same for the BIG-SPELL-ONLY reserve (Troyan's floated {G}{U}): a qualifying spell (MV 5+ or
     // {X}) spends it before the general float -- it can pay nothing else. Empty for every deck
     // without such a source -> byte-identical.
@@ -1650,7 +1665,14 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
         // MTG_LINE_FLOAT_TAP_FIRST: the rung's held generic pips skip the reserve (0 -> the plain drain).
         const int fgh = std::min(t_float_generic_hold, cost.generic);
         cost.generic -= fgh;
-        SpendFloatingTowardCost(state.floating_mana, cost);
+        const int untagged_c = state.floating_mana.colorless - HasteFloatUnits(state);
+        const int cap = cpip_deck ? std::min(prepay_c, untagged_c) : untagged_c;
+        {
+            GenericCFirstScope _gcf(cap);
+            SpendFloatingTowardCost(state.floating_mana, cost);
+            prepay_c -= cap - t_generic_c_first;
+        }
+        if (cpip_deck && state.floating_prepay_c != 0) { SetPrepayKeptC(state, prepay_c); }
         cost.generic += fgh;
     }
     // MANA ORACLE's float-only payment (ManaOracle.h): whatever the floating pools did not cover, the
@@ -1673,6 +1695,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
         state.floating_creature_mana = cre_reserve_pre;
         state.floating_bigspell_mana = big_reserve_pre;
         state.floating_haste_c       = haste_reserve_pre;
+        state.floating_prepay_c      = prepay_c_pre;
         return false;
     }
     // Publish this payment's coloured need (net of floating) for the sole-colour-provider rank
@@ -3753,6 +3776,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     state.floating_creature_mana       = cre_reserve_pre;
     state.floating_bigspell_mana       = big_reserve_pre;
     state.floating_haste_c             = haste_reserve_pre;
+    state.floating_prepay_c            = prepay_c_pre;
     if (tapstats::Enabled()) { tapstats::g_pay_once_fail.fetch_add(1, std::memory_order_relaxed); }
     return false;
 }

@@ -58741,8 +58741,11 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // Snapshot exactly what a tap can touch so a declined solve (wild output) rolls back cleanly.
     const std::vector<Permanent> bf_snap = state.battlefield;
     const ManaPool               fm_snap = state.floating_mana;
-    // A PHYSICAL {C} STAYS {C}: the {C} this prepay has tapped so far that is PHYSICALLY colourless -- out of a
-    // source with no colour mode at all (Mutavault, Sol Ring, Wastes). Only that {C} must stay `colorless`.
+    const int                    prepay_c_prior = state.deck_spends_c_pip ? PrepayKeptC(state) : 0;
+    int                          prepay_c_kept  = 0;   // this batch's kept {C} (GameState::floating_prepay_c)
+    // A PHYSICAL {C} STAYS {C}: the {C} this prepay has tapped so far out of a source that could NOT have made
+    // every colour instead -- no colour mode at all (Mutavault, Sol Ring, Wastes) or only some (Caves of Koilos,
+    // painlands). Only that {C} must stay `colorless`.
     // A {C} out of a source that could have made a colour for this spell instead (Sliver Hive, Cavern of
     // Souls, Secluded Courtyard: C or any colour for the creature type) is any-colour mana whose colour is
     // committed at spend (USER: no per-colour branching), so booking it `wild` is legal -- and keeping it
@@ -58758,9 +58761,19 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             if (!bp.tapped || bf_snap[static_cast<std::size_t>(bi)].tapped || bp.def_absent) { continue; }
             const CardDefinition* bd = CardDatabase::Instance().LookupCached(bp.card);
             if (bd == nullptr || bd->params.produces.empty()) { continue; }
-            bool only_c = true;
-            for (Color c : bd->params.produces) { if (c != Color::Colorless) { only_c = false; break; } }
-            if (!only_c) { continue; }
+            // A {C} rides `wild` only if its source could have made EVERY colour instead (`wild` pays any
+            // colour pip). A source with a {C} mode and only SOME colours -- Caves of Koilos {W}/{B}/{C}, a
+            // painland, an Eldrazi land -- made a {C} that cannot become {G}: Melira Pod smoke d0 gi738 T5,
+            // the Caves {C} booked `wild` paid Birds of Paradise's {G} once generic took {C} before wild
+            // (GenericCFirstScope). Counting it here can only keep MORE real {C} as `colorless` (legal; at
+            // worst a W/B the land could have tapped for is refused), never launder one.
+            bool has_c = false; unsigned colours = 0;
+            for (Color c : bd->params.produces)
+            {
+                if (c == Color::Colorless) { has_c = true; }
+                else if (static_cast<int>(c) < 5) { colours |= 1u << static_cast<int>(c); }
+            }
+            if (!has_c || colours == 0x1Fu) { continue; }
             const int y = LandAuraColorMask(state, bp) != 0 ? ManaProducedPerTap(*bd)
                                                             : PermanentManaYield(state, bp, *bd);
             pure += (y >= 0 ? y : ManaProducedPerTap(*bd));
@@ -60192,6 +60205,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             pool.wild      -= c_keep;
             pool.colorless += c_keep;
             c_funded_kept   = c_keep;
+            prepay_c_kept   = c_keep;
         }
         // GENERATOR SERVANT'S HASTE TAG survives a counted float (MTG_PREPAY_FLOAT_POOL). The tag is a
         // subset count of floating {C} (GameState::floating_haste_c), and a creature spell takes ONE
@@ -60295,7 +60309,8 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             // The batch's physical {C} is shared by the two stages: each stage's {C} pips, then its
             // generic, draw on it (the noncreature stage is booked first, as called below).
             int pure_left = pure_c_tapped();
-            auto stage_pool = [&pure_left, &c_must_stay](const ManaCost& c, const ManaPool& prod) -> ManaPool
+            prepay_c_kept = 0;   // the staged pools replace the pre-load above
+            auto stage_pool = [&pure_left, &c_must_stay, &prepay_c_kept](const ManaCost& c, const ManaPool& prod) -> ManaPool
             {
                 ManaPool pl;
                 pl.white = c.white; pl.blue = c.blue; pl.black = c.black;
@@ -60320,6 +60335,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                                                  c.colorless, pure_left);
                     pure_left = std::max(0, pure_left - std::min(pure_left, c.colorless + stay));
                     pl.wild -= stay; pl.colorless += stay;
+                    prepay_c_kept += stay;
                 }
                 for (int i = 0; i < 6; ++i) { *dst[i] += free_[i]; }
                 pl.wild += prod.Total() - pl.Total();   // preserve the stage total exactly
@@ -60347,6 +60363,9 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             state.floating_mana = ManaPool{};
         }
     }
+    // The kept {C} rides into the float as a subset count, for a {C}-pip deck's payer (GameState::floating_prepay_c).
+    if (state.deck_spends_c_pip && (prepay_c_kept > 0 || prepay_c_prior > 0))
+    { SetPrepayKeptC(state, prepay_c_prior + prepay_c_kept); }
     // PREVENT DAMAGE (armed only): the batch prepay is a payment that bypasses TapForCostShared, so
     // it resolves its own tap triggers here, once the whole-turn solve has committed.
     dmgev::FlushDamageEvents(state);
@@ -90473,6 +90492,8 @@ static void FoldPhysicalCards(TranspositionTable::Key& k, const GameState& state
             state.battlefield_at_combat, state.dep_enabler_main1 ? 1 : 0, state.dep_castpayoff_main1 ? 1 : 0,
             state.top_stacked_turn, state.top_stacked_card_number, state.floating_haste_c, state.draw_trigger_mark };
         for (std::int64_t v : sc) { mix(static_cast<std::uint64_t>(v)); }
+        // The prepay's kept {C} (EDF only): value-gated, so every other deck's key is unchanged.
+        if (const int pk = PrepayKeptC(state); pk != 0) { mix(0xC0F1u + static_cast<std::uint64_t>(pk)); }
         if (state.m1_hand_turn == state.TurnSeq())
         {
             mix(0x11BA + static_cast<std::uint64_t>(state.m1_hand_n));
@@ -111671,6 +111692,7 @@ static void BpVerifyStateSwap(const GameState& stored, const GameState& now, boo
     if (stored.deck_reads_life_total != now.deck_reads_life_total) { d += " deck_reads_life_total=" + std::to_string(static_cast<long long>(stored.deck_reads_life_total)) + "/" + std::to_string(static_cast<long long>(now.deck_reads_life_total)); }
     if (stored.deck_reads_lifegain_in_play != now.deck_reads_lifegain_in_play) { d += " deck_reads_lifegain_in_play=" + std::to_string(static_cast<long long>(stored.deck_reads_lifegain_in_play)) + "/" + std::to_string(static_cast<long long>(now.deck_reads_lifegain_in_play)); }
     if (stored.deck_reads_mv_cast != now.deck_reads_mv_cast) { d += " deck_reads_mv_cast=" + std::to_string(static_cast<long long>(stored.deck_reads_mv_cast)) + "/" + std::to_string(static_cast<long long>(now.deck_reads_mv_cast)); }
+    if (stored.deck_spends_c_pip != now.deck_spends_c_pip) { d += " deck_spends_c_pip=" + std::to_string(static_cast<long long>(stored.deck_spends_c_pip)) + "/" + std::to_string(static_cast<long long>(now.deck_spends_c_pip)); }
     if (stored.deck_tracks_noncombat_damage != now.deck_tracks_noncombat_damage) { d += " deck_tracks_noncombat_damage=" + std::to_string(static_cast<long long>(stored.deck_tracks_noncombat_damage)) + "/" + std::to_string(static_cast<long long>(now.deck_tracks_noncombat_damage)); }
     if (stored.dep_castpayoff_main1 != now.dep_castpayoff_main1) { d += " dep_castpayoff_main1=" + std::to_string(static_cast<long long>(stored.dep_castpayoff_main1)) + "/" + std::to_string(static_cast<long long>(now.dep_castpayoff_main1)); }
     if (stored.dep_enabler_main1 != now.dep_enabler_main1) { d += " dep_enabler_main1=" + std::to_string(static_cast<long long>(stored.dep_enabler_main1)) + "/" + std::to_string(static_cast<long long>(now.dep_enabler_main1)); }
