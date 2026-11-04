@@ -46,9 +46,9 @@ FIX BUILT (in the WIP commit carrying this section; NOT yet compiled into a test
   ([lr-fire]), LrBoardDumpTmp ([lr-board], record + miss), the [lr-miss] block before the LR hook in
   TapForCostShared (all MTG_LINE_REPAY_TRACE=1); DecisionProviders.cpp EdfSigDumpTmp (MTG_EDF_ROUTE_SIGDUMP=1).
   The p12 TEMP lever lr_probes_per_unit is still there too (remove or USER-priced).
-RUNNING: build5 of this worktree (my background job: `sleep 190` pid 3404670 then buildq.sh, queued behind two other
-  worktrees' builds); log `build/scratch/mcdragons10/build5.log` ("done:" line = finished). It builds exactly the
-  committed src (no src edits after it). Nothing else of mine is running.
+RUNNING: nothing. build5 FINISHED OK (`build/scratch/mcdragons10/build5.log`, 82/82, "done:") -- this worktree's
+  build/Release/{mtg,mtg-test} now hold the committed fix + the TEMP traces. Copy it aside before testing
+  (e.g. `cp build/Release/mtg build/scratch/mcdragons10/mtg.fix1`).
 REMAINING, IN ORDER:
   1. When build5 is done: `build/Release/mtg-test -tc="Line repay*"` then the whole unit suite. If the new test's
      off-arm CHECK is wrong (the menu may not offer the line), adjust the test, not the fix.
