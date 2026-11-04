@@ -162,6 +162,8 @@ bool OffersIncubatorLathliss(const GameState& s)
 
 }   // namespace
 
+void LineRepayClearPerGame();   // ManaPayment.cpp: the record ring and memo (TurnSolver::ClearPerGameCaches)
+
 TEST_CASE("Line repay: {Mind Stone, Scourge of Valkas} pays both off Gruul Turf's {G} and its floating {R}")
 {
     EnsureCardsLoaded();
@@ -224,4 +226,65 @@ TEST_CASE("Line repay: a re-made payment cannot use what entered after it (Wild 
         TurnSolver::ApplyPlan(t, p, /*is_pre_combat=*/true);
         CHECK_FALSE((OnBattlefield(t, "Wild Growth", 10) && OnBattlefield(t, "Llanowar Elves", 11)));
     }
+}
+
+TEST_CASE("Line repay: a land Aura paid under its host hold can still be re-made (EDF gi323 T2)")
+{
+    EnsureCardsLoaded();
+    // EldraziDisplacerFlicker seed 1870324 gi323 T2: Brushland (Wild Growth on it) and a fresh untapped Mariposa
+    // Military Base ({C}); Wild Growth #2 (onto Mariposa) and Eldrazi Displacer {2}{W} in hand. Four mana: tap
+    // Brushland for {W} (+ the old Wild Growth's {G}), pay the new Wild Growth with that {G} and float the {W}; then
+    // Mariposa's {C} + the new Wild Growth's {G} + the {W} pay the Displacer. The per-cast payer taps Brushland for {G}
+    // instead, so the Displacer needs the line repay. Every land-Aura cast site holds the Aura's host (Mariposa) tapped
+    // across the Aura's own payment; the repay record was pushed INSIDE that hold, on a board with Mariposa tapped
+    // that the line never stands on again, so the Displacer's payment could not find it. The search credited the line
+    // from records pushed without the hold and the executor dropped the Displacer (EDF +1 at LINE_REPAY on, games
+    // 323 / 365 / 935). LineRepayHostUntap re-states the record on the released board.
+    static const EldraziFlickerProvider prov;
+    GameState s;
+    s.m_provider          = &prov;
+    s.active_player_index = 0;
+    s.turn_number         = 2;
+    s.players[0].life     = gamesetup::StartingLife();
+    s.players[1].life     = gamesetup::StartingLife();
+    s.players[0].lands_played_this_turn = 1;
+    s.deck_has_land_aura  = true;
+    for (int k = 0; k < 20; ++k)
+    {
+        Card c = Def(k % 2 == 0 ? "Peregrine Drake" : "Brushland").card;
+        c.m_number = 900 + k;
+        s.players[0].library.push_back(c);
+    }
+    Put(s, "Brushland", 9);
+    Put(s, "Wild Growth", 55);
+    s.battlefield.back().aura_attached_to = 9;
+    Put(s, "Mariposa Military Base", 35, /*entered_this_turn=*/true);
+    Hand(s, "Wild Growth", 56);
+    Hand(s, "Eldrazi Displacer", 18);
+    auto line_pays = [&](bool on) -> int   // -1: no such plan on the menu; 0: dropped; 1: both cast
+    {
+        ArmPin pin(heurarm::LINE_REPAY, on);
+        LineRepayClearPerGame();
+        int seen = -1;
+        for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true))
+        {
+            int wg = -1, ed = -1;
+            for (std::size_t i = 0; i < p.actions.size(); ++i)
+            {
+                const Action& x = p.actions[i];
+                if (x.kind != Action::Kind::CastFromHand) { continue; }
+                if (x.card_name.str() == "Wild Growth" && x.enchant_target == 35) { wg = static_cast<int>(i); }
+                if (x.card_name.str() == "Eldrazi Displacer") { ed = static_cast<int>(i); }
+            }
+            if (wg < 0 || ed < 0 || wg > ed || p.actions.size() != 2) { continue; }
+            LineRepayClearPerGame();
+            GameState t = s;
+            TurnSolver::ApplyPlan(t, p, /*is_pre_combat=*/true);
+            seen = OnBattlefield(t, "Wild Growth", 56) && OnBattlefield(t, "Eldrazi Displacer", 18) ? 1 : 0;
+            if (seen == 1) { break; }
+        }
+        return seen;
+    };
+    CHECK(line_pays(true) == 1);
+    CHECK(line_pays(false) != 1);   // off: the per-cast payer strands the {W} (or the menu never offers the line)
 }

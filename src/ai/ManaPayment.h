@@ -877,6 +877,14 @@ private:
     ManaCost m_prev;
 };
 
+// THE LAND-AURA HOST HOLD AND MTG_LINE_REPAY. Every land-Aura cast site taps the Aura's declared host as a hold
+// across the Aura's own payment. Take `mark = LineRepayMark()` before that payment and release the hold with
+// LineRepayHostUntap(s, mark, host) instead of a bare untap: it untaps the host AND puts the line-repay record that
+// payment pushed onto the board the line really stands on (host untapped), so the next payment of the line can find
+// and re-make it. A bare untap left the record on the held board, which no later board matches (ManaPayment.cpp).
+std::uint64_t LineRepayMark();
+void LineRepayHostUntap(GameState& s, std::uint64_t mark, int host_number);
+
 // THE SCARCE HOLD OUTRANKS A LAND AURA'S HOST HOLD (MTG_SCARCE_COLOR_MASK). Both per-cast host holds (the rollout's
 // apply_one and AIEngine's cast) mark the Aura's host tapped for a first payment and release it only if that payment
 // FAILS -- and the payment's own ladder ends in the unrestricted greedy, so a board whose only other payer is the

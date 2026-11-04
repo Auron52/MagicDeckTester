@@ -10,6 +10,62 @@ Worktree: `/workspaces/MagicDeckTester/.claude/worktrees/agent-a9dab9fbcae918660
 origin/phase-1-2-deck-analyzer 980616e55. Scratch: `/workspaces/MagicDeckTester/build/scratch/mcdragons/`. Helper
 scripts (gitignored): `logs/mcdragons/{mk.py,gate.sh,batch.sh,repro.sh,abrep.py,scprobe.sh}`.
 
+## READ FIRST: Successor 10 (2026-11-04) -- EDF slower games ROOT-CAUSED: a lockstep defect, fix built, NOT yet measured
+Stopped at the 250K context cap. Scratch `build/scratch/mcdragons10/` (diag binaries `mtg.diag1..4` = p12 + traces).
+ROOT CAUSE (all three EDF slower games, 323 / 365 / 935; class (a) LOCKSTEP, not clairvoyance, not budget):
+  The land-Aura HOST HOLD taps the Aura's declared host across the Aura's own payment and untaps it right after, at
+  all four cast sites: executor `src/ai/AIEngine.cpp:~9952-9982` (RESERVE THE AURA'S OWN HOST), ApplyPlanDirect
+  apply_one `src/ai/TurnSolver.cpp:~61430-61464`, and the two payability walks `TurnSolver.cpp:~10153-10179` and
+  `~10871-10890`. LINE_REPAY records the payment INSIDE TapForCostShared (`ManaPayment.cpp` LineRepayRecord, called
+  at the end of TapForCostShared), i.e. while the host is still held tapped: the record's `post` digest and `pre`
+  board have the host TAPPED. The caller then untaps it, so no later board matches that record and LineRepayFind
+  cannot re-make the Aura's payment. The search still credits such lines from records its other paths pushed
+  without the hold (9 such records at t2 on gi323), so it commits a line the executor cannot pay.
+  Evidence (gi323 on, d8 b0, `mcdragons10/s323/lb1.err`): the executor's record of Wild Growth's {G} shows
+  `35T` (Mariposa held), the Displacer's miss shows `35` untapped; ring-1 post 5955553aad5c7c40 vs now
+  5955553aa8360c02, so `find=null` and Eldrazi Displacer {2}{W} is dropped. In the search LR fired 4x for the same
+  ED payment (`[lr-fire] t2 p1 depth=1 failing={2}{W} for=Eldrazi Displacer rec0={G}(Wild Growth)`).
+  Per game (FD trace `MTG_FD_TRACE=1`, `mcdragons10/s<gi>/fd1.err`; executor taps `MTG_EXEC_TAP_TRACE=1`):
+   * 323 (seed 1870324): T1 line win=3 with T2 = Mariposa + Eldrazi Displacer + Wild Growth(on Mariposa). Legal with
+     4 mana (Brushland {W}+old WG {G}: {G} pays the new WG, {W} floats; Mariposa {C}+new WG {G}+{W} pay ED). Executor
+     taps Brushland for {G}, ED dropped -> T3 Drake, win T4 (off arm wins T3 on another line).
+   * 365 (seed 1870366): T3 line = Mariposa + ED + WG; same shape on Conservatory; executor drops ED -> win T5 not T4.
+   * 935 (seed 1880936): T2 line = Mariposa + Training Grounds + Living Wish + WG; executor drops Training Grounds
+     ({U}) -> T3 "Combo Off" is a no-op (the route's T3 WIN needs Training Grounds in play) -> win T5 not T4.
+  The d8 b0 games play the same decisive lines as shipped settings (mcdragons10/d8, digests in d8/w/*.wins), and
+  the off arm never chooses these lines because without LR the walk finds them unpayable.
+FIX BUILT (in the WIP commit carrying this section; NOT yet compiled into a tested binary, NOT measured):
+  `LineRepayMark()` + `LineRepayHostUntap(s, mark, host)` (ManaPayment.cpp, before TapForCostShared; decl
+  ManaPayment.h above "THE SCARCE HOLD OUTRANKS"): replaces the bare `SetPermTapped(..., reserved_host, false)` at
+  all four sites. It untaps the host and, if exactly one record was pushed since `mark` (new thread_local counter
+  `t_lr_pushes`) and its digest still reads the held board, re-states that record on the released board: `post`
+  recomputed, `pre.bf[host].tapped = false`, `content` recomputed (LineRepayContentOf, factored out of
+  LineRepayRecord). Unit test added: test/unit/test_line_repay.cpp "a land Aura paid under its host hold can still
+  be re-made (EDF gi323 T2)" (ApplyPlan of {WG on Mariposa, ED}: on == both cast; off != both). UNRUN.
+  TEMPORARY DIAGNOSTICS in the same commit (env-gated, REMOVE before landing): ManaPayment.cpp LrTraceFireTmp
+  ([lr-fire]), LrBoardDumpTmp ([lr-board], record + miss), the [lr-miss] block before the LR hook in
+  TapForCostShared (all MTG_LINE_REPAY_TRACE=1); DecisionProviders.cpp EdfSigDumpTmp (MTG_EDF_ROUTE_SIGDUMP=1).
+  The p12 TEMP lever lr_probes_per_unit is still there too (remove or USER-priced).
+RUNNING: build5 of this worktree (my background job: `sleep 190` pid 3404670 then buildq.sh, queued behind two other
+  worktrees' builds); log `build/scratch/mcdragons10/build5.log` ("done:" line = finished). It builds exactly the
+  committed src (no src edits after it). Nothing else of mine is running.
+REMAINING, IN ORDER:
+  1. When build5 is done: `build/Release/mtg-test -tc="Line repay*"` then the whole unit suite. If the new test's
+     off-arm CHECK is wrong (the menu may not offer the line), adjust the test, not the fix.
+  2. Re-measure 323 / 365 / 935 at d8 b0 both arms: manifest `mcdragons10/d8/m.json` (one pooled batch, 6 jobs,
+     `--game-trace-dir`), expect on == off (3/4/4). Also shipped settings (single games, seeds above). Confirm the
+     executor now fires LR (`MTG_LINE_REPAY_TRACE=1`, look for [lr-fire] after `[exec-tap] T2 before Eldrazi`).
+  3. Remove the TEMPORARY diagnostics, rebuild, re-run the unit suite.
+  4. The larger held-out EDF A/B (USER: "If it is recoverable I would be curious to see if this works better on a
+     larger set."): LINE_REPAY off vs on, price 4 unchanged, ONE pooled `mtg --batch`, THREADS <= 8, shipped play
+     settings (no depth/budget in the jobs). Fresh seed blocks (checked unused across build/scratch manifests and the
+     suite): EDF standard 5,000 games seed = 2810001 + off, game_index = off; EDF 2HG 1,500 games seed = 2830001 + off
+     (2HG job keys: "starting_life": 30, "opponent_heads": 2 -- test/regression.sh:361). Pattern: mcdragons9/ab9/mk.py
+     + rep.py. Report net, slower/faster, units; instructions:u by `perf stat -e instructions:u` on a fixed per-arm
+     single-thread sample (e.g. 100 games each arm), MTG_PGO irrelevant (run the binary directly). Every slower game
+     must recover at d8 b0; only clear clairvoyance is exempt (MTG_NC_SEARCH=1 test).
+  Still open for the USER (unchanged): LR price (4 vs 12), pricing pass 1.
+
 ## READ FIRST: Successor 9 (2026-11-04) -- LINE PARKED FOR THE USER (stop rule hit on EDF)
 Worktree head = the commit carrying this section (wip/mc-dragons, NOT pushed, no GT accepted, no smoke run).
 Scratch `build/scratch/mcdragons9/`. Binary under test = `mcdragons9/mtg.p12` / `mtg-test.p12` (= HEAD src).

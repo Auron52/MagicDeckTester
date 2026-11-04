@@ -41659,6 +41659,15 @@ static bool PregateRefuses(const GameState& s, int me, PregateDiag* dg = nullptr
 }
 }   // namespace comboroute
 
+
+static void EdfSigDumpTmp(const char* tag, const GameState& s, int r)
+{
+    static const bool on = EnvOn("MTG_EDF_ROUTE_SIGDUMP");
+    if (!on) { return; }
+    std::vector<long long> v; comboroute::RouteSig(s, v);
+    std::string o; for (long long x : v) { o += std::to_string(x); o += ','; }
+    std::fprintf(stderr, "[sigdump] t%d %s r=%d n=%zu | %s\n", s.turn_number, tag, r, v.size(), o.c_str());
+}
 int EdfComboRouteTrial(const GameState& s, int me)
 {
     if (!comboroute::On()) { return 0; }
@@ -41735,6 +41744,7 @@ int EdfComboRouteTrial(const GameState& s, int me)
     const auto rd_t0 = std::chrono::steady_clock::now();
     const int r = comboroute::Run(cx, comboroute::kRunUnforced, &s);
     if (r != 0 && comboroute::ApplyReuseOn()) { comboroute::AttemptCacheStore(s, r, cx.attempt_used); }
+    EdfSigDumpTmp("TRIAL", s, r);
     if (comboroute::RouteDiagOn())
     {
         comboroute::g_run_n.fetch_add(1, std::memory_order_relaxed);
@@ -41772,6 +41782,7 @@ int EdfComboRouteFirstAuraPick(const GameState& s, int me)
 int EdfComboRouteApply(GameState& s, int me)
 {
     if (!comboroute::On()) { return 0; }
+    EdfSigDumpTmp("APPLY", s, -1);
     // ALL-OR-NOTHING: the silent trial on a copy decides; only a kill (or a develop) is played on
     // the real state, and that live run narrates each step into the play history (the same
     // deterministic route).
