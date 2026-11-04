@@ -338,3 +338,53 @@ TEST_CASE("SB order: Culling's hand victim is cast right before Culling, ahead o
     const std::vector<std::string> want = { kRitM, kApM, kCullM, kStoneM, kApM };
     CHECK(got == want);
 }
+
+// ---- the union plan: Ritual x2 + Stone + Apostle in ONE main (held-out 50047 gi46 T3) -----------------------------
+// Three untapped Swamps: Ritual -> BBB, Ritual -> BBBBB, Stone {5}, an Apostle {B} off the third Swamp into the
+// ripple. The shipped game split it across the mains (Ritual, Ritual, Stone in main 1; the Apostle in main 2); the
+// main-1 rule folds a no-attacker turn to main 2, so the whole line has to be ONE main-2 plan.
+TEST_CASE("SB union plan: Ritual, Ritual, Stone, Apostle is one post-combat plan")
+{
+    SearchedM sp;
+    auto union_plans = [](int order)
+    {
+        ArmM arm; arm.Set(heurarm::SB_CAST_ORDER, order);
+        GameState s = BaseM(3);
+        s.phase = Phase::PostCombatMain;
+        s.players[0].lands_played_this_turn = 1;
+        s.players[0].hand.push_back(CardM(kRitM, 60));
+        s.players[0].hand.push_back(CardM(kRitM, 61));
+        s.players[0].hand.push_back(CardM(kStoneM, 62));
+        s.players[0].hand.push_back(CardM(kApM, 63));
+        LibM(s, { kApM, kSwM, kSwM, kSwM, kApM, kApM, kSwM, kSwM, kSwM, kSwM });
+        int n = 0;
+        for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/false))
+        {
+            int rit = 0; bool stone = false, ap = false;
+            for (const Action& a : p.actions)
+            {
+                if (a.kind != Action::Kind::CastFromHand) { continue; }
+                if (a.card_name.str() == kRitM) { ++rit; }
+                if (a.card_name.str() == kStoneM) { stone = true; }
+                if (a.card_name.str() == kApM) { ap = true; }
+            }
+            if (rit == 2 && stone && ap) { ++n; }
+        }
+        return n;
+    };
+    const int shipped = union_plans(0), ordered = union_plans(1);
+    MESSAGE("union plans: shipped order ", shipped, ", USER order ", ordered);
+    CHECK(ordered > 0);
+}
+
+TEST_CASE("SB order, MTG_SB_STONE_FIRST (agent amendment): the granter ranks ahead of the rituals")
+{
+    ArmM arm; arm.Set(heurarm::SB_CAST_ORDER, 1).Set(heurarm::SB_STONE_FIRST, 1);
+    GameState s = BaseM(1);
+    const ShadowbornProvider& p = ProvM();
+    CHECK(p.CastOrderRank(s, DefM(kStoneM)) < p.CastOrderRank(s, DefM(kRitM)));
+    CHECK(p.CastOrderRank(s, DefM(kRitM)) < p.CastOrderRank(s, DefM(kCullM)));
+    CHECK(p.CastOrderRank(s, DefM(kCullM)) < p.CastOrderRank(s, DefM(kApM)));
+    ArmM off; off.Set(heurarm::SB_CAST_ORDER, 0);
+    CHECK(p.CastOrderRank(s, DefM(kStoneM)) == 1);   // inert without the cast order
+}

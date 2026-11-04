@@ -337,3 +337,37 @@ wall time):
 6. **The tutor ties:** Demonic Tutor before Diabolic Intent, both after the bodies; suspends last.
    Fine as a total order? (I found no interaction that decides it.)
 7. **Order of the hard-cast Demons: ANSWERED (USER 2026-11-04)** -- Reaper, Sire, then Overlord last (devotion). Also: *"The flip side to that is that if we sacrifice things to get there then it could end up with less harpies, but overall I don't think this matters."* (Hard-cast Reaper and Sire sacrifice nothing; Diabolic Intent is ranked after the Overlord; only Culling, ranked before the Stone by ruling, eats a body first.)
+## 7. Built and measured (2026-11-04, branch `sb-mainphase`; ALL THREE LEVERS DEFAULT OFF, pending the USER)
+
+Levers (heurarm slots, so one pooled batch runs every arm):
+- `MTG_SB_MAIN1_RULE` -- section 1's rule, as a plan-level fold of ROOT pre-combat plans
+  (`DecisionProvider::Main1PlanFoldLive` / `Main1PlanAdmitted`, applied in `EnumeratePlansWithLandUncached`;
+  searched play only, never inside a breakpoint continuation, never in human play). A main-1 plan beyond the
+  land drop is admitted only with an attack-ready creature AND (Jetmir on the battlefield, or a plan that can
+  still deploy him before combat: a Jetmir fetch, a library tutor, a cast with a ripple granter live, the six
+  reachable from hand). A Lake of the Dead drop keeps its casts (its TAP-FIRST float empties at combat). The
+  sick-turn Demon search is offered in main 2 with it.
+- `MTG_SB_CAST_ORDER` -- section 2's ranks (total by name), Culling's hand victim moved to just before Culling
+  (`ShadowbornProvider::ArrangeCastOrder`), and section 2b's same-main order (no Overlord fetch or hard cast
+  after a Jetmir fetch in the same main).
+- `MTG_SB_STONE_FIRST` -- AGENT amendment, inert without the cast order: Thrumming Stone ranks ahead of Dark
+  Ritual / Culling; the payable-order fallback still puts a ritual first when the Stone needs its mana.
+
+Pooled held-out A/B, d5 b20, max_turns 8, 400 paired games per arm (set A seeds 50001+gi, set B 60001+gi):
+
+| arm | avg A | avg B | units A | units B | slower A / B | slower not recovered at d8 b0 |
+|---|---|---|---|---|---|---|
+| shipped | 4.8000 | 4.7975 | -- | -- | -- | -- |
+| split | 4.8000 | 4.8000 | -3.8% | -6.8% | 12 / 11 | A: gi32, 46, 115, 328; B: gi244 |
+| order (USER) | 4.7900 | 4.7650 | -0.3% | -0.9% | 13 / 8 | A: gi1, 166, 263, 265, 372; B: gi22, 94, 164 |
+| split + order | 4.7675 | 4.7475 | -8.4% | -11.0% | 15 / 10 | the order's, both sets |
+| order + stone-first | 4.7650 | 4.7500 | -1.2% | -0.4% | 7 / 3 | none |
+| split + order + stone-first | 4.7525 | 4.7400 | -8.2% | -10.4% | 11 / 6 | none |
+
+Root cause of the USER order's unrecovered games (each checked: shipped at d8 b0 keeps the faster turn): the
+winning line is "Thrumming Stone, THEN Dark Ritual, then Apostle" -- a Ritual cast after the Stone ripples, and
+its free reveal bottoms four non-Apostles in front of the Apostle chain (seed 50002 gi1: T3 chain of 18 Apostles
+vs 1, T4 vs T5). "Ritual first" makes that line inexpressible at every budget. Hence the stone-first amendment.
+The split-alone unrecovered games (e.g. 50047 gi46: a T1 main-2 Dark Ritual cast for nothing, one Ritual short on
+T3) are NOT root-caused; none of them is slower once the order + stone-first is on. ref_bench (10 references):
+shipped and split 1/10 short (s7), every order arm 0/10 short.

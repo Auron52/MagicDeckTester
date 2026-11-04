@@ -58645,6 +58645,12 @@ static bool SbMain1RuleOn()
     static const bool on = EnvOn("MTG_SB_MAIN1_RULE");
     return heurarm::Flag(heurarm::SB_MAIN1_RULE, on);
 }
+static bool SbStoneFirstOn()
+{
+    // AGENT amendment (for USER review; see heurarm SB_STONE_FIRST): the granter ahead of the rituals. DEFAULT OFF.
+    static const bool on = EnvOn("MTG_SB_STONE_FIRST");
+    return heurarm::Flag(heurarm::SB_STONE_FIRST, on);
+}
 static bool SbPrunesOn();   // ShadowbornPrunesOn, below (the viewer and the MTG_UNPRUNED audit arm keep the full menus)
 static bool SbIsSacNamedCreature(const CardDefinition* d);   // below
 // A creature of `controller`'s that can attack THIS turn as far as sickness goes (CR 302.6) -- the tap is ignored, so
@@ -58693,6 +58699,9 @@ int ShadowbornProvider::CastOrderRank(const GameState& s, const CardDefinition& 
         // THE USER'S ORDER (2026-11-04), read off card data. The land drop is not a cast (it goes first).
         const CardParams& p = def.params;
         if (p.suspend_time_counters > 0) { return p.tutor_to_hand ? 11 : 12; }   // Profane Tutor : Lotus Bloom (suspend only)
+        // MTG_SB_STONE_FIRST (AGENT amendment, for the USER): the granter goes first, so a ritual cast after it
+        // ripples (a free four-card dig); the payable-order fallback still puts a ritual first when the Stone needs it.
+        if (p.grants_ripple > 0 && SbStoneFirstOn()) { return 0; }
         if (p.ritual_floating_mana > 0) { return p.sac_additional_creature ? 2 : 1; }   // Culling : Dark Ritual
         if (p.grants_ripple > 0) { return 3; }                                           // Thrumming Stone
         if (def.card.IsCreature())
