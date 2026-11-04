@@ -132,26 +132,24 @@ unreachable at every budget, so it would fail the d8 b0 recovery bar, whatever i
 ## 2. Proposed full cast order (within a main phase)
 
 **USER RULING 2026-11-04:** *"It should be land -> Dark Ritual -> other spells."* Dark Ritual is cast right
-after the land drop, ahead of the Thrumming Stone and everything else. (This replaces ranks 1-2 below: the
-Stone-first rule with the rituals-first payable fallback becomes simply Ritual first; the rest of the order
-keeps its relative positions.) Earlier the same day: *"Casting the Dark Ritual early in a line is totally
+after the land drop, ahead of the Thrumming Stone and everything else; the table below includes it. Earlier the same day: *"Casting the Dark Ritual early in a line is totally
 fine in my opinion. I sometimes cast it late, but that doesn't really matter at all."*
 
-| draft rank | card | change vs today | why |
+| rank | card | change vs today | why |
 |---|---|---|---|
-| land | the land drop (Lake of the Dead: tap-first, a basic Swamp before Blood Crypt, as today) | none | Nothing in the deck wants to come before the land. P1 (only no-land plans dropped) is unchanged. |
-| 1 | Thrumming Stone | none | Stone-first, CONFIRMED by you. When it needs ritual mana, the payable-order fallback casts Dark Ritual / Culling first (*"You just cast them before and go off"*), as in s1, s8 and s9. |
-| 2 | Dark Ritual | **moved ahead of the Apostle** (15 to 2) | This matches all 6 of your reference plans that held both cards (s1, s3, s4, s6, s8, s9). Placed after the Stone, its ripple can find more Rituals. See question 3 for the trade-off. |
-| 3 | Shadowborn Apostle | none in effect (10). It is after the Ritual now. | It starts the chain. Bodies go down before anything that sacrifices or counts them. |
-| 4 | Abhorrent Overlord (hard cast) | **ordered** (was a plan-order tie at 10) | It goes after the Apostles because devotion counts each Apostle's {B}, which means more Harpies. |
-| 5 | Reaper from the Abyss (hard cast) | **ordered** (tie at 10) | Body. There is no interaction with the others in the cast order. |
-| 6 | Sire of Insanity (hard cast) | **ordered** (tie at 10) | Body. The discard happens at the end step. |
+| land | the land drop (Lake of the Dead: tap-first, a basic Swamp before Blood Crypt, as today) | none | USER ruling: land first. |
+| 1 | Dark Ritual | **moved to the front** (15 to 1) | USER ruling 2026-11-04. Also your practice in all 6 reference plans that held it. |
+| 2 | Thrumming Stone | one place later (was 1) | Granter: every later cast wants it out first. The payable-order fallback still pulls Culling ahead when the Stone needs its mana. |
+| 3 | Shadowborn Apostle | none in effect (10) | Starts the chain. Bodies go down before anything that sacrifices or counts them. |
+| 4 | Abhorrent Overlord (hard cast) | **ordered** (was a plan-order tie at 10) | After the Apostles: devotion counts each Apostle's {B}, so more Harpies. |
+| 5 | Reaper from the Abyss (hard cast) | **ordered** (tie at 10) | Body; no cast-order interaction. |
+| 6 | Sire of Insanity (hard cast) | **ordered** (tie at 10) | Body; the discard is at the end step. |
 | 7 | Jetmir (cannot be cast) | **ordered** (tie at 10) | Listed only so the order is total. |
-| 8 | Culling the Weak | **moved after the creatures** (15 to 8) | After the chain, the weakest victim is a fresh sick Apostle, which is free. Before the chain it would eat an attack-ready one. The payable fallback still pulls it ahead when its {B}{B}{B}{B} pays the Stone or a Demon. |
-| 9 | Demonic Tutor | ordered (was a tie at 20) | It is after the bodies, and the shuffle comes after the chain has used the top of the library. The fetched card is cast in the breakpoint continuation. |
-| 10 | Diabolic Intent | ordered (tie at 20). It goes after Demonic Tutor. | The victim is a sick Apostle from this turn's chain, and its shuffle comes after the chain. DT before Intent is an arbitrary tie I broke. Neither one feeds the other. |
-| 11 | Profane Tutor (suspend) | ordered (tie at 20) | This is a suspend, not a cast, so position only decides which mana pays {1}{B}. Last means it spends what is left over. |
-| 12 | Lotus Bloom (suspend {0}) | ordered (tie at 20) | It costs nothing, so its position does not matter (in s7 you placed it last). |
+| 8 | Culling the Weak | **moved after the creatures** (15 to 8) | After the chain its victim is a fresh sick Apostle. The payable fallback pulls it ahead when its {B}{B}{B}{B} is needed for the Stone or a Demon. |
+| 9 | Demonic Tutor | ordered (tie at 20) | After the bodies; the shuffle comes after the chain has used the top of the library. |
+| 10 | Diabolic Intent | ordered (tie at 20) | Victim is a sick Apostle from this turn's chain. DT before Intent is an arbitrary tie-break (q6). |
+| 11 | Profane Tutor (suspend) | ordered (tie at 20) | A suspend; position only decides which mana pays {1}{B}. |
+| 12 | Lotus Bloom (suspend {0}) | ordered (tie at 20) | Costs nothing, so its position does not matter. |
 
 Plus `CastOrderTiesByName` (or `CastOrderTotalByName`), so that no two different cards ever tie and
 fall back to plan order. That follows your cross-deck ruling of 2026-10-14: *"Let's fully order the
@@ -256,7 +254,7 @@ wall time):
    changes what the chain finds. My default follows your references (Ritual first), and I propose
    measuring both as arms.
    **ANSWERED (USER 2026-11-04):** *"Casting the Dark Ritual early in a line is totally fine in my opinion. I
-   sometimes cast it late, but that doesn't really matter at all."* Ritual first (rank 2) stands. The user is
+   sometimes cast it late, but that doesn't really matter at all."* Ritual first (rank 1, right after the land) stands. The user is
    indifferent to its position, so an order-only arm is a cost/quality check, not a question for the user.
 4. **Culling the Weak after the Apostle chain** (so it eats a fresh sick Apostle), with the payable
    fallback pulling it ahead only when its mana is needed for the Stone or a Demon? Default: yes.
