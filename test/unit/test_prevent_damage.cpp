@@ -429,6 +429,30 @@ TEST_CASE("Prevent Damage: the pain sweep is deferred while human play is still 
     CHECK(forge_tapped(s));
 }
 
+// ---- The mana oracle tells the end-of-main-1 sweep's taps apart from a payment (mana-clean pass 1) ----
+TEST_CASE("Prevent Damage: the end-of-main-1 sweep names the lands it tapped to the oracle's sink, on the observed board only")
+{
+    GameState s = Board();
+    Put(s, "Tamanoa");
+    Put(s, "Battlefield Forge");
+    Put(s, "City of Brass");
+    std::vector<int> want;
+    for (const Permanent& p : s.battlefield) { if (p.card.IsLand()) { want.push_back(p.card.m_number); } }
+    std::vector<int> got;
+    GameState other = s;
+    g_endm1_sweep_tap_sink = &got;
+    g_endm1_sweep_tap_target = &other;   // a nested apply on another copy is not the observed line
+    TapPainSourcesIfUseful(s, 0);
+    CHECK(got.empty());
+    g_endm1_sweep_tap_target = &other;
+    TapPainSourcesIfUseful(other, 0);
+    g_endm1_sweep_tap_sink = nullptr;
+    g_endm1_sweep_tap_target = nullptr;
+    std::sort(got.begin(), got.end());
+    CHECK(got == want);   // both lands, swept for Tamanoa's gain (no mana, no payment)
+    for (const Permanent& p : other.battlefield) { if (p.card.IsLand()) { CHECK(p.tapped); } }
+}
+
 // ---- The viewer valve bounds PAYABLE positions, not the raw odometer (claude-play sweep gi4) ----
 #include "ai/EngineFlags.h"
 TEST_CASE("Viewer plan-cap estimate: an unpayable tutor fan does not count against the bound")

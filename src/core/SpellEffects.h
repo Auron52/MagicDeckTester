@@ -1815,6 +1815,20 @@ struct ScriptedSweep
     int saved;
 };
 
+// OBSERVER SINK (the mana completeness oracle, ManaOracle.cpp Realize): while set, both end-of-main-1 sweeps
+// below record the number of every permanent they tap. A sweep tap is the end-of-main POLICY firing a land for
+// its damage / drip trigger after every payment of the plan is made -- not a payment, and not a mana choice the
+// oracle could branch on -- so the oracle needs to tell it apart from a tap the engine made on its own inside a
+// payment. Only taps on THE observed state count (a nested apply on a copy -- a search inside the plan -- is not
+// the line). nullptr in play: a pointer test, nothing else.
+inline thread_local std::vector<int>* g_endm1_sweep_tap_sink   = nullptr;
+inline thread_local const GameState*  g_endm1_sweep_tap_target = nullptr;
+inline void NoteEndM1SweepTap(const GameState& state, const Permanent& p)
+{
+    if (g_endm1_sweep_tap_sink != nullptr && &state == g_endm1_sweep_tap_target)
+    { g_endm1_sweep_tap_sink->push_back(p.card.m_number); }
+}
+
 inline void TapDripLandsIfUseful(GameState& state, int controller_index)
 {
     if (!ResolveProvider(state).OpponentLifegainUseful(state, controller_index)) { return; }
@@ -1828,6 +1842,7 @@ inline void TapDripLandsIfUseful(GameState& state, int controller_index)
         const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
         if (!def || def->params.tap_opponent_lifegain <= 0) { continue; }
         p.tapped = true;
+        NoteEndM1SweepTap(state, p);
         // Armed (Prevent Damage): the coloured drip tap's pain is a damage EVENT (Tamanoa) and the
         // tap a land tap (Manabarbs); both resolve at the flush below. Unarmed: the raw loss.
         if (state.dmg_events_armed)
@@ -45745,6 +45760,7 @@ inline void TapPainSourcesIfUseful(GameState& state, int ctrl)
             if (nbarb > 0 && life - barb_max <= 0) { continue; } // each barb before its own Tamanoa
         }
         p.tapped = true;
+        NoteEndM1SweepTap(state, p);
         dmgev::ArmedManaTap(state, ctrl, p, pain);
         dmgev::FlushDamageEvents(state);
         if (dmgev::WonLocked(state) || state.players[ctrl].life <= 0) { return; }

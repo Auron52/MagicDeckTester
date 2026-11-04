@@ -687,6 +687,24 @@ bool KeyedApart(const GameState& s, const Permanent& p)
 // the apply they are not -- the plan is the whole main phase, and the pool empties when it ends.
 // A copy the plan being realised uses itself (t_plan_srcs) is its own resource, never its twins'.
 using Res = std::map<std::string, int>;
+// THE OPPONENT'S LIFE IS A RESOURCE OF THE CHECK (a goldfish: lower is better, it is the objective). A payment can
+// move it: Prevent Damage's pain is a damage event Tamanoa turns into lifegain and Vito / Dina into opponent life
+// LOSS, and a drip land gives life (reversed into loss by Tainted Remedy). Without it a painless payment read as
+// covering the painful one that drained the opponent. Keyed only while a CHECK runs (AuditDecision, AuditLine):
+// the shared engine payer's RefinePayment reads the same tables (ManaPayment.cpp PayRefineAfter) and must not
+// move, so it holds this at 0 for its own extent (RefinePayment, below).
+thread_local int t_opp_keyed = 0;
+struct OppKeyScope
+{
+    int saved;
+    explicit OppKeyScope(int v) : saved(t_opp_keyed) { t_opp_keyed = v; }
+    ~OppKeyScope() { t_opp_keyed = saved; }
+    OppKeyScope(const OppKeyScope&) = delete;
+    OppKeyScope& operator=(const OppKeyScope&) = delete;
+};
+// Measured on Prevent Damage games 0-395 (2026-11-04): no flag, prune or apply count moved with the key on or
+// off -- the pass-1 DOMINATED-LIFE lines are not drain-blind -- so this is a soundness guard, not a fix.
+bool OppLifeKeyed() { return t_opp_keyed != 0; }
 Res Resources(const GameState& s, bool with_float)
 {
     Res r;
@@ -700,6 +718,7 @@ Res Resources(const GameState& s, bool with_float)
         if (p.temp_haste) { ++r["H:" + k]; }
     }
     r["L:life"]   = s.players[a].life;
+    if (OppLifeKeyed()) { r["O:opp"] = -s.players[1 - a].life; }
     r["E:energy"] = s.players[a].energy_counters;
     if (with_float)
     {
@@ -767,6 +786,12 @@ bool CoversBoards(const GameState& x, const GameState& y, bool with_float, bool*
     const Player& py = y.players[a];
     bool ok = px.life >= py.life && px.energy_counters >= py.energy_counters;
     st = st || px.life > py.life || px.energy_counters > py.energy_counters;
+    if (OppLifeKeyed())
+    {
+        const int ox = x.players[1 - a].life, oy = y.players[1 - a].life;
+        ok = ok && ox <= oy;
+        st = st || ox < oy;
+    }
     if (ok && with_float)
     {
         const ManaPool* xs[3] = { &x.floating_mana, &x.floating_creature_mana, &x.floating_bigspell_mana };
@@ -2125,6 +2150,7 @@ bool SameOption(bool fa, const PayOption& a, bool fb, const PayOption& b)
 bool RefinePayment(const GameState& pre, const GameState& post, const ManaCost& cost, bool for_creature,
                    bool creature_ability, PayOption& out)
 {
+    OppKeyScope engine_tables(0);   // the engine's payer: its tables never key the opponent's life (t_opp_keyed)
     static const bool s_verify = EnvOn("MTG_PAY_REFINE_MEMO_VERIFY");
     // (The masked board the refine builds its table on differs from `pre` only in tapped flags: one useful-colour mask.)
     const int useful = UsefulColorMask(pre, cost);
@@ -2376,9 +2402,24 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
             std::vector<int>* saved_tap_sink   = g_perm_ability_tap_sink;
             g_perm_ability_tap_target = &copy;
             g_perm_ability_tap_sink   = &act_tap_srcs;
+            // ...and the lands the END-OF-MAIN-1 SWEEP tapped (TapPainSourcesIfUseful / TapDripLandsIfUseful):
+            // the policy firing every leftover pain / drip land for its damage or drip trigger once the plan's
+            // last payment is made. Not a payment: nothing is paid with that mana (it empties with the phase),
+            // so no action of the plan can be dropped by it, and it is a deterministic function of the board
+            // each payment leaves -- the oracle's outcomes and the engine's own line both end with it, so the
+            // end boards it compares already carry its damage, gains and drains. Its own choice (sweep or keep)
+            // is the search's (Plan::sweep_choice), not a mana choice. Prevent Damage pass 1: 574,601 plans
+            // were UNMODELED for these taps alone, in 12,000 games.
+            std::vector<int> sweep_taps;
+            std::vector<int>* saved_sweep_sink   = g_endm1_sweep_tap_sink;
+            const GameState*  saved_sweep_target = g_endm1_sweep_tap_target;
+            g_endm1_sweep_tap_sink   = &sweep_taps;
+            g_endm1_sweep_tap_target = &copy;
             t_hook = &h;
             TurnSolver::ApplyPlan(copy, plan, pre);
             t_hook = nullptr;
+            g_endm1_sweep_tap_sink    = saved_sweep_sink;
+            g_endm1_sweep_tap_target  = saved_sweep_target;
             g_perm_ability_tap_target = saved_tap_target;
             g_perm_ability_tap_sink   = saved_tap_sink;
             // (A tap-ahead inside an ENGINE step is the engine's step, not a tap outside the script.)
@@ -2432,6 +2473,9 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                 if (plan_srcs.count(p0.card.m_number) != 0 || plan_names.count(p0.card.m_name.str()) != 0) { continue; }
                 // ...nor one a continuation tapped as its own activation's {T} cost (not a mana choice).
                 if (std::find(act_tap_srcs.begin(), act_tap_srcs.end(), p0.card.m_number) != act_tap_srcs.end())
+                { continue; }
+                // ...nor one the end-of-main-1 sweep fired for its trigger (above).
+                if (std::find(sweep_taps.begin(), sweep_taps.end(), p0.card.m_number) != sweep_taps.end())
                 { continue; }
                 for (const Permanent& p1 : copy.battlefield)
                 {
@@ -2610,6 +2654,7 @@ Cls DominanceClass(const Res& o, const Res& e, bool pre, std::string* what)
         }
         else if (k.rfind("H:", 0) == 0) { c = C_DOM_HASTE; w = "haste on " + k.substr(2, k.find('|') - 2); }
         else if (k == "L:life")          { c = C_DOM_LIFE;  w = "+" + std::to_string(d) + " life"; }
+        else if (k == "O:opp")           { c = C_DOM_LIFE;  w = "opponent -" + std::to_string(d) + " life"; }
         else if (k == "E:energy")        { c = C_DOM_OTHER; w = "+" + std::to_string(d) + " energy"; }
         else                             { c = C_DOM_OTHER; w = "+" + std::to_string(d) + " " + k; }
         if (what != nullptr) { *what += (what->empty() ? "" : "; ") + w; }
@@ -2987,6 +3032,7 @@ Res HostBlindRes(const GameState& s)
         }
     }
     r["L:life"]   = s.players[a].life;
+    if (OppLifeKeyed()) { r["O:opp"] = -s.players[1 - a].life; }
     r["E:energy"] = s.players[a].energy_counters;
     return r;
 }
@@ -3854,6 +3900,7 @@ void AuditDecision(const GameState& state, bool is_pre_combat)
     // play is byte-identical with the oracle on or off (TurnSolver::ObserverIsolationScope; Bruna seed
     // 30003487 gi3487 won T4 on / T5 off before it).
     TurnSolver::ObserverIsolationScope isolate;
+    OppKeyScope opp_keyed(1);
     std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(state, is_pre_combat);
     const std::size_t cap = MaxPlans() > 0 ? static_cast<std::size_t>(MaxPlans()) : plans.size();
     if (plans.size() > cap)
@@ -3947,6 +3994,7 @@ LineAudit AuditLine(const GameState& state, bool pre, const TurnSolver::Plan& pl
     ComboOffApplyPause co_quiet;
     RevealLogPause     quiet;
     TurnSolver::ObserverIsolationScope isolate;   // a validation leaves the engine's caches as it found them
+    OppKeyScope opp_keyed(1);
     struct CapScope
     {
         int saved;
