@@ -10,20 +10,58 @@ Worktree: `/workspaces/MagicDeckTester/.claude/worktrees/agent-a9dab9fbcae918660
 origin/phase-1-2-deck-analyzer 980616e55. Scratch: `/workspaces/MagicDeckTester/build/scratch/mcdragons/`. Helper
 scripts (gitignored): `logs/mcdragons/{mk.py,gate.sh,batch.sh,repro.sh,abrep.py,scprobe.sh}`.
 
-## READ FIRST: Successor 8 (2026-11-04, checkpoint)
-Scratch `build/scratch/mcdragons8/`. Binaries: p9 (in-place rec[1] find + digest board hash), p10 (+ arm fold cached),
-p11 (+ per-stage priced-probe stats `stage(entered/probes)` + UNCHARGED fail-memo entries do not bind/bump).
-HINATA INSTRUCTIONS (perf stat instructions:u, MTG_PGO=0, 3 games seed 1870011 gi10): off 40.87 G; p8 52.28; p9 51.68;
-p10 51.00. PER GAME (gi12..21, p10, `mcdragons8/pg/`): the +25% is NOT LR's own cost -- games whose tree is unchanged
-(m1/bp computation counts equal) cost +1.0% / +2.6% (gi11 +2.2%: off 11.92, p8 12.21, p10 12.18 G); the excess sits in
-games whose tree changed: gi12 +49% (fired 20, memo_hit 196k), gi18 +139% (fired 3,683; bp-cont computations 4,033 ->
-8,386, hits_served_as_misses 10,309, unstorable 784 -- every fail-memo hit was NoteEpochMemoHit, so bp entries bound
-to the epoch got re-derived next decision). p11's fix: a fail entry is CHARGED only if a priced probe ran / pass 2 was
-cut / it ran off the p1 memo; an uncharged hit or insert binds nothing (ManaPayment.cpp LineRepayMemo.fail is now
-key -> charged; fail_p1 is written only when pass 2 is then cut).
-FIVECOLOUR units +2.2%: caches equal on/off (20 games); LR's priced probes = 401 (~100 units) of ~10k units delta;
-fired 70 / 20 games -> the delta is search over re-paid lines. BRUNA +1.2%: p2_probes 23,575 (~5.9k units / 20 g)
-for found_p2=2 -- the priced pass 2 is the cost; p11 stage stats say which stage.
+## READ FIRST: Successor 8 (2026-11-04; stopped at the context cap -- successor 9 continues)
+Worktree head = the commit carrying this section (wip/mc-dragons, not pushed, no GT accepted). Scratch
+`build/scratch/mcdragons8/`. Binary under test = `mcdragons8/mtg.p11` / `mtg-test.p11` (= HEAD src).
+WHAT P9-P11 CHANGED (ManaPayment.cpp, LINE_REPAY only):
+  * p9 (exact): rec[1] found IN PLACE (PayRefineSnap Take -> LineRepayUndo -> LineRepayFind -> Restore) so a memo hit
+    copies no board; the undone RampScratch is built only past the memo. Digest = Finish(prefix, n, LineRepayDigestBoard)
+    with the board-wide fields hashed once per Find; Find hands the full digest to LineRepayMemoKey (no 2nd pass).
+  * p10 (exact): LineRepayArmFold caches the heurarm fold (memcmp against the last arm) -- the per-byte fold was half of
+    LineRepayTry's self instructions.
+  * p11: LineRepayMemo.fail is key -> CHARGED. Charged = a priced probe ran / cut / VERIFY / ran off the p1 memo
+    (PricedNote sets it; NoteFail reads it). An UNCHARGED hit does not NoteEpochMemoHit and its insert does not bump the
+    memo generation (a recompute anywhere runs the same unpriced stages to the same false, charging nothing). fail_p1 is
+    written only on the pass-2 CUT path (`p1_pending`). Stats: `stage(entered/probes) wf2/full1/full2`.
+MEASUREMENTS (perf stat instructions:u, MTG_PGO=0, single-thread):
+  * Hinata 3 games (seed 1870011 gi10): off 40.87 G; p8 52.28; p9 51.68; p10 51.00 (p11 not re-run on this sample).
+  * Hinata per game gi12..21 (`mcdragons8/pg/`, off = p10 LR off): ALL p10 +21.7% -> p11 +8.0%. Same-tree games
+    +1.0..2.6% (gi11 +2.2%). Excess sits in games whose tree changes: gi12 +49% -> +19% (136k tries, 125k memo hits:
+    residual = per-try MidTurnStateKeyOf ~11k instr + 12.8k fruitless priced probes, full1 1,190 entries), gi18 +139% ->
+    +30% (bp-cont computations 4,033 / 8,386 p10 / 4,924 p11; hits_served_as_misses 10,309 -> 2,326; the rest is ok_p2
+    hits = genuinely budget-bound successes, found_p2 242).
+  * Same outcome on all 10 games p10 = p11; MTG_BP_ENUM_VERIFY on gi12/18/20 with p11: 76,517 hits, CONTENT-DIFF 0.
+  * Unit suite p11: 2,436/2,436 (`mcdragons8/ut11.log`).
+  * IDENTITY p11 (`mcdragons8/id11/plain.out`, 4 threads) vs p7 (`mcdragons7/id7/plain.out`, 1 thread): 20/20 digests
+    equal; 8 jobs differ by 1-59 UNITS. Suspect: the LINE_REPAY record ring (t_lr_ring) is NEVER cleared between games, so
+    a record from an earlier game on the same thread can match (same TurnSeq/digest) -> units depend on thread history.
+    Single-thread p11 re-run RUNNING (`mcdragons8/id11s/plain.out`, ~45 min from 03:40 UTC; parent shell pid 2968600):
+    if its units equal p7's exactly, p9-p11 are exact and the 4-thread diffs are the ring leak. FIX TO MAKE either way:
+    store `game_seed` in LineRepayRec, skip a record whose game_seed differs in LineRepayFind (determinism; may move play
+    slightly -- smoke will show).
+  * FiveColour units +2.2%: caches equal on/off; LR's own priced probes 401 (~100 units) of ~10k units delta per 20 games;
+    fired 70 -> the delta is search over re-paid lines (justified). Bruna +1.2%: priced pass 2 = 23,575 probes / 20 games
+    (~5.9k units, ~2% of units) for found_p2 = 2; by stage wf2 546/5,560, full1 671/13,485, full2 125/4,530 -- full1 (the
+    full table at depth 1: Sol Ring / Wild Growth leftover splits) is the cost; a sound fold of symmetric leftover splits
+    is the trim lever (not attempted).
+A/B ab7 (p7; STILL RUNNING, pid 2856514, `python3 mcdragons6/abrep.py mcdragons7/ab7`), at ~55%: net Angels 0, Bruna -1,
+Dragons -1, FiveColour -1, Goblins 0, Stompy 0, Melira 0, TreasureHunt 0, Colossus 0, Breaching 0, Alchemist 0 (750 g),
+EDF +2 (875 g, units 1.149!), Hinata +2 (1,200 g). Slower: bruna 539 (recovers d8 b0, succ 7), hinata 1021 6->7 and 1055
+5->7 (BOTH RECOVER at d8 b0 on p11: `mcdragons8/d8/nc0.out`), edf 323 3->4, edf 365 4->5 (d8 b0 NOT yet run).
+Hinata 1055 divergence: T1 Ponder keep/shuffle (off shuffles, on keeps) -- a search-evaluation difference, LR fired 364
+in that game; no payment on the line itself. Not root-caused.
+OPEN for successor 9, in order:
+  1. Wait for id11s; then add the game_seed ring guard (above), rebuild p12, rerun the id set 1-thread vs p11 (expect only
+     the leak-affected units to move).
+  2. When ab7 ends: EDF (+2, units +15%) and Hinata (+2) violate "net <= 0". Run d8 b0 (mkd8.py, nc0 then nc1 under
+     MTG_NC_SEARCH=1) for edf 323/365; get EDF LR stats (stage probes) on a 20-game sample -- EDF's units +15% is the
+     priority (EDF had the 45-min memo history). Consider re-running the EDF/Hinata/Bruna arms of the A/B on p12 (p11's
+     cache fix changes budgeted play only through charges; Hinata on p11 still reproduces 1021/1055).
+  3. Residual Hinata cost options (USER call; none exact AND cheap found): (a) SubsetPayableSequential verdict memo
+     across enumerator scopes -- pay census: 67% of SPS calls repeat an earlier identical question (285k of 424k, all
+     false), which would cut LR tries ~2/3 and also the OFF arm; engine-wide change. (b) a cheaper LR memo key than
+     TurnSolver::MidTurnStateKeyOf (needs a proof of what the payer reads). (c) Bruna/Hinata full1 split fold.
+  4. Then task 4 of the brief: smoke (THREADS=8), scoped regression, mana_clean gate slice on Dragons, squash.
 
 ## READ FIRST: Successor 7 (2026-11-04)
 Worktree head = the commit carrying this section (branch wip/mc-dragons; not pushed, no GT accepted). Scratch
