@@ -547,3 +547,18 @@ unpaired at x0/x28/x20/x14 -- all played). Win-turn delta vs x0 (+ = slower), wa
 - A/B rerun on the fixed build (build/Release from 4a8aba3fa): `run_pb.sh` -> `build/scratch/budget/pb.{log,err,txt}`,
   marker `pb.DONE`. The non-deterministic run's outputs moved to `build/scratch/budget/pb_nondet/`.
   Report: `python3 scripts/ab_x_report.py build/scratch/budget/pb`. R choice + any per-deck raise are the USER's.
+
+## RESULT 2026-11-04 ~03:05 UTC: priced-budget A/B on the DETERMINISTIC build (logs/budget/pb_report_v2.txt)
+Same manifest/arms as 01:04. Numbers reproduce the non-deterministic run almost exactly, so that table stood.
+| R (ns/unit)   | moved | better/worse | summed delta | wall sum | p99   | p99.9 | max   | tail corpus sum/max |
+| off (x0)      |   -   |      -       |      -       | 11601 s  | 6.6 s | 27.9 s| 90 s  | 1640 s / 312 s      |
+| 28300 (x28)   |  56   |   28 / 28    |     -2       | 11527 s  | 6.2 s | 31.5 s| 97 s  | 1277 s / 272 s      |
+| 20000 (x20)   |  85   |    9 / 76    |    +76       | 10021 s  | 5.4 s | 26.3 s| 93 s  | 1000 s / 174 s      |
+| 14150 (x14)   | 162   |   21 / 141   |   +136       |  8837 s  | 4.6 s | 21.4 s| 71 s  |  877 s / 160 s      |
+- x28 per deck: kittyv3 +6 (0 better/6 worse), edf +3, niv +3, alchemist/dragonstorm/hinata/2hg singles +1;
+  cyclone -10 (13 better / 4 worse), goblins -4, landfall -2. x28 is a REDISTRIBUTION (heavy-per-unit decks lose
+  search, cheap ones gain), quality-neutral in sum; it barely moves the held-out tail (Cyclone's). Tail corpus -22%,
+  but fungusB_2hg gi4525 grew 149 -> 272 s (t6 -> t7): a cheap-per-unit deck given more search.
+- DECISION OWED BY THE USER: R, and any per-deck budget raise (kittyv3 first). Default taken meanwhile: priced budget
+  stays OFF on the branch (nothing ships until the USER picks); work continues on the pooled bottoming budget.
+
