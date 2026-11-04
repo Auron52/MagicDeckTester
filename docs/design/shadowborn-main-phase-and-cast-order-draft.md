@@ -92,7 +92,7 @@ that perhaps it would make sense to play this a bit differently and do most thin
 cases main 1 is required are: 1. Sacrifice for Jetmir when you have attackers. 2. Drop a bunch of shadowborns
 off Thrumming stone to enable 1. (note that this must not sacrifice all of the attackers) What it really comes
 down to is that you don't need to do it main 1 unless you are deploying Jetmir with current-turn attackers. If
-you aren't, then you do it main 2 instead."* and *"(or I guess if Jetmir is already out)"*.
+you aren't, then you do it main 2 instead."* and *"(or I guess if Jetmir is already out)"* *"Getting more Shadowborns to pump up his effect."* *"(would be a main 1 play)"*.
 
 **The rule.** A main-1 plan (beyond the land drop) is admitted only on a **Jetmir turn**: this turn has
 attack-ready creatures AND either (a) the plan deploys Jetmir (the Apostle activation), with at least one
