@@ -626,3 +626,8 @@ Same manifest/arms as 01:04. Numbers reproduce the non-deterministic run almost 
   b1: X30 0.92x +10, X10 0.70x +48 | b3: X30 0.92x +1 (hinata max 27.4 -> 13.5 s), X10 0.82x +17.
   X30 at b3 ~free; earlier play-budget tail corpus found X30 lossy (kittyv2arch gi1723 4->6) -> low-budget-only = USER.
 - RUNNING: c40_ab.json -- all 40 decks, b1/b3, X100 vs X30, 200 games -> c40.*, c40.DONE.
+- C40 (all 40 complete decks, 200 games, X30 vs X100, priced budget off): b1 0.93x wall, p99.9 7.9 -> 5.8 s, max 14.9 ->
+  12.5, dq +3 (3/5 of 7,971); b3 0.95x, p99.9 12.7 -> 10.3, max 26.4 -> 20.6, dq +3 (0/3 of 7,983). Modest.
+- OPEN, ALL USER CALLS: (1) build-in shape for per-deck R (fit table in the profile vs derived in-engine); (2) Snow 0.7x /
+  Selesnya v2 + Colossus 0.5x search; (3) a tighter priced ceiling (X30) at low budgets; (4) push the tier-neutral
+  increment (refit + determinism fixes) to the shared branch now or with the feature.
