@@ -131,6 +131,12 @@ unreachable at every budget, so it would fail the d8 b0 recovery bar, whatever i
 
 ## 2. Proposed full cast order (within a main phase)
 
+**USER RULING 2026-11-04:** *"It should be land -> Dark Ritual -> other spells."* Dark Ritual is cast right
+after the land drop, ahead of the Thrumming Stone and everything else. (This replaces ranks 1-2 below: the
+Stone-first rule with the rituals-first payable fallback becomes simply Ritual first; the rest of the order
+keeps its relative positions.) Earlier the same day: *"Casting the Dark Ritual early in a line is totally
+fine in my opinion. I sometimes cast it late, but that doesn't really matter at all."*
+
 | draft rank | card | change vs today | why |
 |---|---|---|---|
 | land | the land drop (Lake of the Dead: tap-first, a basic Swamp before Blood Crypt, as today) | none | Nothing in the deck wants to come before the land. P1 (only no-land plans dropped) is unchanged. |
@@ -163,9 +169,15 @@ Dropping them as well is what made the blunt "skip main 2" version lose 0.03-0.0
   main 1. Every Overlord fetch (s1, s3, s6, s9) was on a go-off turn whose board was mostly
   Apostles cast that turn, and each was followed by a Jetmir fetch in the same main. I did not check
   each one against the table's sick / attack test.
-- **Lake of the Dead crack** (`SacForMana`) and **Lotus Bloom's sacrifice for mana**: both mains.
-  In main 2 they can only pay the activation's {B} (and a main-2 Intent or Culling).
-- **The land drop**: both mains, unchanged.
+- **Lake of the Dead crack** (`SacForMana`) and **Lotus Bloom's sacrifice for mana**: **USER RULING
+  2026-11-04:** *"Lotus bloom should be sacrificed on demand by the mana system. not a direct activation."*
+  So Lotus Bloom stops being a plan action (today `SacForMana` with one variant per colour) and becomes a
+  mana source the payer sacrifices only when a cost needs it (three of one colour). Same principle as the
+  USER's Lake ruling (*"it should not be sacrificing the land unless we need it"*); both are being built
+  together on branch `sb-lakeprof`.
+- **The land drop**: **USER RULING 2026-11-04:** *"Land drop should happen main 1 unless we searched it up
+  in main 2."* Main 1 only, except a land that entered the hand during main 2 (fetched by a main-2 tutor)
+  may be played in main 2 if the land drop is still unused.
 - **Implementation shape (for whoever builds it, after your answers):** use
   `ShadowbornProvider::RestrictsCollectedActions` / `CollectedActionAllowed(s, a, is_pre_combat)`,
   the Vampires precedent. When `!is_pre_combat`, drop `CastFromHand` of every card in the table above
