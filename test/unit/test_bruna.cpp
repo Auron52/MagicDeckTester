@@ -177,6 +177,32 @@ TEST_CASE("Bruna: one-colour burst -- a lone Sage cannot pay {W}{U} (three of ON
     CHECK(TapForCostShared(b.s, ww, /*for_creature=*/true, nullptr, true));
 }
 
+TEST_CASE("Bruna: the Sage's burst takes the colour the line's unrestricted sources are short of (MTG_PAY_BURST_LEAD)")
+{
+    // Seed 30000131 gi131 T4 {Bruna, Arcanum Wings}: WUBRG pip order tapped the Sage for {W}{W}{W}, the blue source
+    // paid Bruna's {U}, and Wings' {1}{U} had no blue left. Sage {U}{U}{U} + Remote Farm {W}{W} + a Forest pay Bruna
+    // and leave the Island and the other Forest for Wings. (A {W} Sage strands Wings on every tap order: the Island
+    // pays Bruna's {U}.) A board without a bounce land: this API does not commit a payment's leftover to the pool.
+    BoardBr b;
+    b.Put("Somberwald Sage");
+    b.Put("Remote Farm");
+    b.Put("Forest");
+    b.Put("Forest");
+    b.Put("Island");
+    ManaCost bruna; bruna.generic = 3; bruna.white = 2; bruna.blue = 1;
+    ManaCost wings; wings.generic = 1; wings.blue = 1;
+    ManaCost line = bruna;
+    AddManaCost(line, wings);
+    {
+        LineUnpaidCostScope hold(line);
+        REQUIRE(TapForCostShared(b.s, bruna, /*for_creature=*/true, nullptr, true));
+    }
+    {
+        LineUnpaidCostScope hold(wings);
+        CHECK(TapForCostShared(b.s, wings, /*for_creature=*/false, nullptr, true));
+    }
+}
+
 TEST_CASE("Bruna: the gather dominance collapse -- one subset, or take/skip for Almost Perfect only")
 {
     BoardBr b;

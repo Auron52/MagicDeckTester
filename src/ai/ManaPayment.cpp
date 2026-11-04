@@ -3438,16 +3438,116 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                      state.floating_mana.white, state.floating_mana.blue, state.floating_mana.black,
                      state.floating_mana.red, state.floating_mana.green, state.floating_mana.colorless,
                      state.floating_mana.wild); } };
+    // THE BURST'S LEAD COLOUR (MTG_PAY_BURST_LEAD, default ON). A creature payment taps a creature-only ONE-COLOUR
+    // burst (Somberwald Sage: "three mana of any one color", rank -500 above) for the FIRST coloured pip the greedy
+    // reaches, so WUBRG order made it white whatever the board: Bruna seed 30000131 gi131 T4 {Bruna, Arcanum Wings}
+    // tapped the Sage for {W}{W}{W}, the Chancery's {U} went to Bruna's {U}, and Wings' {1}{U} found no blue -- where
+    // Sage {U}{U}{U} + Remote Farm's {W}{W} pay Bruna and leave the Chancery for Wings (70 of 225 slice APPLY-DROPs
+    // pay through a non-white Sage). So the colour the burst makes is picked here, by the one question it decides:
+    // which of this payment's colours are the UNRESTRICTED sources shortest of, counting this payment's own pips and
+    // what the rest of the line owes (LineOwedAfterOwnPips)? A colour is taken only when its shortfall is strictly
+    // below the default's, so a board where the choice moves nothing pays as before. Pip ORDER only: the same pips
+    // are paid, the backtracker still runs on any failure, and no option is removed -- a mana-payment choice (the
+    // standing exemption). Returns the colour index to pay first, or -1 for the historical order.
+    auto burst_lead = [&]() -> int
+    {
+        if (!for_creature || !PayBurstLeadOn() || !CreatureOnlyFirstEnabled()) { return -1; }
+        const int pips[5] = { cost.white, cost.blue, cost.black, cost.red, cost.green };
+        int first = -1, ncol = 0;
+        for (int c = 0; c < 5; ++c) { if (pips[c] > 0) { if (first < 0) { first = c; } ++ncol; } }
+        if (ncol < 2) { return -1; }
+        const Permanent* bsrc = nullptr;
+        const CardDefinition* bdef = nullptr;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != active || p.tapped) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d == nullptr || !d->params.creature_mana_only || !IsSingleColorBurstSource(*d)) { continue; }
+            if (!usable(p, *d)) { continue; }
+            if (d->card.IsCreature() && restricted_hold_ok && SacPayFodderCostsAttack(state, p)) { continue; }
+            bsrc = &p; bdef = d;
+            break;
+        }
+        if (bsrc == nullptr) { return -1; }
+        const int yield = std::max(1, PermanentManaYield(state, *bsrc, *bdef));
+        bool makes[5] = { false, false, false, false, false };
+        for (Color c : EffectiveProduces(state, active, *bdef))
+        { const int ci = static_cast<int>(c); if (ci >= 0 && ci < 5) { makes[ci] = true; } }
+        if (!makes[first]) { return -1; }
+        // Unrestricted supply per colour: the general float, then every untapped land / rock / ready dork whose mana
+        // any spell may spend (a bundle's units split across its colours, a mono source's all on its one).
+        // Two tallies: every such source, and the non-creature ones alone -- a dork the burst spares stays untapped
+        // (DOMINATED-CREATURE: Bruna {3}{W}{W}{U} off Forest, Remote Farm and a {U} Sage keeps Birds of Paradise up,
+        // where a {W} Sage needs Birds' {U}).
+        const ManaPool& fl = state.floating_mana;
+        int sup[5] = { fl.white + floating.white, fl.blue + floating.blue, fl.black + floating.black,
+                       fl.red + floating.red, fl.green + floating.green };
+        int sup_nc[5] = { sup[0], sup[1], sup[2], sup[3], sup[4] };
+        for (const Permanent& q : state.battlefield)
+        {
+            if (q.controller_index != active || q.tapped || &q == bsrc) { continue; }
+            const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+            if (qd == nullptr || qd->params.creature_mana_only || qd->params.colored_creature_only
+                || BigSpellOnlySource(qd->params)) { continue; }
+            const bool dork = qd->tmpl == CardTemplate::ManaDork && CanTapNow(q, state.battlefield);
+            if (!dork && !q.card.IsLand() && !qd->params.mana_rock) { continue; }
+            int seen = 0, n = 0;
+            const std::vector<Color>& qp = EffectiveProduces(state, active, *qd);
+            for (Color c : qp)
+            { const int ci = static_cast<int>(c); if (ci >= 0 && ci < 5 && !(seen & (1 << ci))) { seen |= 1 << ci; ++n; } }
+            if (n == 0) { continue; }
+            const int amt  = std::max(1, ManaProducedPerTap(*qd));
+            const int each = n == 1 ? amt : std::max(1, amt / n);
+            for (int ci = 0; ci < 5; ++ci)
+            { if (seen & (1 << ci)) { sup[ci] += each; if (!dork) { sup_nc[ci] += each; } } }
+        }
+        int later[5];
+        LineOwedAfterOwnPips(later);
+        // (shortfall against every source) first, (shortfall against the non-creature sources) to break its ties.
+        auto shortfall = [&](int lead) -> int
+        {
+            int s = 0, s_nc = 0;
+            for (int k = 0; k < 5; ++k)
+            {
+                const int d = pips[k] - (k == lead ? std::min(yield, pips[k]) : 0) + later[k];
+                s += std::max(0, d - sup[k]);
+                s_nc += std::max(0, d - sup_nc[k]);
+            }
+            return s * 64 + std::min(s_nc, 63);
+        };
+        int best = first, best_s = shortfall(first);
+        for (int c = first + 1; c < 5; ++c)
+        {
+            if (pips[c] <= 0 || !makes[c]) { continue; }
+            const int s = shortfall(c);
+            if (s < best_s) { best = c; best_s = s; }
+        }
+        return best == first ? -1 : best;
+    };
     auto greedy = [&]() -> bool
     {
         nd_left[0] = cost.white; nd_left[1] = cost.blue;  nd_left[2] = cost.black;     nd_left[3] = cost.red;
         nd_left[4] = cost.green; nd_left[5] = cost.colorless; nd_left[6] = cost.generic;
-        // Pay coloured requirements first (most restrictive), then generic.
-        for (int i = 0; i < cost.white;     ++i) { if (!pay(Color::White,     false)) return false; }
-        for (int i = 0; i < cost.blue;      ++i) { if (!pay(Color::Blue,      false)) return false; }
-        for (int i = 0; i < cost.black;     ++i) { if (!pay(Color::Black,     false)) return false; }
-        for (int i = 0; i < cost.red;       ++i) { if (!pay(Color::Red,       false)) return false; }
-        for (int i = 0; i < cost.green;     ++i) { if (!pay(Color::Green,     false)) return false; }
+        const int lead = burst_lead();
+        if (lead >= 0)
+        {
+            const int n = lead == 1 ? cost.blue : lead == 2 ? cost.black : lead == 3 ? cost.red : cost.green;
+            for (int i = 0; i < n; ++i) { if (!pay(static_cast<Color>(lead), false)) return false; }
+            for (int i = 0; i < cost.white; ++i) { if (!pay(Color::White, false)) return false; }
+            for (int i = 0; lead != 1 && i < cost.blue;  ++i) { if (!pay(Color::Blue,  false)) return false; }
+            for (int i = 0; lead != 2 && i < cost.black; ++i) { if (!pay(Color::Black, false)) return false; }
+            for (int i = 0; lead != 3 && i < cost.red;   ++i) { if (!pay(Color::Red,   false)) return false; }
+            for (int i = 0; lead != 4 && i < cost.green; ++i) { if (!pay(Color::Green, false)) return false; }
+        }
+        else
+        {
+            // Pay coloured requirements first (most restrictive), then generic.
+            for (int i = 0; i < cost.white;     ++i) { if (!pay(Color::White,     false)) return false; }
+            for (int i = 0; i < cost.blue;      ++i) { if (!pay(Color::Blue,      false)) return false; }
+            for (int i = 0; i < cost.black;     ++i) { if (!pay(Color::Black,     false)) return false; }
+            for (int i = 0; i < cost.red;       ++i) { if (!pay(Color::Red,       false)) return false; }
+            for (int i = 0; i < cost.green;     ++i) { if (!pay(Color::Green,     false)) return false; }
+        }
         for (int i = 0; i < cost.colorless; ++i) { if (!pay(Color::Colorless, false)) return false; }
         // {S} pips are baked into `generic` (ManaCost::snow_pips); under STRICT snow payment
         // (mixed manabase -- see the scope above) settle them FIRST among the generic pips,

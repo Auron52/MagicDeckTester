@@ -619,6 +619,16 @@ inline bool PayCcoLineReserveOn()
     return env_on;
 }
 
+// MTG_PAY_BURST_LEAD (2026-11-04; DEFAULT ON, =0 -> the greedy's WUBRG pip order): a creature payment that will tap a
+// creature-only ONE-COLOUR burst source first (Somberwald Sage, the restricted-first rank) pays the colour that burst
+// should make first, so the burst lands on the colour the UNRESTRICTED sources are shortest of for this payment and the
+// rest of the line. Pip order only. See the greedy in TapForCostSharedOnceImpl (ManaPayment.cpp).
+inline bool PayBurstLeadOn()
+{
+    static const bool env_on = EnvOn("MTG_PAY_BURST_LEAD", true);
+    return env_on;
+}
+
 inline bool PayNarrowRestrictedFirstOn()
 {
     static const bool env_on = EnvOn("MTG_PAY_NARROW_RESTRICTED_FIRST", true);
