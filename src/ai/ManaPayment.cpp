@@ -8558,6 +8558,7 @@ bool manaoracle::ScriptedPay(GameState& state, const ManaCost& cost_in, bool for
         if (h.f_has_spell) { h.f_spell = *PayingSpellCard(); }
         h.f_has_ability_src = PayingAbilitySource() != nullptr;
         if (h.f_has_ability_src) { h.f_ability_src = *PayingAbilitySource(); }
+        h.f_sac_victim = g_pay_sac_victim;
         return false;
     }
     const PayOption& opt = h.script[h.next++];
@@ -8567,6 +8568,19 @@ bool manaoracle::ScriptedPay(GameState& state, const ManaCost& cost_in, bool for
     {
         const TurnSolver::PreTap& t = opt.taps[i];
         const bool restricted = i < opt.creature_route.size() && opt.creature_route[i] != 0;
+        for (const Permanent& sp : state.battlefield)
+        {
+            if (sp.card.m_number != t.num || sp.tapped) { continue; }
+            const CardDefinition* sd = CardDatabase::Instance().LookupCached(sp.card);
+            if (sd == nullptr || !IsScaledManaDork(*sd) || sd->params.mana_per_life_gained) { break; }
+            for (const Permanent& q : state.battlefield)
+            {
+                if (!sd->params.mana_per_creature_count_all && q.controller_index != sp.controller_index) { continue; }
+                if (q.card.IsCreature() && CardHasSubtype(q.card, sd->params.mana_per_creature_subtype))
+                { h.scaled_counted.push_back(q.card.m_number); }
+            }
+            break;
+        }
         const std::string why = restricted ? OracleCreatureTap(state, t) : ApplyEnginePreTap(state, t);
         if (!why.empty()) { h.ended = true; h.tap_error = why; return false; }
         h.tapped_by_script.push_back(t.num);

@@ -1121,3 +1121,28 @@ TEST_CASE("route tape: a link is ApplyPlan, recorded only while the oracle's tap
     CHECK(tape.links.size() == 1);
     manaoracle::t_route_tape = nullptr;
 }
+
+// The tap-ahead table (MTG_ORACLE_SCALED_AHEAD): while a cast's additional cost sacrifices an Elf, every scaled dork
+// that counts it taps for one more BEFORE the sacrifice than after, and the surplus floats for the main's later casts.
+// The plain table offers a paying set plus at most ONE further tap (ExtendSurplus) -- and every count of one class
+// (the DFS), so two Priests beside Archdruid is already there. What it never offers is further taps of two DIFFERENT
+// scaled classes beside a paying set: {Forest, Forest} paying Natural Order's {G}{G}-part with BOTH Archdruid and
+// Priest tapped ahead of Elvish Mystic's sacrifice (three Elves each, six floating, where after the sacrifice they make
+// two each). That is the table a re-pay of the earlier payment needs (handoff-stompy-mana.md, LINE_REPAY section).
+TEST_CASE("mana oracle: scaled dorks counting the sacrifice victim can all tap ahead of the sacrifice")
+{
+    EnsureOracleCards();
+    GameState s = Board({ "Forest", "Forest", "Elvish Mystic", "Elvish Archdruid", "Priest of Titania" });
+    const int victim = s.battlefield[2].card.m_number;
+    const std::vector<std::string> both = { "Forest:G", "Forest:G", "Elvish Archdruid:G", "Priest of Titania:G" };
+    const auto plain = manaoracle::MinimalPayments(s, Cost(0, 0, 0, 0, 0, 2), false, nullptr);
+    const auto ahead = manaoracle::MinimalPayments(s, Cost(0, 0, 0, 0, 0, 2), false, nullptr, false, false, nullptr, nullptr,
+                                                   victim);
+    CHECK_FALSE(HasOption(plain, both));
+    CHECK(HasOption(ahead, both));
+    // A victim no scaled dork counts (not an Elf) adds nothing.
+    GameState t = Board({ "Forest", "Forest", "Craterhoof Behemoth", "Elvish Archdruid", "Priest of Titania" });
+    const auto none = manaoracle::MinimalPayments(t, Cost(0, 0, 0, 0, 0, 2), false, nullptr, false, false, nullptr, nullptr,
+                                                  t.battlefield[2].card.m_number);
+    CHECK(none.size() == manaoracle::MinimalPayments(t, Cost(0, 0, 0, 0, 0, 2), false, nullptr).size());
+}

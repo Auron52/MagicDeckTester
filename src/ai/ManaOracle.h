@@ -87,10 +87,17 @@ namespace manaoracle
         // apply Smokebraider's ability half ("...or activate abilities of Elementals": SubtypeAbilityManaOk).
         bool                   f_has_ability_src = false;
         Card                   f_ability_src;
+        // The creature the paid-for cast sacrifices as an additional cost (g_pay_sac_victim; 0 = none), so the table
+        // can tap a scaled dork that counts it AHEAD of the sacrifice (ManaOracle.cpp, ExtendScaledAhead).
+        int                    f_sac_victim = 0;
         int                    f_tapahead = 0;          // > 0: the frontier is a TAP-AHEAD (up to N sources)
         bool                   f_lands_only = true;     // ...of lands only (an ETB "untap N lands")
         // Every newly tapped mana source the script tapped (Card::m_number), for the unscripted-tap check.
         std::vector<int>       tapped_by_script;
+        // Every creature (Card::m_number) a SCALED dork the script tapped was counting at its tap (Priest of
+        // Titania's Elves), so a yield raised by a card the plan took off the library's top is hidden information
+        // (ManaOracle.cpp, BoostedByHiddenCard).
+        std::vector<int>       scaled_counted;
         // Past the script's end, keep making ENGINE steps instead of stopping at a frontier: the pure
         // replay of the engine's own line, whose first failing step the census measures from.
         bool                   all_engine = false;
@@ -251,7 +258,7 @@ namespace manaoracle
     std::vector<PayOption> MinimalPayments(const GameState& state, const ManaCost& cost, bool for_creature,
                                            std::vector<std::string>* unmodeled, bool creature_ability = false,
                                            bool whole_float = false, const Card* spell = nullptr,
-                                           const Card* ability_src = nullptr);
+                                           const Card* ability_src = nullptr, int sac_victim = 0);
 
     // PAY REFINE (MTG_PAY_REFINE; TapForCostShared, ManaPayment.cpp). `pre` / `post`: the board before and after
     // ONE outermost payment of `cost` the engine just made. Returns true and `out` = the payment to make instead

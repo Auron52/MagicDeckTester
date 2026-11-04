@@ -1274,6 +1274,9 @@ struct PayEnum
     // `out` they would have gone) instead of being verified at once -- see RefinePaymentImpl.
     struct Slot { std::vector<Pick> picks; std::size_t pos; };
     std::vector<Slot>*              defer = nullptr;
+    // SCALED TAP-AHEAD BEFORE A SACRIFICE (see ScaledAheadClasses): classes of untapped scaled dorks whose count
+    // includes the creature this payment's cast is about to sacrifice, each with the face that taps it.
+    std::vector<Pick>               ahead;
 
     PayOption Build(const std::vector<Pick>& picks) const
     {
@@ -1451,6 +1454,43 @@ struct PayEnum
         }
     }
 
+    // A paying set, extended with ANY number of further taps of the scaled dorks in `ahead` (every count vector
+    // over their remaining copies; one extra tap is ExtendSurplus's, so two or more). Each such tap's yield drops
+    // by one the moment the cast's additional cost sacrifices a creature it counts, so tapping it NOW, while this
+    // payment is made, floats more than any later payment can draw from it -- and mana floats until the phase
+    // ends (CR 106.4), so a later cast of the same main spends it. StompySurprise mana-clean pass 1, seed
+    // 30004080 T4 {Natural Order + Terastodon}: the engine's joint prepay taps Archdruid AND both Priests (four
+    // Elves each) before Natural Order eats the Archdruid, so Terastodon's {6}{G}{G} comes off the float and
+    // Elvish Mystic stays up; the oracle offered Archdruid alone or one tap more, never both Priests, and could
+    // not reproduce the engine's outcome (ORACLE-GAP). Audit-only: the table is the oracle's own.
+    void ExtendScaledAhead()
+    {
+        if (ahead.empty() || whole_float) { return; }
+        std::vector<int> avail(ahead.size()), k(ahead.size(), 0);
+        for (std::size_t i = 0; i < ahead.size(); ++i)
+        {
+            avail[i] = static_cast<int>(srcs[static_cast<std::size_t>(ahead[i].cls)].nums.size())
+                     - UsedCopies(ahead[i].cls);
+        }
+        std::function<void(std::size_t, int)> rec = [&](std::size_t i, int sum)
+        {
+            if (capped) { return; }
+            if (i == ahead.size())
+            {
+                if (sum < 2) { return; }
+                const std::size_t mark = cur.size();
+                for (std::size_t j = 0; j < ahead.size(); ++j)
+                { for (int q = 0; q < k[j]; ++q) { cur.push_back(ahead[j]); } }
+                t_trc_site = 2; Verify(cur); t_trc_site = 0;
+                cur.resize(mark);
+                return;
+            }
+            for (int v = 0; v <= avail[i] && !capped; ++v) { k[i] = v; rec(i + 1, sum + v); }
+            k[i] = 0;
+        };
+        rec(0, 0);
+    }
+
     // Add fed conversions to a paying set, one at a time, classes from `from` on.
     void ExtendFed(std::size_t from)
     {
@@ -1474,7 +1514,7 @@ struct PayEnum
     void Dfs(std::size_t ci, const int col[6], int total)
     {
         if (capped) { return; }
-        if (MaybeCovers(col, total, cost) && Verify(cur)) { ExtendFed(0); ExtendSurplus(); return; }
+        if (MaybeCovers(col, total, cost) && Verify(cur)) { ExtendFed(0); ExtendSurplus(); ExtendScaledAhead(); return; }
         if (ci >= srcs.size()) { return; }
         if (total + suffix_max[ci] < cost.ManaValue()) { return; }
         Dfs(ci + 1, col, total);   // skip this class...
@@ -1543,9 +1583,46 @@ std::vector<PayOption> StashChoices(const GameState& s, std::vector<std::string>
 
 } // namespace
 
+// The `ahead` classes of PayEnum::ExtendScaledAhead: every source class whose copies are untapped scaled dorks
+// (Priest of Titania, Elvish Archdruid) counting `victim` -- the creature (Card::m_number) the paid-for cast
+// sacrifices as an additional cost (g_pay_sac_victim at the frontier) -- each with its largest unfed face.
+std::vector<Pick> ScaledAheadClasses(const GameState& state, const std::vector<SrcClass>& srcs, int victim)
+{
+    std::vector<Pick> out;
+    if (victim <= 0) { return out; }
+    const int a = state.active_player_index;
+    const Permanent* vp = nullptr;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.card.m_number == victim && p.controller_index == a && p.card.IsCreature()) { vp = &p; break; }
+    }
+    if (vp == nullptr) { return out; }
+    for (std::size_t c = 0; c < srcs.size(); ++c)
+    {
+        const SrcClass& sc = srcs[c];
+        if (sc.land || sc.nums.empty()) { continue; }
+        const Permanent* sp = nullptr;
+        for (const Permanent& p : state.battlefield) { if (p.card.m_number == sc.nums[0]) { sp = &p; break; } }
+        if (sp == nullptr) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(sp->card);
+        if (d == nullptr || !IsScaledManaDork(*d) || d->params.mana_per_life_gained) { continue; }
+        if (!d->params.mana_per_creature_count_all && vp->controller_index != sp->controller_index) { continue; }
+        if (!CardHasSubtype(vp->card, d->params.mana_per_creature_subtype)) { continue; }
+        int best = -1;
+        for (std::size_t fi = 0; fi < sc.faces.size(); ++fi)
+        {
+            if (sc.faces[fi].fed) { continue; }
+            if (best < 0 || sc.faces[fi].net > sc.faces[static_cast<std::size_t>(best)].net) { best = static_cast<int>(fi); }
+        }
+        if (best >= 0 && sc.faces[static_cast<std::size_t>(best)].net >= 2)
+        { out.push_back({ static_cast<int>(c), best }); }
+    }
+    return out;
+}
+
 std::vector<PayOption> MinimalPayments(const GameState& state, const ManaCost& cost, bool for_creature,
                                        std::vector<std::string>* unmodeled, bool creature_ability, bool whole_float,
-                                       const Card* spell, const Card* ability_src)
+                                       const Card* spell, const Card* ability_src, int sac_victim)
 {
     // The payment's context, as the frontier saw it: a creature's activated ability being paid (the
     // Secluded Courtyard clause), the spell being paid for (a subtype restriction). Replayed around every
@@ -1601,6 +1678,9 @@ std::vector<PayOption> MinimalPayments(const GameState& state, const ManaCost& c
         if (wild > 0) { for (int c = 0; c < 5; ++c) { col[c] += wild; } }
         PayEnum pe{ state, cost, for_creature, srcs, suffix_max, st, seen, out };
         pe.whole_float = whole_float;
+        // MTG_ORACLE_SCALED_AHEAD (DEFAULT ON; =0 the one-extra-tap table alone): audit-only, see ExtendScaledAhead.
+        static const bool s_ahead = EnvOn("MTG_ORACLE_SCALED_AHEAD", true);
+        if (!whole_float && s_ahead) { pe.ahead = ScaledAheadClasses(state, srcs, sac_victim); }
         pe.Dfs(0, col, total);
         if (pe.capped && unmodeled != nullptr) { unmodeled->push_back("payment enumeration capped"); }
     }
@@ -2082,6 +2162,7 @@ struct Outcome
     std::string                line;        // LineKey
     std::vector<PayOption>     script;
     std::vector<int>           pay_steps;   // Hook::pay_steps: the human-sequence step of each payment
+    std::vector<int>           scaled_counted;   // Hook::scaled_counted
     std::string                unscripted;  // a mana source the ENGINE tapped outside any payment
     int                        first_fail = -1;  // the first ENGINE step that failed (the census replay)
     // No drop reported: the engine-comparable sense (an optional payment with no option fails the same
@@ -2191,6 +2272,7 @@ struct FrontierRec
     Card                   spell;
     bool                   has_ability_src = false;   // the ability's source (Hook::f_ability_src)
     Card                   ability_src;
+    int                    sac_victim = 0;      // Hook::f_sac_victim
 };
 
 // Apply `plan` to a copy of `root` once per payment script, LAYERED by payment index: every script of
@@ -2287,6 +2369,7 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                 if (h.f_has_spell) { fr.spell = h.f_spell; }
                 fr.has_ability_src = h.f_has_ability_src;
                 if (h.f_has_ability_src) { fr.ability_src = h.f_ability_src; }
+                fr.sac_victim   = h.f_sac_victim;
                 fronts.push_back(std::move(fr));
                 continue;
             }
@@ -2295,6 +2378,7 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
             o.act_drops  = std::move(act_drops);
             o.script     = script;
             o.pay_steps  = h.pay_steps;
+            o.scaled_counted = h.scaled_counted;
             o.first_fail = h.first_fail;
             o.left       = LeftHand(root, copy);
             o.line       = LineKey(root, copy);
@@ -2340,7 +2424,8 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                     ^ std::hash<std::string>{}(fronts[i].cost.ToString() + (fronts[i].for_creature ? "c" : "n")
                                                + (fronts[i].creature_ability ? "a" : "s")
                                                + "t" + std::to_string(fronts[i].tapahead)
-                                               + (fronts[i].has_spell ? "|" + fronts[i].spell.m_name.str() : ""));
+                                               + (fronts[i].has_spell ? "|" + fronts[i].spell.m_name.str() : "")
+                                               + "v" + std::to_string(fronts[i].sac_victim));
             res[i]  = Resources(fronts[i].st, /*with_float=*/true);
         }
         const std::vector<char> keep = ParetoKeep(keys, res);
@@ -2352,7 +2437,8 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
             std::vector<PayOption> opts = f.tapahead > 0
                 ? TapAheadOptions(f.st, f.tapahead, f.lands_only, &r.unmodeled)
                 : MinimalPayments(f.st, f.cost, f.for_creature, &r.unmodeled, f.creature_ability, /*whole_float=*/false,
-                                  f.has_spell ? &f.spell : nullptr, f.has_ability_src ? &f.ability_src : nullptr);
+                                  f.has_spell ? &f.spell : nullptr, f.has_ability_src ? &f.ability_src : nullptr,
+                                  f.sac_victim);
             g_options.fetch_add(static_cast<long long>(opts.size()), std::memory_order_relaxed);
             if (Level() >= 3 && (TraceTurn() == 0 || TraceTurn() == root.turn_number))
             {
@@ -2658,6 +2744,23 @@ bool TapsHiddenCard(const GameState& root, const Outcome& o, std::string* what)
     std::set<int> top;
     for (std::size_t i = 0; i < lib0.size() && still.count(lib0.RawAt(i).m_number) == 0; ++i)
     { top.insert(lib0.RawAt(i).m_number); }
+    // (MTG_ORACLE_HIDDEN_SCALED=0 also drops this run test.)
+    // A LOOK AT THE TOP N whose rest goes to the BOTTOM (Turntimber Symbiosis's seven) leaves the first looked-at card
+    // still in the library, so the run above stops at once. When the end library still STARTS with an unbroken run
+    // of the root library from some depth j (nothing shuffled it), every card above j was taken off the top: a draw,
+    // a reveal, a look -- never a search, which takes its card from inside the run and leaves the top in place.
+    {
+        static const bool s_run = EnvOn("MTG_ORACLE_HIDDEN_SCALED", true);
+        const std::size_t m = s_run ? std::min<std::size_t>(4, lib1.size()) : 0;
+        for (std::size_t j = 0; m > 0 && j + m <= lib0.size() && j < 64; ++j)
+        {
+            bool run = true;
+            for (std::size_t q = 0; q < m && run; ++q) { run = lib0.RawAt(j + q).m_number == lib1.RawAt(q).m_number; }
+            if (!run) { continue; }
+            for (std::size_t i = 0; i < j; ++i) { top.insert(lib0.RawAt(i).m_number); }
+            break;
+        }
+    }
     if (!top.empty() && LibraryTopVisible(root)) { top.erase(lib0.RawAt(0).m_number); }
     if (top.empty()) { return false; }
     for (const PayOption& p : o.script)
@@ -2668,6 +2771,24 @@ bool TapsHiddenCard(const GameState& root, const Outcome& o, std::string* what)
             if (what != nullptr) { *what = t.name + "#" + std::to_string(t.num); }
             return true;
         }
+    }
+    // ...or a SCALED dork's tap that COUNTED such a card (StompySurprise mana-clean pass 1, 302 of 459 ENUM-GAPs,
+    // seed 30008581 T4 {Craterhoof + Turntimber Symbiosis}): Turntimber Symbiosis puts a Priest of Titania off the
+    // top seven, and the other Priest then taps for one Elf more than the board held when the plan was chosen --
+    // Craterhoof's eighth mana is the hidden card's, exactly as if it had been tapped itself.
+    // MTG_ORACLE_HIDDEN_SCALED (DEFAULT ON; =0 only a tapped hidden card is hidden): audit-only.
+    static const bool s_hidden_scaled = EnvOn("MTG_ORACLE_HIDDEN_SCALED", true);
+    for (int n : o.scaled_counted)
+    {
+        if (!s_hidden_scaled) { break; }
+        if (top.count(n) == 0) { continue; }
+        if (what != nullptr)
+        {
+            std::string nm = "#" + std::to_string(n);
+            for (const Permanent& q : o.st.battlefield) { if (q.card.m_number == n) { nm = q.card.m_name.str() + nm; break; } }
+            *what = nm + " (counted by a scaled dork's tap)";
+        }
+        return true;
     }
     return false;
 }
