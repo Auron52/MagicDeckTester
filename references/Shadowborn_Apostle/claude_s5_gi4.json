@@ -1,0 +1,739 @@
+{
+  "seed": 5, "game_index": 4, "win_turn": 7, "won": true,
+  "mulligan": { "count": 0, "bottom": [] }, "karoo_float": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1, "spell_copy_id": 1,
+  "decisions": [
+    { "chosen": 1, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 9, "name": "Diabolic Intent" }, { "num": 2, "name": "Blood Crypt" }, { "num": 20, "name": "Reaper from the Abyss" }, { "num": 21, "name": "Shadowborn Apostle" }, { "num": 22, "name": "Shadowborn Apostle" }, { "num": 40, "name": "Swamp" }, { "num": 23, "name": "Shadowborn Apostle" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "cast_order": ["**", "land=Swamp", "cast=Shadowborn Apostle"], "decision": {
+  "decision_index": 1,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 1, "card": "Shadowborn Apostle" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 2, "name": "Blood Crypt", "cost": "", "mv": 0, "kind": "land" }, { "num": 9, "name": "Diabolic Intent", "cost": "{1}{B}", "mv": 2, "kind": "nonpermanent" }, { "num": 20, "name": "Reaper from the Abyss", "cost": "{3}{B}{B}{B}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 21, "name": "Shadowborn Apostle", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Shadowborn Apostle", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Shadowborn Apostle", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 24, "name": "Shadowborn Apostle", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 40, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Blood Crypt; cast: Shadowborn Apostle", "declared_order_payability": "not_verified", "land": "Blood Crypt", "casts": ["Shadowborn Apostle"], "actions": [{ "card": "Shadowborn Apostle" }] },
+    { "index": 1, "summary": "land=Swamp; cast: Shadowborn Apostle", "declared_order_payability": "not_verified", "land": "Swamp", "casts": ["Shadowborn Apostle"], "actions": [{ "card": "Shadowborn Apostle" }] },
+    { "index": 2, "summary": "land=Blood Crypt; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Blood Crypt", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Swamp; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Swamp", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 2,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Shadowborn Apostle", "idx": 5, "num": 21, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Swamp", "idx": 4, "num": 40, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 2, "name": "Blood Crypt", "cost": "", "mv": 0, "kind": "land" }, { "num": 9, "name": "Diabolic Intent", "cost": "{1}{B}", "mv": 2, "kind": "nonpermanent" }, { "num": 20, "name": "Reaper from the Abyss", "cost": "{3}{B}{B}{B}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Shadowborn Apostle", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Shadowborn Apostle", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 24, "name": "Shadowborn Apostle", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 3,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Shadowborn Apostle", "idx": 5, "num": 21, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Swamp", "idx": 4, "num": 40, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 2, "name": "Blood Crypt", "cost": "", "mv": 0, "kind": "land" }, { "num": 9, "name": "Diabolic Intent", "cost": "{1}{B}", "mv": 2, "kind": "nonpermanent" }, { "num": 20, "name": "Reaper from the Abyss", "cost": "{3}{B}{B}{B}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Shadowborn Apostle", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Shadowborn Apostle", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 24, "name": "Shadowborn Apostle", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 18, "cast_order": ["**", "land=Swamp", "cast=Diabolic Intent"], "decision": {
+  "decision_index": 4,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 2, "card": "Swamp" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Shadowborn Apostle", "idx": 5, "num": 21, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Swamp", "idx": 4, "num": 40, "is_land": true, "taps": "B" }], "vial_counters": [], "hand": [{ "num": 2, "name": "Blood Crypt", "cost": "", "mv": 0, "kind": "land" }, { "num": 9, "name": "Diabolic Intent", "cost": "{1}{B}", "mv": 2, "kind": "nonpermanent" }, { "num": 20, "name": "Reaper from the Abyss", "cost": "{3}{B}{B}{B}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Shadowborn Apostle", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Shadowborn Apostle", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 24, "name": "Shadowborn Apostle", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 41, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Blood Crypt; cast: Shadowborn Apostle, Shadowborn Apostle", "declared_order_payability": "not_verified", "land": "Blood Crypt", "casts": ["Shadowborn Apostle", "Shadowborn Apostle"], "cast_order_canonical": ["Shadowborn Apostle", "Shadowborn Apostle"], "actions": [{ "card": "Shadowborn Apostle" }, { "card": "Shadowborn Apostle" }] },
+    { "index": 1, "summary": "land=Swamp; cast: Shadowborn Apostle, Shadowborn Apostle", "declared_order_payability": "not_verified", "land": "Swamp", "casts": ["Shadowborn Apostle", "Shadowborn Apostle"], "cast_order_canonical": ["Shadowborn Apostle", "Shadowborn Apostle"], "actions": [{ "card": "Shadowborn Apostle" }, { "card": "Shadowborn Apostle" }] },
+    { "index": 2, "summary": "land=Blood Crypt; cast: Shadowborn Apostle", "declared_order_payability": "not_verified", "land": "Blood Crypt", "casts": ["Shadowborn Apostle"], "actions": [{ "card": "Shadowborn Apostle" }] },
+    { "index": 3, "summary": "land=Swamp; cast: Shadowborn Apostle", "declared_order_payability": "not_verified", "land": "Swamp", "casts": ["Shadowborn Apostle"], "actions": [{ "card": "Shadowborn Apostle" }] },
+    { "index": 4, "summary": "land=none; cast: Shadowborn Apostle", "declared_order_payability": "not_verified", "land": null, "casts": ["Shadowborn Apostle"], "actions": [{ "card": "Shadowborn Apostle" }] },
+    { "index": 5, "summary": "land=Blood Crypt; cast: Diabolic Intent → Thrumming Stone", "declared_order_payability": "not_verified", "land": "Blood Crypt", "casts": ["Diabolic Intent"], "actions": [{ "card": "Diabolic Intent", "tutor_target": "Thrumming Stone", "sac_victim": 21, "sac_victim_name": "Shadowborn Apostle" }] },
+    { "index": 18, "summary": "land=Swamp; cast: Diabolic Intent → Thrumming Stone", "declared_order_payability": "not_verified", "land": "Swamp", "casts": ["Diabolic Intent"], "actions": [{ "card": "Diabolic Intent", "tutor_target": "Thrumming Stone", "sac_victim": 21, "sac_victim_name": "Shadowborn Apostle" }] },
+    { "index": 31, "summary": "land=Blood Crypt; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Blood Crypt", "casts": [], "actions": [] },
+    { "index": 32, "summary": "land=Swamp; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Swamp", "casts": [], "actions": [] },
+    { "index": 33, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 24,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 5,
+  "type": "tutor_etb",
+  "source": "Diabolic Intent",
+  "turn": 2,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Swamp", "idx": 4, "num": 40, "tapped": true, "is_land": true }, { "name": "Swamp", "idx": 5, "num": 41, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 2, "name": "Blood Crypt", "cost": "", "mv": 0, "kind": "land" }, { "num": 20, "name": "Reaper from the Abyss", "cost": "{3}{B}{B}{B}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Shadowborn Apostle", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Shadowborn Apostle", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 24, "name": "Shadowborn Apostle", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": ["Shadowborn Apostle"], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "heuristic_default": 0,
+  "candidates": [{ "index": 0, "name": "Thrumming Stone" }, { "index": 1, "name": "Lake of the Dead" }, { "index": 2, "name": "Dark Ritual" }, { "index": 3, "name": "Shadowborn Apostle" }, { "index": 4, "name": "Swamp" }, { "index": 5, "name": "Culling the Weak" }, { "index": 6, "name": "Jetmir, Nexus of Revels" }, { "index": 7, "name": "Profane Tutor" }, { "index": 8, "name": "Demonic Tutor" }, { "index": 9, "name": "Lotus Bloom" }, { "index": 10, "name": "Diabolic Intent" }, { "index": 11, "name": "Sire of Insanity" }, { "index": 12, "name": "Abhorrent Overlord" }],
+  "note": "reply a candidate index to search that card up, or -1 to decline the optional search. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "reveals": [{ "turn": 2, "source": "Diabolic Intent (searched)", "cards": [{ "name": "Thrumming Stone", "disposition": "to hand" }] }],
+  "events": [{ "turn": 2, "kind": "sacrifice", "text": "🔪 Diabolic Intent -- sacrificed Shadowborn Apostle" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Swamp", "idx": 4, "num": 40, "tapped": true, "is_land": true }, { "name": "Swamp", "idx": 5, "num": 41, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 2, "name": "Blood Crypt", "cost": "", "mv": 0, "kind": "land" }, { "num": 20, "name": "Reaper from the Abyss", "cost": "{3}{B}{B}{B}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Shadowborn Apostle", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Shadowborn Apostle", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 24, "name": "Shadowborn Apostle", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Thrumming Stone", "cost": "{5}", "mv": 5, "kind": "permanent" }], "graveyard": ["Diabolic Intent", "Shadowborn Apostle"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 7,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Swamp", "idx": 4, "num": 40, "tapped": true, "is_land": true }, { "name": "Swamp", "idx": 5, "num": 41, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 2, "name": "Blood Crypt", "cost": "", "mv": 0, "kind": "land" }, { "num": 20, "name": "Reaper from the Abyss", "cost": "{3}{B}{B}{B}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Shadowborn Apostle", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Shadowborn Apostle", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 24, "name": "Shadowborn Apostle", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Thrumming Stone", "cost": "{5}", "mv": 5, "kind": "permanent" }], "graveyard": ["Diabolic Intent", "Shadowborn Apostle"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 3, "cast_order": ["**", "land=Blood Crypt", "cast=Shadowborn Apostle"], "decision": {
+  "decision_index": 8,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 3, "card": "Thrumming Stone" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Swamp", "idx": 4, "num": 40, "is_land": true, "taps": "B" }, { "name": "Swamp", "idx": 5, "num": 41, "is_land": true, "taps": "B" }], "vial_counters": [], "hand": [{ "num": 2, "name": "Blood Crypt", "cost": "", "mv": 0, "kind": "land" }, { "num": 20, "name": "Reaper from the Abyss", "cost": "{3}{B}{B}{B}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Shadowborn Apostle", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Shadowborn Apostle", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 24, "name": "Shadowborn Apostle", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Thrumming Stone", "cost": "{5}", "mv": 5, "kind": "permanent" }, { "num": 59, "name": "Thrumming Stone", "cost": "{5}", "mv": 5, "kind": "permanent" }], "graveyard": ["Diabolic Intent", "Shadowborn Apostle"], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Blood Crypt; cast: Shadowborn Apostle, Shadowborn Apostle, Shadowborn Apostle", "declared_order_payability": "not_verified", "land": "Blood Crypt", "casts": ["Shadowborn Apostle", "Shadowborn Apostle", "Shadowborn Apostle"], "cast_order_canonical": ["Shadowborn Apostle", "Shadowborn Apostle", "Shadowborn Apostle"], "actions": [{ "card": "Shadowborn Apostle" }, { "card": "Shadowborn Apostle" }, { "card": "Shadowborn Apostle" }] },
+    { "index": 1, "summary": "land=Blood Crypt; cast: Shadowborn Apostle, Shadowborn Apostle", "declared_order_payability": "not_verified", "land": "Blood Crypt", "casts": ["Shadowborn Apostle", "Shadowborn Apostle"], "cast_order_canonical": ["Shadowborn Apostle", "Shadowborn Apostle"], "actions": [{ "card": "Shadowborn Apostle" }, { "card": "Shadowborn Apostle" }] },
+    { "index": 2, "summary": "land=none; cast: Shadowborn Apostle, Shadowborn Apostle", "declared_order_payability": "not_verified", "land": null, "casts": ["Shadowborn Apostle", "Shadowborn Apostle"], "cast_order_canonical": ["Shadowborn Apostle", "Shadowborn Apostle"], "actions": [{ "card": "Shadowborn Apostle" }, { "card": "Shadowborn Apostle" }] },
+    { "index": 3, "summary": "land=Blood Crypt; cast: Shadowborn Apostle", "declared_order_payability": "not_verified", "land": "Blood Crypt", "casts": ["Shadowborn Apostle"], "actions": [{ "card": "Shadowborn Apostle" }] },
+    { "index": 4, "summary": "land=none; cast: Shadowborn Apostle", "declared_order_payability": "not_verified", "land": null, "casts": ["Shadowborn Apostle"], "actions": [{ "card": "Shadowborn Apostle" }] },
+    { "index": 5, "summary": "land=Blood Crypt; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Blood Crypt", "casts": [], "actions": [] },
+    { "index": 6, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 9,
+  "type": "land_entry",
+  "source": "Blood Crypt",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Swamp", "idx": 4, "num": 40, "is_land": true, "taps": "B" }, { "name": "Swamp", "idx": 5, "num": 41, "is_land": true, "taps": "B" }], "vial_counters": [], "hand": [{ "num": 2, "name": "Blood Crypt", "cost": "", "mv": 0, "kind": "land" }, { "num": 20, "name": "Reaper from the Abyss", "cost": "{3}{B}{B}{B}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Shadowborn Apostle", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Shadowborn Apostle", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 24, "name": "Shadowborn Apostle", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Thrumming Stone", "cost": "{5}", "mv": 5, "kind": "permanent" }, { "num": 59, "name": "Thrumming Stone", "cost": "{5}", "mv": 5, "kind": "permanent" }], "graveyard": ["Diabolic Intent", "Shadowborn Apostle"], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "pay_life": 2,
+  "reveal_types": [],
+  "heuristic_default": 1,
+  "note": "reply 1 to enter UNTAPPED (pay 2 life), or 0 to enter tapped. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 10,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Blood Crypt", "idx": 6, "num": 2, "is_land": true, "taps": "BR" }, { "name": "Shadowborn Apostle", "idx": 7, "num": 22, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Swamp", "idx": 4, "num": 40, "tapped": true, "is_land": true }, { "name": "Swamp", "idx": 5, "num": 41, "is_land": true, "taps": "B" }], "vial_counters": [], "hand": [{ "num": 20, "name": "Reaper from the Abyss", "cost": "{3}{B}{B}{B}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Shadowborn Apostle", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 24, "name": "Shadowborn Apostle", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Thrumming Stone", "cost": "{5}", "mv": 5, "kind": "permanent" }, { "num": 59, "name": "Thrumming Stone", "cost": "{5}", "mv": 5, "kind": "permanent" }], "graveyard": ["Diabolic Intent", "Shadowborn Apostle"], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Shadowborn Apostle, Shadowborn Apostle", "declared_order_payability": "not_verified", "land": null, "casts": ["Shadowborn Apostle", "Shadowborn Apostle"], "cast_order_canonical": ["Shadowborn Apostle", "Shadowborn Apostle"], "actions": [{ "card": "Shadowborn Apostle" }, { "card": "Shadowborn Apostle" }] },
+    { "index": 1, "summary": "land=none; cast: Shadowborn Apostle", "declared_order_payability": "not_verified", "land": null, "casts": ["Shadowborn Apostle"], "actions": [{ "card": "Shadowborn Apostle" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 11,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Blood Crypt", "idx": 6, "num": 2, "is_land": true, "taps": "BR" }, { "name": "Shadowborn Apostle", "idx": 7, "num": 22, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Swamp", "idx": 4, "num": 40, "tapped": true, "is_land": true }, { "name": "Swamp", "idx": 5, "num": 41, "is_land": true, "taps": "B" }], "vial_counters": [], "hand": [{ "num": 20, "name": "Reaper from the Abyss", "cost": "{3}{B}{B}{B}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Shadowborn Apostle", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 24, "name": "Shadowborn Apostle", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Thrumming Stone", "cost": "{5}", "mv": 5, "kind": "permanent" }, { "num": 59, "name": "Thrumming Stone", "cost": "{5}", "mv": 5, "kind": "permanent" }], "graveyard": ["Diabolic Intent", "Shadowborn Apostle"], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Shadowborn Apostle, Shadowborn Apostle", "declared_order_payability": "not_verified", "land": null, "casts": ["Shadowborn Apostle", "Shadowborn Apostle"], "cast_order_canonical": ["Shadowborn Apostle", "Shadowborn Apostle"], "actions": [{ "card": "Shadowborn Apostle" }, { "card": "Shadowborn Apostle" }] },
+    { "index": 1, "summary": "land=none; cast: Shadowborn Apostle", "declared_order_payability": "not_verified", "land": null, "casts": ["Shadowborn Apostle"], "actions": [{ "card": "Shadowborn Apostle" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "cast_order": ["**", "cast=Shadowborn Apostle", "cast=Shadowborn Apostle"], "decision": {
+  "decision_index": 12,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 4, "card": "Shadowborn Apostle" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Blood Crypt", "idx": 6, "num": 2, "is_land": true, "taps": "BR" }, { "name": "Shadowborn Apostle", "idx": 7, "num": 22, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Swamp", "idx": 4, "num": 40, "is_land": true, "taps": "B" }, { "name": "Swamp", "idx": 5, "num": 41, "is_land": true, "taps": "B" }], "vial_counters": [], "hand": [{ "num": 20, "name": "Reaper from the Abyss", "cost": "{3}{B}{B}{B}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Shadowborn Apostle", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 24, "name": "Shadowborn Apostle", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Shadowborn Apostle", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Thrumming Stone", "cost": "{5}", "mv": 5, "kind": "permanent" }, { "num": 59, "name": "Thrumming Stone", "cost": "{5}", "mv": 5, "kind": "permanent" }], "graveyard": ["Diabolic Intent", "Shadowborn Apostle"], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Shadowborn Apostle, Shadowborn Apostle, Shadowborn Apostle", "declared_order_payability": "not_verified", "land": null, "casts": ["Shadowborn Apostle", "Shadowborn Apostle", "Shadowborn Apostle"], "cast_order_canonical": ["Shadowborn Apostle", "Shadowborn Apostle", "Shadowborn Apostle"], "actions": [{ "card": "Shadowborn Apostle" }, { "card": "Shadowborn Apostle" }, { "card": "Shadowborn Apostle" }] },
+    { "index": 1, "summary": "land=none; cast: Shadowborn Apostle, Shadowborn Apostle", "declared_order_payability": "not_verified", "land": null, "casts": ["Shadowborn Apostle", "Shadowborn Apostle"], "cast_order_canonical": ["Shadowborn Apostle", "Shadowborn Apostle"], "actions": [{ "card": "Shadowborn Apostle" }, { "card": "Shadowborn Apostle" }] },
+    { "index": 2, "summary": "land=none; cast: Shadowborn Apostle", "declared_order_payability": "not_verified", "land": null, "casts": ["Shadowborn Apostle"], "actions": [{ "card": "Shadowborn Apostle" }] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "main_ordinal": 6,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Blood Crypt", "idx": 6, "num": 2, "tapped": true, "is_land": true }, { "name": "Shadowborn Apostle", "idx": 7, "num": 22, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 8, "num": 23, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 9, "num": 24, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Swamp", "idx": 4, "num": 40, "is_land": true, "taps": "B" }, { "name": "Swamp", "idx": 5, "num": 41, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 20, "name": "Reaper from the Abyss", "cost": "{3}{B}{B}{B}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Shadowborn Apostle", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Thrumming Stone", "cost": "{5}", "mv": 5, "kind": "permanent" }, { "num": 59, "name": "Thrumming Stone", "cost": "{5}", "mv": 5, "kind": "permanent" }], "graveyard": ["Diabolic Intent", "Shadowborn Apostle"], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Shadowborn Apostle", "declared_order_payability": "not_verified", "land": null, "casts": ["Shadowborn Apostle"], "actions": [{ "card": "Shadowborn Apostle" }] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 14,
+  "main_ordinal": 7,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 4, "kind": "combat", "text": "⚔ attacked: Shadowborn Apostle (1) — 1 to opponent (20→19)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Blood Crypt", "idx": 6, "num": 2, "tapped": true, "is_land": true }, { "name": "Shadowborn Apostle", "idx": 7, "num": 22, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 8, "num": 23, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 9, "num": 24, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Swamp", "idx": 4, "num": 40, "is_land": true, "taps": "B" }, { "name": "Swamp", "idx": 5, "num": 41, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 20, "name": "Reaper from the Abyss", "cost": "{3}{B}{B}{B}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Shadowborn Apostle", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Thrumming Stone", "cost": "{5}", "mv": 5, "kind": "permanent" }, { "num": 59, "name": "Thrumming Stone", "cost": "{5}", "mv": 5, "kind": "permanent" }], "graveyard": ["Diabolic Intent", "Shadowborn Apostle"], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Shadowborn Apostle", "declared_order_payability": "not_verified", "land": null, "casts": ["Shadowborn Apostle"], "actions": [{ "card": "Shadowborn Apostle" }] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "cast=Dark Ritual", "cast=Thrumming Stone"], "decision": {
+  "decision_index": 15,
+  "main_ordinal": 8,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 5, "card": "Dark Ritual" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Blood Crypt", "idx": 6, "num": 2, "is_land": true, "taps": "BR" }, { "name": "Shadowborn Apostle", "idx": 7, "num": 22, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 8, "num": 23, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 9, "num": 24, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Swamp", "idx": 4, "num": 40, "is_land": true, "taps": "B" }, { "name": "Swamp", "idx": 5, "num": 41, "is_land": true, "taps": "B" }], "vial_counters": [], "hand": [{ "num": 4, "name": "Dark Ritual", "cost": "{B}", "mv": 1, "kind": "nonpermanent" }, { "num": 20, "name": "Reaper from the Abyss", "cost": "{3}{B}{B}{B}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Shadowborn Apostle", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Thrumming Stone", "cost": "{5}", "mv": 5, "kind": "permanent" }, { "num": 59, "name": "Thrumming Stone", "cost": "{5}", "mv": 5, "kind": "permanent" }], "graveyard": ["Diabolic Intent", "Shadowborn Apostle"], "library_size": 47, "land_drops_left": 1 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Dark Ritual, Thrumming Stone", "declared_order_payability": "not_verified", "land": null, "casts": ["Dark Ritual", "Thrumming Stone"], "cast_order_canonical": ["Dark Ritual", "Thrumming Stone"], "actions": [{ "card": "Dark Ritual" }, { "card": "Thrumming Stone" }] },
+    { "index": 1, "summary": "land=none; cast: Thrumming Stone, Dark Ritual", "declared_order_payability": "known_drops", "land": null, "drops": ["Thrumming Stone"], "casts": ["Thrumming Stone", "Dark Ritual"], "cast_order_canonical": ["Thrumming Stone", "Dark Ritual"], "actions": [{ "card": "Thrumming Stone" }, { "card": "Dark Ritual" }] },
+    { "index": 2, "summary": "land=none; cast: Dark Ritual, Shadowborn Apostle", "declared_order_payability": "not_verified", "land": null, "casts": ["Dark Ritual", "Shadowborn Apostle"], "cast_order_canonical": ["Dark Ritual", "Shadowborn Apostle"], "actions": [{ "card": "Dark Ritual" }, { "card": "Shadowborn Apostle" }] },
+    { "index": 3, "summary": "land=none; cast: Shadowborn Apostle, Dark Ritual", "declared_order_payability": "not_verified", "land": null, "casts": ["Shadowborn Apostle", "Dark Ritual"], "cast_order_canonical": ["Shadowborn Apostle", "Dark Ritual"], "actions": [{ "card": "Shadowborn Apostle" }, { "card": "Dark Ritual" }] },
+    { "index": 4, "summary": "land=none; cast: Shadowborn Apostle", "declared_order_payability": "not_verified", "land": null, "casts": ["Shadowborn Apostle"], "actions": [{ "card": "Shadowborn Apostle" }] },
+    { "index": 5, "summary": "land=none; cast: Dark Ritual", "declared_order_payability": "not_verified", "land": null, "casts": ["Dark Ritual"], "actions": [{ "card": "Dark Ritual" }] },
+    { "index": 6, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 16,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Blood Crypt", "idx": 6, "num": 2, "tapped": true, "is_land": true }, { "name": "Shadowborn Apostle", "idx": 7, "num": 22, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 8, "num": 23, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 9, "num": 24, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Swamp", "idx": 4, "num": 40, "tapped": true, "is_land": true }, { "name": "Swamp", "idx": 5, "num": 41, "tapped": true, "is_land": true }, { "name": "Thrumming Stone", "idx": 10, "num": 57, "is_land": false }], "vial_counters": [], "hand": [{ "num": 20, "name": "Reaper from the Abyss", "cost": "{3}{B}{B}{B}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Shadowborn Apostle", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 59, "name": "Thrumming Stone", "cost": "{5}", "mv": 5, "kind": "permanent" }], "graveyard": ["Dark Ritual", "Diabolic Intent", "Shadowborn Apostle"], "library_size": 47, "land_drops_left": 1 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 17,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 5, "kind": "combat", "text": "⚔ attacked: Shadowborn Apostle (1), Shadowborn Apostle (1), Shadowborn Apostle (1) — 3 to opponent (19→16)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Blood Crypt", "idx": 6, "num": 2, "tapped": true, "is_land": true }, { "name": "Shadowborn Apostle", "idx": 7, "num": 22, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 8, "num": 23, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 9, "num": 24, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Swamp", "idx": 4, "num": 40, "tapped": true, "is_land": true }, { "name": "Swamp", "idx": 5, "num": 41, "tapped": true, "is_land": true }, { "name": "Thrumming Stone", "idx": 10, "num": 57, "is_land": false }], "vial_counters": [], "hand": [{ "num": 20, "name": "Reaper from the Abyss", "cost": "{3}{B}{B}{B}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Shadowborn Apostle", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 59, "name": "Thrumming Stone", "cost": "{5}", "mv": 5, "kind": "permanent" }], "graveyard": ["Dark Ritual", "Diabolic Intent", "Shadowborn Apostle"], "library_size": 47, "land_drops_left": 1 },
+  "opponent": { "life": 16, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 18,
+  "main_ordinal": 9,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 6, "card": "Swamp" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Blood Crypt", "idx": 6, "num": 2, "is_land": true, "taps": "BR" }, { "name": "Shadowborn Apostle", "idx": 7, "num": 22, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 8, "num": 23, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 9, "num": 24, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Swamp", "idx": 4, "num": 40, "is_land": true, "taps": "B" }, { "name": "Swamp", "idx": 5, "num": 41, "is_land": true, "taps": "B" }, { "name": "Thrumming Stone", "idx": 10, "num": 57, "is_land": false }], "vial_counters": [], "hand": [{ "num": 20, "name": "Reaper from the Abyss", "cost": "{3}{B}{B}{B}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Shadowborn Apostle", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }, { "num": 59, "name": "Thrumming Stone", "cost": "{5}", "mv": 5, "kind": "permanent" }], "graveyard": ["Dark Ritual", "Diabolic Intent", "Shadowborn Apostle"], "library_size": 46, "land_drops_left": 1 },
+  "opponent": { "life": 16, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Swamp; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Swamp", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=Swamp; cast: Shadowborn Apostle", "declared_order_payability": "not_verified", "land": "Swamp", "casts": ["Shadowborn Apostle"], "actions": [{ "card": "Shadowborn Apostle" }] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=none; cast: Shadowborn Apostle", "declared_order_payability": "not_verified", "land": null, "casts": ["Shadowborn Apostle"], "actions": [{ "card": "Shadowborn Apostle" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 19,
+  "type": "dig",
+  "source": "Shadowborn Apostle (ripple reveal)",
+  "turn": 6,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Blood Crypt", "idx": 6, "num": 2, "is_land": true, "taps": "BR" }, { "name": "Shadowborn Apostle", "idx": 7, "num": 22, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 8, "num": 23, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 9, "num": 24, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Swamp", "idx": 4, "num": 40, "tapped": true, "is_land": true }, { "name": "Swamp", "idx": 5, "num": 41, "is_land": true, "taps": "B" }, { "name": "Thrumming Stone", "idx": 10, "num": 57, "is_land": false }], "vial_counters": [], "hand": [{ "num": 20, "name": "Reaper from the Abyss", "cost": "{3}{B}{B}{B}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }, { "num": 59, "name": "Thrumming Stone", "cost": "{5}", "mv": 5, "kind": "permanent" }], "graveyard": ["Dark Ritual", "Diabolic Intent", "Shadowborn Apostle"], "library_size": 46, "land_drops_left": 1 },
+  "opponent": { "life": 16, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "heuristic_default": 0,
+  "examined": [{ "index": 0, "legal": true, "name": "Shadowborn Apostle" }],
+  "note": "reply 0 to reveal the top four cards of your library (you may then cast any with the same name for free; the rest go to the bottom in the order revealed), or -1 not to reveal (nothing moves). Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 20,
+  "type": "free_cast",
+  "source": "Shadowborn Apostle (ripple)",
+  "turn": 6,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Blood Crypt", "idx": 6, "num": 2, "is_land": true, "taps": "BR" }, { "name": "Shadowborn Apostle", "idx": 7, "num": 22, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 8, "num": 23, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 9, "num": 24, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Swamp", "idx": 4, "num": 40, "tapped": true, "is_land": true }, { "name": "Swamp", "idx": 5, "num": 41, "is_land": true, "taps": "B" }, { "name": "Thrumming Stone", "idx": 10, "num": 57, "is_land": false }], "vial_counters": [], "hand": [{ "num": 20, "name": "Reaper from the Abyss", "cost": "{3}{B}{B}{B}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }, { "num": 59, "name": "Thrumming Stone", "cost": "{5}", "mv": 5, "kind": "permanent" }], "graveyard": ["Dark Ritual", "Diabolic Intent", "Shadowborn Apostle"], "library_size": 42, "land_drops_left": 1 },
+  "opponent": { "life": 16, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "heuristic_default": 0,
+  "ai_pick": 0,
+  "candidates": [{ "index": 0, "name": "Shadowborn Apostle" }, { "index": 1, "name": "Shadowborn Apostle" }],
+  "walked": ["Profane Tutor", "Swamp"],
+  "note": "reply a candidate index to cast that spell WITHOUT paying its mana cost, or -1 to decline. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 21,
+  "type": "free_cast",
+  "source": "Shadowborn Apostle (ripple)",
+  "turn": 6,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Blood Crypt", "idx": 6, "num": 2, "is_land": true, "taps": "BR" }, { "name": "Shadowborn Apostle", "idx": 7, "num": 22, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 8, "num": 23, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 9, "num": 24, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Swamp", "idx": 4, "num": 40, "tapped": true, "is_land": true }, { "name": "Swamp", "idx": 5, "num": 41, "is_land": true, "taps": "B" }, { "name": "Thrumming Stone", "idx": 10, "num": 57, "is_land": false }], "vial_counters": [], "hand": [{ "num": 20, "name": "Reaper from the Abyss", "cost": "{3}{B}{B}{B}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }, { "num": 59, "name": "Thrumming Stone", "cost": "{5}", "mv": 5, "kind": "permanent" }], "graveyard": ["Dark Ritual", "Diabolic Intent", "Shadowborn Apostle"], "library_size": 42, "land_drops_left": 1 },
+  "opponent": { "life": 16, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "heuristic_default": 0,
+  "ai_pick": 0,
+  "candidates": [{ "index": 0, "name": "Shadowborn Apostle" }],
+  "walked": ["Profane Tutor", "Swamp"],
+  "note": "reply a candidate index to cast that spell WITHOUT paying its mana cost, or -1 to decline. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 22,
+  "type": "dig",
+  "source": "Shadowborn Apostle (ripple reveal)",
+  "turn": 6,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Blood Crypt", "idx": 6, "num": 2, "is_land": true, "taps": "BR" }, { "name": "Shadowborn Apostle", "idx": 7, "num": 22, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 8, "num": 23, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 9, "num": 24, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Swamp", "idx": 4, "num": 40, "tapped": true, "is_land": true }, { "name": "Swamp", "idx": 5, "num": 41, "is_land": true, "taps": "B" }, { "name": "Thrumming Stone", "idx": 10, "num": 57, "is_land": false }], "vial_counters": [], "hand": [{ "num": 20, "name": "Reaper from the Abyss", "cost": "{3}{B}{B}{B}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }, { "num": 59, "name": "Thrumming Stone", "cost": "{5}", "mv": 5, "kind": "permanent" }], "graveyard": ["Dark Ritual", "Diabolic Intent", "Shadowborn Apostle"], "library_size": 44, "land_drops_left": 1 },
+  "opponent": { "life": 16, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "heuristic_default": 0,
+  "examined": [{ "index": 0, "legal": true, "name": "Shadowborn Apostle" }],
+  "note": "reply 0 to reveal the top four cards of your library (you may then cast any with the same name for free; the rest go to the bottom in the order revealed), or -1 not to reveal (nothing moves). Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 23,
+  "type": "free_cast",
+  "source": "Shadowborn Apostle (ripple)",
+  "turn": 6,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Blood Crypt", "idx": 6, "num": 2, "is_land": true, "taps": "BR" }, { "name": "Shadowborn Apostle", "idx": 7, "num": 22, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 8, "num": 23, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 9, "num": 24, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Swamp", "idx": 4, "num": 40, "tapped": true, "is_land": true }, { "name": "Swamp", "idx": 5, "num": 41, "is_land": true, "taps": "B" }, { "name": "Thrumming Stone", "idx": 10, "num": 57, "is_land": false }], "vial_counters": [], "hand": [{ "num": 20, "name": "Reaper from the Abyss", "cost": "{3}{B}{B}{B}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }, { "num": 59, "name": "Thrumming Stone", "cost": "{5}", "mv": 5, "kind": "permanent" }], "graveyard": ["Dark Ritual", "Diabolic Intent", "Shadowborn Apostle"], "library_size": 40, "land_drops_left": 1 },
+  "opponent": { "life": 16, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "heuristic_default": 0,
+  "ai_pick": 0,
+  "candidates": [{ "index": 0, "name": "Shadowborn Apostle" }],
+  "walked": ["Jetmir, Nexus of Revels", "Swamp", "Thrumming Stone"],
+  "reveals": [{ "turn": 6, "source": "Shadowborn Apostle (ripple)", "cards": [{ "name": "Shadowborn Apostle", "disposition": "kept" }, { "name": "Profane Tutor", "disposition": "to the bottom" }, { "name": "Swamp", "disposition": "to the bottom" }, { "name": "Shadowborn Apostle", "disposition": "kept" }] }],
+  "note": "reply a candidate index to cast that spell WITHOUT paying its mana cost, or -1 to decline. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 24,
+  "type": "dig",
+  "source": "Shadowborn Apostle (ripple reveal)",
+  "turn": 6,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Blood Crypt", "idx": 6, "num": 2, "is_land": true, "taps": "BR" }, { "name": "Shadowborn Apostle", "idx": 7, "num": 22, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 8, "num": 23, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 9, "num": 24, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Swamp", "idx": 4, "num": 40, "tapped": true, "is_land": true }, { "name": "Swamp", "idx": 5, "num": 41, "is_land": true, "taps": "B" }, { "name": "Thrumming Stone", "idx": 10, "num": 57, "is_land": false }], "vial_counters": [], "hand": [{ "num": 20, "name": "Reaper from the Abyss", "cost": "{3}{B}{B}{B}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }, { "num": 59, "name": "Thrumming Stone", "cost": "{5}", "mv": 5, "kind": "permanent" }], "graveyard": ["Dark Ritual", "Diabolic Intent", "Shadowborn Apostle"], "library_size": 43, "land_drops_left": 1 },
+  "opponent": { "life": 16, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "heuristic_default": 0,
+  "examined": [{ "index": 0, "legal": true, "name": "Shadowborn Apostle" }],
+  "note": "reply 0 to reveal the top four cards of your library (you may then cast any with the same name for free; the rest go to the bottom in the order revealed), or -1 not to reveal (nothing moves). Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 25,
+  "type": "free_cast",
+  "source": "Shadowborn Apostle (ripple)",
+  "turn": 6,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Blood Crypt", "idx": 6, "num": 2, "is_land": true, "taps": "BR" }, { "name": "Shadowborn Apostle", "idx": 7, "num": 22, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 8, "num": 23, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 9, "num": 24, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Swamp", "idx": 4, "num": 40, "tapped": true, "is_land": true }, { "name": "Swamp", "idx": 5, "num": 41, "is_land": true, "taps": "B" }, { "name": "Thrumming Stone", "idx": 10, "num": 57, "is_land": false }], "vial_counters": [], "hand": [{ "num": 20, "name": "Reaper from the Abyss", "cost": "{3}{B}{B}{B}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }, { "num": 59, "name": "Thrumming Stone", "cost": "{5}", "mv": 5, "kind": "permanent" }], "graveyard": ["Dark Ritual", "Diabolic Intent", "Shadowborn Apostle"], "library_size": 39, "land_drops_left": 1 },
+  "opponent": { "life": 16, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "heuristic_default": 0,
+  "ai_pick": 0,
+  "candidates": [{ "index": 0, "name": "Shadowborn Apostle" }],
+  "walked": ["Diabolic Intent", "Diabolic Intent", "Dark Ritual"],
+  "reveals": [{ "turn": 6, "source": "Shadowborn Apostle (ripple)", "cards": [{ "name": "Jetmir, Nexus of Revels", "disposition": "to the bottom" }, { "name": "Swamp", "disposition": "to the bottom" }, { "name": "Shadowborn Apostle", "disposition": "kept" }, { "name": "Thrumming Stone", "disposition": "to the bottom" }] }],
+  "note": "reply a candidate index to cast that spell WITHOUT paying its mana cost, or -1 to decline. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 26,
+  "type": "dig",
+  "source": "Shadowborn Apostle (ripple reveal)",
+  "turn": 6,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Blood Crypt", "idx": 6, "num": 2, "is_land": true, "taps": "BR" }, { "name": "Shadowborn Apostle", "idx": 7, "num": 22, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 8, "num": 23, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 9, "num": 24, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Swamp", "idx": 4, "num": 40, "tapped": true, "is_land": true }, { "name": "Swamp", "idx": 5, "num": 41, "is_land": true, "taps": "B" }, { "name": "Thrumming Stone", "idx": 10, "num": 57, "is_land": false }], "vial_counters": [], "hand": [{ "num": 20, "name": "Reaper from the Abyss", "cost": "{3}{B}{B}{B}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }, { "num": 59, "name": "Thrumming Stone", "cost": "{5}", "mv": 5, "kind": "permanent" }], "graveyard": ["Dark Ritual", "Diabolic Intent", "Shadowborn Apostle"], "library_size": 42, "land_drops_left": 1 },
+  "opponent": { "life": 16, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "heuristic_default": 0,
+  "examined": [{ "index": 0, "legal": true, "name": "Shadowborn Apostle" }],
+  "note": "reply 0 to reveal the top four cards of your library (you may then cast any with the same name for free; the rest go to the bottom in the order revealed), or -1 not to reveal (nothing moves). Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 27,
+  "type": "free_cast",
+  "source": "Shadowborn Apostle (ripple)",
+  "turn": 6,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Blood Crypt", "idx": 6, "num": 2, "is_land": true, "taps": "BR" }, { "name": "Shadowborn Apostle", "idx": 7, "num": 22, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 8, "num": 23, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 9, "num": 24, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Swamp", "idx": 4, "num": 40, "tapped": true, "is_land": true }, { "name": "Swamp", "idx": 5, "num": 41, "is_land": true, "taps": "B" }, { "name": "Thrumming Stone", "idx": 10, "num": 57, "is_land": false }], "vial_counters": [], "hand": [{ "num": 20, "name": "Reaper from the Abyss", "cost": "{3}{B}{B}{B}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }, { "num": 59, "name": "Thrumming Stone", "cost": "{5}", "mv": 5, "kind": "permanent" }], "graveyard": ["Dark Ritual", "Diabolic Intent", "Shadowborn Apostle"], "library_size": 38, "land_drops_left": 1 },
+  "opponent": { "life": 16, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "heuristic_default": 0,
+  "ai_pick": 0,
+  "candidates": [{ "index": 0, "name": "Shadowborn Apostle" }],
+  "walked": ["Swamp", "Thrumming Stone", "Swamp"],
+  "reveals": [{ "turn": 6, "source": "Shadowborn Apostle (ripple)", "cards": [{ "name": "Diabolic Intent", "disposition": "to the bottom" }, { "name": "Diabolic Intent", "disposition": "to the bottom" }, { "name": "Dark Ritual", "disposition": "to the bottom" }, { "name": "Shadowborn Apostle", "disposition": "kept" }] }],
+  "note": "reply a candidate index to cast that spell WITHOUT paying its mana cost, or -1 to decline. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 28,
+  "type": "dig",
+  "source": "Shadowborn Apostle (ripple reveal)",
+  "turn": 6,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Blood Crypt", "idx": 6, "num": 2, "is_land": true, "taps": "BR" }, { "name": "Shadowborn Apostle", "idx": 7, "num": 22, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 8, "num": 23, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 9, "num": 24, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Swamp", "idx": 4, "num": 40, "tapped": true, "is_land": true }, { "name": "Swamp", "idx": 5, "num": 41, "is_land": true, "taps": "B" }, { "name": "Thrumming Stone", "idx": 10, "num": 57, "is_land": false }], "vial_counters": [], "hand": [{ "num": 20, "name": "Reaper from the Abyss", "cost": "{3}{B}{B}{B}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }, { "num": 59, "name": "Thrumming Stone", "cost": "{5}", "mv": 5, "kind": "permanent" }], "graveyard": ["Dark Ritual", "Diabolic Intent", "Shadowborn Apostle"], "library_size": 41, "land_drops_left": 1 },
+  "opponent": { "life": 16, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "heuristic_default": -1,
+  "examined": [{ "index": 0, "legal": true, "name": "Shadowborn Apostle" }],
+  "note": "reply 0 to reveal the top four cards of your library (you may then cast any with the same name for free; the rest go to the bottom in the order revealed), or -1 not to reveal (nothing moves). Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 29,
+  "type": "dig",
+  "source": "Shadowborn Apostle (ripple reveal)",
+  "turn": 6,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Blood Crypt", "idx": 6, "num": 2, "is_land": true, "taps": "BR" }, { "name": "Shadowborn Apostle", "idx": 7, "num": 22, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 8, "num": 23, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 9, "num": 24, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 11, "num": 33, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 12, "num": 32, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 13, "num": 31, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Swamp", "idx": 4, "num": 40, "tapped": true, "is_land": true }, { "name": "Swamp", "idx": 5, "num": 41, "is_land": true, "taps": "B" }, { "name": "Thrumming Stone", "idx": 10, "num": 57, "is_land": false }], "vial_counters": [], "hand": [{ "num": 20, "name": "Reaper from the Abyss", "cost": "{3}{B}{B}{B}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }, { "num": 59, "name": "Thrumming Stone", "cost": "{5}", "mv": 5, "kind": "permanent" }], "graveyard": ["Dark Ritual", "Diabolic Intent", "Shadowborn Apostle"], "library_size": 41, "land_drops_left": 1 },
+  "opponent": { "life": 16, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "heuristic_default": -1,
+  "examined": [{ "index": 0, "legal": true, "name": "Shadowborn Apostle" }],
+  "note": "reply 0 to reveal the top four cards of your library (you may then cast any with the same name for free; the rest go to the bottom in the order revealed), or -1 not to reveal (nothing moves). Default = the AI's pick."
+}
+},
+    { "chosen": 5, "decision": {
+  "decision_index": 30,
+  "main_ordinal": 10,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "reveals": [{ "turn": 6, "source": "Shadowborn Apostle (ripple)", "cards": [{ "name": "Shadowborn Apostle", "disposition": "kept" }, { "name": "Swamp", "disposition": "to the bottom" }, { "name": "Thrumming Stone", "disposition": "to the bottom" }, { "name": "Swamp", "disposition": "to the bottom" }] }, { "turn": 6, "source": "Shadowborn Apostle (ripple)", "cards": [{ "name": "Swamp", "disposition": "to the bottom" }, { "name": "Sire of Insanity", "disposition": "to the bottom" }, { "name": "Lake of the Dead", "disposition": "to the bottom" }, { "name": "Swamp", "disposition": "to the bottom" }] }, { "turn": 6, "source": "Shadowborn Apostle (ripple)", "cards": [{ "name": "Abhorrent Overlord", "disposition": "to the bottom" }, { "name": "Swamp", "disposition": "to the bottom" }, { "name": "Swamp", "disposition": "to the bottom" }, { "name": "Dark Ritual", "disposition": "to the bottom" }] }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Blood Crypt", "idx": 6, "num": 2, "is_land": true, "taps": "BR" }, { "name": "Shadowborn Apostle", "idx": 7, "num": 22, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 8, "num": 23, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 9, "num": 24, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 11, "num": 33, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 12, "num": 32, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 13, "num": 31, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 14, "num": 28, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 15, "num": 25, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 16, "num": 26, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Swamp", "idx": 4, "num": 40, "tapped": true, "is_land": true }, { "name": "Swamp", "idx": 5, "num": 41, "is_land": true, "taps": "B" }, { "name": "Thrumming Stone", "idx": 10, "num": 57, "is_land": false }], "vial_counters": [], "hand": [{ "num": 20, "name": "Reaper from the Abyss", "cost": "{3}{B}{B}{B}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }, { "num": 59, "name": "Thrumming Stone", "cost": "{5}", "mv": 5, "kind": "permanent" }], "graveyard": ["Dark Ritual", "Diabolic Intent", "Shadowborn Apostle"], "library_size": 41, "land_drops_left": 1 },
+  "opponent": { "life": 16, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Swamp; cast: Shadowborn Apostle: sacrifice six of them: search for a Demon, put it onto the battlefield", "declared_order_payability": "not_verified", "land": "Swamp", "casts": ["Shadowborn Apostle"], "actions": [{ "card": "Shadowborn Apostle", "src_num": 22, "activate": true, "cost_pips": "B", "activation_cost": "{B}", "act_label": "sacrifice six of them: search for a Demon, put it onto the battlefield", "verb": "sacnamed", "tutor_target": "Sire of Insanity", "x": 1 }] },
+    { "index": 1, "summary": "land=Swamp; cast: Shadowborn Apostle: sacrifice six of them: search for a Demon, put it onto the battlefield", "declared_order_payability": "not_verified", "land": "Swamp", "casts": ["Shadowborn Apostle"], "actions": [{ "card": "Shadowborn Apostle", "src_num": 22, "activate": true, "cost_pips": "B", "activation_cost": "{B}", "act_label": "sacrifice six of them: search for a Demon, put it onto the battlefield", "verb": "sacnamed", "tutor_target": "Abhorrent Overlord", "x": 1 }] },
+    { "index": 2, "summary": "land=none; cast: Shadowborn Apostle: sacrifice six of them: search for a Demon, put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Shadowborn Apostle"], "actions": [{ "card": "Shadowborn Apostle", "src_num": 22, "activate": true, "cost_pips": "B", "activation_cost": "{B}", "act_label": "sacrifice six of them: search for a Demon, put it onto the battlefield", "verb": "sacnamed", "tutor_target": "Sire of Insanity", "x": 1 }] },
+    { "index": 3, "summary": "land=none; cast: Shadowborn Apostle: sacrifice six of them: search for a Demon, put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Shadowborn Apostle"], "actions": [{ "card": "Shadowborn Apostle", "src_num": 22, "activate": true, "cost_pips": "B", "activation_cost": "{B}", "act_label": "sacrifice six of them: search for a Demon, put it onto the battlefield", "verb": "sacnamed", "tutor_target": "Abhorrent Overlord", "x": 1 }] },
+    { "index": 4, "summary": "land=Swamp; cast: Shadowborn Apostle: sacrifice six of them: search for a Demon, put it onto the battlefield", "declared_order_payability": "not_verified", "land": "Swamp", "casts": ["Shadowborn Apostle"], "actions": [{ "card": "Shadowborn Apostle", "src_num": 22, "activate": true, "cost_pips": "B", "activation_cost": "{B}", "act_label": "sacrifice six of them: search for a Demon, put it onto the battlefield", "verb": "sacnamed", "tutor_target": "Jetmir, Nexus of Revels", "x": 1 }] },
+    { "index": 5, "summary": "land=none; cast: Shadowborn Apostle: sacrifice six of them: search for a Demon, put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Shadowborn Apostle"], "actions": [{ "card": "Shadowborn Apostle", "src_num": 22, "activate": true, "cost_pips": "B", "activation_cost": "{B}", "act_label": "sacrifice six of them: search for a Demon, put it onto the battlefield", "verb": "sacnamed", "tutor_target": "Jetmir, Nexus of Revels", "x": 1 }] },
+    { "index": 6, "summary": "land=Swamp; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Swamp", "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=Swamp; cast: Shadowborn Apostle: sacrifice six of them: search for a Demon, put it onto the battlefield", "declared_order_payability": "not_verified", "land": "Swamp", "casts": ["Shadowborn Apostle"], "actions": [{ "card": "Shadowborn Apostle", "src_num": 22, "activate": true, "cost_pips": "B", "activation_cost": "{B}", "act_label": "sacrifice six of them: search for a Demon, put it onto the battlefield", "verb": "sacnamed", "tutor_target": "(no fetch)", "x": 1 }] },
+    { "index": 8, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 9, "summary": "land=none; cast: Shadowborn Apostle: sacrifice six of them: search for a Demon, put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Shadowborn Apostle"], "actions": [{ "card": "Shadowborn Apostle", "src_num": 22, "activate": true, "cost_pips": "B", "activation_cost": "{B}", "act_label": "sacrifice six of them: search for a Demon, put it onto the battlefield", "verb": "sacnamed", "tutor_target": "(no fetch)", "x": 1 }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 7, "decision": {
+  "decision_index": 31,
+  "type": "sacrifice",
+  "source": "Shadowborn Apostle",
+  "turn": 6,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Blood Crypt", "idx": 6, "num": 2, "is_land": true, "taps": "BR" }, { "name": "Shadowborn Apostle", "idx": 7, "num": 22, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 8, "num": 23, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 9, "num": 24, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 11, "num": 33, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 12, "num": 32, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 13, "num": 31, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 14, "num": 28, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 15, "num": 25, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 16, "num": 26, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Swamp", "idx": 4, "num": 40, "tapped": true, "is_land": true }, { "name": "Swamp", "idx": 5, "num": 41, "tapped": true, "is_land": true }, { "name": "Thrumming Stone", "idx": 10, "num": 57, "is_land": false }], "vial_counters": [], "hand": [{ "num": 20, "name": "Reaper from the Abyss", "cost": "{3}{B}{B}{B}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }, { "num": 59, "name": "Thrumming Stone", "cost": "{5}", "mv": 5, "kind": "permanent" }], "graveyard": ["Dark Ritual", "Diabolic Intent", "Shadowborn Apostle"], "library_size": 41, "land_drops_left": 1 },
+  "opponent": { "life": 16, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "heuristic_default": 7,
+  "allow_decline": false,
+  "pick_index": 0,
+  "pick_total": 6,
+  "options": [{ "index": 0, "perm_index": 7, "tapped": false, "name": "Shadowborn Apostle", "label": "Shadowborn Apostle", "num": 22, "sick": false }, { "index": 1, "perm_index": 8, "tapped": false, "name": "Shadowborn Apostle", "label": "Shadowborn Apostle", "num": 23, "sick": false }, { "index": 2, "perm_index": 9, "tapped": false, "name": "Shadowborn Apostle", "label": "Shadowborn Apostle", "num": 24, "sick": false }, { "index": 3, "perm_index": 11, "tapped": false, "name": "Shadowborn Apostle", "label": "Shadowborn Apostle", "num": 33, "sick": true }, { "index": 4, "perm_index": 12, "tapped": false, "name": "Shadowborn Apostle", "label": "Shadowborn Apostle", "num": 32, "sick": true }, { "index": 5, "perm_index": 13, "tapped": false, "name": "Shadowborn Apostle", "label": "Shadowborn Apostle", "num": 31, "sick": true }, { "index": 6, "perm_index": 14, "tapped": false, "name": "Shadowborn Apostle", "label": "Shadowborn Apostle", "num": 28, "sick": true }, { "index": 7, "perm_index": 15, "tapped": false, "name": "Shadowborn Apostle", "label": "Shadowborn Apostle", "num": 25, "sick": true }, { "index": 8, "perm_index": 16, "tapped": false, "name": "Shadowborn Apostle", "label": "Shadowborn Apostle", "num": 26, "sick": true }],
+  "note": "reply an option index -- the creature to sacrifice. Default = the AI's pick."
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 32,
+  "type": "sacrifice",
+  "source": "Shadowborn Apostle",
+  "turn": 6,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Blood Crypt", "idx": 6, "num": 2, "is_land": true, "taps": "BR" }, { "name": "Shadowborn Apostle", "idx": 7, "num": 22, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 8, "num": 23, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 9, "num": 24, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 11, "num": 33, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 12, "num": 32, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 13, "num": 31, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 14, "num": 28, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 15, "num": 25, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 16, "num": 26, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Swamp", "idx": 4, "num": 40, "tapped": true, "is_land": true }, { "name": "Swamp", "idx": 5, "num": 41, "tapped": true, "is_land": true }, { "name": "Thrumming Stone", "idx": 10, "num": 57, "is_land": false }], "vial_counters": [], "hand": [{ "num": 20, "name": "Reaper from the Abyss", "cost": "{3}{B}{B}{B}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }, { "num": 59, "name": "Thrumming Stone", "cost": "{5}", "mv": 5, "kind": "permanent" }], "graveyard": ["Dark Ritual", "Diabolic Intent", "Shadowborn Apostle"], "library_size": 41, "land_drops_left": 1 },
+  "opponent": { "life": 16, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "heuristic_default": 7,
+  "allow_decline": false,
+  "pick_index": 1,
+  "pick_total": 6,
+  "options": [{ "index": 0, "perm_index": 7, "tapped": false, "name": "Shadowborn Apostle", "label": "Shadowborn Apostle", "num": 22, "sick": false }, { "index": 1, "perm_index": 8, "tapped": false, "name": "Shadowborn Apostle", "label": "Shadowborn Apostle", "num": 23, "sick": false }, { "index": 2, "perm_index": 9, "tapped": false, "name": "Shadowborn Apostle", "label": "Shadowborn Apostle", "num": 24, "sick": false }, { "index": 3, "perm_index": 11, "tapped": false, "name": "Shadowborn Apostle", "label": "Shadowborn Apostle", "num": 33, "sick": true }, { "index": 4, "perm_index": 12, "tapped": false, "name": "Shadowborn Apostle", "label": "Shadowborn Apostle", "num": 32, "sick": true }, { "index": 5, "perm_index": 13, "tapped": false, "name": "Shadowborn Apostle", "label": "Shadowborn Apostle", "num": 31, "sick": true }, { "index": 6, "perm_index": 14, "tapped": false, "name": "Shadowborn Apostle", "label": "Shadowborn Apostle", "num": 28, "sick": true }, { "index": 7, "perm_index": 16, "tapped": false, "name": "Shadowborn Apostle", "label": "Shadowborn Apostle", "num": 26, "sick": true }],
+  "note": "reply an option index -- the creature to sacrifice. Default = the AI's pick."
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 33,
+  "type": "sacrifice",
+  "source": "Shadowborn Apostle",
+  "turn": 6,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Blood Crypt", "idx": 6, "num": 2, "is_land": true, "taps": "BR" }, { "name": "Shadowborn Apostle", "idx": 7, "num": 22, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 8, "num": 23, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 9, "num": 24, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 11, "num": 33, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 12, "num": 32, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 13, "num": 31, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 14, "num": 28, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 15, "num": 25, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 16, "num": 26, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Swamp", "idx": 4, "num": 40, "tapped": true, "is_land": true }, { "name": "Swamp", "idx": 5, "num": 41, "tapped": true, "is_land": true }, { "name": "Thrumming Stone", "idx": 10, "num": 57, "is_land": false }], "vial_counters": [], "hand": [{ "num": 20, "name": "Reaper from the Abyss", "cost": "{3}{B}{B}{B}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }, { "num": 59, "name": "Thrumming Stone", "cost": "{5}", "mv": 5, "kind": "permanent" }], "graveyard": ["Dark Ritual", "Diabolic Intent", "Shadowborn Apostle"], "library_size": 41, "land_drops_left": 1 },
+  "opponent": { "life": 16, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "heuristic_default": 6,
+  "allow_decline": false,
+  "pick_index": 2,
+  "pick_total": 6,
+  "options": [{ "index": 0, "perm_index": 7, "tapped": false, "name": "Shadowborn Apostle", "label": "Shadowborn Apostle", "num": 22, "sick": false }, { "index": 1, "perm_index": 8, "tapped": false, "name": "Shadowborn Apostle", "label": "Shadowborn Apostle", "num": 23, "sick": false }, { "index": 2, "perm_index": 9, "tapped": false, "name": "Shadowborn Apostle", "label": "Shadowborn Apostle", "num": 24, "sick": false }, { "index": 3, "perm_index": 12, "tapped": false, "name": "Shadowborn Apostle", "label": "Shadowborn Apostle", "num": 32, "sick": true }, { "index": 4, "perm_index": 13, "tapped": false, "name": "Shadowborn Apostle", "label": "Shadowborn Apostle", "num": 31, "sick": true }, { "index": 5, "perm_index": 14, "tapped": false, "name": "Shadowborn Apostle", "label": "Shadowborn Apostle", "num": 28, "sick": true }, { "index": 6, "perm_index": 16, "tapped": false, "name": "Shadowborn Apostle", "label": "Shadowborn Apostle", "num": 26, "sick": true }],
+  "note": "reply an option index -- the creature to sacrifice. Default = the AI's pick."
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 34,
+  "type": "sacrifice",
+  "source": "Shadowborn Apostle",
+  "turn": 6,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Blood Crypt", "idx": 6, "num": 2, "is_land": true, "taps": "BR" }, { "name": "Shadowborn Apostle", "idx": 7, "num": 22, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 8, "num": 23, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 9, "num": 24, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 11, "num": 33, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 12, "num": 32, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 13, "num": 31, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 14, "num": 28, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 15, "num": 25, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 16, "num": 26, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Swamp", "idx": 4, "num": 40, "tapped": true, "is_land": true }, { "name": "Swamp", "idx": 5, "num": 41, "tapped": true, "is_land": true }, { "name": "Thrumming Stone", "idx": 10, "num": 57, "is_land": false }], "vial_counters": [], "hand": [{ "num": 20, "name": "Reaper from the Abyss", "cost": "{3}{B}{B}{B}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }, { "num": 59, "name": "Thrumming Stone", "cost": "{5}", "mv": 5, "kind": "permanent" }], "graveyard": ["Dark Ritual", "Diabolic Intent", "Shadowborn Apostle"], "library_size": 41, "land_drops_left": 1 },
+  "opponent": { "life": 16, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "heuristic_default": 5,
+  "allow_decline": false,
+  "pick_index": 3,
+  "pick_total": 6,
+  "options": [{ "index": 0, "perm_index": 7, "tapped": false, "name": "Shadowborn Apostle", "label": "Shadowborn Apostle", "num": 22, "sick": false }, { "index": 1, "perm_index": 8, "tapped": false, "name": "Shadowborn Apostle", "label": "Shadowborn Apostle", "num": 23, "sick": false }, { "index": 2, "perm_index": 9, "tapped": false, "name": "Shadowborn Apostle", "label": "Shadowborn Apostle", "num": 24, "sick": false }, { "index": 3, "perm_index": 13, "tapped": false, "name": "Shadowborn Apostle", "label": "Shadowborn Apostle", "num": 31, "sick": true }, { "index": 4, "perm_index": 14, "tapped": false, "name": "Shadowborn Apostle", "label": "Shadowborn Apostle", "num": 28, "sick": true }, { "index": 5, "perm_index": 16, "tapped": false, "name": "Shadowborn Apostle", "label": "Shadowborn Apostle", "num": 26, "sick": true }],
+  "note": "reply an option index -- the creature to sacrifice. Default = the AI's pick."
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 35,
+  "type": "sacrifice",
+  "source": "Shadowborn Apostle",
+  "turn": 6,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Blood Crypt", "idx": 6, "num": 2, "is_land": true, "taps": "BR" }, { "name": "Shadowborn Apostle", "idx": 7, "num": 22, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 8, "num": 23, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 9, "num": 24, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 11, "num": 33, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 12, "num": 32, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 13, "num": 31, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 14, "num": 28, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 15, "num": 25, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 16, "num": 26, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Swamp", "idx": 4, "num": 40, "tapped": true, "is_land": true }, { "name": "Swamp", "idx": 5, "num": 41, "tapped": true, "is_land": true }, { "name": "Thrumming Stone", "idx": 10, "num": 57, "is_land": false }], "vial_counters": [], "hand": [{ "num": 20, "name": "Reaper from the Abyss", "cost": "{3}{B}{B}{B}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }, { "num": 59, "name": "Thrumming Stone", "cost": "{5}", "mv": 5, "kind": "permanent" }], "graveyard": ["Dark Ritual", "Diabolic Intent", "Shadowborn Apostle"], "library_size": 41, "land_drops_left": 1 },
+  "opponent": { "life": 16, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "heuristic_default": 4,
+  "allow_decline": false,
+  "pick_index": 4,
+  "pick_total": 6,
+  "options": [{ "index": 0, "perm_index": 7, "tapped": false, "name": "Shadowborn Apostle", "label": "Shadowborn Apostle", "num": 22, "sick": false }, { "index": 1, "perm_index": 8, "tapped": false, "name": "Shadowborn Apostle", "label": "Shadowborn Apostle", "num": 23, "sick": false }, { "index": 2, "perm_index": 9, "tapped": false, "name": "Shadowborn Apostle", "label": "Shadowborn Apostle", "num": 24, "sick": false }, { "index": 3, "perm_index": 14, "tapped": false, "name": "Shadowborn Apostle", "label": "Shadowborn Apostle", "num": 28, "sick": true }, { "index": 4, "perm_index": 16, "tapped": false, "name": "Shadowborn Apostle", "label": "Shadowborn Apostle", "num": 26, "sick": true }],
+  "note": "reply an option index -- the creature to sacrifice. Default = the AI's pick."
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 36,
+  "type": "sacrifice",
+  "source": "Shadowborn Apostle",
+  "turn": 6,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Blood Crypt", "idx": 6, "num": 2, "is_land": true, "taps": "BR" }, { "name": "Shadowborn Apostle", "idx": 7, "num": 22, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 8, "num": 23, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 9, "num": 24, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 11, "num": 33, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 12, "num": 32, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 13, "num": 31, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 14, "num": 28, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 15, "num": 25, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 16, "num": 26, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Swamp", "idx": 4, "num": 40, "tapped": true, "is_land": true }, { "name": "Swamp", "idx": 5, "num": 41, "tapped": true, "is_land": true }, { "name": "Thrumming Stone", "idx": 10, "num": 57, "is_land": false }], "vial_counters": [], "hand": [{ "num": 20, "name": "Reaper from the Abyss", "cost": "{3}{B}{B}{B}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }, { "num": 59, "name": "Thrumming Stone", "cost": "{5}", "mv": 5, "kind": "permanent" }], "graveyard": ["Dark Ritual", "Diabolic Intent", "Shadowborn Apostle"], "library_size": 41, "land_drops_left": 1 },
+  "opponent": { "life": 16, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "heuristic_default": 3,
+  "allow_decline": false,
+  "pick_index": 5,
+  "pick_total": 6,
+  "options": [{ "index": 0, "perm_index": 7, "tapped": false, "name": "Shadowborn Apostle", "label": "Shadowborn Apostle", "num": 22, "sick": false }, { "index": 1, "perm_index": 8, "tapped": false, "name": "Shadowborn Apostle", "label": "Shadowborn Apostle", "num": 23, "sick": false }, { "index": 2, "perm_index": 9, "tapped": false, "name": "Shadowborn Apostle", "label": "Shadowborn Apostle", "num": 24, "sick": false }, { "index": 3, "perm_index": 16, "tapped": false, "name": "Shadowborn Apostle", "label": "Shadowborn Apostle", "num": 26, "sick": true }],
+  "note": "reply an option index -- the creature to sacrifice. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 37,
+  "main_ordinal": 11,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 6, "kind": "sacrifice", "text": "🔪 Shadowborn Apostle -- sacrificed 6 creatures named Shadowborn Apostle" }, { "turn": 6, "kind": "tutor", "text": "🐉 Jetmir, Nexus of Revels -- put onto the battlefield (Shadowborn Apostle)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Blood Crypt", "idx": 6, "num": 2, "is_land": true, "taps": "BR" }, { "name": "Jetmir, Nexus of Revels", "idx": 11, "num": 13, "sick": true, "is_land": false, "power": 6, "toughness": 4 }, { "name": "Shadowborn Apostle", "idx": 7, "num": 22, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 8, "num": 23, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 9, "num": 24, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Swamp", "idx": 4, "num": 40, "tapped": true, "is_land": true }, { "name": "Swamp", "idx": 5, "num": 41, "tapped": true, "is_land": true }, { "name": "Thrumming Stone", "idx": 10, "num": 57, "is_land": false }], "vial_counters": [], "hand": [{ "num": 20, "name": "Reaper from the Abyss", "cost": "{3}{B}{B}{B}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }, { "num": 59, "name": "Thrumming Stone", "cost": "{5}", "mv": 5, "kind": "permanent" }], "graveyard": ["Dark Ritual", "Diabolic Intent", "Shadowborn Apostle", "Shadowborn Apostle", "Shadowborn Apostle", "Shadowborn Apostle", "Shadowborn Apostle", "Shadowborn Apostle", "Shadowborn Apostle"], "library_size": 40, "land_drops_left": 1 },
+  "opponent": { "life": 16, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Swamp; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Swamp", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 38,
+  "main_ordinal": 12,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 6, "kind": "combat", "text": "⚔ attacked: Shadowborn Apostle (2), Shadowborn Apostle (2), Shadowborn Apostle (2) — 6 to opponent (16→10)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Blood Crypt", "idx": 6, "num": 2, "is_land": true, "taps": "BR" }, { "name": "Jetmir, Nexus of Revels", "idx": 11, "num": 13, "sick": true, "is_land": false, "power": 6, "toughness": 4 }, { "name": "Shadowborn Apostle", "idx": 7, "num": 22, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 8, "num": 23, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 9, "num": 24, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Swamp", "idx": 4, "num": 40, "tapped": true, "is_land": true }, { "name": "Swamp", "idx": 5, "num": 41, "tapped": true, "is_land": true }, { "name": "Thrumming Stone", "idx": 10, "num": 57, "is_land": false }], "vial_counters": [], "hand": [{ "num": 20, "name": "Reaper from the Abyss", "cost": "{3}{B}{B}{B}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }, { "num": 59, "name": "Thrumming Stone", "cost": "{5}", "mv": 5, "kind": "permanent" }], "graveyard": ["Dark Ritual", "Diabolic Intent", "Shadowborn Apostle", "Shadowborn Apostle", "Shadowborn Apostle", "Shadowborn Apostle", "Shadowborn Apostle", "Shadowborn Apostle", "Shadowborn Apostle"], "library_size": 40, "land_drops_left": 1 },
+  "opponent": { "life": 10, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Swamp; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Swamp", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 39,
+  "main_ordinal": 13,
+  "type": "main_phase",
+  "turn": 7,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 7, "card": "Lake of the Dead" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Blood Crypt", "idx": 6, "num": 2, "is_land": true, "taps": "BR" }, { "name": "Jetmir, Nexus of Revels", "idx": 11, "num": 13, "is_land": false, "power": 6, "toughness": 4 }, { "name": "Shadowborn Apostle", "idx": 7, "num": 22, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 8, "num": 23, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 9, "num": 24, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Swamp", "idx": 4, "num": 40, "is_land": true, "taps": "B" }, { "name": "Swamp", "idx": 5, "num": 41, "is_land": true, "taps": "B" }, { "name": "Thrumming Stone", "idx": 10, "num": 57, "is_land": false }], "vial_counters": [], "hand": [{ "num": 15, "name": "Lake of the Dead", "cost": "", "mv": 0, "kind": "land" }, { "num": 20, "name": "Reaper from the Abyss", "cost": "{3}{B}{B}{B}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }, { "num": 59, "name": "Thrumming Stone", "cost": "{5}", "mv": 5, "kind": "permanent" }], "graveyard": ["Dark Ritual", "Diabolic Intent", "Shadowborn Apostle", "Shadowborn Apostle", "Shadowborn Apostle", "Shadowborn Apostle", "Shadowborn Apostle", "Shadowborn Apostle", "Shadowborn Apostle"], "library_size": 39, "land_drops_left": 1 },
+  "opponent": { "life": 10, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Lake of the Dead; cast: Thrumming Stone, Lake of the Dead: tap, sacrifice a Swamp for {B}×4", "declared_order_payability": "not_verified", "land": "Lake of the Dead", "casts": ["Thrumming Stone", "Lake of the Dead"], "actions": [{ "card": "Thrumming Stone" }, { "card": "Lake of the Dead", "src_num": 15, "activate": true, "sacout": true, "sac_count": 1, "sac_mana": true, "float_color": "B" }] },
+    { "index": 1, "summary": "land=Lake of the Dead; cast: Lake of the Dead: tap, sacrifice a Swamp for {B}×4", "declared_order_payability": "not_verified", "land": "Lake of the Dead", "casts": ["Lake of the Dead"], "actions": [{ "card": "Lake of the Dead", "src_num": 15, "activate": true, "sacout": true, "sac_count": 1, "sac_mana": true, "float_color": "B" }] },
+    { "index": 2, "summary": "land=Lake of the Dead; cast: Reaper from the Abyss, Lake of the Dead: tap, sacrifice a Swamp for {B}×4", "declared_order_payability": "not_verified", "land": "Lake of the Dead", "casts": ["Reaper from the Abyss", "Lake of the Dead"], "actions": [{ "card": "Reaper from the Abyss" }, { "card": "Lake of the Dead", "src_num": 15, "activate": true, "sacout": true, "sac_count": 1, "sac_mana": true, "float_color": "B" }] },
+    { "index": 3, "summary": "land=Swamp; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Swamp", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=Lake of the Dead; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Lake of the Dead", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 40,
+  "type": "main_phase",
+  "turn": 7,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Blood Crypt", "idx": 6, "num": 2, "is_land": true, "taps": "BR" }, { "name": "Jetmir, Nexus of Revels", "idx": 11, "num": 13, "is_land": false, "power": 6, "toughness": 4 }, { "name": "Shadowborn Apostle", "idx": 7, "num": 22, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 8, "num": 23, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Shadowborn Apostle", "idx": 9, "num": 24, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Swamp", "idx": 4, "num": 40, "is_land": true, "taps": "B" }, { "name": "Swamp", "idx": 5, "num": 41, "is_land": true, "taps": "B" }, { "name": "Swamp", "idx": 12, "num": 47, "is_land": true, "taps": "B" }, { "name": "Thrumming Stone", "idx": 10, "num": 57, "is_land": false }], "vial_counters": [], "hand": [{ "num": 15, "name": "Lake of the Dead", "cost": "", "mv": 0, "kind": "land" }, { "num": 20, "name": "Reaper from the Abyss", "cost": "{3}{B}{B}{B}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 59, "name": "Thrumming Stone", "cost": "{5}", "mv": 5, "kind": "permanent" }], "graveyard": ["Dark Ritual", "Diabolic Intent", "Shadowborn Apostle", "Shadowborn Apostle", "Shadowborn Apostle", "Shadowborn Apostle", "Shadowborn Apostle", "Shadowborn Apostle", "Shadowborn Apostle"], "library_size": 39, "land_drops_left": 0 },
+  "opponent": { "life": 10, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 7, "kind": "combat", "text": "⚔ attacked: Shadowborn Apostle (2), Shadowborn Apostle (2), Shadowborn Apostle (2), Jetmir, Nexus of Revels (6) — 12 to opponent (10→-2)" }
+  ]
+}
