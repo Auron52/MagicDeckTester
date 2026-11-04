@@ -18537,8 +18537,11 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
                        (int)lackey_persist, (int)skirk_on, vial_charge, untapped_mana, mana_now,
                        mana_next, buff_targets, (int)hand_has_play })
         { sig = (sig ^ (uint64_t)(uint32_t)v) * 1099511628211ull; }
-        if (!s_seen.insert(sig).second
-            || (int)s_seen.size() > EnvInt("MTG_TUTOR_RANK_DUMP_MAX", 400)) { dump = false; }
+        // At MTG_TUTOR_RANK_DUMP=2 a REAL resolution always prints (it is the one to diff the search against).
+        static const bool s_dump_real = EnvInt("MTG_TUTOR_RANK_DUMP", 0) >= 2;
+        const bool always = s_dump_real && g_real_resolution;
+        if ((!s_seen.insert(sig).second && !always)
+            || ((int)s_seen.size() > EnvInt("MTG_TUTOR_RANK_DUMP_MAX", 400) && !always)) { dump = false; }
     }
     if (dump)
     {
@@ -18551,6 +18554,27 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
                      (int)skirk_on, vial_charge, untapped_mana, mana_now, mana_next,
                      buff_targets, (int)hand_has_play, (int)haste_avail, swings_left, skirk_ramp,
                      TutorSearchWidth());
+        // MTG_TUTOR_RANK_DUMP=2: also the board and hand the inputs above were read from (per permanent:
+        // tapped / entered_this_turn / CanAttackFull / power; per hand card: staged), the phase and whether
+        // this is the REAL resolution -- the instrument for executor-vs-rollout input mismatches.
+        static const int s_dump_lvl = EnvInt("MTG_TUTOR_RANK_DUMP", 0);
+        if (s_dump_lvl >= 2)
+        {
+            std::fprintf(stderr, "  [tr-board] real=%d phase=%d hand=%zu bf=%zu\n", (int)g_real_resolution,
+                         (int)s.phase, s.players[controller].hand.size(), s.battlefield.size());
+            for (const Permanent& p : s.battlefield)
+            {
+                if (p.controller_index != controller) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+                const Card& pc = d ? d->card : p.card;
+                if (!pc.IsCreature()) { continue; }
+                std::fprintf(stderr, "    bf %-26s #%d tap=%d ett=%d atk=%d pw=%d\n", p.card.m_name.str().c_str(),
+                             p.card.m_number, (int)p.tapped, (int)p.entered_this_turn,
+                             (int)CanAttackFull(p, s.battlefield, controller), board_power(p, pc));
+            }
+            for (const Card& h : s.players[controller].hand)
+            { std::fprintf(stderr, "    hand %-26s #%d staged=%d\n", h.m_name.str().c_str(), h.m_number, (int)h.m_is_staged); }
+        }
         for (std::size_t i = 0; i < cands.size(); ++i)
         {
             const Card* lc = nullptr;

@@ -20984,6 +20984,13 @@ inline void FireCombatDamageCheatIntoPlay(GameState& state, int controller,
             }
             state.scripted_cheat_choice = -1;   // consumed by this trigger
         }
+        // MTG_LACKEY_TRACE=2: the trigger's ordinal rank and the card it actually puts (diagnostic only).
+        if (s_lackey_trace && EnvInt("MTG_LACKEY_TRACE", 0) >= 2)
+        {
+            std::fprintf(stderr, "[lackey2] turn=%d real=%d ord_rank=%d chose=%s hand=%zu\n", state.turn_number,
+                         static_cast<int>(g_real_resolution), ord_rank, ap.hand[best].m_name.str().c_str(),
+                         ap.hand.size());
+        }
         // MTG_LACKEY_PREF: DIAGNOSTIC (no play change). Logs the REVEALED PREFERENCE of the search --
         // the candidate set that was actually available and the card the chosen plan actually put --
         // for REAL resolutions only (g_real_resolution; every rollout scope clears it). Run with a
