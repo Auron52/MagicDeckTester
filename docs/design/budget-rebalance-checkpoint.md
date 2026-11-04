@@ -506,3 +506,20 @@ unpaired at x0/x28/x20/x14 -- all played). Win-turn delta vs x0 (+ = slower), wa
   search (+8% wall) and plays better. So x28 does not shorten the held-out tail; the tail corpus drops 22%.
 - Decision is the USER's (R, and any per-deck budget raise for kittyv3/edf/niv). Running now: tier-2 purity under
   priced on (run_purity_pb.sh -> pp_a/pp_b, purity_pb.DONE).
+
+## 2026-11-04 ~02:30 UTC: the priced budget was NOT DETERMINISTIC -- three channels fixed (WIP 4a8aba3fa)
+- Found by the tier-2 purity run under priced ON (95/260 unit diffs). It was not tier 2: same binary, same jobs gave
+  different units at 32 vs 32 threads and 2 vs 32. Root: the per-kind work counts (workctr) were not a pure function of
+  the game -- harmless while only diagnostics read them, but the priced budget bills from them (and the SHIPPED X=100
+  priced ceiling trips on them, so default play has had the same latent exposure, rarely triggered).
+- Channels (found with a temporary per-caller kPay counter + ASLR-off repeat + memo key dumps):
+  1. FluctKeepPayable 4-slot memo: slot hash had &cost_def (ASLR) + std::hash names (platform); outlived the game.
+  2. manaoracle refine memo (t_refine_memo): outlived the game.
+  3. BuildBreakpointKey folded g_incinerator_pin_cursor with no pins installed (cursor never reset, advances on every
+     unpinned trigger) -> identical states keyed apart by earlier games' triggers (MidrangeBurn).
+  Plus the tier-2 mana entry now records its solve's counted work and a tier-2 hit replays it.
+- Checks so far: priced-off counts identical 2 vs 32 threads and with ASLR on; priced-on units identical 32/32/2 on a
+  24-job subset; 2450/2450 unit tests. RUNNING: run_det_full.sh (regression manifest, priced ON: 16 vs 8 threads, and
+  tier 2 default vs absent) -> det_full.DONE.
+- CONSEQUENCE: the 01:04 A/B table above was measured on the non-deterministic build. Its per-deck x28 deltas (27 better
+  / 28 worse) are within what scheduling alone moved; RERUN pb_ab.json on the fixed build before anyone decides on R.
