@@ -1198,3 +1198,74 @@ logs/shadowborn/int10-brief.md for later).
 The keep table shipped, so the overnight ENTRY set expanded per the regression-testing skill's floor: d5 b20 play
 rows 4 x 300 -> 4 x 425 (Hinata's floor), the four d3 b10 400-game rows -> one 125-game sanity row (s4004), d0 rows
 unchanged. No overnight GT existed yet for Shadowborn; the next periodic overnight run accepts these rows as new.
+
+## s7 budget miss (2026-11-04)
+
+USER: *"If it doesn't find that relatively straightforward line at a decent budget we shold probably dig to see if
+there is a way to reduce the cost so that it can."* Reference `claude_s7_gi6` (force_mulligan 1:16): the human wins
+T5, the shipped search (d5 b20) T6. Branch `sb-s7cost` (local), scratch `build/scratch/sb-s7cost/`.
+
+**0. The hand-off tool was not the shipped engine (fixed, e66dddfc0).** `--choices-then-auto` never called
+`SetSearchPostCombat`, so on every second-main deck a hand-off ran without the searched second main: s7 handed off at
+T1 frame 0 won T5 at b20 while the real game (CLI and `--batch`) wins T6. Fixed at the hand-back; the T1 hand-off now
+reproduces the batch (b20 T6, b80 T5). Every earlier `ref_handoff.py` / `ref_handoff_sweep.py` result on a second-main
+deck (Shadowborn, Fungus, AntiLifegain, Kitty, ...) measured the single-main engine. Same commit: the hybrid root's
+census row and `MTG_PLAN_DUMP` keyed the phase off `second_main` (pre=0 / the second-main menu at every second-main
+root); now pre-combat. Diagnostics added (off by default): `MTG_PLAN_DUMP_STATE`, `MTG_LA_HIST`,
+`MTG_CLAUDE_STOP_AFTER_TURN`.
+
+**1. Localised: the T2 pre-combat main.** Board: Swamp + Apostle; hand Profane Tutor, Demonic Tutor, Diabolic
+Intent, Lake of the Dead, Apostle, Abhorrent Overlord. Hand-offs from that board, differing only in budget: b10..b40
+play Lake + Apostle (T6), b60+ play Lake + suspend Profane Tutor (T5). From the T3 board after Lake + Apostle the
+game is T6 at b20, b80, b320 and d8 b0 -- T5 is gone. After Lake + Profane, b20 wins T5. After the human's T2
+(Apostle, Lake held), d8 b0 wins T5 but b20 and b80 do not (a second T5 line, not the one the budget finds).
+Clairvoyance: the Profane line casts Profane off suspend at T4 upkeep (fetching Thrumming Stone) and its T4 draw (Dark
+Ritual) comes after Demonic Tutor's T3 shuffle, which the search sees; the human's line needs no library knowledge.
+
+**2. Why b20 misses it: the ladder stops at depth 1.** T2 pass 1 (depth 1) costs 5,789 units and scores both T2
+plays T6 (the horizon leaf cannot see the T4-upkeep Profane). The start gate refuses pass 2 with 12,211 of 18,000
+units left. Pass 2 (T2 and T3 searched) finds T5 and costs 91,013 units at b60 (148,335 at b400: the late waves admit
+more at a larger budget), i.e. 16x pass 1 and 7.5x the whole b20 budget.
+
+Where pass 2's 91,013 units go (census delta b60 - b20 at the T2 root): la_cand 47,438, rollout_step 14,199,
+la_bp_wave 14,191, greedy_fallback 13,473, fs_bp_node 789, fs_main2 690, fs_pre 233. `MTG_LA_HIST` on one T2 child (the
+Profane line's T3 node, d1 unlimited): EVERY la_cand candidate is inside the horizon rollouts (rnest=1), i.e. the
+engine-default 1-ply leaf (`MTG_FD_LEAF_DEPTH` default 1; Shadowborn's profile sets no `search_leaf_depth`):
+
+| leaf turn | m1 calls / cands | m2 calls / cands |
+|---|---|---|
+| T4 | 155 / 4,393 | 2,134 / 8,242 |
+| T5 | 39 / 512 | 441 / 1,433 |
+| T6 | 9 / 45 | 19 / 50 |
+
+The leaf's own second main is searched at the leaf's ply for every first-main candidate (USER doctrine: m2 searched
+wherever m1 is), so each leaf turn is (m1 menu) x (m2 menu) playouts. Per T2 child, the T3 depth-1 subtree costs (d1
+unlimited) 12.6k (Lake + Apostle), 14.2k (Apostle, Lake held), 22.1k (Lake), 21.4k (Lake + Profane), ~1k (each
+DT/DI -> Stone). Leaf transposition hits 75% (19.8k lookups) -- a hit already skips its rollout but pays its 1 la_cand
+unit. Arms at b400, T2 pass costs: base pass 2 148k; `MTG_NO_M2_SOLVE=1` (upper bound only, never a proposal) pass 2
+73.8k; greedy leaf pass 1 122, pass 2 3,440 (T6), pass 3 143k (T5).
+
+**3. Waste seen in the search's own T3 menu (Profane line; `MTG_PLAN_DUMP_STATE`).** 52 plans, 46 distinct states.
+(a) 24 are Profane Tutor's T4-upkeep pick variants (`upkeep_land_search` = 1, 2 on top of the front): the T3 menu is
+x3 for a pick that, at a last-ply T3 node, resolves beyond the horizon. (b) 6 are Lake of the Dead SacForMana plans
+whose entire output is left floating with nothing left to spend it on (e.g. `PlayLand:Swamp + SacForMana:Lake`,
+pool 5, nothing cast), each strictly dominated by the same plan without the activation (a Swamp and an untapped Lake
+kept). (c) 6 exact STATE-DUPs, already folded. NOT implemented here: neither closes a 7.5x gap; (b) needs a soundness
+proof against breakpoint continuations that could spend the float, (a) changes what the horizon sees at every budget
+(a play change needing the A/B, and arguably the USER's call). Both are the next collapses to build.
+
+**4. The lever that does close it is a SETTING (USER decision, not adopted): the greedy horizon leaf.** Held-out A/B,
+seeds 920000-920999, d5 b20, 1000 paired games, one pooled batch (arm = manifest `leaf_greedy_from_depth: 1`, which
+is `search_leaf_depth: 0` for every pass):
+
+| arm | avg turn | units/game | thread-ms |
+|---|---|---|---|
+| shipped (1-ply leaf) | 4.8600 | 21,082 | 883,025 |
+| greedy leaf | 4.8100 (-0.050, t -4.69; 68 faster, 19 slower) | 24,198 (+14.8%) | 944,123 (+6.9%) |
+
+All 19 slower games recover at d8 b0 under the greedy leaf (each <= its shipped-b20 turn; gi236 6 -> 5). s7 at b20:
+T5 (T2 pass 3, 61,822 units, finds the Profane line). `ref_bench --deck shadowborn_apostle`: shipped 1/10 short (s7
+6 vs 5), greedy leaf 0/10 short (search avg 4.2 -> 4.1). More units, because the cheap passes let the ladder reach
+depth 3 and the overrun ceiling lets that pass finish. Caveats for the decision: the keep table was generated under
+the 1-ply leaf (a leaf change is a play change; Rule 0 of mulligan-profile.md applies to whether to regenerate), and
+the per-deck leaf K is what the value-leaf pipeline's leaf calibration measures -- Shadowborn's value leaf is still open.
