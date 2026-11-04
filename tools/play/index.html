@@ -164,8 +164,8 @@
      row (the tapped one is just wider). */
   .thumb.tapped { width:126px; }
   .thumb.tapped img { width:90px; margin:0 auto; transform:rotate(90deg); opacity:.82; filter:saturate(.85); }
-  .thumb .sickbadge { position:absolute; top:2px; right:2px; background:rgba(200,150,40,.92); color:#0c1116;
-                      font-size:11px; font-weight:700; border-radius:3px; padding:0 3px; line-height:14px; z-index:3; }
+  .thumb .sickbadge { position:absolute; top:1px; right:1px; font-size:11px; line-height:12px; z-index:3;
+                      text-shadow:0 0 2px #000; }
   .thumb .tapbadge { position:absolute; top:2px; left:2px; background:rgba(120,120,130,.92); color:#0c1116;
       border-radius:4px; font-size:10px; font-weight:700; padding:0 4px; z-index:2; }
   .thumb em { font-style:normal; font-size:10px; color:var(--muted); display:block; line-height:1.12; margin-top:3px; }
@@ -2227,7 +2227,7 @@ function bfThumb(o) {   // battlefield entry {name, is_land, is_le, counters?}
     (o.tapped?`<span class="tapbadge" title="tapped">⤵</span>`:'')+
     // SUMMONING SICK (USER 2026-11-04): entered this turn and cannot attack -- the board said nothing, so a
     // sacrifice of six identical Apostles could not tell the attack-ready ones apart.
-    (o.sick?`<span class="sickbadge" title="summoning sick: entered this turn, cannot attack">💤 sick</span>`:'')+
+    (o.sick?`<span class="sickbadge" title="summoning sick: entered this turn, cannot attack">💤</span>`:'')+
     ((tapOpts.length&&S.tapMode)?`<span class="pretapbadge" title="click to ${o.tap_sac?'sacrifice':'tap'} ${esc(o.name)} yourself for ${esc(tapOpts.map(preTapFaceText).join(' or '))}${(o.tap_fed||[]).length?` — ${esc(o.tap_feed||'its feed')} comes out of your floating mana, so tap its feeder first`:''}${o.tap_note?` — ${esc(o.tap_note)}`:''}${(o.tap_auras||[]).length?` — you will also pick the colour of ${esc((o.tap_auras||[]).map(a=>a.name).join(' and '))}’s bonus mana`:''}${o.tap_energy?` — a COLOURED tap costs ${o.tap_energy} energy, its {C} mode is free`:''}">⛏${tapN?` ×${tapN}`:''}</span>`:'')+
     // Copy-entrant provenance (Sakashima's Protege): the art/name ARE the copied card — without
     // this badge a Protege-copy of Boarding Party is indistinguishable from a real one and the
