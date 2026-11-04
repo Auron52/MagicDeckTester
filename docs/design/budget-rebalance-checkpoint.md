@@ -523,3 +523,19 @@ unpaired at x0/x28/x20/x14 -- all played). Win-turn delta vs x0 (+ = slower), wa
   tier 2 default vs absent) -> det_full.DONE.
 - CONSEQUENCE: the 01:04 A/B table above was measured on the non-deterministic build. Its per-deck x28 deltas (27 better
   / 28 worse) are within what scheduling alone moved; RERUN pb_ab.json on the fixed build before anyone decides on R.
+
+## Live at compaction #7 (2026-11-04 ~02:45 UTC)
+- Tree: budget-rebalance @ bef762a7e (src = WIP 4a8aba3fa: priced budget + refit + determinism fixes + tier-2 work
+  replay). build/Release is that tree, clean (temp diagnostics removed). Nothing on the shared branch.
+- RUNNING (harness tasks): run_det_full.sh -> build/scratch/budget/dA/dB/dC.{log,err}, det_full.DONE (priced ON;
+  expect 0 unit-diff jobs for 16 vs 8 threads AND tier2 default vs KB=1); CI watch on bef762a7e.
+- NEXT:
+  1. Read det_full output. If any diffs remain: same method -- per-game workctr counts priced OFF across thread counts
+     (detcmp.py), then a temporary per-caller kPay counter (return address via dladdr + addr2line), then memo-key dumps.
+  2. Rerun the A/B on the fixed build: bash build/scratch/budget/run_pb.sh (pb_ab.json unchanged, 126,580 games,
+     ~25 min), report with scripts/ab_x_report.py build/scratch/budget/pb. Report per-deck quality + tail per R to the
+     USER (R = priced ns per billed unit; 28,300 = median deck unchanged; lower R = less search). Per-deck budget raise
+     (Kitty v3 / EDF / Niv were the losers on the bad build) is the USER's call.
+  3. Then pooled bottoming budget, then remaining EDF wastes. GT accept owed before any shared push (refit prices +
+     determinism fixes move budgeted play through the X=100 ceiling).
+- Cyclone mulligan generation stays PAUSED (USER).
