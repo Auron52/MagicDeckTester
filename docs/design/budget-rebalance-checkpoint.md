@@ -539,3 +539,11 @@ unpaired at x0/x28/x20/x14 -- all played). Win-turn delta vs x0 (+ = slower), wa
   3. Then pooled bottoming budget, then remaining EDF wastes. GT accept owed before any shared push (refit prices +
      determinism fixes move budgeted play through the X=100 ceiling).
 - Cyclone mulligan generation stays PAUSED (USER).
+
+## 2026-11-04 02:35 UTC: determinism VERIFIED at full scale; A/B rerun LAUNCHED
+- det_full (regression manifest, 260 jobs, priced ON): 16 vs 8 threads **0 unit-diff jobs** (369,148,027 units both);
+  tier-2 default vs absent (KB=1) **0 unit-diff jobs**. Priced OFF tier-2 purity was already 0 diffs.
+- CI for bef762a7e: run 41758970791 (watch still pending at launch).
+- A/B rerun on the fixed build (build/Release from 4a8aba3fa): `run_pb.sh` -> `build/scratch/budget/pb.{log,err,txt}`,
+  marker `pb.DONE`. The non-deterministic run's outputs moved to `build/scratch/budget/pb_nondet/`.
+  Report: `python3 scripts/ab_x_report.py build/scratch/budget/pb`. R choice + any per-deck raise are the USER's.
