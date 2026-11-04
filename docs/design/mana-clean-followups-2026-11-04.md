@@ -54,3 +54,13 @@ limit); needs a byte-identical held-out run.
   come with an actual win to help offset the losses."*
 - CAPPED retry + node cap: USER *"Sure. We may even want a higher threshold depending."* (being measured on
   wip/oracle-nodecap).
+
+## Galadriel: the oracle-on arm exhausts memory (found 2026-11-04 16:30Z, deferred)
+
+The pass run `pass1-galadriel-r2` (src `aa9f15b9b77f`) hit the 43 GB RSS cap about two minutes into the full oracle-ON
+batch (32 threads) and aborted with exit 137 after 564 games. Those games logged 2,966 UNMODELED "payment enumeration
+capped" flags, nearly all Crackle with Power with a large X on boards of 10+ lands (e.g. seed 30000018 gi 18 T4, seed
+30000022 gi 22 T4). The oracle-OFF arm is unaffected. The same run had started at 12:36Z alongside other jobs and is the
+likely cause of the container OOM at ~12:50Z. Games in flight at the abort: gi 1457, 1827, 2157, 2179, 2291, 2417, 2445.
+Galadriel is NOT requeued: root-cause the oracle's memory on X-spell payment enumeration first (per-game RSS with
+`MTG_MANA_ORACLE=2`, one thread), then rerun the deck alone.
