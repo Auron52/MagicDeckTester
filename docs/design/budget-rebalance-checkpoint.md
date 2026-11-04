@@ -578,3 +578,7 @@ Same manifest/arms as 01:04. Numbers reproduce the non-deterministic run almost 
 - NOW: rebased budget-rebalance onto origin 68a94b54d; rebuild OK, 2544/2544 tests. Running smoke then regression
   (priced budget OFF: refit prices + determinism fixes move budgeted play through the X=100 ceiling) -> accept -> the
   increment can land on the shared branch once the USER is happy. R / per-deck raise still the USER's call.
+- TIERS on the rebased tree (budget-rebalance b00e7f153, priced budget OFF): smoke 169/169 PASS, regression 271/271 PASS
+  (references included), BOTH with 0 play-changed / 0 slower / 0 faster games vs committed GT. Nothing to accept: the
+  refit prices + determinism fixes + tier-2 work replay are byte-identical on both tiers. Not pushed to the shared
+  branch (feature not complete until the USER rules on R / per-deck raise).
