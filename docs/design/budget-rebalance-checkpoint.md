@@ -716,3 +716,23 @@ problem that doesn't happen as much anymore." Start with every slow rollout on r
   mull_gen bug), not the d1/b1 replay; the d1/b1 decision never closed, so it has no row.
 - Small fix EDITED, NOT BUILT (the running replays use this worktree's binary): MulliganProfileIO.h -- a sidecar
   without mull_gen_* / expected_buckets keeps the profile's values (generation-only keys; play-neutral).
+
+### 10:45 UTC -- 6(a) PRICED_STOP measured on the gen tail; Goblins culprit found; play A/B READY
+- PRICED_STOP=1 vs off, rollout replays paired on (size side r, seed), `python3 build/scratch/budget/hist/stop/pair.py`:
+  4,312 paired lines, **0 win-turn diffs**. EDF d1/b1 10 lines 47,146 s -> 236 s (13,124 s -> 109 s max; single-hand
+  probe 8,613 s -> 10.9 s); LFE 13 lines 1,237 -> 312 s; Melira 1,085 lines max 4,167 -> 3,690 s (its tail is NOT
+  derivation -- next to investigate); Goblins 187 max 1,650 -> 996 s; Kitty top-3000 / Snow / CG neutral.
+  Still running at compaction: stop/run_stop2.sh (Melira, ~160 lines left) and stop/run_stop3.sh (Kitty top 3000).
+- GOBLINS (5): bisect first bad = d2184261b MTG_SUBSET_SAC_OUTLETS (intentional correctness fix, default ON). Branch,
+  line d6/b10: on 1,479 s, SAC_OUTLETS=0 80 s, DEV_SEQ=0 1,473 s (not it), both 92 s; win turn 4 everywhere. Census
+  (probe/gc_on.tsv vs gc_off.tsv): space_odo 635M vs 31M, pay_calls 231M vs 8.8M, dupc_sac_for_mana 66M vs 1.5M, plans
+  only 4.6x -> waste = selections the one-use-per-sac-source dup rule rejects AFTER pay/rules work. SUBAGENT running
+  (worktree .claude/worktrees/sac-fold, branch sac-fold, cores 26-29,31, scratch build/scratch/budget/sacfold/):
+  exact fold so the walk never visits those selections. Bisect worktree reset + removed (refs check OK).
+- UNCOMMITTED src in this worktree (built 10:4x, unit tests NOT yet run): MulliganProfileIO.h mull_gen fix; per-job
+  arm `bp_priced_stop` (ValueArm.h, BatchRunner.cpp parser, TurnSolver.cpp BpDerivePricedStopOn replaces the static
+  env read). Next: run build/Release/mtg-test, commit.
+- PLAY A/B READY (not launched): build/scratch/budget/mk_ps.py -> pstop_ab.json (368 jobs, 63,290 games, arms _x0 = stop
+  OFF / _x1 = stop ON, X=100); run build/scratch/budget/run_pstop.sh (cores 0-25, threads 26) once the stop2/stop3
+  replays finish; stop my EDF off-arm replay (run_hist3.sh, pid 907159) at launch. Read: scripts/ab_x_report.py
+  build/scratch/budget/pstop. Adoption = default ON if every deck net <= 0, then smoke/regression GT accept.
