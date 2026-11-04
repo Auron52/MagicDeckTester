@@ -9,6 +9,7 @@
 #include "../ai/ManaPayment.h"  // upkeep instant tutor affordability
 #include "../ai/TurnSolver.h"   // EquipmentEtbDrawFires (the log's draw reporter, below)
 #include "../ai/GameWorkMeter.h"
+#include "../ai/EscStats.h"     // t_job / t_gi: the batch job a bottom trial belongs to (MTG_BOTTOM_TRIAL_TRACE)
 #include "../cards/CardDatabase.h"
 #include <algorithm>
 #include <iostream>   // MTG_FB_TRACE diagnostic
@@ -152,7 +153,9 @@ int GameEngine::PlayOutFrom(GameState& state, int max_turns, ResumeAt from)
             if (id == 0) { return; }
             std::string o = "[btrial] seed=" + std::to_string(st.game_seed) + " id=" + std::to_string(id)
                           + " stop=" + std::to_string(stop) + " res=" + std::to_string(res)
-                          + " turn=" + std::to_string(st.turn_number) + " u=";
+                          + " turn=" + std::to_string(st.turn_number)
+                          + " job=" + (escstats::t_job ? escstats::t_job : "-") + " gi=" + std::to_string(escstats::t_gi)
+                          + " u=";
             for (std::size_t k = 0; k < u.size(); ++k) { o += (k ? "," : "") + std::to_string(u[k]); }
             std::fprintf(stderr, "%s\n", o.c_str());
         }
