@@ -71929,7 +71929,11 @@ static void FoldIdleLandCracks(const GameState& state, bool is_pre_combat, std::
             TurnSolver::Plan s = c;
             s.actions.erase(s.actions.begin() + static_cast<std::ptrdiff_t>(k));
             std::size_t j = 0;
-            for (; j < v.size(); ++j) { if (j != i && v[j] == s) { break; } }
+            for (; j < v.size(); ++j)
+            {
+                if (j == i || v[j].actions.size() != s.actions.size() || v[j].land_to_play != s.land_to_play) { continue; }
+                if (v[j] == s) { break; }
+            }
             static const bool s_dbg = EnvOn("MTG_IDLE_CRACK_DEBUG");
             if (s_dbg)
             {
@@ -77249,7 +77253,6 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     {
         drop_attach_illegal_core(v);
         drop_partial_vamp(v);
-        FoldIdleLandCracks(state, is_pre_combat, v);   // MTG_IDLE_CRACK_FOLD (sound identity; inert without a land crack)
     };
     // AN EVOKE NOTHING READS (PlanHasDeadOptionalEvoke; LandfallElementals s61001 / s61007): a plan that
     // evokes Foundation Breaker while no enter watcher / opponent target / death payoff is on the board
@@ -77430,7 +77433,6 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     }
 
     drop_partial_vamp(ordered);
-    FoldIdleLandCracks(state, is_pre_combat, ordered);   // MTG_IDLE_CRACK_FOLD, on the ORDERED list (per ordering)
     return ordered;
 }
 
@@ -95083,9 +95085,19 @@ static bool SuspendTutorUncoveredPending(const GameState& state)
 // in the playout beyond the horizon (permitted), or at a constant-leaf edge (the identity fold). Printed at exit.
 namespace stutcensus
 {
-inline std::atomic<long long> g_searched{0}, g_narrow{0}, g_edge{0}, g_outside{0};
-static void Note(const GameState& s)
+inline std::atomic<long long> g_searched{0}, g_narrow{0}, g_edge{0}, g_outside{0}, g_real{0};
+static void Note(const GameState& s, int controller, const CardParams& pp)
 {
+    // Only a pick with a CHOICE: one candidate (after the provider's restriction) is the same pick either way.
+    if (SuspendTutorPickWidth(s, controller, pp) <= 1) { return; }
+    // The EXECUTOR's own upkeep resolving an unpinned fetch: the committed line's crossing recorded nothing.
+    if (g_real_resolution)
+    {
+        g_real.fetch_add(1, std::memory_order_relaxed);
+        if (EnvInt("MTG_STUT_AXIS_STATS", 0) >= 2)
+        { std::fprintf(stderr, "[stut-axis] REAL unpinned fetch: seed=%llu T%d\n", static_cast<unsigned long long>(s.game_seed), s.turn_number); }
+        return;
+    }
     if (HumanPlayActive() || !greedywindow::InWindow(0)) { g_outside.fetch_add(1, std::memory_order_relaxed); return; }
     if (t_rollout_narrow || (g_rollout_nest > 0 && t_echo_rollout_turn_depth <= 0))
     { g_narrow.fetch_add(1, std::memory_order_relaxed); return; }
@@ -95099,8 +95111,8 @@ struct Installer
     {
         if (g_stut_unpinned_hook == nullptr) { return; }
         std::fprintf(stderr, "[stut-axis] unpinned suspended-tutor searches: searched-frame=%lld (must be 0) "
-                             "playout=%lld edge=%lld outside-window=%lld\n",
-                     g_searched.load(), g_narrow.load(), g_edge.load(), g_outside.load());
+                             "playout=%lld edge=%lld outside-window=%lld real-upkeep=%lld\n",
+                     g_searched.load(), g_narrow.load(), g_edge.load(), g_outside.load(), g_real.load());
     }
 };
 static Installer s_installer;
@@ -95282,7 +95294,8 @@ bool BoundaryFan::Cross(GameState& sx)
     if (tutor_) { t_upkeep_tutor_width_probe = &tutor_width; }
     SuspendTutorProbe stut_probe;
     SuspendTutorProbe* prior_stut_probe = t_suspend_tutor_probe;
-    if (stut_) { t_suspend_tutor_probe = &stut_probe; }
+    const bool prior_stut_crossing = t_stut_fan_crossing;
+    if (stut_) { t_suspend_tutor_probe = &stut_probe; t_stut_fan_crossing = true; }
     if (doth_)
     {
         DothProbeScope scope;
@@ -95292,6 +95305,7 @@ bool BoundaryFan::Cross(GameState& sx)
     else { ok = SimulateEndAndStartNextTurn(sx); }
     t_upkeep_tutor_width_probe = prior_tutor_probe;
     t_suspend_tutor_probe = prior_stut_probe;
+    t_stut_fan_crossing = prior_stut_crossing;
     if (tutor_) { tutor_width_ = std::max(1, tutor_width); }
     if (stut_)
     {
