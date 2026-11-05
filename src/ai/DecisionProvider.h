@@ -221,6 +221,14 @@ public:
     virtual std::vector<std::string>
     TutorCandidates(const GameState& s, int controller, const CardParams& pp) const = 0;
 
+    // Tooth and Nail's searched compound axis. The two library picks enter the
+    // hand before the two hand-put picks are made, so a provider may narrow a
+    // COMPLETE legal tuple. The engine resolves the pinned tuple verbatim.
+    // Human play and MTG_UNPRUNED(Tutor) bypass this hook.
+    virtual bool ToothAndNailCandidateOk(const GameState&, int, int,
+                                         const std::vector<std::string>&,
+                                         const std::vector<std::string>&) const { return true; }
+
     // TutorMarksSuggested -- HUMAN PLAY only: should the tutor chooser MARK the provider's narrowed
     // candidate set (its pruned TutorCandidates) among the full legal list it offers? The menu is never
     // narrowed and never reordered (reference replays index into it) -- the marked names get a
@@ -347,6 +355,12 @@ public:
     { return {}; }
     virtual bool PutTargetOk(const PutPolicy& /*pol*/, const CardDefinition& /*d*/) const
     { return true; }
+
+    // A creature tutor can create a new same-main Equipment host that was
+    // absent when the turn's action set was built. Providers with that line
+    // can ask the search to re-evaluate after the tutor resolves.
+    virtual bool PostCreatureTutorBreakpoint(const GameState&, const CardDefinition&) const
+    { return false; }
 
     // SacTutorPutList -- Defense of the Heart upkeep sac-tutor ("search your library for up to two
     // creature cards, put those cards onto the battlefield"): which creature cards (by NAME, an
@@ -1910,7 +1924,7 @@ public:
     {
         (void)s; (void)source;
         std::vector<int> out;
-        if (mode == PermAbilityMode::PingAll)
+        if (mode == PermAbilityMode::PingAll || mode == PermAbilityMode::TargetPump)
         {
             for (int k = 1; k <= max_affordable; ++k) { out.push_back(k); }
             return out;

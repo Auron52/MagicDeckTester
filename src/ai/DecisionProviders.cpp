@@ -21197,6 +21197,7 @@ namespace
     const MirrorwingProvider     g_mirrorwing;
     const EquipmentProvider      g_equipment;
     const StompyProvider         g_stompy;
+    const JumboCactuarProvider   g_jumbo_cactuar;
     const MinotaurProvider       g_minotaur;
     const DragonsProvider        g_dragons;
     const GiantsProvider         g_giants;
@@ -23302,6 +23303,201 @@ std::vector<int> MerfolkProvider::CleanupDiscardCandidates(
 bool MerfolkProvider::CleanupDiscardShedStable() const
 { return !MerfolkBucketDiscardEnabled(); }
 
+// Concentrate Wild Growth, Utopia Sprawl and Overgrowth on the Forest that already
+// produces the most mana. Arbor Elf and Voyaging Satyr then untap the whole stack.
+// Keep four untapped hosts as alternatives: Overgrowth costs three mana, and
+// the payment can tap three Forests before the Aura enters. The fourth host
+// must remain reachable when its bonus pays for another spell this turn.
+// The caller reopens all legal hosts for human play and MTG_UNPRUNE=landaurahost.
+std::vector<int> JumboCactuarProvider::LandAuraHostCandidates(const GameState& s,
+                                                               int controller) const
+{
+    struct Host { int number; int yield; bool tapped; };
+    std::vector<Host> hosts;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller || !p.card.IsLand() || LandHasShroud(p, s))
+        { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        hosts.push_back({p.card.m_number, PermanentManaYield(s, p, *d), p.tapped});
+    }
+    std::stable_sort(hosts.begin(), hosts.end(), [](const Host& a, const Host& b)
+    { return a.yield != b.yield ? a.yield > b.yield : a.number < b.number; });
+    if (hosts.empty()) { return {}; }
+    std::vector<int> out{hosts.front().number};
+    int ready = hosts.front().tapped ? 0 : 1;
+    for (const Host& h : hosts)
+    {
+        if (ready >= 4) { break; }
+        if (h.tapped || h.number == hosts.front().number) { continue; }
+        out.push_back(h.number);
+        ++ready;
+    }
+    return out;
+}
+
+DecisionProvider::PutPolicy JumboCactuarProvider::PutTargetPolicy(
+    const GameState& s, int controller) const
+{
+    // Single-creature tutors in this goldfish have three useful roles. At low
+    // mana, Arbor Elf accelerates; Surrak is the reachable haste enabler one
+    // mana before Cactuar; once Cactuar is reachable it is the default payoff.
+    // Keep BOTH payoffs if two tutors are in hand, or Cactuar is already in
+    // hand, so the search can assemble Surrak -> Cactuar in one turn.
+    constexpr unsigned cactuar = 1u, surrak = 2u, elf = 4u;
+    PutPolicy pol;
+    if (controller < 0 || controller >= static_cast<int>(s.players.size())) { return pol; }
+    const Player& p = s.players[static_cast<std::size_t>(controller)];
+    int tutor_count = 0;
+    bool cactuar_in_hand = false;
+    for (const Card& c : p.hand)
+    {
+        if (c.m_is_staged) { continue; }
+        if (c.m_name.str() == "Jumbo Cactuar") { cactuar_in_hand = true; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d && (d->params.tutor_mv_max_is_x || d->params.finale_of_devastation))
+        { ++tutor_count; }
+    }
+    const int mana = AvailableManaPool(s).Total() + s.floating_mana.Total();
+    unsigned mask = mana >= 9 ? cactuar : (mana == 8 ? cactuar | surrak
+                                : (mana == 7 ? surrak | elf : elf));
+    if (tutor_count >= 2 && mana >= 7) { mask |= cactuar | surrak; }
+    if (cactuar_in_hand && mana >= 7) { mask |= surrak; }
+    pol.narrow = true;
+    pol.deck_bits = mask;
+    return pol;
+}
+
+bool JumboCactuarProvider::PutTargetOk(const PutPolicy& pol,
+                                       const CardDefinition& d) const
+{
+    const auto& name = d.card.m_name.str();
+    if (name == "Jumbo Cactuar")     { return (pol.deck_bits & 1u) != 0; }
+    if (name == "Surrak and Goreclaw") { return (pol.deck_bits & 2u) != 0; }
+    if (name == "Arbor Elf")          { return (pol.deck_bits & 4u) != 0; }
+    return false;
+}
+
+bool JumboCactuarProvider::PostCreatureTutorBreakpoint(
+    const GameState& s, const CardDefinition& d) const
+{
+    if (!d.params.tutor_mv_max_is_x) { return false; }
+    const auto haste_equipment = [](const std::string& name)
+    { return name == "Chariot of Victory" || name == "Lightning Greaves"; };
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index == s.active_player_index
+            && haste_equipment(p.card.m_name.str())) { return true; }
+    }
+    for (const Card& card : s.players[s.active_player_index].hand)
+    { if (haste_equipment(card.m_name.str())) { return true; } }
+    return false;
+}
+
+int JumboCactuarProvider::CastOrderRank(const GameState& s,
+                                       const CardDefinition& d) const
+{
+    // The deck's complete, tie-free cast order. In particular a one-mana Aura
+    // can fund Overgrowth on the same turn; generic rank 5 ties all three and
+    // its name tie break incorrectly puts Overgrowth first. Keep the list in
+    // sync with the review table in analysis-Jumbo Cactuar.md.
+    const auto& name = d.card.m_name.str();
+    if (name == "Forest")               { return 0; }
+    if (name == "Wild Growth")          { return 10; }
+    if (name == "Utopia Sprawl")        { return 20; }
+    if (name == "Overgrowth")           { return 30; }
+    if (name == "Lightning Greaves")    { return 35; }
+    if (name == "Arbor Elf")            { return 40; }
+    if (name == "Voyaging Satyr")       { return 50; }
+    if (name == "Chariot of Victory")   { return 60; }
+    if (name == "Nylea, God of the Hunt") { return 80; }
+    if (name == "Tooth and Nail")       { return 90; }
+    if (name == "Surrak and Goreclaw")  { return 100; }
+    if (name == "Green Sun's Zenith")   { return 110; }
+    if (name == "Finale of Devastation") { return 120; }
+    if (name == "Jumbo Cactuar")        { return 130; }
+    return DeckProvider::CastOrderRank(s, d);
+}
+
+int JumboCactuarProvider::CastOrderActionRank(const GameState&,
+                                             const Action& a, int base_rank) const
+{
+    // Two GSZs (or a GSZ plus Finale) can put both bodies in one turn. The
+    // action's pinned target, unlike the spell name, distinguishes their order.
+    if (a.def && (a.def->params.tutor_mv_max_is_x
+                  || a.def->params.finale_of_devastation))
+    {
+        const auto& target = a.tutor_target.str();
+        if (target.find("Arbor Elf") != std::string::npos) { return 38; }
+        if (target.find("Surrak and Goreclaw") != std::string::npos) { return 95; }
+        if (target.find("Jumbo Cactuar") != std::string::npos) { return 125; }
+    }
+    return base_rank;
+}
+
+int JumboCactuarProvider::ActivationOrderRankForAction(
+    const GameState& s, const CardDefinition& d, const Action& a) const
+{
+    // Mana-source haste equips are fired immediately after their pieces enter
+    // by ApplyManaUnlockEquips, before a later cast spends the newly available
+    // mana. These ranks order the remaining, trailing activations. Nylea's
+    // targeted pump and Chariot must precede Greaves on the same host because
+    // Greaves grants shroud.
+    const auto& name = d.card.m_name.str();
+    if (name == "Nylea, God of the Hunt") { return 10; }
+    if (a.kind == Action::Kind::Equip)
+    {
+        int host_rank = 5;
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.card.m_number != a.sac_victim_id) { continue; }
+            const auto& host = p.card.m_name.str();
+            host_rank = host == "Arbor Elf" ? 0 : host == "Voyaging Satyr" ? 1
+                      : host == "Surrak and Goreclaw" ? 2 : host == "Jumbo Cactuar" ? 3 : 4;
+            break;
+        }
+        return (name == "Chariot of Victory" ? 20 : 30) + host_rank;
+    }
+    return DeckProvider::ActivationOrderRankForAction(s, d, a);
+}
+
+bool JumboCactuarProvider::ToothAndNailCandidateOk(
+    const GameState& s, int controller, int mode,
+    const std::vector<std::string>& library_picks,
+    const std::vector<std::string>& hand_puts) const
+{
+    if (mode != 2 || controller < 0 || controller >= static_cast<int>(s.players.size()))
+    { return true; }
+    constexpr const char* kCactuar = "Jumbo Cactuar";
+    constexpr const char* kSurrak = "Surrak and Goreclaw";
+    const Player& p = s.players[static_cast<std::size_t>(controller)];
+    const auto has_name = [](const auto& cards, const char* name)
+    {
+        return std::any_of(cards.begin(), cards.end(), [name](const Card& c)
+        { return c.m_name.str() == name; });
+    };
+    const auto has_unstaged_hand = [&p](const char* name)
+    {
+        return std::any_of(p.hand.begin(), p.hand.end(), [name](const Card& c)
+        { return !c.m_is_staged && c.m_name.str() == name; });
+    };
+    const bool c_in_hand = has_unstaged_hand(kCactuar);
+    const bool s_in_hand = has_unstaged_hand(kSurrak);
+    const bool c_available = c_in_hand || has_name(p.library, kCactuar);
+    const bool s_available = s_in_hand || has_name(p.library, kSurrak);
+    if (!c_available || !s_available) { return true; }
+    const auto picked = [&library_picks](const char* name)
+    { return std::find(library_picks.begin(), library_picks.end(), name) != library_picks.end(); };
+    if ((!c_in_hand && !picked(kCactuar)) || (!s_in_hand && !picked(kSurrak)))
+    { return false; }
+    // Tooth's two entrants are simultaneous for this trigger, and the plan
+    // enumerator stores the pair in name order.
+    return hand_puts.size() == 2
+        && std::find(hand_puts.begin(), hand_puts.end(), kSurrak) != hand_puts.end()
+        && std::find(hand_puts.begin(), hand_puts.end(), kCactuar) != hand_puts.end();
+}
+
 const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
 {
     // Archetype detection by card params (same shape as GoldFishRunner::DeckUsesSecondMain).
@@ -23312,6 +23508,7 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     bool midrange_burn = false;
     bool goblin = false, gift = false, fivec = false, mirrorwing = false, equipment = false;
     bool stompy = false;   // StompySurprise (elf ramp) -- routes to Generic BEFORE the anti check
+    bool jumbo_cactuar = false; // gated mechanics on Jumbo Cactuar and Surrak
     bool minotaur = false; // Minotaur tribal -- routes to Generic BEFORE the goblin check
     bool dragons = false;  // Mono-red Dragons ramp -- routes to Generic BEFORE the goblin check
     bool giants = false;   // Mono-red Giant tribal -- MUST route ABOVE both goblin AND anti
@@ -23506,6 +23703,8 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
         const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
         if (!def) { continue; }
         const CardParams& p = def->params;
+        if (p.attack_self_pump_flat_power > 0 || p.other_nontoken_enters_counter_haste > 0)
+        { jumbo_cactuar = true; }
         // Independent, Merfolk-list-specific mechanics. Do not key on Aether Vial,
         // creature-type lands, or a generic lord: other tribal decks use those too.
         if (p.enter_as_copy_of_creature || p.kicked_etb_target_land_island
@@ -24018,6 +24217,7 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // Shadowborn Apostle: FIRST (see the flag) -- above `anti`, which its tutors set alone.
     if (shadowborn)  { return g_shadowborn; }
     cyclone = cyclone || (cy_extra_turn && cy_cycle_scry);
+    if (jumbo_cactuar) { return g_jumbo_cactuar; }
     if (cyclone)     { return g_cyclone; }
     if (lfe)         { return g_landfall_elementals; }
     if (niv)         { return g_niv_mizzet_combo; }

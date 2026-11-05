@@ -540,6 +540,16 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
                                                   def.params.reanimate_creature_max_mv,
                                                   def.card.m_name.str());
                 }
+                if (def.params.tooth_and_nail)
+                {
+                    ResolveToothAndNail(state, entry.controller_index,
+                                        entry.chosen_x.value_or(0), entry.tutor_target);
+                }
+                if (def.params.finale_of_devastation)
+                {
+                    ResolveFinaleOfDevastation(state, entry.controller_index, def.params,
+                                               entry.chosen_x.value_or(0), entry.tutor_target);
+                }
                 if (def.params.tutor_to_battlefield_single)
                 {
                     // Natural Order: search ONE matching (type + colour) creature and put it onto

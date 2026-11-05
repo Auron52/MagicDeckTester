@@ -1,0 +1,25 @@
+{
+  "deck": "decks/Jumbo Cactuar/Jumbo Cactuar.cod",
+  "turn": 4,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "on_the_play": true,
+  "max_turns": 4,
+  "active_life": 20,
+  "opponent_life": 20,
+  "battlefield": [
+    {"name": "Forest"}, {"name": "Forest"}, {"name": "Forest"},
+    {"name": "Forest"}, {"name": "Forest"}, {"name": "Forest"},
+    {"name": "Forest"}, {"name": "Forest"}, {"name": "Forest"},
+    {"name": "Forest"}, {"name": "Forest"}, {"name": "Forest"},
+    {"name": "Forest"}, {"name": "Forest"}
+  ],
+  "hand": ["Green Sun's Zenith", "Jumbo Cactuar"],
+  "library_filler": "Forest",
+  "library_size": 20,
+  "library": ["Surrak and Goreclaw"],
+  "depth": 3,
+  "budget_ms": 0,
+  "expect_win_turn": 4,
+  "_comment": "Zenith fetches Surrak before Cactuar is cast from hand on the same turn."
+}

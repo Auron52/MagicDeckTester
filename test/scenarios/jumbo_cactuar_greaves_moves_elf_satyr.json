@@ -1,0 +1,21 @@
+{
+  "deck": "decks/Jumbo Cactuar/Jumbo Cactuar.cod",
+  "turn": 3,
+  "resume_at": "main1",
+  "on_the_play": true,
+  "battlefield": [
+    {"name": "Forest"}, {"name": "Forest"}, {"name": "Forest"},
+    {"name": "Forest"},
+    {"name": "Wild Growth", "equips": "Forest"}
+  ],
+  "hand": ["Lightning Greaves", "Arbor Elf", "Voyaging Satyr", "Nylea, God of the Hunt"],
+  "library_filler": "Forest",
+  "library_size": 20,
+  "env": {"MTG_HUMAN_PLAY": "1"},
+  "depth": 0,
+  "budget_ms": 0,
+  "max_turns": 4,
+  "validate_line": "cast=Lightning Greaves;cast=Arbor Elf;equip=Lightning Greaves;cast=Voyaging Satyr;equip=Lightning Greaves;cast=Nylea, God of the Hunt",
+  "expect_verdict": "accept",
+  "_comment": "Four Forests and a Wild Growth give five mana. Greaves and Elf spend three; hasted Elf untaps the enchanted Forest to pay for Satyr, then Greaves moves to Satyr and its untap pays for Nylea. The nine-mana line needs both equip activations in one main phase."
+}

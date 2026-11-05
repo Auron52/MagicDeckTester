@@ -754,6 +754,26 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                 // difference between variants, and without them the menu held identical twins
                 // and the fetch was invisible (seed-7 play-test: the picked plan silently
                 // grabbed a 1-drop). Same lesson as the Pod/blink labels below.
+                else if (const CardDefinition* tn = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                         tn && tn->params.tooth_and_nail)
+                {
+                    tag += a.chosen_x == 2 ? " (entwined: search, then put)"
+                         : a.chosen_x == 1 ? " (put from hand)" : " (search to hand)";
+                }
+                else if (const CardDefinition* fd = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                         fd && fd->params.finale_of_devastation)
+                {
+                    if (HumanPlayActive()) { tag += " (choose X and creature at cast)"; }
+                    else if (a.tutor_target.str().size() > 3)
+                    {
+                        tag += a.tutor_target.str()[0] == 'G' ? " -> graveyard " : " -> library ";
+                        tag += a.tutor_target.str().substr(3);
+                        if (a.tutor_target.str()[0] == 'G' && a.tutor_target.str()[1] == '1')
+                        { tag += " (also shuffle library)"; }
+                        tag += " (X=" + std::to_string(a.chosen_x) + ")";
+                    }
+                    else { tag += " (find nothing; X=" + std::to_string(a.chosen_x) + ")"; }
+                }
                 else if ([&]() { FixedBurnPin bp; return DecodeFixedBurnPin(a.tutor_target.str(), bp); }())
                 {
                     FixedBurnPin bp; DecodeFixedBurnPin(a.tutor_target.str(), bp);
@@ -1060,6 +1080,13 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                     tag += " -- X=" + (a.chosen_x == kTapTargetPumpXAll ? std::string("all remaining mana")
                                                                         : std::to_string(a.chosen_x))
                          + " \xE2\x86\x92 " + EnchantTargetName(s, a.sac_victim_id);
+                }
+                if (a.ability_mode == Action::AbilityMode::TargetPump
+                    || a.ability_mode == Action::AbilityMode::UntapLand)
+                {
+                    tag += " \xE2\x86\x92 " + EnchantTargetName(s, a.sac_victim_id);
+                    if (a.ability_mode == Action::AbilityMode::TargetPump && a.chosen_x > 1)
+                    { tag += " x" + std::to_string(a.chosen_x); }
                 }
                 break;
             // Birthing Pod: the VICTIM and the FETCH are the whole decision (the blink lesson
@@ -3053,11 +3080,21 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             // Kessig Wolf Run's pump (TapTargetPump): the target (m_number + name) and the X, so the GUI
             // and the claude-play protocol can tell the (target, X) variants apart. `pump_x` -1 = the
             // max-X fold's "all remaining mana" (never emitted under human play).
-            if (ac.kind == Action::Kind::ActivatePermAbility && ac.ability_mode == Action::AbilityMode::TapTargetPump)
+            if (ac.kind == Action::Kind::ActivatePermAbility
+                && (ac.ability_mode == Action::AbilityMode::TapTargetPump
+                    || ac.ability_mode == Action::AbilityMode::TargetPump))
             {
                 os << ", \"pump_target\": " << ac.sac_victim_id
                    << ", \"pump_target_name\": "; JsonStr(os, EnchantTargetName(s, ac.sac_victim_id));
-                os << ", \"pump_x\": " << (ac.chosen_x == kTapTargetPumpXAll ? -1 : ac.chosen_x);
+                if (ac.ability_mode == Action::AbilityMode::TapTargetPump)
+                { os << ", \"pump_x\": " << (ac.chosen_x == kTapTargetPumpXAll ? -1 : ac.chosen_x); }
+                else { os << ", \"pump_count\": " << ac.chosen_x; }
+            }
+            if (ac.kind == Action::Kind::ActivatePermAbility
+                && ac.ability_mode == Action::AbilityMode::UntapLand)
+            {
+                os << ", \"untap_target\": " << ac.sac_victim_id
+                   << ", \"untap_target_name\": "; JsonStr(os, EnchantTargetName(s, ac.sac_victim_id));
             }
             // REPEATABLE (no {T} and no sacrifice in the cost, so activation count is bounded only
             // by mana): tells the viewer it may STACK this activation -- clicking it K times queues
@@ -3071,7 +3108,8 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                 || ac.kind == Action::Kind::ActivateUntap
                 || (ac.kind == Action::Kind::ActivatePermAbility
                     && (ac.ability_mode == Action::AbilityMode::Drain
-                        || ac.ability_mode == Action::AbilityMode::ExileTop)))
+                        || ac.ability_mode == Action::AbilityMode::ExileTop
+                        || ac.ability_mode == Action::AbilityMode::TargetPump)))
             { os << ", \"repeatable\": true"; }
             if (!ac.chosen_float_color.empty()) { os << ", \"float_color\": "; JsonStr(os, ac.chosen_float_color); }
             // Solo-target trick (Zada/Mirrorwing): the target is chosen at RESOLUTION via the
@@ -4387,6 +4425,15 @@ static void WriteAttackModeDecisionJson(std::ostream& os, const GameState& s,
     // branch adds a "trigger":"etb" field and its own option texts. Tectonic Giant's payload is
     // byte-identical (the attack branch below is the original text, unchanged).
     const CardDefinition* src_def = CardDatabase::Instance().Lookup(source);
+    if (src_def != nullptr && src_def->params.finale_of_devastation)
+    {
+        os << "  \"trigger\":\"spell\",\n";
+        os << "  \"options\":[{\"index\":0,\"text\":\"Search only the graveyard (no shuffle)\"},"
+              "{\"index\":1,\"text\":\"Also search and shuffle your library\"}],\n";
+        EmitRevealsField(os, reveals);
+        d.Note("reply 0 to search only the graveyard, or 1 to also search and shuffle your library.");
+        return;
+    }
     if (src_def != nullptr && src_def->params.etb_modal_self_counters > 0
         && src_def->params.etb_modal_lifegain > 0)
     {
@@ -4536,10 +4583,22 @@ static void WriteSacTutorDecisionJson(std::ostream& os, const GameState& s, cons
     d.Array("candidates", candidates.size(), [&](std::size_t i)
     {
         os << "{ \"index\": " << i << ", \"def\": " << (is_def[i] ? "true" : "false")
-           << ", \"name\": "; JsonStr(os, candidates[i].m_name.str()); os << " }";
+           << ", \"name\": "; JsonStr(os, candidates[i].m_name.str());
+        if (source == "Finale of Devastation")
+        {
+            bool in_library = false;
+            for (const Card& c : s.ActivePlayer().library)
+            { if (c.m_number == candidates[i].m_number) { in_library = true; break; } }
+            os << ", \"zone\": "; JsonStr(os, in_library ? "library" : "graveyard");
+        }
+        os << " }";
     });
-    d.Note("reply one int per candidate (1 = put this creature onto the battlefield), up to "
-           "max_puts total. They enter in ascending candidate order. Default = the AI's pick.");
+    if (source == "Tooth and Nail (to hand)")
+    { d.Note("reply one int per candidate (1 = take this library creature into hand), up to max_puts total. Default = the AI's pick."); }
+    else if (source == "Finale of Devastation")
+    { d.Note("reply one int per candidate (1 = put this library or graveyard creature onto the battlefield), at most one. Choosing none may offer a library-search choice. Default = the AI's pick."); }
+    else
+    { d.Note("reply one int per candidate (1 = put this creature onto the battlefield), up to max_puts total. They enter in ascending candidate order. Default = the AI's pick."); }
 }
 
 // Reveillark revive decision: the player picks WHICH qualifying graveyard creature cards (printed
@@ -4778,6 +4837,14 @@ static void WriteXValueDecisionJson(std::ostream& os, const GameState& s, const 
          .Word("x_kind", "etb_destroy_k").Int("min_x", 0).Int("max_x", max_x);
         d.HeuristicDefault(default_x);
         d.Note("reply how many noncreature permanents Terastodon targets (0..max_x). Target choices follow. This is an enter-the-battlefield trigger, not a mana payment.");
+        return;
+    }
+    if (target == 4)
+    {
+        d.Type("x_value").Source(source).Turn(s).Board(s)
+         .Word("x_kind", "finale").Int("min_x", 0).Int("max_x", max_x);
+        d.HeuristicDefault(default_x);
+        d.Note("reply the X paid for Finale of Devastation (0..max_x). A creature with mana value up to X can enter; at X=10 or more your team gains +X/+X and haste.");
         return;
     }
     d.Type("x_value").Source(source).Turn(s).Board(s)

@@ -341,6 +341,10 @@ enum class PermAbilityMode
     // and WHICH Demon (Action::tutor_target) are SEARCHED; both ride SacNamedPinScope into the shared
     // resolver in ApplyPermAbility. Emitted out of band (never a K block). Appended LAST.
     SacNamedTutorPut,
+    // Nylea: mana-only, repeatable target creature +2/+2 until end of turn.
+    TargetPump,
+    // Voyaging Satyr in human play: tap source to untap a chosen land.
+    UntapLand,
 };
 
 // Does this mode's cost include {T}? THE single source of truth, because three separate sites used
@@ -355,6 +359,7 @@ inline bool PermAbilityTaps(PermAbilityMode m)
         && m != PermAbilityMode::ExileTop
         && m != PermAbilityMode::IceCounter
         && m != PermAbilityMode::GrantLifelink
+        && m != PermAbilityMode::TargetPump
         && m != PermAbilityMode::SporeSaproling
         && m != PermAbilityMode::PayToken
         && m != PermAbilityMode::FadeSaproling

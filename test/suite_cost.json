@@ -194,12 +194,21 @@
   },
   "hinata": {
    "cost_metric": "searched_depth_budget_pooled_seeds_v2",
-   "cost_per_game_ms": 4389.9733,
+   "cost_per_game_ms": 5680.7733,
    "jobs": 7,
    "key": "hinata",
    "tier": "regression",
-   "total_core_ms": 1767106,
+   "total_core_ms": 2193640,
    "worst_case": "hinata2hg_regression_d5_b30"
+  },
+  "jumbo": {
+   "cost_metric": "searched_depth_budget_pooled_seeds_v2",
+   "cost_per_game_ms": 3391.549,
+   "jobs": 6,
+   "key": "jumbo",
+   "tier": "regression",
+   "total_core_ms": 3609138,
+   "worst_case": "jumbo_regression_d5_b20"
   },
   "kittyv3": {
    "cost_metric": "searched_depth_budget_pooled_seeds_v2",

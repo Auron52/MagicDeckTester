@@ -3529,7 +3529,10 @@ inline void PerformTutorToBattlefield(GameState& state, int controller, const Ca
     // Null chooser (autonomous / search / rollout, RevealLogPause) -> byte-identical.
     if (g_play_tutor_chooser && pp.tutor_mv_max_is_x && max_puts == 1 && !human_override)
     {
-        // SPARE-CONVOKE X EXTENSION (USER 2026-09-05, seed-7 round 2: a combined "dork + Chord"
+        // SPARE-CONVOKE X EXTENSION for an actual convoke spell (Chord of Calling).
+        // Green Sun's Zenith shares tutor_mv_max_is_x but has no convoke; it must
+        // neither offer higher-MV targets nor tap creatures to raise paid X.
+        // (USER 2026-09-05, seed-7 round 2: a combined "dork + Chord"
         // plan bakes X=1 -- enumeration classifies convoke against the PRE-cast board -- so the
         // picker offered only 1-drops even though the just-cast dork could convoke). At
         // resolution the same-line casts ARE on the battlefield, so every untapped
@@ -3538,7 +3541,8 @@ inline void PerformTutorToBattlefield(GameState& state, int controller, const Ca
         // above the baked X taps k spare bodies, free bodies first, in the classifier's own
         // deterministic order. Chooser-gated -> live human play only; the default answer never
         // exceeds the baked X, so references replay without extra taps.
-        const ConvokeClasses spare_cc = ClassifyConvokeBodies(state, controller);
+        const ConvokeClasses spare_cc = pp.convoke
+            ? ClassifyConvokeBodies(state, controller) : ConvokeClasses{};
         std::vector<int> spare_ids;
         for (const int id : spare_cc.free_green) { spare_ids.push_back(id); }
         for (const int id : spare_cc.free_other) { spare_ids.push_back(id); }
@@ -6302,6 +6306,9 @@ inline bool CreatureHasFirstStrike(const Permanent& creature, const GameState& s
         const CardDefinition* d = CardDatabase::Instance().LookupCached(a.card);
         if (!d) { return false; }
         const CardParams& gp = d->params;
+        if (gp.is_equipment && gp.equip_grants_first_strike
+            && a.equipped_to != 0 && a.equipped_to == creature.card.m_number)
+        { return true; }
         if (gp.is_aura && gp.aura_grants_first_strike
             && a.aura_attached_to != 0 && a.aura_attached_to == creature.card.m_number)
         { return true; }
@@ -6465,6 +6472,7 @@ inline BoardSources GatherBoardSources(const std::vector<Permanent>& battlefield
         // CreatureHasFirstStrike's granters -- the union of its three grant shapes (a superset, so
         // an empty list is a proof that only printed first strike can answer true).
         if (pp.grants_first_strike || (pp.is_aura && pp.aura_grants_first_strike)
+            || (pp.is_equipment && pp.equip_grants_first_strike)
             || pp.etb_choose_keyword_count > 0)
         { bs.fs.push_back(i); }
         if (pp.combat_damage_counters_each_attacker > 0) { bs.cd_counters.push_back(i); }
@@ -7119,6 +7127,17 @@ inline void FireCreatureEnterWatchers(GameState& state, int entered_controller, 
         // but a handful of them answer "no".
         if (!wd || !wd->enter_watcher) { continue; }
         const CardParams& wp = wd->params;
+        // Surrak and Goreclaw changes the ENTRANT, not the watcher. The outer
+        // loop already excludes the entrant as its own watcher. This trigger
+        // also sees a simultaneous co-entrant once the batch is placed.
+        if (wp.other_nontoken_enters_counter_haste > 0
+            && w.controller_index == entered_controller
+            && !state.battlefield[entered_index].is_token)
+        {
+            Permanent& entrant = state.battlefield[entered_index];
+            PutPlusCounters(state, entrant, wp.other_nontoken_enters_counter_haste);
+            entrant.temp_haste = true;
+        }
         // "Whenever another creature enters, you gain N" (Soul Warden / Essence Warden: ANY side).
         // One GainLife call PER WATCHER, never summed: each watcher's trigger is its own life-gain
         // EVENT (CR 119.10), so 2 Soul Wardens + 2 Soul's Attendants on one creature entering are
@@ -19908,6 +19927,7 @@ inline void ApplyAttackSelfPumps(GameState& state, int controller,
         const CardDefinition* d = CardDatabase::Instance().LookupCached(self.card);
         if (!d) { continue; }
         const CardParams& p = d->params;
+        self.temp_power_bonus += p.attack_self_pump_flat_power;
 
         // Piledriver: +power per OTHER attacking creature whose subtype is in subtypes_affected.
         if ((p.attack_pump_power_per_other_matching > 0 || p.attack_pump_tough_per_other_matching > 0)
@@ -25165,6 +25185,9 @@ inline int ScaledDorkCount(const GameState& state, int controller, const CardDef
 // card without the param -> byte-identical elsewhere.
 inline bool ManaSubtypeGateLive(const GameState& state, int controller, const CardDefinition& def)
 {
+    // The mana payer uses Arbor Elf and Voyaging Satyr as extra taps of their
+    // best legal land, including in human play. A player need not activate an
+    // untapper separately before casting a spell it funds.
     if (def.params.mana_requires_land_subtype.empty()) { return true; }
     return ControlsSubtype(state, controller, def.params.mana_requires_land_subtype);
 }
@@ -27877,6 +27900,243 @@ inline bool DeployCreatureFromHand(GameState& state, int controller, int hand_id
     return true;
 }
 
+// Tooth and Nail's two modes resolve in printed order. A plan pins each selected
+// copy by name (control separators cannot occur in card names); human play may
+// replace both lists against the live zones through the existing multi-pick UI.
+inline std::string EncodeToothChoices(const std::vector<std::string>& library,
+                                     const std::vector<std::string>& hand)
+{
+    std::string out;
+    for (int i = 0; i < 2; ++i)
+    {
+        if (i) { out.push_back('\x1f'); }
+        if (i < static_cast<int>(library.size())) { out += library[i]; }
+    }
+    out.push_back('\x1f');
+    for (int i = 0; i < 2; ++i)
+    {
+        if (i) { out.push_back('\x1f'); }
+        if (i < static_cast<int>(hand.size())) { out += hand[i]; }
+    }
+    return out;
+}
+
+inline void ResolveToothAndNail(GameState& state, int controller, int mode,
+                                const std::string& encoded)
+{
+    if (mode < 0 || mode > 2) { return; }
+    Player& ap = state.players[controller];
+    std::vector<std::string> parts;
+    std::size_t at = 0;
+    for (int i = 0; i < 4; ++i)
+    {
+        std::size_t end = encoded.find('\x1f', at);
+        parts.push_back(encoded.substr(at, end == std::string::npos ? end : end - at));
+        at = end == std::string::npos ? encoded.size() : end + 1;
+    }
+    auto selections = [&](const auto& zone, int offset,
+                          const std::string& source) -> std::vector<int>
+    {
+        std::vector<Card> candidates;
+        for (const Card& c : zone)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d && d->card.IsCreature() && !c.m_is_staged) { candidates.push_back(c); }
+        }
+        std::vector<int> picks;
+        std::vector<bool> used(candidates.size(), false);
+        for (int k = 0; k < 2; ++k)
+        {
+            const std::string& want = parts[offset + k];
+            if (want.empty()) { continue; }
+            for (int j = 0; j < static_cast<int>(candidates.size()); ++j)
+            {
+                if (!used[j] && candidates[j].m_name.str() == want)
+                { picks.push_back(j); used[j] = true; break; }
+            }
+        }
+        if (g_play_sac_tutor_chooser)
+        { picks = (*g_play_sac_tutor_chooser)(state, controller, source, candidates, 2, picks); }
+        std::vector<int> numbers;
+        for (int j : picks)
+        {
+            if (j >= 0 && j < static_cast<int>(candidates.size()) && numbers.size() < 2)
+            { numbers.push_back(candidates[j].m_number); }
+        }
+        return numbers;
+    };
+
+    if (mode != 1)
+    {
+        const std::vector<int> found = selections(ap.library, 0, "Tooth and Nail (to hand)");
+        for (int number : found)
+        {
+            for (int i = 0; i < static_cast<int>(ap.library.size()); ++i)
+            {
+                if (ap.library[i].m_number != number) { continue; }
+                Card c = ap.library[i];
+                ap.library.erase(ap.library.begin() + i);
+                EnterHand(state, controller, std::move(c), HandEntryReason::Tutor);
+                break;
+            }
+        }
+        ShuffleAfterSearch(state, controller);
+    }
+    if (mode == 0) { return; }
+
+    const std::vector<int> selected = selections(ap.hand, 2, "Tooth and Nail (from hand)");
+    // Both selected cards enter at once. Their ETB abilities resolve only after
+    // the complete group is on the battlefield, so Craterhoof sees its partner.
+    std::vector<Card> moved;
+    for (int number : selected)
+    {
+        for (int i = 0; i < static_cast<int>(ap.hand.size()); ++i)
+        {
+            if (ap.hand[i].m_number != number) { continue; }
+            moved.push_back(ap.hand[i]);
+            ap.hand.erase(ap.hand.begin() + i);
+            break;
+        }
+    }
+    std::vector<int> entered;
+    for (const Card& c : moved)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (!d) { continue; }
+        Permanent perm;
+        perm.card = d->card;
+        perm.card.m_number = c.m_number;
+        perm.controller_index = controller;
+        perm.owner_index = controller;
+        perm.entered_this_turn = true;
+        state.battlefield.push_back(perm);
+        entered.push_back(c.m_number);
+    }
+    for (int number : entered)
+    {
+        int slot = -1;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        { if (state.battlefield[i].card.m_number == number) { slot = i; break; } }
+        if (slot < 0) { continue; }
+        FireEtbWatchers(state, controller, slot);
+        slot = -1;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        { if (state.battlefield[i].card.m_number == number) { slot = i; break; } }
+        if (slot >= 0) { FireOwnEtbTriggers(state, controller, slot, std::string(), kEtbKxHeuristic); }
+    }
+    EnforceLegendRule(state, controller);
+}
+
+// Finale's searched card may be in either zone. `pin` is L0:<name>, G0:<name>
+// (graveyard only), G1:<name> (also search/shuffle library), or N (search
+// library and fail to find), or Z (search only an empty graveyard; no
+// shuffle). The X>=10 team effect occurs even on a whiff.
+inline void ResolveFinaleOfDevastation(GameState& state, int controller,
+                                       const CardParams& pp, int x,
+                                       const std::string& pin)
+{
+    Player& ap = state.players[controller];
+    auto eligible = [&](const Card& c) {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        return d && d->card.IsCreature() && d->card.m_mana_cost.ManaValue() <= x;
+    };
+    char zone = pin.empty() ? 'N' : pin[0];
+    bool search_library = zone == 'L' || zone == 'N' || (pin.size() > 1 && pin[1] == '1');
+    std::string name = pin.size() > 3 ? pin.substr(3) : std::string();
+    int number = 0;
+    if (g_play_sac_tutor_chooser)
+    {
+        std::vector<Card> candidates;
+        for (const Card& c : ap.library)   { if (eligible(c)) { candidates.push_back(c); } }
+        const int lib_count = static_cast<int>(candidates.size());
+        for (const Card& c : ap.graveyard) { if (eligible(c)) { candidates.push_back(c); } }
+        std::vector<int> default_pick;
+        for (int i = 0; i < static_cast<int>(candidates.size()); ++i)
+        {
+            const bool in_lib = i < lib_count;
+            if (candidates[i].m_name.str() == name && ((zone == 'L') == in_lib))
+            { default_pick.push_back(i); break; }
+        }
+        const std::vector<int> picks = (*g_play_sac_tutor_chooser)(
+            state, controller, "Finale of Devastation", candidates, 1, default_pick);
+        if (picks.empty() || picks[0] < 0 || picks[0] >= static_cast<int>(candidates.size()))
+        {
+            zone = 'N'; search_library = true; name.clear();
+            bool graveyard_has_eligible = false;
+            for (const Card& c : ap.graveyard)
+            { if (eligible(c)) { graveyard_has_eligible = true; break; } }
+            // A public-zone search must find an eligible card if one exists.
+            // With none, the player may choose the graveyard-only whiff and
+            // preserve the library's order, or search the hidden library too.
+            if (!graveyard_has_eligible && g_play_attack_mode_chooser)
+            {
+                search_library = (*g_play_attack_mode_chooser)(
+                    state, controller, "Finale of Devastation", 1) == 1;
+                if (!search_library) { zone = 'Z'; }
+            }
+        }
+        else
+        {
+            const int i = picks[0];
+            zone = i < lib_count ? 'L' : 'G';
+            number = candidates[i].m_number;
+            name = candidates[i].m_name.str();
+            search_library = zone == 'L';
+        }
+        if (zone == 'G' && g_play_attack_mode_chooser)
+        {
+            const int def = pin.size() > 1 && pin[0] == 'G' && pin[1] == '1' ? 1 : 0;
+            search_library = (*g_play_attack_mode_chooser)(
+                state, controller, "Finale of Devastation", def) == 1;
+        }
+    }
+    if (zone == 'L')
+    {
+        CardParams library_pp = pp;
+        library_pp.tutor_shuffle_after = true;
+        PerformTutorToBattlefield(state, controller, library_pp, 1,
+                                  name.empty() ? std::vector<std::string>{std::string(kTutorDeclineTarget)}
+                                               : std::vector<std::string>{name},
+                                  "Finale of Devastation", -1, x);
+    }
+    else if (zone == 'G')
+    {
+        for (int i = 0; i < static_cast<int>(ap.graveyard.size()); ++i)
+        {
+            const Card& c = ap.graveyard[i];
+            if (!eligible(c) || (number != 0 ? c.m_number != number : c.m_name.str() != name)) { continue; }
+            Card moved = c;
+            ap.graveyard.erase(ap.graveyard.begin() + i);
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(moved);
+            if (!d) { break; }
+            Permanent perm;
+            perm.card = d->card;
+            perm.card.m_number = moved.m_number;
+            perm.controller_index = controller;
+            perm.owner_index = controller;
+            perm.entered_this_turn = true;
+            state.battlefield.push_back(perm);
+            const int slot = static_cast<int>(state.battlefield.size()) - 1;
+            FireEtbWatchers(state, controller, slot);
+            FireOwnEtbTriggers(state, controller, slot, std::string(), kEtbKxHeuristic);
+            EnforceLegendRule(state, controller);
+            break;
+        }
+        if (search_library) { ShuffleAfterSearch(state, controller); }
+    }
+    else if (search_library) { ShuffleAfterSearch(state, controller); }
+    if (x >= 10)
+    {
+        for (Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != controller || !p.card.IsCreature()) { continue; }
+            p.temp_power_bonus += x;
+            p.temp_tough_bonus += x;
+            p.temp_haste = true;
+        }
+    }
+}
+
 // THE KILL CHAIN -- convert banked combo mana into the finisher the BOARD does not have yet.
 //
 // USER, 2026-09-04: "The top priority is always keeping the combo going", and "Finding exact ways to
@@ -28599,6 +28859,12 @@ inline bool TapTargetPumpTargetLegal(const GameState& s, const Permanent& q, int
     if (CreatureHasShroud(q, s, nullptr)) { return false; }
     if (q.controller_index != controller && q.card.HasKeyword(Keyword::Hexproof)) { return false; }
     return true;
+}
+
+inline bool UntapLandTargetLegal(const GameState& s, const Permanent& q, int controller)
+{
+    return q.card.IsLand() && !LandHasShroud(q, s)
+        && !(q.controller_index != controller && q.card.HasKeyword(Keyword::Hexproof));
 }
 
 // The cost of ONE activation at X = x: the printed cost with x per {X} pip folded into GENERIC, and the
@@ -29818,10 +30084,12 @@ inline bool PermAbilitySourceLive(const GameState& state, int controller, int so
         // {T} or the mana is paid. Pinned (the searched variant): THAT creature must still be a legal
         // target; a stale plan (it left, or gained shroud) is a clean no-op -- NO substitution, which
         // would be an in-window pick. Unpinned (target 0): any legal target exists.
-        if (mode == PermAbilityMode::TapTargetPump)
+        if (mode == PermAbilityMode::TapTargetPump || mode == PermAbilityMode::TargetPump)
         {
             const CardDefinition* td = CardDatabase::Instance().LookupCached(p.card);
-            if (td == nullptr || !td->params.tap_target_pump_cost.has_value()) { return false; }
+            if (td == nullptr || !(mode == PermAbilityMode::TapTargetPump
+                ? td->params.tap_target_pump_cost.has_value()
+                : td->params.target_pump_cost.has_value())) { return false; }
             const int want = g_tap_target_pump_pin.target;
             bool target_ok = false;
             for (const Permanent& q : state.battlefield)
@@ -29830,6 +30098,19 @@ inline bool PermAbilitySourceLive(const GameState& state, int controller, int so
                 if (TapTargetPumpTargetLegal(state, q, controller)) { target_ok = true; break; }
             }
             if (!target_ok) { return false; }
+        }
+        if (mode == PermAbilityMode::UntapLand)
+        {
+            const CardDefinition* td = CardDatabase::Instance().LookupCached(p.card);
+            if (td == nullptr || !td->params.untap_target_land) { return false; }
+            const int want = g_tap_target_pump_pin.target;
+            bool legal = false;
+            for (const Permanent& q : state.battlefield)
+            {
+                if (want != 0 && q.card.m_number != want) { continue; }
+                if (UntapLandTargetLegal(state, q, controller)) { legal = true; break; }
+            }
+            if (!legal) { return false; }
         }
         // No {T} in the cost -> the source's tap state and summoning sickness are irrelevant. This
         // used to test SacDraw alone; the two Eldrazi mana sinks are the same shape, and requiring
@@ -29956,7 +30237,9 @@ inline const char* PermAbilityLabel(PermAbilityMode mode)
         case PermAbilityMode::TapSubtypeSteal:
                                               return "tap five untapped Vampires: gain control of target creature";
         case PermAbilityMode::TransformSelf:  return "transform it (you control five or more Vampires)";
-        case PermAbilityMode::TapTargetPump:  return "target creature gets a pump until end of turn";
+        case PermAbilityMode::TapTargetPump:
+        case PermAbilityMode::TargetPump:     return "target creature gets a pump until end of turn";
+        case PermAbilityMode::UntapLand:      return "untap target land";
         case PermAbilityMode::PayCounterSelf: return "put a +1/+1 counter on this creature";
         case PermAbilityMode::CounterPing:    return "remove a +1/+1 counter: 1 damage to any target";
         case PermAbilityMode::PingLoop:       return "Heliod loop: ping until the opponent is dead";
@@ -30071,9 +30354,12 @@ inline bool PayTapSubtypeCost(GameState& state, int controller, const CardDefini
 inline std::string PermAbilityLabelFor(PermAbilityMode mode, const CardDefinition* d)
 {
     // Kessig Wolf Run: the printed pump, read off the params ("+X/+0 and gains trample").
-    if (mode == PermAbilityMode::TapTargetPump && d != nullptr && d->params.tap_target_pump_cost.has_value())
+    if ((mode == PermAbilityMode::TapTargetPump || mode == PermAbilityMode::TargetPump)
+        && d != nullptr && (d->params.tap_target_pump_cost.has_value()
+                            || d->params.target_pump_cost.has_value()))
     {
-        const bool per_x = d->params.tap_target_pump_cost->has_x;
+        const bool per_x = mode == PermAbilityMode::TapTargetPump
+            && d->params.tap_target_pump_cost->has_x;
         auto amt = [per_x](int n) -> std::string
         {
             if (!per_x) { return std::to_string(n); }
@@ -30944,6 +31230,7 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
             break;
         }
         case PermAbilityMode::TapTargetPump:
+        case PermAbilityMode::TargetPump:
         {
             // Kessig Wolf Run: "Target creature gets +X/+0 and gains trample until end of turn." The {T}
             // and {X}{R}{G} were paid by the caller (TapTargetPumpPay, which rewrote the pin's X to the
@@ -30981,10 +31268,24 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
             if (g_play_event_sink && !g_tap_speculating)
             {
                 EmitPlayEvent(state.turn_number, "ability",
-                              src_name + ": X=" + std::to_string(x) + " -- " + t.card.m_name.str() + " gets +"
+                              src_name + (mode == PermAbilityMode::TargetPump ? ": " : ": X=" + std::to_string(x) + " -- ")
+                              + t.card.m_name.str() + " gets +"
                               + std::to_string(pp) + "/+" + std::to_string(pt)
                               + (d->params.tap_target_pump_grants_trample ? " and trample" : "")
                               + " until end of turn");
+            }
+            break;
+        }
+        case PermAbilityMode::UntapLand:
+        {
+            const int want = g_tap_target_pump_pin.target;
+            for (Permanent& q : state.battlefield)
+            {
+                if (q.card.m_number != want || !UntapLandTargetLegal(state, q, controller)) { continue; }
+                q.tapped = false;
+                if (g_play_event_sink && !g_tap_speculating)
+                { EmitPlayEvent(state.turn_number, "ability", src_name + ": untap " + q.card.m_name.str()); }
+                break;
             }
             break;
         }
@@ -31200,6 +31501,8 @@ inline int SpendRepeatActivations(GameState& state, int controller, int source_i
                                       // fail loudly -- it reads a cost the card does not have,
                                       // finds no value, and fires ZERO times. Silent, and exactly
                                       // the class of bug the per-mode tables keep producing.
+                                      : (mode == PermAbilityMode::TargetPump)
+                                      ? &def.params.target_pump_cost
                                       : (mode == PermAbilityMode::PayToken)
                                       ? &def.params.pay_token_cost
                                       // Pyrohemia's "{R}: 1 damage to each creature and each

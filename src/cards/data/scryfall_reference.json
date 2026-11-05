@@ -1081,6 +1081,17 @@
     "toughness": null,
     "type_line": "Legendary Planeswalker — Chandra"
   },
+  "Chariot of Victory": {
+    "cmc": 3.0,
+    "keywords": [
+      "Equip"
+    ],
+    "mana_cost": "{3}",
+    "oracle_text": "Equipped creature has first strike, trample, and haste.\nEquip {1}",
+    "power": null,
+    "toughness": null,
+    "type_line": "Artifact — Equipment"
+  },
   "Chord of Calling": {
     "cmc": 3.0,
     "keywords": [
@@ -2046,6 +2057,15 @@
     "keywords": [],
     "mana_cost": "{R}{G}{W}",
     "oracle_text": "Fiery Justice deals 5 damage divided as you choose among any number of targets. Target opponent gains 5 life.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
+  "Finale of Devastation": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{X}{G}{G}",
+    "oracle_text": "Search your library and/or graveyard for a creature card with mana value X or less and put it onto the battlefield. If you search your library this way, shuffle. If X is 10 or more, creatures you control get +X/+X and gain haste until end of turn.",
     "power": null,
     "toughness": null,
     "type_line": "Sorcery"
@@ -3043,6 +3063,17 @@
     "toughness": "3",
     "type_line": "Legendary Snow Creature — God"
   },
+  "Jumbo Cactuar": {
+    "cmc": 7.0,
+    "keywords": [
+      "10,000 Needles"
+    ],
+    "mana_cost": "{5}{G}{G}",
+    "oracle_text": "10,000 Needles — Whenever this creature attacks, it gets +9999/+0 until end of turn.",
+    "power": "1",
+    "toughness": "7",
+    "type_line": "Creature — Plant"
+  },
   "Kaldring, the Rimestaff": {
     "cmc": 3.0,
     "keywords": [],
@@ -4024,6 +4055,17 @@
     "power": "4",
     "toughness": "6",
     "type_line": "Enchantment Creature — Human Soldier"
+  },
+  "Nylea, God of the Hunt": {
+    "cmc": 4.0,
+    "keywords": [
+      "Indestructible"
+    ],
+    "mana_cost": "{3}{G}",
+    "oracle_text": "Indestructible\nAs long as your devotion to green is less than five, Nylea isn't a creature. (Each {G} in the mana costs of permanents you control counts toward your devotion to green.)\nOther creatures you control have trample.\n{3}{G}: Target creature gets +2/+2 until end of turn.",
+    "power": "6",
+    "toughness": "6",
+    "type_line": "Legendary Enchantment Creature — God"
   },
   "O-Naginata": {
     "cmc": 1.0,
@@ -5745,6 +5787,17 @@
     "toughness": "5",
     "type_line": "Creature — Giant Warrior"
   },
+  "Surrak and Goreclaw": {
+    "cmc": 6.0,
+    "keywords": [
+      "Trample"
+    ],
+    "mana_cost": "{4}{G}{G}",
+    "oracle_text": "Trample\nOther creatures you control have trample.\nWhenever another nontoken creature you control enters, put a +1/+1 counter on it. It gains haste until end of turn.",
+    "power": "6",
+    "toughness": "5",
+    "type_line": "Legendary Creature — Human Bear"
+  },
   "Surtland Flinger": {
     "cmc": 5.0,
     "keywords": [],
@@ -6129,6 +6182,17 @@
     "power": "2",
     "toughness": "1",
     "type_line": "Creature — Human Shaman"
+  },
+  "Tooth and Nail": {
+    "cmc": 7.0,
+    "keywords": [
+      "Entwine"
+    ],
+    "mana_cost": "{5}{G}{G}",
+    "oracle_text": "Choose one —\n• Search your library for up to two creature cards, reveal them, put them into your hand, then shuffle.\n• Put up to two creature cards from your hand onto the battlefield.\nEntwine {2} (Choose both if you pay the entwine cost.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
   },
   "Tournament Grounds": {
     "cmc": 0.0,
@@ -6557,6 +6621,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Land"
+  },
+  "Voyaging Satyr": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{G}",
+    "oracle_text": "{T}: Untap target land.",
+    "power": "1",
+    "toughness": "2",
+    "type_line": "Creature — Satyr Druid"
   },
   "Walking Ballista": {
     "cmc": 0.0,

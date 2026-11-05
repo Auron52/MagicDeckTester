@@ -1,0 +1,8 @@
+{
+  "merge": [
+    {
+      "cards": ["Utopia Sprawl", "Wild Growth"],
+      "why": "Both are one-mana Forest Auras that add one green mana per tap in this mono-green goldfish; Utopia Sprawl always chooses green."
+    }
+  ]
+}

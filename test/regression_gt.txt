@@ -4,6 +4,7 @@
 # accepted-with-regressions (overnight, 2026-10-28): Bruna TUTOR FIT (USER 2026-10-11) + keep table ADOPTED (see the smoke note). TUTOR FIT alone, table absent: searched 4 slower / 3 faster (all 4 PERSIST at 4x/16x and pass a Glittering Wish / Open the Armory before diverging; net +1 turn over 2,000 d5 games), d0 net faster. With the table: d5 s4004-7007 4.956->4.806 / 5.030->4.852 / 4.936->4.790 / 5.120->4.808, d3 s4004 5.104->4.696, d0 -0.26..-0.29 on all 4 seeds; backstop d3/d5 s30231 (3 games) 3.667->4.333 = 1 game, different mulligan count. Attribution 5176 mull-count + 928 bottom + 25 bottom-order; the 5 d5 'unexplained' games (same hand and bottom, play differs) are the lookahead bottoming's residue, not a table leak: each reproduces singly and matches the table-off digest with the table keeping and MTG_EXHAUSTIVE_BOTTOM=0. Units/game 3.8-5.3x lower.
 # accepted-with-regressions (smoke, 2026-11-04): Profane resolve fan (held-out -0.007): shadowborn d3 s2002 gi10 T5->T6 recovers T5 at d8 b0; th d5 s2002, alchemist d0 s2002/d5 s3003 and snow d0 s2002 are pre-existing origin drift (same got-digests from origin's own binary; none of these decks holds Profane Tutor or Lake of the Dead)
 # accepted-with-regressions (regression, 2026-11-04): Profane resolve fan (held-out -0.007): shadowborn d3 s2002 gi10 T5->T6 recovers T5 at d8 b0; th d5 s2002, alchemist d0 s2002/d5 s3003 and snow d0 s2002 are pre-existing origin drift (same got-digests from origin's own binary; none of these decks holds Profane Tutor or Lake of the Dead)
+# accepted-with-regressions (regression, 2026-11-05): Jumbo Cactuar cast sequencing update: 18 searched games faster, none slower; seven depth-zero games slower and five faster on the 1,000-game seed, net searched improvement. All 757 saved references replay without drift; same-run suite cost 0.76x Hinata.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -70,6 +71,9 @@ fivecolour_smoke_d5_s1001=4.7840/73e004034afa3134
 stompy_smoke_d0_s1001=4.8170/0254d80bf9c7c5cf
 stompy_smoke_d3_s1001=3.9800/e2e95d4626254be2
 stompy_smoke_d5_s1001=4.0000/12c9e20788d4ea9d
+jumbo_smoke_d0_s1001=5.7890/f6c5d435fdde2725
+jumbo_smoke_d3_s1001=4.4600/e1bdf422a423277d
+jumbo_smoke_d5_s1001=4.3200/a027298364e87c90
 minotaur_smoke_d0_s1001=5.3050/948ae97fa1052211
 minotaur_smoke_d3_s1001=4.9867/c2ccc2adcb805a03
 minotaur_smoke_d5_s1001=4.8954/e73569ee4e3d2ade
@@ -237,6 +241,12 @@ elementals_regression_d3_s30001=4.2000/adccc6917e55e488
 elementals_regression_d5_s30001=4.2000/adccc6917e55e488
 melira_regression_d3_s30001=4.5500/14a6ea695ade4937
 melira_regression_d5_s30001=4.5263/ea1756df21b7ca65
+jumbo_regression_d3_s30001=4.3000/7bd0c725d11c41d8
+jumbo_regression_d5_s30001=4.3000/7bd0c725d11c41d8
+jumbo_regression_d0_s2002=5.7720/13190b04be8a0117
+jumbo_regression_d3_s2002=4.3300/a991dc31ddd13f5f
+jumbo_regression_d5_s2002=4.3700/bdc3d335865d1e42
+jumbo_regression_d5_s3003=4.2880/e85176e8157cd85e
 minotaur_regression_d3_s30001=4.9000/f335d9b5734cc03b
 minotaur_regression_d5_s30001=4.9000/f335d9b5734cc03b
 mirrorwing_regression_d3_s30001=4.1500/685db03551646284
@@ -508,6 +518,20 @@ elementals_overnight_d3_s30101=4.2000/2d3b4bbf3571aa1f
 elementals_overnight_d5_s30101=4.2000/2d3b4bbf3571aa1f
 melira_overnight_d3_s30101=4.6000/9329cce625145448
 melira_overnight_d5_s30101=4.6000/0ec1e390f5194323
+jumbo_overnight_d3_s30101=4.4500/fe13c456d0aa2931
+jumbo_overnight_d5_s30101=4.4500/fe13c456d0aa2931
+jumbo_overnight_d0_s4004=5.7680/7a408a58a4a0394c
+jumbo_overnight_d0_s6006=5.8610/758ba2d76085f10d
+jumbo_overnight_d0_s8008=5.7985/5da003dc46ec3eb6
+jumbo_overnight_d0_s10010=5.7925/687b7dc93820f28f
+jumbo_overnight_d3_s4004=4.3575/e40c98e268ffac0c
+jumbo_overnight_d3_s5005=4.3825/c59e12907bc30efb
+jumbo_overnight_d3_s6006=4.3500/f78f36c60e1ab925
+jumbo_overnight_d3_s7007=4.3150/abac2e15bc3887a6
+jumbo_overnight_d5_s4004=4.3567/78c1e65260d44a2d
+jumbo_overnight_d5_s5005=4.3667/1eb4cf8e4b3f2509
+jumbo_overnight_d5_s6006=4.3167/962474ce976d01ab
+jumbo_overnight_d5_s7007=4.3133/9989ff1ecd76175a
 minotaur_overnight_d3_s30101=4.8500/55054b2787721be4
 minotaur_overnight_d5_s30101=4.8500/55054b2787721be4
 mirrorwing_overnight_d3_s30101=4.3000/845b018cc35ba1c7

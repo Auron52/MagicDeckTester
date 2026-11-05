@@ -1,0 +1,22 @@
+{
+  "deck": "decks/Jumbo Cactuar/Jumbo Cactuar.cod",
+  "turn": 3,
+  "resume_at": "main1",
+  "on_the_play": true,
+  "battlefield": [
+    {"name": "Forest"}, {"name": "Forest"},
+    {"name": "Voyaging Satyr", "sick": false},
+    {"name": "Wild Growth", "equips": "Forest"}
+  ],
+  "hand": ["Forest", "Chariot of Victory", "Voyaging Satyr"],
+  "library_filler": "Forest",
+  "library_size": 20,
+  "env": {"MTG_HUMAN_PLAY": "1"},
+  "depth": 0,
+  "budget_ms": 0,
+  "max_turns": 4,
+  "validate_line": "land=Forest;cast=Chariot of Victory;cast=Voyaging Satyr;seq=land=Forest|cast=Chariot of Victory|cast=Voyaging Satyr",
+  "expect_verdict": "accept",
+  "expect_human_summary_contains": "Voyaging Satyr",
+  "_comment": "Seed 2 viewer rejection: Chariot then a second Satyr is payable because the existing Satyr automatically untaps the enchanted Forest during mana payment."
+}

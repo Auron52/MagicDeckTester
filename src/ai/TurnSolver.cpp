@@ -6380,6 +6380,15 @@ static std::uint32_t BpAvailablePermAbilityModes(const GameState& state, const P
         }
         if (target) { bits |= 1u << static_cast<int>(PermAbilityMode::TapTargetPump); }
     }
+    if (sd.params.target_pump_cost.has_value()
+        && pool.CanPay(EffectiveActivationCost(state, ctrl, src.card, *sd.params.target_pump_cost)))
+    {
+        for (const Permanent& q : state.battlefield)
+        {
+            if (TapTargetPumpTargetLegal(state, q, ctrl))
+            { bits |= 1u << static_cast<int>(PermAbilityMode::TargetPump); break; }
+        }
+    }
     // Walking Ballista's counter ping and the Heliod loop: the out-of-band blocks' conditions, mirrored
     // (the shared CollectCounterPingOffers / PingLoopLiveNow). See CollectActions, "WALKING BALLISTA".
     if (sd.params.remove_counter_ping_damage > 0)
@@ -16540,6 +16549,20 @@ static void HasteUnlockedManaOf(const GameState& state, int host_id, ManaPool& o
     // Deathrite-style mana is fuel-gated on a land in a graveyard and the fuel is SHARED with the
     // copies the pool already credited, so it is deliberately not credited here (conservative).
     if (d->params.gy_land_exile_mana) { return; }
+    // A hand-cast Arbor Elf / Voyaging Satyr will re-tap an enchanted land as
+    // soon as haste unlocks it. Supply a virtual permanent so the shared land
+    // Aura reader includes the target land's full bonus. With perm=null it
+    // credits only the printed {G}, and the affordable Greaves -> Elf -> Satyr
+    // line is discarded before the real payer gets to try it.
+    Permanent hand_untapper;
+    if (!perm && !d->params.mana_requires_land_subtype.empty())
+    {
+        hand_untapper.card = d->card;
+        hand_untapper.controller_index = active;
+        hand_untapper.owner_index = active;
+        hand_untapper.entered_this_turn = true;
+        perm = &hand_untapper;
+    }
     ManaPool add;
     AddSourceToPool(add, state, *d, perm ? PermanentManaYield(state, *perm, *d) : -1, perm);
     if (add.Total() <= 0) { return; }
@@ -29268,6 +29291,7 @@ void CollectActivationKeys(const GameState& state, int ctrl, const Permanent& p,
         { PermAbilityMode::TapTargetPump,      &pp.tap_target_pump_cost           },
         // Walking Ballista's "{4}: put a +1/+1 counter" (2026-10-27) -- appended LAST.
         { PermAbilityMode::PayCounterSelf,     &pp.self_counter_cost              },
+        { PermAbilityMode::TargetPump,         &pp.target_pump_cost              },
     };
     for (std::size_t i = 0; i < sizeof modes / sizeof modes[0]; ++i)
     {
@@ -32029,6 +32053,8 @@ bool TurnSolver::ParamKeyedDrawClass(const GameState& state, const CardDefinitio
         || p.damage_equals_top_mv
         || p.tutor_to_hand
         || p.tutor_to_top
+        || (AcqResolveEnabled()
+            && ResolveProvider(state).PostCreatureTutorBreakpoint(state, def))
         // etb_dig_count is claimed only in the pre-fix world: MTG_BP_ETB_DIG hands it to site 10.
         || (p.etb_dig_count > 0 && !BpEtbDigEnabled())
         // The Zada/Mirrorwing trick class (site 5), whichever payload armed it.
@@ -37152,6 +37178,90 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 actions.push_back(std::move(a));
                 continue;
             }
+            if (def.params.finale_of_devastation)
+            {
+                const ManaCost base = EffectiveCost(def, state);
+                const DecisionProvider& finale_prov = ResolveProvider(state);
+                DecisionProvider::PutPolicy finale_pol =
+                    finale_prov.PutTargetPolicy(state, state.active_player_index);
+                if (HumanPlayActive() || DecisionUnpruned(UnprunedGate::Tutor))
+                { finale_pol.narrow = false; }
+                // A land Aura cast earlier in this same plan can raise the X
+                // payable for Finale. In particular, Overgrowth on a Forest
+                // that two Arbor Elves can re-tap turns a pre-Aura X=7 into
+                // X=10. Keep those X choices in the action fan; the sequential
+                // payer still rejects every combination it cannot really pay.
+                int aura_x_credit = 0;
+                if (!HumanPlayActive())
+                {
+                    int ready_untappers = 0;
+                    for (const Permanent& q : state.battlefield)
+                    {
+                        if (q.controller_index != state.active_player_index || q.tapped
+                            || !CanTapNow(q, state.battlefield)) { continue; }
+                        const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+                        if (qd && !qd->params.mana_requires_land_subtype.empty())
+                        { ++ready_untappers; }
+                    }
+                    for (const Card& c : ap.hand)
+                    {
+                        if (c.m_is_staged || c.m_number == ap.hand[i].m_number) { continue; }
+                        const CardDefinition* ad = CardDatabase::Instance().LookupCached(c);
+                        if (ad && ad->params.is_land_aura && ad->params.land_aura_extra_mana > 0)
+                        { aura_x_credit += ad->params.land_aura_extra_mana * (1 + ready_untappers); }
+                    }
+                }
+                const int max_x = std::max(0, static_cast<int>(turn_pool().Total())
+                                                + aura_x_credit - base.ManaValue());
+                const int last_x = HumanPlayActive() ? 0 : max_x;
+                for (int x = 0; x <= last_x; ++x)
+                {
+                    ManaCost cost = base;
+                    cost.generic += x;
+                    auto offer = [&](const std::string& pin) {
+                        Action a;
+                        a.kind = Action::Kind::CastFromHand;
+                        a.card_name = ap.hand[i].m_name;
+                        a.hand_index = i;
+                        a.cost = cost;
+                        a.chosen_x = x;
+                        a.tutor_target = pin;
+                        a.eval = EvalCard(def, state, x);
+                        a.is_noncreature = true;
+                        a.card_mv = def.card.m_mana_cost.ManaValue();
+                        actions.push_back(std::move(a));
+                    };
+                    offer("N");  // hidden library search may fail to find, even at X=0
+                    bool graveyard_has_eligible = false;
+                    for (const Card& c : ap.graveyard)
+                    {
+                        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                        if (d && d->card.IsCreature() && d->card.m_mana_cost.ManaValue() <= x)
+                        { graveyard_has_eligible = true; break; }
+                    }
+                    if (HumanPlayActive()) { continue; }  // X and card are asked at resolution
+                    if (!graveyard_has_eligible)
+                    { offer("Z"); }  // search only the empty graveyard: no library shuffle
+                    std::unordered_set<std::string> seen_library, seen_graveyard;
+                    for (const Card& c : ap.library)
+                    {
+                        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                        if (d && d->card.IsCreature() && d->card.m_mana_cost.ManaValue() <= x
+                            && (!finale_pol.narrow || finale_prov.PutTargetOk(finale_pol, *d))
+                            && seen_library.insert(c.m_name.str()).second)
+                        { offer("L0:" + c.m_name.str()); }
+                    }
+                    for (const Card& c : ap.graveyard)
+                    {
+                        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                        if (d && d->card.IsCreature() && d->card.m_mana_cost.ManaValue() <= x
+                            && (!finale_pol.narrow || finale_prov.PutTargetOk(finale_pol, *d))
+                            && seen_graveyard.insert(c.m_name.str()).second)
+                        { offer("G0:" + c.m_name.str()); offer("G1:" + c.m_name.str()); }
+                    }
+                }
+                continue;
+            }
             // Chord of Calling ({X}{G}{G}{G}, Convoke, Instant: "search your library for a
             // creature card with mana value X or less, put it onto the battlefield, then
             // shuffle"). Without this branch the terminal `continue` below drops the card from
@@ -37174,7 +37284,33 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 const int fo = static_cast<int>(cc.free_other.size());
                 const int ag = static_cast<int>(cc.atk_green.size());
                 const int ao = static_cast<int>(cc.atk_other.size());
-                const int pool_total = turn_pool().Total();
+                int pool_total = turn_pool().Total();
+                if (HumanPlayActive())
+                {
+                    // Literal untap-target-land abilities are separate viewer actions,
+                    // so AvailableManaPool does not count them. They can still fund
+                    // this same-turn X cast after the player orders the untaps first.
+                    // Use only a ceiling here; ApplyPlan checks the actual order and
+                    // payment. Seed 73010 needs both Elf and Satyr to reach GSZ X=6.
+                    int best_land = 0;
+                    for (const Permanent& q : state.battlefield)
+                    {
+                        if (q.controller_index != state.active_player_index || !q.card.IsLand()
+                            || !UntapLandTargetLegal(state, q, state.active_player_index)) { continue; }
+                        const CardDefinition* ld = CardDatabase::Instance().LookupCached(q.card);
+                        if (ld) { best_land = std::max(best_land, PermanentManaYield(state, q, *ld)); }
+                    }
+                    if (best_land > 0)
+                    {
+                        for (const Permanent& q : state.battlefield)
+                        {
+                            if (q.controller_index != state.active_player_index || q.tapped
+                                || !CanTapNow(q, state.battlefield)) { continue; }
+                            const CardDefinition* ud = CardDatabase::Instance().LookupCached(q.card);
+                            if (ud && ud->params.untap_target_land) { pool_total += best_land; }
+                        }
+                    }
+                }
                 // Provider fetch narrowing (PutTargetPolicy/PutTargetOk; narrow=false =
                 // unnarrowed) -- the same policy as the Birthing Pod site, so the two
                 // put-tutors cannot drift. Allocation-free by contract.
@@ -37186,7 +37322,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 const DecisionProvider& chord_prov = ResolveProvider(state);
                 DecisionProvider::PutPolicy chord_pol =
                     chord_prov.PutTargetPolicy(state, state.active_player_index);
-                if (HumanPlayActive()) { chord_pol.narrow = false; }
+                if (HumanPlayActive() || DecisionUnpruned(UnprunedGate::Tutor))
+                { chord_pol.narrow = false; }
                 std::unordered_set<std::string> chord_seen;
                 for (const Card& lc : ap.library)
                 {
@@ -38285,7 +38422,11 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 // card in the same state, so it cannot encode a deck's judgement). The heuristic
                 // pick is OPT-IN PER DECK -- USER: "My ideas were just a heuristic for Fungus ...
                 // I wouldn't apply them to EDF in particular."
-                aura_hosts = FoldInterchangeableAuraHosts(state, aura_hosts);
+                // A provider may deliberately retain two same-name hosts because
+                // paying for this Aura can tap one before it enters. The generic
+                // class fold cannot erase either of those proposed alternatives.
+                if (!provider_narrowed)
+                { aura_hosts = FoldInterchangeableAuraHosts(state, aura_hosts); }
                 if (!provider_narrowed
                     && ResolveProvider(state).UsesLandAuraHostHeuristic())
                 { aura_hosts = PickLandAuraHosts(state, aura_hosts, def); }
@@ -39096,6 +39237,74 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // Unite the Coalition (approved collapse): one CastFromHand variant per split S in
         // [0..N] -- S x face damage + (N-S) draws. Shared hand_index -> mutually exclusive; the
         // signature folds S so the autonomous dedup never collapses distinct splits.
+        if (def.params.tooth_and_nail)
+        {
+            // Search the whole compound choice at cast time. In entwined mode the
+            // hand-put set includes the cards found by the first mode; choosing a
+            // pre-search hand subset would miss the card's central combo line.
+            auto subsets = [](const std::vector<std::string>& names) {
+                std::vector<std::vector<std::string>> out(1);
+                std::unordered_set<std::string> seen;
+                for (int x = 0; x < static_cast<int>(names.size()); ++x)
+                {
+                    if (seen.insert(names[x]).second) { out.push_back({names[x]}); }
+                    for (int y = x + 1; y < static_cast<int>(names.size()); ++y)
+                    {
+                        std::vector<std::string> pair{names[x], names[y]};
+                        std::sort(pair.begin(), pair.end());
+                        const std::string key = pair[0] + '\x1f' + pair[1];
+                        if (seen.insert(key).second) { out.push_back(std::move(pair)); }
+                    }
+                }
+                return out;
+            };
+            std::vector<std::string> library;
+            for (const Card& c : ap.library)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                if (d && d->card.IsCreature()) { library.push_back(c.m_name.str()); }
+            }
+            std::vector<std::string> hand;
+            for (int hi = 0; hi < static_cast<int>(ap.hand.size()); ++hi)
+            {
+                if (hi == i || ap.hand[hi].m_is_staged) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(ap.hand[hi]);
+                if (d && d->card.IsCreature()) { hand.push_back(ap.hand[hi].m_name.str()); }
+            }
+            const auto lib_sets = HumanPlayActive()
+                ? std::vector<std::vector<std::string>>(1) : subsets(library);
+            for (int mode = 0; mode <= 2; ++mode)
+            {
+                ManaCost cost = EffectiveCost(def, state);
+                if (mode == 2) { cost.generic += 2; }
+                for (const auto& lib : (mode == 1
+                         ? std::vector<std::vector<std::string>>(1) : lib_sets))
+                {
+                    std::vector<std::string> available = hand;
+                    if (mode == 2) { available.insert(available.end(), lib.begin(), lib.end()); }
+                    const auto hand_sets = (mode == 0 || HumanPlayActive())
+                        ? std::vector<std::vector<std::string>>(1) : subsets(available);
+                    for (const auto& put : hand_sets)
+                    {
+                        if (!HumanPlayActive() && !DecisionUnpruned(UnprunedGate::Tutor)
+                            && !ResolveProvider(state).ToothAndNailCandidateOk(
+                                state, state.active_player_index, mode, lib, put)) { continue; }
+                        Action a;
+                        a.kind = Action::Kind::CastFromHand;
+                        a.card_name = ap.hand[i].m_name;
+                        a.hand_index = i;
+                        a.cost = cost;
+                        a.chosen_x = mode;
+                        a.tutor_target = EncodeToothChoices(lib, put);
+                        a.eval = EvalCard(def, state);
+                        a.is_noncreature = true;
+                        a.card_mv = def.card.m_mana_cost.ManaValue();
+                        actions.push_back(std::move(a));
+                    }
+                }
+            }
+            continue;
+        }
         if (def.params.modal_choose_n > 0)
         {
             // WHICH splits to branch on is provider-owned (see ModalSplitCandidates). The default
@@ -43406,6 +43615,62 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 }
             }
 
+            // ---- Nylea: mana-only, repeatable targeted +2/+2 until end of turn.
+            // Target is a searched axis, count is a searched mana-sink axis. Human
+            // play sees every legal target and re-prompts after each activation.
+            if (sd->params.target_pump_cost.has_value())
+            {
+                const int me = state.active_player_index;
+                const ManaCost cost = EffectiveActivationCost(state, me, src.card,
+                                                               *sd->params.target_pump_cost);
+                ManaPool have = turn_pool();
+                have.AddPool(state.floating_mana);
+                if (cost.ManaValue() > 0 && have.CanPay(cost))
+                {
+                    std::vector<int> counts{1};
+                    if (!HumanPlayActive())
+                    {
+                        counts = ResolveProvider(state).ManaSinkActivationCounts(
+                            state, src, Action::AbilityMode::TargetPump,
+                            static_cast<int>(have.Total()) / cost.ManaValue());
+                    }
+                    std::vector<std::uint64_t> keys;
+                    std::vector<int> linked;
+                    if (!HumanPlayActive()) { LandfallTargetLinks(state, linked); }
+                    for (const Permanent& q : state.battlefield)
+                    {
+                        if (q.card.m_number == 0 || !TapTargetPumpTargetLegal(state, q, me)) { continue; }
+                        if (!HumanPlayActive())
+                        {
+                            if (q.controller_index != me) { continue; }
+                            std::uint64_t key = 0;
+                            if (LandfallTargetFoldKey(state, q, key, &linked))
+                            {
+                                if (std::find(keys.begin(), keys.end(), key) != keys.end()) { continue; }
+                                keys.push_back(key);
+                            }
+                        }
+                        for (int count : counts)
+                        {
+                            if (count <= 0) { continue; }
+                            Action a;
+                            a.kind = Action::Kind::ActivatePermAbility;
+                            a.card_name = src.card.m_name;
+                            a.def = sd;
+                            a.hand_index = -1;
+                            a.sac_source_id = src.card.m_number;
+                            a.sac_victim_id = q.card.m_number;
+                            a.ability_mode = Action::AbilityMode::TargetPump;
+                            a.chosen_x = count;
+                            a.cost = cost;  // first activation; apply pays the remaining K-1
+                            a.eval = 2 * sd->params.tap_target_pump_power * count;
+                            a.is_noncreature = true;
+                            actions.push_back(std::move(a));
+                        }
+                    }
+                }
+            }
+
             // ---- Khalni Heart Expedition: "Remove three quest counters from this enchantment and
             // sacrifice it: Search your library for up to two basic land cards, put them onto the
             // battlefield tapped, then shuffle." (PermAbilityMode::QuestSacLandSearch; core/LandSearch.h)
@@ -47419,7 +47684,8 @@ static int ActivationFamilyKey(const Action& a)
 //    sac_source_ids with >= 2 variants; single-variant sources (Dragonstorm's mono-colour Lotus
 //    Bloom) stay independent bits -> byte-identical for every existing deck.
 static constexpr int kIndependentAction = std::numeric_limits<int>::min();
-static int PlanGroupKey(const Action& a, const std::vector<int>& multi_sac)
+static int PlanGroupKey(const GameState& state, const Action& a,
+                        const std::vector<int>& multi_sac)
 {
     static const bool s_off = EnvOn("MTG_NO_ACTIVATION_FAMILY_GROUPS");
     if (!s_off && a.free_cast)
@@ -47438,6 +47704,26 @@ static int PlanGroupKey(const Action& a, const std::vector<int>& multi_sac)
     // behind s_off: the seed has no ungrouped form (two seeds in one plan are not a legal selection).
     if (IsCycleSeed(a)) { return -6000000; }
     if (a.hand_index >= 0) { return a.hand_index; }
+    // Jumbo Cactuar's free Greaves can haste an Elf, let it fund a Satyr,
+    // then move to that Satyr before a later cast. Ordinary equip variants of
+    // one source are alternatives (one family), but these two activations are
+    // sequential and both legal. Give the two mana-untapper host TYPES their
+    // own families; all other Greaves hosts keep the source family below.
+    if (a.kind == Action::Kind::Equip && a.card_name == "Lightning Greaves"
+        && std::string(ResolveProvider(state).Name()) == "JumboCactuar")
+    {
+        auto host_key = [&](const Card& c) -> int
+        {
+            if (c.m_number != a.sac_victim_id) { return 0; }
+            if (c.m_name.str() == "Arbor Elf") { return -7000001; }
+            if (c.m_name.str() == "Voyaging Satyr") { return -7000002; }
+            return 0;
+        };
+        for (const Permanent& p : state.battlefield)
+        { if (const int key = host_key(p.card)) { return key; } }
+        for (const Card& c : state.players[state.active_player_index].hand)
+        { if (const int key = host_key(c)) { return key; } }
+    }
     if (!s_off && a.kind == Action::Kind::SacForMana
         && std::binary_search(multi_sac.begin(), multi_sac.end(), a.sac_source_id))
     { return -1000 - a.sac_source_id; }
@@ -49041,11 +49327,41 @@ static int EtbUntapBoundCredit(const GameState* etb_state, const Action& a)
 // and can never drop a payable plan. It touches no payment -- the flat pool, the per-colour gates and
 // the sequential walk all still price the Aura's own cast against the pre-cast board, and the walk
 // attaches it only AFTER that payment (optimism in the bound, exactness in the payment).
-static int LandAuraBoundCredit(const Action& a)
+// A human-play Satyr is a literal untap action, rather than the autonomous
+// Arbor-style mana source. The target land's full next tap is a safe upper
+// bound for a plan that activates Satyr before a later cast. Without this
+// term the subset odometer drops {untap enchanted Forest, cast Cactuar} before
+// the sequential payer can see that the untap makes the cast affordable.
+static int UntapLandActionBoundCredit(const GameState* s, const Action& a)
+{
+    if (s == nullptr || a.kind != Action::Kind::ActivatePermAbility
+        || a.ability_mode != Action::AbilityMode::UntapLand) { return 0; }
+    for (const Permanent& q : s->battlefield)
+    {
+        if (q.card.m_number != a.sac_victim_id || !q.card.IsLand()) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+        return d ? PermanentManaYield(*s, q, *d) : 0;
+    }
+    return 0;
+}
+
+static int LandAuraBoundCredit(const GameState* s, const Action& a)
 {
     if (a.def == nullptr || a.kind != Action::Kind::CastFromHand) { return 0; }
     if (!a.def->params.is_land_aura || a.def->params.land_aura_extra_mana <= 0) { return 0; }
-    return SeqLandAuraEnabled() ? a.def->params.land_aura_extra_mana : 0;
+    if (!SeqLandAuraEnabled()) { return 0; }
+    int taps = 1;
+    if (s != nullptr)
+    {
+        for (const Permanent& q : s->battlefield)
+        {
+            if (q.controller_index != s->active_player_index || q.tapped
+                || !CanTapNow(q, s->battlefield)) { continue; }
+            const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+            if (qd && !qd->params.mana_requires_land_subtype.empty()) { ++taps; }
+        }
+    }
+    return a.def->params.land_aura_extra_mana * taps;
 }
 
 // MTG_MINT_CREDIT_EXACT -- SAME-PLAN HEROISM WIDTH (see SamePlanHeroismMint). The Frontline
@@ -49138,7 +49454,8 @@ static int ManaPruneBound(const ManaPool& pool, const std::vector<Action>& cands
             b += MintHeroismBonus(a, hero, hero_bodies);   // ...and the same-plan Heroism copies' Treasures
         }
         b += EtbUntapBoundCredit(etb_state, a);   // ETB "untap up to N lands" -- see above
-        b += LandAuraBoundCredit(a);              // "enchanted land taps for an additional {G}"
+        b += LandAuraBoundCredit(etb_state, a);   // Aura may be tapped again by ready untappers
+        b += UntapLandActionBoundCredit(etb_state, a);
         if (a.def && a.def->params.ritual_float_gy_self_bonus) { ++gy; }
     }
     // SOUNDNESS FIX (2026-07-30): this bound credited every candidate's base ritual_float but NOT the
@@ -49257,7 +49574,8 @@ static inline bool ManaGateWouldHelp(const std::vector<Action>& cands, const Gam
                           || !a.def->params.reduces_spell_subtype.empty()
                           || a.def->params.chooses_creature_type))
             || EtbUntapBoundCredit(etb_state, a) > 0
-            || LandAuraBoundCredit(a) > 0)
+            || LandAuraBoundCredit(etb_state, a) > 0
+            || UntapLandActionBoundCredit(etb_state, a) > 0)
         { return true; }
     }
     return false;
@@ -49311,7 +49629,8 @@ static bool BuildManaGateIndex(const ManaPool& pool, const std::vector<Action>& 
         // shipped consider() mint credit had no term in either bound, so the subset it exists to
         // admit ({Gold Rush, Fists} = 4 on a 3-mana pool) died at the odometer unpriced.
         t.gain = a.ritual_float + a.rock_mana.Total() + a.mint_gain + MintHeroismBonus(a, hero, hero_bodies)
-               + EtbUntapBoundCredit(etb_state, a) + LandAuraBoundCredit(a)
+               + EtbUntapBoundCredit(etb_state, a) + LandAuraBoundCredit(etb_state, a)
+               + UntapLandActionBoundCredit(etb_state, a)
                + WidenBoundGain(a, w_dom, w_live);
         t.gy   = (a.def && a.def->params.ritual_float_gy_self_bonus) ? 1 : 0;
         t.block = ((a.def && (a.def->params.affinity_for_subtype
@@ -54903,7 +55222,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         { gate_relevant = true; }
         // The group key: hand slot / free-cast bank slot / mutually-exclusive activation or
         // multi-variant-sac family (PlanGroupKey), else -> independent bit.
-        const int gkey = PlanGroupKey(cands[j], multi_sac);
+        const int gkey = PlanGroupKey(state, cands[j], multi_sac);
         if (gkey == kIndependentAction) { independent.push_back(j); continue; }
 
         int gi = -1;
@@ -62511,6 +62830,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // inside EffectiveCost). Matches the enum's a.cost = EffectiveCost(def,state,k+1) and the
         // executor's CastSpellFromHand -> lockstep. copies=1 for every non-spliced cast.
         ManaCost ec = EffectiveCost(def, state, splice_count + 1);
+        if (def.params.tooth_and_nail && chosen_x == 2) { ec.generic += 2; }
         // EVOKE (Reveillark): the alternate cost replaces the printed one wholesale (CR 702.75;
         // lockstep with the enumeration's a.cost and the executor's CastSpellFromHand).
         if (evoke && def.params.evoke_cost.has_value()) { ec = *def.params.evoke_cost; }
@@ -62536,7 +62856,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // DecisionProvider::DrawXCandidates. max = what the live pool (float included, counted ONCE)
         // pays now over the base cost, so X is chosen against the mana the line has left. The
         // chooser is null in every search / rollout / trial apply (RevealLogPause) -> byte-identical.
-        if (g_play_x_value_chooser != nullptr && def.tmpl == CardTemplate::DrawX && !free_cast)
+        if (g_play_x_value_chooser != nullptr
+            && (def.tmpl == CardTemplate::DrawX || def.params.finale_of_devastation)
+            && !free_cast)
         {
             ManaPool xpool = AvailableManaPool(state);   // credits the float itself (FloatLeftoverMana)
             if (!FloatLeftoverManaEnabled()) { xpool.AddPool(state.floating_mana); }
@@ -62549,10 +62871,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 const int  lib    = static_cast<int>(state.ActivePlayer().library.size());
                 // Default: the kill at the opponent (minimal lethal, else everything affordable); for
                 // yourself, as many as the pool pays without drawing past your library (CR 104.3c).
-                const int  dflt   = at_opp ? ((lethal > 0 && lethal <= xmax) ? lethal : xmax)
+                const int  dflt   = def.params.finale_of_devastation ? std::min(xmax, 10)
+                                  : at_opp ? ((lethal > 0 && lethal <= xmax) ? lethal : xmax)
                                            : std::min(xmax, lib);
                 int xv = (*g_play_x_value_chooser)(state, state.active_player_index, def.card.m_name.str(),
-                                                   at_opp ? 1 : 0, xmax, dflt, lethal);
+                                                   def.params.finale_of_devastation ? 4 : (at_opp ? 1 : 0),
+                                                   xmax, dflt, lethal);
                 if (xv < 0 || xv > xmax) { xv = dflt; }
                 chosen_x = xv;
             }
@@ -64461,6 +64785,15 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 { g_play_draw_sink->push_back({ state.turn_number, ap.hand[hi].m_name.str() }); }
             }
         }
+        else if (def.params.tooth_and_nail)
+        {
+            ResolveToothAndNail(state, state.active_player_index, chosen_x, tutor_target);
+        }
+        else if (def.params.finale_of_devastation)
+        {
+            ResolveFinaleOfDevastation(state, state.active_player_index,
+                                       def.params, chosen_x, tutor_target);
+        }
         else if (IsLibraryTutor(def.params))
         {
             // Tutor (Idyllic / Enlightened / Long-Term Plans): fetch the SEARCHED target (tutor_target); empty
@@ -64557,6 +64890,19 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                                       /*max_puts=*/1, pref, def.card.m_name.str(),
                                       /*require_mv=*/-1,
                                       def.params.tutor_mv_max_is_x ? chosen_x : -1);
+            // A GSZ fetch can create the haste Equipment's lethal host only
+            // after this cast resolves. Re-enumerate the remaining main phase
+            // with that host present (the executor's deferred-breakpoint twin
+            // classifies the same provider hook). Jumbo seed 1050 otherwise
+            // leaves two Chariots on Satyr and waits until turn seven.
+            if (AcqResolveEnabled()
+                && ResolveProvider(state).PostCreatureTutorBreakpoint(state, def)
+                && !s_human_play && sink_stack.empty())
+            {
+                deferred_cantrip_resolve = true;
+                deferred_cantrip_site = &def;
+                deferred_hand_before = deferred_snapshot(hand_at_cast);
+            }
         }
         else if (def.params.tutor_to_battlefield)
         {
@@ -66778,7 +67124,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // Kessig Wolf Run's searched TARGET + X (TapTargetPump), read by the liveness check, the
             // payment (TapTargetPumpPay) and the resolver. {0, 0} for every other mode (never read).
             const bool tpump = a.ability_mode == Action::AbilityMode::TapTargetPump;
-            const TapTargetPumpPinScope _tpump_pin(tpump ? a.sac_victim_id : 0, tpump ? a.chosen_x : 0);
+            const bool target_pump = a.ability_mode == Action::AbilityMode::TargetPump;
+            const bool untap_land = a.ability_mode == Action::AbilityMode::UntapLand;
+            const TapTargetPumpPinScope _tpump_pin((tpump || target_pump || untap_land) ? a.sac_victim_id : 0,
+                                                   tpump ? a.chosen_x : 0);
             // Walking Ballista's searched ping TARGET (0 = the opponent's face); twin in the other world.
             const CounterPingTargetPinScope _cp_pin(
                 a.ability_mode == Action::AbilityMode::CounterPing ? a.sac_victim_id : 0);
@@ -66823,6 +67172,29 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 {
                     _act_line_pay.Paid();
                     if (ActDropAuditOn()) { g_act_fired.fetch_add(1, std::memory_order_relaxed); }
+                    // Human play exposes Satyr's target literally. If that
+                    // land is still untapped, tap it for mana immediately
+                    // before the untap; this is a legal mana-ability sequence
+                    // and lets the later spell in this same plan spend the
+                    // extra tap. The autonomous payer already models this
+                    // as its Arbor-style mana source.
+                    if (untap_land && HumanPlayActive())
+                    {
+                        for (Permanent& q : state.battlefield)
+                        {
+                            if (q.card.m_number != a.sac_victim_id
+                                || q.controller_index != state.active_player_index) { continue; }
+                            const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+                            if (qd != nullptr && KarooBounceFloatable(state, q, *qd))
+                            {
+                                q.tapped = true;
+                                FloatSourceTapCommitted(state, state.active_player_index, *qd, &q);
+                                if (LandAuraBonus(state, q) > 0)
+                                { LandAuraAddToPool(state.floating_mana, state, q); }
+                            }
+                            break;
+                        }
+                    }
                     // Site-8 detection input: did the gated look-at-top (Scrying Sheets / Frost
                     // Augur) actually move a card into hand? Hand size is the observable -- the
                     // gated TapDraw is the only thing this apply can grow the hand with.
@@ -70935,6 +71307,10 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                 if (!act.chosen_float_color.empty()) { w.Put('#'); w.Put(act.chosen_float_color); }
                 if (act.free_cast) { w.Put("#FREE"); }
                 if (d && d->params.modal_choose_n > 0) { w.Put("#S"); w.Int(act.chosen_x); }
+                if (d && d->params.tooth_and_nail)
+                { w.Put("#TN"); w.Int(act.chosen_x); w.Put(act.tutor_target); }
+                if (d && d->params.finale_of_devastation)
+                { w.Put("#FD"); w.Int(act.chosen_x); w.Put(act.tutor_target); }
                 if (d && HasSacCreatureAdditionalCost(d->params)) { w.Put("#V"); w.Int(act.soulfire_own_targets); }
                 if (d && d->params.look_top_put_creature_count > 0) { w.Put("#T"); w.Put(act.tutor_target); }
                 if (d && d->params.etb_destroy_own_noncreature_max > 0) { w.Put("#K"); w.Int(act.chosen_x); }
@@ -71110,7 +71486,10 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                 { w.Put("#T"); w.Int(act.enchant_target); w.Put("#S"); w.Put(StealSpecText(act.steal_spec)); }
                 // Kessig Wolf Run's pump target (TapTargetPump; its X rides chosen_x). Lockstep with the
                 // legacy builder.
-                if (act.ability_mode == Action::AbilityMode::TapTargetPump) { w.Put("#P"); w.Int(act.sac_victim_id); }
+                if (act.ability_mode == Action::AbilityMode::TapTargetPump
+                    || act.ability_mode == Action::AbilityMode::TargetPump
+                    || act.ability_mode == Action::AbilityMode::UntapLand)
+                { w.Put("#P"); w.Int(act.sac_victim_id); }
                 // Walking Ballista's ping: WHICH target (0 = face) is a decision. Every other ability: no tag.
                 if (act.ability_mode == Action::AbilityMode::CounterPing && act.sac_victim_id != 0)
                 { w.Put("#B"); w.Int(act.sac_victim_id); }
@@ -72422,7 +72801,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // The group key: hand slot / free-cast bank slot / mutually-exclusive activation or
         // multi-variant-sac family (PlanGroupKey), else -> independent bit.
         // Kept in lockstep with Solve's partition pass above -- change one, change both.
-        const int gkey = PlanGroupKey(cands[j], multi_sac);
+        const int gkey = PlanGroupKey(state, cands[j], multi_sac);
         if (gkey == kIndependentAction) { independent.push_back(j); continue; }
 
         int gi = -1;
@@ -73360,6 +73739,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         if (any_haste_dork)
         {
             ManaPool dork_prod, dork_prod_nc; ManaCost enable_costs; bool sel_dork = false;
+            std::vector<int> priced_enable_pieces;
             for (int j : sel)
             {
                 if (haste_unlock[j].Total() <= 0) { continue; }
@@ -73391,6 +73771,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                         || c.hand_index >= static_cast<int>(ap.hand.size())) { continue; }
                     const int num = ap.hand[c.hand_index].m_number;
                     if (num != cands[j].sac_source_id && num != cands[j].sac_victim_id) { continue; }
+                    // One Greaves cast can enable two sequential free equips,
+                    // first to Elf and then to Satyr. Its cast is paid once.
+                    if (std::find(priced_enable_pieces.begin(), priced_enable_pieces.end(), num)
+                        != priced_enable_pieces.end()) { continue; }
+                    priced_enable_pieces.push_back(num);
                     enable_costs.white += c.cost.white; enable_costs.blue      += c.cost.blue;
                     enable_costs.black += c.cost.black; enable_costs.red       += c.cost.red;
                     enable_costs.green += c.cost.green; enable_costs.colorless += c.cost.colorless;
@@ -74070,6 +74455,17 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                         || (!mana_ok && !(any_filter && SubsetPayableWithFilters(state, cands, sel)));
         if (mana_reject) { _ct.label = "flat-pool"; }
         if (mana_reject && exec_feas_rescues()) { mana_reject = false; _ct.label = "early-gate"; }
+        // The flat pool excludes a human Satyr's literal target choice. A
+        // selected untap action may supply the later cast, and the exact
+        // ApplyPlan trial (then the committed apply) judges the real order.
+        if (mana_reject && HumanPlayActive())
+        {
+            for (int j : sel)
+            {
+                if (UntapLandActionBoundCredit(&state, cands[j]) <= 0) { continue; }
+                mana_reject = false; _ct.label = "human-untap-land"; break;
+            }
+        }
         // MTG_DBG_MULTI=<turn> -- print every MULTI-CAST odometer position considered on that turn and
         // whether the mana gates kept it. "The line is not on the menu" has half a dozen possible
         // causes spread across the odometer bound, three gates and two rescues, and they are
@@ -75843,6 +76239,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                         if (act.free_cast) { k += "#FREE"; }
                         const CardDefinition* const cd = act.def;
                         if (cd && cd->params.modal_choose_n > 0) { k += "#S"; k += std::to_string(act.chosen_x); }
+                        if (cd && cd->params.tooth_and_nail)
+                        { k += "#TN"; k += std::to_string(act.chosen_x); k += act.tutor_target.str(); }
+                        if (cd && cd->params.finale_of_devastation)
+                        { k += "#FD"; k += std::to_string(act.chosen_x); k += act.tutor_target.str(); }
                         // Natural Order: distinct sacrifice victims are DISTINCT plans (core
                         // invariant); gated on the param so no existing deck's signature moves.
                         if (cd && HasSacCreatureAdditionalCost(cd->params))
@@ -76228,7 +76628,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                                      : "#T" + std::to_string(act.enchant_target) + "#S" + StealSpecText(act.steal_spec))
                                   // Kessig Wolf Run's pump (TapTargetPump): WHICH creature is a decision
                                   // (chosen_x above is its X) -- the Gamble lesson. Every other ability: no tag.
-                                  + (act.ability_mode != Action::AbilityMode::TapTargetPump
+                                  + ((act.ability_mode != Action::AbilityMode::TapTargetPump
+                                      && act.ability_mode != Action::AbilityMode::TargetPump
+                                      && act.ability_mode != Action::AbilityMode::UntapLand)
                                      ? std::string() : "#P" + std::to_string(act.sac_victim_id))
                                   // Walking Ballista's ping target (0 = the face, untagged).
                                   + (act.ability_mode != Action::AbilityMode::CounterPing || act.sac_victim_id == 0
@@ -86499,7 +86901,10 @@ static std::string PlanDomKey(const Action& a)
     if (a.vamp_casts_needed != 0) { k += "|B"; k += std::to_string(static_cast<int>(a.vamp_casts_needed)); }
     if (a.steal_spec != 0)   // Vampires B: the steal's target + tap spec content
     { k += "|S"; k += std::to_string(a.enchant_target); k += "/"; k += StealSpecText(a.steal_spec); }
-    if (a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::TapTargetPump)
+    if (a.kind == Action::Kind::ActivatePermAbility
+        && (a.ability_mode == Action::AbilityMode::TapTargetPump
+            || a.ability_mode == Action::AbilityMode::TargetPump
+            || a.ability_mode == Action::AbilityMode::UntapLand))
     { k += "|T"; k += std::to_string(a.sac_victim_id); }   // Kessig Wolf Run: the pump's target
     if (a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::CounterPing
         && a.sac_victim_id != 0)
@@ -111353,6 +111758,22 @@ static std::string LineSummaryOfPlan(const TurnSolver::Plan& p, const GameState*
         // Kessig Wolf Run's pump: its two decisions -- the X and WHICH creature -- are the label (the
         // blink shape), so a history row says what was pumped and by how much.
         else if (a.kind == Action::Kind::ActivatePermAbility
+                 && a.ability_mode == Action::AbilityMode::UntapLand)
+        {
+            const std::string tn = st ? SubChoiceHostLabel(*st, a.sac_victim_id) : std::string();
+            cast_names.push_back(a.card_name + ": untap "
+                + (tn.empty() ? std::string("target land") : tn));
+        }
+        else if (a.kind == Action::Kind::ActivatePermAbility
+                 && a.ability_mode == Action::AbilityMode::TargetPump)
+        {
+            const std::string tn = st ? SubChoiceHostLabel(*st, a.sac_victim_id) : std::string();
+            cast_names.push_back(a.card_name + ": pump "
+                + (tn.empty() ? std::string("target creature") : tn) + " +"
+                + std::to_string(a.def ? a.def->params.tap_target_pump_power * a.chosen_x : 0)
+                + "/+" + std::to_string(a.def ? a.def->params.tap_target_pump_tough * a.chosen_x : 0));
+        }
+        else if (a.kind == Action::Kind::ActivatePermAbility
                  && a.ability_mode == Action::AbilityMode::TapTargetPump)
         {
             const std::string tn = st ? SubChoiceHostLabel(*st, a.sac_victim_id) : std::string();
@@ -112903,10 +113324,23 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
                            return cd2 && (cd2->params.tutor_mv_max_is_x
                                           || HumanPlayDefersTutorTarget(*cd2));
                        }());
+            const CardDefinition* tooth_def = a.def ? a.def
+                : CardDatabase::Instance().LookupInterned(a.card_name);
+            if (a.kind == Action::Kind::CastFromHand && tooth_def
+                && tooth_def->params.tooth_and_nail)
+            {
+                const std::string mode = a.chosen_x == 2 ? "Yes — pay {2}, search, then put"
+                                       : a.chosen_x == 1 ? "No — put two from hand"
+                                                         : "No — search two to hand";
+                addSub(a.card_name.str() + " " + mode, a.card_name.str() + " entwine",
+                       mode, a.card_name.str(), "modal");
+            }
             if (a.tutor_target.str().compare(0, 10, "fireblast:") == 0)
             { addSub(a.card_name + " (sacrifice two Mountains)", a.card_name + " cost", "sacrifice two Mountains", "sacrifice two Mountains", "cost"); }
             FixedBurnPin burn_pin;
             if (!a.tutor_target.empty() && !resolution_tutor
+                && !(tooth_def && tooth_def->params.tooth_and_nail)
+                && !(tooth_def && tooth_def->params.finale_of_devastation)
                 && !DecodeFixedBurnPin(a.tutor_target.str(), burn_pin)
                 && a.tutor_target.str().compare(0, 10, "fireblast:") != 0)
             { addSub(a.card_name + " \xE2\x86\x92 " + a.tutor_target, a.card_name + " \xE2\x86\x92", a.tutor_target, a.tutor_target, "tutor"); }
@@ -113102,6 +113536,31 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
             // untapper's board-object shape, so two same-named Plants get distinct choices) and the X,
             // for EVERY X including 0 (a mixed sub/no-sub set would otherwise collapse the X = 0 entry).
             else if (a.kind == Action::Kind::ActivatePermAbility
+                     && a.ability_mode == Action::AbilityMode::UntapLand)
+            {
+                const std::string hn = SubChoiceHostLabel(state, a.sac_victim_id);
+                std::string art;
+                for (const Permanent& perm : state.battlefield)
+                { if (perm.card.m_number == a.sac_victim_id) { art = perm.card.m_name.str(); break; } }
+                if (!hn.empty())
+                { addSub(a.card_name + " \xE2\x86\x92 " + hn, a.card_name + " untaps", hn, art,
+                         "untapland", a.sac_victim_id); }
+            }
+            else if (a.kind == Action::Kind::ActivatePermAbility
+                     && a.ability_mode == Action::AbilityMode::TargetPump)
+            {
+                const std::string hn = SubChoiceHostLabel(state, a.sac_victim_id);
+                std::string art;
+                for (const Permanent& perm : state.battlefield)
+                { if (perm.card.m_number == a.sac_victim_id) { art = perm.card.m_name.str(); break; } }
+                if (!hn.empty())
+                { addSub(a.card_name + " \xE2\x86\x92 " + hn, a.card_name + " pumps", hn, art,
+                         "pumptarget", a.sac_victim_id); }
+                if (a.chosen_x > 1)
+                { addSub(a.card_name + " activate " + std::to_string(a.chosen_x) + " times",
+                         a.card_name + " activations", std::to_string(a.chosen_x), a.card_name.str(), "count"); }
+            }
+            else if (a.kind == Action::Kind::ActivatePermAbility
                      && a.ability_mode == Action::AbilityMode::TapTargetPump)
             {
                 const std::string hn = SubChoiceHostLabel(state, a.sac_victim_id);
@@ -113155,7 +113614,8 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
                 addSub(a.card_name + " \xE2\x86\x92 " + who + " (X chosen at cast)", a.card_name + " target",
                        who + " (X chosen at cast)", a.card_name, "modal");
             }
-            else if (a.chosen_x > 0)       { addSub(a.card_name + " X=" + std::to_string(a.chosen_x), a.card_name + " X", "X=" + std::to_string(a.chosen_x), a.card_name, "x"); }
+            else if (a.chosen_x > 0 && !(tooth_def && tooth_def->params.tooth_and_nail))
+            { addSub(a.card_name + " X=" + std::to_string(a.chosen_x), a.card_name + " X", "X=" + std::to_string(a.chosen_x), a.card_name, "x"); }
             // NOTE: a.ponder_keep is deliberately NOT a variant token. The Ponder reorder (keep-top
             // vs shuffle, and the full ordering) is re-asked at REAL resolution via the look-at-top
             // chooser (g_play_top_chooser), so pre-selecting it here just stacked a redundant "choose
@@ -115478,7 +115938,7 @@ static const char* PlanDumpModeName(PermAbilityMode m)
         "LifeGatedPutCreatures", "SacLifePerCreature", "TapLifegain", "ActivatedDig",
         "SacLandSearch", "QuestSacLandSearch", "ReconfigureUnattach", "TapBlood", "BloodDraw",
         "TapSubtypeSteal", "TransformSelf", "TapTargetPump", "PayCounterSelf", "CounterPing", "PingLoop",
-        "SacNamedTutorPut"
+        "SacNamedTutorPut", "TargetPump", "UntapLand"
     };
     const int i = static_cast<int>(m);
     if (i >= 0 && i < static_cast<int>(sizeof(kNames) / sizeof(kNames[0]))) { return kNames[i]; }

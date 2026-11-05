@@ -1,0 +1,297 @@
+{
+  "seed": 4, "game_index": 3, "win_turn": 4, "won": true,
+  "mulligan": { "count": 2, "bottom": [23, 51] }, "karoo_float": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1, "spell_copy_id": 1,
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 10, "name": "Forest" }, { "num": 33, "name": "Jumbo Cactuar" }, { "num": 34, "name": "Jumbo Cactuar" }, { "num": 49, "name": "Utopia Sprawl" }, { "num": 38, "name": "Nylea, God of the Hunt" }, { "num": 11, "name": "Forest" }, { "num": 12, "name": "Forest" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": true,
+  "to_bottom": 1,
+  "hand": [{ "num": 37, "name": "Lightning Greaves" }, { "num": 8, "name": "Chariot of Victory" }, { "num": 54, "name": "Voyaging Satyr" }, { "num": 51, "name": "Utopia Sprawl" }, { "num": 39, "name": "Overgrowth" }, { "num": 4, "name": "Arbor Elf" }, { "num": 27, "name": "Forest" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 2,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 2,
+  "on_the_play": true,
+  "to_bottom": 2,
+  "hand": [{ "num": 52, "name": "Utopia Sprawl" }, { "num": 51, "name": "Utopia Sprawl" }, { "num": 3, "name": "Arbor Elf" }, { "num": 21, "name": "Forest" }, { "num": 33, "name": "Jumbo Cactuar" }, { "num": 57, "name": "Wild Growth" }, { "num": 23, "name": "Forest" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 2 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 6, "decision": {
+  "decision_index": 3,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 2,
+  "hand": [{ "num": 52, "name": "Utopia Sprawl", "win_optimal": true }, { "num": 51, "name": "Utopia Sprawl", "win_optimal": true }, { "num": 3, "name": "Arbor Elf", "win_optimal": true }, { "num": 21, "name": "Forest", "win_optimal": true }, { "num": 33, "name": "Jumbo Cactuar", "win_optimal": true }, { "num": 57, "name": "Wild Growth", "win_optimal": true }, { "num": 23, "name": "Forest", "win_optimal": true }],
+  "ai_choice": { "index": 4, "num": 33, "name": "Jumbo Cactuar" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 2)"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 4,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 1,
+  "bottom_total": 2,
+  "hand": [{ "num": 52, "name": "Utopia Sprawl", "win_optimal": true }, { "num": 51, "name": "Utopia Sprawl", "win_optimal": true }, { "num": 3, "name": "Arbor Elf", "win_optimal": true }, { "num": 21, "name": "Forest", "win_optimal": true }, { "num": 33, "name": "Jumbo Cactuar", "win_optimal": true }, { "num": 57, "name": "Wild Growth", "win_optimal": true }],
+  "ai_choice": { "index": 4, "num": 33, "name": "Jumbo Cactuar" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 2 of 2)"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Forest", "cast=Arbor Elf"], "decision": {
+  "decision_index": 5,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 3, "name": "Arbor Elf", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 21, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 33, "name": "Jumbo Cactuar", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Utopia Sprawl", "cost": "{G}", "mv": 1, "kind": "permanent" }, { "num": 57, "name": "Wild Growth", "cost": "{G}", "mv": 1, "kind": "permanent" }], "graveyard": [], "library_size": 55, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Forest; cast: Arbor Elf", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Arbor Elf"], "actions": [{ "card": "Arbor Elf" }] },
+    { "index": 1, "summary": "land=Forest; cast: Utopia Sprawl → Forest", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Utopia Sprawl"], "actions": [{ "card": "Utopia Sprawl", "enchant_target": 21, "enchant_target_name": "Forest" }] },
+    { "index": 2, "summary": "land=Forest; cast: Wild Growth → Forest", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Wild Growth"], "actions": [{ "card": "Wild Growth", "enchant_target": 21, "enchant_target_name": "Forest" }] },
+    { "index": 3, "summary": "land=Forest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Arbor Elf", "idx": 5, "num": 3, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Forest", "idx": 4, "num": 21, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 33, "name": "Jumbo Cactuar", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Utopia Sprawl", "cost": "{G}", "mv": 1, "kind": "permanent" }, { "num": 57, "name": "Wild Growth", "cost": "{G}", "mv": 1, "kind": "permanent" }], "graveyard": [], "library_size": 55, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 7,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Arbor Elf", "idx": 5, "num": 3, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Forest", "idx": 4, "num": 21, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 33, "name": "Jumbo Cactuar", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Utopia Sprawl", "cost": "{G}", "mv": 1, "kind": "permanent" }, { "num": 57, "name": "Wild Growth", "cost": "{G}", "mv": 1, "kind": "permanent" }], "graveyard": [], "library_size": 55, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "cast_order": ["**", "land=Forest", "cast=Wild Growth@21", "cast=Utopia Sprawl@21"], "decision": {
+  "decision_index": 8,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 2, "card": "Forest" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Arbor Elf", "idx": 5, "num": 3, "is_land": false, "taps": "G", "power": 1, "toughness": 1 }, { "name": "Forest", "idx": 4, "num": 21, "is_land": true, "taps": "G" }], "vial_counters": [], "hand": [{ "num": 28, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 33, "name": "Jumbo Cactuar", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Utopia Sprawl", "cost": "{G}", "mv": 1, "kind": "permanent" }, { "num": 57, "name": "Wild Growth", "cost": "{G}", "mv": 1, "kind": "permanent" }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Forest; cast: Utopia Sprawl → Forest #1, Wild Growth → Forest #1", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Utopia Sprawl", "Wild Growth"], "cast_order_canonical": ["Utopia Sprawl", "Wild Growth"], "actions": [{ "card": "Utopia Sprawl", "enchant_target": 21, "enchant_target_name": "Forest", "enchant_target_label": "Forest #1" }, { "card": "Wild Growth", "enchant_target": 21, "enchant_target_name": "Forest", "enchant_target_label": "Forest #1" }] },
+    { "index": 1, "summary": "land=Forest; cast: Wild Growth → Forest #1, Utopia Sprawl → Forest #1", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Wild Growth", "Utopia Sprawl"], "cast_order_canonical": ["Wild Growth", "Utopia Sprawl"], "actions": [{ "card": "Wild Growth", "enchant_target": 21, "enchant_target_name": "Forest", "enchant_target_label": "Forest #1" }, { "card": "Utopia Sprawl", "enchant_target": 21, "enchant_target_name": "Forest", "enchant_target_label": "Forest #1" }] },
+    { "index": 2, "summary": "land=Forest; cast: Utopia Sprawl → Forest #2, Wild Growth → Forest #1", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Utopia Sprawl", "Wild Growth"], "cast_order_canonical": ["Utopia Sprawl", "Wild Growth"], "actions": [{ "card": "Utopia Sprawl", "enchant_target": 28, "enchant_target_name": "Forest", "enchant_target_label": "Forest #2" }, { "card": "Wild Growth", "enchant_target": 21, "enchant_target_name": "Forest", "enchant_target_label": "Forest #1" }] },
+    { "index": 3, "summary": "land=Forest; cast: Wild Growth → Forest #1, Utopia Sprawl → Forest #2", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Wild Growth", "Utopia Sprawl"], "cast_order_canonical": ["Wild Growth", "Utopia Sprawl"], "actions": [{ "card": "Wild Growth", "enchant_target": 21, "enchant_target_name": "Forest", "enchant_target_label": "Forest #1" }, { "card": "Utopia Sprawl", "enchant_target": 28, "enchant_target_name": "Forest", "enchant_target_label": "Forest #2" }] },
+    { "index": 4, "summary": "land=Forest; cast: Utopia Sprawl → Forest #1, Wild Growth → Forest #2", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Utopia Sprawl", "Wild Growth"], "cast_order_canonical": ["Utopia Sprawl", "Wild Growth"], "actions": [{ "card": "Utopia Sprawl", "enchant_target": 21, "enchant_target_name": "Forest", "enchant_target_label": "Forest #1" }, { "card": "Wild Growth", "enchant_target": 28, "enchant_target_name": "Forest", "enchant_target_label": "Forest #2" }] },
+    { "index": 5, "summary": "land=Forest; cast: Wild Growth → Forest #2, Utopia Sprawl → Forest #1", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Wild Growth", "Utopia Sprawl"], "cast_order_canonical": ["Wild Growth", "Utopia Sprawl"], "actions": [{ "card": "Wild Growth", "enchant_target": 28, "enchant_target_name": "Forest", "enchant_target_label": "Forest #2" }, { "card": "Utopia Sprawl", "enchant_target": 21, "enchant_target_name": "Forest", "enchant_target_label": "Forest #1" }] },
+    { "index": 6, "summary": "land=Forest; cast: Utopia Sprawl → Forest #2, Wild Growth → Forest #2", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Utopia Sprawl", "Wild Growth"], "cast_order_canonical": ["Utopia Sprawl", "Wild Growth"], "actions": [{ "card": "Utopia Sprawl", "enchant_target": 28, "enchant_target_name": "Forest", "enchant_target_label": "Forest #2" }, { "card": "Wild Growth", "enchant_target": 28, "enchant_target_name": "Forest", "enchant_target_label": "Forest #2" }] },
+    { "index": 7, "summary": "land=Forest; cast: Wild Growth → Forest #2, Utopia Sprawl → Forest #2", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Wild Growth", "Utopia Sprawl"], "cast_order_canonical": ["Wild Growth", "Utopia Sprawl"], "actions": [{ "card": "Wild Growth", "enchant_target": 28, "enchant_target_name": "Forest", "enchant_target_label": "Forest #2" }, { "card": "Utopia Sprawl", "enchant_target": 28, "enchant_target_name": "Forest", "enchant_target_label": "Forest #2" }] },
+    { "index": 8, "summary": "land=none; cast: Utopia Sprawl → Forest #1, Wild Growth → Forest #1", "declared_order_payability": "not_verified", "land": null, "casts": ["Utopia Sprawl", "Wild Growth"], "cast_order_canonical": ["Utopia Sprawl", "Wild Growth"], "actions": [{ "card": "Utopia Sprawl", "enchant_target": 21, "enchant_target_name": "Forest", "enchant_target_label": "Forest #1" }, { "card": "Wild Growth", "enchant_target": 21, "enchant_target_name": "Forest", "enchant_target_label": "Forest #1" }] },
+    { "index": 9, "summary": "land=none; cast: Wild Growth → Forest #1, Utopia Sprawl → Forest #1", "declared_order_payability": "not_verified", "land": null, "casts": ["Wild Growth", "Utopia Sprawl"], "cast_order_canonical": ["Wild Growth", "Utopia Sprawl"], "actions": [{ "card": "Wild Growth", "enchant_target": 21, "enchant_target_name": "Forest", "enchant_target_label": "Forest #1" }, { "card": "Utopia Sprawl", "enchant_target": 21, "enchant_target_name": "Forest", "enchant_target_label": "Forest #1" }] },
+    { "index": 10, "summary": "land=Forest; cast: Utopia Sprawl → Forest #1", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Utopia Sprawl"], "actions": [{ "card": "Utopia Sprawl", "enchant_target": 21, "enchant_target_name": "Forest", "enchant_target_label": "Forest #1" }] },
+    { "index": 11, "summary": "land=Forest; cast: Utopia Sprawl → Forest #2", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Utopia Sprawl"], "actions": [{ "card": "Utopia Sprawl", "enchant_target": 28, "enchant_target_name": "Forest", "enchant_target_label": "Forest #2" }] },
+    { "index": 12, "summary": "land=Forest; cast: Wild Growth → Forest #1", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Wild Growth"], "actions": [{ "card": "Wild Growth", "enchant_target": 21, "enchant_target_name": "Forest", "enchant_target_label": "Forest #1" }] },
+    { "index": 13, "summary": "land=Forest; cast: Wild Growth → Forest #2", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Wild Growth"], "actions": [{ "card": "Wild Growth", "enchant_target": 28, "enchant_target_name": "Forest", "enchant_target_label": "Forest #2" }] },
+    { "index": 14, "summary": "land=none; cast: Utopia Sprawl → Forest #1", "declared_order_payability": "not_verified", "land": null, "casts": ["Utopia Sprawl"], "actions": [{ "card": "Utopia Sprawl", "enchant_target": 21, "enchant_target_name": "Forest", "enchant_target_label": "Forest #1" }] },
+    { "index": 15, "summary": "land=none; cast: Wild Growth → Forest #1", "declared_order_payability": "not_verified", "land": null, "casts": ["Wild Growth"], "actions": [{ "card": "Wild Growth", "enchant_target": 21, "enchant_target_name": "Forest", "enchant_target_label": "Forest #1" }] },
+    { "index": 16, "summary": "land=Forest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 17, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 4, "decision": {
+  "decision_index": 9,
+  "type": "choose_color",
+  "source": "Utopia Sprawl",
+  "turn": 2,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Arbor Elf", "idx": 5, "num": 3, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Forest", "idx": 4, "num": 21, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 7, "num": 28, "tapped": true, "is_land": true }, { "name": "Utopia Sprawl", "idx": 9, "num": 52, "is_aura": true, "attached_to": 21, "attached_to_idx": 4, "is_land": false }, { "name": "Wild Growth", "idx": 8, "num": 57, "is_aura": true, "attached_to": 21, "attached_to_idx": 4, "is_land": false }], "vial_counters": [], "hand": [{ "num": 33, "name": "Jumbo Cactuar", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "heuristic_default": 4,
+  "colors": [{ "ordinal": 0, "name": "White" }, { "ordinal": 1, "name": "Blue" }, { "ordinal": 2, "name": "Black" }, { "ordinal": 3, "name": "Red" }, { "ordinal": 4, "name": "Green" }],
+  "note": "reply a color ORDINAL (0=W 1=U 2=B 3=R 4=G) to lock that color in for this permanent for the rest of the game. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 10,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 2, "kind": "choose_color", "text": "Utopia Sprawl -- chose Green" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Arbor Elf", "idx": 5, "num": 3, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Forest", "idx": 4, "num": 21, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 7, "num": 28, "tapped": true, "is_land": true }, { "name": "Utopia Sprawl", "idx": 9, "num": 52, "is_aura": true, "attached_to": 21, "attached_to_idx": 4, "is_land": false }, { "name": "Wild Growth", "idx": 8, "num": 57, "is_aura": true, "attached_to": 21, "attached_to_idx": 4, "is_land": false }], "vial_counters": [], "hand": [{ "num": 33, "name": "Jumbo Cactuar", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 11,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Arbor Elf", "idx": 5, "num": 3, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Forest", "idx": 4, "num": 21, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 7, "num": 28, "tapped": true, "is_land": true }, { "name": "Utopia Sprawl", "idx": 9, "num": 52, "is_aura": true, "attached_to": 21, "attached_to_idx": 4, "is_land": false }, { "name": "Wild Growth", "idx": 8, "num": 57, "is_aura": true, "attached_to": 21, "attached_to_idx": 4, "is_land": false }], "vial_counters": [], "hand": [{ "num": 33, "name": "Jumbo Cactuar", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 12,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 3, "card": "Tooth and Nail" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Arbor Elf", "idx": 5, "num": 3, "is_land": false, "taps": "G", "power": 1, "toughness": 1 }, { "name": "Forest", "idx": 4, "num": 21, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 7, "num": 28, "is_land": true, "taps": "G" }, { "name": "Utopia Sprawl", "idx": 9, "num": 52, "is_aura": true, "attached_to": 21, "attached_to_idx": 4, "is_land": false }, { "name": "Wild Growth", "idx": 8, "num": 57, "is_aura": true, "attached_to": 21, "attached_to_idx": 4, "is_land": false }], "vial_counters": [], "hand": [{ "num": 33, "name": "Jumbo Cactuar", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Tooth and Nail", "cost": "{5}{G}{G}", "mv": 7, "kind": "nonpermanent" }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 10, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Jumbo Cactuar", "declared_order_payability": "not_verified", "land": null, "casts": ["Jumbo Cactuar"], "actions": [{ "card": "Jumbo Cactuar" }] },
+    { "index": 1, "summary": "land=none; cast: Tooth and Nail (search to hand)", "declared_order_payability": "not_verified", "land": null, "casts": ["Tooth and Nail"], "actions": [{ "card": "Tooth and Nail", "tutor_target": "\u001f\u001f\u001f" }] },
+    { "index": 2, "summary": "land=none; cast: Tooth and Nail (put from hand)", "declared_order_payability": "not_verified", "land": null, "casts": ["Tooth and Nail"], "actions": [{ "card": "Tooth and Nail", "tutor_target": "\u001f\u001f\u001f", "x": 1 }] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Arbor Elf", "idx": 5, "num": 3, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Forest", "idx": 4, "num": 21, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 7, "num": 28, "tapped": true, "is_land": true }, { "name": "Jumbo Cactuar", "idx": 11, "num": 33, "is_land": false, "power": 1, "toughness": 7 }, { "name": "Utopia Sprawl", "idx": 9, "num": 52, "is_aura": true, "attached_to": 21, "attached_to_idx": 4, "is_land": false }, { "name": "Wild Growth", "idx": 8, "num": 57, "is_aura": true, "attached_to": 21, "attached_to_idx": 4, "is_land": false }], "vial_counters": [], "hand": [{ "num": 45, "name": "Tooth and Nail", "cost": "{5}{G}{G}", "mv": 7, "kind": "nonpermanent" }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 10, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 14,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Arbor Elf", "idx": 5, "num": 3, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Forest", "idx": 4, "num": 21, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 7, "num": 28, "tapped": true, "is_land": true }, { "name": "Jumbo Cactuar", "idx": 11, "num": 33, "is_land": false, "power": 1, "toughness": 7 }, { "name": "Utopia Sprawl", "idx": 9, "num": 52, "is_aura": true, "attached_to": 21, "attached_to_idx": 4, "is_land": false }, { "name": "Wild Growth", "idx": 8, "num": 57, "is_aura": true, "attached_to": 21, "attached_to_idx": 4, "is_land": false }], "vial_counters": [], "hand": [{ "num": 45, "name": "Tooth and Nail", "cost": "{5}{G}{G}", "mv": 7, "kind": "nonpermanent" }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 10, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 15,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 4, "card": "Voyaging Satyr" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Arbor Elf", "idx": 5, "num": 3, "is_land": false, "taps": "G", "power": 1, "toughness": 1 }, { "name": "Forest", "idx": 4, "num": 21, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 7, "num": 28, "is_land": true, "taps": "G" }, { "name": "Jumbo Cactuar", "idx": 11, "num": 33, "is_land": false, "power": 1, "toughness": 7 }, { "name": "Utopia Sprawl", "idx": 9, "num": 52, "is_aura": true, "attached_to": 21, "attached_to_idx": 4, "is_land": false }, { "name": "Wild Growth", "idx": 8, "num": 57, "is_aura": true, "attached_to": 21, "attached_to_idx": 4, "is_land": false }], "vial_counters": [], "hand": [{ "num": 45, "name": "Tooth and Nail", "cost": "{5}{G}{G}", "mv": 7, "kind": "nonpermanent" }, { "num": 55, "name": "Voyaging Satyr", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 10, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Voyaging Satyr", "declared_order_payability": "not_verified", "land": null, "casts": ["Voyaging Satyr"], "actions": [{ "card": "Voyaging Satyr" }] },
+    { "index": 1, "summary": "land=none; cast: Tooth and Nail (search to hand)", "declared_order_payability": "not_verified", "land": null, "casts": ["Tooth and Nail"], "actions": [{ "card": "Tooth and Nail", "tutor_target": "\u001f\u001f\u001f" }] },
+    { "index": 2, "summary": "land=none; cast: Tooth and Nail (put from hand)", "declared_order_payability": "not_verified", "land": null, "casts": ["Tooth and Nail"], "actions": [{ "card": "Tooth and Nail", "tutor_target": "\u001f\u001f\u001f", "x": 1 }] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 4, "kind": "combat", "text": "⚔ attacked: Arbor Elf (1), Jumbo Cactuar (10000) — 10001 to opponent (20→-9981)" }
+  ]
+}

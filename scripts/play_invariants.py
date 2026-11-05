@@ -45,6 +45,12 @@ KNOWN_TYPES = {
     "main_phase", "mulligan", "bottom", "vial_charge",
     "scry", "surveil", "reorder", "divide", "target", "bounce",
     "dig", "discard", "expressive_iteration", "retrace_discard", "replicate", "land_entry",
+    # Utopia Sprawl's as-enters colour selection is a single option index with
+    # the engine's default exposed by the viewer, so reply_for's generic path applies.
+    "choose_color",
+    # Finale's optional library search after an empty graveyard choice; one
+    # option index, with heuristic_default emitted by the spell decision.
+    "attack_mode",
     # "target player draws X" (Stroke of Genius): X picked at the cast, reply = X itself.
     "x_value",
     # sac-land additional cost (Shard Volley / Crop Rotation): single-int, engine default exposed.

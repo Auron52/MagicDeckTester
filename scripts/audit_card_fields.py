@@ -51,6 +51,7 @@ MODELED_ELSEWHERE_KEYWORDS = {
     # ability they label is what has to be modelled, and the tag would say nothing):
     "landfall", "ferocious", "spectacle", "rot fly", "constellation", "addendum",
     "revolt", "raid", "delirium", "threshold", "hellbent", "morbid",
+    "10,000 needles",  # Jumbo Cactuar's ability word; the attack trigger is modeled separately.
     # Enrage (Apex Altisaur): ability word, same class as morbid/revolt above. Its ABILITY
     # ("whenever this creature is dealt damage, it fights...") is separately recorded as
     # provably inert in the card's oracle bracket note -- nothing in this sim deals damage
@@ -88,6 +89,7 @@ MODELED_ELSEWHERE_KEYWORDS = {
     "fight", "double", "exert",
     # Keyword abilities this engine models via params / oracle logic, not a tag:
     "cycling", "scry", "surveil", "cascade", "retrace", "replicate",
+    "entwine",  # Tooth and Nail's {2} mode cost is modeled by tooth_and_nail.
     "affinity", "treasure",
     # Food: token-type keyword (like treasure) -- Oko's Food-making is modeled structurally
     # via his loyalty effects, not a keyword tag.

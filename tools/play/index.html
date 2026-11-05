@@ -3516,7 +3516,7 @@ function renderChooseDialog(v, line){
     // Every relation word a dimension key can end with must be listed, or the leftover text is asked
     // of Scryfall as a card name and the header art comes back broken ("Natural Order sacrifices" is
     // not a card). Keep this in sync with the addSub() keys in TurnSolver::CheckLine.
-    const srcName = dim.key.replace(/\s*(\u2192|fetches|X|own targets|extra targets|splice|replicate|devours|floats|face|sacrifices|activations|equips to|untaps|counter|ability|modes|mode|strive|cost|timing)\s*$/,'').trim();
+    const srcName = dim.key.replace(/\s*(\u2192|fetches|X|own targets|extra targets|splice|replicate|devours|floats|face|sacrifices|activations|equips to|untaps|counter|ability|modes|mode|entwine|strive|cost|timing)\s*$/,'').trim();
     const crumbs = picks.length
       ? `<div class="chosen">${picks.map(p=>`<span class="crumb">${esc(p.key)} <b>${esc(p.label||p.choice)}</b></span>`).join('')}</div>`
       : '';
@@ -5504,6 +5504,8 @@ function attackModePanelHtml(d){
   // trigger "etb": a modal ENTER trigger (Trufflesnout) rides the same decision type.
   if (d.trigger==='etb')
     h+=`<div class="sub">${esc(d.source||'This creature')} entered the battlefield. Pick a mode.</div>`;
+  else if (d.trigger==='spell')
+    h+=`<div class="sub">Choose whether to search your library too. Searching it will shuffle it; searching only your graveyard preserves the library order.</div>`;
   else
     h+=`<div class="sub">${esc(d.source||'This creature')} attacked. Pick a mode; it resolves <b>before</b> combat damage.</div>`;
   h+=`<div class="cardrow" style="justify-content:center;margin:8px 0">${cardMini(d.source||'', '', 'normal')}</div>`;
@@ -5629,22 +5631,31 @@ function commitDragonBatch(d){
 // fewer (or none) is legal, so the confirm button is never blocked by an under-cap selection.
 function sacTutorPanelHtml(d){
   const cap=d.max_puts||0;
+  const finale=d.source==='Finale of Devastation';
+  const toothHand=(d.source||'').startsWith('Tooth and Nail (to hand)');
+  const toothPut=(d.source||'').startsWith('Tooth and Nail (from hand)');
   if (S._sacTutorFor !== d.decision_index){ S._sacTutorFor=d.decision_index; S.sacTutorSel=new Set(aiDragonSet(d)); }
   const sel=S.sacTutorSel, aiSet=new Set(aiDragonSet(d));
   let h=`<h3>${esc(d.source||'Defense of the Heart')} — put which creatures?</h3>`;
-  h+=`<div class="sub">Search your library for up to <b>${cap}</b> creature card${cap===1?'':'s'} and put them onto the battlefield. They enter in the order shown (left to right) — enter token-makers before a Massacre Wurm so its sweep catches the new tokens. The AI’s picks are preselected.</div>`;
+  h+=finale
+    ? `<div class="sub">Choose a creature card with mana value at most the X you paid. Cards are labelled <b>Library</b> or <b>Graveyard</b>. If the graveyard has no eligible creature, choosing none lets you decide whether to search your library or only your graveyard. The +X/+X and haste still happen if X is at least 10.</div>`
+    : toothHand
+    ? `<div class="sub">Choose up to <b>${cap}</b> creature cards from your library to reveal and put into your hand. Your library will be shuffled.</div>`
+    : toothPut
+    ? `<div class="sub">Choose up to <b>${cap}</b> creature cards from your hand. They enter the battlefield together.</div>`
+    : `<div class="sub">Search your library for up to <b>${cap}</b> creature card${cap===1?'':'s'} and put them onto the battlefield. They enter in the order shown (left to right) — enter token-makers before a Massacre Wurm so its sweep catches the new tokens. The AI’s picks are preselected.</div>`;
   h+=`<div class="tutgrid">`;
   (d.candidates||[]).forEach(c=>{
     const isSel=sel.has(c.index), isAI=aiSet.has(c.index);
     h+=`<span class="cardmini tdig${isSel?' sel':''}${isAI?' def':''}" data-opt="${c.index}" data-name="${esc(c.name)}" title="${esc(c.name)}">`+
-       `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(c.name)}</em>`+
+       `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(c.name)}${c.zone?' · '+esc(c.zone):''}</em>`+
        (isAI?`<span class="deftag">AI pick</span>`:'')+`</span>`;
   });
   h+=`</div>`;
   const n=sel.size, ok=(n<=cap);
   h+=`<div class="pbtns"><span class="pcount">${n} / ${cap} selected</span>`+
      `<button class="ghost" id="sactutai">Follow AI</button><span class="spacer"></span>`+
-     `<button id="decconfirm" class="primary" ${ok?'':'disabled'}>Put ${n} creature${n===1?'':'s'}</button></div>`;
+     `<button id="decconfirm" class="primary" ${ok?'':'disabled'}>${finale&&n===0?'Find nothing':`${toothHand?'Take':'Put'} ${n} creature${n===1?'':'s'}`}</button></div>`;
   return h;
 }
 function toggleSacTutor(d, oi){
@@ -5755,6 +5766,9 @@ function commitReplicate(d, n){
 // (lethal / your whole library / max affordable / the AI default) and a number box for any X 0..max_x.
 // The reply is X itself on the --choices stream.
 function xValueConsequence(d, n){
+  if (d.x_kind==='finale') return n>=10
+    ? `Find a creature with mana value ${n} or less; your creatures gain +${n}/+${n} and haste`
+    : `Find a creature with mana value ${n} or less`;
   const opp = d.draw_target==='opponent';
   if (opp) {
     const L=d.lethal_x|0;
@@ -5785,6 +5799,19 @@ function xValuePanelHtml(d){
       h+=`<button class="${k===def?'primary':'ghost'}" data-xv="${k}">${k} target${k===1?'':'s'}${k===def?'  ·  AI':''}</button>`;
     return h+`</div>`;
   }
+  if (d.x_kind==='finale'){
+    let h=`<h3>Finale of Devastation — choose X</h3>`;
+    h+=`<div class="sub">Pay X, then choose a creature card with mana value X or less from your library or graveyard. At X ≥ 10, your creatures gain +X/+X and haste until end of turn.</div>`;
+    h+=`<div class="tutgrid">`+cardMini(d.source||'')+`</div>`;
+    h+=`<div class="pbtns" style="margin-top:10px"><span class="spacer"></span>`;
+    for (const k of [...new Set([def, Math.min(10,max), max])])
+      h+=`<button class="${k===def?'primary':'ghost'}" data-xv="${k}">X=${k}${k===def?'  ·  AI':''}</button>`;
+    h+=`</div><div class="pbtns" style="margin-top:8px"><span class="spacer"></span>`+
+       `<label>X = <input id="xvinput" type="number" min="0" max="${max}" value="${def}" style="width:6em"/></label>`+
+       `<span id="xvlabel" style="margin:0 10px">${xValueConsequence(d,def)}</span>`+
+       `<button class="primary" id="decconfirm">Cast with this X</button></div>`;
+    return h;
+  }
   const opp = d.draw_target==='opponent';
   let h=`<h3>${esc(d.source||'X spell')} — choose X</h3>`;
   h+=`<div class="sub">${opp?'The <b>opponent</b> draws X cards':'<b>You</b> draw X cards'}. You can pay up to <b>X=${max}</b> right now`+
@@ -5806,6 +5833,7 @@ function xValuePanelHtml(d){
 function commitXValue(d, n){
   if (d.x_kind==='reveal_gain'){ pushChoice(d, n, `${d.source}: reveal ${n} → gain ${(d.life_per_x|0)*n}`); return; }
   if (d.x_kind==='etb_destroy_k'){ pushChoice(d, n, `${d.source}: target ${n} noncreature permanent${n===1?'':'s'}`); return; }
+  if (d.x_kind==='finale'){ pushChoice(d, n, `${d.source}: X=${n}`); return; }
   pushChoice(d, n, `${d.source}: X=${n} → ${d.draw_target==='opponent'?'opponent':'you'} draw${d.draw_target==='opponent'?'s':''}`);
 }
 // Firebreathe amount modal (#4): a combat-phase decision (the viewer's first NON-main-phase breakpoint

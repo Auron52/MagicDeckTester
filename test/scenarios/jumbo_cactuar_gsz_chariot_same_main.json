@@ -1,0 +1,25 @@
+{
+  "deck": "decks/Jumbo Cactuar/Jumbo Cactuar.cod",
+  "turn": 6,
+  "resume_at": "main1",
+  "lands_played_this_turn": 0,
+  "on_the_play": true,
+  "opponent_life": 20,
+  "battlefield": [
+    {"name": "Forest"}, {"name": "Forest"}, {"name": "Forest"},
+    {"name": "Forest"}, {"name": "Forest"},
+    {"name": "Overgrowth", "equips": "Forest"},
+    {"name": "Voyaging Satyr", "sick": false},
+    {"name": "Chariot of Victory", "equips": "Voyaging Satyr"},
+    {"name": "Chariot of Victory", "equips": "Voyaging Satyr"}
+  ],
+  "hand": ["Forest", "Utopia Sprawl", "Green Sun's Zenith"],
+  "library_filler": "Forest",
+  "library_size": 20,
+  "library": ["Jumbo Cactuar"],
+  "depth": 5,
+  "budget_ms": 20,
+  "max_turns": 6,
+  "expect_win_turn": 6,
+  "_comment": "Seed 1050: GSZ puts Cactuar onto the battlefield after the action fan was built. A same-main continuation must move a Chariot from Satyr to the newly fetched Cactuar for the turn-six kill."
+}

@@ -1,0 +1,64 @@
+{
+  "card_scores": {
+    "Arbor Elf": [
+      0.4369685927468332,
+      -0.11542082470344539
+    ],
+    "Chariot of Victory": [
+      -0.35943511990183286,
+      -0.28605200945626486
+    ],
+    "Finale of Devastation": [
+      0.022281209781209732
+    ],
+    "Green Sun's Zenith": [
+      0.32623047608823974,
+      -0.17204301075268802
+    ],
+    "Jumbo Cactuar": [
+      0.13194993138437283,
+      -0.23021582733812984
+    ],
+    "Lightning Greaves": [
+      -0.15836239827271203
+    ],
+    "Nylea, God of the Hunt": [
+      -0.3249377513886227
+    ],
+    "Overgrowth": [
+      0.19291602266872765,
+      -0.5003144654088052
+    ],
+    "Surrak and Goreclaw": [
+      -0.14331723027375265
+    ],
+    "Tooth and Nail": [
+      0.33080636177981315,
+      -0.3412176059234886
+    ],
+    "Utopia Sprawl": [
+      0.10750097162844963,
+      0.17387732749178486
+    ],
+    "Voyaging Satyr": [
+      0.027603392187412368,
+      -0.1973244147157187
+    ],
+    "Wild Growth": [
+      0.16804670912951192,
+      0.08717948717948687
+    ]
+  },
+  "hand_score_threshold": -1e+18,
+  "mulligan": {
+    "bottom_order": "count_first",
+    "curve_check": "two_drop",
+    "max_lands": 5,
+    "min_color_sources": {},
+    "min_lands": 1,
+    "min_playable": 0,
+    "required_pieces": [],
+    "stop_at": 4
+  },
+  "version": 1
+}

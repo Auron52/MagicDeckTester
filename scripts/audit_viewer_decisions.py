@@ -240,6 +240,8 @@ MANIFEST = {
     # Ranger of Eos: the up-to-two pick surfaces through the existing sac_tutor multi-pick
     # chooser at resolution (PerformEtbTutorToHandMulti), on the cast and the put path alike.
     "etb_tutor_hand_count":  ("sac_tutor",            positive),
+    "tooth_and_nail":        ("sac_tutor",            truthy),
+    "finale_of_devastation": ("sac_tutor",            truthy),
     # Reveillark: WHICH up-to-two power<=2 creatures return -- its own `revive` multi-pick
     # chooser (g_play_revive_chooser in PerformReturnFromGraveyardToBattlefield, the sac_tutor
     # reply shape) wired 2026-09-05; fires on EVERY LTB path (sac costs, flickers, evoke).
@@ -412,6 +414,8 @@ MANIFEST = {
     # TARGET and the X are main_phase plan VARIANTS (every legal X 0..max and every legal creature under
     # human play; the `pumptarget` / `x` sub-choices of a verbless `cast=Kessig Wolf Run` line).
     "tap_target_pump_cost":          ("main_phase",  truthy),
+    "target_pump_cost":              ("main_phase",  truthy),
+    "untap_target_land":             ("main_phase",  truthy),
     # Bloodghast "you MAY return this card from your graveyard to the battlefield" (landfall): the
     # existing `revive` decision from the landfall chokepoint, one 0/1 flag per graveyard copy, all
     # preselected (autonomous play resolves YES by a PROVISIONAL dominance).
@@ -751,6 +755,7 @@ BOARD_ACTIVATIONS = {
     "tap_blood_cost":                            ("activate",       truthy,   "tap_blood_cost"),
     # Kessig Wolf Run's pump: the verbless land convention (`cast=Kessig Wolf Run`), cost {X}{R}{G}.
     "tap_target_pump_cost":                      ("activate",       truthy,   "tap_target_pump_cost"),
+    "target_pump_cost":                          ("activate",       truthy,   "target_pump_cost"),
     # SelesnyaLifegain (2026-09-30). The Steppe keeps the verbless `cast=<land>` convention every
     # other land-borne PermAbilityMode uses (Shivan Gorge, Botanical Conservatory, Mariposa) -- a land
     # is never in the cast multiset for a real hand cast, so the name is unambiguous. VERIFIABLE
@@ -1313,6 +1318,8 @@ INERT_PARAMS = {
     "attack_pump_power_per_other_matching": "automatic attack trigger (Piledriver +2/+0 per other attacking Goblin)",
     "attack_self_pump_per_other_subtype": "automatic attack trigger (Muxus +1/+1 per other Goblin)",
     "attack_self_pump_power": "attack-trigger pump amount detail", "attack_self_pump_tough": "attack-trigger pump amount detail",
+    "attack_self_pump_flat_power": "automatic fixed attack-trigger pump amount (Jumbo Cactuar)",
+    "other_nontoken_enters_counter_haste": "mandatory enter trigger on another nontoken creature (Surrak and Goreclaw)",
     # ETB triggers -- automatic, no choice (damage targets face in goldfish; reveal puts ALL matching):
     "etb_self_creates_tokens": "automatic ETB token creation (Mogg 1, Siege-Gang 3), no choice",
     "etb_damage_any": "automatic ETB damage, no target in goldfish (face)",
@@ -1439,6 +1446,7 @@ INERT_PARAMS = {
     "equip_cost_generic": "equip cost detail (rides is_equipment)",
     "equip_grants_double_strike": "static grant detail (rides is_equipment): Lizard Blades' 'Equipped creature has double strike', no choice",
     "equip_grants_haste": "static grant detail (rides is_equipment)",
+    "equip_grants_first_strike": "static grant detail (rides is_equipment)",
     "equip_grants_shroud": "static grant detail (goldfish-inert; rides is_equipment)",
     "graveyard_replace_shuffle_library": "automatic replacement effect (Progenitus shuffle-in), no choice",
     # Progenitus. A static RESTRICTION, not a choice: protection from everything makes the creature
@@ -1905,6 +1913,10 @@ def expected_for_card(card):
     # viewer plan-space valve dropped the card (AccomplishedAlchemist sweep seed 80016, 2026-10-19).
     if card.get("template") == "draw_x":
         exp.add("x_value")
+    if p.get("tooth_and_nail"):
+        exp.add("main_phase")
+    if p.get("finale_of_devastation"):
+        exp.add("x_value")
     # Martyr of Sands' "Reveal X white cards" (sac_outlet_lifegain_per_revealed_color): the X is asked
     # at the activation's cost in ApplySacCreatureOutlet (x_value, reveal kind).
     if p.get("sac_outlet_lifegain_per_revealed_color"):
@@ -1949,7 +1961,9 @@ def modeled_tokens(card):
         for a in p.get("loyalty_abilities", [])
     ):
         t.add("target")
-    if real_target(p.get("targeting", "none")) or p.get("spectacle_cost"): t.add("target")
+    if real_target(p.get("targeting", "none")) or p.get("spectacle_cost") \
+            or p.get("target_pump_cost") or p.get("untap_target_land"):
+        t.add("target")
     if p.get("sacrifice_land"):                                            t.add("sacrifice")
     if p.get("etb_scry", 0) > 0 or p.get("cast_scry", 0) > 0:              t.add("scry")
     if p.get("cycle_or_discard_trigger_scry", 0) > 0:                      t.add("scry")   # Curator
@@ -1972,7 +1986,8 @@ def modeled_tokens(card):
     if p.get("tutor_to_hand") or p.get("tutor_to_top") or p.get("fetch_land_types") \
             or p.get("tutor_library_position", 0) > 1 \
             or p.get("tutor_to_battlefield_single") or p.get("tutor_land_to_battlefield") \
-            or p.get("look_top_put_creature_count", 0) > 0:
+            or p.get("look_top_put_creature_count", 0) > 0 \
+            or p.get("tooth_and_nail") or p.get("finale_of_devastation"):
         t.add("search")
     # Natural Order's "sacrifice a green creature" additional cost is a modeled plan-variant
     # choice (sac victim variants), so its "sacrifice a/an" phrase is covered.
@@ -1994,6 +2009,8 @@ def modeled_tokens(card):
     # Shadowborn INT-3: Thrumming Stone's ripple -- reveal (`dig`) and the free casts (`free_cast`).
     if p.get("grants_ripple") or p.get("ripple"):
         t.update({"reveal", "cast"})
+    if p.get("tooth_and_nail"):
+        t.add("modal")
     # Kitesail Larcenist: "for each player, choose up to one other target artifact or creature" IS
     # the treasurify choice (own side = chosen_x plan variants, both sides = the treasurify chooser),
     # so both the 'target' and the 'choose up to' (modal) phrases are covered.

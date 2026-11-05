@@ -49,6 +49,7 @@ declare -A DECK_FILE=(
   [mirrorwing]="decks/Mirrorwing Dragon/Mirrorwing Dragon.cod"
   [fivecolour]=decks/FiveColour/FiveColour.cod
   [stompy]=decks/StompySurprise/StompySurprise.cod
+  [jumbo]="decks/Jumbo Cactuar/Jumbo Cactuar.cod"
   [minotaur]=decks/Minotaur/Minotaur.cod
   # kittyv3 IS the shipped KittyEquipment list (promoted 2026-10-14). The KEY keeps its `v3`
   # suffix on purpose: it was measured on this decklist and ONE KEY PER DECKLIST means a key never
@@ -104,6 +105,7 @@ declare -A DECK_PROF=(
   [mirrorwing]="decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json"
   [fivecolour]=decks/FiveColour/FiveColour.profile.json
   [stompy]=decks/StompySurprise/StompySurprise.profile.json
+  [jumbo]="decks/Jumbo Cactuar/Jumbo Cactuar.profile.json"
   [minotaur]=decks/Minotaur/Minotaur.profile.json
   [kittyv3]=decks/KittyEquipment/KittyEquipment.profile.json
   [dragons]=decks/Dragons/Dragons.profile.json
@@ -295,6 +297,12 @@ SMOKE_CASES=(
   "stompy  0 1001 1000 0"
   "stompy     3  1001    50 10"
   "stompy     5  1001   175 20"
+  # jumbo: mono-green ramp into hasty Jumbo Cactuar; baseline profile, no keep table.
+  # Initial counts follow the similarly timed Stompy ramp list; the pooled gate
+  # and first tier runs determine final cost and variance.
+  "jumbo  0 1001 1000 0"
+  "jumbo  3 1001   50 10"
+  "jumbo  5 1001  175 20"
   # minotaur: Rakdos Minotaur tribal aggro (wins ~T5.0 at searched depth; MinotaurProvider since
   # 2026-08-30 -- Generic plus the user-amended cleanup-discard bucket policy). Ships a value leaf
   # with trust at d5.
@@ -723,6 +731,8 @@ REGRESSION_CASES=(
   "goblins          5 30001  20 0"
   "hinata           3 30001   5 0"
   "hinata           5 30001   5 0"
+  "jumbo            3 30001  20 0"
+  "jumbo            5 30001  20 0"
   "kittyv3          3 30301  20 0"
   "kittyv3          5 30301  20 0"
   "knights          3 30001  20 0"
@@ -863,6 +873,10 @@ REGRESSION_CASES=(
   "stompy     3  2002   100 10"
   "stompy     5  2002   500 20"
   "stompy     5  3003   500 20"
+  "jumbo  0 2002 1000 0"
+  "jumbo  3 2002  100 10"
+  "jumbo  5 2002  500 20"
+  "jumbo  5 3003  500 20"
   # minotaur: stompy-style two-seed sweep (~9 min ST added at the probed per-game costs; the
   # longest job, d5 x250, is ~158 s -- well inside the existing regression makespan).
   "minotaur 0 2002 1000 0"
@@ -1155,6 +1169,8 @@ OVERNIGHT_CASES=(
   "soldiers         5 30101  20 0"
   "stompy           3 30101  20 0"
   "stompy           5 30101  20 0"
+  "jumbo            3 30101  20 0"
+  "jumbo            5 30101  20 0"
   "th               3 30101  20 0"
   "th               5 30101  20 0"
   "vampires         3 30401  20 0"
@@ -1370,6 +1386,19 @@ OVERNIGHT_CASES=(
   "stompy     5  5005  1425 20"
   "stompy     5  6006  1425 20"
   "stompy     5  7007  1425 20"
+  # jumbo: overnight ENTRY set while this deck has only a baseline keep profile.
+  "jumbo 0  4004 2000 0"
+  "jumbo 0  6006 2000 0"
+  "jumbo 0  8008 2000 0"
+  "jumbo 0 10010 2000 0"
+  "jumbo 3 4004 400 10"
+  "jumbo 3 5005 400 10"
+  "jumbo 3 6006 400 10"
+  "jumbo 3 7007 400 10"
+  "jumbo 5 4004 300 20"
+  "jumbo 5 5005 300 20"
+  "jumbo 5 6006 300 20"
+  "jumbo 5 7007 300 20"
   # minotaur: stompy-shaped four-seed deep sweep at 2x the gate budgets (d3 b20 / d5 b40).
   # At the probed costs that is ~4x1000x0.39 s + 4x500x0.63 s ~= 47 min single-thread, pooled.
   "minotaur 0  4004 2000 0"

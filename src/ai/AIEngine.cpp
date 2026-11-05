@@ -5327,6 +5327,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // like Light Up the Stage gets the same draw-breakpoint the rollout's
     // ApplyPlanDirect already models (cast the draw spell, then re-solve and cast the
     // freshly revealed cards with the remaining mana). See stage_draw_break below.
+    auto creature_tutor_replan = [&](const CardDefinition& d)
+    { return AcqResolveEnabled()
+          && ResolveProvider(state).PostCreatureTutorBreakpoint(state, d); };
     auto note_draw_engine = [&](const std::string& name)
     {
         const CardDefinition* d = CardDatabase::Instance().Lookup(name);
@@ -5353,6 +5356,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                   // re-solved after a tutor, so the fetched card (Sylvan Scrying -> Forbidden
                   // Orchard as the deferred drop) waited a turn (found in the Creature Giving
                   // review, 2026-08-19).
+                  || creature_tutor_replan(*d)
                   || (AcqResolveEnabled()
                       && (d->params.damage_equals_top_mv || d->params.tutor_to_hand))
                   // MTG_TOP_RESOLVE: a tutor-to-top (Worldly Tutor) re-arms the top-of-library
@@ -5445,6 +5449,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                      // Soulfire's staged exile / tutor fetch (MTG_ACQ_RESOLVE): the rollout arms a
                      // deferred re-solve after these, so the executor must classify them the same
                      // way or the committed continuation replays at the wrong breakpoint.
+                     || creature_tutor_replan(*d)
                      || (AcqResolveEnabled()
                          && (d->params.damage_equals_top_mv || d->params.tutor_to_hand))
                      // MTG_TOP_RESOLVE: the tutor-to-top reset arms the rollout's deferred
@@ -5489,7 +5494,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (m_lookahead_depth <= 0) { return false; }
         const CardDefinition* d = CardDatabase::Instance().Lookup(name);
         if (d == nullptr) { return false; }
-        const bool deferred = (AcqResolveEnabled()
+        const bool deferred = creature_tutor_replan(*d)
+                           || (AcqResolveEnabled()
                                && (d->params.damage_equals_top_mv || d->params.tutor_to_hand))
                            || (TopResolveActive(state) && d->params.tutor_to_top);
         if (!deferred) { return false; }
@@ -6960,7 +6966,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                                                   sac_named ? &a.tutor_target.str() : nullptr);
             // Kessig Wolf Run's searched target + X (TapTargetPump) -- lockstep twin of the rollout's.
             const bool tpump = a.ability_mode == Action::AbilityMode::TapTargetPump;
-            const TapTargetPumpPinScope _tpump_pin(tpump ? a.sac_victim_id : 0, tpump ? a.chosen_x : 0);
+            const bool target_pump = a.ability_mode == Action::AbilityMode::TargetPump;
+            const bool untap_land = a.ability_mode == Action::AbilityMode::UntapLand;
+            const TapTargetPumpPinScope _tpump_pin((tpump || target_pump || untap_land) ? a.sac_victim_id : 0,
+                                                   tpump ? a.chosen_x : 0);
             // Walking Ballista's searched ping TARGET (0 = the opponent's face); twin in the other world.
             const CounterPingTargetPinScope _cp_pin(
                 a.ability_mode == Action::AbilityMode::CounterPing ? a.sac_victim_id : 0);
@@ -9918,6 +9927,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
         effective.has_x  = false;
         effective.x_pips = 0;
     }
+    if (def->params.tooth_and_nail && chosen_x == 2) { effective.generic += 2; }
     // Convoke (Chord of Calling): the committed taps reduce this cast's cost -- the SAME shared
     // reduction the enumeration emitted (5d dropped-cast bug: pricing the FULL cost here dropped
     // a mana-legal convoke cast after its bodies were already tapped).

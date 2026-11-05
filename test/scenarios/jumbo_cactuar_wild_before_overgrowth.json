@@ -1,0 +1,21 @@
+{
+  "deck": "decks/Jumbo Cactuar/Jumbo Cactuar.cod",
+  "turn": 2,
+  "resume_at": "main1",
+  "on_the_play": true,
+  "battlefield": [
+    {"name": "Forest"},
+    {"name": "Arbor Elf", "sick": false}
+  ],
+  "hand": ["Forest", "Wild Growth", "Overgrowth"],
+  "library_filler": "Forest",
+  "library_size": 20,
+  "env": {"MTG_HUMAN_PLAY": "1"},
+  "depth": 0,
+  "budget_ms": 0,
+  "max_turns": 3,
+  "validate_line": "land=Forest;cast=Wild Growth;cast=Overgrowth;seq=land=Forest|cast=Wild Growth|cast=Overgrowth",
+  "expect_verdict": "choose",
+  "expect_human_summary_contains": "Overgrowth",
+  "_comment": "Seed 1 viewer gap: Wild Growth must resolve before the Overgrowth it funds; the full card order offers the pair without a search-gap override."
+}

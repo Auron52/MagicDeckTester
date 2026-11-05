@@ -1263,6 +1263,8 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.etb_tutor_hand_count      = params.value("etb_tutor_hand_count", 0);
     p.convoke                   = params.value("convoke", false);
     p.tutor_mv_max_is_x         = params.value("tutor_mv_max_is_x", false);
+    p.tooth_and_nail            = params.value("tooth_and_nail", false);
+    p.finale_of_devastation     = params.value("finale_of_devastation", false);
     p.wish_from_sideboard       = params.value("wish_from_sideboard", false);
     p.wish_requires_name        = params.value("wish_requires_name", std::string());
     p.wish_requires_multicolored = params.value("wish_requires_multicolored", false);
@@ -1303,6 +1305,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.equip_cost_generic        = params.value("equip_cost_generic", 0);
     p.equip_grants_haste        = params.value("equip_grants_haste", false);
     p.equip_grants_shroud       = params.value("equip_grants_shroud", false);
+    p.equip_grants_first_strike = params.value("equip_grants_first_strike", false);
     p.equip_power_bonus         = params.value("equip_power_bonus", 0);
     p.equip_tough_bonus         = params.value("equip_tough_bonus", 0);
     p.equip_grants_lifelink     = params.value("equip_grants_lifelink", false);
@@ -1634,6 +1637,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.attack_pump_tough_per_other_matching = params.value("attack_pump_tough_per_other_matching", 0);
     p.attack_self_pump_per_other_subtype   = params.value("attack_self_pump_per_other_subtype", std::string());
     p.attack_self_pump_power    = params.value("attack_self_pump_power", 0);
+    p.attack_self_pump_flat_power = params.value("attack_self_pump_flat_power", 0);
     p.attack_self_pump_tough    = params.value("attack_self_pump_tough", 0);
     p.static_self_pump_per_other_subtype   = params.value("static_self_pump_per_other_subtype", std::string());
     p.static_self_pump_power    = params.value("static_self_pump_power", 0);
@@ -1736,6 +1740,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.mana_per_life_gained         = params.value("mana_per_life_gained", false);
     p.produces_one_color           = params.value("produces_one_color", false);
     p.mana_requires_land_subtype   = params.value("mana_requires_land_subtype", std::string{});
+    p.untap_target_land = params.value("untap_target_land", false);
     p.etb_team_pump_per_creature   = params.value("etb_team_pump_per_creature", false);
     p.etb_put_creature_cards_from_hand = params.value("etb_put_creature_cards_from_hand", false);
     p.upkeep_reorder               = params.value("upkeep_reorder", 0);
@@ -1755,6 +1760,8 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
         params.value("own_creature_enters_lifegain_toughness", false);
     p.own_creature_enters_self_counters =
         params.value("own_creature_enters_self_counters", 0);
+    p.other_nontoken_enters_counter_haste =
+        params.value("other_nontoken_enters_counter_haste", 0);
     p.any_creature_enters_self_counters_power =
         params.value("any_creature_enters_self_counters_power", false);
     p.other_subtype_enters_counters_subtype =
@@ -1991,6 +1998,8 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     // Kessig Wolf Run (2026-10-22) -- see CardParams::tap_target_pump_cost.
     if (params.contains("tap_target_pump_cost"))
         p.tap_target_pump_cost = ManaCostFromString(params["tap_target_pump_cost"].get<std::string>());
+    if (params.contains("target_pump_cost"))
+        p.target_pump_cost = ManaCostFromString(params["target_pump_cost"].get<std::string>());
     p.tap_target_pump_power          = params.value("tap_target_pump_power", 0);
     p.tap_target_pump_tough          = params.value("tap_target_pump_tough", 0);
     p.tap_target_pump_grants_trample = params.value("tap_target_pump_grants_trample", false);

@@ -2260,6 +2260,27 @@ public:
     int EnumGroupCap() const override;
 };
 
+// The new Jumbo Cactuar and Surrak mechanics identify this deck without
+// inheriting another archetype's judgement hooks.
+class JumboCactuarProvider : public DeckProvider
+{
+public:
+    const char* Name() const override { return "JumboCactuar"; }
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed, "NOT ASSESSED. Verify the turn-win certificate for the Jumbo Cactuar deck." }; }
+    std::vector<int> LandAuraHostCandidates(const GameState& s, int controller) const override;
+    PutPolicy PutTargetPolicy(const GameState& s, int controller) const override;
+    bool PutTargetOk(const PutPolicy& pol, const CardDefinition& d) const override;
+    bool PostCreatureTutorBreakpoint(const GameState& s, const CardDefinition& d) const override;
+    int CastOrderRank(const GameState& s, const CardDefinition& def) const override;
+    int CastOrderActionRank(const GameState& s, const Action& a, int base_rank) const override;
+    int ActivationOrderRankForAction(const GameState& s, const CardDefinition& d,
+                                     const Action& a) const override;
+    bool ToothAndNailCandidateOk(const GameState& s, int controller, int mode,
+                                 const std::vector<std::string>& library_picks,
+                                 const std::vector<std::string>& hand_puts) const override;
+};
+
 // StompySurprise (mono-green elf ramp). Detection keys on the deck's gated params (see the
 // stompy flag in DetectDecisionProvider); every hook except the one below stays Generic, so
 // routing this deck here instead of g_generic changes nothing but the cleanup-discard ranking.

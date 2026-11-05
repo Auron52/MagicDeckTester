@@ -1448,6 +1448,9 @@ struct CardParams
     // colour; summoning sickness is irrelevant (no {T} symbol). Both false/absent = byte-identical.
     bool                     convoke = false;
     bool                     tutor_mv_max_is_x = false;
+    // Multi-mode creature tutors. The chosen mode is carried by Action::chosen_x.
+    bool                     tooth_and_nail = false;
+    bool                     finale_of_devastation = false;
     // Dragonstorm (Storm) tutor-TO-BATTLEFIELD: on resolution, put min(spells_cast_this_turn,
     // #library cards matching tutor_types) cards (Dragons) from the library ONTO THE BATTLEFIELD
     // (not hand/top). Each put routes through the shared FireEtbWatchers cascade (Scourge ping /
@@ -1649,6 +1652,7 @@ struct CardParams
     int  equip_cost_generic = 0;
     bool equip_grants_haste = false;
     bool equip_grants_shroud = false;
+    bool equip_grants_first_strike = false;
     // KittyEquipment additions -- the first P/T-rider / keyword-grant / restricted equipment.
     // equip_power_bonus/equip_tough_bonus mirror aura_power_bonus/aura_tough_bonus and are summed
     // by EquipBonusFor (SpellEffects.h) at the SAME three attack-power sites as AuraBonusFor
@@ -2954,6 +2958,8 @@ struct CardParams
     std::string attack_self_pump_per_other_subtype;
     int         attack_self_pump_power = 0;
     int         attack_self_pump_tough = 0;
+    // Jumbo Cactuar: fixed attack-triggered power gain, independent of other attackers.
+    int         attack_self_pump_flat_power = 0;
     // STATIC twin of the three fields above (Borderland Behemoth: "This creature gets +4/+4 for
     // each other Giant you control"). A CONTINUOUS layer-7c self-modification (CR 611.3), NOT an
     // attack trigger and NOT a lord: it buffs only itself, so power_bonus/tough_bonus/
@@ -3543,6 +3549,9 @@ struct CardParams
     // controller controls a land with this subtype -- equivalent in a single-main goldfish
     // (each Arbor untap lets one Forest tap once more: N Arbors + >=1 Forest = +N G).
     std::string mana_requires_land_subtype;
+    // Human play of an untap-land mana source exposes the literal target as a
+    // main-phase action. Autonomous search keeps the equivalent mana abstraction.
+    bool untap_target_land = false;
 
     // Craterhoof Behemoth ETB: "creatures you control gain trample and get +X/+X until end of
     // turn, where X is the number of creatures you control" (X counted AFTER it enters, so it
@@ -3636,6 +3645,9 @@ struct CardParams
     // counters MERGE into one entry -- BuildSimKey folds each Counter entry separately, so
     // un-merged entries would split the transposition key for boards that are actually identical.
     int  own_creature_enters_self_counters = 0;
+    // Surrak and Goreclaw: the trigger puts counters on another nontoken
+    // creature entering under this permanent's controller and grants haste.
+    int  other_nontoken_enters_counter_haste = 0;
     // Hamletback Goliath: "Whenever another creature enters, you may put X +1/+1 counters on this
     // creature, where X is that creature's power." Distinct from own_creature_enters_self_counters
     // directly above in BOTH respects: the scope is ANY controller (the oracle has no "you
@@ -4517,6 +4529,8 @@ struct CardParams
     // Combat.cpp has no blocker path and Keyword::Trample has no reader (the Craterhoof / Rageblood
     // Shaman disclosure class) -- so it is parsed and labelled, never applied. Empty cost = inert.
     std::optional<ManaCost>  tap_target_pump_cost;
+    // Nylea: no {T}, repeatable; reuses tap_target_pump_power/_tough.
+    std::optional<ManaCost>  target_pump_cost;
     int                      tap_target_pump_power = 0;
     int                      tap_target_pump_tough = 0;
     bool                     tap_target_pump_grants_trample = false;
@@ -4746,6 +4760,7 @@ inline bool DefHasCreatureEnterWatcher(const CardParams& p)
         || p.own_creature_enters_lifegain > 0
         || p.own_creature_enters_lifegain_toughness
         || p.own_creature_enters_self_counters > 0
+        || p.other_nontoken_enters_counter_haste > 0
         || p.any_creature_enters_self_counters_power
         || p.opp_creature_enters_life_loss > 0
         || p.own_creature_enters_opp_life_loss > 0    // Forerunner of the Coalition (2026-09-26)
