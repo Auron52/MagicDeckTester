@@ -11,6 +11,10 @@ to has drifted, and let one or more idle machines regenerate them, most-drifted 
     python3 scripts/artifact_queue.py start                      # detach a worker loop (own session, nohup)
     python3 scripts/artifact_queue.py run [--once] [--dry-run]   # the worker loop, in the foreground
     python3 scripts/artifact_queue.py stop                       # finish the CURRENT job, then exit
+    python3 scripts/artifact_queue.py pause                      # stop NOW; `start` resumes the same job
+    python3 scripts/artifact_queue.py abandon "<why>"            # USER: retire the in-flight job (state kept aside)
+        # A job ends only on a VERDICT or `abandon`. A driver that exits without one (crash, OOM, SIGTERM,
+        # build failure mid-job) keeps it in flight -- same tree, same queue dir -- exactly like `pause`.
     python3 scripts/artifact_queue.py selftest                   # claim CAS, .gz round-trip, parsing (no games)
 
 Design + rationale: docs/design/artifact-staleness-queue.md (USER idea, 2026-09-03 / 2026-10-10;
@@ -92,6 +96,13 @@ DEFAULT_CONFIG = {
     "idle_poll_minutes": 5,
     "idle_max_load": None,
     "retry_rejected_days": 14,                # FAILED claims only (a crash is no verdict on the deck)
+    # A driver that exits WITHOUT a verdict (OOM-killed phase, SIGTERM, crash, a build failure mid-job) leaves
+    # the job in flight and the worker RESUMES it in the same frozen tree (USER 2026-11-05: "we should fix
+    # anything not making it effectively resumable"). These bound a deterministic crash: after max_attempts
+    # verdictless attempts in one worker process, the job is set aside (claim `paused`, inflight.json kept)
+    # and the worker exits for a human; `start` retries it, `abandon` retires it.
+    "max_attempts": 3,
+    "retry_backoff_minutes": 15,              # x attempt number, between verdictless attempts
     "auto_land": True,
     "marks": [],
 }
@@ -1349,6 +1360,27 @@ def versus_cost(wt, stem, since):
     return mean, se, len(r)
 
 
+def tree_provenance(wt, frozen):
+    """-> what the worktree ACTUALLY holds vs the commit the job was frozen at. The drivers build and play
+    HEAD, not `frozen`: a worktree an agent cherry-picked fixes onto (Hinata2 2026-11: 14 commits, HEAD
+    4a5fba5db vs frozen ae41aaad0; valueleaf.sh's own freeze.src is HEAD:src) generates on HEAD's src, so
+    a verdict must record HEAD and HEAD:src, and name the difference."""
+    head = git("rev-parse", "HEAD", cwd=wt).strip()
+    head_src = git("rev-parse", "HEAD:src", cwd=wt).strip()
+    frozen_src = git("rev-parse", "%s:src" % frozen, cwd=wt, check=False).strip() or None
+    return {"head": head, "head_src": head_src, "frozen_src": frozen_src,
+            "head_differs": head != git("rev-parse", frozen, cwd=wt, check=False).strip(),
+            "src_differs": head_src != frozen_src}
+
+
+def prov_note(prov, frozen):
+    if not prov["head_differs"]:
+        return ""
+    return ("WORKTREE HEAD %s DIFFERS from frozen %s (%s) -- the artifacts were generated on HEAD"
+            % (prov["head"][:9], frozen[:9], "src tree %s vs %s" % (prov["head_src"][:9], (prov["frozen_src"] or "?")[:9])
+               if prov["src_differs"] else "same src tree"))
+
+
 def run_job(wid, cfg, q, job, wt, frozen, deckinfo, dry):
     deck = job["deck"]
     claim = {"deck": deck, "worker": wid, "state": "running", "stages": job["stages"], "stage": job["stages"][0],
@@ -1359,9 +1391,6 @@ def run_job(wid, cfg, q, job, wt, frozen, deckinfo, dry):
         log(wid, "DRY RUN: would claim %s and run %s at %s%s" % (deck, " -> ".join(job["stages"]), frozen[:9],
             "; the box is BUSY now (%s), so a real run would wait" % why if why else "; the box is free"))
         return "dry"
-    if not put_claim(q, deck, claim, wid, job, cfg):
-        log(wid, "%s: another worker claimed it first -- skipping" % deck)
-        return "lost"
     ifp = os.path.join(state_dir(wid), "inflight.json")
     prior = json.load(open(ifp)) if os.path.exists(ifp) else {}
     # A RESUMED job skips the stages it already finished: re-running `mullgen.sh run` after an adoption
@@ -1370,18 +1399,68 @@ def run_job(wid, cfg, q, job, wt, frozen, deckinfo, dry):
     done_stages = prior.get("done_stages", [])
     detail = prior.get("detail", [])
     plan = prior.get("plan")                  # the mulligan settings, pinned once computed
-    if prior.get("claim", {}).get("run_id"):
-        claim["run_id"] = prior["claim"]["run_id"]
+    attempts = prior.get("attempts", [])      # every verdictless attempt: when, stage, rc, log
+    pc = prior.get("claim", {})
+    if pc.get("run_id"):
+        claim["run_id"] = pc["run_id"]
+    if prior:
+        # `started` is the FIRST claim of this run, kept across every resume: versus_cost() reads the A/B rounds
+        # since it, and a reset dropped the pre-pause rounds -- a dearer table then read "cost not measured" and
+        # was ADOPTED instead of reported as a TRADE. The run_id stamp is the first claim too (and repairs a
+        # `started` an older worker already reset).
+        t0 = [t for t in (parse_iso(pc["started"]) if pc.get("started") else None, run_started(pc)) if t]
+        if t0:
+            claim["started"] = iso(min(t0))
+        claim["resumed"] = iso(utcnow())
+    resuming = bool(prior)
+    if not put_claim(q, deck, claim, wid, job, cfg):
+        log(wid, "%s: another worker claimed it first -- skipping" % deck)
+        return "lost"
+    prov = tree_provenance(wt, frozen)
+    claim["head"] = prov["head"]
+    if prov["head_differs"]:
+        log(wid, "  !!! %s -- recorded in the ledger and the result commit" % prov_note(prov, frozen))
 
     def save_inflight():
         json.dump({"job": job, "claim": claim, "done_stages": done_stages, "detail": detail, "plan": plan,
-                   "vl_queue_fresh": prior.get("vl_queue_fresh", False)}, open(ifp, "w"), indent=1)
+                   "vl_queue_fresh": prior.get("vl_queue_fresh", False), "attempts": attempts},
+                  open(ifp, "w"), indent=1)
 
     def verdict(kind, v, ident, extra):
-        """Record a stage's verdict in the deck's ledger (in the worktree; it lands with the result branch)."""
-        append_ledger(wt, deck, dict({"run_id": claim["run_id"], "kind": kind, "verdict": v, "ident": ident,
-                                      "frozen": frozen, "src_tree": git("rev-parse", "%s:src" % frozen, cwd=wt).strip(),
-                                      "date": datetime.date.today().isoformat(), "worker": wid}, **extra))
+        """Record a stage's verdict in the deck's ledger (in the worktree; it lands with the result branch).
+        src_tree is the worktree's HEAD:src -- what the drivers actually built -- not frozen's."""
+        e = {"run_id": claim["run_id"], "kind": kind, "verdict": v, "ident": ident, "frozen": frozen,
+             "head": prov["head"], "src_tree": prov["head_src"],
+             "date": datetime.date.today().isoformat(), "worker": wid}
+        if prov["head_differs"]:
+            e.update({"frozen_src_tree": prov["frozen_src"], "provenance_warning": prov_note(prov, frozen)})
+        append_ledger(wt, deck, dict(e, **extra))
+
+    fail = {}                                 # set when this attempt ends WITHOUT a verdict (resumable)
+
+    def verdictless(stage, rc, logname, why):
+        fail.update({"stage": stage, "rc": rc, "why": why,
+                     "log": os.path.join(state_dir(wid), logname) if logname else None})
+        return "retry"
+
+    def hold_in_flight(kind):
+        """End a verdictless attempt WITHOUT retiring the job: inflight.json, the worktree (no result branch,
+        no checkout) and the driver's queue dir/journal all stay, the attempt is recorded, and the claim is set
+        `paused` -- which no other worker takes over -- so the next attempt (this process, or the next `start`)
+        resumes exactly as it does after a USER `pause`."""
+        attempts.append(dict(fail, at=iso(utcnow()), pid=os.getpid(), kind=kind, head=prov["head"]))
+        n = len(attempts)
+        claim.update({"state": "paused", "paused": iso(utcnow()), "pause_reason": kind,
+                      "detail": "attempt %d ended WITHOUT a verdict (%s, stage %s, rc %s, log %s); in flight on worker "
+                                "%s, which resumes it" % (n, fail.get("why"), fail.get("stage"), fail.get("rc"),
+                                                         fail.get("log"), wid)})
+        save_inflight()
+        try:
+            put_claim(q, deck, claim, wid)
+        except Exception as e:
+            log(wid, "  (claim update failed: %s)" % e)
+        log(wid, "%s attempt %d ended WITHOUT a verdict -- KEPT IN FLIGHT (%s): %s; stage %s rc %s; log %s"
+            % (deck, n, kind, fail.get("why"), fail.get("stage"), fail.get("rc"), fail.get("log")))
 
     save_inflight()
     hb = Heartbeat(q, deck, claim, cfg)
@@ -1452,23 +1531,34 @@ def run_job(wid, cfg, q, job, wt, frozen, deckinfo, dry):
                 finally:
                     if saved is not None:
                         open(os.path.join(wt, sfile), "wb").write(saved)
-                regzip(wt, deckinfo)
                 rep = os.path.join(wt, "logs", re.sub(r"[^A-Za-z0-9._-]", "_", deckinfo["dir"][len("decks/"):]) + "_mullgen",
                                    "VALIDATION.txt")
                 text = open(rep).read() if os.path.exists(rep) else ""
-                m = re.findall(r"new-vs-old delta: ([-+0-9.eE]+)t", text)
-                delta = float(m[-1]) if m else None
-                prof_rel = os.path.join(deckinfo["dir"], "%s.keepmodel.exhaustive.profile.json.gz" % deckinfo["stem"])
-                settings = {"recipe": plan["recipe"], "env": plan["env"], "depth": plan["depth"], "budget": plan["budget"]}
                 saved_inc = "regeneration: incumbent saved" in text
                 if rc != 3 and text and saved_inc == first_time:
                     # A regeneration must use old-vs-new; a first version must use keep and confounded-bottom
                     # A/Bs. Never read the wrong validation report as a verdict for this job.
-                    outcome = "failed"
-                    detail.append("mulligan: FAILED -- driver used %s validation for a %s job; rc=%d, see %s.mulligan.log"
-                                  % ("REGENERATION" if saved_inc else "FIRST-VERSION",
-                                     "first-time" if first_time else "regeneration", rc, deck))
+                    outcome = verdictless("mulligan", rc, "%s.mulligan.log" % deck,
+                                          "driver used %s validation for a %s job"
+                                          % ("REGENERATION" if saved_inc else "FIRST-VERSION",
+                                             "first-time" if first_time else "regeneration"))
                     break
+                is_verdict = (rc == 3 or (rc == 0 and ("VALIDATION PASSED" in text or "UNGATED run" in text))
+                              or (first_time and "VALIDATION FAILED" in text)
+                              or "VALIDATION FAILED -- new profile is worse than the old" in text)
+                if not is_verdict:
+                    # The driver stopped WITHOUT a verdict (killed, OOM, a crashed phase): leave the deck folder
+                    # exactly as the driver left it -- the same state a `pause` leaves -- so the next attempt's
+                    # mullgen.sh resumes its own journal. regzip here would fold a half-written plain table into
+                    # the .gz and the retry's ungzip_incumbent would then hand it back as the "incumbent".
+                    outcome = verdictless("mulligan", rc, "%s.mulligan.log" % deck,
+                                          "mullgen.sh exited rc=%d without a validation verdict" % rc)
+                    break
+                regzip(wt, deckinfo)
+                m = re.findall(r"new-vs-old delta: ([-+0-9.eE]+)t", text)
+                delta = float(m[-1]) if m else None
+                prof_rel = os.path.join(deckinfo["dir"], "%s.keepmodel.exhaustive.profile.json.gz" % deckinfo["stem"])
+                settings = {"recipe": plan["recipe"], "env": plan["env"], "depth": plan["depth"], "budget": plan["budget"]}
                 # BETTER OVERALL (USER 2026-10-26: "If the table is better overall (average quality and performance
                 # not worse) it is adoptable"). The driver gates quality; the worker adds the performance half from
                 # the same versus games. Significantly dearer at no-worse quality is a TRADE: the USER's call.
@@ -1496,6 +1586,13 @@ def run_job(wid, cfg, q, job, wt, frozen, deckinfo, dry):
                     verdict("mulligan", "adopted-ungated", artifact_ident("mulligan", wt, prof_rel),
                             {"delta": delta, "settings": settings, "detail": detail[-1]})
                 elif rc == 3:
+                    if resuming or done_stages:
+                        # A gate refusing a job that has banked work (a resumed journal: mullgen.sh's recipe
+                        # preflight, its journal-backup copy failing on a full disk) is a hazard for a human,
+                        # not a verdict to retire the job on: hold it, in flight.
+                        outcome = verdictless("mulligan", rc, "%s.mulligan.log" % deck,
+                                              "REFUSED by a driver gate (exit 3) on a job with banked work") and "held"
+                        break
                     outcome = "refused"
                     detail.append("mulligan: REFUSED by a driver gate (exit 3) -- see %s.mulligan.log" % deck)
                     break
@@ -1517,9 +1614,8 @@ def run_job(wid, cfg, q, job, wt, frozen, deckinfo, dry):
                     # kept table is the one it is fitted to (2026-10-25: Anti-Lifegain's leaf was skipped here).
                     if "valueleaf" not in job.get("queued_kinds", job["stages"]):
                         break
-                else:
-                    outcome = "failed"
-                    detail.append("mulligan: FAILED rc=%d -- see %s.mulligan.log" % (rc, deck))
+                else:                                 # unreachable while is_verdict covers every branch
+                    outcome = verdictless("mulligan", rc, "%s.mulligan.log" % deck, "no verdict branch matched")
                     break
             else:
                 # valueleaf.sh resumes from logs/vlq_<key> markers. A NEW job must not inherit the markers,
@@ -1535,17 +1631,21 @@ def run_job(wid, cfg, q, job, wt, frozen, deckinfo, dry):
                                 "%s.valueleaf.log" % deck)
                 vtxt = open(os.path.join(state_dir(wid), "%s.valueleaf.log" % deck)).read()
                 vtxt = vtxt[vtxt.rfind("\n=== 20"):]                  # this attempt's output only
+                # Anything short of a COMPLETE run is NOT a verdict (an OOM-killed phase, a pool failure, a
+                # SIGTERM): the job stays in flight and valueleaf.sh resumes from its own markers next attempt.
                 if rc == 0 and "=== COMPLETE" not in vtxt:
-                    outcome = "failed"
-                    detail.append("valueleaf: exit 0 WITHOUT the COMPLETE line -- not a verdict; see %s.valueleaf.log" % deck)
+                    outcome = verdictless("valueleaf", rc, "%s.valueleaf.log" % deck, "exit 0 WITHOUT the COMPLETE line")
                     break
                 if rc == 3:
+                    if resuming or done_stages:
+                        outcome = verdictless("valueleaf", rc, "%s.valueleaf.log" % deck,
+                                              "REFUSED (exit 3) on a job with banked work") and "held"
+                        break
                     outcome = "refused"
                     detail.append("valueleaf: REFUSED (exit 3)")
                     break
                 if rc != 0:
-                    outcome = "failed"
-                    detail.append("valueleaf: FAILED rc=%d" % rc)
+                    outcome = verdictless("valueleaf", rc, "%s.valueleaf.log" % deck, "valueleaf.sh exited rc=%d" % rc)
                     break
                 new_ident = artifact_ident("valueleaf", wt, deckinfo["value"])
                 adopted = new_ident is not None and new_ident != job["blobs"].get("valueleaf")
@@ -1562,19 +1662,29 @@ def run_job(wid, cfg, q, job, wt, frozen, deckinfo, dry):
             done_stages.append(stage)
             save_inflight()
     except MachineFault as e:
-        # Not the deck's fault: release the claim (so another machine can take it) and stop THIS worker,
-        # rather than stamping every deck in the queue "failed" for retry_rejected_days one by one.
+        # Not the deck's fault: stop THIS worker, rather than stamping every deck in the queue "failed" for
+        # retry_rejected_days one by one. A job with banked work (a resume, or a finished stage) stays IN FLIGHT
+        # here -- its journal, queue dir and frozen tree are on this machine only -- and `start` resumes it once
+        # the box is fixed. Only a job that has not run anything yet is released for another machine.
         hb.stop()
+        if resuming or done_stages:
+            verdictless(claim.get("stage"), None, "build.log", "machine fault: %s" % e)
+            hold_in_flight("machine fault")
+            log(wid, "%s HELD IN FLIGHT -- machine fault: %s. Worker stopping; fix the box and `start` again "
+                     "(it resumes this job)." % (deck, e))
+            raise
         claim.update({"state": "released", "finished": iso(utcnow()), "detail": "machine fault: %s" % e})
         q._write(deck, claim)
         os.remove(ifp)
         log(wid, "%s RELEASED -- machine fault: %s. Worker stopping; fix the box and `start` again." % (deck, e))
         raise
     except Exception as e:
-        outcome = "failed"
-        detail.append("worker error: %s" % e)
+        outcome = verdictless(claim.get("stage"), None, None, "worker error: %r" % e)
     finally:
         hb.stop()
+    if outcome in ("retry", "held"):
+        hold_in_flight(outcome)
+        return outcome
     # Commit whatever the drivers left in the deck folder onto a result branch -- adopted artifacts, a
     # quarantined .DISABLED table, a screened mull_gen setting. Nothing is discarded, ever.
     branch = None
@@ -1589,9 +1699,12 @@ def run_job(wid, cfg, q, job, wt, frozen, deckinfo, dry):
                    if only_ledger else
                    "NOT LANDED: rebase onto the working branch, run smoke + regression and accept the GT the\n"
                    "new artifacts move (regression-testing.md), then push.\n\n")
-        msg = ("artifact-refresh(%s): %s\n\nRegenerated by the artifact queue worker %s, frozen at %s.\n%s\n\n%s"
+        pn = prov_note(prov, frozen)
+        msg = ("artifact-refresh(%s): %s\n\nRegenerated by the artifact queue worker %s, frozen at %s, generated on "
+               "worktree HEAD %s (src tree %s).%s\n%s\n\n%s"
                "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>\n"
-               % (deck, outcome, wid, frozen[:9], "\n".join("  " + x for x in detail), landing))
+               % (deck, outcome, wid, frozen[:9], prov["head"][:9], prov["head_src"][:12],
+                  ("\n!!! " + pn) if pn else "", "\n".join("  " + x for x in detail), landing))
         git("commit", "-q", "-m", msg, cwd=wt)
         r = subprocess.run(["git", "push", "-q", "origin", branch], cwd=wt, capture_output=True, text=True)
         if r.returncode != 0:
@@ -1789,9 +1902,11 @@ def cmd_run(a):
         pass
     refuse_temp_root()
     fails = 0
+    retries = 0                                         # verdictless attempts of the in-flight job, this process
     while not stop_requested(wid):
         inflight = os.path.join(state_dir(wid), "inflight.json")
-        if os.path.exists(inflight):
+        resuming = os.path.exists(inflight)
+        if resuming:
             # Interrupted mid-job: resume in the SAME frozen worktree (both drivers resume from their own
             # markers/journals). Re-syncing here would re-freeze on a newer commit under a half-done run.
             st = json.load(open(inflight))
@@ -1835,6 +1950,31 @@ def cmd_run(a):
                               deckinfo, a.dry_run)
         except MachineFault:
             return 1
+        if outcome == "lost" and resuming:
+            # Our in-flight job's claim is held by someone else (a lease that expired while this worker was
+            # down). Its journal and queue dir are HERE, so never re-sync over them: stop for a human.
+            log(wid, "%s: in-flight job's claim is held by another worker -- NOT re-syncing over its banked "
+                     "work; worker stopping. Inspect `claims`, then `start` (resume) or `abandon`." % job["deck"])
+            return 1
+        if outcome == "held":
+            log(wid, "%s HELD in flight for a human (see the attempt above); worker stopping. `start` resumes "
+                     "it, `abandon` retires it." % job["deck"])
+            return 1
+        if outcome == "retry":
+            retries += 1
+            if retries >= int(cfg.get("max_attempts", 3)):
+                log(wid, "%s: %d attempts in a row ended WITHOUT a verdict -- STALLED, worker stopping. The job "
+                         "stays in flight (claim paused); `start` resumes it, `abandon` retires it. Logs: %s"
+                         % (job["deck"], retries, state_dir(wid)))
+                return 1
+            wait = int(cfg.get("retry_backoff_minutes", 15)) * retries * 60
+            log(wid, "%s: resuming the same job in %d min (attempt %d of %d)"
+                % (job["deck"], wait // 60, retries + 1, cfg.get("max_attempts", 3)))
+            t_end = time.time() + wait
+            while time.time() < t_end and not stop_requested(wid):
+                time.sleep(min(30, max(0, t_end - time.time())))
+            continue
+        retries = 0
         fails = fails + 1 if outcome == "failed" else 0
         if fails >= 3:
             log(wid, "3 deck jobs FAILED in a row -- stopping this worker: that is the box, not the decks. "
@@ -1928,6 +2068,41 @@ def cmd_pause(a):
         return 1
     print("paused %s (stage %s). `start` on this checkout resumes it; no other worker will take it."
           % (claim["deck"], claim.get("stage")))
+    return 0
+
+
+def cmd_abandon(a):
+    """USER retirement of the in-flight job -- the ONLY way, besides a verdict, that one ends. The worker must
+    be stopped. inflight.json is renamed aside (never deleted), the claim becomes `failed` (the crash retry
+    window applies), and nothing in the worktree is touched: its journals and logs/vlq_<deck> stay where they
+    are, and the NEXT job's freeze re-syncs the tree (tracked edits rescued to a branch, an earlier value-leaf
+    queue moved aside, never deleted)."""
+    wid = worker_id()
+    sd = state_dir(wid)
+    try:
+        pid = int(open(os.path.join(sd, "worker.pid")).read())
+        os.kill(pid, 0)
+        print("worker %s is running (pid %d): `pause` it first" % (wid, pid))
+        return 1
+    except (OSError, ValueError):
+        pass
+    ifp = os.path.join(sd, "inflight.json")
+    if not os.path.exists(ifp):
+        print("worker %s has no job in flight" % wid)
+        return 0
+    st = json.load(open(ifp))
+    claim = st["claim"]
+    aside = os.path.join(sd, "inflight.abandoned-%s.json" % utcnow().strftime("%Y%m%dT%H%M%S"))
+    os.rename(ifp, aside)
+    claim.update({"state": "failed", "finished": iso(utcnow()),
+                  "detail": "ABANDONED by the USER (%s) after %d verdictless attempt(s); state kept at %s"
+                            % (a.why, len(st.get("attempts", [])), aside)})
+    q = Queue()
+    q.fetch()
+    if not put_claim(q, claim["deck"], claim, wid):
+        print("could not write the abandoned claim for %s (another worker holds it?)" % claim["deck"])
+    log(wid, "ABANDONED in-flight %s by the USER (%s); state -> %s" % (claim["deck"], a.why, aside))
+    print("abandoned %s; its in-flight state is at %s" % (claim["deck"], aside))
     return 0
 
 
@@ -2143,13 +2318,15 @@ def main():
     sp.add_parser("start")
     sp.add_parser("stop")
     sp.add_parser("pause")
+    s = sp.add_parser("abandon", help="USER: retire the in-flight job (worker stopped); its state is kept aside")
+    s.add_argument("why")
     s = sp.add_parser("land", help="land result branches with the adoption step")
     s.add_argument("branches", nargs="+")
     s.add_argument("--force", action="store_true", help="land a branch HELD for the USER (a trade) once they decided")
     sp.add_parser("selftest")
     a = ap.parse_args()
     fn = {"status": cmd_status, "explain": cmd_explain, "mark": cmd_mark, "unmark": cmd_mark, "claims": cmd_claims,
-          "run": cmd_run, "start": cmd_start, "stop": cmd_stop, "pause": cmd_pause, "land": cmd_land, "selftest": cmd_selftest}[a.cmd]
+          "run": cmd_run, "start": cmd_start, "stop": cmd_stop, "pause": cmd_pause, "abandon": cmd_abandon, "land": cmd_land, "selftest": cmd_selftest}[a.cmd]
     return fn(a)
 
 

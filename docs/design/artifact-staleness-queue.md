@@ -158,9 +158,25 @@ finished claim holds while the deck's artifacts on the branch are still the blob
 until its result lands) -- but only when it produced a result branch; one that adopted nothing (a leaf left
 staged) is retryable like a rejected/refused one: once the deck's suite play has drifted `min_drift` turns
 since the commit that attempt FROZE (below). A taken-over lease uses the same
-rule as the picker, so the two cannot disagree. A MACHINE fault (`./build.sh` failing) releases the claim
-and stops that worker instead of stamping every deck "failed" one after another, and three failed deck
-jobs in a row also stop it.
+rule as the picker, so the two cannot disagree. A MACHINE fault (`./build.sh` failing) stops that worker
+instead of stamping every deck "failed" one after another; it releases the claim only when the job has run
+nothing yet (otherwise the job stays in flight, below).
+
+**A job ends ONLY on a verdict or a USER `abandon`** (USER 2026-11-05: *"That sounds like a bug to me. We
+should be saving game by game results."* and *"In the meantime we should fix anything not making it
+effectively resumable."*). A driver that exits WITHOUT a verdict -- an OOM-killed phase, a pool failure, a
+SIGTERM, `valueleaf.sh` exiting 0 without `=== COMPLETE`, a build failure mid-job, a worker exception --
+used to count as "failed": inflight.json was deleted, the next claim re-synced the worktree and moved
+`logs/vlq_<deck>` aside, and days of finished phases were redone. Now such an attempt is recorded in
+`inflight.json` `attempts` (stage, rc, log path, HEAD), the claim goes `paused` (no other worker takes it),
+nothing is committed or re-zipped, and the worker resumes the same job in the same tree after
+`retry_backoff_minutes` x attempt -- the very path `pause` + `start` takes. After `max_attempts` (3) in one
+worker process it stops with the job still in flight; `start` retries, `abandon "<why>"` retires it
+(inflight.json renamed aside, claim `failed`). A driver gate refusing (exit 3) a job with banked work (a
+resume, or a finished stage) is held the same way rather than retired. The claim's `started` is the FIRST
+claim's, kept across resumes (it bounds the A/B rounds `versus_cost` reads), and every verdict records the
+worktree's real `head` / `src_tree` (HEAD:src), with `frozen_src_tree` + a `provenance_warning` when an
+agent's commits on the worker tree made HEAD differ from `frozen`. Test: `test/artifact_queue_resume_test.py`.
 
 **The worker.** Per machine (`MDT_WORKER_ID`, else the id minted into `logs/artifact_queue/WORKER_ID`): a worktree at
 `.claude/worktrees/artifact-worker-<id>` (persistent location; build/ goes to the volume via build.sh),
