@@ -3613,6 +3613,7 @@ static ManaPool BuildNonCreaturePool(const GameState& state)
     // in the NONCREATURE pool; omitting it would have this test reject casts the payer pays.
     AddSacPayFodderToPool(pool, state, state.active_player_index,
                           LiveSacPayOutlet(state, state.active_player_index));
+    AddOnDemandSacToPool(pool, state);   // on-demand cracks: unrestricted mana (see AvailableManaPool)
     if (FloatLeftoverManaEnabled()) { pool.AddPool(state.floating_mana); }  // see AvailableManaPool
     // The big-spell-only reserve pays a qualifying NONCREATURE spell too (Colossification, Eldrazi
     // Conscription); BigOnlySubsetPayable takes it back out for the non-qualifying part.
@@ -7830,6 +7831,13 @@ static void ComputeAvailableColors(const GameState& state, bool have[5], bool pe
             for (Color c : SacPayOutletColors(so.def->params))
             { const int ci = static_cast<int>(c); if (ci >= 0 && ci < 5) { have[ci] = true; } }
         }
+    }
+    // On-demand cracks (Lotus Bloom: any one colour; Lake of the Dead: its own): a colour the payer can
+    // make by cracking one, often the deck's only source of an off-colour pip -- the §2a lesson again.
+    if (state.deck_has_ondemand_sac)
+    {
+        const unsigned m = OnDemandSacSupplyNow(state).mask;
+        for (int i = 0; i < 5; ++i) { if (m & (1u << i)) { have[i] = true; } }
     }
 
     // SCALING SOURCE WIDENING (domain_mana: Faeburrow Elder / Bloom Tender).
@@ -40590,6 +40598,10 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 if (p.controller_index != state.active_player_index || p.tapped) { continue; }
                 const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
                 if (!pd || pd->params.sac_for_mana_amount <= 0) { continue; }
+                // ON-DEMAND (Lotus Bloom, Lake of the Dead): the PAYER cracks it when a cost needs it --
+                // never a plan action (USER 2026-11-04: "it should be on-demand and only done that way").
+                // The gates credit its supply (OnDemandSacSupplyNow), so this is a SWAP of the accounting.
+                if (state.deck_has_ondemand_sac && IsOnDemandSacDef(*pd)) { continue; }
                 if (!pd->params.sac_for_mana_victim_land_subtype.empty())
                 {
                     int& left = victim_budget(pd->params.sac_for_mana_victim_land_subtype, p.card.m_number);
@@ -73066,136 +73078,6 @@ void TurnSolver::SoundFoldCounters(long long out[5])
     out[4] = seedwalk::g_folded.load();
 }
 
-// ---- THE IDLE LAND-CRACK FOLD (MTG_IDLE_CRACK_FOLD, DEFAULT OFF; =1 -> the fold) ------------------------------
-// DEFAULT OFF 2026-11-04: sound, but on Shadowborn its probes (two ApplyPlanDirect + dedup keys per crack plan) cost
-// ~2.8% of CPU against -1.7% units and no game changed; the USER adopted it only "if there is no performance
-// drawbacks". Superseded by the on-demand sac-for-mana payer (docs/design/sac-for-mana-on-demand.md), which removes
-// crack plans altogether; revive only with a cheaper probe.
-// USER 2026-11-04 (Shadowborn s7, Lake of the Dead): "it should not be sacrificing the land unless we need it."
-// A SacForMana whose source is a LAND (Lake of the Dead's "{T}, Sacrifice a Swamp: {B}{B}{B}{B}", Dwarven Ruins,
-// Svyelunite Temple) is a MANA ABILITY: it can be activated at any later priority of the phase. Plan C holds such a
-// crack and plan S is C with that crack removed (all other fields equal). Apply both on copies, then activate the
-// crack on S's end state. If that state's dedup key equals C's end state (BuildDedupKey, the engine's own
-// duplicate test), C is exactly "S, and then the same mana ability later". Every future of C is therefore a
-// future of S: a later decision of the phase (a breakpoint continuation, an activation) can activate the crack
-// from S's state, because the Lake is still untapped and the victim is still there. Without that, the float
-// empties at the end of the phase and S keeps a Swamp and an untapped Lake. So C is dropped. This is a SOUND
-// IDENTITY fold, not a projection. It never removes a crack whose mana the plan spent in a way S cannot
-// reproduce: then the keys differ (C paid from the float while S tapped another source, or S tapped the Lake
-// itself), and C stays. It fires only when S is in the same list, so the line is never lost. A plan with two cracks
-// folds onto the one-crack plan, which folds onto the no-crack plan, a chain that ends at a plan without cracks.
-// Not in human play (the viewer's menu is never narrowed). Inert for every deck without a land SacForMana source.
-static bool IdleCrackFoldOn()
-{
-    static const bool on = EnvOn("MTG_IDLE_CRACK_FOLD", false);
-    return heurarm::Flag(heurarm::IDLE_CRACK_FOLD, on);
-}
-static std::atomic<long long> g_idle_crack_folded{0}, g_idle_crack_tested{0};
-static bool ActionIsLandCrack(const GameState& state, const Action& a)
-{
-    if (a.kind != Action::Kind::SacForMana || a.sac_source_id == 0) { return false; }
-    for (const Permanent& p : state.battlefield)
-    {
-        if (p.controller_index != state.active_player_index || p.card.m_number != a.sac_source_id) { continue; }
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        return d != nullptr && d->card.IsLand() && d->params.sac_for_mana_amount > 0;
-    }
-    return false;
-}
-static std::string PbVerifyFieldDiff(const TurnSolver::Plan& a, const TurnSolver::Plan& b);
-static void FoldIdleLandCracks(const GameState& state, bool is_pre_combat, std::vector<TurnSolver::Plan>& v,
-                               bool clear_land = true)
-{
-    {
-        static const bool s_dbg0 = EnvOn("MTG_IDLE_CRACK_DEBUG");
-        if (s_dbg0)
-        {
-            int n_sac = 0, src0 = -1;
-            for (const TurnSolver::Plan& p : v) { for (const Action& a : p.actions) { if (a.kind == Action::Kind::SacForMana) { ++n_sac; src0 = a.sac_source_id; } } }
-            std::fprintf(stderr, "[idle-crack] enter T%d n=%zu sac_actions=%d src=%d human=%d on=%d\n", state.turn_number, v.size(), n_sac, src0,
-                         HumanPlayActive() ? 1 : 0, IdleCrackFoldOn() ? 1 : 0);
-        }
-    }
-    if (HumanPlayActive() || !IdleCrackFoldOn() || v.size() < 2) { return; }
-    bool any = false;
-    for (const TurnSolver::Plan& p : v)
-    {
-        for (const Action& a : p.actions) { if (ActionIsLandCrack(state, a)) { any = true; break; } }
-        if (any) { break; }
-    }
-    if (!any) { return; }
-    // The trial applies must not play a land the plan does not make (drop_partial_vamp's probe rule).
-    // Inside EnumeratePlans the state already holds the frame's land choice and the plans are not land-tagged
-    // yet, so the trial applies must not play a land the plan does not make (drop_partial_vamp's probe rule).
-    // On a land-tagged list (EnumeratePlansWithLand) the plans apply as they are.
-    auto probe_of = [clear_land](const TurnSolver::Plan& p)
-    {
-        TurnSolver::Plan q = p;
-        if (clear_land) { q.land_decided = true; q.land_to_play.clear(); }
-        return q;
-    };
-    std::vector<char> drop(v.size(), 0);
-    for (std::size_t i = 0; i < v.size(); ++i)
-    {
-        const TurnSolver::Plan& c = v[i];
-        for (std::size_t k = 0; k < c.actions.size() && !drop[i]; ++k)
-        {
-            const Action& crack = c.actions[k];
-            if (!ActionIsLandCrack(state, crack)) { continue; }
-            TurnSolver::Plan s = c;
-            s.actions.erase(s.actions.begin() + static_cast<std::ptrdiff_t>(k));
-            std::size_t j = 0;
-            for (; j < v.size(); ++j)
-            {
-                if (j == i || v[j].actions.size() != s.actions.size() || v[j].land_to_play != s.land_to_play) { continue; }
-                if (v[j] == s) { break; }
-            }
-            static const bool s_dbg = EnvOn("MTG_IDLE_CRACK_DEBUG");
-            if (s_dbg)
-            {
-                std::fprintf(stderr, "[idle-crack] T%d plan %zu/%zu acts=%zu sibling=%s\n", state.turn_number, i, v.size(),
-                             c.actions.size(), j == v.size() ? "none" : "found");
-                if (j == v.size())
-                {
-                    for (std::size_t q = 0; q < v.size(); ++q)
-                    {
-                        if (v[q].actions == s.actions)
-                        { std::fprintf(stderr, "[idle-crack]   same-actions #%zu differs:%s\n", q, PbVerifyFieldDiff(v[q], s).c_str()); }
-                    }
-                }
-            }
-            if (j == v.size()) { continue; }   // no sibling without the crack: never fold onto nothing
-            g_idle_crack_tested.fetch_add(1, std::memory_order_relaxed);
-            GameState gc = state;
-            ApplyPlanDirect(gc, probe_of(c), is_pre_combat);
-            GameState gs = state;
-            ApplyPlanDirect(gs, probe_of(v[j]), is_pre_combat);
-            ApplySacForMana(gs, gs.active_player_index, crack.sac_source_id,
-                            TurnSolver::SacFloatColorFor(gs, c.actions, crack), crack.ritual_float,
-                            crack.sac_victim_id);
-            if (s_dbg)
-            {
-                std::fprintf(stderr, "[idle-crack]   keys %s  C: pool=%d bf=%zu  S+crack: pool=%d bf=%zu\n",
-                             BuildDedupKey(gs) == BuildDedupKey(gc) ? "EQUAL" : "differ", gc.floating_mana.Total(),
-                             gc.battlefield.size(), gs.floating_mana.Total(), gs.battlefield.size());
-            }
-            if (BuildDedupKey(gs) == BuildDedupKey(gc))
-            {
-                drop[i] = 1;
-                g_idle_crack_folded.fetch_add(1, std::memory_order_relaxed);
-            }
-        }
-    }
-    std::size_t w = 0;
-    for (std::size_t i = 0; i < v.size(); ++i) { if (!drop[i]) { if (w != i) { v[w] = std::move(v[i]); } ++w; } }
-    v.resize(w);
-}
-void TurnSolver::IdleCrackFoldCounters(long long* tested, long long* folded)
-{ *tested = g_idle_crack_tested.load(); *folded = g_idle_crack_folded.load(); }
-std::vector<TurnSolver::Plan> TurnSolver::FoldIdleLandCracksForTest(const GameState& state, bool is_pre_combat,
-                                                                    std::vector<Plan> plans)
-{ FoldIdleLandCracks(state, is_pre_combat, plans, /*clear_land=*/false); return plans; }
-
 static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool is_pre_combat)
 {
     routetape::Suspend _rts;       // an enumeration's trial applies are not a route link's own resolutions
@@ -88425,7 +88307,6 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
         AppendHumanPlayLandsEdgePlans(state, plans);
         AppendHumanPlayDigPlans(state, plans);
         for (TurnSolver::Plan& p : plans) { p.land_decided = true; }
-        FoldIdleLandCracks(state, is_pre_combat, plans, /*clear_land=*/false);   // MTG_IDLE_CRACK_FOLD (no-drop menu)
         AppendBreakpointVariants(state, plans);
         // Sub-decision axes on the no-drop path, BOTH mains (unconditional since 2026-09-30, USER
         // HARD RULE docs/design/no-greedy-in-search-window.md). The interior m2 solve arrives here
@@ -89619,9 +89500,6 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
     // QR1: the tapland stable_sort above can interleave the human cycle-seed plans among the older ones again, and
     // the breakpoint fan below caps its base plans IN LIST ORDER (MTG_BP_MAXBASE) -- so restore "older plans
     // first" here, or the seeds take the fan an older plan always had (EldraziDisplacerFlicker claude_s16_gi15 T4).
-    // MTG_IDLE_CRACK_FOLD on the FULL land-tagged menu (the land-only baselines and the land-less plans live here,
-    // not in EnumeratePlans' list), before any breakpoint variant or axis is derived from a base plan.
-    FoldIdleLandCracks(state, is_pre_combat, all, /*clear_land=*/false);
     OrderHumanCycleSeedPlans(state, all);
     AppendBreakpointVariants(state, all);
     PbAxesAndTwins(state, is_pre_combat, all, pb_lazy);   // the axes, then the soulbond decline twins

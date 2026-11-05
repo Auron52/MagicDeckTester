@@ -1389,6 +1389,18 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         }
         return false;
     }();
+    // ON-DEMAND sac-for-mana sources (GameState::deck_has_ondemand_sac): MAINBOARD ONLY, the Moraug
+    // reasoning -- the stamp moves the source from the plan enumerator to the payer, a behaviour. A
+    // conjured Black Lotus (Garth) is not in the list, so FiveColour keeps its own conjure-and-crack route.
+    state.deck_has_ondemand_sac = [&deck]{
+        if (!heurarm::Flag(heurarm::SAC_ON_DEMAND, EnvOn("MTG_SAC_ON_DEMAND", true))) { return false; }   // A/B ONLY
+        for (const Card& c : deck.mainboard)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d && IsOnDemandSacDef(*d)) { return true; }
+        }
+        return false;
+    }();
     // ETB-cascade presence gates (see the block on GameState). FireEtbWatchers walks the whole
     // battlefield once for devotion, once per player for ascend and once to count Dragons, on
     // EVERY permanent that enters -- O(enters x battlefield), quadratic for a token deck, and 45%

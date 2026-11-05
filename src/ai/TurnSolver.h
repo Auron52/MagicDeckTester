@@ -2661,14 +2661,8 @@ public:
     // reports: [0] F2 exactly sized fans, [1] F3 mirror ranks declined, [2] F4 stranding ranks declined, [3] F5
     // cross-base ranks declined, [4] Q36 seed variants not emitted. Monotonic; a caller diffs around its work.
     static void              SoundFoldCounters(long long out[5]);
-    // The idle land-crack fold (MTG_IDLE_CRACK_FOLD, TurnSolver.cpp FoldIdleLandCracks): process-wide counts of
-    // crack plans tested against a crack-less sibling and folded onto it. Monotonic.
-    static void              IdleCrackFoldCounters(long long* tested, long long* folded);
     // Test hook: every crossing BoundaryFan makes from `state` -> (Profane-fetch pin recorded or -1, hand.front()).
     static std::vector<std::pair<int, std::string>> SuspendTutorBoundaryForTest(const GameState& state);
-    // Test hook: run the fold over an explicit plan list (the list EnumeratePlans would return).
-    static std::vector<Plan> FoldIdleLandCracksForTest(const GameState& state, bool is_pre_combat,
-                                                       std::vector<Plan> plans);
     // True inside a horizon playout -- beyond the search window, where a greedy policy is permitted.
     static bool              InRolloutPlayout();
     // True inside the depth-0 executor's greedy pick (a GreedyPermit(D0Runner) is live) -- the

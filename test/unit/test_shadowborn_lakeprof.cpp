@@ -1,13 +1,14 @@
 // Shadowborn Apostle, s7 budget miss follow-up (2026-11-04; docs/design/analysis-Shadowborn Apostle.md,
 // "Lake fold + Profane fetch timing"):
-//   * MTG_IDLE_CRACK_FOLD -- a plan that cracks Lake of the Dead for mana it never needs folds onto the
-//     same plan without the crack (a SOUND identity fold), and a crack whose mana a cast spends is kept.
+//   * ON-DEMAND sac-for-mana (superseded MTG_IDLE_CRACK_FOLD, deleted with the Lake's SacForMana action) --
+//     the payer cracks Lake of the Dead / Lotus Bloom only when a cost cannot be paid without it.
 //   * MTG_PROFANE_RESOLVE_FAN -- Profane Tutor's off-suspend fetch is decided where the search crosses
 //     into the upkeep it resolves at (BoundaryFan), never staged as a main-phase plan variant.
 #include <doctest/doctest.h>
 
 #include "ai/DecisionProviders.h"
 #include "ai/HeuristicArm.h"
+#include "ai/ManaPayment.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
 #include "core/GameState.h"
@@ -82,33 +83,39 @@ int CountCrackPlans(const std::vector<TurnSolver::Plan>& v)
 { return static_cast<int>(std::count_if(v.begin(), v.end(), PlanCracks)); }
 }   // namespace
 
-TEST_CASE("Idle crack fold: a Lake crack nothing spends is not offered; with the lever off it is")
+// ---- ON-DEMAND sac-for-mana (docs/design/sac-for-mana-on-demand.md, USER 2026-11-04: "it should be on-demand
+// and only done that way"). The payer cracks Lake of the Dead / Lotus Bloom only when the cost cannot be paid
+// without it; no plan carries a SacForMana action for either.
+namespace
+{
+int CountPerm(const GameState& s, const std::string& name)
+{
+    int n = 0;
+    for (const Permanent& p : s.battlefield) { if (p.card.m_name.str() == name) { ++n; } }
+    return n;
+}
+bool PayLp(GameState& s, int generic, int black, int red = 0)
+{
+    ManaCost c; c.generic = generic; c.black = black; c.red = red;
+    return TapForCostShared(s, c, /*for_creature=*/false, nullptr, true);
+}
+}   // namespace
+
+TEST_CASE("On-demand Lake: not cracked when the lands pay, and its plain tap is the last resort")
 {
     // The fold is measured alone: the Shadowborn ritual-payoff prune (default ON) drops an unspent crack too, and the
     // main-1 rule folds main-1 casts, so both are pinned off here.
     ArmScope rp(heurarm::SB_RITUAL_PAYOFF, false), m1r(heurarm::SB_MAIN1_RULE, false);
     GameState s = BaseLp();
     s.battlefield.push_back(PermLp("Lake of the Dead", 80));
-    s.battlefield.push_back(PermLp("Swamp", 81));
-    s.players[0].hand.push_back(PlaceholderLp("Abhorrent Overlord", 82));   // {5}{B}{B}: unreachable either way
-    int off = 0, on = 0;
-    {
-        ArmScope a(heurarm::IDLE_CRACK_FOLD, false);
-        off = CountCrackPlans(TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true));
-    }
-    long long t0 = 0, f0 = 0, t1 = 0, f1 = 0;
-    TurnSolver::IdleCrackFoldCounters(&t0, &f0);
-    {
-        ArmScope a(heurarm::IDLE_CRACK_FOLD, true);
-        on = CountCrackPlans(TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true));
-    }
-    TurnSolver::IdleCrackFoldCounters(&t1, &f1);
-    CHECK(off >= 1);   // the waste exists without the fold
-    CHECK(on == 0);    // ...and every copy of it folds onto its crack-less sibling
-    CHECK(f1 > f0);
+    for (int i = 0; i < 3; ++i) { s.battlefield.push_back(PermLp("Swamp", 81 + i)); }
+    REQUIRE(PayLp(s, 1, 1));                     // {1}{B}
+    CHECK(CountPerm(s, "Swamp") == 3);           // no Swamp sacrificed
+    CHECK_FALSE(s.battlefield[0].tapped);        // the Lake held: its crack stays available
+    CHECK(s.floating_mana.Total() == 0);
 }
 
-TEST_CASE("Idle crack fold: the identity test keeps a crack whose float pays a cast, and needs the sibling")
+TEST_CASE("On-demand Lake: cracked when the cost needs it, and the surplus floats")
 {
     // The fold is measured alone: the Shadowborn ritual-payoff prune (default ON) drops an unspent crack too, and the
     // main-1 rule folds main-1 casts, so both are pinned off here.
@@ -116,31 +123,58 @@ TEST_CASE("Idle crack fold: the identity test keeps a crack whose float pays a c
     GameState s = BaseLp();
     s.battlefield.push_back(PermLp("Lake of the Dead", 80));
     s.battlefield.push_back(PermLp("Swamp", 81));
-    s.battlefield.push_back(PermLp("Swamp", 82));
-    s.players[0].hand.push_back(PlaceholderLp("Demonic Tutor", 83));
-    ArmScope a(heurarm::IDLE_CRACK_FOLD, true);
-    std::vector<TurnSolver::Plan> all;
-    {
-        ArmScope off(heurarm::IDLE_CRACK_FOLD, false);
-        all = TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true);
-    }
-    // The crack + Demonic Tutor plan leaves a Swamp UNTAPPED and three {B} floating; its sibling taps both Swamps:
-    // the end states differ, so the fold keeps it (the float can fund the tutored card's cast this phase).
-    std::vector<TurnSolver::Plan> crack_dt;
+    // Plain: Lake + Swamp = 2. Crack: the Swamp's own {B} (tapped before it goes) + {B}{B}{B}{B} = 5.
+    REQUIRE(PayLp(s, 2, 1));                     // {2}{B}
+    CHECK(CountPerm(s, "Swamp") == 0);
+    CHECK(CountPerm(s, "Lake of the Dead") == 1);
+    CHECK(s.floating_mana.Total() == 2);         // leftover rule: the rest floats for the phase
+}
+
+TEST_CASE("On-demand Lake: the crack and the plain tap are exclusive")
+{
+    GameState s = BaseLp();
+    s.battlefield.push_back(PermLp("Lake of the Dead", 80));
+    s.battlefield.push_back(PermLp("Swamp", 81));
+    const GameState before = s;
+    CHECK_FALSE(PayLp(s, 4, 2));                 // 6 > 5: plain {B} on top of the crack is not on offer
+    CHECK(s.battlefield.size() == before.battlefield.size());
+    CHECK(s.floating_mana.Total() == 0);
+    for (std::size_t i = 0; i < s.battlefield.size(); ++i) { CHECK_FALSE(s.battlefield[i].tapped); }
+}
+
+TEST_CASE("On-demand Lotus Bloom: kept when the lands pay; pays a colour no land makes")
+{
+    GameState s = BaseLp();
+    s.battlefield.push_back(PermLp("Lotus Bloom", 70));
+    s.battlefield.push_back(PermLp("Swamp", 71));
+    s.battlefield.push_back(PermLp("Swamp", 72));
+    REQUIRE(PayLp(s, 1, 1));
+    CHECK(CountPerm(s, "Lotus Bloom") == 1);
+    GameState t = BaseLp();
+    t.battlefield.push_back(PermLp("Lotus Bloom", 70));
+    t.battlefield.push_back(PermLp("Swamp", 71));
+    REQUIRE(PayLp(t, 0, 1, 2));                  // {B}{R}{R}: the red only the Lotus can make
+    CHECK(CountPerm(t, "Lotus Bloom") == 0);
+    CHECK(t.floating_mana.red == 1);             // three of ONE colour: one red floats on
+    CHECK(t.floating_mana.Total() == 1);
+}
+
+TEST_CASE("On-demand: no SacForMana plan action for Lake / Lotus, and a cast that needs the crack is offered")
+{
+    GameState s = BaseLp();
+    s.battlefield.push_back(PermLp("Lake of the Dead", 80));
+    for (int i = 0; i < 3; ++i) { s.battlefield.push_back(PermLp("Swamp", 81 + i)); }
+    s.battlefield.push_back(PermLp("Lotus Bloom", 85));
+    s.players[0].hand.push_back(FullCardLp("Abhorrent Overlord", 86));   // {5}{B}{B}
+    const std::vector<TurnSolver::Plan> all = TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true);
+    CHECK(CountCrackPlans(all) == 0);
+    bool overlord = false;
     for (const TurnSolver::Plan& p : all)
     {
-        bool dt = false;
-        for (const Action& x : p.actions) { if (x.kind == Action::Kind::CastFromHand && x.card_name.str() == "Demonic Tutor") { dt = true; } }
-        if (dt && PlanCracks(p)) { crack_dt.push_back(p); }
+        for (const Action& x : p.actions)
+        { if (x.kind == Action::Kind::CastFromHand && x.card_name.str() == "Abhorrent Overlord") { overlord = true; } }
     }
-    REQUIRE_FALSE(crack_dt.empty());
-    const std::vector<TurnSolver::Plan> folded = TurnSolver::FoldIdleLandCracksForTest(s, true, all);
-    for (const TurnSolver::Plan& p : crack_dt) { CHECK(std::find(folded.begin(), folded.end(), p) != folded.end()); }
-    // A lone crack plan (no sibling without it) is never folded onto nothing.
-    std::vector<TurnSolver::Plan> lone;
-    for (const TurnSolver::Plan& p : all) { if (PlanCracks(p) && p.actions.size() == 1) { lone.push_back(p); } }
-    REQUIRE(lone.size() == 1);
-    CHECK(TurnSolver::FoldIdleLandCracksForTest(s, true, lone).size() == 1);
+    CHECK(overlord);
 }
 
 namespace
