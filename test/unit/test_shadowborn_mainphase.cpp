@@ -474,3 +474,61 @@ TEST_CASE("SB ritual payoff: a Dark Ritual that nothing spends is pruned; Ritual
     CHECK(on.first == 0);
     CHECK(on.second > 0);
 }
+
+// The granter phantom (held-out 50047 gi46 T1 main 2): {Thrumming Stone, Dark Ritual} on one Swamp passed the flat sum
+// on the Ritual's ripple-chain credit, which needs the Stone out first; the executor cast the Ritual for nothing.
+TEST_CASE("SB ritual payoff: a granter that only the ritual's own ripple credit could pay is a phantom, pruned")
+{
+    SearchedM sp;
+    auto stone_plans = [](int on)
+    {
+        ArmM arm; arm.Set(heurarm::SB_RITUAL_PAYOFF, on);
+        GameState s = BaseM(1);
+        s.turn_number = 1;
+        s.phase = Phase::PostCombatMain;
+        s.players[0].lands_played_this_turn = 1;
+        s.players[0].hand.push_back(CardM(kStoneM, 60));
+        s.players[0].hand.push_back(CardM(kRitM, 61));
+        LibM(s, { kRitM, kRitM, kSwM, kSwM, kSwM, kSwM, kSwM, kSwM });
+        int n = 0;
+        for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/false))
+        { if (CastsName(p, kStoneM)) { ++n; } }
+        return n;
+    };
+    MESSAGE("Stone plans on one Swamp: off ", stone_plans(0), ", on ", stone_plans(1));
+    CHECK(stone_plans(1) == 0);
+    // Three Swamps: Ritual (BBB) + two Swamps = 5 pays the Stone -> the line stays.
+    ArmM arm; arm.Set(heurarm::SB_RITUAL_PAYOFF, 1);
+    GameState t = BaseM(3);
+    t.phase = Phase::PostCombatMain;
+    t.players[0].lands_played_this_turn = 1;
+    t.players[0].hand.push_back(CardM(kStoneM, 60));
+    t.players[0].hand.push_back(CardM(kRitM, 61));
+    LibM(t, { kRitM, kSwM, kSwM, kSwM, kSwM, kSwM });
+    int n = 0;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(t, false)) { if (CastsName(p, kStoneM) && CastsName(p, kRitM)) { ++n; } }
+    CHECK(n > 0);
+}
+
+// The unreachable activation (held-out 50047 gi46 T2 main 2): {Dark Ritual, sacrifice-six} with one Apostle out and no
+// granter -- the activation cannot resolve, so the Ritual has no sink.
+TEST_CASE("SB ritual payoff: a sacrifice-six activation the six cannot reach is no sink for a ritual")
+{
+    SearchedM sp;
+    auto ritual_plans = [](int on, int apostles)
+    {
+        ArmM arm; arm.Set(heurarm::SB_RITUAL_PAYOFF, on);
+        GameState s = BaseM(2);
+        s.phase = Phase::PostCombatMain;
+        s.players[0].lands_played_this_turn = 1;
+        for (int k = 0; k < apostles; ++k) { s.battlefield.push_back(PermM(kApM, 20 + k)); }
+        s.players[0].hand.push_back(CardM(kRitM, 61));
+        LibM(s, { kJetM, kOverM, kSwM, kSwM, kSwM, kSwM });
+        int n = 0;
+        for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/false))
+        { if (CastsName(p, kRitM)) { ++n; } }
+        return n;
+    };
+    MESSAGE("Ritual plans, one Apostle: off ", ritual_plans(0, 1), ", on ", ritual_plans(1, 1));
+    CHECK(ritual_plans(1, 1) == 0);
+}

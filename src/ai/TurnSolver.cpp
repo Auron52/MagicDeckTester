@@ -14299,15 +14299,86 @@ static ReducerSinkCtx BuildReducerSinkCtx(const GameState& state)
 // ritual left in hand is at least as good. A ritual cast under a ripple granter is no exception: the cards its reveal
 // casts are rituals of the same name (their mana unspent too), and its value as a dig is the clairvoyant one the USER
 // ruled out (2026-11-05). Erring wide: a subset whose ritual float goes unspent BESIDE a paid cast is kept.
-static bool SubsetRitualSpendsNothing(const std::vector<Action>& cands, const std::vector<int>& sel)
+//
+// THE GRANTER PHANTOM (same lever; held-out 50047 gi46 T1 main 2, the main-1 rule's "Dark Ritual cast for nothing"):
+// {Thrumming Stone, Dark Ritual} on ONE Swamp passed the flat payability sum because the Ritual's ripple pin credits its
+// chain (ripple_chain_float) -- but the chain fires only once the granter is OUT, and the granter cannot be paid without
+// that very credit. The executor cast the Ritual, could not pay the Stone, and the realised line was "Ritual for
+// nothing". So a subset that casts a ripple granter (none on our battlefield) is also dropped when the granter's cost
+// exceeds the most mana that can exist before it resolves: `pool` (the enumeration's own supply) plus every mana
+// action's net output WITHOUT its chain credit (nothing ripples before the granter is out). That bound ignores every
+// other cast's cost, so it is an upper bound and the drop is sound: the subset can only realise one of its own
+// prefixes, which the list holds on its own.
+//
+// THE UNREACHABLE ACTIVATION (same game, T2 main 2 once the above was fixed): {Dark Ritual, Apostle activation} with ONE
+// Apostle on the battlefield. The sacrifice-six activation is emitted ahead of the bodies (a cast chain can bring them
+// mid-plan), so it read as the Ritual's sink; with no granter live and too few bodies it fails at the executor and the
+// Ritual is again cast for nothing. A sac-named activation therefore counts as spending only when the six can be there:
+// `named_bf` (sac-named creatures on our battlefield) plus the subset's sac-named casts reach sac_named_count, or a
+// ripple granter is live (on the battlefield, or cast by the subset).
+static bool SubsetRitualSpendsNothing(const std::vector<Action>& cands, const std::vector<int>& sel,
+                                      const ManaPool* pool = nullptr, bool granter_bf = true, int named_bf = 1 << 20)
 {
-    bool has_ritual = false;
+    bool has_ritual = false, spends = false;
+    // The sac-named activations' reachability (see above): casts of sac-named creatures and granters in the subset.
+    int named_casts = 0;
+    bool granter_cast = false;
     for (int j : sel)
     {
-        if (cands[j].ritual_float > 0) { has_ritual = true; continue; }
-        if (cands[j].cost.ManaValue() > 0) { return false; }
+        const Action& a = cands[j];
+        if (a.kind != Action::Kind::CastFromHand || a.def == nullptr) { continue; }
+        if (a.def->params.grants_ripple > 0) { granter_cast = true; }
+        if (a.def->card.IsCreature() && a.def->params.sac_named_count > 0) { ++named_casts; }
     }
-    return has_ritual;
+    long long pre_granter = pool != nullptr ? static_cast<long long>(pool->Total()) : 0;
+    int granter_cost = -1;
+    for (int j : sel)
+    {
+        const Action& a = cands[j];
+        if (a.ritual_float > 0)
+        {
+            has_ritual = true;
+            const long long net = static_cast<long long>(a.ritual_float) - a.ripple_chain_float - a.cost.ManaValue();
+            if (net > 0) { pre_granter += net; }
+            continue;
+        }
+        if (a.cost.ManaValue() > 0)
+        {
+            const bool sac_named = a.kind == Action::Kind::ActivatePermAbility
+                                && a.ability_mode == Action::AbilityMode::SacNamedTutorPut && a.def != nullptr;
+            if (!sac_named || granter_bf || granter_cast || named_bf + named_casts >= a.def->params.sac_named_count)
+            { spends = true; }
+        }
+        if (!granter_bf && a.kind == Action::Kind::CastFromHand && a.def != nullptr && a.def->params.grants_ripple > 0)
+        { granter_cost = std::max(granter_cost, a.cost.ManaValue()); }
+    }
+    if (!has_ritual) { return false; }
+    if (!spends) { return true; }
+    return pool != nullptr && granter_cost > 0 && pre_granter < granter_cost;
+}
+// A ripple granter on `me`'s battlefield (the phantom test above needs none there).
+static int SacNamedCreaturesOnBattlefield(const GameState& s)
+{
+    const int me = s.active_player_index;
+    int n = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me || p.def_absent || !p.card.IsCreature()) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.sac_named_count > 0) { ++n; }
+    }
+    return n;
+}
+static bool RippleGranterOnBattlefield(const GameState& s)
+{
+    const int me = s.active_player_index;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.grants_ripple > 0) { return true; }
+    }
+    return false;
 }
 
 static bool SubsetWastesAccelerant(const std::vector<Action>& cands, const std::vector<int>& sel,
@@ -52978,6 +53049,8 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     const bool payoff_prune_on = ResolveProvider(state).PrunesAcceleratorWithoutPayoff();
     const bool ritual_spend_prune_on = ResolveProvider(state).PrunesRitualWithoutSpend()
                                     && !DecisionUnpruned(UnprunedGate::PayoffPrune);
+    const bool ritual_spend_granter_bf = ritual_spend_prune_on && RippleGranterOnBattlefield(state);
+    const int  ritual_spend_named_bf   = ritual_spend_prune_on ? SacNamedCreaturesOnBattlefield(state) : 0;
     // The two sac filters read the per-candidate source table when it was built; nullptr / -1 keep
     // their original in-loop board resolution (see SubsetFilterPre).
     const std::vector<const CardDefinition*>* sac_tab =
@@ -53494,7 +53567,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             && SubsetWastesAccelerant(cands, sel, storm_in_hand)) { return; }
         // ...and its SPEND form (PrunesRitualWithoutSpend; Shadowborn): a ritual whose mana nothing in the subset
         // spends. Lockstep twin in EnumeratePlans.
-        if (ritual_spend_prune_on && SubsetRitualSpendsNothing(cands, sel)) { return; }
+        if (ritual_spend_prune_on && SubsetRitualSpendsNothing(cands, sel, &pool, ritual_spend_granter_bf, ritual_spend_named_bf)) { return; }
         // Reject two SacForMana of the same source (its colour variants are mutually exclusive). Inert
         // without a SacForMana action (Lotus Bloom) -> byte-identical.
         if (pre.dup_source
@@ -72510,6 +72583,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     const bool payoff_prune_on = ResolveProvider(state).PrunesAcceleratorWithoutPayoff();
     const bool ritual_spend_prune_on = ResolveProvider(state).PrunesRitualWithoutSpend()
                                     && !DecisionUnpruned(UnprunedGate::PayoffPrune);
+    const bool ritual_spend_granter_bf = ritual_spend_prune_on && RippleGranterOnBattlefield(state);
+    const int  ritual_spend_named_bf   = ritual_spend_prune_on ? SacNamedCreaturesOnBattlefield(state) : 0;
     // ...and the reducer sink's "is a ritual needed?" facts (MTG_PAYOFF_REDUCER_SINK_NEEDED), once per
     // enumeration; only the branch-list prune below reads them.
     const ReducerSinkCtx reducer_ctx = payoff_prune_on ? BuildReducerSinkCtx(state) : ReducerSinkCtx{};
@@ -73406,7 +73481,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             && SubsetWastesAccelerant(cands, sel, /*storm_in_hand=*/false, /*search_branch_list=*/true,
                                       &reducer_ctx)) { return; }
         // ...and its SPEND form (PrunesRitualWithoutSpend; Shadowborn). Lockstep twin of Solve's.
-        if (ritual_spend_prune_on && SubsetRitualSpendsNothing(cands, sel)) { return; }
+        if (ritual_spend_prune_on && SubsetRitualSpendsNothing(cands, sel, &pool, ritual_spend_granter_bf, ritual_spend_named_bf)) { return; }
         // Reject two SacForMana of the same source (mutually-exclusive colour variants). Inert
         // without a SacForMana action -> byte-identical.
         if (pre.dup_source
