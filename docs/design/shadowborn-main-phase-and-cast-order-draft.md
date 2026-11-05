@@ -390,3 +390,83 @@ shipped and split 1/10 short (s7), every order arm 0/10 short.
 4. The main-1 rule's standalone losses (a Dark Ritual cast for nothing in T1 main 2): *"Hmm... We might want to prune
    rituals with no payoff like we have for other decks."* -> add the ritual-without-payoff prune for this deck,
    reusing the existing mechanism other decks use.
+
+## 9. Built 2026-11-05 (branch `sb-mainphase`, local; every lever still DEFAULT OFF, pending the USER)
+
+USER rulings received this session (verbatim, in order):
+* *"I don't care about rippling to skip non-apostles. That is clear clairvoyance as you wouldn't do it if you didn't
+  know what the top 4 are."*
+* *"That makes sense."* (Culling's narrow victim rule)
+* *"Yeah, overall we might even find that pruning the overlord main-2 if we played Jetmir in main-1 is actually the
+  correct course of action. Alternatively we could have the Jetmir activation in Main-1 cause us to move the Overlord
+  activation before it? That is a better option if we want it. Overlord in Main-2 i worse in the case where we drop
+  Jetmir in Main-1."*
+* *"Hmm... We might want to prune rituals with no payoff like we have for other decks."*
+* *"We shouldn't do anything heavy for now as we have another agent running."* / *"(another agent running on a
+  separate container)"*
+* *"No, I don't want you to worry about making the decision blind for ripple. We should just not worry about the
+  impacts of clairvoyance on our rules."*
+* *"You can use non-clairvoyant search and analysis to determine whether it is clairvoyance."*
+* *"My actual suggestion for Overlord is to move it wherever it needs to go to be before Jetmir. It should be in main-1
+  if Jetmir is there and main-2 otherwise."*
+
+**A. `MTG_SB_STONE_FIRST` deleted** (code, heurarm slot, test). The USER's order stands.
+
+**B. Ripple clairvoyance: NOT built (USER: do not make the ripple decision blind).** Diagnosis kept for the record:
+with Thrumming Stone in HAND, `EmitRipplePins` emits each ritual cast both as `kRippleRevealAll` (needs a granter cast
+in the plan) and as the requirement-free `B = 0` twin, and a plan that casts the Stone ahead of the Ritual admits
+either, so the search picks "reveal" or "don't reveal" by reading the top four. Under the shipped order (Stone rank 1,
+Ritual rank 15) that is the clairvoyant Ritual ripple-dig the USER ruled out; the USER's order (Ritual first) never
+reaches it.
+
+**C. Overlord placement** (`SbJetmirArrivedThisTurn`, `SbMain1JetmirCanFollow`). Once Jetmir has arrived this turn
+(`entered_this_turn`; exact in this list, nothing puts him in play outside a main) no Overlord fetch or hard cast is
+offered for the rest of the turn (either lever). Under `MTG_SB_MAIN1_RULE` a MAIN-1 Overlord is offered only when
+Jetmir is there in main 1 (on the battlefield with an attacker, or still deployable this main: an attacker, Jetmir in
+the library, and the bodies for a further six), and on an attack turn main 1 offers the Overlord AHEAD of Jetmir when
+both sixes can be had. Everything else is a main-2 Overlord. Residual (erring wide): a main-1 Overlord whose follow-up
+Jetmir the search then declines is not refused, so that line can appear in both mains.
+
+**D. Ritual without a payoff** (`MTG_SB_RITUAL_PAYOFF`, `DecisionProvider::PrunesRitualWithoutSpend`, the spend form of
+the Dragonstorm payoff prune at its two lockstep sites). Drops a subset that casts a ritual (Dark Ritual, Culling, a
+Lake crack) and spends mana on nothing else, plus the two phantom sinks found in held-out 50047 gi46: a ripple granter
+only the ritual's own chain credit could pay (T1 `{Stone, Ritual}` on one Swamp), and a sacrifice-six activation the
+six cannot reach (T2 `{Ritual, activation}` with one Apostle, no granter). Re-check of the main-1 rule's standalone
+losses (d5 b20 and d8 b0, one game at a time):
+
+| game | shipped | main-1 | main-1 + ritual prune | main-1 + order + ritual prune |
+|---|---|---|---|---|
+| 50033 gi32 | 3 | 4 | 4 (d8b0 4) | 3 |
+| 50047 gi46 | 4 | 5 | 5 (d8b0 5) | 4 |
+| 50116 gi115 | 5 | 6 | 6 (d8b0 6) | 5 |
+| 50329 gi328 | 6 | 7 | 7 (d8b0 7) | 6 |
+| 60245 gi244 | 5 | 6 | 6 (d8b0 6) | 5 |
+
+The prune removes the wasted Rituals (gi46 casts none on T1/T2) but does not recover these five under the main-1 rule
+ALONE: in gi46 the T3 main-2 line lands "Ritual, Ritual, Stone" without the Apostle (shipped: Ritual, Ritual, Stone in
+main 1 + Apostle in main 2), so the chain starts a turn later. NOT root-caused. All five recover with the cast order on.
+
+**Clairvoyance classification of the order's slower games (§7)**, non-clairvoyant tool = the known-respecting blind
+search (`MTG_SEARCH_BLIND_UNKNOWN=1`, salts 1..16), shipped vs USER order, d5 b20, one game at a time
+(`logs/sb-mainphase/blinddig.py`). "dig" = the shipped line casts Dark Ritual after Thrumming Stone (the ripple-dig):
+
+| game | clairvoyant shipped / order | blind: salts where shipped digs | blind shipped avg (dig / no-dig) | blind order avg | verdict |
+|---|---|---|---|---|---|
+| 50002 gi1 | 4 (dig) / 5 | 5 of 16 | 4.00 / 5.00 | 5.00 | clairvoyance-only |
+| 50167 gi166 | 4 (dig) / 5 | 3 | 4.00 / 6.46 | 7.38 | dig clairvoyant; residual gap without it -> UNRESOLVED |
+| 50264 gi263 | 4 (dig) / 5 | 6 | 5.50 / 7.00 | 7.00 | clairvoyance-only |
+| 50266 gi265 | 4 (dig) / 5 | 5 | 4.00 / 8.36 | 8.38 | clairvoyance-only |
+| 50373 gi372 | 4 (dig) / 5 | 2 | 6.50 / 8.14 | 7.62 | clairvoyance-only |
+| 60023 gi22 | 4 (dig) / 5 | 0 | - / 6.06 | 6.94 | dig never chosen blind; residual gap -> UNRESOLVED |
+| 60095 gi94 | 5 (dig) / 6 | 0 | - / 8.06 | 8.06 | clairvoyance-only |
+| 60165 gi164 | 4 (no dig) / 5 | 0 | - / 7.81 | 7.94 | no dig; blind tie -> inconclusive |
+
+Caveat: the blind machinery plays far worse than the clairvoyant search here (many blind games unwon by T8), so the
+blind averages are noisy; gi166 and gi22 need a look before they are called real rule losses.
+
+**F. Prepared, NOT run** (USER: nothing heavy). Manifest `build/scratch/sb-mainphase/ab7/manifest.json` (480 jobs,
+4,800 games: arms shipped / split / split+rit / order / both / both+rit, sets 50001 and 60001, 400 paired games
+each, d5 b20, max 8; binary `ab7/mtg.ab` = commit in `ab7/COMMIT`). Run from the worktree root:
+`build/scratch/.../ab7/mtg.ab --batch <ab7>/manifest.json --threads 32 --game-log-dir <ab7>/games > <ab7>/batch.stdout 2> <ab7>/batch.stderr`
+then `python3 logs/sb-mainphase/ab5.py report <ab7>`; repro each slower game at `--depth 8 --budget-ms 0`
+(`logs/sb-mainphase/recheck.py 8 0 ...`) and classify the order arm's with `blinddig.py`.
