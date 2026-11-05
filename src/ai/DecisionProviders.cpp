@@ -58636,13 +58636,13 @@ bool ShadowbornProvider::FreeCastTakeDominated(const GameState& /*s*/, int /*con
 static bool SbCastOrderOn()
 {
     // The USER's cast order (2026-11-04). =1 / =0 select the arm; see the default note at the read.
-    static const bool on = EnvOn("MTG_SB_CAST_ORDER");
+    static const bool on = EnvOn("MTG_SB_CAST_ORDER", true);
     return heurarm::Flag(heurarm::SB_CAST_ORDER, on);
 }
 static bool SbMain1RuleOn()
 {
     // The USER's main-1 rule (2026-11-04). =1 / =0 select the arm; see the default note at the read.
-    static const bool on = EnvOn("MTG_SB_MAIN1_RULE");
+    static const bool on = EnvOn("MTG_SB_MAIN1_RULE", true);
     return heurarm::Flag(heurarm::SB_MAIN1_RULE, on);
 }
 static bool SbPrunesOn();   // ShadowbornPrunesOn, below (the viewer and the MTG_UNPRUNED audit arm keep the full menus)
@@ -58754,8 +58754,8 @@ int ShadowbornProvider::CastOrderRank(const GameState& s, const CardDefinition& 
 bool ShadowbornProvider::CastOrderTotalByName() const { return SbCastOrderOn(); }
 bool ShadowbornProvider::PrunesRitualWithoutSpend() const
 {
-    // The USER's ritual-payoff prune (2026-11-05). =1 / =0 select the arm; DEFAULT OFF pending the USER.
-    static const bool on = EnvOn("MTG_SB_RITUAL_PAYOFF");
+    // The USER's ritual-payoff prune (2026-11-05). =1 / =0 select the arm; DEFAULT ON (2026-11-05: ab7 -0.035 turns, -14..-20% units; every unrecovered game is the clairvoyant ripple-dig the USER ruled out).
+    static const bool on = EnvOn("MTG_SB_RITUAL_PAYOFF", true);
     return heurarm::Flag(heurarm::SB_RITUAL_PAYOFF, on) && SbPrunesOn();
 }
 void ShadowbornProvider::ArrangeCastOrder(const GameState& /*s*/, const std::vector<Action>& actions,
