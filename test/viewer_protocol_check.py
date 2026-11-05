@@ -44,7 +44,7 @@ test/regression.sh runs the full sweep --strict (threaded) in REGRESSION mode --
 three: this is a whole-corpus replay, so re-running it in smoke and overnight re-measured the same
 thing (VPC_ALWAYS=1 forces it in any mode, VPC_SKIP=1 skips it).
 """
-import collections, json, os, re, subprocess, sys, glob
+import collections, json, os, re, subprocess, sys, glob, time
 
 MTG = os.environ.get("MTG_BIN", "./build/Release/mtg")
 # The passive opponent's scheduled creatures ("1/1 Creature" spawns) carry card numbers from this
@@ -2047,6 +2047,40 @@ def emit_resolved(paths):
     return 0
 
 
+# Per-reference wall seconds from the last threaded sweep, used only to schedule the next one
+# most-expensive-first. Regenerable scratch (gitignored test/logs/); a missing or corrupt file just
+# means path order with unknown refs first.
+REF_TIMES = os.path.join("test", "logs", "viewer_protocol_ref_times.json")
+
+
+def _load_ref_times():
+    try:
+        with open(REF_TIMES) as f:
+            d = json.load(f)
+        return {k: float(v) for k, v in d.items()}
+    except (OSError, ValueError, AttributeError, TypeError):
+        return {}
+
+
+def _save_ref_times(prev, new):
+    merged = dict(prev)          # keep refs this run did not touch (--only, --sample)
+    merged.update(new)
+    try:
+        os.makedirs(os.path.dirname(REF_TIMES), exist_ok=True)
+        tmp = REF_TIMES + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(merged, f, indent=0, sort_keys=True)
+        os.replace(tmp, REF_TIMES)
+    except OSError as e:
+        print(f"[ref times not saved: {e}]", file=sys.stderr)
+
+
+def _timed_check(path):
+    t0 = time.monotonic()
+    r = check_reference(path)
+    return r, round(time.monotonic() - t0, 2)
+
+
 def main():
     if "--emit-resolved" in sys.argv[1:]:
         i = sys.argv.index("--emit-resolved")
@@ -2139,9 +2173,21 @@ def main():
              "shuffle-dead": "shuffle-dead  ", "board-diverged": "BOARD-DIVERGED", "unresolvable": "ENUM-GAP      ",
              "mulligan": "mull-drift    "}
     if threads > 1:
+        # MOST EXPENSIVE FIRST (USER 2026-11-05). Submitted in path order, the pool spent its last
+        # minutes with one or two slow replays running alone on an otherwise idle box (an EDF ref at
+        # the end of an 8-minute sweep). Longest-first lets the slow chains overlap the short ones.
+        # Cost = this ref's wall time from the previous run (REF_TIMES); a ref with no recorded time
+        # goes first, larger file first. Only the SUBMISSION order changes: results are still printed
+        # in ref order, so output and exit code are unchanged.
+        prev = _load_ref_times()
+        order = sorted(range(len(refs)),
+                       key=lambda i: (refs[i] in prev, -prev.get(refs[i], 0.0),
+                                      -os.path.getsize(refs[i])))
         from concurrent.futures import ThreadPoolExecutor
         with ThreadPoolExecutor(max_workers=threads) as ex:
-            results = list(ex.map(check_reference, refs))
+            timed = dict(zip(order, ex.map(_timed_check, [refs[i] for i in order])))
+        results = [timed[i][0] for i in range(len(refs))]
+        _save_ref_times(prev, {refs[i]: timed[i][1] for i in range(len(refs))})
     else:
         results = [check_reference(p) for p in refs]
     for path, (c_ok, kind, detail) in zip(refs, results):
