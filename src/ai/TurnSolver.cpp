@@ -14291,6 +14291,25 @@ static ReducerSinkCtx BuildReducerSinkCtx(const GameState& state)
     return rs;
 }
 
+// The SPEND form of the payoff prune (DecisionProvider::PrunesRitualWithoutSpend; Shadowborn, USER 2026-11-05: "We
+// might want to prune rituals with no payoff like we have for other decks."). True when the subset casts a mana ritual
+// (ritual_float > 0, ripple-chain credit included) and NOTHING else in it costs mana: the rituals' float has no sink in
+// this subset, and a subset of rituals, land-free mana cracks and free suspends opens no breakpoint continuation that
+// could spend it later in the phase. Floating mana empties at the end of the phase, so the same subset with every such
+// ritual left in hand is at least as good. A ritual cast under a ripple granter is no exception: the cards its reveal
+// casts are rituals of the same name (their mana unspent too), and its value as a dig is the clairvoyant one the USER
+// ruled out (2026-11-05). Erring wide: a subset whose ritual float goes unspent BESIDE a paid cast is kept.
+static bool SubsetRitualSpendsNothing(const std::vector<Action>& cands, const std::vector<int>& sel)
+{
+    bool has_ritual = false;
+    for (int j : sel)
+    {
+        if (cands[j].ritual_float > 0) { has_ritual = true; continue; }
+        if (cands[j].cost.ManaValue() > 0) { return false; }
+    }
+    return has_ritual;
+}
+
 static bool SubsetWastesAccelerant(const std::vector<Action>& cands, const std::vector<int>& sel,
                                    bool storm_in_hand, bool search_branch_list = false,
                                    const ReducerSinkCtx* reducer_ctx = nullptr)
@@ -52957,6 +52976,8 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     // Provider payoff-prune opt-in, hoisted out of consider(): it is a VIRTUAL call on a per-deck
     // provider, constant for the whole enumeration, and it used to be dispatched once per subset.
     const bool payoff_prune_on = ResolveProvider(state).PrunesAcceleratorWithoutPayoff();
+    const bool ritual_spend_prune_on = ResolveProvider(state).PrunesRitualWithoutSpend()
+                                    && !DecisionUnpruned(UnprunedGate::PayoffPrune);
     // The two sac filters read the per-candidate source table when it was built; nullptr / -1 keep
     // their original in-loop board resolution (see SubsetFilterPre).
     const std::vector<const CardDefinition*>* sac_tab =
@@ -53471,6 +53492,9 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         if (payoff_prune_on
             && !DecisionUnpruned(UnprunedGate::PayoffPrune)
             && SubsetWastesAccelerant(cands, sel, storm_in_hand)) { return; }
+        // ...and its SPEND form (PrunesRitualWithoutSpend; Shadowborn): a ritual whose mana nothing in the subset
+        // spends. Lockstep twin in EnumeratePlans.
+        if (ritual_spend_prune_on && SubsetRitualSpendsNothing(cands, sel)) { return; }
         // Reject two SacForMana of the same source (its colour variants are mutually exclusive). Inert
         // without a SacForMana action (Lotus Bloom) -> byte-identical.
         if (pre.dup_source
@@ -72484,6 +72508,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // Provider payoff-prune opt-in, hoisted out of eval_and_push: a virtual call, constant for the
     // enumeration, previously dispatched once per subset.
     const bool payoff_prune_on = ResolveProvider(state).PrunesAcceleratorWithoutPayoff();
+    const bool ritual_spend_prune_on = ResolveProvider(state).PrunesRitualWithoutSpend()
+                                    && !DecisionUnpruned(UnprunedGate::PayoffPrune);
     // ...and the reducer sink's "is a ritual needed?" facts (MTG_PAYOFF_REDUCER_SINK_NEEDED), once per
     // enumeration; only the branch-list prune below reads them.
     const ReducerSinkCtx reducer_ctx = payoff_prune_on ? BuildReducerSinkCtx(state) : ReducerSinkCtx{};
@@ -73379,6 +73405,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             && !DecisionUnpruned(UnprunedGate::PayoffPrune)
             && SubsetWastesAccelerant(cands, sel, /*storm_in_hand=*/false, /*search_branch_list=*/true,
                                       &reducer_ctx)) { return; }
+        // ...and its SPEND form (PrunesRitualWithoutSpend; Shadowborn). Lockstep twin of Solve's.
+        if (ritual_spend_prune_on && SubsetRitualSpendsNothing(cands, sel)) { return; }
         // Reject two SacForMana of the same source (mutually-exclusive colour variants). Inert
         // without a SacForMana action -> byte-identical.
         if (pre.dup_source

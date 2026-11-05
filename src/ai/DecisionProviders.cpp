@@ -58645,12 +58645,6 @@ static bool SbMain1RuleOn()
     static const bool on = EnvOn("MTG_SB_MAIN1_RULE");
     return heurarm::Flag(heurarm::SB_MAIN1_RULE, on);
 }
-static bool SbStoneFirstOn()
-{
-    // AGENT amendment (for USER review; see heurarm SB_STONE_FIRST): the granter ahead of the rituals. DEFAULT OFF.
-    static const bool on = EnvOn("MTG_SB_STONE_FIRST");
-    return heurarm::Flag(heurarm::SB_STONE_FIRST, on);
-}
 static bool SbPrunesOn();   // ShadowbornPrunesOn, below (the viewer and the MTG_UNPRUNED audit arm keep the full menus)
 static bool SbIsSacNamedCreature(const CardDefinition* d);   // below
 // A creature of `controller`'s that can attack THIS turn as far as sickness goes (CR 302.6) -- the tap is ignored, so
@@ -58670,26 +58664,68 @@ static bool SbIsDevotionDemon(const CardDefinition* d)
 {
     return d != nullptr && d->card.IsCreature() && !d->params.etb_tokens_per_devotion_color.empty();
 }
-// "Jetmir was fetched EARLIER IN THIS MAIN" (the activation order, MTG_SB_CAST_ORDER): the count anthem is on our
-// battlefield and entered this turn, and this main is the one it entered in. Before combat that is certain (nothing
-// puts it onto the battlefield in an upkeep). After combat it is certain only under the main-1 rule on a turn with
-// no attack-ready creature of ours left: such a turn's main 1 is land-only (Main1PlanAdmitted), so Jetmir entered
-// in main 2. Otherwise a main-2 state cannot tell a main-1 Jetmir from a main-2 one, and the main-1 one keeps its
-// main-2 Overlord (USER: "let the search determine that") -- so the test errs towards offering. Disclosed edge: a
-// main-1 Jetmir whose main 2 has lost every old creature (all of them sacrificed) reads as main 2 and loses the
-// main-2 Overlord fetch.
-static bool SbJetmirFetchedThisMain(const GameState& s, int controller, bool pre_combat)
+// "Jetmir arrived THIS TURN" (the activation order, MTG_SB_CAST_ORDER): the count anthem is on our battlefield and
+// entered this turn. USER 2026-11-05: "Overlord in Main-2 i worse in the case where we drop Jetmir in Main-1." and
+// (2026-11-04) "if we activate for Overlord and Jetmir they should remain in that order." Together: once Jetmir has
+// arrived this turn -- in main 1 or earlier in this main -- no Overlord (fetch or hard cast) follows him this turn; the
+// Overlord line is Overlord -> Jetmir inside one main. Nothing in this list puts Jetmir onto the battlefield outside a
+// main phase (the Apostle activation is sorcery-speed; Profane Tutor fetches to hand), so entered_this_turn is exact
+// for "arrived in a main this turn" with no per-main bookkeeping. A Jetmir that arrived and then LEFT the battlefield
+// the same turn (only a sacrifice of him, last in the deck's victim order) is not seen, so that turn keeps its
+// Overlord -- the prune errs towards offering, never the other way.
+static bool SbJetmirArrivedThisTurn(const GameState& s, int controller)
 {
-    bool jet_new = false, ready = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller || !p.entered_this_turn || p.def_absent) { continue; }
+        if (SbIsCountAnthem(CardDatabase::Instance().LookupCached(p.card))) { return true; }
+    }
+    return false;
+}
+
+// THE OVERLORD'S PLACEMENT (MTG_SB_MAIN1_RULE; USER 2026-11-05: "My actual suggestion for Overlord is to move it
+// wherever it needs to go to be before Jetmir. It should be in main-1 if Jetmir is there and main-2 otherwise."). A
+// MAIN-1 Overlord (the activation's fetch or the hard cast) is offered only when Jetmir is "there" in main 1: on the
+// battlefield already with an attack-ready creature of ours, or still deployable later in this main -- an attack-ready
+// creature (the main-1 rule's Jetmir turn), Jetmir in our library, and the bodies for a further six after this
+// Overlord (`fetch`: it eats six itself): enough sac-named creatures on the battlefield, or a way to add more before
+// combat (one in hand, a ripple granter on the battlefield with a nonland card in hand, a library tutor in hand).
+// Everything else is the out-of-place variant: its twin is the same Overlord after combat (main 2), which on an attack
+// turn also keeps the six attackers' damage. Erring wide: a main-1 Overlord whose follow-up Jetmir the search then
+// declines is not refused (the fold judges the state, not the rest of the line), so that line can still appear twice.
+static bool SbMain1JetmirCanFollow(const GameState& s, int controller, bool fetch)
+{
+    bool ready = false, jet_bf = false;
+    int apostles = 0, need = 6;
     for (const Permanent& p : s.battlefield)
     {
         if (p.controller_index != controller) { continue; }
         if (SbAttackReady(p, controller)) { ready = true; }
-        if (p.entered_this_turn && !p.def_absent && SbIsCountAnthem(CardDatabase::Instance().LookupCached(p.card)))
-        { jet_new = true; }
+        const CardDefinition* d = p.def_absent ? nullptr : CardDatabase::Instance().LookupCached(p.card);
+        if (SbIsCountAnthem(d)) { jet_bf = true; }
+        if (SbIsSacNamedCreature(d)) { ++apostles; need = d->params.sac_named_count; }
     }
-    if (!jet_new) { return false; }
-    return pre_combat || (SbMain1RuleOn() && !ready);
+    if (!ready) { return false; }   // no attacker: a main-1 Jetmir changes nothing this combat
+    if (jet_bf) { return true; }    // "if Jetmir is there"
+    bool jet_lib = false;
+    for (const Card& lc : s.players[static_cast<std::size_t>(controller)].library)
+    { if (SbIsCountAnthem(CardDatabase::Instance().LookupCached(lc))) { jet_lib = true; break; } }
+    if (!jet_lib) { return false; }
+    if (apostles - (fetch ? need : 0) >= need) { return true; }
+    bool granter_bf = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.grants_ripple > 0) { granter_bf = true; break; }
+    }
+    for (const Card& c : s.players[static_cast<std::size_t>(controller)].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr || d->card.IsLand()) { continue; }
+        if (SbIsSacNamedCreature(d) || IsLibraryTutor(d->params) || granter_bf) { return true; }
+    }
+    return false;
 }
 
 int ShadowbornProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
@@ -58699,9 +58735,6 @@ int ShadowbornProvider::CastOrderRank(const GameState& s, const CardDefinition& 
         // THE USER'S ORDER (2026-11-04), read off card data. The land drop is not a cast (it goes first).
         const CardParams& p = def.params;
         if (p.suspend_time_counters > 0) { return p.tutor_to_hand ? 11 : 12; }   // Profane Tutor : Lotus Bloom (suspend only)
-        // MTG_SB_STONE_FIRST (AGENT amendment, for the USER): the granter goes first, so a ritual cast after it
-        // ripples (a free four-card dig); the payable-order fallback still puts a ritual first when the Stone needs it.
-        if (p.grants_ripple > 0 && SbStoneFirstOn()) { return 0; }
         if (p.ritual_floating_mana > 0) { return p.sac_additional_creature ? 2 : 1; }   // Culling : Dark Ritual
         if (p.grants_ripple > 0) { return 3; }                                           // Thrumming Stone
         if (def.card.IsCreature())
@@ -58719,6 +58752,12 @@ int ShadowbornProvider::CastOrderRank(const GameState& s, const CardDefinition& 
     return DeckProvider::CastOrderRank(s, def);
 }
 bool ShadowbornProvider::CastOrderTotalByName() const { return SbCastOrderOn(); }
+bool ShadowbornProvider::PrunesRitualWithoutSpend() const
+{
+    // The USER's ritual-payoff prune (2026-11-05). =1 / =0 select the arm; DEFAULT OFF pending the USER.
+    static const bool on = EnvOn("MTG_SB_RITUAL_PAYOFF");
+    return heurarm::Flag(heurarm::SB_RITUAL_PAYOFF, on) && SbPrunesOn();
+}
 void ShadowbornProvider::ArrangeCastOrder(const GameState& /*s*/, const std::vector<Action>& actions,
                                           std::vector<int>& order) const
 {
@@ -58750,16 +58789,19 @@ void ShadowbornProvider::ArrangeCastOrder(const GameState& /*s*/, const std::vec
         }
     }
 }
-bool ShadowbornProvider::RestrictsCollectedActions() const { return SbCastOrderOn(); }
+bool ShadowbornProvider::RestrictsCollectedActions() const { return SbCastOrderOn() || SbMain1RuleOn(); }
 bool ShadowbornProvider::CollectedActionAllowed(const GameState& s, const Action& a, bool is_pre_combat) const
 {
     // "Overlord should go before any activations Shadowborn activations when it is cast": no hard cast of the
-    // devotion-token Demon once an Apostle activation has fetched Jetmir in this main (the only activations this
-    // deck offers fetch the Overlord itself -- a 1-of, then not in hand -- or Jetmir).
-    if (!SbCastOrderOn() || !SbPrunesOn() || a.kind != Action::Kind::CastFromHand) { return true; }
+    // devotion-token Demon once Jetmir has arrived this turn, in this main or in main 1 (USER 2026-11-05: "Overlord
+    // in Main-2 i worse in the case where we drop Jetmir in Main-1.").
+    if (!(SbCastOrderOn() || SbMain1RuleOn()) || !SbPrunesOn() || a.kind != Action::Kind::CastFromHand) { return true; }
     const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
     if (!SbIsDevotionDemon(d)) { return true; }
-    return !SbJetmirFetchedThisMain(s, s.active_player_index, is_pre_combat);
+    if (SbJetmirArrivedThisTurn(s, s.active_player_index)) { return false; }   // either main
+    // The placement (MTG_SB_MAIN1_RULE): main 1 only when Jetmir is there in main 1 (SbMain1JetmirCanFollow).
+    if (SbMain1RuleOn() && is_pre_combat) { return SbMain1JetmirCanFollow(s, s.active_player_index, /*fetch=*/false); }
+    return true;
 }
 
 namespace
@@ -58979,12 +59021,18 @@ void ShadowbornProvider::SacNamedTimingFilter(const GameState& s, int controller
     // summoning sick turn you can do demon search main 1 if you want." -- main 1 vs main 2 was an equal twin).
     // MAIN-1 RULE (MTG_SB_MAIN1_RULE, USER 2026-11-04): a turn with no attack-ready Apostle is no longer a
     // main-1-only search -- the plan-level fold (Main1PlanAdmitted) moves it to main 2 unless it deploys Jetmir
-    // with an attacker of another kind -- so both mains offer the list. Same-main order (MTG_SB_CAST_ORDER): no
-    // Overlord fetch after a Jetmir fetch in this main (USER: "if we activate for Overlord and Jetmir they should
-    // remain in that order"; "in main 2 we should still allow Overlord -> Jetmir").
+    // with an attacker of another kind -- so both mains offer the list. Activation order (MTG_SB_CAST_ORDER): no
+    // Overlord fetch once Jetmir has arrived THIS TURN, in this main or in main 1 (USER: "if we activate for
+    // Overlord and Jetmir they should remain in that order"; "in main 2 we should still allow Overlord -> Jetmir";
+    // 2026-11-05: "Overlord in Main-2 i worse in the case where we drop Jetmir in Main-1.").
+    // PLACEMENT (MTG_SB_MAIN1_RULE, USER 2026-11-05: "It should be in main-1 if Jetmir is there and main-2
+    // otherwise."): a main-1 Overlord fetch only when Jetmir is there in main 1 (SbMain1JetmirCanFollow).
     auto same_main_order = [&]()
     {
-        if (!SbCastOrderOn() || targets.empty() || !SbJetmirFetchedThisMain(s, controller, pre_combat)) { return; }
+        if (targets.empty() || !(SbCastOrderOn() || SbMain1RuleOn())) { return; }
+        const bool drop = SbJetmirArrivedThisTurn(s, controller)
+                       || (SbMain1RuleOn() && pre_combat && !SbMain1JetmirCanFollow(s, controller, /*fetch=*/true));
+        if (!drop) { return; }
         targets.erase(std::remove_if(targets.begin(), targets.end(), [](const std::string& nm)
         { return SbIsDevotionDemon(CardDatabase::Instance().Lookup(nm)); }), targets.end());
     };
@@ -59003,6 +59051,16 @@ void ShadowbornProvider::SacNamedTimingFilter(const GameState& s, int controller
         (is_anthem ? anthem : other).push_back(nm);
         if (is_anthem && jet == nullptr) { jet = d; }
     }
+    // PLACEMENT (MTG_SB_MAIN1_RULE): when main 1 offers Jetmir, the Overlord rides ahead of him there if the
+    // bodies for both sixes can be had (SbMain1JetmirCanFollow); otherwise it stays a main-2 fetch.
+    const auto main1_list = [&]()
+    {
+        std::vector<std::string> m1;
+        if (SbMain1RuleOn() && !SbJetmirArrivedThisTurn(s, controller) && SbMain1JetmirCanFollow(s, controller, true))
+        { for (const std::string& nm : other) { if (SbIsDevotionDemon(CardDatabase::Instance().Lookup(nm))) { m1.push_back(nm); } } }
+        m1.insert(m1.end(), anthem.begin(), anthem.end());
+        return m1;
+    };
     // THE JETMIR TEST (USER CONFIRMED 2026-11-03: "That rule sounds reasonable to me"): on an attack turn the
     // count-anthem Demon is the ONLY pick, before combat, exactly when fetching it raises THIS turn's attack over not
     // activating (a lethal one first). Read off card data: the six = the weakest copies (X, T, U, S -- the activation's
@@ -59061,7 +59119,7 @@ void ShadowbornProvider::SacNamedTimingFilter(const GameState& s, int controller
         // held-out A/B, seed 7001 gi126: T4 cast an Apostle into a Stone chain (15 reveals -> 18 Apostles, 3 of
         // them attack-ready); INT-8 fetched Jetmir in main 1 and won that turn (3 x 4 x 2 = 24 vs 16), INT-9 judged
         // the 3-Apostle pre-chain board, offered nothing in main 1 and won a turn later.
-        if (pre_combat && static_cast<int>(six.size()) < n) { targets = anthem; return; }
+        if (pre_combat && static_cast<int>(six.size()) < n) { targets = main1_list(); return; }
         // ...and the same when the six ARE on the battlefield but this plan can still cast more bodies before the
         // activation (a sac-named creature in hand -- the ripple chain multiplies it): the pre-chain board under-prices
         // Jetmir, because the chain's sick copies become the six and the attack-ready army survives. Held-out seed
@@ -59072,11 +59130,11 @@ void ShadowbornProvider::SacNamedTimingFilter(const GameState& s, int controller
         {
             for (const Card& c : s.players[static_cast<std::size_t>(controller)].hand)
             {
-                if (SbIsSacNamedCreature(CardDatabase::Instance().LookupCached(c))) { targets = anthem; return; }
+                if (SbIsSacNamedCreature(CardDatabase::Instance().LookupCached(c))) { targets = main1_list(); return; }
             }
         }
     }
-    if (jet_gains) { targets = pre_combat ? anthem : std::vector<std::string>{}; }
+    if (jet_gains) { targets = pre_combat ? main1_list() : std::vector<std::string>{}; }
     else           { targets = pre_combat ? std::vector<std::string>{} : (other.empty() ? anthem : other); }
     same_main_order();
 }

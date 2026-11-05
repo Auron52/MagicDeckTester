@@ -5,8 +5,8 @@
 //     everything else is folded to its main-2 twin (ShadowbornProvider::Main1PlanAdmitted). The sick-turn Demon
 //     search is offered after combat with it.
 //   * MTG_SB_CAST_ORDER -- land, Dark Ritual, [Culling's hand victim], Culling, Thrumming Stone, Apostle, Reaper,
-//     Sire, Overlord, Jetmir, Demonic Tutor, Diabolic Intent, Profane Tutor, Lotus Bloom; within one main no
-//     Overlord (fetch or hard cast) after a Jetmir fetch.
+//     Sire, Overlord, Jetmir, Demonic Tutor, Diabolic Intent, Profane Tutor, Lotus Bloom; once Jetmir has arrived
+//     this turn (either main), no Overlord fetch or hard cast.
 #include <doctest/doctest.h>
 
 #include "ai/DecisionProviders.h"
@@ -278,7 +278,10 @@ TEST_CASE("SB order: Jetmir fetched this main -> no Overlord fetch and no Overlo
     CHECK(CastCountM(s, kOverM, true) == 0);
 }
 
-TEST_CASE("SB order: a MAIN-2 Overlord after a main-1 Jetmir stays offered (attack turn)")
+// USER 2026-11-05: "Overlord in Main-2 i worse in the case where we drop Jetmir in Main-1." -> once Jetmir has arrived
+// this turn, main 2 offers neither the Overlord fetch nor its hard cast, whichever main he came in; a main-2
+// Overlord -> Jetmir (no Jetmir yet this turn) stays offered.
+TEST_CASE("SB order: a MAIN-2 Overlord after a main-1 Jetmir is pruned (fetch and hard cast)")
 {
     ArmM arm;
     arm.Set(heurarm::SB_CAST_ORDER, 1).Set(heurarm::SB_MAIN1_RULE, 1);
@@ -286,17 +289,29 @@ TEST_CASE("SB order: a MAIN-2 Overlord after a main-1 Jetmir stays offered (atta
     s.phase = Phase::PostCombatMain;
     s.battlefield.push_back(PermM(kJetM, 30, /*fresh=*/true));
     for (int k = 0; k < 6; ++k) { s.battlefield.push_back(PermM(kApM, 10 + k, /*fresh=*/true)); }
-    s.battlefield.push_back(PermM(kApM, 20));   // an old Apostle: it attacked, Jetmir may have come in main 1
+    s.battlefield.push_back(PermM(kApM, 20));   // an old Apostle: it attacked, Jetmir came in main 1
     s.players[0].hand.push_back(CardM(kOverM, 60));
     LibM(s, { kOverM, kSwM, kSwM });
+    {
+        ArmM off; off.Set(heurarm::SB_CAST_ORDER, 0).Set(heurarm::SB_MAIN1_RULE, 0);   // both levers off: both stay offered
+        const std::vector<std::string> t = ActTargetsM(s, /*pre_combat=*/false);
+        CHECK(std::find(t.begin(), t.end(), kOverM) != t.end());
+        CHECK(CastCountM(s, kOverM, false) > 0);
+    }
     const std::vector<std::string> t = ActTargetsM(s, /*pre_combat=*/false);
-    CHECK(std::find(t.begin(), t.end(), kOverM) != t.end());
-    CHECK(CastCountM(s, kOverM, false) > 0);
-    // No old creature at all after combat under the main-1 rule: main 1 was land-only, so Jetmir came in THIS main.
+    CHECK(std::find(t.begin(), t.end(), kOverM) == t.end());
+    CHECK(CastCountM(s, kOverM, false) == 0);
+    // Jetmir from an EARLIER turn (not fresh): the Overlord is still offered in main 2.
     GameState u = s;
-    u.battlefield.pop_back();
-    u.players[0].hand.clear();
-    CHECK(ActTargetsM(u, /*pre_combat=*/false).empty());
+    for (Permanent& p : u.battlefield) { if (p.card.m_name.str() == kJetM) { p.entered_this_turn = false; } }
+    CHECK(CastCountM(u, kOverM, false) > 0);
+    // No Jetmir yet this turn: main-2 Overlord -> Jetmir stays offered (sick turn, the main-1 rule's main 2).
+    GameState w = BaseM(8);
+    w.phase = Phase::PostCombatMain;
+    for (int k = 0; k < 6; ++k) { w.battlefield.push_back(PermM(kApM, 10 + k, /*fresh=*/true)); }
+    LibM(w, { kOverM, kJetM, kSwM, kSwM });
+    const std::vector<std::string> wt = ActTargetsM(w, /*pre_combat=*/false);
+    CHECK(std::find(wt.begin(), wt.end(), kOverM) != wt.end());
 }
 
 // ---- the cast order -----------------------------------------------------------------------------------------------
@@ -377,14 +392,85 @@ TEST_CASE("SB union plan: Ritual, Ritual, Stone, Apostle is one post-combat plan
     CHECK(ordered > 0);
 }
 
-TEST_CASE("SB order, MTG_SB_STONE_FIRST (agent amendment): the granter ranks ahead of the rituals")
+// ---- the Overlord's placement (MTG_SB_MAIN1_RULE; USER 2026-11-05) ------------------------------------------------
+// "My actual suggestion for Overlord is to move it wherever it needs to go to be before Jetmir. It should be in main-1
+// if Jetmir is there and main-2 otherwise."
+TEST_CASE("SB placement: Overlord then Jetmir, both in main 1, is reachable on a Jetmir turn")
 {
-    ArmM arm; arm.Set(heurarm::SB_CAST_ORDER, 1).Set(heurarm::SB_STONE_FIRST, 1);
-    GameState s = BaseM(1);
-    const ShadowbornProvider& p = ProvM();
-    CHECK(p.CastOrderRank(s, DefM(kStoneM)) < p.CastOrderRank(s, DefM(kRitM)));
-    CHECK(p.CastOrderRank(s, DefM(kRitM)) < p.CastOrderRank(s, DefM(kCullM)));
-    CHECK(p.CastOrderRank(s, DefM(kCullM)) < p.CastOrderRank(s, DefM(kApM)));
-    ArmM off; off.Set(heurarm::SB_CAST_ORDER, 0);
-    CHECK(p.CastOrderRank(s, DefM(kStoneM)) == 1);   // inert without the cast order
+    ArmM arm; arm.Set(heurarm::SB_MAIN1_RULE, 1).Set(heurarm::SB_CAST_ORDER, 1);
+    GameState s = BaseM(4);
+    s.battlefield.push_back(PermM(kApM, 9));                                                  // attack-ready
+    for (int k = 0; k < 12; ++k) { s.battlefield.push_back(PermM(kApM, 10 + k, /*fresh=*/true)); }   // two sixes
+    LibM(s, { kOverM, kJetM, kSwM, kSwM });
+    const std::vector<std::string> m1 = ActTargetsM(s, /*pre_combat=*/true);
+    const auto ov = std::find(m1.begin(), m1.end(), kOverM), jt = std::find(m1.begin(), m1.end(), kJetM);
+    CHECK(ov != m1.end());
+    CHECK(jt != m1.end());
+    CHECK(ov < jt);   // the Overlord ahead of Jetmir
+    // ...and after the Overlord fetch (it ate six sick Apostles), Jetmir still follows in main 1.
+    GameState t = BaseM(4);
+    t.battlefield.push_back(PermM(kApM, 9));
+    for (int k = 0; k < 6; ++k) { t.battlefield.push_back(PermM(kApM, 10 + k, /*fresh=*/true)); }
+    t.battlefield.push_back(PermM(kOverM, 30, /*fresh=*/true));
+    LibM(t, { kJetM, kSwM, kSwM });
+    const std::vector<std::string> m1b = ActTargetsM(t, /*pre_combat=*/true);
+    CHECK(std::find(m1b.begin(), m1b.end(), kJetM) != m1b.end());
+    // Without the lever the attack-turn main 1 offers Jetmir alone (the INT-9 table).
+    ArmM off; off.Set(heurarm::SB_MAIN1_RULE, 0);
+    const std::vector<std::string> m1o = ActTargetsM(s, /*pre_combat=*/true);
+    CHECK(std::find(m1o.begin(), m1o.end(), kOverM) == m1o.end());
+}
+
+TEST_CASE("SB placement: a main-1 Overlord with no Jetmir to follow is pruned (it goes to main 2)")
+{
+    ArmM arm; arm.Set(heurarm::SB_MAIN1_RULE, 1).Set(heurarm::SB_CAST_ORDER, 1);
+    // Sick turn: six fresh Apostles, nothing attack-ready -> no main-1 Jetmir -> the Overlord fetch is main 2 only.
+    GameState s = BaseM(8);
+    for (int k = 0; k < 6; ++k) { s.battlefield.push_back(PermM(kApM, 10 + k, /*fresh=*/true)); }
+    s.players[0].hand.push_back(CardM(kOverM, 60));
+    LibM(s, { kOverM, kJetM, kSwM, kSwM });
+    const std::vector<std::string> m1 = ActTargetsM(s, /*pre_combat=*/true);
+    CHECK(std::find(m1.begin(), m1.end(), kOverM) == m1.end());
+    CHECK(CastCountM(s, kOverM, /*pre_combat=*/true) == 0);   // the hard cast too
+    const std::vector<std::string> m2 = ActTargetsM(s, /*pre_combat=*/false);
+    CHECK(std::find(m2.begin(), m2.end(), kOverM) != m2.end());
+    CHECK(CastCountM(s, kOverM, /*pre_combat=*/false) > 0);
+    // Jetmir already on the battlefield with an attacker: "if Jetmir is there" -> the main-1 hard cast is offered.
+    GameState t = BaseM(8);
+    t.battlefield.push_back(PermM(kJetM, 30));
+    t.battlefield.push_back(PermM(kApM, 9));
+    t.players[0].hand.push_back(CardM(kOverM, 60));
+    LibM(t, { kSwM, kSwM });
+    CHECK(CastCountM(t, kOverM, /*pre_combat=*/true) > 0);
+}
+
+// ---- the ritual-without-payoff prune (MTG_SB_RITUAL_PAYOFF; USER 2026-11-05) --------------------------------------
+TEST_CASE("SB ritual payoff: a Dark Ritual that nothing spends is pruned; Ritual + a paid cast stays")
+{
+    SearchedM sp;
+    auto census = [](int on, bool with_apostle)
+    {
+        ArmM arm; arm.Set(heurarm::SB_RITUAL_PAYOFF, on);
+        GameState s = BaseM(1);
+        s.turn_number = 1;
+        s.phase = Phase::PostCombatMain;
+        s.players[0].lands_played_this_turn = 1;
+        s.players[0].hand.push_back(CardM(kRitM, 60));
+        if (with_apostle) { s.players[0].hand.push_back(CardM(kApM, 61)); }
+        LibM(s, { kSwM, kSwM, kSwM, kSwM });
+        int rit_alone = 0, rit_and_ap = 0;
+        for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/false))
+        {
+            const bool r = CastsName(p, kRitM), a = CastsName(p, kApM);
+            if (r && !a) { ++rit_alone; }
+            if (r && a) { ++rit_and_ap; }
+        }
+        return std::make_pair(rit_alone, rit_and_ap);
+    };
+    CHECK(census(0, false).first > 0);    // shipped: the lone Ritual is a plan
+    CHECK(census(1, false).first == 0);   // pruned
+    // With an Apostle in hand the Ritual-alone line is still pruned, and Ritual + Apostle is NOT (the Apostle spends).
+    const auto on = census(1, true);
+    CHECK(on.first == 0);
+    CHECK(on.second > 0);
 }

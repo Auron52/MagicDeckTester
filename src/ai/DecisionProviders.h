@@ -4011,10 +4011,16 @@ public:
     // Apostle -- the one-variant prune already never offers the hand victim when the board has one).
     // ACTIVATION ORDER within one main (USER: "Overlord should go before any activations Shadowborn activations
     // when it is cast." / "if we activate for Overlord and Jetmir they should remain in that order." / "in main
-    // 2 we should still allow Overlord -> Jetmir."): with Jetmir fetched EARLIER IN THIS MAIN, neither an
-    // Overlord fetch (SacNamedTimingFilter) nor an Overlord hard cast (CollectedActionAllowed) is offered. A
-    // main-2 Overlord after a MAIN-1 Jetmir stays searched (USER: "let the search determine that").
+    // 2 we should still allow Overlord -> Jetmir." / 2026-11-05: "Overlord in Main-2 i worse in the case where we
+    // drop Jetmir in Main-1."): once Jetmir has arrived THIS TURN (earlier in this main, or in main 1), neither an
+    // Overlord fetch (SacNamedTimingFilter) nor an Overlord hard cast (CollectedActionAllowed) is offered; the
+    // Overlord line is Overlord -> Jetmir inside one main.
     bool CastOrderTotalByName() const override;
+    // RITUAL WITHOUT A PAYOFF (MTG_SB_RITUAL_PAYOFF; USER 2026-11-05: "We might want to prune rituals with no payoff
+    // like we have for other decks."): a plan subset that casts Dark Ritual / Culling the Weak and spends mana on
+    // nothing else is dropped (DecisionProvider::PrunesRitualWithoutSpend). Searched and greedy play alike; the viewer
+    // and the MTG_UNPRUNED audit arm keep it.
+    bool PrunesRitualWithoutSpend() const override;
     void ArrangeCastOrder(const GameState& s, const std::vector<Action>& actions,
                           std::vector<int>& order) const override;
     bool RestrictsCollectedActions() const override;

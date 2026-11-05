@@ -3318,6 +3318,16 @@ public:
     // docs/design/hinata-spasm-gate-rootcause.md). Dragonstorm has no such mana sink, so the prune should
     // net-help here. Base returns false -> byte-identical; only DragonstormProvider opts in.
     virtual bool PrunesAcceleratorWithoutPayoff() const { return false; }
+    // PrunesRitualWithoutSpend -- the SPEND form of the payoff prune (first user: Shadowborn Apostle, USER 2026-11-05:
+    // "We might want to prune rituals with no payoff like we have for other decks."). Where the Dragonstorm prune
+    // names its payoffs by card role, this one counts ANY action of the subset that costs mana and is not itself a
+    // ritual (a cast, a suspend with a cost, a paid activation) as the payoff: a subset that casts a ritual and
+    // spends mana on nothing else floats the ritual's mana into the end of the phase, so the same subset without
+    // the ritual (the card kept in hand) dominates it. Sound with continuations: a subset of rituals alone opens no
+    // breakpoint, so nothing later in the phase can spend the float. Same call sites as the payoff prune (the
+    // search's branch list and the greedy / rollout policy, lockstep) and the same MTG_UNPRUNED(payoffprune) gate.
+    // Default false -> byte-identical.
+    virtual bool PrunesRitualWithoutSpend() const { return false; }
 
     // CastCheapestFirstWithinTier -- within one CastOrderRank tier, cast same-tier MANA ACCELERANTS
     // cheapest-first by the action's ACTUAL cost. A ritual chain funds itself cheapest-first, so a dearer
