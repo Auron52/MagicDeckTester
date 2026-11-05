@@ -14,6 +14,7 @@
 #include "../core/GameLogger.h"   // g_real_resolution (TEMP MTG_TAPDBG diagnostic)
 
 #include <algorithm>
+#include <memory>
 #include <array>
 #include <chrono>
 #include <bit>          // std::popcount (the ramp-filter feed charge; MSVC has no __builtin_popcount)
@@ -8980,34 +8981,34 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
         const dmgev::PayHoldScope h(dmgev::t_pay_hold | land_hold);
         if (TapForCostSharedCore(state, cost_in, for_creature, available, honor_legacy_cco)) { return true; }
     }
-    // The winning recipe, replayed on the real board (log, prompts and events see the one real crack).
-    auto commit = [&](const std::vector<OnDemandCrack>& recipe, bool hold_lands, GameState& trial,
-                      const ManaPool& trial_avail) -> bool
-    {
-        GameState redo = state;
-        ManaPool redo_avail = available != nullptr ? *available : ManaPool{};
-        const bool ok = OnDemandPayWith(redo, recipe, hold_lands, cost_in, for_creature,
-                                        available != nullptr ? &redo_avail : nullptr, honor_legacy_cco);
-        // A human's victim pick can differ from the quiet trial's fold; should that pick not pay, keep the trial.
-        if (ok) { state = std::move(redo); if (available != nullptr) { *available = redo_avail; } }
-        else    { state = std::move(trial); if (available != nullptr) { *available = trial_avail; } }
-        return true;
-    };
-    GameState trial;
+    // The winning recipe, replayed IN PLACE on the real board (log, prompts and events see the one real
+    // crack). In place, never by assigning the trial copy back: a caller may hold references into this
+    // state's hand / battlefield across its payment, and a whole-state assignment reallocates every zone
+    // (measured: heap corruption in the smoke tier's first cut). A crack's sacrifice is the same in-payment
+    // erase the Treasure route already makes (CommitPaySacSacrifices). The replay is the trial's own
+    // deterministic computation on an identical board; should it ever fail (a human's victim pick differing
+    // from the quiet trial's fold), the crack has floated its mana and the cost reports unpaid -- the
+    // conservative side, never a phantom payment.
+    auto commit = [&](const std::vector<OnDemandCrack>& recipe, bool hold_lands) -> bool
+    { return OnDemandPayWith(state, recipe, hold_lands, cost_in, for_creature, available, honor_legacy_cco); };
+    // One heap scratch board for every trial (a GameState is large, and this runs deep in the search's stack).
+    const std::unique_ptr<GameState> scratch = std::make_unique<GameState>();
     ManaPool trial_avail;
+    auto trial = [&](const std::vector<OnDemandCrack>& recipe, bool hold_lands) -> bool
+    {
+        return OnDemandTrial(state, recipe, hold_lands, cost_in, for_creature, available, trial_avail,
+                             honor_legacy_cco, *scratch);
+    };
     // 2. A land's plain tap, kept when the rest of the line still fits the board afterwards.
     bool plain_ok = false;
-    GameState plain;
-    ManaPool plain_avail;
     if (!lands.empty())
     {
-        plain_ok = OnDemandTrial(state, {}, false, cost_in, for_creature, available, plain_avail, honor_legacy_cco, plain);
+        plain_ok = trial({}, false);
         if (plain_ok)
         {
             int rest_pips[5];
             const int rest = LineRestAfter(cost_in, rest_pips);
-            if (rest <= 0 || AvailableManaPool(plain).Total() >= rest)
-            { return commit({}, false, plain, plain_avail); }
+            if (rest <= 0 || AvailableManaPool(*scratch).Total() >= rest) { return commit({}, false); }
         }
     }
     // 3. Crack, one source at a time.
@@ -9015,26 +9016,25 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
     for (const OnDemandCrack& k : lands)
     {
         recipe.push_back(k);
-        if (OnDemandTrial(state, recipe, true, cost_in, for_creature, available, trial_avail,
-                          honor_legacy_cco, trial))
-        { return commit(recipe, true, trial, trial_avail); }
+        if (trial(recipe, true)) { return commit(recipe, true); }
     }
+    static const char* kCol[5] = { "W", "U", "B", "R", "G" };
     for (const OnDemandCrack& k0 : lumps)
     {
         // The colour is read off the board the previous cracks leave.
-        GameState at = state;
-        { const RevealLogPause quiet; for (const OnDemandCrack& k : recipe) { ApplyOnDemandCrack(at, k); } }
         int order[5];
-        LumpColourOrder(at, cost_in, order);
-        static const char* kCol[5] = { "W", "U", "B", "R", "G" };
+        {
+            const RevealLogPause quiet;
+            *scratch = state;
+            for (const OnDemandCrack& k : recipe) { ApplyOnDemandCrack(*scratch, k); }
+            LumpColourOrder(*scratch, cost_in, order);
+        }
         for (int c = 0; c < 5; ++c)
         {
             OnDemandCrack k = k0;
             k.color = kCol[order[c]];
             recipe.push_back(k);
-            if (OnDemandTrial(state, recipe, true, cost_in, for_creature, available, trial_avail,
-                              honor_legacy_cco, trial))
-            { return commit(recipe, true, trial, trial_avail); }
+            if (trial(recipe, true)) { return commit(recipe, true); }
             recipe.pop_back();
         }
         // No colour of this lump completes the payment alone: crack it in its first colour and add the next.
@@ -9043,7 +9043,7 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
         recipe.push_back(k);
     }
     // Nothing paid with a crack: a plain land tap that strands the rest of the line still pays THIS cost.
-    if (plain_ok) { return commit({}, false, plain, plain_avail); }
+    if (plain_ok) { return commit({}, false); }
     return false;
 }
 
