@@ -35,6 +35,10 @@ outcome, the CAPPED verdict and the UNMODELED notes are unchanged (every kept fr
 **Verified.**
 - The same 32 games ran to completion with peak RSS **6.7 GB** (was >40 GB, killed).
 - On the 12 games both runs finished, result lines and all 287 oracle lines are identical.
+- SelesnyaLifegain (the 32 games in flight at its abort): 31 of 32 finished, peak RSS **5.7 GB** (was 43 GB,
+  killed). The 32nd, gi 8437 (seed 30008437 --game-index 8437), was stopped at 4.3 h. That is the TIME problem
+  of section 2 (an elf board of 24 permanents with three Priests of Titania and three Archdruids; plans cap at
+  20,000 applies, ~317 s per audit), not memory.
 
 A second, smaller holder remains. `outcomes` keeps a full board per apply, about 300-700 MB per call at the
 20,000 retry (112 calls). That is harmless at 6.7 GB peak; revisit only if a deck shows it.
