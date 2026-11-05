@@ -4,9 +4,12 @@
   "valueleaf": null
  },
  "deck": "unpredictable_cyclone",
+ "detail": "mulligan: FIRST VERSION ADOPTED -- keep and confounded bottoming A/Bs passed (recipe fast); valueleaf: NO LEAF ADOPTED",
+ "finished": "2026-11-05T19:03:25Z",
  "frozen": "0b7d581f50786f0e20f438dfabf4531f558c2be4",
  "heartbeat": "2026-11-05T18:59:23Z",
  "host": "550a08fdc1f3",
+ "result_branch": "artifact-refresh/unpredictable_cyclone-20261105-1903",
  "run_id": "unpredictable_cyclone-artifact-queue-d7d6a5-20261103T134203",
  "score": 0.0,
  "stage": "valueleaf",
@@ -15,6 +18,6 @@
   "valueleaf"
  ],
  "started": "2026-11-04T12:32:07Z",
- "state": "running",
+ "state": "done",
  "worker": "artifact-queue-d7d6a5"
 }
