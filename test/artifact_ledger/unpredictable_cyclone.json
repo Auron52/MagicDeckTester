@@ -1,0 +1,42 @@
+{
+ "deck": "unpredictable_cyclone",
+ "_doc": "artifact refresh verdicts -- scripts/artifact_queue.py (LEDGER_DIR)",
+ "entries": [
+  {
+   "run_id": "unpredictable_cyclone-artifact-queue-d7d6a5-20261103T134203",
+   "kind": "mulligan",
+   "verdict": "adopted",
+   "ident": "9b7715f305de13f172d5d00be3d37bbd642387d4",
+   "frozen": "0b7d581f50786f0e20f438dfabf4531f558c2be4",
+   "src_tree": "8c5df5675f11b6ed789b49fc4265d0c0937c5fb1",
+   "date": "2026-11-05",
+   "worker": "artifact-queue-d7d6a5",
+   "settings": {
+    "recipe": "fast",
+    "env": {},
+    "depth": null,
+    "budget": null
+   },
+   "detail": "mulligan: FIRST VERSION ADOPTED -- keep and confounded bottoming A/Bs passed (recipe fast)"
+  },
+  {
+   "run_id": "unpredictable_cyclone-artifact-queue-d7d6a5-20261103T134203",
+   "kind": "valueleaf",
+   "verdict": "not-adopted",
+   "ident": null,
+   "frozen": "0b7d581f50786f0e20f438dfabf4531f558c2be4",
+   "src_tree": "8c5df5675f11b6ed789b49fc4265d0c0937c5fb1",
+   "date": "2026-11-05",
+   "worker": "artifact-queue-d7d6a5",
+   "detail": "valueleaf: NO LEAF ADOPTED",
+   "decisions": [
+    "    VERDICT arm=nlesc_d6b30 adopt=0 delta=-0.02763 t=-11.08 cost=1.310x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.31x) with quality better (-0.02763) -- a TRADE, the user's call",
+    "    VERDICT arm=nlesc_d6b40 adopt=0 delta=-0.05850 t=-20.46 cost=1.514x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.51x) with quality better (-0.05850) -- a TRADE, the user's call",
+    "    PICK arm=d6b20 why=the cheapest of 1 passing arm(s) (1.00x vs live, delta +0.00025)",
+    "    next: commit it with the deck's smoke + regression GT re-accepted (it changes play).",
+    "",
+    "=== 2026-11-05T19:03:11  PHASE E.6: no allowance for unpredictable_cyclone -- no ladder escalations in 1200 games (single-path or trust-dominated); fleet default R = 0"
+   ]
+  }
+ ]
+}
