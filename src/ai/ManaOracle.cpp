@@ -2548,6 +2548,18 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
         }
         const std::vector<char> keep = ParetoKeep(keys, res);
         std::vector<std::vector<PayOption>> next;
+        // THE NEXT LAYER IS BUILT ONLY AS FAR AS THE APPLY CEILING REACHES (memory, 2026-11-05). The layer loop
+        // above applies scripts in order and stops at the first one it meets with `nodes >= NodeCap()`, marking
+        // the realisation CAPPED -- so of this layer's scripts only the first `room` can ever be applied, and
+        // any script past them does exactly one thing: it makes the next layer cap. Building them all is pure
+        // waste, and it was the oracle's memory blow-up: Galadriel seed 30000910 T4 (Crackle with Power on a
+        // 10+ land board, ~7,500 payment options per frontier) materialised a 2,027,521-script layer, ~3 GB,
+        // for a 2,000-apply ceiling, and a few threads doing that at once took the 47 GB box past the RSS cap
+        // (pass1-galadriel-r2, pass1-selesnyalifegain; the container OOM of 2026-11-04 ~12:50Z). Lossless:
+        // the applied prefix, every outcome and the CAPPED verdict are unchanged (a dropped script sets
+        // `capped`, as meeting it at the ceiling would). Every kept frontier's options are still ENUMERATED,
+        // so the UNMODELED notes MinimalPayments makes are unchanged too.
+        const std::size_t room = nodes < NodeCap() ? static_cast<std::size_t>(NodeCap() - nodes) : 0;
         for (std::size_t i = 0; i < n; ++i)
         {
             if (!keep[i]) { g_pruned.fetch_add(1, std::memory_order_relaxed); continue; }
@@ -2579,6 +2591,7 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
             }
             for (PayOption& o : opts)
             {
+                if (next.size() >= room) { r.capped = true; break; }
                 std::vector<PayOption> s = f.script;
                 o.what = f.tapahead > 0 ? std::string("tap-ahead") : f.cost.ToString();
                 s.push_back(std::move(o));
