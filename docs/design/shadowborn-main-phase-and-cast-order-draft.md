@@ -371,3 +371,22 @@ vs 1, T4 vs T5). "Ritual first" makes that line inexpressible at every budget. H
 The split-alone unrecovered games (e.g. 50047 gi46: a T1 main-2 Dark Ritual cast for nothing, one Ritual short on
 T3) are NOT root-caused; none of them is slower once the order + stone-first is on. ref_bench (10 references):
 shipped and split 1/10 short (s7), every order arm 0/10 short.
+
+## 8. USER rulings on the A/B (2026-11-05, verbatim)
+
+1. Stone-first amendment: *"I don't care about rippling to skip non-apostles. That is clear clairvoyance as you wouldn't
+   do it if you didn't know what the top 4 are."* -> Stone-first is NOT adopted; the USER's order (Ritual first)
+   stands. The "lost" games under the USER's order came from a Dark Ritual ripple whose value is bottoming four
+   non-Apostles above an Apostle run, i.e. a ripple decision that is only good if you know the top four. OWED: find
+   where the search makes the reveal choice with the library known (clairvoyance) and make it blind.
+2. Culling's victim: *"That makes sense."* -> the narrow rule stays (a Harpy or an Apostle on the board, else a hand
+   Apostle cast just before Culling; never a Demon or Jetmir ahead of a hand Apostle).
+3. Overlord after Jetmir: *"Yeah, overall we might even find that pruning the overlord main-2 if we played Jetmir in
+   main-1 is actually the correct course of action. Alternatively we could have the Jetmir activation in Main-1 cause
+   us to move the Overlord activation before it? That is a better option if we want it. Overlord in Main-2 i worse in
+   the case where we drop Jetmir in Main-1."* -> prune the main-2 Overlord (fetch or cast) when Jetmir was put
+   in main 1; the Overlord line is represented by Overlord -> Jetmir inside main 1. This supersedes 2b's "a main-2
+   Overlord after a main-1 Jetmir stays searched" and removes the edge case.
+4. The main-1 rule's standalone losses (a Dark Ritual cast for nothing in T1 main 2): *"Hmm... We might want to prune
+   rituals with no payoff like we have for other decks."* -> add the ritual-without-payoff prune for this deck,
+   reusing the existing mechanism other decks use.
