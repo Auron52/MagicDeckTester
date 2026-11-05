@@ -8802,10 +8802,12 @@ static bool PlainDfsCostsSound(const std::vector<std::vector<int>>& groups, cons
     for (const std::vector<int>& gr : groups) { for (int j : gr) { if (cand_mv[static_cast<std::size_t>(j)] < 0) { return false; } } }
     return true;
 }
-template <class Emit>
+// `skip(imask)` (the overload below passes a never-skip): true = do not build or emit this independent
+// mask at the current group position (MTG_DUP_ACTION_FOLD's prefix rule; see DupActFold).
+template <class Emit, class Skip>
 static void PlainOdometerDfs(const std::vector<std::vector<int>>& groups, const std::vector<int>& independent,
                              const std::vector<int>& auto_sel, const std::vector<int>& cand_mv, int mana_bound,
-                             std::vector<int>& sel, Emit&& emit)
+                             std::vector<int>& sel, Emit&& emit, Skip&& skip)
 {
     const int G = static_cast<int>(groups.size());
     const int num_ind = static_cast<int>(independent.size());
@@ -8840,6 +8842,7 @@ static void PlainOdometerDfs(const std::vector<std::vector<int>>& groups, const 
         const std::size_t nb = na + (c0 > 0 ? 1 : 0) + nhi;
         for (int imask = 0; imask < (1 << num_ind); ++imask)
         {
+            if (skip(imask)) { continue; }
             int pcost = 0;
             sel.resize(nb + static_cast<std::size_t>(num_ind));
             int* sp = sel.data();
@@ -8892,6 +8895,14 @@ static void PlainOdometerDfs(const std::vector<std::vector<int>>& groups, const 
             if (g == G) { return; }
         }
     }
+}
+template <class Emit>
+static void PlainOdometerDfs(const std::vector<std::vector<int>>& groups, const std::vector<int>& independent,
+                             const std::vector<int>& auto_sel, const std::vector<int>& cand_mv, int mana_bound,
+                             std::vector<int>& sel, Emit&& emit)
+{
+    PlainOdometerDfs(groups, independent, auto_sel, cand_mv, mana_bound, sel, std::forward<Emit>(emit),
+                     [](int) { return false; });
 }
 
 std::vector<std::vector<int>> TurnSolver::PlainWalkSequenceForTest(const std::vector<std::vector<int>>& groups,
@@ -18497,6 +18508,44 @@ struct Dump
 // NOT `inline`: an unreferenced inline variable is never emitted, so its destructor never runs.
 static Dump g_dump;
 }   // namespace sacdupfold
+
+// MTG_DUP_ACTION_FOLD (DEFAULT ON; =0 walks every arrangement as before) and its verifier
+// MTG_DUP_ACTION_FOLD_VERIFY=1. See DupActFold above EnumeratePlanPositions for the fold and the
+// argument that it is exact. The verifier keeps the unfolded walk, tags every plan pushed from a
+// position the fold would have skipped (Plan::land_tie_key = kTwinTag, the MTG_ENUM_DEDUP_STREAM_VERIFY
+// scratch convention), and after EnumeratePlans' signature dedup counts the tagged plans that SURVIVED
+// it -- the one way the fold could change the returned list. Must be 0; printed at exit with the
+// brute-force recheck of each flagged selection (a flagged selection holding no identical candidate
+// whose lower-slot twin is unselected is a wrong mask).
+namespace dupactfold
+{
+// The per-job arm (valuearm dup_action_fold) wins, else the env.
+inline bool On()
+{
+    static const bool env = EnvOn("MTG_DUP_ACTION_FOLD", true);
+    const int a = valuearm::t_arm.dup_action_fold;
+    return a >= 0 ? a != 0 : env;
+}
+inline bool VerifyOn() { static const bool v = EnvOn("MTG_DUP_ACTION_FOLD_VERIFY"); return v; }
+// Set by the walk immediately before handing a flagged selection to eval_and_push; TAKEN (cleared) at
+// eval_and_push's entry, so a nested enumeration inside the scoring never inherits it (foldsel's rule).
+inline thread_local bool t_twin = false;
+inline bool Take() { const bool b = t_twin; t_twin = false; return b; }
+constexpr int kTwinTag = -1000000000;   // far below MTG_ENUM_DEDUP_STREAM_VERIFY's -2 - index tags
+inline std::atomic<long long> g_flagged{0}, g_pushed{0}, g_kept{0}, g_brute_mismatch{0}, g_calls{0};
+struct Dump
+{
+    ~Dump()
+    {
+        if (!VerifyOn()) { return; }
+        std::fprintf(stderr, "[dup-action-fold] verify: calls=%lld flagged=%lld pushed=%lld KEPT_BY_DEDUP=%lld "
+                     "BRUTE_MISMATCH=%lld\n", g_calls.load(), g_flagged.load(), g_pushed.load(), g_kept.load(),
+                     g_brute_mismatch.load());
+    }
+};
+// NOT `inline`: an unreferenced inline variable is never emitted, so its destructor never runs.
+static Dump g_dump;
+}   // namespace dupactfold
 
 // MTG_FOLD_SEARCH_ODO -- DEFAULT OFF; =1 enables. Arms the flag above on the SEARCH's own
 // subset walk, which is a second, private copy of the odometer that was never wired to it. See
@@ -51109,6 +51158,120 @@ static inline void SacDupVerifyEmit(const std::vector<Action>& cands, std::vecto
     sacdupfold::t_expect_reject = false;
 }
 
+// ---- IDENTICAL-CANDIDATE PREFIX FOLD (MTG_DUP_ACTION_FOLD, DEFAULT ON; =0 disables) ---------------
+// CollectActions can emit the SAME activation twice as two independent bits. On a persist-loop board
+// (Melira Pod: a free sac outlet, a Kitchen Finks, a loop closer) a free outlet's canonical single sac
+// (victim by the expendability heuristic) and the persist block's explicit K=1 sac of each persist body
+// coincide whenever the heuristic picked that body: two Actions equal in EVERY field except `eval` (0 for
+// the canonical sac -- a Feeder's counter is not a payload term -- and 1 for the persist sac). Taking both
+// is real coverage (the free outlet sacs the returning body twice), but taking ONE of them gives plans with
+// the same signature. A class of k such bits walks 2^k positions for k + 1 distinct plans. Measured on the
+// Melira d3/b3 tail line (seed 10372713029942101962, T6 main 2 under Celes: three Feeders and a Bloodthrone
+// over three Finks): four such pairs among 16 independents, 65,535 positions emitted per enumeration for
+// 20,735 plans the dedup keeps, ~2,300 of the line's enumerations.
+// THE FOLD: order each class by (eval DESCENDING, slot ascending); a position whose selected members are not
+// a PREFIX of that order is not walked. Its canonical twin -- the same number of members, the highest-eval
+// ones, lowest slots among equal evals -- is.
+// WHY IT IS EXACT (an identity fold, not a narrowing): EnumeratePlans' signature dedup (PlanSignatureFast
+// keys a sac on kind / source / victim / count, never on eval) puts every arrangement of a class with the
+// same member count into ONE signature class, and keeps, per class, the first member in the stable
+// (wins_this_turn desc, value desc) order -- ties in emission order. Members differ only in `eval`, which
+// eval_and_push reads in exactly one place, `total_eval += c.eval` -> plan.value (wins, the mana sums, the
+// win projection and every other field are identical), so among one signature class the value is the sum of
+// the chosen members' evals plus a common term: the maximum is the top-m by eval, and among equal values
+// the earliest-emitted is the lowest slots -- both walks visit positions sharing every group digit in
+// increasing imask order, so the twin with the lower bits is emitted first. That is the canonical arrangement,
+// so every arrangement the fold skips is one the dedup would have dropped, nothing between the walk and the
+// dedup caps or truncates the list, and the stable sort keeps the survivors' relative order: the returned
+// list (set and order) is unchanged. MTG_DUP_ACTION_FOLD_VERIFY checks exactly that (KEPT_BY_DEDUP = 0).
+// WHAT IT DOES MOVE: the visits billed (enum_charge.visits / workctr kOdoVisit -> the priced decision ceiling),
+// exactly as MTG_SAC_DUP_WALK_FOLD: a finite budget runs out later. Nothing is billed at an unlimited budget.
+// Scope: EnumeratePlans' no-mana-side walks (the carry walk and PlainOdometerDfs); the two-stage driver and
+// Solve's rollout walk are untouched (the measured boards put no position in Solve's walk). Human play is
+// never folded.
+struct DupActFold
+{
+    bool on = false, verify = false;
+    // (predecessor bit, member bit) for each consecutive pair of one class, in canonical order.
+    std::vector<std::pair<unsigned, unsigned>> pairs;
+};
+static void BuildDupActFold(const std::vector<Action>& cands, const std::vector<int>& independent, DupActFold& f)
+{
+    f = DupActFold{};
+    const bool verify = dupactfold::VerifyOn();
+    if (!(dupactfold::On() || verify) || HumanPlayActive()) { return; }
+    const int n = static_cast<int>(independent.size());
+    if (n < 2 || n > 31) { return; }   // the walkers' imask is a 32-bit int
+    // Classes: independents equal in every field but `eval` (DupActEqualButEval). Cheap key first, so the
+    // full compare runs only on the rare pair that already shares kind / source / victim / count / name.
+    auto at = [&](int b) -> const Action& { return cands[static_cast<std::size_t>(independent[static_cast<std::size_t>(b)])]; };
+    int cls[32];
+    int ncls = 0;
+    for (int b = 0; b < n; ++b) { cls[b] = -1; }
+    thread_local Action t_scratch;   // assignment reuses its capacity (the ds_equiv pattern)
+    for (int b = 1; b < n; ++b)
+    {
+        const Action& ab = at(b);
+        for (int c = 0; c < b; ++c)
+        {
+            const Action& ac = at(c);
+            if (ac.kind != ab.kind || ac.sac_source_id != ab.sac_source_id || ac.sac_victim_id != ab.sac_victim_id
+                || ac.sac_count != ab.sac_count || ac.hand_index != ab.hand_index || !(ac.card_name == ab.card_name))
+            { continue; }
+            t_scratch = ac;
+            t_scratch.eval = ab.eval;
+            if (!(t_scratch == ab)) { continue; }
+            if (cls[c] < 0) { cls[c] = ncls++; }
+            cls[b] = cls[c];
+            break;
+        }
+    }
+    // Per class, the members in CANONICAL order -- eval DESCENDING, then slot ascending -- and a pair per
+    // consecutive two: a later member may be selected only with its predecessor (see DupActFold).
+    for (int k = 0; k < ncls; ++k)
+    {
+        int mem[32];
+        int nm = 0;
+        for (int b = 0; b < n; ++b) { if (cls[b] == k) { mem[nm++] = b; } }
+        std::stable_sort(mem, mem + nm, [&](int x, int y) { return at(x).eval > at(y).eval; });
+        for (int i = 1; i < nm; ++i) { f.pairs.push_back({ 1u << mem[i - 1], 1u << mem[i] }); }
+    }
+    if (f.pairs.empty()) { return; }
+    f.on = true;
+    f.verify = verify;
+    if (verify) { dupactfold::g_calls.fetch_add(1, std::memory_order_relaxed); }
+}
+// True when `imask` selects a class member whose canonical predecessor is unselected.
+static inline bool DupActNonCanonical(const DupActFold& f, unsigned imask)
+{
+    for (const std::pair<unsigned, unsigned>& p : f.pairs)
+    { if ((imask & p.second) != 0 && (imask & p.first) == 0) { return true; } }
+    return false;
+}
+// The verifier's brute-force answer for a flagged selection, straight from the definition: some selected
+// independent has an UNSELECTED class twin (equal but for eval) that precedes it canonically -- a higher
+// eval, or the same eval in a lower slot.
+static bool DupActBruteNonCanonical(const std::vector<Action>& cands, const std::vector<int>& independent,
+                                    const std::vector<int>& sel)
+{
+    auto in_sel = [&](int j) { return std::find(sel.begin(), sel.end(), j) != sel.end(); };
+    for (std::size_t b = 0; b < independent.size(); ++b)
+    {
+        const Action& ab = cands[static_cast<std::size_t>(independent[b])];
+        if (!in_sel(independent[b])) { continue; }
+        for (std::size_t c = 0; c < independent.size(); ++c)
+        {
+            if (c == b || in_sel(independent[c])) { continue; }
+            const Action& ac = cands[static_cast<std::size_t>(independent[c])];
+            if (!(ac.eval > ab.eval || (ac.eval == ab.eval && c < b))) { continue; }
+            Action x = ac;
+            x.eval = ab.eval;
+            if (x == ab) { return true; }
+        }
+    }
+    return false;
+}
+
 // ---- Two-stage plan-position enumeration: mana side x payoff side ------------------------------
 //
 // The flat odometer walks ONE mixed-radix counter over every candidate group, so a hand holding k
@@ -73731,6 +73894,14 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     auto eval_and_push = [&](const std::vector<int>& sel) { eval_and_push_body(sel); };
     eval_and_push_body = [&](const std::vector<int>& sel)
     {
+        // MTG_DUP_ACTION_FOLD_VERIFY: TAKEN first, before any return, so it never leaks to a later selection.
+        const bool dup_twin = dupactfold::Take();
+        if (dup_twin)
+        {
+            dupactfold::g_flagged.fetch_add(1, std::memory_order_relaxed);
+            if (!DupActBruteNonCanonical(cands, independent, sel))
+            { dupactfold::g_brute_mismatch.fetch_add(1, std::memory_order_relaxed); }
+        }
         ++enum_charge.visits;   // MTG_ENUM_CHARGE (see EnumChargeScope); a counter only when off
         // BRANCH SHAPE, EnumeratePlans side. Distinct from SolveUncached's funnel: this is the
         // odometer walk the odo/plans/dedup columns actually describe.
@@ -75508,6 +75679,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         ApplyCantripFirstOrder(state, plan.actions);   // no-op unless MTG_CANTRIP_FIRST
         if (BfCensusOn()) { bfcensus::g_subsets_scored[1].fetch_add(1, std::memory_order_relaxed); }
         if (enumstats::Enabled()) { enumstats::g_e_surv.fetch_add(1, std::memory_order_relaxed); }
+        if (dup_twin)
+        {
+            plan.land_tie_key = dupactfold::kTwinTag;
+            dupactfold::g_pushed.fetch_add(1, std::memory_order_relaxed);
+        }
         plans.push_back(std::move(plan));
         if (ds_on_push) { ds_on_push(); }
     };
@@ -76035,8 +76211,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     static const bool s_ds_env = EnvOn("MTG_ENUM_DEDUP_STREAM", true);
     static const std::size_t s_ds_at = static_cast<std::size_t>(std::max(64, EnvInt("MTG_ENUM_DEDUP_STREAM_AT", 4096)));
     static const bool s_ds_xaudit = EnvOn("MTG_SIG_X_AUDIT");
+    // (Off under MTG_DUP_ACTION_FOLD_VERIFY + the stream's own verify: both tag Plan::land_tie_key.)
+    static const bool s_ds_dupact_clash = EnvOn("MTG_ENUM_DEDUP_STREAM_VERIFY") && dupactfold::VerifyOn();
     bool ds_on = s_ds_env && !s_human_play_sig && PlanSigFastOn() && !s_ds_xaudit
-              && !branchstats::Enabled() && !shapestats::Enabled() && !McWalkBoundVerify();
+              && !branchstats::Enabled() && !shapestats::Enabled() && !McWalkBoundVerify() && !s_ds_dupact_clash;
     if (ds_on && !cre_host_sig)
     {
         for (const Action& c : cands) { if (IsCreatureAuraCast(c)) { ds_on = false; break; } }
@@ -76216,6 +76394,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // 2026-07-29). Mirrored in Solve and EnumeratePlans -- change one, change both.
         std::vector<int> choice(num_groups, 0);
         std::vector<int> sel;   // reused across positions (clear keeps capacity)
+        // MTG_DUP_ACTION_FOLD: classes of identical independent candidates (see DupActFold). `daf_twin`
+        // carries a VERIFY-mode flag from the mask test to the emit of the same position.
+        DupActFold daf;
+        BuildDupActFold(cands, independent, daf);
+        bool daf_twin = false;
         // Running "which digits are non-zero" mask, maintained by the carry below instead of
         // rebuilt per position -- see EquipPieceDepViolated's fast overload.
         std::uint64_t sel_mask = 0;
@@ -76290,8 +76473,17 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                                      && SubsetVampOutletInvalidPre(state, cands, s, /*fold_from_odometer=*/true, pre.vamp))
                                  { return false; }
                                  if (fso) { foldsel::g_from_odometer = true; }
+                                 if (daf_twin) { dupactfold::t_twin = true; }
                                  eval_and_push(s);
                                  return false;
+                             },
+                             // MTG_DUP_ACTION_FOLD: refuse (or, verifying, flag) a non-prefix class arrangement.
+                             [&](int imask) -> bool
+                             {
+                                 daf_twin = false;
+                                 if (!daf.on || !DupActNonCanonical(daf, static_cast<unsigned>(imask))) { return false; }
+                                 if (daf.verify) { daf_twin = true; return false; }
+                                 return true;
                              });
             done = true;
         }
@@ -76386,6 +76578,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             if (s_walk_diag && outer_ok) { ++wd_outer; }
             for (int imask = 0; outer_ok && imask < (1 << num_ind); ++imask)
             {
+                // MTG_DUP_ACTION_FOLD: a non-prefix arrangement of identical candidates (see DupActFold).
+                daf_twin = daf.on && DupActNonCanonical(daf, static_cast<unsigned>(imask));
+                if (daf_twin && !daf.verify) { continue; }
                 int pcost = 0, pgain = 0, pgy = 0, pblock = 0;
                 sel.clear();
                 // Auto-equip collapse: the forced free equips ride EVERY subset (first -- {0}-cost,
@@ -76429,6 +76624,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                     // a plan out of a position the bound refused is a soundness violation.
                     const std::size_t n_before = plans.size();
                     if (FoldSearchOdometerOn(state)) { foldsel::g_from_odometer = true; }
+                    if (daf_twin) { dupactfold::t_twin = true; }
                     eval_and_push(sel);
                     mcwalk::g_pruned.fetch_add(1, std::memory_order_relaxed);
                     if (plans.size() != n_before)
@@ -76464,6 +76660,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 // way), and VerifyFoldRecoverable builds the twin on every rejection -- so this is
                 // a claim to CHECK at runtime, not to argue.
                 if (FoldSearchOdometerOn(state)) { foldsel::g_from_odometer = true; }
+                if (daf_twin) { dupactfold::t_twin = true; }
                 eval_and_push(sel);
             }
             // RADIX CUT (MTG_EQUIP_DEP_SKIP): every position until digit `dep_cut` next changes
@@ -77578,6 +77775,23 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         std::size_t nm = 0;
         for (char m : ds_marked) { nm += m ? 1 : 0; }
         dsverify::g_marked.fetch_add(static_cast<long long>(nm), std::memory_order_relaxed);
+    }
+    // MTG_DUP_ACTION_FOLD_VERIFY: a twin the fold would have skipped must never survive the dedup.
+    if (dupactfold::VerifyOn())
+    {
+        for (TurnSolver::Plan& kp : deduped)
+        {
+            if (kp.land_tie_key != dupactfold::kTwinTag) { continue; }
+            if (dupactfold::g_kept.fetch_add(1, std::memory_order_relaxed) < 8)
+            {
+                std::string d;
+                for (const Action& a : kp.actions)
+                { d += a.card_name.str() + "(src" + std::to_string(a.sac_source_id) + ">" + std::to_string(a.sac_victim_id) + ") "; }
+                std::fprintf(stderr, "[dup-action-fold] KEPT twin t%d v=%g [%s]\n", state.turn_number,
+                             static_cast<double>(kp.value), d.c_str());
+            }
+            kp.land_tie_key = -1;
+        }
     }
 
     // ROLLING EARTHQUAKE TOP-X (MTG_PD_QUAKE_TOP_X, ADOPTED default ON 2026-09-29, PROVISIONAL; USER doctrine 2026-09-29: "it makes

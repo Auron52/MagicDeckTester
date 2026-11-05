@@ -299,6 +299,7 @@ add_executable(mtg-test
     test/unit/test_mana_oracle.cpp
     test/unit/test_sac_land_class_pin.cpp
     test/unit/test_counter_list.cpp
+    test/unit/test_dup_action_fold.cpp
     test/unit/test_kitty_discard.cpp
     test/unit/test_bucket_policy.cpp
     test/unit/test_cost_reducers.cpp
