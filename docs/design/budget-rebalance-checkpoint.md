@@ -775,3 +775,15 @@ problem that doesn't happen as much anymore." Start with every slow rollout on r
   an identity fold candidate, and whether the priced ceiling (X) bills w_odo here -- replays ran X=1000.
 - PARKED: the box goes to the artifact queue (Cyclone mulligan resume) per USER 2026-11-04. No engine runs of mine
   are active. Branch budget-rebalance is NOT on the shared branch (feature incomplete).
+
+### 2026-11-05 22:05 UTC -- RESUMED (USER: "pause the niv mizzet run, so we can pivot back to the budget rebalancing")
+- Queue: Cyclone DONE + LANDED on phase-1-2-deck-analyzer (e4ad12898 artifacts, e7882bfb7 GT). NivMizzetCombo mulligan PAUSED
+  (worker d7d6a5 stopped; claim paused; `python3 scripts/artifact_queue.py run` in .claude/worktrees/artifact-queue resumes it).
+- Melira tail, sharpened: in cen_10372713029942101962.tsv the heaviest decision (T6 main-2, budget 2,700 units) ran 631 s against
+  a PRICED ceiling of 2,700 x 25,000 ns x 100 = 6.75 s (93x over) -- the census already ran at the shipped priced X=100
+  (MTG_DECISION_WORK_X=1000 there is the separate UNIT ceiling). The enumeration never polls decisionwork::PricedExceeded()
+  (only the BP-derivation stop and SearchBudget::Overrun do). 1,400 enumeration calls emit 116M plans (~83K per call),
+  space_dedup 44M; board = 3x Carrion Feeder + 3x Kitchen Finks + Bloodthrone Vampire in hand.
+- SUBAGENT running (worktree off 108072a7e, local branch mel-fold, scratch build/scratch/budget/melfold/): name the plan
+  family, build an EXACT identity fold if one exists (verify mode + per-job arm + digest equality), and REPORT (not build)
+  where a priced poll in the enumeration would bound it. Order follows "collapse wasted search first".
