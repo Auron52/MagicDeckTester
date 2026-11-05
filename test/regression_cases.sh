@@ -1386,19 +1386,19 @@ OVERNIGHT_CASES=(
   "stompy     5  5005  1425 20"
   "stompy     5  6006  1425 20"
   "stompy     5  7007  1425 20"
-  # jumbo: overnight ENTRY set while this deck has only a baseline keep profile.
+  # jumbo: overnight FULL set after adopting its exhaustive keep profile.
   "jumbo 0  4004 2000 0"
   "jumbo 0  6006 2000 0"
   "jumbo 0  8008 2000 0"
   "jumbo 0 10010 2000 0"
-  "jumbo 3 4004 400 10"
-  "jumbo 3 5005 400 10"
-  "jumbo 3 6006 400 10"
-  "jumbo 3 7007 400 10"
-  "jumbo 5 4004 300 20"
-  "jumbo 5 5005 300 20"
-  "jumbo 5 6006 300 20"
-  "jumbo 5 7007 300 20"
+  "jumbo 3 4004 1000 20"
+  "jumbo 3 5005 1000 20"
+  "jumbo 3 6006 1000 20"
+  "jumbo 3 7007 1000 20"
+  "jumbo 5 4004 500 40"
+  "jumbo 5 5005 500 40"
+  "jumbo 5 6006 500 40"
+  "jumbo 5 7007 500 40"
   # minotaur: stompy-shaped four-seed deep sweep at 2x the gate budgets (d3 b20 / d5 b40).
   # At the probed costs that is ~4x1000x0.39 s + 4x500x0.63 s ~= 47 min single-thread, pooled.
   "minotaur 0  4004 2000 0"

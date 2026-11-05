@@ -359,6 +359,25 @@ This confirms the recorded lines remain executable and the search reaches at
 least their win turns on the same starting hands; it does not claim the search
 chooses the exact same sequence of actions.
 
+## Mulligan profile and overnight baseline
+
+The exhaustive `fast` profile uses K=13, merging Utopia Sprawl with Wild Growth.
+The measured generation setting is d1/b1 (rank correlation 0.9955 against
+d5/b20 play, above the 0.990 floor), with R=30. The first-version validation
+accepted both keep (−0.323250 turns against static) and confounded blind
+bottoming (−0.100167 turns against lookahead). The full overnight Jumbo rows
+were expanded to four 1,000-game d3/b20 seeds and four 500-game d5/b40 seeds,
+baselined with the table absent, then accepted with the table present. The
+adoption attribution found 7,640 changed mulligan counts, 751 changed bottoms,
+22 bottom-order-only digests, and four same-hand cases matching table-off play
+when lookahead bottoming was restored.
+
+The complete overnight suite was then rebaselined: 118 rows matched, 424
+changed, and 11 new Shadowborn rows were added. Searched games improved 3,953
+times versus 1,889 slowdowns. Angels (+0.0064 turns over 6,065 searched games),
+Angels 2HG (+0.0150 over 600), and Bruna (+0.0122 over 2,131) remain visible
+follow-ups in the accepted ground-truth note.
+
 ## Open model questions
 
 Trample on Chariot, Nylea, and Surrak, and Nylea's indestructible, are inert
