@@ -215,7 +215,8 @@ TEST_CASE("SB main-1 rule: Jetmir on the battlefield with an attacker -> nothing
 TEST_CASE("SB main-1 rule: a granter on the battlefield -> a cast stays in main 1 (a reveal chain may reach Jetmir)")
 {
     SearchedM sp;
-    ArmM arm; arm.Set(heurarm::SB_MAIN1_RULE, 1);
+    // The ritual-payoff prune (default ON) would drop this lone Ritual on its own; the rule is tested alone.
+    ArmM arm; arm.Set(heurarm::SB_MAIN1_RULE, 1).Set(heurarm::SB_RITUAL_PAYOFF, 0);
     GameState s = BaseM(2);
     s.battlefield.push_back(PermM(kStoneM, 40));
     s.battlefield.push_back(PermM(kApM, 41));
@@ -268,7 +269,8 @@ TEST_CASE("SB order: Jetmir fetched this main -> no Overlord fetch and no Overlo
     s.players[0].hand.push_back(CardM(kOverM, 60));
     LibM(s, { kOverM, kSwM, kSwM });
     {
-        ArmM arm; arm.Set(heurarm::SB_CAST_ORDER, 0);
+        // The baseline is the arm with neither lever: the main-1 rule's placement also refuses a post-Jetmir Overlord.
+        ArmM arm; arm.Set(heurarm::SB_CAST_ORDER, 0).Set(heurarm::SB_MAIN1_RULE, 0);
         const std::vector<std::string> t = ActTargetsM(s, true);
         CHECK(std::find(t.begin(), t.end(), kOverM) != t.end());
         CHECK(CastCountM(s, kOverM, true) > 0);

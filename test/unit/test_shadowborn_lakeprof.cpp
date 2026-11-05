@@ -84,6 +84,9 @@ int CountCrackPlans(const std::vector<TurnSolver::Plan>& v)
 
 TEST_CASE("Idle crack fold: a Lake crack nothing spends is not offered; with the lever off it is")
 {
+    // The fold is measured alone: the Shadowborn ritual-payoff prune (default ON) drops an unspent crack too, and the
+    // main-1 rule folds main-1 casts, so both are pinned off here.
+    ArmScope rp(heurarm::SB_RITUAL_PAYOFF, false), m1r(heurarm::SB_MAIN1_RULE, false);
     GameState s = BaseLp();
     s.battlefield.push_back(PermLp("Lake of the Dead", 80));
     s.battlefield.push_back(PermLp("Swamp", 81));
@@ -107,6 +110,9 @@ TEST_CASE("Idle crack fold: a Lake crack nothing spends is not offered; with the
 
 TEST_CASE("Idle crack fold: the identity test keeps a crack whose float pays a cast, and needs the sibling")
 {
+    // The fold is measured alone: the Shadowborn ritual-payoff prune (default ON) drops an unspent crack too, and the
+    // main-1 rule folds main-1 casts, so both are pinned off here.
+    ArmScope rp(heurarm::SB_RITUAL_PAYOFF, false), m1r(heurarm::SB_MAIN1_RULE, false);
     GameState s = BaseLp();
     s.battlefield.push_back(PermLp("Lake of the Dead", 80));
     s.battlefield.push_back(PermLp("Swamp", 81));
