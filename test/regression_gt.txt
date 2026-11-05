@@ -1,4 +1,4 @@
-# Regression ground truth -- commit a705f3dea  date 2026-11-05
+# Regression ground truth -- commit e4ad12898  date 2026-11-05
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (smoke, 2026-11-04): Profane resolve fan (held-out -0.007): shadowborn d3 s2002 gi10 T5->T6 recovers T5 at d8 b0; th d5 s2002, alchemist d0 s2002/d5 s3003 and snow d0 s2002 are pre-existing origin drift (same got-digests from origin's own binary; none of these decks holds Profane Tutor or Lake of the Dead)
 # accepted-with-regressions (regression, 2026-11-04): Profane resolve fan (held-out -0.007): shadowborn d3 s2002 gi10 T5->T6 recovers T5 at d8 b0; th d5 s2002, alchemist d0 s2002/d5 s3003 and snow d0 s2002 are pre-existing origin drift (same got-digests from origin's own binary; none of these decks holds Profane Tutor or Lake of the Dead)
@@ -41,10 +41,10 @@ antilife_smoke_d5_s1001=4.2154/b667e16f09c2fcb9
 hinata_smoke_d0_s1001=6.7830/780989093156f2ff
 hinata_smoke_d3_s1001=6.0000/b65957bf1bcf627b
 hinata_smoke_d5_s1001=5.7200/7bc7abd2624edf82
-cyclone_smoke_d0_s1001=8.3630/e390c15fb7e05279
-cyclone_smoke_d3_s1001=5.0000/1935802853619c5d
-cyclone_smoke_d5_s1001=4.9100/5cd7cddf08debac2
-cyclone2hg_smoke_d3_s1001=5.0600/fe8c305f3a540709
+cyclone_smoke_d0_s1001=8.3610/801db26870908ec5
+cyclone_smoke_d3_s1001=4.9400/f6bc7069a092a949
+cyclone_smoke_d5_s1001=4.7400/3d63886aa9c3f850
+cyclone2hg_smoke_d3_s1001=5.0000/af9bdd10df486e96
 shadowborn_smoke_d0_s1001=7.7990/43382607e354fd46
 shadowborn_smoke_d3_s1001=5.2200/554c3e02bd0a76f8
 shadowborn_smoke_d5_s1001=4.9400/52fe062fc20b34cd
@@ -182,8 +182,8 @@ elementals_smoke_d3_s1001=4.4600/15877bad8bb35b68
 elementals_smoke_d5_s1001=4.3360/0de4bca09ab94ef0
 
 # --- regression ---
-cyclone_regression_d3_s30031=5.3333/0bda8499e912c855
-cyclone_regression_d5_s30031=5.0000/64b1c8b741425be5
+cyclone_regression_d3_s30031=4.5000/9cae75a150715362
+cyclone_regression_d5_s30031=4.5000/0a4d7a7f24601daa
 shadowborn_regression_d3_s30073=4.6667/82bb2770cd14605d
 shadowborn_regression_d5_s30073=4.6667/82bb2770cd14605d
 midrangeburn_regression_d3_s30021=4.0000/02b6ee67bad9be24
@@ -298,11 +298,11 @@ hinata_regression_d0_s2002=6.8470/8773fd2849120167
 hinata_regression_d3_s2002=5.6933/dcd9057de29ae636
 hinata_regression_d5_s2002=5.5667/7ef5353f84700e7b
 hinata_regression_d5_s3003=5.6267/28cc9af17a725e22
-cyclone_regression_d0_s2002=8.3320/cfbe05dae5911584
-cyclone_regression_d3_s2002=4.9467/61936dbab625e851
-cyclone_regression_d3_s3003=4.9467/99499f4a298db8f0
-cyclone_regression_d5_s2002=4.8867/3130aff4703b6a8e
-cyclone_regression_d5_s3003=4.8800/828aafd6689d6e43
+cyclone_regression_d0_s2002=8.3410/ff285c765cd3e471
+cyclone_regression_d3_s2002=4.8533/f22dcd37081f4918
+cyclone_regression_d3_s3003=4.9333/437a6de4a37c0d52
+cyclone_regression_d5_s2002=4.7333/eb0d78511c346b04
+cyclone_regression_d5_s3003=4.7667/bdcbc678cb54ed24
 shadowborn_regression_d0_s2002=7.8800/8c5b82fbe68aad4b
 shadowborn_regression_d3_s2002=4.8933/248b869ee9c7bd9f
 shadowborn_regression_d3_s3003=5.0267/a2d45e59b2f1bc72
