@@ -1,0 +1,345 @@
+{
+  "seed": 1, "game_index": 0, "win_turn": 4, "won": true,
+  "mulligan": { "count": 1, "bottom": [13] }, "karoo_float": 1, "fetch_activation": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1, "spell_copy_id": 1,
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 13, "name": "Eidolon of the Great Revel" }, { "num": 47, "name": "Searing Blaze" }, { "num": 40, "name": "Rift Bolt" }, { "num": 5, "name": "Boltwave" }, { "num": 24, "name": "Lava Spike" }, { "num": 33, "name": "Monastery Swiftspear" }, { "num": 20, "name": "Inspiring Vantage" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": false,
+  "to_bottom": 1,
+  "hand": [{ "num": 17, "name": "Goblin Guide" }, { "num": 28, "name": "Lightning Bolt" }, { "num": 26, "name": "Lava Spike" }, { "num": 24, "name": "Lava Spike" }, { "num": 44, "name": "Sacred Foundry" }, { "num": 53, "name": "Skewer the Critics" }, { "num": 13, "name": "Eidolon of the Great Revel" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 6, "decision": {
+  "decision_index": 2,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 1,
+  "hand": [{ "num": 17, "name": "Goblin Guide", "win_optimal": true }, { "num": 28, "name": "Lightning Bolt", "win_optimal": true }, { "num": 26, "name": "Lava Spike", "win_optimal": true }, { "num": 24, "name": "Lava Spike", "win_optimal": true }, { "num": 44, "name": "Sacred Foundry", "win_optimal": true }, { "num": 53, "name": "Skewer the Critics", "win_optimal": true }, { "num": 13, "name": "Eidolon of the Great Revel", "win_optimal": true }],
+  "ai_choice": { "index": 5, "num": 53, "name": "Skewer the Critics" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 1)"
+}
+},
+    { "chosen": 1, "cast_order": ["**", "land=Mountain", "cast=Goblin Guide"], "decision": {
+  "decision_index": 3,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 1, "card": "Mountain" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 17, "name": "Goblin Guide", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Lava Spike", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 24, "name": "Lava Spike", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 28, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 39, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 44, "name": "Sacred Foundry", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Skewer the Critics", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 53 },
+  "plans": [
+    { "index": 0, "summary": "land=Sacred Foundry; cast: Goblin Guide", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": ["Goblin Guide"], "actions": [{ "card": "Goblin Guide" }] },
+    { "index": 1, "summary": "land=Mountain; cast: Goblin Guide", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Goblin Guide"], "actions": [{ "card": "Goblin Guide" }] },
+    { "index": 2, "summary": "land=Sacred Foundry; cast: Lightning Bolt → opponent", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": ["Lightning Bolt"], "actions": [{ "card": "Lightning Bolt", "burn_target": "opponent" }] },
+    { "index": 3, "summary": "land=Sacred Foundry; cast: Lava Spike → opponent", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": ["Lava Spike"], "actions": [{ "card": "Lava Spike", "burn_target": "opponent" }] },
+    { "index": 4, "summary": "land=Mountain; cast: Lightning Bolt → opponent", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Lightning Bolt"], "actions": [{ "card": "Lightning Bolt", "burn_target": "opponent" }] },
+    { "index": 5, "summary": "land=Mountain; cast: Lava Spike → opponent", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Lava Spike"], "actions": [{ "card": "Lava Spike", "burn_target": "opponent" }] },
+    { "index": 6, "summary": "land=Sacred Foundry; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=Mountain; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 8, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 4,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Guide", "idx": 4, "num": 17, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Mountain", "idx": 3, "num": 39, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 26, "name": "Lava Spike", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 24, "name": "Lava Spike", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 28, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 44, "name": "Sacred Foundry", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Skewer the Critics", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 53 },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "reveals": [{ "turn": 1, "source": "Goblin Guide (attack)", "cards": [{ "name": "Plains", "disposition": "kept" }] }],
+  "events": [{ "turn": 1, "kind": "combat", "text": "⚔ attacked: Goblin Guide (2) — 2 to opponent (20→18)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Guide", "idx": 4, "num": 17, "tapped": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Mountain", "idx": 3, "num": 39, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 26, "name": "Lava Spike", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 24, "name": "Lava Spike", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 28, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 44, "name": "Sacred Foundry", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Skewer the Critics", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 52 },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 4, "cast_order": ["**", "land=Sacred Foundry", "cast=Lava Spike", "cast=Skewer the Critics"], "decision": {
+  "decision_index": 6,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 2, "card": "Skullcrack" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Guide", "idx": 4, "num": 17, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Mountain", "idx": 3, "num": 39, "is_land": true, "taps": "R" }], "vial_counters": [], "hand": [{ "num": 26, "name": "Lava Spike", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 24, "name": "Lava Spike", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 28, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 44, "name": "Sacred Foundry", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Skewer the Critics", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }, { "num": 54, "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 51 },
+  "plans": [
+    { "index": 0, "summary": "land=Sacred Foundry; cast: Lava Spike → opponent, Lightning Bolt → opponent", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": ["Lava Spike", "Lightning Bolt"], "cast_order_canonical": ["Lava Spike", "Lightning Bolt"], "actions": [{ "card": "Lava Spike", "burn_target": "opponent" }, { "card": "Lightning Bolt", "burn_target": "opponent" }] },
+    { "index": 1, "summary": "land=Sacred Foundry; cast: Lava Spike → opponent, Lava Spike → opponent", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": ["Lava Spike", "Lava Spike"], "cast_order_canonical": ["Lava Spike", "Lava Spike"], "actions": [{ "card": "Lava Spike", "burn_target": "opponent" }, { "card": "Lava Spike", "burn_target": "opponent" }] },
+    { "index": 2, "summary": "land=Sacred Foundry; cast: Lightning Bolt → opponent, Skewer the Critics → opponent", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": ["Lightning Bolt", "Skewer the Critics"], "cast_order_canonical": ["Lightning Bolt", "Skewer the Critics"], "actions": [{ "card": "Lightning Bolt", "burn_target": "opponent" }, { "card": "Skewer the Critics", "burn_target": "opponent" }] },
+    { "index": 3, "summary": "land=Sacred Foundry; cast: Skewer the Critics → opponent, Lightning Bolt → opponent", "declared_order_payability": "known_drops", "land": "Sacred Foundry", "drops": ["Skewer the Critics"], "casts": ["Skewer the Critics", "Lightning Bolt"], "cast_order_canonical": ["Skewer the Critics", "Lightning Bolt"], "actions": [{ "card": "Skewer the Critics", "burn_target": "opponent" }, { "card": "Lightning Bolt", "burn_target": "opponent" }] },
+    { "index": 4, "summary": "land=Sacred Foundry; cast: Lava Spike → opponent, Skewer the Critics → opponent", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": ["Lava Spike", "Skewer the Critics"], "cast_order_canonical": ["Lava Spike", "Skewer the Critics"], "actions": [{ "card": "Lava Spike", "burn_target": "opponent" }, { "card": "Skewer the Critics", "burn_target": "opponent" }] },
+    { "index": 5, "summary": "land=Sacred Foundry; cast: Skewer the Critics → opponent, Lava Spike → opponent", "declared_order_payability": "known_drops", "land": "Sacred Foundry", "drops": ["Skewer the Critics"], "casts": ["Skewer the Critics", "Lava Spike"], "cast_order_canonical": ["Skewer the Critics", "Lava Spike"], "actions": [{ "card": "Skewer the Critics", "burn_target": "opponent" }, { "card": "Lava Spike", "burn_target": "opponent" }] },
+    { "index": 6, "summary": "land=Sacred Foundry; cast: Lightning Bolt → opponent", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": ["Lightning Bolt"], "actions": [{ "card": "Lightning Bolt", "burn_target": "opponent" }] },
+    { "index": 7, "summary": "land=Sacred Foundry; cast: Lava Spike → opponent", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": ["Lava Spike"], "actions": [{ "card": "Lava Spike", "burn_target": "opponent" }] },
+    { "index": 8, "summary": "land=Sacred Foundry; cast: Skullcrack → opponent", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": ["Skullcrack"], "actions": [{ "card": "Skullcrack", "burn_target": "opponent" }] },
+    { "index": 9, "summary": "land=none; cast: Lightning Bolt → opponent", "declared_order_payability": "not_verified", "land": null, "casts": ["Lightning Bolt"], "actions": [{ "card": "Lightning Bolt", "burn_target": "opponent" }] },
+    { "index": 10, "summary": "land=none; cast: Lava Spike → opponent", "declared_order_payability": "not_verified", "land": null, "casts": ["Lava Spike"], "actions": [{ "card": "Lava Spike", "burn_target": "opponent" }] },
+    { "index": 11, "summary": "land=Sacred Foundry; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": [], "actions": [] },
+    { "index": 12, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 7,
+  "type": "land_entry",
+  "source": "Sacred Foundry",
+  "turn": 2,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Guide", "idx": 4, "num": 17, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Mountain", "idx": 3, "num": 39, "is_land": true, "taps": "R" }], "vial_counters": [], "hand": [{ "num": 26, "name": "Lava Spike", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 24, "name": "Lava Spike", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 28, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 44, "name": "Sacred Foundry", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Skewer the Critics", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }, { "num": 54, "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 51 },
+  "pay_life": 2,
+  "reveal_types": [],
+  "heuristic_default": 1,
+  "note": "reply 1 to enter UNTAPPED (pay 2 life), or 0 to enter tapped. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 8,
+  "type": "target",
+  "source": "Lava Spike",
+  "turn": 2,
+  "per_target_damage": 3, "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Goblin Guide", "idx": 4, "num": 17, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Mountain", "idx": 3, "num": 39, "is_land": true, "taps": "R" }, { "name": "Sacred Foundry", "idx": 5, "num": 44, "is_land": true, "taps": "RW" }], "vial_counters": [], "hand": [{ "num": 26, "name": "Lava Spike", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 24, "name": "Lava Spike", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 28, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 53, "name": "Skewer the Critics", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }, { "num": 54, "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 51 },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }],
+  "note": "reply an option index. Each chosen target takes 3 damage (up to 1 target(s)). Default = the AI's pick (face)."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 9,
+  "type": "target",
+  "source": "Skewer the Critics",
+  "turn": 2,
+  "per_target_damage": 3, "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Goblin Guide", "idx": 4, "num": 17, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Mountain", "idx": 3, "num": 39, "tapped": true, "is_land": true }, { "name": "Sacred Foundry", "idx": 5, "num": 44, "is_land": true, "taps": "RW" }], "vial_counters": [], "hand": [{ "num": 24, "name": "Lava Spike", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 28, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 53, "name": "Skewer the Critics", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }, { "num": 54, "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Lava Spike"], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 15, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 51 },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }, { "kind": "permanent", "index": 4, "label": "Goblin Guide (yours)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }, { "index": 2, "label": "Goblin Guide (yours)", "targets": [{ "kind": "permanent", "index": 4 }] }],
+  "note": "reply an option index. Each chosen target takes 3 damage (up to 1 target(s)). Default = the AI's pick (face)."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 10,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 2, "kind": "damage", "text": "🔥 Lava Spike: 3 to opponent (18→15)" }, { "turn": 2, "kind": "damage", "text": "🔥 Skewer the Critics: 3 to opponent (15→12)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Goblin Guide", "idx": 4, "num": 17, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Mountain", "idx": 3, "num": 39, "tapped": true, "is_land": true }, { "name": "Sacred Foundry", "idx": 5, "num": 44, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 24, "name": "Lava Spike", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 28, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 54, "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Lava Spike", "Skewer the Critics"], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 12, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 51 },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 11,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "reveals": [{ "turn": 2, "source": "Goblin Guide (attack)", "cards": [{ "name": "Mountain", "disposition": "kept" }] }],
+  "events": [{ "turn": 2, "kind": "combat", "text": "⚔ attacked: Goblin Guide (2) — 2 to opponent (12→10)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Goblin Guide", "idx": 4, "num": 17, "tapped": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Mountain", "idx": 3, "num": 39, "tapped": true, "is_land": true }, { "name": "Sacred Foundry", "idx": 5, "num": 44, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 24, "name": "Lava Spike", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 28, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 54, "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Lava Spike", "Skewer the Critics"], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 10, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 50 },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 3, "cast_order": ["**", "cast=Monastery Swiftspear", "cast=Lava Spike"], "decision": {
+  "decision_index": 12,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 3, "card": "Monastery Swiftspear" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Goblin Guide", "idx": 4, "num": 17, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Mountain", "idx": 3, "num": 39, "is_land": true, "taps": "R" }, { "name": "Sacred Foundry", "idx": 5, "num": 44, "is_land": true, "taps": "RW" }], "vial_counters": [], "hand": [{ "num": 24, "name": "Lava Spike", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 28, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 35, "name": "Monastery Swiftspear", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 54, "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Lava Spike", "Skewer the Critics"], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 10, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 49 },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Lightning Bolt → opponent, Monastery Swiftspear", "declared_order_payability": "not_verified", "land": null, "casts": ["Lightning Bolt", "Monastery Swiftspear"], "cast_order_canonical": ["Lightning Bolt", "Monastery Swiftspear"], "actions": [{ "card": "Lightning Bolt", "burn_target": "opponent" }, { "card": "Monastery Swiftspear" }] },
+    { "index": 1, "summary": "land=none; cast: Monastery Swiftspear, Lightning Bolt → opponent", "declared_order_payability": "not_verified", "land": null, "casts": ["Monastery Swiftspear", "Lightning Bolt"], "cast_order_canonical": ["Monastery Swiftspear", "Lightning Bolt"], "actions": [{ "card": "Monastery Swiftspear" }, { "card": "Lightning Bolt", "burn_target": "opponent" }] },
+    { "index": 2, "summary": "land=none; cast: Lava Spike → opponent, Monastery Swiftspear", "declared_order_payability": "not_verified", "land": null, "casts": ["Lava Spike", "Monastery Swiftspear"], "cast_order_canonical": ["Lava Spike", "Monastery Swiftspear"], "actions": [{ "card": "Lava Spike", "burn_target": "opponent" }, { "card": "Monastery Swiftspear" }] },
+    { "index": 3, "summary": "land=none; cast: Monastery Swiftspear, Lava Spike → opponent", "declared_order_payability": "not_verified", "land": null, "casts": ["Monastery Swiftspear", "Lava Spike"], "cast_order_canonical": ["Monastery Swiftspear", "Lava Spike"], "actions": [{ "card": "Monastery Swiftspear" }, { "card": "Lava Spike", "burn_target": "opponent" }] },
+    { "index": 4, "summary": "land=none; cast: Lava Spike → opponent, Lightning Bolt → opponent", "declared_order_payability": "not_verified", "land": null, "casts": ["Lava Spike", "Lightning Bolt"], "cast_order_canonical": ["Lava Spike", "Lightning Bolt"], "actions": [{ "card": "Lava Spike", "burn_target": "opponent" }, { "card": "Lightning Bolt", "burn_target": "opponent" }] },
+    { "index": 5, "summary": "land=none; cast: Monastery Swiftspear", "declared_order_payability": "not_verified", "land": null, "casts": ["Monastery Swiftspear"], "actions": [{ "card": "Monastery Swiftspear" }] },
+    { "index": 6, "summary": "land=none; cast: Lightning Bolt → opponent", "declared_order_payability": "not_verified", "land": null, "casts": ["Lightning Bolt"], "actions": [{ "card": "Lightning Bolt", "burn_target": "opponent" }] },
+    { "index": 7, "summary": "land=none; cast: Lava Spike → opponent", "declared_order_payability": "not_verified", "land": null, "casts": ["Lava Spike"], "actions": [{ "card": "Lava Spike", "burn_target": "opponent" }] },
+    { "index": 8, "summary": "land=none; cast: Skullcrack → opponent", "declared_order_payability": "not_verified", "land": null, "casts": ["Skullcrack"], "actions": [{ "card": "Skullcrack", "burn_target": "opponent" }] },
+    { "index": 9, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 13,
+  "type": "target",
+  "source": "Lava Spike",
+  "turn": 3,
+  "per_target_damage": 3, "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Goblin Guide", "idx": 4, "num": 17, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Monastery Swiftspear", "idx": 6, "num": 35, "is_land": false, "power": 1, "toughness": 2 }, { "name": "Mountain", "idx": 3, "num": 39, "tapped": true, "is_land": true }, { "name": "Sacred Foundry", "idx": 5, "num": 44, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 24, "name": "Lava Spike", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 28, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 54, "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Lava Spike", "Skewer the Critics"], "library_size": 51, "land_drops_left": 1, "floating_mana": {"R": 1} },
+  "opponent": { "life": 10, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 49 },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }],
+  "note": "reply an option index. Each chosen target takes 3 damage (up to 1 target(s)). Default = the AI's pick (face)."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 14,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 3, "kind": "damage", "text": "🔥 Lava Spike: 3 to opponent (10→7)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Goblin Guide", "idx": 4, "num": 17, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Monastery Swiftspear", "idx": 6, "num": 35, "is_land": false, "power": 2, "toughness": 3 }, { "name": "Mountain", "idx": 3, "num": 39, "tapped": true, "is_land": true }, { "name": "Sacred Foundry", "idx": 5, "num": 44, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 28, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 54, "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Lava Spike", "Lava Spike", "Skewer the Critics"], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 7, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 49 },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 15,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "reveals": [{ "turn": 3, "source": "Goblin Guide (attack)", "cards": [{ "name": "Lightning Bolt", "disposition": "" }] }],
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Goblin Guide (2), Monastery Swiftspear (2) — 4 to opponent (7→3)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Goblin Guide", "idx": 4, "num": 17, "tapped": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Monastery Swiftspear", "idx": 6, "num": 35, "tapped": true, "is_land": false, "power": 2, "toughness": 3 }, { "name": "Mountain", "idx": 3, "num": 39, "tapped": true, "is_land": true }, { "name": "Sacred Foundry", "idx": 5, "num": 44, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 28, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 54, "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Lava Spike", "Lava Spike", "Skewer the Critics"], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 3, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 49 },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "cast=Boltwave", "cast=Lightning Bolt"], "decision": {
+  "decision_index": 16,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 4, "card": "Boltwave" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Goblin Guide", "idx": 4, "num": 17, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Monastery Swiftspear", "idx": 6, "num": 35, "is_land": false, "power": 1, "toughness": 2 }, { "name": "Mountain", "idx": 3, "num": 39, "is_land": true, "taps": "R" }, { "name": "Sacred Foundry", "idx": 5, "num": 44, "is_land": true, "taps": "RW" }], "vial_counters": [], "hand": [{ "num": 6, "name": "Boltwave", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 28, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 54, "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Lava Spike", "Lava Spike", "Skewer the Critics"], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 3, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 48 },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Boltwave, Lightning Bolt → opponent", "declared_order_payability": "not_verified", "land": null, "casts": ["Boltwave", "Lightning Bolt"], "cast_order_canonical": ["Boltwave", "Lightning Bolt"], "actions": [{ "card": "Boltwave" }, { "card": "Lightning Bolt", "burn_target": "opponent" }] },
+    { "index": 1, "summary": "land=none; cast: Lightning Bolt → opponent", "declared_order_payability": "not_verified", "land": null, "casts": ["Lightning Bolt"], "actions": [{ "card": "Lightning Bolt", "burn_target": "opponent" }] },
+    { "index": 2, "summary": "land=none; cast: Skullcrack → opponent", "declared_order_payability": "not_verified", "land": null, "casts": ["Skullcrack"], "actions": [{ "card": "Skullcrack", "burn_target": "opponent" }] },
+    { "index": 3, "summary": "land=none; cast: Boltwave", "declared_order_payability": "not_verified", "land": null, "casts": ["Boltwave"], "actions": [{ "card": "Boltwave" }] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 17,
+  "type": "target",
+  "source": "Lightning Bolt",
+  "turn": 4,
+  "per_target_damage": 3, "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Goblin Guide", "idx": 4, "num": 17, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Monastery Swiftspear", "idx": 6, "num": 35, "is_land": false, "power": 2, "toughness": 3 }, { "name": "Mountain", "idx": 3, "num": 39, "tapped": true, "is_land": true }, { "name": "Sacred Foundry", "idx": 5, "num": 44, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 28, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 54, "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Boltwave", "Lava Spike", "Lava Spike", "Skewer the Critics"], "library_size": 50, "land_drops_left": 1, "floating_mana": {"R": 1} },
+  "opponent": { "life": 0, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 48 },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }, { "kind": "permanent", "index": 4, "label": "Goblin Guide (yours)" }, { "kind": "permanent", "index": 6, "label": "Monastery Swiftspear (yours)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }, { "index": 2, "label": "Goblin Guide (yours)", "targets": [{ "kind": "permanent", "index": 4 }] }, { "index": 3, "label": "Monastery Swiftspear (yours)", "targets": [{ "kind": "permanent", "index": 6 }] }],
+  "note": "reply an option index. Each chosen target takes 3 damage (up to 1 target(s)). Default = the AI's pick (face)."
+}
+}
+  ],
+  "final_events": [
+    { "turn": 4, "kind": "damage", "text": "🔥 Boltwave: 3 to opponent (3→0)" },
+    { "turn": 4, "kind": "damage", "text": "🔥 Lightning Bolt: 3 to opponent (0→-3)" }
+  ]
+}
