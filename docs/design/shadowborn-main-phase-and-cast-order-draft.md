@@ -470,3 +470,51 @@ each, d5 b20, max 8; binary `ab7/mtg.ab` = commit in `ab7/COMMIT`). Run from the
 `build/scratch/.../ab7/mtg.ab --batch <ab7>/manifest.json --threads 32 --game-log-dir <ab7>/games > <ab7>/batch.stdout 2> <ab7>/batch.stderr`
 then `python3 logs/sb-mainphase/ab5.py report <ab7>`; repro each slower game at `--depth 8 --budget-ms 0`
 (`logs/sb-mainphase/recheck.py 8 0 ...`) and classify the order arm's with `blinddig.py`.
+
+## 10. Root cause of the five unrecovered games (2026-11-05; no amendment, every lever still DEFAULT OFF)
+
+Every game was played one at a time at `--depth 8 --budget-ms 0` per arm with one lever toggled at a time (binary
+`ab7/mtg.ab`, 309ff7ec3; logs `build/scratch/sb-mainphase/rcx/<BASE>_<gi>/<arm>`). Win turns (9 = no win by T8):
+
+| game | shipped | rit only | order | order+rit | split+rit | both | bothrit | removed by |
+|---|---|---|---|---|---|---|---|---|
+| 60135 gi134 | 7 | 7 | 7 | 9 | 7 | 7 | 9 | ritual prune, only with the order |
+| 60104 gi103 | 7 | 7 | 7 | 8 | 7 | 7 | 8 | ritual prune, only with the order |
+| 60095 gi94 | 5 | 5 | 6 | 7 | 5 | 6 | 7 | order (T5->6), then the prune (6->7) |
+| 50167 gi166 | 4 | 4 | 5 | 5 | 4 | 5 | 5 | order |
+| 60023 gi22 | 4 | 4 | 5 | 5 | 4 | 5 | 5 | order |
+
+The main-1 rule removes nothing in any of the five. Every lost line is a Dark Ritual ripple-dig under Thrumming Stone:
+* **Ritual alone (gi134, gi103, and gi94's second turn).** gi134 T5: Stone already out, "Dark Ritual" alone; the ripple
+  reveals {Swamp, Profane Tutor, Swamp, Swamp}, all bottomed, and the {B}{B}{B} goes unspent. The only effect is that
+  the T6 draw becomes Demonic Tutor instead of a Swamp. gi103 T4 is the same: two free Rituals, mana unspent, and the
+  T5 draw becomes an Apostle instead of a Stone. Under the shipped order the search reaches the same dig as
+  "Stone, Ritual" inside one plan (split+rit's gi134 T5 main 2), and the prune keeps that (the Stone is a paid sink).
+  The USER's order casts the Ritual ahead of the Stone, which leaves only the Ritual-alone form, and the prune drops
+  that form by design (§9.D: "its value as a dig is the clairvoyant one the USER ruled out"). gi134 under bothrit is
+  then a COMPLETE proven no-win at T1 (`proven_no_win`; the log stops after T1).
+* **Stone, then Ritual, then Apostle (gi166, gi22, and gi94's T3).** gi22 T3 shipped: Lake, Stone, Ritual (the ripple
+  reveals {Swamp, Diabolic Intent, Swamp, Culling}: no Ritual, nothing cast, all four bottomed), then the Apostle chains.
+  "Ritual, Stone, Apostle" costs the same and is payable under the order, but its Apostle would reveal those same four
+  and stop. gi166 T3 is the same (the one free Ritual's mana is not needed: five floating left over). The first
+  divergence is at T2 (shipped holds Lake for the 6-mana T3). This is exactly the USER's "rippling to skip
+  non-apostles".
+
+**Non-clairvoyant check** (`rcx/blindrit.py`: known-respecting blind search, salts 1..16, d5 b20, one game at a time;
+avg win turn, unwon = 9): gi134 shipped 9.00 / bothrit 9.00; gi103 9.00 / 8.69; gi94 8.06 / 7.88; gi166 6.00 / 7.81;
+gi22 6.06 / 7.56. At d5 b0 for gi166 and gi22 against the order: 6.38 / 7.38 and 6.25 / 7.69. For gi166 and gi22 the
+blind gap does not come from a dig (gi22: no blind salt digs). Per salt, the first divergence is the T2 land and the
+Diabolic Intent target (shipped: Swamp, fetch an Apostle; order: Lake, fetch a Ritual). Every step of shipped's line
+there is legal under the order: none of the three levers touches the land, a tutor target, or {Stone, Apostle}.
+So it is the determinized blind search choosing differently on one library, not a removed line. Population blind
+A/B (below): no blind cost.
+
+**Pooled A/B** (`build/scratch/sb-mainphase/ab8`, ONE batch, 3,200 games: ab7's shipped and bothrit jobs, plus the
+same jobs with `blind_salt=1`). Clairvoyant rows are byte-identical to ab7.
+
+| arm | set 50001 avg (d) | units | set 60001 avg (d) | units | faster/slower A, B |
+|---|---|---|---|---|---|
+| shipped | 4.7950 | -- | 4.7850 | -- | -- |
+| bothrit | 4.7775 (-0.0175) | -14.2% | 4.7325 (-0.0525) | -19.6% | 24/18, 31/11 |
+| shipped, blind salt 1 | 6.3575 | -- | 6.3075 | -- | -- |
+| bothrit, blind salt 1 | 6.1950 (-0.1625) | +7.0% | 6.3150 (+0.0075) | +7.7% | 95/76, 94/96 |
