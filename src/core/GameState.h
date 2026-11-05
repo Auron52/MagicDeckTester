@@ -462,6 +462,14 @@ struct GameState
     // scenario harness) keeps the outlet. Placed in the last byte of the padding after
     // pending_extra_combats (sizeof(GameState) unchanged, measured). A deck constant: never folded.
     bool                     deck_reads_life_total = true;
+    // ON-DEMAND SAC-FOR-MANA (Lotus Bloom, Lake of the Dead; USER 2026-11-04: *"Lotus bloom should be
+    // sacrificed on demand by the mana system. not a direct activation."*). DECK CONSTANT
+    // (StampDeckTraits): the mainboard holds an IsOnDemandSacDef card, so the PAYER cracks it when a cost
+    // cannot be paid without it and the plan enumerator emits no SacForMana action for it. DEFAULT TRUE
+    // (an unstamped state -- the scenario harness -- runs the on-demand route, which every apply world
+    // reads off the same state, so lockstep holds either way); a FALSE stamp is what keeps a deck with no
+    // such card off the payer's extra board scan. A deck constant: never folded.
+    bool                     deck_has_ondemand_sac = true;
     // EXTRA TURNS (Emrakul, the Aeons Torn -- CardParams::cast_trigger_extra_turns; Unpredictable Cyclone
     // phase 2, 2026-10-27). USER RULING 2026-10-26: *"Importantly, extra turns do not count toward the
     // turn count."* So `turn_number` stays the ROUND (how many turns the opponent has been given; every

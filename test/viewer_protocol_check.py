@@ -78,6 +78,21 @@ STRICT = "--strict" in sys.argv[1:]
 _tps = os.environ.get("MTG_TREASURE_PAY_SOURCE")
 TREASURE_PAY_COMPAT = _tps != "0"
 PAY_SAC_NAMES = {"Treasure Token"}
+# ON-DEMAND sac-for-mana sources (engine IsOnDemandSacDef; docs/design/sac-for-mana-on-demand.md, USER 2026-11-04:
+# "it should be on-demand and only done that way"). Lotus Bloom and Lake of the Dead are cracked by the PAYER when a
+# cost needs them and are never a plan action, unconditionally (no engine flag). A recorded crack is the same
+# implicit-payment case as a Treasure's: the plan is matched MINUS it (tier 3 below), and the drift test still
+# decides. A recorded crack is an action naming one of these with `sacout` or a `float_color` (Lotus Bloom's other
+# recorded actions -- the suspend, the cast off suspend -- carry neither).
+ON_DEMAND_SAC_NAMES = {"Lotus Bloom", "Lake of the Dead"}
+
+
+def is_implicit_pay_sac(a):
+    """A recorded plan action the engine now makes inside payment (see PAY_SAC_NAMES / ON_DEMAND_SAC_NAMES)."""
+    name = a.get("card")
+    if name in ON_DEMAND_SAC_NAMES:
+        return a.get("verb", "") != "suspend" and bool(a.get("sacout") or a.get("float_color"))
+    return TREASURE_PAY_COMPAT and bool(a.get("sacout")) and name in PAY_SAC_NAMES
 
 # Per-replay ADDRESS-SPACE cap, in MB (MTG_REPLAY_AS_CAP_MB; 0 disables). A replay is an ordinary
 # few-MB run -- the whole 208-reference sweep peaks around 90 MB per process -- but the plan
@@ -778,8 +793,7 @@ def plan_key_sans_pay_sac(p):
     """§2a compat key (see TREASURE_PAY_COMPAT): the recorded plan's identity with its Treasure-sac
     entries removed -- one cast instance per recorded sac ACTION (a plan can crack several). None
     when the plan has no such action (then this tier adds nothing over plan_key)."""
-    sacs = [a.get("card") for a in (p.get("actions") or [])
-            if a.get("sacout") and a.get("card") in PAY_SAC_NAMES]
+    sacs = [a.get("card") for a in (p.get("actions") or []) if is_implicit_pay_sac(a)]
     if not sacs:
         return None
     casts = list(p.get("casts") or [])
@@ -989,8 +1003,8 @@ def find_plan(recorded, plans, recorded_index=None, prefer=None, mdfc_face=None)
                           if list(plans[i].get("casts") or []) == list(recorded.get("casts") or [])]
             if same_order:
                 hits = same_order
-    if not hits and TREASURE_PAY_COMPAT:
-        # §2a compat tier: the recorded plan's Treasure-sac actions are implicit payment now, so
+    if not hits:
+        # §2a compat tier (Treasures under TREASURE_PAY_COMPAT; the on-demand cracks always): the recorded plan's Treasure-sac actions are implicit payment now, so
         # match the plan MINUS them. The sac colour is re-derived by the payment solver, the same
         # way a stale index is re-derived by content.
         want = plan_key_sans_pay_sac(recorded)

@@ -5216,14 +5216,32 @@ static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
         {
             std::stringstream ss(val);
             std::string step;
-            while (std::getline(ss, step, '|')) { if (!step.empty()) { ls.sequence.push_back(step); } }
+            while (std::getline(ss, step, '|'))
+            {
+                if (step.empty()) { continue; }
+                // The on-demand crack is not a step (see `sacout` below).
+                if (step.rfind("sacout=", 0) == 0)
+                {
+                    const CardDefinition* od = CardDatabase::Instance().Lookup(step.substr(7));
+                    if (od && IsOnDemandSacDef(*od) && EnvOn("MTG_SAC_ON_DEMAND", true)) { continue; }
+                }
+                ls.sequence.push_back(step);
+            }
         }
         else if (key == "cast")      { ls.casts.push_back(val); }
         else if (key == "act")       { ls.casts.push_back(val); ls.board_acts.push_back(val); }  // board activation
         else if (key == "landsedge") { ls.lands_edge = std::atoi(val.c_str()); }
         else if (key == "vial")      { ls.vial_deploys.push_back(val); }
         else if (key == "retrace")   { ls.retrace_casts.push_back(val); }
-        else if (key == "sacout")    { ls.sac_outlets.push_back(val); }   // one token per activation
+        // An ON-DEMAND source's crack (Lotus Bloom, Lake of the Dead) is the payer's, never a plan action
+        // (IsOnDemandSacDef; USER 2026-11-04 "it should be on-demand and only done that way"): a recorded
+        // `sacout=` of one is implicit payment now, so it is dropped here -- the payer cracks it at the cast
+        // that needs it. Every other outlet keeps its token.
+        else if (key == "sacout")
+        {
+            const CardDefinition* od = CardDatabase::Instance().Lookup(val);
+            if (!(od && IsOnDemandSacDef(*od) && EnvOn("MTG_SAC_ON_DEMAND", true))) { ls.sac_outlets.push_back(val); }
+        }
         else if (key == "attachall") { ls.attach_all.push_back(val); }    // Balan attach-all
         else if (key == "sfput")     { ls.sf_puts.push_back(val); }       // Stoneforge put (card name)
         else if (key == "auraswap")  { ls.aura_swaps.push_back(val); }    // Arcanum Wings' swap (Aura in)

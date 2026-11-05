@@ -36542,6 +36542,116 @@ inline bool IsPaySacSource(const CardDefinition& def)
         && TreasurePaySourceEnabled();
 }
 
+// ---- ON-DEMAND sac-for-mana sources (Lotus Bloom, Lake of the Dead) -----------------------------------
+// USER 2026-11-04 (verbatim): *"Lotus bloom should be sacrificed on demand by the mana system. not a direct
+// activation."* -- and on Lake of the Dead: *"it should not be sacrificing the land unless we need it."* --
+// and *"Yes, it should be on-demand and only done that way."* Design: docs/design/sac-for-mana-on-demand.md.
+//
+// Such a source is NOT a plan action: CollectActions emits no SacForMana for it, and the shared payer
+// (TapForCostShared, ManaPayment.cpp) cracks it only when the cost in hand cannot be paid without it -- the
+// dominance rule: an uncracked source leaves a superset of the board, so cracking only on need loses
+// nothing in goldfish. The crack itself is the unchanged ApplySacForMana, so the executor, the rollout and
+// the human's automatic payment run one path. The capacity is supply to every gate that may PRUNE a line
+// (AvailableManaPool and its twins, BuildColorFeasibility, ComputeAvailableColors, UntappedManaUpperBound)
+// through OnDemandSacSupplyNow below, the same over-count licence the gates already take: crediting the
+// crack can only keep a line, and the real payer no-ops the ones it cannot pay.
+//
+// The two shapes:
+//   * a one-shot LUMP of one chosen colour, the source itself sacrificed (Lotus Bloom; by card data also
+//     Black Lotus, which no stamped mainboard holds -- Garth conjures it): sac_for_mana_amount >= 2,
+//     no `produces`, no pinned colour, no {T}-creature / haste rider, not a creature-eating outlet;
+//   * a LAND crack that eats ANOTHER land (Lake of the Dead: "{T}, Sacrifice a Swamp: Add {B}{B}{B}{B}"),
+//     an alternative MODE of the land's own "{T}: Add {B}", so it is worth its amount MINUS that tap.
+// Fixed-colour self-sac lands (Dwarven Ruins, Svyelunite Temple), Generator Servant, Treasures and the
+// Skirk-style outlets keep their existing routes.
+inline bool IsOnDemandSacDef(const CardDefinition& def)
+{
+    const CardParams& q = def.params;
+    if (q.sac_for_mana_amount < 2) { return false; }
+    if (!q.sac_for_mana_victim_land_subtype.empty()) { return true; }
+    return q.produces.empty() && q.sac_for_mana_color.empty() && !q.sac_for_mana_requires_tap
+        && !q.sac_for_mana_grants_haste && !IsSacManaOutlet(q);
+}
+
+// May the active player crack `p` (an IsOnDemandSacDef permanent they control) right now? Untapped, and a
+// land crack needs a victim of its subtype other than itself. `victims_used` lets a caller walking several
+// such lands charge each crack one victim (two Lakes share the Swamps).
+inline bool OnDemandSacCrackableNow(const GameState& state, const Permanent& p, const CardDefinition& def,
+                                    int victims_used = 0)
+{
+    if (p.tapped || p.controller_index != state.active_player_index) { return false; }
+    const std::string& sub = def.params.sac_for_mana_victim_land_subtype;
+    if (sub.empty()) { return true; }
+    int n = 0;
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != p.controller_index || !q.card.IsLand()) { continue; }
+        if (q.card.m_number == p.card.m_number) { continue; }
+        if (LandHasSubtypeNow(state, q, sub) && ++n > victims_used) { return true; }
+    }
+    return false;
+}
+
+// The on-demand cracks' supply over and above what the board's ordinary scans already count: `any` units of
+// a lump whose single colour is chosen at the crack (credited WILD -- the gates are necessary conditions, so
+// "three of any one colour" read as three wild is the conservative, prune-less side), plus each land crack's
+// DELTA over its plain tap in its pinned colour (`fixed`, WUBRG + C). `mask` is the colours a crack can
+// supply (bit i = WUBRG). `skip` / `reserved_mask` exclude a source as the scans' own "as if tapped" /
+// held-source arguments do. Empty on every unstamped-false deck (one bool test).
+struct OnDemandSacSupply
+{
+    int      any      = 0;
+    int      fixed[6] = { 0, 0, 0, 0, 0, 0 };
+    unsigned mask     = 0;
+    int Total() const { return any + fixed[0] + fixed[1] + fixed[2] + fixed[3] + fixed[4] + fixed[5]; }
+};
+inline OnDemandSacSupply OnDemandSacSupplyNow(const GameState& state, const Permanent* skip = nullptr,
+                                              std::uint64_t reserved_mask = 0)
+{
+    OnDemandSacSupply out;
+    if (!state.deck_has_ondemand_sac) { return out; }
+    int lake_cracks = 0;
+    const int n = static_cast<int>(state.battlefield.size());
+    for (int i = 0; i < n; ++i)
+    {
+        const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+        if (&p == skip || p.tapped || p.controller_index != state.active_player_index) { continue; }
+        if (i < 64 && (reserved_mask & (1ull << i))) { continue; }
+        if (p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || !IsOnDemandSacDef(*d)) { continue; }
+        const CardParams& q = d->params;
+        if (q.sac_for_mana_victim_land_subtype.empty())
+        {
+            out.any += q.sac_for_mana_amount;
+            out.mask |= 0x1Fu;
+            continue;
+        }
+        if (!OnDemandSacCrackableNow(state, p, *d, lake_cracks)) { continue; }
+        ++lake_cracks;
+        const int delta = std::max(0, q.sac_for_mana_amount - std::max(1, q.produces_amount));
+        static const char kLetters[] = "WUBRGC";
+        for (int c = 0; c < 6; ++c)
+        {
+            if (!q.sac_for_mana_color.empty() && q.sac_for_mana_color[0] == kLetters[c])
+            {
+                out.fixed[c] += delta;
+                if (c < 5) { out.mask |= 1u << c; }
+            }
+        }
+    }
+    return out;
+}
+// The supply above, into a flat pool (the AvailableManaPool family's accounting).
+inline void AddOnDemandSacToPool(ManaPool& pool, const GameState& state, const Permanent* skip = nullptr)
+{
+    if (!state.deck_has_ondemand_sac) { return; }
+    const OnDemandSacSupply sup = OnDemandSacSupplyNow(state, skip);
+    pool.wild += sup.any;
+    pool.white += sup.fixed[0]; pool.blue += sup.fixed[1]; pool.black += sup.fixed[2];
+    pool.red   += sup.fixed[3]; pool.green += sup.fixed[4]; pool.colorless += sup.fixed[5];
+}
+
 // "Some payment on this thread has TAPPED a pay-sac source since the last commit." Set by the one
 // tap helper that can crack one (TapSourceIntoFloat), consumed and cleared by
 // CommitPaySacSacrifices, which is the only eraser. Deliberately NOT cleared on a failed payment:
@@ -45949,6 +46059,9 @@ inline int UntappedManaUpperBound(const GameState& state, bool for_creature,
                   + SacPayPlanFodderCount(state, active, so))
                * std::max(1, so.def->params.sac_outlet_add_mana_amount);
     }
+    // On-demand cracks (Lotus Bloom, Lake of the Dead): the payer cracks one when it must, so a bound blind
+    // to them would PROVE unpayable exactly the costs they exist to pay. A held source's crack is held too.
+    if (state.deck_has_ondemand_sac) { total += OnDemandSacSupplyNow(state, nullptr, reserved_mask).Total(); }
     return total;
 }
 
