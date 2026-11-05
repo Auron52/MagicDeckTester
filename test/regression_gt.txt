@@ -4,6 +4,8 @@
 # accepted-with-regressions (regression, 2026-11-04): Profane resolve fan (held-out -0.007): shadowborn d3 s2002 gi10 T5->T6 recovers T5 at d8 b0; th d5 s2002, alchemist d0 s2002/d5 s3003 and snow d0 s2002 are pre-existing origin drift (same got-digests from origin's own binary; none of these decks holds Profane Tutor or Lake of the Dead)
 # accepted-with-regressions (regression, 2026-11-05): Jumbo Cactuar cast sequencing update: 18 searched games faster, none slower; seven depth-zero games slower and five faster on the 1,000-game seed, net searched improvement. All 757 saved references replay without drift; same-run suite cost 0.76x Hinata.
 # accepted-with-regressions (overnight, 2026-11-05): Full overnight rebaseline requested after Jumbo exhaustive keep adoption and current engine changes: 118 matching, 424 changed, 11 new Shadowborn rows. Searched games 3953 faster vs 1889 slower; Angels +0.0064t/6065 searched, Angels2HG +0.0150t/600, Bruna +0.0122t/2131 remain visible follow-ups. Jumbo full overnight rows already adopted and match.
+# accepted-with-regressions (smoke, 2026-11-05): Jumbo exhaustive keep and bottom profile plus adopted d6b20 single-pass setting; searched net improves; changed hands explain the vast majority of per-game changes; overnight GT remains from the full suite rebaseline before the play-setting adoption.
+# accepted-with-regressions (regression, 2026-11-05): Jumbo exhaustive keep and bottom profile plus adopted d6b20 single-pass setting; all searched row averages improve or match; changed hands explain the vast majority of per-game changes; overnight GT remains from the full suite rebaseline before the play-setting adoption.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -70,9 +72,9 @@ fivecolour_smoke_d5_s1001=4.7840/73e004034afa3134
 stompy_smoke_d0_s1001=4.8170/0254d80bf9c7c5cf
 stompy_smoke_d3_s1001=3.9800/e2e95d4626254be2
 stompy_smoke_d5_s1001=4.0000/12c9e20788d4ea9d
-jumbo_smoke_d0_s1001=5.7890/f6c5d435fdde2725
-jumbo_smoke_d3_s1001=4.4600/e1bdf422a423277d
-jumbo_smoke_d5_s1001=4.3200/a027298364e87c90
+jumbo_smoke_d0_s1001=5.6540/f16fa7a3f7fc3c1e
+jumbo_smoke_d3_s1001=3.9400/a8c923c3e73fc5e1
+jumbo_smoke_d5_s1001=3.9829/5483716a171458b1
 minotaur_smoke_d0_s1001=5.3050/948ae97fa1052211
 minotaur_smoke_d3_s1001=4.9867/c2ccc2adcb805a03
 minotaur_smoke_d5_s1001=4.8954/e73569ee4e3d2ade
@@ -230,8 +232,8 @@ goblins_regression_d3_s30001=3.7500/91809def39c75fce
 goblins_regression_d5_s30001=3.7500/91809def39c75fce
 hinata_regression_d3_s30001=5.4000/dc809bb9e08d2f85
 hinata_regression_d5_s30001=5.4000/dc809bb9e08d2f85
-jumbo_regression_d3_s30001=4.3000/7bd0c725d11c41d8
-jumbo_regression_d5_s30001=4.3000/7bd0c725d11c41d8
+jumbo_regression_d3_s30001=4.3000/797d6d2d769db88b
+jumbo_regression_d5_s30001=4.0526/d848a42275b51ede
 kittyv3_regression_d3_s30301=3.4000/20266003fb5e888b
 kittyv3_regression_d5_s30301=3.4000/20266003fb5e888b
 knights_regression_d3_s30001=4.3500/5dc667b9fee7d29e
@@ -336,10 +338,10 @@ stompy_regression_d0_s2002=4.8580/ddc27e701ff83999
 stompy_regression_d3_s2002=4.1400/29cd2e05d4bcb99d
 stompy_regression_d5_s2002=4.1000/9fbcebdbc6b697f6
 stompy_regression_d5_s3003=4.0560/415f29b0a90fb76e
-jumbo_regression_d0_s2002=5.7720/13190b04be8a0117
-jumbo_regression_d3_s2002=4.3300/a991dc31ddd13f5f
-jumbo_regression_d5_s2002=4.3700/bdc3d335865d1e42
-jumbo_regression_d5_s3003=4.2880/e85176e8157cd85e
+jumbo_regression_d0_s2002=5.5870/db8dea0bf0cf0f92
+jumbo_regression_d3_s2002=4.2400/9502daee72117f48
+jumbo_regression_d5_s2002=4.0840/723a18554dfe149f
+jumbo_regression_d5_s3003=4.0780/914c04ed1eec2993
 minotaur_regression_d0_s2002=5.3100/0d522c9d270f350f
 minotaur_regression_d3_s2002=4.8800/2192c7cd2cc8d894
 minotaur_regression_d5_s2002=4.8780/c3f0de692d29640b

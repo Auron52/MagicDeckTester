@@ -378,6 +378,25 @@ times versus 1,889 slowdowns. Angels (+0.0064 turns over 6,065 searched games),
 Angels 2HG (+0.0150 over 600), and Bruna (+0.0122 over 2,131) remain visible
 follow-ups in the accepted ground-truth note.
 
+## Value-leaf generation and play setting
+
+The value-leaf run used the committed profile at `16e2f6d2f` and collected
+10,263 searched positions from 2,500 games. Its matrix completed 52/52 cells
+at 400 games each, with no condemned cells. The trained model's held-out RMSE
+was 0.5821. The model is retained as `Jumbo Cactuar.value.DISABLED.json`:
+although it passed the first leaf check, the full shape comparison selected a
+leafless final-depth single pass. That shape improved the paired mean by 0.0030
+turns and used 0.941 times the search units of the previous live setting over
+8,000 paired games.
+
+The subsequent depth and budget grid selected d6/b20 for the live sidecar. It
+matched the d5/b20 baseline's win turns while using 0.994 times its search
+units over 8,000 paired games. The escalation-skip stage found no ladder
+escalations and made no change. Jumbo smoke and regression ground truth were
+re-accepted after the setting change; the full overnight baseline above
+predates this play-setting adoption and will be revisited at the next periodic
+overnight run.
+
 ## Open model questions
 
 Trample on Chariot, Nylea, and Surrak, and Nylea's indestructible, are inert
