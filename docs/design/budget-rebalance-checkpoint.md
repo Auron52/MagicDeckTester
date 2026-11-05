@@ -787,3 +787,29 @@ problem that doesn't happen as much anymore." Start with every slow rollout on r
 - SUBAGENT running (worktree off 108072a7e, local branch mel-fold, scratch build/scratch/budget/melfold/): name the plan
   family, build an EXACT identity fold if one exists (verify mode + per-job arm + digest equality), and REPORT (not build)
   where a priced poll in the enumeration would bound it. Order follows "collapse wasted search first".
+
+### 2026-11-05 ~23:00 UTC -- REBASED onto phase-1-2-deck-analyzer; Melira dup-action fold ADOPTED; tiers RUNNING
+- Rebased onto origin/phase-1-2-deck-analyzer (one trivial conflict, TurnSolver.cpp ConsumeAtN signature next to the new
+  lahist block); pre-rebase head tagged locally br-prerebase-20261105 (69c463748). check_gt_logs 1002 consistent; branch GT
+  == shared GT. mtg-test 2593/2593. Force-pushed 1a58a0e35; CI green (ubuntu, windows, determinism parity).
+- 88b398400 MTG_DUP_ACTION_FOLD (default ON, exact; cherry-picked from local branch mel-fold 13feb049b): in EnumeratePlans'
+  no-mana-side walks, independent actions equal in every field but `eval` (an outlet's canonical single sac of the
+  counter-less Kitchen Finks vs the persist block's explicit K=1 sac of the same Finks) are walked only in canonical
+  (eval-desc, slot) prefix order; the signature dedup ignores eval and eval feeds only plan.value, so the returned list is
+  identical. Verify (MTG_DUP_ACTION_FOLD_VERIFY): Melira worst line 177.9M flagged, KEPT_BY_DEDUP 0, BRUTE_MISMATCH 0;
+  regression tier 44,689 flagged, 0/0. Full regression tier 265/265 digests = GT (verify and on arms; re-checked by me
+  with melfold/scripts/cmpgt.py); units moved on 3 Melira jobs only. Worst line (cap 3 GB): emitted 302M -> 127M, wall
+  2,187 -> 1,473 s; heaviest decision 1,205 -> 548 s. Per-job arm "dup_action_fold". mtg-test 2594/2594.
+- What remains of that tail is NOT exactly foldable: 110,591 plans -> 3,363 distinct end states, but which body dies
+  matters (Celes counters, persist return), so only a state-level dedup (MTG_CAND_DEDUP, default off, lossy question)
+  could collapse it.
+- PRICED CEILING on that decision (fold subagent, reported not built): a poll in the enumeration would NOT bound it.
+  (1) The priced ledger (MTG_PLAN_PRICED_LEDGER) bills only what an UNLIMITED plan cache would recompute; the 110K-plan
+  lists are refused by the real cache and recomputed muted -> only 4.9% of visits billed (=0 probe: decision stops at
+  2,896 units / 182 s instead of 631 s). (2) Even unmuted, emitted plans (build/sort/dedup) are unpriced: ~20x under.
+  CONFOUND being checked: those replays ran at MTG_RSS_CAP_GB=3 (the cache pool derives from it); generation runs at 20.
+- RUNNING (harness-tracked, build/scratch/budget/chain_tiers.sh): smoke -> regression on 88b398400 (logs tiers/*.log,
+  markers tiers/{smoke,regression,probe}.DONE), then melfold/run_cap.sh: worst line at cap 20 then cap 20 +
+  MTG_PLAN_CACHE_KB=0 (out melfold/cap/status).
+- NEXT: if tiers match GT -> push to shared branch (feature = re-pricing + priced stop + sac fold + dup-action fold).
+  Hand-off doc for the rest (docs/design/budget-rebalance-followups.md).
