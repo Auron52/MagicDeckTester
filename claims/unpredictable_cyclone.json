@@ -10,6 +10,8 @@
  "heartbeat": "2026-11-05T18:59:23Z",
  "host": "550a08fdc1f3",
  "land_note": "build failed in the landing worktree -- left for an agent",
+ "landed": "e7882bfb72079cb450b213be87f4bcf061365f25",
+ "landed_at": "2026-11-05T19:54:52Z",
  "result_branch": "artifact-refresh/unpredictable_cyclone-20261105-1903",
  "run_id": "unpredictable_cyclone-artifact-queue-d7d6a5-20261103T134203",
  "score": 0.0,
