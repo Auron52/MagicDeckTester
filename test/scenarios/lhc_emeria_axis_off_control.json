@@ -11,10 +11,10 @@
     "Plains",
     "Walking Ballista"
   ],
-  "depth": 3,
+  "depth": 0,
   "budget_ms": 0,
   "max_turns": 8,
-  "_comment": "Control for lhc_emeria_searched_return: the same board with the Emeria search axis OFF (MTG_EMERIA_AXIS=0). The T8 upkeep then returns the provider front (Auriok Champion), no Ballista is ever found, and nothing wins by T8 -- so the win in the paired scenario is the SEARCHED pick, not a default.",
+  "_comment": "Depth-0 playout control for lhc_emeria_searched_return: the same board takes the provider's front (Auriok Champion) at the upkeep, so no Ballista is found by T8. The paired searched scenario returns Ranger-Captain instead.",
   "battlefield": [
     {
       "name": "Plains"
@@ -48,8 +48,5 @@
     "Auriok Champion",
     "Ranger-Captain of Eos"
   ],
-  "env": {
-    "MTG_EMERIA_AXIS": "0"
-  },
   "expect_no_win": true
 }

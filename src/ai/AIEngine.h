@@ -272,6 +272,10 @@ public:
                               const SuspendArrivalCtx& ctx);
     static int RealStutNodeThunk(void* owner, GameState& state, int controller, const CardParams& pp, const Card& card,
                                  const SuspendArrivalCtx& ctx);
+    int DecideResolutionLand(GameState& state, int controller, const CardParams& pp, const Card& card,
+                             const SuspendArrivalCtx& ctx);
+    static int RealLandNodeThunk(void* owner, GameState& state, int controller, const CardParams& pp,
+                                 const Card& card, const SuspendArrivalCtx& ctx);
 
     // Mulligan keep-model GENERATOR hook (analyzer-only): clairvoyant "keep value" of an
     // opening hand. Bottoms `mulligan_count` cards using the SAME lookahead bottoming that

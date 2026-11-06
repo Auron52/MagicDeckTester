@@ -510,10 +510,19 @@ void GameEngine::UpkeepStep(GameState& state)
         struct RealStutNodeScope
         {
             RealStutNodeFn fn; void* owner; const GameState* st;   // the enclosing game's (a bottom trial nests)
+            RealLandNodeFn land_fn; void* land_owner; const GameState* land_st;
             RealStutNodeScope(AIEngine* ai, const GameState* s)
-                : fn(t_real_stut_node), owner(t_real_stut_owner), st(t_real_stut_state)
-            { t_real_stut_node = &AIEngine::RealStutNodeThunk; t_real_stut_owner = ai; t_real_stut_state = s; }
-            ~RealStutNodeScope() { t_real_stut_node = fn; t_real_stut_owner = owner; t_real_stut_state = st; }
+                : fn(t_real_stut_node), owner(t_real_stut_owner), st(t_real_stut_state),
+                  land_fn(t_real_land_node), land_owner(t_real_land_owner), land_st(t_real_land_state)
+            {
+                t_real_stut_node = &AIEngine::RealStutNodeThunk; t_real_stut_owner = ai; t_real_stut_state = s;
+                t_real_land_node = &AIEngine::RealLandNodeThunk; t_real_land_owner = ai; t_real_land_state = s;
+            }
+            ~RealStutNodeScope()
+            {
+                t_real_stut_node = fn; t_real_stut_owner = owner; t_real_stut_state = st;
+                t_real_land_node = land_fn; t_real_land_owner = land_owner; t_real_land_state = land_st;
+            }
         } _rsn(&m_ai, &state);
         ProcessSuspendArrivals(state, state.active_player_index);
     }

@@ -2643,6 +2643,24 @@ inline int ConsumePackedLandSearchPin(int& packed)
     if (packed == 0) { packed = -1; }
     return k;
 }
+// The crossing learns each upkeep-stream menu at the state where that ordinal is consumed:
+// ripple decision, free copy's search (or its empty slot), then the arriving spell's search.
+struct UpkeepLandPickProbe
+{
+    int n = 0;
+    int size[kLandSearchPinOrdinals] = { 1, 1, 1, 1, 1 };
+};
+inline thread_local UpkeepLandPickProbe* t_upkeep_land_pick_probe = nullptr;
+inline int ConsumeUpkeepLandPin(GameState& state, int width)
+{
+    if (UpkeepLandPickProbe* pr = t_upkeep_land_pick_probe)
+    {
+        if (pr->n < kLandSearchPinOrdinals)
+        { pr->size[pr->n] = std::max(1, std::min(width, kLandSearchPinMask + 1)); }
+        ++pr->n;
+    }
+    return ConsumePackedLandSearchPin(state.scripted_upkeep_land_search);
+}
 // PROFANE TUTOR's fetch at RESOLUTION (MTG_PROFANE_RESOLVE_FAN, DEFAULT ON; =0 -> the old main-phase pin on the
 // upkeep land-search stream). See GameState::scripted_suspend_tutor and TurnSolver's BoundaryFan.
 inline bool ProfaneResolveFanOn()
@@ -2709,6 +2727,11 @@ using RealStutNodeFn = int (*)(void* owner, GameState& state, int controller, co
 inline thread_local RealStutNodeFn t_real_stut_node  = nullptr;
 inline thread_local void*          t_real_stut_owner = nullptr;
 inline thread_local const GameState* t_real_stut_state = nullptr;
+using RealLandNodeFn = int (*)(void* owner, GameState& state, int controller, const CardParams& pp,
+                               const Card& card, const SuspendArrivalCtx& ctx);
+inline thread_local RealLandNodeFn t_real_land_node = nullptr;
+inline thread_local void* t_real_land_owner = nullptr;
+inline thread_local const GameState* t_real_land_state = nullptr;
 // `put_credit` (land-search gap 2): the land-put mana credit the CAST was emitted with
 // (Action::rock_mana on a LandSearchPutsUntapped cast), which restricts the pick to the picks earning
 // exactly that credit -- see LandSearchCreditGroups. nullptr / empty = unrestricted (every other site).
@@ -2716,6 +2739,8 @@ inline void PerformLandSearch(GameState& state, int controller, const LandSearch
                               const std::string& source, int pin,
                               const char* source_suffix = nullptr,
                               const ManaPool* put_credit = nullptr);        // LandSearch.h
+inline const std::vector<std::vector<std::string>>& LandSearchPicksMemo(const GameState& state,
+                                                                         int controller, const LandSearchSpec& spec);
 inline void ApplyLandSearchActivation(GameState& state, int controller, int src_idx,
                                       const CardDefinition& def);           // LandSearch.h
 inline void FireAttackLandSearch(GameState& state, int controller, std::vector<int>& atk_idx);
@@ -21869,8 +21894,22 @@ inline void CastOffSuspend(GameState& state, int controller, const Card& card)
         }
         if (def->params.land_search_on_resolve && def->params.land_search_count > 0)
         {
-            PerformLandSearch(state, controller, LandSearchSpecOf(def->params), card.m_name.str(),
-                              ConsumePackedLandSearchPin(state.scripted_upkeep_land_search));
+            const LandSearchSpec spec = LandSearchSpecOf(def->params);
+            const bool need_width = t_upkeep_land_pick_probe != nullptr
+                || (t_real_land_node != nullptr && &state == t_real_land_state);
+            const int width = need_width ? static_cast<int>(LandSearchPicksMemo(state, controller, spec).size()) : 1;
+            int pin = ConsumeUpkeepLandPin(state, width);
+            if (width > 1 && t_real_land_node != nullptr && &state == t_real_land_state
+                && t_suspend_ripple_depth == 0 && t_suspend_arrival_ctx != nullptr)
+            {
+                const RealLandNodeFn fn = t_real_land_node;
+                t_real_land_node = nullptr;
+                const int resolved = fn(t_real_land_owner, state, controller, def->params, card,
+                                        *t_suspend_arrival_ctx);
+                t_real_land_node = fn;
+                if (resolved >= 0) { pin = resolved; }
+            }
+            PerformLandSearch(state, controller, spec, card.m_name.str(), pin);
         }
         // PROFANE TUTOR (suspend-only tutor_to_hand): "Search your library for a card, put that card
         // into your hand, then shuffle." Its target is the SAME packed upkeep pin stream as Search for
@@ -21912,7 +21951,7 @@ inline void CastOffSuspend(GameState& state, int controller, const Card& card)
                 if (pin < 0 && g_stut_unpinned_hook != nullptr && !t_stut_fan_crossing)
                 { g_stut_unpinned_hook(state, controller, def->params); }
             }
-            else { pin = ConsumePackedLandSearchPin(state.scripted_upkeep_land_search); }
+            else { pin = ConsumeUpkeepLandPin(state, SuspendTutorPickWidth(state, controller, def->params)); }
             const int saved = g_scripted_tutor_choice;
             g_scripted_tutor_choice = pin;
             PerformTutor(state, controller, def->params, /*target_name=*/std::string{}, card.m_name.str(),
@@ -29321,6 +29360,10 @@ constexpr int kGracePinBits      = 4;
 constexpr int kGracePinMask      = (1 << kGracePinBits) - 1;
 constexpr int kGraceMaxOrdinals  = 3;   // the int16 pin holds 3 x 4 bits; a 4th+ copy takes its front
 
+// Resolution-state menus observed by the crossing that resolves this end step.
+struct GracePickProbe { int n = 0; int size[kGraceMaxOrdinals] = { 1, 1, 1 }; };
+inline thread_local GracePickProbe* t_grace_pick_probe = nullptr;
+
 inline bool HasEndStepGraceTrigger(const CardParams& p) { return p.endstep_modal_reanimate_mv >= 0; }
 
 inline GyReanimateFilter GraceFilter(const CardParams& p)
@@ -29385,6 +29428,12 @@ inline void PerformEndStepAbidingGrace(GameState& state, const std::vector<int>&
         const CardParams& pp = triggers[j]->params;
         const std::string src = triggers[j]->card.m_name.str();
         const std::vector<int> opts = GraceOptions(state, me, pp, &snapshot);
+        if (GracePickProbe* pr = t_grace_pick_probe)
+        {
+            if (pr->n < kGraceMaxOrdinals)
+            { pr->size[pr->n] = std::min<int>(static_cast<int>(opts.size()), kGracePinMask + 1); }
+            ++pr->n;
+        }
         if (opts.empty()) { continue; }   // no gain mode and no target: the ability is removed (CR 603.3c)
         int k = 0;
         if (pin >= 0 && static_cast<int>(j) < kGraceMaxOrdinals)
@@ -29463,6 +29512,14 @@ constexpr int kUpkeepReanimateDecline     = kUpkeepReanimatePinMask;   // the "y
 constexpr int kUpkeepReanimateMaxRanks    = kUpkeepReanimatePinMask;   // ranks 0..14
 constexpr int kUpkeepReanimateMaxOrdinals = 3;   // the int16 pin holds 3 x 4 bits; a 4th+ copy takes its front
 
+struct UpkeepReanimatePickProbe
+{
+    int n = 0;
+    int size[kUpkeepReanimateMaxOrdinals] = { 1, 1, 1 };
+    bool may[kUpkeepReanimateMaxOrdinals] = { false, false, false };
+};
+inline thread_local UpkeepReanimatePickProbe* t_upkeep_reanimate_pick_probe = nullptr;
+
 inline bool HasUpkeepGyReanimate(const CardParams& p) { return p.upkeep_gy_reanimate; }
 
 inline bool UpkeepGyReanimateConditionMet(const GameState& state, int controller, const CardParams& p)
@@ -29516,9 +29573,19 @@ inline void PerformUpkeepGyReanimate(GameState& state, const UpkeepGyReanimateSn
         const CardParams& pp = triggers[j]->params;
         const std::string src = triggers[j]->card.m_name.str();
         // CR 603.4: re-check the intervening if on resolution.
+        if (UpkeepReanimatePickProbe* pr = t_upkeep_reanimate_pick_probe)
+        { pr->n = std::min<int>(static_cast<int>(j) + 1, kUpkeepReanimateMaxOrdinals); }
         if (!UpkeepGyReanimateConditionMet(state, me, pp)) { continue; }
         const GyReanimateFilter f = UpkeepGyReanimateFilter(pp);
         const std::vector<int> opts = GyReanimateCandidateNames(state, me, f, &snapshot);
+        if (UpkeepReanimatePickProbe* pr = t_upkeep_reanimate_pick_probe)
+        {
+            if (static_cast<int>(j) < kUpkeepReanimateMaxOrdinals)
+            {
+                pr->size[j] = std::min<int>(static_cast<int>(opts.size()), kUpkeepReanimateMaxRanks);
+                pr->may[j] = pp.upkeep_gy_reanimate_may && !opts.empty();
+            }
+        }
         if (opts.empty()) { continue; }   // no legal target: the trigger is removed (CR 603.3d)
         int k = 0;
         if (pin >= 0 && static_cast<int>(j) < kUpkeepReanimateMaxOrdinals)
@@ -47242,7 +47309,16 @@ inline void ResolveSuspendRipple(GameState& state, int controller, const CardDef
     const bool f2 = RippleResolutionShuffles(def) && StableShuffleEnabled();
     for (std::size_t k = 0; k < ns.size(); ++k)
     {
-        int rank = nested ? -1 : ConsumePackedLandSearchPin(state.scripted_upkeep_land_search);
+        int width = 1;
+        if (!nested && t_upkeep_land_pick_probe != nullptr)
+        {
+            bool copy_in_lib = false;
+            for (const Card& lc : state.players[static_cast<std::size_t>(controller)].library)
+            { if (lc.m_name == def.card.m_name) { copy_in_lib = true; break; } }
+            const bool fixed = ResolveProvider(state).RippleFixed(state);
+            width = fixed ? 1 : f2 ? (copy_in_lib ? 2 : 1) : (copy_in_lib ? 3 : 2);
+        }
+        int rank = nested ? -1 : ConsumeUpkeepLandPin(state, width);
         if (rank < 0) { rank = 0; }
         RippleScript sc;
         sc.name = def.card.m_name; sc.pinned = true; sc.per_name = !f2;
@@ -47269,7 +47345,7 @@ inline void ResolveSuspendRipple(GameState& state, int controller, const CardDef
             CastOffSuspend(state, controller, c);
             --t_suspend_ripple_depth;
         }
-        if (!nested && !consumed_search) { (void)ConsumePackedLandSearchPin(state.scripted_upkeep_land_search); }
+        if (!nested && !consumed_search) { (void)ConsumeUpkeepLandPin(state, 1); }
     }
 }
 inline void RippleTraceNoteShuffle() { if (ripplestats::On()) { ripplestats::NoteShuffle(); } }

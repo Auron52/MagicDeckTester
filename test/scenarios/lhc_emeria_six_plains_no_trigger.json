@@ -44,8 +44,5 @@
   "graveyard": [
     "Ranger-Captain of Eos"
   ],
-  "env": {
-    "MTG_EMERIA_AXIS": "0"
-  },
   "expect_no_win": true
 }
