@@ -482,6 +482,7 @@ struct Permanent
                                             // elsewhere. Placed beside temp_lifelink in the 2026-09-25
                                             // cache layout (a bool in the cold bool run), not in the
                                             // scan-hot first 192 bytes.
+    bool      temp_indestructible  = false; // Boros Charm; battlefield-only until cleanup
     // EXERT (CR 701.38, Amonkhet): "it doesn't untap during your next untap step". Set when an
     // ability whose cost includes exerting this permanent is activated (CardParams::tap_token_exerts
     // -- Basri, Tomorrow's Champion), and CONSUMED by the next untap step of its controller, which
@@ -814,6 +815,8 @@ struct Permanent
     // is the older, conflated meaning, and the whole point of animated_printed_types is that the two
     // questions ("is it a creature?" and "does it have all creature types?") are no longer the same.
     bool AnimatedAllTypes() const { return is_animated && !animated_printed_types; }
+    bool HasKeyword(Keyword keyword) const
+    { return card.HasKeyword(keyword) || (keyword == Keyword::Indestructible && temp_indestructible); }
 
     // A permanent can attack if it is an untapped creature (or animated land) without
     // Defender that is not summoning sick (CR 302.6, CR 508.1).

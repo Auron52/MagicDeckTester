@@ -1,0 +1,19 @@
+{
+  "_comment": "Boltwave deals three damage to each of two opposing heads, reducing their shared team life by six.",
+  "env": { "MTG_OPPONENT_HEADS": "2" },
+  "deck": "decks/Modern RW Burn/Modern RW Burn.cod",
+  "turn": 2,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 6,
+  "resume_at": "main1",
+  "battlefield": [{ "name": "Mountain" }],
+  "hand": ["Boltwave"],
+  "library_filler": "Mountain",
+  "library_size": 30,
+  "depth": 2,
+  "budget_ms": 20,
+  "max_turns": 2,
+  "expect_win_turn": 2,
+  "expect_opponent_life": 0
+}

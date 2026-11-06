@@ -1523,6 +1523,12 @@ inline bool HumanCombatSwapOn() { return g_play_legacy_combat_swap_defer; }
 // (KarooTapInResponseOn reads this gate in human play). MTG_HUMAN_KAROO_FLOAT=0 is its env twin
 // (scenario controls); DEFAULT ON.
 inline bool g_play_legacy_karoo_float = false;
+
+// Saved references made before fetchlands gained a held battlefield activation used the
+// immediate-fetch land drop. Replay only: live games keep the real enter/activate timing.
+inline bool g_play_legacy_fetch_immediate = false;
+inline bool LegacyFetchImmediateOn() { return g_play_legacy_fetch_immediate; }
+
 inline bool HumanKarooFloatRuleOn()   // the rule the run plays under (the recording stamp reads this)
 {
     static const bool s_env = EnvOn("MTG_HUMAN_KAROO_FLOAT", true);

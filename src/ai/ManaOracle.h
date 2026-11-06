@@ -41,6 +41,8 @@ namespace manaoracle
 {
     // 0 = off; 1 = summary + the first few flags per class; 2 = every flag; 3 = + per-plan trace.
     int  Level();
+    // Empty the payment-refine memo; once per game from TurnSolver::ClearPerGameCaches.
+    void ClearRefineMemoPerGame();
     inline bool On() { return Level() > 0; }
 
     // One way to pay one payment: the taps to make (in order), and the floating units to set aside
@@ -258,7 +260,8 @@ namespace manaoracle
     std::vector<PayOption> MinimalPayments(const GameState& state, const ManaCost& cost, bool for_creature,
                                            std::vector<std::string>* unmodeled, bool creature_ability = false,
                                            bool whole_float = false, const Card* spell = nullptr,
-                                           const Card* ability_src = nullptr, int sac_victim = 0);
+                                           const Card* ability_src = nullptr, int sac_victim = 0,
+                                           std::size_t max_opts = static_cast<std::size_t>(-1));
 
     // PAY REFINE (MTG_PAY_REFINE; TapForCostShared, ManaPayment.cpp). `pre` / `post`: the board before and after
     // ONE outermost payment of `cost` the engine just made. Returns true and `out` = the payment to make instead

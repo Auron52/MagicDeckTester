@@ -1,0 +1,342 @@
+{
+  "seed": 3, "game_index": 2, "win_turn": 4, "won": true,
+  "mulligan": { "count": 1, "bottom": [44] }, "karoo_float": 1, "fetch_activation": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1, "spell_copy_id": 1,
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 24, "name": "Lava Spike" }, { "num": 54, "name": "Skullcrack" }, { "num": 1, "name": "Arid Mesa" }, { "num": 56, "name": "Sunbaked Canyon" }, { "num": 47, "name": "Searing Blaze" }, { "num": 48, "name": "Searing Blaze" }, { "num": 40, "name": "Rift Bolt" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": false,
+  "to_bottom": 1,
+  "hand": [{ "num": 21, "name": "Inspiring Vantage" }, { "num": 26, "name": "Lava Spike" }, { "num": 55, "name": "Skullcrack" }, { "num": 8, "name": "Boltwave" }, { "num": 20, "name": "Inspiring Vantage" }, { "num": 44, "name": "Sacred Foundry" }, { "num": 33, "name": "Monastery Swiftspear" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 5, "decision": {
+  "decision_index": 2,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 1,
+  "hand": [{ "num": 21, "name": "Inspiring Vantage", "win_optimal": true }, { "num": 26, "name": "Lava Spike", "win_optimal": true }, { "num": 55, "name": "Skullcrack", "win_optimal": true }, { "num": 8, "name": "Boltwave", "win_optimal": true }, { "num": 20, "name": "Inspiring Vantage", "win_optimal": true }, { "num": 44, "name": "Sacred Foundry", "win_optimal": true }, { "num": 33, "name": "Monastery Swiftspear", "win_optimal": true }],
+  "ai_choice": { "index": 0, "num": 21, "name": "Inspiring Vantage" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 1)"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Inspiring Vantage", "cast=Monastery Swiftspear"], "decision": {
+  "decision_index": 3,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 1, "card": "Boros Charm" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 8, "name": "Boltwave", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 10, "name": "Boros Charm", "cost": "{W}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 21, "name": "Inspiring Vantage", "cost": "", "mv": 0, "kind": "land" }, { "num": 20, "name": "Inspiring Vantage", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Lava Spike", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 33, "name": "Monastery Swiftspear", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }], "library_size": 53 },
+  "plans": [
+    { "index": 0, "summary": "land=Inspiring Vantage; cast: Monastery Swiftspear", "declared_order_payability": "not_verified", "land": "Inspiring Vantage", "casts": ["Monastery Swiftspear"], "actions": [{ "card": "Monastery Swiftspear" }] },
+    { "index": 1, "summary": "land=Inspiring Vantage; cast: Lava Spike → opponent", "declared_order_payability": "not_verified", "land": "Inspiring Vantage", "casts": ["Lava Spike"], "actions": [{ "card": "Lava Spike", "burn_target": "opponent" }] },
+    { "index": 2, "summary": "land=Inspiring Vantage; cast: Boltwave", "declared_order_payability": "not_verified", "land": "Inspiring Vantage", "casts": ["Boltwave"], "actions": [{ "card": "Boltwave" }] },
+    { "index": 3, "summary": "land=Inspiring Vantage; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Inspiring Vantage", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 4,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Inspiring Vantage", "idx": 5, "num": 21, "tapped": true, "is_land": true }, { "name": "Monastery Swiftspear", "idx": 6, "num": 33, "is_land": false, "power": 1, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 8, "name": "Boltwave", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 10, "name": "Boros Charm", "cost": "{W}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 20, "name": "Inspiring Vantage", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Lava Spike", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 55, "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }], "library_size": 53 },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 1, "kind": "combat", "text": "⚔ attacked: Monastery Swiftspear (1) — 1 to opponent (20→19)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Inspiring Vantage", "idx": 5, "num": 21, "tapped": true, "is_land": true }, { "name": "Monastery Swiftspear", "idx": 6, "num": 33, "tapped": true, "is_land": false, "power": 1, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 8, "name": "Boltwave", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 10, "name": "Boros Charm", "cost": "{W}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 20, "name": "Inspiring Vantage", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Lava Spike", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 55, "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }], "library_size": 53 },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 6, "cast_order": ["**", "land=Inspiring Vantage", "suspend=Rift Bolt", "cast=Boltwave"], "decision": {
+  "decision_index": 6,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 2, "card": "Rift Bolt" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Inspiring Vantage", "idx": 5, "num": 21, "is_land": true, "taps": "RW" }, { "name": "Monastery Swiftspear", "idx": 6, "num": 33, "is_land": false, "power": 1, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 8, "name": "Boltwave", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 10, "name": "Boros Charm", "cost": "{W}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 20, "name": "Inspiring Vantage", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Lava Spike", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 40, "name": "Rift Bolt", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }, { "num": 55, "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }], "library_size": 52 },
+  "plans": [
+    { "index": 0, "summary": "land=Inspiring Vantage; cast: Boltwave, Lava Spike → opponent", "declared_order_payability": "not_verified", "land": "Inspiring Vantage", "casts": ["Boltwave", "Lava Spike"], "cast_order_canonical": ["Boltwave", "Lava Spike"], "actions": [{ "card": "Boltwave" }, { "card": "Lava Spike", "burn_target": "opponent" }] },
+    { "index": 1, "summary": "land=Inspiring Vantage; cast: Boros Charm (4 damage to opponent)", "declared_order_payability": "not_verified", "land": "Inspiring Vantage", "casts": ["Boros Charm"], "actions": [{ "card": "Boros Charm", "x": 1 }] },
+    { "index": 2, "summary": "land=Inspiring Vantage; cast: Lava Spike → opponent", "declared_order_payability": "not_verified", "land": "Inspiring Vantage", "casts": ["Lava Spike"], "actions": [{ "card": "Lava Spike", "burn_target": "opponent" }] },
+    { "index": 3, "summary": "land=Inspiring Vantage; cast: Skullcrack → opponent", "declared_order_payability": "not_verified", "land": "Inspiring Vantage", "casts": ["Skullcrack"], "actions": [{ "card": "Skullcrack", "burn_target": "opponent" }] },
+    { "index": 4, "summary": "land=Inspiring Vantage; cast: Boltwave", "declared_order_payability": "not_verified", "land": "Inspiring Vantage", "casts": ["Boltwave"], "actions": [{ "card": "Boltwave" }] },
+    { "index": 5, "summary": "land=Inspiring Vantage; cast: Lava Spike → opponent, Rift Bolt (suspend)", "declared_order_payability": "not_verified", "land": "Inspiring Vantage", "casts": ["Lava Spike", "Rift Bolt"], "actions": [{ "card": "Lava Spike", "burn_target": "opponent" }, { "card": "Rift Bolt", "verb": "suspend" }] },
+    { "index": 6, "summary": "land=Inspiring Vantage; cast: Boltwave, Rift Bolt (suspend)", "declared_order_payability": "not_verified", "land": "Inspiring Vantage", "casts": ["Boltwave", "Rift Bolt"], "actions": [{ "card": "Boltwave" }, { "card": "Rift Bolt", "verb": "suspend" }] },
+    { "index": 7, "summary": "land=none; cast: Lava Spike → opponent", "declared_order_payability": "not_verified", "land": null, "casts": ["Lava Spike"], "actions": [{ "card": "Lava Spike", "burn_target": "opponent" }] },
+    { "index": 8, "summary": "land=none; cast: Boltwave", "declared_order_payability": "not_verified", "land": null, "casts": ["Boltwave"], "actions": [{ "card": "Boltwave" }] },
+    { "index": 9, "summary": "land=Inspiring Vantage; cast: Boros Charm (4 damage to you)", "declared_order_payability": "not_verified", "land": "Inspiring Vantage", "casts": ["Boros Charm"], "actions": [{ "card": "Boros Charm", "x": 1 }] },
+    { "index": 10, "summary": "land=Inspiring Vantage; cast: Boros Charm (your permanents gain indestructible)", "declared_order_payability": "not_verified", "land": "Inspiring Vantage", "casts": ["Boros Charm"], "actions": [{ "card": "Boros Charm", "x": 2 }] },
+    { "index": 11, "summary": "land=Inspiring Vantage; cast: Boros Charm (double strike to 1/1 Creature #1)", "declared_order_payability": "not_verified", "land": "Inspiring Vantage", "casts": ["Boros Charm"], "actions": [{ "card": "Boros Charm", "x": 3, "enchant_target": 500000, "enchant_target_name": "1/1 Creature", "enchant_target_label": "1/1 Creature #1" }] },
+    { "index": 12, "summary": "land=Inspiring Vantage; cast: Boros Charm (double strike to 1/1 Creature #2)", "declared_order_payability": "not_verified", "land": "Inspiring Vantage", "casts": ["Boros Charm"], "actions": [{ "card": "Boros Charm", "x": 3, "enchant_target": 500001, "enchant_target_name": "1/1 Creature", "enchant_target_label": "1/1 Creature #2" }] },
+    { "index": 13, "summary": "land=Inspiring Vantage; cast: Boros Charm (double strike to Monastery Swiftspear)", "declared_order_payability": "not_verified", "land": "Inspiring Vantage", "casts": ["Boros Charm"], "actions": [{ "card": "Boros Charm", "x": 3, "enchant_target": 33, "enchant_target_name": "Monastery Swiftspear" }] },
+    { "index": 14, "summary": "land=Inspiring Vantage; cast: Boros Charm (double strike to 1/1 Creature #3)", "declared_order_payability": "not_verified", "land": "Inspiring Vantage", "casts": ["Boros Charm"], "actions": [{ "card": "Boros Charm", "x": 3, "enchant_target": 500002, "enchant_target_name": "1/1 Creature", "enchant_target_label": "1/1 Creature #3" }] },
+    { "index": 15, "summary": "land=Inspiring Vantage; cast: Boros Charm (double strike to 1/1 Creature #4)", "declared_order_payability": "not_verified", "land": "Inspiring Vantage", "casts": ["Boros Charm"], "actions": [{ "card": "Boros Charm", "x": 3, "enchant_target": 500003, "enchant_target_name": "1/1 Creature", "enchant_target_label": "1/1 Creature #4" }] },
+    { "index": 16, "summary": "land=Inspiring Vantage; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Inspiring Vantage", "casts": [], "actions": [] },
+    { "index": 17, "summary": "land=Inspiring Vantage; cast: Rift Bolt (suspend)", "declared_order_payability": "not_verified", "land": "Inspiring Vantage", "casts": ["Rift Bolt"], "actions": [{ "card": "Rift Bolt", "verb": "suspend" }] },
+    { "index": 18, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 19, "summary": "land=none; cast: Rift Bolt (suspend)", "declared_order_payability": "not_verified", "land": null, "casts": ["Rift Bolt"], "actions": [{ "card": "Rift Bolt", "verb": "suspend" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 7,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 2, "kind": "suspend", "text": "⌛ Rift Bolt -- suspended (arrives T3)" }, { "turn": 2, "kind": "damage", "text": "🔥 Boltwave: 3 to opponent (19→16)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Inspiring Vantage", "idx": 5, "num": 21, "tapped": true, "is_land": true }, { "name": "Inspiring Vantage", "idx": 9, "num": 20, "tapped": true, "is_land": true }, { "name": "Monastery Swiftspear", "idx": 6, "num": 33, "is_land": false, "power": 2, "toughness": 3 }], "vial_counters": [], "hand": [{ "num": 10, "name": "Boros Charm", "cost": "{W}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 26, "name": "Lava Spike", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 55, "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "exile": [{ "name": "Rift Bolt", "kind": "suspend", "reason": "suspend", "time_counters": 1, "arrive_turn": 3 }], "graveyard": ["Boltwave"], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 16, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }], "library_size": 52 },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 2, "kind": "combat", "text": "⚔ attacked: Monastery Swiftspear (2) — 2 to opponent (16→14)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Inspiring Vantage", "idx": 5, "num": 21, "tapped": true, "is_land": true }, { "name": "Inspiring Vantage", "idx": 9, "num": 20, "tapped": true, "is_land": true }, { "name": "Monastery Swiftspear", "idx": 6, "num": 33, "tapped": true, "is_land": false, "power": 2, "toughness": 3 }], "vial_counters": [], "hand": [{ "num": 10, "name": "Boros Charm", "cost": "{W}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 26, "name": "Lava Spike", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 55, "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "exile": [{ "name": "Rift Bolt", "kind": "suspend", "reason": "suspend", "time_counters": 1, "arrive_turn": 3 }], "graveyard": ["Boltwave"], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 14, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }], "library_size": 52 },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 9,
+  "type": "free_cast",
+  "source": "Rift Bolt (suspend)",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Inspiring Vantage", "idx": 5, "num": 21, "is_land": true, "taps": "RW" }, { "name": "Inspiring Vantage", "idx": 9, "num": 20, "is_land": true, "taps": "RW" }, { "name": "Monastery Swiftspear", "idx": 6, "num": 33, "is_land": false, "power": 1, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 10, "name": "Boros Charm", "cost": "{W}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 26, "name": "Lava Spike", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 55, "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Boltwave"], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 14, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 11, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }], "library_size": 51 },
+  "heuristic_default": 0,
+  "operation": "suspend_cast",
+  "ai_pick": 0,
+  "candidates": [{ "index": 0, "name": "Rift Bolt" }],
+  "note": "reply a candidate index to cast that spell WITHOUT paying its mana cost, or -1 to decline. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 10,
+  "type": "target",
+  "source": "Rift Bolt",
+  "turn": 3,
+  "per_target_damage": 3, "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Inspiring Vantage", "idx": 5, "num": 21, "is_land": true, "taps": "RW" }, { "name": "Inspiring Vantage", "idx": 9, "num": 20, "is_land": true, "taps": "RW" }, { "name": "Monastery Swiftspear", "idx": 6, "num": 33, "is_land": false, "power": 1, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 10, "name": "Boros Charm", "cost": "{W}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 26, "name": "Lava Spike", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 55, "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Boltwave"], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 14, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 11, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }], "library_size": 51 },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }, { "kind": "permanent", "index": 3, "label": "1/1 Creature (opponent)" }, { "kind": "permanent", "index": 4, "label": "1/1 Creature (opponent)" }, { "kind": "permanent", "index": 6, "label": "Monastery Swiftspear (yours)" }, { "kind": "permanent", "index": 7, "label": "1/1 Creature (opponent)" }, { "kind": "permanent", "index": 8, "label": "1/1 Creature (opponent)" }, { "kind": "permanent", "index": 10, "label": "1/1 Creature (opponent)" }, { "kind": "permanent", "index": 11, "label": "1/1 Creature (opponent)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }, { "index": 2, "label": "1/1 Creature (opponent)", "targets": [{ "kind": "permanent", "index": 3 }] }, { "index": 3, "label": "1/1 Creature (opponent)", "targets": [{ "kind": "permanent", "index": 4 }] }, { "index": 4, "label": "Monastery Swiftspear (yours)", "targets": [{ "kind": "permanent", "index": 6 }] }, { "index": 5, "label": "1/1 Creature (opponent)", "targets": [{ "kind": "permanent", "index": 7 }] }, { "index": 6, "label": "1/1 Creature (opponent)", "targets": [{ "kind": "permanent", "index": 8 }] }, { "index": 7, "label": "1/1 Creature (opponent)", "targets": [{ "kind": "permanent", "index": 10 }] }, { "index": 8, "label": "1/1 Creature (opponent)", "targets": [{ "kind": "permanent", "index": 11 }] }],
+  "note": "reply an option index. Each chosen target takes 3 damage (up to 1 target(s)). Default = the AI's pick (face)."
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 11,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 3, "card": "Eidolon of the Great Revel" }],
+  "events": [{ "turn": 3, "kind": "suspend", "text": "⌛ Rift Bolt -- cast off suspend" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Inspiring Vantage", "idx": 5, "num": 21, "is_land": true, "taps": "RW" }, { "name": "Inspiring Vantage", "idx": 9, "num": 20, "is_land": true, "taps": "RW" }, { "name": "Monastery Swiftspear", "idx": 6, "num": 33, "is_land": false, "power": 2, "toughness": 3 }], "vial_counters": [], "hand": [{ "num": 10, "name": "Boros Charm", "cost": "{W}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 14, "name": "Eidolon of the Great Revel", "cost": "{R}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Lava Spike", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 55, "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Boltwave", "Rift Bolt"], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 11, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 11, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }], "library_size": 51 },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Eidolon of the Great Revel", "declared_order_payability": "not_verified", "land": null, "casts": ["Eidolon of the Great Revel"], "actions": [{ "card": "Eidolon of the Great Revel" }] },
+    { "index": 1, "summary": "land=none; cast: Boros Charm (4 damage to opponent)", "declared_order_payability": "not_verified", "land": null, "casts": ["Boros Charm"], "actions": [{ "card": "Boros Charm", "x": 1 }] },
+    { "index": 2, "summary": "land=none; cast: Lava Spike → opponent", "declared_order_payability": "not_verified", "land": null, "casts": ["Lava Spike"], "actions": [{ "card": "Lava Spike", "burn_target": "opponent" }] },
+    { "index": 3, "summary": "land=none; cast: Skullcrack → opponent", "declared_order_payability": "not_verified", "land": null, "casts": ["Skullcrack"], "actions": [{ "card": "Skullcrack", "burn_target": "opponent" }] },
+    { "index": 4, "summary": "land=none; cast: Boros Charm (4 damage to you)", "declared_order_payability": "not_verified", "land": null, "casts": ["Boros Charm"], "actions": [{ "card": "Boros Charm", "x": 1 }] },
+    { "index": 5, "summary": "land=none; cast: Boros Charm (your permanents gain indestructible)", "declared_order_payability": "not_verified", "land": null, "casts": ["Boros Charm"], "actions": [{ "card": "Boros Charm", "x": 2 }] },
+    { "index": 6, "summary": "land=none; cast: Boros Charm (double strike to 1/1 Creature #1)", "declared_order_payability": "not_verified", "land": null, "casts": ["Boros Charm"], "actions": [{ "card": "Boros Charm", "x": 3, "enchant_target": 500000, "enchant_target_name": "1/1 Creature", "enchant_target_label": "1/1 Creature #1" }] },
+    { "index": 7, "summary": "land=none; cast: Boros Charm (double strike to 1/1 Creature #2)", "declared_order_payability": "not_verified", "land": null, "casts": ["Boros Charm"], "actions": [{ "card": "Boros Charm", "x": 3, "enchant_target": 500001, "enchant_target_name": "1/1 Creature", "enchant_target_label": "1/1 Creature #2" }] },
+    { "index": 8, "summary": "land=none; cast: Boros Charm (double strike to Monastery Swiftspear)", "declared_order_payability": "not_verified", "land": null, "casts": ["Boros Charm"], "actions": [{ "card": "Boros Charm", "x": 3, "enchant_target": 33, "enchant_target_name": "Monastery Swiftspear" }] },
+    { "index": 9, "summary": "land=none; cast: Boros Charm (double strike to 1/1 Creature #3)", "declared_order_payability": "not_verified", "land": null, "casts": ["Boros Charm"], "actions": [{ "card": "Boros Charm", "x": 3, "enchant_target": 500002, "enchant_target_name": "1/1 Creature", "enchant_target_label": "1/1 Creature #3" }] },
+    { "index": 10, "summary": "land=none; cast: Boros Charm (double strike to 1/1 Creature #4)", "declared_order_payability": "not_verified", "land": null, "casts": ["Boros Charm"], "actions": [{ "card": "Boros Charm", "x": 3, "enchant_target": 500003, "enchant_target_name": "1/1 Creature", "enchant_target_label": "1/1 Creature #4" }] },
+    { "index": 11, "summary": "land=none; cast: Boros Charm (double strike to 1/1 Creature #5)", "declared_order_payability": "not_verified", "land": null, "casts": ["Boros Charm"], "actions": [{ "card": "Boros Charm", "x": 3, "enchant_target": 500004, "enchant_target_name": "1/1 Creature", "enchant_target_label": "1/1 Creature #5" }] },
+    { "index": 12, "summary": "land=none; cast: Boros Charm (double strike to 1/1 Creature #6)", "declared_order_payability": "not_verified", "land": null, "casts": ["Boros Charm"], "actions": [{ "card": "Boros Charm", "x": 3, "enchant_target": 500005, "enchant_target_name": "1/1 Creature", "enchant_target_label": "1/1 Creature #6" }] },
+    { "index": 13, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 12,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Inspiring Vantage", "idx": 5, "num": 21, "tapped": true, "is_land": true }, { "name": "Inspiring Vantage", "idx": 9, "num": 20, "tapped": true, "is_land": true }, { "name": "Monastery Swiftspear", "idx": 6, "num": 33, "is_land": false, "power": 3, "toughness": 4 }], "vial_counters": [], "hand": [{ "num": 14, "name": "Eidolon of the Great Revel", "cost": "{R}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Lava Spike", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 55, "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Boltwave", "Boros Charm", "Rift Bolt"], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 7, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 11, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }], "library_size": 51 },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Monastery Swiftspear (3) — 3 to opponent (7→4)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Inspiring Vantage", "idx": 5, "num": 21, "tapped": true, "is_land": true }, { "name": "Inspiring Vantage", "idx": 9, "num": 20, "tapped": true, "is_land": true }, { "name": "Monastery Swiftspear", "idx": 6, "num": 33, "tapped": true, "is_land": false, "power": 3, "toughness": 4 }], "vial_counters": [], "hand": [{ "num": 14, "name": "Eidolon of the Great Revel", "cost": "{R}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Lava Spike", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 55, "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Boltwave", "Boros Charm", "Rift Bolt"], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 4, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 11, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }], "library_size": 51 },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 2, "cast_order": ["**", "land=Sunbaked Canyon", "cast=Skullcrack", "cast=Lava Spike"], "decision": {
+  "decision_index": 14,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 4, "card": "Sunbaked Canyon" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Inspiring Vantage", "idx": 5, "num": 21, "is_land": true, "taps": "RW" }, { "name": "Inspiring Vantage", "idx": 9, "num": 20, "is_land": true, "taps": "RW" }, { "name": "Monastery Swiftspear", "idx": 6, "num": 33, "is_land": false, "power": 1, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 14, "name": "Eidolon of the Great Revel", "cost": "{R}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Lava Spike", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 55, "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 58, "name": "Sunbaked Canyon", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Boltwave", "Boros Charm", "Rift Bolt"], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 4, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 11, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }], "library_size": 50 },
+  "plans": [
+    { "index": 0, "summary": "land=Sunbaked Canyon; cast: Eidolon of the Great Revel, Lava Spike → opponent", "declared_order_payability": "not_verified", "land": "Sunbaked Canyon", "casts": ["Eidolon of the Great Revel", "Lava Spike"], "cast_order_canonical": ["Eidolon of the Great Revel", "Lava Spike"], "actions": [{ "card": "Eidolon of the Great Revel" }, { "card": "Lava Spike", "burn_target": "opponent" }] },
+    { "index": 1, "summary": "land=Sunbaked Canyon; cast: Lava Spike → opponent, Eidolon of the Great Revel", "declared_order_payability": "not_verified", "land": "Sunbaked Canyon", "casts": ["Lava Spike", "Eidolon of the Great Revel"], "cast_order_canonical": ["Lava Spike", "Eidolon of the Great Revel"], "actions": [{ "card": "Lava Spike", "burn_target": "opponent" }, { "card": "Eidolon of the Great Revel" }] },
+    { "index": 2, "summary": "land=Sunbaked Canyon; cast: Lava Spike → opponent, Skullcrack → opponent", "declared_order_payability": "not_verified", "land": "Sunbaked Canyon", "casts": ["Lava Spike", "Skullcrack"], "cast_order_canonical": ["Lava Spike", "Skullcrack"], "actions": [{ "card": "Lava Spike", "burn_target": "opponent" }, { "card": "Skullcrack", "burn_target": "opponent" }] },
+    { "index": 3, "summary": "land=Sunbaked Canyon; cast: Lava Spike → opponent", "declared_order_payability": "not_verified", "land": "Sunbaked Canyon", "casts": ["Lava Spike"], "actions": [{ "card": "Lava Spike", "burn_target": "opponent" }] },
+    { "index": 4, "summary": "land=Sunbaked Canyon; cast: Skullcrack → opponent", "declared_order_payability": "not_verified", "land": "Sunbaked Canyon", "casts": ["Skullcrack"], "actions": [{ "card": "Skullcrack", "burn_target": "opponent" }] },
+    { "index": 5, "summary": "land=none; cast: Lava Spike → opponent", "declared_order_payability": "not_verified", "land": null, "casts": ["Lava Spike"], "actions": [{ "card": "Lava Spike", "burn_target": "opponent" }] },
+    { "index": 6, "summary": "land=none; cast: Skullcrack → opponent", "declared_order_payability": "not_verified", "land": null, "casts": ["Skullcrack"], "actions": [{ "card": "Skullcrack", "burn_target": "opponent" }] },
+    { "index": 7, "summary": "land=Sunbaked Canyon; cast: Eidolon of the Great Revel", "declared_order_payability": "not_verified", "land": "Sunbaked Canyon", "casts": ["Eidolon of the Great Revel"], "actions": [{ "card": "Eidolon of the Great Revel" }] },
+    { "index": 8, "summary": "land=none; cast: Eidolon of the Great Revel", "declared_order_payability": "not_verified", "land": null, "casts": ["Eidolon of the Great Revel"], "actions": [{ "card": "Eidolon of the Great Revel" }] },
+    { "index": 9, "summary": "land=Sunbaked Canyon; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Sunbaked Canyon", "casts": [], "actions": [] },
+    { "index": 10, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 42,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 15,
+  "type": "target",
+  "source": "Skullcrack",
+  "turn": 4,
+  "per_target_damage": 3, "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 19, "battlefield": [{ "name": "Inspiring Vantage", "idx": 5, "num": 21, "tapped": true, "is_land": true }, { "name": "Inspiring Vantage", "idx": 9, "num": 20, "tapped": true, "is_land": true }, { "name": "Monastery Swiftspear", "idx": 6, "num": 33, "is_land": false, "power": 1, "toughness": 2 }, { "name": "Sunbaked Canyon", "idx": 12, "num": 58, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 14, "name": "Eidolon of the Great Revel", "cost": "{R}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Lava Spike", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 55, "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Boltwave", "Boros Charm", "Rift Bolt"], "library_size": 50, "land_drops_left": 0, "floating_mana": {"R": 2, "wild": 1} },
+  "opponent": { "life": 4, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 11, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }], "library_size": 50 },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }],
+  "note": "reply an option index. Each chosen target takes 3 damage (up to 1 target(s)). Default = the AI's pick (face)."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 16,
+  "type": "target",
+  "source": "Lava Spike",
+  "turn": 4,
+  "per_target_damage": 3, "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 19, "battlefield": [{ "name": "Inspiring Vantage", "idx": 5, "num": 21, "tapped": true, "is_land": true }, { "name": "Inspiring Vantage", "idx": 9, "num": 20, "tapped": true, "is_land": true }, { "name": "Monastery Swiftspear", "idx": 6, "num": 33, "is_land": false, "power": 2, "toughness": 3 }, { "name": "Sunbaked Canyon", "idx": 12, "num": 58, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 14, "name": "Eidolon of the Great Revel", "cost": "{R}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Lava Spike", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }], "graveyard": ["Boltwave", "Boros Charm", "Rift Bolt", "Skullcrack"], "library_size": 50, "land_drops_left": 0, "floating_mana": {"R": 1} },
+  "opponent": { "life": 1, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 11, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }], "library_size": 50 },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }],
+  "note": "reply an option index. Each chosen target takes 3 damage (up to 1 target(s)). Default = the AI's pick (face)."
+}
+}
+  ],
+  "final_events": [
+    { "turn": 4, "kind": "damage", "text": "🔥 Skullcrack: 3 to opponent (4→1)" },
+    { "turn": 4, "kind": "damage", "text": "🔥 Lava Spike: 3 to opponent (1→-2)" }
+  ]
+}

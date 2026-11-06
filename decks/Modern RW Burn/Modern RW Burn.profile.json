@@ -1,0 +1,84 @@
+{
+  "value_play": { "expected_buckets": 12, "mull_gen_depth": 1, "mull_gen_budget_ms": 1 },
+  "card_scores": {
+    "Arid Mesa": [
+      0.04757450683453612,
+      -0.1528944911297856
+    ],
+    "Boltwave": [
+      0.007284000782578737,
+      0.00706497552291907
+    ],
+    "Boros Charm": [
+      -0.05842585278981094,
+      -0.051194231635872
+    ],
+    "Eidolon of the Great Revel": [
+      -0.13208492801166383
+    ],
+    "Goblin Guide": [
+      0.4696822429906544,
+      0.06524083393242286
+    ],
+    "Inspiring Vantage": [
+      0.05238274428073808,
+      -0.27072538860103634
+    ],
+    "Lava Spike": [
+      0.07098160735705727,
+      0.0014227642276423147
+    ],
+    "Lightning Bolt": [
+      -0.07701071080817945,
+      -0.06568872987477636
+    ],
+    "Lightning Helix": [
+      -0.17968493384661866
+    ],
+    "Monastery Swiftspear": [
+      0.5438976653152525,
+      0.11074651353568488
+    ],
+    "Mountain": [
+      -0.093319490476381,
+      -0.06665768920010695
+    ],
+    "Rift Bolt": [
+      0.06676342525399193,
+      -0.018867924528302105
+    ],
+    "Sacred Foundry": [
+      -0.01707460757857948,
+      -0.021449434100036413
+    ],
+    "Searing Blaze": [
+      -0.3366013071895422
+    ],
+    "Skewer the Critics": [
+      -0.04317349569890183,
+      0.28388538914854733
+    ],
+    "Skullcrack": [
+      -0.24461614574238988
+    ],
+    "Sunbaked Canyon": [
+      0.03914060316635348,
+      -0.24111070073531904
+    ],
+    "Wooded Foothills": [
+      -0.14049616795612252
+    ]
+  },
+  "hand_score_threshold": -1e+18,
+  "mulligan": {
+    "bottom_order": "count_first",
+    "curve_check": "two_drop",
+    "max_lands": 5,
+    "min_color_sources": {},
+    "min_lands": 1,
+    "min_playable": 1,
+    "required_pieces": [],
+    "stop_at": 4
+  },
+  "version": 1
+}

@@ -1,4 +1,4 @@
-# Mana oracle: the memory blow-up (FIXED 2026-11-05) and the slow-game time (OPEN)
+# Mana oracle: the memory blow-up (FIXED 2026-11-05) and the slow-game time (FIXED 2026-11-06)
 
 The mana-clean pass (`scripts/mana_clean.py`, oracle arm `MTG_MANA_ORACLE=2`) lost two decks to the per-process
 RSS cap: Galadriel (`pass1-galadriel-r2`, 43 GB in ~2 min) and SelesnyaLifegain (`pass1-selesnyalifegain`, 43 GB
@@ -43,32 +43,60 @@ outcome, the CAPPED verdict and the UNMODELED notes are unchanged (every kept fr
 A second, smaller holder remains. `outcomes` keeps a full board per apply, about 300-700 MB per call at the
 20,000 retry (112 calls). That is harmless at 6.7 GB peak; revisit only if a deck shows it.
 
-## 2. Time: root causes (OPEN, for discussion)
+## 2. Time: root cause and fix (levers (b), (c), (d) LANDED 2026-11-06; (a) not needed yet)
 
-The fixed Galadriel batch still took 34 min for 32 games (one game 2,265 s). The census says:
+The fixed Galadriel batch still took 34 min for 32 games (one game 2,265 s), and five decks (Snow,
+LandfallElementals, AccomplishedAlchemist, NivMizzetCombo, EldraziDisplacerFlicker) stalled on single games of
+1-4 h. 98% of oracle time was in plans that end CAPPED.
 
-1. **98% of oracle time is in plans that end CAPPED.** Each one first runs the 2,000-apply pass, caps, and is
-   redone from scratch at 20,000. That is ~10% repeat work per capped plan.
-2. **The same (board, plan) is audited repeatedly.** Seed 30000596 T4 emitted 5 of its CAPPED lines three times
-   each, byte-identical (same board, same plan). Each audit of that plan costs 175-298 s at the retry ceiling.
-3. **Every kept frontier is enumerated in full.** That is up to 18,000-22,000 options, each verified by paying on
-   a scratch board, even when only a few hundred applies remain. The memory fix kept this (to keep UNMODELED
-   notes identical), so it still costs time.
-4. **The combinatorics are real.** For example, Galadriel with ten-odd distinct Temples and duals: boards
-   with different duals left untapped are Pareto-incomparable, so the frontier prune cannot fold them. The
-   identical-source fold only helps boards of truly interchangeable sources (Crackle X on basics, elf boards).
+**(d) Profile** (`perf`, Profile build, Galadriel seed 30000596 alone: 19 min 49 s, 81 plans, 464,224 applies,
+**45.7 M payment options**). About 97% of the time is `MinimalPayments`' option DFS, and almost all of that is
+`PayEnum::Verify` paying each option on a scratch board (`PayAndRecord`, 58% inclusive). Within that,
+`MidTurnStateKeyOfPayment` keys each result to discard duplicates (`BuildSimKeyBase` 24%, `LandTypeChangedToIsland`
+12% self). Applying scripts is about 1%. The cause: every kept frontier was enumerated in full (18-22k options,
+each verified), to apply a few hundred of them.
 
-**Candidate levers** (none implemented; numbers owed per lever):
+**(c) Lazy enumeration** (USER 2026-11-06: "that sounds fine"). A frontier's DFS stops at
+`room - next.size() + 1` options (`MinimalPayments(..., max_opts)`, `PayEnum::want`). The extra one tells Realize
+whether the layer is cut. A kept frontier met once the layer is already full is not enumerated, because it can
+only cut the layer. The scripts built, their order, every outcome and the CAPPED verdict are those of the full
+enumeration. **What is lost:** the "payment enumeration capped" UNMODELED *reason tally*, on plans already CAPPED
+(the note is not computed past the cut). No flag moves. Every UNMODELED emission is guarded by `r.capped`
+(AuditPlan returns before it, and AuditLine reports the cap first), so a CAPPED plan never emitted UNMODELED for
+that note anyway.
 
-- **(a) Per-game memo of audit results**, keyed on the full board + plan + `pre`. This is lossless if the audit is
-  a pure function of those. Risk: state outside `GameState` (see `oracle-dedup-deferred.md`), so the key must be
-  verified with a re-run-and-compare mode first.
-- **(b) Continue the retry from the 2,000 pass instead of restarting.** This is lossless (the same prefix in the
-  same order) and saves the first pass, ~10%.
-- **(c) Lazy enumeration.** Stop the option DFS once `room` options exist. This changes the UNMODELED
-  "payment enumeration capped" notes, but only on plans already CAPPED. That is a disclosure change, so the
-  USER decides.
-- **(d) Profile the enumeration** (`perf` on seed 30000596 alone) before choosing among (a)-(c).
+**(b) The retry continues from the cut.** Under a larger ceiling a layer's scripts are the same list cut later.
+A capped pass leaves a `RealizeCursor`, holding:
+- the kept frontiers of the layer it was building and where the cut fell;
+- the scripts before the cut;
+- the boards the applied part of the next layer reached;
+- the outcomes and notes so far.
+
+The retry rebuilds that layer from the cut and applies only the new scripts. The notes are restored to fresh-run
+order, because AuditPlan reads the first one. `MTG_ORACLE_RESUME_CHECK=1` (diagnostic) runs the fresh retry too
+and aborts on any difference.
+
+**(a) Per-game audit memo: not built.** With (b)+(c) the oracle is ~16x cheaper. Revisit only if a deck still
+stalls.
+
+**Measured** (the 32 Galadriel games of section 1, 32 threads; "old" = f6697cedf):
+
+| | old | (b)+(c) |
+|---|---|---|
+| wall | 34 min 18 s | **2 min 29 s** |
+| oracle ms (summed over threads) | 12,161,274 | 770,310 |
+| options enumerated | 408,879,187 | 5,688,534 |
+| applies | 6,134,047 | 5,566,047 |
+| result lines, oracle lines (897), UNMODELED=367, CAPPED=235 | | **identical** |
+| "payment enumeration capped" tally | 286,403 | 12,878 |
+| peak RSS | 6.7 GB | 14.9 GB (6.0 GB at 8 threads) |
+
+The higher peak is concurrency, not a leak: the 32 games now overlap in their worst plans. Each 20,000-apply
+retry holds its `outcomes` boards (~300-700 MB, section 1), and the peak scales with the thread count. With
+`MTG_ORACLE_RESUME_CHECK=1`, 284 of 284 resumed retries equalled the fresh ones (Galadriel).
+SelesnyaLifegain (the 32 games of section 1, with the check on): all 32 finished in **5 min 20 s**. That
+includes gi 8437, which was stopped at 4.3 h on the old binary. The 31 games both runs finished agree on every
+result and all 2,541 oracle lines, and 1,683 of 1,683 resumed retries equalled the fresh ones.
 
 ## 3. Reproduce
 

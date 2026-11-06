@@ -1,0 +1,23 @@
+{
+  "_comment": "The Burn provider's on-play fetch policy must still pay Arid Mesa's one life and make Mountain mana for Lava Spike.",
+  "deck": "decks/Modern RW Burn/Modern RW Burn.cod",
+  "turn": 1,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "resume_at": "main1",
+  "hand": ["Arid Mesa", "Lava Spike"],
+  "library_top": ["Mountain"],
+  "library_filler": "Mountain",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 50,
+  "max_turns": 1,
+  "expect_log_sequence": [
+    "T1 MAIN_1 PLAY_LAND Arid Mesa",
+    "T1 MAIN_1 CAST_SPELL Lava Spike"
+  ],
+  "expect_active_life": 19,
+  "expect_opponent_life": 17,
+  "expect_no_win": true
+}

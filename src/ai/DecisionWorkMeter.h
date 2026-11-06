@@ -20,6 +20,7 @@
 //
 // Deterministic: identical seed + budget + multiplier trips at the identical unit on every
 // machine. Disarmed (multiplier 0/unset) nothing is ever tripped and play is byte-identical.
+#include <algorithm>
 #include "../core/WorkCounters.h"
 #include "../core/EnvFlags.h"
 #include "ValueArm.h"
@@ -116,4 +117,64 @@ inline long long PricedLimitNs(long long limit_units)
     if (x <= 0 || limit_units <= 0) { return 0; }
     return limit_units * ref * x;
 }
+}
+// PRICED BUDGET (MTG_PRICED_BUDGET, default OFF while it is measured; docs/design/budget-rebalance-checkpoint.md).
+// A finite budget is spent in REAL COST, not in units: every charge bills the priced work done on this thread since
+// the previous charge (workctr::t_priced -- plan enumeration, applies, mana payment, state keys, rollout steps,
+// charged or not) plus kInteriorNs per unit charged, converted at UnitNs() ns per unit (MTG_PRICED_UNIT_NS, default
+// 28,300 = the median deck's priced ns per unit on the 2026-11-04 regression fit, so that deck searches as much as
+// before). A deck whose units hide heavy uncharged work (EDF ~103k ns/unit, Dragonstorm ~64k, Kitty ~55k) gets
+// proportionally fewer units per budget-ms; a light one (Goblins ~15k) more. RE-PRICES, never removes: an
+// UNLIMITED budget is charged exactly as before (Bill returns n), so everything findable at a large budget still is.
+// Deterministic and residency-independent: t_priced is integer prices x counts on this thread, the plan caches'
+// priced ledger makes it as-if-unlimited-cache, and tier-2 hits must charge what a recompute does (Tier2Overflow.h).
+// The kInteriorNs floor keeps every charge site progressing (a charge never bills less than its units' own price).
+namespace pricedbudget
+{
+// R in ns per unit for this job: the per-job arm (valuearm priced_unit_ns) wins, else the env; 0 = off.
+inline long long UnitNs()
+{
+    static const long long env = EnvOn("MTG_PRICED_BUDGET", false) ? std::max(1, EnvInt("MTG_PRICED_UNIT_NS", 28300)) : 0;
+    const int a = valuearm::t_arm.priced_unit_ns;
+    return a >= 0 ? a : env;
+}
+inline bool On() { return UnitNs() > 0; }
+inline thread_local long long t_wm  = 0;   // t_priced already billed (or dropped) on this thread
+inline thread_local long long t_acc = 0;   // billed ns not yet worth a whole unit
+// > 0 inside a FINITE decision root's Scope. Billing happens only there: a finite sub-budget that an UNLIMITED root
+// builds for a probe pass is charged units exactly as before, so an unlimited search is untouched by construction.
+inline thread_local int       t_active = 0;
+inline bool Active() { return t_active > 0; }
+// Units to charge a FINITE budget for a charge of n units.
+inline long long Bill(long long n)
+{
+    long long d = workctr::t_priced - t_wm;
+    if (d < 0) { d = workctr::t_priced; }   // t_priced was reset (a new game) since the last bill
+    t_wm = workctr::t_priced;
+    const long long ns = t_acc + n * workctr::kInteriorNs + d;
+    const long long u = ns / UnitNs();
+    t_acc = ns - u * UnitNs();
+    return u;
+}
+// Work done where no finite budget is charged (an unlimited budget, a null budget) is dropped, not carried into
+// the next finite one.
+inline void Drop() { t_wm = workctr::t_priced; }
+// RAII at a decision ROOT: work done before the decision is not billed to it, and the decision's own work is not
+// billed to an enclosing one (nested label / measurement roots) -- the enclosing pending work is kept as it was.
+struct Scope
+{
+    bool      on;
+    long long prev_pending, prev_acc;
+    explicit Scope(bool root) : on(root && On()), prev_pending(0), prev_acc(0)
+    {
+        if (!on) { return; }
+        prev_pending = workctr::t_priced - t_wm;
+        if (prev_pending < 0) { prev_pending = 0; }
+        prev_acc = t_acc;
+        t_wm = workctr::t_priced;
+        t_acc = 0;
+        ++t_active;
+    }
+    ~Scope() { if (on) { --t_active; t_wm = workctr::t_priced - prev_pending; t_acc = prev_acc; } }
+};
 }

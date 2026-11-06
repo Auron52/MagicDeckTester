@@ -335,6 +335,7 @@ std::mutex             g_print_mu;
 std::atomic<long long> g_cap_retry{0}, g_cap_retry_ok{0};   // the CAPPED escalation (see its site)
 std::mutex             g_reason_mu;
 std::map<std::string, long long> g_unmodeled_reasons;
+std::atomic<long long> g_resume_checked{0};   // MTG_ORACLE_RESUME_CHECK: resumed retries checked equal
 
 struct Reporter
 {
@@ -371,6 +372,8 @@ struct Reporter
             std::fprintf(stderr, "=== MANA ORACLE capped-plan escalation: %lld retried, %lld finished ===\n",
                          g_cap_retry.load(), g_cap_retry_ok.load());
         }
+        if (g_resume_checked.load() > 0)
+        { std::fprintf(stderr, "=== MANA ORACLE resume check: %lld resumed retries equal the fresh ones ===\n", g_resume_checked.load()); }
         for (const auto& kv : g_unmodeled_reasons)
         { std::fprintf(stderr, "=== MANA ORACLE unmodeled: %lld x %s ===\n", kv.second, kv.first.c_str()); }
         long long lost = 0;
@@ -1326,6 +1329,12 @@ struct PayEnum
     std::size_t                     cap    = 4096;
     bool                            capped = false;
     bool                            whole_float = false;   // MinimalPayments' fast form: no leftover split either
+    // LAZY STOP (USER 2026-11-06, lever (c) of docs/design/mana-oracle-memory-time.md): the caller can use at most
+    // `want` options (Realize's apply room, plus one to learn whether the layer is cut), so the DFS stops once `out`
+    // holds that many. It reuses `capped` to unwind, and `lazy` keeps the "payment enumeration capped" note off:
+    // that note is not computed past the point the plan is already CAPPED.
+    std::size_t                     want = static_cast<std::size_t>(-1);
+    bool                            lazy = false;
     std::vector<Pick>               cur;
     // RefinePayment's LAZY SURPLUS: a paying set's one-more-tap supersets are parked here (the set, and where in
     // `out` they would have gone) instead of being verified at once -- see RefinePaymentImpl.
@@ -1449,7 +1458,11 @@ struct PayEnum
                 rkey = (rkey ^ (0x51A9ull + static_cast<std::uint64_t>(p.card.m_number))) * 0x9E3779B97F4A7C15ULL;
             }
         }
-        if (seen.insert(rkey).second) { out.push_back(std::move(o)); }
+        if (seen.insert(rkey).second)
+        {
+            out.push_back(std::move(o));
+            if (out.size() >= want) { capped = true; lazy = true; }
+        }
         return true;
     }
 
@@ -1679,7 +1692,8 @@ std::vector<Pick> ScaledAheadClasses(const GameState& state, const std::vector<S
 
 std::vector<PayOption> MinimalPayments(const GameState& state, const ManaCost& cost, bool for_creature,
                                        std::vector<std::string>* unmodeled, bool creature_ability, bool whole_float,
-                                       const Card* spell, const Card* ability_src, int sac_victim)
+                                       const Card* spell, const Card* ability_src, int sac_victim,
+                                       std::size_t max_opts)
 {
     // The payment's context, as the frontier saw it: a creature's activated ability being paid (the
     // Secluded Courtyard clause), the spell being paid for (a subtype restriction). Replayed around every
@@ -1725,6 +1739,7 @@ std::vector<PayOption> MinimalPayments(const GameState& state, const ManaCost& c
     std::unordered_set<std::uint64_t> seen;
     for (const PayOption& st : whole_float ? std::vector<PayOption>(1) : StashChoices(state, unmodeled))
     {
+        if (out.size() >= max_opts) { break; }   // the lazy stop (PayEnum::want): the caller can use no more
         const ManaPool& f = state.floating_mana;
         int col[6] = { f.white - st.stash.white, f.blue - st.stash.blue, f.black - st.stash.black,
                        f.red - st.stash.red, f.green - st.stash.green, f.colorless - st.stash.colorless };
@@ -1735,11 +1750,12 @@ std::vector<PayOption> MinimalPayments(const GameState& state, const ManaCost& c
         if (wild > 0) { for (int c = 0; c < 5; ++c) { col[c] += wild; } }
         PayEnum pe{ state, cost, for_creature, srcs, suffix_max, st, seen, out };
         pe.whole_float = whole_float;
+        pe.want        = max_opts;
         // MTG_ORACLE_SCALED_AHEAD (DEFAULT ON; =0 the one-extra-tap table alone): audit-only, see ExtendScaledAhead.
         static const bool s_ahead = EnvOn("MTG_ORACLE_SCALED_AHEAD", true);
         if (!whole_float && s_ahead) { pe.ahead = ScaledAheadClasses(state, srcs, sac_victim); }
         pe.Dfs(0, col, total);
-        if (pe.capped && unmodeled != nullptr) { unmodeled->push_back("payment enumeration capped"); }
+        if (pe.capped && !pe.lazy && unmodeled != nullptr) { unmodeled->push_back("payment enumeration capped"); }
     }
     return out;
 }
@@ -2179,6 +2195,11 @@ bool SameOption(bool fa, const PayOption& a, bool fb, const PayOption& b)
 }
 } // namespace
 
+// Per game (TurnSolver::ClearPerGameCaches): the refine memo is pure, but a memo that outlives the game makes
+// how often RefinePaymentImpl runs -- and so the payments it counts (workctr::kPay), which the priced budget and
+// the priced ceiling read -- depend on which games shared the worker thread (2026-11-04).
+void ClearRefineMemoPerGame() { t_refine_memo.clear(); }
+
 bool RefinePayment(const GameState& pre, const GameState& post, const ManaCost& cost, bool for_creature,
                    bool creature_ability, PayOption& out)
 {
@@ -2371,6 +2392,30 @@ struct FrontierRec
     int                    sac_victim = 0;      // Hook::f_sac_victim
 };
 
+// Where a realisation's next layer was first cut by the apply ceiling, and what the capped pass had there, so a
+// retry under a larger ceiling continues instead of starting over (Realize's `cursor`, lever (b)).
+struct RealizeCut
+{
+    bool        set = false;
+    std::size_t i = 0;   // the kept frontier the cut fell in (or before)
+    std::size_t k = 0;   // the layer's script count before that frontier's options
+    std::size_t u = 0;   // r.unmodeled's size before that frontier was enumerated
+};
+struct RealizeCursor
+{
+    bool                                valid = false;
+    RealizeCut                          cut;
+    int                                 nodes_build = 0;   // applies made when the cut layer was built
+    std::vector<FrontierRec>            fronts_build;      // that layer's frontiers, and which the prune kept
+    std::vector<char>                   keep;
+    std::vector<std::vector<PayOption>> prefix;            // its scripts before the cut frontier
+    std::size_t                         cut_size = 0;      // its script count as cut (all applied)
+    std::size_t                         u_apply = 0;       // r.unmodeled's size before they were applied
+    std::vector<FrontierRec>            fronts_next;       // the frontier boards those applies reached
+    int                                 nodes_after = 0;
+    Realization                         r;                 // the outcomes and notes at the end of the capped pass
+};
+
 // Apply `plan` to a copy of `root` once per payment script, LAYERED by payment index: every script of
 // length k is applied, the frontier boards they reach are Pareto-pruned (same core, dominated
 // resources INCLUDING floating mana -> dropped; under goldfish monotonicity a board with every
@@ -2383,7 +2428,8 @@ struct FrontierRec
 // `accept` (with stop_at_full): ...and that this test passes (Realization::hit names the one it stopped at).
 Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pre, bool stop_at_full,
                     const std::vector<PayOption>& prefix = {}, bool all_engine = false,
-                    const std::multiset<std::string>* want = nullptr, const OutcomeTest* accept = nullptr)
+                    const std::multiset<std::string>* want = nullptr, const OutcomeTest* accept = nullptr,
+                    RealizeCursor* cursor = nullptr)
 {
     Realization r;
     std::vector<std::vector<PayOption>> layer(1, prefix);
@@ -2411,143 +2457,190 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
         ~PlanSrcScope() { t_plan_srcs = saved; t_key_twin_taps = saved_twin; }
     } _plan_src_scope(&plan_srcs);   // + t_key_twin_taps: the continuation's twinned {T} sources (KeyedApart)
     const int act = root.active_player_index;
-    while (!layer.empty())
+    // THE CAPPED RETRY CONTINUES FROM THE CUT (lever (b) of docs/design/mana-oracle-memory-time.md, USER 2026-11-06).
+    // Under a larger ceiling the scripts are applied in exactly the same order -- a layer's scripts are its kept
+    // frontiers' options in order, and the ceiling only decides where that list is cut -- so a retry from scratch
+    // first repeats every apply of the capped pass. With a `cursor`, the capped pass leaves what it had at the
+    // cut (the kept frontiers of the layer it was building, where the cut fell, the scripts before it, the boards
+    // the applied part of the next layer reached, the outcomes and notes so far), and the retry rebuilds that
+    // layer from the cut under its own room and applies only the scripts past the ones already applied. The
+    // notes are put back in the order a fresh run makes them (a later check reads the FIRST one), so the retry's
+    // Realization is the from-scratch one; MTG_ORACLE_RESUME_CHECK=1 runs both and aborts on any difference.
+    const bool may_save = cursor != nullptr && !cursor->valid && !stop_at_full;
+    bool resume = cursor != nullptr && cursor->valid && !stop_at_full;
+    bool pending_save = false;
+    std::size_t start = 0;
+    std::vector<FrontierRec> carried;   // a resumed layer's frontier boards its applied prefix already reached
+    RealizeCut cut;
+    while (resume || !layer.empty())
     {
         std::vector<FrontierRec> fronts;
-        for (std::vector<PayOption>& script : layer)
-        {
-            if (nodes >= NodeCap()) { r.capped = true; break; }
-            ++nodes;
-            g_applies.fetch_add(1, std::memory_order_relaxed);
-            GameState copy = root;
-            FrontierRec fr;
-            Hook h;
-            h.target  = &copy;
-            h.script  = script;
-            h.f_state = &fr.st;
-            h.all_engine = all_engine;
-            std::vector<std::string> cast_drops, act_drops;
-            std::vector<std::string>* saved_cast = g_play_dropped_cast_sink;
-            std::vector<std::string>* saved_act  = g_act_drop_sink;
-            g_play_dropped_cast_sink = &cast_drops;
-            g_act_drop_sink          = &act_drops;
-            const long long ta0 = g_tap_ahead_calls;
-            const long long uc0 = g_untap_choice_calls;
-            // The {T}-cost activation sources the apply resolved on this copy -- the plan's AND its
-            // continuations' (a breakpoint continuation's Voldaren Estate Blood) -- for the unscripted check.
-            std::vector<int> act_tap_srcs;
-            const GameState*  saved_tap_target = g_perm_ability_tap_target;
-            std::vector<int>* saved_tap_sink   = g_perm_ability_tap_sink;
-            g_perm_ability_tap_target = &copy;
-            g_perm_ability_tap_sink   = &act_tap_srcs;
-            // ...and the lands the END-OF-MAIN-1 SWEEP tapped (TapPainSourcesIfUseful / TapDripLandsIfUseful):
-            // the policy firing every leftover pain / drip land for its damage or drip trigger once the plan's
-            // last payment is made. Not a payment: nothing is paid with that mana (it empties with the phase),
-            // so no action of the plan can be dropped by it, and it is a deterministic function of the board
-            // each payment leaves -- the oracle's outcomes and the engine's own line both end with it, so the
-            // end boards it compares already carry its damage, gains and drains. Its own choice (sweep or keep)
-            // is the search's (Plan::sweep_choice), not a mana choice. Prevent Damage pass 1: 574,601 plans
-            // were UNMODELED for these taps alone, in 12,000 games.
-            std::vector<int> sweep_taps;
-            std::vector<int>* saved_sweep_sink   = g_endm1_sweep_tap_sink;
-            const GameState*  saved_sweep_target = g_endm1_sweep_tap_target;
-            g_endm1_sweep_tap_sink   = &sweep_taps;
-            g_endm1_sweep_tap_target = &copy;
-            t_hook = &h;
-            TurnSolver::ApplyPlan(copy, plan, pre);
-            t_hook = nullptr;
-            g_endm1_sweep_tap_sink    = saved_sweep_sink;
-            g_endm1_sweep_tap_target  = saved_sweep_target;
-            g_perm_ability_tap_target = saved_tap_target;
-            g_perm_ability_tap_sink   = saved_tap_sink;
-            // (A tap-ahead inside an ENGINE step is the engine's step, not a tap outside the script.)
-            const bool engine_tapahead = (g_tap_ahead_calls - ta0) != h.engine_tapaheads;
-            const bool engine_untap    = g_untap_choice_calls != uc0;
-            g_play_dropped_cast_sink = saved_cast;
-            g_act_drop_sink          = saved_act;
-            if (!h.tap_error.empty())
-            {
-                r.unmodeled.push_back("scripted payment refused: " + h.tap_error);
-                continue;
-            }
-            if (h.frontier)
-            {
-                g_frontiers.fetch_add(1, std::memory_order_relaxed);
-                fr.script       = std::move(script);
-                fr.cost         = h.f_cost;
-                fr.for_creature = h.f_for_creature;
-                fr.index        = h.next;
-                fr.tapahead     = h.f_tapahead;
-                fr.lands_only   = h.f_lands_only;
-                fr.creature_ability = h.f_creature_ability;
-                fr.has_spell    = h.f_has_spell;
-                if (h.f_has_spell) { fr.spell = h.f_spell; }
-                fr.has_ability_src = h.f_has_ability_src;
-                if (h.f_has_ability_src) { fr.ability_src = h.f_ability_src; }
-                fr.sac_victim   = h.f_sac_victim;
-                fronts.push_back(std::move(fr));
-                continue;
-            }
-            Outcome o;
-            o.cast_drops = std::move(cast_drops);
-            o.act_drops  = std::move(act_drops);
-            o.script     = script;
-            o.pay_steps  = h.pay_steps;
-            o.scaled_counted = h.scaled_counted;
-            o.first_fail = h.first_fail;
-            o.left       = LeftHand(root, copy);
-            o.line       = LineKey(root, copy);
-            // Did the ENGINE tap a mana source on its own (a tap-ahead, an untap effect's choice)? The
-            // oracle did not choose that tap, so it cannot vouch for completeness there.
-            if (engine_tapahead) { o.unscripted = "(an engine tap-ahead before an untap effect)"; }
-            // ...or chose WHICH lands an untap effect brought back (Cloud of Faeries, Reality Spasm, an
-            // untap ritual): a heuristic pick among different lands that the oracle does not branch on.
-            if (engine_untap)
-            { o.unscripted += (o.unscripted.empty() ? "" : ", ") + std::string("(an untap effect's choice of lands)"); }
-            std::set<int> by_script(h.tapped_by_script.begin(), h.tapped_by_script.end());
-            for (const Permanent& p0 : root.battlefield)
-            {
-                if (p0.controller_index != act || p0.tapped || by_script.count(p0.card.m_number) != 0) { continue; }
-                if (plan_srcs.count(p0.card.m_number) != 0 || plan_names.count(p0.card.m_name.str()) != 0) { continue; }
-                // ...nor one a continuation tapped as its own activation's {T} cost (not a mana choice).
-                if (std::find(act_tap_srcs.begin(), act_tap_srcs.end(), p0.card.m_number) != act_tap_srcs.end())
-                { continue; }
-                // ...nor one the end-of-main-1 sweep fired for its trigger (above).
-                if (std::find(sweep_taps.begin(), sweep_taps.end(), p0.card.m_number) != sweep_taps.end())
-                { continue; }
-                for (const Permanent& p1 : copy.battlefield)
-                {
-                    if (p1.card.m_number != p0.card.m_number) { continue; }
-                    if (p1.tapped && IsManaSourceNow(root, p0))
-                    { o.unscripted += (o.unscripted.empty() ? "" : ", ") + p0.card.m_name.str(); }
-                    break;
-                }
-            }
-            o.st = std::move(copy);
-            // (An outcome resting on a mana choice the engine made on its own is no caller's hit, so it does
-            // not end the search either: a scripted payment further on may still realise the line.)
-            const bool full = stop_at_full && o.Clean() && o.unscripted.empty()
-                           && (want == nullptr || Includes(o.left, *want)) && (accept == nullptr || (*accept)(o));
-            r.outcomes.push_back(std::move(o));
-            if (full) { r.hit = static_cast<int>(r.outcomes.size()) - 1; return r; }
-        }
-        if (r.capped) { break; }
-        // ---- Pareto-prune the frontier boards of this layer -----------------------------------
-        const std::size_t n = fronts.size();
-        std::vector<std::uint64_t> keys(n);
-        std::vector<Res> res(n);
-        for (std::size_t i = 0; i < n; ++i)
-        {
-            keys[i] = CoreKey(fronts[i].st, /*canonical=*/false) ^ (0x9e3779b97f4a7c15ULL * (fronts[i].index + 1))
-                    ^ std::hash<std::string>{}(fronts[i].cost.ToString() + (fronts[i].for_creature ? "c" : "n")
-                                               + (fronts[i].creature_ability ? "a" : "s")
-                                               + "t" + std::to_string(fronts[i].tapahead)
-                                               + (fronts[i].has_spell ? "|" + fronts[i].spell.m_name.str() : "")
-                                               + "v" + std::to_string(fronts[i].sac_victim));
-            res[i]  = Resources(fronts[i].st, /*with_float=*/true);
-        }
-        const std::vector<char> keep = ParetoKeep(keys, res);
+        std::vector<char> keep;
         std::vector<std::vector<PayOption>> next;
+        std::size_t first_i = 0;
+        std::vector<std::string> apply_notes;
+        if (resume)
+        {
+            r = std::move(cursor->r);
+            r.capped = false;
+            apply_notes.assign(r.unmodeled.begin() + static_cast<std::ptrdiff_t>(cursor->u_apply), r.unmodeled.end());
+            r.unmodeled.resize(cursor->cut.u);
+            nodes   = cursor->nodes_build;
+            fronts  = std::move(cursor->fronts_build);
+            keep    = std::move(cursor->keep);
+            next    = std::move(cursor->prefix);
+            first_i = cursor->cut.i;
+        }
+        else
+        {
+            fronts = std::move(carried);
+            carried.clear();
+            for (std::size_t li = start; li < layer.size(); ++li)
+            {
+                std::vector<PayOption>& script = layer[li];
+                if (nodes >= NodeCap()) { r.capped = true; break; }
+                ++nodes;
+                g_applies.fetch_add(1, std::memory_order_relaxed);
+                GameState copy = root;
+                FrontierRec fr;
+                Hook h;
+                h.target  = &copy;
+                h.script  = script;
+                h.f_state = &fr.st;
+                h.all_engine = all_engine;
+                std::vector<std::string> cast_drops, act_drops;
+                std::vector<std::string>* saved_cast = g_play_dropped_cast_sink;
+                std::vector<std::string>* saved_act  = g_act_drop_sink;
+                g_play_dropped_cast_sink = &cast_drops;
+                g_act_drop_sink          = &act_drops;
+                const long long ta0 = g_tap_ahead_calls;
+                const long long uc0 = g_untap_choice_calls;
+                // The {T}-cost activation sources the apply resolved on this copy -- the plan's AND its
+                // continuations' (a breakpoint continuation's Voldaren Estate Blood) -- for the unscripted check.
+                std::vector<int> act_tap_srcs;
+                const GameState*  saved_tap_target = g_perm_ability_tap_target;
+                std::vector<int>* saved_tap_sink   = g_perm_ability_tap_sink;
+                g_perm_ability_tap_target = &copy;
+                g_perm_ability_tap_sink   = &act_tap_srcs;
+                // ...and the lands the END-OF-MAIN-1 SWEEP tapped (TapPainSourcesIfUseful / TapDripLandsIfUseful):
+                // the policy firing every leftover pain / drip land for its damage or drip trigger once the plan's
+                // last payment is made. Not a payment: nothing is paid with that mana (it empties with the phase),
+                // so no action of the plan can be dropped by it, and it is a deterministic function of the board
+                // each payment leaves -- the oracle's outcomes and the engine's own line both end with it, so the
+                // end boards it compares already carry its damage, gains and drains. Its own choice (sweep or keep)
+                // is the search's (Plan::sweep_choice), not a mana choice. Prevent Damage pass 1: 574,601 plans
+                // were UNMODELED for these taps alone, in 12,000 games.
+                std::vector<int> sweep_taps;
+                std::vector<int>* saved_sweep_sink   = g_endm1_sweep_tap_sink;
+                const GameState*  saved_sweep_target = g_endm1_sweep_tap_target;
+                g_endm1_sweep_tap_sink   = &sweep_taps;
+                g_endm1_sweep_tap_target = &copy;
+                t_hook = &h;
+                TurnSolver::ApplyPlan(copy, plan, pre);
+                t_hook = nullptr;
+                g_endm1_sweep_tap_sink    = saved_sweep_sink;
+                g_endm1_sweep_tap_target  = saved_sweep_target;
+                g_perm_ability_tap_target = saved_tap_target;
+                g_perm_ability_tap_sink   = saved_tap_sink;
+                // (A tap-ahead inside an ENGINE step is the engine's step, not a tap outside the script.)
+                const bool engine_tapahead = (g_tap_ahead_calls - ta0) != h.engine_tapaheads;
+                const bool engine_untap    = g_untap_choice_calls != uc0;
+                g_play_dropped_cast_sink = saved_cast;
+                g_act_drop_sink          = saved_act;
+                if (!h.tap_error.empty())
+                {
+                    r.unmodeled.push_back("scripted payment refused: " + h.tap_error);
+                    continue;
+                }
+                if (h.frontier)
+                {
+                    g_frontiers.fetch_add(1, std::memory_order_relaxed);
+                    fr.script       = std::move(script);
+                    fr.cost         = h.f_cost;
+                    fr.for_creature = h.f_for_creature;
+                    fr.index        = h.next;
+                    fr.tapahead     = h.f_tapahead;
+                    fr.lands_only   = h.f_lands_only;
+                    fr.creature_ability = h.f_creature_ability;
+                    fr.has_spell    = h.f_has_spell;
+                    if (h.f_has_spell) { fr.spell = h.f_spell; }
+                    fr.has_ability_src = h.f_has_ability_src;
+                    if (h.f_has_ability_src) { fr.ability_src = h.f_ability_src; }
+                    fr.sac_victim   = h.f_sac_victim;
+                    fronts.push_back(std::move(fr));
+                    continue;
+                }
+                Outcome o;
+                o.cast_drops = std::move(cast_drops);
+                o.act_drops  = std::move(act_drops);
+                o.script     = script;
+                o.pay_steps  = h.pay_steps;
+                o.scaled_counted = h.scaled_counted;
+                o.first_fail = h.first_fail;
+                o.left       = LeftHand(root, copy);
+                o.line       = LineKey(root, copy);
+                // Did the ENGINE tap a mana source on its own (a tap-ahead, an untap effect's choice)? The
+                // oracle did not choose that tap, so it cannot vouch for completeness there.
+                if (engine_tapahead) { o.unscripted = "(an engine tap-ahead before an untap effect)"; }
+                // ...or chose WHICH lands an untap effect brought back (Cloud of Faeries, Reality Spasm, an
+                // untap ritual): a heuristic pick among different lands that the oracle does not branch on.
+                if (engine_untap)
+                { o.unscripted += (o.unscripted.empty() ? "" : ", ") + std::string("(an untap effect's choice of lands)"); }
+                std::set<int> by_script(h.tapped_by_script.begin(), h.tapped_by_script.end());
+                for (const Permanent& p0 : root.battlefield)
+                {
+                    if (p0.controller_index != act || p0.tapped || by_script.count(p0.card.m_number) != 0) { continue; }
+                    if (plan_srcs.count(p0.card.m_number) != 0 || plan_names.count(p0.card.m_name.str()) != 0) { continue; }
+                    // ...nor one a continuation tapped as its own activation's {T} cost (not a mana choice).
+                    if (std::find(act_tap_srcs.begin(), act_tap_srcs.end(), p0.card.m_number) != act_tap_srcs.end())
+                    { continue; }
+                    // ...nor one the end-of-main-1 sweep fired for its trigger (above).
+                    if (std::find(sweep_taps.begin(), sweep_taps.end(), p0.card.m_number) != sweep_taps.end())
+                    { continue; }
+                    for (const Permanent& p1 : copy.battlefield)
+                    {
+                        if (p1.card.m_number != p0.card.m_number) { continue; }
+                        if (p1.tapped && IsManaSourceNow(root, p0))
+                        { o.unscripted += (o.unscripted.empty() ? "" : ", ") + p0.card.m_name.str(); }
+                        break;
+                    }
+                }
+                o.st = std::move(copy);
+                // (An outcome resting on a mana choice the engine made on its own is no caller's hit, so it does
+                // not end the search either: a scripted payment further on may still realise the line.)
+                const bool full = stop_at_full && o.Clean() && o.unscripted.empty()
+                               && (want == nullptr || Includes(o.left, *want)) && (accept == nullptr || (*accept)(o));
+                r.outcomes.push_back(std::move(o));
+                if (full) { r.hit = static_cast<int>(r.outcomes.size()) - 1; return r; }
+            }
+            start = 0;
+            if (r.capped)
+            {
+                if (pending_save)
+                {
+                    cursor->fronts_next = std::move(fronts);
+                    cursor->nodes_after = nodes;
+                    cursor->r           = r;
+                    cursor->valid       = true;
+                }
+                break;
+            }
+            // ---- Pareto-prune the frontier boards of this layer -----------------------------------
+            std::vector<std::uint64_t> keys(fronts.size());
+            std::vector<Res> res(fronts.size());
+            for (std::size_t i = 0; i < fronts.size(); ++i)
+            {
+                keys[i] = CoreKey(fronts[i].st, /*canonical=*/false) ^ (0x9e3779b97f4a7c15ULL * (fronts[i].index + 1))
+                        ^ std::hash<std::string>{}(fronts[i].cost.ToString() + (fronts[i].for_creature ? "c" : "n")
+                                                   + (fronts[i].creature_ability ? "a" : "s")
+                                                   + "t" + std::to_string(fronts[i].tapahead)
+                                                   + (fronts[i].has_spell ? "|" + fronts[i].spell.m_name.str() : "")
+                                                   + "v" + std::to_string(fronts[i].sac_victim));
+                res[i]  = Resources(fronts[i].st, /*with_float=*/true);
+            }
+            keep = ParetoKeep(keys, res);
+        }
+        const std::size_t n = fronts.size();
         // THE NEXT LAYER IS BUILT ONLY AS FAR AS THE APPLY CEILING REACHES (memory, 2026-11-05). The layer loop
         // above applies scripts in order and stops at the first one it meets with `nodes >= NodeCap()`, marking
         // the realisation CAPPED -- so of this layer's scripts only the first `room` can ever be applied, and
@@ -2557,18 +2650,30 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
         // for a 2,000-apply ceiling, and a few threads doing that at once took the 47 GB box past the RSS cap
         // (pass1-galadriel-r2, pass1-selesnyalifegain; the container OOM of 2026-11-04 ~12:50Z). Lossless:
         // the applied prefix, every outcome and the CAPPED verdict are unchanged (a dropped script sets
-        // `capped`, as meeting it at the ceiling would). Every kept frontier's options are still ENUMERATED,
-        // so the UNMODELED notes MinimalPayments makes are unchanged too.
+        // `capped`, as meeting it at the ceiling would).
         const std::size_t room = nodes < NodeCap() ? static_cast<std::size_t>(NodeCap() - nodes) : 0;
-        for (std::size_t i = 0; i < n; ++i)
+        for (std::size_t i = first_i; i < n; ++i)
         {
             if (!keep[i]) { g_pruned.fetch_add(1, std::memory_order_relaxed); continue; }
+            const std::size_t k0 = next.size(), u0 = r.unmodeled.size();   // where a cut here resumes (lever (b))
+            auto note_cut = [&] { r.capped = true; if (!cut.set) { cut.set = true; cut.i = i; cut.k = k0; cut.u = u0; } };
+            // ...AND ITS OPTIONS ARE ENUMERATED ONLY AS FAR AS THAT (USER 2026-11-06, lever (c) of
+            // docs/design/mana-oracle-memory-time.md: "that sounds fine"). With the layer already full, a kept
+            // frontier would only cut it -- it always yields at least one script (the fail option below) -- so
+            // it is not enumerated; and a frontier's own DFS stops at room - next.size() + 1 options, the one
+            // extra telling the loop below whether the layer is cut. The scripts built, their order, every
+            // outcome and the CAPPED verdict are those of the full enumeration. What is lost: the "payment
+            // enumeration capped" UNMODELED note, on plans already CAPPED (the note is not computed past the
+            // point the search is cut). Galadriel seed 30000596 T4 enumerated 18-22k options per frontier,
+            // each verified by a scratch pay, to apply a few hundred of them.
+            if (next.size() >= room) { note_cut(); break; }
+            const std::size_t want = room - next.size() + 1;
             FrontierRec& f = fronts[i];
             std::vector<PayOption> opts = f.tapahead > 0
                 ? TapAheadOptions(f.st, f.tapahead, f.lands_only, &r.unmodeled)
                 : MinimalPayments(f.st, f.cost, f.for_creature, &r.unmodeled, f.creature_ability, /*whole_float=*/false,
                                   f.has_spell ? &f.spell : nullptr, f.has_ability_src ? &f.ability_src : nullptr,
-                                  f.sac_victim);
+                                  f.sac_victim, want);
             g_options.fetch_add(static_cast<long long>(opts.size()), std::memory_order_relaxed);
             if (Level() >= 3 && (TraceTurn() == 0 || TraceTurn() == root.turn_number))
             {
@@ -2591,12 +2696,32 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
             }
             for (PayOption& o : opts)
             {
-                if (next.size() >= room) { r.capped = true; break; }
+                if (next.size() >= room) { note_cut(); break; }
                 std::vector<PayOption> s = f.script;
                 o.what = f.tapahead > 0 ? std::string("tap-ahead") : f.cost.ToString();
                 s.push_back(std::move(o));
                 next.push_back(std::move(s));
             }
+        }
+        if (resume)
+        {
+            r.unmodeled.insert(r.unmodeled.end(), apply_notes.begin(), apply_notes.end());
+            start   = cursor->cut_size;
+            carried = std::move(cursor->fronts_next);
+            nodes   = cursor->nodes_after;
+            cursor->valid = false;
+            resume = false;
+        }
+        else if (may_save && cut.set && !pending_save)
+        {
+            pending_save         = true;
+            cursor->cut          = cut;
+            cursor->nodes_build  = nodes;
+            cursor->fronts_build = std::move(fronts);
+            cursor->keep         = std::move(keep);
+            cursor->prefix.assign(next.begin(), next.begin() + static_cast<std::ptrdiff_t>(cut.k));
+            cursor->cut_size     = next.size();
+            cursor->u_apply      = r.unmodeled.size();
         }
         layer.swap(next);
     }
@@ -3260,7 +3385,8 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
     std::multiset<std::string> e_want = LeftHand(root, e);
     for (const std::string& c : e_cast) { e_want.insert(c); }
     // ---- the complete side, in the engine's own order ----------------------------------------------
-    Realization r = Realize(root, plan, pre, /*stop_at_full=*/false);
+    RealizeCursor cursor;   // lever (b): the retry below continues from where this pass was cut
+    Realization r = Realize(root, plan, pre, /*stop_at_full=*/false, {}, false, nullptr, nullptr, &cursor);
     // ESCALATION (Fluctuator 2026-11-03), ALWAYS ON: a plan that hits the per-plan ceiling is realized again
     // under a 20000-apply ceiling, so only the plans that need it pay for it. CAPPED fails the mana-clean gate
     // (USER 2026-11-03), so the checker must be able to conclude. Fluctuator's cycling turns (each cycle a
@@ -3278,7 +3404,34 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
     {
         const int saved = t_node_cap;
         t_node_cap = s_retry;
-        r = Realize(root, plan, pre, /*stop_at_full=*/false);
+        const bool resumed = cursor.valid;
+        r = Realize(root, plan, pre, /*stop_at_full=*/false, {}, false, nullptr, nullptr, &cursor);
+        // MTG_ORACLE_RESUME_CHECK=1 (diagnostic, default off): the from-scratch retry must equal the resumed one.
+        static const bool s_resume_check = EnvOn("MTG_ORACLE_RESUME_CHECK");
+        if (s_resume_check && resumed)
+        {
+            const Realization f = Realize(root, plan, pre, /*stop_at_full=*/false);
+            bool same = f.capped == r.capped && f.unmodeled == r.unmodeled && f.outcomes.size() == r.outcomes.size();
+            for (std::size_t i = 0; same && i < f.outcomes.size(); ++i)
+            {
+                const Outcome& a = f.outcomes[i];
+                const Outcome& b = r.outcomes[i];
+                same = ScriptText(a.script) == ScriptText(b.script) && a.line == b.line && a.left == b.left
+                    && a.unscripted == b.unscripted && a.cast_drops == b.cast_drops && a.act_drops == b.act_drops
+                    && a.pay_steps == b.pay_steps && a.first_fail == b.first_fail && a.Clean() == b.Clean()
+                    && a.scaled_counted == b.scaled_counted
+                    && CoreKey(a.st, /*canonical=*/false) == CoreKey(b.st, /*canonical=*/false);
+            }
+            if (!same)
+            {
+                std::fprintf(stderr, "[mana-oracle] RESUME-CHECK MISMATCH %s plan={%s}: fresh %zu outcomes/%zu notes "
+                             "capped=%d, resumed %zu/%zu capped=%d\n", Ctx(root, pre).c_str(), PlanText(plan).c_str(),
+                             f.outcomes.size(), f.unmodeled.size(), f.capped ? 1 : 0, r.outcomes.size(),
+                             r.unmodeled.size(), r.capped ? 1 : 0);
+                std::abort();
+            }
+            g_resume_checked.fetch_add(1, std::memory_order_relaxed);
+        }
         t_node_cap = saved;
         cap_used = s_retry;
         g_cap_retry.fetch_add(1, std::memory_order_relaxed);

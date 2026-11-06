@@ -28,6 +28,9 @@ struct Decklist;
 // Default off => byte-identical. Defined in DecisionProviders.cpp.
 bool DecisionUnpruned();
 
+// Shared land-drop policy, read by both plan enumeration and its executor.
+bool FetchResolvesOnPlay(const GameState& state, const CardDefinition& land);
+
 // GRANULAR un-pruning: the global MTG_UNPRUNED opens EVERY branch-narrowing gate at once,
 // which explodes the search (the full 100-game d5 audit does not finish in hours because a
 // few gates -- tutor/fetch full enumeration, dig, search-ordering -- each multiply the tree).
@@ -803,6 +806,7 @@ public:
     bool ArchetypeCardValue(const GameState&, const CardDefinition&, int, int&) const override;
     std::vector<std::string> TutorCandidates(const GameState&, int, const CardParams&) const override;
     std::vector<std::string> FetchCandidates(const GameState&, int, const CardParams&) const override;
+    bool ConsiderFetchHold(const GameState&, const CardDefinition&) const override { return false; }
     bool CanAutoFireAltPayload(const GameState&, int, const CardDefinition&) const override;
     // CastEnablerFirst: no override -- enabler-first is the generic param-derived ENABLES tier
     // now (lifegain_to_loss -> rank 0, card-dependency-map).
@@ -986,7 +990,7 @@ class SliversProvider : public VialProvider
 {
 public:
     CertStance Certificate() const override
-    { return { CertState::NotAssessed, "NOT ASSESSED. Test: is combat the ONLY route to the opponent's life, and does nothing in the pool grant haste or untap? See SnowProvider/FungusProvider for the worked shape." }; }
+    { return { CertState::NotAssessed, "NOT ASSESSED. Slivers' Vial, replicate, and affinity lines need a deck-specific winless proof." }; }
     // MTG_SLIVERS_ORDER -- the TOTAL cast order, USER-APPROVED 2026-11-03 with every card in its own row
     // (docs/design/cast-order-drafts-2026-10-14/slivers_vial.md section 3): Hatchery Sliver first, Thrumming
     // Hivepool last. DEFAULT ON; =0 => VialProvider::CastOrderRank byte-for-byte. A rank tie between two
@@ -1304,6 +1308,22 @@ public:
     // post-combat options; main 1 stays fully searched.
     bool RestrictsMain2Casts() const override;
     bool Main2CastAllowed(const GameState& s, const Action& a) const override;
+};
+
+// Fetchland search routes this list through AntiLifegain before the Burn branch.
+// Its own fetch choice uses the Boros mana needs instead of that four-colour policy.
+class ModernRwBurnProvider : public AntiLifegainProvider
+{
+public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed, "NOT ASSESSED. Bound Boros Charm's modes, burn, and combat before claiming a winless turn" }; }
+    const char* Name() const override { return "ModernRwBurn"; }
+    int CastOrderRank(const GameState& s, const CardDefinition& def) const override;
+    bool OrderOpaqueCastsByRank() const override;
+    bool ShouldConsiderDig(const GameState& s) const override;
+    bool ConsiderFetchHold(const GameState& s, const CardDefinition& fetch) const override;
+    std::vector<std::string> FetchCandidates(const GameState& s, int controller,
+                                             const CardParams& fetch_pp) const override;
 };
 
 // Midrange Burn uses the common baseline: the original Burn list's low-curve land
@@ -1891,6 +1911,7 @@ public:
     { return { CertState::NotAssessed, "NOT ASSESSED. Test: is combat the ONLY route to the opponent's life, and does nothing in the pool grant haste or untap? See SnowProvider/FungusProvider for the worked shape." }; }
     const char* Name() const override { return "FiveColour"; }
     std::vector<std::string> FetchCandidates(const GameState&, int, const CardParams&) const override;
+    bool ConsiderFetchHold(const GameState&, const CardDefinition&) const override { return false; }
     // Fetch search breadth: the base-class DEFAULT (top entry only) is exactly this deck's
     // reviewed policy -- no override needed. Evidence that top-1 is right here: the wide fan's
     // coupled-metric edge (+0.034 held-out 8/8 keys) was proven 100% CLAIRVOYANCE by the
@@ -4006,6 +4027,53 @@ public:
     // re-sequences the plan. Every other card keeps the generic rank.
     int CastOrderRank(const GameState& s, const CardDefinition& def) const override;
 
+    // ---- THE USER'S CAST ORDER AND MAIN-1 RULE (USER 2026-11-04; docs/design/shadowborn-main-phase-and-cast-
+    // order-draft.md) -----------------------------------------------------------------------------------------
+    // CAST ORDER (MTG_SB_CAST_ORDER). The USER: "It should be land -> Dark Ritual -> other spells." / "So it should
+    // be Dark Ritual, <shadowborn sacrifice for culling if needed>, Culling, Thrumming stone..." / "If needed here
+    // is pretty much just so that you can cast culling when no shadowborn is out. If you have a good sacrifice
+    // already you can just use it and cast the apostle later." / (the Demons) Overlord last for devotion. Ranks,
+    // read off CARD DATA (roles, never names):
+    //   1 a plain ritual (Dark Ritual)            2 a creature-sacrifice ritual (Culling the Weak)
+    //   3 the ripple granter (Thrumming Stone)   4 the sac-named creature (Shadowborn Apostle)
+    //   5 a Demon with no other role (Reaper)    6 the hand-discarder (Sire of Insanity)
+    //   7 the devotion-token maker (Overlord)    8 the count anthem (Jetmir, uncastable here)
+    //   9 a tutor with no sacrifice (Demonic Tutor) 10 a creature-sacrificing tutor (Diabolic Intent)
+    //  11 a suspend tutor (Profane Tutor)        12 a suspend mana artifact (Lotus Bloom)
+    // Total by name (CastOrderTotalByName) for anything the table does not place. ArrangeCastOrder moves the
+    // hand victim of a creature-sacrifice spell (Culling's same-plan Apostle, Action::trick_hand_target) to just
+    // BEFORE that spell, so "Ritual, Apostle, Culling (eating it), Stone, Apostles" is the realised line, not
+    // "Ritual, Stone, Apostle, Culling" (the generic dependency pass moves the spell after its victim instead).
+    // The victim itself is unchanged (SacCostVictimVariant: a Harpy / Apostle on the battlefield, else a hand
+    // Apostle -- the one-variant prune already never offers the hand victim when the board has one).
+    // ACTIVATION ORDER within one main (USER: "Overlord should go before any activations Shadowborn activations
+    // when it is cast." / "if we activate for Overlord and Jetmir they should remain in that order." / "in main
+    // 2 we should still allow Overlord -> Jetmir." / 2026-11-05: "Overlord in Main-2 i worse in the case where we
+    // drop Jetmir in Main-1."): once Jetmir has arrived THIS TURN (earlier in this main, or in main 1), neither an
+    // Overlord fetch (SacNamedTimingFilter) nor an Overlord hard cast (CollectedActionAllowed) is offered; the
+    // Overlord line is Overlord -> Jetmir inside one main.
+    bool CastOrderTotalByName() const override;
+    // RITUAL WITHOUT A PAYOFF (MTG_SB_RITUAL_PAYOFF; USER 2026-11-05: "We might want to prune rituals with no payoff
+    // like we have for other decks."): a plan subset that casts Dark Ritual / Culling the Weak and spends mana on
+    // nothing else is dropped (DecisionProvider::PrunesRitualWithoutSpend). Searched and greedy play alike; the viewer
+    // and the MTG_UNPRUNED audit arm keep it.
+    bool PrunesRitualWithoutSpend() const override;
+    void ArrangeCastOrder(const GameState& s, const std::vector<Action>& actions,
+                          std::vector<int>& order) const override;
+    bool RestrictsCollectedActions() const override;
+    bool CollectedActionAllowed(const GameState& s, const Action& a, bool is_pre_combat) const override;
+    // MAIN-1 RULE (MTG_SB_MAIN1_RULE). The USER: "What it really comes down to is that you don't need to do it main
+    // 1 unless you are deploying Jetmir with current-turn attackers. If you aren't, then you do it main 2 instead."
+    // / "(or I guess if Jetmir is already out)" / "Getting more Shadowborns to pump up his effect." / "Yes,
+    // exactly, we need attackers as well." / "Land drop should happen main 1 unless we searched it up in main 2."
+    // / scope: "With no search that is fine." A SOUND dominance fold (the proof is at Main1PlanAdmitted): a ROOT
+    // main-1 plan beyond the land drop is admitted only on a JETMIR TURN -- an attack-ready creature of ours AND
+    // (Jetmir on our battlefield, or the plan can still deploy him before combat). Every other plan's twin is the
+    // same plan in main 2, after a land-only main 1.
+    bool Main1PlanFoldLive(const GameState& s) const override;
+    bool Main1PlanAdmitted(const GameState& s, const std::vector<Action>& actions,
+                           const std::string& land_to_play) const override;
+
     // ---- INT-4: THE USER'S TUTOR AND DEMON RULES (USER 2026-11-03) -------------------------------------
     // AUTHORITY. The USER: "I recommend we make a heuristic for demon search and for tutoring. Demon search
     // is easy because you would go Abhorrent Overlord and Jetmir only, preferably in that order";
@@ -4766,6 +4834,8 @@ int  EdfComboRouteApply(GameState& s, int controller);        // same codes; liv
 // Drop the trial's board-keyed memo. Called once per game from TurnSolver::ClearPerGameCaches so a
 // reused batch worker thread starts every game with an empty memo (see the memo's own comment).
 void EdfComboRouteClearMemo();
+// Empty Fluctuator's keep-needed payability memo (FluctKeepPayable), per game from ClearPerGameCaches.
+void FluctKeepPayableClearMemo();
 // Test seam (MTG_EDF_ROUTE_AURA_ORDER): the HAND INDEX of the land Aura the route's deploy step 2 casts
 // first on this board, -1 when the hand holds none. Reads only; plays nothing.
 int  EdfComboRouteFirstAuraPick(const GameState& s, int controller);

@@ -213,7 +213,17 @@ TEST_CASE("Landfall: a fetchland's drop is TWO landfall triggers -- the fetchlan
     s.players[0].library.push_back(HandLf("Forest", 3));
     s.players[0].library.push_back(HandLf("Mountain", 4));
     REQUIRE(PlayLandFromHand(s, 0, DefLf("Wooded Foothills"), LandPlayOptions{}));
+    // The fetchland now ENTERS (a real battlefield fetch): its own entry is the first landfall...
+    CHECK(CountNamed(s, "4/4 Beast Token") == 1);
+    // ...and its searched activation ({T}, pay 1 life, sacrifice) puts the fetched land: the second.
+    int src = -1;
+    for (std::size_t i = 0; i < s.battlefield.size(); ++i)
+    { if (s.battlefield[i].card.m_name == "Wooded Foothills") { s.battlefield[i].tapped = true; src = static_cast<int>(i); } }
+    REQUIRE(src >= 0);
+    const int life = s.players[0].life;
+    ApplyPermAbility(s, 0, s.battlefield[static_cast<std::size_t>(src)].card.m_number, PermAbilityMode::SacLandSearch);
     CHECK(CountNamed(s, "4/4 Beast Token") == 2);
+    CHECK(s.players[0].life == life - 1);
 }
 
 TEST_CASE("Landfall route 3: a land entrant reaching the universal enter cascade triggers once")

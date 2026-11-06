@@ -63,6 +63,7 @@ BIN = os.environ.get("MTG_BIN", "./build/Release/mtg")   # override to audit a n
 # choice; a scry of 0 is not a scry). A `None` predicate means "present and truthy".
 # ---------------------------------------------------------------------------
 def truthy(v):        return bool(v)
+def present(v):       return v is not None  # An empty mana cost still defines a real activation.
 def positive(v):      return isinstance(v, (int, float)) and v > 0
 def real_target(v):   return isinstance(v, str) and v not in ("none", "player", "")
 
@@ -635,7 +636,7 @@ MANIFEST = {
     # whose activation itself is the landsearch= board verb -- BOARD_ACTIVATIONS).
     "land_search_on_resolve":          ("tutor_etb",  truthy),
     "land_search_on_enter_or_attack":  ("tutor_etb",  truthy),
-    "land_search_activation_cost":     ("tutor_etb",  truthy),
+    "land_search_activation_cost":     ("tutor_etb",  present),
     # ---- Colossus Hammer (2026-10-17) ----
     # Magnetic Theft, "Attach target Equipment to target creature": WHICH (Equipment, creature) pair
     # is a searched main_phase plan variant for the engine, but for a HUMAN both targets are asked at
@@ -780,7 +781,7 @@ BOARD_ACTIVATIONS = {
     # Evolving Wilds / Terramorphic Expanse ({T}, Sacrifice -- cost ""), Myriad Landscape ({2}, {T},
     # Sacrifice) and Khalni Heart Expedition (three quest counters + sacrifice): the landsearch= verb
     # (a land is never cast; a Khalni may also sit in hand).
-    "land_search_activation_cost":               ("verb:landsearch", truthy,  "land_search_activation_cost"),
+    "land_search_activation_cost":               ("verb:landsearch", present, "land_search_activation_cost"),
     "lifelink_grant_cost":                       ("activate",       truthy,   "lifelink_grant_cost"),  # Heliod {1}{W}
     "self_counter_cost":                         ("activate",       truthy,   "self_counter_cost"),    # Walking Ballista {4}
     "figure_two_cost":                          ("activate",       truthy,   "figure_two_cost"),
@@ -836,6 +837,10 @@ def _cost_mv(card, cost_from):
 # one dangerous error; under-listing just yields a longer, safe review list.
 # ---------------------------------------------------------------------------
 INERT_PARAMS = {
+    "damage_each_opponent": "Boltwave hits each opponent automatically; no target choice",
+    "players_cant_gain_life_this_turn": "Skullcrack turn-scoped rule effect; no player choice",
+    "damage_cant_be_prevented_this_turn": "Skullcrack turn-scoped rule effect; no player choice",
+    "attack_defending_player_reveal_land_to_hand": "Goblin Guide attack trigger is mandatory; no player choice",
     # Midrange Burn: fixed arithmetic/cost semantics; the existing cast/tap actions own timing.
     "damage_per_nonbasic_land": "Price of Progress deals its printed multiple to EACH player from the live nonbasic count; no targets or chosen amount",
     "tap_is_life_payment": "Fiery Islet's printed life payment is a mandatory mana-ability cost, not preventable damage; the mana activation is the existing tap action",
@@ -902,6 +907,7 @@ INERT_PARAMS = {
     "land_search_activation_taps": "COST detail ({T} in the activation cost) -- rides land_search_activation_cost -> verb:landsearch",
     "land_search_activation_remove_quest": "COST detail (Khalni: remove three quest counters) -- rides land_search_activation_cost -> verb:landsearch",
     "land_search_activation_sacrifice_self": "COST detail ('Sacrifice this') -- rides land_search_activation_cost -> verb:landsearch",
+    "land_search_activation_life_cost": "COST detail ('Pay 1 life' on a fetchland) -- automatic payment on the surfaced landsearch activation",
     "gy_return_at_random": "Haunted Fengraf: WHICH creature returns is RANDOM (a seeded draw at resolution), never a player choice -- the viewer must not offer a pick; the activation itself is verb:gyreturn (value @random)",
     "landfall_quest_counters": "Khalni Heart Expedition's 'you MAY put a quest counter' -- resolved YES by dominance (a quest counter only feeds the optional activation; one more never removes an option), the quest_counter_per_attacker precedent -- DISCLOSED 6a, PROVISIONAL",
     "etb_tokens_per_land": "automatic ETB token count per land you control (Avenger of Zendikar / Phylath), no choice",
@@ -1675,6 +1681,7 @@ INERT_PARAMS = {
 # MAPPED (they pass the guard); the per-deck obligation is that every legal variant/activation
 # is OFFERED (unpruned) in the plan list -- verified in the sweep, not by a distinct type.
 MAINPHASE_PARAMS = {
+    "boros_charm_modal": "Boros Charm modes and double-strike creature target are separate main_phase plan variants (chosen_x and enchant_target)",
     # Fury (2026-10-18): "Evoke--Exile a red card from your hand" -- WHICH red card is exiled is one
     # main_phase CastFromHand evoke variant per distinct legal red hand name (Action::pitch_name, #EX in
     # the plan signature, the CheckLine `pitch` sub after the `evoke` mode sub), offered unpruned.
@@ -2020,6 +2027,8 @@ def modeled_tokens(card):
         t.update({"reveal", "cast"})
     if p.get("tooth_and_nail"):
         t.add("modal")
+    if p.get("boros_charm_modal"):
+        t.update({"modal", "target"})
     # Kitesail Larcenist: "for each player, choose up to one other target artifact or creature" IS
     # the treasurify choice (own side = chosen_x plan variants, both sides = the treasurify chooser),
     # so both the 'target' and the 'choose up to' (modal) phrases are covered.

@@ -1,0 +1,23 @@
+{
+  "_comment": "Seed 891002 at turn 3: Bolt turns on Skewer's {R} spectacle cost and both noncreature casts give Swiftspear +2/+2. Bolt 3 + Skewer 3 + attackers 7 is lethal from 13. The old AntiLifegain cast ordering priced Skewer at its printed {2}{R} in the subset and missed this kill.",
+  "deck": "decks/Modern RW Burn/Modern RW Burn.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 16,
+  "opponent_life": 13,
+  "resume_at": "main1",
+  "battlefield": [
+    { "name": "Sacred Foundry" },
+    { "name": "Sunbaked Canyon" },
+    { "name": "Goblin Guide", "sick": false },
+    { "name": "Goblin Guide", "sick": false },
+    { "name": "Monastery Swiftspear", "sick": false }
+  ],
+  "hand": ["Boros Charm", "Eidolon of the Great Revel", "Lightning Bolt", "Skewer the Critics"],
+  "library_filler": "Mountain",
+  "library_size": 30,
+  "depth": 5,
+  "budget_ms": 20,
+  "max_turns": 3,
+  "expect_win_turn": 3
+}

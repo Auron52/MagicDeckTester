@@ -24,6 +24,7 @@
 // by name at all -- only the total Ir moves.
 #include "Tier1Ledger.h"
 #include "Tier2Overflow.h"
+#include "WorkCounters.h"
 #include "SpellEffects.h"
 #include "MemBudget.h"
 #include "RouteTape.h"
@@ -5370,14 +5371,24 @@ struct ManaCacheEntry
     // tier-2 overflow is on (a TIER-2 entry is served only under an identical pair -- see McT2CtxMatch) or under
     // MTG_MANA_CACHE_VERIFY (whose mismatch print says whether the context moved). Never part of the tier-1 key.
     std::uint64_t dbg_pay_ctx = 0, dbg_traits = 0;
+    // The WORK the filling solve counted (workctr per-kind deltas: nested payments, state keys, ...). A TIER-2 hit
+    // replays it, because with tier 2 absent that lookup is a recompute and the recompute counts it -- and the
+    // priced budget / priced ceiling read workctr::t_priced. A tier-1 hit replays nothing (as before). work_known
+    // is false when the solve ran under workctr::t_mute (it counted nothing, so the record is not the recompute's);
+    // tier 2 refuses such an entry, which is exactly tier 2 being absent.
+    std::uint32_t work[workctr::kKinds] = {};
+    bool          work_known = true;
 };
 inline thread_local std::unordered_map<std::uint64_t, ManaCacheEntry> g_mana_cache;
 // TIER-2 OVERFLOW (core/Tier2Overflow.h; MTG_TIER2_OVERFLOW, DEFAULT ON). When the fixed tier-1 allocation
 // fills, the wholesale clear SPILLS every entry here instead of dropping it, and a tier-1 miss looks here
 // before solving. A hit is PROMOTED back into tier 1 through the same store path a recompute would take, so
 // tier-1 contents -- and with them every tier-1 hit and every later clear point -- are exactly what they would
-// be had tier 2 refused the entry. Payment charges no units and no priced work (workctr::kPay is counted in
-// TapForCostShared, before this cache), so a tier-2 hit and a recompute charge the same: nothing.
+// be had tier 2 refused the entry. Payment charges no units, but the SOLVE counts priced work (nested payments,
+// state keys; workctr) that the priced budget and the priced ceiling read, so a tier-2 hit replays the work its
+// solve recorded (ManaCacheEntry::work) and charges what the recompute would. (The old claim here -- "kPay is
+// counted before the cache, so a hit and a recompute charge the same: nothing" -- missed the solve's own work:
+// under MTG_PRICED_BUDGET, MTG_TIER2_OVERFLOW_KB=1 vs default moved 95 of 260 regression jobs, 2026-11-04.)
 // THE ONE HAZARD is content: MTG_MANA_CACHE_VERIFY found colour-only differences between a tier-1 hit and a
 // fresh solve when the payer context / plan traits had moved since the store (NivMizzetCombo seed 2085 gi83,
 // 40 hits). Inside tier 1 that is deterministic; served from a machine-sized tier 2 it would make play depend
@@ -6471,11 +6482,13 @@ static bool TapForCostBacktrackTop(GameState& state, const ManaCost& cost,
             if (tier2::On() && g_mana_t2.Size() != 0)
             {
                 auto t2 = g_mana_t2.Find(mk1);
-                if (t2 != g_mana_t2.End() && t2->second.verify == mk2)
+                if (t2 != g_mana_t2.End() && t2->second.verify == mk2 && t2->second.work_known)
                 {
                     if (t2->second.dbg_pay_ctx == mc_ctx_pay && (!McT2CtxOn() || t2->second.dbg_traits == mc_ctx_traits))
                     {
                         g_mana_t2.NoteHit();
+                        for (int k = 0; k < workctr::kKinds; ++k)
+                        { if (t2->second.work[k] != 0) { workctr::Inc(k, t2->second.work[k]); } }
                         auto nh = g_mana_t2.Take(t2);
                         it = McTier1Insert(mk1, std::move(nh.mapped()));
                         mc_from_t2 = true;
@@ -6652,6 +6665,9 @@ static bool TapForCostBacktrackTop(GameState& state, const ManaCost& cost,
     // OR-ed back, so the caller's view of g_bt_ramp_feed_alt is exactly what it was without the split.
     const bool mc_alt_outer = g_bt_ramp_feed_alt;
     if (mc_active) { g_bt_ramp_feed_alt = false; }
+    long long mc_work0[workctr::kKinds];   // the solve's work, for the entry (ManaCacheEntry::work)
+    const bool mc_mute0 = workctr::t_mute != 0;
+    if (mc_active) { for (int k = 0; k < workctr::kKinds; ++k) { mc_work0[k] = workctr::t_n[k]; } }
     bool ok;
     if (!tapstats::Enabled())
     {
@@ -6787,6 +6803,13 @@ static bool TapForCostBacktrackTop(GameState& state, const ManaCost& cost,
         e.energy_spent = 0;
         e.dbg_pay_ctx = mc_ctx_pay; e.dbg_traits = mc_ctx_traits;   // pre-solve context (0 unless overflow/verify)
         e.feed_alt = !ok && mc_alt_here;
+        e.work_known = !mc_mute0 && workctr::t_mute == 0;
+        for (int k = 0; k < workctr::kKinds && e.work_known; ++k)
+        {
+            const long long d = workctr::t_n[k] - mc_work0[k];
+            if (d < 0 || d > 0xFFFFFFFFll) { e.work_known = false; break; }   // a game reset inside / overflow
+            e.work[k] = static_cast<std::uint32_t>(d);
+        }
         bool storable = true;
         if (ok)
         {

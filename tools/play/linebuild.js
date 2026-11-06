@@ -218,6 +218,63 @@
     return parts.length ? parts : [[]];
   }
 
+  // A freshly played fetchland has no mana ability. Its activation becomes available only
+  // after the land drop, and a fetched land can then pay the queued action. Split that
+  // request into land, crack, continuation; the caller uses this only when validation found
+  // the original line unpayable (or the known land+suspend enumeration gap). The offered
+  // activation is the engine's evidence that the source really is crackable.
+  function fetchManaRoute(decision, plan) {
+    if (!Array.isArray(plan) || plan.length < 2 || plan[0].kind !== 'land') return null;
+    const land = plan[0].name;
+    const offered = ((decision && decision.plans) || []).some(p =>
+      p.land === land && (p.actions || []).some(a =>
+        a.card === land && a.verb === 'landsearch' && a.activate && a.fetch_mana));
+    if (!offered) return null;
+    // If the player already queued this crack, retain that action and its order. It must
+    // run after the land drop, and any cast funded by it needs the following decision.
+    if (plan[1].kind === 'activate' && plan[1].verb === 'landsearch'
+        && (plan[1].src || plan[1].name) === land) {
+      return [plan[0], Object.assign({}, plan[1], { defer: true }),
+              ...(plan[2] ? [Object.assign({}, plan[2], { defer: true })] : []), ...plan.slice(3)];
+    }
+    if (plan.some(p => p.kind === 'activate' && p.verb === 'landsearch'
+                    && (p.src || p.name) === land)) return null;
+    return [plan[0], { name: land, src: land, kind: 'activate', verb: 'landsearch', defer: true },
+            Object.assign({}, plan[1], { defer: true }), ...plan.slice(2)];
+  }
+  const fetchSuspendRoute = fetchManaRoute; // Keep the existing check's interface.
+  function fetchAutoRoute(decision, plan, verdict, reason) {
+    const needsFetch = (verdict === 'illegal' && /^can't pay\b/i.test(reason || ''))
+      || (verdict === 'legal_not_enumerated' && plan && plan.length === 2
+          && plan[1].kind === 'suspend');
+    if (!needsFetch) return null;
+    const played = fetchManaRoute(decision, plan);
+    if (played) return played;
+    // A fetch already on the battlefield can supply the queued spell without a land drop.
+    // Take this route only with one distinct offered source; with several, the player may
+    // need a particular search range and should choose the source explicitly.
+    if (!plan || !plan.length || plan.some(p => p.kind === 'land')) return null;
+    const onBoard = new Set(((decision && decision.me && decision.me.battlefield) || []).map(p => p.name));
+    const sources = new Set();
+    for (const p of ((decision && decision.plans) || [])) {
+      for (const a of (p.actions || [])) {
+        if (a.fetch_mana && a.verb === 'landsearch' && a.activate && onBoard.has(a.card))
+          sources.add(a.card);
+      }
+    }
+    // A manually queued crack is the source itself. Split AFTER it; prepending another
+    // activation would sacrifice the fetch once, then reject the stale duplicate.
+    const first = plan[0];
+    if (first.kind === 'activate' && first.verb === 'landsearch'
+        && sources.has(first.src || first.name) && plan.length > 1)
+      return [first, Object.assign({}, plan[1], { defer: true }), ...plan.slice(2)];
+    if (plan.some(p => p.kind === 'activate' && p.verb === 'landsearch')) return null;
+    if (sources.size !== 1) return null;
+    const land = sources.values().next().value;
+    return [{ name: land, src: land, kind: 'activate', verb: 'landsearch' },
+            Object.assign({}, plan[0], { defer: true }), ...plan.slice(1)];
+  }
+
   // Repeat plan entries [from, to) `n` times in total (n=1 is a no-op), returning the new plan.
   // Each repetition after the first begins with a DEFERRED copy, so the repetitions commit as
   // consecutive segments -- exactly the sequence the human would have produced by clicking the
@@ -822,8 +879,8 @@
   // slots, one play appearing 18 times) purely because it had no dimension to live in.
   // `pumptarget` (WHICH creature Kessig Wolf Run's "+X/+0" lands on) is a per-action target pick like
   // `equip`, so it is asked before that pump's `x`.
-  const SUBKIND_PRI = { face: -1, fetch: 0, free: 0.5, sacrifice: 0.75, tutor: 1, loyalty: 1.3,
-                        bestow: 1.4, enchant: 1.5, equip: 1.5, pumptarget: 1.5, untapland: 1.5, jitte: 1.6, x: 2, activations: 2,
+  const SUBKIND_PRI = { borosmode: -2, face: -1, fetch: 0, free: 0.5, sacrifice: 0.75, tutor: 1, loyalty: 1.3,
+                        bestow: 1.4, enchant: 1.5, equip: 1.5, pumptarget: 1.5, untapland: 1.5, borostarget: 1.5, jitte: 1.6, x: 2, activations: 2,
                         modal: 2.5, soulfire: 3, crackle: 4, splice: 5, devour: 5.5, replicate: 6,
                         color: 7, pitch: 9.5 };   // pitch: Fury's evoke-exile card, after its `evoke` mode (9)
   function subKindPri(k) { return SUBKIND_PRI[k] === undefined ? 9 : SUBKIND_PRI[k]; }
@@ -880,7 +937,7 @@
            stampPlanNums, isPreTap, preTapToken,
            // segmentParts is exported (not just encodeSegments) because applyAccepted needs the
            // committing segment's ENTRIES, not its encoded string, to scope the full-order pin.
-           segmentParts, isDeferred, repeatBlock, loopBlock, segmentLoopable,
+           segmentParts, isDeferred, fetchSuspendRoute, fetchAutoRoute, repeatBlock, loopBlock, segmentLoopable,
            untapNeed, untapNeedToken,
            fusedInvestigateEntries, removeFusedAt, CLUE_TOKEN,
            nextDimension, filterByChoice, dimensionsRemaining, choiceOf, subOf };

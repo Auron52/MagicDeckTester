@@ -35,6 +35,11 @@ struct CardParams
     bool incinerator_damage_trigger = false; // transient chooser filter and Incinerator trigger marker
 
     int damage       = 0;
+    bool damage_each_opponent = false; // Boltwave: untargeted damage to every opponent
+    bool boros_charm_modal = false; // three cast-time modes
+    bool players_cant_gain_life_this_turn = false;
+    bool damage_cant_be_prevented_this_turn = false;
+    bool attack_defending_player_reveal_land_to_hand = false;
     int damage_per_nonbasic_land = 0; // each player takes their own live nonbasic-land count
     bool chain_lightning_copy = false; // damaged player/controller may pay RR and copy
     bool sacrifice_mountains_alternative = false; // Fireblast: sacrifice two Mountains instead of mana
@@ -2646,6 +2651,7 @@ struct CardParams
     bool land_search_activation_taps             = false;
     int  land_search_activation_remove_quest     = 0;
     bool land_search_activation_sacrifice_self   = false;
+    int  land_search_activation_life_cost         = 0; // fetchlands: pay life as activation cost
 
     // Expressive Iteration: "look at the top 3; 1 to hand, 1 to bottom, 1 exiled & playable THIS
     // turn." Resolved by ResolveExpressiveIteration (NOT the normal draw/scry path). A DrawSpell so

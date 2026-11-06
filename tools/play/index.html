@@ -2558,7 +2558,8 @@ function renderBoard() {
   // opponent (across the table — NOT a drop target). When a target decision is active and the
   // opponent's face is a legal target, the life total becomes a clickable, highlightable target.
   const oppFace = faceTarget(d,'opp');
-  const oppB = `<b class="opp ${oppLifeDisp<=0?'dead':''}${oppFace?' facetgt':''}${oppFace&&isSelT(oppFace)?' selected':''}"${oppFace?` data-tk="${tgtKey(oppFace)}"`:''}>${oppLifeDisp ?? '?'}</b>`;
+  const oppBoros = S.variantTargetPick && S.variantTargetPick.choices.some(c=>c.num===0);
+  const oppB = `<b class="opp ${oppLifeDisp<=0?'dead':''}${oppFace||oppBoros?' facetgt':''}${oppFace&&isSelT(oppFace)||oppBoros&&S.variantTargetPick.selected?.num===0?' selected':''}"${oppFace?` data-tk="${tgtKey(oppFace)}"`:''}>${oppLifeDisp ?? '?'}</b>`;
   h += `<div class="lifebar"><span class="life">Opponent ${oppB}</span>`+
        // The opponent's library, when one was dealt (a deck-out / mill deck must see its target).
        (d.opponent&&d.opponent.library_size!=null?`<span class="life" title="cards left in the opponent's library${d.opponent.decked?' -- DECKED':''}">library <b>${d.opponent.library_size}</b>${d.opponent.decked?' (decked)':''}</span>`:'')+`</div>`;
@@ -2569,7 +2570,8 @@ function renderBoard() {
   // MY field = the play area (drop target). Drop a hand card here to plan playing it.
   h += `<div id="playfield">`;
   const youFace = faceTarget(d,'you');
-  const youB = `<b class="you ${meLifeDisp<=5?'lo':''}${youFace?' facetgt':''}${youFace&&isSelT(youFace)?' selected':''}"${youFace?` data-tk="${tgtKey(youFace)}"`:''}>${meLifeDisp ?? '?'}</b>`;
+  const youBoros = S.variantTargetPick && S.variantTargetPick.choices.some(c=>c.num===-1);
+  const youB = `<b class="you ${meLifeDisp<=5?'lo':''}${youFace||youBoros?' facetgt':''}${youFace&&isSelT(youFace)||youBoros&&S.variantTargetPick.selected?.num===-1?' selected':''}"${youFace?` data-tk="${tgtKey(youFace)}"`:''}>${meLifeDisp ?? '?'}</b>`;
   h += `<div class="lifebar"><span class="life">You ${youB}</span>`+
        `<span class="life">library <b>${me.library_size ?? '?'}</b></span>`+
        // Life gained this turn: the X of every "X = life gained this turn" source (Accomplished
@@ -3162,6 +3164,21 @@ function wireBoard() {
       t.onclick = e => { e.stopPropagation(); freeEquipAtHost(+t.dataset.num); };
     });
   }
+  if (S.variantTargetPick) {
+    const pick=S.variantTargetPick;
+    $('board').querySelectorAll('.thumb[data-num]').forEach(t=>{
+      const c=pick.choices.find(c=>c.num>0 && c.num===+t.dataset.num);
+      if (!c) return;
+      t.classList.add('selectable');
+      if (pick.selected===c) t.classList.add('selected');
+      t.onclick=e=>{ e.stopPropagation(); pick.choose(c); };
+    });
+    for (const [selector,num] of [['.life b.opp',0],['.life b.you',-1]]) {
+      const c=pick.choices.find(c=>c.num===num);
+      const b=$('board').querySelector(selector);
+      if (c && b) b.onclick=e=>{ e.stopPropagation(); pick.choose(c); };
+    }
+  }
 }
 
 function renderEffects() {
@@ -3448,7 +3465,8 @@ function renderChooseDialog(v, line){
     (pl.actions||[]).forEach(a=>{
       // Solo-target tricks re-ask their target at RESOLUTION (board prompt), so they deliberately
       // carry no queue-time sub -- synthesizing one would ask a decision twice.
-      if (!a || a.trick || !(a.enchant_target>0) || !a.enchant_target_name || !a.card) return;
+      if (!a || a.trick || !(a.enchant_target>0) || !a.enchant_target_name || !a.card
+          || (x.subs||[]).some(s=>s.key===a.card+' mode' && s.kind==='borosmode')) return;
       const key=a.card+' →';
       if ((x.subs||[]).some(s=>s.key===key)) return;   // the engine named it -- keep ITS label ("#2" disambiguation)
       // `choice` must be the DISAMBIGUATED label and `card` the clean name: two same-named hosts
@@ -3501,7 +3519,36 @@ function renderChooseDialog(v, line){
       if (hit){ const next=remaining.filter(x=>choiceOf(x,dim.key)===hit.choice);
                 return stepChoose(next, picks.concat([{key:dim.key, choice:hit.choice}])); }
     }
+    if (dim.kind==='borostarget') return renderBorosTargetPick(dim, choices, remaining, picks);
     renderDimPick(dim, choices, remaining, picks);
+  }
+
+  function renderBorosTargetPick(dim, choices, remaining, picks){
+    const damage = picks.some(p=>p.key==='Boros Charm mode' && p.choice==='Deal 4 damage');
+    const commitTarget = c=>{
+      S.variantTargetPick=null;
+      const next=remaining.filter(x=>choiceOf(x,dim.key)===c.choice);
+      stepChoose(next, picks.concat([{key:dim.key, choice:c.choice, label:c.choice}]));
+    };
+    const pick={choices, selected:damage ? (choices.find(c=>c.num===0)||choices[0]) : null,
+      choose:c=>{
+        if (!damage) return commitTarget(c);
+        pick.selected=c;
+        renderBoard(); showPrompt();
+      }};
+    S.variantTargetPick=pick;
+    function showPrompt(){
+      const panel=$('decpanel'), back=$('decback');
+      back.className=''; back.style.display='none'; panel.className='show prompt';
+      panel.innerHTML=`<h3>${esc(dim.key)} — ${damage?'deal 4 damage to '+esc(pick.selected.choice):'choose a target on the board'}</h3>`+
+        `<div class="pbtns"><button id="chooseback" class="ghost">Back</button>`+
+        `<span class="spacer"></span><button id="choosecancel" class="ghost">Cancel</button>`+
+        (damage?`<button id="chooseconfirm">Confirm</button>`:'')+`</div>`;
+      $('chooseback').onclick=()=>{ S.variantTargetPick=null; renderBoard(); replay(picks.slice(0,-1)); };
+      $('choosecancel').onclick=()=>{ S.variantTargetPick=null; hideDecPanel(); renderBoard(); };
+      if (damage) $('chooseconfirm').onclick=()=>commitTarget(pick.selected);
+    }
+    renderBoard(); showPrompt();
   }
 
   function renderDimPick(dim, choices, remaining, picks){
@@ -3548,7 +3595,7 @@ function renderChooseDialog(v, line){
     // dimension reports '—').
     const sameCard = choices.every(c => (c.card||'') === (choices[0].card||''));
     const listShape = sameCard || choices.some(c => !c.card)
-                   || ['modal','x','splice','replicate','devour','color','free','loyalty'].indexOf(dim.kind) >= 0;
+                   || ['modal','borosmode','x','splice','replicate','devour','color','free','loyalty'].indexOf(dim.kind) >= 0;
     let h=`<div class="dimhead">${srcName?cardMini(srcName,'dimsrc'):''}`+
           `<div class="dimtext"><h3>${esc(dim.key)}?</h3>`+
           `<div class="sub">${total>1?`Decision ${step} of ${total} for this line — `:''}`+
@@ -3890,6 +3937,18 @@ function handleVerdict(v, line) {
   if (v.verdict==='accept') return applyAccepted(v.plan_index, v.matched_summary || line,
                                                  validationPlanView(v, v.plan_index));
   if (v.verdict==='choose') return renderChooseDialog(v, line);   // central image dialog, not the side panel
+  // A newly played fetch cannot pay a cast until it is cracked on the next main-phase
+  // decision. When the engine says the queued order cannot pay, insert that activation
+  // and keep the rest of the user's line queued. The land-search target remains a real
+  // engine choice at resolution. The same route covers the land+suspend enumeration gap.
+  const fetchRoute=LB.fetchAutoRoute(v.decision, S.plan, v.verdict, v.reason);
+  if (fetchRoute) {
+    const land=fetchRoute[0].name;
+    S.plan=fetchRoute; hideVerdict(); renderBoard();
+    flashHint(`Cracking ${land} to pay the queued line. Choose the fetched land when prompted.`);
+    commitLine();
+    return;
+  }
   // REJECT (illegal / legal_not_enumerated / unsupported): the committed line did NOT play, so a
   // pending "Pass turn" skip (S.commitTurn, set by the Commit-turn button) must be dropped -- otherwise
   // picking an ALTERNATE plan from the menu below inherits the skip and auto-passes the rest of THIS
@@ -3931,8 +3990,11 @@ function handleVerdict(v, line) {
     S.macroRun = null; S.plan = [];
   }
   const cls=v.verdict==='legal_not_enumerated'?'legal':(v.verdict==='unsupported'?'unsupported':'illegal');
-  const tag=v.verdict==='legal_not_enumerated'?'legal · not enumerated':(v.verdict==='unsupported'?'unsupported':'illegal');
-  const head=v.verdict==='legal_not_enumerated'?'Rules-legal, but the model never enumerated it.'
+  const fetchSuspend = v.verdict==='legal_not_enumerated'
+    ? LB.fetchSuspendRoute(v.decision, S.plan) : null;
+  const tag=fetchSuspend?'play in steps':v.verdict==='legal_not_enumerated'?'legal · not enumerated':(v.verdict==='unsupported'?'unsupported':'illegal');
+  const head=fetchSuspend?'Activate the fetchland before suspending.'
+            :v.verdict==='legal_not_enumerated'?'Rules-legal, but the model never enumerated it.'
             :v.verdict==='unsupported'?'The v1 line check can’t validate this yet.':'The model can’t play this line.';
   const plans=(v.decision&&v.decision.plans)||[];
   // Each enumerated plan is CLICKABLE: picking it submits that plan index directly (same path a normal
@@ -3957,15 +4019,22 @@ function handleVerdict(v, line) {
     +((v.decision&&v.decision.plans_total)?`<div class="hint">showing top ${plans.length} of ${v.decision.plans_total} enumerated plans — hand-built lines are still checked against all of them</div>`:'');
   const ve=$('verdict'); ve.className=cls;
   ve.innerHTML=`<span class="vtag">${tag}</span>${macroNote}<h4>${head}</h4>`+
-    `<div>${esc(v.reason||'')}${v.failed_action?`<br><span class="hint">at: ${esc(v.failed_action)}</span>`:''}</div>`+
+    `<div>${esc(fetchSuspend
+      ? `The viewer can play the land, let you choose what it fetches, then suspend ${S.plan[1].name}.`
+      : (v.reason||''))}${v.failed_action?`<br><span class="hint">at: ${esc(v.failed_action)}</span>`:''}</div>`+
     orderAuditHtml(v.order_audit)+
     `<div class="modelplans"><b>What the model would accept${plans.length?' (click to play)':''}:</b>${mp}</div>`+
-    `<div class="actions">${playAnywayHtml(v)}<button id="artbtn" class="primary">Store as artifact</button>`+
+    `<div class="actions">${fetchSuspend
+      ? `<button id="fetchsuspendbtn" class="primary">Crack ${esc(S.plan[0].name)}, then suspend</button>`
+      : playAnywayHtml(v)}<button id="artbtn" class="primary">Store as artifact</button>`+
     `<button id="retrybtn" class="ghost">Clear &amp; retry</button></div><div id="artinfo" class="hint" style="margin-top:8px"></div>`;
   ve.style.display='block';
   $('retrybtn').onclick=clearPlan; $('artbtn').onclick=()=>storeArtifact(v, line);
   if ($('oracletaps')) { $('oracletaps').onclick=()=>queueOracleTaps(v.order_audit); }
   if ($('anywaybtn')) { $('anywaybtn').onclick=()=>playAnyway(v, line); }
+  if ($('fetchsuspendbtn')) { $('fetchsuspendbtn').onclick=()=>{
+    S.plan=fetchSuspend; hideVerdict(); renderBoard(); commitLine();
+  }; }
   // Wire each model-plan button to submit its index. Clear S.plan first so the rejected hand-built
   // queue doesn't seed a false dropped-cast check against the (different) model plan's actual casts.
   ve.querySelectorAll('.vplan').forEach(btn=>btn.onclick=()=>{
@@ -6304,7 +6373,7 @@ function advanceTo(dec) { (dec&&dec.mdfc_backs||[]).forEach(n=>MDFC_BACKS.add(n)
   // freeEquipPick joins the other armed modes here: it is per-DECISION (its hosts and counts come
   // from this decision's offers), so carrying it across a new decision would leave the button
   // reading "pick a creature" over a board where nothing is a legal host -- an armed dead control.
-  S.decision=dec; S.over=false; S.result=null; S.leMode=false; S.vialMode=null; S.blinkMode=null; S.repeatPick=null; S.loopPick=null; S.freeEquipPick=false; S.boardSel=null; S._selFor=null;
+  S.decision=dec; S.over=false; S.result=null; S.leMode=false; S.vialMode=null; S.blinkMode=null; S.repeatPick=null; S.loopPick=null; S.freeEquipPick=false; S.variantTargetPick=null; S.boardSel=null; S._selFor=null;
   // When THIS frame arrived, and a fresh pass-arm. Both belong to the frame: `frameAt` is what makes
   // "that click landed right after your line committed" answerable at all, and an arm raised on the
   // previous frame describes a pool that no longer exists (see passNeedsConfirm).

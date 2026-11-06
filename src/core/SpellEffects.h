@@ -1121,16 +1121,22 @@ struct NoncombatTriggerScope
 struct NoncombatStateSnapshot
 {
     bool enabled;
+    bool cant_gain_life = false;
+    bool cant_prevent_damage = false;
     std::array<int, 2> received{};
     std::vector<IncineratorDamageTrigger> pending;
     int depth = 0;
-    explicit NoncombatStateSnapshot(const GameState& s) : enabled(s.deck_tracks_noncombat_damage)
+    explicit NoncombatStateSnapshot(const GameState& s) : enabled(s.deck_tracks_noncombat_damage),
+        cant_gain_life(s.players_cant_gain_life_this_turn),
+        cant_prevent_damage(s.damage_cant_be_prevented_this_turn)
     {
         if (enabled) { received = s.noncombat_damage_received_this_turn;
             pending = s.pending_incinerator_damage; depth = s.noncombat_trigger_depth; }
     }
     void Restore(GameState& s) const
     {
+        s.players_cant_gain_life_this_turn = cant_gain_life;
+        s.damage_cant_be_prevented_this_turn = cant_prevent_damage;
         if (enabled) { s.noncombat_damage_received_this_turn = received;
             s.pending_incinerator_damage = pending; s.noncombat_trigger_depth = depth; }
     }
@@ -1669,6 +1675,7 @@ inline void OpponentGainsLife(GameState& state, int controller_index, int amount
                               const std::string& source = std::string())
 {
     if (amount <= 0) { return; }
+    if (state.players_cant_gain_life_this_turn) { return; }
     int opp = 1 - controller_index;
     const bool remedied = RemedyActive(state, controller_index);
     // MTG_LIFE_TRACE=1 (diagnosis only): per-event ledger of every opponent gain/flip with source
@@ -2413,6 +2420,7 @@ struct LandSearchSpec
     bool tapped          = false;  // battlefield entries forced tapped
     bool optional        = false;  // "you MAY search" -- human-only decline
     std::uint16_t subtype = 0;     // "a <Subtype> card" (Nature's Lore: Forest) -- SubtypeRegistry id; 0 = any
+    std::uint16_t subtype_alt = 0; // fetchland: the second permitted land subtype
 };
 inline LandSearchSpec LandSearchSpecOf(const CardParams& p)
 {
@@ -2424,6 +2432,11 @@ inline LandSearchSpec LandSearchSpecOf(const CardParams& p)
     s.tapped          = p.land_search_tapped;
     s.optional        = p.land_search_optional;
     s.subtype         = p.land_search_subtype_id;
+    if (p.land_search_activation_cost.has_value() && p.fetch_land_types.size() >= 2)
+    {
+        s.subtype = SubtypeRegistry::Instance().Id(p.fetch_land_types[0]);
+        s.subtype_alt = SubtypeRegistry::Instance().Id(p.fetch_land_types[1]);
+    }
     return s;
 }
 
@@ -5102,7 +5115,7 @@ inline void FlushIncineratorDamageTriggers(GameState& state)
     {
         const Permanent& p = state.battlefield[i];
         if ((p.card.IsCreature() || p.is_animated) && p.damage > 0
-            && p.damage >= LethalToughness(p, state) && !p.card.HasKeyword(Keyword::Indestructible))
+            && p.damage >= LethalToughness(p, state) && !p.HasKeyword(Keyword::Indestructible))
         { CounterPingKillAt(state, i, "lethal damage before Incinerator trigger"); }
     }
     --state.noncombat_trigger_depth;
@@ -5155,7 +5168,7 @@ inline void FlushIncineratorDamageTriggers(GameState& state)
                 const int before = p.damage;
                 p.damage += event.amount;
                 ApplyBurnToCreature(state, p, before, 0, event.controller);
-                dead = p.damage >= LethalToughness(p, state) && !p.card.HasKeyword(Keyword::Indestructible);
+                dead = p.damage >= LethalToughness(p, state) && !p.HasKeyword(Keyword::Indestructible);
             }
             else { break; }
             if (dead)
@@ -7467,6 +7480,7 @@ inline void FireOppCreatureDies(GameState& state, int dead_controller)
 inline void GainLife(GameState& state, int player, int amount)
 {
     if (amount <= 0) { return; }
+    if (state.players_cant_gain_life_this_turn) { return; }
     // Lifegain REPLACEMENT (Rhox Faithmender x2, Bilbo +1) -- armed decks only; identity otherwise.
     // Applied to the EVENT before anything reads it, so life_gained_this_turn and the watchers (Vito's
     // "that much") all see the replaced amount, as the rules say they must (CR 614.1).
@@ -10292,7 +10306,7 @@ inline void AskHumanEtbDestroyVictims(GameState& state, int controller, const Ca
         {
             Permanent& q = state.battlefield[i];
             if (q.card.m_number != num) { continue; }
-            if (q.card.HasKeyword(Keyword::Indestructible)) { break; }
+            if (q.HasKeyword(Keyword::Indestructible)) { break; }
             const int ctrl = q.controller_index;
             if (g_play_event_sink && !g_tap_speculating)
             {
@@ -10591,7 +10605,7 @@ inline void PerformMvCastDamageOppCreatures(GameState& state, int controller,
         ++hit;
         q.damage += dmg;
         if (q.damage >= q.EffectiveToughness()
-            && !q.card.HasKeyword(Keyword::Indestructible))
+            && !q.HasKeyword(Keyword::Indestructible))
         {
             ++killed;
             const int dead_controller = q.controller_index;
@@ -11418,7 +11432,7 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
             if (q.controller_index != opp || !q.card.IsCreature()) { continue; }
             q.damage += p.etb_damage_each_opponent;
             if (q.damage >= q.EffectiveToughness()
-                && !q.card.HasKeyword(Keyword::Indestructible))
+                && !q.HasKeyword(Keyword::Indestructible))
             {
                 const int dead_controller = q.controller_index;
                 state.players[q.owner_index].graveyard.push_back(q.card);
@@ -14227,7 +14241,7 @@ inline bool DealPermanentAbilityDamage(GameState& s, int controller, const CardD
         const int before = p.damage;
         p.damage += amount;
         ApplyBurnToCreature(s, p, before, 0, controller);
-        if (p.damage >= LethalToughness(p, s) && !p.card.HasKeyword(Keyword::Indestructible))
+        if (p.damage >= LethalToughness(p, s) && !p.HasKeyword(Keyword::Indestructible))
         { CounterPingKillAt(s, i, "lethal ability damage"); }
         return true;
     }
@@ -14245,7 +14259,8 @@ inline bool FixedTargetedBurn(const CardDefinition& d)
 {
     return d.tmpl == CardTemplate::DirectDamage && !d.card.m_mana_cost.has_x
         && !d.params.damage_divided && !d.params.damage_equals_top_mv
-        && (d.params.targeting == Targeting::Any || d.params.targeting == Targeting::Multi);
+        && (d.params.targeting == Targeting::Any || d.params.targeting == Targeting::Multi
+            || d.params.targeting == Targeting::Player);
 }
 struct FixedBurnPin { int first = 0; int second = -2; int paired_controller = -1; };
 inline thread_local int g_paired_burn_stage = 0;
@@ -14350,7 +14365,8 @@ inline std::vector<FixedBurnPin> FixedBurnCandidates(const GameState& s, int cas
     else
     {
         out.push_back({0, -2, -1}); out.push_back({-1, -2, -1});
-        for (const auto& c : creatures) { out.push_back({c.first, -2, -1}); }
+        if (d.params.targeting != Targeting::Player)
+        { for (const auto& c : creatures) { out.push_back({c.first, -2, -1}); } }
         for (const auto& w : walkers)
         {
             bool seen = false;
@@ -14480,7 +14496,8 @@ inline bool ResolveFixedBurnPin(GameState& s, int caster, const CardDefinition& 
             if (!BurnPermanentTargetLegal(s, caster, q)) { return false; }
             if (creature_only && ((!q.card.IsCreature() && !q.is_animated)
                                  || q.controller_index != p.paired_controller)) { return false; }
-            if (!creature_only && d.params.targeting == Targeting::Multi
+            if (!creature_only && (d.params.targeting == Targeting::Multi
+                                   || d.params.targeting == Targeting::Player)
                 && !q.card.HasType(CardType::Planeswalker)) { return false; }
             DealPermanentAbilityDamage(s, caster, d, damage, target, false);
             return true;
@@ -15433,7 +15450,7 @@ inline void PerformDamageAllCreatures(GameState& state, int controller,
         Permanent& q = state.battlefield[i];
         if (!q.card.IsCreature()) { continue; }
         if (q.damage < LethalToughness(q, state)) { continue; }
-        if (q.card.HasKeyword(Keyword::Indestructible)) { continue; }
+        if (q.HasKeyword(Keyword::Indestructible)) { continue; }
         died.push_back({ q.card, q.controller_index, q.is_token,
                          MinusCountersOn(q), TotalCountersOn(q) });
         state.players[q.owner_index].graveyard.push_back(q.card);
@@ -15624,7 +15641,7 @@ inline void ResolveEtbDestroyMandatory(GameState& state, int controller, int sou
     }
     const int bi = legal[static_cast<std::size_t>(k)];
     Permanent& q = state.battlefield[static_cast<std::size_t>(bi)];
-    if (q.card.HasKeyword(Keyword::Indestructible)) { return; }   // targeted, not destroyed
+    if (q.HasKeyword(Keyword::Indestructible)) { return; }   // targeted, not destroyed
     const Card dead = q.card;
     const int  dead_ctrl = q.controller_index;
     const bool was_creature = q.card.IsCreature();
@@ -15884,7 +15901,7 @@ inline void ResolveCastTriggerTargets(GameState& state, int controller, const st
         const bool was_token = q.is_token || q.card.m_number >= GameState::kFirstOppSpawnNumber;
         const int  m1 = MinusCountersOn(q);
         const int  total_counters = TotalCountersOn(q);
-        if (destroy && q.card.HasKeyword(Keyword::Indestructible))
+        if (destroy && q.HasKeyword(Keyword::Indestructible))
         {
             if (g_play_event_sink && !g_tap_speculating)
             {
@@ -15979,7 +15996,7 @@ inline void ResolveEtbDestroyOptional(GameState& state, int controller, const Ca
     }
     const int bi = legal[static_cast<std::size_t>(k)];
     Permanent& q = state.battlefield[static_cast<std::size_t>(bi)];
-    if (q.card.HasKeyword(Keyword::Indestructible)) { return; }   // targeted, not destroyed
+    if (q.HasKeyword(Keyword::Indestructible)) { return; }   // targeted, not destroyed
     const Card dead = q.card;
     const int  dead_ctrl = q.controller_index;
     const bool was_creature = q.card.IsCreature();
@@ -16051,7 +16068,7 @@ inline void ResolveEtbDividedCreatureDamage(GameState& state, int controller, co
     for (int i : legal)
     {
         const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
-        const bool unkillable = q.card.HasKeyword(Keyword::Indestructible);
+        const bool unkillable = q.HasKeyword(Keyword::Indestructible);
         need.push_back(unkillable ? 0 : std::max(1, LethalToughness(q, state) - q.damage));
     }
     std::vector<int> alloc = ResolveProvider(state).EtbDividedDamageAlloc(state, controller, legal, need, total);
@@ -16108,7 +16125,7 @@ inline void ResolveEtbDividedCreatureDamage(GameState& state, int controller, co
         if (std::find(hit_numbers.begin(), hit_numbers.end(), q.card.m_number) == hit_numbers.end()) { continue; }
         if (!(q.card.IsCreature() || q.is_animated)) { continue; }
         if (q.damage < LethalToughness(q, state)) { continue; }
-        if (q.card.HasKeyword(Keyword::Indestructible)) { continue; }
+        if (q.HasKeyword(Keyword::Indestructible)) { continue; }
         died.push_back({ q.card, q.controller_index, q.is_token,
                          MinusCountersOn(q), TotalCountersOn(q) });
         if (!q.is_token) { state.players[q.owner_index].graveyard.push_back(q.card); }
@@ -18026,7 +18043,7 @@ inline void ResolveDestroyTargetNonbasicLand(GameState& state, int controller, c
     }
     const int bi = legal[static_cast<std::size_t>(k)];
     const Permanent& q = state.battlefield[static_cast<std::size_t>(bi)];
-    if (q.card.HasKeyword(Keyword::Indestructible)) { return; }
+    if (q.HasKeyword(Keyword::Indestructible)) { return; }
     const Card dead = q.card;
     const int  owner = q.owner_index;
     const bool own = q.controller_index == controller;
@@ -20209,6 +20226,79 @@ inline void ApplyAttackDrawTriggers(GameState& state, int controller,
             {
                 for (std::size_t hi = before; hi < pl.hand.size(); ++hi)
                 { g_play_draw_sink->push_back({ state.turn_number, pl.hand[hi].m_name.str() }); }
+            }
+        }
+    }
+}
+
+// Goblin Guide: each attacking copy reveals the defending player's top card. A land is put
+// into that player's hand, not drawn; a nonland stays on top. The passive opponent has one
+// modelled library, shared by the two-headed abstraction.
+inline void ApplyGoblinGuideAttackTriggers(GameState& state, int controller,
+                                           const std::vector<int>& attacker_indices)
+{
+    if (!state.opponent_library_dealt) { return; }
+    Player& defender = state.players[1 - controller];
+    for (int idx : attacker_indices)
+    {
+        if (idx < 0 || idx >= static_cast<int>(state.battlefield.size())) { continue; }
+        const Permanent& attacker = state.battlefield[static_cast<std::size_t>(idx)];
+        if (attacker.controller_index != controller) { continue; }
+        const CardDefinition* source = CardDatabase::Instance().LookupCached(attacker.card);
+        if (!source || !source->params.attack_defending_player_reveal_land_to_hand
+            || defender.library.empty()) { continue; }
+        const Card revealed = defender.library.front();
+        const CardDefinition* top = CardDatabase::Instance().LookupCached(revealed);
+        const bool land = top && top->card.IsLand();
+        EmitReveal(state.turn_number, source->card.m_name.str() + " (attack)",
+                   { revealed.m_number }, { revealed.m_name.str() },
+                   land ? std::vector<int>{ revealed.m_number } : std::vector<int>{},
+                   {});
+        if (land)
+        {
+            defender.library.erase(defender.library.begin());
+            EnterHand(state, 1 - controller, revealed, HandEntryReason::Reveal);
+        }
+    }
+}
+
+inline bool SpellCanTargetPermanent(const GameState& s, int controller, const Permanent& p);
+inline void ApplyBorosCharm(GameState& state, int controller, int mode, int target_number)
+{
+    if (mode == 1)
+    {
+        const CardDefinition* charm = CardDatabase::Instance().Lookup("Boros Charm");
+        if (!charm) { return; }
+        if (target_number > 0)
+        {
+            bool legal = false;
+            for (const Permanent& p : state.battlefield)
+            {
+                if (p.card.m_number == target_number && p.card.HasType(CardType::Planeswalker)
+                    && SpellCanTargetPermanent(state, controller, p)) { legal = true; break; }
+            }
+            if (!legal) { return; }
+        }
+        else if (target_number != 0 && target_number != -1) { return; }
+        DealPermanentAbilityDamage(state, controller, *charm, 4, target_number, false);
+    }
+    else if (mode == 2)
+    {
+        for (Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != controller) { continue; }
+            p.temp_indestructible = true;
+        }
+    }
+    else if (mode == 3)
+    {
+        for (Permanent& p : state.battlefield)
+        {
+            if (p.card.m_number == target_number && p.card.IsCreature()
+                && SpellCanTargetPermanent(state, controller, p))
+            {
+                p.temp_double_strike = true;
+                break;
             }
         }
     }
@@ -28880,6 +28970,7 @@ inline std::uint64_t StealAttackBodyKey(const GameState& s, const Permanent& q)
     c.temp_haste = false;
     c.temp_lifelink = false;
     c.temp_double_strike = false;
+    c.temp_indestructible = false;
     c.once_per_turn_used = false;
     std::uint64_t k = 0;
     if (!LandfallTargetFoldKey(s, c, k))
@@ -29122,7 +29213,7 @@ inline bool CounterPingSbaDead(const Permanent& q, const GameState& state)
     if (!q.card.IsCreature()) { return false; }
     const int t = LethalToughness(q, state);
     if (t <= 0) { return true; }
-    return q.damage > 0 && q.damage >= t && !q.card.HasKeyword(Keyword::Indestructible);
+    return q.damage > 0 && q.damage >= t && !q.HasKeyword(Keyword::Indestructible);
 }
 
 // Put the creature at battlefield index `i` into the graveyard as an SBA death (the executor's SBA, exactly),
@@ -29867,7 +29958,7 @@ inline void CollectCounterPingOffers(const GameState& state, int controller, con
     for (const Permanent& q : state.battlefield)
     {
         if (!q.card.IsCreature() || q.card.m_number == 0 || q.card.m_number == src.card.m_number) { continue; }
-        if (DoomedEntrant(q, state) || q.card.HasKeyword(Keyword::Indestructible)) { continue; }
+        if (DoomedEntrant(q, state) || q.HasKeyword(Keyword::Indestructible)) { continue; }
         const int need_dmg = LethalToughness(q, state) - q.damage;
         if (need_dmg <= 0) { continue; }
         const int k = (need_dmg + dmg - 1) / dmg;
@@ -30139,6 +30230,12 @@ inline bool PermAbilitySourceLive(const GameState& state, int controller, int so
         {
             const CardDefinition* ld = CardDatabase::Instance().LookupCached(p.card);
             if (ld == nullptr || state.players[controller].life < ld->params.activate_min_life)
+            { return false; }
+        }
+        if (mode == PermAbilityMode::SacLandSearch)
+        {
+            const CardDefinition* ld = CardDatabase::Instance().LookupCached(p.card);
+            if (ld == nullptr || state.players[controller].life < ld->params.land_search_activation_life_cost)
             { return false; }
         }
         // Khalni Heart Expedition: "Remove three quest counters" is part of the COST, so the
@@ -43952,7 +44049,7 @@ inline void PerformEndStepMorbidDestroy(GameState& state, int n_triggers)
             }
         }
         Permanent& q = state.battlefield[static_cast<std::size_t>(bi)];
-        if (q.card.HasKeyword(Keyword::Indestructible)) { continue; }   // targeted, not destroyed
+        if (q.HasKeyword(Keyword::Indestructible)) { continue; }   // targeted, not destroyed
         const Card dead      = q.card;
         const int  dead_ctrl = q.controller_index;
         const bool was_token = q.is_token;

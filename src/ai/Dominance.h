@@ -809,6 +809,7 @@ inline bool AtCleanBoundary(const GameState& s)
             || p.sac_at_end_step)                                   { return false; }
         if (p.temp_lifelink)                                        { return false; }   // Heliod until-EOT grant
         if (p.temp_double_strike)                                   { return false; }   // Valiant Knight until-EOT grant
+        if (p.temp_indestructible)                                  { return false; }   // Boros Charm until-EOT grant
         if (p.etb_tap_pending)                                      { return false; }   // Colossification deferral (mid-turn only)
         if (p.marked_for_destruction)                               { return false; }
         if (p.mana_tap_mark != 0)                                   { return false; }   // Prevent Damage: an unflushed tap trigger
@@ -883,6 +884,8 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     }
     fold(s.on_the_play ? 1u : 0u);
     fold(s.opponent_lost_life_this_turn ? 1u : 0u);
+    if (s.players_cant_gain_life_this_turn) { fold(0x5C011u); }
+    if (s.damage_cant_be_prevented_this_turn) { fold(0x5C012u); }
     if (s.deck_tracks_noncombat_damage)
     {
         fold(0x1C1DE); fold(s.noncombat_damage_received_this_turn[0]);

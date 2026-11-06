@@ -476,6 +476,13 @@ public:
     virtual std::vector<std::string>
     FetchCandidates(const GameState& s, int controller, const CardParams& fetch_pp) const = 0;
 
+    // Search policy for a fetchland played from hand/top. True keeps the legal
+    // battlefield hold and later activation; false resolves the zero-mana,
+    // one-life fetch on play. Human play and the unpruned audit always keep the
+    // hold. Decks without a reviewed policy keep the full timing choice.
+    virtual bool ConsiderFetchHold(const GameState& s, const CardDefinition& fetch) const
+    { (void)s; (void)fetch; return true; }
+
     // CanAutoFireAltPayload -- auto-fire safe alt payload: per-card predicate (the engine keeps the
     // deterministic re-scan loop; only the "is this free payload safe to fire" decision
     // is provider-owned).
@@ -2978,6 +2985,21 @@ public:
     virtual bool CollectedActionAllowed(const GameState& s, const Action& a, bool is_pre_combat) const
     { (void)s; (void)a; (void)is_pre_combat; return true; }
 
+    // Main1PlanFoldLive / Main1PlanAdmitted -- a provider's PLAN-level fold of the PRE-combat main (first user:
+    // Shadowborn's USER main-1 rule, MTG_SB_MAIN1_RULE). Where CollectedActionAllowed judges one action, this
+    // judges a whole ROOT main-1 plan: a plan it refuses is dropped from the pre-combat menu because its
+    // post-combat twin (the same casts and activations in main 2, after a land-only main 1) is at least as good.
+    // Applied once per root pre-combat enumeration (EnumeratePlansWithLandUncached; never inside a breakpoint
+    // continuation, never in human play, searched play only), so the search, the searched rollout and the
+    // executor (which plays the search's plan) read one menu. Main1PlanFoldLive is asked ONCE per enumeration
+    // and may cache per-state facts for the Main1PlanAdmitted calls that immediately follow it (same thread, no
+    // enumeration in between). A plan with no actions (the land drop alone) must always be admitted. Defaults
+    // false / true -> byte-identical.
+    virtual bool Main1PlanFoldLive(const GameState& s) const { (void)s; return false; }
+    virtual bool Main1PlanAdmitted(const GameState& s, const std::vector<Action>& actions,
+                                   const std::string& land_to_play) const
+    { (void)s; (void)actions; (void)land_to_play; return true; }
+
     // FetchSearchCandidates -- the fetch targets the SEARCH actually branches on. The provider
     // returns a list of VARYING SIZE and the engine fans over exactly what comes back -- no
     // engine-side cap (USER design 2026-08-21: "the return IS the candidate set", the doctrine
@@ -3307,6 +3329,16 @@ public:
     // docs/design/hinata-spasm-gate-rootcause.md). Dragonstorm has no such mana sink, so the prune should
     // net-help here. Base returns false -> byte-identical; only DragonstormProvider opts in.
     virtual bool PrunesAcceleratorWithoutPayoff() const { return false; }
+    // PrunesRitualWithoutSpend -- the SPEND form of the payoff prune (first user: Shadowborn Apostle, USER 2026-11-05:
+    // "We might want to prune rituals with no payoff like we have for other decks."). Where the Dragonstorm prune
+    // names its payoffs by card role, this one counts ANY action of the subset that costs mana and is not itself a
+    // ritual (a cast, a suspend with a cost, a paid activation) as the payoff: a subset that casts a ritual and
+    // spends mana on nothing else floats the ritual's mana into the end of the phase, so the same subset without
+    // the ritual (the card kept in hand) dominates it. Sound with continuations: a subset of rituals alone opens no
+    // breakpoint, so nothing later in the phase can spend the float. Same call sites as the payoff prune (the
+    // search's branch list and the greedy / rollout policy, lockstep) and the same MTG_UNPRUNED(payoffprune) gate.
+    // Default false -> byte-identical.
+    virtual bool PrunesRitualWithoutSpend() const { return false; }
 
     // CastCheapestFirstWithinTier -- within one CastOrderRank tier, cast same-tier MANA ACCELERANTS
     // cheapest-first by the action's ACTUAL cost. A ritual chain funds itself cheapest-first, so a dearer

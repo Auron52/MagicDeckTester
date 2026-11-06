@@ -154,7 +154,16 @@ struct Arm
     // PRICED DECISION CEILING (MTG_DECISION_PRICED_X; decisionwork::PricedLimitNs): X in units of L x REF_NS.
     // Per-job so the off arm and an X sweep share one pooled batch. -1 unset => env (default 0 = off) | 0 off.
     int         decision_priced_x = -1;
+    int         plan_priced_ledger_max_emits = -1;   // MTG_PLAN_PRICED_LEDGER_MAX_EMITS: -1 env | 0 unlimited | >0 virtual admission ceiling
     int         decision_priced_gate = -1;   // priced START GATE: -1 env (MTG_DECISION_PRICED_GATE, default OFF) | 0 off | 1 on
+    int         bp_priced_stop    = -1;   // MTG_BP_DERIVE_PRICED_STOP (BpDerivePricedStopOn): -1 env | 0 off | 1 on
+    int         sac_dup_fold      = -1;   // MTG_SAC_DUP_WALK_FOLD (sacdupfold::On): -1 env | 0 off | 1 on
+    int         dup_action_fold   = -1;   // MTG_DUP_ACTION_FOLD (dupactfold::On): -1 env | 0 off | 1 on
+    int         two_stage_fold_prefix = -1; // MTG_TWO_STAGE_FOLD_PREFIX: -1 env | 0 off | 1 on
+    // PRICED BUDGET (MTG_PRICED_BUDGET / MTG_PRICED_UNIT_NS; namespace pricedbudget in DecisionWorkMeter.h): ns of
+    // priced work per budget unit. Per-job so the off arm and an R sweep share one pooled batch.
+    // -1 unset => env | 0 off | > 0 on at that R.
+    int         priced_unit_ns    = -1;
     // AA ROUTE WALK PRICE (MTG_AA_ROUTE_NODE_UNITS; aaroute::NodeUnits in DecisionProviders.cpp): units
     // per walk apply. Per-job so the off arm and a price sweep share one pooled batch.
     // -1 unset => env (default 0 = off) | 0 off | > 0 on at that price.

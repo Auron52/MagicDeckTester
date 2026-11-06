@@ -1890,7 +1890,7 @@ void DecisionProvider::CastTriggerTargetOrder(const GameState& s, int controller
     auto tier = [&](const Permanent& q) -> int
     {
         if (q.controller_index != controller) { return 0; }
-        if (destroy && q.card.HasKeyword(Keyword::Indestructible)) { return 1; }
+        if (destroy && q.HasKeyword(Keyword::Indestructible)) { return 1; }
         if (q.card.IsLand() && !q.card.IsCreature()) { return q.tapped ? 2 : 3; }
         if (q.card.IsCreature() || q.is_animated) { return q.EffectivePower() >= 10 ? 6 : 4; }
         return 5;
@@ -21183,6 +21183,110 @@ bool VampiresProvider::CleanupDiscardShedStable() const
     return false;
 }
 
+// The paired baseline is the AntiLifegain route this deck used before onboarding.
+// Ordered opaque casts make a burn spell's damage available before a later
+// spectacle cast, so the enumerator can price that cast at its legal live cost.
+static bool ModernRwBurnSpectacleOrderEnabled()
+{
+    static const bool on = EnvOn("MTG_RW_BURN_SPECTACLE_ORDER", true);  // DEFAULT ON; =0 restores baseline
+    return on;
+}
+
+bool ModernRwBurnProvider::ConsiderFetchHold(const GameState&, const CardDefinition&) const
+{
+    // The only distinct Burn line found needs two Searing Blazes, two opposing
+    // creatures, and no intervening need for the fetched mana. Keep it in the
+    // unpruned audit and the viewer; the ordinary search spends no timing fan.
+    static const bool auto_crack = EnvOn("MTG_RW_BURN_FETCH_AUTOCRACK", true); // DEFAULT ON; =0 restores full hold search
+    return !auto_crack;
+}
+
+std::vector<std::string> ModernRwBurnProvider::FetchCandidates(
+    const GameState& s, int controller, const CardParams& fetch_pp) const
+{
+    std::vector<std::string> all = GenericProvider::FetchCandidates(s, controller, fetch_pp);
+    if (DecisionUnpruned(UnprunedGate::Fetch)) { return all; }
+
+    int white_sources = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d || !d->card.IsLand()) { continue; }
+        if (std::find(d->params.produces.begin(), d->params.produces.end(), Color::White)
+            != d->params.produces.end()) { ++white_sources; }
+    }
+
+    const char* preferred = white_sources < 2 ? "Sacred Foundry" : "Mountain";
+    const char* fallback = white_sources < 2 ? "Mountain" : "Sacred Foundry";
+    if (std::find(all.begin(), all.end(), preferred) != all.end()) { return {preferred}; }
+    if (std::find(all.begin(), all.end(), fallback) != all.end()) { return {fallback}; }
+    return all;
+}
+
+bool FetchResolvesOnPlay(const GameState& state, const CardDefinition& land)
+{
+    const CardParams& p = land.params;
+    if (p.fetch_land_types.empty()) { return false; }
+    if (!p.land_search_activation_cost.has_value() || LegacyFetchImmediateOn()) { return true; }
+    // Only the modern zero-mana, one-life fetch template is safe to collapse
+    // through PerformFetch; other activated searches keep their full cost path.
+    if (p.land_search_activation_cost->ManaValue() != 0 || p.land_search_activation_life_cost != 1
+        || !p.land_search_activation_sacrifice_self || p.land_search_count != 1
+        || state.players[state.active_player_index].life <= 3) { return false; }
+    if (HumanPlayActive() || DecisionUnpruned(UnprunedGate::Fetch)) { return false; }
+    return !ResolveProvider(state).ConsiderFetchHold(state, land);
+}
+
+int ModernRwBurnProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
+{
+    if (!ModernRwBurnSpectacleOrderEnabled())
+    { return AntiLifegainProvider::CastOrderRank(s, def); }
+    if (def.params.on_cast_trigger_damage > 0) { return 40; }
+    if (def.params.spectacle_cost.has_value()) { return 30; }
+    return AntiLifegainProvider::CastOrderRank(s, def);
+}
+
+bool ModernRwBurnProvider::OrderOpaqueCastsByRank() const
+{ return ModernRwBurnSpectacleOrderEnabled(); }
+
+bool ModernRwBurnProvider::ShouldConsiderDig(const GameState& s) const
+{
+    if (AntiLifegainProvider::ShouldConsiderDig(s)) { return true; }
+    static const bool dead_blaze_dig = EnvOn("MTG_RW_BURN_DEAD_BLAZE_DIG", true);  // DEFAULT ON; =0 restores baseline
+    if (!dead_blaze_dig) { return false; }
+
+    int lands = 0;
+    bool ready_sac_draw_land = false;
+    bool opposing_creature = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != s.active_player_index)
+        {
+            opposing_creature |= p.card.IsCreature();
+            continue;
+        }
+        if (!p.card.IsLand()) { continue; }
+        ++lands;
+        if (p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        ready_sac_draw_land |= d && d->params.sacrifice_draw_cost.has_value();
+    }
+    // Preserve Generic's post-sacrifice two-land floor. With an opposing creature
+    // Searing Blaze is live damage, so its normal cheap-spell guard still applies.
+    if (lands < 3 || !ready_sac_draw_land || opposing_creature) { return false; }
+
+    bool dead_blaze = false;
+    for (const Card& c : s.ActivePlayer().hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (!d || d->card.IsLand() || d->card.m_mana_cost.ManaValue() > lands) { continue; }
+        if (c.m_name == "Searing Blaze") { dead_blaze = true; continue; }
+        return false;  // another cheap spell is useful gas; keep the generic guard
+    }
+    return dead_blaze;
+}
+
 // ---- instances + selection --------------------------------------------------
 
 namespace
@@ -21205,6 +21309,7 @@ namespace
     const SliversProvider        g_slivers;
     const HinataProvider         g_hinata;
     const BurnProvider           g_burn;
+    const ModernRwBurnProvider   g_modern_rw_burn;
     const MidrangeBurnProvider   g_midrange_burn;
     const DragonstormProvider    g_dragonstorm;
     const GoblinsProvider        g_goblins;
@@ -21344,7 +21449,7 @@ std::vector<int> PreventDamageProvider::XCandidates(const GameState& s, const Ca
         for (const Permanent& p : s.battlefield)
         {
             if (p.controller_index != me || !p.card.IsCreature()) { continue; }
-            if (p.card.HasKeyword(Keyword::Indestructible)) { continue; }
+            if (p.HasKeyword(Keyword::Indestructible)) { continue; }
             board_ceil = std::min(board_ceil, std::max(0, LethalToughness(p, s) - p.damage - 1));
         }
         ManaPool pool = AvailableManaPool(s);
@@ -21430,7 +21535,7 @@ std::vector<int> PreventDamageProvider::ManaSinkActivationCounts(const GameState
     for (const Permanent& p : s.battlefield)
     {
         if (p.controller_index != me || !p.card.IsCreature()) { continue; }
-        if (p.card.HasKeyword(Keyword::Indestructible)) { continue; }
+        if (p.HasKeyword(Keyword::Indestructible)) { continue; }
         board_ceil = std::min(board_ceil, std::max(0, LethalToughness(p, s) - p.damage - 1));
     }
     // No creature of ours on the board: nothing to protect, every count "survives" (NO_OVERKILL keeps the
@@ -23522,6 +23627,7 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     bool slivers = false;   // Hatchery Sliver / Thrumming Hivepool: SliversProvider, inside `vial`
     bool merfolk = false; // Image, Tide Shaper, and Spreading Seas carry independent gated signatures.
     bool midrange_burn = false;
+    bool modern_rw_burn = false;
     bool goblin = false, gift = false, fivec = false, mirrorwing = false, equipment = false;
     bool stompy = false;   // StompySurprise (elf ramp) -- routes to Generic BEFORE the anti check
     bool jumbo_cactuar = false; // gated mechanics on Jumbo Cactuar and Surrak
@@ -23717,6 +23823,12 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
         // during onboarding before their data entries have been implemented.
         if (c.m_name == "Chandra's Incinerator" || c.m_name == "Chandra, Torch of Defiance"
             || c.m_name == "Grim Lavamancer") { midrange_burn = true; }
+        // Conjoin independent Boros-list cards with Searing Blaze's Burn marker.
+        // Each name occurs only in this list among the repository decklists; the
+        // OR keeps routing stable if one flex slot changes during deck screening.
+        if (c.m_name == "Boros Charm" || c.m_name == "Boltwave"
+            || c.m_name == "Sunbaked Canyon" || c.m_name == "Inspiring Vantage")
+        { modern_rw_burn = true; }
         const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
         if (!def) { continue; }
         const CardParams& p = def->params;
@@ -24400,6 +24512,7 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // inherits Generic). Trips no other signature (verified: it detected to Generic before this
     // provider existed), so placement here is for tidiness only.
     if (snow) { return g_snow; }
+    if (anti && modern_rw_burn) { return g_modern_rw_burn; }
     if (anti) { return g_antilife; }
     if (th)   { return g_treasure; }
     // VialProvider holds slivers_vial's USER-settled cleanup-discard rule (2026-10-09). slivers_vial
@@ -28865,17 +28978,33 @@ static bool FluctuatorSecondThreatLive(const GameState& s)
 // battlefield (each permanent's copy number, name, tapped and entered-this-turn state), the floating
 // mana, life, turn and the drop count. A 4-entry thread_local cache keyed on exactly those keeps the
 // GameState copies off the chain's hot path. Pure read; a hit returns what the copies would.
+// The KEY is address- and platform-free (names by FNV-1a over their bytes, never a pointer or std::hash) and the
+// cache is emptied per game (FluctKeepPayableClearMemo): its slot is h & 3, so a pointer in the key made which
+// entries evicted each other -- and so how many payments the copies counted (workctr::kPay) -- vary with ASLR
+// and batch order. Play never read that count; the priced budget and the priced ceiling do (2026-11-04).
+namespace fluctkeep
+{
+struct Entry { std::uint64_t key = 0; bool val = false; bool used = false; };
+inline thread_local Entry t_cache[4];
+inline std::uint64_t Str(const std::string& v)
+{
+    std::uint64_t h = 1469598103934665603ULL;
+    for (unsigned char c : v) { h = (h ^ c) * 1099511628211ULL; }
+    return h;
+}
+}
+void FluctKeepPayableClearMemo() { for (fluctkeep::Entry& e : fluctkeep::t_cache) { e = fluctkeep::Entry{}; } }
 static bool FluctKeepPayable(const GameState& s, const CardDefinition& cost_def, const std::string* land)
 {
-    struct Entry { std::uint64_t key = 0; bool val = false; bool used = false; };
-    static thread_local Entry t_cache[4];
+    fluctkeep::Entry* const t_cache = fluctkeep::t_cache;
     std::uint64_t h = 1469598103934665603ULL;
     auto mix = [&h](std::uint64_t v) { h ^= v + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2); };
     const int me = s.active_player_index;
     mix(static_cast<std::uint64_t>(s.TurnSeq()));
     mix(static_cast<std::uint64_t>(me));
     mix(static_cast<std::uint64_t>(s.players[me].life));
-    mix(static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(&cost_def)));
+    mix(fluctkeep::Str(cost_def.card.m_name.str()));
+    mix(static_cast<std::uint64_t>(cost_def.card.IsCreature() ? 1u : 0u));
     const ManaPool& f = s.floating_mana;
     for (int v : { f.white, f.blue, f.black, f.red, f.green, f.colorless, f.wild })
     { mix(static_cast<std::uint64_t>(v)); }
@@ -28883,16 +29012,16 @@ static bool FluctKeepPayable(const GameState& s, const CardDefinition& cost_def,
     {
         if (p.controller_index != me) { continue; }
         mix(static_cast<std::uint64_t>(p.card.m_number));
-        mix(std::hash<std::string>{}(p.card.m_name.str()));
+        mix(fluctkeep::Str(p.card.m_name.str()));
         mix((p.tapped ? 1u : 0u) | (p.entered_this_turn ? 2u : 0u));
     }
     if (land != nullptr)
     {
-        mix(std::hash<std::string>{}(*land));
+        mix(fluctkeep::Str(*land));
         mix(static_cast<std::uint64_t>(s.players[me].lands_played_this_turn));
         mix(0x5bd1e995ULL);
     }
-    Entry& e = t_cache[h & 3u];
+    fluctkeep::Entry& e = t_cache[h & 3u];
     if (e.used && e.key == h) { return e.val; }
     const ManaCost& cost = cost_def.card.m_mana_cost;
     const bool v = land != nullptr
@@ -58657,10 +58786,277 @@ bool ShadowbornProvider::FreeCastTakeDominated(const GameState& /*s*/, int /*con
     return hit.card.IsCreature() && p.sac_named_count > 0 && p.etb_scry == 0 && p.etb_dig_count == 0
         && p.etb_self_draw == 0 && p.etb_tutor_hand_count == 0;
 }
+// ---- ShadowbornProvider: the USER's cast order and main-1 rule (2026-11-04; authority and tables in the
+// declaration) ------------------------------------------------------------------------------------------------
+static bool SbCastOrderOn()
+{
+    // The USER's cast order (2026-11-04). =1 / =0 select the arm; see the default note at the read.
+    static const bool on = EnvOn("MTG_SB_CAST_ORDER", true);
+    return heurarm::Flag(heurarm::SB_CAST_ORDER, on);
+}
+static bool SbMain1RuleOn()
+{
+    // The USER's main-1 rule (2026-11-04). =1 / =0 select the arm; see the default note at the read.
+    static const bool on = EnvOn("MTG_SB_MAIN1_RULE", true);
+    return heurarm::Flag(heurarm::SB_MAIN1_RULE, on);
+}
+static bool SbPrunesOn();   // ShadowbornPrunesOn, below (the viewer and the MTG_UNPRUNED audit arm keep the full menus)
+static bool SbIsSacNamedCreature(const CardDefinition* d);   // below
+// A creature of `controller`'s that can attack THIS turn as far as sickness goes (CR 302.6) -- the tap is ignored, so
+// the post-combat main reads the same army the pre-combat main did.
+static bool SbAttackReady(const Permanent& p, int controller)
+{
+    if (p.controller_index != controller || (!p.card.IsCreature() && !p.is_animated)) { return false; }
+    if (p.card.HasKeyword(Keyword::Defender)) { return false; }
+    if (p.is_animated || p.card.HasKeyword(Keyword::Haste)) { return true; }
+    return !(p.entered_this_turn || p.gained_control_this_turn);
+}
+static bool SbIsCountAnthem(const CardDefinition* d)
+{
+    return d != nullptr && d->card.IsCreature() && !d->params.creature_count_anthem_tiers.empty();
+}
+static bool SbIsDevotionDemon(const CardDefinition* d)
+{
+    return d != nullptr && d->card.IsCreature() && !d->params.etb_tokens_per_devotion_color.empty();
+}
+// "Jetmir arrived THIS TURN" (the activation order, MTG_SB_CAST_ORDER): the count anthem is on our battlefield and
+// entered this turn. USER 2026-11-05: "Overlord in Main-2 i worse in the case where we drop Jetmir in Main-1." and
+// (2026-11-04) "if we activate for Overlord and Jetmir they should remain in that order." Together: once Jetmir has
+// arrived this turn -- in main 1 or earlier in this main -- no Overlord (fetch or hard cast) follows him this turn; the
+// Overlord line is Overlord -> Jetmir inside one main. Nothing in this list puts Jetmir onto the battlefield outside a
+// main phase (the Apostle activation is sorcery-speed; Profane Tutor fetches to hand), so entered_this_turn is exact
+// for "arrived in a main this turn" with no per-main bookkeeping. A Jetmir that arrived and then LEFT the battlefield
+// the same turn (only a sacrifice of him, last in the deck's victim order) is not seen, so that turn keeps its
+// Overlord -- the prune errs towards offering, never the other way.
+static bool SbJetmirArrivedThisTurn(const GameState& s, int controller)
+{
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller || !p.entered_this_turn || p.def_absent) { continue; }
+        if (SbIsCountAnthem(CardDatabase::Instance().LookupCached(p.card))) { return true; }
+    }
+    return false;
+}
+
+// THE OVERLORD'S PLACEMENT (MTG_SB_MAIN1_RULE; USER 2026-11-05: "My actual suggestion for Overlord is to move it
+// wherever it needs to go to be before Jetmir. It should be in main-1 if Jetmir is there and main-2 otherwise."). A
+// MAIN-1 Overlord (the activation's fetch or the hard cast) is offered only when Jetmir is "there" in main 1: on the
+// battlefield already with an attack-ready creature of ours, or still deployable later in this main -- an attack-ready
+// creature (the main-1 rule's Jetmir turn), Jetmir in our library, and the bodies for a further six after this
+// Overlord (`fetch`: it eats six itself): enough sac-named creatures on the battlefield, or a way to add more before
+// combat (one in hand, a ripple granter on the battlefield with a nonland card in hand, a library tutor in hand).
+// Everything else is the out-of-place variant: its twin is the same Overlord after combat (main 2), which on an attack
+// turn also keeps the six attackers' damage. Erring wide: a main-1 Overlord whose follow-up Jetmir the search then
+// declines is not refused (the fold judges the state, not the rest of the line), so that line can still appear twice.
+static bool SbMain1JetmirCanFollow(const GameState& s, int controller, bool fetch)
+{
+    bool ready = false, jet_bf = false;
+    int apostles = 0, need = 6;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        if (SbAttackReady(p, controller)) { ready = true; }
+        const CardDefinition* d = p.def_absent ? nullptr : CardDatabase::Instance().LookupCached(p.card);
+        if (SbIsCountAnthem(d)) { jet_bf = true; }
+        if (SbIsSacNamedCreature(d)) { ++apostles; need = d->params.sac_named_count; }
+    }
+    if (!ready) { return false; }   // no attacker: a main-1 Jetmir changes nothing this combat
+    if (jet_bf) { return true; }    // "if Jetmir is there"
+    bool jet_lib = false;
+    for (const Card& lc : s.players[static_cast<std::size_t>(controller)].library)
+    { if (SbIsCountAnthem(CardDatabase::Instance().LookupCached(lc))) { jet_lib = true; break; } }
+    if (!jet_lib) { return false; }
+    if (apostles - (fetch ? need : 0) >= need) { return true; }
+    bool granter_bf = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.grants_ripple > 0) { granter_bf = true; break; }
+    }
+    for (const Card& c : s.players[static_cast<std::size_t>(controller)].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr || d->card.IsLand()) { continue; }
+        if (SbIsSacNamedCreature(d) || IsLibraryTutor(d->params) || granter_bf) { return true; }
+    }
+    return false;
+}
+
 int ShadowbornProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
 {
+    if (SbCastOrderOn())
+    {
+        // THE USER'S ORDER (2026-11-04), read off card data. The land drop is not a cast (it goes first).
+        const CardParams& p = def.params;
+        if (p.suspend_time_counters > 0) { return p.tutor_to_hand ? 11 : 12; }   // Profane Tutor : Lotus Bloom (suspend only)
+        if (p.ritual_floating_mana > 0) { return p.sac_additional_creature ? 2 : 1; }   // Culling : Dark Ritual
+        if (p.grants_ripple > 0) { return 3; }                                           // Thrumming Stone
+        if (def.card.IsCreature())
+        {
+            if (p.sac_named_count > 0)                         { return 4; }   // Shadowborn Apostle
+            if (!p.creature_count_anthem_tiers.empty())        { return 8; }   // Jetmir (cannot be cast here)
+            if (!p.etb_tokens_per_devotion_color.empty())      { return 7; }   // Abhorrent Overlord, last for devotion
+            if (p.endstep_each_player_discards_hand)           { return 6; }   // Sire of Insanity
+            return 5;                                                          // Reaper from the Abyss
+        }
+        if (p.tutor_to_hand) { return p.sac_additional_creature ? 10 : 9; }   // Diabolic Intent : Demonic Tutor
+        return DeckProvider::CastOrderRank(s, def);
+    }
     if (def.params.grants_ripple > 0) { return 1; }   // the granter first (PROVISIONAL deck order)
     return DeckProvider::CastOrderRank(s, def);
+}
+bool ShadowbornProvider::CastOrderTotalByName() const { return SbCastOrderOn(); }
+bool ShadowbornProvider::PrunesRitualWithoutSpend() const
+{
+    // The USER's ritual-payoff prune (2026-11-05). =1 / =0 select the arm; DEFAULT ON (2026-11-05: ab7 -0.035 turns, -14..-20% units; every unrecovered game is the clairvoyant ripple-dig the USER ruled out).
+    static const bool on = EnvOn("MTG_SB_RITUAL_PAYOFF", true);
+    return heurarm::Flag(heurarm::SB_RITUAL_PAYOFF, on) && SbPrunesOn();
+}
+void ShadowbornProvider::ArrangeCastOrder(const GameState& /*s*/, const std::vector<Action>& actions,
+                                          std::vector<int>& order) const
+{
+    if (!SbCastOrderOn() || order.size() < 2) { return; }
+    // "Dark Ritual, <shadowborn sacrifice for culling if needed>, Culling, Thrumming stone": a creature-sacrifice
+    // spell whose victim is a SAME-PLAN hand creature (Action::trick_hand_target, the SAC-ANY-CREATURE post-pass)
+    // takes that creature's first cast to just BEFORE itself, so the spell keeps its rank (Culling ahead of the
+    // Stone) and the cost is payable at its cast (CR 601.2h). Structural: the realised line is the one the plan
+    // names. A spell already after its victim (Diabolic Intent behind the Apostles) is untouched.
+    for (std::size_t p = 0; p < order.size(); ++p)
+    {
+        const Action& t = actions[static_cast<std::size_t>(order[p])];
+        if (t.kind != Action::Kind::CastFromHand || t.trick_hand_target.empty() || t.attach_equip_id != 0) { continue; }
+        const CardDefinition* td = t.def ? t.def : CardDatabase::Instance().Lookup(t.card_name);
+        if (td == nullptr || !td->params.sac_additional_creature) { continue; }
+        for (std::size_t q = 0; q < order.size(); ++q)
+        {
+            const Action& c = actions[static_cast<std::size_t>(order[q])];
+            if (q == p || c.kind != Action::Kind::CastFromHand || c.attach_equip_id != 0
+                || c.card_name.str() != t.trick_hand_target) { continue; }
+            if (q > p)
+            {
+                const int v = order[q];
+                order.erase(order.begin() + static_cast<std::ptrdiff_t>(q));
+                order.insert(order.begin() + static_cast<std::ptrdiff_t>(p), v);
+                ++p;   // the spell moved one slot later
+            }
+            break;   // the first cast of the victim's name is the one the cost eats
+        }
+    }
+}
+bool ShadowbornProvider::RestrictsCollectedActions() const { return SbCastOrderOn() || SbMain1RuleOn(); }
+bool ShadowbornProvider::CollectedActionAllowed(const GameState& s, const Action& a, bool is_pre_combat) const
+{
+    // "Overlord should go before any activations Shadowborn activations when it is cast": no hard cast of the
+    // devotion-token Demon once Jetmir has arrived this turn, in this main or in main 1 (USER 2026-11-05: "Overlord
+    // in Main-2 i worse in the case where we drop Jetmir in Main-1.").
+    if (!(SbCastOrderOn() || SbMain1RuleOn()) || !SbPrunesOn() || a.kind != Action::Kind::CastFromHand) { return true; }
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    if (!SbIsDevotionDemon(d)) { return true; }
+    if (SbJetmirArrivedThisTurn(s, s.active_player_index)) { return false; }   // either main
+    // The placement (MTG_SB_MAIN1_RULE): main 1 only when Jetmir is there in main 1 (SbMain1JetmirCanFollow).
+    if (SbMain1RuleOn() && is_pre_combat) { return SbMain1JetmirCanFollow(s, s.active_player_index, /*fetch=*/false); }
+    return true;
+}
+
+namespace
+{
+// Main1PlanFoldLive's per-state facts, read by the Main1PlanAdmitted calls that immediately follow it on the same
+// thread (DecisionProvider::Main1PlanFoldLive's contract). `state` guards a stale read.
+struct SbMain1Ctx
+{
+    const GameState* state = nullptr;
+    bool        jet_reachable = false;   // an attack-ready creature + Jetmir in our library (not on the battlefield)
+    bool        granter_bf    = false;   // a ripple granter on our battlefield
+    int         apostles_bf   = 0;       // sac-named creatures on our battlefield
+    int         need          = 6;       // the activation's sac_named_count
+    std::string jet_name;
+};
+thread_local SbMain1Ctx t_sb_main1;
+}   // namespace
+
+// THE MAIN-1 RULE (MTG_SB_MAIN1_RULE; USER 2026-11-04, the authority is in the declaration). The fold, and why it is
+// SOUND (a dominance fold, never a pick): in this goldfish nothing cast or activated before combat changes combat
+// EXCEPT through Jetmir's count anthem -- the list has no haste, no anthem but Jetmir's, no attack trigger, no draw;
+// every body cast in main 1 is summoning sick; lands, Lake of the Dead and Lotus Bloom keep their mana across combat
+// while floating mana empties at the end of the phase. So with no attack-ready creature, or with Jetmir neither on our
+// battlefield nor reachable this turn, the main-2 version of a main-1 plan (land-only main 1, the same actions after
+// combat) is at least as good: the same mana, the same bodies, and a main-1 sacrifice (Culling, Diabolic Intent, the
+// six) can only cost an attacker's damage. What the fold must NOT drop, and therefore admits:
+//   * every plan while Jetmir is ON our battlefield with an attack-ready creature (each body cast raises his count);
+//   * a plan that deploys Jetmir (an Apostle activation fetching him) -- the INT-9 Demon-timing table already offers
+//     that only when it raises this turn's attack (lethal first) or a chain can still add bodies, i.e. with an
+//     attacker left over;
+//   * a plan whose BREAKPOINT CONTINUATION can still deploy him before combat, because the fold judges the root plan
+//     only: a library tutor (Demonic Tutor / Diabolic Intent: the fetched card opens a continuation), a spell cast
+//     with a ripple granter live (a reveal chain can reach the six and arm breakpoint site 9), or enough Apostles
+//     cast to reach the six from hand (site 9 again). Erring wide only costs fold;
+//   * a plan whose land drop is Lake of the Dead (its entry taps the Swamp it eats first -- TAP-FIRST -- and that
+//     float empties if main 1 casts nothing, so the main-2 twin would be a mana short).
+// The land drop itself stays in main 1 on every turn (USER: "Land drop should happen main 1 unless we searched it up
+// in main 2"; HeldLandBarredFromMain2 already bars a held land from the main-2 drop).
+bool ShadowbornProvider::Main1PlanFoldLive(const GameState& s) const
+{
+    t_sb_main1.state = nullptr;
+    if (!SbMain1RuleOn() || !SbPrunesOn()) { return false; }
+    const int me = s.active_player_index;
+    SbMain1Ctx c;
+    bool attackers = false, jet_bf = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        if (SbAttackReady(p, me)) { attackers = true; }
+        const CardDefinition* d = p.def_absent ? nullptr : CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        if (SbIsCountAnthem(d)) { jet_bf = true; }
+        if (d->params.grants_ripple > 0) { c.granter_bf = true; }
+        if (SbIsSacNamedCreature(d)) { ++c.apostles_bf; c.need = d->params.sac_named_count; }
+    }
+    if (attackers && jet_bf) { return false; }   // every body raises Jetmir's count: nothing to fold
+    if (attackers)
+    {
+        for (const Card& lc : s.players[static_cast<std::size_t>(me)].library)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(lc);
+            if (SbIsCountAnthem(d)) { c.jet_reachable = true; c.jet_name = lc.m_name.str(); break; }
+        }
+    }
+    c.state = &s;
+    t_sb_main1 = c;
+    return true;
+}
+bool ShadowbornProvider::Main1PlanAdmitted(const GameState& s, const std::vector<Action>& actions,
+                                           const std::string& land_to_play) const
+{
+    if (actions.empty()) { return true; }
+    if (t_sb_main1.state != &s) { return true; }   // no context for this state: never fold blind
+    const SbMain1Ctx& c = t_sb_main1;
+    if (!land_to_play.empty())
+    {
+        const CardDefinition* ld = CardDatabase::Instance().Lookup(land_to_play);
+        if (ld != nullptr && !ld->params.etb_replace_sacrifice_land_subtype.empty()) { return true; }   // the Lake
+    }
+    if (!c.jet_reachable) { return false; }
+    int casts = 0, apostle_casts = 0;
+    bool granter_cast = false;
+    for (const Action& a : actions)
+    {
+        if (a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::SacNamedTutorPut)
+        {
+            if (a.tutor_target.str() == c.jet_name) { return true; }   // deploys Jetmir before combat
+            continue;
+        }
+        if (a.kind != Action::Kind::CastFromHand) { continue; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        if (d == nullptr) { return true; }                       // a cast we cannot read: never fold blind
+        if (IsLibraryTutor(d->params)) { return true; }           // its continuation may deploy Jetmir
+        ++casts;
+        if (d->params.grants_ripple > 0) { granter_cast = true; }
+        if (SbIsSacNamedCreature(d)) { ++apostle_casts; }
+    }
+    if (c.granter_bf ? casts > 0 : (granter_cast && casts > 1)) { return true; }   // a reveal chain may follow
+    if (c.need > 0 && c.apostles_bf + apostle_casts >= c.need) { return true; }     // the six, from hand
+    return false;
 }
 
 // ---- ShadowbornProvider: the USER's Overlord upkeep-sacrifice order (Shadowborn INT-7; authority and the
@@ -58752,6 +59148,7 @@ static bool ShadowbornFreeIntentTakeOn()
     return heurarm::Flag(heurarm::SHADOWBORN_FREE_INTENT_TAKE, on);
 }
 static bool ShadowbornPrunesOn() { return !DecisionUnpruned() && !HumanPlayActive(); }
+static bool SbPrunesOn() { return ShadowbornPrunesOn(); }
 static bool SbIsSacNamedCreature(const CardDefinition* d)
 {
     return d != nullptr && d->card.IsCreature() && d->params.sac_named_count > 0;
@@ -58777,7 +59174,29 @@ void ShadowbornProvider::SacNamedTimingFilter(const GameState& s, int controller
     }
     // SICK turn: the INT-4 order (devotion Demon, then count anthem), MAIN 1 ONLY (USER CONFIRMED 2026-11-03: "On a
     // summoning sick turn you can do demon search main 1 if you want." -- main 1 vs main 2 was an equal twin).
-    if (!attack_turn) { if (!pre_combat) { targets.clear(); } return; }
+    // MAIN-1 RULE (MTG_SB_MAIN1_RULE, USER 2026-11-04): a turn with no attack-ready Apostle is no longer a
+    // main-1-only search -- the plan-level fold (Main1PlanAdmitted) moves it to main 2 unless it deploys Jetmir
+    // with an attacker of another kind -- so both mains offer the list. Activation order (MTG_SB_CAST_ORDER): no
+    // Overlord fetch once Jetmir has arrived THIS TURN, in this main or in main 1 (USER: "if we activate for
+    // Overlord and Jetmir they should remain in that order"; "in main 2 we should still allow Overlord -> Jetmir";
+    // 2026-11-05: "Overlord in Main-2 i worse in the case where we drop Jetmir in Main-1.").
+    // PLACEMENT (MTG_SB_MAIN1_RULE, USER 2026-11-05: "It should be in main-1 if Jetmir is there and main-2
+    // otherwise."): a main-1 Overlord fetch only when Jetmir is there in main 1 (SbMain1JetmirCanFollow).
+    auto same_main_order = [&]()
+    {
+        if (targets.empty() || !(SbCastOrderOn() || SbMain1RuleOn())) { return; }
+        const bool drop = SbJetmirArrivedThisTurn(s, controller)
+                       || (SbMain1RuleOn() && pre_combat && !SbMain1JetmirCanFollow(s, controller, /*fetch=*/true));
+        if (!drop) { return; }
+        targets.erase(std::remove_if(targets.begin(), targets.end(), [](const std::string& nm)
+        { return SbIsDevotionDemon(CardDatabase::Instance().Lookup(nm)); }), targets.end());
+    };
+    if (!attack_turn)
+    {
+        if (!pre_combat && !SbMain1RuleOn()) { targets.clear(); }
+        same_main_order();
+        return;
+    }
     std::vector<std::string> anthem, other;
     const CardDefinition* jet = nullptr;
     for (const std::string& nm : targets)
@@ -58787,6 +59206,16 @@ void ShadowbornProvider::SacNamedTimingFilter(const GameState& s, int controller
         (is_anthem ? anthem : other).push_back(nm);
         if (is_anthem && jet == nullptr) { jet = d; }
     }
+    // PLACEMENT (MTG_SB_MAIN1_RULE): when main 1 offers Jetmir, the Overlord rides ahead of him there if the
+    // bodies for both sixes can be had (SbMain1JetmirCanFollow); otherwise it stays a main-2 fetch.
+    const auto main1_list = [&]()
+    {
+        std::vector<std::string> m1;
+        if (SbMain1RuleOn() && !SbJetmirArrivedThisTurn(s, controller) && SbMain1JetmirCanFollow(s, controller, true))
+        { for (const std::string& nm : other) { if (SbIsDevotionDemon(CardDatabase::Instance().Lookup(nm))) { m1.push_back(nm); } } }
+        m1.insert(m1.end(), anthem.begin(), anthem.end());
+        return m1;
+    };
     // THE JETMIR TEST (USER CONFIRMED 2026-11-03: "That rule sounds reasonable to me"): on an attack turn the
     // count-anthem Demon is the ONLY pick, before combat, exactly when fetching it raises THIS turn's attack over not
     // activating (a lethal one first). Read off card data: the six = the weakest copies (X, T, U, S -- the activation's
@@ -58845,7 +59274,7 @@ void ShadowbornProvider::SacNamedTimingFilter(const GameState& s, int controller
         // held-out A/B, seed 7001 gi126: T4 cast an Apostle into a Stone chain (15 reveals -> 18 Apostles, 3 of
         // them attack-ready); INT-8 fetched Jetmir in main 1 and won that turn (3 x 4 x 2 = 24 vs 16), INT-9 judged
         // the 3-Apostle pre-chain board, offered nothing in main 1 and won a turn later.
-        if (pre_combat && static_cast<int>(six.size()) < n) { targets = anthem; return; }
+        if (pre_combat && static_cast<int>(six.size()) < n) { targets = main1_list(); return; }
         // ...and the same when the six ARE on the battlefield but this plan can still cast more bodies before the
         // activation (a sac-named creature in hand -- the ripple chain multiplies it): the pre-chain board under-prices
         // Jetmir, because the chain's sick copies become the six and the attack-ready army survives. Held-out seed
@@ -58856,12 +59285,13 @@ void ShadowbornProvider::SacNamedTimingFilter(const GameState& s, int controller
         {
             for (const Card& c : s.players[static_cast<std::size_t>(controller)].hand)
             {
-                if (SbIsSacNamedCreature(CardDatabase::Instance().LookupCached(c))) { targets = anthem; return; }
+                if (SbIsSacNamedCreature(CardDatabase::Instance().LookupCached(c))) { targets = main1_list(); return; }
             }
         }
     }
-    if (jet_gains) { targets = pre_combat ? anthem : std::vector<std::string>{}; }
+    if (jet_gains) { targets = pre_combat ? main1_list() : std::vector<std::string>{}; }
     else           { targets = pre_combat ? std::vector<std::string>{} : (other.empty() ? anthem : other); }
+    same_main_order();
 }
 
 bool ShadowbornProvider::NoLandPlanDominated(const GameState& s) const

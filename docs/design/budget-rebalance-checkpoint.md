@@ -445,3 +445,387 @@ X=0 and X=100 before). Next slowest 87 s (kitty_v1vscur_2hg_cur gi20037), then 7
 - Stage now: RE-PRICE (plan item 2). Step 1 = quiet-box cost fit on HEAD: build/scratch/budget/run_fit.sh -> fit.txt /
   fit.DONE (regression manifest, 32 thr, MTG_TIER1_STATS). Then `scripts/cost_fit.py fit.txt` vs the provisional
   contended prices in src/core/WorkCounters.h.
+
+## Live at compaction #6 (2026-11-04 ~00:50 UTC) -- RE-PRICE stage, prototype built, A/B not yet launched
+- USER 2026-11-04: approved the plan -- renormalise on the MEDIAN deck, let the curve show what the heavy decks lose;
+  "the 'raise budget' option is still on the table" per deck.
+- QUIET-BOX FIT DONE (build/scratch/budget/fit.txt, run_fit.sh; 13,525 searched games >= 50 ms): prices ns
+  step 21426, greedy 569, enum 18455, plans 2866, odo 511, apply 8097, pay 2561, simkey 3749, interior 586.
+  priced actual/pred p95 1.57 (slowest 1%: 1.78) vs units-only 3.29 (7.45). Per-deck priced ns/unit (aggregate):
+  goblins 14.8k ... median 28.3k ... hinata 40.4k, alchemist 45.7k, kittyv3 54.9k, dragonstorm 63.8k, edf 103.5k.
+- SRC committed as WIP on budget-rebalance ONLY (NOT shared; prototype, default OFF => only the price constants change default play, via
+  the X=100 priced ceiling's trip points):
+  * src/core/WorkCounters.h: kPriceNs refit + kInteriorNs=586.
+  * src/ai/DecisionWorkMeter.h: namespace pricedbudget at end of file -- UnitNs() (per-job arm valuearm
+    priced_unit_ns wins, else MTG_PRICED_BUDGET + MTG_PRICED_UNIT_NS default 28300; 0 = off), Bill(n) = (t_acc +
+    n*kInteriorNs + (t_priced - t_wm)) / R with carry, Drop(), Scope (decision-root RAII; t_active gate so only a
+    FINITE decision root's work is billed; nested roots keep the outer's pending).
+  * src/ai/TurnSolver.cpp ~1935: PricedUnits() in ConsumeAt / ConsumeAtN (null/unlimited/inactive => n, Drop);
+    cache-hit replays (kCacheHit, ~4185) pass bill=false; CacheChargeNote still notes raw n (storability).
+    pricedbudget::Scope at both decision roots (FullSearchLineHybrid fs_decision_root ~99949, SolveWithLookahead
+    decision_root ~102372).
+  * src/ai/ValueArm.h priced_unit_ns arm; src/runner/BatchRunner.cpp parses "priced_unit_ns".
+- BUILD: first build OK (without the arm); rebuild WITH the arm running (task brnefxshf -> build_pb2.log). Check exit.
+- NEXT:
+  1. Sanity: one budgeted game priced on vs off (units must differ, no hang); one budget-0 game on vs off (must be
+     byte-identical: inert at unlimited); unit tests (build/Release/mtg-test, 2450 expected).
+  2. LAUNCH build/scratch/budget/run_pb.sh (harness-tracked) -> pb.DONE; manifest pb_ab.json from mk_pb.py: 736 jobs /
+     126,580 games, arms x0 (off) / x28 (R=28300) / x20 / x14, held-out reg shapes seed+7e6 (budget-0 excluded) + 45
+     tail-corpus games each. Runs from the budget-rebalance worktree. Read: `python3 scripts/ab_x_report.py
+     build/scratch/budget/pb` (x0 = baseline). Report per-deck quality + tail per R to the USER; heavy decks (edf,
+     dragonstorm, kitty, alchemist, hinata) are the ones expected to lose -> per-deck budget raise is the USER's call.
+  3. Tier-2 purity under priced on: regression manifest, priced on, MTG_TIER2_OVERFLOW_KB=1 vs default -> 0 unit diffs.
+  4. Then pooled bottoming budget; EDF remaining wastes.
+- Cyclone mulligan PAUSED (resumable via `artifact_queue.py start` in the artifact-queue checkout).
+
+## Live 2026-11-04 00:40 UTC: priced-budget A/B RUNNING (pb_ab.json, 126,580 games, 32 threads)
+- Build trap: the first build_pb binary was compiled while ValueArm.h was mid-edit -> mixed Arm layouts across TUs
+  (per-job priced_unit_ns never reached the reader; 9 Cyclone remand unit tests read a shifted ceiling). A clean
+  rebuild fixed both: 2450/2450 tests. WIP 9f94d1087 (comment on the right field) is the A/B binary's tree.
+- Sanity (sanity.json, 5 decks d3): budget-0 games byte-identical priced on vs off (digest + units, all 5); budgeted
+  games move (EDF, Snow digests change), no hang.
+- Arm meaning (corrected): R is priced ns per billed unit, so LOWER R = LESS search. x28 = median deck unchanged,
+  x20 ~0.7x, x14 ~0.5x priced work per budget. Heavy decks (EDF 103.5k ns/unit) get ~0.27x at x28.
+- Running: build/scratch/budget/run_pb.sh -> pb.log / pb.err / pb.txt, pb.DONE at the end (harness task blhevfl4r).
+  Read: python3 scripts/ab_x_report.py build/scratch/budget/pb
+- NEXT: report per-deck quality + tail per R to the USER (heavy-deck budget raise is the USER's call); then the
+  tier-2 purity test under priced on (regression manifest, MTG_TIER2_OVERFLOW_KB=1 vs default, 0 unit diffs);
+  then pooled bottoming budget; then EDF wastes. GT accept owed before any shared push (refit prices move play).
+
+## RESULT 2026-11-04 01:04 UTC: priced-budget A/B DONE (logs/budget/pb_report.txt)
+Held-out regression shapes, ~31.5k paired games per arm (sub-1ms games carry no SLOW-GAME line: 9/44/53/63 games
+unpaired at x0/x28/x20/x14 -- all played). Win-turn delta vs x0 (+ = slower), wall over the held-out games:
+| R (ns/unit)   | moved | better/worse | summed delta | /game   | wall sum | p99   | p99.9 | max   | tail corpus sum/max |
+| off (x0)      |   -   |      -       |      -       |    -    | 11853 s  | 6.6 s | 30.2 s| 90 s  | 1635 s / 314 s      |
+| 28300 (x28)   |  55   |   27 / 28    |     -1       | -0.0000 | 11572 s  | 6.3 s | 31.0 s| 98 s  | 1278 s / 275 s      |
+| 20000 (x20)   |  84   |    9 / 75    |    +75       | +0.0024 | 10076 s  | 5.4 s | 25.9 s| 84 s  |  999 s / 171 s      |
+| 14150 (x14)   | 162   |   21 / 141   |   +136       | +0.0043 |  8908 s  | 4.7 s | 21.6 s| 74 s  |  874 s / 162 s      |
+- x28 per deck: kittyv3 +6 (0/6), edf +3, niv +3, alchemist +1 worse; cyclone -9 (12 better), goblins -4, landfall -2
+  better. Heavy decks lose as expected; cheap-per-unit decks gain.
+- The held-out TAIL is Cyclone's (23 of the 32 slowest games in every arm, ~27% of wall); at x28 Cyclone gets MORE
+  search (+8% wall) and plays better. So x28 does not shorten the held-out tail; the tail corpus drops 22%.
+- Decision is the USER's (R, and any per-deck budget raise for kittyv3/edf/niv). Running now: tier-2 purity under
+  priced on (run_purity_pb.sh -> pp_a/pp_b, purity_pb.DONE).
+
+## 2026-11-04 ~02:30 UTC: the priced budget was NOT DETERMINISTIC -- three channels fixed (WIP 4a8aba3fa)
+- Found by the tier-2 purity run under priced ON (95/260 unit diffs). It was not tier 2: same binary, same jobs gave
+  different units at 32 vs 32 threads and 2 vs 32. Root: the per-kind work counts (workctr) were not a pure function of
+  the game -- harmless while only diagnostics read them, but the priced budget bills from them (and the SHIPPED X=100
+  priced ceiling trips on them, so default play has had the same latent exposure, rarely triggered).
+- Channels (found with a temporary per-caller kPay counter + ASLR-off repeat + memo key dumps):
+  1. FluctKeepPayable 4-slot memo: slot hash had &cost_def (ASLR) + std::hash names (platform); outlived the game.
+  2. manaoracle refine memo (t_refine_memo): outlived the game.
+  3. BuildBreakpointKey folded g_incinerator_pin_cursor with no pins installed (cursor never reset, advances on every
+     unpinned trigger) -> identical states keyed apart by earlier games' triggers (MidrangeBurn).
+  Plus the tier-2 mana entry now records its solve's counted work and a tier-2 hit replays it.
+- Checks so far: priced-off counts identical 2 vs 32 threads and with ASLR on; priced-on units identical 32/32/2 on a
+  24-job subset; 2450/2450 unit tests. RUNNING: run_det_full.sh (regression manifest, priced ON: 16 vs 8 threads, and
+  tier 2 default vs absent) -> det_full.DONE.
+- CONSEQUENCE: the 01:04 A/B table above was measured on the non-deterministic build. Its per-deck x28 deltas (27 better
+  / 28 worse) are within what scheduling alone moved; RERUN pb_ab.json on the fixed build before anyone decides on R.
+
+## Live at compaction #7 (2026-11-04 ~02:45 UTC)
+- Tree: budget-rebalance @ bef762a7e (src = WIP 4a8aba3fa: priced budget + refit + determinism fixes + tier-2 work
+  replay). build/Release is that tree, clean (temp diagnostics removed). Nothing on the shared branch.
+- RUNNING (harness tasks): run_det_full.sh -> build/scratch/budget/dA/dB/dC.{log,err}, det_full.DONE (priced ON;
+  expect 0 unit-diff jobs for 16 vs 8 threads AND tier2 default vs KB=1); CI watch on bef762a7e.
+- NEXT:
+  1. Read det_full output. If any diffs remain: same method -- per-game workctr counts priced OFF across thread counts
+     (detcmp.py), then a temporary per-caller kPay counter (return address via dladdr + addr2line), then memo-key dumps.
+  2. Rerun the A/B on the fixed build: bash build/scratch/budget/run_pb.sh (pb_ab.json unchanged, 126,580 games,
+     ~25 min), report with scripts/ab_x_report.py build/scratch/budget/pb. Report per-deck quality + tail per R to the
+     USER (R = priced ns per billed unit; 28,300 = median deck unchanged; lower R = less search). Per-deck budget raise
+     (Kitty v3 / EDF / Niv were the losers on the bad build) is the USER's call.
+  3. Then pooled bottoming budget, then remaining EDF wastes. GT accept owed before any shared push (refit prices +
+     determinism fixes move budgeted play through the X=100 ceiling).
+- Cyclone mulligan generation stays PAUSED (USER).
+
+## 2026-11-04 02:35 UTC: determinism VERIFIED at full scale; A/B rerun LAUNCHED
+- det_full (regression manifest, 260 jobs, priced ON): 16 vs 8 threads **0 unit-diff jobs** (369,148,027 units both);
+  tier-2 default vs absent (KB=1) **0 unit-diff jobs**. Priced OFF tier-2 purity was already 0 diffs.
+- CI for bef762a7e: run 41758970791 (watch still pending at launch).
+- A/B rerun on the fixed build (build/Release from 4a8aba3fa): `run_pb.sh` -> `build/scratch/budget/pb.{log,err,txt}`,
+  marker `pb.DONE`. The non-deterministic run's outputs moved to `build/scratch/budget/pb_nondet/`.
+  Report: `python3 scripts/ab_x_report.py build/scratch/budget/pb`. R choice + any per-deck raise are the USER's.
+
+## RESULT 2026-11-04 ~03:05 UTC: priced-budget A/B on the DETERMINISTIC build (logs/budget/pb_report_v2.txt)
+Same manifest/arms as 01:04. Numbers reproduce the non-deterministic run almost exactly, so that table stood.
+| R (ns/unit)   | moved | better/worse | summed delta | wall sum | p99   | p99.9 | max   | tail corpus sum/max |
+| off (x0)      |   -   |      -       |      -       | 11601 s  | 6.6 s | 27.9 s| 90 s  | 1640 s / 312 s      |
+| 28300 (x28)   |  56   |   28 / 28    |     -2       | 11527 s  | 6.2 s | 31.5 s| 97 s  | 1277 s / 272 s      |
+| 20000 (x20)   |  85   |    9 / 76    |    +76       | 10021 s  | 5.4 s | 26.3 s| 93 s  | 1000 s / 174 s      |
+| 14150 (x14)   | 162   |   21 / 141   |   +136       |  8837 s  | 4.6 s | 21.4 s| 71 s  |  877 s / 160 s      |
+- x28 per deck: kittyv3 +6 (0 better/6 worse), edf +3, niv +3, alchemist/dragonstorm/hinata/2hg singles +1;
+  cyclone -10 (13 better / 4 worse), goblins -4, landfall -2. x28 is a REDISTRIBUTION (heavy-per-unit decks lose
+  search, cheap ones gain), quality-neutral in sum; it barely moves the held-out tail (Cyclone's). Tail corpus -22%,
+  but fungusB_2hg gi4525 grew 149 -> 272 s (t6 -> t7): a cheap-per-unit deck given more search.
+- DECISION OWED BY THE USER: R, and any per-deck budget raise (kittyv3 first). Default taken meanwhile: priced budget
+  stays OFF on the branch (nothing ships until the USER picks); work continues on the pooled bottoming budget.
+
+
+## 2026-11-04 ~03:40 UTC: USER "leave Cyclone alone, focus on the fully complete decks"; plan items re-scoped
+- Priced-budget A/B EXCLUDING Cyclone (held-out, ~31.1k games/arm):
+  off 8500 s p99 4.65 p99.9 15.3 max 79 | x28 15/24 +8, 8130 s (-4%) 4.26/14.4/63 | x20 5/66 +66, 7160 s (-16%)
+  3.60/12.6/65 | x14 10/124 +129, 6425 s (-24%) 3.13/11.2/39. Cyclone's -10 was what made x28 look neutral.
+- POOLED BOTTOMING BUDGET -- DEFERRED (no target on complete decks). MTG_ROLLOUT_STATS + MTG_BOTTOM_TRIAL_TRACE (now
+  names job/gi) on the x0 arm: with Cyclone 2,656 s of 12,368 s user (21.5%), 1,883 trials; WITHOUT Cyclone 286 s of
+  9,516 s (3.0%), 39 trials, ALL in two tail-corpus EDF games played deliberately without the keep table
+  (edf_keepab_static gi821, edf_keepab_lookahead gi214). No shipped config of a complete deck runs a bottoming trial
+  (all have keep tables). It matters only for table-less decks (new decks, Cyclone, generation) -- revisit there.
+- EDF REMAINING WASTES -- DEFERRED. They were found on edf_keepab_static gi821 (no keep table). Shipped EDF is 4.1% of
+  held-out wall, max game 15.9 s. Held-out wall by complete deck: hinata 12.4%, snow 11.4% (max 78 s), melira 6.6%,
+  alchemist 6.1%, fivecolour 5.4% (max 55 s), landfall, edf, niv ...
+- NOW: rebased budget-rebalance onto origin 68a94b54d; rebuild OK, 2544/2544 tests. Running smoke then regression
+  (priced budget OFF: refit prices + determinism fixes move budgeted play through the X=100 ceiling) -> accept -> the
+  increment can land on the shared branch once the USER is happy. R / per-deck raise still the USER's call.
+- TIERS on the rebased tree (budget-rebalance b00e7f153, priced budget OFF): smoke 169/169 PASS, regression 271/271 PASS
+  (references included), BOTH with 0 play-changed / 0 slower / 0 faster games vs committed GT. Nothing to accept: the
+  refit prices + determinism fixes + tier-2 work replay are byte-identical on both tiers. Not pushed to the shared
+  branch (feature not complete until the USER rules on R / per-deck raise).
+
+## 2026-11-04 ~05:00 UTC: USER direction + per-deck R result
+- USER: lower R + price the budget appropriately makes sense, BUILT IN so budget settings do not change; the TOP point is
+  that expensive cases must be priced so a LOWER BUDGET BRINGS COST DOWN ("far too many examples of us using budget 1-3
+  and it taking hours"). Also: show any cases giving up a little quality for much better tail/total.
+- Per-deck R (each deck's own aggregate ns/unit from fit.txt; ps_ab.json, Cyclone excluded, fresh x0 on the rebased
+  binary): 31,082 paired, 27 better / 10 worse, summed -20 (sign p~0.01); wall 8789 -> 8866 s (+0.9%), p99.9 14.8 ->
+  16.3, max 78 -> 75. Within-deck redistribution is a QUALITY win at ~same cost; it does not shrink the tail.
+- Low-quality-cost candidates (pb.err per deck, R lowered for that deck == budget x0.71 / x0.5): snow x14 0.61x wall
+  +1/325 max 79->39 s; fivecolour x20 0.85x +1, max 52->14; melira x20 0.89x +0 / x14 0.78x +2; landfall x20 0.85x +0;
+  dragonstorm x20 0.69x -2; alchemist x20 0.83x +3; colossus/selesnyav2/pd/mirrorwing 0.59-0.90x, 0..+1. NOT: hinata,
+  edf, kittyv3, niv, bruna, elementals, creature. CONFIRMING: conf_ab.json (4x games, seeds +2e6, x0/x20/x14) ->
+  conf.{log,err}, conf.DONE; report with ab_x_report.py build/scratch/budget/conf.
+- Leak: fungusB 2hg gi4525 (d7 b1000) 109 s -> 373 s under pricing (units 4.8M -> 9.3M): priced work escapes the bill
+  somewhere. Single-game census running: leak/f4525_x{0,1}.census.tsv.
+- Low-budget generation replay (the USER's top point): build/scratch/budget/replay/Melira Pod (copy: cod, profile,
+  buckets, value.json, gencache) + melira_slow.log (302 SLOW-ROLLOUTs, 19,153 s logged, d3 b3). Replay =
+  MTG_DECISION_WORK_X=1000 MTG_KEEP_BENCH=1 MTG_KEEP_REPLAY_LIST=<log> [MTG_KEEP_BENCH_BUDGET=b] mtg-analyze <copy>.cod
+  --gen-mulligan fast. The gencache fingerprint MISMATCHES -> discovery reruns once (11,200 rollouts); do it on a
+  quiet box at 32 threads, then arms budget {1,3,10} x priced {off,on}.
+- CONFIRM (conf_ab.json, 4x games, seeds +2e6; dq = summed win-turn delta, + worse): snow x20 +1/1300 0.72x wall p99
+  28.3->18.5 (CANDIDATE); selesnyav2 x14 0/1800 0.74x; colossus x14 -1/1767 0.77x; mirrorwing x20 +3/2100 0.86x
+  (marginal). NOT small: alchemist +13, landfall +14, dragonstorm +8, fivecolour +8, melira +6, pd +3 at x20.
+  The 325-game first read was too small. Proposed to the USER (their call): Snow 0.7x, Selesnya v2 / Colossus 0.5x.
+- fungusB gi4525 is NOT a leak: billing exact (each big decision ~2.4-2.7M billed units both arms); the deck is cheap
+  per unit (21.9k) so pricing at 28.3k gives each decision 1.4x priced work, and the game went a turn longer.
+  Per-deck R removes it by construction.
+- MELIRA LOW-BUDGET REPLAY (replay/mrep_b{1,3,10}_p{0,1}.out; 6 arms concurrent, 5 cores each): only 32 of 302 slow
+  lines replay (215 seed mismatches + 55 label skips: bucketing changed). Those 32 logged 2,468 s at b3; now 28 s
+  (max 12 s): the historical hours-long cases are FIXED on HEAD. Ordinary rollouts: b1 0.21 s, b3 0.35 s, b10 0.54 s
+  (10x budget = 2.6x cost: a FLOOR). Pricing ~no effect (Melira ~median price).
+- RUNNING: scale_ab.json -- 40 complete decks, d3, b{1,3,10,30} x {x0, x1=per-deck R}, 100 games each, MTG_TIER1_STATS
+  -> scale.{log,err,txt}, scale.DONE. Question: where does cost stop falling with budget, and which work is the floor.
+- SCALING SWEEP (scale_ab.json, 40 complete decks, d3, 100 games/cell): total wall b1/b3/b10/b30 = 690/964/1531/2332 s
+  (x0) and 695/950/1459/2342 (per-deck R); max game b1 15 s, b3 28 s -- NO hours-long games on HEAD. Budget 1 = 30% of
+  budget 30 (a FLOOR). Worst floors: giants 75%, edf 57%, galadriel 55%, angels 52%, alchemist 47% (giants/galadriel/
+  angels are cheap in absolute; EDF/alchemist/hinata ~0.8-1 s/game at b1). EDF b1: pay = 60% of priced work.
+- FLOOR MECHANISM (leak/edf_b1_x28.census.tsv): at b1 the decision budget is L=900 units; EDF decisions bill p50 6x,
+  p90 26x, max 129x L under median R (overrun ceiling 25x L, escalation, fresh budgets per bp re-solve). Median R cuts
+  EDF only 0.90x at b1 (billed units 3.4x, priced 0.89x): the work is not stopped by the budget.
+- PRICED CEILING SWEEP (ceil_ab.json; 8 expensive decks x 200 games, priced budget OFF; dq vs X=100):
+  b1: X30 0.92x +10, X10 0.70x +48 | b3: X30 0.92x +1 (hinata max 27.4 -> 13.5 s), X10 0.82x +17.
+  X30 at b3 ~free; earlier play-budget tail corpus found X30 lossy (kittyv2arch gi1723 4->6) -> low-budget-only = USER.
+- RUNNING: c40_ab.json -- all 40 decks, b1/b3, X100 vs X30, 200 games -> c40.*, c40.DONE.
+- C40 (all 40 complete decks, 200 games, X30 vs X100, priced budget off): b1 0.93x wall, p99.9 7.9 -> 5.8 s, max 14.9 ->
+  12.5, dq +3 (3/5 of 7,971); b3 0.95x, p99.9 12.7 -> 10.3, max 26.4 -> 20.6, dq +3 (0/3 of 7,983). Modest.
+- OPEN, ALL USER CALLS: (1) build-in shape for per-deck R (fit table in the profile vs derived in-engine); (2) Snow 0.7x /
+  Selesnya v2 + Colossus 0.5x search; (3) a tighter priced ceiling (X30) at low budgets; (4) push the tier-neutral
+  increment (refit + determinism fixes) to the shared branch now or with the feature.
+
+## 2026-11-04 07:00 UTC -- do the historical slow GENERATION rollouts still happen? (RUNNING)
+
+USER: the "budget 1-3 taking hours" cases are mulligan-generation rollouts (Melira d3 b3 single rollouts of
+10.2 h / 8.4 h / 6.1 h; EDF 3.9 h; Kitty ~1 h). "If they don't really anymore then we may be optimizing for a
+problem that doesn't happen as much anymore." Start with every slow rollout on record.
+
+- New diagnostic `MTG_KEEP_REPLAY_LOGGED_SEED=1` (ExhaustiveKeep.cpp): the replay list runs each line from
+  its LOGGED seed + hand (`run_rs`, split out of `run_one`), so logs written under older buckets replay
+  (the earlier Melira replay lost 215 of 302 lines to SEED MISMATCH). Labels that are not current bucket
+  reps fall back to the card name's bucket.
+- Corpus (`build/scratch/budget/hist/mk_corpus.py`): union of every slow log of the CURRENT lists, deduped:
+  Melira 1,243 (64 core-h logged), EDF 3,959 (126), Kitty v3 19,442 (661), Snow 685 (457 replayable:
+  Kaldring left the list), LFE 372, Goblins 187, Creature Giving 30, slivers 6. Archived lists (Kitty v2,
+  Selesnya v1, Mirrorwing v1/v2) excluded. Cyclone has NO slow log: its gen is d1 b1 and its worst rollout
+  is 8.3 s. Hinata2's log holds only discovery / play-digest lines.
+- Run: `hist/run_hist.sh` (+ `run_hist2.sh`, Melira/LFE relaunched at 6 GB after 3/2 GB RSS caps
+  aborted them), each deck at its CURRENT gen setting, buckets from the shipped table
+  (`MTG_KEEP_BUCKETS_FROM`, no discovery), Release, disjoint cores. Report: `python3 hist/report.py`.
+- First results (worst-logged first): Melira 10.2 h -> 1.2 s, 8.4 h -> 0.7 s, 2.1 h -> 21.6 s; Goblins
+  37.6 min -> 0.7 s; Kitty 1 h-class -> 23-37 s; still-slow: Goblins 98 s / 90 s, Creature Giving 46 s.
+
+### 08:00 UTC -- interim: the tail is NOT gone; it moved, and depth 1 is where it lives
+- 5,064 lines replayed so far. Deep gen settings (Melira d3/b3, Kitty d2/b3, Goblins d6/b6): the famous
+  hours-long rollouts are now seconds-minutes (Melira 10.2 h -> 1.2 s; Kitty ~1 h -> 23-79 s, ratio 3%).
+  But 31 lines got SLOWER than logged, 11 of them Goblins >2x and >60 s (worst 43 s -> 1,624 s; Melira
+  405 s -> 1,396 s). Confound to rule out first: the replay's per-process RSS caps (2-6 GB) shrink the
+  shared plan / tier-2 pools vs generation's 20 GB (`probe/run_gob.sh`: branch vs primary binary, cap 20).
+- d1/b1 decks (EDF, LFE -- their real gen setting): the worst hands STILL run 20-30+ min (LFE four in flight
+  at 17-31 min when it hit a 6 GB cap; EDF six in flight > 20 min). Budget-independent: one EDF hand is
+  59 ms at d5/b20 and 357 ms at d5/b1 but > 20 min at d1/b1, d1/b3 AND d1/b20 (`probe/run_probe.sh`).
+- MECHANISM (perf on the stuck d1 probe; census shows ONE decision that never closes): SolveWithLookahead ->
+  FullSearchLineHybrid -> FSLineWinComplete -> FSLineWin -> SimulateToEnd -> GameEngine::RunTurnFrom ->
+  AIEngine::TakeTurn -> BpDeriveContinuationList / EnumeratePlansWithLand (+ TapForCostSharedOnce). At depth 1
+  every root candidate is followed by a whole-game playout INSIDE the decision; the playout's per-turn plan
+  enumeration explodes on Displacer/Drake boards. The priced ceiling (X=100 => ~2.25 s at b1) is only checked
+  between passes (budget->Overrun()), never inside the playout, so nothing bounds it.
+- Side finding: a direct `mtg-analyze --gen-mulligan` on a deck whose value sidecar lacks mull_gen_* runs at
+  gen-default d5/b20 (sidecar value_play replaces the profile's keys). mullgen.sh carries the setting over
+  first, so production is fine; affects Colossus Hammer, EDF, Landfall, LFE, Midrange Burn on direct calls.
+
+### 08:55 UTC -- Goblins: a 35-50x ENGINE cost regression on the same play; bisect RUNNING
+- Worst Goblins line (seed 12671395107054027213, size7 draw r=26; logged 43 s at d6/b10 on 719cffd38,
+  10-25). Same line, d6/b10, cap 20 GB, single core, win turn 4 in EVERY run (same play, only cost moved):
+  old binary 719cffd38: 42.7 s (10-25 deck inputs) / 39.6 s (current inputs) -- reproduces the log;
+  primary build/Release (built 11-03): 1,103 s; this branch: 1,479 s (current inputs) / 2,164 s (old inputs).
+  Inputs barely matter -> it is CODE, landed between 719cffd38 and 11-03. (At b6, today's setting: primary 586 s,
+  branch 970 s; branch at a 2 GB RSS cap 1,624 s -> small caps cost another ~1.7x.)
+- BISECT (RUNNING, background): worktree `.claude/worktrees/gob-bisect` (detached, scratch), `git bisect start
+  68a94b54d 719cffd38 -- src`, `git bisect run build/scratch/budget/hist/probe/bisect_step.sh` (build Release,
+  replay the line; GOOD < 120 s, a probe still running at 240 s is stopped and logged BAD). Progress:
+  `build/scratch/budget/hist/probe/bisect.log`; full output `probe/bisect_run.log` (prints "first bad commit").
+  Step 1: 9ebe3df41 BAD. When done: `git -C .claude/worktrees/gob-bisect bisect reset`, read the culprit,
+  then remove the worktree with scripts/safe_worktree_remove.sh.
+- Melira (all 1,239 lines, d3/b3, branch binary, 6 GB cap): total 7.5 core-h vs 64.1 logged (12%), but the
+  tail stays: 4,167 s (logged 1,994 s), 3,965 s (logged 6.1 h), 2,296 s (logged 226 s), 1,396 s, 872 s ...
+  -- the Carrion Feeder family; several got WORSE, likely the same regression as Goblins.
+- STILL RUNNING: Kitty (~8k of 19,442 lines; max 79 s, ratio ~3.7%) and EDF at d1/b1 (`run_hist3.sh`,
+  stuck on its 6 worst hands > 80 min). EDF single-hand probe d1/b1 (census) still running (> 60 min on a hand
+  that is 59 ms at d5/b20); d1/b3 and d1/b20 probes stopped by me at > 60 min. LFE d1/b1 aborted at its 6 GB
+  cap with four rollouts in flight at 17-31 min.
+- OPEN USER CALLS (new, in addition to the four above): (5) the Goblins regression fix once bisected;
+  (6) the depth-1 playout explosion -- bound the in-playout work by the decision's priced ceiling (a play change
+  at low budgets; held-out A/B) and/or EDF/LFE's generation depth (a settings call); (7) hold decisions 1-4
+  until 5-6 are settled (recommended).
+
+### 09:45 UTC -- USER RULINGS on 5-7; 6(a) step 1 RUNNING
+- USER 2026-11-04: (5) wait for the actual commit; a mistake -> just fix it; intentional -> still dig for ways
+  to avoid paying such a high cost. (6) try (a), bound in-playout work by the decision's priced ceiling (the
+  others are less connected to budgeting). (7) HOLD 1-3 unless they are shown to help the HEAVY TAIL; not keen
+  on a new per-deck setting for a few percent.
+- Replay results (report.py): Kitty v3 16,984/19,442 lines, max 79 s, 5% of logged -- its tail is gone.
+  EDF d1/b1: 7,838 s (logged 7,125) and 6,058 s (logged 14,213) still; 7 more lines in flight > 2 h.
+  Melira d3/b3 max 4,167 s. Snow / Creature Giving / slivers max 47 s.
+- Bisect step 2: 4df5e5201 GOOD (28.6 s); culprit in (4df5e5201, 9ebe3df41].
+- The stuck d1/b1 decision (perf, live): SolveWithLookahead -> SimulateToEnd -> ApplyPlanDirect -> ApplyPlanDirect
+  -> BpDeriveContinuationList -> BpEnumEntryFor -> EnumeratePlansWithLand -> EnumeratePlans -> TapForCostSharedOnce:
+  a breakpoint-continuation DERIVATION inside one rollout step. The existing MTG_BP_DERIVE_PRICED_STOP (11-03,
+  OFF by USER ruling "only for things expensive enough to be a real issue"; it bought nothing on d5/b20 play)
+  polls exactly this walk. Step 1 of (a): measure it on the d1/b1 gen tail -- `hist/stop/run_stop.sh` (EDF top
+  14 lines on cores 20-23, LFE top 30 on 24-27, X=100) vs the off arm in hist/*.out. Out: hist/stop/{EDF,LFE}.out.
+- CAUTION reading probe/census_d1b1.tsv: its rows are the PLAY-DIGEST games, which ran at d5/b20 (the sidecar
+  mull_gen bug), not the d1/b1 replay; the d1/b1 decision never closed, so it has no row.
+- Small fix EDITED, NOT BUILT (the running replays use this worktree's binary): MulliganProfileIO.h -- a sidecar
+  without mull_gen_* / expected_buckets keeps the profile's values (generation-only keys; play-neutral).
+
+### 10:45 UTC -- 6(a) PRICED_STOP measured on the gen tail; Goblins culprit found; play A/B READY
+- PRICED_STOP=1 vs off, rollout replays paired on (size side r, seed), `python3 build/scratch/budget/hist/stop/pair.py`:
+  4,312 paired lines, **0 win-turn diffs**. EDF d1/b1 10 lines 47,146 s -> 236 s (13,124 s -> 109 s max; single-hand
+  probe 8,613 s -> 10.9 s); LFE 13 lines 1,237 -> 312 s; Melira 1,085 lines max 4,167 -> 3,690 s (its tail is NOT
+  derivation -- next to investigate); Goblins 187 max 1,650 -> 996 s; Kitty top-3000 / Snow / CG neutral.
+  Still running at compaction: stop/run_stop2.sh (Melira, ~160 lines left) and stop/run_stop3.sh (Kitty top 3000).
+- GOBLINS (5): bisect first bad = d2184261b MTG_SUBSET_SAC_OUTLETS (intentional correctness fix, default ON). Branch,
+  line d6/b10: on 1,479 s, SAC_OUTLETS=0 80 s, DEV_SEQ=0 1,473 s (not it), both 92 s; win turn 4 everywhere. Census
+  (probe/gc_on.tsv vs gc_off.tsv): space_odo 635M vs 31M, pay_calls 231M vs 8.8M, dupc_sac_for_mana 66M vs 1.5M, plans
+  only 4.6x -> waste = selections the one-use-per-sac-source dup rule rejects AFTER pay/rules work. SUBAGENT running
+  (worktree .claude/worktrees/sac-fold, branch sac-fold, cores 26-29,31, scratch build/scratch/budget/sacfold/):
+  exact fold so the walk never visits those selections. Bisect worktree reset + removed (refs check OK).
+- UNCOMMITTED src in this worktree (built 10:4x, unit tests NOT yet run): MulliganProfileIO.h mull_gen fix; per-job
+  arm `bp_priced_stop` (ValueArm.h, BatchRunner.cpp parser, TurnSolver.cpp BpDerivePricedStopOn replaces the static
+  env read). Next: run build/Release/mtg-test, commit.
+- PLAY A/B READY (not launched): build/scratch/budget/mk_ps.py -> pstop_ab.json (368 jobs, 63,290 games, arms _x0 = stop
+  OFF / _x1 = stop ON, X=100); run build/scratch/budget/run_pstop.sh (cores 0-25, threads 26) once the stop2/stop3
+  replays finish; stop my EDF off-arm replay (run_hist3.sh, pid 907159) at launch. Read: scripts/ab_x_report.py
+  build/scratch/budget/pstop. Adoption = default ON if every deck net <= 0, then smoke/regression GT accept.
+
+### 11:50 UTC -- 6(a) ADOPTED on the branch: MTG_BP_DERIVE_PRICED_STOP default ON (7d44be043, pushed)
+- Gen tail (stop/pair.py, final): 4,936 paired lines over 7 decks, 0 win-turn diffs (EDF 10, LFE 13, Melira 1,239,
+  Goblins 187, Kitty top-3000, Snow 457, CG 30). EDF 47,146 s -> 236 s on its paired lines.
+- Play A/B (pstop_ab.json, 26 thr, 20 min): 31,588 paired held-out games, 0 win turns, 0 UNITS moved; tail corpus 45/45
+  identical -> in play at shipped settings the stop never trips, so smoke/regression GT should be byte-identical.
+- REVERSES the 11-03 USER ruling ("PRICED_STOP stays OFF") on the strength of the gen-tail data + USER's 11-04 "give (a)
+  a try" -- SURFACED to the USER for confirm/veto; one-line revert (EnvOn default in BpDerivePricedStopOn).
+- Also committed: 31170cccd (sidecar mull_gen fix), 73afdd405 (per-job arm bp_priced_stop). mtg-test 2544/2544.
+- Remaining heavy tail: Melira d3/b3 (6 lines > 600 s, max 3,690 s with the stop; Carrion Feeder family) -- NEXT.
+  Goblins 996 s max -> the sac-fold subagent (worktree sac-fold) is on it. LFE replays hit 5-6 GB RSS caps (exit 137)
+  at 4-7 threads: a memory question to look at.
+
+### 12:25 UTC -- PRICED_STOP default ON stands (USER); Melira tail is not SAC_OUTLETS
+- USER 11-04 on the 11-03 reversal: "If I ruled on it and there is new information that shows it is worthwhile then
+  that can be retracted. What matters to me is the impact in terms of quality and performance." -> default ON stays.
+- Melira d3/b3, three ~650 s lines (hist/mel/run_mel.sh, single core, X=1000): default vs MTG_SUBSET_SAC_OUTLETS=0
+  274/276, 294/291, 517/520 s, win turns equal -> NOT the Goblins mechanism. Solo cost is ~2.4x below the contended
+  4-thread replay. Turn census on the two worst lines running (hist/mel/run_mcen.sh -> cen_<seed>.tsv, cores 6-7).
+- Sac-fold: first subagent hit the 250K cap; commit 9984a7572 on local branch sac-fold, exact (verify: 19,983,527
+  flagged, 0 passed the dup check, 0 brute mismatches; 25-job regression sample digests = GT, units equal, wall
+  354 -> 148 s) but does NOT fire on the Goblins gen line (other walk). Handoff build/scratch/budget/sacfold/HANDOFF.md;
+  a second subagent continues from it.
+
+### 12:55 UTC -- sac-dup fold ADOPTED on the branch; budget work PARKED for the Cyclone queue run (USER)
+- 118b8ef36 MTG_SAC_DUP_WALK_FOLD (default ON, exact; cherry-picked from local branch sac-fold 9984a7572) + f8e7f0f64
+  per-job arm `sac_dup_fold`. Verify: 91.6M flagged on the Goblins gen line / 20.0M on the 25-job regression sample,
+  0 passed the dup check, 0 brute mismatches, 0 unfolded. 25-job sample digests = GT. Held-out A/B (mk_sdf.py ->
+  sdf_ab.json, goblins+goblins2hg, +8e6, X=100): 675 paired, 0 moved, wall 208 -> 95 s. mtg-test 2544/2544.
+  Gen line: dupc_sac_for_mana 40.3M -> 0, enum_enter -29%, wall only -2% (cost there = 140M pay_calls).
+- Not done, candidate exact skip: dupc_fold_prefix (61M/line with the fold) in the two-stage driver; needs a
+  straddle-aware prefix map (see build/scratch/budget/sacfold/HANDOFF.md RESOLVED section).
+- MELIRA TAIL (hist/mel/cen_<seed>.tsv, solo single core): worst lines 1,729 s / 1,568 s, 3-4 decisions on T5-T6 hold
+  ~95%. Each: enum_emitted / space_plans ~1.1e8 plans, space_odo ~2.2e8, w_odo 3.5-5.7M -- but units 3.2K-148K
+  (~100 ms/unit). So the cost is a huge UNBILLED plan space (likely Carrion Feeder / Kitchen Finks sac-target
+  subsets), not rejection waste. NEXT: name the plan family (enum census of one heavy decision), check whether it is
+  an identity fold candidate, and whether the priced ceiling (X) bills w_odo here -- replays ran X=1000.
+- PARKED: the box goes to the artifact queue (Cyclone mulligan resume) per USER 2026-11-04. No engine runs of mine
+  are active. Branch budget-rebalance is NOT on the shared branch (feature incomplete).
+
+### 2026-11-05 22:05 UTC -- RESUMED (USER: "pause the niv mizzet run, so we can pivot back to the budget rebalancing")
+- Queue: Cyclone DONE + LANDED on phase-1-2-deck-analyzer (e4ad12898 artifacts, e7882bfb7 GT). NivMizzetCombo mulligan PAUSED
+  (worker d7d6a5 stopped; claim paused; `python3 scripts/artifact_queue.py run` in .claude/worktrees/artifact-queue resumes it).
+- Melira tail, sharpened: in cen_10372713029942101962.tsv the heaviest decision (T6 main-2, budget 2,700 units) ran 631 s against
+  a PRICED ceiling of 2,700 x 25,000 ns x 100 = 6.75 s (93x over) -- the census already ran at the shipped priced X=100
+  (MTG_DECISION_WORK_X=1000 there is the separate UNIT ceiling). The enumeration never polls decisionwork::PricedExceeded()
+  (only the BP-derivation stop and SearchBudget::Overrun do). 1,400 enumeration calls emit 116M plans (~83K per call),
+  space_dedup 44M; board = 3x Carrion Feeder + 3x Kitchen Finks + Bloodthrone Vampire in hand.
+- SUBAGENT running (worktree off 108072a7e, local branch mel-fold, scratch build/scratch/budget/melfold/): name the plan
+  family, build an EXACT identity fold if one exists (verify mode + per-job arm + digest equality), and REPORT (not build)
+  where a priced poll in the enumeration would bound it. Order follows "collapse wasted search first".
+
+### 2026-11-05 ~23:00 UTC -- REBASED onto phase-1-2-deck-analyzer; Melira dup-action fold ADOPTED; tiers RUNNING
+- Rebased onto origin/phase-1-2-deck-analyzer (one trivial conflict, TurnSolver.cpp ConsumeAtN signature next to the new
+  lahist block); pre-rebase head tagged locally br-prerebase-20261105 (69c463748). check_gt_logs 1002 consistent; branch GT
+  == shared GT. mtg-test 2593/2593. Force-pushed 1a58a0e35; CI green (ubuntu, windows, determinism parity).
+- 88b398400 MTG_DUP_ACTION_FOLD (default ON, exact; cherry-picked from local branch mel-fold 13feb049b): in EnumeratePlans'
+  no-mana-side walks, independent actions equal in every field but `eval` (an outlet's canonical single sac of the
+  counter-less Kitchen Finks vs the persist block's explicit K=1 sac of the same Finks) are walked only in canonical
+  (eval-desc, slot) prefix order; the signature dedup ignores eval and eval feeds only plan.value, so the returned list is
+  identical. Verify (MTG_DUP_ACTION_FOLD_VERIFY): Melira worst line 177.9M flagged, KEPT_BY_DEDUP 0, BRUTE_MISMATCH 0;
+  regression tier 44,689 flagged, 0/0. Full regression tier 265/265 digests = GT (verify and on arms; re-checked by me
+  with melfold/scripts/cmpgt.py); units moved on 3 Melira jobs only. Worst line (cap 3 GB): emitted 302M -> 127M, wall
+  2,187 -> 1,473 s; heaviest decision 1,205 -> 548 s. Per-job arm "dup_action_fold". mtg-test 2594/2594.
+- What remains of that tail is NOT exactly foldable: 110,591 plans -> 3,363 distinct end states, but which body dies
+  matters (Celes counters, persist return), so only a state-level dedup (MTG_CAND_DEDUP, default off, lossy question)
+  could collapse it.
+- PRICED CEILING on that decision (fold subagent, reported not built): a poll in the enumeration would NOT bound it.
+  (1) The priced ledger (MTG_PLAN_PRICED_LEDGER) bills only what an UNLIMITED plan cache would recompute; the 110K-plan
+  lists are refused by the real cache and recomputed muted -> only 4.9% of visits billed (=0 probe: decision stops at
+  2,896 units / 182 s instead of 631 s). (2) Even unmuted, emitted plans (build/sort/dedup) are unpriced: ~20x under.
+  CONFOUND being checked: those replays ran at MTG_RSS_CAP_GB=3 (the cache pool derives from it); generation runs at 20.
+- RUNNING (harness-tracked, build/scratch/budget/chain_tiers.sh): smoke -> regression on 88b398400 (logs tiers/*.log,
+  markers tiers/{smoke,regression,probe}.DONE), then melfold/run_cap.sh: worst line at cap 20 then cap 20 +
+  MTG_PLAN_CACHE_KB=0 (out melfold/cap/status).
+- NEXT: if tiers match GT -> push to shared branch (feature = re-pricing + priced stop + sac fold + dup-action fold).
+  Hand-off doc for the rest (docs/design/budget-rebalance-followups.md).
+
+### 2026-11-06 -- LANDED on phase-1-2-deck-analyzer (rebased onto df30bfce1); NO GT accept needed from this branch
+- First tier run (on 36d3672bc): 4 equal-score EDF/Bruna digest movers, reproduced by origin's own binary (origin drift from
+  a705f3dea); origin's dfd675afb accept then covered them, so that accept was dropped in the second rebase.
+- Second rebase onto df30bfce1 (13 new origin commits, Shadowborn levers default ON): rebuilt; smoke 164/176, regression
+  262/282, mtg-test 2609/2611. ALL 32 moved cells and BOTH unit failures (test_landfall.cpp:216 fetchland drop = two
+  landfall triggers, gets one; test_pirates_provider.cpp:371 47 deck folders vs 46) reproduce EXACTLY on origin
+  df30bfce1's own binary (build/scratch/budget/ctrl2/, worktree .claude/worktrees/origin-ctrl): origin drift from
+  25261417f "Analyze Modern RW Burn and gate fetchland hold search" (Burn / AntiLife / FiveColour; AntiLife d0
+  4.892 -> 4.999, FiveColour d0 5.456 -> 5.566 are WORSE). NOT accepted here -- another session's unexplained change;
+  surfaced to the USER. This branch moves nothing relative to origin's binary.
+- Melira cap probe (melfold/run_cap.sh, worst line, fold build): cap 3 GB ~1,473 s; cap 20 GB 644 s (logged 1,993 s),
+  win turn 7; unbounded plan cache killed at the 20 GB RSS cap -> a real pricing gap; deferred.
+- FEATURE LANDED: re-pricing refit + determinism fixes, MTG_BP_DERIVE_PRICED_STOP, MTG_SAC_DUP_WALK_FOLD,
+  MTG_DUP_ACTION_FOLD (+ per-job arms; MTG_PRICED_BUDGET prototype stays default OFF). Further work:
+  docs/design/budget-rebalance-followups.md.

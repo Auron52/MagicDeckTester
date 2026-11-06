@@ -840,6 +840,9 @@ enum Slot : int
     PREPAY_SCALER_GROWN,      // MTG_PREPAY_SCALER_GROWN  the whole-turn prepay (BatchPrepayMainCasts) declines when the batch casts a creature an untapped subtype-scaled dork counts (Priest of Titania, Elvish Archdruid) and the board without those dorks cannot pay the batch and its joint solve would tap a flat creature: the prepay taps everything before the first cast resolves, so the dork pays at its plan-start count; the per-cast payer taps it after the food lands (TurnSolver.cpp, PP_SCALER_GROWN). StompySurprise mana-clean DOMINATED-CREATURE, seed 30004002 T3. DEFAULT ON; =0 -> the prepay as before
     PD_USEFUL_LINE_OK,        // MTG_PD_USEFUL_LINE_OK  Prevent Damage: the pain-USEFUL payment (dmgev::PainAwarePay) checks the rest of the line it is applying (the harmful mode's exact line_ok) and, when its pain-first assignment strands a later cast, re-pays holding each source it tapped in turn, keeping the first that leaves the line payable. Mana-clean APPLY-DROP s30006387 T4 (Dina's {G} on the lone spare {R} source before Rolling Earthquake). Default ON; =0 -> the unchecked pain-first payment
     PD_DEFER_LINE,            // MTG_PD_DEFER_LINE      Prevent Damage: the PAIN DEFERRAL's after-chain is the chain at the end-of-main sweep for the WHOLE line -- the line's later permanent casts join it, its sac-outlet victims leave it -- not only the spell being paid for. Mana-clean DOMINATED-LIFE (seed 30000020 T6, 30000065 T6). Default ON; =0 -> the paying spell / batch only, every own-board hazard off
+    SB_MAIN1_RULE,            // MTG_SB_MAIN1_RULE  Shadowborn Apostle: the USER's main-1 rule (2026-11-04) -- a root pre-combat plan beyond the land drop is admitted only on a JETMIR TURN (an attack-ready creature of ours AND Jetmir on our battlefield, or a plan that can still deploy him before combat); every other plan is folded to its main-2 twin (ShadowbornProvider::Main1PlanAdmitted). Searched play only. The sick-turn Demon search moves to main 2 with it
+    SB_CAST_ORDER,            // MTG_SB_CAST_ORDER  Shadowborn Apostle: the USER's cast order (2026-11-04): land, Dark Ritual, [Culling's hand victim], Culling the Weak, Thrumming Stone, Apostle, Reaper, Sire, Overlord, Jetmir, Demonic Tutor, Diabolic Intent, Profane Tutor, Lotus Bloom (total by name); Culling's hand victim is cast just before it; within one main the Overlord (hard cast or fetched) never follows a Jetmir fetch
+    SB_RITUAL_PAYOFF,         // MTG_SB_RITUAL_PAYOFF  Shadowborn Apostle (USER 2026-11-05, "prune rituals with no payoff like we have for other decks"): a plan subset that casts a mana ritual (Dark Ritual, Culling the Weak) and spends mana on nothing that is not itself a ritual is dropped (DecisionProvider::PrunesRitualWithoutSpend; TurnSolver SubsetRitualSpendsNothing) -- its float empties at the end of the phase, so the same subset without the ritual dominates it. Search branch list and greedy policy alike. DEFAULT ON (2026-11-05, ab7/ab8)
     COUNT
 };
 
@@ -1624,6 +1627,9 @@ inline const char* Name(int slot)
         "MTG_PREPAY_SCALER_GROWN",
         "MTG_PD_USEFUL_LINE_OK",
         "MTG_PD_DEFER_LINE",
+        "MTG_SB_MAIN1_RULE",
+        "MTG_SB_CAST_ORDER",
+        "MTG_SB_RITUAL_PAYOFF",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

@@ -23,9 +23,10 @@
 //   Nature's Lore              1 Forest card, untapped                 spell resolution
 //   Skyshroud Claim            2 Forest cards, untapped                spell resolution
 //
-// WHY NOT the fetchland collapse (fetch_land_types / PerformFetch): the fetchland never enters the
-// battlefield (so its own landfall and the hold line vanish), pays 1 life, filters by SUBTYPE and
-// ignores "tapped". WHY NOT Crop Rotation's PerformLandTutorToBattlefield: it puts ONE card through
+// Arid Mesa and Wooded Foothills now use SacLandSearch: they enter, may be held, and pay one life
+// on activation. Legacy fetches still use the immediate PerformFetch collapse. The search spec
+// accepts either printed subtype and includes both in its memo key. Crop Rotation's
+// PerformLandTutorToBattlefield puts ONE card through
 // EnterLand without the land's own ETB extras (a fetched Karoo bounces nothing) and its target pin is
 // inert in resolve mode (the provider's front is taken inside the search window -- the Creature
 // Giving item, deliberately not touched here).
@@ -84,7 +85,10 @@ inline bool LandSearchLegal(const CardDefinition* d, const LandSearchSpec& spec)
     if (d == nullptr || !d->card.IsLand()) { return false; }
     if (spec.basic_only && !IsBasicLandCard(*d)) { return false; }
     // "a Forest card": the land subtype off the definition (a basic Forest, a Stomping Ground).
-    if (spec.subtype != SubtypeRegistry::kNone && !d->card.m_subtypes.HasId(spec.subtype)) { return false; }
+    if (spec.subtype != SubtypeRegistry::kNone
+        && !d->card.m_subtypes.HasId(spec.subtype)
+        && (spec.subtype_alt == SubtypeRegistry::kNone
+            || !d->card.m_subtypes.HasId(spec.subtype_alt))) { return false; }
     return true;
 }
 
@@ -164,7 +168,7 @@ inline std::vector<std::vector<std::string>> LandSearchPicksUncached(const GameS
     std::vector<LandSearchClass> cls = LandSearchClasses(s, ctrl, spec);
     const DecisionProvider& prov = ResolveProvider(s);
     // The provider's CLASS narrowing (LandSearchAdmitsLand): autonomous play only, like the width below.
-    if (LandSearchPickPruned())
+    if (LandSearchPickPruned() && spec.subtype_alt == SubtypeRegistry::kNone)
     {
         cls.erase(std::remove_if(cls.begin(), cls.end(), [&](const LandSearchClass& k)
                   { return k.def == nullptr
@@ -249,9 +253,9 @@ inline std::vector<std::vector<std::string>> LandSearchPicksUncached(const GameS
         for (auto& v : splits) { out.push_back(std::move(v)); }
     }
     prov.LandSearchPickOrder(s, ctrl, spec.count, spec.to_hand, spec.basic_only, spec.share_land_type,
-                             spec.subtype, out);
+                             spec.subtype_alt == SubtypeRegistry::kNone ? spec.subtype : SubtypeRegistry::kNone, out);
     // The provider's NARROWING (LandSearchPickWidth): autonomous play only; see LandSearchPickPruned.
-    if (LandSearchPickPruned())
+    if (LandSearchPickPruned() && spec.subtype_alt == SubtypeRegistry::kNone)
     {
         const int w = prov.LandSearchPickWidth(s, ctrl, spec.count, spec.to_hand, spec.basic_only,
                                                spec.share_land_type, spec.subtype, out);
@@ -286,6 +290,7 @@ struct Key
     int                   count = 0, to_hand = 0;
     bool                  basic_only = false, share = false;
     std::uint16_t         subtype = 0;      // LandSearchSpec::subtype (Nature's Lore's "Forest card")
+    std::uint16_t         subtype_alt = 0;  // fetchland's second legal subtype
     bool                  pruned = false;   // LandSearchPickPruned() -- the provider's narrowing applied
     int                   n = 0;
     const CardDefinition* defs[kMaxDefs] = {};
@@ -294,7 +299,7 @@ struct Key
     {
         if (prov_type != o.prov_type || prov_key != o.prov_key || count != o.count
             || to_hand != o.to_hand || basic_only != o.basic_only || share != o.share
-            || subtype != o.subtype || pruned != o.pruned || n != o.n)
+            || subtype != o.subtype || subtype_alt != o.subtype_alt || pruned != o.pruned || n != o.n)
         { return false; }
         for (int i = 0; i < n; ++i)
         { if (defs[i] != o.defs[i] || copies[i] != o.copies[i]) { return false; } }
@@ -312,7 +317,8 @@ struct Key
         mix(prov_type); mix(prov_key);
         mix(static_cast<std::uint64_t>(count) | (static_cast<std::uint64_t>(to_hand) << 8)
             | (basic_only ? 1ull << 16 : 0ull) | (share ? 1ull << 17 : 0ull) | (pruned ? 1ull << 18 : 0ull)
-            | (static_cast<std::uint64_t>(subtype) << 19));
+            | (static_cast<std::uint64_t>(subtype) << 19)
+            | (static_cast<std::uint64_t>(subtype_alt) << 35));
         for (int i = 0; i < n; ++i)
         {
             mix(static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(defs[i])));
@@ -374,6 +380,7 @@ inline const landsearchmemo::Slot& LandSearchMemoSlot(const GameState& s, int ct
     k.basic_only = spec.basic_only;
     k.share      = spec.share_land_type;
     k.subtype    = spec.subtype;
+    k.subtype_alt = spec.subtype_alt;
     k.pruned     = LandSearchPickPruned();
     bool ok = true;
     if (spec.count > 0)
@@ -937,6 +944,10 @@ inline void ApplyLandSearchActivationPinned(GameState& state, int controller, in
         Permanent& q = state.battlefield[static_cast<std::size_t>(src_idx)];
         if (q.quest_counters < p.land_search_activation_remove_quest) { return; }   // stale plan: cannot pay
         q.quest_counters -= p.land_search_activation_remove_quest;   // a cost is never doubled
+    }
+    if (p.land_search_activation_life_cost > 0)
+    {
+        state.players[static_cast<std::size_t>(controller)].life -= p.land_search_activation_life_cost;
     }
     if (p.land_search_activation_sacrifice_self)
     {

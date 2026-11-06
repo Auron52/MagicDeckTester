@@ -299,6 +299,7 @@ add_executable(mtg-test
     test/unit/test_mana_oracle.cpp
     test/unit/test_sac_land_class_pin.cpp
     test/unit/test_counter_list.cpp
+    test/unit/test_dup_action_fold.cpp
     test/unit/test_kitty_discard.cpp
     test/unit/test_bucket_policy.cpp
     test/unit/test_cost_reducers.cpp
@@ -364,6 +365,7 @@ add_executable(mtg-test
     test/unit/test_shadowborn_int6.cpp
     test/unit/test_shadowborn_int8.cpp
     test/unit/test_shadowborn_int9.cpp
+    test/unit/test_shadowborn_mainphase.cpp
     test/unit/test_etb_dig_breakpoint.cpp
     test/unit/test_etb_treasure_spend.cpp
     test/unit/test_payable_order.cpp

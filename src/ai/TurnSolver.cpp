@@ -25,6 +25,7 @@
 #include "../core/OpponentDeck.h"
 #include "../core/EffectHandler.h"
 #include "../core/GameEngine.h"
+#include "../core/MemBudget.h"
 #include "AIEngine.h"
 #include "../core/SpellEffects.h"
 #include "../core/Trace.h"
@@ -53,6 +54,7 @@
 #include <set>
 #include <mutex>
 #include <optional>
+#include <semaphore>
 #include <cmath>
 #include <unordered_map>
 #if defined(_MSC_VER)
@@ -1938,14 +1940,25 @@ inline thread_local bool t_active = false;
 // runs, every unit charged is also attributed to it (and to every computation enclosing it).
 namespace cachecharge { struct Rec; inline thread_local Rec* t_rec = nullptr; }
 static void CacheChargeNote(SearchBudget* budget, long long n);   // defined with cachecharge
+// PRICED BUDGET (MTG_PRICED_BUDGET; namespace pricedbudget in DecisionWorkMeter.h): a FINITE budget is charged the priced
+// work since the previous charge instead of the n units. An unlimited or null budget is charged exactly as before
+// and the work is dropped. The cache recorder still notes n (whether a computation charged at all is what decides
+// its storability), and a cache-hit REPLAY consumes its recorded units unbilled (`bill` false).
+static inline long long PricedUnits(SearchBudget* budget, long long n)
+{
+    if (!pricedbudget::On()) { return n; }
+    if (budget == nullptr || budget->Unlimited() || !pricedbudget::Active()) { pricedbudget::Drop(); return n; }
+    return pricedbudget::Bill(n);
+}
 static inline void ConsumeAt(SearchBudget* budget, unitsite::Site site)
 {
-    if (budget == nullptr) { return; }
+    if (budget == nullptr) { if (pricedbudget::On()) { pricedbudget::Drop(); } return; }
     if (s_rollout_stats && !budget->Unlimited() && budget->Used() >= budget->Limit())
     { g_units_after_spent.fetch_add(1, std::memory_order_relaxed); }
-    budget->Consume(1);
-    if (s_rollout_stats) { unitsite::g_units[site].fetch_add(1, std::memory_order_relaxed); }
-    if (g_dvs_in_p2 > 0) { g_dvs_p2_site[site].fetch_add(1, std::memory_order_relaxed); }
+    const long long u = PricedUnits(budget, 1);
+    budget->Consume(u);
+    if (s_rollout_stats) { unitsite::g_units[site].fetch_add(u, std::memory_order_relaxed); }
+    if (g_dvs_in_p2 > 0) { g_dvs_p2_site[site].fetch_add(u, std::memory_order_relaxed); }
     if (cachecharge::t_rec != nullptr) { CacheChargeNote(budget, 1); }
 }
 // MTG_LA_HIST=1 (diagnostic, never read by play): a histogram of SolveWithLookahead's candidate loops by
@@ -1979,12 +1992,13 @@ struct Dumper
 };
 inline Dumper g_dumper;
 }
-static inline void ConsumeAtN(SearchBudget* budget, unitsite::Site site, long long n)
+static inline void ConsumeAtN(SearchBudget* budget, unitsite::Site site, long long n, bool bill = true)
 {
-    if (budget == nullptr || n <= 0) { return; }
-    budget->Consume(n);
-    if (s_rollout_stats) { unitsite::g_units[site].fetch_add(n, std::memory_order_relaxed); }
-    if (g_dvs_in_p2 > 0) { g_dvs_p2_site[site].fetch_add(n, std::memory_order_relaxed); }
+    if (budget == nullptr || n <= 0) { if (budget == nullptr && pricedbudget::On()) { pricedbudget::Drop(); } return; }
+    const long long u = bill ? PricedUnits(budget, n) : n;
+    budget->Consume(u);
+    if (s_rollout_stats) { unitsite::g_units[site].fetch_add(u, std::memory_order_relaxed); }
+    if (g_dvs_in_p2 > 0) { g_dvs_p2_site[site].fetch_add(u, std::memory_order_relaxed); }
     if (cachecharge::t_rec != nullptr) { CacheChargeNote(budget, n); }
 }
 
@@ -4168,6 +4182,7 @@ struct Scope
         const bool greedy_residual_changed = g_greedy_charge_acc != greedy_acc;
         c.storable = c.other == 0 && !dec_cut && !gr_cut
                   && !meter_changed && !greedy_residual_changed && !decisionwork::Exceeded()
+                  && !decisionwork::PricedExceeded()
                   && (Mode() != 1 || (c.dec == 0 && c.greedy == 0 && rec.subsearch == 0));
         g_computations.fetch_add(1, std::memory_order_relaxed);
         if (c.dec + c.greedy + c.other > 0) { g_charging.fetch_add(1, std::memory_order_relaxed); }
@@ -4206,9 +4221,9 @@ static bool CacheHitCharge(const cachecharge::Cost& c)
     if (!ok) { cachecharge::g_hits_refused.fetch_add(1, std::memory_order_relaxed); return false; }
     cachecharge::g_hits_replayed.fetch_add(1, std::memory_order_relaxed);
     if (c.dec > 0 && d != nullptr)
-    { ConsumeAtN(d, unitsite::kCacheHit, c.dec); cachecharge::g_units_replayed.fetch_add(c.dec, std::memory_order_relaxed); }
+    { ConsumeAtN(d, unitsite::kCacheHit, c.dec, /*bill=*/false); cachecharge::g_units_replayed.fetch_add(c.dec, std::memory_order_relaxed); }
     if (c.greedy > 0 && g != nullptr)
-    { ConsumeAtN(g, unitsite::kCacheHit, c.greedy); cachecharge::g_units_replayed.fetch_add(c.greedy, std::memory_order_relaxed); }
+    { ConsumeAtN(g, unitsite::kCacheHit, c.greedy, /*bill=*/false); cachecharge::g_units_replayed.fetch_add(c.greedy, std::memory_order_relaxed); }
     return true;
 }
 
@@ -8797,10 +8812,12 @@ static bool PlainDfsCostsSound(const std::vector<std::vector<int>>& groups, cons
     for (const std::vector<int>& gr : groups) { for (int j : gr) { if (cand_mv[static_cast<std::size_t>(j)] < 0) { return false; } } }
     return true;
 }
-template <class Emit>
+// `skip(imask)` (the overload below passes a never-skip): true = do not build or emit this independent
+// mask at the current group position (MTG_DUP_ACTION_FOLD's prefix rule; see DupActFold).
+template <class Emit, class Skip>
 static void PlainOdometerDfs(const std::vector<std::vector<int>>& groups, const std::vector<int>& independent,
                              const std::vector<int>& auto_sel, const std::vector<int>& cand_mv, int mana_bound,
-                             std::vector<int>& sel, Emit&& emit)
+                             std::vector<int>& sel, Emit&& emit, Skip&& skip)
 {
     const int G = static_cast<int>(groups.size());
     const int num_ind = static_cast<int>(independent.size());
@@ -8835,6 +8852,7 @@ static void PlainOdometerDfs(const std::vector<std::vector<int>>& groups, const 
         const std::size_t nb = na + (c0 > 0 ? 1 : 0) + nhi;
         for (int imask = 0; imask < (1 << num_ind); ++imask)
         {
+            if (skip(imask)) { continue; }
             int pcost = 0;
             sel.resize(nb + static_cast<std::size_t>(num_ind));
             int* sp = sel.data();
@@ -8887,6 +8905,14 @@ static void PlainOdometerDfs(const std::vector<std::vector<int>>& groups, const 
             if (g == G) { return; }
         }
     }
+}
+template <class Emit>
+static void PlainOdometerDfs(const std::vector<std::vector<int>>& groups, const std::vector<int>& independent,
+                             const std::vector<int>& auto_sel, const std::vector<int>& cand_mv, int mana_bound,
+                             std::vector<int>& sel, Emit&& emit)
+{
+    PlainOdometerDfs(groups, independent, auto_sel, cand_mv, mana_bound, sel, std::forward<Emit>(emit),
+                     [](int) { return false; });
 }
 
 std::vector<std::vector<int>> TurnSolver::PlainWalkSequenceForTest(const std::vector<std::vector<int>>& groups,
@@ -10648,7 +10674,13 @@ static std::string FsPlanText(const TurnSolver::Plan& p)
     {
         if (!s.empty()) { s += " + "; }
         s += a.card_name.str();
-        if (a.chosen_x > 0)   { s += "(x" + std::to_string(a.chosen_x) + ")"; }
+        if (a.card_name.str() == "Boros Charm")
+        {
+            s += a.chosen_x == 1 ? "[4 damage]"
+               : a.chosen_x == 2 ? "[indestructible]"
+               : a.chosen_x == 3 ? "[double strike]" : "[mode?]";
+        }
+        else if (a.chosen_x > 0) { s += "(x" + std::to_string(a.chosen_x) + ")"; }
         if (a.ponder_keep >= 0) { s += a.ponder_keep ? "[keep]" : "[shuf]"; }
         // An Aura's HOST is a searched variant (one plan per legal host); print it, or two host
         // variants of the same Aura read as one plan scanned twice (claude_s12_gi11 T3).
@@ -13287,6 +13319,59 @@ static int CountProwessAttackers(const GameState& state)
     return count;
 }
 
+// Boros Charm's double-strike mode adds one more hit from its chosen attacker.
+// The ordinary projection already counts that attack and one prowess pump per
+// noncreature cast; credit only the second hit. Keep this conservative: a target
+// that could be tapped for the plan's mana or removed by another selected action
+// receives no credit. The exact plan apply can still discover those lines.
+static int BorosMode3ExtraStrike(const GameState& state, bool is_pre_combat,
+                                const std::vector<Action>& cands, const std::vector<int>& sel,
+                                const std::vector<AttackingManaSource>& atk_mana_srcs,
+                                int noncreature_count)
+{
+    if (!is_pre_combat) { return 0; }
+    int extra = 0;
+    std::vector<int> credited;
+    for (int j : sel)
+    {
+        const Action& a = cands[static_cast<std::size_t>(j)];
+        if (a.card_name != "Boros Charm" || a.chosen_x != 3 || a.enchant_target <= 0)
+        { continue; }
+        if (std::string_view(ResolveProvider(state).Name()) != "ModernRwBurn") { return 0; }
+        const int target = a.enchant_target;
+        if (std::find(credited.begin(), credited.end(), target) != credited.end()) { continue; }
+        credited.push_back(target);  // two Charms do not grant a third strike
+        bool may_leave_or_tap = false;
+        for (const AttackingManaSource& src : atk_mana_srcs)
+        { if (src.number == target) { may_leave_or_tap = true; break; } }
+        for (int k : sel)
+        {
+            if (k == j) { continue; }
+            const Action& b = cands[static_cast<std::size_t>(k)];
+            if (b.card_name == "Boros Charm" && b.chosen_x == 3) { continue; }
+            if (b.kind != Action::Kind::CastFromHand || b.direct_damage > 0
+                || b.enchant_target == target
+                || b.sac_source_id == target || b.sac_victim_id == target
+                || (b.def && (b.def->params.damage_all_creatures > 0
+                              || b.def->params.x_damage_each_creature_and_player)))
+            { may_leave_or_tap = true; break; }
+        }
+        if (may_leave_or_tap) { continue; }
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.card.m_number != target || p.controller_index != state.active_player_index
+                || !p.card.IsCreature() || CreatureHasDoubleStrike(p, state)
+                || !CanAttackFull(p, state.battlefield, state.active_player_index)
+                || !WantsToAttack(state, p)
+                || !SpellCanTargetPermanent(state, state.active_player_index, p)) { continue; }
+            extra += std::max(0, CombatPowerOf(p, state)
+                                    + (p.card.HasKeyword(Keyword::Prowess) ? noncreature_count : 0));
+            break;
+        }
+    }
+    return extra;
+}
+
 static bool HasLegalCreatureTarget(const GameState& state)
 {
     const Player& opp = state.Opponent();
@@ -14297,6 +14382,96 @@ static ReducerSinkCtx BuildReducerSinkCtx(const GameState& state)
     rs.surplus_live = true;
     rs.free_supply += state.floating_mana.Total();
     return rs;
+}
+
+// The SPEND form of the payoff prune (DecisionProvider::PrunesRitualWithoutSpend; Shadowborn, USER 2026-11-05: "We
+// might want to prune rituals with no payoff like we have for other decks."). True when the subset casts a mana ritual
+// (ritual_float > 0, ripple-chain credit included) and NOTHING else in it costs mana: the rituals' float has no sink in
+// this subset, and a subset of rituals, land-free mana cracks and free suspends opens no breakpoint continuation that
+// could spend it later in the phase. Floating mana empties at the end of the phase, so the same subset with every such
+// ritual left in hand is at least as good. A ritual cast under a ripple granter is no exception: the cards its reveal
+// casts are rituals of the same name (their mana unspent too), and its value as a dig is the clairvoyant one the USER
+// ruled out (2026-11-05). Erring wide: a subset whose ritual float goes unspent BESIDE a paid cast is kept.
+//
+// THE GRANTER PHANTOM (same lever; held-out 50047 gi46 T1 main 2, the main-1 rule's "Dark Ritual cast for nothing"):
+// {Thrumming Stone, Dark Ritual} on ONE Swamp passed the flat payability sum because the Ritual's ripple pin credits its
+// chain (ripple_chain_float) -- but the chain fires only once the granter is OUT, and the granter cannot be paid without
+// that very credit. The executor cast the Ritual, could not pay the Stone, and the realised line was "Ritual for
+// nothing". So a subset that casts a ripple granter (none on our battlefield) is also dropped when the granter's cost
+// exceeds the most mana that can exist before it resolves: `pool` (the enumeration's own supply) plus every mana
+// action's net output WITHOUT its chain credit (nothing ripples before the granter is out). That bound ignores every
+// other cast's cost, so it is an upper bound and the drop is sound: the subset can only realise one of its own
+// prefixes, which the list holds on its own.
+//
+// THE UNREACHABLE ACTIVATION (same game, T2 main 2 once the above was fixed): {Dark Ritual, Apostle activation} with ONE
+// Apostle on the battlefield. The sacrifice-six activation is emitted ahead of the bodies (a cast chain can bring them
+// mid-plan), so it read as the Ritual's sink; with no granter live and too few bodies it fails at the executor and the
+// Ritual is again cast for nothing. A sac-named activation therefore counts as spending only when the six can be there:
+// `named_bf` (sac-named creatures on our battlefield) plus the subset's sac-named casts reach sac_named_count, or a
+// ripple granter is live (on the battlefield, or cast by the subset).
+static bool SubsetRitualSpendsNothing(const std::vector<Action>& cands, const std::vector<int>& sel,
+                                      const ManaPool* pool = nullptr, bool granter_bf = true, int named_bf = 1 << 20)
+{
+    bool has_ritual = false, spends = false;
+    // The sac-named activations' reachability (see above): casts of sac-named creatures and granters in the subset.
+    int named_casts = 0;
+    bool granter_cast = false;
+    for (int j : sel)
+    {
+        const Action& a = cands[j];
+        if (a.kind != Action::Kind::CastFromHand || a.def == nullptr) { continue; }
+        if (a.def->params.grants_ripple > 0) { granter_cast = true; }
+        if (a.def->card.IsCreature() && a.def->params.sac_named_count > 0) { ++named_casts; }
+    }
+    long long pre_granter = pool != nullptr ? static_cast<long long>(pool->Total()) : 0;
+    int granter_cost = -1;
+    for (int j : sel)
+    {
+        const Action& a = cands[j];
+        if (a.ritual_float > 0)
+        {
+            has_ritual = true;
+            const long long net = static_cast<long long>(a.ritual_float) - a.ripple_chain_float - a.cost.ManaValue();
+            if (net > 0) { pre_granter += net; }
+            continue;
+        }
+        if (a.cost.ManaValue() > 0)
+        {
+            const bool sac_named = a.kind == Action::Kind::ActivatePermAbility
+                                && a.ability_mode == Action::AbilityMode::SacNamedTutorPut && a.def != nullptr;
+            if (!sac_named || granter_bf || granter_cast || named_bf + named_casts >= a.def->params.sac_named_count)
+            { spends = true; }
+        }
+        if (!granter_bf && a.kind == Action::Kind::CastFromHand && a.def != nullptr && a.def->params.grants_ripple > 0)
+        { granter_cost = std::max(granter_cost, a.cost.ManaValue()); }
+    }
+    if (!has_ritual) { return false; }
+    if (!spends) { return true; }
+    return pool != nullptr && granter_cost > 0 && pre_granter < granter_cost;
+}
+// A ripple granter on `me`'s battlefield (the phantom test above needs none there).
+static int SacNamedCreaturesOnBattlefield(const GameState& s)
+{
+    const int me = s.active_player_index;
+    int n = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me || p.def_absent || !p.card.IsCreature()) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.sac_named_count > 0) { ++n; }
+    }
+    return n;
+}
+static bool RippleGranterOnBattlefield(const GameState& s)
+{
+    const int me = s.active_player_index;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.grants_ripple > 0) { return true; }
+    }
+    return false;
 }
 
 static bool SubsetWastesAccelerant(const std::vector<Action>& cands, const std::vector<int>& sel,
@@ -18304,6 +18479,84 @@ namespace foldsel
 inline thread_local bool g_from_odometer = false;
 inline bool Take() { const bool b = g_from_odometer; g_from_odometer = false; return b; }
 }   // namespace foldsel
+
+// MTG_SAC_DUP_WALK_FOLD (DEFAULT ON; =0 walks every same-source pair as before) and its verifier
+// MTG_SAC_DUP_WALK_FOLD_VERIFY=1. See SacDupFold above EnumeratePlanPositions for the fold and the
+// argument that it is exact. The verifier keeps the unfolded walk, flags each selection the fold
+// would have skipped (t_expect_reject, set around that selection's emit), and counts (a) a flagged
+// selection that holds NO same-source SacForMana pair by a brute-force scan (a wrong mask), and (b) a
+// flagged selection that got PAST a site's SubsetHasDuplicateSacSource test (the rule did not reject
+// what the fold assumed it would). Both must be 0; printed at exit.
+namespace sacdupfold
+{
+// The per-job arm (valuearm sac_dup_fold) wins, else the env.
+inline bool On()
+{
+    static const bool env = EnvOn("MTG_SAC_DUP_WALK_FOLD", true);
+    const int a = valuearm::t_arm.sac_dup_fold;
+    return a >= 0 ? a != 0 : env;
+}
+inline bool VerifyOn() { static const bool v = EnvOn("MTG_SAC_DUP_WALK_FOLD_VERIFY"); return v; }
+inline thread_local bool t_expect_reject = false;
+inline std::atomic<long long> g_flagged{0}, g_brute_mismatch{0}, g_passed_dup{0}, g_reached_dup{0}, g_missed{0};
+// Called right after a site's duplicate-source test let `sel` through.
+inline void NotePassedDupCheck()
+{ if (t_expect_reject) { g_passed_dup.fetch_add(1, std::memory_order_relaxed); } }
+// Called right before a site's duplicate-source test (how many flagged selections it actually judged).
+inline void NoteReachedDupCheck()
+{ if (t_expect_reject) { g_reached_dup.fetch_add(1, std::memory_order_relaxed); } }
+struct Dump
+{
+    ~Dump()
+    {
+        if (!VerifyOn()) { return; }
+        std::fprintf(stderr, "[sac-dup-walk-fold] verify: flagged=%lld reached_dup_check=%lld "
+                     "PASSED_DUP_CHECK=%lld BRUTE_MISMATCH=%lld unfolded_dups=%lld\n",
+                     g_flagged.load(), g_reached_dup.load(), g_passed_dup.load(), g_brute_mismatch.load(),
+                     g_missed.load());
+    }
+};
+// NOT `inline`: an unreferenced inline variable is never emitted, so its destructor never runs.
+static Dump g_dump;
+}   // namespace sacdupfold
+
+// MTG_DUP_ACTION_FOLD (DEFAULT ON; =0 walks every arrangement as before) and its verifier
+// MTG_DUP_ACTION_FOLD_VERIFY=1. See DupActFold above EnumeratePlanPositions for the fold and the
+// argument that it is exact. The verifier keeps the unfolded walk, tags every plan pushed from a
+// position the fold would have skipped (Plan::land_tie_key = kTwinTag, the MTG_ENUM_DEDUP_STREAM_VERIFY
+// scratch convention), and after EnumeratePlans' signature dedup counts the tagged plans that SURVIVED
+// it -- the one way the fold could change the returned list. Must be 0; printed at exit with the
+// brute-force recheck of each flagged selection (a flagged selection holding no identical candidate
+// whose lower-slot twin is unselected is a wrong mask).
+namespace dupactfold
+{
+// The per-job arm (valuearm dup_action_fold) wins, else the env.
+inline bool On()
+{
+    static const bool env = EnvOn("MTG_DUP_ACTION_FOLD", true);
+    const int a = valuearm::t_arm.dup_action_fold;
+    return a >= 0 ? a != 0 : env;
+}
+inline bool VerifyOn() { static const bool v = EnvOn("MTG_DUP_ACTION_FOLD_VERIFY"); return v; }
+// Set by the walk immediately before handing a flagged selection to eval_and_push; TAKEN (cleared) at
+// eval_and_push's entry, so a nested enumeration inside the scoring never inherits it (foldsel's rule).
+inline thread_local bool t_twin = false;
+inline bool Take() { const bool b = t_twin; t_twin = false; return b; }
+constexpr int kTwinTag = -1000000000;   // far below MTG_ENUM_DEDUP_STREAM_VERIFY's -2 - index tags
+inline std::atomic<long long> g_flagged{0}, g_pushed{0}, g_kept{0}, g_brute_mismatch{0}, g_calls{0};
+struct Dump
+{
+    ~Dump()
+    {
+        if (!VerifyOn()) { return; }
+        std::fprintf(stderr, "[dup-action-fold] verify: calls=%lld flagged=%lld pushed=%lld KEPT_BY_DEDUP=%lld "
+                     "BRUTE_MISMATCH=%lld\n", g_calls.load(), g_flagged.load(), g_pushed.load(), g_kept.load(),
+                     g_brute_mismatch.load());
+    }
+};
+// NOT `inline`: an unreferenced inline variable is never emitted, so its destructor never runs.
+static Dump g_dump;
+}   // namespace dupactfold
 
 // MTG_FOLD_SEARCH_ODO -- DEFAULT OFF; =1 enables. Arms the flag above on the SEARCH's own
 // subset walk, which is a second, private copy of the odometer that was never wired to it. See
@@ -24343,6 +24596,7 @@ struct FoldPrefixMap
 {
     // Parallel to `groups`: per option, (class << 8) | ord, or -1 for untagged.
     std::vector<std::vector<int>> opt;
+    std::vector<int> tagged_groups;
     int classes = 0;
     bool Empty() const { return classes == 0; }
 };
@@ -24356,6 +24610,7 @@ static int BuildFoldPrefixMap(const std::vector<Action>& cands,
                               FoldPrefixMap& out)
 {
     out.opt.clear();
+    out.tagged_groups.clear();
     out.classes = 0;
     // A tagged action outside the odometer can supply a predecessor ord, so the choice vector alone
     // would no longer decide the rule. Disarm rather than approximate.
@@ -24378,6 +24633,7 @@ static int BuildFoldPrefixMap(const std::vector<Action>& cands,
     for (std::size_t g = 0; g < groups.size(); ++g)
     {
         out.opt[g].assign(groups[g].size(), -1);
+        bool group_tagged = false;
         for (std::size_t k = 0; k < groups[g].size(); ++k)
         {
             const Action& a = cands[groups[g][k]];
@@ -24393,7 +24649,9 @@ static int BuildFoldPrefixMap(const std::vector<Action>& cands,
             }
             out.opt[g][k] = (ci << 8) | a.equiv_ord;
             any = true;
+            group_tagged = true;
         }
+        if (group_tagged) { out.tagged_groups.push_back(static_cast<int>(g)); }
     }
     out.classes = any ? n : 0;
     return out.classes;
@@ -24404,8 +24662,9 @@ static int BuildFoldPrefixMap(const std::vector<Action>& cands,
 static inline bool FoldPrefixViolated(const FoldPrefixMap& f, const std::vector<int>& choice)
 {
     std::uint32_t seen[kMaxFoldPrefixClasses] = { 0 };
-    for (std::size_t g = 0; g < f.opt.size() && g < choice.size(); ++g)
+    for (int g : f.tagged_groups)
     {
+        if (g >= static_cast<int>(choice.size())) { continue; }
         if (choice[g] <= 0) { continue; }
         const int p = f.opt[g][static_cast<std::size_t>(choice[g] - 1)];
         if (p < 0) { continue; }
@@ -24417,6 +24676,78 @@ static inline bool FoldPrefixViolated(const FoldPrefixMap& f, const std::vector<
         if ((m & (m + 1)) != 0) { return true; }
     }
     return false;
+}
+// Two classes fit in one 64-bit line mask. OR of the mana and payoff masks checks a class
+// straddling the split exactly, before a pair enters the sort vector.
+static inline bool FoldPrefixBitsViolated(std::uint64_t bits, int classes)
+{
+    const std::uint32_t lo = static_cast<std::uint32_t>(bits);
+    if ((lo & (lo + 1)) != 0) { return true; }
+    if (classes > 1)
+    {
+        const std::uint32_t hi = static_cast<std::uint32_t>(bits >> 32);
+        if ((hi & (hi + 1)) != 0) { return true; }
+    }
+    return false;
+}
+static inline bool FoldPrefixBitsViolatedSelected(std::uint64_t bits, unsigned classes)
+{
+    if ((classes & 1u) != 0)
+    {
+        const std::uint32_t m = static_cast<std::uint32_t>(bits);
+        if ((m & (m + 1)) != 0) { return true; }
+    }
+    if ((classes & 2u) != 0)
+    {
+        const std::uint32_t m = static_cast<std::uint32_t>(bits >> 32);
+        if ((m & (m + 1)) != 0) { return true; }
+    }
+    return false;
+}
+
+// Two-stage positions have mana and payoff digits in separate line tables. Judge the complete
+// choice after joining them: an equivalence class may straddle the split, so neither partial
+// line can reject it alone. VERIFY keeps flagged positions and asks the ordinary duplicate check
+// to reject them; the independent brute check guards the prefix map itself.
+namespace twostagefold
+{
+inline bool On()
+{
+    static const bool env = EnvOn("MTG_TWO_STAGE_FOLD_PREFIX", true);
+    const int arm = valuearm::t_arm.two_stage_fold_prefix;
+    return arm >= 0 ? arm != 0 : env;
+}
+inline bool Verify() { static const bool v = EnvOn("MTG_TWO_STAGE_FOLD_PREFIX_VERIFY"); return v; }
+inline thread_local bool t_expect_reject = false;
+inline std::atomic<long long> g_flagged{0}, g_passed{0}, g_brute_mismatch{0}, g_skipped{0};
+inline void NotePassedDupCheck()
+{ if (t_expect_reject) { g_passed.fetch_add(1, std::memory_order_relaxed); } }
+inline bool BruteNonCanonical(const std::vector<Action>& cands, const std::vector<int>& sel)
+{
+    for (int j : sel)
+    {
+        const Action& a = cands[j];
+        if (a.equiv_tag == 0 || a.equiv_ord <= 0) { continue; }
+        bool have_pred = false;
+        for (int k : sel)
+        {
+            if (cands[k].equiv_tag == a.equiv_tag && cands[k].equiv_ord == a.equiv_ord - 1)
+            { have_pred = true; break; }
+        }
+        if (!have_pred) { return true; }
+    }
+    return false;
+}
+struct Report
+{
+    ~Report()
+    {
+        if (!Verify()) { return; }
+        std::fprintf(stderr, "[two-stage-fold-prefix] verify: flagged=%lld passed=%lld brute_mismatch=%lld skipped=%lld\n",
+                     g_flagged.load(), g_passed.load(), g_brute_mismatch.load(), g_skipped.load());
+    }
+};
+inline Report g_report;
 }
 
 // Default ON: it removes work the leaf clause removes anyway, so there is no behaviour to adopt --
@@ -29312,6 +29643,8 @@ void CollectActivationKeys(const GameState& state, int ctrl, const Permanent& p,
     for (std::size_t i = 0; i < sizeof modes / sizeof modes[0]; ++i)
     {
         if (!modes[i].cost->has_value()) { continue; }
+        if (modes[i].mode == PermAbilityMode::SacLandSearch
+            && state.players[ctrl].life < pp.land_search_activation_life_cost) { continue; }
         if (PermAbilityTaps(modes[i].mode) && (p.tapped || !CanTapNow(p, state.battlefield))) { continue; }
         // TapBlood's cost is {5} minus our Vampires NOW (TapBloodCostNow) -- price THAT, total-only
         // like ActAffordable; the crack also needs a card to discard (its cost includes one).
@@ -29865,6 +30198,14 @@ static int BpDeriveMeterMode()
     return v;
 }
 static bool BpDeriveMeterOn() { return BpDeriveMeterMode() > 0; }
+// MTG_BP_DERIVE_PRICED_STOP (see eval_and_push): the per-job arm (valuearm bp_priced_stop) wins, else the env.
+// Read only once the priced ceiling has tripped, so its cost never lands on an ordinary subset visit.
+static bool BpDerivePricedStopOn()
+{
+    static const bool env = EnvOn("MTG_BP_DERIVE_PRICED_STOP", true);
+    const int a = valuearm::t_arm.bp_priced_stop;
+    return a >= 0 ? a != 0 : env;
+}
 static thread_local bool g_bp_derive_interrupted = false;
 namespace bpmeter
 {
@@ -39228,6 +39569,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             && def.params.targeting != Targeting::Creature)
         {
             direct = def.params.damage;
+            if (def.params.damage_each_opponent)
+            { direct *= gamesetup::OpponentHeads(); }
             if (def.params.landfall_damage > 0
                 && LandEnteredUnderControlThisTurn(state, state.active_player_index))   // played OR put
             {
@@ -39370,6 +39713,55 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         a.is_draw_until_nonland = (def.tmpl == CardTemplate::DrawUntilNonland);
         a.discard_land_damage   = def.params.discard_land_damage;
         a.max_casts_after       = def.params.max_casts_after;   // Irencrag "one more spell" restriction
+        if (def.params.boros_charm_modal)
+        {
+            Action face = a;
+            face.chosen_x = 1;
+            face.direct_damage = 4;
+            face.eval += 400;
+            actions.push_back(std::move(face));
+            Action self_hit = a;
+            self_hit.chosen_x = 1;
+            self_hit.enchant_target = -1;
+            actions.push_back(std::move(self_hit));
+            for (const Permanent& p : state.battlefield)
+            {
+                if (!p.card.HasType(CardType::Planeswalker)
+                    || !SpellCanTargetPermanent(state, state.active_player_index, p)) { continue; }
+                Action walker_hit = a;
+                walker_hit.chosen_x = 1;
+                walker_hit.enchant_target = p.card.m_number;
+                actions.push_back(std::move(walker_hit));
+            }
+
+            Action protect = a;
+            protect.chosen_x = 2;
+            actions.push_back(std::move(protect));
+
+            // The target is fixed when the spell is cast. Distinct creatures remain distinct
+            // branches so search and the viewer can choose the double-strike recipient.
+            for (const Permanent& p : state.battlefield)
+            {
+                if (!p.card.IsCreature()
+                    || !SpellCanTargetPermanent(state, state.active_player_index, p)) { continue; }
+                Action strike = a;
+                strike.chosen_x = 3;
+                strike.enchant_target = p.card.m_number;
+                actions.push_back(std::move(strike));
+            }
+            for (const Card& c : ap.hand)
+            {
+                if (c.m_number == 0 || c.m_number == ap.hand[i].m_number) { continue; }
+                const CardDefinition* creature = CardDatabase::Instance().LookupCached(c);
+                if (!creature || !creature->card.IsCreature()) { continue; }
+                Action strike = a;
+                strike.chosen_x = 3;
+                strike.enchant_target = c.m_number;
+                strike.trick_hand_target = c.m_name.str();
+                actions.push_back(std::move(strike));
+            }
+            continue;
+        }
         // HARD-CAST HASTE creature: it attacks the turn it arrives, so it belongs in this turn's
         // attack projection exactly like a hasted Vial drop (vial_attack_power). Stamped here, once,
         // because the projection is rebuilt per PLAN and both enumerators share CollectActions.
@@ -43245,6 +43637,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 for (const ModeSpec& m : modes)
                 {
                     if (!m.cost->has_value()) { continue; }
+                    if (m.mode == Action::AbilityMode::SacLandSearch
+                        && state.players[state.active_player_index].life
+                            < sd->params.land_search_activation_life_cost) { continue; }
                     const bool taps = PermAbilityTaps(m.mode);
                     if (taps && (src.tapped || !CanTapNow(src, state.battlefield))) { continue; }
                     // Bilbo: "Activate only if you have 111 or more life" -- the SAME gate the apply
@@ -43474,6 +43869,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     // dominated-action removal (the Recruitment Officer whiff gate's shape);
                     // autonomous only -- a human cannot see the library and keeps the offer.
                     if (m.mode == Action::AbilityMode::SacLandSearch && !HumanPlayActive()
+                        && sd->params.fetch_land_types.empty()
                         && LandSearchPicksMemo(state, state.active_player_index,
                                                LandSearchSpecOf(sd->params)).empty()) { continue; }
                     // HUMAN PLAY: never offer a CREATURE-source activation the real payment cannot
@@ -50691,6 +51087,294 @@ static void MeasureManaSideCollapse(const std::vector<Action>& cands,
     enumstats::g_m_manaonly.fetch_add(manaonly.size(), std::memory_order_relaxed);
 }
 
+// ---- SAME-SOURCE SacForMana WALK FOLD (MTG_SAC_DUP_WALK_FOLD, DEFAULT ON; =0 disables) -----------
+// A repeatable creature sac OUTLET (Skirk Prospector, Utopia Mycon) reaches the walk as SEVERAL
+// SacForMana actions on ONE sac_source_id -- the single sac, the demand burst k, the activation-demand
+// bursts, the lethal burst -- all in one colour. CollectMultiVariantSacSources deliberately leaves
+// same-colour variants as INDEPENDENT bits (grouping them reorders the enumeration: 14 Goblins d0 games
+// moved, 11 worse), so m variants cost 2^m odometer positions of which only m+1 are legal: every
+// position holding two of them is generated, folded, paired, handed to eval_and_push / consider and
+// only then rejected by SubsetHasDuplicateSacSource's kSacForMana clause. MTG_SUBSET_SAC_OUTLETS
+// (d2184261b) made those outlets' boards reachable far more often, and on the Goblins gen line
+// dupc_sac_for_mana went 1.5M -> 66.1M per rollout.
+// THE FOLD: the walk drops those positions itself -- a Stage-A mana line (or a flat-fallback position)
+// holding two SacForMana candidates with the same sac_source_id is never built, so none of its pairs
+// is formed, sorted or emitted.
+// WHY IT IS EXACT (an identity fold, not a narrowing): every selection containing that pair is a
+// selection the receiving site REJECTS. Both sites (Solve::consider site 0, EnumeratePlans'
+// eval_and_push site 1) run `pre.dup_source && SubsetHasDuplicateSacSource(...)` unconditionally, and
+// BuildSubsetFilterPre raises dup_source for ANY SacForMana candidate and kDupSacMana for two or more
+// (the caller passes that verdict in as `live`); the clause's test is exactly "kind == SacForMana on both
+// and equal sac_source_id" (id 0 included). Everything a site does before that test is either another
+// rejection or a charge/instrument, never a push, so the emitted plan list -- set AND order: the pairs
+// are still sorted by the flat key -- is unchanged. Dropping mana lines also lowers Stage B's row-skip
+// bound (best_head / min_mcost), which only drops a payoff line no SURVIVING mana line can fund, and
+// its pairs with the dropped lines were rejected anyway.
+// WHAT IT DOES MOVE: the visits the sites bill. A skipped selection no longer increments
+// enum_charge.visits (canon-wave billing, MTG_ENUM_CHARGE, workctr kOdoVisit -> the priced decision
+// ceiling) or Solve's greedy-walk charge, so a FINITE budget runs out later than before. That is the
+// sound-collapse shape (CLAUDE.md, COLLAPSE WASTED SEARCH): at an unlimited budget nothing is billed and
+// play is identical by the argument above. Payoff-side SacForMana (ritual_float 0) are not folded; the
+// rule still rejects them at the site, as before.
+struct SacDupFold
+{
+    bool on = false, verify = false;
+    // independent SLOT -> mask of the OTHER independent slots sharing its SacForMana source (0 = none).
+    std::vector<unsigned> ind_conf;
+    // candidate -> its colliding source's bit (0 = not a SacForMana on a source held twice), for group
+    // options; and that bit's independent slots.
+    std::vector<std::uint64_t> cand_bit;
+    std::uint64_t bit_ind[64] = {};
+    bool any_group = false;   // some group option carries a bit
+};
+static void BuildSacDupFold(const std::vector<Action>& cands, const std::vector<std::vector<int>>& groups,
+                            const std::vector<int>& independent, bool live, SacDupFold& f)
+{
+    f = SacDupFold{};
+    const bool verify = sacdupfold::VerifyOn();
+    if (!live || !(sacdupfold::On() || verify)) { return; }
+    const int num_ind = static_cast<int>(independent.size());
+    if (num_ind > 31) { return; }   // the walkers' imask is a 32-bit int
+    // Mana-side SacForMana members of the walk (groups + independent), by source id.
+    std::vector<std::pair<int, int>> src_n;   // (sac_source_id, count); tiny -> linear scan
+    auto note = [&](int j)
+    {
+        const Action& a = cands[static_cast<std::size_t>(j)];
+        if (a.kind != Action::Kind::SacForMana || !IsManaSideAction(a)) { return; }
+        for (auto& sn : src_n) { if (sn.first == a.sac_source_id) { ++sn.second; return; } }
+        src_n.push_back({ a.sac_source_id, 1 });
+    };
+    for (const std::vector<int>& g : groups) { for (int j : g) { note(j); } }
+    for (int j : independent) { note(j); }
+    std::vector<int> bit_src;   // bit index -> source id (sources held at least twice)
+    for (const auto& sn : src_n) { if (sn.second >= 2 && bit_src.size() < 64) { bit_src.push_back(sn.first); } }
+    if (bit_src.empty()) { return; }
+    auto bit_of = [&](int j) -> std::uint64_t
+    {
+        const Action& a = cands[static_cast<std::size_t>(j)];
+        if (a.kind != Action::Kind::SacForMana || !IsManaSideAction(a)) { return 0; }
+        for (std::size_t k = 0; k < bit_src.size(); ++k)
+        { if (bit_src[k] == a.sac_source_id) { return 1ull << k; } }
+        return 0;
+    };
+    f.cand_bit.assign(cands.size(), 0);
+    std::vector<std::uint64_t> ind_bit(static_cast<std::size_t>(num_ind), 0);
+    for (int b = 0; b < num_ind; ++b)
+    {
+        ind_bit[static_cast<std::size_t>(b)] = bit_of(independent[static_cast<std::size_t>(b)]);
+        for (std::size_t k = 0; k < 64; ++k)
+        { if (ind_bit[static_cast<std::size_t>(b)] & (1ull << k)) { f.bit_ind[k] |= 1ull << b; } }
+    }
+    f.ind_conf.assign(static_cast<std::size_t>(num_ind), 0);
+    for (int b = 0; b < num_ind; ++b)
+    {
+        const std::uint64_t bb = ind_bit[static_cast<std::size_t>(b)];
+        if (bb == 0) { continue; }
+        for (int c = 0; c < num_ind; ++c)
+        { if (c != b && ind_bit[static_cast<std::size_t>(c)] == bb) { f.ind_conf[static_cast<std::size_t>(b)] |= 1u << c; } }
+    }
+    for (const std::vector<int>& g : groups)
+    {
+        for (int j : g)
+        {
+            f.cand_bit[static_cast<std::size_t>(j)] = bit_of(j);
+            if (f.cand_bit[static_cast<std::size_t>(j)] != 0) { f.any_group = true; }
+        }
+    }
+    f.on = true;
+    f.verify = verify;
+}
+// The group half of a position: false when two chosen group options share a source (the whole position
+// is a duplicate); else `forbid` = the independent slots that collide with a chosen option.
+// `choice[t]` indexes `gidx[t]` (a side's group list, or every group when gidx is null).
+static bool SacDupGroupsOk(const SacDupFold& f, const std::vector<std::vector<int>>& groups,
+                           const std::vector<int>* gidx, const std::vector<int>& choice, unsigned& forbid)
+{
+    forbid = 0;
+    if (!f.any_group) { return true; }
+    std::uint64_t seen = 0;
+    for (std::size_t t = 0; t < choice.size(); ++t)
+    {
+        if (choice[t] <= 0) { continue; }
+        const int g = gidx != nullptr ? (*gidx)[t] : static_cast<int>(t);
+        const std::uint64_t bit = f.cand_bit[static_cast<std::size_t>(groups[static_cast<std::size_t>(g)][static_cast<std::size_t>(choice[t] - 1)])];
+        if (bit == 0) { continue; }
+        if ((seen & bit) != 0) { return false; }
+        seen |= bit;
+    }
+    for (std::uint64_t s = seen; s != 0; s &= s - 1)
+    { forbid |= static_cast<unsigned>(f.bit_ind[std::countr_zero(s)]); }
+    return true;
+}
+// The independent half: true when `imask` (FULL slot positions) holds a colliding pair, or a slot the
+// chosen group options forbid.
+static inline bool SacDupImaskDup(const SacDupFold& f, unsigned imask, unsigned forbid)
+{
+    if ((imask & forbid) != 0) { return true; }
+    for (unsigned s = imask; s != 0; s &= s - 1)
+    { if ((imask & f.ind_conf[static_cast<std::size_t>(std::countr_zero(s))]) != 0) { return true; } }
+    return false;
+}
+// The verifier's brute-force answer for a flagged selection.
+static bool SelHasSameSourceSacForMana(const std::vector<Action>& cands, const std::vector<int>& sel)
+{
+    for (std::size_t x = 0; x < sel.size(); ++x)
+    {
+        const Action& p = cands[static_cast<std::size_t>(sel[x])];
+        if (p.kind != Action::Kind::SacForMana) { continue; }
+        for (std::size_t y = x + 1; y < sel.size(); ++y)
+        {
+            const Action& q = cands[static_cast<std::size_t>(sel[y])];
+            if (q.kind == Action::Kind::SacForMana && q.sac_source_id == p.sac_source_id) { return true; }
+        }
+    }
+    return false;
+}
+// Verify mode: a same-source pair the dup test rejected WITHOUT the walk having flagged it -- a selection
+// the fold does not cover (a walk it does not run in, or a payoff-side SacForMana). Coverage, not
+// soundness: such a selection is still rejected, only not skipped. The first few are printed.
+static void SacDupNoteUnfolded(const std::vector<Action>& cands, const std::vector<int>& sel, int site)
+{
+    if (!sacdupfold::VerifyOn() || sacdupfold::t_expect_reject || !SelHasSameSourceSacForMana(cands, sel)) { return; }
+    if (sacdupfold::g_missed.fetch_add(1, std::memory_order_relaxed) >= 8) { return; }
+    std::string d;
+    for (int j : sel)
+    {
+        const Action& a = cands[static_cast<std::size_t>(j)];
+        d += a.card_name.str() + "(k" + std::to_string(static_cast<int>(a.kind)) + ",src" + std::to_string(a.sac_source_id)
+           + ",rf" + std::to_string(a.ritual_float) + ",rock" + std::to_string(a.rock_mana.Total()) + ") ";
+    }
+    bool any_rf = false;
+    for (const Action& a : cands) { if (a.ritual_float > 0 || a.rock_mana.Total() > 0) { any_rf = true; break; } }
+    std::fprintf(stderr, "[sac-dup-walk-fold] UNFOLDED site=%d cands=%zu any_mana_side=%d sel=[%s]\n",
+                 site, cands.size(), any_rf ? 1 : 0, d.c_str());
+}
+// Verify-mode emission wrapper: flag the selection around its emit (see namespace sacdupfold).
+template <class Emit>
+static inline void SacDupVerifyEmit(const std::vector<Action>& cands, std::vector<int>& sel, const Emit& emit)
+{
+    sacdupfold::g_flagged.fetch_add(1, std::memory_order_relaxed);
+    if (!SelHasSameSourceSacForMana(cands, sel))
+    { sacdupfold::g_brute_mismatch.fetch_add(1, std::memory_order_relaxed); }
+    sacdupfold::t_expect_reject = true;
+    emit(sel);
+    sacdupfold::t_expect_reject = false;
+}
+
+// ---- IDENTICAL-CANDIDATE PREFIX FOLD (MTG_DUP_ACTION_FOLD, DEFAULT ON; =0 disables) ---------------
+// CollectActions can emit the SAME activation twice as two independent bits. On a persist-loop board
+// (Melira Pod: a free sac outlet, a Kitchen Finks, a loop closer) a free outlet's canonical single sac
+// (victim by the expendability heuristic) and the persist block's explicit K=1 sac of each persist body
+// coincide whenever the heuristic picked that body: two Actions equal in EVERY field except `eval` (0 for
+// the canonical sac -- a Feeder's counter is not a payload term -- and 1 for the persist sac). Taking both
+// is real coverage (the free outlet sacs the returning body twice), but taking ONE of them gives plans with
+// the same signature. A class of k such bits walks 2^k positions for k + 1 distinct plans. Measured on the
+// Melira d3/b3 tail line (seed 10372713029942101962, T6 main 2 under Celes: three Feeders and a Bloodthrone
+// over three Finks): four such pairs among 16 independents, 65,535 positions emitted per enumeration for
+// 20,735 plans the dedup keeps, ~2,300 of the line's enumerations.
+// THE FOLD: order each class by (eval DESCENDING, slot ascending); a position whose selected members are not
+// a PREFIX of that order is not walked. Its canonical twin -- the same number of members, the highest-eval
+// ones, lowest slots among equal evals -- is.
+// WHY IT IS EXACT (an identity fold, not a narrowing): EnumeratePlans' signature dedup (PlanSignatureFast
+// keys a sac on kind / source / victim / count, never on eval) puts every arrangement of a class with the
+// same member count into ONE signature class, and keeps, per class, the first member in the stable
+// (wins_this_turn desc, value desc) order -- ties in emission order. Members differ only in `eval`, which
+// eval_and_push reads in exactly one place, `total_eval += c.eval` -> plan.value (wins, the mana sums, the
+// win projection and every other field are identical), so among one signature class the value is the sum of
+// the chosen members' evals plus a common term: the maximum is the top-m by eval, and among equal values
+// the earliest-emitted is the lowest slots -- both walks visit positions sharing every group digit in
+// increasing imask order, so the twin with the lower bits is emitted first. That is the canonical arrangement,
+// so every arrangement the fold skips is one the dedup would have dropped, nothing between the walk and the
+// dedup caps or truncates the list, and the stable sort keeps the survivors' relative order: the returned
+// list (set and order) is unchanged. MTG_DUP_ACTION_FOLD_VERIFY checks exactly that (KEPT_BY_DEDUP = 0).
+// WHAT IT DOES MOVE: the visits billed (enum_charge.visits / workctr kOdoVisit -> the priced decision ceiling),
+// exactly as MTG_SAC_DUP_WALK_FOLD: a finite budget runs out later. Nothing is billed at an unlimited budget.
+// Scope: EnumeratePlans' no-mana-side walks (the carry walk and PlainOdometerDfs); the two-stage driver and
+// Solve's rollout walk are untouched (the measured boards put no position in Solve's walk). Human play is
+// never folded.
+struct DupActFold
+{
+    bool on = false, verify = false;
+    // (predecessor bit, member bit) for each consecutive pair of one class, in canonical order.
+    std::vector<std::pair<unsigned, unsigned>> pairs;
+};
+static void BuildDupActFold(const std::vector<Action>& cands, const std::vector<int>& independent, DupActFold& f)
+{
+    f = DupActFold{};
+    const bool verify = dupactfold::VerifyOn();
+    if (!(dupactfold::On() || verify) || HumanPlayActive()) { return; }
+    const int n = static_cast<int>(independent.size());
+    if (n < 2 || n > 31) { return; }   // the walkers' imask is a 32-bit int
+    // Classes: independents equal in every field but `eval` (DupActEqualButEval). Cheap key first, so the
+    // full compare runs only on the rare pair that already shares kind / source / victim / count / name.
+    auto at = [&](int b) -> const Action& { return cands[static_cast<std::size_t>(independent[static_cast<std::size_t>(b)])]; };
+    int cls[32];
+    int ncls = 0;
+    for (int b = 0; b < n; ++b) { cls[b] = -1; }
+    thread_local Action t_scratch;   // assignment reuses its capacity (the ds_equiv pattern)
+    for (int b = 1; b < n; ++b)
+    {
+        const Action& ab = at(b);
+        for (int c = 0; c < b; ++c)
+        {
+            const Action& ac = at(c);
+            if (ac.kind != ab.kind || ac.sac_source_id != ab.sac_source_id || ac.sac_victim_id != ab.sac_victim_id
+                || ac.sac_count != ab.sac_count || ac.hand_index != ab.hand_index || !(ac.card_name == ab.card_name))
+            { continue; }
+            t_scratch = ac;
+            t_scratch.eval = ab.eval;
+            if (!(t_scratch == ab)) { continue; }
+            if (cls[c] < 0) { cls[c] = ncls++; }
+            cls[b] = cls[c];
+            break;
+        }
+    }
+    // Per class, the members in CANONICAL order -- eval DESCENDING, then slot ascending -- and a pair per
+    // consecutive two: a later member may be selected only with its predecessor (see DupActFold).
+    for (int k = 0; k < ncls; ++k)
+    {
+        int mem[32];
+        int nm = 0;
+        for (int b = 0; b < n; ++b) { if (cls[b] == k) { mem[nm++] = b; } }
+        std::stable_sort(mem, mem + nm, [&](int x, int y) { return at(x).eval > at(y).eval; });
+        for (int i = 1; i < nm; ++i) { f.pairs.push_back({ 1u << mem[i - 1], 1u << mem[i] }); }
+    }
+    if (f.pairs.empty()) { return; }
+    f.on = true;
+    f.verify = verify;
+    if (verify) { dupactfold::g_calls.fetch_add(1, std::memory_order_relaxed); }
+}
+// True when `imask` selects a class member whose canonical predecessor is unselected.
+static inline bool DupActNonCanonical(const DupActFold& f, unsigned imask)
+{
+    for (const std::pair<unsigned, unsigned>& p : f.pairs)
+    { if ((imask & p.second) != 0 && (imask & p.first) == 0) { return true; } }
+    return false;
+}
+// The verifier's brute-force answer for a flagged selection, straight from the definition: some selected
+// independent has an UNSELECTED class twin (equal but for eval) that precedes it canonically -- a higher
+// eval, or the same eval in a lower slot.
+static bool DupActBruteNonCanonical(const std::vector<Action>& cands, const std::vector<int>& independent,
+                                    const std::vector<int>& sel)
+{
+    auto in_sel = [&](int j) { return std::find(sel.begin(), sel.end(), j) != sel.end(); };
+    for (std::size_t b = 0; b < independent.size(); ++b)
+    {
+        const Action& ab = cands[static_cast<std::size_t>(independent[b])];
+        if (!in_sel(independent[b])) { continue; }
+        for (std::size_t c = 0; c < independent.size(); ++c)
+        {
+            if (c == b || in_sel(independent[c])) { continue; }
+            const Action& ac = cands[static_cast<std::size_t>(independent[c])];
+            if (!(ac.eval > ab.eval || (ac.eval == ab.eval && c < b))) { continue; }
+            Action x = ac;
+            x.eval = ab.eval;
+            if (x == ab) { return true; }
+        }
+    }
+    return false;
+}
+
 // ---- Two-stage plan-position enumeration: mana side x payoff side ------------------------------
 //
 // The flat odometer walks ONE mixed-radix counter over every candidate group, so a hand holding k
@@ -50725,10 +51409,12 @@ static void MeasureManaSideCollapse(const std::vector<Action>& cands,
 // the caller's remaining per-selection filter (Solve's Vial-capacity check). Both are template
 // parameters, not std::function: this runs once per rollout node, where a per-call closure allocation
 // is measurable.
-template <class ExtraOk, class Emit>
+template <class ExtraOk, class Emit, class Stop>
 static void EnumeratePlanPositions(const std::vector<Action>& cands,
                                    const std::vector<std::vector<int>>& groups,
                                    const std::vector<int>& independent,
+                                   const std::vector<int>& auto_sel,
+                                   bool fold_dup_live,
                                    const ManaGateIndex* gate, int mana_bound,
                                    const SpliceOdometerIndex& sidx,
                                    const std::vector<int>& accel_order,
@@ -50741,10 +51427,13 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
                                    // equip digit -> the cast groups its pieces need; see
                                    // BuildEquipPieceDeps.
                                    const EquipPieceDeps& equip_deps,
+                                   // The caller's verdict that its duplicate-source rule is live for
+                                   // SacForMana (pre.dup_source && kDupSacMana); arms SacDupFold.
+                                   bool sac_dup_live,
                                    // By const reference, NOT by value: Solve's `consider` closure
                                    // captures a dozen locals, and this is called once per rollout
                                    // node -- copying it per call is measurable.
-                                   const ExtraOk& extra_ok, const Emit& emit)
+                                   const ExtraOk& extra_ok, const Emit& emit, const Stop& stop)
 {
     const int  num_groups = static_cast<int>(groups.size());
     const int  num_ind    = static_cast<int>(independent.size());
@@ -50771,6 +51460,17 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
     };
 
     std::vector<int> sel;
+
+    // MTG_SAC_DUP_WALK_FOLD: see SacDupFold. Off (f.on false) unless a mana-side source holds two
+    // SacForMana candidates and the caller's rule is live.
+    SacDupFold sdf;
+    BuildSacDupFold(cands, groups, independent, sac_dup_live, sdf);
+    const bool sdf_skip = sdf.on && !sdf.verify;   // verify keeps every position, flags the duplicates
+
+    FoldPrefixMap fold_map;
+    const bool fold_pred_on = fold_dup_live && (twostagefold::On() || twostagefold::Verify())
+        && BuildFoldPrefixMap(cands, groups, independent, auto_sel, fold_map) > 0;
+    const bool fold_verify = fold_pred_on && twostagefold::Verify();
 
     // Partition the odometer's digits. `mi`/`pi` hold SLOTS into `independent` so each side can
     // rebuild its bits at their original positions (the flat imask must be reproduced exactly).
@@ -50901,7 +51601,7 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
             std::uint64_t sel_mask = 0;
             DepSkipAudit dep_audit(2);
             bool done = false;
-            while (!done)
+            while (!done && !stop())
             {
                 // MTG_EQUIP_COPY_SKIP: the same verdict, plus WHERE to jump to (see
                 // FungibleEquipCopyAdvance). Evaluated first now, which changes only which predicate
@@ -50927,17 +51627,22 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
                     dep_audit.Visit(equip_deps, choice, choice, rejected, dep_adv, dep_jump,
                                     EquipPieceDepViolated(equip_deps, choice, sel_mask));
                 }
-                if (!rejected)
+                // MTG_SAC_DUP_WALK_FOLD: the group half of the duplicate-source test, once per position.
+                unsigned sd_forbid = 0;
+                const bool sd_gdup = sdf.on && !SacDupGroupsOk(sdf, groups, nullptr, choice, sd_forbid);
+                if (!rejected && !(sd_gdup && sdf_skip))
                 {
                     Agg ga;
                     for (int g = 0; g < num_groups; ++g)
                     { if (choice[g] > 0) { fold(ga, groups[g][choice[g] - 1]); } }
-                    for (unsigned imask = 0; imask < (1u << num_ind); ++imask)
+                    for (unsigned imask = 0; imask < (1u << num_ind) && !stop(); ++imask)
                     {
                         if (has_ind_accel
                             && IndependentAccelPrefixViolated(cands, independent,
                                                               static_cast<int>(imask)))
                         { continue; }
+                        const bool sd_dup = sdf.on && (sd_gdup || SacDupImaskDup(sdf, imask, sd_forbid));
+                        if (sd_dup && sdf_skip) { continue; }
                         Agg t = ga;
                         for (int b = 0; b < num_ind; ++b)
                         { if (imask & (1u << b)) { fold(t, independent[b]); } }
@@ -50947,7 +51652,11 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
                         { if (choice[g] > 0) { sel.push_back(groups[g][choice[g] - 1]); } }
                         for (int b = 0; b < num_ind; ++b)
                         { if (imask & (1u << b)) { sel.push_back(independent[b]); } }
-                        if (!sel.empty() && extra_ok(sel)) { foldsel::g_from_odometer = true; emit(sel); }
+                        if (!sel.empty() && extra_ok(sel))
+                        {
+                            foldsel::g_from_odometer = true;
+                            if (sd_dup) { SacDupVerifyEmit(cands, sel, emit); } else { emit(sel); }
+                        }
                     }
                 }
                 // RADIX CUT: skip the entire run of positions that must violate the same pair,
@@ -50986,7 +51695,38 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
         }
     }
 
-    struct Line { Agg agg; std::uint64_t pos = 0; unsigned imask = 0; int digits = 0; };
+    struct Line
+    {
+        Agg agg;
+        std::uint64_t pos = 0, fold_bits = 0;
+        unsigned imask = 0;
+        int digits = 0;
+        bool sd_dup = false;
+    };
+    const bool fold_fast = fold_pred_on && fold_map.classes <= 2;
+    unsigned fold_mana_only = 0, fold_payoff_only = 0;
+    if (fold_fast)
+    {
+        unsigned side[2] = { 0, 0 };
+        for (int g : fold_map.tagged_groups)
+        {
+            const unsigned s = std::binary_search(mg.begin(), mg.end(), g) ? 1u : 2u;
+            for (int p : fold_map.opt[g])
+            { if (p >= 0) { side[p >> 8] |= s; } }
+        }
+        for (int c = 0; c < fold_map.classes; ++c)
+        {
+            if (side[c] == 1) { fold_mana_only |= 1u << c; }
+            if (side[c] == 2) { fold_payoff_only |= 1u << c; }
+        }
+    }
+    long long fold_line_skipped = 0;
+    auto fold_option = [&](Line& line, int g, int digit)
+    {
+        if (!fold_fast || digit <= 0) { return; }
+        const int p = fold_map.opt[g][static_cast<std::size_t>(digit - 1)];
+        if (p >= 0) { line.fold_bits |= 1ull << ((p >> 8) * 32 + (p & 0xff)); }
+    };
     std::vector<Line> mlines, plines;
     std::vector<int>  mdig, pdig;      // flat digit storage, |side groups| ints per line
 
@@ -50997,7 +51737,7 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
         std::vector<int> full(num_groups, 0);   // the predicates read only mana-side digits
         DepSkipAudit dep_audit(3);
         bool done = false;
-        while (!done)
+        while (!done && !stop())
         {
             for (int t = 0; t < ng; ++t) { full[mg[t]] = choice[t]; }
             // MTG_EQUIP_DEP_SKIP: the verdict plus the run's GROUP digit, mapped onto this odometer's
@@ -51026,7 +51766,12 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
                 dep_audit.Visit(equip_deps, choice, full, rejected, dep_adv && dep_t >= 0, dep_t,
                                 EquipPieceDepViolated(equip_deps, full));
             }
-            if (!rejected)
+            // MTG_SAC_DUP_WALK_FOLD: the group half of the duplicate-source test, once per mana line
+            // family. SacForMana is mana-side by IsManaSideAction (the fold only marks those), so a
+            // duplicate pair always lies wholly inside Stage A.
+            unsigned sd_forbid = 0;
+            const bool sd_gdup = sdf.on && !SacDupGroupsOk(sdf, groups, &mg, choice, sd_forbid);
+            if (!rejected && !(sd_gdup && sdf_skip))
             {
                 for (int imask = 0; imask < (1 << ni); ++imask)
                 {
@@ -51035,7 +51780,10 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
                     if (has_ind_accel
                         && IndependentAccelPrefixViolated(cands, independent, static_cast<int>(full_imask)))
                     { continue; }
+                    const bool sd_dup = sdf.on && (sd_gdup || SacDupImaskDup(sdf, full_imask, sd_forbid));
+                    if (sd_dup && sdf_skip) { continue; }
                     Line L;
+                    L.sd_dup = sd_dup;
                     L.imask  = full_imask;
                     L.digits = static_cast<int>(mdig.size());
                     for (int t = 0; t < ng; ++t)
@@ -51044,11 +51792,15 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
                         if (choice[t] > 0)
                         {
                             L.pos += static_cast<std::uint64_t>(choice[t]) * stride[mg[t]];
+                            fold_option(L, mg[t], choice[t]);
                             fold(L.agg, groups[mg[t]][choice[t] - 1]);
                         }
                     }
                     for (int b = 0; b < ni; ++b)
                     { if (imask & (1 << b)) { fold(L.agg, independent[mi[b]]); } }
+                    if (!fold_verify && fold_mana_only != 0
+                        && FoldPrefixBitsViolatedSelected(L.fold_bits, fold_mana_only))
+                    { mdig.resize(static_cast<std::size_t>(L.digits)); ++fold_line_skipped; continue; }
                     mlines.push_back(L);
                 }
             }
@@ -51088,7 +51840,7 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
         const int ng = static_cast<int>(pg.size()), ni = static_cast<int>(pi.size());
         std::vector<int> choice(ng, 0);
         bool done = false;
-        while (!done)
+        while (!done && !stop())
         {
             for (int imask = 0; imask < (1 << ni); ++imask)
             {
@@ -51100,6 +51852,7 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
                     if (choice[t] > 0)
                     {
                         L.pos += static_cast<std::uint64_t>(choice[t]) * stride[pg[t]];
+                        fold_option(L, pg[t], choice[t]);
                         fold(L.agg, groups[pg[t]][choice[t] - 1]);
                     }
                 }
@@ -51109,6 +51862,9 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
                     L.imask |= 1u << pi[b];
                     fold(L.agg, independent[pi[b]]);
                 }
+                if (!fold_verify && fold_payoff_only != 0
+                    && FoldPrefixBitsViolatedSelected(L.fold_bits, fold_payoff_only))
+                { pdig.resize(static_cast<std::size_t>(L.digits)); ++fold_line_skipped; continue; }
                 // Whole-row skip: if the most generous mana line cannot fund this payoff line, no
                 // pair can, so drop it here instead of re-rejecting it against every mana line.
                 // The gain/gy guards are structural (a payoff-side action adds no mana by definition)
@@ -51144,6 +51900,7 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
     // ---- Pair, then replay in flat-odometer order ----------------------------------------------
     struct Pair { std::uint64_t key; int m, p; };
     std::vector<Pair> pairs;
+    long long fold_skipped = 0;
     const std::uint64_t imask_span = 1ull << num_ind;
     for (int pi_idx = 0; pi_idx < static_cast<int>(plines.size()); ++pi_idx)
     {
@@ -51152,6 +51909,9 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
         {
             const Line& M = mlines[mi_idx];
             if (!payable(M.agg, P.agg)) { continue; }
+            if (fold_fast && !fold_verify
+                && FoldPrefixBitsViolated(M.fold_bits | P.fold_bits, fold_map.classes))
+            { ++fold_skipped; continue; }
             const std::uint64_t key = (M.pos + P.pos) * imask_span + (M.imask | P.imask);
             pairs.push_back(Pair{ key, mi_idx, pi_idx });
         }
@@ -51167,18 +51927,44 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
     std::vector<int> choice(num_groups, 0);
     for (const Pair& pr : pairs)
     {
+        if (stop()) { break; }
         const Line& M = mlines[pr.m];
         const Line& P = plines[pr.p];
         for (int t = 0; t < mng; ++t) { choice[mg[t]] = mdig[M.digits + t]; }
         for (int t = 0; t < png; ++t) { choice[pg[t]] = pdig[P.digits + t]; }
+        const bool fold_viol = fold_pred_on && (fold_verify || !fold_fast)
+            && (fold_fast ? FoldPrefixBitsViolated(M.fold_bits | P.fold_bits, fold_map.classes)
+                          : FoldPrefixViolated(fold_map, choice));
+        if (fold_viol && !fold_verify)
+        {
+            ++fold_skipped;
+            continue;
+        }
         const unsigned imask = M.imask | P.imask;
         sel.clear();
         for (int g = 0; g < num_groups; ++g)
         { if (choice[g] > 0) { sel.push_back(groups[g][choice[g] - 1]); } }
         for (int b = 0; b < num_ind; ++b)
         { if (imask & (1u << b)) { sel.push_back(independent[b]); } }
-        if (!sel.empty() && extra_ok(sel)) { foldsel::g_from_odometer = true; emit(sel); }
+        if (!sel.empty() && extra_ok(sel))
+        {
+            foldsel::g_from_odometer = true;
+            auto deliver = [&]
+            { if (M.sd_dup) { SacDupVerifyEmit(cands, sel, emit); } else { emit(sel); } };
+            if (fold_viol && fold_verify)
+            {
+                twostagefold::g_flagged.fetch_add(1, std::memory_order_relaxed);
+                if (!twostagefold::BruteNonCanonical(cands, sel))
+                { twostagefold::g_brute_mismatch.fetch_add(1, std::memory_order_relaxed); }
+                twostagefold::t_expect_reject = true;
+                deliver();
+                twostagefold::t_expect_reject = false;
+            }
+            else { deliver(); }
+        }
     }
+    if (fold_skipped + fold_line_skipped != 0)
+    { twostagefold::g_skipped.fetch_add(fold_skipped + fold_line_skipped, std::memory_order_relaxed); }
 }
 
 // Feasible-aware EARLY ritual-drop -- the group-level, before-the-odometer analog of the late
@@ -52980,6 +53766,10 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     // Provider payoff-prune opt-in, hoisted out of consider(): it is a VIRTUAL call on a per-deck
     // provider, constant for the whole enumeration, and it used to be dispatched once per subset.
     const bool payoff_prune_on = ResolveProvider(state).PrunesAcceleratorWithoutPayoff();
+    const bool ritual_spend_prune_on = ResolveProvider(state).PrunesRitualWithoutSpend()
+                                    && !DecisionUnpruned(UnprunedGate::PayoffPrune);
+    const bool ritual_spend_granter_bf = ritual_spend_prune_on && RippleGranterOnBattlefield(state);
+    const int  ritual_spend_named_bf   = ritual_spend_prune_on ? SacNamedCreaturesOnBattlefield(state) : 0;
     // The two sac filters read the per-candidate source table when it was built; nullptr / -1 keep
     // their original in-loop board resolution (see SubsetFilterPre).
     const std::vector<const CardDefinition*>* sac_tab =
@@ -53494,12 +54284,21 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         if (payoff_prune_on
             && !DecisionUnpruned(UnprunedGate::PayoffPrune)
             && SubsetWastesAccelerant(cands, sel, storm_in_hand)) { return; }
+        // ...and its SPEND form (PrunesRitualWithoutSpend; Shadowborn): a ritual whose mana nothing in the subset
+        // spends. Lockstep twin in EnumeratePlans.
+        if (ritual_spend_prune_on && SubsetRitualSpendsNothing(cands, sel, &pool, ritual_spend_granter_bf, ritual_spend_named_bf)) { return; }
         // Reject two SacForMana of the same source (its colour variants are mutually exclusive). Inert
         // without a SacForMana action (Lotus Bloom) -> byte-identical.
+        // EnumeratePlanPositions' SacDupFold relies on this test being reached unconditionally by
+        // every selection that gets this far (MTG_SAC_DUP_WALK_FOLD); keep it that way.
+        sacdupfold::NoteReachedDupCheck();
         if (pre.dup_source
             && SubsetHasDuplicateSacSource(cands, sel, /*site=*/0, fold_from_odometer,
                                            pre.dup_clause, pre.DupM(cands), &pre.copy_cap))
-        { if (shape != nullptr) { shapestats::Bump(shape->rej_dup); ++callf.rej_dup; } return; }
+        { if (shape != nullptr) { shapestats::Bump(shape->rej_dup); ++callf.rej_dup; }
+          SacDupNoteUnfolded(cands, sel, 0); return; }
+        sacdupfold::NotePassedDupCheck();
+        twostagefold::NotePassedDupCheck();
         // Reject an Equip whose equipment/host is in hand and uncast by this subset (silent no-op).
         // Inert without an Equip candidate -> byte-identical. Kept in lockstep with the twin below.
         if (pre.equip && SubsetHasStrandedEquip(state, cands, sel,
@@ -54372,7 +55171,9 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         const int kill_combo_dmg = KillTriggerComboCredit(state, cands, sel);
         // Walking Ballista's post-combat pings (CounterPingFinish) -- 0 for every deck without a pinger.
         const int ping_reach = CounterPingReach(state, cands, sel);
-        bool wins = (projected_atk + direct_dmg + extra_lethal + cannons_dmg + freecast_dmg + kill_combo_dmg + ping_reach)
+        const int boros_extra = BorosMode3ExtraStrike(state, is_pre_combat, cands, sel,
+                                                      atk_mana_srcs, noncreature_count);
+        bool wins = (projected_atk + boros_extra + direct_dmg + extra_lethal + cannons_dmg + freecast_dmg + kill_combo_dmg + ping_reach)
                     >= state.Opponent().life;
         // A NON-DAMAGE win this turn (Dimensional Infiltrator decking them out). Rides the same
         // has_extra_lethal gate, so a deck with no such model never calls it and stays
@@ -55876,9 +56677,12 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     }
     else
     {
-        EnumeratePlanPositions(cands, groups, independent, gate, mana_bound, *sidx, accel_order,
+        EnumeratePlanPositions(cands, groups, independent, auto_sel, pre.dup_source,
+                               gate, mana_bound, *sidx, accel_order,
                                any_splice, splice_collapse_on, accel_prefix_on && any_accel,
-                               has_ind_accel, copy_class, equip_deps, vial_ok, consider);
+                               has_ind_accel, copy_class, equip_deps,
+                               /*sac_dup_live=*/pre.dup_source && (pre.dup_clause & kDupSacMana) != 0,
+                               vial_ok, consider, [] { return false; });
     }
 
     // THE HOLD LINE (HoldLineEnabled -- see that helper for the measurement that chose ONE plan over
@@ -63802,10 +64606,17 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (remand_countered) { cantrip_breakpoint(*remand_def, /*plain_cantrip=*/true); }
         }
 
+        bool direct_damage_resolved = true;
         if (remand_countered) { /* X is back in hand: nothing resolves (see the REMAND block) */ }
         else if (def.tmpl == CardTemplate::DirectDamage)
         {
             NoncombatTriggerScope noncombat_scope(state);
+            const bool prior_no_gain = state.players_cant_gain_life_this_turn;
+            const bool prior_no_prevent = state.damage_cant_be_prevented_this_turn;
+            if (def.params.players_cant_gain_life_this_turn)
+            { state.players_cant_gain_life_this_turn = true; }
+            if (def.params.damage_cant_be_prevented_this_turn)
+            { state.damage_cant_be_prevented_this_turn = true; }
             // Play-viewer event: opponent life BEFORE this burn spell's damage, so the history can
             // report "N to opponent (before->after)". Measured up to (not including) the
             // opponent_lifegain rider below, which OpponentGainsLife reports as its own life event.
@@ -63818,7 +64629,6 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // a phantom-early-win source.
             Targeting t = def.params.targeting;
             int chain_hit_controller = opp_idx;
-            bool direct_damage_resolved = true;
             // An {X} burn deals chosen X * x_damage_multiplier (Crackle = 5X; mirrors
             // EffectHandler::ResolveDirectDamage); a fixed-damage burn uses params.damage.
             int x_mult = def.params.x_damage_multiplier; if (x_mult < 1) { x_mult = 1; }
@@ -63858,6 +64668,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 chain_hit_controller = BurnTargetController(state, state.active_player_index, fixed_burn_pin.first);
                 direct_damage_resolved = ResolveFixedBurnPin(state, state.active_player_index,
                                                              def, fixed_burn_pin, dmg);
+            }
+            else if (def.params.damage_each_opponent)
+            {
+                const int total = dmg * gamesetup::OpponentHeads();
+                state.players[opp_idx].life -= total;
+                RecordNoncombatDamageToPlayer(state, state.active_player_index, opp_idx, total);
+                if (total > 0) { state.opponent_lost_life_this_turn = true; }
             }
             else if (t == Targeting::Any || t == Targeting::Player)
             {
@@ -64086,6 +64903,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 }
             }
             // An all-illegal-target spell does not resolve any rider (CR 608.2b).
+            // Skullcrack's turn-wide restrictions are part of its resolution too.
+            if (!direct_damage_resolved)
+            {
+                state.players_cant_gain_life_this_turn = prior_no_gain;
+                state.damage_cant_be_prevented_this_turn = prior_no_prevent;
+            }
             if (direct_damage_resolved)
             {
             // Play-viewer history: one "burn" event for all of this spell's direct face damage
@@ -65334,6 +66157,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // (On-cast triggers + Prowess already fired above, at cast time, before the
         // resolution branch -- see the note there.)
 
+        if (!remand_countered && def.params.boros_charm_modal)
+        { ApplyBorosCharm(state, state.active_player_index, chosen_x, enchant_target); }
+
         // "Create N tokens" as a spell's resolution (Fungus Frolic). Before the zone move below,
         // which is the order the real game resolves in. Executor twin: EffectHandler::ResolveImpl.
         // (Every resolution step from here to the zone move is skipped for a REMANDED X.)
@@ -65343,7 +66169,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // upgrade. Here for the same reason the token call above is: BEFORE the zone move below,
         // which is the order the real game resolves in -- and the gain must land before anything
         // reads life_gained_this_turn. Executor twin: EffectHandler::ResolveImpl.
-        if (!remand_countered) { ApplyCastLifegain(state, state.active_player_index, def, cast_player_target); }
+        if (!remand_countered && (def.tmpl != CardTemplate::DirectDamage || direct_damage_resolved))
+        { ApplyCastLifegain(state, state.active_player_index, def, cast_player_target); }
 
         // LAND SEARCH as an instant/sorcery's resolution (Rampant Growth, Search for Tomorrow,
         // Cultivate; core/LandSearch.h). Before the zone move below, and before the put-in-hand
@@ -69221,6 +70048,7 @@ static void SimulateOneCombat(GameState& state, bool additional)
     // Two-Headed Hellkite attack-trigger draw (attack_draw_cards): drawn at declare-attackers,
     // so the cards are in hand for the post-combat main. Mirrors GameEngine::CombatPhase.
     ApplyAttackDrawTriggers(state, active, atk_idx);
+    ApplyGoblinGuideAttackTriggers(state, active, atk_idx);
 
     // Jorn, God of Winter (attack_untap_snow_permanents): did it attack? The untap itself is applied
     // AFTER ResolveCombatDamage, which is where attackers get tapped -- see AttackUntapSnowFires.
@@ -69600,6 +70428,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
         p.temp_haste            = false;   // Expedite until-EOT haste expires (lockstep w/ CleanupStep)
         p.temp_lifelink         = false;   // Heliod's until-EOT lifelink grant expires (same lockstep)
         p.temp_double_strike    = false;   // Valiant Knight's until-EOT team grant expires (CR 514.2)
+        p.temp_indestructible   = false;
         p.is_animated           = false;
         p.animated_printed_types = false;   // qualifies the animation, so it expires with it (lockstep)
     }
@@ -69658,6 +70487,8 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     state.AdvanceTurnCounter();
     if (state.deck_has_extra_combat) { state.phase = Phase::Beginning; }   // Moraug (see the head of this function)
     state.opponent_lost_life_this_turn = false;
+    state.players_cant_gain_life_this_turn = false;
+    state.damage_cant_be_prevented_this_turn = false;
     state.creature_died_this_turn = false;   // morbid resets each turn (lockstep w/ GameEngine::UntapStep)
     state.ripple_script = RippleScript{};    // the ripple chain script is turn-scoped (lockstep w/ GameEngine::UntapStep)
     state.noncombat_damage_received_this_turn = {};
@@ -71333,6 +72164,8 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                 if (!act.chosen_float_color.empty()) { w.Put('#'); w.Put(act.chosen_float_color); }
                 if (act.free_cast) { w.Put("#FREE"); }
                 if (d && d->params.modal_choose_n > 0) { w.Put("#S"); w.Int(act.chosen_x); }
+                if (d && d->params.boros_charm_modal)
+                { w.Put("#BC"); w.Int(act.chosen_x); w.Put('/'); w.Int(act.enchant_target); }
                 if (d && d->params.tooth_and_nail)
                 { w.Put("#TN"); w.Int(act.chosen_x); w.Put(act.tutor_target); }
                 if (d && d->params.finale_of_devastation)
@@ -72401,6 +73234,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     RevealLogPause _rlp_enum;
     PROF_INC(enumerate_calls);
     workctr::Inc(workctr::kEnumCall);
+    bool enum_priced_stop = false;
     const Player& ap              = state.ActivePlayer();
     ManaPool      pool            = AvailableManaPool(state);
     ManaPool      pool_noncreature = BuildNonCreaturePool(state);
@@ -72510,6 +73344,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // Provider payoff-prune opt-in, hoisted out of eval_and_push: a virtual call, constant for the
     // enumeration, previously dispatched once per subset.
     const bool payoff_prune_on = ResolveProvider(state).PrunesAcceleratorWithoutPayoff();
+    const bool ritual_spend_prune_on = ResolveProvider(state).PrunesRitualWithoutSpend()
+                                    && !DecisionUnpruned(UnprunedGate::PayoffPrune);
+    const bool ritual_spend_granter_bf = ritual_spend_prune_on && RippleGranterOnBattlefield(state);
+    const int  ritual_spend_named_bf   = ritual_spend_prune_on ? SacNamedCreaturesOnBattlefield(state) : 0;
     // ...and the reducer sink's "is a ritual needed?" facts (MTG_PAYOFF_REDUCER_SINK_NEEDED), once per
     // enumeration; only the branch-list prune below reads them.
     const ReducerSinkCtx reducer_ctx = payoff_prune_on ? BuildReducerSinkCtx(state) : ReducerSinkCtx{};
@@ -73238,11 +74076,24 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     auto eval_and_push = [&](const std::vector<int>& sel) { eval_and_push_body(sel); };
     eval_and_push_body = [&](const std::vector<int>& sel)
     {
+        // Both provenance flags must be consumed even when pricing stops this walk.
+        const bool dup_twin = dupactfold::Take();
+        const bool fold_from_odometer = foldsel::Take();
+        if (enum_priced_stop || (g_bp_enum_depth == 0 && decisionwork::PricedExceeded()))
+        {
+            enum_priced_stop = true;
+            return;
+        }
+        if (dup_twin)
+        {
+            dupactfold::g_flagged.fetch_add(1, std::memory_order_relaxed);
+            if (!DupActBruteNonCanonical(cands, independent, sel))
+            { dupactfold::g_brute_mismatch.fetch_add(1, std::memory_order_relaxed); }
+        }
         ++enum_charge.visits;   // MTG_ENUM_CHARGE (see EnumChargeScope); a counter only when off
         // BRANCH SHAPE, EnumeratePlans side. Distinct from SolveUncached's funnel: this is the
         // odometer walk the odo/plans/dedup columns actually describe.
         if (eshape != nullptr) { shapestats::Bump(eshape->e_entered); ++ecallf.entered; }
-        const bool fold_from_odometer = foldsel::Take();   // see foldsel / consider()
         // The per-game backstop (see bp_abandon_watch): stop deriving once the game is void.
         if (bp_abandon_watch)
         {
@@ -73258,8 +74109,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 return;
             }
         }
-        // MTG_BP_DERIVE_PRICED_STOP (DEFAULT OFF -- a PROPOSAL for the priced per-decision ceiling, not
-        // adopted; docs/design/edf-tutor-pin-alias-2026-11-03.md section 4). A breakpoint-continuation
+        // MTG_BP_DERIVE_PRICED_STOP (DEFAULT ON since 2026-11-04; docs/design/budget-rebalance-checkpoint.md 11:45 and
+        // docs/design/edf-tutor-pin-alias-2026-11-03.md section 4). Measured: mulligan-generation rollouts at d1/b1 (EDF,
+        // LFE) whose derivations ran for HOURS end in seconds (EDF 6,058 s -> 22 s, 8,613 s -> 11 s) with the win turn
+        // identical on all 4,936 paired gen-tail lines (7 decks); in play at the shipped settings it never trips
+        // (held-out A/B, 31,588 paired games: 0 win turns and 0 UNITS moved). A breakpoint-continuation
         // derivation is an enumeration, not a search node: it charges no unit and nothing inside it polls
         // SearchBudget::Overrun(), so a decision whose priced ceiling (MTG_DECISION_PRICED_X) has tripped keeps
         // deriving 10k-plan lists inside its horizon rollouts until each one completes. This stops the
@@ -73270,8 +74124,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // priced ceiling is armed, and the ceiling is never armed at an unlimited budget, so this re-prices
         // work under a finite budget and cannot make a line unfindable at a large one. Same lockstep caveat as
         // MTG_BP_DERIVE_METER mode 2: an interrupted list can reach play only through the anytime rescue.
-        static const bool s_priced_stop = EnvOn("MTG_BP_DERIVE_PRICED_STOP");
-        if (s_priced_stop && g_bp_enum_depth > 0 && decisionwork::PricedExceeded())
+        if (g_bp_enum_depth > 0 && decisionwork::PricedExceeded() && BpDerivePricedStopOn())
         {
             g_bp_derive_interrupted = true;
             bpmeter::g_priced_stops.fetch_add(1, std::memory_order_relaxed);
@@ -73405,8 +74258,13 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             && !DecisionUnpruned(UnprunedGate::PayoffPrune)
             && SubsetWastesAccelerant(cands, sel, /*storm_in_hand=*/false, /*search_branch_list=*/true,
                                       &reducer_ctx)) { return; }
+        // ...and its SPEND form (PrunesRitualWithoutSpend; Shadowborn). Lockstep twin of Solve's.
+        if (ritual_spend_prune_on && SubsetRitualSpendsNothing(cands, sel, &pool, ritual_spend_granter_bf, ritual_spend_named_bf)) { return; }
         // Reject two SacForMana of the same source (mutually-exclusive colour variants). Inert
         // without a SacForMana action -> byte-identical.
+        // EnumeratePlanPositions' SacDupFold relies on this test being reached unconditionally by
+        // every selection that gets this far (MTG_SAC_DUP_WALK_FOLD); keep it that way.
+        sacdupfold::NoteReachedDupCheck();
         if (pre.dup_source
             && SubsetHasDuplicateSacSource(cands, sel, /*site=*/1, fold_from_odometer, pre.dup_clause,
                                            pre.DupM(cands), &pre.copy_cap))
@@ -73417,7 +74275,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
           // table should move onto it; see the note on rej_dup_s1's declaration.
           if (shapestats::Enabled())
           { shapestats::Bump(shapestats::g_turn[shapestats::Clamp(state.turn_number)].rej_dup_s1); }
-          return; }
+          SacDupNoteUnfolded(cands, sel, 1); return; }
+        sacdupfold::NotePassedDupCheck();
+        twostagefold::NotePassedDupCheck();
         // Reject an Equip whose equipment/host is in hand and uncast by this subset (silent no-op).
         // Inert without an Equip candidate -> byte-identical. Kept in lockstep with Solve's twin.
         if (pre.equip && SubsetHasStrandedEquip(state, cands, sel,
@@ -74811,7 +75671,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         const int kill_combo_dmg = KillTriggerComboCredit(state, cands, sel);
         // Walking Ballista's post-combat pings -- twin of Solve's (0 for every deck without a pinger).
         const int ping_reach = CounterPingReach(state, cands, sel);
-        bool wins = (projected_atk + direct_dmg + cannons_dmg + freecast_dmg + kill_combo_dmg + ping_reach)
+        const int boros_extra = BorosMode3ExtraStrike(state, is_pre_combat, cands, sel,
+                                                      atk_mana_srcs, noncreature_count);
+        bool wins = (projected_atk + boros_extra + direct_dmg + cannons_dmg + freecast_dmg + kill_combo_dmg + ping_reach)
                     >= state.Opponent().life;
         // A NON-DAMAGE win this turn (a deck-out). Board-level, so it needs no `casting` list and
         // costs one virtual call behind the has_extra_lethal gate; false for every deck without an
@@ -75005,7 +75867,13 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         ApplyCantripFirstOrder(state, plan.actions);   // no-op unless MTG_CANTRIP_FIRST
         if (BfCensusOn()) { bfcensus::g_subsets_scored[1].fetch_add(1, std::memory_order_relaxed); }
         if (enumstats::Enabled()) { enumstats::g_e_surv.fetch_add(1, std::memory_order_relaxed); }
+        if (dup_twin)
+        {
+            plan.land_tie_key = dupactfold::kTwinTag;
+            dupactfold::g_pushed.fetch_add(1, std::memory_order_relaxed);
+        }
         plans.push_back(std::move(plan));
+        workctr::Inc(workctr::kPlanEmit);
         if (ds_on_push) { ds_on_push(); }
     };
 
@@ -75532,8 +76400,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     static const bool s_ds_env = EnvOn("MTG_ENUM_DEDUP_STREAM", true);
     static const std::size_t s_ds_at = static_cast<std::size_t>(std::max(64, EnvInt("MTG_ENUM_DEDUP_STREAM_AT", 4096)));
     static const bool s_ds_xaudit = EnvOn("MTG_SIG_X_AUDIT");
+    // (Off under MTG_DUP_ACTION_FOLD_VERIFY + the stream's own verify: both tag Plan::land_tie_key.)
+    static const bool s_ds_dupact_clash = EnvOn("MTG_ENUM_DEDUP_STREAM_VERIFY") && dupactfold::VerifyOn();
     bool ds_on = s_ds_env && !s_human_play_sig && PlanSigFastOn() && !s_ds_xaudit
-              && !branchstats::Enabled() && !shapestats::Enabled() && !McWalkBoundVerify();
+              && !branchstats::Enabled() && !shapestats::Enabled() && !McWalkBoundVerify() && !s_ds_dupact_clash;
     if (ds_on && !cre_host_sig)
     {
         for (const Action& c : cands) { if (IsCreatureAuraCast(c)) { ds_on = false; break; } }
@@ -75713,6 +76583,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // 2026-07-29). Mirrored in Solve and EnumeratePlans -- change one, change both.
         std::vector<int> choice(num_groups, 0);
         std::vector<int> sel;   // reused across positions (clear keeps capacity)
+        // MTG_DUP_ACTION_FOLD: classes of identical independent candidates (see DupActFold). `daf_twin`
+        // carries a VERIFY-mode flag from the mask test to the emit of the same position.
+        DupActFold daf;
+        BuildDupActFold(cands, independent, daf);
+        bool daf_twin = false;
         // Running "which digits are non-zero" mask, maintained by the carry below instead of
         // rebuilt per position -- see EquipPieceDepViolated's fast overload.
         std::uint64_t sel_mask = 0;
@@ -75787,12 +76662,21 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                                      && SubsetVampOutletInvalidPre(state, cands, s, /*fold_from_odometer=*/true, pre.vamp))
                                  { return false; }
                                  if (fso) { foldsel::g_from_odometer = true; }
+                                 if (daf_twin) { dupactfold::t_twin = true; }
                                  eval_and_push(s);
-                                 return false;
+                                 return enum_priced_stop;
+                             },
+                             // MTG_DUP_ACTION_FOLD: refuse (or, verifying, flag) a non-prefix class arrangement.
+                             [&](int imask) -> bool
+                             {
+                                 daf_twin = false;
+                                 if (!daf.on || !DupActNonCanonical(daf, static_cast<unsigned>(imask))) { return false; }
+                                 if (daf.verify) { daf_twin = true; return false; }
+                                 return true;
                              });
             done = true;
         }
-        while (!done)
+        while (!done && !enum_priced_stop)
         {
             // Fungible identical-Equipment copies: only the canonical (non-increasing) position of a
             // class emits. Tested before the mana fold -- a skipped position's aggregate is dead work.
@@ -75883,6 +76767,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             if (s_walk_diag && outer_ok) { ++wd_outer; }
             for (int imask = 0; outer_ok && imask < (1 << num_ind); ++imask)
             {
+                // MTG_DUP_ACTION_FOLD: a non-prefix arrangement of identical candidates (see DupActFold).
+                daf_twin = daf.on && DupActNonCanonical(daf, static_cast<unsigned>(imask));
+                if (daf_twin && !daf.verify) { continue; }
                 int pcost = 0, pgain = 0, pgy = 0, pblock = 0;
                 sel.clear();
                 // Auto-equip collapse: the forced free equips ride EVERY subset (first -- {0}-cost,
@@ -75926,6 +76813,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                     // a plan out of a position the bound refused is a soundness violation.
                     const std::size_t n_before = plans.size();
                     if (FoldSearchOdometerOn(state)) { foldsel::g_from_odometer = true; }
+                    if (daf_twin) { dupactfold::t_twin = true; }
                     eval_and_push(sel);
                     mcwalk::g_pruned.fetch_add(1, std::memory_order_relaxed);
                     if (plans.size() != n_before)
@@ -75961,7 +76849,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 // way), and VerifyFoldRecoverable builds the twin on every rejection -- so this is
                 // a claim to CHECK at runtime, not to argue.
                 if (FoldSearchOdometerOn(state)) { foldsel::g_from_odometer = true; }
+                if (daf_twin) { dupactfold::t_twin = true; }
                 eval_and_push(sel);
+                if (enum_priced_stop) { break; }
             }
             // RADIX CUT (MTG_EQUIP_DEP_SKIP): every position until digit `dep_cut` next changes
             // violates the same piece requirement. 0 = the ordinary step.
@@ -76029,13 +76919,23 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     }
     else
     {
-        EnumeratePlanPositions(cands, groups, independent, gate, mana_bound, *sidx, accel_order,
+        EnumeratePlanPositions(cands, groups, independent, auto_sel, pre.dup_source,
+                               gate, mana_bound, *sidx, accel_order,
                                any_splice, splice_collapse_on, accel_prefix_on && any_accel,
                                has_ind_accel, copy_class, equip_deps,
+                               /*sac_dup_live=*/pre.dup_source && (pre.dup_clause & kDupSacMana) != 0,
                                [](const std::vector<int>&) { return true; },
-                               eval_and_push);
+                               eval_and_push, [&]
+                               {
+                                   if (!enum_priced_stop && g_bp_enum_depth == 0 && decisionwork::PricedExceeded())
+                                   {
+                                       enum_priced_stop = true;
+                                   }
+                                   return enum_priced_stop;
+                               });
     }
 
+    if (enum_priced_stop) { return plans; }
     ds_on_push = nullptr;   // MTG_ENUM_DEDUP_STREAM: the walk is over (Plan B is never compacted)
     if (ds_on && s_ds_verify) { ds_mark(); }   // the verify judges every walk-emitted plan
     // --- Plan B: draw-early variants for Spectacle draw spells ---
@@ -76054,7 +76954,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // without consulting `groups`, so the cap never dropped any of its plans -- wave 0 emitted
     // them all, and re-emitting here would double-score them.
     const bool s_groupwave_tranche = (groupwave::g_state.tranche_rank >= 0);
-    for (int i = 0; !s_groupwave_tranche && i < m; ++i)
+    for (int i = 0; !s_groupwave_tranche && i < m
+                    && (g_bp_enum_depth > 0 || !decisionwork::PricedExceeded()); ++i)
     {
         const Action& c = cands[i];
         // A spectacle-enabling trigger is any burn that reaches the opponent's face this turn --
@@ -76116,6 +77017,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
 
         for (const TriggerCand* trigger : chosen_triggers)
         {
+            if (g_bp_enum_depth == 0 && decisionwork::PricedExceeded()) { break; }
             TurnSolver::Plan plan;
             int direct_dmg = 0;
             if (trigger)
@@ -76135,9 +77037,14 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             plan.value += draw.eval;
             plan.wins_this_turn = (pending_atk + direct_dmg) >= state.Opponent().life;
             plans.push_back(std::move(plan));
+            workctr::Inc(workctr::kPlanEmit);
         }
     }
 
+    if (g_bp_enum_depth == 0 && decisionwork::PricedExceeded())
+    {
+        return plans;
+    }
     // Sort so the highest-value plans are simulated first.  When a timeout fires
     // the search returns the best plan found so far, so we want the most promising
     // candidates evaluated before cheaper ones.
@@ -76265,6 +77172,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                         if (act.free_cast) { k += "#FREE"; }
                         const CardDefinition* const cd = act.def;
                         if (cd && cd->params.modal_choose_n > 0) { k += "#S"; k += std::to_string(act.chosen_x); }
+                        if (cd && cd->params.boros_charm_modal)
+                        { k += "#BC"; k += std::to_string(act.chosen_x); k += '/'; k += std::to_string(act.enchant_target); }
                         if (cd && cd->params.tooth_and_nail)
                         { k += "#TN"; k += std::to_string(act.chosen_x); k += act.tutor_target.str(); }
                         if (cd && cd->params.finale_of_devastation)
@@ -77073,6 +77982,23 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         for (char m : ds_marked) { nm += m ? 1 : 0; }
         dsverify::g_marked.fetch_add(static_cast<long long>(nm), std::memory_order_relaxed);
     }
+    // MTG_DUP_ACTION_FOLD_VERIFY: a twin the fold would have skipped must never survive the dedup.
+    if (dupactfold::VerifyOn())
+    {
+        for (TurnSolver::Plan& kp : deduped)
+        {
+            if (kp.land_tie_key != dupactfold::kTwinTag) { continue; }
+            if (dupactfold::g_kept.fetch_add(1, std::memory_order_relaxed) < 8)
+            {
+                std::string d;
+                for (const Action& a : kp.actions)
+                { d += a.card_name.str() + "(src" + std::to_string(a.sac_source_id) + ">" + std::to_string(a.sac_victim_id) + ") "; }
+                std::fprintf(stderr, "[dup-action-fold] KEPT twin t%d v=%g [%s]\n", state.turn_number,
+                             static_cast<double>(kp.value), d.c_str());
+            }
+            kp.land_tie_key = -1;
+        }
+    }
 
     // ROLLING EARTHQUAKE TOP-X (MTG_PD_QUAKE_TOP_X, ADOPTED default ON 2026-09-29, PROVISIONAL; USER doctrine 2026-09-29: "it makes
     // no sense to do less than the toughness of your creatures, assuming you have remaining mana").
@@ -77118,7 +78044,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             {
                 if (!any_quake) { break; }
                 if (q.controller_index != me || !q.card.IsCreature()) { continue; }
-                if (q.card.HasKeyword(Keyword::Indestructible)) { continue; }
+                if (q.HasKeyword(Keyword::Indestructible)) { continue; }
                 board_ceil = std::min(board_ceil, std::max(0, LethalToughness(q, state) - q.damage - 1));
             }
             // key (plan without the quake's X) -> (index of the best kept plan, its X)
@@ -77318,7 +78244,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 for (const Permanent& q : state.battlefield)
                 {
                     if (q.controller_index != me || !q.card.IsCreature()) { continue; }
-                    if (q.card.HasKeyword(Keyword::Indestructible)) { continue; }
+                    if (q.HasKeyword(Keyword::Indestructible)) { continue; }
                     board_ceil = std::min(board_ceil, std::max(0, LethalToughness(q, state) - q.damage - 1));
                 }
                 std::unordered_map<std::string, std::pair<std::size_t, int>> best;
@@ -87438,6 +88364,30 @@ static std::string VampDumpAction(const Action& a)
     if (a.equiv_tag) { s += " e" + std::to_string(a.equiv_tag) + "." + std::to_string(a.equiv_ord); }
     return s;
 }
+// MTG_SB_MAIN1_STATS=1 (DIAGNOSTIC, print-only, default off): how many root pre-combat plans the provider's
+// plan-level main-1 fold (Main1PlanFoldLive / Main1PlanAdmitted) saw and kept, printed at exit.
+namespace sbmain1
+{
+inline bool On() { static const bool on = EnvOn("MTG_SB_MAIN1_STATS"); return on; }
+inline std::atomic<long long> g_lists{0}, g_seen{0}, g_kept{0};
+inline void Note(std::size_t seen, std::size_t kept)
+{
+    g_lists.fetch_add(1, std::memory_order_relaxed);
+    g_seen.fetch_add(static_cast<long long>(seen), std::memory_order_relaxed);
+    g_kept.fetch_add(static_cast<long long>(kept), std::memory_order_relaxed);
+}
+struct Printer
+{
+    ~Printer()
+    {
+        if (!On()) { return; }
+        std::fprintf(stderr, "[sb-main1] folded lists=%lld plans seen=%lld kept=%lld dropped=%lld\n",
+                     g_lists.load(), g_seen.load(), g_kept.load(), g_seen.load() - g_kept.load());
+    }
+};
+inline Printer g_printer;
+}   // namespace sbmain1
+
 static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameState& state,
                                                                     bool is_pre_combat,
                                                                     PbLazyLayout* pb_lazy = nullptr)
@@ -87467,6 +88417,36 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
             kept.reserve(all.size());
             for (TurnSolver::Plan& p : all) { if (!p.land_to_play.empty()) { kept.push_back(std::move(p)); } }
             if (!kept.empty()) { all.swap(kept); }
+        }
+    }
+    // A PROVIDER'S PLAN-LEVEL MAIN-1 FOLD (DecisionProvider::Main1PlanFoldLive / Main1PlanAdmitted; Shadowborn's
+    // USER main-1 rule, MTG_SB_MAIN1_RULE). ROOT pre-combat enumeration only: a breakpoint continuation's list
+    // (g_bp_enum_depth > 0, or a greedy continuation's scope) belongs to a main-1 plan the fold already admitted,
+    // so it is never filtered. Searched play only (the depth-0 runner keeps the full menu, as the Fungus split
+    // does), never in human play, only on a deck that plays a second main (the dropped plans' twins live there).
+    if (is_pre_combat && !all.empty() && !HumanPlayActive() && SearchedPlayActive() && state.uses_second_main
+        && g_bp_enum_depth == 0 && !TurnSolver::InBpContinuation())
+    {
+        const DecisionProvider& mprov = ResolveProvider(state);
+        if (mprov.Main1PlanFoldLive(state))
+        {
+            if (pb_lazy != nullptr) { PbLazyMaterialize(all, *pb_lazy); }
+            std::vector<char> admit(all.size(), 0);
+            std::size_t n_admit = 0;
+            for (std::size_t i = 0; i < all.size(); ++i)
+            {
+                const TurnSolver::Plan& p = all[i];
+                if (p.actions.empty() || mprov.Main1PlanAdmitted(state, p.actions, p.land_to_play))
+                { admit[i] = 1; ++n_admit; }
+            }
+            if (sbmain1::On()) { sbmain1::Note(all.size(), n_admit); }
+            if (n_admit > 0 && n_admit < all.size())
+            {
+                std::size_t w = 0;
+                for (std::size_t i = 0; i < all.size(); ++i)
+                { if (admit[i]) { if (w != i) { all[w] = std::move(all[i]); } ++w; } }
+                all.resize(w);
+            }
         }
     }
     // MTG_VAMP_PLAN_DUMP=<min plans> (inert by default; Vampires Stage 5f): print every enumeration of at
@@ -88185,7 +89165,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
             add_for_land(ln, "", "back");
             continue;
         }
-        if (ld && !ld->params.fetch_land_types.empty())
+        if (ld && FetchResolvesOnPlay(state, *ld))
         {
             std::vector<std::string> cands =
                 ResolveProvider(state).FetchCandidates(state, state.active_player_index, ld->params);
@@ -88239,7 +89219,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
                 if (tl->card.IsLand()) { add_for_land(tn, "", "front", true); }
                 add_for_land(tn, "", "back", true);
             }
-            else if (tl && !tl->params.fetch_land_types.empty())
+            else if (tl && FetchResolvesOnPlay(state, *tl))
             {
                 // The SAME fetch fan as a hand fetchland (FetchCandidates, narrowed by the provider's
                 // FetchSearchCandidates outside the unpruned audit and human play).
@@ -89573,19 +90553,21 @@ static inline void PlanCacheNoteHit(int cat)
 // the ceiling's trip point and play (regression tier, default vs MTG_PLAN_CACHE_KB=1: 6 job digests, 3 win
 // turns, 14 games' units; identical at X=0; docs/design/tier2-cache-overflow.md, last section).
 //
-// THE RULE: t_priced counts what it would count with an UNLIMITED plan cache -- the byte pool never refusing,
-// no pressure clears -- which is what a large box does today, so the X=100 calibration and ground truth hold
-// wherever nothing is refused. Per worker thread, a SHADOW of each cache's KEY STRUCTURE (64-bit key -> a flag
-// byte, no plans) replays that cache's unlimited-world store rule: the same count caps and clears, the same
-// epoch/game scope (all three plan caches are cleared per game in ClearPerGameCaches, so the unlimited world
-// is per game and independent of batch order), and every storable computation stored. Each lookup asks the
+// THE RULE: t_priced counts what it would count with a deterministic virtual plan cache -- the byte pool never
+// changes its admissions based on RAM pressure or other workers. It declines a derivation that emitted more
+// than MTG_PLAN_PRICED_LEDGER_MAX_EMITS raw plans while a finite priced decision is armed: Melira's costly
+// derivations can return small deduplicated lists, yet their repeated builds left one decision 23x over its
+// priced limit. At budget 0 the virtual cache remains unlimited, and the new price cannot change play.
+// Per worker thread, a SHADOW of each cache's KEY STRUCTURE (64-bit key -> a flag byte, no plans) replays
+// count caps and clears and the fixed admission test. The three shadows clear per game, so the virtual
+// cache is independent of batch order. Each lookup asks the
 // shadow first:
-//   * shadow HIT (an entry the unlimited cache would serve, CacheHitCharge's mode-1 test): free, as today. The
+//   * shadow HIT (an entry the virtual cache would serve, CacheHitCharge's mode-1 test): free, as today. The
 //     real cache serves it if it holds it; if not (refused / cleared under pressure) the recompute runs with
-//     workctr MUTED, so it counts nothing, and stores nothing in the shadow -- in the unlimited world it, and
+//     workctr MUTED, so it counts nothing, and stores nothing in the shadow -- in the virtual world it, and
 //     every lookup nested in it, never ran.
-//   * shadow MISS: a real hit is NOT served (the unlimited world recomputes here, and counts it); the
-//     computation runs counted and the shadow records it by the unlimited store rule.
+//   * shadow MISS: a real hit is NOT served (the virtual world recomputes here, and counts it); the
+//     computation runs counted and the shadow records it by the fixed admission rule.
 // Nested lookups inside a muted recompute serve a real hit when there is one and otherwise compute; they touch
 // no shadow, so their first counted lookup later is still a miss. Real-cache stores are left as they are (a
 // real entry the shadow lacks is never served, so it cannot move a count).
@@ -89595,6 +90577,21 @@ static inline void PlanCacheNoteHit(int cat)
 static bool BpEnumEpochScoped();   // defined with the bp cache, below
 namespace pledger
 {
+inline int MaxEmits()
+{
+    // The virtual cache declines computations with a giant raw-plan fan, even when dedup makes the
+    // returned list small. A fixed count is independent of the RAM cap and other workers. At an unlimited
+    // decision root the priced ceiling is disarmed, so the original unlimited shadow is retained.
+    if (decisionwork::t_pr_limit <= 0) { return 0; }
+    static const int env = std::max(0, EnvInt("MTG_PLAN_PRICED_LEDGER_MAX_EMITS", 100000));
+    const int arm = valuearm::t_arm.plan_priced_ledger_max_emits;
+    return arm >= 0 ? arm : env;
+}
+inline bool FitsWork(std::size_t nplans, long long emitted)
+{
+    const int lim = MaxEmits();
+    return lim == 0 || (nplans <= static_cast<std::size_t>(lim) && emitted <= lim);
+}
 inline bool On()
 {
     static const bool v = EnvOn("MTG_PLAN_PRICED_LEDGER", true) && cachecharge::Mode() == 1
@@ -89631,7 +90628,7 @@ inline void NotePeak()
     long long p = g_peak.load(std::memory_order_relaxed);
     while (n > p && !g_peak.compare_exchange_weak(p, n, std::memory_order_relaxed)) {}
 }
-// RAII: armed => everything until scope exit is the unlimited world's free hit (counts nothing).
+// RAII: armed => everything until scope exit is a virtual-cache hit (counts nothing).
 struct Mute
 {
     bool on = false;
@@ -89656,13 +90653,15 @@ struct Dump
 };
 inline Dump g_dump;
 }   // namespace pledger
-// The enum memo's store rule with no byte budget, on its shadow: a first visit leaves a marker (clearing the
-// whole map at the entry cap, as the real cache does), a second visit promotes a storable computation.
-static void PledgerEnumStore(std::uint64_t lk, bool found, const cachecharge::Cost& c)
+// The enum memo's virtual store rule: a first visit leaves a marker (clearing the whole map at the entry cap,
+// as the real cache does), a second visit promotes only a storable, affordable derivation.
+static void PledgerEnumStore(std::uint64_t lk, bool found, const cachecharge::Cost& c,
+                            std::size_t nplans, long long emitted)
 {
     if (found)
     {
-        if (c.storable) { pledger::t_enum[lk] = pledger::FlagsOf(c); }
+        if (c.storable && pledger::FitsWork(nplans, emitted))
+        { pledger::t_enum[lk] = pledger::FlagsOf(c); }
         return;
     }
     if (pledger::t_enum.size() >= enummemo::Cap()) { pledger::t_enum.clear(); }
@@ -89883,7 +90882,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
         return it->second.plans;
     }
 
-    if (sh_hit) { led_mute.Arm(); }   // MTG_PLAN_PRICED_LEDGER: a free hit in the unlimited world
+    if (sh_hit) { led_mute.Arm(); }   // MTG_PLAN_PRICED_LEDGER: a free virtual-cache hit
     enummemo::g_misses.fetch_add(1, std::memory_order_relaxed);
     const bool second_visit = (it != cache.end() && it->second.epoch == g_decision_epoch);
     if (second_visit && enummemo::StatsOn()) { enummemo::g_second.fetch_add(1, std::memory_order_relaxed); }
@@ -89893,9 +90892,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
     const unsigned long long trunc_before = g_fs_trunc_events;
     const long long m1_u0 = gamework::t_used;
     const std::uint64_t m1_ctx = pccv::On() ? PlanCacheCtxBits() : 0;   // MTG_PLAN_CACHE_COST_VERIFY
+    const long long m1_emit0 = workctr::t_n[workctr::kPlanEmit];
     cachecharge::Scope m1_ccs;
     std::vector<TurnSolver::Plan> plans;
     { enummemo::BodyScope body; plans = EnumeratePlansWithLandUncached(state, is_pre_combat, pb_lazy); }
+    const long long m1_emitted = workctr::t_n[workctr::kPlanEmit] - m1_emit0;
     cachecharge::Cost m1_cost = m1_ccs.Done();
     m1_cost.ctx = m1_ctx;
     PlanCacheNoteComputation(plancache::kCatM1, gamework::t_used - m1_u0);
@@ -89978,8 +90979,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
     // A VOID game (the per-game backstop fired: gamework::Poll) stores nothing -- a route walk cut inside
     // this enumeration's CollectActions made the list a function of the cut. Always false unless a unit
     // ceiling or a wall cap is armed.
-    if (gamework::Abandoned()) { return plans; }
-    if (led && !led_mute.on) { PledgerEnumStore(lk, sh_found, m1_cost); }   // the unlimited store rule
+    if (gamework::Abandoned() || decisionwork::PricedExceeded()) { return plans; }
+    if (led && !led_mute.on)
+    { PledgerEnumStore(lk, sh_found, m1_cost, plans.size() + (lazy_now ? pb_lazy->P : 0), m1_emitted); }
     if (second_visit)
     {
         // Second visit this decision: the state provably recurs -- promote to full storage,
@@ -90134,7 +91136,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansM2Memoized(const GameState& s
         return it->second.plans;
     }
 
-    if (sh_hit) { led_mute.Arm(); }   // MTG_PLAN_PRICED_LEDGER: a free hit in the unlimited world
+    if (sh_hit) { led_mute.Arm(); }   // MTG_PLAN_PRICED_LEDGER: a free virtual-cache hit
     enummemo::g_misses.fetch_add(1, std::memory_order_relaxed);
     const bool second_visit = (it != cache.end() && it->second.epoch == g_decision_epoch);
     const int saved_md = groupwave::g_state.max_dropped;
@@ -90148,9 +91150,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlansM2Memoized(const GameState& s
     const bool m2_lazy = ((led && !led_mute.on) ? sh_found : second_visit) && BpLazyCandsOn();
     const long long m2_u0 = gamework::t_used;
     const std::uint64_t m2_ctx = pccv::On() ? PlanCacheCtxBits() : 0;   // MTG_PLAN_CACHE_COST_VERIFY
+    const long long m2_emit0 = workctr::t_n[workctr::kPlanEmit];
     cachecharge::Scope m2_ccs;
     std::vector<TurnSolver::Plan> plans;
     { enummemo::BodyScope body; plans = EnumerateM2PlansBody(state, m2_lazy ? &m2_lz : nullptr); }
+    const long long m2_emitted = workctr::t_n[workctr::kPlanEmit] - m2_emit0;
     cachecharge::Cost m2_cost = m2_ccs.Done();
     m2_cost.ctx = m2_ctx;
     PlanCacheNoteComputation(plancache::kCatM2, gamework::t_used - m2_u0);
@@ -90159,9 +91163,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlansM2Memoized(const GameState& s
     const uint32_t own_trunc = static_cast<uint32_t>(g_fs_trunc_events - trunc_before);
     const int own_md = groupwave::g_state.max_dropped;
     groupwave::g_state.max_dropped = std::max(saved_md, own_md);
-    if (gamework::Abandoned())   // a VOID game stores nothing (see the m1 host)
+    if (gamework::Abandoned() || decisionwork::PricedExceeded())   // interrupted lists are never stored
     { if (m2_lz.active) { PbLazyMaterialize(plans, m2_lz); } return plans; }
-    if (led && !led_mute.on) { PledgerEnumStore(lk, sh_found, m2_cost); }   // the unlimited store rule
+    if (led && !led_mute.on)
+    { PledgerEnumStore(lk, sh_found, m2_cost, plans.size() + (m2_lz.active ? m2_lz.P : 0), m2_emitted); }
     if (second_visit)
     {
         // Same byte-budget gate as the m1 host above (over budget: stay a marker, recompute).
@@ -90391,6 +91396,9 @@ void TurnSolver::ClearPerGameCaches()
     // The EDF combo route's board-keyed trial memo -- same channel, see EdfComboRouteClearMemo.
     EdfComboRouteClearMemo();
     AlchemistComboRouteClearMemo();
+    FluctKeepPayableClearMemo();               // Fluctuator's keep-needed payability memo
+    g_incinerator_pin_cursor = 0;              // advances unpinned on every Incinerator trigger (see BuildBreakpointKey)
+    manaoracle::ClearRefineMemoPerGame();      // the mana oracle's payment-refine memo
     // The hybrid's per-game learned cost model (emulated ladder R/G, single-pass R, research R).
     HybridLearnedStateClear();
     // The payable-mana cache (SpellEffects.cpp): pure in design, but every key hole it has had was a
@@ -90568,6 +91576,8 @@ static TranspositionTable::Key BuildSimKeyBase(const GameState& state, int max_t
     Fold(k, static_cast<uint64_t>(state.active_player_index));
     Fold(k, state.on_the_play ? 1u : 0u);
     Fold(k, state.opponent_lost_life_this_turn ? 1u : 0u);
+    if (state.players_cant_gain_life_this_turn) { Fold(k, 0x5C011); }
+    if (state.damage_cant_be_prevented_this_turn) { Fold(k, 0x5C012); }
     if (state.deck_tracks_noncombat_damage)
     {
         Fold(k, 0x1C1DE); Fold(k, state.noncombat_damage_received_this_turn[0]);
@@ -91291,6 +92301,7 @@ static TranspositionTable::Key BuildSimKeyBase(const GameState& state, int max_t
         if (perm.temp_haste)   { Fold(tk, 0x7A57E); }
         if (perm.temp_lifelink){ Fold(tk, 0x11FE11); }   // Heliod's until-EOT lifelink grant
         if (perm.temp_double_strike) { Fold(tk, 0x2D5D5); }   // Valiant Knight's until-EOT grant
+        if (perm.temp_indestructible) { Fold(tk, 0x1D357); }  // Boros Charm until-EOT grant
         // Soulbond pair (Silverblade Paladin). NONZERO-gated, so every deck without soulbond keeps
         // its exact prior key. Future-determining: which creature is paired decides which body
         // double-strikes for the rest of the game, so two boards differing only in the partner are
@@ -95154,6 +96165,47 @@ static void DvsRecordDirtyKeys(const FSLineCache* lc, const TranspositionTable::
     }
 }
 
+// Multiple Reefs plus land search can retain several gigabytes of live candidate state while
+// its searched line is scored. Many such lines at once exhausted the 20 GB generation cap
+// even though each line completed alone. Admit the expensive search window by RAM capacity,
+// while unrelated workers remain active. This guard is recursive on a worker: a child search
+// shares its parent's permit, and the permit is returned only when the outer frame unwinds.
+namespace heavyfangate
+{
+inline thread_local bool t_held = false;
+inline bool On() { static const bool on = EnvOn("MTG_HEAVY_FAN_GATE", true); return on; } // DEFAULT ON; =0 restores full overlap
+inline bool Risk(const GameState& state)
+{
+    if (!state.deck_has_look_top_watcher || !state.deck_has_land_search) { return false; }
+    int watchers = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.enters_look_top_land_or_hand && ++watchers >= 2) { return true; }
+    }
+    return false;
+}
+inline std::counting_semaphore<64>& Slots()
+{
+    const long long cap = membudget::RssCapBytes();
+    static std::counting_semaphore<64> slots(static_cast<std::ptrdiff_t>(
+        std::clamp<long long>(cap / (8LL << 30), 1, 64)));
+    return slots;
+}
+struct Frame
+{
+    bool owner = false;
+    explicit Frame(const GameState& state)
+    {
+        if (!On() || t_held || membudget::RssCapBytes() <= 0 || !Risk(state)) { return; }
+        Slots().acquire();
+        t_held = owner = true;
+    }
+    ~Frame() { if (owner) { t_held = false; Slots().release(); } }
+};
+}
+
 static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int max_turns,
                                         int cutoff, bool second_main, TranspositionTable* tt,
                                         FSLineCache* lc, SearchBudget* budget);
@@ -97421,6 +98473,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                                         int cutoff, bool second_main, TranspositionTable* tt,
                                         FSLineCache* lc, SearchBudget* budget)
 {
+    const heavyfangate::Frame _hfg(state);
     if (state.turn_number > max_turns) { return { max_turns + 1, {} }; }
     if (state.turn_number > cutoff)    { ++g_fs_cut_prunes; return { max_turns + 1, {} }; }  // can't beat incumbent
     const pastcut::CutFrame _pcf(cutoff);   // MTG_FSL_PASTCUT_PROBE: this node's cutoff, for FSLineStoreWin
@@ -102594,6 +103647,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
     // The PRICED ceiling (MTG_DECISION_PRICED_X, default 0 = off; DecisionWorkMeter.h): same root, same
     // trip path, but in real-cost currency, so a decision whose work the unit misses is bounded too.
     decisionwork::PricedScope _dwp_fs(fs_decision_root ? decisionwork::PricedLimitNs(budget->Limit()) : 0);
+    pricedbudget::Scope _pb_fs(fs_decision_root);   // MTG_PRICED_BUDGET: bill this decision only its own work
     // PER-DECISION WORK CENSUS (MTG_TURN_CENSUS; TurnCensus.h). Hung on the SAME root predicate as
     // the work ceiling above, deliberately: the ceiling's root is the definition of "one real
     // decision" this engine already commits to, and a census with its own notion of a decision
@@ -104980,6 +106034,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                                                   int* out_committed_win,
                                                   int* out_committed_sub_depth)
 {
+    const heavyfangate::Frame _hfg(state);
     if (enforce_budget) { g_solve_committed_tb = leafeval::kInvalid; }   // see LastCommittedTieBreak
     RevealLogPause _rlp;  // planning: suppress scry/dig reveal logging (real play only)
     routetape::Suspend _rts;   // see TurnSolver::Solve
@@ -105021,6 +106076,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
     decisionwork::Scope _dws((decision_root && s_decision_work_x > 0)
                              ? budget->Limit() * s_decision_work_x : 0);
     decisionwork::PricedScope _dwp(decision_root ? decisionwork::PricedLimitNs(budget->Limit()) : 0);   // see the hybrid root's twin
+    pricedbudget::Scope _pb(decision_root);   // MTG_PRICED_BUDGET (see the hybrid root's twin)
     // PER-DECISION WORK CENSUS -- see the twin in FullSearchLineHybrid. root=1 is this host.
     if (decision_root && turncensus::On()) { turncensus::t_board = CensusBoardDesc(state); }
     turncensus::Scope _tc(decision_root, state.game_seed, state.turn_number,
@@ -108202,8 +109258,15 @@ static TranspositionTable::Key BuildBreakpointKey(const GameState& state, bool i
         for (const auto& e : state.pending_incinerator_damage)
         { Fold(k, e.source.m_number); Fold(k, e.source.m_name_hash); Fold(k, e.controller); Fold(k, e.damaged_player); Fold(k, e.amount); }
         Fold(k, state.noncombat_trigger_depth);
-        Fold(k, static_cast<uint64_t>(g_incinerator_pin_cursor));
-        if (g_incinerator_pins) { for (int id : *g_incinerator_pins) { Fold(k, id); } }
+        // The cursor only means something while pins are installed (it indexes them); with none it still advances
+        // on every resolved trigger and outlives the game on the worker thread, so folding it unconditionally made
+        // identical states key apart by how many Incinerator triggers EARLIER GAMES resolved -- pure caches, but
+        // their hit rates (and the priced work the budget reads) then depended on batch order (2026-11-04).
+        if (g_incinerator_pins)
+        {
+            Fold(k, static_cast<uint64_t>(g_incinerator_pin_cursor));
+            for (int id : *g_incinerator_pins) { Fold(k, id); }
+        }
     }
 
     Fold(k, static_cast<uint64_t>(state.casts_remaining_this_turn + 1));   // -1 == unset
@@ -111147,6 +112210,7 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
     PbLazyLayout plans_lz;   // M1: the list's lazy blocks and its selection (BpEnumEntry)
     CandOrder    plans_ord;
     const long long bp_u0 = gamework::t_used;
+    const long long bp_emit0 = workctr::t_n[workctr::kPlanEmit];
     const std::uint64_t bp_ctx = pccv::On() ? PlanCacheCtxBits() : 0;   // MTG_PLAN_CACHE_COST_VERIFY
     cachecharge::Scope bp_ccs;   // MTG_CACHE_HIT_CHARGE: what this derivation charges, by budget
     const BpSide bp_side = BpSideBegin();
@@ -111156,6 +112220,7 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
                                                                   /*count_stats=*/true, &demoted,
                                                                   /*front_only=*/false, &bp_interrupted,
                                                                   &plans_lz, &plans_ord);
+    const long long bp_emitted = workctr::t_n[workctr::kPlanEmit] - bp_emit0;
     bp_chan.Restore();
     // MTG_BP_TUTOR_PIN_ALIAS: did the derivation read the watched tutor pin? (Closed here, before the
     // store path builds any diagnostic key.)
@@ -111304,7 +112369,8 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
 
     // MTG_PLAN_PRICED_LEDGER: the unlimited cache's store rule on its shadow -- the entry cap's wholesale clear,
     // never the byte pool's -- for a COUNTED derivation only (a muted one never ran in that world).
-    if (led && !led_mute.on && !bp_interrupted && !aa_cut_inside && bp_cost.storable)
+    if (led && !led_mute.on && !bp_interrupted && !aa_cut_inside && bp_cost.storable
+        && pledger::FitsWork(plans.size() + (plans_lz.active ? plans_lz.P : 0), bp_emitted))
     {
         if (pledger::t_bp.size() >= s_bp_enum_cap) { pledger::t_bp.clear(); }
         const bool to_alias = alias_ok && pin_unread;
@@ -111601,7 +112667,7 @@ static bool BpCanonFront(const GameState& state, bool is_pre_combat, TurnSolver:
         // MTG_BP_TUTOR_PIN_ALIAS: a full list filed under the pin-cleared key (derived without reading the
         // pin, so valid under this one) serves the canon exactly as an exact-key entry does.
         // Under the ledger the alias key is built when EITHER cache lacks the exact key, and its build is
-        // counted only when the unlimited one does (it builds it exactly when it lacks the key).
+        // counted only when the virtual cache does (it builds it exactly when it lacks the key).
         if ((it == bpcache::t_plans.end() || (led && !sh_found))
             && g_scripted_tutor_choice >= 0 && tutorpinalias::On())
         {
@@ -111667,11 +112733,12 @@ static bool BpCanonFront(const GameState& state, bool is_pre_combat, TurnSolver:
             return true;
         }
     }
-    if (sh_hit) { led_mute.Arm(); }   // MTG_PLAN_PRICED_LEDGER: a free hit in the unlimited world
+    if (sh_hit) { led_mute.Arm(); }   // MTG_PLAN_PRICED_LEDGER: a free virtual-cache hit
     const std::uint64_t aa_cuts0 = AlchemistComboRouteCuts();   // see BpEnumEntryFor's twin
     // An INTERRUPTED derivation (the per-game backstop, or MTG_BP_DERIVE_METER=2) returns EMPTY: served, never
     // stored -- BpEnumEntryFor's rule, which this twin did not apply until the backstop could interrupt here.
     bool bp_interrupted = false;
+    const long long fr_emit0 = workctr::t_n[workctr::kPlanEmit];
     cachecharge::Scope fr_ccs;   // MTG_CACHE_HIT_CHARGE
     const BpSide fr_side = BpSideBegin();
     BpChannels fr_chan;   // MTG_BP_DERIVE_ISOLATE
@@ -111679,6 +112746,7 @@ static bool BpCanonFront(const GameState& state, bool is_pre_combat, TurnSolver:
     std::vector<TurnSolver::Plan> plans =
         BpDeriveContinuationList(state, is_pre_combat, /*count_stats=*/true, /*demoted_out=*/nullptr,
                                  /*front_only=*/true, &bp_interrupted);
+    const long long fr_emitted = workctr::t_n[workctr::kPlanEmit] - fr_emit0;
     fr_chan.Restore();
     cachecharge::Cost fr_cost = fr_ccs.Done();
     BpSideEnd(fr_side, fr_cost);
@@ -111700,7 +112768,8 @@ static bool BpCanonFront(const GameState& state, bool is_pre_combat, TurnSolver:
     }
     static const std::size_t s_cap = static_cast<std::size_t>(
         std::max(1, EnvInt("MTG_BP_CANON_FRONT_CAP", 16384)));
-    if (led && !led_mute.on && !aa_cut_inside && !bp_interrupted && fr_cost.storable)
+    if (led && !led_mute.on && !aa_cut_inside && !bp_interrupted && fr_cost.storable
+        && pledger::FitsWork(plans.size(), fr_emitted))
     {   // MTG_PLAN_PRICED_LEDGER: the shadow's store, as below (this memo has no byte budget of its own)
         if (pledger::t_front.size() >= s_cap) { pledger::t_front.clear(); }
         pledger::t_front[pledger::K(key)] = pledger::FlagsOf(fr_cost);
@@ -113631,6 +114700,7 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
             // BOTH conditions are load-bearing and they were fixed independently (2026-09-03): widen
             // the HOST to any permanent, and keep loyalty OUT of this path entirely.
             if (a.enchant_target > 0 && !is_trick && !is_attach_spell && a.kind != Action::Kind::ActivateLoyalty
+                && !(a.def && a.def->params.boros_charm_modal)
                 && !(a.kind == Action::Kind::GraveyardExileAbility && a.gy_exile_mode == 3))
             {
                 std::string art;
@@ -113663,7 +114733,23 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
             // modes out, so the dialog reads as an explicit list of what each split actually does.
             const CardDefinition* mdef = CardDatabase::Instance().LookupInterned(a.card_name);
             const bool is_modal = mdef && mdef->params.modal_choose_n > 0;
-            if (is_modal && a.chosen_x >= 0)
+            if (mdef && mdef->params.boros_charm_modal)
+            {
+                const std::string mode = a.chosen_x == 1 ? "Deal 4 damage"
+                                       : a.chosen_x == 2 ? "Your permanents gain indestructible"
+                                       : "Target creature gains double strike";
+                addSub(a.card_name + " " + mode, a.card_name + " mode",
+                       mode, a.card_name, "borosmode");
+                if (a.chosen_x != 2)
+                {
+                    const std::string target = a.enchant_target == 0 ? "opponent"
+                                             : a.enchant_target == -1 ? "you"
+                                             : SubChoiceAuraHostLabel(state, a.enchant_target);
+                    addSub(a.card_name + " targets " + target, a.card_name + " target",
+                           target, a.card_name, "borostarget", a.enchant_target);
+                }
+            }
+            else if (is_modal && a.chosen_x >= 0)
             {
                 const int n     = mdef->params.modal_choose_n;
                 const int dmg   = a.chosen_x * mdef->params.modal_damage_per_choice;
@@ -115942,7 +117028,8 @@ static long long MtgTurnCensusShapeSum(std::atomic<std::uint64_t> shapestats::Sl
     X(w_odo,              workctr::t_n[workctr::kOdoVisit])                                       \
     X(w_apply,            workctr::t_n[workctr::kApply])                                          \
     X(w_pay,              workctr::t_n[workctr::kPay])                                            \
-    X(w_simkey,           workctr::t_n[workctr::kSimKey])
+    X(w_simkey,           workctr::t_n[workctr::kSimKey])                                         \
+    X(w_plan_emit,        workctr::t_n[workctr::kPlanEmit])
 
 const std::vector<const char*>& turncensus::FieldNames()
 {

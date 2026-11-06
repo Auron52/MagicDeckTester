@@ -215,6 +215,29 @@ function checkSacrificeDimension() {
   return fails;
 }
 
+function checkBorosCharmDimensions() {
+  const mode = (choice) => ({ key:'Boros Charm mode', choice, card:'Boros Charm', kind:'borosmode' });
+  const target = (choice, num) => ({ key:'Boros Charm target', choice, card:'Boros Charm', kind:'borostarget', num });
+  const variants = [
+    {subs:[mode('Deal 4 damage'), target('opponent', 0)]},
+    {subs:[mode('Deal 4 damage'), target('you', -1)]},
+    {subs:[mode('Your permanents gain indestructible')]},
+    {subs:[mode('Target creature gains double strike'), target('Monastery Swiftspear', 11)]},
+    {subs:[mode('Target creature gains double strike'), target('Goblin Guide', 12)]},
+  ];
+  const fails = [];
+  const first = LB.nextDimension(variants);
+  if (!first || first.dim.kind !== 'borosmode' || first.choices.length !== 3)
+    fails.push('Boros Charm must ask for its three modes first');
+  const damage = LB.nextDimension(LB.filterByChoice(variants, 'Boros Charm mode', 'Deal 4 damage'));
+  if (!damage || damage.dim.kind !== 'borostarget' || damage.choices.map(c=>c.num).join(',') !== '0,-1')
+    fails.push('the damage mode must offer both player targets');
+  const strike = LB.nextDimension(LB.filterByChoice(variants, 'Boros Charm mode', 'Target creature gains double strike'));
+  if (!strike || strike.dim.kind !== 'borostarget' || strike.choices.map(c=>c.num).join(',') !== '11,12')
+    fails.push('the double-strike mode must offer the board creatures by identity');
+  return fails;
+}
+
 // ---- A MIXED variant set is still walked, never dumped flat ----------------------------------
 // Some variants of a line carry a dimension and others simply do not: "cast Bonesplitter" versus
 // "cast Bonesplitter AND equip the copy in play" is the shape that got reported (KittyEquipment
@@ -440,6 +463,71 @@ function checkMultipleSuspends() {
   plan = LB.toggleSuspend(twoReal, plan, 'Rift Bolt');
   if (plan.length !== 1 || plan[0].kind !== 'nonpermanent')
     fails.push('suspend used a copy already queued as a cast, or removed that cast');
+  return fails;
+}
+
+function checkFetchSuspendRoute() {
+  const fails = [];
+  const land = { name: 'Wooded Foothills', kind: 'land' };
+  const suspend = { name: 'Rift Bolt', kind: 'suspend' };
+  const decision = { plans: [{ land: land.name, actions: [
+    { card: land.name, verb: 'landsearch', activate: true, fetch_mana: true }
+  ] }] };
+  const route = LB.fetchSuspendRoute(decision, [land, suspend]);
+  const want = ['land=Wooded Foothills', 'landsearch=Wooded Foothills', 'suspend=Rift Bolt'];
+  if (!route || JSON.stringify(LB.encodeSegments(route)) !== JSON.stringify(want))
+    fails.push(`fetch, crack, suspend route: ${route && JSON.stringify(LB.encodeSegments(route))}`);
+  if (LB.fetchSuspendRoute({ plans: [] }, [land, suspend]) !== null)
+    fails.push('offered a fetch route without an enumerated activation');
+  const bolt = { name: 'Lightning Bolt', kind: 'nonpermanent' };
+  const castRoute = LB.fetchAutoRoute(decision, [land, bolt], 'illegal',
+    "can't pay for 'Lightning Bolt': no untapped source produces red mana");
+  const castWant = ['land=Wooded Foothills', 'landsearch=Wooded Foothills', 'cast=Lightning Bolt'];
+  if (!castRoute || JSON.stringify(LB.encodeSegments(castRoute)) !== JSON.stringify(castWant))
+    fails.push(`fetch, crack, cast route: ${castRoute && JSON.stringify(LB.encodeSegments(castRoute))}`);
+  const burnRoute = LB.fetchAutoRoute({ plans: [{ land: 'Arid Mesa', actions: [
+    { card: 'Arid Mesa', verb: 'landsearch', activate: true, fetch_mana: true }
+  ] }] }, [
+    { name: 'Arid Mesa', kind: 'land' },
+    { name: 'Monastery Swiftspear', kind: 'permanent' },
+    { name: 'Goblin Guide', kind: 'permanent' }
+  ], 'illegal', "can't pay {R} for 'Goblin Guide' with the mana available this phase");
+  const burnWant = ['land=Arid Mesa', 'landsearch=Arid Mesa',
+                    'cast=Monastery Swiftspear;cast=Goblin Guide'];
+  if (!burnRoute || JSON.stringify(LB.encodeSegments(burnRoute)) !== JSON.stringify(burnWant))
+    fails.push(`Modern RW Burn seed 5 T2 did not crack Mesa between the land drop and two casts: ${burnRoute && JSON.stringify(LB.encodeSegments(burnRoute))}`);
+  if (LB.fetchAutoRoute(decision, [land, bolt], 'illegal', 'invalid target') !== null
+      || LB.fetchAutoRoute(decision, [land, bolt], 'accept', '') !== null)
+    fails.push('auto-cracked a fetch for a line that did not fail its mana payment');
+  if (!LB.fetchAutoRoute(decision, [land, suspend], 'legal_not_enumerated', ''))
+    fails.push('did not auto-crack for the fetchland suspend gap');
+  const boardDecision = { me: { battlefield: [{ name: land.name }] }, plans: [
+    { actions: [{ card: land.name, verb: 'landsearch', activate: true, fetch_mana: true }] }
+  ] };
+  const boardRoute = LB.fetchAutoRoute(boardDecision, [bolt], 'illegal',
+    "can't pay for 'Lightning Bolt': no untapped source produces red mana");
+  if (!boardRoute || JSON.stringify(LB.encodeSegments(boardRoute))
+      !== JSON.stringify(['landsearch=Wooded Foothills', 'cast=Lightning Bolt']))
+    fails.push('did not crack a held fetch before the queued cast');
+  const manualCrack = { name: land.name, src: land.name, kind: 'activate', verb: 'landsearch' };
+  const manualRoute = LB.fetchAutoRoute(boardDecision, [manualCrack, bolt], 'illegal',
+    "can't pay for 'Lightning Bolt': no untapped source produces red mana");
+  if (!manualRoute || JSON.stringify(LB.encodeSegments(manualRoute))
+      !== JSON.stringify(['landsearch=Wooded Foothills', 'cast=Lightning Bolt'])
+      || manualRoute.filter(p=>p.verb==='landsearch').length !== 1)
+    fails.push('manual fetch crack was duplicated instead of split before the cast');
+  const playedManual = LB.fetchAutoRoute(decision, [land, manualCrack, bolt], 'illegal',
+    "can't pay for 'Lightning Bolt': no untapped source produces red mana");
+  if (!playedManual || JSON.stringify(LB.encodeSegments(playedManual))
+      !== JSON.stringify(['land=Wooded Foothills', 'landsearch=Wooded Foothills', 'cast=Lightning Bolt'])
+      || playedManual.filter(p=>p.verb==='landsearch').length !== 1)
+    fails.push('newly played fetch duplicated its explicitly queued crack');
+  const tappedBasic = { plans: [{ land: 'Evolving Wilds', actions: [
+    { card: 'Evolving Wilds', verb: 'landsearch', activate: true }
+  ] }] };
+  if (LB.fetchAutoRoute(tappedBasic, [{ name: 'Evolving Wilds', kind: 'land' }, bolt],
+    'illegal', "can't pay for 'Lightning Bolt'") !== null)
+    fails.push('treated a tapped-basic search as same-turn mana');
   return fails;
 }
 
@@ -1114,6 +1202,10 @@ function main() {
   sacFails.forEach(m => console.log(`  FAIL  sacrifice dimension: ${m}`));
   console.log(`Viewer sacrifice picker: ${sacFails.length ? 'WRONG' : 'victim asked first, then the fetch target'} ` +
               `(${sacFails.length} FAIL)`);
+  const borosFails = checkBorosCharmDimensions();
+  borosFails.forEach(m => console.log(`  FAIL  Boros Charm picker: ${m}`));
+  console.log(`Viewer Boros Charm picker: ${borosFails.length ? 'WRONG' : 'mode first, then board target'} ` +
+              `(${borosFails.length} FAIL)`);
   const verbFails = checkActivationVerbs();
   verbFails.forEach(m => console.log(`  FAIL  activation verb: ${m}`));
   console.log(`Viewer activation verbs: ${verbFails.length ? 'WRONG' : 'cast/sacout/equip/attachall/sfput/jittemode all encode'} ` +
@@ -1170,10 +1262,14 @@ function main() {
   suspendFails.forEach(m => console.log(`  FAIL  suspend: ${m}`));
   console.log(`Viewer suspend: ${suspendFails.length ? 'WRONG' : 'two copies queue in one line, capped by real hand copies'} ` +
               `(${suspendFails.length} FAIL)`);
-  return (fail + dimFails.length + landFails.length + sacFails.length + verbFails.length
+  const fetchSuspendFails = checkFetchSuspendRoute();
+  fetchSuspendFails.forEach(m => console.log(`  FAIL  fetch suspend: ${m}`));
+  console.log(`Viewer fetch suspend route: ${fetchSuspendFails.length ? 'WRONG' : 'land, crack, suspend become three payable segments'} ` +
+              `(${fetchSuspendFails.length} FAIL)`);
+  return (fail + dimFails.length + landFails.length + sacFails.length + borosFails.length + verbFails.length
           + mixFails.length + hostFails.length + stackFails.length + macroFails.length
           + tapFails.length + topFails.length + posFails.length + kickFails.length
-          + suspendFails.length + karooFails.length + seqFails.length + shrinkFails.length + segFails.length) ? 1 : 0;
+          + suspendFails.length + fetchSuspendFails.length + karooFails.length + seqFails.length + shrinkFails.length + segFails.length) ? 1 : 0;
 }
 
 process.exit(main());

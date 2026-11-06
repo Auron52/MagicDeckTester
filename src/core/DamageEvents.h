@@ -105,6 +105,7 @@ inline int CountTamanoa(const GameState& s, int ctrl)
 // Purity protects its CONTROLLER ("If noncombat damage would be dealt to you").
 inline bool PurityProtects(const GameState& s, int player)
 {
+    if (s.damage_cant_be_prevented_this_turn) { return false; }
     for (const Permanent& p : s.battlefield)
     {
         if (p.controller_index != player) { continue; }
@@ -274,7 +275,7 @@ inline int DealDamageEvent(GameState& s, int src_ctrl, bool src_is_creature, boo
     std::vector<int> gains;
     if (to_self > 0)
     {
-        if (!combat && PurityProtects(s, src_ctrl))
+        if (!combat && !s.damage_cant_be_prevented_this_turn && PurityProtects(s, src_ctrl))
         {
             GainLife(s, src_ctrl, to_self);   // replacement: immediate, not a trigger
             Log(s, "lifegain", std::string("✚ Purity prevents ") + std::to_string(to_self)

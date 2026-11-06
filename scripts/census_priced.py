@@ -6,7 +6,7 @@ its priced work exceeds X * L * REF_NS, L = the decision's budget in units (cens
 For each candidate X prints how many decisions would trip, the share of all priced time that sits ABOVE the
 ceiling (the work a ceiling at X could remove at most), and the worst decisions.
 
-Priced work = sum over work kinds of price_k * w_k (census columns w_step_c .. w_simkey; prices default to
+Priced work = sum over work kinds of price_k * w_k (census columns w_step_c .. w_plan_emit; prices default to
 core/WorkCounters.h kPriceNs, override with --prices name=ns,...). The w_* columns are thread_local, so they
 are exact in a multi-threaded run even where the census marks a row contended.
 Run the census with MTG_TURN_CENSUS_JOB=1 so --by-deck can attribute rows.
@@ -16,9 +16,9 @@ import argparse
 import collections
 import sys
 
-KINDS = ["step_c", "step_f", "greedy", "enum", "plans", "odo", "apply", "pay", "simkey"]
-DEFAULT_PRICE_NS = {"step_c": 20322, "step_f": 20322, "greedy": 697, "enum": 26807, "plans": 2098,
-                    "odo": 967, "apply": 5560, "pay": 2170, "simkey": 7768}
+KINDS = ["step_c", "step_f", "greedy", "enum", "plans", "odo", "apply", "pay", "simkey", "plan_emit"]
+DEFAULT_PRICE_NS = {"step_c": 21426, "step_f": 21426, "greedy": 569, "enum": 18455, "plans": 2866,
+                    "odo": 511, "apply": 8097, "pay": 2561, "simkey": 3749, "plan_emit": 10000}
 
 
 def pct(v, q):
@@ -50,14 +50,16 @@ def main():
             parts = line.rstrip("\n").split("\t")
             if hdr is None:
                 hdr = {n: i for i, n in enumerate(parts)}
-                missing = [k for k in KINDS if "w_" + k not in hdr]
+                missing = [k for k in KINDS if k != "plan_emit" and "w_" + k not in hdr]
                 if missing:
                     sys.exit(f"census lacks work columns {missing} (built before the w_* columns?)")
+                if "w_plan_emit" not in hdr:
+                    print("warning: old census has no w_plan_emit; its priced total excludes emitted-plan work", file=sys.stderr)
                 continue
             L = int(parts[hdr["budget"]])
             if L <= 0:
                 continue   # unlimited root: no ceiling applies
-            pr = sum(price[k] * int(parts[hdr["w_" + k]]) for k in KINDS)
+            pr = sum(price[k] * int(parts[hdr["w_" + k]]) for k in KINDS if "w_" + k in hdr)
             board = parts[-1]
             job = board[1:board.index("]")] if board.startswith("[") else "-"
             rows.append((pr / (L * a.ref_ns), pr, L, int(parts[hdr["units"]]), int(parts[hdr["wall_us"]]),

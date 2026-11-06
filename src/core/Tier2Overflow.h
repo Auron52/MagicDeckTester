@@ -37,7 +37,7 @@ namespace tier2
 {
 enum Cat : int
 {
-    kMana = 0,   // payable-mana cache (SpellEffects): content-pure, payment charges nothing -> wall only
+    kMana = 0,   // payable-mana cache (SpellEffects): content-pure; a hit replays the solve's recorded work (no units)
     kCats
 };
 inline const char* CatName(int c)

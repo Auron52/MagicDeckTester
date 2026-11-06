@@ -373,6 +373,15 @@
     "toughness": null,
     "type_line": "Enchantment"
   },
+  "Arid Mesa": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for a Mountain or Plains card, put it onto the battlefield, then shuffle.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
   "Armadillo Cloak": {
     "cmc": 3.0,
     "keywords": [
@@ -714,6 +723,15 @@
     "toughness": "3",
     "type_line": "Creature — Human Pirate"
   },
+  "Boltwave": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{R}",
+    "oracle_text": "Boltwave deals 3 damage to each opponent.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
   "Bone Saw": {
     "cmc": 0.0,
     "keywords": [
@@ -755,6 +773,15 @@
     "power": "1",
     "toughness": "1",
     "type_line": "Snow Creature — Elf Druid"
+  },
+  "Boros Charm": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{R}{W}",
+    "oracle_text": "Choose one —\n• Boros Charm deals 4 damage to target player or planeswalker.\n• Permanents you control gain indestructible until end of turn.\n• Target creature gains double strike until end of turn.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
   },
   "Boros Garrison": {
     "cmc": 0.0,
@@ -2976,6 +3003,15 @@
     "toughness": "6",
     "type_line": "Legendary Creature — Dragon"
   },
+  "Inspiring Vantage": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped unless you control two or fewer other lands.\n{T}: Add {R} or {W}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
   "Inspiring Veteran": {
     "cmc": 2.0,
     "keywords": [],
@@ -3426,6 +3462,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Artifact — Equipment"
+  },
+  "Lightning Helix": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{R}{W}",
+    "oracle_text": "Lightning Helix deals 3 damage to any target and you gain 3 life.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
   },
   "Lightstall Inquisitor": {
     "cmc": 1.0,
@@ -4917,6 +4962,15 @@
     "toughness": "1",
     "type_line": "Creature — Goblin Warrior"
   },
+  "Sacred Foundry": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "({T}: Add {R} or {W}.)\nAs this land enters, you may pay 2 life. If you don't, it enters tapped.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land — Mountain Plains"
+  },
   "Sakashima's Protege": {
     "cmc": 6.0,
     "keywords": [
@@ -5831,6 +5885,15 @@
     "keywords": [],
     "mana_cost": "",
     "oracle_text": "This land enters tapped unless you control an Island or a Mountain.\n{T}: Add {U} or {R}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
+  "Sunbaked Canyon": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{T}, Pay 1 life: Add {R} or {W}.\n{1}, {T}, Sacrifice this land: Draw a card.",
     "power": null,
     "toughness": null,
     "type_line": "Land"

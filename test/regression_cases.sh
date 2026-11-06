@@ -34,6 +34,7 @@ declare -A DECK_FILE=(
   [slivers]=decks/slivers_vial/slivers_vial.txt
   [burn]=decks/burn/burn.txt
   [midrangeburn]="decks/Midrange Burn/Midrange Burn.cod"
+  [modernrwburn]="decks/Modern RW Burn/Modern RW Burn.cod"
   [merfolk]=decks/Merfolk/Merfolk.cod
   [th]=decks/treasure_hunt/treasure_hunt.txt
   [knights]=decks/Knights/Knights.cod
@@ -91,6 +92,7 @@ declare -A DECK_PROF=(
   [slivers]=decks/slivers_vial/slivers_vial.profile.json
   [burn]=decks/burn/burn.profile.json
   [midrangeburn]="decks/Midrange Burn/Midrange Burn.profile.json"
+  [modernrwburn]="decks/Modern RW Burn/Modern RW Burn.profile.json"
   [merfolk]=decks/Merfolk/Merfolk.profile.json
   [th]=decks/treasure_hunt/treasure_hunt.profile.json
   [knights]=decks/Knights/Knights.profile.json
@@ -172,6 +174,11 @@ SMOKE_CASES=(
   "midrangeburn     3 1001   50 10"
   "midrangeburn     5 1001  100 20"
   "midrangeburn2hg  5 1001   25 20"
+  # Modern RW Burn: baseline-profile ENTRY set. Boltwave scales with opposing heads.
+  "modernrwburn     0 1001 1000 0"
+  "modernrwburn     3 1001   50 10"
+  "modernrwburn     5 1001  100 20"
+  "modernrwburn2hg  5 1001   25 20"
   # fungus: Hinata's sizing, adopted wholesale rather than probed (user call 2026-09-20).
   # MEASURED 2026-09-22 before adopting: this deck is the suite's most expensive by a clear margin
   # -- 281.8s CPU here (2nd behind snow's 520.5s) and 1,331.1s in REGRESSION, where it is 1st at
@@ -1046,6 +1053,12 @@ REGRESSION_CASES=(
   "midrangeburn     5 2002  150 20"
   "midrangeburn     5 3003  150 20"
   "midrangeburn2hg  5 2002   75 20"
+  # Modern RW Burn: most searched games run at the shipped d5/b20 setting.
+  "modernrwburn     0 2002 1000 0"
+  "modernrwburn     3 2002   75 10"
+  "modernrwburn     5 2002  150 20"
+  "modernrwburn     5 3003  150 20"
+  "modernrwburn2hg  5 2002   75 20"
   # Merfolk: provisional pre-keep-table ENTRY set; most searched games use play settings.
   "merfolk 0 2002 1000 0"
   "merfolk 3 2002   75 10"
@@ -1833,6 +1846,23 @@ OVERNIGHT_CASES=(
   "midrangeburn2hg  5  5005  170 20"
   "midrangeburn2hg  5  6006  170 20"
   "midrangeburn2hg  5  7007  170 20"
+  # Modern RW Burn: pre-keep-table overnight ENTRY set.
+  "modernrwburn     0  4004 2000 0"
+  "modernrwburn     0  6006 2000 0"
+  "modernrwburn     0  8008 2000 0"
+  "modernrwburn     0 10010 2000 0"
+  "modernrwburn     3  4004  400 10"
+  "modernrwburn     3  5005  400 10"
+  "modernrwburn     3  6006  400 10"
+  "modernrwburn     3  7007  400 10"
+  "modernrwburn     5  4004  300 20"
+  "modernrwburn     5  5005  300 20"
+  "modernrwburn     5  6006  300 20"
+  "modernrwburn     5  7007  300 20"
+  "modernrwburn2hg  5  4004  100 20"
+  "modernrwburn2hg  5  5005  100 20"
+  "modernrwburn2hg  5  6006  100 20"
+  "modernrwburn2hg  5  7007  100 20"
   # Merfolk: pre-keep-table overnight ENTRY set (Hinata's shape).
   "merfolk 0  4004 2000 0"
   "merfolk 0  6006 2000 0"

@@ -681,6 +681,7 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
         switch (a.kind)
         {
             case Action::Kind::CastFromHand:
+            {
                 tag = a.card_name;
                 // An {X} spell's X is the whole difference between its variants (claude-play sweep
                 // gi5: every Rolling Earthquake X read "Rolling Earthquake"). X=0 is a real line
@@ -746,7 +747,20 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                     if (ai < convoke_labels.size() && !convoke_labels[ai].empty())
                     { tag += " (convoke: " + convoke_labels[ai] + ")"; }
                 }
-                if (a.enchant_target > 0) { tag += " \xE2\x86\x92 " + AuraHostLabel(s, a.enchant_target); }
+                if (const CardDefinition* modal_def = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                    modal_def && modal_def->params.boros_charm_modal)
+                {
+                    if (a.chosen_x == 1)
+                    {
+                        const std::string target = a.enchant_target == 0 ? "opponent"
+                            : a.enchant_target == -1 ? "you" : AuraHostLabel(s, a.enchant_target);
+                        tag += " (4 damage to " + target + ")";
+                    }
+                    else if (a.chosen_x == 2) { tag += " (your permanents gain indestructible)"; }
+                    else if (a.chosen_x == 3)
+                    { tag += " (double strike to " + AuraHostLabel(s, a.enchant_target) + ")"; }
+                }
+                else if (a.enchant_target > 0) { tag += " \xE2\x86\x92 " + AuraHostLabel(s, a.enchant_target); }
                 // The no-own-creature "cash the cantrip off their body" variant (kTrickOpponentTarget).
                 else if (a.enchant_target == kTrickOpponentTarget)
                 { tag += " \xE2\x86\x92 opponent's creature"; }
@@ -801,6 +815,7 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                     else { tag += " (no Treasure)"; }
                 }
                 break;
+            }
             case Action::Kind::CastFromGraveyard: tag = a.card_name + " (retrace)"; break;
             case Action::Kind::ActivateVial:      tag = a.card_name + " (vial)"; break;
             case Action::Kind::PlayLand:          tag = a.card_name + " (land)"; break;
@@ -2824,7 +2839,21 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                 else if (ac.kind == Action::Kind::ActivatePermAbility
                          && (ac.ability_mode == Action::AbilityMode::SacLandSearch
                              || ac.ability_mode == Action::AbilityMode::QuestSacLandSearch))
-                { os << ", \"verb\": \"landsearch\""; }
+                {
+                    os << ", \"verb\": \"landsearch\"";
+                    // The viewer may insert this activation before a queued cast that needs
+                    // its mana. Evolving Wilds and the other tapped-basic searches cannot
+                    // supply that mana now, so advertise only the untapped fetch template.
+                    const CardDefinition* fd = ac.def ? ac.def
+                        : CardDatabase::Instance().Lookup(ac.card_name);
+                    if (fd && !fd->params.fetch_land_types.empty()
+                        && fd->params.land_search_activation_cost.has_value()
+                        && fd->params.land_search_activation_cost->ManaValue() == 0
+                        && !fd->params.land_search_tapped
+                        && fd->params.land_search_activation_sacrifice_self
+                        && fd->params.land_search_count == 1)
+                    { os << ", \"fetch_mana\": true"; }
+                }
                 // Captivating Vampire's steal and Bloodline Keeper's transform (Vampires B): the list
                 // runs two copies of each card, so `cast=<name>` is ambiguous with a HAND copy -- the
                 // taplife= reason. The value is the SOURCE on the battlefield; the steal's target and
@@ -5695,6 +5724,9 @@ if (!log_dir.empty())
     // Same pattern for the human Karoo TAP-IN-RESPONSE float (HumanKarooFloatOn, 2026-10-08): a
     // reference without `karoo_float` predates it and replays under --legacy-karoo-float.
     if (HumanKarooFloatRuleOn()) { out << ", \"karoo_float\": 1"; }
+    // A new recording uses held fetchlands and their separate activation. Earlier references
+    // carry no stamp and replay through the old immediate-fetch path.
+    if (!LegacyFetchImmediateOn()) { out << ", \"fetch_activation\": 1"; }
     // Same contract for the CR 510.4 two-step combat damage (CombatDamageStepsOn, GameLogger.h): a
     // reference without `combat_damage_steps` predates it and replays under --legacy-single-damage-step.
     if (CombatDamageStepsOn()) { out << ", \"combat_damage_steps\": 1"; }
@@ -10479,6 +10511,7 @@ int main(int argc, char* argv[])
         if (flag == "--firebreathe-prompt")  { firebreathe_prompt = true; continue; }
         if (flag == "--legacy-combat-swap-defer") { g_play_legacy_combat_swap_defer = true; continue; }   // replay a reference recorded UNDER the 2026-10-06..22 human combat-swap deferral (stamp combat_swap_timing; value-less)
         if (flag == "--legacy-karoo-float")  { g_play_legacy_karoo_float = true; continue; } // replay a reference recorded before the human Karoo tap-in-response float (value-less; see HumanKarooFloatOn)
+        if (flag == "--legacy-fetch-immediate") { g_play_legacy_fetch_immediate = true; continue; } // replay references recorded before fetchlands could be held and activated
         if (flag == "--legacy-pain-pay")     { g_play_legacy_pain_pay = true; continue; }    // replay a reference recorded before the Prevent Damage pain deferral (value-less; see GameLogger.h)
         if (flag == "--legacy-single-damage-step") { g_play_legacy_single_damage_step = true; continue; } // replay a reference recorded before the CR 510.4 two-step combat damage (value-less; see GameLogger.h)
         if (flag == "--legacy-spell-copy")   { g_play_legacy_spell_copy = true; continue; }  // replay a reference recorded before the resolved-spell copy id (value-less; see GameLogger.h, Cyclone Q53)

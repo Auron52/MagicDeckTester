@@ -1,0 +1,48 @@
+{
+ "deck": "decks/Shadowborn Apostle/Shadowborn Apostle.cod",
+ "turn": 2,
+ "on_the_play": true,
+ "active_life": 20,
+ "opponent_life": 20,
+ "resume_at": "main1",
+ "library_filler": "Swamp",
+ "library_size": 30,
+ "library_top": ["Shadowborn Apostle", "Shadowborn Apostle", "Shadowborn Apostle", "Shadowborn Apostle",
+                 "Shadowborn Apostle", "Shadowborn Apostle", "Shadowborn Apostle", "Shadowborn Apostle"],
+ "depth": 3,
+ "budget_ms": 0,
+ "max_turns": 6,
+ "env": {
+  "MTG_SB_CAST_ORDER": "1"
+ },
+ "battlefield": [
+  {
+   "name": "Swamp",
+   "controller": 0
+  }
+ ],
+ "hand": [
+  "Swamp",
+  "Dark Ritual",
+  "Shadowborn Apostle",
+  "Shadowborn Apostle",
+  "Culling the Weak",
+  "Thrumming Stone"
+ ],
+ "expect_log_sequence": [
+  "CAST_SPELL Dark Ritual",
+  "CAST_SPELL Shadowborn Apostle",
+  "CAST_SPELL Culling the Weak",
+  "CAST_SPELL Thrumming Stone",
+  "CAST_SPELL Shadowborn Apostle"
+ ],
+ "_comment": [
+  "USER cast order (2026-11-04, MTG_SB_CAST_ORDER): 'So it should be Dark Ritual, <shadowborn sacrifice for culling",
+  "if needed>, Culling, Thrumming stone...' -- 'If needed here is pretty much just so that you can cast culling when",
+  "no shadowborn is out.' An EMPTY board, two Swamps: Ritual {B} -> BBB (4 total), an Apostle {B} as Culling's",
+  "victim (3), Culling {B} -> BBBB (6), Thrumming Stone {5} (1), then an Apostle {B} into the Stone's ripple (top",
+  "eight are Apostles). The Stone is affordable only through Culling, and Culling only through the hand victim cast",
+  "first, so the search must find exactly this order (ShadowbornProvider::ArrangeCastOrder puts the victim just",
+  "before Culling; the generic dependency pass would have moved Culling after the Stone instead)."
+ ]
+}

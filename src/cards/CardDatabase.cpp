@@ -860,6 +860,12 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.power_bonus = params.value("power_bonus", 0);
     p.tough_bonus = params.value("tough_bonus", 0);
     p.targeting      = TargetingFromString(params.value("targeting", std::string("none")));
+    p.damage_each_opponent = params.value("damage_each_opponent", false);
+    p.boros_charm_modal = params.value("boros_charm_modal", false);
+    p.players_cant_gain_life_this_turn = params.value("players_cant_gain_life_this_turn", false);
+    p.damage_cant_be_prevented_this_turn = params.value("damage_cant_be_prevented_this_turn", false);
+    p.attack_defending_player_reveal_land_to_hand =
+        params.value("attack_defending_player_reveal_land_to_hand", false);
     p.sacrifice_land = params.value("sacrifice_land", false);
     p.reveal_subtype_or_pay = params.value("reveal_subtype_or_pay", std::string{});
     p.bounce_opponent_nonland_permanent = params.value("bounce_opponent_nonland_permanent", false);
@@ -1528,6 +1534,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.land_search_activation_taps           = params.value("land_search_activation_taps", false);
     p.land_search_activation_remove_quest   = params.value("land_search_activation_remove_quest", 0);
     p.land_search_activation_sacrifice_self = params.value("land_search_activation_sacrifice_self", false);
+    p.land_search_activation_life_cost = params.value("land_search_activation_life_cost", 0);
 
     p.expressive_iteration      = params.value("expressive_iteration", false);
     p.cast_draw                 = params.value("cast_draw", 0);

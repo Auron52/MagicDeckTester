@@ -445,6 +445,11 @@ def recording_rule_args(ref):
     (HumanKarooFloatOn). A recording made before carries no key and was played without that mana, so
     it is replayed with --legacy-karoo-float. Inert on every deck without a Karoo.
 
+    `fetch_activation` (2026-11-05, Modern RW Burn onboarding): Wooded Foothills and Arid Mesa now
+    enter the battlefield and search only when activated. Earlier saved games used the immediate
+    fetchland collapse, so their same land pick produced different mana and shuffle timing. Replay
+    those recordings with --legacy-fetch-immediate; new recordings carry the stamp.
+
     `pain_defer` (2026-10-08, USER report on Prevent_Damage/claude_s11_gi10: "I had to use the
     manual-tap option"): from then on an auto-tapped payment that funds a lifegain amplifier (Rhox
     Faithmender, Vito, ...) keeps the painful lands for the end-of-main sweep (dmgev::PainDeferEnabled).
@@ -472,6 +477,8 @@ def recording_rule_args(ref):
     args = ["--legacy-combat-swap-defer"] if ref.get("combat_swap_timing") else []
     if not ref.get("karoo_float"):
         args.append("--legacy-karoo-float")
+    if not ref.get("fetch_activation"):
+        args.append("--legacy-fetch-immediate")
     if not ref.get("pain_defer"):
         args.append("--legacy-pain-pay")
     if not ref.get("gsz_copy_id"):

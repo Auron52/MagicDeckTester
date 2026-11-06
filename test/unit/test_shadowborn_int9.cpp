@@ -299,9 +299,23 @@ TEST_CASE("INT-9 Lake of the Dead: a basic Swamp is sacrificed before Blood Cryp
     CHECK(s.battlefield[static_cast<std::size_t>(v)].card.m_name.str() == kSw9);
 }
 
+// The INT-9 activation/timing tests below document the arm WITHOUT the USER's main-1 rule / cast order / ritual
+// prune (MTG_SB_MAIN1_RULE / MTG_SB_CAST_ORDER / MTG_SB_RITUAL_PAYOFF, default ON since 2026-11-05). Under the rule
+// a sick turn's Demon search is offered after combat too, and an attack turn with both sixes offers the Overlord ahead of Jetmir
+// in main 1; those shapes are tested in test_shadowborn_mainphase.cpp.
+struct PreMainRule9
+{
+    Arm9 arm;
+    PreMainRule9()
+    {
+        arm.Set(heurarm::SB_MAIN1_RULE, 0).Set(heurarm::SB_CAST_ORDER, 0).Set(heurarm::SB_RITUAL_PAYOFF, 0);
+    }
+};
+
 // ---- A.2 + E: the Apostle activation ------------------------------------------------------------------------------
 TEST_CASE("INT-9 activation: ONE body code (the weakest six) per Demon")
 {
+    PreMainRule9 pre_rule;
     GameState s = Base9(1);
     for (int k = 0; k < 4; ++k) { s.battlefield.push_back(Perm9(kAp9, 10 + k, /*fresh=*/true)); }
     for (int k = 0; k < 12; ++k) { s.battlefield.push_back(Perm9(kAp9, 20 + k)); }
@@ -354,6 +368,7 @@ TEST_CASE("INT-9 timing (USER CONFIRMED amendment): Jetmir main 1 only when it r
 
 TEST_CASE("INT-9 timing: attack turn -> Jetmir main 1 only; no Jetmir -> Overlord main 2 only; sick turn -> both")
 {
+    PreMainRule9 pre_rule;
     GameState s = Base9(1);
     for (int k = 0; k < 13; ++k) { s.battlefield.push_back(Perm9(kAp9, 10 + k)); }
     Lib9(s, { kOver9, kJet9, kSw9, kSw9 });
@@ -410,6 +425,7 @@ TEST_CASE("INT-9 timing: six attack-ready + an Apostle in hand (a chain can stil
 // The kill arithmetic, read off card data: the activation, then everyone able to attack attacks.
 static bool JetmirKill9(int ready, int opp_life)
 {
+    PreMainRule9 pre_rule;
     GameState s = Base9(1);
     s.players[1].life = opp_life;
     for (int k = 0; k < ready; ++k) { s.battlefield.push_back(Perm9(kAp9, 10 + k)); }
