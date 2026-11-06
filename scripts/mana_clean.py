@@ -77,8 +77,9 @@ SEED_BASE = 30000000             # game g of a deck's sequence is seed SEED_BASE
 DISCLOSED = ["DOMINATED-LIFE"]
 # UNMODELED (the oracle cannot drive the plan) and CAPPED (its payment search hit the node cap) FAIL too (USER
 # 2026-11-03: "Even if this means an issue in our instrument it means something to fix"): a plan the oracle gave no
-# verdict on is a plan nobody has shown clean.
-ISSUE = [c for c in mo.MISS if c not in DISCLOSED] + ["ORACLE-GAP", "UNMODELED", "CAPPED"]
+# verdict on is a plan nobody has shown clean. CAPPED-DECISION (a decision spent its priced work budget, USER 2026-11-06:
+# no deck may get indefinitely stuck) fails for the same reason.
+ISSUE = [c for c in mo.MISS if c not in DISCLOSED] + ["ORACLE-GAP", "UNMODELED", "CAPPED", "CAPPED-DECISION"]
 LIFE_BREAKPOINT = re.compile(r"\bat least \d+ life\b|(?<!gained )\b\d+ or more life\b|\blife total is (?:less|greater) than \d+",
                              re.I)
 # Cards whose life clause is NOT a goldfish breakpoint (USER 2026-11-04), so they do not make DOMINATED-LIFE fail.

@@ -12,6 +12,7 @@
 #include "../core/GameLogger.h"
 #include "../core/GameState.h"
 #include "../core/SpellEffects.h"
+#include "../core/WorkCounters.h"   // workctr::t_priced: the per-decision work budget
 
 #include <algorithm>
 #include <atomic>
@@ -271,6 +272,38 @@ int MaxGateChecks()
     static const int v = std::max(0, EnvInt("MTG_MANA_ORACLE_GATE_MAX", 400));
     return v;
 }
+// THE PER-DECISION WORK BUDGET (USER 2026-11-06: "Whatever the case we don't want to get indefinitely stuck on
+// those"). NodeCap bounds one Realize, but nothing bounded a DECISION: a menu of hundreds of plans, each paying
+// its 2000 + 20000 applies plus its sibling / order / rollback realisations, on a breakpoint deck where an apply
+// that reaches a new breakpoint board re-derives a continuation list of tens of thousands of plans, took one
+// decision hours (EDF seed 30000061 3.0 h, Alchemist 30000059 7.6 h; with the oracle off those games play in
+// < 0.1 s, docs/design/mana-clean-followups-2026-11-04.md s9). An APPLY count cannot bound that: EDF gi61's T3
+// made its first 60,000 applies in 34 s and its next 140,000 in 97 min. So the budget is the engine's PRICED
+// WORK (workctr::t_priced: fitted ns per apply / enumeration / emitted plan / payment / key, integer constants x
+// counts), deterministic -- a report is a function of the game alone, on every machine -- and within ~1.6x of
+// wall at p95. Once a decision has spent it, every Realize stops as CAPPED, the escalation is skipped, and every
+// verdict still to come in the decision -- the plan being audited and every plan and gate-rejected plan after it
+// -- is reported as CAPPED-DECISION instead (Emit). That class FAILS the mana-clean gate exactly as CAPPED does:
+// a plan nobody checked is a plan nobody has shown clean. MTG_MANA_ORACLE_DECISION_S = the budget in priced
+// seconds (default 300); 0 = unbounded.
+long long DecisionCapNs()
+{
+    static const long long v = static_cast<long long>(std::max(0, EnvInt("MTG_MANA_ORACLE_DECISION_S", 300))) * 1000000000LL;
+    return v;
+}
+thread_local long long t_dec_applies = 0;    // applies made by the decision being audited (reported)
+thread_local long long t_dec_start   = 0;    // workctr::t_priced when it began
+thread_local long long t_dec_limit   = 0;    // > 0 inside AuditDecision: its budget, priced ns
+inline long long DecisionSpentNs() { return workctr::t_priced - t_dec_start; }
+inline bool DecisionOut() { return t_dec_limit > 0 && DecisionSpentNs() >= t_dec_limit; }
+std::atomic<long long> g_dec_capped{0}, g_dec_capped_plans{0};
+// MTG_MANA_ORACLE_HEAVY=<n> (diagnostic, default 0 = off): print every decision that made >= n applies (applies,
+// priced and wall ms, menu size) -- the sizing data for DecisionCapNs.
+int HeavyDecision()
+{
+    static const int v = std::max(0, EnvInt("MTG_MANA_ORACLE_HEAVY", 0));
+    return v;
+}
 // 0 = audit every plan on the menu.
 int MaxPlans()
 {
@@ -283,12 +316,12 @@ enum Cls
 {
     C_ORACLE_GAP, C_ENUM_GAP, C_APPLY_DROP, C_APPLY_DROP_ORDER, C_PHANTOM,
     C_DOM_CREATURE, C_DOM_ONESHOT, C_DOM_HASTE, C_DOM_LIFE, C_DOM_OTHER, C_DOM_LAND,
-    C_CONT_DIFFERS, C_DROP_COVERED, C_UNMODELED, C_CAPPED, C_HIDDEN_INFO, C_N
+    C_CONT_DIFFERS, C_DROP_COVERED, C_UNMODELED, C_CAPPED, C_HIDDEN_INFO, C_CAPPED_DECISION, C_N
 };
 const char* const kClsName[C_N] = {
     "ORACLE-GAP", "ENUM-GAP", "APPLY-DROP", "APPLY-DROP-ORDER", "PHANTOM",
     "DOMINATED-CREATURE", "DOMINATED-ONESHOT", "DOMINATED-HASTE", "DOMINATED-LIFE", "DOMINATED-OTHER",
-    "DOMINATED-LAND", "CONTINUATION-DIFFERS", "DROP-COVERED", "UNMODELED", "CAPPED", "HIDDEN-INFO"
+    "DOMINATED-LAND", "CONTINUATION-DIFFERS", "DROP-COVERED", "UNMODELED", "CAPPED", "HIDDEN-INFO", "CAPPED-DECISION"
 };
 // A MISS is a class the ENGINE owes a fix for (I2). DOMINATED-LAND is only a potential one -- whether
 // the land mattered is the follow-up question (Stage 3) -- so it is counted, and printed at level 2.
@@ -366,6 +399,11 @@ struct Reporter
         {
             std::fprintf(stderr, "=== MANA ORACLE combo routes: %lld equip-route macros audited, %lld links, %lld ms ===\n",
                          g_route_macros.load(), g_route_links.load(), g_route_us.load() / 1000);
+        }
+        if (g_dec_capped.load() > 0)
+        {
+            std::fprintf(stderr, "=== MANA ORACLE decision budget: %lld decisions spent it, %lld plans not audited ===\n",
+                         g_dec_capped.load(), g_dec_capped_plans.load());
         }
         if (g_cap_retry.load() > 0)
         {
@@ -2498,8 +2536,9 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
             for (std::size_t li = start; li < layer.size(); ++li)
             {
                 std::vector<PayOption>& script = layer[li];
-                if (nodes >= NodeCap()) { r.capped = true; break; }
+                if (nodes >= NodeCap() || DecisionOut()) { r.capped = true; break; }
                 ++nodes;
+                ++t_dec_applies;
                 g_applies.fetch_add(1, std::memory_order_relaxed);
                 GameState copy = root;
                 FrontierRec fr;
@@ -2847,10 +2886,18 @@ thread_local const std::string* t_emit_prefix = nullptr;
 void Emit(Cls c, const GameState& root, bool pre, const TurnSolver::Plan& plan, const std::string& detail)
 {
     if (t_emit_capture != nullptr) { t_emit_capture->push_back(kClsName[c]); return; }
+    // Past the decision budget a verdict may rest on a search the budget cut, so it is no verdict (DecisionCap).
+    std::string conv;
+    if (c != C_CAPPED_DECISION && DecisionOut())
+    {
+        conv = std::string("decision work budget (MTG_MANA_ORACLE_DECISION_S=") + std::to_string(t_dec_limit / 1000000000LL)
+             + " priced s) spent; the search behind this verdict may be cut. Would-be " + kClsName[c] + ": ";
+        c = C_CAPPED_DECISION;
+    }
     if (!Count(c)) { return; }
     std::lock_guard<std::mutex> lk(g_print_mu);
     std::fprintf(stderr, "[mana-oracle] %s %s plan={%s} | %s%s | %s\n", kClsName[c], Ctx(root, pre).c_str(),
-                 PlanText(plan).c_str(), t_emit_prefix != nullptr ? t_emit_prefix->c_str() : "", detail.c_str(),
+                 PlanText(plan).c_str(), t_emit_prefix != nullptr ? t_emit_prefix->c_str() : "", (conv + detail).c_str(),
                  BoardText(root).c_str());
 }
 
@@ -3104,6 +3151,7 @@ bool ReplayScript(const GameState& root, bool pre, const TurnSolver::Plan& plan,
     t_hook = saved_hook;
     g_play_dropped_cast_sink = saved_cast;
     g_act_drop_sink          = saved_act;
+    ++t_dec_applies;
     g_applies.fetch_add(1, std::memory_order_relaxed);
     return h.tap_error.empty() && !h.frontier && h.next == script.size() && cast_drops.empty() && act_drops.empty();
 }
@@ -3400,7 +3448,7 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
         return v > 0 ? v : 20000;
     }();
     int cap_used = NodeCap();
-    if (r.capped && t_node_cap == 0 && s_retry > cap_used)
+    if (r.capped && t_node_cap == 0 && s_retry > cap_used && !DecisionOut())
     {
         const int saved = t_node_cap;
         t_node_cap = s_retry;
@@ -4128,6 +4176,20 @@ void AuditDecision(const GameState& state, bool is_pre_combat)
     // 30003487 gi3487 won T4 on / T5 off before it).
     TurnSolver::ObserverIsolationScope isolate;
     OppKeyScope opp_keyed(1);
+    struct DecBudgetScope
+    {
+        long long saved_n, saved_start, saved_lim;
+        DecBudgetScope() : saved_n(t_dec_applies), saved_start(t_dec_start), saved_lim(t_dec_limit)
+        { t_dec_applies = 0; t_dec_start = workctr::t_priced; t_dec_limit = DecisionCapNs(); }
+        ~DecBudgetScope() { t_dec_applies = saved_n; t_dec_start = saved_start; t_dec_limit = saved_lim; }
+    } dec_budget;
+    long long dec_skipped = 0;
+    auto skip_out = [&](const TurnSolver::Plan& p, const char* what)
+    {
+        ++dec_skipped;
+        Emit(C_CAPPED_DECISION, state, is_pre_combat, p, std::string("decision work budget (MTG_MANA_ORACLE_DECISION_S=")
+             + std::to_string(t_dec_limit / 1000000000LL) + " priced s) spent before this " + what + " was audited");
+    };
     std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(state, is_pre_combat);
     const std::size_t cap = MaxPlans() > 0 ? static_cast<std::size_t>(MaxPlans()) : plans.size();
     if (plans.size() > cap)
@@ -4162,6 +4224,7 @@ void AuditDecision(const GameState& state, bool is_pre_combat)
     static const std::vector<const TurnSolver::Plan*> kNoPlans;
     for (std::size_t i = 0; i < plans.size(); ++i)
     {
+        if (DecisionOut()) { skip_out(plans[i], "plan"); continue; }
         const auto it = full_by_key.find(keys[i]);
         const auto pt = full_plans_by_key.find(keys[i]);
         AuditPlan(state, is_pre_combat, plans[i], real[i], it == full_by_key.end() ? kNone : it->second,
@@ -4191,6 +4254,7 @@ void AuditDecision(const GameState& state, bool is_pre_combat)
         const std::string k = SiblingKey(p);
         if (mv.on_menu.count(k) != 0 || !done.insert(k).second) { continue; }
         g_gate_rejects.fetch_add(1, std::memory_order_relaxed);
+        if (DecisionOut()) { skip_out(p, "gate-rejected plan"); continue; }
         if (MaxGateChecks() > 0 && checked >= MaxGateChecks())
         { g_gate_rejects_skipped.fetch_add(1, std::memory_order_relaxed); continue; }
         ++checked;
@@ -4198,8 +4262,20 @@ void AuditDecision(const GameState& state, bool is_pre_combat)
         const GapVerdict v = EnumGapPlan(state, is_pre_combat, p, mv);
         if (v.cls != C_N) { Emit(v.cls, state, is_pre_combat, p, v.detail); }
     }
-    g_ms.fetch_add(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t0).count(),
-                   std::memory_order_relaxed);
+    const long long ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t0).count();
+    g_ms.fetch_add(ms, std::memory_order_relaxed);
+    if (DecisionOut())
+    {
+        g_dec_capped.fetch_add(1, std::memory_order_relaxed);
+        g_dec_capped_plans.fetch_add(dec_skipped, std::memory_order_relaxed);
+    }
+    if (DecisionOut() || (HeavyDecision() > 0 && t_dec_applies >= HeavyDecision()))
+    {
+        std::lock_guard<std::mutex> lk(g_print_mu);
+        std::fprintf(stderr, "[mana-oracle] DECISION-COST %s plans=%zu gate_checked=%d applies=%lld priced_ms=%lld ms=%lld%s\n",
+                     Ctx(state, is_pre_combat).c_str(), plans.size(), checked, t_dec_applies, DecisionSpentNs() / 1000000LL, ms,
+                     DecisionOut() ? (" BUDGET-SPENT skipped=" + std::to_string(dec_skipped)).c_str() : "");
+    }
 }
 
 // ---- the viewer's line check (ManaOracle.h) ---------------------------------------------------------

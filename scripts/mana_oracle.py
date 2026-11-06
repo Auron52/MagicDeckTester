@@ -36,7 +36,7 @@ from engine_bin import engine_bin  # noqa: E402
 # ORACLE-GAP = the oracle owes one; the rest are context.
 MISS = ["ENUM-GAP", "APPLY-DROP", "APPLY-DROP-ORDER", "DOMINATED-CREATURE", "DOMINATED-ONESHOT",
         "DOMINATED-HASTE", "DOMINATED-LIFE", "DOMINATED-OTHER"]
-ORDER = MISS + ["ORACLE-GAP", "UNMODELED", "CAPPED", "PHANTOM", "CONTINUATION-DIFFERS", "DROP-COVERED",
+ORDER = MISS + ["ORACLE-GAP", "UNMODELED", "CAPPED", "CAPPED-DECISION", "PHANTOM", "CONTINUATION-DIFFERS", "DROP-COVERED",
                 "DOMINATED-LAND", "HIDDEN-INFO"]
 WHAT = {
     "ENUM-GAP": "a mana gate kept this plan off the menu, yet an order and payment realise it, reaching a board no menu entry reaches",
@@ -51,6 +51,8 @@ WHAT = {
     "ORACLE-GAP": "the oracle could not reproduce the engine's own outcome -- the oracle is incomplete here",
     "UNMODELED": "the oracle cannot drive something this plan needs, so it gives no verdict",
     "CAPPED": "the payment search hit MTG_MANA_ORACLE_NODES and then the _RETRY escalation (20000); the complete side is partial",
+    "CAPPED-DECISION": "the decision spent its priced work budget (MTG_MANA_ORACLE_DECISION_S, default 300 priced s) before this plan's audit "
+                       "finished, so it has no verdict",
     "PHANTOM": "the menu offers a plan no order or payment realises (search noise, not a miss)",
     "CONTINUATION-DIFFERS": "the engine dropped a continuation cast; the oracle's payable lines continued differently",
     "DOMINATED-LAND": "another payment leaves a land untapped -- matters only if something could use it (Stage 3)",
