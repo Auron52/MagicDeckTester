@@ -2557,7 +2557,8 @@ function renderBoard() {
   // opponent (across the table — NOT a drop target). When a target decision is active and the
   // opponent's face is a legal target, the life total becomes a clickable, highlightable target.
   const oppFace = faceTarget(d,'opp');
-  const oppB = `<b class="opp ${oppLifeDisp<=0?'dead':''}${oppFace?' facetgt':''}${oppFace&&isSelT(oppFace)?' selected':''}"${oppFace?` data-tk="${tgtKey(oppFace)}"`:''}>${oppLifeDisp ?? '?'}</b>`;
+  const oppBoros = S.variantTargetPick && S.variantTargetPick.choices.some(c=>c.num===0);
+  const oppB = `<b class="opp ${oppLifeDisp<=0?'dead':''}${oppFace||oppBoros?' facetgt':''}${oppFace&&isSelT(oppFace)?' selected':''}"${oppFace?` data-tk="${tgtKey(oppFace)}"`:''}>${oppLifeDisp ?? '?'}</b>`;
   h += `<div class="lifebar"><span class="life">Opponent ${oppB}</span>`+
        // The opponent's library, when one was dealt (a deck-out / mill deck must see its target).
        (d.opponent&&d.opponent.library_size!=null?`<span class="life" title="cards left in the opponent's library${d.opponent.decked?' -- DECKED':''}">library <b>${d.opponent.library_size}</b>${d.opponent.decked?' (decked)':''}</span>`:'')+`</div>`;
@@ -2568,7 +2569,8 @@ function renderBoard() {
   // MY field = the play area (drop target). Drop a hand card here to plan playing it.
   h += `<div id="playfield">`;
   const youFace = faceTarget(d,'you');
-  const youB = `<b class="you ${meLifeDisp<=5?'lo':''}${youFace?' facetgt':''}${youFace&&isSelT(youFace)?' selected':''}"${youFace?` data-tk="${tgtKey(youFace)}"`:''}>${meLifeDisp ?? '?'}</b>`;
+  const youBoros = S.variantTargetPick && S.variantTargetPick.choices.some(c=>c.num===-1);
+  const youB = `<b class="you ${meLifeDisp<=5?'lo':''}${youFace||youBoros?' facetgt':''}${youFace&&isSelT(youFace)?' selected':''}"${youFace?` data-tk="${tgtKey(youFace)}"`:''}>${meLifeDisp ?? '?'}</b>`;
   h += `<div class="lifebar"><span class="life">You ${youB}</span>`+
        `<span class="life">library <b>${me.library_size ?? '?'}</b></span>`+
        // Life gained this turn: the X of every "X = life gained this turn" source (Accomplished
@@ -3160,6 +3162,20 @@ function wireBoard() {
       t.onclick = e => { e.stopPropagation(); freeEquipAtHost(+t.dataset.num); };
     });
   }
+  if (S.variantTargetPick) {
+    const pick=S.variantTargetPick;
+    $('board').querySelectorAll('.thumb[data-num]').forEach(t=>{
+      const c=pick.choices.find(c=>c.num>0 && c.num===+t.dataset.num);
+      if (!c) return;
+      t.classList.add('selectable');
+      t.onclick=e=>{ e.stopPropagation(); pick.choose(c); };
+    });
+    for (const [selector,num] of [['.life b.opp',0],['.life b.you',-1]]) {
+      const c=pick.choices.find(c=>c.num===num);
+      const b=$('board').querySelector(selector);
+      if (c && b) b.onclick=e=>{ e.stopPropagation(); pick.choose(c); };
+    }
+  }
 }
 
 function renderEffects() {
@@ -3446,7 +3462,8 @@ function renderChooseDialog(v, line){
     (pl.actions||[]).forEach(a=>{
       // Solo-target tricks re-ask their target at RESOLUTION (board prompt), so they deliberately
       // carry no queue-time sub -- synthesizing one would ask a decision twice.
-      if (!a || a.trick || !(a.enchant_target>0) || !a.enchant_target_name || !a.card) return;
+      if (!a || a.trick || !(a.enchant_target>0) || !a.enchant_target_name || !a.card
+          || (x.subs||[]).some(s=>s.key===a.card+' mode' && s.kind==='borosmode')) return;
       const key=a.card+' →';
       if ((x.subs||[]).some(s=>s.key===key)) return;   // the engine named it -- keep ITS label ("#2" disambiguation)
       // `choice` must be the DISAMBIGUATED label and `card` the clean name: two same-named hosts
@@ -3499,7 +3516,24 @@ function renderChooseDialog(v, line){
       if (hit){ const next=remaining.filter(x=>choiceOf(x,dim.key)===hit.choice);
                 return stepChoose(next, picks.concat([{key:dim.key, choice:hit.choice}])); }
     }
+    if (dim.kind==='borostarget') return renderBorosTargetPick(dim, choices, remaining, picks);
     renderDimPick(dim, choices, remaining, picks);
+  }
+
+  function renderBorosTargetPick(dim, choices, remaining, picks){
+    S.variantTargetPick={choices, choose:c=>{
+      S.variantTargetPick=null;
+      const next=remaining.filter(x=>choiceOf(x,dim.key)===c.choice);
+      stepChoose(next, picks.concat([{key:dim.key, choice:c.choice, label:c.choice}]));
+    }};
+    renderBoard();
+    const panel=$('decpanel'), back=$('decback');
+    back.className=''; back.style.display='none'; panel.className='show prompt';
+    panel.innerHTML=`<h3>${esc(dim.key)} — choose a target on the board</h3>`+
+      `<div class="pbtns"><button id="chooseback" class="ghost">Back</button>`+
+      `<span class="spacer"></span><button id="choosecancel" class="ghost">Cancel</button></div>`;
+    $('chooseback').onclick=()=>{ S.variantTargetPick=null; renderBoard(); replay(picks.slice(0,-1)); };
+    $('choosecancel').onclick=()=>{ S.variantTargetPick=null; hideDecPanel(); renderBoard(); };
   }
 
   function renderDimPick(dim, choices, remaining, picks){
@@ -3546,7 +3580,7 @@ function renderChooseDialog(v, line){
     // dimension reports '—').
     const sameCard = choices.every(c => (c.card||'') === (choices[0].card||''));
     const listShape = sameCard || choices.some(c => !c.card)
-                   || ['modal','x','splice','replicate','devour','color','free','loyalty'].indexOf(dim.kind) >= 0;
+                   || ['modal','borosmode','x','splice','replicate','devour','color','free','loyalty'].indexOf(dim.kind) >= 0;
     let h=`<div class="dimhead">${srcName?cardMini(srcName,'dimsrc'):''}`+
           `<div class="dimtext"><h3>${esc(dim.key)}?</h3>`+
           `<div class="sub">${total>1?`Decision ${step} of ${total} for this line — `:''}`+
@@ -6312,7 +6346,7 @@ function advanceTo(dec) { (dec&&dec.mdfc_backs||[]).forEach(n=>MDFC_BACKS.add(n)
   // freeEquipPick joins the other armed modes here: it is per-DECISION (its hosts and counts come
   // from this decision's offers), so carrying it across a new decision would leave the button
   // reading "pick a creature" over a board where nothing is a legal host -- an armed dead control.
-  S.decision=dec; S.over=false; S.result=null; S.leMode=false; S.vialMode=null; S.blinkMode=null; S.repeatPick=null; S.loopPick=null; S.freeEquipPick=false; S.boardSel=null; S._selFor=null;
+  S.decision=dec; S.over=false; S.result=null; S.leMode=false; S.vialMode=null; S.blinkMode=null; S.repeatPick=null; S.loopPick=null; S.freeEquipPick=false; S.variantTargetPick=null; S.boardSel=null; S._selFor=null;
   // When THIS frame arrived, and a fresh pass-arm. Both belong to the frame: `frameAt` is what makes
   // "that click landed right after your line committed" answerable at all, and an arm raised on the
   // previous frame describes a pool that no longer exists (see passNeedsConfirm).

@@ -215,6 +215,29 @@ function checkSacrificeDimension() {
   return fails;
 }
 
+function checkBorosCharmDimensions() {
+  const mode = (choice) => ({ key:'Boros Charm mode', choice, card:'Boros Charm', kind:'borosmode' });
+  const target = (choice, num) => ({ key:'Boros Charm target', choice, card:'Boros Charm', kind:'borostarget', num });
+  const variants = [
+    {subs:[mode('Deal 4 damage'), target('opponent', 0)]},
+    {subs:[mode('Deal 4 damage'), target('you', -1)]},
+    {subs:[mode('Your permanents gain indestructible')]},
+    {subs:[mode('Target creature gains double strike'), target('Monastery Swiftspear', 11)]},
+    {subs:[mode('Target creature gains double strike'), target('Goblin Guide', 12)]},
+  ];
+  const fails = [];
+  const first = LB.nextDimension(variants);
+  if (!first || first.dim.kind !== 'borosmode' || first.choices.length !== 3)
+    fails.push('Boros Charm must ask for its three modes first');
+  const damage = LB.nextDimension(LB.filterByChoice(variants, 'Boros Charm mode', 'Deal 4 damage'));
+  if (!damage || damage.dim.kind !== 'borostarget' || damage.choices.map(c=>c.num).join(',') !== '0,-1')
+    fails.push('the damage mode must offer both player targets');
+  const strike = LB.nextDimension(LB.filterByChoice(variants, 'Boros Charm mode', 'Target creature gains double strike'));
+  if (!strike || strike.dim.kind !== 'borostarget' || strike.choices.map(c=>c.num).join(',') !== '11,12')
+    fails.push('the double-strike mode must offer the board creatures by identity');
+  return fails;
+}
+
 // ---- A MIXED variant set is still walked, never dumped flat ----------------------------------
 // Some variants of a line carry a dimension and others simply do not: "cast Bonesplitter" versus
 // "cast Bonesplitter AND equip the copy in play" is the shape that got reported (KittyEquipment
@@ -1153,6 +1176,10 @@ function main() {
   sacFails.forEach(m => console.log(`  FAIL  sacrifice dimension: ${m}`));
   console.log(`Viewer sacrifice picker: ${sacFails.length ? 'WRONG' : 'victim asked first, then the fetch target'} ` +
               `(${sacFails.length} FAIL)`);
+  const borosFails = checkBorosCharmDimensions();
+  borosFails.forEach(m => console.log(`  FAIL  Boros Charm picker: ${m}`));
+  console.log(`Viewer Boros Charm picker: ${borosFails.length ? 'WRONG' : 'mode first, then board target'} ` +
+              `(${borosFails.length} FAIL)`);
   const verbFails = checkActivationVerbs();
   verbFails.forEach(m => console.log(`  FAIL  activation verb: ${m}`));
   console.log(`Viewer activation verbs: ${verbFails.length ? 'WRONG' : 'cast/sacout/equip/attachall/sfput/jittemode all encode'} ` +
@@ -1213,7 +1240,7 @@ function main() {
   fetchSuspendFails.forEach(m => console.log(`  FAIL  fetch suspend: ${m}`));
   console.log(`Viewer fetch suspend route: ${fetchSuspendFails.length ? 'WRONG' : 'land, crack, suspend become three payable segments'} ` +
               `(${fetchSuspendFails.length} FAIL)`);
-  return (fail + dimFails.length + landFails.length + sacFails.length + verbFails.length
+  return (fail + dimFails.length + landFails.length + sacFails.length + borosFails.length + verbFails.length
           + mixFails.length + hostFails.length + stackFails.length + macroFails.length
           + tapFails.length + topFails.length + posFails.length + kickFails.length
           + suspendFails.length + fetchSuspendFails.length + karooFails.length + seqFails.length + shrinkFails.length + segFails.length) ? 1 : 0;

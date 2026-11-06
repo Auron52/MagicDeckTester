@@ -113837,14 +113837,19 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
             const bool is_modal = mdef && mdef->params.modal_choose_n > 0;
             if (mdef && mdef->params.boros_charm_modal)
             {
-                const std::string mode = a.chosen_x == 1
-                    ? "4 damage to " + (a.enchant_target == 0 ? std::string("opponent")
-                                       : a.enchant_target == -1 ? std::string("you")
-                                       : SubChoiceHostLabel(state, a.enchant_target))
-                                       : a.chosen_x == 2 ? "indestructible to your permanents"
-                                       : "double strike to " + SubChoiceHostLabel(state, a.enchant_target);
+                const std::string mode = a.chosen_x == 1 ? "Deal 4 damage"
+                                       : a.chosen_x == 2 ? "Your permanents gain indestructible"
+                                       : "Target creature gains double strike";
                 addSub(a.card_name + " " + mode, a.card_name + " mode",
-                       mode, a.card_name, "modal");
+                       mode, a.card_name, "borosmode");
+                if (a.chosen_x != 2)
+                {
+                    const std::string target = a.enchant_target == 0 ? "opponent"
+                                             : a.enchant_target == -1 ? "you"
+                                             : SubChoiceAuraHostLabel(state, a.enchant_target);
+                    addSub(a.card_name + " targets " + target, a.card_name + " target",
+                           target, a.card_name, "borostarget", a.enchant_target);
+                }
             }
             else if (is_modal && a.chosen_x >= 0)
             {
