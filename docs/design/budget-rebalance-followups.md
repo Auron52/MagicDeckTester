@@ -1,6 +1,7 @@
 # Budget rebalance: deferred follow-ups
 
-Status: DEFERRED (2026-11-05). This is everything left over after the budget-rebalance feature landed on
+Status: IN PROGRESS (2026-11-06; item 1 mitigated, item 2 open, item 3 diagnosed). This is everything left over
+after the budget-rebalance feature landed on
 `phase-1-2-deck-analyzer`. Each item stands alone; work them in the order given. Full history of the
 measurements is in `docs/design/budget-rebalance-checkpoint.md`.
 
@@ -88,6 +89,26 @@ Data: `build/scratch/budget/melfold/`.
 - `dbg2.err`: heavy-call dumps.
 - `dbg3.err`: state census.
 
+**2026-11-06 progress.** `plan_emit` now prices every raw plan at 10,000 ns, and budgeted
+`EnumeratePlans` polls the priced limit through its inline, carry, and two-stage walks. Interrupted
+lists are not cached. The priced ledger's deterministic virtual cache declines derivations that
+emit over 100,000 raw plans (or return over 100,000 plans); at budget 0 it keeps the original
+unlimited admission. The 20,000-plan trial cut Melira further but made one EDF play game run past
+24 minutes, so it was rejected. The 100,000-plan trial finished that EDF game in 245 s (baseline
+283 s) with the same play digest.
+
+- Melira's worst generation replay at the production 20 GB cap: 644 s -> 46.5 s, win turn 7 in
+  both arms. Its largest instrumented decision is 20.0 s, down from 154 s in the priced-emits-only
+  trial. The 6.75 s priced allowance remains an estimate, not a literal wall-time bound.
+- Paired play corpus: 184 jobs / 31,645 games, no average win-turn changes, one same-turn play
+  digest change (LFE gi242, T6 in both arms). Summed job wall fell 12,059 -> 7,029 s; the
+  regression-shaped slow-game p99.9 fell 18.2 -> 9.9 s. Evidence:
+  `build/scratch/budget/priced_emit_100k_ab/` and
+  `build/scratch/budget/priced_emit_ab/melira_shadow100k_census.tsv`.
+- Final source gates: 2,612 unit tests; smoke 176/176 with no changed games; regression 282/282
+  with no changed games; strict viewer replay 767 references, zero drift/gaps. The one held-out
+  LFE digest change is outside these committed tiers and retains its T6 win.
+
 ## 2. `dupc_fold_prefix`: a candidate exact skip in the two-stage plan driver
 
 On the Goblins d6/b10 generation line, 36-61M selections per line die at the canonical-prefix clause of
@@ -100,8 +121,21 @@ the duplicate check, after the walk has visited them. This is the same shape the
 ## 3. LFE generation replays hit 5-6 GB RSS caps
 
 Replaying LFE's slow generation lines at 4-7 threads aborted at 5-6 GB caps (exit 137), with rollouts
-17-31 min in flight. Nobody has looked at it yet. Find which pool grows: tier-2 plan pools, or the
-breakpoint cache.
+17-31 min in flight. The pending question was whether the tier-2 plan pool or a breakpoint cache grew.
+
+**Diagnosed 2026-11-06:** neither stored pool explains the RSS spike. Replaying the 30-line LFE
+tail list at four threads and a 5 GB cap:
+
+- With the breakpoint prefix-resume cache disabled (`MTG_NO_BP_PREFIX_CACHE=1`), RSS reached
+  5.43 GB and aborted while the shared plan pool held only 240 MB.
+- With the plan pool effectively disabled (`MTG_PLAN_CACHE_KB=1`), RSS reached 5.80 GB and
+  aborted with the pool at **0 MB**. Logs: `build/scratch/budget/priced_emit_100k_ab/lfe_no_prefix.err`
+  and `lfe_no_plan_pool.err`.
+
+The large allocations are in-flight enumeration/axis expansion, per the earlier source-level
+diagnosis in `docs/design/lfe-plan-fan-explosion.md` (sections 3 and 7). These 5 GB replay caps
+are below what the four concurrent heavy LFE rollouts need. The stored plan and breakpoint
+continuation caches share the accounted plan pool; changing their limits does not fix this case.
 
 ## 4. Held for the USER (do not adopt without them)
 

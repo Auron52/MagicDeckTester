@@ -4176,6 +4176,7 @@ struct Scope
         const bool greedy_residual_changed = g_greedy_charge_acc != greedy_acc;
         c.storable = c.other == 0 && !dec_cut && !gr_cut
                   && !meter_changed && !greedy_residual_changed && !decisionwork::Exceeded()
+                  && !decisionwork::PricedExceeded()
                   && (Mode() != 1 || (c.dec == 0 && c.greedy == 0 && rec.subsearch == 0));
         g_computations.fetch_add(1, std::memory_order_relaxed);
         if (c.dec + c.greedy + c.other > 0) { g_charging.fetch_add(1, std::memory_order_relaxed); }
@@ -51306,7 +51307,7 @@ static bool DupActBruteNonCanonical(const std::vector<Action>& cands, const std:
 // the caller's remaining per-selection filter (Solve's Vial-capacity check). Both are template
 // parameters, not std::function: this runs once per rollout node, where a per-call closure allocation
 // is measurable.
-template <class ExtraOk, class Emit>
+template <class ExtraOk, class Emit, class Stop>
 static void EnumeratePlanPositions(const std::vector<Action>& cands,
                                    const std::vector<std::vector<int>>& groups,
                                    const std::vector<int>& independent,
@@ -51328,7 +51329,7 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
                                    // By const reference, NOT by value: Solve's `consider` closure
                                    // captures a dozen locals, and this is called once per rollout
                                    // node -- copying it per call is measurable.
-                                   const ExtraOk& extra_ok, const Emit& emit)
+                                   const ExtraOk& extra_ok, const Emit& emit, const Stop& stop)
 {
     const int  num_groups = static_cast<int>(groups.size());
     const int  num_ind    = static_cast<int>(independent.size());
@@ -51491,7 +51492,7 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
             std::uint64_t sel_mask = 0;
             DepSkipAudit dep_audit(2);
             bool done = false;
-            while (!done)
+            while (!done && !stop())
             {
                 // MTG_EQUIP_COPY_SKIP: the same verdict, plus WHERE to jump to (see
                 // FungibleEquipCopyAdvance). Evaluated first now, which changes only which predicate
@@ -51525,7 +51526,7 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
                     Agg ga;
                     for (int g = 0; g < num_groups; ++g)
                     { if (choice[g] > 0) { fold(ga, groups[g][choice[g] - 1]); } }
-                    for (unsigned imask = 0; imask < (1u << num_ind); ++imask)
+                    for (unsigned imask = 0; imask < (1u << num_ind) && !stop(); ++imask)
                     {
                         if (has_ind_accel
                             && IndependentAccelPrefixViolated(cands, independent,
@@ -51596,7 +51597,7 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
         std::vector<int> full(num_groups, 0);   // the predicates read only mana-side digits
         DepSkipAudit dep_audit(3);
         bool done = false;
-        while (!done)
+        while (!done && !stop())
         {
             for (int t = 0; t < ng; ++t) { full[mg[t]] = choice[t]; }
             // MTG_EQUIP_DEP_SKIP: the verdict plus the run's GROUP digit, mapped onto this odometer's
@@ -51695,7 +51696,7 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
         const int ng = static_cast<int>(pg.size()), ni = static_cast<int>(pi.size());
         std::vector<int> choice(ng, 0);
         bool done = false;
-        while (!done)
+        while (!done && !stop())
         {
             for (int imask = 0; imask < (1 << ni); ++imask)
             {
@@ -51774,6 +51775,7 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
     std::vector<int> choice(num_groups, 0);
     for (const Pair& pr : pairs)
     {
+        if (stop()) { break; }
         const Line& M = mlines[pr.m];
         const Line& P = plines[pr.p];
         for (int t = 0; t < mng; ++t) { choice[mg[t]] = mdig[M.digits + t]; }
@@ -56504,7 +56506,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                                any_splice, splice_collapse_on, accel_prefix_on && any_accel,
                                has_ind_accel, copy_class, equip_deps,
                                /*sac_dup_live=*/pre.dup_source && (pre.dup_clause & kDupSacMana) != 0,
-                               vial_ok, consider);
+                               vial_ok, consider, [] { return false; });
     }
 
     // THE HOLD LINE (HoldLineEnabled -- see that helper for the measurement that chose ONE plan over
@@ -73053,6 +73055,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     RevealLogPause _rlp_enum;
     PROF_INC(enumerate_calls);
     workctr::Inc(workctr::kEnumCall);
+    bool enum_priced_stop = false;
     const Player& ap              = state.ActivePlayer();
     ManaPool      pool            = AvailableManaPool(state);
     ManaPool      pool_noncreature = BuildNonCreaturePool(state);
@@ -73894,8 +73897,14 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     auto eval_and_push = [&](const std::vector<int>& sel) { eval_and_push_body(sel); };
     eval_and_push_body = [&](const std::vector<int>& sel)
     {
-        // MTG_DUP_ACTION_FOLD_VERIFY: TAKEN first, before any return, so it never leaks to a later selection.
+        // Both provenance flags must be consumed even when pricing stops this walk.
         const bool dup_twin = dupactfold::Take();
+        const bool fold_from_odometer = foldsel::Take();
+        if (enum_priced_stop || (g_bp_enum_depth == 0 && decisionwork::PricedExceeded()))
+        {
+            enum_priced_stop = true;
+            return;
+        }
         if (dup_twin)
         {
             dupactfold::g_flagged.fetch_add(1, std::memory_order_relaxed);
@@ -73906,7 +73915,6 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // BRANCH SHAPE, EnumeratePlans side. Distinct from SolveUncached's funnel: this is the
         // odometer walk the odo/plans/dedup columns actually describe.
         if (eshape != nullptr) { shapestats::Bump(eshape->e_entered); ++ecallf.entered; }
-        const bool fold_from_odometer = foldsel::Take();   // see foldsel / consider()
         // The per-game backstop (see bp_abandon_watch): stop deriving once the game is void.
         if (bp_abandon_watch)
         {
@@ -75685,6 +75693,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             dupactfold::g_pushed.fetch_add(1, std::memory_order_relaxed);
         }
         plans.push_back(std::move(plan));
+        workctr::Inc(workctr::kPlanEmit);
         if (ds_on_push) { ds_on_push(); }
     };
 
@@ -76475,7 +76484,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                                  if (fso) { foldsel::g_from_odometer = true; }
                                  if (daf_twin) { dupactfold::t_twin = true; }
                                  eval_and_push(s);
-                                 return false;
+                                 return enum_priced_stop;
                              },
                              // MTG_DUP_ACTION_FOLD: refuse (or, verifying, flag) a non-prefix class arrangement.
                              [&](int imask) -> bool
@@ -76487,7 +76496,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                              });
             done = true;
         }
-        while (!done)
+        while (!done && !enum_priced_stop)
         {
             // Fungible identical-Equipment copies: only the canonical (non-increasing) position of a
             // class emits. Tested before the mana fold -- a skipped position's aggregate is dead work.
@@ -76662,6 +76671,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 if (FoldSearchOdometerOn(state)) { foldsel::g_from_odometer = true; }
                 if (daf_twin) { dupactfold::t_twin = true; }
                 eval_and_push(sel);
+                if (enum_priced_stop) { break; }
             }
             // RADIX CUT (MTG_EQUIP_DEP_SKIP): every position until digit `dep_cut` next changes
             // violates the same piece requirement. 0 = the ordinary step.
@@ -76734,9 +76744,17 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                                has_ind_accel, copy_class, equip_deps,
                                /*sac_dup_live=*/pre.dup_source && (pre.dup_clause & kDupSacMana) != 0,
                                [](const std::vector<int>&) { return true; },
-                               eval_and_push);
+                               eval_and_push, [&]
+                               {
+                                   if (!enum_priced_stop && g_bp_enum_depth == 0 && decisionwork::PricedExceeded())
+                                   {
+                                       enum_priced_stop = true;
+                                   }
+                                   return enum_priced_stop;
+                               });
     }
 
+    if (enum_priced_stop) { return plans; }
     ds_on_push = nullptr;   // MTG_ENUM_DEDUP_STREAM: the walk is over (Plan B is never compacted)
     if (ds_on && s_ds_verify) { ds_mark(); }   // the verify judges every walk-emitted plan
     // --- Plan B: draw-early variants for Spectacle draw spells ---
@@ -76755,7 +76773,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // without consulting `groups`, so the cap never dropped any of its plans -- wave 0 emitted
     // them all, and re-emitting here would double-score them.
     const bool s_groupwave_tranche = (groupwave::g_state.tranche_rank >= 0);
-    for (int i = 0; !s_groupwave_tranche && i < m; ++i)
+    for (int i = 0; !s_groupwave_tranche && i < m
+                    && (g_bp_enum_depth > 0 || !decisionwork::PricedExceeded()); ++i)
     {
         const Action& c = cands[i];
         // A spectacle-enabling trigger is any burn that reaches the opponent's face this turn --
@@ -76817,6 +76836,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
 
         for (const TriggerCand* trigger : chosen_triggers)
         {
+            if (g_bp_enum_depth == 0 && decisionwork::PricedExceeded()) { break; }
             TurnSolver::Plan plan;
             int direct_dmg = 0;
             if (trigger)
@@ -76836,9 +76856,14 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             plan.value += draw.eval;
             plan.wins_this_turn = (pending_atk + direct_dmg) >= state.Opponent().life;
             plans.push_back(std::move(plan));
+            workctr::Inc(workctr::kPlanEmit);
         }
     }
 
+    if (g_bp_enum_depth == 0 && decisionwork::PricedExceeded())
+    {
+        return plans;
+    }
     // Sort so the highest-value plans are simulated first.  When a timeout fires
     // the search returns the best plan found so far, so we want the most promising
     // candidates evaluated before cheaper ones.
@@ -90278,19 +90303,21 @@ static inline void PlanCacheNoteHit(int cat)
 // the ceiling's trip point and play (regression tier, default vs MTG_PLAN_CACHE_KB=1: 6 job digests, 3 win
 // turns, 14 games' units; identical at X=0; docs/design/tier2-cache-overflow.md, last section).
 //
-// THE RULE: t_priced counts what it would count with an UNLIMITED plan cache -- the byte pool never refusing,
-// no pressure clears -- which is what a large box does today, so the X=100 calibration and ground truth hold
-// wherever nothing is refused. Per worker thread, a SHADOW of each cache's KEY STRUCTURE (64-bit key -> a flag
-// byte, no plans) replays that cache's unlimited-world store rule: the same count caps and clears, the same
-// epoch/game scope (all three plan caches are cleared per game in ClearPerGameCaches, so the unlimited world
-// is per game and independent of batch order), and every storable computation stored. Each lookup asks the
+// THE RULE: t_priced counts what it would count with a deterministic virtual plan cache -- the byte pool never
+// changes its admissions based on RAM pressure or other workers. It declines a derivation that emitted more
+// than MTG_PLAN_PRICED_LEDGER_MAX_EMITS raw plans while a finite priced decision is armed: Melira's costly
+// derivations can return small deduplicated lists, yet their repeated builds left one decision 23x over its
+// priced limit. At budget 0 the virtual cache remains unlimited, and the new price cannot change play.
+// Per worker thread, a SHADOW of each cache's KEY STRUCTURE (64-bit key -> a flag byte, no plans) replays
+// count caps and clears and the fixed admission test. The three shadows clear per game, so the virtual
+// cache is independent of batch order. Each lookup asks the
 // shadow first:
-//   * shadow HIT (an entry the unlimited cache would serve, CacheHitCharge's mode-1 test): free, as today. The
+//   * shadow HIT (an entry the virtual cache would serve, CacheHitCharge's mode-1 test): free, as today. The
 //     real cache serves it if it holds it; if not (refused / cleared under pressure) the recompute runs with
-//     workctr MUTED, so it counts nothing, and stores nothing in the shadow -- in the unlimited world it, and
+//     workctr MUTED, so it counts nothing, and stores nothing in the shadow -- in the virtual world it, and
 //     every lookup nested in it, never ran.
-//   * shadow MISS: a real hit is NOT served (the unlimited world recomputes here, and counts it); the
-//     computation runs counted and the shadow records it by the unlimited store rule.
+//   * shadow MISS: a real hit is NOT served (the virtual world recomputes here, and counts it); the
+//     computation runs counted and the shadow records it by the fixed admission rule.
 // Nested lookups inside a muted recompute serve a real hit when there is one and otherwise compute; they touch
 // no shadow, so their first counted lookup later is still a miss. Real-cache stores are left as they are (a
 // real entry the shadow lacks is never served, so it cannot move a count).
@@ -90300,6 +90327,21 @@ static inline void PlanCacheNoteHit(int cat)
 static bool BpEnumEpochScoped();   // defined with the bp cache, below
 namespace pledger
 {
+inline int MaxEmits()
+{
+    // The virtual cache declines computations with a giant raw-plan fan, even when dedup makes the
+    // returned list small. A fixed count is independent of the RAM cap and other workers. At an unlimited
+    // decision root the priced ceiling is disarmed, so the original unlimited shadow is retained.
+    if (decisionwork::t_pr_limit <= 0) { return 0; }
+    static const int env = std::max(0, EnvInt("MTG_PLAN_PRICED_LEDGER_MAX_EMITS", 100000));
+    const int arm = valuearm::t_arm.plan_priced_ledger_max_emits;
+    return arm >= 0 ? arm : env;
+}
+inline bool FitsWork(std::size_t nplans, long long emitted)
+{
+    const int lim = MaxEmits();
+    return lim == 0 || (nplans <= static_cast<std::size_t>(lim) && emitted <= lim);
+}
 inline bool On()
 {
     static const bool v = EnvOn("MTG_PLAN_PRICED_LEDGER", true) && cachecharge::Mode() == 1
@@ -90336,7 +90378,7 @@ inline void NotePeak()
     long long p = g_peak.load(std::memory_order_relaxed);
     while (n > p && !g_peak.compare_exchange_weak(p, n, std::memory_order_relaxed)) {}
 }
-// RAII: armed => everything until scope exit is the unlimited world's free hit (counts nothing).
+// RAII: armed => everything until scope exit is a virtual-cache hit (counts nothing).
 struct Mute
 {
     bool on = false;
@@ -90361,13 +90403,15 @@ struct Dump
 };
 inline Dump g_dump;
 }   // namespace pledger
-// The enum memo's store rule with no byte budget, on its shadow: a first visit leaves a marker (clearing the
-// whole map at the entry cap, as the real cache does), a second visit promotes a storable computation.
-static void PledgerEnumStore(std::uint64_t lk, bool found, const cachecharge::Cost& c)
+// The enum memo's virtual store rule: a first visit leaves a marker (clearing the whole map at the entry cap,
+// as the real cache does), a second visit promotes only a storable, affordable derivation.
+static void PledgerEnumStore(std::uint64_t lk, bool found, const cachecharge::Cost& c,
+                            std::size_t nplans, long long emitted)
 {
     if (found)
     {
-        if (c.storable) { pledger::t_enum[lk] = pledger::FlagsOf(c); }
+        if (c.storable && pledger::FitsWork(nplans, emitted))
+        { pledger::t_enum[lk] = pledger::FlagsOf(c); }
         return;
     }
     if (pledger::t_enum.size() >= enummemo::Cap()) { pledger::t_enum.clear(); }
@@ -90588,7 +90632,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
         return it->second.plans;
     }
 
-    if (sh_hit) { led_mute.Arm(); }   // MTG_PLAN_PRICED_LEDGER: a free hit in the unlimited world
+    if (sh_hit) { led_mute.Arm(); }   // MTG_PLAN_PRICED_LEDGER: a free virtual-cache hit
     enummemo::g_misses.fetch_add(1, std::memory_order_relaxed);
     const bool second_visit = (it != cache.end() && it->second.epoch == g_decision_epoch);
     if (second_visit && enummemo::StatsOn()) { enummemo::g_second.fetch_add(1, std::memory_order_relaxed); }
@@ -90598,9 +90642,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
     const unsigned long long trunc_before = g_fs_trunc_events;
     const long long m1_u0 = gamework::t_used;
     const std::uint64_t m1_ctx = pccv::On() ? PlanCacheCtxBits() : 0;   // MTG_PLAN_CACHE_COST_VERIFY
+    const long long m1_emit0 = workctr::t_n[workctr::kPlanEmit];
     cachecharge::Scope m1_ccs;
     std::vector<TurnSolver::Plan> plans;
     { enummemo::BodyScope body; plans = EnumeratePlansWithLandUncached(state, is_pre_combat, pb_lazy); }
+    const long long m1_emitted = workctr::t_n[workctr::kPlanEmit] - m1_emit0;
     cachecharge::Cost m1_cost = m1_ccs.Done();
     m1_cost.ctx = m1_ctx;
     PlanCacheNoteComputation(plancache::kCatM1, gamework::t_used - m1_u0);
@@ -90683,8 +90729,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
     // A VOID game (the per-game backstop fired: gamework::Poll) stores nothing -- a route walk cut inside
     // this enumeration's CollectActions made the list a function of the cut. Always false unless a unit
     // ceiling or a wall cap is armed.
-    if (gamework::Abandoned()) { return plans; }
-    if (led && !led_mute.on) { PledgerEnumStore(lk, sh_found, m1_cost); }   // the unlimited store rule
+    if (gamework::Abandoned() || decisionwork::PricedExceeded()) { return plans; }
+    if (led && !led_mute.on)
+    { PledgerEnumStore(lk, sh_found, m1_cost, plans.size() + (lazy_now ? pb_lazy->P : 0), m1_emitted); }
     if (second_visit)
     {
         // Second visit this decision: the state provably recurs -- promote to full storage,
@@ -90839,7 +90886,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansM2Memoized(const GameState& s
         return it->second.plans;
     }
 
-    if (sh_hit) { led_mute.Arm(); }   // MTG_PLAN_PRICED_LEDGER: a free hit in the unlimited world
+    if (sh_hit) { led_mute.Arm(); }   // MTG_PLAN_PRICED_LEDGER: a free virtual-cache hit
     enummemo::g_misses.fetch_add(1, std::memory_order_relaxed);
     const bool second_visit = (it != cache.end() && it->second.epoch == g_decision_epoch);
     const int saved_md = groupwave::g_state.max_dropped;
@@ -90853,9 +90900,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlansM2Memoized(const GameState& s
     const bool m2_lazy = ((led && !led_mute.on) ? sh_found : second_visit) && BpLazyCandsOn();
     const long long m2_u0 = gamework::t_used;
     const std::uint64_t m2_ctx = pccv::On() ? PlanCacheCtxBits() : 0;   // MTG_PLAN_CACHE_COST_VERIFY
+    const long long m2_emit0 = workctr::t_n[workctr::kPlanEmit];
     cachecharge::Scope m2_ccs;
     std::vector<TurnSolver::Plan> plans;
     { enummemo::BodyScope body; plans = EnumerateM2PlansBody(state, m2_lazy ? &m2_lz : nullptr); }
+    const long long m2_emitted = workctr::t_n[workctr::kPlanEmit] - m2_emit0;
     cachecharge::Cost m2_cost = m2_ccs.Done();
     m2_cost.ctx = m2_ctx;
     PlanCacheNoteComputation(plancache::kCatM2, gamework::t_used - m2_u0);
@@ -90864,9 +90913,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlansM2Memoized(const GameState& s
     const uint32_t own_trunc = static_cast<uint32_t>(g_fs_trunc_events - trunc_before);
     const int own_md = groupwave::g_state.max_dropped;
     groupwave::g_state.max_dropped = std::max(saved_md, own_md);
-    if (gamework::Abandoned())   // a VOID game stores nothing (see the m1 host)
+    if (gamework::Abandoned() || decisionwork::PricedExceeded())   // interrupted lists are never stored
     { if (m2_lz.active) { PbLazyMaterialize(plans, m2_lz); } return plans; }
-    if (led && !led_mute.on) { PledgerEnumStore(lk, sh_found, m2_cost); }   // the unlimited store rule
+    if (led && !led_mute.on)
+    { PledgerEnumStore(lk, sh_found, m2_cost, plans.size() + (m2_lz.active ? m2_lz.P : 0), m2_emitted); }
     if (second_visit)
     {
         // Same byte-budget gate as the m1 host above (over budget: stay a marker, recompute).
@@ -111865,6 +111915,7 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
     PbLazyLayout plans_lz;   // M1: the list's lazy blocks and its selection (BpEnumEntry)
     CandOrder    plans_ord;
     const long long bp_u0 = gamework::t_used;
+    const long long bp_emit0 = workctr::t_n[workctr::kPlanEmit];
     const std::uint64_t bp_ctx = pccv::On() ? PlanCacheCtxBits() : 0;   // MTG_PLAN_CACHE_COST_VERIFY
     cachecharge::Scope bp_ccs;   // MTG_CACHE_HIT_CHARGE: what this derivation charges, by budget
     const BpSide bp_side = BpSideBegin();
@@ -111874,6 +111925,7 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
                                                                   /*count_stats=*/true, &demoted,
                                                                   /*front_only=*/false, &bp_interrupted,
                                                                   &plans_lz, &plans_ord);
+    const long long bp_emitted = workctr::t_n[workctr::kPlanEmit] - bp_emit0;
     bp_chan.Restore();
     // MTG_BP_TUTOR_PIN_ALIAS: did the derivation read the watched tutor pin? (Closed here, before the
     // store path builds any diagnostic key.)
@@ -112022,7 +112074,8 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
 
     // MTG_PLAN_PRICED_LEDGER: the unlimited cache's store rule on its shadow -- the entry cap's wholesale clear,
     // never the byte pool's -- for a COUNTED derivation only (a muted one never ran in that world).
-    if (led && !led_mute.on && !bp_interrupted && !aa_cut_inside && bp_cost.storable)
+    if (led && !led_mute.on && !bp_interrupted && !aa_cut_inside && bp_cost.storable
+        && pledger::FitsWork(plans.size() + (plans_lz.active ? plans_lz.P : 0), bp_emitted))
     {
         if (pledger::t_bp.size() >= s_bp_enum_cap) { pledger::t_bp.clear(); }
         const bool to_alias = alias_ok && pin_unread;
@@ -112319,7 +112372,7 @@ static bool BpCanonFront(const GameState& state, bool is_pre_combat, TurnSolver:
         // MTG_BP_TUTOR_PIN_ALIAS: a full list filed under the pin-cleared key (derived without reading the
         // pin, so valid under this one) serves the canon exactly as an exact-key entry does.
         // Under the ledger the alias key is built when EITHER cache lacks the exact key, and its build is
-        // counted only when the unlimited one does (it builds it exactly when it lacks the key).
+        // counted only when the virtual cache does (it builds it exactly when it lacks the key).
         if ((it == bpcache::t_plans.end() || (led && !sh_found))
             && g_scripted_tutor_choice >= 0 && tutorpinalias::On())
         {
@@ -112385,11 +112438,12 @@ static bool BpCanonFront(const GameState& state, bool is_pre_combat, TurnSolver:
             return true;
         }
     }
-    if (sh_hit) { led_mute.Arm(); }   // MTG_PLAN_PRICED_LEDGER: a free hit in the unlimited world
+    if (sh_hit) { led_mute.Arm(); }   // MTG_PLAN_PRICED_LEDGER: a free virtual-cache hit
     const std::uint64_t aa_cuts0 = AlchemistComboRouteCuts();   // see BpEnumEntryFor's twin
     // An INTERRUPTED derivation (the per-game backstop, or MTG_BP_DERIVE_METER=2) returns EMPTY: served, never
     // stored -- BpEnumEntryFor's rule, which this twin did not apply until the backstop could interrupt here.
     bool bp_interrupted = false;
+    const long long fr_emit0 = workctr::t_n[workctr::kPlanEmit];
     cachecharge::Scope fr_ccs;   // MTG_CACHE_HIT_CHARGE
     const BpSide fr_side = BpSideBegin();
     BpChannels fr_chan;   // MTG_BP_DERIVE_ISOLATE
@@ -112397,6 +112451,7 @@ static bool BpCanonFront(const GameState& state, bool is_pre_combat, TurnSolver:
     std::vector<TurnSolver::Plan> plans =
         BpDeriveContinuationList(state, is_pre_combat, /*count_stats=*/true, /*demoted_out=*/nullptr,
                                  /*front_only=*/true, &bp_interrupted);
+    const long long fr_emitted = workctr::t_n[workctr::kPlanEmit] - fr_emit0;
     fr_chan.Restore();
     cachecharge::Cost fr_cost = fr_ccs.Done();
     BpSideEnd(fr_side, fr_cost);
@@ -112418,7 +112473,8 @@ static bool BpCanonFront(const GameState& state, bool is_pre_combat, TurnSolver:
     }
     static const std::size_t s_cap = static_cast<std::size_t>(
         std::max(1, EnvInt("MTG_BP_CANON_FRONT_CAP", 16384)));
-    if (led && !led_mute.on && !aa_cut_inside && !bp_interrupted && fr_cost.storable)
+    if (led && !led_mute.on && !aa_cut_inside && !bp_interrupted && fr_cost.storable
+        && pledger::FitsWork(plans.size(), fr_emitted))
     {   // MTG_PLAN_PRICED_LEDGER: the shadow's store, as below (this memo has no byte budget of its own)
         if (pledger::t_front.size() >= s_cap) { pledger::t_front.clear(); }
         pledger::t_front[pledger::K(key)] = pledger::FlagsOf(fr_cost);
@@ -116634,7 +116690,8 @@ static long long MtgTurnCensusShapeSum(std::atomic<std::uint64_t> shapestats::Sl
     X(w_odo,              workctr::t_n[workctr::kOdoVisit])                                       \
     X(w_apply,            workctr::t_n[workctr::kApply])                                          \
     X(w_pay,              workctr::t_n[workctr::kPay])                                            \
-    X(w_simkey,           workctr::t_n[workctr::kSimKey])
+    X(w_simkey,           workctr::t_n[workctr::kSimKey])                                         \
+    X(w_plan_emit,        workctr::t_n[workctr::kPlanEmit])
 
 const std::vector<const char*>& turncensus::FieldNames()
 {

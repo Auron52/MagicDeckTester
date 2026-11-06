@@ -3,7 +3,7 @@
 
 Model: ms ~= sum_k price_k * count_k, non-negative prices, no intercept. Regressors:
   interior = units - step_c   (charged interior plan-loop units and priced sites)
-  step_c, step_f, greedy, enum, plans, odo, apply   (core/WorkCounters.h)
+  step_c, step_f, greedy, enum, plans, odo, apply, pay, simkey, plan_emit (core/WorkCounters.h)
 Prints the prices (us per event), each regressor's share of the fitted time, and the fit quality:
 the ratio actual/predicted per game (median, p5, p95) overall, per deck, and on the slowest games --
 a cost model that bounds the tail must keep that ratio near 1 on the tail, not just on average.
@@ -80,7 +80,7 @@ def fit(X, y, wts):
 sys.path.insert(0, __file__.rsplit("/", 1)[0])
 from tier1_stats import load  # noqa: E402
 
-KINDS = ["interior", "step_c", "step_f", "greedy", "enum", "plans", "odo", "apply", "pay", "simkey"]
+KINDS = ["interior", "step_c", "step_f", "greedy", "enum", "plans", "odo", "apply", "pay", "simkey", "plan_emit"]
 
 
 def features(r):

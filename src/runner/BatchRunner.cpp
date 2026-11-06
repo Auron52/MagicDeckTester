@@ -798,6 +798,8 @@ Job ParseJob(const json& jspec, ProfileCache& cache)
     if (jspec.contains("solve_charge_w")) { j.arm.solve_charge_w = jspec["solve_charge_w"].get<int>(); }
     if (jspec.contains("enum_charge_w"))  { j.arm.enum_charge_w  = jspec["enum_charge_w"].get<int>(); }
     if (jspec.contains("decision_priced_x")) { j.arm.decision_priced_x = jspec["decision_priced_x"].get<int>(); }
+    if (jspec.contains("plan_priced_ledger_max_emits"))
+    { j.arm.plan_priced_ledger_max_emits = jspec["plan_priced_ledger_max_emits"].get<int>(); }
     if (jspec.contains("priced_unit_ns")) { j.arm.priced_unit_ns = jspec["priced_unit_ns"].get<int>(); }
     if (jspec.contains("decision_priced_gate")) { j.arm.decision_priced_gate = jspec["decision_priced_gate"].get<bool>() ? 1 : 0; }
     if (jspec.contains("bp_priced_stop")) { j.arm.bp_priced_stop = jspec["bp_priced_stop"].get<bool>() ? 1 : 0; }
