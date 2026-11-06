@@ -1,0 +1,369 @@
+{
+  "seed": 6, "game_index": 5, "win_turn": 4, "won": true,
+  "mulligan": { "count": 1, "bottom": [57] }, "karoo_float": 1, "fetch_activation": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1, "spell_copy_id": 1,
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 40, "name": "Rift Bolt" }, { "num": 56, "name": "Sunbaked Canyon" }, { "num": 37, "name": "Mountain" }, { "num": 20, "name": "Inspiring Vantage" }, { "num": 44, "name": "Sacred Foundry" }, { "num": 21, "name": "Inspiring Vantage" }, { "num": 28, "name": "Lightning Bolt" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": true,
+  "to_bottom": 1,
+  "hand": [{ "num": 14, "name": "Eidolon of the Great Revel" }, { "num": 15, "name": "Eidolon of the Great Revel" }, { "num": 57, "name": "Sunbaked Canyon" }, { "num": 56, "name": "Sunbaked Canyon" }, { "num": 55, "name": "Skullcrack" }, { "num": 36, "name": "Monastery Swiftspear" }, { "num": 60, "name": "Wooded Foothills" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 2,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 1,
+  "hand": [{ "num": 14, "name": "Eidolon of the Great Revel", "win_optimal": true }, { "num": 15, "name": "Eidolon of the Great Revel", "win_optimal": true }, { "num": 57, "name": "Sunbaked Canyon", "win_optimal": true }, { "num": 56, "name": "Sunbaked Canyon", "win_optimal": true }, { "num": 55, "name": "Skullcrack", "win_optimal": true }, { "num": 36, "name": "Monastery Swiftspear", "win_optimal": true }, { "num": 60, "name": "Wooded Foothills", "win_optimal": true }],
+  "ai_choice": { "index": 6, "num": 60, "name": "Wooded Foothills" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 1)"
+}
+},
+    { "chosen": 3, "cast_order": ["**", "land=Wooded Foothills", "need=R"], "decision": {
+  "decision_index": 3,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 14, "name": "Eidolon of the Great Revel", "cost": "{R}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 15, "name": "Eidolon of the Great Revel", "cost": "{R}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 36, "name": "Monastery Swiftspear", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 56, "name": "Sunbaked Canyon", "cost": "", "mv": 0, "kind": "land" }, { "num": 60, "name": "Wooded Foothills", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 53 },
+  "plans": [
+    { "index": 0, "summary": "land=Sunbaked Canyon; cast: Monastery Swiftspear", "declared_order_payability": "not_verified", "land": "Sunbaked Canyon", "casts": ["Monastery Swiftspear"], "actions": [{ "card": "Monastery Swiftspear" }] },
+    { "index": 1, "summary": "land=Wooded Foothills; cast: Wooded Foothills: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "casts": ["Wooded Foothills"], "actions": [{ "card": "Wooded Foothills", "src_num": 60, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 2, "summary": "land=Sunbaked Canyon; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Sunbaked Canyon", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Wooded Foothills; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 12,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "landsearch=Wooded Foothills", "need=R"], "decision": {
+  "decision_index": 4,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Wooded Foothills", "idx": 4, "num": 60, "is_land": true }], "vial_counters": [], "hand": [{ "num": 14, "name": "Eidolon of the Great Revel", "cost": "{R}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 15, "name": "Eidolon of the Great Revel", "cost": "{R}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 36, "name": "Monastery Swiftspear", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 56, "name": "Sunbaked Canyon", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 53 },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Wooded Foothills: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Wooded Foothills"], "actions": [{ "card": "Wooded Foothills", "src_num": 60, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 5,
+  "type": "tutor_etb",
+  "source": "Wooded Foothills -- land onto the battlefield",
+  "turn": 1,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 19, "battlefield": [], "vial_counters": [], "hand": [{ "num": 14, "name": "Eidolon of the Great Revel", "cost": "{R}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 15, "name": "Eidolon of the Great Revel", "cost": "{R}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 36, "name": "Monastery Swiftspear", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 56, "name": "Sunbaked Canyon", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Wooded Foothills"], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 53 },
+  "heuristic_default": 0,
+  "candidates": [{ "index": 0, "name": "Mountain" }, { "index": 1, "name": "Sacred Foundry" }],
+  "note": "reply a candidate index to search that card up, or -1 to decline the optional search. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 6,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 1, "kind": "sacrifice", "text": "🔪 Wooded Foothills -- sacrificed (cost)" }, { "turn": 1, "kind": "tutor", "text": "🔎 Wooded Foothills: Mountain onto the battlefield" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 19, "battlefield": [{ "name": "Mountain", "idx": 4, "num": 39, "is_land": true, "taps": "R" }], "vial_counters": [], "hand": [{ "num": 14, "name": "Eidolon of the Great Revel", "cost": "{R}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 15, "name": "Eidolon of the Great Revel", "cost": "{R}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 36, "name": "Monastery Swiftspear", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 56, "name": "Sunbaked Canyon", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Wooded Foothills"], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 53 },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Monastery Swiftspear", "declared_order_payability": "not_verified", "land": null, "casts": ["Monastery Swiftspear"], "actions": [{ "card": "Monastery Swiftspear" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 7,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 19, "battlefield": [{ "name": "Monastery Swiftspear", "idx": 5, "num": 36, "is_land": false, "power": 1, "toughness": 2 }, { "name": "Mountain", "idx": 4, "num": 39, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 14, "name": "Eidolon of the Great Revel", "cost": "{R}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 15, "name": "Eidolon of the Great Revel", "cost": "{R}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 56, "name": "Sunbaked Canyon", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Wooded Foothills"], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 53 },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 1, "kind": "combat", "text": "⚔ attacked: Monastery Swiftspear (1) — 1 to opponent (20→19)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 19, "battlefield": [{ "name": "Monastery Swiftspear", "idx": 5, "num": 36, "tapped": true, "is_land": false, "power": 1, "toughness": 2 }, { "name": "Mountain", "idx": 4, "num": 39, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 14, "name": "Eidolon of the Great Revel", "cost": "{R}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 15, "name": "Eidolon of the Great Revel", "cost": "{R}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 56, "name": "Sunbaked Canyon", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Wooded Foothills"], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 53 },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Sunbaked Canyon", "cast=Eidolon of the Great Revel"], "decision": {
+  "decision_index": 9,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 2, "card": "Boltwave" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 19, "battlefield": [{ "name": "Monastery Swiftspear", "idx": 5, "num": 36, "is_land": false, "power": 1, "toughness": 2 }, { "name": "Mountain", "idx": 4, "num": 39, "is_land": true, "taps": "R" }], "vial_counters": [], "hand": [{ "num": 5, "name": "Boltwave", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 14, "name": "Eidolon of the Great Revel", "cost": "{R}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 15, "name": "Eidolon of the Great Revel", "cost": "{R}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 56, "name": "Sunbaked Canyon", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Wooded Foothills"], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 52 },
+  "plans": [
+    { "index": 0, "summary": "land=Sunbaked Canyon; cast: Eidolon of the Great Revel", "declared_order_payability": "not_verified", "land": "Sunbaked Canyon", "casts": ["Eidolon of the Great Revel"], "actions": [{ "card": "Eidolon of the Great Revel" }] },
+    { "index": 1, "summary": "land=Sunbaked Canyon; cast: Skullcrack → opponent", "declared_order_payability": "not_verified", "land": "Sunbaked Canyon", "casts": ["Skullcrack"], "actions": [{ "card": "Skullcrack", "burn_target": "opponent" }] },
+    { "index": 2, "summary": "land=Sunbaked Canyon; cast: Boltwave", "declared_order_payability": "not_verified", "land": "Sunbaked Canyon", "casts": ["Boltwave"], "actions": [{ "card": "Boltwave" }] },
+    { "index": 3, "summary": "land=none; cast: Boltwave", "declared_order_payability": "not_verified", "land": null, "casts": ["Boltwave"], "actions": [{ "card": "Boltwave" }] },
+    { "index": 4, "summary": "land=Sunbaked Canyon; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Sunbaked Canyon", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 24,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 10,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Eidolon of the Great Revel", "idx": 7, "num": 14, "sick": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Monastery Swiftspear", "idx": 5, "num": 36, "is_land": false, "power": 1, "toughness": 2 }, { "name": "Mountain", "idx": 4, "num": 39, "tapped": true, "is_land": true }, { "name": "Sunbaked Canyon", "idx": 6, "num": 56, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 5, "name": "Boltwave", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 15, "name": "Eidolon of the Great Revel", "cost": "{R}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Wooded Foothills"], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 52 },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 11,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 2, "kind": "combat", "text": "⚔ attacked: Monastery Swiftspear (1) — 1 to opponent (19→18)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Eidolon of the Great Revel", "idx": 7, "num": 14, "sick": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Monastery Swiftspear", "idx": 5, "num": 36, "tapped": true, "is_land": false, "power": 1, "toughness": 2 }, { "name": "Mountain", "idx": 4, "num": 39, "tapped": true, "is_land": true }, { "name": "Sunbaked Canyon", "idx": 6, "num": 56, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 5, "name": "Boltwave", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 15, "name": "Eidolon of the Great Revel", "cost": "{R}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Wooded Foothills"], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 52 },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 3, "cast_order": ["**", "suspend=Rift Bolt", "cast=Boltwave"], "decision": {
+  "decision_index": 12,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 3, "card": "Rift Bolt" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Eidolon of the Great Revel", "idx": 7, "num": 14, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Monastery Swiftspear", "idx": 5, "num": 36, "is_land": false, "power": 1, "toughness": 2 }, { "name": "Mountain", "idx": 4, "num": 39, "is_land": true, "taps": "R" }, { "name": "Sunbaked Canyon", "idx": 6, "num": 56, "is_land": true, "taps": "RW" }], "vial_counters": [], "hand": [{ "num": 5, "name": "Boltwave", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 15, "name": "Eidolon of the Great Revel", "cost": "{R}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Rift Bolt", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }, { "num": 55, "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Wooded Foothills"], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 51 },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Eidolon of the Great Revel", "declared_order_payability": "not_verified", "land": null, "casts": ["Eidolon of the Great Revel"], "actions": [{ "card": "Eidolon of the Great Revel" }] },
+    { "index": 1, "summary": "land=none; cast: Skullcrack → opponent", "declared_order_payability": "not_verified", "land": null, "casts": ["Skullcrack"], "actions": [{ "card": "Skullcrack", "burn_target": "opponent" }] },
+    { "index": 2, "summary": "land=none; cast: Boltwave", "declared_order_payability": "not_verified", "land": null, "casts": ["Boltwave"], "actions": [{ "card": "Boltwave" }] },
+    { "index": 3, "summary": "land=none; cast: Boltwave, Rift Bolt (suspend)", "declared_order_payability": "not_verified", "land": null, "casts": ["Boltwave", "Rift Bolt"], "actions": [{ "card": "Boltwave" }, { "card": "Rift Bolt", "verb": "suspend" }] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=none; cast: Rift Bolt (suspend)", "declared_order_payability": "not_verified", "land": null, "casts": ["Rift Bolt"], "actions": [{ "card": "Rift Bolt", "verb": "suspend" }] },
+    { "index": 6, "summary": "sacrifice Sunbaked Canyon to draw", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [{ "card": "Sunbaked Canyon", "dig": true, "dig_sacrifice": true }] }
+  ],
+  "plans_hidden": 42,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 3, "kind": "suspend", "text": "⌛ Rift Bolt -- suspended (arrives T4)" }, { "turn": 3, "kind": "damage", "text": "🔥 Boltwave: 3 to opponent (18→15)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 15, "battlefield": [{ "name": "Eidolon of the Great Revel", "idx": 7, "num": 14, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Monastery Swiftspear", "idx": 5, "num": 36, "is_land": false, "power": 2, "toughness": 3 }, { "name": "Mountain", "idx": 4, "num": 39, "tapped": true, "is_land": true }, { "name": "Sunbaked Canyon", "idx": 6, "num": 56, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 15, "name": "Eidolon of the Great Revel", "cost": "{R}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "exile": [{ "name": "Rift Bolt", "kind": "suspend", "reason": "suspend", "time_counters": 1, "arrive_turn": 4 }], "graveyard": ["Boltwave", "Wooded Foothills"], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 15, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 51 },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 14,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Monastery Swiftspear (2), Eidolon of the Great Revel (2) — 4 to opponent (15→11)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 15, "battlefield": [{ "name": "Eidolon of the Great Revel", "idx": 7, "num": 14, "tapped": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Monastery Swiftspear", "idx": 5, "num": 36, "tapped": true, "is_land": false, "power": 2, "toughness": 3 }, { "name": "Mountain", "idx": 4, "num": 39, "tapped": true, "is_land": true }, { "name": "Sunbaked Canyon", "idx": 6, "num": 56, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 15, "name": "Eidolon of the Great Revel", "cost": "{R}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "exile": [{ "name": "Rift Bolt", "kind": "suspend", "reason": "suspend", "time_counters": 1, "arrive_turn": 4 }], "graveyard": ["Boltwave", "Wooded Foothills"], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 11, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 51 },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 15,
+  "type": "free_cast",
+  "source": "Rift Bolt (suspend)",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 15, "battlefield": [{ "name": "Eidolon of the Great Revel", "idx": 7, "num": 14, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Monastery Swiftspear", "idx": 5, "num": 36, "is_land": false, "power": 1, "toughness": 2 }, { "name": "Mountain", "idx": 4, "num": 39, "is_land": true, "taps": "R" }, { "name": "Sunbaked Canyon", "idx": 6, "num": 56, "is_land": true, "taps": "RW" }], "vial_counters": [], "hand": [{ "num": 15, "name": "Eidolon of the Great Revel", "cost": "{R}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Boltwave", "Wooded Foothills"], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 11, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 50 },
+  "heuristic_default": 0,
+  "operation": "suspend_cast",
+  "ai_pick": 0,
+  "candidates": [{ "index": 0, "name": "Rift Bolt" }],
+  "note": "reply a candidate index to cast that spell WITHOUT paying its mana cost, or -1 to decline. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 16,
+  "type": "target",
+  "source": "Rift Bolt",
+  "turn": 4,
+  "per_target_damage": 3, "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 15, "battlefield": [{ "name": "Eidolon of the Great Revel", "idx": 7, "num": 14, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Monastery Swiftspear", "idx": 5, "num": 36, "is_land": false, "power": 1, "toughness": 2 }, { "name": "Mountain", "idx": 4, "num": 39, "is_land": true, "taps": "R" }, { "name": "Sunbaked Canyon", "idx": 6, "num": 56, "is_land": true, "taps": "RW" }], "vial_counters": [], "hand": [{ "num": 15, "name": "Eidolon of the Great Revel", "cost": "{R}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Boltwave", "Wooded Foothills"], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 11, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 50 },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }, { "kind": "permanent", "index": 3, "label": "2/2 Creature (opponent)" }, { "kind": "permanent", "index": 5, "label": "Monastery Swiftspear (yours)" }, { "kind": "permanent", "index": 7, "label": "Eidolon of the Great Revel (yours)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }, { "index": 2, "label": "2/2 Creature (opponent)", "targets": [{ "kind": "permanent", "index": 3 }] }, { "index": 3, "label": "Monastery Swiftspear (yours)", "targets": [{ "kind": "permanent", "index": 5 }] }, { "index": 4, "label": "Eidolon of the Great Revel (yours)", "targets": [{ "kind": "permanent", "index": 7 }] }],
+  "note": "reply an option index. Each chosen target takes 3 damage (up to 1 target(s)). Default = the AI's pick (face)."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 17,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 4, "card": "Lava Spike" }],
+  "events": [{ "turn": 4, "kind": "suspend", "text": "⌛ Rift Bolt -- cast off suspend" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 13, "battlefield": [{ "name": "Eidolon of the Great Revel", "idx": 7, "num": 14, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Monastery Swiftspear", "idx": 5, "num": 36, "is_land": false, "power": 2, "toughness": 3 }, { "name": "Mountain", "idx": 4, "num": 39, "is_land": true, "taps": "R" }, { "name": "Sunbaked Canyon", "idx": 6, "num": 56, "is_land": true, "taps": "RW" }], "vial_counters": [], "hand": [{ "num": 15, "name": "Eidolon of the Great Revel", "cost": "{R}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Lava Spike", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 55, "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Boltwave", "Rift Bolt", "Wooded Foothills"], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 8, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 50 },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Skullcrack → opponent", "declared_order_payability": "not_verified", "land": null, "casts": ["Skullcrack"], "actions": [{ "card": "Skullcrack", "burn_target": "opponent" }] },
+    { "index": 1, "summary": "land=none; cast: Lava Spike → opponent", "declared_order_payability": "not_verified", "land": null, "casts": ["Lava Spike"], "actions": [{ "card": "Lava Spike", "burn_target": "opponent" }] },
+    { "index": 2, "summary": "land=none; cast: Eidolon of the Great Revel", "declared_order_payability": "not_verified", "land": null, "casts": ["Eidolon of the Great Revel"], "actions": [{ "card": "Eidolon of the Great Revel" }] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 4, "summary": "sacrifice Sunbaked Canyon to draw", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [{ "card": "Sunbaked Canyon", "dig": true, "dig_sacrifice": true }] }
+  ],
+  "plans_hidden": 30,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 18,
+  "type": "target",
+  "source": "Skullcrack",
+  "turn": 4,
+  "per_target_damage": 3, "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 13, "battlefield": [{ "name": "Eidolon of the Great Revel", "idx": 7, "num": 14, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Monastery Swiftspear", "idx": 5, "num": 36, "is_land": false, "power": 2, "toughness": 3 }, { "name": "Mountain", "idx": 4, "num": 39, "is_land": true, "taps": "R" }, { "name": "Sunbaked Canyon", "idx": 6, "num": 56, "is_land": true, "taps": "RW" }], "vial_counters": [], "hand": [{ "num": 15, "name": "Eidolon of the Great Revel", "cost": "{R}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Lava Spike", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 55, "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Boltwave", "Rift Bolt", "Wooded Foothills"], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 8, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 50 },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }],
+  "note": "reply an option index. Each chosen target takes 3 damage (up to 1 target(s)). Default = the AI's pick (face)."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 19,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 4, "kind": "damage", "text": "🔥 Skullcrack: 3 to opponent (8→5)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 10, "battlefield": [{ "name": "Eidolon of the Great Revel", "idx": 7, "num": 14, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Monastery Swiftspear", "idx": 5, "num": 36, "is_land": false, "power": 3, "toughness": 4 }, { "name": "Mountain", "idx": 4, "num": 39, "tapped": true, "is_land": true }, { "name": "Sunbaked Canyon", "idx": 6, "num": 56, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 15, "name": "Eidolon of the Great Revel", "cost": "{R}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Lava Spike", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }], "graveyard": ["Boltwave", "Rift Bolt", "Skullcrack", "Wooded Foothills"], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 5, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 50 },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 4, "kind": "combat", "text": "⚔ attacked: Monastery Swiftspear (3), Eidolon of the Great Revel (2) — 5 to opponent (5→0)" }
+  ]
+}
