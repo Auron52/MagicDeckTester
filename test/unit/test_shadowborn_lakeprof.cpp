@@ -84,8 +84,8 @@ int CountCrackPlans(const std::vector<TurnSolver::Plan>& v)
 }   // namespace
 
 // ---- ON-DEMAND sac-for-mana (docs/design/sac-for-mana-on-demand.md, USER 2026-11-04: "it should be on-demand
-// and only done that way"). The payer cracks Lake of the Dead / Lotus Bloom only when the cost cannot be paid
-// without it; no plan carries a SacForMana action for either.
+// and only done that way"). The payer cracks Lake of the Dead / Lotus Bloom when the cost needs it or
+// a searched Lake policy requests the early crack; no plan carries a SacForMana action for either.
 namespace
 {
 int CountPerm(const GameState& s, const std::string& name)
@@ -122,6 +122,23 @@ TEST_CASE("On-demand Lake: cracked when the cost needs it, and the surplus float
     CHECK(CountPerm(s, "Swamp") == 0);
     CHECK(CountPerm(s, "Lake of the Dead") == 1);
     CHECK(s.floating_mana.Total() == 2);         // leftover rule: the rest floats for the phase
+}
+
+TEST_CASE("On-demand Lake: searched early crack preserves mana for later payments")
+{
+    GameState ordinary = BaseLp();
+    ordinary.battlefield.push_back(PermLp("Lake of the Dead", 80));
+    ordinary.battlefield.push_back(PermLp("Swamp", 81));
+    GameState searched = ordinary;
+    searched.scripted_early_ondemand_crack = true;
+    REQUIRE(PayLp(ordinary, 0, 1));
+    REQUIRE(PayLp(searched, 0, 1));
+    CHECK(CountPerm(ordinary, "Swamp") == 1);
+    CHECK_FALSE(ordinary.battlefield[0].tapped);
+    CHECK(CountPerm(searched, "Swamp") == 0);
+    CHECK(searched.battlefield[0].tapped);
+    CHECK(searched.floating_mana.Total() == 4);
+    CHECK_FALSE(searched.scripted_early_ondemand_crack);
 }
 
 TEST_CASE("On-demand Lake: the crack and the plain tap are exclusive")

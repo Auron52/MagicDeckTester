@@ -1253,6 +1253,9 @@ public:
         //
         // Both flags are human-menu only and neither is read by the search or any digest.
         bool combo_off_offered  = false;
+        // Search alternative: the payer may crack Lake before the next eligible bill. Kept in the
+        // byte after combo_off_offered so the Plan's layout does not grow.
+        std::int8_t early_ondemand_crack = -1;
         // SEARCHED DEFENSE OF THE HEART PUT LIST (MTG_DOTH_AXIS, 2026-10-29): the NEXT upkeep's put lists, packed
         // exactly as GameState::scripted_doth_put (a rank per trigger ordinal into the resolution-time option
         // list, rank 0 = the provider's pick, + the count of ordinals it covers); -1 = write nothing. Written

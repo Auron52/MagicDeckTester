@@ -3981,6 +3981,9 @@ public:
 class ShadowbornProvider : public DeckProvider
 {
 public:
+    bool SearchEarlySacLandPolicy(const GameState& s, const std::vector<Action>& acts) const override;
+    bool ComboCardValue(const GameState& s, const CardDefinition& def,
+                        int dmg_unit, int& out) const override;
     CertStance Certificate() const override
     { return { CertState::NotAssessed,
                "NOT ASSESSED. Damage is combat-only (Apostles 1/1; Demons: Reaper 6/6 flier, Abhorrent "

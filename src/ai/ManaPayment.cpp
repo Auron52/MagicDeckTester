@@ -8979,6 +8979,23 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
     CollectOnDemandCracks(state, lands, lumps);
     if (lands.empty() && lumps.empty())
     { return TapForCostSharedCore(state, cost_in, for_creature, available, honor_legacy_cco); }
+    // A searched line may need the Lake's four black mana for later casts or an activation even
+    // when this individual bill is payable by tapping it for one. Try that line on a copy before
+    // committing the sacrifice. The pin remains for a later payment if no Lake is crackable yet.
+    if (state.scripted_early_ondemand_crack)
+    {
+        for (const OnDemandCrack& k : lands)
+        {
+            if (k.color.empty()) { continue; }
+            const std::unique_ptr<GameState> scratch = std::make_unique<GameState>();
+            ManaPool trial_avail;
+            if (!OnDemandTrial(state, {k}, true, cost_in, for_creature, available, trial_avail,
+                               honor_legacy_cco, *scratch)) { continue; }
+            if (OnDemandPayWith(state, {k}, true, cost_in, for_creature, available, honor_legacy_cco))
+            { state.scripted_early_ondemand_crack = false; return true; }
+            return false;
+        }
+    }
     // 1. Ordinary payment, the crackable lands held. (A failed payment leaves the board as it found it.)
     {
         std::uint64_t land_hold = 0;

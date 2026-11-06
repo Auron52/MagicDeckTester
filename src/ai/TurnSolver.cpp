@@ -1597,6 +1597,7 @@ inline void Record(const GameState& s, const TurnSolver::Plan& first, const Turn
     pl("clandfall", first.combat_landfall_target_choice != dup.combat_landfall_target_choice);
     pl("fbhold", first.fb_hold_choice != dup.fb_hold_choice);
     pl("ctransform", first.combat_transform_choice != dup.combat_transform_choice);
+    pl("earlycrack", first.early_ondemand_crack != dup.early_ondemand_crack);
     pl("lsearch", first.land_search_pins != dup.land_search_pins
                   || first.attack_land_search_choice != dup.attack_land_search_choice
                   || first.upkeep_land_search_choice != dup.upkeep_land_search_choice
@@ -26856,6 +26857,8 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
     { fold(0x1A5E0000ull + static_cast<uint64_t>(static_cast<uint32_t>(p.upkeep_land_search_choice + 2))); }
     if (p.combat_crack_choice != -1)
     { fold(0x1A5F0000ull + static_cast<uint64_t>(static_cast<uint32_t>(p.combat_crack_choice + 2))); }
+    if (p.early_ondemand_crack != -1)
+    { fold(0x1A5FCA11ull + static_cast<uint64_t>(p.early_ondemand_crack)); }
     // Bloodline Keeper's in-combat transform (Vampires B): value-gated, its own tag.
     if (p.combat_transform_choice != -1)
     { fold(0x1A610000ull + static_cast<uint64_t>(static_cast<uint32_t>(p.combat_transform_choice + 2))); }
@@ -27159,6 +27162,7 @@ static bool IsApplyEmptyPlan(const TurnSolver::Plan& p)
         && p.land_search_pins.empty() && p.attack_land_search_choice == -1
         && p.upkeep_land_search_choice == -1 && p.combat_crack_choice == -1
         && p.combat_transform_choice == -1
+        && p.early_ondemand_crack == -1
         && p.land_search_act_slot == -1
         && p.look_top_pins.empty() && p.incinerator_targets.empty()
         && p.lackey_choice == -1 && p.ponder_choice == -1 && p.discard_choice == -1
@@ -27207,6 +27211,7 @@ static bool PlanIsAxisVariantExceptOrder(const TurnSolver::Plan& p)
         || !p.land_search_pins.empty() || p.attack_land_search_choice >= 0
         || p.upkeep_land_search_choice >= 0 || p.combat_crack_choice >= 0
         || p.combat_transform_choice >= 0   // Bloodline Keeper's in-combat transform (Vampires B)
+        || p.early_ondemand_crack >= 0
         // Abiding Grace's end-step ranks / Emeria's next-upkeep ranks: clones of their base differing only
         // in a pending STATE pin. NOTE what this does NOT buy: BuildDedupKey folds the RAW pin, so two
         // codes that would resolve to the same outcome still key apart and are never skipped here. The
@@ -28144,6 +28149,8 @@ inline std::uint64_t PlanH(const TurnSolver::Plan& p, int ax)
                           p.combat_landfall_target_choice, p.combat_crack_choice, p.lackey_choice,
                           p.saga_target_choice, p.saga_ch1_choice, p.sweep_choice, p.le_fire_choice };
     for (int x : extra) { h = Mix(h, static_cast<std::uint64_t>(x + 7)); }
+    if (p.early_ondemand_crack >= 0)
+    { h = Mix(h, 0xEA4CCA11ull + static_cast<std::uint64_t>(p.early_ondemand_crack)); }
     if (p.grace_choice >= 0) { h = Mix(h, 0x4752ull + static_cast<std::uint64_t>(p.grace_choice)); }   // value-gated
     if (p.upkeep_gy_reanimate_choice >= 0)
     { h = Mix(h, 0x454Dull + static_cast<std::uint64_t>(p.upkeep_gy_reanimate_choice)); }   // value-gated
@@ -52459,6 +52466,7 @@ namespace solvememo
             || a.upkeep_land_search_choice != b.upkeep_land_search_choice
             || a.combat_crack_choice != b.combat_crack_choice
             || a.combat_transform_choice != b.combat_transform_choice
+            || a.early_ondemand_crack != b.early_ondemand_crack
             || a.land_search_act_slot != b.land_search_act_slot
             || a.tapmode_choice != b.tapmode_choice || a.freshmode_choice != b.freshmode_choice
             || a.lackey_choice != b.lackey_choice || a.ponder_choice != b.ponder_choice
@@ -58296,6 +58304,19 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         span.End(true, /*made=*/ok || t_prepay_partial_made);
         return ok;
     }
+    // This line chose to crack an on-demand land at the first bill. A joint prepay would
+    // tap the Lake for one before that bill exists and bypass the searched payer choice.
+    // Pay in cast order so TapForCostShared can consume the pin on the real first bill.
+    if (state.scripted_early_ondemand_crack) { return false; }
+    if (state.deck_has_ondemand_sac)
+    {
+        for (const Action& a : acts)
+        {
+            if (a.kind == Action::Kind::ActivatePermAbility
+                && a.ability_mode == Action::AbilityMode::SacNamedTutorPut)
+            { return false; }
+        }
+    }
     // Attribution (fivecolour-payment-query-fold.md step 0): count every invocation, and every one
     // that DECLINES -- a decline is what routes the turn's casts to the per-cast fallback, i.e. what
     // turns one folded question into one question per cast.
@@ -60419,6 +60440,13 @@ ManaCost LineCastCostTotal(const std::vector<Action>& acts)
     const bool hold_blink = heurarm::Flag(heurarm::HOLD_C_FOR_LINE, s_hold_c_line_env);
     for (const Action& a : acts)
     {
+        if (a.kind == Action::Kind::ActivatePermAbility
+            && a.ability_mode == Action::AbilityMode::SacNamedTutorPut)
+        {
+            // The activation follows the casts; Lake's payment choice must reserve its bill.
+            AddManaCost(total, a.cost);
+            continue;
+        }
         if (hold_blink && a.kind == Action::Kind::ActivateBlink)
         {
             ManaCost pips = a.cost;
@@ -68059,6 +68087,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                           : TapForCostDirect(state, act_cost, /*for_creature=*/false))
                 {
                     _act_line_pay.Paid();
+                    if (sac_named) { SubManaCost(g_line_unpaid_cost, act_cost); }
                     if (ActDropAuditOn()) { g_act_fired.fetch_add(1, std::memory_order_relaxed); }
                     // Human play exposes Satyr's target literally. If that
                     // land is still untapped, tap it for mana immediately
@@ -70554,6 +70583,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     state.scripted_combat_aura_swap = -1;          // searched Arcanum Wings combat swap (same lockstep)
     state.scripted_combat_aura_swap_in = -1;       // ...and its fixed Aura (human deferred swap)
     state.scripted_attack_land_search = -1;        // searched Primeval Titan attack pick (same lockstep)
+    state.scripted_early_ondemand_crack = false;
     state.pending_extra_combats = 0;   // Moraug: drained every turn; a turn boundary never carries one
     state.scripted_combat_land_search_crack = -1;  // ...and the in-combat Khalni crack (same lockstep)
     state.scripted_combat_landfall_target = -1;    // ...and the combat landfall-target rank (same lockstep)
@@ -87457,6 +87487,37 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         }
     }
 
+    // The Lake's early on-demand crack is a payment POLICY branch, not a SacForMana action.
+    // It must be present on breakpoint continuations as well as the outer plan: a ripple can
+    // expose the casts that need the float only after the first segment has been applied.
+    if (!HumanPlayActive() && state.deck_has_ondemand_sac)
+    {
+        bool lake = false;
+        for (const Permanent& q : state.battlefield)
+        {
+            if (q.controller_index != state.active_player_index || q.def_absent || q.tapped) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+            if (d != nullptr && !d->params.sac_for_mana_victim_land_subtype.empty())
+            { lake = true; break; }
+        }
+        if (lake)
+        {
+            if (pb_lazy != nullptr && pb_lazy->active) { PbLazyMaterialize(all, *pb_lazy); }
+            std::vector<TurnSolver::Plan> extra;
+            extra.reserve(all.size());
+            for (const TurnSolver::Plan& p : all)
+            {
+                if (p.early_ondemand_crack >= 0) { continue; }
+                if (!ResolveProvider(state).SearchEarlySacLandPolicy(state, p.actions)) { continue; }
+                TurnSolver::Plan v = p;
+                v.early_ondemand_crack = state.scripted_early_ondemand_crack ? 0 : 1;
+                v.bp_wave0 = false;
+                extra.push_back(std::move(v));
+            }
+            all.insert(all.end(), std::make_move_iterator(extra.begin()),
+                                  std::make_move_iterator(extra.end()));
+        }
+    }
 }
 
 // ---- THE IDLE PASS A PRE-COMBAT HOST APPENDS GETS EVERY SUB-DECISION AXIS (2026-10-17) ----------
@@ -87884,6 +87945,7 @@ static void PlanDomCensus(const std::vector<TurnSolver::Plan>& all)
             add(pl.attack_land_search_choice); add(pl.upkeep_land_search_choice);
             add(pl.combat_crack_choice); add(pl.land_search_act_slot);
             add(pl.combat_transform_choice);
+            add(pl.early_ondemand_crack);
             x += "|lt";
             for (int s : pl.look_top_pins)        { add(s); }
             if (!pl.incinerator_targets.empty())
@@ -88070,6 +88132,7 @@ static std::string PbVerifyFieldDiff(const TurnSolver::Plan& a, const TurnSolver
     if (!(a.look_top_pins == b.look_top_pins)) { d += " look_top_pins"; }
     if (!(a.combat_crack_choice == b.combat_crack_choice)) { d += " combat_crack_choice"; }
     if (!(a.combat_transform_choice == b.combat_transform_choice)) { d += " combat_transform_choice"; }
+    if (!(a.early_ondemand_crack == b.early_ondemand_crack)) { d += " early_ondemand_crack"; }
     if (!(a.land_search_act_slot == b.land_search_act_slot)) { d += " land_search_act_slot"; }
     if (!(a.combat_landfall_target_choice == b.combat_landfall_target_choice)) { d += " combat_landfall_target_choice"; }
     if (!(a.fb_hold_choice == b.fb_hold_choice)) { d += " fb_hold_choice"; }
@@ -90218,6 +90281,7 @@ static void FoldPhysicalCards(TranspositionTable::Key& k, const GameState& state
             state.battlefield_at_combat, state.dep_enabler_main1 ? 1 : 0, state.dep_castpayoff_main1 ? 1 : 0,
             state.top_stacked_turn, state.top_stacked_card_number, state.floating_haste_c, state.draw_trigger_mark };
         for (std::int64_t v : sc) { mix(static_cast<std::uint64_t>(v)); }
+        if (state.scripted_early_ondemand_crack) { mix(0xEA4CCA11ull); }
         if (state.m1_hand_turn == state.TurnSeq())
         {
             mix(0x11BA + static_cast<std::uint64_t>(state.m1_hand_n));
@@ -91406,6 +91470,7 @@ static TranspositionTable::Key BuildSimKeyBase(const GameState& state, int max_t
     Fold(k, second_main ? 1u : 0u);
     Fold(k, static_cast<uint64_t>(state.turn_number));
     Fold(k, static_cast<uint64_t>(state.active_player_index));
+    if (state.scripted_early_ondemand_crack) { Fold(k, 0xEA4CCA11ull); }
     Fold(k, state.on_the_play ? 1u : 0u);
     Fold(k, state.opponent_lost_life_this_turn ? 1u : 0u);
     if (state.players_cant_gain_life_this_turn) { Fold(k, 0x5C011); }
@@ -93727,6 +93792,7 @@ static TranspositionTable::Key BuildDedupKeyBeforeLandSearchPins(const GameState
         { Fold(k, 0x9e3779b97f4a7c15ULL ^ (static_cast<std::uint64_t>(i + 1) << 40)
                      ^ static_cast<std::uint64_t>(static_cast<std::uint32_t>(pins[i]))); }
     }
+    if (state.scripted_early_ondemand_crack) { Fold(k, 0xEA4CCA11ull); }
     // ...and the two COMBAT pins (Bruna gather subset, Arcanum Wings combat swap + its fixed Aura),
     // which the list above missed: a tutor variant carrying a swap pin collided with the same tutor
     // pick without one and was skipped (MTG_DEDUP_KEY_COMBAT_PINS; see CombatPinPrecombatOn). Same
@@ -117232,6 +117298,7 @@ void TurnSolver::PlanDumpAt(const GameState& state, bool is_pre_combat, int dept
 // that did not branch on the axis leaves an outer value (the committed plan's, under a re-solve) alone.
 void TurnSolver::WritePostApplyStatePins(GameState& s, const Plan& p)
 {
+    if (p.early_ondemand_crack >= 0) { s.scripted_early_ondemand_crack = p.early_ondemand_crack != 0; }
     // Goblin Lackey's put: this turn's combat-damage step.
     if (p.lackey_choice >= 0) { s.scripted_cheat_choice = p.lackey_choice; }
     // Surtland Flinger's victim, at declare-attackers. -2 (decline) is a real pinned choice: != -1.

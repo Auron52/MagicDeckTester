@@ -58760,6 +58760,59 @@ bool ShadowbornProvider::FreeCastTakeDominated(const GameState& /*s*/, int /*con
     return hit.card.IsCreature() && p.sac_named_count > 0 && p.etb_scry == 0 && p.etb_dig_count == 0
         && p.etb_self_draw == 0 && p.etb_tutor_hand_count == 0;
 }
+bool ShadowbornProvider::ComboCardValue(const GameState& s, const CardDefinition& def,
+                                        int dmg_unit, int& out) const
+{
+    // A creature-sacrificing tutor is a missing-engine piece when an Apostle
+    // is already available to sacrifice and Lake can pay for the fetched
+    // ripple granter on the following turn. Value the enabled route, rather
+    // than the tutor's generic one-damage spell fallback.
+    if (!def.params.tutor_to_hand || !def.params.sac_additional_creature) { return false; }
+    const int me = s.active_player_index;
+    bool fodder = false, lake = false, granter_bf = false, granter_hand = false, granter_lib = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        fodder |= d->params.sac_named_count > 0;
+        lake |= !d->params.sac_for_mana_victim_land_subtype.empty();
+        granter_bf |= d->params.grants_ripple > 0;
+    }
+    for (const Card& c : s.players[static_cast<std::size_t>(me)].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr) { continue; }
+        lake |= !d->params.sac_for_mana_victim_land_subtype.empty();
+        granter_hand |= d->params.grants_ripple > 0;
+    }
+    if (!fodder || !lake || granter_bf || granter_hand) { return false; }
+    for (const Card& c : s.players[static_cast<std::size_t>(me)].library)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d != nullptr && d->params.grants_ripple > 0) { granter_lib = true; break; }
+    }
+    if (!granter_lib) { return false; }
+    out = 8 * dmg_unit;
+    return true;
+}
+bool ShadowbornProvider::SearchEarlySacLandPolicy(const GameState& s, const std::vector<Action>& acts) const
+{
+    // Early Lake mana can fund spells revealed by Stone's ripple only after the
+    // first segment resolves. Keep that payment branch for Stone and live ripple
+    // casts; the ordinary payer still cracks Lake whenever a bill needs it.
+    if (DecisionUnpruned()) { return true; }
+    for (const Action& a : acts)
+    {
+        if (a.kind != Action::Kind::CastFromHand) { continue; }
+        const CardDefinition* q = a.def != nullptr ? a.def
+            : CardDatabase::Instance().LookupInterned(a.card_name);
+        if (q == nullptr) { continue; }
+        if (!RippleInstanceNs(s, s.active_player_index, *q).empty()
+            || q->card.m_name.str() == "Thrumming Stone") { return true; }
+    }
+    return false;
+}
 // ---- ShadowbornProvider: the USER's cast order and main-1 rule (2026-11-04; authority and tables in the
 // declaration) ------------------------------------------------------------------------------------------------
 static bool SbCastOrderOn()

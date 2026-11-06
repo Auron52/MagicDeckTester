@@ -366,6 +366,7 @@ void GameEngine::UntapStep(GameState& state)
     state.scripted_combat_aura_swap = -1;   // searched Arcanum Wings combat swap (same lockstep)
     state.scripted_combat_aura_swap_in = -1;   // ...and its fixed Aura (human deferred swap)
     state.scripted_attack_land_search = -1;    // searched Primeval Titan attack pick (same lockstep)
+    state.scripted_early_ondemand_crack = false;
     state.pending_extra_combats = 0;   // Moraug: drained every turn; a turn boundary never carries one
     state.scripted_combat_land_search_crack = -1;   // ...and the in-combat Khalni crack (same lockstep)
     state.scripted_combat_landfall_target = -1;     // ...and the combat landfall-target rank (same lockstep)

@@ -7017,6 +7017,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 else
                 {
                     _act_line_pay.Paid();
+                    if (sac_named) { SubManaCost(g_line_unpaid_cost, act_cost); }
                     if (ActDropAuditOn()) { g_act_fired.fetch_add(1, std::memory_order_relaxed); }
                     // Site-8 detection input (lockstep twin of the rollout's): did the gated
                     // look-at-top (Scrying Sheets / Frost Augur) move a card into hand?

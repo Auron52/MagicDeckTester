@@ -982,6 +982,7 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     // Bloodline Keeper's in-combat transform mask (Vampires B): the same class, its own domain tag.
     if (s.scripted_combat_transform >= 0)
     { fold(0x1A61000000ull + static_cast<std::uint64_t>(s.scripted_combat_transform)); }
+    if (s.scripted_early_ondemand_crack) { fold(0xEA4CCA1100ull); }
     // The searched echo pin (Plan::echo_choice): FUTURE-DETERMINING across the turn boundary (set during the
     // turn's apply, consumed at the NEXT upkeep -- the scripted_upkeep_gy_reanimate class), value-gated with
     // its own domain tag so every deck without an echo card keeps its exact key.
