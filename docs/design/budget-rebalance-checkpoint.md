@@ -813,3 +813,19 @@ problem that doesn't happen as much anymore." Start with every slow rollout on r
   MTG_PLAN_CACHE_KB=0 (out melfold/cap/status).
 - NEXT: if tiers match GT -> push to shared branch (feature = re-pricing + priced stop + sac fold + dup-action fold).
   Hand-off doc for the rest (docs/design/budget-rebalance-followups.md).
+
+### 2026-11-06 -- LANDED on phase-1-2-deck-analyzer (rebased onto df30bfce1); NO GT accept needed from this branch
+- First tier run (on 36d3672bc): 4 equal-score EDF/Bruna digest movers, reproduced by origin's own binary (origin drift from
+  a705f3dea); origin's dfd675afb accept then covered them, so that accept was dropped in the second rebase.
+- Second rebase onto df30bfce1 (13 new origin commits, Shadowborn levers default ON): rebuilt; smoke 164/176, regression
+  262/282, mtg-test 2609/2611. ALL 32 moved cells and BOTH unit failures (test_landfall.cpp:216 fetchland drop = two
+  landfall triggers, gets one; test_pirates_provider.cpp:371 47 deck folders vs 46) reproduce EXACTLY on origin
+  df30bfce1's own binary (build/scratch/budget/ctrl2/, worktree .claude/worktrees/origin-ctrl): origin drift from
+  25261417f "Analyze Modern RW Burn and gate fetchland hold search" (Burn / AntiLife / FiveColour; AntiLife d0
+  4.892 -> 4.999, FiveColour d0 5.456 -> 5.566 are WORSE). NOT accepted here -- another session's unexplained change;
+  surfaced to the USER. This branch moves nothing relative to origin's binary.
+- Melira cap probe (melfold/run_cap.sh, worst line, fold build): cap 3 GB ~1,473 s; cap 20 GB 644 s (logged 1,993 s),
+  win turn 7; unbounded plan cache killed at the 20 GB RSS cap -> a real pricing gap; deferred.
+- FEATURE LANDED: re-pricing refit + determinism fixes, MTG_BP_DERIVE_PRICED_STOP, MTG_SAC_DUP_WALK_FOLD,
+  MTG_DUP_ACTION_FOLD (+ per-job arms; MTG_PRICED_BUDGET prototype stays default OFF). Further work:
+  docs/design/budget-rebalance-followups.md.
