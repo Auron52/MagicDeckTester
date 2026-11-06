@@ -21186,6 +21186,29 @@ bool ModernRwBurnProvider::ConsiderFetchHold(const GameState&, const CardDefinit
     return !auto_crack;
 }
 
+std::vector<std::string> ModernRwBurnProvider::FetchCandidates(
+    const GameState& s, int controller, const CardParams& fetch_pp) const
+{
+    std::vector<std::string> all = GenericProvider::FetchCandidates(s, controller, fetch_pp);
+    if (DecisionUnpruned(UnprunedGate::Fetch)) { return all; }
+
+    int white_sources = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d || !d->card.IsLand()) { continue; }
+        if (std::find(d->params.produces.begin(), d->params.produces.end(), Color::White)
+            != d->params.produces.end()) { ++white_sources; }
+    }
+
+    const char* preferred = white_sources < 2 ? "Sacred Foundry" : "Mountain";
+    const char* fallback = white_sources < 2 ? "Mountain" : "Sacred Foundry";
+    if (std::find(all.begin(), all.end(), preferred) != all.end()) { return {preferred}; }
+    if (std::find(all.begin(), all.end(), fallback) != all.end()) { return {fallback}; }
+    return all;
+}
+
 bool FetchResolvesOnPlay(const GameState& state, const CardDefinition& land)
 {
     const CardParams& p = land.params;

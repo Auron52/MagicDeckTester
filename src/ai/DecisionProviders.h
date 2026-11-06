@@ -792,6 +792,7 @@ public:
     bool ArchetypeCardValue(const GameState&, const CardDefinition&, int, int&) const override;
     std::vector<std::string> TutorCandidates(const GameState&, int, const CardParams&) const override;
     std::vector<std::string> FetchCandidates(const GameState&, int, const CardParams&) const override;
+    bool ConsiderFetchHold(const GameState&, const CardDefinition&) const override { return false; }
     bool CanAutoFireAltPayload(const GameState&, int, const CardDefinition&) const override;
     // CastEnablerFirst: no override -- enabler-first is the generic param-derived ENABLES tier
     // now (lifegain_to_loss -> rank 0, card-dependency-map).
@@ -1296,7 +1297,7 @@ public:
 };
 
 // Fetchland search routes this list through AntiLifegain before the Burn branch.
-// Keep that policy byte-for-byte until a measured Boros-specific policy replaces it.
+// Its own fetch choice uses the Boros mana needs instead of that four-colour policy.
 class ModernRwBurnProvider : public AntiLifegainProvider
 {
 public:
@@ -1307,6 +1308,8 @@ public:
     bool OrderOpaqueCastsByRank() const override;
     bool ShouldConsiderDig(const GameState& s) const override;
     bool ConsiderFetchHold(const GameState& s, const CardDefinition& fetch) const override;
+    std::vector<std::string> FetchCandidates(const GameState& s, int controller,
+                                             const CardParams& fetch_pp) const override;
 };
 
 // Midrange Burn uses the common baseline: the original Burn list's low-curve land
@@ -1894,6 +1897,7 @@ public:
     { return { CertState::NotAssessed, "NOT ASSESSED. Test: is combat the ONLY route to the opponent's life, and does nothing in the pool grant haste or untap? See SnowProvider/FungusProvider for the worked shape." }; }
     const char* Name() const override { return "FiveColour"; }
     std::vector<std::string> FetchCandidates(const GameState&, int, const CardParams&) const override;
+    bool ConsiderFetchHold(const GameState&, const CardDefinition&) const override { return false; }
     // Fetch search breadth: the base-class DEFAULT (top entry only) is exactly this deck's
     // reviewed policy -- no override needed. Evidence that top-1 is right here: the wide fan's
     // coupled-metric edge (+0.034 held-out 8/8 keys) was proven 100% CLAIRVOYANCE by the
