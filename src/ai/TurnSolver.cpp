@@ -14511,15 +14511,18 @@ static bool RippleGranterOnBattlefield(const GameState& s)
     return false;
 }
 
+// `implicit_accel`: the subset spends an accelerant that is not one of its actions -- an ON-DEMAND crack
+// (Lotus Bloom) the payer makes because the subset's cost cannot be paid without it (Solve's caller tests
+// that). Such a subset is judged exactly as the {crack, ...} subset of the action route was.
 static bool SubsetWastesAccelerant(const std::vector<Action>& cands, const std::vector<int>& sel,
                                    bool storm_in_hand, bool search_branch_list = false,
-                                   const ReducerSinkCtx* reducer_ctx = nullptr)
+                                   const ReducerSinkCtx* reducer_ctx = nullptr, bool implicit_accel = false)
 {
     // A fair creature justifies a ritual by default; under the storm-hold rule, when a storm payoff is
     // in hand, it does NOT -- only the storm finishers (Dragonstorm/Apex) do, so the ritual is held.
     const bool creature_pays = !(s_storm_hold && storm_in_hand);
     const bool reducer_pays  = search_branch_list && PayoffPruneReducerSinkOn();
-    bool has_ritual = false, has_payoff = false, has_reducer = false;
+    bool has_ritual = implicit_accel, has_payoff = false, has_reducer = false;
     int nonritual_cost = 0;   // MTG_PAYOFF_REDUCER_SINK_NEEDED: what the subset's other actions cost
     for (int j : sel)
     {
@@ -53957,6 +53960,29 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                                     && !DecisionUnpruned(UnprunedGate::PayoffPrune);
     const bool ritual_spend_granter_bf = ritual_spend_prune_on && RippleGranterOnBattlefield(state);
     const int  ritual_spend_named_bf   = ritual_spend_prune_on ? SacNamedCreaturesOnBattlefield(state) : 0;
+    // ON-DEMAND sac-for-mana (Lotus Bloom; IsOnDemandSacDef) under the payoff prune and its storm-hold rule.
+    // The crack is no plan action any more, so SubsetWastesAccelerant cannot see a subset that SPENDS it: the
+    // payer cracks the Lotus at the cast the board cannot pay without it. A subset whose cost is payable only
+    // with that crack is a Lotus-spending subset and faces the test the {crack, ...} subset faced on the action
+    // route (storm-hold: with Dragonstorm / Apex in hand a fair Dragon is no payoff for it). Measured: without
+    // this the d0 runner spent a T4 Lotus on Scourge of Valkas instead of storming (Dragonstorm held-out d0
+    // seed 91009 gi8: T4 -> T7; d0 x3000 +0.092 turns). Policy only, as the rule is: this is Solve (the d0
+    // runner and the horizon playout). Inert without an on-demand source on the battlefield.
+    OnDemandSacSupply od_payoff_sup;
+    if (payoff_prune_on && state.deck_has_ondemand_sac && !DecisionUnpruned(UnprunedGate::PayoffPrune))
+    { od_payoff_sup = OnDemandSacSupplyNow(state); }
+    const bool od_payoff_live = od_payoff_sup.Total() > 0;
+    auto without_ondemand = [&od_payoff_sup](ManaPool p)
+    {
+        p.wild      = std::max(0, p.wild      - od_payoff_sup.any);
+        p.white     = std::max(0, p.white     - od_payoff_sup.fixed[0]);
+        p.blue      = std::max(0, p.blue      - od_payoff_sup.fixed[1]);
+        p.black     = std::max(0, p.black     - od_payoff_sup.fixed[2]);
+        p.red       = std::max(0, p.red       - od_payoff_sup.fixed[3]);
+        p.green     = std::max(0, p.green     - od_payoff_sup.fixed[4]);
+        p.colorless = std::max(0, p.colorless - od_payoff_sup.fixed[5]);
+        return p;
+    };
     // The two sac filters read the per-candidate source table when it was built; nullptr / -1 keep
     // their original in-loop board resolution (see SubsetFilterPre).
     const std::vector<const CardDefinition*>* sac_tab =
@@ -54939,6 +54965,12 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             && ColourExactRitualCredit(pool, pool_noncreature, cands, sel, eff_cg, eff_nc_cg)
             && !(eff_cg.CanPay(combined) && eff_nc_cg.CanPay(noncreature_combined)))
         { mc_store_reject(); return; }
+        // An on-demand crack this subset needs, with no payoff for it (see od_payoff_live). Not cached: the
+        // verdict reads the subset's payoffs, not only its mana.
+        if (mana_ok && od_payoff_live
+            && SubsetWastesAccelerant(cands, sel, storm_in_hand, false, nullptr, /*implicit_accel=*/true)
+            && !(without_ondemand(eff_cg).CanPay(combined) && without_ondemand(eff_nc_cg).CanPay(noncreature_combined)))
+        { return; }
         // Filter/ramp-land color conversion the flat pool can't express -> real-payment fallback.
         if (!mana_ok && any_filter && es_on_c)
         {
