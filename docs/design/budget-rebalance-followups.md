@@ -152,6 +152,27 @@ diagnosis in `docs/design/lfe-plan-fan-explosion.md` (sections 3 and 7). These 5
 are below what the four concurrent heavy LFE rollouts need. The stored plan and breakpoint
 continuation caches share the accounted plan pool; changing their limits does not fix this case.
 
+**2026-11-06 larger historical-tail sample.** Replayed the first 100 distinct lines of each
+historical slow-generation list at the generation settings (depth 1, budget 1), priced-stop ON,
+and a 20 GB RSS cap. These are deliberately selected slow cases, not a random game sample.
+Logs and input lists: `build/scratch/budget/lfe_followup/`.
+
+| Deck / workers | Finished | Batch wall | Peak RSS | Per-line median / p90 / max |
+| --- | ---: | ---: | ---: | ---: |
+| EDF / 30 | 100/100 | 1:18 | 4.5 GiB | 6.6 / 18.8 / 40.0 s |
+| LFE / 30 | 92/100, RSS abort | 1:18 | 20.8 GiB | 8.7 / 28.1 / 53.6 s (completed lines only) |
+| LFE / 8 | 100/100 | 1:47 | 18.0 GiB | 3.8 / 16.2 / 40.0 s |
+| LFE / 4 | 100/100 | 2:49 | 11.1 GiB | 3.4 / 15.0 / 33.0 s |
+
+The EDF sample has no remaining multi-minute line. All 100 LFE lines finish in well under a
+minute when concurrency is limited, but the 30-worker run still cannot finish under the
+production memory cap. Eight workers leave only about 2 GB headroom in this replay and are not
+safe for a full generation with its cell-table baseline. The LFE issue remains **open**:
+temporary plan fan-out needs a memory bound that preserves the same decisions; changing the
+stored plan-pool limit does not provide one. The lazy look-top fan was active in the four-worker
+run and avoided materializing 118.8 million variants, so disabling that optimization would
+worsen this case. No new engine or budget setting was adopted from this diagnostic.
+
 ## 4. Held or decided by the USER (do not adopt held items without them)
 
 USER 2026-11-04: hold these "unless they are shown to help the HEAVY TAIL; not keen on a new per-deck
