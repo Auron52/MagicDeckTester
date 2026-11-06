@@ -27,7 +27,7 @@ Shared branch: `origin/phase-1-2-deck-analyzer`.
      attack trigger.
    - Unit 2614/2614, scenarios 419/419, smoke unmoved. A detached chain (PID 3279052) runs regression
      (`build/scratch/sb-picks/reg.txt`) and then the pooled A/B (`build/scratch/sb-picks/ab1/`).
-     Status is in `chain1.status`; `chain1.DONE` marks the end. Nothing is accepted yet. Item 3 is not
+     Regression finished 277/277 with nothing moved (no GT accept needed). The A/B is running; `chain1.DONE` marks the end. Item 3 is not
      started.
 4. nlfit redesign (leafless-first reserve). Worktree `shadowborn`, branch shadowborn-analysis (LOCAL).
    Handoff: `shadowborn/logs/shadowborn/nlfit-reserve-handoff.md`.
