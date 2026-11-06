@@ -24584,6 +24584,7 @@ struct FoldPrefixMap
 {
     // Parallel to `groups`: per option, (class << 8) | ord, or -1 for untagged.
     std::vector<std::vector<int>> opt;
+    std::vector<int> tagged_groups;
     int classes = 0;
     bool Empty() const { return classes == 0; }
 };
@@ -24597,6 +24598,7 @@ static int BuildFoldPrefixMap(const std::vector<Action>& cands,
                               FoldPrefixMap& out)
 {
     out.opt.clear();
+    out.tagged_groups.clear();
     out.classes = 0;
     // A tagged action outside the odometer can supply a predecessor ord, so the choice vector alone
     // would no longer decide the rule. Disarm rather than approximate.
@@ -24619,6 +24621,7 @@ static int BuildFoldPrefixMap(const std::vector<Action>& cands,
     for (std::size_t g = 0; g < groups.size(); ++g)
     {
         out.opt[g].assign(groups[g].size(), -1);
+        bool group_tagged = false;
         for (std::size_t k = 0; k < groups[g].size(); ++k)
         {
             const Action& a = cands[groups[g][k]];
@@ -24634,7 +24637,9 @@ static int BuildFoldPrefixMap(const std::vector<Action>& cands,
             }
             out.opt[g][k] = (ci << 8) | a.equiv_ord;
             any = true;
+            group_tagged = true;
         }
+        if (group_tagged) { out.tagged_groups.push_back(static_cast<int>(g)); }
     }
     out.classes = any ? n : 0;
     return out.classes;
@@ -24645,8 +24650,9 @@ static int BuildFoldPrefixMap(const std::vector<Action>& cands,
 static inline bool FoldPrefixViolated(const FoldPrefixMap& f, const std::vector<int>& choice)
 {
     std::uint32_t seen[kMaxFoldPrefixClasses] = { 0 };
-    for (std::size_t g = 0; g < f.opt.size() && g < choice.size(); ++g)
+    for (int g : f.tagged_groups)
     {
+        if (g >= static_cast<int>(choice.size())) { continue; }
         if (choice[g] <= 0) { continue; }
         const int p = f.opt[g][static_cast<std::size_t>(choice[g] - 1)];
         if (p < 0) { continue; }
@@ -24658,6 +24664,78 @@ static inline bool FoldPrefixViolated(const FoldPrefixMap& f, const std::vector<
         if ((m & (m + 1)) != 0) { return true; }
     }
     return false;
+}
+// Two classes fit in one 64-bit line mask. OR of the mana and payoff masks checks a class
+// straddling the split exactly, before a pair enters the sort vector.
+static inline bool FoldPrefixBitsViolated(std::uint64_t bits, int classes)
+{
+    const std::uint32_t lo = static_cast<std::uint32_t>(bits);
+    if ((lo & (lo + 1)) != 0) { return true; }
+    if (classes > 1)
+    {
+        const std::uint32_t hi = static_cast<std::uint32_t>(bits >> 32);
+        if ((hi & (hi + 1)) != 0) { return true; }
+    }
+    return false;
+}
+static inline bool FoldPrefixBitsViolatedSelected(std::uint64_t bits, unsigned classes)
+{
+    if ((classes & 1u) != 0)
+    {
+        const std::uint32_t m = static_cast<std::uint32_t>(bits);
+        if ((m & (m + 1)) != 0) { return true; }
+    }
+    if ((classes & 2u) != 0)
+    {
+        const std::uint32_t m = static_cast<std::uint32_t>(bits >> 32);
+        if ((m & (m + 1)) != 0) { return true; }
+    }
+    return false;
+}
+
+// Two-stage positions have mana and payoff digits in separate line tables. Judge the complete
+// choice after joining them: an equivalence class may straddle the split, so neither partial
+// line can reject it alone. VERIFY keeps flagged positions and asks the ordinary duplicate check
+// to reject them; the independent brute check guards the prefix map itself.
+namespace twostagefold
+{
+inline bool On()
+{
+    static const bool env = EnvOn("MTG_TWO_STAGE_FOLD_PREFIX", true);
+    const int arm = valuearm::t_arm.two_stage_fold_prefix;
+    return arm >= 0 ? arm != 0 : env;
+}
+inline bool Verify() { static const bool v = EnvOn("MTG_TWO_STAGE_FOLD_PREFIX_VERIFY"); return v; }
+inline thread_local bool t_expect_reject = false;
+inline std::atomic<long long> g_flagged{0}, g_passed{0}, g_brute_mismatch{0}, g_skipped{0};
+inline void NotePassedDupCheck()
+{ if (t_expect_reject) { g_passed.fetch_add(1, std::memory_order_relaxed); } }
+inline bool BruteNonCanonical(const std::vector<Action>& cands, const std::vector<int>& sel)
+{
+    for (int j : sel)
+    {
+        const Action& a = cands[j];
+        if (a.equiv_tag == 0 || a.equiv_ord <= 0) { continue; }
+        bool have_pred = false;
+        for (int k : sel)
+        {
+            if (cands[k].equiv_tag == a.equiv_tag && cands[k].equiv_ord == a.equiv_ord - 1)
+            { have_pred = true; break; }
+        }
+        if (!have_pred) { return true; }
+    }
+    return false;
+}
+struct Report
+{
+    ~Report()
+    {
+        if (!Verify()) { return; }
+        std::fprintf(stderr, "[two-stage-fold-prefix] verify: flagged=%lld passed=%lld brute_mismatch=%lld skipped=%lld\n",
+                     g_flagged.load(), g_passed.load(), g_brute_mismatch.load(), g_skipped.load());
+    }
+};
+inline Report g_report;
 }
 
 // Default ON: it removes work the leaf clause removes anyway, so there is no behaviour to adopt --
@@ -51311,6 +51389,8 @@ template <class ExtraOk, class Emit, class Stop>
 static void EnumeratePlanPositions(const std::vector<Action>& cands,
                                    const std::vector<std::vector<int>>& groups,
                                    const std::vector<int>& independent,
+                                   const std::vector<int>& auto_sel,
+                                   bool fold_dup_live,
                                    const ManaGateIndex* gate, int mana_bound,
                                    const SpliceOdometerIndex& sidx,
                                    const std::vector<int>& accel_order,
@@ -51362,6 +51442,11 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
     SacDupFold sdf;
     BuildSacDupFold(cands, groups, independent, sac_dup_live, sdf);
     const bool sdf_skip = sdf.on && !sdf.verify;   // verify keeps every position, flags the duplicates
+
+    FoldPrefixMap fold_map;
+    const bool fold_pred_on = fold_dup_live && (twostagefold::On() || twostagefold::Verify())
+        && BuildFoldPrefixMap(cands, groups, independent, auto_sel, fold_map) > 0;
+    const bool fold_verify = fold_pred_on && twostagefold::Verify();
 
     // Partition the odometer's digits. `mi`/`pi` hold SLOTS into `independent` so each side can
     // rebuild its bits at their original positions (the flat imask must be reproduced exactly).
@@ -51586,7 +51671,38 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
         }
     }
 
-    struct Line { Agg agg; std::uint64_t pos = 0; unsigned imask = 0; int digits = 0; bool sd_dup = false; };
+    struct Line
+    {
+        Agg agg;
+        std::uint64_t pos = 0, fold_bits = 0;
+        unsigned imask = 0;
+        int digits = 0;
+        bool sd_dup = false;
+    };
+    const bool fold_fast = fold_pred_on && fold_map.classes <= 2;
+    unsigned fold_mana_only = 0, fold_payoff_only = 0;
+    if (fold_fast)
+    {
+        unsigned side[2] = { 0, 0 };
+        for (int g : fold_map.tagged_groups)
+        {
+            const unsigned s = std::binary_search(mg.begin(), mg.end(), g) ? 1u : 2u;
+            for (int p : fold_map.opt[g])
+            { if (p >= 0) { side[p >> 8] |= s; } }
+        }
+        for (int c = 0; c < fold_map.classes; ++c)
+        {
+            if (side[c] == 1) { fold_mana_only |= 1u << c; }
+            if (side[c] == 2) { fold_payoff_only |= 1u << c; }
+        }
+    }
+    long long fold_line_skipped = 0;
+    auto fold_option = [&](Line& line, int g, int digit)
+    {
+        if (!fold_fast || digit <= 0) { return; }
+        const int p = fold_map.opt[g][static_cast<std::size_t>(digit - 1)];
+        if (p >= 0) { line.fold_bits |= 1ull << ((p >> 8) * 32 + (p & 0xff)); }
+    };
     std::vector<Line> mlines, plines;
     std::vector<int>  mdig, pdig;      // flat digit storage, |side groups| ints per line
 
@@ -51652,11 +51768,15 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
                         if (choice[t] > 0)
                         {
                             L.pos += static_cast<std::uint64_t>(choice[t]) * stride[mg[t]];
+                            fold_option(L, mg[t], choice[t]);
                             fold(L.agg, groups[mg[t]][choice[t] - 1]);
                         }
                     }
                     for (int b = 0; b < ni; ++b)
                     { if (imask & (1 << b)) { fold(L.agg, independent[mi[b]]); } }
+                    if (!fold_verify && fold_mana_only != 0
+                        && FoldPrefixBitsViolatedSelected(L.fold_bits, fold_mana_only))
+                    { mdig.resize(static_cast<std::size_t>(L.digits)); ++fold_line_skipped; continue; }
                     mlines.push_back(L);
                 }
             }
@@ -51708,6 +51828,7 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
                     if (choice[t] > 0)
                     {
                         L.pos += static_cast<std::uint64_t>(choice[t]) * stride[pg[t]];
+                        fold_option(L, pg[t], choice[t]);
                         fold(L.agg, groups[pg[t]][choice[t] - 1]);
                     }
                 }
@@ -51717,6 +51838,9 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
                     L.imask |= 1u << pi[b];
                     fold(L.agg, independent[pi[b]]);
                 }
+                if (!fold_verify && fold_payoff_only != 0
+                    && FoldPrefixBitsViolatedSelected(L.fold_bits, fold_payoff_only))
+                { pdig.resize(static_cast<std::size_t>(L.digits)); ++fold_line_skipped; continue; }
                 // Whole-row skip: if the most generous mana line cannot fund this payoff line, no
                 // pair can, so drop it here instead of re-rejecting it against every mana line.
                 // The gain/gy guards are structural (a payoff-side action adds no mana by definition)
@@ -51752,6 +51876,7 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
     // ---- Pair, then replay in flat-odometer order ----------------------------------------------
     struct Pair { std::uint64_t key; int m, p; };
     std::vector<Pair> pairs;
+    long long fold_skipped = 0;
     const std::uint64_t imask_span = 1ull << num_ind;
     for (int pi_idx = 0; pi_idx < static_cast<int>(plines.size()); ++pi_idx)
     {
@@ -51760,6 +51885,9 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
         {
             const Line& M = mlines[mi_idx];
             if (!payable(M.agg, P.agg)) { continue; }
+            if (fold_fast && !fold_verify
+                && FoldPrefixBitsViolated(M.fold_bits | P.fold_bits, fold_map.classes))
+            { ++fold_skipped; continue; }
             const std::uint64_t key = (M.pos + P.pos) * imask_span + (M.imask | P.imask);
             pairs.push_back(Pair{ key, mi_idx, pi_idx });
         }
@@ -51780,6 +51908,14 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
         const Line& P = plines[pr.p];
         for (int t = 0; t < mng; ++t) { choice[mg[t]] = mdig[M.digits + t]; }
         for (int t = 0; t < png; ++t) { choice[pg[t]] = pdig[P.digits + t]; }
+        const bool fold_viol = fold_pred_on && (fold_verify || !fold_fast)
+            && (fold_fast ? FoldPrefixBitsViolated(M.fold_bits | P.fold_bits, fold_map.classes)
+                          : FoldPrefixViolated(fold_map, choice));
+        if (fold_viol && !fold_verify)
+        {
+            ++fold_skipped;
+            continue;
+        }
         const unsigned imask = M.imask | P.imask;
         sel.clear();
         for (int g = 0; g < num_groups; ++g)
@@ -51789,9 +51925,22 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
         if (!sel.empty() && extra_ok(sel))
         {
             foldsel::g_from_odometer = true;
-            if (M.sd_dup) { SacDupVerifyEmit(cands, sel, emit); } else { emit(sel); }
+            auto deliver = [&]
+            { if (M.sd_dup) { SacDupVerifyEmit(cands, sel, emit); } else { emit(sel); } };
+            if (fold_viol && fold_verify)
+            {
+                twostagefold::g_flagged.fetch_add(1, std::memory_order_relaxed);
+                if (!twostagefold::BruteNonCanonical(cands, sel))
+                { twostagefold::g_brute_mismatch.fetch_add(1, std::memory_order_relaxed); }
+                twostagefold::t_expect_reject = true;
+                deliver();
+                twostagefold::t_expect_reject = false;
+            }
+            else { deliver(); }
         }
     }
+    if (fold_skipped + fold_line_skipped != 0)
+    { twostagefold::g_skipped.fetch_add(fold_skipped + fold_line_skipped, std::memory_order_relaxed); }
 }
 
 // Feasible-aware EARLY ritual-drop -- the group-level, before-the-odometer analog of the late
@@ -54124,6 +54273,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         { if (shape != nullptr) { shapestats::Bump(shape->rej_dup); ++callf.rej_dup; }
           SacDupNoteUnfolded(cands, sel, 0); return; }
         sacdupfold::NotePassedDupCheck();
+        twostagefold::NotePassedDupCheck();
         // Reject an Equip whose equipment/host is in hand and uncast by this subset (silent no-op).
         // Inert without an Equip candidate -> byte-identical. Kept in lockstep with the twin below.
         if (pre.equip && SubsetHasStrandedEquip(state, cands, sel,
@@ -56502,7 +56652,8 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     }
     else
     {
-        EnumeratePlanPositions(cands, groups, independent, gate, mana_bound, *sidx, accel_order,
+        EnumeratePlanPositions(cands, groups, independent, auto_sel, pre.dup_source,
+                               gate, mana_bound, *sidx, accel_order,
                                any_splice, splice_collapse_on, accel_prefix_on && any_accel,
                                has_ind_accel, copy_class, equip_deps,
                                /*sac_dup_live=*/pre.dup_source && (pre.dup_clause & kDupSacMana) != 0,
@@ -74098,6 +74249,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
           { shapestats::Bump(shapestats::g_turn[shapestats::Clamp(state.turn_number)].rej_dup_s1); }
           SacDupNoteUnfolded(cands, sel, 1); return; }
         sacdupfold::NotePassedDupCheck();
+        twostagefold::NotePassedDupCheck();
         // Reject an Equip whose equipment/host is in hand and uncast by this subset (silent no-op).
         // Inert without an Equip candidate -> byte-identical. Kept in lockstep with Solve's twin.
         if (pre.equip && SubsetHasStrandedEquip(state, cands, sel,
@@ -76739,7 +76891,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     }
     else
     {
-        EnumeratePlanPositions(cands, groups, independent, gate, mana_bound, *sidx, accel_order,
+        EnumeratePlanPositions(cands, groups, independent, auto_sel, pre.dup_source,
+                               gate, mana_bound, *sidx, accel_order,
                                any_splice, splice_collapse_on, accel_prefix_on && any_accel,
                                has_ind_accel, copy_class, equip_deps,
                                /*sac_dup_live=*/pre.dup_source && (pre.dup_clause & kDupSacMana) != 0,

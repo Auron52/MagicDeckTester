@@ -1,7 +1,7 @@
 # Budget rebalance: deferred follow-ups
 
-Status: IN PROGRESS (2026-11-06; item 1 mitigated, item 2 open, item 3 diagnosed). This is everything left over
-after the budget-rebalance feature landed on
+Status: FOLLOW-UPS CHECKED (2026-11-06; item 1 mitigated, item 2 implemented, item 3 diagnosed).
+This records the items left over after the budget-rebalance feature landed on
 `phase-1-2-deck-analyzer`. Each item stands alone; work them in the order given. Full history of the
 measurements is in `docs/design/budget-rebalance-checkpoint.md`.
 
@@ -117,6 +117,21 @@ the duplicate check, after the walk has visited them. This is the same shape the
 - Notes: `build/scratch/budget/sacfold/HANDOFF.md` (RESOLVED section).
 - Exactness bar: a verify mode with 0 passed / 0 brute mismatches, and regression digests equal to GT.
 - That cost line is now dominated by 140M `pay_calls`, so expect work removed, not much wall.
+
+**2026-11-06 candidate.** `MTG_TWO_STAGE_FOLD_PREFIX` checks combined mana/payoff ord masks
+before admitting pairs when there are at most two classes; larger class sets use the full
+choice after pair sorting. A class wholly on one side can reject that side's line before
+pairing; a class that straddles the split is checked only after the masks are combined. The
+ordinary leaf rule remains in place. `MTG_TWO_STAGE_FOLD_PREFIX_VERIFY=1` preserves flagged
+positions and independently checks their ords against the leaf verdict: over seven Goblins
+regression jobs (1,715 games), 4,367,408 flagged, **0 passed, 0 brute mismatches**. All seven
+on/off job digests match.
+
+On the Goblins d6/b10 generation line, the fold keeps win turn 4 and play digest
+`00498288b76987e4`; wall falls 115.0 -> 98.7 s. `dupc_fold_prefix` falls 7.07M -> 0 and
+`enum_enter` falls 23.05M -> 16.84M. Evidence: `build/scratch/budget/priced_emit_100k_ab/prefix_gob_*`.
+Final gates: 2,612 unit tests; smoke 176/176 and regression 282/282 with no changed games;
+strict viewer replay 767 references, zero drift/gaps. No GT acceptance was needed.
 
 ## 3. LFE generation replays hit 5-6 GB RSS caps
 

@@ -159,6 +159,7 @@ struct Arm
     int         bp_priced_stop    = -1;   // MTG_BP_DERIVE_PRICED_STOP (BpDerivePricedStopOn): -1 env | 0 off | 1 on
     int         sac_dup_fold      = -1;   // MTG_SAC_DUP_WALK_FOLD (sacdupfold::On): -1 env | 0 off | 1 on
     int         dup_action_fold   = -1;   // MTG_DUP_ACTION_FOLD (dupactfold::On): -1 env | 0 off | 1 on
+    int         two_stage_fold_prefix = -1; // MTG_TWO_STAGE_FOLD_PREFIX: -1 env | 0 off | 1 on
     // PRICED BUDGET (MTG_PRICED_BUDGET / MTG_PRICED_UNIT_NS; namespace pricedbudget in DecisionWorkMeter.h): ns of
     // priced work per budget unit. Per-job so the off arm and an R sweep share one pooled batch.
     // -1 unset => env | 0 off | > 0 on at that R.
