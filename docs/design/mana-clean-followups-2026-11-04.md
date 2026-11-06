@@ -55,6 +55,25 @@ limit); needs a byte-identical held-out run.
 - CAPPED retry + node cap: USER *"Sure. We may even want a higher threshold depending."* (being measured on
   wip/oracle-nodecap).
 
+## 7. LINE_REPAY (payment redo): USER direction 2026-11-06
+Parked on `wip/mc-dragons` 06d079365 (EDF +11 / EDF2HG +3 on 5k/1.5k games; 4 slower games recover only under
+`MTG_NC_SEARCH=1`; drafted fix for the land-Aura host hold perturbing the redo's find digest, not built). USER:
+*"I can't say even the clairvoyant version would that disastrous, given that everything else is clairvoyant.
+Naturally, I prefer the other version, though. The main idea, though. is that the user must be able to come up with a
+plan and execute it based on cards in hand allocating mana as necessary and the search must be able to do the same.
+The clairvoyant idea of what to hold up is something we could add a heuristic for, but should try not to touch
+otherwise if possible."*
+
+How this applies:
+- The redo stays the non-clairvoyant kind (re-pay only against cards known at that payment), per the 11-03 ruling.
+- Its purpose is that principle: a plan made from the cards in hand must be payable by the search exactly as a player
+  would allocate it. A search/executor mismatch (the host-hold defect: the search keeps mana for Eldrazi Displacer,
+  the executor spends it on the Aura) is a correctness defect to fix, not a policy question.
+- "What to hold up" against unseen cards (Dragonstorm {B} for Apex, Mirrorwing H1/H2) belongs in provider heuristics,
+  not in the redo or the search.
+- The price (4 vs 12 probes a unit, pricing pass 1) is budget accounting, inert at unlimited budget. Default when the
+  work resumes: 12 and price pass 1, measured; still open for the USER to override.
+
 ## Galadriel: the oracle-on arm exhausts memory (found 2026-11-04 16:30Z, deferred)
 
 The pass run `pass1-galadriel-r2` (src `aa9f15b9b77f`) hit the 43 GB RSS cap about two minutes into the full oracle-ON
