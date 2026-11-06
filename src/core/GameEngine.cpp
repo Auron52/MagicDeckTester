@@ -307,7 +307,7 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
     // MTG_LANDDRAW_CENSUS (diagnostic only, a no-op unless set): did this turn's dig chain draw a
     // land with the drop open and end with the drop unused? Read before the end step changes nothing.
     AIEngine::LandDrawCensusEndTurn(state);
-    // The executor's crossing node (MTG_PROFANE_REAL_NODE): a Profane Tutor fetch due at the next upkeep that the
+    // The executor's crossing node: a Profane Tutor fetch due at the next upkeep that the
     // committed line left unpinned is searched here, before the crossing (no-op for every other deck / rollouts).
     m_ai.DecideCrossingFetch(state);
     if (at <= static_cast<int>(ResumeAt::End))   { EndStep(state); }
@@ -503,7 +503,7 @@ void GameEngine::UpkeepStep(GameState& state)
     // card and CAST off suspend any whose last counter is now gone (arrive_turn <= this turn). Runs
     // after UntapStep, so the arrived artifact is untapped and available this turn. Mirrors the rollout
     // (SimulateEndAndStartNextTurn) -> lockstep. No-op for every deck without a suspended card.
-    // The executor's suspended-tutor RESOLUTION node (MTG_PROFANE_REAL_NODE): an uncovered search this upkeep meets
+    // The executor's suspended-tutor RESOLUTION node: an uncovered search this upkeep meets
     // (a ripple free copy no crossing could foresee) is searched where it resolves. Installed for THIS state only
     // (every copy a search makes has another address); inert for every deck without a suspended tutor.
     {

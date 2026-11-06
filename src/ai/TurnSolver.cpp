@@ -96592,8 +96592,7 @@ std::vector<std::pair<int, std::string>> TurnSolver::SuspendTutorBoundaryForTest
     }
     return out;
 }
-// THE EXECUTOR'S CROSSING NODE for Profane Tutor's fetch (MTG_PROFANE_REAL_NODE, DEFAULT ON; =0 -> the real upkeep
-// takes the provider's front, the old fallback). USER 2026-11-04, on the executor's upkeep falling back to the
+// THE EXECUTOR'S CROSSING NODE for Profane Tutor's fetch. USER 2026-11-04, on the executor's upkeep falling back to the
 // provider's pick: "We should search and use a heuristic on that decision like any other." The fetch is normally
 // decided by the BoundaryFan where the SEARCH crosses into that upkeep and rides the committed plan
 // (Plan::suspend_tutor_choice). When the committed line's own crossing lay beyond its horizon (an early ladder pass
@@ -96607,15 +96606,10 @@ std::vector<std::pair<int, std::string>> TurnSolver::SuspendTutorBoundaryForTest
 // front (rank 0 keeps every tie). The budget only prices the deepening: at an unlimited budget every pass runs, so
 // no rank is unfindable. Writes the pin on `state` (consumed at the upkeep) and returns it; -2 = nothing to decide
 // (no uncovered fetch, or a single candidate).
-static bool ProfaneRealNodeOn()
-{
-    static const bool e = EnvOn("MTG_PROFANE_REAL_NODE", true);   // DEFAULT ON; =0 disables
-    return heurarm::Flag(heurarm::PROFANE_REAL_NODE, e);
-}
 int TurnSolver::ChooseRealCrossingFetch(GameState& state, int depth, int max_turns, SearchBudget* budget,
                                         bool second_main)
 {
-    if (depth <= 0 || !ProfaneRealNodeOn() || !SuspendTutorUncoveredPending(state)) { return -2; }
+    if (depth <= 0 || !SuspendTutorUncoveredPending(state)) { return -2; }
     RevealLogPause _rlp;   // a search, not the real game: no reveal logging, no viewer sink
     TranspositionTable tt;
     int chosen = -2;
@@ -96650,7 +96644,7 @@ int TurnSolver::ChooseRealCrossingFetch(GameState& state, int depth, int max_tur
     }
     return chosen;
 }
-// THE EXECUTOR'S RESOLUTION NODE (MTG_PROFANE_REAL_NODE, same lever): a suspended tutor's search the real upkeep
+// THE EXECUTOR'S RESOLUTION NODE: a suspended tutor's search the real upkeep
 // meets UNCOVERED -- the committed line's crossing resolved fewer searches, because a ripple free copy (Thrumming
 // Stone revealing the other Profane Tutor) depends on a library top the blind search cannot see, so no crossing
 // can foresee it (Shadowborn seed 940184 T5: the free copy took the pinned rank, the arrival's own search had
@@ -96667,7 +96661,7 @@ int TurnSolver::ChooseRealResolutionFetch(const GameState& state, int controller
                                           const Card& card, const SuspendArrivalCtx& ctx, int depth, int max_turns,
                                           SearchBudget* budget, bool second_main)
 {
-    if (depth <= 0 || !ProfaneRealNodeOn()) { return -1; }
+    if (depth <= 0) { return -1; }
     const int width = SuspendTutorPickWidth(state, controller, pp);
     if (width <= 1) { return -1; }
     RevealLogPause _rlp;   // a search, not the real game: no reveal logging, no viewer sink

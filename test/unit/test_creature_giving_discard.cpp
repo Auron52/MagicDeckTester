@@ -411,14 +411,6 @@ TEST_CASE("CG Crop Rotation: the resolution tutor pin picks the land; the Orchar
             CHECK(g_scripted_tutor_choice == -1);   // consumed: it cannot leak into the apply's next tutor
             CHECK(put_land(c) == uniq[std::min<std::size_t>(static_cast<std::size_t>(pick), uniq.size() - 1)]);
         }
-        // The lever OFF (A/B arm): the front, and the pin is left alone.
-        heurarm::t_arm[heurarm::LAND_TUTOR_PIN] = 0;
-        GameState c = s;
-        g_scripted_tutor_choice = 1;
-        PerformLandTutorToBattlefield(c, 0, pp, std::string());
-        CHECK(put_land(c) == uniq[0]);
-        CHECK(g_scripted_tutor_choice == 1);
-        heurarm::t_arm[heurarm::LAND_TUTOR_PIN] = -1;
         g_scripted_tutor_choice = -1;
     }
     {

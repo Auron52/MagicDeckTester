@@ -243,7 +243,6 @@ TEST_CASE("Profane fetch: the executor's crossing node searches an unpinned fetc
     const std::size_t width = TurnSolver::SuspendTutorBoundaryForTest(ProfaneDueState()).size();
     REQUIRE(width >= 2);
     {
-        ArmScope n(heurarm::PROFANE_REAL_NODE, true);
         GameState s = ProfaneDueState();
         const int pin = TurnSolver::ChooseRealCrossingFetch(s, /*depth=*/2, /*max_turns=*/8, nullptr, true);
         REQUIRE(pin >= 0);
@@ -268,12 +267,6 @@ TEST_CASE("Profane fetch: the executor's crossing node searches an unpinned fetc
         GameState sn = ProfaneDueState();
         sn.players[0].suspended_cards.clear();
         CHECK(TurnSolver::ChooseRealCrossingFetch(sn, 2, 8, nullptr, true) == -2);
-    }
-    {
-        ArmScope n(heurarm::PROFANE_REAL_NODE, false);   // the old fallback: the upkeep takes the front
-        GameState s = ProfaneDueState();
-        CHECK(TurnSolver::ChooseRealCrossingFetch(s, 2, 8, nullptr, true) == -2);
-        CHECK(s.scripted_suspend_tutor == -1);
     }
 }
 
@@ -346,15 +339,10 @@ TEST_CASE("Profane fetch: the executor's resolution node decides an UNCOVERED se
     const int width = SuspendTutorPickWidth(s, 0, pp);
     REQUIRE(width >= 2);
     {
-        ArmScope n(heurarm::PROFANE_REAL_NODE, true);
         const int r = TurnSolver::ChooseRealResolutionFetch(s, 0, pp, card, ctx, 2, 8, nullptr, true);
         CHECK(r >= 0);
         CHECK(r < width);
         CHECK(TurnSolver::ChooseRealResolutionFetch(s, 0, pp, card, ctx, 2, 8, nullptr, true) == r);
         CHECK(TurnSolver::ChooseRealResolutionFetch(s, 0, pp, card, ctx, 0, 8, nullptr, true) == -1);
-    }
-    {
-        ArmScope n(heurarm::PROFANE_REAL_NODE, false);
-        CHECK(TurnSolver::ChooseRealResolutionFetch(s, 0, pp, card, ctx, 2, 8, nullptr, true) == -1);
     }
 }
