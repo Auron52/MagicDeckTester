@@ -1,6 +1,6 @@
 # Budget rebalance: deferred follow-ups
 
-Status: FOLLOW-UPS CHECKED (2026-11-06; item 1 mitigated, item 2 implemented, item 3 diagnosed).
+Status: FOLLOW-UPS CHECKED (2026-11-06; item 1 mitigated, item 2 implemented, item 3 memory-gated).
 This records the items left over after the budget-rebalance feature landed on
 `phase-1-2-deck-analyzer`. Each item stands alone; work them in the order given. Full history of the
 measurements is in `docs/design/budget-rebalance-checkpoint.md`.
@@ -172,6 +172,28 @@ temporary plan fan-out needs a memory bound that preserves the same decisions; c
 stored plan-pool limit does not provide one. The lazy look-top fan was active in the four-worker
 run and avoided materializing 118.8 million variants, so disabling that optimization would
 worsen this case. No new engine or budget setting was adopted from this diagnostic.
+
+**2026-11-06 memory follow-up.** A lazy land-search pin block was prototyped and discarded:
+on a heavy single-line replay it changed neither peak RSS (3.71 GiB) nor the lazy-clone count
+(4.90 million), and the 32-worker 100-line run still aborted at 20.8 GiB after 92 lines.
+`jemalloc` with rapid decay also aborted after 92 lines: the peak is live concurrent work, not
+allocator retention. Both experiments preserved the observed win turns.
+
+`MTG_HEAVY_FAN_GATE` now limits overlap while the searched board has at least two look-top
+watchers and a land-search deck trait. Its permit count is one per 8 GiB of RSS cap (two at the
+20 GiB production cap); other search states continue at normal worker concurrency. It changes
+only scheduling. The same 100-line replay with 32 workers finished at 12.5 GiB peak and 4:48
+batch wall, with **0/100 win-turn changes** against the four-worker baseline. The ungated run
+aborted at 20.8 GiB after 92 lines. A narrower three-watcher trigger finished at 15.2 GiB and
+4:28 with 0/100 win-turn changes, but bought only 20 seconds at the cost of 2.7 GiB of headroom,
+so the two-watcher trigger was retained. The gate trades throughput on this deliberately
+concentrated slow-tail corpus for a bounded process peak; its worst per-line wall (including
+permit wait) was 274 seconds, versus 33 seconds at four workers. The underlying per-line search
+work remains a separate performance opportunity.
+
+Final gates on the two-watcher version: 2,612 unit tests; smoke 176/176 and regression
+282/282 with zero changed game outcomes or play digests; strict viewer replay 767 references,
+zero drift or enum gaps. No ground-truth acceptance was needed.
 
 ## 4. Held or decided by the USER (do not adopt held items without them)
 

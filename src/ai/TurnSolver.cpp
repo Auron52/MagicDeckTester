@@ -25,6 +25,7 @@
 #include "../core/OpponentDeck.h"
 #include "../core/EffectHandler.h"
 #include "../core/GameEngine.h"
+#include "../core/MemBudget.h"
 #include "AIEngine.h"
 #include "../core/SpellEffects.h"
 #include "../core/Trace.h"
@@ -53,6 +54,7 @@
 #include <set>
 #include <mutex>
 #include <optional>
+#include <semaphore>
 #include <cmath>
 #include <unordered_map>
 #if defined(_MSC_VER)
@@ -96067,6 +96069,47 @@ static void DvsRecordDirtyKeys(const FSLineCache* lc, const TranspositionTable::
     }
 }
 
+// Multiple Reefs plus land search can retain several gigabytes of live candidate state while
+// its searched line is scored. Many such lines at once exhausted the 20 GB generation cap
+// even though each line completed alone. Admit the expensive search window by RAM capacity,
+// while unrelated workers remain active. This guard is recursive on a worker: a child search
+// shares its parent's permit, and the permit is returned only when the outer frame unwinds.
+namespace heavyfangate
+{
+inline thread_local bool t_held = false;
+inline bool On() { static const bool on = EnvOn("MTG_HEAVY_FAN_GATE", true); return on; } // DEFAULT ON; =0 restores full overlap
+inline bool Risk(const GameState& state)
+{
+    if (!state.deck_has_look_top_watcher || !state.deck_has_land_search) { return false; }
+    int watchers = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.enters_look_top_land_or_hand && ++watchers >= 2) { return true; }
+    }
+    return false;
+}
+inline std::counting_semaphore<64>& Slots()
+{
+    const long long cap = membudget::RssCapBytes();
+    static std::counting_semaphore<64> slots(static_cast<std::ptrdiff_t>(
+        std::clamp<long long>(cap / (8LL << 30), 1, 64)));
+    return slots;
+}
+struct Frame
+{
+    bool owner = false;
+    explicit Frame(const GameState& state)
+    {
+        if (!On() || t_held || membudget::RssCapBytes() <= 0 || !Risk(state)) { return; }
+        Slots().acquire();
+        t_held = owner = true;
+    }
+    ~Frame() { if (owner) { t_held = false; Slots().release(); } }
+};
+}
+
 static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int max_turns,
                                         int cutoff, bool second_main, TranspositionTable* tt,
                                         FSLineCache* lc, SearchBudget* budget);
@@ -98334,6 +98377,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                                         int cutoff, bool second_main, TranspositionTable* tt,
                                         FSLineCache* lc, SearchBudget* budget)
 {
+    const heavyfangate::Frame _hfg(state);
     if (state.turn_number > max_turns) { return { max_turns + 1, {} }; }
     if (state.turn_number > cutoff)    { ++g_fs_cut_prunes; return { max_turns + 1, {} }; }  // can't beat incumbent
     const pastcut::CutFrame _pcf(cutoff);   // MTG_FSL_PASTCUT_PROBE: this node's cutoff, for FSLineStoreWin
@@ -105894,6 +105938,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                                                   int* out_committed_win,
                                                   int* out_committed_sub_depth)
 {
+    const heavyfangate::Frame _hfg(state);
     if (enforce_budget) { g_solve_committed_tb = leafeval::kInvalid; }   // see LastCommittedTieBreak
     RevealLogPause _rlp;  // planning: suppress scry/dig reveal logging (real play only)
     routetape::Suspend _rts;   // see TurnSolver::Solve
