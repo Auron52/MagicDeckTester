@@ -55676,7 +55676,12 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     // staged-Dragonstorm quirk -- the "much harder" Apex-pile case), which turned a T8 win into a loss.
     // At spells_cast_this_turn==0 no staged cards can exist (staging needs a prior cast), so the
     // constructed line is always a coherent opening-main line and the re-sim is a faithful oracle.
-    if (any_ritual && has_extra_lethal && state.spells_cast_this_turn == 0
+    // A suspended Lotus can be cast at upkeep, so its on-demand crack is available in main 1
+    // after spells_cast_this_turn became nonzero. The go-off check is still coherent when no
+    // cards are staged for an Apex breakpoint; execution below verifies any claimed win.
+    const bool goff_opening = state.spells_cast_this_turn == 0
+        || (od_payoff_live && state.ActivePlayer().staged_cards.empty());
+    if (any_ritual && has_extra_lethal && goff_opening
         && !s_no_goff_shortcircuit && !s_no_combo_line
         && !DecisionUnpruned(UnprunedGate::ComboLine))
     {
@@ -55697,11 +55702,23 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             const int    saved_fj = best_fill_j;
             const Action saved_fa = best_fill_action;
             consider(goff);
-            if (best.wins_this_turn)
+            // With an on-demand Lotus, the crack is no longer a plan action. The provider's
+            // Dragonstorm damage projection can miss a kill whose fetched haste attacker finishes
+            // combat (Dragonstorm d0 seed 91148, gi147: Feat -> Dragonstorm wins T4, but the
+            // projection rates it below a fair Scourge cast). Verify the same feasible go-off
+            // line even when the projection falls short; only an executed kill can short-circuit.
+            const bool verify_unprojected = state.deck_has_ondemand_sac
+                && OnDemandSacSupplyNow(state).Total() > 0 && best_sel == goff;
+            if (best.wins_this_turn || verify_unprojected)
             {
                 GameState copy = state;
                 ApplyPlanDirect(copy, materialize_best(), is_pre_combat);
-                if (OpponentHasLost(copy)) { return best; }   // verified lethal -> skip the powerset (materialized above)
+                if (verify_unprojected && is_pre_combat && !OpponentHasLost(copy)) { SimulateCombat(copy); }
+                if (OpponentHasLost(copy) && copy.players[state.active_player_index].life > 0)
+                {
+                    best.wins_this_turn = true;
+                    return best;   // verified lethal -> skip the powerset (materialized above)
+                }
             }
             best      = saved_best;
             best_mask = saved_mask;

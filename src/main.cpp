@@ -5223,7 +5223,7 @@ static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
                 if (step.rfind("sacout=", 0) == 0)
                 {
                     const CardDefinition* od = CardDatabase::Instance().Lookup(step.substr(7));
-                    if (od && IsOnDemandSacDef(*od) && EnvOn("MTG_SAC_ON_DEMAND", true)) { continue; }
+                    if (od && IsOnDemandSacDef(*od)) { continue; }
                 }
                 ls.sequence.push_back(step);
             }
@@ -5240,7 +5240,7 @@ static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
         else if (key == "sacout")
         {
             const CardDefinition* od = CardDatabase::Instance().Lookup(val);
-            if (!(od && IsOnDemandSacDef(*od) && EnvOn("MTG_SAC_ON_DEMAND", true))) { ls.sac_outlets.push_back(val); }
+            if (!(od && IsOnDemandSacDef(*od))) { ls.sac_outlets.push_back(val); }
         }
         else if (key == "attachall") { ls.attach_all.push_back(val); }    // Balan attach-all
         else if (key == "sfput")     { ls.sf_puts.push_back(val); }       // Stoneforge put (card name)
