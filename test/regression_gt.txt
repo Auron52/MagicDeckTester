@@ -1,10 +1,8 @@
-# Regression ground truth -- commit 1382e9510  date 2026-11-06
+# Regression ground truth -- commit 3189fce5d  date 2026-11-06
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-05): Full overnight rebaseline requested after Jumbo exhaustive keep adoption and current engine changes: 118 matching, 424 changed, 11 new Shadowborn rows. Searched games 3953 faster vs 1889 slower; Angels +0.0064t/6065 searched, Angels2HG +0.0150t/600, Bruna +0.0122t/2131 remain visible follow-ups. Jumbo full overnight rows already adopted and match.
-# accepted-with-regressions (smoke, 2026-11-06): Shadowborn main-1 rule + USER cast order + ritual-payoff prune DEFAULT ON (held-out ab7 -0.035 turns, -14..-20% units; d8 b0: every unrecovered game is the clairvoyant ripple-dig the USER ruled out). Also accepts 4 digest-only rows (edf_smoke_d0_s1001, edf_regression_d0_s2002, edf_regression_d5_s3003, bruna_regression_d5_s2002; averages unchanged): pre-existing origin drift, reproduced byte-identically by origin 36d3672bc's own binary
-# accepted-with-regressions (regression, 2026-11-06): Shadowborn main-1 rule + USER cast order + ritual-payoff prune DEFAULT ON (held-out ab7 -0.035 turns, -14..-20% units; d8 b0: every unrecovered game is the clairvoyant ripple-dig the USER ruled out). Also accepts 4 digest-only rows (edf_smoke_d0_s1001, edf_regression_d0_s2002, edf_regression_d5_s3003, bruna_regression_d5_s2002; averages unchanged): pre-existing origin drift, reproduced byte-identically by origin 36d3672bc's own binary
-# accepted-with-regressions (regression, 2026-11-06): gi32,gi54: fetch-timing shuffle changes next draw (both d3 and d5); gi121: mulligan bottom hand changed; gi147: fetch timing changes draw; all persist at 16x and searched net improves 20 games
-# accepted-with-regressions (regression, 2026-11-06): gi46: changed fetch line and T5 draw divergence; gi68: same-draw T1 pass from budget churn; both recover old T6 at 4x and 16x; net 2HG mean improves 4.9733 to 4.9600
+# accepted-with-regressions (smoke, 2026-11-06): On-demand Lotus/Lake payer: 10600 paired held-out games improve all eight cells; disjoint Shadowborn d5 -7/1600; all 49+20 slower searched games recover at d8 b0; smoke 4 searched slower cases recover at d8 b0
+# accepted-with-regressions (regression, 2026-11-06): On-demand Lotus/Lake payer: 9 changed rows only in Dragonstorm and Shadowborn; 10 searched slower games all recover at d8 b0 against current-base binary; held-out 10600 paired games improve every deck/depth cell and disjoint Shadowborn d5 improves -7/1600; strict references 767 with zero failures
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -50,13 +48,13 @@ cyclone_smoke_d0_s1001=8.3610/801db26870908ec5
 cyclone_smoke_d3_s1001=4.9400/f6bc7069a092a949
 cyclone_smoke_d5_s1001=4.7400/3d63886aa9c3f850
 cyclone2hg_smoke_d3_s1001=5.0000/af9bdd10df486e96
-shadowborn_smoke_d0_s1001=7.7820/7730f80b348be6d8
-shadowborn_smoke_d3_s1001=5.1000/c9ac5c768a2dbe7a
-shadowborn_smoke_d5_s1001=4.8600/8ec5427cd153c2c6
-shadowborn2hg_smoke_d3_s1001=5.3200/c8490f23fa84a2d7
-dragonstorm_smoke_d0_s1001=4.9790/dc745ef2a7e0828c
-dragonstorm_smoke_d3_s1001=4.5000/7cf4ded3804f4228
-dragonstorm_smoke_d5_s1001=4.4600/a33c29a2f7ee08e7
+shadowborn_smoke_d0_s1001=7.3990/b0e18186bf8ef053
+shadowborn_smoke_d3_s1001=5.0600/8094f8e84b0ce584
+shadowborn_smoke_d5_s1001=4.8100/5402844c85d68a1b
+shadowborn2hg_smoke_d3_s1001=5.2800/e0d087e5ce050c0f
+dragonstorm_smoke_d0_s1001=4.9620/8666da55b491a4d5
+dragonstorm_smoke_d3_s1001=4.4800/fa3164d53b41a5d7
+dragonstorm_smoke_d5_s1001=4.4400/b9f2486bd505a595
 auras_smoke_d0_s1001=4.3440/3d6879e20a8e97b5
 auras_smoke_d3_s1001=3.9300/f9e5834fbb0153ed
 auras_smoke_d5_s1001=4.1089/a13f3545c6498631
@@ -114,7 +112,7 @@ angels2hg_smoke_d5_s1001=5.1700/131c373abc1a6d78
 slivers2hg_smoke_d5_s1001=4.8000/d2901cf2d9c5e018
 burn2hg_smoke_d5_s1001=5.8200/2f0015aaebd8cffc
 th2hg_smoke_d5_s1001=4.6600/810d26dcdb95f739
-dragonstorm2hg_smoke_d5_s1001=4.7000/4f32c93c3c75b643
+dragonstorm2hg_smoke_d5_s1001=4.6800/98b5986ad8a8e499
 auras2hg_smoke_d5_s1001=4.4200/e756a3364e13656a
 creature_giving2hg_smoke_d5_s1001=4.9000/94547cc2a83a8525
 mirrorwing2hg_smoke_d5_s1001=4.6800/afa2a5bd163547ae
@@ -308,15 +306,15 @@ cyclone_regression_d3_s2002=4.8533/f22dcd37081f4918
 cyclone_regression_d3_s3003=4.9333/437a6de4a37c0d52
 cyclone_regression_d5_s2002=4.7333/eb0d78511c346b04
 cyclone_regression_d5_s3003=4.7667/bdcbc678cb54ed24
-shadowborn_regression_d0_s2002=7.8420/15c790cc0e1f4396
-shadowborn_regression_d3_s2002=4.8267/0cec5c9b5da0d749
-shadowborn_regression_d3_s3003=4.9467/aa4f6253b122f22a
-shadowborn_regression_d5_s2002=4.8267/d37aaf0c3b02dc69
-shadowborn_regression_d5_s3003=4.8133/5dc24bc89bfaf536
-dragonstorm_regression_d0_s2002=5.0010/a7f021373380920f
-dragonstorm_regression_d3_s2002=4.2300/8acf33bfdd6cfb35
-dragonstorm_regression_d5_s2002=4.3106/8ecd14e879216387
-dragonstorm_regression_d5_s3003=4.4282/f54fef95b20e4547
+shadowborn_regression_d0_s2002=7.3690/bc1408590a69f403
+shadowborn_regression_d3_s2002=4.8400/8203db8ca6ff6df8
+shadowborn_regression_d3_s3003=5.0000/28c41751e937e7ba
+shadowborn_regression_d5_s2002=4.8200/f8b25f67383e739d
+shadowborn_regression_d5_s3003=4.8200/af1188d4f98a1e5e
+dragonstorm_regression_d0_s2002=4.9950/134893a12929142d
+dragonstorm_regression_d3_s2002=4.2200/8f7dbeca5df380e6
+dragonstorm_regression_d5_s2002=4.2988/58e56b81b49569f7
+dragonstorm_regression_d5_s3003=4.4165/0d314a8278089c5d
 auras_regression_d0_s2002=4.3400/a764beb2594cc023
 auras_regression_d3_s2002=4.0171/c520eaa268bda7a9
 auras_regression_d5_s2002=4.0867/adfcc7d33d37929f

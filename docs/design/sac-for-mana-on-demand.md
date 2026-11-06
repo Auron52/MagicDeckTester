@@ -1,7 +1,7 @@
-# Sacrifice-for-mana ON DEMAND (Lotus Bloom, Lake of the Dead): deferred design
+# Sacrifice-for-mana ON DEMAND (Lotus Bloom, Lake of the Dead)
 
-Status: BUILT 2026-11-05 on branch `sb-sacpayer` (see "Implementation (2026-11-05)" at the end); validation
-in progress. Was DEFERRED (2026-11-04), queued after the main-phase/cast-order work.
+Status: implemented and validated 2026-11-06 on branch `sb-sacpayer`. See the implementation and
+validation notes below. Was deferred on 2026-11-04 until the main-phase/cast-order work landed.
 
 USER 2026-11-04 (verbatim): *"Yes, it should be on-demand and only done that way."* The payer is the ONLY route for
 these cracks: retire the Lotus Bloom / Lake of the Dead SacForMana action (step 5 below is required, not optional), and
@@ -112,12 +112,24 @@ action.
   as its delta over the plain tap in its colour, one per available victim. Added to `AvailableManaPool`,
   `AvailableManaPoolNoAttackers`, `BuildNonCreaturePool`, `BuildColorFeasibility`, `ComputeAvailableColors` and
   `UntappedManaUpperBound`.
-* **Batch prepay.** Unchanged: it already declined on a non-empty float, so a crack line always paid per cast; now
-  the batch pays a line that needs no crack, and a line that does falls to the per-cast payer, which cracks.
+* **Batch prepay.** A searched early Lake-payment policy or a line containing a paid Apostle tutor activation
+  declines joint prepay, so the payer sees the first bill before Lake is tapped for one black. The activation's
+  cost is included in the line total and removed when paid in both apply worlds.
 * **Viewer / replay.** Human auto-payment runs the same wrapper. `viewer_protocol_check.py` matches a recorded
   Lotus / Lake crack (an action with `sacout` or `float_color`) by the §2a "plan minus its implicit pay-sac" tier.
-  Open: the Lake has no pre-tap CRACK face in the pay-click flow (the plain {B} only); Lotus keeps
-  `Route::SacAction`.
+  Lake has no standalone pre-tap crack face: the payer offers the crack while paying a cost, as the user's
+  on-demand ruling requires. Lotus keeps `Route::SacAction` for a pay-click on that source.
 * **Tests.** `test/unit/test_shadowborn_lakeprof.cpp`: not cracked when lands pay (Lake held), cracked when needed
   with the surplus floating, crack and plain tap exclusive, Lotus kept when lands pay and paying a colour no land
   makes, no SacForMana plan and the crack-needing cast still offered.
+
+## Validation (2026-11-06)
+
+The current-base paired sweep contains 10,600 games across Dragonstorm, Shadowborn, and their two-headed variants.
+Every measured deck/depth cell improves: Dragonstorm d0 -17/3000 turns, d3 -13/1000, d5 -8/600, 2HG d5 -8/1000;
+Shadowborn d0 -1382/3000, d3 -7/600, d5 -2/400, 2HG d3 -40/1000. A disjoint Shadowborn d5 sample improves
+by seven turns over 1,600 games. All 49 slower searched games in the main sweep, all 20 in the disjoint sweep,
+and all ten slower searched regression games recover at depth 8 with no budget. The final source also recovers
+the five focused payer seeds. Full unit tests passed (2,616 cases), scenarios passed (419), smoke and regression
+ground truth were accepted with provenance notes, and strict reference replay found 304 exact, 462 repaired,
+one beaten, and zero failures across 767 references. The two suboptimal references remain beaten.
