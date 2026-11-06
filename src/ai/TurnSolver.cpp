@@ -69961,6 +69961,8 @@ struct CombatStagedOutScope
     CombatStagedOutScope& operator=(const CombatStagedOutScope&) = delete;
 };
 
+static void SimulateOneCombatAfterTitan(GameState& state, int active, std::vector<int>& atk_idx);
+
 static void SimulateOneCombat(GameState& state, bool additional)
 {
     CombatStagedOutScope staged_out(state);   // the executor's combat-time hand (see the scope)
@@ -69991,6 +69993,15 @@ static void SimulateOneCombat(GameState& state, bool additional)
     // GameEngine::CombatPhase (lockstep, ONE shared helper). Param-gated inert.
     FireAttackLandSearch(state, active, atk_idx);
     FireCombatLandSearchCracks(state, active, atk_idx);   // the in-combat Khalni crack (lockstep)
+
+    SimulateOneCombatAfterTitan(state, active, atk_idx);
+}
+
+// The same post-Titan combat continuation is used by the real resolution search node.
+// Its caller keeps CombatStagedOutScope live until this returns, so the combat-time
+// hand layout is identical to the ordinary rollout.
+static void SimulateOneCombatAfterTitan(GameState& state, int active, std::vector<int>& atk_idx)
+{
 
     const int declared_n = static_cast<int>(atk_idx.size());   // CR 508.4: before tokens join
     // Mavren Fein, Dusk Apostle: "whenever one or more nontoken Vampires you control attack, create a
@@ -96899,6 +96910,126 @@ int TurnSolver::ChooseRealResolutionLand(const GameState& state, int controller,
         }
         if (sub > 0 && budget != nullptr && (budget->Exhausted() || budget->Overrun())) { break; }
         chosen = best_rank;
+    }
+    return chosen;
+}
+
+int TurnSolver::ChooseRealAttackLand(const GameState& state, const std::vector<int>& attackers,
+                                     bool additional, int depth, int max_turns, SearchBudget* budget,
+                                     bool second_main)
+{
+    if (depth <= 0 || !state.deck_has_land_search) { return -1; }
+    std::vector<int> pins{0};
+    int ordinal = 0;
+    for (int slot : attackers)
+    {
+        if (slot < 0 || slot >= static_cast<int>(state.battlefield.size())) { continue; }
+        const Permanent& p = state.battlefield[static_cast<std::size_t>(slot)];
+        if (p.def_absent || p.controller_index != state.active_player_index) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || !d->params.land_search_on_enter_or_attack || d->params.land_search_count <= 0)
+        { continue; }
+        if (ordinal >= kLandSearchPinOrdinals) { break; }
+        const LandSearchSpec spec = LandSearchSpecOf(d->params);
+        const landsearchmemo::Slot& memo = LandSearchMemoSlot(state, state.active_player_index, spec);
+        const int width = std::min<int>(static_cast<int>(memo.picks.size()), kLandSearchPinMask + 1);
+        for (int r = 1; r < width; ++r)
+        { pins.push_back(r << (kLandSearchPinBits * ordinal)); }
+        // A fetched Karoo can return more than the provider's first land. The packed
+        // attack slot carries that bounce rank too, exactly as the main-phase fan does.
+        for (int r : memo.karoo_picks)
+        {
+            if (r < 0 || r >= width) { continue; }
+            const std::vector<const CardDefinition*>& pd = memo.pick_defs[static_cast<std::size_t>(r)];
+            const int bf = LandSearchBattlefieldCount(spec, static_cast<int>(pd.size()));
+            std::vector<const CardDefinition*> partners;
+            bool skipped_karoo = false;
+            for (int j = 0; j < bf; ++j)
+            {
+                const CardDefinition* ld = pd[static_cast<std::size_t>(j)];
+                if (!skipped_karoo && ld != nullptr && ld->params.etb_bounce_land)
+                { skipped_karoo = true; continue; }
+                partners.push_back(ld);
+            }
+            const int bounce_width = PutKarooBounceBound(state, state.active_player_index, partners,
+                                                          spec.tapped, /*hand_land_possible=*/true,
+                                                          /*spend_witness=*/false);
+            for (int b = 1; b < bounce_width; ++b)
+            {
+                const int value = LandSearchBouncePinValue(width, r, b);
+                if (value <= kLandSearchPinMask)
+                { pins.push_back(value << (kLandSearchPinBits * ordinal)); }
+            }
+        }
+        ++ordinal;
+    }
+    if (ordinal == 0) { return -1; }
+    // Preserve the committed line's packed choice as a candidate even when it combines
+    // several non-front ordinals; the other candidates are additive single deviations.
+    const int inherited = state.scripted_attack_land_search;
+    if (inherited > 0 && std::find(pins.begin(), pins.end(), inherited) == pins.end())
+    { pins.push_back(inherited); }
+    if (pins.size() == 1) { return -1; }
+
+    RevealLogPause _rlp;
+    TranspositionTable tt;
+    int chosen = 0;
+    for (int sub = 0; sub <= depth - 1; ++sub)
+    {
+        if (sub > 0 && budget != nullptr && (budget->Exhausted() || budget->Overrun())) { break; }
+        int best_wt = max_turns + 2, best_pin = 0;
+        for (int pin : pins)
+        {
+            GameState ce = state;
+            ce.scripted_attack_land_search = pin;
+            std::vector<int> atk = attackers;
+            FireAttackLandSearch(ce, ce.active_player_index, atk);
+            FireCombatLandSearchCracks(ce, ce.active_player_index, atk);
+            SimulateOneCombatAfterTitan(ce, ce.active_player_index, atk);
+            // Moraug: an additional combat is followed by the remaining queued combats
+            // and the regular combat, with no intervening main phase.
+            if (additional && !OpponentHasLost(ce))
+            {
+                while (ce.pending_extra_combats > 0 && !OpponentHasLost(ce))
+                {
+                    --ce.pending_extra_combats;
+                    SimulateOneCombat(ce, /*additional=*/true);
+                }
+                if (!OpponentHasLost(ce)) { SimulateOneCombat(ce, /*additional=*/false); }
+            }
+            MergeStagedToHandEnd(ce);
+            int wt = OpponentHasLost(ce) ? ce.turn_number : max_turns + 1;
+            if (wt > max_turns)
+            {
+                if (second_main || UntapSecondMainLive(ce) || DigSecondMainLive(ce)
+                    || ProviderSecondMainLive(ce))
+                {
+                    const Plan post = SolveWithLookahead(ce, /*is_pre_combat=*/false, sub + 1,
+                                                         max_turns, budget, /*enforce_budget=*/false,
+                                                         /*second_main=*/true, &tt);
+                    ApplyPlanDirect(ce, post, /*is_pre_combat=*/false);
+                    if (OpponentHasLost(ce)) { wt = ce.turn_number; }
+                    else if (RunPostMain2ExtraCombats(ce)) { wt = ce.turn_number; }
+                }
+                if (wt > max_turns)
+                {
+                    BoundaryFan fan(ce, /*with_echo=*/true);
+                    while (fan.Next())
+                    {
+                        GameState tail = ce;
+                        fan.Stamp(tail);
+                        if (!fan.Cross(tail)) { continue; }
+                        ExpireStagedCards(tail);
+                        const int cut = best_wt <= max_turns ? best_wt - 1 : max_turns + 1;
+                        wt = std::min(wt, SimulateToEnd(std::move(tail), sub, max_turns,
+                                                         budget, cut, second_main, &tt));
+                    }
+                }
+            }
+            if (wt < best_wt) { best_wt = wt; best_pin = pin; }
+        }
+        if (sub > 0 && budget != nullptr && (budget->Exhausted() || budget->Overrun())) { break; }
+        chosen = best_pin;
     }
     return chosen;
 }

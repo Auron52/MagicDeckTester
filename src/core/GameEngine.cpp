@@ -990,6 +990,7 @@ void GameEngine::CombatPhase(GameState& state, bool additional)
     // landfall payloads pump attacking Plants this combat. Pick = the searched
     // Plan::attack_land_search_choice pin. Repairs atk_idx (a fetched Karoo's bounce erases a slot).
     // Mirrors TurnSolver::SimulateCombat (lockstep, ONE shared helper). Param-gated inert.
+    m_ai.DecideAttackLand(state, atk_idx, additional);
     FireAttackLandSearch(state, state.active_player_index, atk_idx);
     // ...then the IN-COMBAT Khalni Heart Expedition crack: an Expedition the trigger's landfalls
     // filled can be activated before damage (it has no timing restriction), so its two lands' landfall
