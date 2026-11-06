@@ -493,6 +493,32 @@ TEST_CASE("mana oracle: one more tap beside a multi-unit source lets its surplus
     CHECK(superset);
 }
 
+// LAZY STOP (lever (c), USER 2026-11-06): a capped caller asks for at most `max_opts` options, and gets exactly the
+// first `max_opts` of the full enumeration, in order -- Realize applies that prefix and nothing past it.
+TEST_CASE("mana oracle: a lazily stopped enumeration is a prefix of the full one")
+{
+    EnsureOracleCards();
+    GameState s = Board({ "Forest", "Forest", "Plains", "Island", "Swamp", "Mountain" });
+    const auto full = manaoracle::MinimalPayments(s, Cost(2), /*for_creature=*/false, nullptr);
+    REQUIRE(full.size() >= 4);
+    auto same = [](const manaoracle::PayOption& a, const manaoracle::PayOption& b)
+    {
+        if (a.taps.size() != b.taps.size() || a.stash.Total() != b.stash.Total()) { return false; }
+        for (std::size_t i = 0; i < a.taps.size(); ++i)
+        { if (a.taps[i].name != b.taps[i].name || a.taps[i].num != b.taps[i].num) { return false; } }
+        return true;
+    };
+    for (std::size_t k = 1; k <= full.size() + 1; ++k)
+    {
+        std::vector<std::string> notes;
+        const auto lazy = manaoracle::MinimalPayments(s, Cost(2), false, &notes, false, false, nullptr, nullptr, 0, k);
+        REQUIRE(lazy.size() == std::min(k, full.size()));
+        for (std::size_t i = 0; i < lazy.size(); ++i) { CHECK(same(lazy[i], full[i])); }
+        // The stop is not an enumeration cap: no "payment enumeration capped" note.
+        for (const std::string& n : notes) { CHECK(n != "payment enumeration capped"); }
+    }
+}
+
 // Found by the oracle's rollback census (2026-10-27; EDF viewer game seed 3000 T4): a {U} whose only blue
 // is Fertile Ground's any-colour bonus on Mariposa Military Base fails the greedy, and the backtracker's
 // DFS -- which taps sources in battlefield order and accepts the FIRST covering tap set -- tapped
