@@ -60,3 +60,77 @@ based on origin/phase-1-2-deck-analyzer 6abc9ef80. Spec: `docs/design/sac-for-ma
 
 ## Running jobs
 None of mine. (Chain PID 3188692 was stopped before it took the lock.)
+
+
+---------------------------------------------------------------------------------------------------------
+# HANDOFF #2 (2026-11-06 ~01:45 UTC) -- supersedes "Done / Measurements / Remaining" above where they differ
+
+## Done (branch sb-sacpayer, LOCAL, unpushed; rebased onto origin/phase-1-2-deck-analyzer dfd675afb, clean)
+- b23675331 payer + retired action + MTG_IDLE_CRACK_FOLD deleted (was 45ef98611 pre-rebase)
+- 92864668a crack-in-place fix (was f1bfef72d); ddeb7f6fa first handoff notes
+- a832f5128 test fix after rebase: the ArmScope pins (SB_RITUAL_PAYOFF/SB_MAIN1_RULE off) git auto-merged onto the
+  two payer tests; moved to "On-demand: no SacForMana plan action ... a cast that needs the crack is offered"
+  (the default-ON main-1 rule folded the Overlord cast). Unit: 2613/2613 after it (5/5 On-demand*). Scenarios 419/419.
+- 0f46edde0 WIP, UNBUILT + UNTESTED: fix for the Dragonstorm d0 regression (below). TurnSolver.cpp only:
+  SubsetWastesAccelerant gains `implicit_accel`; SolveUncached computes od_payoff_sup (OnDemandSacSupplyNow when
+  payoff_prune_on && deck_has_ondemand_sac) and, after the colour-exact check in consider(), rejects a subset that
+  has no payoff (storm-hold rule) AND whose cost is NOT payable from eff_cg/eff_nc_cg minus the on-demand supply.
+  Solve only (d0 runner + horizon playout); EnumeratePlans' payoff-prune twin NOT changed (search now admits
+  implicit-Lotus no-payoff subsets = a widening; decide whether to mirror it).
+  The build of 0f46edde0 was cancelled while waiting on the lock: build/Release/mtg is STILL a832f5128's binary.
+
+## Measurements (binary a832f5128 == ab2/mtg.ab, MTG_PGO=0)
+- Smoke (build/scratch/sb-sacpayer/smoke2.log): 164 pass / 8 fail, ONLY dragonstorm*/shadowborn* rows move
+  (FiveColour unchanged, as expected). shadowborn d0 7.782->7.381, d3 5.10->5.12, d5 4.86->4.85, 2hg d3 5.32->5.34;
+  dragonstorm d0 4.979->5.109 (WORSE), d3 4.50->4.50 (digest only), d5 4.460->4.447, 2hg d5 4.70->4.68.
+- Held-out A/B (build/scratch/sb-sacpayer/ab2/, games/*.wins; report: python3 build/scratch/sb-sacpayer/abrep.py
+  build/scratch/sb-sacpayer/ab2/games 0 -v), base = MTG_SAC_ON_DEMAND=0 (old action route; fold was default OFF so
+  base == origin play), od = payer:
+    dragonstorm d0 n=3000 4.9807->5.0727 d=+0.0920 se=0.0095 slower=214 faster=66 net=+276   <-- FAILS the bar
+    dragonstorm d3 n=1000 4.3440->4.3330 d=-0.0110 se=0.0046 slower=2 faster=13 net=-11 (slower gi 137, 435)
+    dragonstorm d5 n=600  4.4183->4.4050 d=-0.0133 se=0.0047 slower=0 faster=8 net=-8
+    shadowborn  d0 n=3000 7.7577->7.3027 d=-0.4550 se=0.0225 slower=181 faster=737 net=-1365
+    shadowborn  d3 n=600  4.8967->4.8750 d=-0.0217 se=0.0116 slower=14 faster=26 net=-13
+                (slower gi 94 218 237 332 342 345 358 368 422 442 458 479 530 551)
+    shadowborn  d5 n=400  4.7925->4.7925 d=0 se=0.0100 slower=5 faster=5 net=0 (slower gi 30 116 254 343 351)
+  Seeds: seed = 91001 + 1000*depth + gi, --game-index gi (manifest jobs: seed base+off, game_index off).
+- ROOT CAUSE of the Dragonstorm d0 loss (repro: build/scratch/sb-sacpayer/rp/, ds8b/ds8o game logs,
+  proj8b/proj8o.txt = MTG_SOLVE_PROJ_TRACE=4): seed 91009 gi8 d0, base T4 / od T7. At T4 with Lotus Bloom on the
+  battlefield and Dragonstorm + Apex in hand, base's {Lotus crack, Scourge} subset was pruned by the STORM-HOLD
+  rule (SubsetWastesAccelerant, s_storm_hold: with a storm payoff in hand a fair Dragon does not justify an
+  accelerant), so it ran the ritual/Apex/Dragonstorm line and won. On od the crack is implicit, the subset is just
+  {Scourge} (supply=5 incl. the credited Lotus), the rule cannot see the Lotus being spent, Scourge (eval 800)
+  beats the go-off line (eval 400), and the payer cracks the Lotus for it. 0f46edde0 is the proposed fix.
+
+## Remaining, in order
+1. Build 0f46edde0 under the lock; unit + scenarios; repro seed 91009 gi8 d0 both arms (expect od T4 again) with
+   ab-style env MTG_SAC_ON_DEMAND (the selector still exists).
+2. Re-run the A/B on the new binary: copy build/Release/mtg to a NEW dir (e.g. ab3/), `python3 mkab.py ab3/manifest.json`,
+   ONE batch `--threads 24 --game-log-dir ab3/games` under flock. Check dragonstorm d0 net <= 0; shadowborn d0 should
+   be unchanged by the fix (payoff_prune_on is Dragonstorm-only).
+3. d8 b0 repro (`--depth 8 --budget-ms 0 --ignore-play-profile`, both arms) of EVERY slower searched game of the
+   final A/B (and a sample of d0 slower games). Clairvoyance-only losses are accepted (USER). Root-cause any other.
+4. Regression on the OD binary (viewer_protocol_check: 8 Dragonstorm references with a Lotus crack must replay), then
+   scripts/ref_bench.py for Dragonstorm / Shadowborn.
+5. Delete MTG_SAC_ON_DEMAND (HeuristicArm.h slot SAC_ON_DEMAND + name list entry; GoldFishRunner.cpp:1395 line;
+   main.cpp two `EnvOn("MTG_SAC_ON_DEMAND", true)` reads in the human-line sacout parse) -> byte-identical default.
+6. Land: unit, scenarios, smoke, regression; --accept only dragonstorm*/shadowborn* movers (any other mover must be
+   explained; origin drift only if origin's binary reproduces it); python3 test/check_gt_logs.py; rebase (never merge)
+   onto origin/phase-1-2-deck-analyzer; push; watch CI in background, report Windows.
+7. If the bar is not met: do NOT land; report numbers, mechanism, proposed amendment (adoption is the USER's call).
+
+## USER rulings (verbatim)
+- "It should be land -> Dark Ritual -> other spells. Lotus bloom should be sacrificed on demand by the mana system. not a direct activation."
+- On Lake of the Dead: "For 2 I agree that it should not be sacrificing the land unless we need it. We should sort that out if possible."
+- "Yes, it should be on-demand and only done that way."  (-> the payer is the ONLY route; delete the selector before landing)
+- "Any order is fine from my perspective, so after seems good."
+- Brief (via coordinator): losses that come only from clairvoyance are accepted.
+
+## Running jobs
+None. chain2 (PID 3285147) finished: build/scratch/sb-sacpayer/chain2.status = "smoke rc=1 / ab rc=0 / DONE".
+The queued build of 0f46edde0 (PID 3317473, waiting on the lock, never started compiling) was killed.
+
+## Open question for the USER
+- The payer widens the SEARCH for Dragonstorm: EnumeratePlans' payoff prune no longer drops a no-payoff subset funded
+  by an implicit Lotus crack (it used to drop {crack, X} with no payoff). 0f46edde0 restores the rule in the greedy
+  policy only. Mirror it in EnumeratePlans too? Default taken: no (a widening is not lossy; searched d3/d5 improved).
