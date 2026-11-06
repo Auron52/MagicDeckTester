@@ -26,6 +26,9 @@ before every push. "Feel free to delay any iterations that seem to be getting st
    Alchemist gi 29, 59; seed 30000000+gi) as one batch with `MTG_MANA_ORACLE=0` (`stall.o0.*`), then `=2`
    (`stall.o2.*`), under `/usr/bin/time -v`. Reading: if the OFF arm is slow too, the stall is play-side (a search
    blow-up, not the analyzer); if only ON is slow, it is another oracle path.
+   `postpass/sampler.sh` (PID in `sampler.pid`) takes gdb stacks + a 60 s `perf` profile of each running stall-batch
+   mtg every ~5 min into `postpass/samples/a<arm>-<time>.{bt,perf}`. USER 11-06: sort out the stalls so no deck can
+   get indefinitely stuck (suspects the analyzer, which has had little optimisation).
 
 ## Pass verdicts (this segment; earlier ones are in test/mana_clean.json and status.log)
 - galadriel: 71,000 games, 372,073 issues (MISS 453 = 425 APPLY-DROP + 28 ENUM-GAP "cast both Galadriels",
