@@ -307,6 +307,9 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
     // MTG_LANDDRAW_CENSUS (diagnostic only, a no-op unless set): did this turn's dig chain draw a
     // land with the drop open and end with the drop unused? Read before the end step changes nothing.
     AIEngine::LandDrawCensusEndTurn(state);
+    // The executor's crossing node (MTG_PROFANE_REAL_NODE): a Profane Tutor fetch due at the next upkeep that the
+    // committed line left unpinned is searched here, before the crossing (no-op for every other deck / rollouts).
+    m_ai.DecideCrossingFetch(state);
     if (at <= static_cast<int>(ResumeAt::End))   { EndStep(state); }
     CleanupStep(state);
     // EXTRA TURN NEXT (pending_extra_turns > 0): the opponent takes NO turn before it, so neither
@@ -500,7 +503,20 @@ void GameEngine::UpkeepStep(GameState& state)
     // card and CAST off suspend any whose last counter is now gone (arrive_turn <= this turn). Runs
     // after UntapStep, so the arrived artifact is untapped and available this turn. Mirrors the rollout
     // (SimulateEndAndStartNextTurn) -> lockstep. No-op for every deck without a suspended card.
-    ProcessSuspendArrivals(state, state.active_player_index);
+    // The executor's suspended-tutor RESOLUTION node (MTG_PROFANE_REAL_NODE): an uncovered search this upkeep meets
+    // (a ripple free copy no crossing could foresee) is searched where it resolves. Installed for THIS state only
+    // (every copy a search makes has another address); inert for every deck without a suspended tutor.
+    {
+        struct RealStutNodeScope
+        {
+            RealStutNodeFn fn; void* owner; const GameState* st;   // the enclosing game's (a bottom trial nests)
+            RealStutNodeScope(AIEngine* ai, const GameState* s)
+                : fn(t_real_stut_node), owner(t_real_stut_owner), st(t_real_stut_state)
+            { t_real_stut_node = &AIEngine::RealStutNodeThunk; t_real_stut_owner = ai; t_real_stut_state = s; }
+            ~RealStutNodeScope() { t_real_stut_node = fn; t_real_stut_owner = owner; t_real_stut_state = st; }
+        } _rsn(&m_ai, &state);
+        ProcessSuspendArrivals(state, state.active_player_index);
+    }
 
     // Aether Vial: add a charge counter each upkeep using an AI heuristic.
     // Stop adding when the counter count reaches the most common creature MV in hand,
