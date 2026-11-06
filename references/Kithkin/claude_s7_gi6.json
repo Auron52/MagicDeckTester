@@ -1,0 +1,361 @@
+{
+  "seed": 7, "game_index": 6, "win_turn": 5, "won": true,
+  "mulligan": { "count": 0, "bottom": [] }, "karoo_float": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1, "spell_copy_id": 1,
+  "decisions": [
+    { "chosen": 1, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 22, "name": "Knight of Meadowgrain" }, { "num": 36, "name": "Plains" }, { "num": 37, "name": "Plains" }, { "num": 17, "name": "Goldmeadow Stalwart" }, { "num": 26, "name": "Metallic Mimic" }, { "num": 38, "name": "Plains" }, { "num": 9, "name": "Cenn's Heir" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Plains", "cast=Goldmeadow Stalwart"], "decision": {
+  "decision_index": 1,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 1, "card": "Figure of Destiny" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 9, "name": "Cenn's Heir", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Figure of Destiny", "cost": "{R/W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 17, "name": "Goldmeadow Stalwart", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Knight of Meadowgrain", "cost": "{W}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Metallic Mimic", "cost": "{2}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 36, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 37, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 38, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Plains; cast: Goldmeadow Stalwart", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Goldmeadow Stalwart"], "actions": [{ "card": "Goldmeadow Stalwart" }] },
+    { "index": 1, "summary": "land=Plains; cast: Figure of Destiny", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Figure of Destiny"], "actions": [{ "card": "Figure of Destiny" }] },
+    { "index": 2, "summary": "land=Plains; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 2,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Goldmeadow Stalwart", "idx": 5, "num": 17, "sick": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Plains", "idx": 4, "num": 36, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 9, "name": "Cenn's Heir", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Figure of Destiny", "cost": "{R/W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Knight of Meadowgrain", "cost": "{W}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Metallic Mimic", "cost": "{2}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 37, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 38, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 3,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Goldmeadow Stalwart", "idx": 5, "num": 17, "sick": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Plains", "idx": 4, "num": 36, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 9, "name": "Cenn's Heir", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Figure of Destiny", "cost": "{R/W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Knight of Meadowgrain", "cost": "{W}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Metallic Mimic", "cost": "{2}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 37, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 38, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 3, "cast_order": ["**", "land=Plains", "cast=Metallic Mimic"], "decision": {
+  "decision_index": 4,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 2, "card": "Goldmeadow Stalwart" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Goldmeadow Stalwart", "idx": 5, "num": 17, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Plains", "idx": 4, "num": 36, "is_land": true, "taps": "W" }], "vial_counters": [], "hand": [{ "num": 9, "name": "Cenn's Heir", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Figure of Destiny", "cost": "{R/W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 18, "name": "Goldmeadow Stalwart", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Knight of Meadowgrain", "cost": "{W}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Metallic Mimic", "cost": "{2}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 37, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 38, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Plains; cast: Figure of Destiny, Goldmeadow Stalwart", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Figure of Destiny", "Goldmeadow Stalwart"], "cast_order_canonical": ["Figure of Destiny", "Goldmeadow Stalwart"], "actions": [{ "card": "Figure of Destiny" }, { "card": "Goldmeadow Stalwart" }] },
+    { "index": 1, "summary": "land=Plains; cast: Goldmeadow Stalwart, Figure of Destiny", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Goldmeadow Stalwart", "Figure of Destiny"], "cast_order_canonical": ["Goldmeadow Stalwart", "Figure of Destiny"], "actions": [{ "card": "Goldmeadow Stalwart" }, { "card": "Figure of Destiny" }] },
+    { "index": 2, "summary": "land=Plains; cast: Knight of Meadowgrain", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Knight of Meadowgrain"], "actions": [{ "card": "Knight of Meadowgrain" }] },
+    { "index": 3, "summary": "land=Plains; cast: Metallic Mimic", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Metallic Mimic"], "actions": [{ "card": "Metallic Mimic" }] },
+    { "index": 4, "summary": "land=Plains; cast: Goldmeadow Stalwart", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Goldmeadow Stalwart"], "actions": [{ "card": "Goldmeadow Stalwart" }] },
+    { "index": 5, "summary": "land=none; cast: Goldmeadow Stalwart", "declared_order_payability": "not_verified", "land": null, "casts": ["Goldmeadow Stalwart"], "actions": [{ "card": "Goldmeadow Stalwart" }] },
+    { "index": 6, "summary": "land=Plains; cast: Cenn's Heir", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Cenn's Heir"], "actions": [{ "card": "Cenn's Heir" }] },
+    { "index": 7, "summary": "land=Plains; cast: Figure of Destiny", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Figure of Destiny"], "actions": [{ "card": "Figure of Destiny" }] },
+    { "index": 8, "summary": "land=none; cast: Figure of Destiny", "declared_order_payability": "not_verified", "land": null, "casts": ["Figure of Destiny"], "actions": [{ "card": "Figure of Destiny" }] },
+    { "index": 9, "summary": "land=Plains; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 10, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Goldmeadow Stalwart", "idx": 5, "num": 17, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Metallic Mimic", "idx": 7, "num": 26, "sick": true, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Plains", "idx": 4, "num": 36, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 6, "num": 37, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 9, "name": "Cenn's Heir", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Figure of Destiny", "cost": "{R/W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 18, "name": "Goldmeadow Stalwart", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Knight of Meadowgrain", "cost": "{W}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 38, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 2, "kind": "combat", "text": "⚔ attacked: Goldmeadow Stalwart (2) — 2 to opponent (20→18)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Goldmeadow Stalwart", "idx": 5, "num": 17, "tapped": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Metallic Mimic", "idx": 7, "num": 26, "sick": true, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Plains", "idx": 4, "num": 36, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 6, "num": 37, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 9, "name": "Cenn's Heir", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Figure of Destiny", "cost": "{R/W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 18, "name": "Goldmeadow Stalwart", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Knight of Meadowgrain", "cost": "{W}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 38, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 5, "cast_order": ["**", "land=Plains", "cast=Goldmeadow Stalwart", "cast=Cenn's Heir"], "decision": {
+  "decision_index": 7,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 3, "card": "Unexpectedly Absent" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Goldmeadow Stalwart", "idx": 5, "num": 17, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Metallic Mimic", "idx": 7, "num": 26, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Plains", "idx": 4, "num": 36, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 6, "num": 37, "is_land": true, "taps": "W" }], "vial_counters": [], "hand": [{ "num": 9, "name": "Cenn's Heir", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Figure of Destiny", "cost": "{R/W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 18, "name": "Goldmeadow Stalwart", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Knight of Meadowgrain", "cost": "{W}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 38, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Plains; cast: Goldmeadow Stalwart, Knight of Meadowgrain", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Goldmeadow Stalwart", "Knight of Meadowgrain"], "cast_order_canonical": ["Goldmeadow Stalwart", "Knight of Meadowgrain"], "actions": [{ "card": "Goldmeadow Stalwart" }, { "card": "Knight of Meadowgrain" }] },
+    { "index": 1, "summary": "land=Plains; cast: Knight of Meadowgrain, Goldmeadow Stalwart", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Knight of Meadowgrain", "Goldmeadow Stalwart"], "cast_order_canonical": ["Knight of Meadowgrain", "Goldmeadow Stalwart"], "actions": [{ "card": "Knight of Meadowgrain" }, { "card": "Goldmeadow Stalwart" }] },
+    { "index": 2, "summary": "land=Plains; cast: Figure of Destiny, Knight of Meadowgrain", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Figure of Destiny", "Knight of Meadowgrain"], "cast_order_canonical": ["Figure of Destiny", "Knight of Meadowgrain"], "actions": [{ "card": "Figure of Destiny" }, { "card": "Knight of Meadowgrain" }] },
+    { "index": 3, "summary": "land=Plains; cast: Knight of Meadowgrain, Figure of Destiny", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Knight of Meadowgrain", "Figure of Destiny"], "cast_order_canonical": ["Knight of Meadowgrain", "Figure of Destiny"], "actions": [{ "card": "Knight of Meadowgrain" }, { "card": "Figure of Destiny" }] },
+    { "index": 4, "summary": "land=Plains; cast: Cenn's Heir, Goldmeadow Stalwart", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Cenn's Heir", "Goldmeadow Stalwart"], "cast_order_canonical": ["Cenn's Heir", "Goldmeadow Stalwart"], "actions": [{ "card": "Cenn's Heir" }, { "card": "Goldmeadow Stalwart" }] },
+    { "index": 5, "summary": "land=Plains; cast: Goldmeadow Stalwart, Cenn's Heir", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Goldmeadow Stalwart", "Cenn's Heir"], "cast_order_canonical": ["Goldmeadow Stalwart", "Cenn's Heir"], "actions": [{ "card": "Goldmeadow Stalwart" }, { "card": "Cenn's Heir" }] },
+    { "index": 6, "summary": "land=Plains; cast: Figure of Destiny, Goldmeadow Stalwart", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Figure of Destiny", "Goldmeadow Stalwart"], "cast_order_canonical": ["Figure of Destiny", "Goldmeadow Stalwart"], "actions": [{ "card": "Figure of Destiny" }, { "card": "Goldmeadow Stalwart" }] },
+    { "index": 7, "summary": "land=Plains; cast: Goldmeadow Stalwart, Figure of Destiny", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Goldmeadow Stalwart", "Figure of Destiny"], "cast_order_canonical": ["Goldmeadow Stalwart", "Figure of Destiny"], "actions": [{ "card": "Goldmeadow Stalwart" }, { "card": "Figure of Destiny" }] },
+    { "index": 8, "summary": "land=none; cast: Figure of Destiny, Goldmeadow Stalwart", "declared_order_payability": "not_verified", "land": null, "casts": ["Figure of Destiny", "Goldmeadow Stalwart"], "cast_order_canonical": ["Figure of Destiny", "Goldmeadow Stalwart"], "actions": [{ "card": "Figure of Destiny" }, { "card": "Goldmeadow Stalwart" }] },
+    { "index": 9, "summary": "land=none; cast: Goldmeadow Stalwart, Figure of Destiny", "declared_order_payability": "not_verified", "land": null, "casts": ["Goldmeadow Stalwart", "Figure of Destiny"], "cast_order_canonical": ["Goldmeadow Stalwart", "Figure of Destiny"], "actions": [{ "card": "Goldmeadow Stalwart" }, { "card": "Figure of Destiny" }] },
+    { "index": 10, "summary": "land=Plains; cast: Goldmeadow Stalwart, Unexpectedly Absent (X=0)", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Goldmeadow Stalwart", "Unexpectedly Absent"], "cast_order_canonical": ["Goldmeadow Stalwart", "Unexpectedly Absent"], "actions": [{ "card": "Goldmeadow Stalwart" }, { "card": "Unexpectedly Absent" }] },
+    { "index": 11, "summary": "land=Plains; cast: Knight of Meadowgrain", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Knight of Meadowgrain"], "actions": [{ "card": "Knight of Meadowgrain" }] },
+    { "index": 12, "summary": "land=Plains; cast: Cenn's Heir, Figure of Destiny", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Cenn's Heir", "Figure of Destiny"], "cast_order_canonical": ["Cenn's Heir", "Figure of Destiny"], "actions": [{ "card": "Cenn's Heir" }, { "card": "Figure of Destiny" }] },
+    { "index": 13, "summary": "land=Plains; cast: Figure of Destiny, Cenn's Heir", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Figure of Destiny", "Cenn's Heir"], "cast_order_canonical": ["Figure of Destiny", "Cenn's Heir"], "actions": [{ "card": "Figure of Destiny" }, { "card": "Cenn's Heir" }] },
+    { "index": 14, "summary": "land=Plains; cast: Goldmeadow Stalwart", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Goldmeadow Stalwart"], "actions": [{ "card": "Goldmeadow Stalwart" }] },
+    { "index": 15, "summary": "land=none; cast: Knight of Meadowgrain", "declared_order_payability": "not_verified", "land": null, "casts": ["Knight of Meadowgrain"], "actions": [{ "card": "Knight of Meadowgrain" }] },
+    { "index": 16, "summary": "land=none; cast: Goldmeadow Stalwart", "declared_order_payability": "not_verified", "land": null, "casts": ["Goldmeadow Stalwart"], "actions": [{ "card": "Goldmeadow Stalwart" }] },
+    { "index": 17, "summary": "land=Plains; cast: Figure of Destiny, Unexpectedly Absent (X=0)", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Figure of Destiny", "Unexpectedly Absent"], "cast_order_canonical": ["Figure of Destiny", "Unexpectedly Absent"], "actions": [{ "card": "Figure of Destiny" }, { "card": "Unexpectedly Absent" }] },
+    { "index": 18, "summary": "land=Plains; cast: Cenn's Heir", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Cenn's Heir"], "actions": [{ "card": "Cenn's Heir" }] },
+    { "index": 19, "summary": "land=Plains; cast: Figure of Destiny", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Figure of Destiny"], "actions": [{ "card": "Figure of Destiny" }] },
+    { "index": 20, "summary": "land=none; cast: Cenn's Heir", "declared_order_payability": "not_verified", "land": null, "casts": ["Cenn's Heir"], "actions": [{ "card": "Cenn's Heir" }] },
+    { "index": 21, "summary": "land=none; cast: Figure of Destiny", "declared_order_payability": "not_verified", "land": null, "casts": ["Figure of Destiny"], "actions": [{ "card": "Figure of Destiny" }] },
+    { "index": 22, "summary": "land=Plains; cast: Unexpectedly Absent (X=0)", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent" }] },
+    { "index": 23, "summary": "land=Plains; cast: Unexpectedly Absent (X=1)", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent", "x": 1 }] },
+    { "index": 24, "summary": "land=none; cast: Unexpectedly Absent (X=0)", "declared_order_payability": "not_verified", "land": null, "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent" }] },
+    { "index": 25, "summary": "land=Plains; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 26, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Cenn's Heir", "idx": 10, "num": 9, "sick": true, "is_land": false, "power": 2, "toughness": 2, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "Goldmeadow Stalwart", "idx": 5, "num": 17, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Goldmeadow Stalwart", "idx": 9, "num": 18, "sick": true, "is_land": false, "power": 3, "toughness": 3, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "Metallic Mimic", "idx": 7, "num": 26, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Plains", "idx": 4, "num": 36, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 6, "num": 37, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 8, "num": 38, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 13, "name": "Figure of Destiny", "cost": "{R/W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Knight of Meadowgrain", "cost": "{W}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Goldmeadow Stalwart (2), Metallic Mimic (2) — 4 to opponent (18→14)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Cenn's Heir", "idx": 10, "num": 9, "sick": true, "is_land": false, "power": 2, "toughness": 2, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "Goldmeadow Stalwart", "idx": 5, "num": 17, "tapped": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Goldmeadow Stalwart", "idx": 9, "num": 18, "sick": true, "is_land": false, "power": 3, "toughness": 3, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "Metallic Mimic", "idx": 7, "num": 26, "tapped": true, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Plains", "idx": 4, "num": 36, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 6, "num": 37, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 8, "num": 38, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 13, "name": "Figure of Destiny", "cost": "{R/W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Knight of Meadowgrain", "cost": "{W}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 14, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Plains", "cast=Figure of Destiny", "cast=Knight of Meadowgrain"], "decision": {
+  "decision_index": 10,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 4, "card": "Plains" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Cenn's Heir", "idx": 10, "num": 9, "is_land": false, "power": 2, "toughness": 2, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "Goldmeadow Stalwart", "idx": 5, "num": 17, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Goldmeadow Stalwart", "idx": 9, "num": 18, "is_land": false, "power": 3, "toughness": 3, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "Metallic Mimic", "idx": 7, "num": 26, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Plains", "idx": 4, "num": 36, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 6, "num": 37, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 8, "num": 38, "is_land": true, "taps": "W" }], "vial_counters": [], "hand": [{ "num": 13, "name": "Figure of Destiny", "cost": "{R/W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Knight of Meadowgrain", "cost": "{W}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 39, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 14, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Plains; cast: Figure of Destiny, Knight of Meadowgrain", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Figure of Destiny", "Knight of Meadowgrain"], "cast_order_canonical": ["Figure of Destiny", "Knight of Meadowgrain"], "actions": [{ "card": "Figure of Destiny" }, { "card": "Knight of Meadowgrain" }] },
+    { "index": 1, "summary": "land=Plains; cast: Knight of Meadowgrain, Figure of Destiny", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Knight of Meadowgrain", "Figure of Destiny"], "cast_order_canonical": ["Knight of Meadowgrain", "Figure of Destiny"], "actions": [{ "card": "Knight of Meadowgrain" }, { "card": "Figure of Destiny" }] },
+    { "index": 2, "summary": "land=none; cast: Figure of Destiny, Knight of Meadowgrain", "declared_order_payability": "not_verified", "land": null, "casts": ["Figure of Destiny", "Knight of Meadowgrain"], "cast_order_canonical": ["Figure of Destiny", "Knight of Meadowgrain"], "actions": [{ "card": "Figure of Destiny" }, { "card": "Knight of Meadowgrain" }] },
+    { "index": 3, "summary": "land=none; cast: Knight of Meadowgrain, Figure of Destiny", "declared_order_payability": "not_verified", "land": null, "casts": ["Knight of Meadowgrain", "Figure of Destiny"], "cast_order_canonical": ["Knight of Meadowgrain", "Figure of Destiny"], "actions": [{ "card": "Knight of Meadowgrain" }, { "card": "Figure of Destiny" }] },
+    { "index": 4, "summary": "land=Plains; cast: Knight of Meadowgrain, Unexpectedly Absent (X=0)", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Knight of Meadowgrain", "Unexpectedly Absent"], "cast_order_canonical": ["Knight of Meadowgrain", "Unexpectedly Absent"], "actions": [{ "card": "Knight of Meadowgrain" }, { "card": "Unexpectedly Absent" }] },
+    { "index": 5, "summary": "land=Plains; cast: Knight of Meadowgrain", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Knight of Meadowgrain"], "actions": [{ "card": "Knight of Meadowgrain" }] },
+    { "index": 6, "summary": "land=none; cast: Knight of Meadowgrain", "declared_order_payability": "not_verified", "land": null, "casts": ["Knight of Meadowgrain"], "actions": [{ "card": "Knight of Meadowgrain" }] },
+    { "index": 7, "summary": "land=Plains; cast: Figure of Destiny, Unexpectedly Absent (X=0)", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Figure of Destiny", "Unexpectedly Absent"], "cast_order_canonical": ["Figure of Destiny", "Unexpectedly Absent"], "actions": [{ "card": "Figure of Destiny" }, { "card": "Unexpectedly Absent" }] },
+    { "index": 8, "summary": "land=Plains; cast: Figure of Destiny, Unexpectedly Absent (X=1)", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Figure of Destiny", "Unexpectedly Absent"], "cast_order_canonical": ["Figure of Destiny", "Unexpectedly Absent"], "actions": [{ "card": "Figure of Destiny" }, { "card": "Unexpectedly Absent", "x": 1 }] },
+    { "index": 9, "summary": "land=none; cast: Figure of Destiny, Unexpectedly Absent (X=0)", "declared_order_payability": "not_verified", "land": null, "casts": ["Figure of Destiny", "Unexpectedly Absent"], "cast_order_canonical": ["Figure of Destiny", "Unexpectedly Absent"], "actions": [{ "card": "Figure of Destiny" }, { "card": "Unexpectedly Absent" }] },
+    { "index": 10, "summary": "land=Plains; cast: Figure of Destiny", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Figure of Destiny"], "actions": [{ "card": "Figure of Destiny" }] },
+    { "index": 11, "summary": "land=none; cast: Figure of Destiny", "declared_order_payability": "not_verified", "land": null, "casts": ["Figure of Destiny"], "actions": [{ "card": "Figure of Destiny" }] },
+    { "index": 12, "summary": "land=Plains; cast: Unexpectedly Absent (X=0)", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent" }] },
+    { "index": 13, "summary": "land=Plains; cast: Unexpectedly Absent (X=1)", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent", "x": 1 }] },
+    { "index": 14, "summary": "land=Plains; cast: Unexpectedly Absent (X=2)", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent", "x": 2 }] },
+    { "index": 15, "summary": "land=none; cast: Unexpectedly Absent (X=0)", "declared_order_payability": "not_verified", "land": null, "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent" }] },
+    { "index": 16, "summary": "land=none; cast: Unexpectedly Absent (X=1)", "declared_order_payability": "not_verified", "land": null, "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent", "x": 1 }] },
+    { "index": 17, "summary": "land=Plains; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 18, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 11,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Cenn's Heir", "idx": 10, "num": 9, "is_land": false, "power": 2, "toughness": 2, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "Figure of Destiny", "idx": 12, "num": 13, "sick": true, "is_land": false, "power": 2, "toughness": 2, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "Goldmeadow Stalwart", "idx": 5, "num": 17, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Goldmeadow Stalwart", "idx": 9, "num": 18, "is_land": false, "power": 3, "toughness": 3, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "Knight of Meadowgrain", "idx": 13, "num": 22, "sick": true, "is_land": false, "power": 3, "toughness": 3, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "Metallic Mimic", "idx": 7, "num": 26, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Plains", "idx": 4, "num": 36, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 6, "num": 37, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 8, "num": 38, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 11, "num": 39, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 55, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 14, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Figure of Destiny: become a 2/2 Kithkin Spirit", "declared_order_payability": "not_verified", "land": null, "casts": ["Figure of Destiny"], "actions": [{ "card": "Figure of Destiny", "src_num": 13, "activate": true, "cost_pips": "R", "activation_cost": "{R/W}", "act_label": "become a 2/2 Kithkin Spirit", "verb": "figure", "mode": 2, "x": 1 }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 12,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 4, "kind": "combat", "text": "⚔ attacked: Goldmeadow Stalwart (2), Metallic Mimic (2), Goldmeadow Stalwart (3), Cenn's Heir (5) — 12 to opponent (14→2)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Cenn's Heir", "idx": 10, "num": 9, "tapped": true, "is_land": false, "power": 5, "toughness": 5, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "Figure of Destiny", "idx": 12, "num": 13, "sick": true, "is_land": false, "power": 2, "toughness": 2, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "Goldmeadow Stalwart", "idx": 5, "num": 17, "tapped": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Goldmeadow Stalwart", "idx": 9, "num": 18, "tapped": true, "is_land": false, "power": 3, "toughness": 3, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "Knight of Meadowgrain", "idx": 13, "num": 22, "sick": true, "is_land": false, "power": 3, "toughness": 3, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "Metallic Mimic", "idx": 7, "num": 26, "tapped": true, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Plains", "idx": 4, "num": 36, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 6, "num": 37, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 8, "num": 38, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 11, "num": 39, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 55, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 2, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Figure of Destiny: become a 2/2 Kithkin Spirit", "declared_order_payability": "not_verified", "land": null, "casts": ["Figure of Destiny"], "actions": [{ "card": "Figure of Destiny", "src_num": 13, "activate": true, "cost_pips": "R", "activation_cost": "{R/W}", "act_label": "become a 2/2 Kithkin Spirit", "verb": "figure", "mode": 2, "x": 1 }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 17, "decision": {
+  "decision_index": 13,
+  "main_ordinal": 6,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 5, "card": "Plains" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Cenn's Heir", "idx": 10, "num": 9, "is_land": false, "power": 2, "toughness": 2, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "Figure of Destiny", "idx": 12, "num": 13, "is_land": false, "power": 2, "toughness": 2, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "Goldmeadow Stalwart", "idx": 5, "num": 17, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Goldmeadow Stalwart", "idx": 9, "num": 18, "is_land": false, "power": 3, "toughness": 3, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "Knight of Meadowgrain", "idx": 13, "num": 22, "is_land": false, "power": 3, "toughness": 3, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "Metallic Mimic", "idx": 7, "num": 26, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Plains", "idx": 4, "num": 36, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 6, "num": 37, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 8, "num": 38, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 11, "num": 39, "is_land": true, "taps": "W" }], "vial_counters": [], "hand": [{ "num": 40, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 2, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Plains; cast: Unexpectedly Absent (X=0), Figure of Destiny: become a 2/2 Kithkin Spirit", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Unexpectedly Absent", "Figure of Destiny"], "actions": [{ "card": "Unexpectedly Absent" }, { "card": "Figure of Destiny", "src_num": 13, "activate": true, "cost_pips": "R", "activation_cost": "{R/W}", "act_label": "become a 2/2 Kithkin Spirit", "verb": "figure", "mode": 2, "x": 1 }] },
+    { "index": 1, "summary": "land=Plains; cast: Unexpectedly Absent (X=1), Figure of Destiny: become a 2/2 Kithkin Spirit", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Unexpectedly Absent", "Figure of Destiny"], "actions": [{ "card": "Unexpectedly Absent", "x": 1 }, { "card": "Figure of Destiny", "src_num": 13, "activate": true, "cost_pips": "R", "activation_cost": "{R/W}", "act_label": "become a 2/2 Kithkin Spirit", "verb": "figure", "mode": 2, "x": 1 }] },
+    { "index": 2, "summary": "land=Plains; cast: Unexpectedly Absent (X=2), Figure of Destiny: become a 2/2 Kithkin Spirit", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Unexpectedly Absent", "Figure of Destiny"], "actions": [{ "card": "Unexpectedly Absent", "x": 2 }, { "card": "Figure of Destiny", "src_num": 13, "activate": true, "cost_pips": "R", "activation_cost": "{R/W}", "act_label": "become a 2/2 Kithkin Spirit", "verb": "figure", "mode": 2, "x": 1 }] },
+    { "index": 3, "summary": "land=Plains; cast: Unexpectedly Absent (X=0), Figure of Destiny: become a 4/4 Kithkin Spirit Warrior", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Unexpectedly Absent", "Figure of Destiny"], "actions": [{ "card": "Unexpectedly Absent" }, { "card": "Figure of Destiny", "src_num": 13, "activate": true, "cost_pips": "RRR", "activation_cost": "{R/W}{R/W}{R/W}", "act_label": "become a 4/4 Kithkin Spirit Warrior", "verb": "figure", "mode": 4, "x": 1 }] },
+    { "index": 4, "summary": "land=none; cast: Unexpectedly Absent (X=0), Figure of Destiny: become a 2/2 Kithkin Spirit", "declared_order_payability": "not_verified", "land": null, "casts": ["Unexpectedly Absent", "Figure of Destiny"], "actions": [{ "card": "Unexpectedly Absent" }, { "card": "Figure of Destiny", "src_num": 13, "activate": true, "cost_pips": "R", "activation_cost": "{R/W}", "act_label": "become a 2/2 Kithkin Spirit", "verb": "figure", "mode": 2, "x": 1 }] },
+    { "index": 5, "summary": "land=none; cast: Unexpectedly Absent (X=1), Figure of Destiny: become a 2/2 Kithkin Spirit", "declared_order_payability": "not_verified", "land": null, "casts": ["Unexpectedly Absent", "Figure of Destiny"], "actions": [{ "card": "Unexpectedly Absent", "x": 1 }, { "card": "Figure of Destiny", "src_num": 13, "activate": true, "cost_pips": "R", "activation_cost": "{R/W}", "act_label": "become a 2/2 Kithkin Spirit", "verb": "figure", "mode": 2, "x": 1 }] },
+    { "index": 6, "summary": "land=Plains; cast: Unexpectedly Absent (X=0)", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent" }] },
+    { "index": 7, "summary": "land=Plains; cast: Unexpectedly Absent (X=1)", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent", "x": 1 }] },
+    { "index": 8, "summary": "land=Plains; cast: Unexpectedly Absent (X=2)", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent", "x": 2 }] },
+    { "index": 9, "summary": "land=Plains; cast: Unexpectedly Absent (X=3)", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent", "x": 3 }] },
+    { "index": 10, "summary": "land=Plains; cast: Figure of Destiny: become a 2/2 Kithkin Spirit", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Figure of Destiny"], "actions": [{ "card": "Figure of Destiny", "src_num": 13, "activate": true, "cost_pips": "R", "activation_cost": "{R/W}", "act_label": "become a 2/2 Kithkin Spirit", "verb": "figure", "mode": 2, "x": 1 }] },
+    { "index": 11, "summary": "land=Plains; cast: Figure of Destiny: become a 4/4 Kithkin Spirit Warrior", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Figure of Destiny"], "actions": [{ "card": "Figure of Destiny", "src_num": 13, "activate": true, "cost_pips": "RRR", "activation_cost": "{R/W}{R/W}{R/W}", "act_label": "become a 4/4 Kithkin Spirit Warrior", "verb": "figure", "mode": 4, "x": 1 }] },
+    { "index": 12, "summary": "land=none; cast: Unexpectedly Absent (X=0)", "declared_order_payability": "not_verified", "land": null, "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent" }] },
+    { "index": 13, "summary": "land=none; cast: Unexpectedly Absent (X=1)", "declared_order_payability": "not_verified", "land": null, "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent", "x": 1 }] },
+    { "index": 14, "summary": "land=none; cast: Unexpectedly Absent (X=2)", "declared_order_payability": "not_verified", "land": null, "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent", "x": 2 }] },
+    { "index": 15, "summary": "land=none; cast: Figure of Destiny: become a 2/2 Kithkin Spirit", "declared_order_payability": "not_verified", "land": null, "casts": ["Figure of Destiny"], "actions": [{ "card": "Figure of Destiny", "src_num": 13, "activate": true, "cost_pips": "R", "activation_cost": "{R/W}", "act_label": "become a 2/2 Kithkin Spirit", "verb": "figure", "mode": 2, "x": 1 }] },
+    { "index": 16, "summary": "land=none; cast: Figure of Destiny: become a 4/4 Kithkin Spirit Warrior", "declared_order_payability": "not_verified", "land": null, "casts": ["Figure of Destiny"], "actions": [{ "card": "Figure of Destiny", "src_num": 13, "activate": true, "cost_pips": "RRR", "activation_cost": "{R/W}{R/W}{R/W}", "act_label": "become a 4/4 Kithkin Spirit Warrior", "verb": "figure", "mode": 4, "x": 1 }] },
+    { "index": 17, "summary": "land=Plains; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 18, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 14,
+  "main_ordinal": 7,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Cenn's Heir", "idx": 10, "num": 9, "is_land": false, "power": 2, "toughness": 2, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "Figure of Destiny", "idx": 12, "num": 13, "is_land": false, "power": 2, "toughness": 2, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "Goldmeadow Stalwart", "idx": 5, "num": 17, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Goldmeadow Stalwart", "idx": 9, "num": 18, "is_land": false, "power": 3, "toughness": 3, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "Knight of Meadowgrain", "idx": 13, "num": 22, "is_land": false, "power": 3, "toughness": 3, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "Metallic Mimic", "idx": 7, "num": 26, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Plains", "idx": 4, "num": 36, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 6, "num": 37, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 8, "num": 38, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 11, "num": 39, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 14, "num": 40, "is_land": true, "taps": "W" }], "vial_counters": [], "hand": [{ "num": 55, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 48, "land_drops_left": 0 },
+  "opponent": { "life": 2, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Unexpectedly Absent (X=0), Figure of Destiny: become a 2/2 Kithkin Spirit", "declared_order_payability": "not_verified", "land": null, "casts": ["Unexpectedly Absent", "Figure of Destiny"], "actions": [{ "card": "Unexpectedly Absent" }, { "card": "Figure of Destiny", "src_num": 13, "activate": true, "cost_pips": "R", "activation_cost": "{R/W}", "act_label": "become a 2/2 Kithkin Spirit", "verb": "figure", "mode": 2, "x": 1 }] },
+    { "index": 1, "summary": "land=none; cast: Unexpectedly Absent (X=1), Figure of Destiny: become a 2/2 Kithkin Spirit", "declared_order_payability": "not_verified", "land": null, "casts": ["Unexpectedly Absent", "Figure of Destiny"], "actions": [{ "card": "Unexpectedly Absent", "x": 1 }, { "card": "Figure of Destiny", "src_num": 13, "activate": true, "cost_pips": "R", "activation_cost": "{R/W}", "act_label": "become a 2/2 Kithkin Spirit", "verb": "figure", "mode": 2, "x": 1 }] },
+    { "index": 2, "summary": "land=none; cast: Unexpectedly Absent (X=2), Figure of Destiny: become a 2/2 Kithkin Spirit", "declared_order_payability": "not_verified", "land": null, "casts": ["Unexpectedly Absent", "Figure of Destiny"], "actions": [{ "card": "Unexpectedly Absent", "x": 2 }, { "card": "Figure of Destiny", "src_num": 13, "activate": true, "cost_pips": "R", "activation_cost": "{R/W}", "act_label": "become a 2/2 Kithkin Spirit", "verb": "figure", "mode": 2, "x": 1 }] },
+    { "index": 3, "summary": "land=none; cast: Unexpectedly Absent (X=0), Figure of Destiny: become a 4/4 Kithkin Spirit Warrior", "declared_order_payability": "not_verified", "land": null, "casts": ["Unexpectedly Absent", "Figure of Destiny"], "actions": [{ "card": "Unexpectedly Absent" }, { "card": "Figure of Destiny", "src_num": 13, "activate": true, "cost_pips": "RRR", "activation_cost": "{R/W}{R/W}{R/W}", "act_label": "become a 4/4 Kithkin Spirit Warrior", "verb": "figure", "mode": 4, "x": 1 }] },
+    { "index": 4, "summary": "land=none; cast: Unexpectedly Absent (X=0)", "declared_order_payability": "not_verified", "land": null, "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent" }] },
+    { "index": 5, "summary": "land=none; cast: Unexpectedly Absent (X=1)", "declared_order_payability": "not_verified", "land": null, "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent", "x": 1 }] },
+    { "index": 6, "summary": "land=none; cast: Unexpectedly Absent (X=2)", "declared_order_payability": "not_verified", "land": null, "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent", "x": 2 }] },
+    { "index": 7, "summary": "land=none; cast: Unexpectedly Absent (X=3)", "declared_order_payability": "not_verified", "land": null, "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent", "x": 3 }] },
+    { "index": 8, "summary": "land=none; cast: Figure of Destiny: become a 2/2 Kithkin Spirit", "declared_order_payability": "not_verified", "land": null, "casts": ["Figure of Destiny"], "actions": [{ "card": "Figure of Destiny", "src_num": 13, "activate": true, "cost_pips": "R", "activation_cost": "{R/W}", "act_label": "become a 2/2 Kithkin Spirit", "verb": "figure", "mode": 2, "x": 1 }] },
+    { "index": 9, "summary": "land=none; cast: Figure of Destiny: become a 4/4 Kithkin Spirit Warrior", "declared_order_payability": "not_verified", "land": null, "casts": ["Figure of Destiny"], "actions": [{ "card": "Figure of Destiny", "src_num": 13, "activate": true, "cost_pips": "RRR", "activation_cost": "{R/W}{R/W}{R/W}", "act_label": "become a 4/4 Kithkin Spirit Warrior", "verb": "figure", "mode": 4, "x": 1 }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 5, "kind": "combat", "text": "⚔ attacked: Goldmeadow Stalwart (2), Metallic Mimic (2), Goldmeadow Stalwart (3), Cenn's Heir (7), Figure of Destiny (2), Knight of Meadowgrain (3) — 19 to opponent (2→-17)" }
+  ]
+}

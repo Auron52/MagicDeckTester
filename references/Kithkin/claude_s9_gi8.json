@@ -1,0 +1,298 @@
+{
+  "seed": 9, "game_index": 8, "win_turn": 4, "won": true,
+  "mulligan": { "count": 2, "bottom": [7, 8] }, "karoo_float": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1, "spell_copy_id": 1,
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 26, "name": "Metallic Mimic" }, { "num": 27, "name": "Metallic Mimic" }, { "num": 13, "name": "Figure of Destiny" }, { "num": 57, "name": "Wizened Cenn" }, { "num": 1, "name": "Adaptive Automaton" }, { "num": 36, "name": "Plains" }, { "num": 55, "name": "Unexpectedly Absent" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": false,
+  "to_bottom": 1,
+  "hand": [{ "num": 4, "name": "Adaptive Automaton" }, { "num": 16, "name": "Figure of Destiny" }, { "num": 30, "name": "Militia's Pride" }, { "num": 10, "name": "Cenn's Heir" }, { "num": 12, "name": "Cenn's Heir" }, { "num": 15, "name": "Figure of Destiny" }, { "num": 44, "name": "Plains" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 2,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 2,
+  "on_the_play": false,
+  "to_bottom": 2,
+  "hand": [{ "num": 8, "name": "Aether Vial" }, { "num": 17, "name": "Goldmeadow Stalwart" }, { "num": 43, "name": "Plains" }, { "num": 7, "name": "Aether Vial" }, { "num": 58, "name": "Wizened Cenn" }, { "num": 27, "name": "Metallic Mimic" }, { "num": 45, "name": "Plains" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 2 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 3,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 2,
+  "hand": [{ "num": 8, "name": "Aether Vial", "win_optimal": true }, { "num": 17, "name": "Goldmeadow Stalwart", "win_optimal": true }, { "num": 43, "name": "Plains", "win_optimal": true }, { "num": 7, "name": "Aether Vial", "win_optimal": true }, { "num": 58, "name": "Wizened Cenn", "win_optimal": true }, { "num": 27, "name": "Metallic Mimic", "win_optimal": true }, { "num": 45, "name": "Plains", "win_optimal": true }],
+  "ai_choice": { "index": 0, "num": 8, "name": "Aether Vial" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 2)"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 4,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 1,
+  "bottom_total": 2,
+  "hand": [{ "num": 8, "name": "Aether Vial", "win_optimal": true }, { "num": 17, "name": "Goldmeadow Stalwart", "win_optimal": true }, { "num": 43, "name": "Plains", "win_optimal": true }, { "num": 58, "name": "Wizened Cenn", "win_optimal": true }, { "num": 27, "name": "Metallic Mimic", "win_optimal": true }, { "num": 45, "name": "Plains", "win_optimal": true }],
+  "ai_choice": { "index": 4, "num": 27, "name": "Metallic Mimic" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 2 of 2)"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Plains", "cast=Goldmeadow Stalwart"], "decision": {
+  "decision_index": 5,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 1, "card": "Plains" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 17, "name": "Goldmeadow Stalwart", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Metallic Mimic", "cost": "{2}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 45, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 50, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Wizened Cenn", "cost": "{W}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Plains; cast: Goldmeadow Stalwart", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Goldmeadow Stalwart"], "actions": [{ "card": "Goldmeadow Stalwart" }] },
+    { "index": 1, "summary": "land=Plains; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Goldmeadow Stalwart", "idx": 4, "num": 17, "sick": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Plains", "idx": 3, "num": 43, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 27, "name": "Metallic Mimic", "cost": "{2}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 50, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Wizened Cenn", "cost": "{W}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 7,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Goldmeadow Stalwart", "idx": 4, "num": 17, "sick": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Plains", "idx": 3, "num": 43, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 27, "name": "Metallic Mimic", "cost": "{2}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 50, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Wizened Cenn", "cost": "{W}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "cast_order": ["**", "land=Plains", "cast=Metallic Mimic"], "decision": {
+  "decision_index": 8,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 2, "card": "Goldmeadow Stalwart" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Goldmeadow Stalwart", "idx": 4, "num": 17, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Plains", "idx": 3, "num": 43, "is_land": true, "taps": "W" }], "vial_counters": [], "hand": [{ "num": 20, "name": "Goldmeadow Stalwart", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Metallic Mimic", "cost": "{2}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 50, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Wizened Cenn", "cost": "{W}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Plains; cast: Wizened Cenn", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Wizened Cenn"], "actions": [{ "card": "Wizened Cenn" }] },
+    { "index": 1, "summary": "land=Plains; cast: Metallic Mimic", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Metallic Mimic"], "actions": [{ "card": "Metallic Mimic" }] },
+    { "index": 2, "summary": "land=Plains; cast: Goldmeadow Stalwart", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Goldmeadow Stalwart"], "actions": [{ "card": "Goldmeadow Stalwart" }] },
+    { "index": 3, "summary": "land=none; cast: Goldmeadow Stalwart", "declared_order_payability": "not_verified", "land": null, "casts": ["Goldmeadow Stalwart"], "actions": [{ "card": "Goldmeadow Stalwart" }] },
+    { "index": 4, "summary": "land=Plains; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Goldmeadow Stalwart", "idx": 4, "num": 17, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Metallic Mimic", "idx": 6, "num": 27, "sick": true, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Plains", "idx": 3, "num": 43, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 5, "num": 45, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 20, "name": "Goldmeadow Stalwart", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Wizened Cenn", "cost": "{W}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 10,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 2, "kind": "combat", "text": "⚔ attacked: Goldmeadow Stalwart (2) — 2 to opponent (20→18)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Goldmeadow Stalwart", "idx": 4, "num": 17, "tapped": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Metallic Mimic", "idx": 6, "num": 27, "sick": true, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Plains", "idx": 3, "num": 43, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 5, "num": 45, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 20, "name": "Goldmeadow Stalwart", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Wizened Cenn", "cost": "{W}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Plains", "cast=Goldmeadow Stalwart", "cast=Wizened Cenn"], "decision": {
+  "decision_index": 11,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 3, "card": "Knight of Meadowgrain" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Goldmeadow Stalwart", "idx": 4, "num": 17, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Metallic Mimic", "idx": 6, "num": 27, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Plains", "idx": 3, "num": 43, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 5, "num": 45, "is_land": true, "taps": "W" }], "vial_counters": [], "hand": [{ "num": 20, "name": "Goldmeadow Stalwart", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Knight of Meadowgrain", "cost": "{W}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Wizened Cenn", "cost": "{W}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 8, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 7, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Plains; cast: Goldmeadow Stalwart, Wizened Cenn", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Goldmeadow Stalwart", "Wizened Cenn"], "cast_order_canonical": ["Goldmeadow Stalwart", "Wizened Cenn"], "actions": [{ "card": "Goldmeadow Stalwart" }, { "card": "Wizened Cenn" }] },
+    { "index": 1, "summary": "land=Plains; cast: Wizened Cenn, Goldmeadow Stalwart", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Wizened Cenn", "Goldmeadow Stalwart"], "cast_order_canonical": ["Wizened Cenn", "Goldmeadow Stalwart"], "actions": [{ "card": "Wizened Cenn" }, { "card": "Goldmeadow Stalwart" }] },
+    { "index": 2, "summary": "land=Plains; cast: Goldmeadow Stalwart, Knight of Meadowgrain", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Goldmeadow Stalwart", "Knight of Meadowgrain"], "cast_order_canonical": ["Goldmeadow Stalwart", "Knight of Meadowgrain"], "actions": [{ "card": "Goldmeadow Stalwart" }, { "card": "Knight of Meadowgrain" }] },
+    { "index": 3, "summary": "land=Plains; cast: Knight of Meadowgrain, Goldmeadow Stalwart", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Knight of Meadowgrain", "Goldmeadow Stalwart"], "cast_order_canonical": ["Knight of Meadowgrain", "Goldmeadow Stalwart"], "actions": [{ "card": "Knight of Meadowgrain" }, { "card": "Goldmeadow Stalwart" }] },
+    { "index": 4, "summary": "land=Plains; cast: Wizened Cenn", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Wizened Cenn"], "actions": [{ "card": "Wizened Cenn" }] },
+    { "index": 5, "summary": "land=Plains; cast: Goldmeadow Stalwart", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Goldmeadow Stalwart"], "actions": [{ "card": "Goldmeadow Stalwart" }] },
+    { "index": 6, "summary": "land=Plains; cast: Knight of Meadowgrain", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Knight of Meadowgrain"], "actions": [{ "card": "Knight of Meadowgrain" }] },
+    { "index": 7, "summary": "land=none; cast: Wizened Cenn", "declared_order_payability": "not_verified", "land": null, "casts": ["Wizened Cenn"], "actions": [{ "card": "Wizened Cenn" }] },
+    { "index": 8, "summary": "land=none; cast: Goldmeadow Stalwart", "declared_order_payability": "not_verified", "land": null, "casts": ["Goldmeadow Stalwart"], "actions": [{ "card": "Goldmeadow Stalwart" }] },
+    { "index": 9, "summary": "land=none; cast: Knight of Meadowgrain", "declared_order_payability": "not_verified", "land": null, "casts": ["Knight of Meadowgrain"], "actions": [{ "card": "Knight of Meadowgrain" }] },
+    { "index": 10, "summary": "land=Plains; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 11, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 12,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Goldmeadow Stalwart", "idx": 4, "num": 17, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Goldmeadow Stalwart", "idx": 10, "num": 20, "sick": true, "is_land": false, "power": 4, "toughness": 4, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "Metallic Mimic", "idx": 6, "num": 27, "is_land": false, "power": 3, "toughness": 2 }, { "name": "Plains", "idx": 3, "num": 43, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 5, "num": 45, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 9, "num": 50, "tapped": true, "is_land": true }, { "name": "Wizened Cenn", "idx": 11, "num": 58, "sick": true, "is_land": false, "power": 3, "toughness": 3, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 25, "name": "Knight of Meadowgrain", "cost": "{W}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 8, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 7, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Goldmeadow Stalwart (3), Metallic Mimic (3) — 6 to opponent (18→12)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Goldmeadow Stalwart", "idx": 4, "num": 17, "tapped": true, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Goldmeadow Stalwart", "idx": 10, "num": 20, "sick": true, "is_land": false, "power": 4, "toughness": 4, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "Metallic Mimic", "idx": 6, "num": 27, "tapped": true, "is_land": false, "power": 3, "toughness": 2 }, { "name": "Plains", "idx": 3, "num": 43, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 5, "num": 45, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 9, "num": 50, "tapped": true, "is_land": true }, { "name": "Wizened Cenn", "idx": 11, "num": 58, "sick": true, "is_land": false, "power": 3, "toughness": 3, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 25, "name": "Knight of Meadowgrain", "cost": "{W}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 12, "battlefield": [{ "name": "1/1 Creature", "idx": 8, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 7, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "cast=Figure of Destiny", "cast=Knight of Meadowgrain"], "decision": {
+  "decision_index": 14,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 4, "card": "Figure of Destiny" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Goldmeadow Stalwart", "idx": 4, "num": 17, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Goldmeadow Stalwart", "idx": 10, "num": 20, "is_land": false, "power": 4, "toughness": 4, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "Metallic Mimic", "idx": 6, "num": 27, "is_land": false, "power": 3, "toughness": 2 }, { "name": "Plains", "idx": 3, "num": 43, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 5, "num": 45, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 9, "num": 50, "is_land": true, "taps": "W" }, { "name": "Wizened Cenn", "idx": 11, "num": 58, "is_land": false, "power": 3, "toughness": 3, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 14, "name": "Figure of Destiny", "cost": "{R/W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Knight of Meadowgrain", "cost": "{W}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 12, "battlefield": [{ "name": "1/1 Creature", "idx": 8, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 7, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Figure of Destiny, Knight of Meadowgrain", "declared_order_payability": "not_verified", "land": null, "casts": ["Figure of Destiny", "Knight of Meadowgrain"], "cast_order_canonical": ["Figure of Destiny", "Knight of Meadowgrain"], "actions": [{ "card": "Figure of Destiny" }, { "card": "Knight of Meadowgrain" }] },
+    { "index": 1, "summary": "land=none; cast: Knight of Meadowgrain, Figure of Destiny", "declared_order_payability": "not_verified", "land": null, "casts": ["Knight of Meadowgrain", "Figure of Destiny"], "cast_order_canonical": ["Knight of Meadowgrain", "Figure of Destiny"], "actions": [{ "card": "Knight of Meadowgrain" }, { "card": "Figure of Destiny" }] },
+    { "index": 2, "summary": "land=none; cast: Knight of Meadowgrain", "declared_order_payability": "not_verified", "land": null, "casts": ["Knight of Meadowgrain"], "actions": [{ "card": "Knight of Meadowgrain" }] },
+    { "index": 3, "summary": "land=none; cast: Figure of Destiny", "declared_order_payability": "not_verified", "land": null, "casts": ["Figure of Destiny"], "actions": [{ "card": "Figure of Destiny" }] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 15,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Figure of Destiny", "idx": 12, "num": 14, "sick": true, "is_land": false, "power": 3, "toughness": 3, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "Goldmeadow Stalwart", "idx": 4, "num": 17, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Goldmeadow Stalwart", "idx": 10, "num": 20, "is_land": false, "power": 4, "toughness": 4, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "Knight of Meadowgrain", "idx": 13, "num": 25, "sick": true, "is_land": false, "power": 4, "toughness": 4, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "Metallic Mimic", "idx": 6, "num": 27, "is_land": false, "power": 3, "toughness": 2 }, { "name": "Plains", "idx": 3, "num": 43, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 5, "num": 45, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 9, "num": 50, "tapped": true, "is_land": true }, { "name": "Wizened Cenn", "idx": 11, "num": 58, "is_land": false, "power": 3, "toughness": 3, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }], "vial_counters": [], "hand": [], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 12, "battlefield": [{ "name": "1/1 Creature", "idx": 8, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 7, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 4, "kind": "combat", "text": "⚔ attacked: Goldmeadow Stalwart (3), Metallic Mimic (3), Goldmeadow Stalwart (4), Wizened Cenn (3) — 13 to opponent (12→-1)" }
+  ]
+}
