@@ -2843,6 +2843,15 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                 else if (ac.kind == Action::Kind::ActivatePermAbility
                          && ac.ability_mode == Action::AbilityMode::SacNamedTutorPut)
                 { os << ", \"verb\": \"sacnamed\""; }
+                else if (ac.kind == Action::Kind::ActivatePermAbility
+                         && (ac.ability_mode == Action::AbilityMode::FigureTwo
+                             || ac.ability_mode == Action::AbilityMode::FigureFour
+                             || ac.ability_mode == Action::AbilityMode::FigureEight))
+                {
+                    const int form = ac.ability_mode == Action::AbilityMode::FigureTwo ? 2
+                                   : ac.ability_mode == Action::AbilityMode::FigureFour ? 4 : 8;
+                    os << ", \"verb\": \"figure\", \"mode\": " << form;
+                }
                 // Birthing Pod: names the SOURCE artifact (never castable), carries the fetch on
                 // tutor_target (already serialised) + the victim id, so the GUI writes
                 // `pod=<fetch>#<victim>` instead of an ambiguous `cast=Birthing Pod`.
@@ -3599,6 +3608,11 @@ static std::pair<int,int> ProtocolLivePT(const Permanent& p, const GameState& s)
     int pw = p.EffectivePower(), tf = p.EffectiveToughness();
     if (const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card))
     {
+        if (p.is_animated)
+        {
+            pw += pd->params.animate_power;
+            tf += pd->params.animate_toughness;
+        }
         pw += DynamicBasePower(*pd, s, p.controller_index);
         tf += DynamicBaseToughness(*pd, s, p.controller_index);
     }
@@ -3615,7 +3629,7 @@ static std::pair<int,int> ProtocolLivePT(const Permanent& p, const GameState& s)
 // token has no P/T and "Island (0/0)" reads as a bug.
 static std::string ProtocolPTLabel(const Permanent& p, const GameState& s)
 {
-    if (!p.card.IsCreature()) { return p.card.m_name.str(); }
+    if (!p.card.IsCreature() && !p.is_animated) { return p.card.m_name.str(); }
     const auto pt = ProtocolLivePT(p, s);
     return p.card.m_name.str() + " (" + std::to_string(pt.first) + "/"
            + std::to_string(pt.second) + ")";
@@ -4110,6 +4124,13 @@ static void WriteDigDecisionJson(std::ostream& os, const GameState& s, const std
                    : "reply an index into `examined` (the cards left -- the one you put on top is no longer "
                      "listed) to put that card on top of your library BENEATH the one you just chose (it is "
                      "the second card you draw). Mandatory: -1 takes the AI's pick. Default = the AI's pick.");
+    }
+    else if (source.find("(attack pay)") != std::string::npos)
+    {
+        d.Note("reply 0 to pay {W} for this declared nontoken attacker's Militia's Pride trigger. "
+               "Create a tapped and attacking 1/1 white Kithkin Soldier token before combat damage. "
+               "Reply -1 to decline this trigger; each Pride and attacker pair is asked separately. "
+               "Default = the search pin when present, otherwise decline.");
     }
     else if (source.find("(combat transform)") != std::string::npos)
     {
@@ -5159,6 +5180,12 @@ static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
         else if (key == "sfput")     { ls.sf_puts.push_back(val); }       // Stoneforge put (card name)
         else if (key == "auraswap")  { ls.aura_swaps.push_back(val); }    // Arcanum Wings' swap (Aura in)
         else if (key == "jittemode") { ls.jitte_modes.push_back(std::atoi(val.c_str())); }
+        else if (key == "figure")
+        {
+            const auto hash = val.find('#');
+            ls.figure_modes.push_back({ std::atoi(val.substr(0, hash).c_str()),
+                hash == std::string::npos ? 0 : std::atoi(val.substr(hash + 1).c_str()) });
+        }
         // "equipallfree=<host m_number>": the mass-attach bundle. 0 (or an unparseable value) is
         // the "any host" wildcard every other verb already honours, which is what lets a scenario
         // fixture ask for the gesture without hard-coding a card number.

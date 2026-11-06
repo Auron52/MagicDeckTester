@@ -643,6 +643,8 @@ inline uint64_t FungibilityKey(const Permanent& p)
     if (const uint64_t kw_hi = p.card.m_keyword_mask >> 32) { Mix(h, kw_hi ^ 0x9e3779b97f4a7c15ull); }
     Mix(h, static_cast<uint64_t>(p.card.m_power.value_or(-99) + 100) << 32
          | static_cast<uint64_t>(p.card.m_toughness.value_or(-99) + 100));
+    for (std::size_t i = 0; i < p.card.m_subtypes.size(); ++i)
+    { Mix(h, static_cast<uint64_t>(p.card.m_subtypes.IdAt(i))); }
     Mix(h, (p.card.m_is_staged ? 1ull : 0ull) | (p.card.m_impulse_no_land ? 2ull : 0ull)
          | (static_cast<uint64_t>(p.card.m_staged_expiry) << 8));
     Mix(h, static_cast<uint64_t>(p.controller_index) << 32 | static_cast<uint64_t>(p.owner_index));
@@ -938,6 +940,7 @@ static bool PlanHasCombatPin(const TurnSolver::Plan& p)
         || p.attack_land_search_choice >= 0    // Primeval Titan's attack pick: read in THIS combat only
         || p.combat_crack_choice >= 0          // ...and the in-combat Khalni crack
         || p.combat_transform_choice >= 0      // ...and Bloodline Keeper's in-combat transform (Vampires B)
+        || p.militia_pride_pay_choice >= 0
         || p.attack_attach_choice >= 0         // Raubahn's attack attach: read in THIS combat only
         || p.fb_hold_choice >= 0               // the searched banked hold: read at THIS combat's pump only
         || PlanHasAttackTriggerPin(p);        // Tectonic mode / keep, Flinger victim (the *_PIN_FOLD levers)
@@ -1595,6 +1598,7 @@ inline void Record(const GameState& s, const TurnSolver::Plan& first, const Turn
     pl("clandfall", first.combat_landfall_target_choice != dup.combat_landfall_target_choice);
     pl("fbhold", first.fb_hold_choice != dup.fb_hold_choice);
     pl("ctransform", first.combat_transform_choice != dup.combat_transform_choice);
+    pl("pridepay", first.militia_pride_pay_choice != dup.militia_pride_pay_choice);
     pl("lsearch", first.land_search_pins != dup.land_search_pins
                   || first.attack_land_search_choice != dup.attack_land_search_choice
                   || first.upkeep_land_search_choice != dup.upkeep_land_search_choice
@@ -6274,10 +6278,10 @@ static std::uint64_t BpActivationKey(int number, int ability)
 // Returns a bitmask over PermAbilityMode. Mirrors the emission CONDITIONS only; the K axis, the
 // interchangeable-source fold and the condemnation gate change which VARIANTS emit, never whether
 // the ability is available.
-static std::uint32_t BpAvailablePermAbilityModes(const GameState& state, const Permanent& src,
+static std::uint64_t BpAvailablePermAbilityModes(const GameState& state, const Permanent& src,
                                                   const CardDefinition& sd, const ManaPool& pool)
 {
-    std::uint32_t bits = 0;
+    std::uint64_t bits = 0;
     struct ModeSpec { PermAbilityMode mode; const std::optional<ManaCost>* cost; };
     const ModeSpec modes[] = {
         { PermAbilityMode::TapDamage,      &sd.params.tap_damage_cost         },
@@ -6306,6 +6310,9 @@ static std::uint32_t BpAvailablePermAbilityModes(const GameState& state, const P
         { PermAbilityMode::BloodDraw,          &sd.params.blood_draw_cost                },
         // Walking Ballista's "{4}: put a +1/+1 counter" -- appended LAST, same order in all three tables.
         { PermAbilityMode::PayCounterSelf,     &sd.params.self_counter_cost              },
+        { PermAbilityMode::FigureTwo,          &sd.params.figure_two_cost                },
+        { PermAbilityMode::FigureFour,         &sd.params.figure_four_cost               },
+        { PermAbilityMode::FigureEight,        &sd.params.figure_eight_cost              },
     };
     const int ctrl = state.active_player_index;
     for (const ModeSpec& m : modes)
@@ -6315,7 +6322,7 @@ static std::uint32_t BpAvailablePermAbilityModes(const GameState& state, const P
         // Voldaren Estate: the Vampire-reduced cost NOW; the Blood crack: a card to discard.
         if (m.mode == PermAbilityMode::TapBlood)
         {
-            if (pool.CanPay(TapBloodCostNow(state, ctrl, sd))) { bits |= 1u << static_cast<int>(m.mode); }
+            if (pool.CanPay(TapBloodCostNow(state, ctrl, sd))) { bits |= 1ull << static_cast<int>(m.mode); }
             continue;
         }
         if (m.mode == PermAbilityMode::BloodDraw
@@ -6353,20 +6360,20 @@ static std::uint32_t BpAvailablePermAbilityModes(const GameState& state, const P
                                    sd.params.activated_dig_types,
                                    sd.params.activated_dig_max_mv).empty())
         { continue; }
-        bits |= 1u << static_cast<int>(m.mode);
+        bits |= 1ull << static_cast<int>(m.mode);
     }
     if (sd.params.spore_saproling_cost > 0 && src.spore_counters >= sd.params.spore_saproling_cost)
-    { bits |= 1u << static_cast<int>(PermAbilityMode::SporeSaproling); }
+    { bits |= 1ull << static_cast<int>(PermAbilityMode::SporeSaproling); }
     // Khalni Heart Expedition: the counter-costed land search (no {T}, no mana) -- the spore clause's
     // shape. Mirrors the enumerator's block (see CollectActions, "QuestSacLandSearch").
     if (sd.params.land_search_activation_remove_quest > 0 && sd.params.land_search_count > 0
         && src.quest_counters >= sd.params.land_search_activation_remove_quest)
-    { bits |= 1u << static_cast<int>(PermAbilityMode::QuestSacLandSearch); }
+    { bits |= 1ull << static_cast<int>(PermAbilityMode::QuestSacLandSearch); }
     // Lizard Blades' reconfigure unattach: the out-of-band block's conditions, mirrored (attached,
     // cost payable by colour). Mirrors the enumerator's block (see CollectActions, "UNATTACH half").
     if (sd.params.reconfigure_cost.has_value() && src.equipped_to != 0
         && pool.CanPay(EffectiveActivationCost(state, ctrl, src.card, *sd.params.reconfigure_cost)))
-    { bits |= 1u << static_cast<int>(PermAbilityMode::ReconfigureUnattach); }
+    { bits |= 1ull << static_cast<int>(PermAbilityMode::ReconfigureUnattach); }
     // Kessig Wolf Run's targeted pump: the out-of-band block's conditions, mirrored (an untapped,
     // tappable source, {R}{G} at X = 0 payable, a legal own target). See CollectActions, "Kessig Wolf Run".
     if (sd.params.tap_target_pump_cost.has_value() && !src.tapped && CanTapNow(src, state.battlefield)
@@ -6378,7 +6385,7 @@ static std::uint32_t BpAvailablePermAbilityModes(const GameState& state, const P
             if (q.controller_index == ctrl && q.card.m_number != 0 && TapTargetPumpTargetLegal(state, q, ctrl))
             { target = true; break; }
         }
-        if (target) { bits |= 1u << static_cast<int>(PermAbilityMode::TapTargetPump); }
+        if (target) { bits |= 1ull << static_cast<int>(PermAbilityMode::TapTargetPump); }
     }
     if (sd.params.target_pump_cost.has_value()
         && pool.CanPay(EffectiveActivationCost(state, ctrl, src.card, *sd.params.target_pump_cost)))
@@ -6386,7 +6393,7 @@ static std::uint32_t BpAvailablePermAbilityModes(const GameState& state, const P
         for (const Permanent& q : state.battlefield)
         {
             if (TapTargetPumpTargetLegal(state, q, ctrl))
-            { bits |= 1u << static_cast<int>(PermAbilityMode::TargetPump); break; }
+            { bits |= 1ull << static_cast<int>(PermAbilityMode::TargetPump); break; }
         }
     }
     // Walking Ballista's counter ping and the Heliod loop: the out-of-band blocks' conditions, mirrored
@@ -6395,8 +6402,8 @@ static std::uint32_t BpAvailablePermAbilityModes(const GameState& state, const P
     {
         const int total = static_cast<int>(pool.Total());
         if (CounterPingAnyOffer(state, ctrl, src, total))
-        { bits |= 1u << static_cast<int>(PermAbilityMode::CounterPing); }
-        if (PingLoopLiveNow(state, ctrl, src, total)) { bits |= 1u << static_cast<int>(PermAbilityMode::PingLoop); }
+        { bits |= 1ull << static_cast<int>(PermAbilityMode::CounterPing); }
+        if (PingLoopLiveNow(state, ctrl, src, total)) { bits |= 1ull << static_cast<int>(PermAbilityMode::PingLoop); }
     }
     return bits;
 }
@@ -8079,10 +8086,10 @@ static SameTurnReducerCounts CountSameTurnReducers(const GameState& state,
             if (d->params.chooses_creature_type)
             {
                 // A same-turn Incubator is not on the battlefield yet, so its ETB choice has not
-                // happened. It is a pure function of the deck, so predicting it here gives exactly
-                // what FireEtbWatchers will pick when the cast resolves.
+                // happened. Ask the same provider used by FireEtbWatchers to predict the choice.
                 if (chosen == SubtypeRegistry::kNone)
-                { chosen = DominantCreatureSubtypeId(state, state.active_player_index); }
+                { chosen = ResolveProvider(state).ChosenCreatureSubtypeId(
+                    state, state.active_player_index, *d); }
                 id = chosen;
             }
             else
@@ -11058,7 +11065,8 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
             perm.controller_index = cp.active_player_index;
             perm.owner_index      = cp.active_player_index;
             if (def.params.chooses_creature_type)
-            { perm.chosen_subtype_id = DominantCreatureSubtypeId(cp, cp.active_player_index); }
+            { perm.chosen_subtype_id = ResolveProvider(cp).ChosenCreatureSubtypeId(
+                cp, cp.active_player_index, def); }
             cp.battlefield.push_back(perm);
         }
         // ETB TREASURE (Corsair Captain; MTG_ETB_TREASURE_SPEND): the enter trigger's Treasure --
@@ -16682,7 +16690,7 @@ static void AddCostCarryingHybrids(ManaCost& dst, const ManaCost& src)
     dst.white += src.white; dst.blue      += src.blue;  dst.black   += src.black;
     dst.red   += src.red;   dst.green     += src.green; dst.generic += src.generic;
     dst.colorless += src.colorless;
-    for (int i = 0; i < src.hybrid_count && dst.hybrid_count < 4; ++i)
+    for (int i = 0; i < src.hybrid_count && dst.hybrid_count < 6; ++i)
     { dst.hybrid_pair[dst.hybrid_count++] = src.hybrid_pair[i]; }
 }
 
@@ -17849,7 +17857,7 @@ static void FoldMixCost(std::uint64_t& h, const ManaCost& c)
     FoldMix(h, static_cast<std::uint64_t>(c.has_x ? 1 : 0));
     FoldMix(h, static_cast<std::uint64_t>(c.x_pips));
     FoldMix(h, static_cast<std::uint64_t>(c.hybrid_count));
-    for (int i = 0; i < 4; ++i) { FoldMix(h, static_cast<std::uint64_t>(c.hybrid_pair[i])); }
+    for (int i = 0; i < 6; ++i) { FoldMix(h, static_cast<std::uint64_t>(c.hybrid_pair[i])); }
     FoldMix(h, static_cast<std::uint64_t>(c.phyrexian_count));
     for (int i = 0; i < 2; ++i) { FoldMix(h, static_cast<std::uint64_t>(c.phyrexian_color[i])); }
     FoldMix(h, static_cast<std::uint64_t>(c.snow_pips));
@@ -19836,6 +19844,7 @@ static bool SubsetWastesCreatureSacMana(const GameState& state,
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (!d) { continue; }
         if (d->params.dies_trigger_damage > 0 || d->params.dies_trigger_creates_tokens > 0
+            || (d->params.dies_trigger_tokens_per_counter && TotalCountersOn(p) > 0)
             || d->params.dies_trigger_impulse_exile) { return false; }
     }
     return true;
@@ -21938,6 +21947,7 @@ static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::v
             if (pd->params.persist) { p.board_persist = true; }
             // SubsetWastesCreatureSacMana's final test, hoisted into this same walk (see the struct).
             if (pd->params.dies_trigger_damage > 0 || pd->params.dies_trigger_creates_tokens > 0
+                || (pd->params.dies_trigger_tokens_per_counter && TotalCountersOn(perm) > 0)
                 || pd->params.dies_trigger_impulse_exile)
             { p.board_death_payoff = true; }
             if (p.board_persist && p.board_death_payoff) { break; }
@@ -26517,6 +26527,8 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
     // Bloodline Keeper's in-combat transform (Vampires B): value-gated, its own tag.
     if (p.combat_transform_choice != -1)
     { fold(0x1A610000ull + static_cast<uint64_t>(static_cast<uint32_t>(p.combat_transform_choice + 2))); }
+    if (p.militia_pride_pay_choice != -1)
+    { fold(0x1A620000ull + static_cast<uint64_t>(static_cast<uint32_t>(p.militia_pride_pay_choice + 2))); }
     // ...and the activations' POSITION (Plan::land_search_act_slot; -1, the trailing pass, is the
     // default and folds nothing): 0 keeps the value the old pre-cast twin folded, k >= 1 folds k.
     if (p.land_search_act_slot == 0) { fold(0x1A60AC75ull); }
@@ -26816,7 +26828,7 @@ static bool IsApplyEmptyPlan(const TurnSolver::Plan& p)
         && p.sac_pins.empty() && p.tapmode_choice == 0 && p.freshmode_choice == 0
         && p.land_search_pins.empty() && p.attack_land_search_choice == -1
         && p.upkeep_land_search_choice == -1 && p.combat_crack_choice == -1
-        && p.combat_transform_choice == -1
+        && p.combat_transform_choice == -1 && p.militia_pride_pay_choice == -1
         && p.land_search_act_slot == -1
         && p.look_top_pins.empty() && p.incinerator_targets.empty()
         && p.lackey_choice == -1 && p.ponder_choice == -1 && p.discard_choice == -1
@@ -26865,6 +26877,7 @@ static bool PlanIsAxisVariantExceptOrder(const TurnSolver::Plan& p)
         || !p.land_search_pins.empty() || p.attack_land_search_choice >= 0
         || p.upkeep_land_search_choice >= 0 || p.combat_crack_choice >= 0
         || p.combat_transform_choice >= 0   // Bloodline Keeper's in-combat transform (Vampires B)
+        || p.militia_pride_pay_choice >= 0
         // Abiding Grace's end-step ranks / Emeria's next-upkeep ranks: clones of their base differing only
         // in a pending STATE pin. NOTE what this does NOT buy: BuildDedupKey folds the RAW pin, so two
         // codes that would resolve to the same outcome still key apart and are never skipped here. The
@@ -27796,7 +27809,7 @@ inline std::uint64_t PlanH(const TurnSolver::Plan& p, int ax)
         if (ax != kLandSlot && ax != kLandHold) { h = Mix(h, static_cast<std::uint64_t>(p.land_slot + 7)); }
     }
     const int extra[] = { p.discard_choice, p.dig_choice, p.scry_choice, p.tutor_choice, p.fb_hold_choice,
-                          p.landfall_target_choice, p.combat_transform_choice, p.tapmode_choice,
+                          p.landfall_target_choice, p.combat_transform_choice, p.militia_pride_pay_choice, p.tapmode_choice,
                           p.freshmode_choice, p.vial_charge_choice, p.atk_dork_release, p.bounce_choice,
                           p.etbdig_choice, p.etbcounter_choice, p.ponder_choice, p.putback_choice,
                           p.combat_landfall_target_choice, p.combat_crack_choice, p.lackey_choice,
@@ -29291,6 +29304,9 @@ void CollectActivationKeys(const GameState& state, int ctrl, const Permanent& p,
         { PermAbilityMode::TapTargetPump,      &pp.tap_target_pump_cost           },
         // Walking Ballista's "{4}: put a +1/+1 counter" (2026-10-27) -- appended LAST.
         { PermAbilityMode::PayCounterSelf,     &pp.self_counter_cost              },
+        { PermAbilityMode::FigureTwo,          &pp.figure_two_cost                },
+        { PermAbilityMode::FigureFour,         &pp.figure_four_cost               },
+        { PermAbilityMode::FigureEight,        &pp.figure_eight_cost              },
         { PermAbilityMode::TargetPump,         &pp.target_pump_cost              },
     };
     for (std::size_t i = 0; i < sizeof modes / sizeof modes[0]; ++i)
@@ -29610,14 +29626,14 @@ std::vector<std::uint64_t> TurnSolver::PrePlanAvailabilityKeys(const GameState& 
         if (p.controller_index != state.active_player_index || p.card.m_number == 0) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (d == nullptr) { continue; }
-        const std::uint32_t bits = BpAvailablePermAbilityModes(state, p, *d, pool);
+        const std::uint64_t bits = BpAvailablePermAbilityModes(state, p, *d, pool);
         // Walk the SET bits, not all 31 slots. A permanent offers one or two modes at most, so the
         // old `for (mode = 1..31) if (bits & (1 << mode))` paid 31 iterations to find them -- 1.03%
         // of the whole program's instructions at the mulligan-generation shape (0.52% loop control +
         // 0.51% test). `rest &= rest - 1` clears the lowest set bit, so this visits exactly the modes
         // that are on, in the same ASCENDING order, and mode 0 is masked off exactly as `mode = 1`
         // excluded it. Identity, not a narrowing.
-        for (std::uint32_t rest = bits & ~1u; rest != 0; rest &= rest - 1)
+        for (std::uint64_t rest = bits & ~1ull; rest != 0; rest &= rest - 1)
         {
             const int mode = std::countr_zero(rest);
             out.push_back(BpActivationKey(p.card.m_number, mode));
@@ -43222,6 +43238,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     // Walking Ballista's "{4}: put a +1/+1 counter" -- appended LAST in all three
                     // tables; a repeatable {T}-less mana sink (the PayToken shape, K block).
                     { Action::AbilityMode::PayCounterSelf, &sd->params.self_counter_cost    },
+                    { Action::AbilityMode::FigureTwo,      &sd->params.figure_two_cost      },
+                    { Action::AbilityMode::FigureFour,     &sd->params.figure_four_cost     },
+                    { Action::AbilityMode::FigureEight,    &sd->params.figure_eight_cost    },
                 };
                 for (const ModeSpec& m : modes)
                 {
@@ -43320,7 +43339,10 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     // through the put-in-hand breakpoint re-solve with its own pick -- a block would
                     // resolve picks 2..K by the ranked default inside the window (no-greedy rule).
                     if (!taps && m.mode != Action::AbilityMode::SacDraw
-                        && m.mode != Action::AbilityMode::ActivatedDig)
+                        && m.mode != Action::AbilityMode::ActivatedDig
+                        && m.mode != Action::AbilityMode::FigureTwo
+                        && m.mode != Action::AbilityMode::FigureFour
+                        && m.mode != Action::AbilityMode::FigureEight)
                     {
                         const bool fold_fanout =
                             HumanPlayActive() || DecisionUnpruned(UnprunedGate::BlinkTarget);
@@ -44501,7 +44523,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 // (see its comment). Sethron's {2}{B/R} has one, so K<=3 already fits; the clamp is
                 // here so a future multi-hybrid activation cost cannot silently produce a cost whose
                 // hybrid metadata under-counts its own pips (which would REFUSE a legal payment).
-                if (per.hybrid_count > 0) { kmax = std::min(kmax, 4 / per.hybrid_count); }
+                if (per.hybrid_count > 0) { kmax = std::min(kmax, 6 / per.hybrid_count); }
                 // mode 3 always benefits its own source (it is a self pump), like mode 1.
                 bool any_beneficiary = (mode == 1 || mode == 3);
                 if (mode == 2)
@@ -44555,7 +44577,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         probe.hybrid_count = 0;
                         for (int rep = 0; rep < k; ++rep)
                         {
-                            for (int hi = 0; hi < per.hybrid_count && probe.hybrid_count < 4; ++hi)
+                            for (int hi = 0; hi < per.hybrid_count && probe.hybrid_count < 6; ++hi)
                             { probe.hybrid_pair[probe.hybrid_count++] = per.hybrid_pair[hi]; }
                         }
                         GameState scratch = state;
@@ -44581,7 +44603,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     c.hybrid_count = 0;
                     for (int rep = 0; rep < k; ++rep)
                     {
-                        for (int hi = 0; hi < per.hybrid_count && c.hybrid_count < 4; ++hi)
+                        for (int hi = 0; hi < per.hybrid_count && c.hybrid_count < 6; ++hi)
                         { c.hybrid_pair[c.hybrid_count++] = per.hybrid_pair[hi]; }
                     }
                     a.cost           = c;
@@ -51658,6 +51680,7 @@ namespace solvememo
             || a.upkeep_land_search_choice != b.upkeep_land_search_choice
             || a.combat_crack_choice != b.combat_crack_choice
             || a.combat_transform_choice != b.combat_transform_choice
+            || a.militia_pride_pay_choice != b.militia_pride_pay_choice
             || a.land_search_act_slot != b.land_search_act_slot
             || a.tapmode_choice != b.tapmode_choice || a.freshmode_choice != b.freshmode_choice
             || a.lackey_choice != b.lackey_choice || a.ponder_choice != b.ponder_choice
@@ -57764,7 +57787,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         {
             for (int h = 0; h < ec.hybrid_count; ++h)
             {
-                if (combined.hybrid_count < 4) { combined.hybrid_pair[combined.hybrid_count++] = ec.hybrid_pair[h]; }
+                if (combined.hybrid_count < 6) { combined.hybrid_pair[combined.hybrid_count++] = ec.hybrid_pair[h]; }
                 else { hybrid_overflow = true; }
             }
             AddCostCarryingHybrids(a_bill, ec);
@@ -57808,7 +57831,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         crea_part.colorless -= rs.noncreature.colorless;
         AddManaCost(c_crea, crea_part);
     }
-    if (hybrid_overflow) { combined.hybrid_count = 0; for (int h = 0; h < 4; ++h) { combined.hybrid_pair[h] = 0; } }
+    if (hybrid_overflow) { combined.hybrid_count = 0; for (int h = 0; h < 6; ++h) { combined.hybrid_pair[h] = 0; } }
     // A single cast is already optimal via the per-cast complete-solver fallback; the inter-cast
     // stranding needs >=2 casts sharing the pool. <2 -> decline (single-cast turns byte-identical).
     if (eligible < 2 || combined.ManaValue() == 0) { return Pp(PP_FEW_CASTS); }
@@ -58444,7 +58467,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     {
         ManaCost c_small = combined;
         c_small.hybrid_count = 0;   // the stages pay the flat bill (c_bigq carries no hybrid pairs)
-        for (int h = 0; h < 4; ++h) { c_small.hybrid_pair[h] = 0; }
+        for (int h = 0; h < 6; ++h) { c_small.hybrid_pair[h] = 0; }
         c_small.generic -= c_bigq.generic; c_small.white -= c_bigq.white; c_small.blue -= c_bigq.blue;
         c_small.black -= c_bigq.black; c_small.red -= c_bigq.red; c_small.green -= c_bigq.green;
         c_small.colorless -= c_bigq.colorless;
@@ -69171,6 +69194,7 @@ static void SimulateOneCombat(GameState& state, bool additional)
     // Adeline block so its untapped, non-attacking token is never appended to atk_idx. Mirrors
     // GameEngine::CombatPhase (lockstep, ONE shared helper). Param-gated inert.
     FireAttackOneOrMoreTokens(state, active, atk_idx);
+    FireMilitiaPrideTokens(state, active, atk_idx);
     // Attack-trigger tokens (Adeline), tapped and attacking this combat, then persist.
     if (!atk_idx.empty())
     {
@@ -69666,6 +69690,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     state.scripted_combat_land_search_crack = -1;  // ...and the in-combat Khalni crack (same lockstep)
     state.scripted_combat_landfall_target = -1;    // ...and the combat landfall-target rank (same lockstep)
     state.scripted_combat_transform = -1;          // ...and Bloodline Keeper's combat transform (same lockstep)
+    state.scripted_militia_pride_pay = -1;
     state.scripted_attack_attach  = -1;            // searched Raubahn attack attach (same lockstep)
     state.scripted_fb_hold        = -1;            // searched banked-hold rank (MTG_FB_HOLD_SEARCHED; same lockstep)
     ++combatpin::t_reads;                          // a pin write a share must see (COMBAT-PIN READ WITNESS)
@@ -69930,9 +69955,10 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
         const int  ctrl = p.controller_index;
         const bool tok  = p.is_token;
         const int  m1   = MinusCountersOn(p);
+        const int total_counters = TotalCountersOn(p);
         state.players[ctrl].graveyard.push_back(dead);
         state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
-        OnCreatureDies(state, ctrl, dead, tok, m1);   // may append a token at the end -> safe (no echo_cost)
+        OnCreatureDies(state, ctrl, dead, tok, m1, nullptr, total_counters);   // may append a token at the end -> safe (no echo_cost)
         // Do not advance i: the erased slot now holds the next permanent.
     }
     // END OF THE UPKEEP STEP (CR 500.4): the pool empties, so an echo cost paid off a lumpy source
@@ -85262,6 +85288,70 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                               std::make_move_iterator(extra.end()));
     }
 
+    // Militia's Pride: how many optional {W} attack triggers to pay. The trigger
+    // resolver walks the declared nontoken attackers and Pride copies in stable
+    // order; each paid trigger creates an identical tapped, attacking token.
+    // Enumerate every count, including the idle pass's counts. Unpayable excess
+    // counts collapse after the combat apply, never before search.
+    if (!HumanPlayActive() && !cont_axes_only && is_pre_combat)
+    {
+        const int me = state.active_player_index;
+        int pride_now = 0;
+        int bodies_now = 0;
+        for (const Permanent& q : state.battlefield)
+        {
+            if (q.controller_index != me || q.def_absent) { continue; }
+            if (!q.is_token && (q.card.IsCreature() || q.is_animated)) { ++bodies_now; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+            if (d && d->params.attack_nontoken_pay_token_cost) { ++pride_now; }
+        }
+        auto bound_for = [&](const TurnSolver::Plan& p)
+        {
+            int prides = pride_now;
+            int bodies = bodies_now;
+            for (const Action& a : p.actions)
+            {
+                // A Mutavault animated by this plan is a nontoken attacker even
+                // though its printed land card was not counted above.
+                if (a.kind == Action::Kind::AnimateLand) { ++bodies; }
+                if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::ActivateVial)
+                { continue; }
+                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+                if (!d) { continue; }
+                if (d->params.attack_nontoken_pay_token_cost) { ++prides; }
+                if (d->card.IsCreature()) { ++bodies; }
+            }
+            return prides * bodies;
+        };
+        std::vector<TurnSolver::Plan> extra;
+        bool have_pass = idle_pass;
+        for (const TurnSolver::Plan& p : all)
+        {
+            if (p.actions.empty() && p.land_to_play.empty()) { have_pass = true; }
+            if (PlanIsAxisVariantExceptOrder(p) || PlanHasCombatPin(p)) { continue; }
+            const int bound = bound_for(p);
+            for (int n = 1; n <= bound; ++n)
+            {
+                TurnSolver::Plan v = p;
+                v.militia_pride_pay_choice = n;
+                extra.push_back(std::move(v));
+            }
+        }
+        if (!have_pass && pride_now > 0)
+        {
+            TurnSolver::Plan idle;
+            idle.land_decided = true;
+            const int bound = pride_now * bodies_now;
+            for (int n = 1; n <= bound; ++n)
+            {
+                TurnSolver::Plan v = idle;
+                v.militia_pride_pay_choice = n;
+                extra.push_back(std::move(v));
+            }
+        }
+        all.insert(all.end(), std::make_move_iterator(extra.begin()), std::make_move_iterator(extra.end()));
+    }
+
     // ---- BLOODLINE KEEPER'S IN-COMBAT TRANSFORM (Vampires B; Plan::combat_transform_choice) ----------
     // {B}: Transform is instant speed, and the one way the Vampire count crosses five DURING combat is
     // an attack-token trigger (Mavren Fein: an untapped 1/1 Vampire at declare-attackers) -- so "Mavren's
@@ -85455,7 +85545,8 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 && p.freshmode_choice == 0 && p.tapmode_choice == 0 && p.dig_choice == -1
                 && !p.soulbond_decline && p.land_search_pins.empty()
                 && p.attack_land_search_choice == -1 && p.upkeep_land_search_choice == -1
-                && p.combat_crack_choice == -1 && p.combat_transform_choice == -1;
+                && p.combat_crack_choice == -1 && p.combat_transform_choice == -1
+                && p.militia_pride_pay_choice == -1;
         };
         std::map<const CardDefinition*, std::size_t> width_cache;
         auto width_of = [&](const CardDefinition* d) -> std::size_t
@@ -86837,7 +86928,7 @@ static std::vector<TurnSolver::Plan> EnumerateM2PlansBody(const GameState& state
     return plans;
 }
 
-static constexpr std::size_t kPlanDomAssertedSize = 552;   // pinned; upstream bp_pre plus Cyclone cast_trigger_target_choice layout; see the static_assert below (+24: Plan::incinerator_targets (Midrange Burn), 2026-10-30, beside bp_pre; +24: Plan::bp_pre (MTG_BP_DEV_SEQ's deviation sequence), beside look_top_pins so no padding moves, 2026-10-29, folded into the Xaxes key; +24: Plan::look_top_pins (Risen Reef land / trigger-order entries), 2026-10-18, folded into the Xaxes key; +8: Plan::putback_choice (Brainstorm's put-back pin, which itself landed in padding) + Plan::putback_group (the put-back fold's sibling id), 2026-10-17, measured 464 -> 472, both folded into the Xaxes key; +8: Plan::attack_attach_choice (Raubahn's attack-attach pin), 2026-10-17, measured 456 -> 464, folded into the Xaxes key; +8: Bruna gather + Wings combat-swap pins, 2026-10-05; +8: Plan::bounce_choice, 2026-10-08; +0: Plan::land_after_casts + Plan::landfall_target_choice, 2026-10-15 -- both placed in existing padding, both folded into the Xaxes key; +0: Plan::land_from_top, 2026-10-15, padding, folded by hand; +0: land_after_casts -> int8_t Plan::land_slot, 2026-10-15, same byte; +32: Plan::land_search_pins + attack/upkeep land-search pins, 2026-10-15; +8: Plan::combat_crack_choice, 2026-10-15; +0: Plan::land_search_act_slot (int8_t), in padding; +8: Plan::land_tie_key, 2026-10-15 -- EnumeratePlansWithLand's sort scratch, a function of actions + land_to_play, so the axes key needs nothing new; 448 + 8 = 456 when the two branches met, measured 2026-10-16)
+static constexpr std::size_t kPlanDomAssertedSize = 560;   // +8 Militia's Pride payment-count pin (2026-11-06), folded into Xaxes below; prior 552-byte layout documented in history.
 // ---- PLAN-LEVEL SUBSET DOMINANCE CENSUS (MTG_PLANDOM_CENSUS, default OFF) ----------------------
 //
 // USER 2026-09-25: *"We could also potentially skip candidates that play strictly less than an
@@ -87027,6 +87118,7 @@ static void PlanDomCensus(const std::vector<TurnSolver::Plan>& all)
             add(pl.attack_land_search_choice); add(pl.upkeep_land_search_choice);
             add(pl.combat_crack_choice); add(pl.land_search_act_slot);
             add(pl.combat_transform_choice);
+            add(pl.militia_pride_pay_choice);
             x += "|lt";
             for (int s : pl.look_top_pins)        { add(s); }
             if (!pl.incinerator_targets.empty())
@@ -87213,6 +87305,7 @@ static std::string PbVerifyFieldDiff(const TurnSolver::Plan& a, const TurnSolver
     if (!(a.look_top_pins == b.look_top_pins)) { d += " look_top_pins"; }
     if (!(a.combat_crack_choice == b.combat_crack_choice)) { d += " combat_crack_choice"; }
     if (!(a.combat_transform_choice == b.combat_transform_choice)) { d += " combat_transform_choice"; }
+    if (!(a.militia_pride_pay_choice == b.militia_pride_pay_choice)) { d += " militia_pride_pay_choice"; }
     if (!(a.land_search_act_slot == b.land_search_act_slot)) { d += " land_search_act_slot"; }
     if (!(a.combat_landfall_target_choice == b.combat_landfall_target_choice)) { d += " combat_landfall_target_choice"; }
     if (!(a.fb_hold_choice == b.fb_hold_choice)) { d += " fb_hold_choice"; }
@@ -87400,6 +87493,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
             for (const Action& a : p.actions) { if (!s.empty()) { s += " + "; } s += VampDumpAction(a); }
             if (p.bp_choice >= 0) { s += " | bp" + std::to_string(p.bp_choice) + "@" + std::to_string(p.bp_at); }
             if (p.combat_transform_choice >= 0) { s += " | ctx" + std::to_string((int)p.combat_transform_choice); }
+            if (p.militia_pride_pay_choice >= 0) { s += " | pride" + std::to_string((int)p.militia_pride_pay_choice); }
             std::fprintf(stderr, "    %s\n", s.empty() ? "(pass)" : s.c_str());
         }
     }
@@ -89301,6 +89395,7 @@ static void FoldPhysicalCards(TranspositionTable::Key& k, const GameState& state
         mix(0x11B9);
         const std::int64_t sc[] = {
             state.scripted_doth_put, state.scripted_combat_landfall_target, state.scripted_combat_transform,
+            state.scripted_militia_pride_pay,
             state.scripted_fb_hold, state.scripted_echo, state.scripted_cheat_choice, state.scripted_fling_victim,
             state.scripted_tectonic_mode, state.scripted_tectonic_keep, state.scripted_bruna_gather,
             state.scripted_combat_aura_swap, state.scripted_combat_aura_swap_in, state.scripted_discard_choice,
@@ -92800,7 +92895,8 @@ static TranspositionTable::Key BuildDedupKeyBeforeLandSearchPins(const GameState
         // + Bloodline Keeper's in-combat transform mask (Vampires B, 2026-10-18), the next LAST slot.
         const int cpins[] = { state.scripted_bruna_gather, state.scripted_combat_aura_swap,
                               state.scripted_combat_aura_swap_in, state.scripted_attack_attach,
-                              state.scripted_fb_hold, state.scripted_combat_transform };
+                              state.scripted_fb_hold, state.scripted_combat_transform,
+                              state.scripted_militia_pride_pay };
         for (int i = 0; i < static_cast<int>(sizeof(cpins) / sizeof(cpins[0])); ++i)
         {
             if (cpins[i] != -1)
@@ -110468,6 +110564,7 @@ static void BpVerifyStateSwap(const GameState& stored, const GameState& now, boo
     if (stored.scripted_combat_land_search_crack != now.scripted_combat_land_search_crack) { d += " scripted_combat_land_search_crack=" + std::to_string(static_cast<long long>(stored.scripted_combat_land_search_crack)) + "/" + std::to_string(static_cast<long long>(now.scripted_combat_land_search_crack)); }
     if (stored.scripted_combat_landfall_target != now.scripted_combat_landfall_target) { d += " scripted_combat_landfall_target=" + std::to_string(static_cast<long long>(stored.scripted_combat_landfall_target)) + "/" + std::to_string(static_cast<long long>(now.scripted_combat_landfall_target)); }
     if (stored.scripted_combat_transform != now.scripted_combat_transform) { d += " scripted_combat_transform=" + std::to_string(static_cast<long long>(stored.scripted_combat_transform)) + "/" + std::to_string(static_cast<long long>(now.scripted_combat_transform)); }
+    if (stored.scripted_militia_pride_pay != now.scripted_militia_pride_pay) { d += " scripted_militia_pride_pay=" + std::to_string(static_cast<long long>(stored.scripted_militia_pride_pay)) + "/" + std::to_string(static_cast<long long>(now.scripted_militia_pride_pay)); }
     if (stored.scripted_discard_choice != now.scripted_discard_choice) { d += " scripted_discard_choice=" + std::to_string(static_cast<long long>(stored.scripted_discard_choice)) + "/" + std::to_string(static_cast<long long>(now.scripted_discard_choice)); }
     if (stored.scripted_doth_put != now.scripted_doth_put) { d += " scripted_doth_put=" + std::to_string(static_cast<long long>(stored.scripted_doth_put)) + "/" + std::to_string(static_cast<long long>(now.scripted_doth_put)); }
     if (stored.scripted_echo != now.scripted_echo) { d += " scripted_echo=" + std::to_string(static_cast<long long>(stored.scripted_echo)) + "/" + std::to_string(static_cast<long long>(now.scripted_echo)); }
@@ -112136,6 +112233,16 @@ static std::string BoardActivationIllegalReason(const GameState& s, const TurnSo
                  "nothing (equip it first)"; }
     }
 
+    for (const auto& figure : spec.figure_modes)
+    {
+        if (figure.form != 2 && figure.form != 4 && figure.form != 8)
+        { return "Figure of Destiny has no such form"; }
+        const bool enters_in_line = std::find(spec.casts.begin(), spec.casts.end(), "Figure of Destiny") != spec.casts.end()
+            || std::find(spec.vial_deploys.begin(), spec.vial_deploys.end(), "Figure of Destiny") != spec.vial_deploys.end();
+        if (!live("Figure of Destiny") && !enters_in_line)
+        { return "you control no Figure of Destiny to activate"; }
+    }
+
     // --- gyexile= : Deathrite Shaman. The source must be live, and the graveyards must hold the
     // card type the mode exiles. A SORCERY cast by this same line lands in the graveyard, so mode 1
     // is only asserted when the line casts no instant/sorcery.
@@ -112628,7 +112735,7 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
     if (spec.pass || (!spec.has_land && spec.casts.empty() && spec.lands_edge == 0 &&
                       spec.vial_deploys.empty() && spec.retrace_casts.empty() &&
                       spec.sac_outlets.empty() && spec.attach_all.empty() &&
-                      spec.sf_puts.empty() && spec.jitte_modes.empty() && spec.equips.empty() &&
+                      spec.sf_puts.empty() && spec.jitte_modes.empty() && spec.figure_modes.empty() && spec.equips.empty() &&
                       spec.equip_all_free.empty() &&
                       spec.gy_exiles.empty() && spec.gy_returns.empty() && spec.gy_plays.empty() && spec.channels.empty() &&
                       spec.cycles.empty() && spec.sac_draws.empty() &&
@@ -112912,6 +113019,7 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
         std::vector<std::string> stealNames;
         std::vector<std::string> transformNames;
         std::vector<int> jitteModes, gyExileModes;
+        std::vector<LineSpec::FigureSpec> figureModes;
         std::vector<TurnSolver::LineSpec::PodSpec> podActs;
         std::vector<std::string> oozeNames;
         std::vector<std::string> sacNamedFetches;
@@ -112955,6 +113063,15 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
             { auraSwapNames.push_back(a.card_name); continue; }
             if (jitte_declared && a.kind == Action::Kind::JitteModeAbility)
             { jitteModes.push_back(a.gy_exile_mode); continue; }
+            if (a.kind == Action::Kind::ActivatePermAbility
+                && (a.ability_mode == Action::AbilityMode::FigureTwo
+                    || a.ability_mode == Action::AbilityMode::FigureFour
+                    || a.ability_mode == Action::AbilityMode::FigureEight))
+            {
+                figureModes.push_back({ a.ability_mode == Action::AbilityMode::FigureTwo ? 2
+                    : a.ability_mode == Action::AbilityMode::FigureFour ? 4 : 8, a.sac_source_id });
+                continue;
+            }
             if (a.kind == Action::Kind::Equip)
             { equipActs.push_back({ a.card_name, a.sac_source_id, a.sac_victim_id }); continue; }
             // Equip-all-free: ALWAYS its own verb, never the legacy cast multiset -- its card_name
@@ -113122,6 +113239,29 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
             std::vector<int> v2 = jitteModes;
             std::sort(v2.begin(), v2.end());
             if (v2 != sortedJitteModes) { continue; }
+        }
+        {
+            if (figureModes.size() != spec.figure_modes.size()) { continue; }
+            std::vector<bool> used(figureModes.size(), false);
+            std::vector<LineSpec::FigureSpec> wants = spec.figure_modes;
+            std::stable_sort(wants.begin(), wants.end(), [](const auto& a, const auto& b) {
+                return (a.source != 0) > (b.source != 0);
+            });
+            bool matched = true;
+            for (const auto& want : wants)
+            {
+                bool found = false;
+                for (std::size_t i = 0; i < figureModes.size(); ++i)
+                {
+                    if (used[i] || figureModes[i].form != want.form
+                        || (want.source != 0 && figureModes[i].source != want.source)) { continue; }
+                    used[i] = true;
+                    found = true;
+                    break;
+                }
+                if (!found) { matched = false; break; }
+            }
+            if (!matched) { continue; }
         }
         if (!EquipsMatch(spec.equips, equipActs)) { continue; }
         if (!EquipAllFreeMatch(spec.equip_all_free, freeAllHosts)) { continue; }
@@ -115938,7 +116078,7 @@ static const char* PlanDumpModeName(PermAbilityMode m)
         "LifeGatedPutCreatures", "SacLifePerCreature", "TapLifegain", "ActivatedDig",
         "SacLandSearch", "QuestSacLandSearch", "ReconfigureUnattach", "TapBlood", "BloodDraw",
         "TapSubtypeSteal", "TransformSelf", "TapTargetPump", "PayCounterSelf", "CounterPing", "PingLoop",
-        "SacNamedTutorPut", "TargetPump", "UntapLand"
+        "SacNamedTutorPut", "TargetPump", "UntapLand", "FigureTwo", "FigureFour", "FigureEight"
     };
     const int i = static_cast<int>(m);
     if (i >= 0 && i < static_cast<int>(sizeof(kNames) / sizeof(kNames[0]))) { return kNames[i]; }
@@ -116258,6 +116398,7 @@ void TurnSolver::WritePostApplyStatePins(GameState& s, const Plan& p)
     if (p.combat_crack_choice >= 0)       { s.scripted_combat_land_search_crack = p.combat_crack_choice; }
     // Bloodline Keeper's in-combat transform mask (Vampires B), read at THIS turn's declare-attackers.
     if (p.combat_transform_choice >= 0)   { s.scripted_combat_transform = p.combat_transform_choice; }
+    if (p.militia_pride_pay_choice >= 0)   { s.scripted_militia_pride_pay = p.militia_pride_pay_choice; }
     // The COMBAT landfall-target rank: Phylath's target for the lands this turn's combat puts (Titan's
     // attack fetch, the in-combat crack), read by the combat land entries (CombatLandfallTargetScope).
     if (p.combat_landfall_target_choice >= 0)

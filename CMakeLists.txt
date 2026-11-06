@@ -321,6 +321,8 @@ add_executable(mtg-test
     test/unit/test_opponent_deck.cpp
     test/unit/test_breaching_clauses.cpp
     test/unit/test_midrange_burn_permanents.cpp
+    test/unit/test_figure_of_destiny.cpp
+    test/unit/test_kithkin_cards.cpp
     test/unit/test_jumbo_cactuar.cpp
     test/unit/test_edf_blink_target.cpp
     test/unit/test_edf_d0_play.cpp

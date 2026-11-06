@@ -288,6 +288,8 @@ function checkActivationVerbs() {
      'equipallfree=0'],
     [{ name: 'Colossus Hammer', src: 'Stoneforge Mystic', kind: 'activate', verb: 'sfput' }, 'sfput=Colossus Hammer'],
     [{ name: "Umezawa's Jitte", src: "Umezawa's Jitte", kind: 'activate', verb: 'jittemode', mode: 1 }, 'jittemode=1'],
+    [{ name: 'Figure of Destiny', src: 'Figure of Destiny', kind: 'activate', verb: 'figure', mode: 8, srcNum: 42 },
+     'figure=8#42'],
     // BLINK: the target is part of the decision, and so is the COUNT. Human play offers one blink
     // plus (when the go-off recognizer sees a live loop) a single FINISH plan at the go-off count;
     // both are the same verb on the same target, so a token without the count cannot tell CheckLine

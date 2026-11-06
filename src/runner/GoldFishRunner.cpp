@@ -1828,7 +1828,7 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                 const ManaCost& m = d->card.m_mana_cost;
                 const int pips[5] = { m.white, m.blue, m.black, m.red, m.green };
                 for (int k = 0; k < 5; ++k) { if (pips[k] > 0) { mask |= static_cast<std::uint8_t>(1u << k); } }
-                for (int h = 0; h < m.hybrid_count && h < 4; ++h)
+                for (int h = 0; h < m.hybrid_count && h < 6; ++h)
                 {
                     const int a = m.hybrid_pair[h] >> 4, b = m.hybrid_pair[h] & 0xF;
                     if (a < 5) { mask |= static_cast<std::uint8_t>(1u << a); }

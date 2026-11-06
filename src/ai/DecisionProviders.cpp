@@ -32,6 +32,21 @@
 #include "ManaPayment.h"            // AvailableManaPool (echo "no gas" check; MTG_LACKEY_RANK=uncast)
 #include "GameWorkMeter.h"          // gamework::t_used (MTG_AA_ROUTE_STATS: the work a route walk runs)
 
+uint16_t DecisionProvider::ChosenCreatureSubtypeId(const GameState& state, int controller,
+                                                    const CardDefinition&) const
+{
+    return DominantCreatureSubtypeId(state, controller);
+}
+
+uint16_t KithkinProvider::ChosenCreatureSubtypeId(const GameState& state, int controller,
+                                                   const CardDefinition& entering) const
+{
+    if (entering.card.m_name == "Adaptive Automaton"
+        || entering.card.m_name == "Metallic Mimic")
+    { return SubtypeRegistry::Instance().Id("Kithkin"); }
+    return DecisionProvider::ChosenCreatureSubtypeId(state, controller, entering);
+}
+
 // Standing unpruned-vs-pruned A/B (search-primary requirement): when MTG_UNPRUNED is set,
 // the search-narrowing heuristics return their MAXIMALLY-PERMISSIVE value so the general
 // search explores the full branch space instead of the heuristic-narrowed one. Run the
@@ -20012,7 +20027,7 @@ namespace
     }
 
     // Same, honouring two-colour hybrid pips: take the first payable concrete assignment
-    // (2^hybrid_count <= 16), matching CanPay's expansion.
+    // (2^hybrid_count <= 64), matching CanPay's expansion.
     bool PayFrom(ManaPool& p, const ManaCost& cost)
     {
         if (cost.hybrid_count == 0) { return PayFlatFrom(p, cost); }
@@ -21175,6 +21190,7 @@ namespace
     // Stateless, read-only -> single shared const instances are thread-safe (same model as
     // CardDatabase). Process lifetime, so GameState's raw pointer stays valid.
     const GenericProvider        g_generic;
+    const KithkinProvider        g_kithkin;
     const AngelsProvider         g_angels;
     const BrunaProvider          g_bruna;
     const ColossusHammerProvider g_colossus_hammer;
@@ -22369,7 +22385,7 @@ std::vector<int> PreventDamageProvider::CleanupDiscardCandidates(
         const ManaCost& mc = d->card.m_mana_cost;
         int flat[5] = { mc.white, mc.blue, mc.black, mc.red, mc.green };
         std::uint32_t req = 0;
-        for (int k = 0; k < mc.hybrid_count && k < 4; ++k)
+        for (int k = 0; k < mc.hybrid_count && k < 6; ++k)
         {
             const int a = mc.hybrid_pair[k] >> 4, b = mc.hybrid_pair[k] & 0xF;
             if (a >= 0 && a < 5) { --flat[a]; }   // the first colour is baked into the flat ints
@@ -23590,6 +23606,7 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // carried by no other card, so one deckbuilding swap cannot lose the routing. Routes to
     // SoldiersProvider (Stage 4a, 2026-10-04: an empty derivation of VialProvider, the archetype it rode).
     bool soldiers = false;
+    bool kithkin = false;    // Kithkin-only card mechanics; never key on colourless Vial/Automaton/Mimic.
     bool knights = false;    // Knight tribal on Aether Vial -- KnightsProvider DERIVES from Vial
     bool wknights = false;   // WhiteKnights: the OTHER Knight list -- derives from Knights
     bool breaching = false;  // Breaching Dragonstorm cascade/free-cast pile -- rode Generic
@@ -23703,6 +23720,14 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
         const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
         if (!def) { continue; }
         const CardParams& p = def->params;
+        // OR across three independently replaceable Kithkin cards. The two new
+        // mechanics are gated; Cenn's Heir adds a subtype-gated older parameter.
+        // Aether Vial and the two artifact lords are shared tribal staples.
+        if (p.attack_nontoken_pay_token_cost.has_value()
+            || !p.enters_with_plus_counters_per_other_subtype.empty()
+            || (CardHasSubtype(def->card, "Kithkin")
+                && p.attack_pump_power_per_other_matching > 0))
+        { kithkin = true; }
         if (p.attack_self_pump_flat_power > 0 || p.other_nontoken_enters_counter_haste > 0)
         { jumbo_cactuar = true; }
         // Independent, Merfolk-list-specific mechanics. Do not key on Aether Vial,
@@ -24216,6 +24241,7 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // beat `anti` (Scalding Tarn) and whatever a later card's param might trip (see the flag).
     // Shadowborn Apostle: FIRST (see the flag) -- above `anti`, which its tutors set alone.
     if (shadowborn)  { return g_shadowborn; }
+    if (kithkin)     { return g_kithkin; }
     cyclone = cyclone || (cy_extra_turn && cy_cycle_scry);
     if (jumbo_cactuar) { return g_jumbo_cactuar; }
     if (cyclone)     { return g_cyclone; }
@@ -38995,7 +39021,7 @@ static void SigCost(std::vector<long long>& v, const ManaCost& c)
     v.push_back(c.generic); v.push_back(c.white); v.push_back(c.blue); v.push_back(c.black); v.push_back(c.red);
     v.push_back(c.green); v.push_back(c.colorless); v.push_back(c.has_x); v.push_back(c.x_pips);
     v.push_back(c.twobrid_count); v.push_back(c.hybrid_count); v.push_back(c.phyrexian_count);
-    for (int i = 0; i < 4; ++i) { v.push_back(c.hybrid_pair[i]); }
+    for (int i = 0; i < 6; ++i) { v.push_back(c.hybrid_pair[i]); }
     for (int i = 0; i < 2; ++i) { v.push_back(c.phyrexian_color[i]); }
     for (int i = 0; i < 3; ++i) { v.push_back(c.twobrid_color[i]); }
 }
@@ -39409,7 +39435,7 @@ static ManaCost ResolveHybrids(const Ctx& cx, const ManaCost& cost)
 {
     if (cost.hybrid_count == 0) { return cost; }
     unsigned bits = 0;
-    for (unsigned i = 0; i < cost.hybrid_count && i < 4; ++i)
+    for (unsigned i = 0; i < cost.hybrid_count && i < 6; ++i)
     {
         const Color first  = static_cast<Color>(cost.hybrid_pair[i] >> 4);
         const Color second = static_cast<Color>(cost.hybrid_pair[i] & 0xF);
@@ -41713,7 +41739,7 @@ static bool PregatePayable(const ManaCost& c, unsigned avail)
 {
     if (c.phyrexian_count > 0 || c.twobrid_count > 0) { return true; }   // not modelled here: never refuse
     int pips[6] = { c.white, c.blue, c.black, c.red, c.green, c.colorless };
-    for (unsigned i = 0; i < c.hybrid_count && i < 4; ++i)
+    for (unsigned i = 0; i < c.hybrid_count && i < 6; ++i)
     {
         const int a = c.hybrid_pair[i] >> 4, b = c.hybrid_pair[i] & 0xF;
         if (a < 6) { --pips[a]; }   // the first colour is baked into the flat count
@@ -54140,7 +54166,7 @@ std::vector<int> EldraziFlickerProvider::CleanupDiscardCandidates(
     auto colour_short = [&](const ManaCost& mc)
     {
         int flat[5] = { mc.white, mc.blue, mc.black, mc.red, mc.green };
-        for (int k = 0; k < mc.hybrid_count && k < 4; ++k)
+        for (int k = 0; k < mc.hybrid_count && k < 6; ++k)
         {
             const int a = mc.hybrid_pair[k] >> 4, b = mc.hybrid_pair[k] & 0xF;
             unsigned m = 0;
@@ -55088,7 +55114,7 @@ std::vector<int> MeliraPodProvider::CleanupDiscardCandidates(
         const ManaCost& mc = defs[at(i)]->card.m_mana_cost;
         int flat[5] = { mc.white, mc.blue, mc.black, mc.red, mc.green };
         bool impossible = false;
-        for (int k = 0; k < mc.hybrid_count && k < 4; ++k)
+        for (int k = 0; k < mc.hybrid_count && k < 6; ++k)
         {
             const int a = mc.hybrid_pair[k] >> 4, b = mc.hybrid_pair[k] & 0xF;
             if (a >= 0 && a < 5) { --flat[a]; }
@@ -55112,7 +55138,7 @@ std::vector<int> MeliraPodProvider::CleanupDiscardCandidates(
         const ManaCost& mc = d->card.m_mana_cost;
         int flat[5] = { mc.white, mc.blue, mc.black, mc.red, mc.green };
         int np = 0;
-        for (int k = 0; k < mc.hybrid_count && k < 4; ++k)
+        for (int k = 0; k < mc.hybrid_count && k < 6; ++k)
         {
             const int a = mc.hybrid_pair[k] >> 4, b = mc.hybrid_pair[k] & 0xF;
             if (a >= 0 && a < 5) { --flat[a]; }

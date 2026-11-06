@@ -556,6 +556,9 @@ struct CardParams
     // EntersWithPreappliedScope, SpellEffects.h), so a co-entrant's enter trigger resolving first
     // already sees the counters. 0 = none -> byte-identical for every other card.
     int enters_with_plus_counters = 0;
+    // Kinsbaile Borderguard: as this enters, count OTHER creatures of the named
+    // subtype already controlled and put that many +1/+1 counters on it.
+    std::string enters_with_plus_counters_per_other_subtype;
 
     // ---- WALKING BALLISTA (LifegainHeliodCombo, 2026-10-27) ------------------------------------------
     // "This creature enters with X +1/+1 counters on it." -- the X of the CAST (CR 107.3m): an AS-ENTERS
@@ -568,6 +571,11 @@ struct CardParams
     // "{4}: Put a +1/+1 counter on this creature." (PermAbilityMode::PayCounterSelf). No {T}: repeatable
     // within a turn, legal while summoning-sick (CR 302.6); a put (PutPlusCounters). nullopt = none.
     std::optional<ManaCost> self_counter_cost;
+    // Figure of Destiny: three permanent, untapped-source activations that set its creature
+    // subtypes and base power/toughness. Costs are independently payable hybrid symbols.
+    std::optional<ManaCost> figure_two_cost;
+    std::optional<ManaCost> figure_four_cost;
+    std::optional<ManaCost> figure_eight_cost;
     // "Remove a +1/+1 counter from this creature: It deals N damage to any target."
     // (PermAbilityMode::CounterPing, and the Heliod loop PermAbilityMode::PingLoop). The cost is a
     // COUNTER, so a body that drops to 0 toughness dies before the damage resolves; the damage and its
@@ -1204,6 +1212,9 @@ struct CardParams
     std::vector<std::string> attack_per_token_subtypes;
     std::vector<std::string> attack_per_token_keywords;       // see etb_created_token_keywords
     std::vector<std::string> attack_token_requires_subtypes;  // attacker subtypes counted (empty = any)
+    // Militia's Pride: one optional payment per declared nontoken attacker,
+    // producing one tapped-and-attacking token per paid trigger.
+    std::optional<ManaCost> attack_nontoken_pay_token_cost;
 
     // Saproling Burst -- FADING (CR 702.32), the engine's first. "Fading 7: this enchantment enters
     // with seven fade counters on it. At the beginning of your upkeep, remove a fade counter from
@@ -3013,6 +3024,9 @@ struct CardParams
     bool                     dies_trigger_damage_each_opponent = false;
     int                      dies_trigger_self_gain = 0;
     int                      dies_trigger_creates_tokens = 0;
+    // Kinsbaile Borderguard: its own death makes one token per counter of ANY
+    // kind it carried immediately before leaving the battlefield.
+    bool                     dies_trigger_tokens_per_counter = false;
     int                      dies_token_power = 0;
     int                      dies_token_toughness = 0;
     std::vector<std::string> dies_token_subtypes;

@@ -10469,7 +10469,7 @@ std::uint64_t ManaCostDigest(const ManaCost& c)
     mix(two(c.colorless, c.x_pips));
     mix(bytes({ static_cast<std::uint8_t>(c.has_x ? 1 : 0), c.twobrid_count, c.hybrid_count, c.hybrid_pair[0],
                 c.hybrid_pair[1], c.hybrid_pair[2], c.hybrid_pair[3], c.phyrexian_count }));
-    mix(bytes({ c.phyrexian_color[0], c.phyrexian_color[1], c.twobrid_color[0], c.twobrid_color[1], c.twobrid_color[2],
+    mix(bytes({ c.hybrid_pair[4], c.hybrid_pair[5], c.phyrexian_color[0], c.phyrexian_color[1], c.twobrid_color[0], c.twobrid_color[1], c.twobrid_color[2],
                 static_cast<std::uint8_t>(c.snow_pips) }));
     return h;
 }

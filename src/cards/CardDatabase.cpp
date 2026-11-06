@@ -722,7 +722,7 @@ static ManaCost ManaCostFromString(const std::string& cost_str)
             // first-listed-colour collapse (A/B lever for measuring either-colour payment;
             // also the byte-identity bisect gate that isolated the digest-render issue).
             static const bool s_no_hybrid = EnvOn("MTG_NO_HYBRID");
-            if (!s_no_hybrid && f >= 0 && sc >= 0 && cost.hybrid_count < 4)
+            if (!s_no_hybrid && f >= 0 && sc >= 0 && cost.hybrid_count < 6)
             {
                 // Bake the FIRST colour into the flat pips (byte-identical to the historical
                 // collapse for every flat reader) and record the pair so payment sites can
@@ -1012,6 +1012,8 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.devour           = params.value("devour", 0);
     // "This creature enters with N +1/+1 counters on it" (Mossborn Hydra) -- see CardParams.
     p.enters_with_plus_counters = params.value("enters_with_plus_counters", 0);
+    p.enters_with_plus_counters_per_other_subtype =
+        params.value("enters_with_plus_counters_per_other_subtype", std::string{});
     // Walking Ballista -- see CardParams.
     p.enters_with_x_plus_counters = params.value("enters_with_x_plus_counters", false);
     if (params.contains("self_counter_cost"))
@@ -1191,6 +1193,9 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
         p.attack_per_token_keywords.push_back(s);
     for (const std::string& s : params.value("attack_token_requires_subtypes", json::array()))
         p.attack_token_requires_subtypes.push_back(s);
+    if (params.contains("attack_nontoken_pay_token_cost"))
+        p.attack_nontoken_pay_token_cost =
+            ManaCostFromString(params["attack_nontoken_pay_token_cost"].get<std::string>());
 
     // Saproling Burst: fading + the counter-costed token maker + the LTB sweep.
     p.fading_counters      = params.value("fading_counters", 0);
@@ -1242,6 +1247,12 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.alt_lifegain_cost         = params.value("alt_lifegain_cost", 0);
     p.alt_lifegain_each_player  = params.value("alt_lifegain_each_player", false);
     p.alt_cost_requires_subtype = params.value("alt_cost_requires_subtype", std::string{});
+    if (params.contains("figure_two_cost"))
+        p.figure_two_cost = ManaCostFromString(params["figure_two_cost"].get<std::string>());
+    if (params.contains("figure_four_cost"))
+        p.figure_four_cost = ManaCostFromString(params["figure_four_cost"].get<std::string>());
+    if (params.contains("figure_eight_cost"))
+        p.figure_eight_cost = ManaCostFromString(params["figure_eight_cost"].get<std::string>());
     p.reveal_or_pay_subtype = params.value("reveal_or_pay_subtype", std::string{});
     if (params.contains("reveal_or_pay_cost"))
         p.reveal_or_pay_cost = ManaCostFromString(params["reveal_or_pay_cost"].get<std::string>());
@@ -1650,6 +1661,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.dies_trigger_damage_each_opponent = params.value("dies_trigger_damage_each_opponent", false);
     p.dies_trigger_self_gain    = params.value("dies_trigger_self_gain", 0);
     p.dies_trigger_creates_tokens = params.value("dies_trigger_creates_tokens", 0);
+    p.dies_trigger_tokens_per_counter = params.value("dies_trigger_tokens_per_counter", false);
     p.dies_token_power          = params.value("dies_token_power", 0);
     p.dies_token_toughness      = params.value("dies_token_toughness", 0);
     for (const std::string& s : params.value("dies_token_subtypes", json::array()))

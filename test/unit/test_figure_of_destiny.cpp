@@ -1,0 +1,69 @@
+#include <doctest/doctest.h>
+#include "cards/CardDatabase.h"
+#include "core/GameState.h"
+#include "core/HeuristicDefaults.h"
+#include "core/ManaPool.h"
+#include "core/SpellEffects.h"
+
+namespace {
+const CardDefinition& FigureDef()
+{
+    static const bool loaded = [] {
+        CardDatabase::Instance().LoadFromJson(ResolveHeuristicDefaultsPath("src/cards/data/cards.json"));
+        return true;
+    }();
+    REQUIRE(loaded);
+    const auto* d = CardDatabase::Instance().Lookup("Figure of Destiny");
+    REQUIRE(d != nullptr);
+    return *d;
+}
+
+GameState FigureState()
+{
+    GameState s;
+    s.active_player_index = 0;
+    Permanent p;
+    p.card = FigureDef().card;
+    p.card.m_number = 101;
+    p.controller_index = p.owner_index = 0;
+    p.entered_this_turn = true; // none of the abilities has a tap symbol
+    s.battlefield.push_back(p);
+    return s;
+}
+}
+
+TEST_CASE("Figure six hybrid pips are all payable with white")
+{
+    const ManaCost& c = *FigureDef().params.figure_eight_cost;
+    CHECK(c.hybrid_count == 6);
+    CHECK(c.ManaValue() == 6);
+    ManaPool white;
+    white.white = 6;
+    CHECK(white.CanPay(c));
+    white.white = 5;
+    CHECK_FALSE(white.CanPay(c));
+}
+
+TEST_CASE("Figure checks Spirit and Warrior on resolution and retains granted keywords")
+{
+    auto s = FigureState();
+    ApplyPermAbility(s, 0, 101, PermAbilityMode::FigureEight);
+    CHECK(s.battlefield[0].card.m_power == 1); // legal activation, conditional effect did nothing
+    ApplyPermAbility(s, 0, 101, PermAbilityMode::FigureFour);
+    CHECK(s.battlefield[0].card.m_power == 1);
+    ApplyPermAbility(s, 0, 101, PermAbilityMode::FigureTwo);
+    CHECK(s.battlefield[0].card.m_power == 2);
+    CHECK(CardHasSubtype(s.battlefield[0].card, "Spirit"));
+    ApplyPermAbility(s, 0, 101, PermAbilityMode::FigureFour);
+    CHECK(s.battlefield[0].card.m_power == 4);
+    CHECK(CardHasSubtype(s.battlefield[0].card, "Warrior"));
+    ApplyPermAbility(s, 0, 101, PermAbilityMode::FigureEight);
+    CHECK(s.battlefield[0].card.m_power == 8);
+    CHECK(s.battlefield[0].card.HasKeyword(Keyword::Flying));
+    CHECK(s.battlefield[0].card.HasKeyword(Keyword::FirstStrike));
+    ApplyPermAbility(s, 0, 101, PermAbilityMode::FigureTwo);
+    CHECK(s.battlefield[0].card.m_power == 2);
+    CHECK_FALSE(CardHasSubtype(s.battlefield[0].card, "Warrior"));
+    CHECK(s.battlefield[0].card.HasKeyword(Keyword::Flying));
+    CHECK(s.battlefield[0].card.HasKeyword(Keyword::FirstStrike));
+}

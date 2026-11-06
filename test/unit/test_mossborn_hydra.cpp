@@ -325,7 +325,8 @@ TEST_CASE("Mossborn Hydra is an Elemental: Omnath, Locus of Rage deals 3 when it
         { s.battlefield.erase(s.battlefield.begin() + static_cast<std::ptrdiff_t>(i)); break; }
     }
     s.players[0].graveyard.push_back(dead);
-    OnCreatureDies(s, 0, dead, /*dead_was_token=*/false, /*dead_minus_counters=*/0);
+    OnCreatureDies(s, 0, dead, /*dead_was_token=*/false, /*dead_minus_counters=*/0,
+                   nullptr, 0);
     CHECK(s.players[1].life == 17);
 }
 

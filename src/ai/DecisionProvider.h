@@ -196,6 +196,10 @@ public:
     // printed which provider was in force, so nothing could have caught them earlier. Pure reporting:
     // no engine path branches on this.
     virtual const char* Name() const { return "Generic"; }
+    // The provider chooses a creature type for an entering permanent. The shared enter
+    // cascade applies the choice; deck-specific preferences belong in provider overrides.
+    virtual uint16_t ChosenCreatureSubtypeId(const GameState& state, int controller,
+                                              const CardDefinition& entering) const;
     // Historical burn target policy: Any targets opponent face; Multi chooses the
     // opponent creature or the existing surviving-own-creature prowess fallback.
     // Decks may opt into the complete target axis; human/unpruned always see it.

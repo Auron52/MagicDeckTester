@@ -224,10 +224,10 @@ struct ManaCost
     // colour per set bit, and the affordability/payment sites (ManaPool::CanPay, TapForCostShared,
     // PayFromPool) try assignments in bits order -- bits==0 IS the old flat cost, so behaviour
     // changes only where the old collapse could not pay at all. Each entry packs the two colours
-    // as (first << 4) | second in printed order; > 4 hybrid pips unsupported (no such card).
+    // as (first << 4) | second in printed order; Figure of Destiny needs six pips.
     // A number/colour pip ({2/B}) is NOT a hybrid -- see twobrid_count below.
     uint8_t hybrid_count   = 0;
-    uint8_t hybrid_pair[4] = {0, 0, 0, 0};
+    uint8_t hybrid_pair[6] = {0, 0, 0, 0, 0, 0};
 
     // PHYREXIAN pips ({G/P}: pay {G} OR 2 life -- CR 107.4f; Birthing Pod, user-directed
     // 2026-09-05 after the green-only collapse cost the T3 cast+activate line). REPRESENTATION
@@ -255,8 +255,8 @@ struct ManaCost
     // machinery never sees a twobrid pip. Before this existed the parser read {2/B} as {B} (MV 3).
     // 3 slots: no card carries more than 3.
     // LAYOUT: twobrid_count sits in the padding after has_x (below) and twobrid_color in the tail
-    // padding here, so sizeof(ManaCost) -- and with it Card and Permanent, which Dominance.h pins --
-    // is unchanged.
+    // padding here, so it did not increase sizeof(ManaCost) when first introduced. Figure of
+    // Destiny later expanded the hybrid pair array to six, increasing the size by eight bytes.
     uint8_t twobrid_color[3] = {0, 0, 0};  // Color of each pip's coloured side, printed order
 
     // SNOW pips ({S}: pay with one mana from a snow SOURCE, any type -- CR 106.4b; Arcum's
@@ -321,7 +321,7 @@ struct ManaCost
     {
         ManaCost c = *this;
         c.hybrid_count = 0;
-        for (int i = 0; i < 4; ++i) { c.hybrid_pair[i] = 0; }
+        for (int i = 0; i < 6; ++i) { c.hybrid_pair[i] = 0; }
         auto bump = [&c](int col, int delta)
         {
             switch (static_cast<Color>(col))
@@ -540,7 +540,7 @@ struct Card
     bool        m_impulse_no_land = false;
     // Placed AFTER the two bools (2026-09-26): with m_keyword_mask widened to 64 bits the hot block is
     // a full 64 bytes, so the tail is mana(48) + subtypes(10) + 2 bools = 60, and this int fills bytes
-    // 124-127 -- keeping sizeof(Card) at 128 (it would pad to 136 in the old int-then-bools order).
+    // 124-127 in the original 128-byte Card; six hybrid slots now make Card 136 bytes.
     int         m_staged_expiry = 0; // last turn this staged card may be played (CR 406); valid when m_is_staged
 
     // The enum value's ordinal is its bit index. CardType/Supertype/Color have < 32 values; Keyword

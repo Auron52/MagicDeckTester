@@ -1101,6 +1101,8 @@ struct GameState
     // with the combat pins at both turn starts, folded value-gated into the dominance key and the
     // post-apply dedup key. At most 7 sources are addressable (the list runs two Keepers).
     std::int8_t              scripted_combat_transform = -1;
+    // Militia's Pride payment count, installed by the pre-combat plan and consumed at attack triggers.
+    std::int16_t             scripted_militia_pride_pay = -1;
     // Does the deck (or the passive opponent's list) run a SYMMETRIC noncreature-spell tax
     // (Thalia, Guardian of Thraben: CardParams::noncreature_spell_tax)? DECK CONSTANT, stamped by
     // StampDeckTraits; gates EffectiveSpellCost's tax walk so a deck without a taxer never pays it.

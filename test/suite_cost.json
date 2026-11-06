@@ -194,11 +194,11 @@
   },
   "hinata": {
    "cost_metric": "searched_depth_budget_pooled_seeds_v2",
-   "cost_per_game_ms": 5680.7733,
+   "cost_per_game_ms": 8929.4267,
    "jobs": 7,
    "key": "hinata",
    "tier": "regression",
-   "total_core_ms": 2193640,
+   "total_core_ms": 2651294,
    "worst_case": "hinata2hg_regression_d5_b30"
   },
   "jumbo": {
@@ -209,6 +209,15 @@
    "tier": "regression",
    "total_core_ms": 3609138,
    "worst_case": "jumbo_regression_d5_b20"
+  },
+  "kithkin": {
+   "cost_metric": "searched_depth_budget_pooled_seeds_v2",
+   "cost_per_game_ms": 794.12,
+   "jobs": 4,
+   "key": "kithkin",
+   "tier": "regression",
+   "total_core_ms": 868263,
+   "worst_case": "kithkin_regression_d3_b10"
   },
   "kittyv3": {
    "cost_metric": "searched_depth_budget_pooled_seeds_v2",

@@ -116,7 +116,7 @@
   //               runs until the float funds the kill -- chunk C2b)        (LineSpec::untap_acts, loop)
   // The verbs whose value is a MODE INT rather than a card name. Kept as a set so encodeLine has one
   // rule instead of a growing `v === 'jittemode' || v === 'gyexile' || ...` chain.
-  const MODE_VERBS = { jittemode: true, gyexile: true };
+  const MODE_VERBS = { jittemode: true, gyexile: true, figure: true };
   // ...and the verbs whose value is a BOARD M_NUMBER rather than a card name or a mode int.
   //   equipallfree=  "attach every FREE loose Equipment to this creature", ONE engine action
   //                  covering N attaches                                  (LineSpec::equip_all_free)
@@ -642,6 +642,7 @@
       parts.push(v + '=' + (MODE_VERBS[v] ? String(p.mode)
                             : NUM_VERBS[v] ? String(p.hostNum || 0)
                             : p.name)
+                 + (v === 'figure' && p.srcNum ? '#'+p.srcNum : '')
                  + (v === 'equip' ? equipIds(p) : v === 'blink' ? blinkIds(p)
                     : (v === 'untapact' || v === 'untaploop') ? untapIds(p) : ''));
     }

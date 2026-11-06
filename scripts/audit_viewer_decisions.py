@@ -85,6 +85,7 @@ MANIFEST = {
     # (ResolveOneLookTop), and, with an entering top-tutor (Flamekin Harbinger), the CR 603.3b order
     # as `dig` "(trigger order)" (ResolveLookTopGroup).
     "enters_look_top_land_or_hand": ("dig",           truthy),
+    "attack_nontoken_pay_token_cost": ("dig",       truthy),   # Militia's Pride: pay or decline for each nontoken attacker
     "cast_reorder":          ("reorder",              positive),
     # Brainstorm (2026-10-17): "then put two cards from your hand on top of your library in any order"
     # -- reuses the `dig` chooser, asked twice at resolution ("(put back: top)", "(put back: second)")
@@ -302,6 +303,9 @@ MANIFEST = {
     "remove_counter_ping_damage": ("target",          positive),
     "enters_with_x_plus_counters": ("main_phase",     truthy),
     "self_counter_cost":     ("main_phase",           truthy),
+    "figure_two_cost":      ("main_phase",           truthy),
+    "figure_four_cost":     ("main_phase",           truthy),
+    "figure_eight_cost":    ("main_phase",           truthy),
     # SelesnyaLifegain screen (2026-10-22): Heroes' Reunion / Rest for the Weary, "TARGET PLAYER gains N
     # life". WHICH player is a real choice: the autonomous search branches over Action::player_target
     # (the opponent variant pruned by DecisionProvider::OffersLifegainOpponentTarget by default); a human
@@ -779,6 +783,9 @@ BOARD_ACTIVATIONS = {
     "land_search_activation_cost":               ("verb:landsearch", truthy,  "land_search_activation_cost"),
     "lifelink_grant_cost":                       ("activate",       truthy,   "lifelink_grant_cost"),  # Heliod {1}{W}
     "self_counter_cost":                         ("activate",       truthy,   "self_counter_cost"),    # Walking Ballista {4}
+    "figure_two_cost":                          ("activate",       truthy,   "figure_two_cost"),
+    "figure_four_cost":                         ("activate",       truthy,   "figure_four_cost"),
+    "figure_eight_cost":                        ("activate",       truthy,   "figure_eight_cost"),
     "remove_counter_ping_damage":                ("activate",       positive, None),                   # Walking Ballista ping (counter cost)
     "can_animate":                               ("verb:animate",   truthy,   "animate_cost"),
     "tap_token_cost":                            ("verb:taptoken",  truthy,   "tap_token_cost"),
@@ -902,6 +909,7 @@ INERT_PARAMS = {
     # ---- Mossborn Hydra (2026-10-22, a Landfall screening candidate) -- PROVISIONAL, pending the user's OK ----
     "landfall_double_self_counters": "Mossborn Hydra's 'double the number of +1/+1 counters on this creature' -- MANDATORY, no target, no choice (CR 701.10e put through DoublePlusCounters); the viewer shows the counter badge",
     "enters_with_plus_counters": "'This creature enters with N +1/+1 counters on it' -- an as-enters REPLACEMENT (CR 614.1c), MANDATORY, no choice; the viewer shows the counter badge",
+    "enters_with_plus_counters_per_other_subtype": "Kinsbaile Borderguard's mandatory as-enters counter count, fixed by other Kithkin controlled; no player choice",
     # ---- Courser of Kruphix's static clauses (2026-10-15) ----
     "library_top_revealed": "Courser of Kruphix's 'Play with the top card of your library revealed' -- DISPLAY ONLY in goldfish (the search is clairvoyant; the passive opponent reads nothing). The viewer shows it as me.library_top while a revealer is ours; no choice",
     # ---- Giants (2026-09-22) ----
@@ -1332,6 +1340,7 @@ INERT_PARAMS = {
     "dies_watch_subtype": "death-watch subtype gating detail", "dies_watch_includes_self": "death-watch self-inclusion detail",
     "dies_trigger_damage": "automatic death trigger, no target in goldfish (Pashalik ping -> face)",
     "dies_trigger_creates_tokens": "automatic death trigger (Mogg death token), no choice",
+    "dies_trigger_tokens_per_counter": "Kinsbaile Borderguard's mandatory death trigger creates one token per counter it had; no player choice",
     "dies_token_power": "death token P/T detail", "dies_token_toughness": "death token P/T detail", "dies_token_subtypes": "death token subtypes",
     "dies_trigger_impulse_exile": "automatic death trigger (Rundvelt impulse-exile top card); which exiled card to CAST rides main_phase",
     "dies_impulse_requires_subtype": "death-impulse castability gating detail (rides dies_trigger_impulse_exile)",

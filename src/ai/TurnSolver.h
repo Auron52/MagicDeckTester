@@ -941,7 +941,7 @@ inline ManaCost PumpCostForActivations(const Action& a, int n)
     c.hybrid_count = 0;
     for (int rep = 0; rep < n; ++rep)
     {
-        for (int hi = 0; hi < per.hybrid_count && c.hybrid_count < 4; ++hi)
+        for (int hi = 0; hi < per.hybrid_count && c.hybrid_count < 6; ++hi)
         { c.hybrid_pair[c.hybrid_count++] = per.hybrid_pair[hi]; }
     }
     return c;
@@ -1628,6 +1628,9 @@ public:
         //     transform sources we control at that point, battlefield order; -1 = hold. Rides GameState::
         //     scripted_combat_transform (ApplyCombatTransforms). Folded wherever combat_crack_choice is.
         std::int8_t combat_transform_choice = -1;
+        // Militia's Pride: number of declared nontoken attacker triggers for which to pay {W}.
+        // -1 = no search pin; 0 = decline all. The shared combat resolver consumes it.
+        std::int16_t militia_pride_pay_choice = -1;
         // THE LAND-SEARCH ACTIVATIONS' POSITION in the cast sequence (follow-up (b) of the land-search
         // design, 2026-10-15; re-expressed in Plan::land_slot's position semantics when the land drop
         // became a position). Every board activation runs in the TRAILING pass, after the plan's
@@ -3406,6 +3409,8 @@ public:
         std::vector<std::string> attach_all;    // "attachall=<Balan name>": AttachAllEquipment
         std::vector<std::string> sf_puts;       // "sfput=<equipment name>": PutFromHandAbility
         std::vector<int>         jitte_modes;   // "jittemode=<1|2>": JitteModeAbility activations
+        struct FigureSpec { int form = 0, source = 0; };
+        std::vector<FigureSpec>  figure_modes;  // "figure=<2|4|8>[#source m_number]"
         // "equip=<equipment name>[#<source m_number>][@<host m_number>]": Equip, one entry per
         // activation. Needed as its own verb because an Equipment on the battlefield and a copy of it
         // in hand share a NAME: matched inside the ordinary `cast=` multiset, "equip the Bonesplitter

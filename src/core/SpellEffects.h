@@ -2990,6 +2990,20 @@ inline int PlusCountersOn(const Permanent& p)
     return n;
 }
 
+// "Each counter on it" counts every type, not merely +1/+1. Capture this
+// before removing a dying permanent; its Card has no counter state.
+inline int TotalCountersOn(const Permanent& p)
+{
+    int n = 0;
+    for (const Counter& c : p.counters) { n += c.count; }
+    // Older counter families use dedicated fields instead of CounterList. Loyalty is
+    // excluded because its CounterList entry is the display mirror of p.loyalty.
+    n += p.charge_counters + p.verse_counters + p.lore_counters + p.storage_counters;
+    n += p.ice_counters + p.age_counters + p.spore_counters + p.fade_counters;
+    n += p.quest_counters + p.hone_counters;
+    return n;
+}
+
 // ---- THE COUNTER-PUT CHOKEPOINT (Doubling Season's second half) ----------------------------
 //
 // "If an effect would put one or more counters on a permanent you control, it puts twice that many
@@ -3069,10 +3083,27 @@ struct EntersWithPreappliedScope
 // Pass-1 half of a simultaneous multi-put: the entrant's as-enters counters on the not-yet-pushed
 // Permanent, at `pre_shift` (DoublerShift of the board before the event). Records the copy in `done`
 // when it applied anything, for the scope above. A no-op (one int test) for every other card.
-inline void ApplyEntersWithOnPut(Permanent& perm, const CardDefinition& d, int pre_shift, std::vector<int>& done)
+inline void ApplyEntersWithOnPut(Permanent& perm, const CardDefinition& d, int pre_shift,
+                                std::vector<int>& done, const GameState& state,
+                                std::size_t pre_event_board_size)
 {
-    if (d.params.enters_with_plus_counters <= 0) { return; }
-    AddPlusCounters(perm, d.params.enters_with_plus_counters << pre_shift);
+    int n = d.params.enters_with_plus_counters;
+    const std::string& sub = d.params.enters_with_plus_counters_per_other_subtype;
+    if (!sub.empty())
+    {
+        for (std::size_t i = 0; i < pre_event_board_size; ++i)
+        {
+            const Permanent& q = state.battlefield[i];
+            if (q.controller_index != perm.controller_index) { continue; }
+            if (q.AnimatedAllTypes() || CardHasSubtype(q.card, sub)) { ++n; }
+        }
+    }
+    if (n <= 0)
+    {
+        if (!sub.empty()) { done.push_back(perm.card.m_number); }
+        return;
+    }
+    AddPlusCounters(perm, n << pre_shift);
     done.push_back(perm.card.m_number);
 }
 
@@ -6464,6 +6495,7 @@ inline BoardSources GatherBoardSources(const std::vector<Permanent>& battlefield
         // the watcher alone, so it is exactly the right thing to hoist. The victim-dependent half
         // (subtype match, self-inclusion) stays in that function and runs unchanged.
         if (pp.dies_trigger_damage > 0 || pp.dies_trigger_creates_tokens > 0
+            || pp.dies_trigger_tokens_per_counter
             || pp.dies_trigger_self_gain > 0 || pp.dies_trigger_impulse_exile)
         { bs.deaths.push_back(i); }
         // OnCreatureDies' own two walks. The UNION of their predicates, so each keeps its own test.
@@ -8529,15 +8561,15 @@ inline bool CardHasSubtypeId(const Card& c, uint16_t sub_id)
     return c.m_subtypes.HasId(sub_id);
 }
 
-// "As this permanent enters, choose a creature type" (Urza's Incubator). Returns the interned id of
-// the creature subtype the controller's DECK is built around: the subtype carried by the most
+// Generic provider's creature-type preference for cards such as Urza's Incubator. Returns the
+// interned id of the creature subtype the controller's DECK is built around: the subtype carried by the most
 // creature cards across all of that player's zones. That keeps the CARD generic -- an Incubator in a
 // Dragons deck chooses Dragon, in a Slivers deck Sliver -- instead of baking one tribe into
 // cards.json, which is wrong for every other deck that runs it.
 //
 // The union of the scanned zones is the player's whole deck, so this is a GAME-CONSTANT: every
 // Incubator that ever enters in one game gets the same answer regardless of when it enters. That is
-// what makes it safe to decide here (deterministically, in both worlds off the same shared helper)
+// what makes it safe for the generic provider to decide deterministically in both worlds
 // rather than as a searched decision. Ties break on the LOWEST interned id, which is assignment
 // order in cards.json -- arbitrary, but the tie means the two tribes are equally represented, and a
 // deck built around two equally-sized tribes is not a case any shipped deck presents. If a deck ever
@@ -9418,6 +9450,22 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index,
                               + " +1/+1 counter" + (PlusCountersOn(e) == 1 ? "" : "s"));
             }
         }
+        if (ed != nullptr && !ed->params.enters_with_plus_counters_per_other_subtype.empty()
+            && (g_enters_with_preapplied == nullptr
+                || std::find(g_enters_with_preapplied->begin(), g_enters_with_preapplied->end(),
+                             e.card.m_number) == g_enters_with_preapplied->end()))
+        {
+            const std::string& sub = ed->params.enters_with_plus_counters_per_other_subtype;
+            int others = 0;
+            for (const Permanent& q : state.battlefield)
+            {
+                if (q.card.m_number == e.card.m_number || q.controller_index != controller)
+                { continue; }
+                if (q.AnimatedAllTypes() || CardHasSubtype(q.card, sub)) { ++others; }
+            }
+            if (others > 0) { PutPlusCounters(state, e, others); }
+            AnnihilateCounters(e);
+        }
         // Walking Ballista with X = 0 (or put onto the battlefield, X = 0 by CR 107.3m): a 0/0 that the
         // toughness SBA kills before any of its enter triggers resolve. Record it so those triggers do
         // not target it, and so DrainPendingZeroToughness kills it in both worlds (see the queue).
@@ -9463,16 +9511,17 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index,
     // its top, BEFORE the Dragon-subtype early-out, gated on the newcomer being a creature. A gift
     // token created for the OPPONENT (CreateToken -> here) therefore drains through Suture Priest
     // exactly like a cast creature. Param-gated scan -> byte-identical for every other deck.
-    // "As this permanent enters, choose a creature type" (Urza's Incubator). Decided HERE, at the
-    // universal enter cascade, so the executor and the rollout make the identical choice off one
-    // shared helper. Above the creature early-out because the Incubator is an artifact.
+    // "As this permanent enters, choose a creature type" (Urza's Incubator). Ask the deck's
+    // provider here, at the universal enter cascade, so executor and rollout agree. Above the
+    // creature early-out because the Incubator is an artifact.
     // Param-gated -> byte-identical for every card that does not choose a type.
     {
         const Permanent& e = state.battlefield[entered_index];
         const CardDefinition* ed = CardDatabase::Instance().LookupCached(e.card);
         if (ed && ChoosesCreatureTypeOnEnter(ed->params))
         {
-            const uint16_t chosen = DominantCreatureSubtypeId(state, e.controller_index);
+            const uint16_t chosen = ResolveProvider(state).ChosenCreatureSubtypeId(
+                state, e.controller_index, *ed);
             state.battlefield[entered_index].chosen_subtype_id = chosen;
             // Metallic Mimic / Adaptive Automaton: "This creature is the chosen type in addition to
             // its other types." Written onto the BATTLEFIELD permanent's own Card copy (layer 4),
@@ -10990,10 +11039,12 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
         entered_numbers.reserve(deploy.size());
         std::vector<int> enters_with_done;
         int enters_with_shift = 0;
+        const std::size_t pre_event_board_size = state.battlefield.size();
         for (const Card& dc : deploy)
         {
             const CardDefinition* dd = CardDatabase::Instance().LookupCached(dc);
-            if (dd != nullptr && dd->params.enters_with_plus_counters > 0)
+            if (dd != nullptr && (dd->params.enters_with_plus_counters > 0
+                || !dd->params.enters_with_plus_counters_per_other_subtype.empty()))
             { enters_with_shift = DoublerShift(state, controller, /*for_tokens=*/false); break; }
         }
         for (const Card& dc : deploy)
@@ -11005,7 +11056,8 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
             perm.controller_index  = controller;
             perm.owner_index       = controller;
             perm.entered_this_turn = true;
-            if (dd != nullptr) { ApplyEntersWithOnPut(perm, *dd, enters_with_shift, enters_with_done); }
+            if (dd != nullptr) { ApplyEntersWithOnPut(perm, *dd, enters_with_shift, enters_with_done,
+                                                     state, pre_event_board_size); }
             state.battlefield.push_back(perm);
             entered_numbers.push_back(perm.card.m_number);
         }
@@ -12119,7 +12171,8 @@ inline bool SelfSacOutletUseful(const GameState& state, int controller, int sour
 // site that passes nothing keeps the original full walk, so this is inert everywhere else.
 inline void OnCreatureDies(GameState& state, int dead_controller, const Card& dead_card,
                            bool dead_was_token, int dead_minus_counters,
-                           const std::vector<int>* dwatch = nullptr)
+                           const std::vector<int>* dwatch,
+                           int dead_total_counters)
 {
     // MORBID (GameState::creature_died_this_turn). Only a CREATURE dying counts: the shared
     // sacrifice chokepoint (SacrificePermanentAt) routes land / artifact sacrifices through here too.
@@ -12257,12 +12310,12 @@ inline void OnCreatureDies(GameState& state, int dead_controller, const Card& de
             // NOT multiplied by head count, unlike the damage above.
             GainLife(state, dead_controller, wp.dies_trigger_self_gain);
         }
-        for (int k = 0; k < wp.dies_trigger_creates_tokens; ++k)
-        {
-            CreateToken(state, dead_controller, wp.dies_token_power,
-                        wp.dies_token_toughness, wp.dies_token_subtypes,
-                        wp.created_token_color, wp.dies_token_keywords);
-        }
+        const int death_tokens = wp.dies_trigger_creates_tokens
+                               + (wp.dies_trigger_tokens_per_counter ? dead_total_counters : 0);
+        CreateTokens(state, dead_controller, death_tokens,
+                     wp.dies_token_power, wp.dies_token_toughness,
+                     wp.dies_token_subtypes, wp.created_token_color,
+                     wp.dies_token_keywords);
         // Vaultborn Tyrant: "When this creature dies, if it's not a token, create a token that's
         // a copy of it." Only ever in `reactions` via the dead card's OWN self-watcher, so the
         // copy is of dead_card itself. The copy's enter fires the watchers (gain 3 / draw 1).
@@ -14898,7 +14951,8 @@ inline int DefaultSacExpendabilityRank(const Permanent& v, int source_id,
 {
     int rank = v.EffectivePower();                 // base: sac the weakest first
     const CardDefinition* d = CardDatabase::Instance().LookupCached(v.card);
-    const bool self_replacing = d && d->params.dies_trigger_creates_tokens > 0
+    const bool self_replacing = d && (d->params.dies_trigger_creates_tokens > 0
+                                  || (d->params.dies_trigger_tokens_per_counter && TotalCountersOn(v) > 0))
                                   && !d->params.dies_token_subtypes.empty();     // Mogg War Marshal
     const bool scaling = d && (
           (!d->params.subtypes_affected.empty()
@@ -15227,6 +15281,7 @@ inline void SacrificePermanentAt(GameState& state, int controller, int idx)
     const Card dead     = state.battlefield[idx].card;
     const bool was_tok  = state.battlefield[idx].is_token;
     const int  dead_m1  = MinusCountersOn(state.battlefield[idx]);
+    const int  dead_total = TotalCountersOn(state.battlefield[idx]);
     // Attachments fall off a sacrificed host (CR 301.5c), exactly as they do on every other death
     // path. This was MISSING here, and this is the SHARED sac chokepoint -- the combat-death SBA
     // (GameEngine.cpp) only walks creatures the SBA ITSELF destroyed, so a sacrificed host was
@@ -15247,7 +15302,7 @@ inline void SacrificePermanentAt(GameState& state, int controller, int idx)
     state.players[state.battlefield[idx].owner_index].graveyard.push_back(dead);
     state.battlefield.erase(state.battlefield.begin() + idx);
     FireSacrificeWatchers(state, controller);   // Slaughter-Priest ("whenever YOU sacrifice ...")
-    OnCreatureDies(state, controller, dead, was_tok, dead_m1);
+    OnCreatureDies(state, controller, dead, was_tok, dead_m1, nullptr, dead_total);
 }
 
 // ---- PITCH EVOKE (CardParams::evoke_exile_color -- Fury "Evoke--Exile a red card from your hand") ----
@@ -15359,7 +15414,7 @@ inline void PerformDamageAllCreatures(GameState& state, int controller,
 {
     if (dmg <= 0) { return; }
     (void)controller;
-    struct SweptDeath { Card card; int controller; bool was_token; int minus_counters; };
+    struct SweptDeath { Card card; int controller; bool was_token; int minus_counters; int total_counters; };
     std::vector<SweptDeath> died;
     int hit = 0;
 
@@ -15379,7 +15434,8 @@ inline void PerformDamageAllCreatures(GameState& state, int controller,
         if (!q.card.IsCreature()) { continue; }
         if (q.damage < LethalToughness(q, state)) { continue; }
         if (q.card.HasKeyword(Keyword::Indestructible)) { continue; }
-        died.push_back({ q.card, q.controller_index, q.is_token, MinusCountersOn(q) });
+        died.push_back({ q.card, q.controller_index, q.is_token,
+                         MinusCountersOn(q), TotalCountersOn(q) });
         state.players[q.owner_index].graveyard.push_back(q.card);
         state.battlefield.erase(state.battlefield.begin()
                                 + static_cast<std::ptrdiff_t>(i));
@@ -15398,7 +15454,8 @@ inline void PerformDamageAllCreatures(GameState& state, int controller,
 
     for (const SweptDeath& d : died)
     {
-        OnCreatureDies(state, d.controller, d.card, d.was_token, d.minus_counters);
+        OnCreatureDies(state, d.controller, d.card, d.was_token, d.minus_counters,
+                       nullptr, d.total_counters);
         if (d.controller != controller) { FireOppCreatureDies(state, d.controller); }
     }
 
@@ -15573,6 +15630,7 @@ inline void ResolveEtbDestroyMandatory(GameState& state, int controller, int sou
     const bool was_creature = q.card.IsCreature();
     const bool was_token = q.is_token;
     const int  m1 = MinusCountersOn(q);
+    const int  total_counters = TotalCountersOn(q);
     PdStats::Count(p.etb_destroy_artifact_enchantment_land ? PdStats::SlimeOwn
                    : (dead_ctrl == controller ? PdStats::ShriekmawOwn : PdStats::ShriekmawOpp));
     if (g_play_event_sink && !g_tap_speculating)
@@ -15594,7 +15652,7 @@ inline void ResolveEtbDestroyMandatory(GameState& state, int controller, int sou
     // one leaving). Same shape as PerformDamageAllCreatures' pass 3.
     if (was_creature)
     {
-        OnCreatureDies(state, dead_ctrl, dead, was_token, m1);
+        OnCreatureDies(state, dead_ctrl, dead, was_token, m1, nullptr, total_counters);
         if (dead_ctrl != controller) { FireOppCreatureDies(state, dead_ctrl); }
     }
     (void)source_id;
@@ -15825,6 +15883,7 @@ inline void ResolveCastTriggerTargets(GameState& state, int controller, const st
         // A scheduled opponent spawn is a token too (its Permanent does not carry is_token).
         const bool was_token = q.is_token || q.card.m_number >= GameState::kFirstOppSpawnNumber;
         const int  m1 = MinusCountersOn(q);
+        const int  total_counters = TotalCountersOn(q);
         if (destroy && q.card.HasKeyword(Keyword::Indestructible))
         {
             if (g_play_event_sink && !g_tap_speculating)
@@ -15852,7 +15911,7 @@ inline void ResolveCastTriggerTargets(GameState& state, int controller, const st
         }
         if (destroy && was_creature)
         {
-            OnCreatureDies(state, dead_ctrl, dead, was_token, m1);
+            OnCreatureDies(state, dead_ctrl, dead, was_token, m1, nullptr, total_counters);
             if (dead_ctrl != controller) { FireOppCreatureDies(state, dead_ctrl); }
         }
         else
@@ -15926,6 +15985,7 @@ inline void ResolveEtbDestroyOptional(GameState& state, int controller, const Ca
     const bool was_creature = q.card.IsCreature();
     const bool was_token = q.is_token;
     const int  m1 = MinusCountersOn(q);
+    const int  total_counters = TotalCountersOn(q);
     if (g_play_event_sink && !g_tap_speculating)
     {
         EmitPlayEvent(state.turn_number, "trigger",
@@ -15942,7 +16002,7 @@ inline void ResolveEtbDestroyOptional(GameState& state, int controller, const Ca
     }
     if (was_creature)
     {
-        OnCreatureDies(state, dead_ctrl, dead, was_token, m1);
+        OnCreatureDies(state, dead_ctrl, dead, was_token, m1, nullptr, total_counters);
         if (dead_ctrl != controller) { FireOppCreatureDies(state, dead_ctrl); }
     }
 }
@@ -16040,7 +16100,7 @@ inline void ResolveEtbDividedCreatureDamage(GameState& state, int controller, co
                       + (desc.empty() ? std::string("no targets (deals no damage)") : desc));
     }
     if (hit_numbers.empty()) { return; }
-    struct DividedDeath { Card card; int controller; bool was_token; int minus_counters; };
+    struct DividedDeath { Card card; int controller; bool was_token; int minus_counters; int total_counters; };
     std::vector<DividedDeath> died;
     for (std::size_t i = state.battlefield.size(); i-- > 0; )
     {
@@ -16049,7 +16109,8 @@ inline void ResolveEtbDividedCreatureDamage(GameState& state, int controller, co
         if (!(q.card.IsCreature() || q.is_animated)) { continue; }
         if (q.damage < LethalToughness(q, state)) { continue; }
         if (q.card.HasKeyword(Keyword::Indestructible)) { continue; }
-        died.push_back({ q.card, q.controller_index, q.is_token, MinusCountersOn(q) });
+        died.push_back({ q.card, q.controller_index, q.is_token,
+                         MinusCountersOn(q), TotalCountersOn(q) });
         if (!q.is_token) { state.players[q.owner_index].graveyard.push_back(q.card); }
         state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
     }
@@ -16063,7 +16124,8 @@ inline void ResolveEtbDividedCreatureDamage(GameState& state, int controller, co
     }
     for (const DividedDeath& d : died)
     {
-        OnCreatureDies(state, d.controller, d.card, d.was_token, d.minus_counters);
+        OnCreatureDies(state, d.controller, d.card, d.was_token, d.minus_counters,
+                       nullptr, d.total_counters);
         if (d.controller != controller) { FireOppCreatureDies(state, d.controller); }
     }
 }
@@ -16406,7 +16468,7 @@ inline void FireAttackSacFlingImpl(GameState& state, int controller,
 // ---- DEVOUR (CR 702.81; Mycoloth "Devour 2") ----------------------------------------------------
 // One creature that died to a devour sacrifice, held so its death triggers can fire AFTER the
 // devouring creature has entered.
-struct DevourDeath { Card card; bool was_token; int minus_counters; };
+struct DevourDeath { Card card; bool was_token; int minus_counters; int total_counters; };
 
 // Apply devour AS THE CREATURE ENTERS, returning how many +1/+1 counters it should enter with.
 //
@@ -16549,7 +16611,8 @@ inline int ApplyDevourAsEnters(GameState& state, int controller, const CardParam
     {
         const Permanent& v = state.battlefield[static_cast<std::size_t>(idx)];
         eaten.push_back(v.card.m_name.str());
-        deferred.push_back(DevourDeath{ v.card, v.is_token, MinusCountersOn(v) });
+        deferred.push_back(DevourDeath{ v.card, v.is_token,
+                                        MinusCountersOn(v), TotalCountersOn(v) });
         state.players[controller].graveyard.push_back(v.card);
         state.battlefield.erase(state.battlefield.begin() + idx);
     }
@@ -16588,7 +16651,8 @@ inline void FireDeferredDevourDeaths(GameState& state, int controller,
         // the battlefield across the call rather than reading the params, so this reports whatever
         // the trigger ACTUALLY created instead of what we predicted it would.
         const std::size_t before = state.battlefield.size();
-        OnCreatureDies(state, controller, d.card, d.was_token, d.minus_counters);
+        OnCreatureDies(state, controller, d.card, d.was_token, d.minus_counters,
+                       nullptr, d.total_counters);
         if (g_play_event_sink && !g_tap_speculating && state.battlefield.size() > before)
         {
             std::string ev = d.card.m_name.str() + " died \xE2\x86\x92 ";
@@ -17489,13 +17553,13 @@ inline void ApplyMassDeathBulk(GameState& state, const std::vector<int>& dying_d
                                BoardSources (&bsrc)[2])
 {
     // Snapshot what the triggers need: the bodies themselves do not survive the compaction.
-    struct Body { Card card; int ctrl; int minus; };
+    struct Body { Card card; int ctrl; int minus; int total; };
     std::vector<Body> bodies;
     bodies.reserve(dying_desc.size());
     for (int i : dying_desc)
     {
         const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
-        bodies.push_back({ q.card, q.controller_index, MinusCountersOn(q) });
+        bodies.push_back({ q.card, q.controller_index, MinusCountersOn(q), TotalCountersOn(q) });
     }
     // ONE pass. `dying_desc` is descending, so walking it from the back yields ascending indices
     // and no membership set is needed. Survivors keep their relative order, so anything elsewhere
@@ -17516,7 +17580,8 @@ inline void ApplyMassDeathBulk(GameState& state, const std::vector<int>& dying_d
     {
         const std::size_t    expect = state.battlefield.size();
         const BoardSources*  ds     = &bsrc[b.ctrl];
-        OnCreatureDies(state, b.ctrl, b.card, /*dead_was_token=*/true, b.minus, &ds->dwatch);
+        OnCreatureDies(state, b.ctrl, b.card, /*dead_was_token=*/true, b.minus,
+                       &ds->dwatch, b.total);
         // A trigger that added or removed a permanent (a death token) invalidates the lists.
         if (state.battlefield.size() != expect)
         {
@@ -17576,6 +17641,7 @@ inline void SweepDeadFadeTokens(GameState& state, int source_number)
         const int  ctrl   = q.controller_index;
         const bool tok    = q.is_token;
         const int  minus  = MinusCountersOn(q);
+        const int  total  = TotalCountersOn(q);
         if (!tok) { state.players[q.owner_index].graveyard.push_back(dead); }
         state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
         // Maintain the prefilters across the removal, then across whatever OnCreatureDies did.
@@ -17588,7 +17654,7 @@ inline void SweepDeadFadeTokens(GameState& state, int source_number)
         // The erase is already applied to the lists above, so `dwatch` is valid for the board
         // OnCreatureDies is about to see -- which is the board the unprefiltered walk would read.
         const BoardSources* ds = srcs(ctrl);
-        OnCreatureDies(state, ctrl, dead, tok, minus, ds ? &ds->dwatch : nullptr);
+        OnCreatureDies(state, ctrl, dead, tok, minus, ds ? &ds->dwatch : nullptr, total);
         if (state.battlefield.size() != expect)
         {
             bsrc[0] = GatherBoardSources(state.battlefield, 0);
@@ -17653,6 +17719,7 @@ inline void DestroyTokensCreatedBy(GameState& state, int source_number)
         const Card dead  = q.card;
         const int  ctrl  = q.controller_index;
         const int  minus = MinusCountersOn(q);
+        const int  total = TotalCountersOn(q);
         if (!gathered)
         {
             bsrc[0] = GatherBoardSources(state.battlefield, 0);
@@ -17668,7 +17735,7 @@ inline void DestroyTokensCreatedBy(GameState& state, int source_number)
         const std::size_t expect = state.battlefield.size();
         const BoardSources* ds = (ctrl == 0 || ctrl == 1) ? &bsrc[ctrl] : nullptr;
         OnCreatureDies(state, ctrl, dead, /*dead_was_token=*/true, minus,
-                       ds ? &ds->dwatch : nullptr);
+                       ds ? &ds->dwatch : nullptr, total);
         if (state.battlefield.size() != expect)
         {
             bsrc[0] = GatherBoardSources(state.battlefield, 0);
@@ -17745,6 +17812,7 @@ inline bool DeathOfWouldPay(const GameState& state, int controller, const Perman
         if (wd == nullptr) { return false; }
         const CardParams& wp = wd->params;
         const bool pays = wp.dies_trigger_damage > 0 || wp.dies_trigger_creates_tokens > 0
+                       || (wp.dies_trigger_tokens_per_counter && TotalCountersOn(victim) > 0)
                        || wp.dies_trigger_self_gain > 0 || wp.dies_trigger_impulse_exile;
         if (!pays) { return false; }
         const bool self_only = wp.dies_watch_subtype.empty();
@@ -17834,6 +17902,7 @@ inline bool SacOutletEatHasValue(const GameState& state, int controller, const C
         if (!need_sub.empty() && !CardHasSubtype(hd->card, need_sub)) { continue; }
         if (hp.persist || hp.ltb_return_creatures > 0) { return true; }
         const bool pays = hp.dies_trigger_damage > 0 || hp.dies_trigger_creates_tokens > 0
+                       || hp.dies_trigger_tokens_per_counter
                        || hp.dies_trigger_self_gain > 0 || hp.dies_trigger_impulse_exile;
         if (pays && hp.dies_watch_includes_self) { return true; }
     }
@@ -17854,6 +17923,7 @@ inline bool SacOutletEatHasValue(const GameState& state, int controller, const C
         // Its OWN death pays (Mogg War Marshal's token, Tukatongue's refund): DeathOfWouldPay's
         // self-only branch, on the body's own params.
         const bool pays = vp.dies_trigger_damage > 0 || vp.dies_trigger_creates_tokens > 0
+                       || (vp.dies_trigger_tokens_per_counter && TotalCountersOn(v) > 0)
                        || vp.dies_trigger_self_gain > 0 || vp.dies_trigger_impulse_exile;
         if (pays && vp.dies_watch_includes_self) { return true; }
         if (vp.ltb_return_creatures > 0) { return true; }
@@ -17905,6 +17975,7 @@ inline void ShrinkCreatureUntilEot(GameState& state, int target_id, int dp, int 
     const int  dead_ctrl   = t.controller_index;
     const bool dead_token  = t.is_token;
     const int  dead_minus  = MinusCountersOn(t);
+    const int  dead_total  = TotalCountersOn(t);
     if (!dead_token) { state.players[dead_owner].graveyard.push_back(dead_card); }
     state.battlefield.erase(state.battlefield.begin() + ti);
     for (Permanent& e : state.battlefield)
@@ -17912,7 +17983,7 @@ inline void ShrinkCreatureUntilEot(GameState& state, int target_id, int dp, int 
         if (e.equipped_to      == dead_num) { e.equipped_to = 0; }
         if (e.aura_attached_to == dead_num) { e.aura_attached_to = 0; }
     }
-    OnCreatureDies(state, dead_ctrl, dead_card, dead_token, dead_minus);
+    OnCreatureDies(state, dead_ctrl, dead_card, dead_token, dead_minus, nullptr, dead_total);
 }
 
 // `any_color_float` (MTG_SAC_FODDER_ACT_MAKER): the CONCRETE letter an ANY-COLOUR mana outlet (Utopia
@@ -18052,6 +18123,7 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
                                                 op->sac_outlet_excludes_self);
     // Find + remove the chosen victim (a controlled creature of the required subtype; self-inclusive).
     Card victim; bool found = false; bool victim_tok = false; int victim_m1 = 0;
+    int victim_total_counters = 0;
     // Dina, Soul Steeper: "+X/+0 where X is the sacrificed creature's power" -- LAST-KNOWN
     // information (Scryfall ruling: "the power the creature had when it was on the battlefield"),
     // so it is read BEFORE each erase below, with the same expression Surtland Flinger's fling uses
@@ -18070,6 +18142,7 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
         victim = state.battlefield[hidx].card; found = true;
         victim_tok = state.battlefield[hidx].is_token;
         victim_m1  = MinusCountersOn(state.battlefield[hidx]);
+        victim_total_counters = TotalCountersOn(state.battlefield[hidx]);
         state.players[controller].graveyard.push_back(victim);
         state.battlefield.erase(state.battlefield.begin() + hidx);
     }
@@ -18106,6 +18179,7 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
             if (pump_from_victim) { victim_lki_power = lki_power(q); }
             victim = q.card; found = true; victim_tok = q.is_token;
             victim_m1 = MinusCountersOn(q);
+            victim_total_counters = TotalCountersOn(q);
             state.players[controller].graveyard.push_back(q.card);
             state.battlefield.erase(state.battlefield.begin() + i);
             break;
@@ -18327,7 +18401,8 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
     const bool outlet_free = !op->sac_creature_cost.has_value()
                           || op->sac_creature_cost->ManaValue() == 0;
     FireSacrificeWatchers(state, controller);   // Slaughter-Priest ("whenever YOU sacrifice ...")
-    OnCreatureDies(state, controller, victim, victim_tok, victim_m1);   // Pashalik ping / Rundvelt impulse / Mogg death token / persist
+    OnCreatureDies(state, controller, victim, victim_tok, victim_m1,
+                   nullptr, victim_total_counters);   // death triggers / persist
 
     // "Infinite life" detection (USER feature 2026-09-04; NOT a win since the 2026-09-05 review --
     // see GameState::inf_life_turn: turn-stamped once, reported separately, search tiebreak only).
@@ -23160,6 +23235,7 @@ inline void PerformUpkeepSacTutor(GameState& state, DothSearchNote search_note =
         // doubler shift (a pure read, taken before the first push), and kept from re-applying in
         // pass 2 by the scope below (EntersWithPreappliedScope).
         const int enters_with_shift = DoublerShift(state, active, /*for_tokens=*/false);
+        const std::size_t pre_event_board_size = state.battlefield.size();
         std::vector<int> enters_with_done;
         for (const std::string& nm : put_list)
         {
@@ -23178,7 +23254,8 @@ inline void PerformUpkeepSacTutor(GameState& state, DothSearchNote search_note =
             perm.controller_index  = active;
             perm.owner_index       = active;
             perm.entered_this_turn = true;
-            ApplyEntersWithOnPut(perm, *d, enters_with_shift, enters_with_done);
+            ApplyEntersWithOnPut(perm, *d, enters_with_shift, enters_with_done,
+                                 state, pre_event_board_size);
             state.battlefield.push_back(perm);
             placed.emplace_back(nm, raw.m_number);
             ++puts;
@@ -23417,7 +23494,11 @@ inline int LethalToughness(const Permanent& p, const GameState& state)
     int t = p.EffectiveToughness();
     t += ComputeLordBonus(p.card, state, p.controller_index, p.AnimatedAllTypes(), &p).second;
     const CardDefinition* cd = CardDatabase::Instance().LookupCached(p.card);
-    if (cd) { t += DynamicBaseToughness(*cd, state, p.controller_index); }
+    if (cd)
+    {
+        if (p.is_animated) { t += cd->params.animate_toughness; }
+        t += DynamicBaseToughness(*cd, state, p.controller_index);
+    }
     t += EquipBonusFor(p, state).second;
     return t;
 }
@@ -23704,6 +23785,71 @@ inline void TapLargestOppCreature(GameState& state, int controller)
 // (they bypass summoning sickness for this attack, then persist and attack normally next
 // turn). Token specs are gathered before creation to avoid range invalidation.
 //
+// Militia's Pride: each declared nontoken attacker triggers EACH Pride. The optional
+// {W} is paid at resolution, so mana sources tapped to attack cannot pay it. The
+// searched pin is a count: identical triggers in this deck have identical outcomes.
+// A human gets one pay/decline choice per affordable trigger. The new bodies enter
+// tapped and attacking, but were not declared attackers and never create triggers.
+inline void FireMilitiaPrideTokens(GameState& state, int controller, std::vector<int>& atk_idx)
+{
+    const int pin = state.scripted_militia_pride_pay;
+    state.scripted_militia_pride_pay = -1;
+    const bool human = g_play_dig_chooser != nullptr && !g_tap_speculating;
+    if (pin <= 0 && !human) { return; }
+    std::vector<Card> sources;
+    std::vector<Card> attackers;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.attack_nontoken_pay_token_cost.has_value()) { sources.push_back(p.card); }
+    }
+    if (sources.empty()) { return; }
+    const std::vector<int> declared = atk_idx;
+    for (int i : declared)
+    {
+        if (i < 0 || i >= static_cast<int>(state.battlefield.size())) { continue; }
+        const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+        if (p.controller_index == controller && !p.is_token) { attackers.push_back(p.card); }
+    }
+    int paid = 0;
+    for (const Card& src : sources)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(src);
+        if (!d || !d->params.attack_nontoken_pay_token_cost) { continue; }
+        const ManaCost cost = *d->params.attack_nontoken_pay_token_cost;
+        for (const Card& attacker : attackers)
+        {
+            bool pay = paid < pin;
+            if (human)
+            {
+                GameState probe = state;
+                if (!TapForCostDirect(probe, cost, /*for_creature=*/false)) { continue; }
+                const std::vector<Card> examined{attacker};
+                const std::vector<int> legal{0};
+                const std::string source = src.m_name.str() + " (attack pay) -- "
+                    + attacker.m_name.str() + " attacked; pay {W} for a tapped and attacking Kithkin Soldier";
+                pay = (*g_play_dig_chooser)(state, controller, source, examined, legal, pay ? 0 : -1) == 0;
+            }
+            if (!pay || !TapForCostDirect(state, cost, /*for_creature=*/false)) { continue; }
+            ++paid;
+            // Mark only Pride's own replicas as attacking. Enter watchers may append
+            // unrelated tokens while each replica enters; those never join combat.
+            const int reps = 1 << DoublerShift(state, controller, /*for_tokens=*/true);
+            const TokenProto proto = BuildTokenProto(
+                d->params.attack_per_token_power, d->params.attack_per_token_toughness,
+                d->params.attack_per_token_subtypes, d->params.created_token_color, {});
+            for (int k = 0; k < reps; ++k)
+            {
+                const int i = static_cast<int>(state.battlefield.size());
+                CreateTokenFromProto(state, controller, proto);
+                state.battlefield[static_cast<std::size_t>(i)].tapped = true;
+                atk_idx.push_back(i);
+            }
+        }
+    }
+}
+
 // `attacker_indices` is the DECLARED attacker list and is REQUIRED for correctness, not an
 // optimisation: a source with attack_tokens_require_self_attacking must be in it. Adeline's trigger
 // is player-scoped ("whenever YOU attack") and ignores the list; Hero's is creature-scoped
@@ -23976,13 +24122,14 @@ inline void EnforceLegendRule(GameState& state, int controller_index)
     // (creature-ness is read on the doomed body as it leaves: a Heliod that is a creature at this
     // moment dies as a creature) and fired AFTER every erase, when no saved index is live -- the
     // "erase first, then OnCreatureDies" discipline every other death site follows.
-    struct DoomedDeath { Card card; int controller; bool token; int minus; };
+    struct DoomedDeath { Card card; int controller; bool token; int minus; int total; };
     std::vector<DoomedDeath> doomed_creatures;
     for (int idx : doomed)   // ascending -> graveyard order matches the old scan
     {
         const Permanent& dp = state.battlefield[idx];
         if (dp.card.IsCreature())
-        { doomed_creatures.push_back({ dp.card, dp.controller_index, dp.is_token, MinusCountersOn(dp) }); }
+        { doomed_creatures.push_back({ dp.card, dp.controller_index, dp.is_token,
+                                       MinusCountersOn(dp), TotalCountersOn(dp) }); }
         // History narration (sink-guarded -> search/rollout byte-identical): a legend-rule death
         // is otherwise INVISIBLE in the viewer -- the user's Protege copied their own Maelstrom
         // Wanderer and "just vanished" (2026-09-04). A doomed copy-entrant is named by its
@@ -24004,7 +24151,7 @@ inline void EnforceLegendRule(GameState& state, int controller_index)
     // One SBA batch: every graveyard-shuffle trigger it fires resolves after ALL the deaths (inert elsewhere).
     GyShuffleBatch _gyb(state);
     for (const DoomedDeath& dd : doomed_creatures)
-    { OnCreatureDies(state, dd.controller, dd.card, dd.token, dd.minus); }
+    { OnCreatureDies(state, dd.controller, dd.card, dd.token, dd.minus, nullptr, dd.total); }
 }
 
 // "You gain N life" / "TARGET PLAYER gains N life" as a spell's own resolution (Feed the Clan; Heroes'
@@ -28998,7 +29145,8 @@ inline void CounterPingKillAt(GameState& state, std::size_t i, const char* why)
         EmitPlayEvent(state.turn_number, "death",
                       "\xE2\x98\xA0 " + q.card.m_name.str() + " dies (" + why + ")");
     }
-    OnCreatureDies(state, q.controller_index, q.card, q.is_token, MinusCountersOn(q));
+    OnCreatureDies(state, q.controller_index, q.card, q.is_token,
+                   MinusCountersOn(q), nullptr, TotalCountersOn(q));
 }
 
 // Drain the doomed-entrant queue (g_pending_zero_toughness): each recorded entrant still at 0
@@ -30241,6 +30389,9 @@ inline const char* PermAbilityLabel(PermAbilityMode mode)
         case PermAbilityMode::TargetPump:     return "target creature gets a pump until end of turn";
         case PermAbilityMode::UntapLand:      return "untap target land";
         case PermAbilityMode::PayCounterSelf: return "put a +1/+1 counter on this creature";
+        case PermAbilityMode::FigureTwo:   return "become a 2/2 Kithkin Spirit";
+        case PermAbilityMode::FigureFour:  return "become a 4/4 Kithkin Spirit Warrior";
+        case PermAbilityMode::FigureEight: return "become an 8/8 Kithkin Spirit Warrior Avatar";
         case PermAbilityMode::CounterPing:    return "remove a +1/+1 counter: 1 damage to any target";
         case PermAbilityMode::PingLoop:       return "Heliod loop: ping until the opponent is dead";
         case PermAbilityMode::SacNamedTutorPut:
@@ -30641,6 +30792,29 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
             {
                 EmitPlayEvent(state.turn_number, "counter", src_name + ": +1/+1 counter ("
                               + std::to_string(PlusCountersOn(state.battlefield[idx])) + ")");
+            }
+            break;
+        }
+        case PermAbilityMode::FigureTwo:
+        case PermAbilityMode::FigureFour:
+        case PermAbilityMode::FigureEight:
+        {
+            Permanent& figure = state.battlefield[idx];
+            if (mode == PermAbilityMode::FigureFour && !CardHasSubtype(figure.card, "Spirit")) { break; }
+            if (mode == PermAbilityMode::FigureEight && !CardHasSubtype(figure.card, "Warrior")) { break; }
+            const int base = mode == PermAbilityMode::FigureTwo ? 2
+                           : mode == PermAbilityMode::FigureFour ? 4 : 8;
+            figure.card.m_power = base;
+            figure.card.m_toughness = base;
+            figure.card.m_subtypes.clear();
+            figure.card.m_subtypes.push_back("Kithkin");
+            figure.card.m_subtypes.push_back("Spirit");
+            if (base >= 4) { figure.card.m_subtypes.push_back("Warrior"); }
+            if (base >= 8)
+            {
+                figure.card.m_subtypes.push_back("Avatar");
+                figure.card.AddKeyword(Keyword::Flying);
+                figure.card.AddKeyword(Keyword::FirstStrike);
             }
             break;
         }
@@ -31512,6 +31686,12 @@ inline int SpendRepeatActivations(GameState& state, int controller, int source_i
                                       // Walking Ballista's "{4}: Put a +1/+1 counter" -- same trap.
                                       : (mode == PermAbilityMode::PayCounterSelf)
                                       ? &def.params.self_counter_cost
+                                      : (mode == PermAbilityMode::FigureTwo)
+                                      ? &def.params.figure_two_cost
+                                      : (mode == PermAbilityMode::FigureFour)
+                                      ? &def.params.figure_four_cost
+                                      : (mode == PermAbilityMode::FigureEight)
+                                      ? &def.params.figure_eight_cost
                                       : &def.params.exile_opponent_top_cost;
     if (!rc->has_value()) { return 0; }
 
@@ -33977,7 +34157,7 @@ inline int ColoredPipReserveMask(const ManaCost& cost)
     if (cost.black > 0) { m |= 1 << static_cast<int>(Color::Black); }
     if (cost.red   > 0) { m |= 1 << static_cast<int>(Color::Red);   }
     if (cost.green > 0) { m |= 1 << static_cast<int>(Color::Green); }
-    for (uint8_t i = 0; i < cost.hybrid_count && i < 4; ++i)
+    for (uint8_t i = 0; i < cost.hybrid_count && i < 6; ++i)
     {
         const int second = cost.hybrid_pair[i] & 0x0F;
         if (second >= 0 && second < static_cast<int>(Color::Colorless)) { m |= 1 << second; }
@@ -43231,7 +43411,8 @@ inline std::vector<int> SacCreatureCandidateIndices(const GameState& state, int 
             {
                 const bool atk = CanAttackFull(p, state.battlefield, p.controller_index);
                 const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-                if (!atk && d && d->params.dies_trigger_creates_tokens > 0) { return 0; }
+                if (!atk && d && (d->params.dies_trigger_creates_tokens > 0
+                    || (d->params.dies_trigger_tokens_per_counter && TotalCountersOn(p) > 0))) { return 0; }
                 if (p.is_token)                                             { return 1; }
                 if (!atk)                                                   { return 2; }
                 return 3;
@@ -43477,6 +43658,7 @@ inline void PerformSacrificeCreatureCost(GameState& state, const std::string& sp
     const Card dead    = state.battlefield[idx].card;
     const bool was_tok = state.battlefield[idx].is_token;
     const int  dead_m1 = MinusCountersOn(state.battlefield[idx]);
+    const int  dead_total = TotalCountersOn(state.battlefield[idx]);
     state.players[state.battlefield[idx].owner_index].graveyard.push_back(dead);
     state.battlefield.erase(state.battlefield.begin() + idx);
     if (g_play_event_sink && !g_tap_speculating)
@@ -43485,7 +43667,7 @@ inline void PerformSacrificeCreatureCost(GameState& state, const std::string& sp
                       "\xF0\x9F\x94\xAA " + spell_name + " -- sacrificed " + dead.m_name.str());
     }
     FireSacrificeWatchers(state, active);   // Slaughter-Priest (a sac cost IS a sacrifice)
-    OnCreatureDies(state, active, dead, was_tok, dead_m1);
+    OnCreatureDies(state, active, dead, was_tok, dead_m1, nullptr, dead_total);
 }
 
 // ===== SHADOWBORN INT-2: THE DEMON TRIGGERS (Reaper from the Abyss, Abhorrent Overlord, Sire of Insanity)
@@ -43775,6 +43957,7 @@ inline void PerformEndStepMorbidDestroy(GameState& state, int n_triggers)
         const int  dead_ctrl = q.controller_index;
         const bool was_token = q.is_token;
         const int  m1        = MinusCountersOn(q);
+        const int  total_counters = TotalCountersOn(q);
         if (g_play_event_sink && !g_tap_speculating)
         {
             EmitPlayEvent(state.turn_number, "trigger",
@@ -43789,7 +43972,7 @@ inline void PerformEndStepMorbidDestroy(GameState& state, int n_triggers)
             if (o.equipped_to      == dead.m_number) { o.equipped_to      = 0; }
             if (o.aura_attached_to == dead.m_number) { o.aura_attached_to = 0; }
         }
-        OnCreatureDies(state, dead_ctrl, dead, was_token, m1);
+        OnCreatureDies(state, dead_ctrl, dead, was_token, m1, nullptr, total_counters);
         if (dead_ctrl != me) { FireOppCreatureDies(state, dead_ctrl); }
     }
 }

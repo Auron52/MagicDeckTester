@@ -365,6 +365,7 @@ void GameEngine::UntapStep(GameState& state)
     state.scripted_combat_land_search_crack = -1;   // ...and the in-combat Khalni crack (same lockstep)
     state.scripted_combat_landfall_target = -1;     // ...and the combat landfall-target rank (same lockstep)
     state.scripted_combat_transform = -1;           // ...and Bloodline Keeper's combat transform (same lockstep)
+    state.scripted_militia_pride_pay = -1;
     state.scripted_attack_attach = -1;  // searched Raubahn attack attach (same lockstep)
     state.scripted_fb_hold = -1;        // searched banked-hold rank (MTG_FB_HOLD_SEARCHED; same lockstep)
     // (scripted_upkeep_land_search is NOT cleared here: it is read at the upkeep that follows.)
@@ -972,6 +973,7 @@ void GameEngine::CombatPhase(GameState& state, bool additional)
     // Adeline block so its untapped, non-attacking token is never appended to atk_idx. Mirrors
     // TurnSolver::SimulateCombat (lockstep, ONE shared helper). Param-gated inert.
     FireAttackOneOrMoreTokens(state, state.active_player_index, atk_idx);
+    FireMilitiaPrideTokens(state, state.active_player_index, atk_idx);
     // Attack triggers that create tapped-and-attacking tokens (Adeline). Fire only when at
     // least one creature is attacking; the new tokens deal damage this combat too.
     if (!atk_idx.empty())
@@ -1341,7 +1343,7 @@ void GameEngine::CheckStateBasedActions(GameState& state)
         // Collect creatures that died this pass so their death-watchers (Pashalik ping / Rundvelt
         // impulse / Mogg death token) fire AFTER the erase loop -- OnCreatureDies may append tokens
         // to the battlefield, which would invalidate the iterator if fired mid-loop.
-        struct DeadCreature { Card card; int controller; bool was_token; int minus_counters; };
+        struct DeadCreature { Card card; int controller; bool was_token; int minus_counters; int total_counters; };
         std::vector<DeadCreature> died;
         for (std::vector<Permanent>::iterator it = state.battlefield.begin();
              it != state.battlefield.end(); )
@@ -1381,7 +1383,8 @@ void GameEngine::CheckStateBasedActions(GameState& state)
             if (destroy)
             {
                 if (is_creature)
-                { died.push_back(DeadCreature{p.card, p.controller_index, p.is_token, MinusCountersOn(p)}); }
+                { died.push_back(DeadCreature{p.card, p.controller_index, p.is_token,
+                                               MinusCountersOn(p), TotalCountersOn(p)}); }
                 state.players[p.controller_index].graveyard.push_back(p.card);
                 it = state.battlefield.erase(it);
                 changed = true;
@@ -1400,7 +1403,8 @@ void GameEngine::CheckStateBasedActions(GameState& state)
         for (const DeadCreature& d : died)
         {
             // no-op unless a death-watcher (or persist) is in play
-            OnCreatureDies(state, d.controller, d.card, d.was_token, d.minus_counters);
+            OnCreatureDies(state, d.controller, d.card, d.was_token, d.minus_counters,
+                           nullptr, d.total_counters);
         }
     }
 }

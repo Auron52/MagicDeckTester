@@ -14857,6 +14857,118 @@
      "Creature"
     ]
    }
+  },
+  {
+   "name": "Wizened Cenn",
+   "mana_cost": "{W}{W}",
+   "types": ["Creature"],
+   "subtypes": ["Kithkin", "Cleric"],
+   "keywords": [],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "Other Kithkin creatures you control get +1/+1.",
+   "template": "lord_effect",
+   "parameters": {
+    "subtypes_affected": ["Kithkin"],
+    "power_bonus": 1,
+    "tough_bonus": 1,
+    "lord_excludes_self": true
+   }
+  },
+  {
+   "name": "Cenn's Heir",
+   "mana_cost": "{1}{W}",
+   "types": ["Creature"],
+   "subtypes": ["Kithkin", "Soldier"],
+   "keywords": [],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "Whenever Cenn's Heir attacks, it gets +1/+1 until end of turn for each other attacking Kithkin.",
+   "template": "vanilla_creature",
+   "parameters": {
+    "subtypes_affected": ["Kithkin"],
+    "attack_pump_power_per_other_matching": 1,
+    "attack_pump_tough_per_other_matching": 1
+   }
+  },
+  {
+   "name": "Militia's Pride",
+   "mana_cost": "{1}{W}",
+   "types": ["Kindred", "Enchantment"],
+   "subtypes": ["Kithkin"],
+   "keywords": [],
+   "oracle_text": "Whenever a nontoken creature you control attacks, you may pay {W}. If you do, create a 1/1 white Kithkin Soldier creature token that's tapped and attacking.",
+   "template": "custom",
+   "parameters": {
+    "attack_nontoken_pay_token_cost": "{W}",
+    "attack_per_token_power": 1,
+    "attack_per_token_toughness": 1,
+    "attack_per_token_subtypes": ["Kithkin", "Soldier"],
+    "created_token_color": "W"
+   }
+  },
+  {
+   "name": "Goldmeadow Stalwart",
+   "mana_cost": "{W}",
+   "types": ["Creature"],
+   "subtypes": ["Kithkin", "Soldier"],
+   "keywords": [],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "As an additional cost to cast this spell, reveal a Kithkin card from your hand or pay {3}.",
+   "template": "vanilla_creature",
+   "parameters": {
+    "reveal_or_pay_subtype": "Kithkin",
+    "reveal_or_pay_cost": "{3}"
+   }
+  },
+  {
+   "name": "Knight of Meadowgrain",
+   "mana_cost": "{W}{W}",
+   "types": ["Creature"],
+   "subtypes": ["Kithkin", "Knight"],
+   "keywords": ["First Strike", "Lifelink"],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "First strike\nLifelink (Damage dealt by this creature also causes you to gain that much life.)",
+   "template": "vanilla_creature",
+   "parameters": {}
+  },
+  {
+   "name": "Kinsbaile Borderguard",
+   "mana_cost": "{1}{W}{W}",
+   "types": ["Creature"],
+   "subtypes": ["Kithkin", "Soldier"],
+   "keywords": [],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "Kinsbaile Borderguard enters the battlefield with a +1/+1 counter on it for each other Kithkin you control.\nWhen Kinsbaile Borderguard dies, create a 1/1 white Kithkin Soldier creature token for each counter on it.",
+   "template": "custom",
+   "parameters": {
+    "enters_with_plus_counters_per_other_subtype": "Kithkin",
+    "dies_watch_includes_self": true,
+    "dies_trigger_tokens_per_counter": true,
+    "dies_token_power": 1,
+    "dies_token_toughness": 1,
+    "dies_token_subtypes": ["Kithkin", "Soldier"],
+    "created_token_color": "W"
+   }
+  },
+  {
+   "name": "Figure of Destiny",
+   "mana_cost": "{R/W}",
+   "types": ["Creature"],
+   "subtypes": ["Kithkin"],
+   "keywords": [],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "{R/W}: This creature becomes a Kithkin Spirit with base power and toughness 2/2.\n{R/W}{R/W}{R/W}: If this creature is a Spirit, it becomes a Kithkin Spirit Warrior with base power and toughness 4/4.\n{R/W}{R/W}{R/W}{R/W}{R/W}{R/W}: If this creature is a Warrior, it becomes a Kithkin Spirit Warrior Avatar with base power and toughness 8/8, flying, and first strike.",
+   "template": "vanilla_creature",
+   "parameters": {
+    "figure_two_cost": "{R/W}",
+    "figure_four_cost": "{R/W}{R/W}{R/W}",
+    "figure_eight_cost": "{R/W}{R/W}{R/W}{R/W}{R/W}{R/W}"
+   }
   }
  ]
 }

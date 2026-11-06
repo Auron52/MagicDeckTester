@@ -355,6 +355,20 @@ public:
     virtual CertStance Certificate() const = 0;
 };
 
+// Kithkin's Vial charge rule is the root default. Its own provider prevents this
+// list from inheriting VialProvider's Sliver-specific cleanup policy.
+class KithkinProvider : public DeckProvider
+{
+public:
+    uint16_t ChosenCreatureSubtypeId(const GameState& state, int controller,
+                                      const CardDefinition& entering) const override;
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed,
+               "NOT ASSESSED. Price Figure's persistent activations and Militia's Pride's "
+               "optional combat tokens before deriving a sound winless-turn bound." }; }
+    const char* Name() const override { return "Kithkin"; }
+};
+
 // ---------------------------------------------------------------------------------------------
 // The three decks that were riding somebody else's provider when the always-own-a-provider rule
 // landed (2026-09-18). Each is an EMPTY derivation on purpose: it inherits every judgement hook
@@ -971,6 +985,8 @@ public:
 class SliversProvider : public VialProvider
 {
 public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed, "NOT ASSESSED. Test: is combat the ONLY route to the opponent's life, and does nothing in the pool grant haste or untap? See SnowProvider/FungusProvider for the worked shape." }; }
     // MTG_SLIVERS_ORDER -- the TOTAL cast order, USER-APPROVED 2026-11-03 with every card in its own row
     // (docs/design/cast-order-drafts-2026-10-14/slivers_vial.md section 3): Hatchery Sliver first, Thrumming
     // Hivepool last. DEFAULT ON; =0 => VialProvider::CastOrderRank byte-for-byte. A rank tie between two

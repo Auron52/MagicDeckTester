@@ -205,7 +205,9 @@
 // EXACT-MATCH attachment wiring, like aura_attached_to: the target's identity affects mana,
 // land subtypes, and creature bonuses. Fold it with the stable permanent id below and treat any
 // such link as a wired board. It is also folded in TurnSolver's mid-turn state key.
-static_assert(sizeof(Permanent) == 312,
+// Figure of Destiny extends ManaCost's hybrid metadata from four to six symbols. This adds eight
+// bytes to every Card/Permanent but no mutable Permanent field; existing card and state folds apply.
+static_assert(sizeof(Permanent) == 320,
               "Permanent changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 // The point of CounterList: this is what makes the erase path a memmove. If a future field breaks
@@ -979,6 +981,8 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     // Bloodline Keeper's in-combat transform mask (Vampires B): the same class, its own domain tag.
     if (s.scripted_combat_transform >= 0)
     { fold(0x1A61000000ull + static_cast<std::uint64_t>(s.scripted_combat_transform)); }
+    if (s.scripted_militia_pride_pay >= 0)
+    { fold(0x1A62000000ull + static_cast<std::uint64_t>(s.scripted_militia_pride_pay)); }
     // The searched echo pin (Plan::echo_choice): FUTURE-DETERMINING across the turn boundary (set during the
     // turn's apply, consumed at the NEXT upkeep -- the scripted_upkeep_gy_reanimate class), value-gated with
     // its own domain tag so every deck without an echo card keeps its exact key.
@@ -1343,6 +1347,16 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
         // Token-ness is read by Lathliss's "nontoken Dragon" gate, so a token copy and a real one
         // are NOT interchangeable.
         mfold(p.is_token ? 1u : 0u);
+        // Figure's activated forms persist across turns. Base P/T, creature types and the
+        // independently retained flying/first-strike grants must match exactly across states.
+        if (const CardDefinition* fd = CardDatabase::Instance().LookupCached(p.card);
+            fd != nullptr && fd->params.figure_two_cost.has_value())
+        {
+            mfold(static_cast<std::uint64_t>(p.card.m_power.value_or(0)));
+            mfold(p.card.m_keyword_mask);
+            for (std::size_t i = 0; i < p.card.m_subtypes.size(); ++i)
+            { mfold(p.card.m_subtypes.IdAt(i)); }
+        }
         // Once-per-turn / obligation flags. All but is_token reset at the untap that just ran for
         // OUR permanents, so they are constant across siblings there; the opponent's are not, and
         // either way they are future-determining, so they match exactly.

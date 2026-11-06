@@ -1043,6 +1043,15 @@
     "toughness": "4",
     "type_line": "Legendary Creature — Human Wizard Knight"
   },
+  "Cenn's Heir": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{W}",
+    "oracle_text": "Whenever this creature attacks, it gets +1/+1 until end of turn for each other attacking Kithkin.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Kithkin Soldier"
+  },
   "Chain Lightning": {
     "cmc": 1.0,
     "keywords": [],
@@ -2061,6 +2070,15 @@
     "toughness": null,
     "type_line": "Sorcery"
   },
+  "Figure of Destiny": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{R/W}",
+    "oracle_text": "{R/W}: This creature becomes a Kithkin Spirit with base power and toughness 2/2.\n{R/W}{R/W}{R/W}: If this creature is a Spirit, it becomes a Kithkin Spirit Warrior with base power and toughness 4/4.\n{R/W}{R/W}{R/W}{R/W}{R/W}{R/W}: If this creature is a Warrior, it becomes a Kithkin Spirit Warrior Avatar with base power and toughness 8/8, flying, and first strike.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Kithkin"
+  },
   "Finale of Devastation": {
     "cmc": 2.0,
     "keywords": [],
@@ -2584,6 +2602,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Instant"
+  },
+  "Goldmeadow Stalwart": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{W}",
+    "oracle_text": "As an additional cost to cast this spell, reveal a Kithkin card from your hand or pay {3}.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Kithkin Soldier"
   },
   "Golem-Skin Gauntlets": {
     "cmc": 1.0,
@@ -3151,6 +3178,15 @@
     "toughness": "3",
     "type_line": "Legendary Creature — Human Soldier"
   },
+  "Kinsbaile Borderguard": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{1}{W}{W}",
+    "oracle_text": "This creature enters with a +1/+1 counter on it for each other Kithkin you control.\nWhen this creature dies, create a 1/1 white Kithkin Soldier creature token for each counter on it.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Kithkin Soldier"
+  },
   "Kinsbaile Cavalier": {
     "cmc": 4.0,
     "keywords": [],
@@ -3215,6 +3251,18 @@
     "power": "2",
     "toughness": "2",
     "type_line": "Creature — Human Knight"
+  },
+  "Knight of Meadowgrain": {
+    "cmc": 2.0,
+    "keywords": [
+      "First strike",
+      "Lifelink"
+    ],
+    "mana_cost": "{W}{W}",
+    "oracle_text": "First strike\nLifelink (Damage dealt by this creature also causes you to gain that much life.)",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Kithkin Knight"
   },
   "Kor Duelist": {
     "cmc": 1.0,
@@ -3763,6 +3811,15 @@
     "power": "2",
     "toughness": "1",
     "type_line": "Artifact Creature — Shapeshifter"
+  },
+  "Militia's Pride": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{W}",
+    "oracle_text": "Whenever a nontoken creature you control attacks, you may pay {W}. If you do, create a 1/1 white Kithkin Soldier creature token that's tapped and attacking.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Kindred Enchantment — Kithkin"
   },
   "Mind Stone": {
     "cmc": 2.0,
@@ -6706,6 +6763,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Land"
+  },
+  "Wizened Cenn": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{W}{W}",
+    "oracle_text": "Other Kithkin creatures you control get +1/+1.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Kithkin Cleric"
   },
   "Wooded Foothills": {
     "cmc": 0.0,

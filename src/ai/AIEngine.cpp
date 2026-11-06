@@ -715,6 +715,7 @@ inline bool CarriesPostApplyPin(const TurnSolver::Plan& p)
         || p.atk_dork_release >= 0 || p.combat_landfall_target_choice >= 0 || p.landfall_target_choice >= 0
         || p.cast_trigger_target_choice >= 0
         || p.combat_transform_choice >= 0
+        || p.militia_pride_pay_choice >= 0
         || p.sweep_choice >= 0 || p.le_fire_choice >= 0 || p.dig_choice == 0 || p.dig_choice == 1;
 }
 // A re-solve's payment pair (tap mode, fresh-spend) matters exactly when it differs from the committed
@@ -751,6 +752,8 @@ inline void RecordReSolveRealized(const GameState& s, const TurnSolver::Plan& p,
         && s.scripted_combat_landfall_target != p.combat_landfall_target_choice)                   { ok = false; }
     if (p.combat_transform_choice >= 0
         && s.scripted_combat_transform != p.combat_transform_choice)                               { ok = false; }
+    if (p.militia_pride_pay_choice >= 0
+        && s.scripted_militia_pride_pay != p.militia_pride_pay_choice)                               { ok = false; }
     if (p.landfall_target_choice >= 0  && LandfallTargetPinFor(s) != p.landfall_target_choice)     { ok = false; }
     if (p.cast_trigger_target_choice >= 0 && CastTriggerTargetPinFor(s) != p.cast_trigger_target_choice) { ok = false; }
     if (p.saga_target_choice >= 0      && s.scripted_saga_target != p.saga_target_choice)          { ok = false; }
@@ -1768,9 +1771,10 @@ void AIEngine::ResolveEchoUpkeep(GameState& state)
         const int  ctrl = p.controller_index;
         const bool tok  = p.is_token;
         const int  m1   = MinusCountersOn(p);
+        const int  total_counters = TotalCountersOn(p);
         state.players[ctrl].graveyard.push_back(dead);
         state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
-        OnCreatureDies(state, ctrl, dead, tok, m1);   // may append a token at the end -> safe (no echo_cost)
+        OnCreatureDies(state, ctrl, dead, tok, m1, nullptr, total_counters);
         // Do not advance i: the erased slot now holds the next permanent.
     }
     // END OF THE UPKEEP STEP (CR 500.4): the pool empties. Echo is resolved here rather than in

@@ -595,7 +595,7 @@ TEST_CASE("Slimefoot: the drain fires for a definition-less Saproling TOKEN")
     dead.m_subtypes = { "Saproling" };
     REQUIRE(CardDatabase::Instance().LookupCached(dead) == nullptr);   // the trap, made explicit
 
-    OnCreatureDies(s, 0, dead, /*dead_was_token=*/true, /*dead_minus_counters=*/0);
+    OnCreatureDies(s, 0, dead, /*dead_was_token=*/true, /*dead_minus_counters=*/0, nullptr, 0);
     CHECK(s.players[1].life == 19);
     CHECK(s.players[0].life == 21);
     CHECK(s.opponent_lost_life_this_turn);
@@ -613,7 +613,7 @@ TEST_CASE("Slimefoot: every Saproling death is a separate trigger -- the board I
     dead.AddType(CardType::Creature);
     dead.m_subtypes = { "Saproling" };
 
-    for (int i = 0; i < 8; ++i) { OnCreatureDies(s, 0, dead, true, 0); }
+    for (int i = 0; i < 8; ++i) { OnCreatureDies(s, 0, dead, true, 0, nullptr, 0); }
     CHECK(s.players[1].life == 12);   // eight Saprolings sacrificed = eight damage, no attack step
     CHECK(s.players[0].life == 28);
 }
@@ -631,7 +631,7 @@ TEST_CASE("Slimefoot: TWO copies are two independent watchers (per-copy, not max
     dead.AddType(CardType::Creature);
     dead.m_subtypes = { "Saproling" };
 
-    OnCreatureDies(s, 0, dead, true, 0);
+    OnCreatureDies(s, 0, dead, true, 0, nullptr, 0);
     CHECK(s.players[1].life == 18);
 }
 
@@ -643,7 +643,7 @@ TEST_CASE("Slimefoot: the watch is SUBTYPE- and CONTROLLER-scoped, and excludes 
     {
         GameState s = Fresh();
         Put(s, "Slimefoot, the Stowaway", 0, 1);
-        OnCreatureDies(s, 0, Def("Thallid").card, false, 0);   // Thallid is a Fungus
+        OnCreatureDies(s, 0, Def("Thallid").card, false, 0, nullptr, 0);   // Thallid is a Fungus
         CHECK(s.players[1].life == 20);
     }
 
@@ -651,7 +651,7 @@ TEST_CASE("Slimefoot: the watch is SUBTYPE- and CONTROLLER-scoped, and excludes 
     {
         GameState s = Fresh();
         Put(s, "Slimefoot, the Stowaway", 0, 1);
-        OnCreatureDies(s, 0, Def("Slimefoot, the Stowaway").card, false, 0);
+        OnCreatureDies(s, 0, Def("Slimefoot, the Stowaway").card, false, 0, nullptr, 0);
         CHECK(s.players[1].life == 20);
     }
 
@@ -664,7 +664,7 @@ TEST_CASE("Slimefoot: the watch is SUBTYPE- and CONTROLLER-scoped, and excludes 
         dead.RehashName();
         dead.AddType(CardType::Creature);
         dead.m_subtypes = { "Saproling" };
-        OnCreatureDies(s, 1, dead, true, 0);   // died under the OPPONENT's control
+        OnCreatureDies(s, 1, dead, true, 0, nullptr, 0);   // died under the OPPONENT's control
         CHECK(s.players[1].life == 20);
     }
 
@@ -672,7 +672,7 @@ TEST_CASE("Slimefoot: the watch is SUBTYPE- and CONTROLLER-scoped, and excludes 
     {
         GameState s = Fresh();
         Put(s, "Slimefoot, the Stowaway", 0, 1);
-        OnCreatureDies(s, 0, Def("Shroofus Sproutsire").card, false, 0);
+        OnCreatureDies(s, 0, Def("Shroofus Sproutsire").card, false, 0, nullptr, 0);
         CHECK(s.players[1].life == 19);
     }
 }
@@ -727,7 +727,7 @@ TEST_CASE("Slimefoot: {4} makes a Saproling, and Doubling Season makes it two")
         Card tok;
         for (const Permanent& p : s.battlefield)
         { if (p.is_token) { tok = p.card; } }
-        OnCreatureDies(s, 0, tok, true, 0);
+        OnCreatureDies(s, 0, tok, true, 0, nullptr, 0);
         CHECK(s.players[1].life == 19);
     }
 }
@@ -751,8 +751,8 @@ TEST_CASE("DEATHSPORE + SLIMEFOOT: the '-1/-1' clause is a FREE two-for-one sac 
     tok.RehashName();
     tok.AddType(CardType::Creature);
     tok.m_subtypes = { "Saproling" };
-    OnCreatureDies(s, 0, tok, true, 0);   // the sacrificed fodder
-    OnCreatureDies(s, 0, tok, true, 0);   // the one shrunk to 0/0
+    OnCreatureDies(s, 0, tok, true, 0, nullptr, 0);   // the sacrificed fodder
+    OnCreatureDies(s, 0, tok, true, 0, nullptr, 0);   // the one shrunk to 0/0
     CHECK(s.players[1].life == 18);
 }
 

@@ -345,6 +345,9 @@ enum class PermAbilityMode
     TargetPump,
     // Voyaging Satyr in human play: tap source to untap a chosen land.
     UntapLand,
+    FigureTwo,
+    FigureFour,
+    FigureEight,
 };
 
 // Does this mode's cost include {T}? THE single source of truth, because three separate sites used
@@ -372,7 +375,10 @@ inline bool PermAbilityTaps(PermAbilityMode m)
         && m != PermAbilityMode::PayCounterSelf       // Walking Ballista: "{4}: put a counter" -- no {T}
         && m != PermAbilityMode::CounterPing          // Walking Ballista: "remove a counter: 1 damage"
         && m != PermAbilityMode::PingLoop             // the Heliod + Ballista loop (pings, no {T})
-        && m != PermAbilityMode::SacNamedTutorPut;    // Shadowborn Apostle: "{B}, Sacrifice six ..." -- no {T}
+        && m != PermAbilityMode::SacNamedTutorPut
+        && m != PermAbilityMode::FigureTwo
+        && m != PermAbilityMode::FigureFour
+        && m != PermAbilityMode::FigureEight;
     // SacLandSearch (Evolving Wilds / Myriad Landscape) is deliberately ABSENT: its cost has {T}.
     // SacLifePerCreature (Blighted Steppe) and TapLifegain (Wellwisher) are deliberately ABSENT --
     // this is an EXCLUSION list, so anything not named here taps, which is what both want. Adding

@@ -82,7 +82,7 @@ struct ManaPool
     }
 
     // Returns true if this pool can pay the given cost. Two-colour hybrid pips are handled by
-    // expanding every concrete assignment (2^hybrid_count, <= 16) over the flat check.
+    // expanding every concrete assignment (2^hybrid_count, <= 64) over the flat check.
     bool CanPay(const ManaCost& cost) const
     {
         if (cost.hybrid_count == 0) { return CanPayFlat(cost); }

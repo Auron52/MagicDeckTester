@@ -69,7 +69,7 @@ void KillC(GameState& s, int num)
         const Permanent dead = s.battlefield[i];
         s.battlefield.erase(s.battlefield.begin() + static_cast<long>(i));
         s.players[dead.controller_index].graveyard.push_back(dead.card);
-        OnCreatureDies(s, dead.controller_index, dead.card, false, 0);
+        OnCreatureDies(s, dead.controller_index, dead.card, false, 0, nullptr, 0);
         return;
     }
     FAIL("no such permanent");

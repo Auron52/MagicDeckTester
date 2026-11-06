@@ -950,11 +950,13 @@ void PerformGenesisWave(GameState& state, int controller, int x, const std::stri
     // Wave that puts no such card reads nothing new.
     std::vector<int> enters_with_done;
     int enters_with_shift = 0;
+    const std::size_t pre_event_board_size = state.battlefield.size();
     for (int i = 0; i < static_cast<int>(revealed.size()); ++i)
     {
         if (!put_flag[static_cast<std::size_t>(i)]) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(revealed[static_cast<std::size_t>(i)]);
-        if (d != nullptr && d->params.enters_with_plus_counters > 0)
+        if (d != nullptr && (d->params.enters_with_plus_counters > 0
+            || !d->params.enters_with_plus_counters_per_other_subtype.empty()))
         { enters_with_shift = DoublerShift(state, controller, /*for_tokens=*/false); break; }
     }
     // ONE event for every trigger pass below: a token made while it resolves (a Scute Swarm copy from the
@@ -986,7 +988,8 @@ void PerformGenesisWave(GameState& state, int controller, int x, const std::stri
             perm.controller_index  = controller;
             perm.owner_index       = controller;
             perm.entered_this_turn = true;   // summoning sick: the Wave's board cannot attack today
-            ApplyEntersWithOnPut(perm, *d, enters_with_shift, enters_with_done);   // no-op unless the param
+            ApplyEntersWithOnPut(perm, *d, enters_with_shift, enters_with_done,
+                                 state, pre_event_board_size);   // no-op unless the param
             state.battlefield.push_back(perm);
         }
         placed.push_back(Placed{ raw.m_name, raw.m_number, d, d->card.IsLand() });
@@ -5869,6 +5872,7 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
              | (static_cast<std::uint64_t>(cost.hybrid_count) << 16));
         mix(h, static_cast<std::uint64_t>(cost.hybrid_pair[0]) | (static_cast<std::uint64_t>(cost.hybrid_pair[1]) << 8)
              | (static_cast<std::uint64_t>(cost.hybrid_pair[2]) << 16) | (static_cast<std::uint64_t>(cost.hybrid_pair[3]) << 24));
+        mix(h, static_cast<std::uint64_t>(cost.hybrid_pair[4]) | (static_cast<std::uint64_t>(cost.hybrid_pair[5]) << 8));
         mix(h, for_creature ? 1ull : 0ull);
         // SUBTYPE-RESTRICTED MANA (Giada) -- the rule this file states in bold above: any flag that
         // changes the BACKTRACKER'S ANSWER for the same board+cost must be hashed into the key.

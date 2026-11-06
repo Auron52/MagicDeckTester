@@ -594,7 +594,7 @@ int UnmetActivationColorMask(const GameState& state)
             if (c == nullptr || !c->has_value()) { continue; }
             const ManaCost m = EffectiveActivationCost(state, active, p.card, c->value());
             int pip[6] = { m.white, m.blue, m.black, m.red, m.green, m.colorless };
-            for (int h = 0; h < m.hybrid_count && h < 4; ++h)
+            for (int h = 0; h < m.hybrid_count && h < 6; ++h)
             {
                 const int first = (m.hybrid_pair[h] >> 4) & 0x0F;
                 if (first >= 0 && first < 6) { --pip[first]; }

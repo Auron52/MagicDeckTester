@@ -1790,6 +1790,7 @@ function queueActivation(src, opt, clickedNum){
     : opt.verb==='auraswap' ? `${src}: aura swap — ${opt.name} comes in from your hand, ${src} returns to your hand. Commit the phase to resolve it. (To swap AFTER attackers are declared instead, skip this: you are asked in combat.)`
     : opt.verb==='attachall' ? `${src}: attaching every Equipment you control to it. Commit the phase to resolve it.`
     : opt.verb==='jittemode' ? `${src}: spending a charge counter (${jitteModeLabel(opt.mode)}). Commit the phase to resolve it.`
+    : opt.verb==='figure' ? `${src}: activating its ${opt.mode}/${opt.mode} form. Commit the phase to resolve it.`
     : opt.verb==='gyexile' ? `${src}: ${opt.mode===3?'paying {R}, tapping and exiling two cards from your graveyard to deal 2 damage to any target':opt.mode===2?'tapping to exile a creature card from a graveyard and gain 2 life':'tapping to exile an instant or sorcery card from a graveyard — each opponent loses 2 life'}. Commit the phase to resolve it.`
     : (opt.verb==='gyreturn' && opt.name==='@random') ? `${src}: tapping and sacrificing it to return a creature card AT RANDOM from your graveyard to your hand (the card is not chosen). Commit the phase to resolve it.`
     : opt.verb==='gyreturn' ? `${src}: tapping and sacrificing it to return ${opt.name} from your graveyard to your hand. Commit the phase to resolve it.`
@@ -2791,6 +2792,7 @@ function renderPlanbar() {
               : p.verb==='sfput'     ? ' ⟳ put from hand'
               : p.verb==='auraswap'  ? ' ⇄ aura swap'
               : p.verb==='jittemode' ? ' \u27f3 ' + jitteModeLabel(p.mode)
+              : p.verb==='figure'    ? ' ⟳ become ' + p.mode + '/' + p.mode
               : p.verb==='sacout'    ? ' ⟳ sacrifice'
               // The two halves of a fused "Investigate & crack" say which half they are, so the
               // pair reads as one gesture spread over two commits rather than two mystery chips.
@@ -4458,6 +4460,18 @@ function lookPanelHtml(d, dec){
 // dimmed/non-takeable, and a "Take nothing" option declines. The AI's pick is tagged. After a card
 // enters hand the engine re-enumerates (the library shrank), so a dug card is playable THIS turn.
 function digPanelHtml(d){
+  if (/\(attack pay\)/.test(d.source||'')) {
+    let h=`<h3>Militia's Pride — pay {W} for a Kithkin Soldier?</h3>`;
+    h+=`<div class="sub">${esc(d.source||'')}<br/>The 1/1 white Kithkin Soldier enters tapped and attacking now. Each Pride trigger is a separate choice.</div>`;
+    h+=`<div class="tutgrid">`;
+    (d.examined||[]).forEach(c=>{
+      h+=`<span class="cardmini tdig" data-opt="${c.index}" data-name="${esc(c.name)}" title="Pay {W}">`+
+         `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/><em>Pay {W}</em></span>`;
+    });
+    h+=`</div><div class="pbtns" style="margin-top:10px"><span class="spacer"></span>`+
+       `<button class="ghost" data-opt="-1">Decline this trigger</button></div>`;
+    return h;
+  }
   // Khalni Heart Expedition's IN-COMBAT crack window reuses this modal ("(combat crack)" in the
   // source): the tiles are Expeditions on the battlefield to CRACK, not cards to dig, and the
   // default is to keep it (the engine cracks in combat only when its search committed to it).

@@ -38,6 +38,7 @@ declare -A DECK_FILE=(
   [th]=decks/treasure_hunt/treasure_hunt.txt
   [knights]=decks/Knights/Knights.cod
   [whiteknights]=decks/WhiteKnights/WhiteKnights.cod
+  [kithkin]=decks/Kithkin/Kithkin.cod
   [antilife]=decks/Anti-Lifegain/Anti-Lifegain.cod
   [hinata]=decks/Hinata2/Hinata2.cod
   [cyclone]="decks/Unpredictable Cyclone/Unpredictable Cyclone.cod"
@@ -94,6 +95,7 @@ declare -A DECK_PROF=(
   [th]=decks/treasure_hunt/treasure_hunt.profile.json
   [knights]=decks/Knights/Knights.profile.json
   [whiteknights]=decks/WhiteKnights/WhiteKnights.profile.json
+  [kithkin]=decks/Kithkin/Kithkin.profile.json
   [antilife]=decks/Anti-Lifegain/Anti-Lifegain.profile.json
   [hinata]=decks/Hinata2/Hinata2.profile.json
   [cyclone]="decks/Unpredictable Cyclone/Unpredictable Cyclone.profile.json"
@@ -217,6 +219,10 @@ SMOKE_CASES=(
   "whiteknights 0 1001 1000 0"
   "whiteknights 3  1001    75 10"
   "whiteknights 5  1001   325 20"
+  # Kithkin: provisional WhiteKnights-class sizing; remeasure at the pinned Hinata cost gate.
+  "kithkin 0 1001 1000 0"
+  "kithkin 3  1001    75 10"
+  "kithkin 5  1001   325 20"
   "antilife 0 1001 1000 0"
   "antilife   3  1001    75 10"
   "antilife   5  1001   325 20"
@@ -814,6 +820,10 @@ REGRESSION_CASES=(
   "whiteknights 3  2002   100 10"
   "whiteknights 5  2002   500 20"
   "whiteknights 5  3003   500 20"
+  "kithkin 0 2002 1000 0"
+  "kithkin 3  2002   100 10"
+  "kithkin 5  2002   500 20"
+  "kithkin 5  3003   500 20"
   # antilife: re-added at 1/10 virtual-ms (see smoke block + search-perf-investigation memory).
   "antilife 0 2002 1000 0"
   "antilife   3  2002   100 10"
@@ -1248,6 +1258,15 @@ OVERNIGHT_CASES=(
   "whiteknights 5  5005  1925 20"
   "whiteknights 5  6006  1925 20"
   "whiteknights 5  7007  1925 20"
+  "kithkin 0 4004 2000 0"
+  "kithkin 0  6006 2000 0"
+  "kithkin 0  8008 2000 0"
+  "kithkin 0 10010 2000 0"
+  "kithkin 3  4004   325 10"
+  "kithkin 5  4004  1925 20"
+  "kithkin 5  5005  1925 20"
+  "kithkin 5  6006  1925 20"
+  "kithkin 5  7007  1925 20"
   # antilife: re-added at 1/10 virtual-ms (see smoke block + search-perf-investigation memory).
   "antilife 0 4004 2000 0"
   "antilife 0  6006 2000 0"
