@@ -103,9 +103,6 @@ bool PayLp(GameState& s, int generic, int black, int red = 0)
 
 TEST_CASE("On-demand Lake: not cracked when the lands pay, and its plain tap is the last resort")
 {
-    // The fold is measured alone: the Shadowborn ritual-payoff prune (default ON) drops an unspent crack too, and the
-    // main-1 rule folds main-1 casts, so both are pinned off here.
-    ArmScope rp(heurarm::SB_RITUAL_PAYOFF, false), m1r(heurarm::SB_MAIN1_RULE, false);
     GameState s = BaseLp();
     s.battlefield.push_back(PermLp("Lake of the Dead", 80));
     for (int i = 0; i < 3; ++i) { s.battlefield.push_back(PermLp("Swamp", 81 + i)); }
@@ -117,9 +114,6 @@ TEST_CASE("On-demand Lake: not cracked when the lands pay, and its plain tap is 
 
 TEST_CASE("On-demand Lake: cracked when the cost needs it, and the surplus floats")
 {
-    // The fold is measured alone: the Shadowborn ritual-payoff prune (default ON) drops an unspent crack too, and the
-    // main-1 rule folds main-1 casts, so both are pinned off here.
-    ArmScope rp(heurarm::SB_RITUAL_PAYOFF, false), m1r(heurarm::SB_MAIN1_RULE, false);
     GameState s = BaseLp();
     s.battlefield.push_back(PermLp("Lake of the Dead", 80));
     s.battlefield.push_back(PermLp("Swamp", 81));
@@ -161,6 +155,9 @@ TEST_CASE("On-demand Lotus Bloom: kept when the lands pay; pays a colour no land
 
 TEST_CASE("On-demand: no SacForMana plan action for Lake / Lotus, and a cast that needs the crack is offered")
 {
+    // The enumeration is tested alone: the Shadowborn main-1 rule (default ON) folds main-1 casts, and the
+    // ritual-payoff prune drops plans on its own, so both are pinned off here.
+    ArmScope rp(heurarm::SB_RITUAL_PAYOFF, false), m1r(heurarm::SB_MAIN1_RULE, false);
     GameState s = BaseLp();
     s.battlefield.push_back(PermLp("Lake of the Dead", 80));
     for (int i = 0; i < 3; ++i) { s.battlefield.push_back(PermLp("Swamp", 81 + i)); }
