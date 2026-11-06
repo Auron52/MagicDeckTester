@@ -2558,7 +2558,7 @@ function renderBoard() {
   // opponent's face is a legal target, the life total becomes a clickable, highlightable target.
   const oppFace = faceTarget(d,'opp');
   const oppBoros = S.variantTargetPick && S.variantTargetPick.choices.some(c=>c.num===0);
-  const oppB = `<b class="opp ${oppLifeDisp<=0?'dead':''}${oppFace||oppBoros?' facetgt':''}${oppFace&&isSelT(oppFace)?' selected':''}"${oppFace?` data-tk="${tgtKey(oppFace)}"`:''}>${oppLifeDisp ?? '?'}</b>`;
+  const oppB = `<b class="opp ${oppLifeDisp<=0?'dead':''}${oppFace||oppBoros?' facetgt':''}${oppFace&&isSelT(oppFace)||oppBoros&&S.variantTargetPick.selected?.num===0?' selected':''}"${oppFace?` data-tk="${tgtKey(oppFace)}"`:''}>${oppLifeDisp ?? '?'}</b>`;
   h += `<div class="lifebar"><span class="life">Opponent ${oppB}</span>`+
        // The opponent's library, when one was dealt (a deck-out / mill deck must see its target).
        (d.opponent&&d.opponent.library_size!=null?`<span class="life" title="cards left in the opponent's library${d.opponent.decked?' -- DECKED':''}">library <b>${d.opponent.library_size}</b>${d.opponent.decked?' (decked)':''}</span>`:'')+`</div>`;
@@ -2570,7 +2570,7 @@ function renderBoard() {
   h += `<div id="playfield">`;
   const youFace = faceTarget(d,'you');
   const youBoros = S.variantTargetPick && S.variantTargetPick.choices.some(c=>c.num===-1);
-  const youB = `<b class="you ${meLifeDisp<=5?'lo':''}${youFace||youBoros?' facetgt':''}${youFace&&isSelT(youFace)?' selected':''}"${youFace?` data-tk="${tgtKey(youFace)}"`:''}>${meLifeDisp ?? '?'}</b>`;
+  const youB = `<b class="you ${meLifeDisp<=5?'lo':''}${youFace||youBoros?' facetgt':''}${youFace&&isSelT(youFace)||youBoros&&S.variantTargetPick.selected?.num===-1?' selected':''}"${youFace?` data-tk="${tgtKey(youFace)}"`:''}>${meLifeDisp ?? '?'}</b>`;
   h += `<div class="lifebar"><span class="life">You ${youB}</span>`+
        `<span class="life">library <b>${me.library_size ?? '?'}</b></span>`+
        // Life gained this turn: the X of every "X = life gained this turn" source (Accomplished
@@ -3168,6 +3168,7 @@ function wireBoard() {
       const c=pick.choices.find(c=>c.num>0 && c.num===+t.dataset.num);
       if (!c) return;
       t.classList.add('selectable');
+      if (pick.selected===c) t.classList.add('selected');
       t.onclick=e=>{ e.stopPropagation(); pick.choose(c); };
     });
     for (const [selector,num] of [['.life b.opp',0],['.life b.you',-1]]) {
@@ -3521,19 +3522,31 @@ function renderChooseDialog(v, line){
   }
 
   function renderBorosTargetPick(dim, choices, remaining, picks){
-    S.variantTargetPick={choices, choose:c=>{
+    const damage = picks.some(p=>p.key==='Boros Charm mode' && p.choice==='Deal 4 damage');
+    const commitTarget = c=>{
       S.variantTargetPick=null;
       const next=remaining.filter(x=>choiceOf(x,dim.key)===c.choice);
       stepChoose(next, picks.concat([{key:dim.key, choice:c.choice, label:c.choice}]));
-    }};
-    renderBoard();
-    const panel=$('decpanel'), back=$('decback');
-    back.className=''; back.style.display='none'; panel.className='show prompt';
-    panel.innerHTML=`<h3>${esc(dim.key)} — choose a target on the board</h3>`+
-      `<div class="pbtns"><button id="chooseback" class="ghost">Back</button>`+
-      `<span class="spacer"></span><button id="choosecancel" class="ghost">Cancel</button></div>`;
-    $('chooseback').onclick=()=>{ S.variantTargetPick=null; renderBoard(); replay(picks.slice(0,-1)); };
-    $('choosecancel').onclick=()=>{ S.variantTargetPick=null; hideDecPanel(); renderBoard(); };
+    };
+    const pick={choices, selected:damage ? (choices.find(c=>c.num===0)||choices[0]) : null,
+      choose:c=>{
+        if (!damage) return commitTarget(c);
+        pick.selected=c;
+        renderBoard(); showPrompt();
+      }};
+    S.variantTargetPick=pick;
+    function showPrompt(){
+      const panel=$('decpanel'), back=$('decback');
+      back.className=''; back.style.display='none'; panel.className='show prompt';
+      panel.innerHTML=`<h3>${esc(dim.key)} — ${damage?'deal 4 damage to '+esc(pick.selected.choice):'choose a target on the board'}</h3>`+
+        `<div class="pbtns"><button id="chooseback" class="ghost">Back</button>`+
+        `<span class="spacer"></span><button id="choosecancel" class="ghost">Cancel</button>`+
+        (damage?`<button id="chooseconfirm">Confirm</button>`:'')+`</div>`;
+      $('chooseback').onclick=()=>{ S.variantTargetPick=null; renderBoard(); replay(picks.slice(0,-1)); };
+      $('choosecancel').onclick=()=>{ S.variantTargetPick=null; hideDecPanel(); renderBoard(); };
+      if (damage) $('chooseconfirm').onclick=()=>commitTarget(pick.selected);
+    }
+    renderBoard(); showPrompt();
   }
 
   function renderDimPick(dim, choices, remaining, picks){
