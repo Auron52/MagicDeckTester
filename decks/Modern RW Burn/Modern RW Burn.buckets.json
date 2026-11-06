@@ -1,0 +1,12 @@
+{
+  "keep_apart": [
+    {
+      "cards": ["Mountain", "Inspiring Vantage"],
+      "why": "Mountain cannot produce white mana for Boros Charm or Lightning Helix, while Inspiring Vantage can."
+    },
+    {
+      "cards": ["Mountain", "Sacred Foundry"],
+      "why": "Mountain cannot produce white mana for Boros Charm or Lightning Helix, while Sacred Foundry can."
+    }
+  ]
+}
