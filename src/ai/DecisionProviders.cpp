@@ -1875,7 +1875,7 @@ void DecisionProvider::CastTriggerTargetOrder(const GameState& s, int controller
     auto tier = [&](const Permanent& q) -> int
     {
         if (q.controller_index != controller) { return 0; }
-        if (destroy && q.card.HasKeyword(Keyword::Indestructible)) { return 1; }
+        if (destroy && q.HasKeyword(Keyword::Indestructible)) { return 1; }
         if (q.card.IsLand() && !q.card.IsCreature()) { return q.tapped ? 2 : 3; }
         if (q.card.IsCreature() || q.is_animated) { return q.EffectivePower() >= 10 ? 6 : 4; }
         return 5;
@@ -21168,6 +21168,87 @@ bool VampiresProvider::CleanupDiscardShedStable() const
     return false;
 }
 
+// The paired baseline is the AntiLifegain route this deck used before onboarding.
+// Ordered opaque casts make a burn spell's damage available before a later
+// spectacle cast, so the enumerator can price that cast at its legal live cost.
+static bool ModernRwBurnSpectacleOrderEnabled()
+{
+    static const bool on = EnvOn("MTG_RW_BURN_SPECTACLE_ORDER", true);  // DEFAULT ON; =0 restores baseline
+    return on;
+}
+
+bool ModernRwBurnProvider::ConsiderFetchHold(const GameState&, const CardDefinition&) const
+{
+    // The only distinct Burn line found needs two Searing Blazes, two opposing
+    // creatures, and no intervening need for the fetched mana. Keep it in the
+    // unpruned audit and the viewer; the ordinary search spends no timing fan.
+    static const bool auto_crack = EnvOn("MTG_RW_BURN_FETCH_AUTOCRACK", true); // DEFAULT ON; =0 restores full hold search
+    return !auto_crack;
+}
+
+bool FetchResolvesOnPlay(const GameState& state, const CardDefinition& land)
+{
+    const CardParams& p = land.params;
+    if (p.fetch_land_types.empty()) { return false; }
+    if (!p.land_search_activation_cost.has_value() || LegacyFetchImmediateOn()) { return true; }
+    // Only the modern zero-mana, one-life fetch template is safe to collapse
+    // through PerformFetch; other activated searches keep their full cost path.
+    if (p.land_search_activation_cost->ManaValue() != 0 || p.land_search_activation_life_cost != 1
+        || !p.land_search_activation_sacrifice_self || p.land_search_count != 1
+        || state.players[state.active_player_index].life <= 3) { return false; }
+    if (HumanPlayActive() || DecisionUnpruned(UnprunedGate::Fetch)) { return false; }
+    return !ResolveProvider(state).ConsiderFetchHold(state, land);
+}
+
+int ModernRwBurnProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
+{
+    if (!ModernRwBurnSpectacleOrderEnabled())
+    { return AntiLifegainProvider::CastOrderRank(s, def); }
+    if (def.params.on_cast_trigger_damage > 0) { return 40; }
+    if (def.params.spectacle_cost.has_value()) { return 30; }
+    return AntiLifegainProvider::CastOrderRank(s, def);
+}
+
+bool ModernRwBurnProvider::OrderOpaqueCastsByRank() const
+{ return ModernRwBurnSpectacleOrderEnabled(); }
+
+bool ModernRwBurnProvider::ShouldConsiderDig(const GameState& s) const
+{
+    if (AntiLifegainProvider::ShouldConsiderDig(s)) { return true; }
+    static const bool dead_blaze_dig = EnvOn("MTG_RW_BURN_DEAD_BLAZE_DIG", true);  // DEFAULT ON; =0 restores baseline
+    if (!dead_blaze_dig) { return false; }
+
+    int lands = 0;
+    bool ready_sac_draw_land = false;
+    bool opposing_creature = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != s.active_player_index)
+        {
+            opposing_creature |= p.card.IsCreature();
+            continue;
+        }
+        if (!p.card.IsLand()) { continue; }
+        ++lands;
+        if (p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        ready_sac_draw_land |= d && d->params.sacrifice_draw_cost.has_value();
+    }
+    // Preserve Generic's post-sacrifice two-land floor. With an opposing creature
+    // Searing Blaze is live damage, so its normal cheap-spell guard still applies.
+    if (lands < 3 || !ready_sac_draw_land || opposing_creature) { return false; }
+
+    bool dead_blaze = false;
+    for (const Card& c : s.ActivePlayer().hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (!d || d->card.IsLand() || d->card.m_mana_cost.ManaValue() > lands) { continue; }
+        if (c.m_name == "Searing Blaze") { dead_blaze = true; continue; }
+        return false;  // another cheap spell is useful gas; keep the generic guard
+    }
+    return dead_blaze;
+}
+
 // ---- instances + selection --------------------------------------------------
 
 namespace
@@ -21189,6 +21270,7 @@ namespace
     const SliversProvider        g_slivers;
     const HinataProvider         g_hinata;
     const BurnProvider           g_burn;
+    const ModernRwBurnProvider   g_modern_rw_burn;
     const MidrangeBurnProvider   g_midrange_burn;
     const DragonstormProvider    g_dragonstorm;
     const GoblinsProvider        g_goblins;
@@ -21328,7 +21410,7 @@ std::vector<int> PreventDamageProvider::XCandidates(const GameState& s, const Ca
         for (const Permanent& p : s.battlefield)
         {
             if (p.controller_index != me || !p.card.IsCreature()) { continue; }
-            if (p.card.HasKeyword(Keyword::Indestructible)) { continue; }
+            if (p.HasKeyword(Keyword::Indestructible)) { continue; }
             board_ceil = std::min(board_ceil, std::max(0, LethalToughness(p, s) - p.damage - 1));
         }
         ManaPool pool = AvailableManaPool(s);
@@ -21414,7 +21496,7 @@ std::vector<int> PreventDamageProvider::ManaSinkActivationCounts(const GameState
     for (const Permanent& p : s.battlefield)
     {
         if (p.controller_index != me || !p.card.IsCreature()) { continue; }
-        if (p.card.HasKeyword(Keyword::Indestructible)) { continue; }
+        if (p.HasKeyword(Keyword::Indestructible)) { continue; }
         board_ceil = std::min(board_ceil, std::max(0, LethalToughness(p, s) - p.damage - 1));
     }
     // No creature of ours on the board: nothing to protect, every count "survives" (NO_OVERKILL keeps the
@@ -23506,6 +23588,7 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     bool slivers = false;   // Hatchery Sliver / Thrumming Hivepool: SliversProvider, inside `vial`
     bool merfolk = false; // Image, Tide Shaper, and Spreading Seas carry independent gated signatures.
     bool midrange_burn = false;
+    bool modern_rw_burn = false;
     bool goblin = false, gift = false, fivec = false, mirrorwing = false, equipment = false;
     bool stompy = false;   // StompySurprise (elf ramp) -- routes to Generic BEFORE the anti check
     bool jumbo_cactuar = false; // gated mechanics on Jumbo Cactuar and Surrak
@@ -23700,6 +23783,12 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
         // during onboarding before their data entries have been implemented.
         if (c.m_name == "Chandra's Incinerator" || c.m_name == "Chandra, Torch of Defiance"
             || c.m_name == "Grim Lavamancer") { midrange_burn = true; }
+        // Conjoin independent Boros-list cards with Searing Blaze's Burn marker.
+        // Each name occurs only in this list among the repository decklists; the
+        // OR keeps routing stable if one flex slot changes during deck screening.
+        if (c.m_name == "Boros Charm" || c.m_name == "Boltwave"
+            || c.m_name == "Sunbaked Canyon" || c.m_name == "Inspiring Vantage")
+        { modern_rw_burn = true; }
         const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
         if (!def) { continue; }
         const CardParams& p = def->params;
@@ -24374,6 +24463,7 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // inherits Generic). Trips no other signature (verified: it detected to Generic before this
     // provider existed), so placement here is for tidiness only.
     if (snow) { return g_snow; }
+    if (anti && modern_rw_burn) { return g_modern_rw_burn; }
     if (anti) { return g_antilife; }
     if (th)   { return g_treasure; }
     // VialProvider holds slivers_vial's USER-settled cleanup-discard rule (2026-10-09). slivers_vial

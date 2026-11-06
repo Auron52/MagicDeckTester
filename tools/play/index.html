@@ -3929,8 +3929,11 @@ function handleVerdict(v, line) {
     S.macroRun = null; S.plan = [];
   }
   const cls=v.verdict==='legal_not_enumerated'?'legal':(v.verdict==='unsupported'?'unsupported':'illegal');
-  const tag=v.verdict==='legal_not_enumerated'?'legal · not enumerated':(v.verdict==='unsupported'?'unsupported':'illegal');
-  const head=v.verdict==='legal_not_enumerated'?'Rules-legal, but the model never enumerated it.'
+  const fetchSuspend = v.verdict==='legal_not_enumerated'
+    ? LB.fetchSuspendRoute(v.decision, S.plan) : null;
+  const tag=fetchSuspend?'play in steps':v.verdict==='legal_not_enumerated'?'legal · not enumerated':(v.verdict==='unsupported'?'unsupported':'illegal');
+  const head=fetchSuspend?'Activate the fetchland before suspending.'
+            :v.verdict==='legal_not_enumerated'?'Rules-legal, but the model never enumerated it.'
             :v.verdict==='unsupported'?'The v1 line check can’t validate this yet.':'The model can’t play this line.';
   const plans=(v.decision&&v.decision.plans)||[];
   // Each enumerated plan is CLICKABLE: picking it submits that plan index directly (same path a normal
@@ -3955,15 +3958,22 @@ function handleVerdict(v, line) {
     +((v.decision&&v.decision.plans_total)?`<div class="hint">showing top ${plans.length} of ${v.decision.plans_total} enumerated plans — hand-built lines are still checked against all of them</div>`:'');
   const ve=$('verdict'); ve.className=cls;
   ve.innerHTML=`<span class="vtag">${tag}</span>${macroNote}<h4>${head}</h4>`+
-    `<div>${esc(v.reason||'')}${v.failed_action?`<br><span class="hint">at: ${esc(v.failed_action)}</span>`:''}</div>`+
+    `<div>${esc(fetchSuspend
+      ? `The viewer can play the land, let you choose what it fetches, then suspend ${S.plan[1].name}.`
+      : (v.reason||''))}${v.failed_action?`<br><span class="hint">at: ${esc(v.failed_action)}</span>`:''}</div>`+
     orderAuditHtml(v.order_audit)+
     `<div class="modelplans"><b>What the model would accept${plans.length?' (click to play)':''}:</b>${mp}</div>`+
-    `<div class="actions">${playAnywayHtml(v)}<button id="artbtn" class="primary">Store as artifact</button>`+
+    `<div class="actions">${fetchSuspend
+      ? `<button id="fetchsuspendbtn" class="primary">Crack ${esc(S.plan[0].name)}, then suspend</button>`
+      : playAnywayHtml(v)}<button id="artbtn" class="primary">Store as artifact</button>`+
     `<button id="retrybtn" class="ghost">Clear &amp; retry</button></div><div id="artinfo" class="hint" style="margin-top:8px"></div>`;
   ve.style.display='block';
   $('retrybtn').onclick=clearPlan; $('artbtn').onclick=()=>storeArtifact(v, line);
   if ($('oracletaps')) { $('oracletaps').onclick=()=>queueOracleTaps(v.order_audit); }
   if ($('anywaybtn')) { $('anywaybtn').onclick=()=>playAnyway(v, line); }
+  if ($('fetchsuspendbtn')) { $('fetchsuspendbtn').onclick=()=>{
+    S.plan=fetchSuspend; hideVerdict(); renderBoard(); commitLine();
+  }; }
   // Wire each model-plan button to submit its index. Clear S.plan first so the rejected hand-built
   // queue doesn't seed a false dropped-cast check against the (different) model plan's actual casts.
   ve.querySelectorAll('.vplan').forEach(btn=>btn.onclick=()=>{

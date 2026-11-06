@@ -441,6 +441,22 @@ function checkMultipleSuspends() {
   return fails;
 }
 
+function checkFetchSuspendRoute() {
+  const fails = [];
+  const land = { name: 'Wooded Foothills', kind: 'land' };
+  const suspend = { name: 'Rift Bolt', kind: 'suspend' };
+  const decision = { plans: [{ land: land.name, actions: [
+    { card: land.name, verb: 'landsearch', activate: true }
+  ] }] };
+  const route = LB.fetchSuspendRoute(decision, [land, suspend]);
+  const want = ['land=Wooded Foothills', 'landsearch=Wooded Foothills', 'suspend=Rift Bolt'];
+  if (!route || JSON.stringify(LB.encodeSegments(route)) !== JSON.stringify(want))
+    fails.push(`fetch, crack, suspend route: ${route && JSON.stringify(LB.encodeSegments(route))}`);
+  if (LB.fetchSuspendRoute({ plans: [] }, [land, suspend]) !== null)
+    fails.push('offered a fetch route without an enumerated activation');
+  return fails;
+}
+
 // The BONUS LAND DROP path (viewer issue #7). A Scale the Heights / Explore grant makes
 // me.land_drops_left > 1, and the engine's Plan still carries ONE land -- so a two-land turn is
 // committed as consecutive SEGMENTS. Both halves of that live here (queueCard must ADD rather than
@@ -1168,10 +1184,14 @@ function main() {
   suspendFails.forEach(m => console.log(`  FAIL  suspend: ${m}`));
   console.log(`Viewer suspend: ${suspendFails.length ? 'WRONG' : 'two copies queue in one line, capped by real hand copies'} ` +
               `(${suspendFails.length} FAIL)`);
+  const fetchSuspendFails = checkFetchSuspendRoute();
+  fetchSuspendFails.forEach(m => console.log(`  FAIL  fetch suspend: ${m}`));
+  console.log(`Viewer fetch suspend route: ${fetchSuspendFails.length ? 'WRONG' : 'land, crack, suspend become three payable segments'} ` +
+              `(${fetchSuspendFails.length} FAIL)`);
   return (fail + dimFails.length + landFails.length + sacFails.length + verbFails.length
           + mixFails.length + hostFails.length + stackFails.length + macroFails.length
           + tapFails.length + topFails.length + posFails.length + kickFails.length
-          + suspendFails.length + karooFails.length + seqFails.length + shrinkFails.length + segFails.length) ? 1 : 0;
+          + suspendFails.length + fetchSuspendFails.length + karooFails.length + seqFails.length + shrinkFails.length + segFails.length) ? 1 : 0;
 }
 
 process.exit(main());

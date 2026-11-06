@@ -570,6 +570,7 @@ bool GoldFishRunner::DeckTouchesOpponentZones(const Decklist& deck)
             // "Target player draws X" aimed at the opponent (Stroke of Genius): a forced-draw
             // deck-out needs a library to empty (opponentdeck::ForcedDraw).
             if (def->params.draw_target_player) { return true; }
+            if (def->params.attack_defending_player_reveal_land_to_hand) { return true; }
         }
         return false;
     };

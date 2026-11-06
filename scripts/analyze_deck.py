@@ -489,6 +489,28 @@ def LoadCardEntry(name: str, cards_json: Path) -> dict | None:
             return card
     return None
 
+
+def FetchHoldReview(card_names: list[str], cards_json: Path) -> dict:
+    """Surface fetch timing separately from card coverage for each deck analysis."""
+    cards = []
+    for name in card_names:
+        entry = LoadCardEntry(name, cards_json)
+        if not entry:
+            continue
+        params = entry.get("parameters", {})
+        if not params.get("fetch_land_types"):
+            continue
+        cards.append({
+            "name": name,
+            "hold_modelled": "land_search_activation_cost" in params,
+        })
+    return {
+        "required": bool(cards),
+        "cards": cards,
+        "question": "Does battlefield fetch hold improve this deck over holding the land in hand, "
+                    "and in which states should its provider consider that timing?" if cards else "",
+    }
+
 def CheckExistingCoverage(card_names: list[str], cards_json: Path,
                           boards: dict[str, str] | None = None) -> list[dict]:
     """
@@ -599,9 +621,11 @@ def CheckExistingCoverage(card_names: list[str], cards_json: Path,
             gaps.append("On-cast trigger in oracle text but on_cast_trigger params not set")
 
         # Static effects needing engine support
-        if "can't gain life" in oracle and not is_d("life") and not is_d("gain"):
+        if "can't gain life" in oracle and not params.get("players_cant_gain_life_this_turn") \
+                and not is_d("life") and not is_d("gain"):
             gaps.append("Static 'can't gain life' not implemented — needs GameState flag")
-        if "can't be prevented" in oracle and not is_d("prevent"):
+        if "can't be prevented" in oracle and not params.get("damage_cant_be_prevented_this_turn") \
+                and not is_d("prevent"):
             gaps.append("Static 'damage can't be prevented' not implemented — needs engine support")
 
         # Unbracketed triggered abilities
@@ -1278,6 +1302,7 @@ def Main():
         # Engine-inferred card dependency edges (review item: a missing edge here means the
         # implementation lacks the param that would derive it -- same class as a coverage gap).
         "dependency_map": DeriveDependencyMap(existing, cards_json),
+        "fetch_hold_review": FetchHoldReview(scanned, cards_json),
     }
 
     if args.coverage_only:

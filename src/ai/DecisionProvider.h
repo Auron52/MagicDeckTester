@@ -472,6 +472,13 @@ public:
     virtual std::vector<std::string>
     FetchCandidates(const GameState& s, int controller, const CardParams& fetch_pp) const = 0;
 
+    // Search policy for a fetchland played from hand/top. True keeps the legal
+    // battlefield hold and later activation; false resolves the zero-mana,
+    // one-life fetch on play. Human play and the unpruned audit always keep the
+    // hold. Decks without a reviewed policy keep the full timing choice.
+    virtual bool ConsiderFetchHold(const GameState& s, const CardDefinition& fetch) const
+    { (void)s; (void)fetch; return true; }
+
     // CanAutoFireAltPayload -- auto-fire safe alt payload: per-card predicate (the engine keeps the
     // deterministic re-scan loop; only the "is this free payload safe to fire" decision
     // is provider-owned).

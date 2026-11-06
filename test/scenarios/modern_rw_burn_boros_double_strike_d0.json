@@ -1,0 +1,21 @@
+{
+  "_comment": "Swiftspear has three +1/+1 counters. Boros Charm triggers prowess: double strike deals 10, while its four-damage mode plus one attack deals 9. Depth zero must rank the double-strike mode as lethal.",
+  "deck": "decks/Modern RW Burn/Modern RW Burn.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 10,
+  "resume_at": "main1",
+  "battlefield": [
+    { "name": "Mountain" },
+    { "name": "Plains" },
+    { "name": "Monastery Swiftspear", "plus_counters": 3 }
+  ],
+  "hand": ["Boros Charm"],
+  "library_filler": "Mountain",
+  "library_size": 30,
+  "depth": 0,
+  "budget_ms": 20,
+  "max_turns": 4,
+  "expect_win_turn": 4
+}

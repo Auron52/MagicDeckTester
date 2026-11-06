@@ -1,0 +1,24 @@
+{
+  "_comment": "A previously played Arid Mesa must remain on the battlefield. Cracking it this turn pays one life, finds Mountain, supplies the second red mana, and makes Searing Blaze deal its landfall amount to the opposing creature and player.",
+  "deck": "decks/Modern RW Burn/Modern RW Burn.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 4,
+  "resume_at": "main1",
+  "battlefield": [
+    { "name": "Arid Mesa" },
+    { "name": "Mountain" },
+    { "name": "Monastery Swiftspear" },
+    { "name": "Goblin Guide", "controller": 1 }
+  ],
+  "hand": ["Searing Blaze"],
+  "library_top": ["Mountain"],
+  "library_filler": "Mountain",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 50,
+  "max_turns": 3,
+  "expect_win_turn": 3,
+  "expect_active_life": 19
+}

@@ -3,10 +3,16 @@
 # accepted-with-regressions (overnight, 2026-11-05): Full overnight rebaseline requested after Jumbo exhaustive keep adoption and current engine changes: 118 matching, 424 changed, 11 new Shadowborn rows. Searched games 3953 faster vs 1889 slower; Angels +0.0064t/6065 searched, Angels2HG +0.0150t/600, Bruna +0.0122t/2131 remain visible follow-ups. Jumbo full overnight rows already adopted and match.
 # accepted-with-regressions (smoke, 2026-11-06): Shadowborn main-1 rule + USER cast order + ritual-payoff prune DEFAULT ON (held-out ab7 -0.035 turns, -14..-20% units; d8 b0: every unrecovered game is the clairvoyant ripple-dig the USER ruled out). Also accepts 4 digest-only rows (edf_smoke_d0_s1001, edf_regression_d0_s2002, edf_regression_d5_s3003, bruna_regression_d5_s2002; averages unchanged): pre-existing origin drift, reproduced byte-identically by origin 36d3672bc's own binary
 # accepted-with-regressions (regression, 2026-11-06): Shadowborn main-1 rule + USER cast order + ritual-payoff prune DEFAULT ON (held-out ab7 -0.035 turns, -14..-20% units; d8 b0: every unrecovered game is the clairvoyant ripple-dig the USER ruled out). Also accepts 4 digest-only rows (edf_smoke_d0_s1001, edf_regression_d0_s2002, edf_regression_d5_s3003, bruna_regression_d5_s2002; averages unchanged): pre-existing origin drift, reproduced byte-identically by origin 36d3672bc's own binary
+# accepted-with-regressions (regression, 2026-11-06): gi32,gi54: fetch-timing shuffle changes next draw (both d3 and d5); gi121: mulligan bottom hand changed; gi147: fetch timing changes draw; all persist at 16x and searched net improves 20 games
+# accepted-with-regressions (regression, 2026-11-06): gi46: changed fetch line and T5 draw divergence; gi68: same-draw T1 pass from budget churn; both recover old T6 at 4x and 16x; net 2HG mean improves 4.9733 to 4.9600
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
 # --- smoke ---
+modernrwburn_smoke_d0_s1001=4.3580/4915b553dc9b78aa
+modernrwburn_smoke_d3_s1001=3.9400/b2b30eda08c1b566
+modernrwburn_smoke_d5_s1001=3.9700/d067e77517c4452f
+modernrwburn2hg_smoke_d5_s1001=5.2400/27d43472edb76a64
 merfolk_smoke_d0_s1001=4.4960/e9b4322db7865929
 merfolk_smoke_d3_s1001=4.1800/e2d4ed3a62295b80
 merfolk_smoke_d5_s1001=4.1700/f2c8e9e392a196b1
@@ -181,6 +187,11 @@ elementals_smoke_d3_s1001=4.4600/15877bad8bb35b68
 elementals_smoke_d5_s1001=4.3360/0de4bca09ab94ef0
 
 # --- regression ---
+modernrwburn_regression_d0_s2002=4.3900/39347d579996af3f
+modernrwburn_regression_d3_s2002=3.9333/2e70ff98cf06d7b5
+modernrwburn_regression_d5_s2002=3.9533/7f5c227ad7286c3a
+modernrwburn_regression_d5_s3003=3.9200/292fa6884b7f6d68
+modernrwburn2hg_regression_d5_s2002=4.9600/25c5cbd6f624c76a
 cyclone_regression_d3_s30031=4.5000/9cae75a150715362
 cyclone_regression_d5_s30031=4.5000/0a4d7a7f24601daa
 shadowborn_regression_d3_s30073=4.6667/38367d12753e710e
@@ -460,6 +471,22 @@ merfolk_regression_d5_s2002=4.1800/6824241f83b7d727
 merfolk_regression_d5_s3003=4.1267/57d9c44cc412b9db
 
 # --- overnight ---
+modernrwburn_overnight_d0_s4004=4.3955/a3e37def79ab2272
+modernrwburn_overnight_d0_s6006=4.4175/708755d9aaffbc81
+modernrwburn_overnight_d0_s8008=4.3770/8177cfadfdf53936
+modernrwburn_overnight_d0_s10010=4.3925/65b03b041ee495c6
+modernrwburn_overnight_d3_s4004=4.0725/d96059dcd536a0c1
+modernrwburn_overnight_d3_s5005=4.0575/75679aa2edb83742
+modernrwburn_overnight_d3_s6006=4.0550/c7fee12f5faa0670
+modernrwburn_overnight_d3_s7007=4.0025/63cd6f9c3b2ee89e
+modernrwburn_overnight_d5_s4004=4.0900/3be57322eefd6b95
+modernrwburn_overnight_d5_s5005=4.0667/c83a9f79e6f0104c
+modernrwburn_overnight_d5_s6006=4.0200/ca0487ebea440da6
+modernrwburn_overnight_d5_s7007=4.0267/e231b6679e2d21b1
+modernrwburn2hg_overnight_d5_s4004=5.0500/f25d51117ead50d3
+modernrwburn2hg_overnight_d5_s5005=5.1600/3fc5224c56aa02c0
+modernrwburn2hg_overnight_d5_s6006=5.1500/e2eb1e6804cf36fa
+modernrwburn2hg_overnight_d5_s7007=5.1200/54143b9003b92b97
 cyclone_overnight_d3_s30051=5.0000/8c00f4fc85f4b21a
 cyclone_overnight_d5_s30051=5.0000/3b4f7adf5b66853f
 shadowborn_overnight_d3_s30081=4.6667/10e0ccf26b4dd9cd

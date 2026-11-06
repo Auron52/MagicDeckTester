@@ -218,6 +218,23 @@
     return parts.length ? parts : [[]];
   }
 
+  // A freshly played fetchland is a permanent, not a mana source. The engine offers its
+  // activation after the land drop, and the fetched land can then pay a suspend cost. If the
+  // player queued "fetchland, suspend" as one line, offer this explicit three-segment route
+  // instead of pinning the two names into a menu that cannot contain the missing activation.
+  // Only derive it from an activation the current engine menu actually offers.
+  function fetchSuspendRoute(decision, plan) {
+    if (!Array.isArray(plan) || plan.length !== 2
+        || plan[0].kind !== 'land' || plan[1].kind !== 'suspend') return null;
+    const land = plan[0].name;
+    const offered = ((decision && decision.plans) || []).some(p =>
+      p.land === land && (p.actions || []).some(a =>
+        a.card === land && a.verb === 'landsearch' && a.activate));
+    if (!offered) return null;
+    return [plan[0], { name: land, src: land, kind: 'activate', verb: 'landsearch', defer: true },
+            Object.assign({}, plan[1], { defer: true })];
+  }
+
   // Repeat plan entries [from, to) `n` times in total (n=1 is a no-op), returning the new plan.
   // Each repetition after the first begins with a DEFERRED copy, so the repetitions commit as
   // consecutive segments -- exactly the sequence the human would have produced by clicking the
@@ -879,7 +896,7 @@
            stampPlanNums, isPreTap, preTapToken,
            // segmentParts is exported (not just encodeSegments) because applyAccepted needs the
            // committing segment's ENTRIES, not its encoded string, to scope the full-order pin.
-           segmentParts, isDeferred, repeatBlock, loopBlock, segmentLoopable,
+           segmentParts, isDeferred, fetchSuspendRoute, repeatBlock, loopBlock, segmentLoopable,
            untapNeed, untapNeedToken,
            fusedInvestigateEntries, removeFusedAt, CLUE_TOKEN,
            nextDimension, filterByChoice, dimensionsRemaining, choiceOf, subOf };

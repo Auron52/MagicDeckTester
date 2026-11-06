@@ -385,6 +385,8 @@ struct GameState
     // turn number and not the next one: the opponent never gets a main phase in this model, so on
     // the user's instruction (2026-09-02) the game is over as of our last turn.
     bool                     opponent_decked              = false;
+    bool                     players_cant_gain_life_this_turn = false;
+    bool                     damage_cant_be_prevented_this_turn = false;
     // SEARCHED DEMON-TRIGGER PIN (Plan::demon_trigger_choice; Shadowborn INT-2), in the 2-byte hole
     // after this bool (gdb ptype /o, 2026-11-03). PACKED: bits 0-7 = Reaper from the Abyss's end-step
     // destroy TARGET (kDemonPinBits per trigger ordinal), bits 8-15 = Abhorrent Overlord's upkeep

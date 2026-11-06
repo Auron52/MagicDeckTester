@@ -123,6 +123,14 @@ python scripts/analyze_deck.py <deck_path> --coverage-only
 
 Parse the JSON output:
 - `missing`: cards not in `src/cards/data/cards.json` at all → must implement before analysis
+- `fetch_hold_review`: for every fetchland in the main list, record whether its
+  battlefield hold is modelled and review its search policy separately from card
+  coverage. Compare holding the land in hand, cracking on play, and holding it on
+  the battlefield. Account for the current turn's mana payment, the next land
+  drop, information from a later draw, landfall, and shuffle timing. A provider
+  may decline the hold only with a named policy; human play and the unpruned
+  audit must still offer it. For a deck where hold helps, document the states
+  that earn the branch and measure the cost and win-turn effect of that gate.
 - `coverage[*].status == "partial"`:
   - `gaps`: oracle text features missing from the current implementation → must fix before analysis
   - `deferred`: bracket-noted items → **read every bracket note and classify it** (see below)

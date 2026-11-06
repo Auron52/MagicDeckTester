@@ -28,6 +28,9 @@ struct Decklist;
 // Default off => byte-identical. Defined in DecisionProviders.cpp.
 bool DecisionUnpruned();
 
+// Shared land-drop policy, read by both plan enumeration and its executor.
+bool FetchResolvesOnPlay(const GameState& state, const CardDefinition& land);
+
 // GRANULAR un-pruning: the global MTG_UNPRUNED opens EVERY branch-narrowing gate at once,
 // which explodes the search (the full 100-game d5 audit does not finish in hours because a
 // few gates -- tutor/fetch full enumeration, dig, search-ordering -- each multiply the tree).
@@ -971,6 +974,8 @@ public:
 class SliversProvider : public VialProvider
 {
 public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed, "NOT ASSESSED. Slivers' Vial, replicate, and affinity lines need a deck-specific winless proof." }; }
     // MTG_SLIVERS_ORDER -- the TOTAL cast order, USER-APPROVED 2026-11-03 with every card in its own row
     // (docs/design/cast-order-drafts-2026-10-14/slivers_vial.md section 3): Hatchery Sliver first, Thrumming
     // Hivepool last. DEFAULT ON; =0 => VialProvider::CastOrderRank byte-for-byte. A rank tie between two
@@ -1288,6 +1293,20 @@ public:
     // post-combat options; main 1 stays fully searched.
     bool RestrictsMain2Casts() const override;
     bool Main2CastAllowed(const GameState& s, const Action& a) const override;
+};
+
+// Fetchland search routes this list through AntiLifegain before the Burn branch.
+// Keep that policy byte-for-byte until a measured Boros-specific policy replaces it.
+class ModernRwBurnProvider : public AntiLifegainProvider
+{
+public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed, "NOT ASSESSED. Bound Boros Charm's modes, burn, and combat before claiming a winless turn" }; }
+    const char* Name() const override { return "ModernRwBurn"; }
+    int CastOrderRank(const GameState& s, const CardDefinition& def) const override;
+    bool OrderOpaqueCastsByRank() const override;
+    bool ShouldConsiderDig(const GameState& s) const override;
+    bool ConsiderFetchHold(const GameState& s, const CardDefinition& fetch) const override;
 };
 
 // Midrange Burn uses the common baseline: the original Burn list's low-curve land

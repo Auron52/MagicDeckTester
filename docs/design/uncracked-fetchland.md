@@ -1,10 +1,43 @@
 # Deferring the fetchland crack
 
-**Status:** designed, not built.
+**Status:** historical design; partially implemented as of 2026-11-05.
 **Origin:** USER, 2026-08-15 — "With a fetch they might defer cracking it until the
 second main. Fetchlands are the most flexible lands, so deferring the crack is
 rarely a bad play, unless you already know what you want to do with it (or need the
 mana now)."
+
+## Current policy and review (2026-11-05)
+
+Arid Mesa and Wooded Foothills now have a battlefield activation model. Most
+other fetchlands in current decklists still use the older immediate-on-play
+card data; the deck analyzer reports both cases in `fetch_hold_review` so a
+new deck review must decide whether to add hold and when its provider should
+consider it. Human play keeps every modelled legal timing choice.
+
+The Modern RW Burn provider skips battlefield hold in autonomous play except
+at three life or less, where cracking or shocking in a fetched land could be
+unsafe. The unpruned audit reopens the hold. This is a provider heuristic,
+not a change to fetchland rules. Burn's two-Searing-Blaze landfall sequence is
+the rare excluded line identified during review.
+
+FiveColour has Wooded Foothills and a distinct reason to consider hold: it can
+make a land drop now and choose the fetched colour after a later draw. A small
+50-game d3/b10 comparison of full timing against the replay-only immediate
+mode gave 4.76 versus 4.78 mean win turn, but 43.9s versus 25.6s wall time.
+That is a cost signal, not sufficient evidence for a safe timing prune. A
+payment-aware provider policy should ask whether the immediate-crack plan
+actually spends the fetched mana; the currently available pre-plan hook cannot
+answer that by itself. The other modelled Wooded Foothills list, Anti-Lifegain,
+also remains on the full timing search pending its own review.
+
+The payment test must apply to a completed line. At the land-play decision,
+the mana provider has not yet paid for later actions, and a held fetch can
+still be cracked before a cast. If the immediate line spends fetched mana,
+the search should keep that crack-and-cast line; the no-crack continuation has
+lost its mana source and can only be useful if a separate payoff compensates
+for the lost cast. A future plan-level dominance check can remove that
+continuation when it proves no such payoff exists. A pre-land test based only
+on available mana would incorrectly hide legal and useful lines.
 
 ## The gap
 
@@ -129,7 +162,8 @@ that way the risky change lands on a base whose mana is known good.
 USER, 2026-10-27, while analyzing `decks/Unpredictable Cyclone/`: *"Technically we should probably support
 leaving it as a fetch land or cracking them later as a future item. It isn't often super relevant, so it can
 remain deferred for the time being."* That deck sets up the top of its library (Brainstorm / Brainsurge /
-Ponder / Long-Term Plans / Curator scry) before cycling into Unpredictable Cyclone, so the crack's shuffle is a
-real decision there: crack before the top-setters (keep the arrangement), or after a Brainstorm to shuffle away
-the two cards it put back. A Scalding Tarn held on the battlefield across turns, then cracked as a shuffle
-outlet, is also inexpressible today. Still deferred.
+Ponder / Long-Term Plans / Curator scry) before cycling into Unpredictable Cyclone. Clarification
+(2026-11-05): when the land drop is available, Tarn can stay in hand until after Brainstorm, then be
+played and cracked to shuffle away the two put-back cards. A Tarn held on the battlefield matters
+only when that turn's land drop has already been used, an earlier drop was needed, or two fetch
+activations on one turn are useful. Those cases remain possible but their value has not been measured.

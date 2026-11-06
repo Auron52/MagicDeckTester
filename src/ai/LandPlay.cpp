@@ -29,7 +29,7 @@ static bool PlayLandCore(GameState& state, const Card& card, const CardDefinitio
 
     // Fetchland: the land drop sacrifices the fetchland to search out a real land. fetch_target
     // names the searched choice; empty -> PerformFetch falls back to its own top heuristic pick.
-    if (!def.params.fetch_land_types.empty())
+    if (FetchResolvesOnPlay(state, def))
     {
         Card fetchland = card;
         leave_zone();

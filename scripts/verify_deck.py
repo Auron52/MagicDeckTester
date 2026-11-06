@@ -126,6 +126,12 @@ def gate_coverage(deck_path):
                 findings.append((f"coverage:{name}", f"PARTIAL {name}: {g}"))
         for d in c.get("deferred", []):
             disclose.append(f"coverage deferral -- {name}: {d}")
+    fetch_review = data.get("fetch_hold_review", {})
+    if fetch_review.get("required"):
+        cards = ", ".join(
+            f"{c['name']} ({'hold modelled' if c['hold_modelled'] else 'immediate model'})"
+            for c in fetch_review.get("cards", []))
+        disclose.append(f"fetch hold review -- {cards}; record the provider timing policy in the deck analysis")
     if findings:
         return Gate("coverage", FAIL, True,
                     f"{len(findings)} missing/partial gap(s)", findings, disclose)

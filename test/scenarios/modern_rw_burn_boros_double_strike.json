@@ -1,0 +1,21 @@
+{
+  "_comment": "Swiftspear has three +1/+1 counters. Casting Boros Charm triggers prowess, taking it to 5 power. Double strike deals 10 and wins now; the four-damage mode plus one 5-power strike deals only 9. This distinguishes the searched mode and target.",
+  "deck": "decks/Modern RW Burn/Modern RW Burn.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 10,
+  "resume_at": "main1",
+  "battlefield": [
+    { "name": "Mountain" },
+    { "name": "Plains" },
+    { "name": "Monastery Swiftspear", "plus_counters": 3 }
+  ],
+  "hand": ["Boros Charm"],
+  "library_filler": "Mountain",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 50,
+  "max_turns": 4,
+  "expect_win_turn": 4
+}

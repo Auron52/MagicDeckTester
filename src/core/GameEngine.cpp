@@ -334,6 +334,8 @@ void GameEngine::UntapStep(GameState& state)
     state.phase = Phase::Beginning;
     state.step  = Step::Untap;
     state.opponent_lost_life_this_turn = false;
+    state.players_cant_gain_life_this_turn = false;
+    state.damage_cant_be_prevented_this_turn = false;
     state.creature_died_this_turn = false;   // morbid resets each turn (lockstep w/ SimulateEndAndStartNextTurn)
     state.ripple_script = RippleScript{};    // the ripple chain script is turn-scoped (lockstep twin: SimulateEndAndStartNextTurn)
     state.noncombat_damage_received_this_turn = {};
@@ -1002,6 +1004,7 @@ void GameEngine::CombatPhase(GameState& state, bool additional)
     // Two-Headed Hellkite attack-trigger draw (attack_draw_cards): drawn at declare-attackers,
     // so the cards are in hand for the post-combat main. Mirrors TurnSolver::SimulateCombat.
     ApplyAttackDrawTriggers(state, state.active_player_index, atk_idx);
+    ApplyGoblinGuideAttackTriggers(state, state.active_player_index, atk_idx);
 
     // Jorn, God of Winter (attack_untap_snow_permanents): did it attack? The untap itself is applied
     // AFTER ResolveCombatDamage, which is where attackers get tapped -- see AttackUntapSnowFires.
@@ -1242,6 +1245,7 @@ void GameEngine::CleanupStep(GameState& state)
         p.temp_haste            = false;   // "gains haste until end of turn" (Expedite) expires
         p.temp_lifelink         = false;   // Heliod's "gains lifelink until end of turn" expires
         p.temp_double_strike    = false;   // Valiant Knight's team "gain double strike until EOT"
+        p.temp_indestructible   = false;
         p.is_animated           = false;
         p.animated_printed_types = false;   // qualifies the animation, so it expires with it
     }
@@ -1376,7 +1380,7 @@ void GameEngine::CheckStateBasedActions(GameState& state)
                 // not save it; CR 704.5g (lethal damage) IS, so it does. Keep them separate.
                 if (tough <= 0) { destroy = true; }
                 if (p.damage >= tough
-                    && !p.card.HasKeyword(Keyword::Indestructible)) { destroy = true; }
+                    && !p.HasKeyword(Keyword::Indestructible)) { destroy = true; }
             }
             if (destroy)
             {

@@ -1,0 +1,18 @@
+{
+  "deck": "decks/Modern RW Burn/Modern RW Burn.cod",
+  "turn": 1,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "resume_at": "main1",
+  "battlefield": [],
+  "hand": ["Wooded Foothills", "Rift Bolt", "Sunbaked Canyon"],
+  "library_filler": "Mountain",
+  "library_size": 40,
+  "depth": 0,
+  "budget_ms": 20,
+  "max_turns": 3,
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "validate_line": "land=Wooded Foothills;suspend=Rift Bolt;seq=land=Wooded Foothills|suspend=Rift Bolt",
+  "expect_verdict": "legal_not_enumerated"
+}

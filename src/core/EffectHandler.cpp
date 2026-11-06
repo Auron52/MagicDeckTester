@@ -469,6 +469,11 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
             {
                 // Non-permanent custom spell: tutor / destroy-all-enchantments / cascade,
                 // then graveyard.
+                if (def.params.boros_charm_modal)
+                {
+                    ApplyBorosCharm(state, entry.controller_index,
+                                    entry.chosen_x.value_or(1), entry.enchant_target);
+                }
                 // "Create N tokens" as the spell's resolution (Fungus Frolic). Lockstep twin of
                 // the rollout's apply_one ApplyCastCreatesTokens call.
                 ApplyCastCreatesTokens(state, entry.controller_index, def);
@@ -729,6 +734,12 @@ void EffectHandler::ResolveDirectDamage(GameState& state, const StackEntry& entr
                                          const CardDefinition& def)
 {
     NoncombatTriggerScope noncombat_scope(state);
+    const bool prior_no_gain = state.players_cant_gain_life_this_turn;
+    const bool prior_no_prevent = state.damage_cant_be_prevented_this_turn;
+    if (def.params.players_cant_gain_life_this_turn)
+    { state.players_cant_gain_life_this_turn = true; }
+    if (def.params.damage_cant_be_prevented_this_turn)
+    { state.damage_cant_be_prevented_this_turn = true; }
     // An {X} burn deals its chosen X (carried on the stack entry; CR 202.3). A fixed-damage
     // burn uses params.damage, with the landfall boost if a land entered this turn.
     int damage;
@@ -785,6 +796,8 @@ void EffectHandler::ResolveDirectDamage(GameState& state, const StackEntry& entr
         {
             // CR 608.2b: with every target illegal, none of the spell resolves,
             // including Magma Jet's scry. Casting still happened; the spell goes to graveyard.
+            state.players_cant_gain_life_this_turn = prior_no_gain;
+            state.damage_cant_be_prevented_this_turn = prior_no_prevent;
             MoveToGraveyard(state, entry);
             return;
         }
@@ -825,6 +838,20 @@ void EffectHandler::ResolveDirectDamage(GameState& state, const StackEntry& entr
             }
         }
     }
+
+    // Boltwave has no target. Apply the separate hit to every opponent head.
+    if (def.params.damage_each_opponent && damage > 0)
+    {
+        const int total = damage * gamesetup::OpponentHeads();
+        state.players[1 - entry.controller_index].life -= total;
+        RecordNoncombatDamageToPlayer(state, entry.controller_index,
+                                      1 - entry.controller_index, total);
+        state.opponent_lost_life_this_turn = true;
+    }
+
+    // The life-gain rider resolves only when the target remains legal.
+    if (def.params.cast_lifegain > 0)
+    { ApplyCastLifegain(state, entry.controller_index, def, entry.player_target); }
 
     // Crackle with Power: the declared extra targets (creatures/self) take 5X and die (SBA), so a
     // killed creature leaves the target pool for later spells. The opponent FACE damage was applied

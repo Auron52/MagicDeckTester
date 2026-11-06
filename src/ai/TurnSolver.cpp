@@ -10641,7 +10641,13 @@ static std::string FsPlanText(const TurnSolver::Plan& p)
     {
         if (!s.empty()) { s += " + "; }
         s += a.card_name.str();
-        if (a.chosen_x > 0)   { s += "(x" + std::to_string(a.chosen_x) + ")"; }
+        if (a.card_name.str() == "Boros Charm")
+        {
+            s += a.chosen_x == 1 ? "[4 damage]"
+               : a.chosen_x == 2 ? "[indestructible]"
+               : a.chosen_x == 3 ? "[double strike]" : "[mode?]";
+        }
+        else if (a.chosen_x > 0) { s += "(x" + std::to_string(a.chosen_x) + ")"; }
         if (a.ponder_keep >= 0) { s += a.ponder_keep ? "[keep]" : "[shuf]"; }
         // An Aura's HOST is a searched variant (one plan per legal host); print it, or two host
         // variants of the same Aura read as one plan scanned twice (claude_s12_gi11 T3).
@@ -13277,6 +13283,59 @@ static int CountProwessAttackers(const GameState& state)
         }
     }
     return count;
+}
+
+// Boros Charm's double-strike mode adds one more hit from its chosen attacker.
+// The ordinary projection already counts that attack and one prowess pump per
+// noncreature cast; credit only the second hit. Keep this conservative: a target
+// that could be tapped for the plan's mana or removed by another selected action
+// receives no credit. The exact plan apply can still discover those lines.
+static int BorosMode3ExtraStrike(const GameState& state, bool is_pre_combat,
+                                const std::vector<Action>& cands, const std::vector<int>& sel,
+                                const std::vector<AttackingManaSource>& atk_mana_srcs,
+                                int noncreature_count)
+{
+    if (!is_pre_combat) { return 0; }
+    int extra = 0;
+    std::vector<int> credited;
+    for (int j : sel)
+    {
+        const Action& a = cands[static_cast<std::size_t>(j)];
+        if (a.card_name != "Boros Charm" || a.chosen_x != 3 || a.enchant_target <= 0)
+        { continue; }
+        if (std::string_view(ResolveProvider(state).Name()) != "ModernRwBurn") { return 0; }
+        const int target = a.enchant_target;
+        if (std::find(credited.begin(), credited.end(), target) != credited.end()) { continue; }
+        credited.push_back(target);  // two Charms do not grant a third strike
+        bool may_leave_or_tap = false;
+        for (const AttackingManaSource& src : atk_mana_srcs)
+        { if (src.number == target) { may_leave_or_tap = true; break; } }
+        for (int k : sel)
+        {
+            if (k == j) { continue; }
+            const Action& b = cands[static_cast<std::size_t>(k)];
+            if (b.card_name == "Boros Charm" && b.chosen_x == 3) { continue; }
+            if (b.kind != Action::Kind::CastFromHand || b.direct_damage > 0
+                || b.enchant_target == target
+                || b.sac_source_id == target || b.sac_victim_id == target
+                || (b.def && (b.def->params.damage_all_creatures > 0
+                              || b.def->params.x_damage_each_creature_and_player)))
+            { may_leave_or_tap = true; break; }
+        }
+        if (may_leave_or_tap) { continue; }
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.card.m_number != target || p.controller_index != state.active_player_index
+                || !p.card.IsCreature() || CreatureHasDoubleStrike(p, state)
+                || !CanAttackFull(p, state.battlefield, state.active_player_index)
+                || !WantsToAttack(state, p)
+                || !SpellCanTargetPermanent(state, state.active_player_index, p)) { continue; }
+            extra += std::max(0, CombatPowerOf(p, state)
+                                    + (p.card.HasKeyword(Keyword::Prowess) ? noncreature_count : 0));
+            break;
+        }
+    }
+    return extra;
 }
 
 static bool HasLegalCreatureTarget(const GameState& state)
@@ -29386,6 +29445,8 @@ void CollectActivationKeys(const GameState& state, int ctrl, const Permanent& p,
     for (std::size_t i = 0; i < sizeof modes / sizeof modes[0]; ++i)
     {
         if (!modes[i].cost->has_value()) { continue; }
+        if (modes[i].mode == PermAbilityMode::SacLandSearch
+            && state.players[ctrl].life < pp.land_search_activation_life_cost) { continue; }
         if (PermAbilityTaps(modes[i].mode) && (p.tapped || !CanTapNow(p, state.battlefield))) { continue; }
         // TapBlood's cost is {5} minus our Vampires NOW (TapBloodCostNow) -- price THAT, total-only
         // like ActAffordable; the crack also needs a card to discard (its cost includes one).
@@ -39302,6 +39363,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             && def.params.targeting != Targeting::Creature)
         {
             direct = def.params.damage;
+            if (def.params.damage_each_opponent)
+            { direct *= gamesetup::OpponentHeads(); }
             if (def.params.landfall_damage > 0
                 && LandEnteredUnderControlThisTurn(state, state.active_player_index))   // played OR put
             {
@@ -39444,6 +39507,55 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         a.is_draw_until_nonland = (def.tmpl == CardTemplate::DrawUntilNonland);
         a.discard_land_damage   = def.params.discard_land_damage;
         a.max_casts_after       = def.params.max_casts_after;   // Irencrag "one more spell" restriction
+        if (def.params.boros_charm_modal)
+        {
+            Action face = a;
+            face.chosen_x = 1;
+            face.direct_damage = 4;
+            face.eval += 400;
+            actions.push_back(std::move(face));
+            Action self_hit = a;
+            self_hit.chosen_x = 1;
+            self_hit.enchant_target = -1;
+            actions.push_back(std::move(self_hit));
+            for (const Permanent& p : state.battlefield)
+            {
+                if (!p.card.HasType(CardType::Planeswalker)
+                    || !SpellCanTargetPermanent(state, state.active_player_index, p)) { continue; }
+                Action walker_hit = a;
+                walker_hit.chosen_x = 1;
+                walker_hit.enchant_target = p.card.m_number;
+                actions.push_back(std::move(walker_hit));
+            }
+
+            Action protect = a;
+            protect.chosen_x = 2;
+            actions.push_back(std::move(protect));
+
+            // The target is fixed when the spell is cast. Distinct creatures remain distinct
+            // branches so search and the viewer can choose the double-strike recipient.
+            for (const Permanent& p : state.battlefield)
+            {
+                if (!p.card.IsCreature()
+                    || !SpellCanTargetPermanent(state, state.active_player_index, p)) { continue; }
+                Action strike = a;
+                strike.chosen_x = 3;
+                strike.enchant_target = p.card.m_number;
+                actions.push_back(std::move(strike));
+            }
+            for (const Card& c : ap.hand)
+            {
+                if (c.m_number == 0 || c.m_number == ap.hand[i].m_number) { continue; }
+                const CardDefinition* creature = CardDatabase::Instance().LookupCached(c);
+                if (!creature || !creature->card.IsCreature()) { continue; }
+                Action strike = a;
+                strike.chosen_x = 3;
+                strike.enchant_target = c.m_number;
+                strike.trick_hand_target = c.m_name.str();
+                actions.push_back(std::move(strike));
+            }
+            continue;
+        }
         // HARD-CAST HASTE creature: it attacks the turn it arrives, so it belongs in this turn's
         // attack projection exactly like a hasted Vial drop (vial_attack_power). Stamped here, once,
         // because the projection is rebuilt per PLAN and both enumerators share CollectActions.
@@ -43316,6 +43428,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 for (const ModeSpec& m : modes)
                 {
                     if (!m.cost->has_value()) { continue; }
+                    if (m.mode == Action::AbilityMode::SacLandSearch
+                        && state.players[state.active_player_index].life
+                            < sd->params.land_search_activation_life_cost) { continue; }
                     const bool taps = PermAbilityTaps(m.mode);
                     if (taps && (src.tapped || !CanTapNow(src, state.battlefield))) { continue; }
                     // Bilbo: "Activate only if you have 111 or more life" -- the SAME gate the apply
@@ -43542,6 +43657,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     // dominated-action removal (the Recruitment Officer whiff gate's shape);
                     // autonomous only -- a human cannot see the library and keeps the offer.
                     if (m.mode == Action::AbilityMode::SacLandSearch && !HumanPlayActive()
+                        && sd->params.fetch_land_types.empty()
                         && LandSearchPicksMemo(state, state.active_player_index,
                                                LandSearchSpecOf(sd->params)).empty()) { continue; }
                     // HUMAN PLAY: never offer a CREATURE-source activation the real payment cannot
@@ -54446,7 +54562,9 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         const int kill_combo_dmg = KillTriggerComboCredit(state, cands, sel);
         // Walking Ballista's post-combat pings (CounterPingFinish) -- 0 for every deck without a pinger.
         const int ping_reach = CounterPingReach(state, cands, sel);
-        bool wins = (projected_atk + direct_dmg + extra_lethal + cannons_dmg + freecast_dmg + kill_combo_dmg + ping_reach)
+        const int boros_extra = BorosMode3ExtraStrike(state, is_pre_combat, cands, sel,
+                                                      atk_mana_srcs, noncreature_count);
+        bool wins = (projected_atk + boros_extra + direct_dmg + extra_lethal + cannons_dmg + freecast_dmg + kill_combo_dmg + ping_reach)
                     >= state.Opponent().life;
         // A NON-DAMAGE win this turn (Dimensional Infiltrator decking them out). Rides the same
         // has_extra_lethal gate, so a deck with no such model never calls it and stays
@@ -63876,10 +63994,17 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (remand_countered) { cantrip_breakpoint(*remand_def, /*plain_cantrip=*/true); }
         }
 
+        bool direct_damage_resolved = true;
         if (remand_countered) { /* X is back in hand: nothing resolves (see the REMAND block) */ }
         else if (def.tmpl == CardTemplate::DirectDamage)
         {
             NoncombatTriggerScope noncombat_scope(state);
+            const bool prior_no_gain = state.players_cant_gain_life_this_turn;
+            const bool prior_no_prevent = state.damage_cant_be_prevented_this_turn;
+            if (def.params.players_cant_gain_life_this_turn)
+            { state.players_cant_gain_life_this_turn = true; }
+            if (def.params.damage_cant_be_prevented_this_turn)
+            { state.damage_cant_be_prevented_this_turn = true; }
             // Play-viewer event: opponent life BEFORE this burn spell's damage, so the history can
             // report "N to opponent (before->after)". Measured up to (not including) the
             // opponent_lifegain rider below, which OpponentGainsLife reports as its own life event.
@@ -63892,7 +64017,6 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // a phantom-early-win source.
             Targeting t = def.params.targeting;
             int chain_hit_controller = opp_idx;
-            bool direct_damage_resolved = true;
             // An {X} burn deals chosen X * x_damage_multiplier (Crackle = 5X; mirrors
             // EffectHandler::ResolveDirectDamage); a fixed-damage burn uses params.damage.
             int x_mult = def.params.x_damage_multiplier; if (x_mult < 1) { x_mult = 1; }
@@ -63932,6 +64056,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 chain_hit_controller = BurnTargetController(state, state.active_player_index, fixed_burn_pin.first);
                 direct_damage_resolved = ResolveFixedBurnPin(state, state.active_player_index,
                                                              def, fixed_burn_pin, dmg);
+            }
+            else if (def.params.damage_each_opponent)
+            {
+                const int total = dmg * gamesetup::OpponentHeads();
+                state.players[opp_idx].life -= total;
+                RecordNoncombatDamageToPlayer(state, state.active_player_index, opp_idx, total);
+                if (total > 0) { state.opponent_lost_life_this_turn = true; }
             }
             else if (t == Targeting::Any || t == Targeting::Player)
             {
@@ -64160,6 +64291,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 }
             }
             // An all-illegal-target spell does not resolve any rider (CR 608.2b).
+            // Skullcrack's turn-wide restrictions are part of its resolution too.
+            if (!direct_damage_resolved)
+            {
+                state.players_cant_gain_life_this_turn = prior_no_gain;
+                state.damage_cant_be_prevented_this_turn = prior_no_prevent;
+            }
             if (direct_damage_resolved)
             {
             // Play-viewer history: one "burn" event for all of this spell's direct face damage
@@ -65408,6 +65545,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // (On-cast triggers + Prowess already fired above, at cast time, before the
         // resolution branch -- see the note there.)
 
+        if (!remand_countered && def.params.boros_charm_modal)
+        { ApplyBorosCharm(state, state.active_player_index, chosen_x, enchant_target); }
+
         // "Create N tokens" as a spell's resolution (Fungus Frolic). Before the zone move below,
         // which is the order the real game resolves in. Executor twin: EffectHandler::ResolveImpl.
         // (Every resolution step from here to the zone move is skipped for a REMANDED X.)
@@ -65417,7 +65557,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // upgrade. Here for the same reason the token call above is: BEFORE the zone move below,
         // which is the order the real game resolves in -- and the gain must land before anything
         // reads life_gained_this_turn. Executor twin: EffectHandler::ResolveImpl.
-        if (!remand_countered) { ApplyCastLifegain(state, state.active_player_index, def, cast_player_target); }
+        if (!remand_countered && (def.tmpl != CardTemplate::DirectDamage || direct_damage_resolved))
+        { ApplyCastLifegain(state, state.active_player_index, def, cast_player_target); }
 
         // LAND SEARCH as an instant/sorcery's resolution (Rampant Growth, Search for Tomorrow,
         // Cultivate; core/LandSearch.h). Before the zone move below, and before the put-in-hand
@@ -69294,6 +69435,7 @@ static void SimulateOneCombat(GameState& state, bool additional)
     // Two-Headed Hellkite attack-trigger draw (attack_draw_cards): drawn at declare-attackers,
     // so the cards are in hand for the post-combat main. Mirrors GameEngine::CombatPhase.
     ApplyAttackDrawTriggers(state, active, atk_idx);
+    ApplyGoblinGuideAttackTriggers(state, active, atk_idx);
 
     // Jorn, God of Winter (attack_untap_snow_permanents): did it attack? The untap itself is applied
     // AFTER ResolveCombatDamage, which is where attackers get tapped -- see AttackUntapSnowFires.
@@ -69673,6 +69815,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
         p.temp_haste            = false;   // Expedite until-EOT haste expires (lockstep w/ CleanupStep)
         p.temp_lifelink         = false;   // Heliod's until-EOT lifelink grant expires (same lockstep)
         p.temp_double_strike    = false;   // Valiant Knight's until-EOT team grant expires (CR 514.2)
+        p.temp_indestructible   = false;
         p.is_animated           = false;
         p.animated_printed_types = false;   // qualifies the animation, so it expires with it (lockstep)
     }
@@ -69731,6 +69874,8 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     state.AdvanceTurnCounter();
     if (state.deck_has_extra_combat) { state.phase = Phase::Beginning; }   // Moraug (see the head of this function)
     state.opponent_lost_life_this_turn = false;
+    state.players_cant_gain_life_this_turn = false;
+    state.damage_cant_be_prevented_this_turn = false;
     state.creature_died_this_turn = false;   // morbid resets each turn (lockstep w/ GameEngine::UntapStep)
     state.ripple_script = RippleScript{};    // the ripple chain script is turn-scoped (lockstep w/ GameEngine::UntapStep)
     state.noncombat_damage_received_this_turn = {};
@@ -71404,6 +71549,8 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                 if (!act.chosen_float_color.empty()) { w.Put('#'); w.Put(act.chosen_float_color); }
                 if (act.free_cast) { w.Put("#FREE"); }
                 if (d && d->params.modal_choose_n > 0) { w.Put("#S"); w.Int(act.chosen_x); }
+                if (d && d->params.boros_charm_modal)
+                { w.Put("#BC"); w.Int(act.chosen_x); w.Put('/'); w.Int(act.enchant_target); }
                 if (d && d->params.tooth_and_nail)
                 { w.Put("#TN"); w.Int(act.chosen_x); w.Put(act.tutor_target); }
                 if (d && d->params.finale_of_devastation)
@@ -74888,7 +75035,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         const int kill_combo_dmg = KillTriggerComboCredit(state, cands, sel);
         // Walking Ballista's post-combat pings -- twin of Solve's (0 for every deck without a pinger).
         const int ping_reach = CounterPingReach(state, cands, sel);
-        bool wins = (projected_atk + direct_dmg + cannons_dmg + freecast_dmg + kill_combo_dmg + ping_reach)
+        const int boros_extra = BorosMode3ExtraStrike(state, is_pre_combat, cands, sel,
+                                                      atk_mana_srcs, noncreature_count);
+        bool wins = (projected_atk + boros_extra + direct_dmg + cannons_dmg + freecast_dmg + kill_combo_dmg + ping_reach)
                     >= state.Opponent().life;
         // A NON-DAMAGE win this turn (a deck-out). Board-level, so it needs no `casting` list and
         // costs one virtual call behind the has_extra_lethal gate; false for every deck without an
@@ -76342,6 +76491,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                         if (act.free_cast) { k += "#FREE"; }
                         const CardDefinition* const cd = act.def;
                         if (cd && cd->params.modal_choose_n > 0) { k += "#S"; k += std::to_string(act.chosen_x); }
+                        if (cd && cd->params.boros_charm_modal)
+                        { k += "#BC"; k += std::to_string(act.chosen_x); k += '/'; k += std::to_string(act.enchant_target); }
                         if (cd && cd->params.tooth_and_nail)
                         { k += "#TN"; k += std::to_string(act.chosen_x); k += act.tutor_target.str(); }
                         if (cd && cd->params.finale_of_devastation)
@@ -77195,7 +77346,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             {
                 if (!any_quake) { break; }
                 if (q.controller_index != me || !q.card.IsCreature()) { continue; }
-                if (q.card.HasKeyword(Keyword::Indestructible)) { continue; }
+                if (q.HasKeyword(Keyword::Indestructible)) { continue; }
                 board_ceil = std::min(board_ceil, std::max(0, LethalToughness(q, state) - q.damage - 1));
             }
             // key (plan without the quake's X) -> (index of the best kept plan, its X)
@@ -77395,7 +77546,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 for (const Permanent& q : state.battlefield)
                 {
                     if (q.controller_index != me || !q.card.IsCreature()) { continue; }
-                    if (q.card.HasKeyword(Keyword::Indestructible)) { continue; }
+                    if (q.HasKeyword(Keyword::Indestructible)) { continue; }
                     board_ceil = std::min(board_ceil, std::max(0, LethalToughness(q, state) - q.damage - 1));
                 }
                 std::unordered_map<std::string, std::pair<std::size_t, int>> best;
@@ -88248,7 +88399,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
             add_for_land(ln, "", "back");
             continue;
         }
-        if (ld && !ld->params.fetch_land_types.empty())
+        if (ld && FetchResolvesOnPlay(state, *ld))
         {
             std::vector<std::string> cands =
                 ResolveProvider(state).FetchCandidates(state, state.active_player_index, ld->params);
@@ -88302,7 +88453,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
                 if (tl->card.IsLand()) { add_for_land(tn, "", "front", true); }
                 add_for_land(tn, "", "back", true);
             }
-            else if (tl && !tl->params.fetch_land_types.empty())
+            else if (tl && FetchResolvesOnPlay(state, *tl))
             {
                 // The SAME fetch fan as a hand fetchland (FetchCandidates, narrowed by the provider's
                 // FetchSearchCandidates outside the unpruned audit and human play).
@@ -90630,6 +90781,8 @@ static TranspositionTable::Key BuildSimKeyBase(const GameState& state, int max_t
     Fold(k, static_cast<uint64_t>(state.active_player_index));
     Fold(k, state.on_the_play ? 1u : 0u);
     Fold(k, state.opponent_lost_life_this_turn ? 1u : 0u);
+    if (state.players_cant_gain_life_this_turn) { Fold(k, 0x5C011); }
+    if (state.damage_cant_be_prevented_this_turn) { Fold(k, 0x5C012); }
     if (state.deck_tracks_noncombat_damage)
     {
         Fold(k, 0x1C1DE); Fold(k, state.noncombat_damage_received_this_turn[0]);
@@ -91353,6 +91506,7 @@ static TranspositionTable::Key BuildSimKeyBase(const GameState& state, int max_t
         if (perm.temp_haste)   { Fold(tk, 0x7A57E); }
         if (perm.temp_lifelink){ Fold(tk, 0x11FE11); }   // Heliod's until-EOT lifelink grant
         if (perm.temp_double_strike) { Fold(tk, 0x2D5D5); }   // Valiant Knight's until-EOT grant
+        if (perm.temp_indestructible) { Fold(tk, 0x1D357); }  // Boros Charm until-EOT grant
         // Soulbond pair (Silverblade Paladin). NONZERO-gated, so every deck without soulbond keeps
         // its exact prior key. Future-determining: which creature is paired decides which body
         // double-strikes for the rest of the game, so two boards differing only in the partner are
@@ -113648,6 +113802,7 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
             // BOTH conditions are load-bearing and they were fixed independently (2026-09-03): widen
             // the HOST to any permanent, and keep loyalty OUT of this path entirely.
             if (a.enchant_target > 0 && !is_trick && !is_attach_spell && a.kind != Action::Kind::ActivateLoyalty
+                && !(a.def && a.def->params.boros_charm_modal)
                 && !(a.kind == Action::Kind::GraveyardExileAbility && a.gy_exile_mode == 3))
             {
                 std::string art;
@@ -113680,7 +113835,18 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
             // modes out, so the dialog reads as an explicit list of what each split actually does.
             const CardDefinition* mdef = CardDatabase::Instance().LookupInterned(a.card_name);
             const bool is_modal = mdef && mdef->params.modal_choose_n > 0;
-            if (is_modal && a.chosen_x >= 0)
+            if (mdef && mdef->params.boros_charm_modal)
+            {
+                const std::string mode = a.chosen_x == 1
+                    ? "4 damage to " + (a.enchant_target == 0 ? std::string("opponent")
+                                       : a.enchant_target == -1 ? std::string("you")
+                                       : SubChoiceHostLabel(state, a.enchant_target))
+                                       : a.chosen_x == 2 ? "indestructible to your permanents"
+                                       : "double strike to " + SubChoiceHostLabel(state, a.enchant_target);
+                addSub(a.card_name + " " + mode, a.card_name + " mode",
+                       mode, a.card_name, "modal");
+            }
+            else if (is_modal && a.chosen_x >= 0)
             {
                 const int n     = mdef->params.modal_choose_n;
                 const int dmg   = a.chosen_x * mdef->params.modal_damage_per_choice;

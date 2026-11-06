@@ -1,0 +1,23 @@
+{
+  "_comment": "Seed 891005 T5: with the opponent at 1, the only hand spell is Searing Blaze, which has no legal creature target. Sacrificing Sunbaked Canyon to draw Goblin Guide, then casting and attacking with Guide, wins now. The old Generic dig gate called Blaze 'castable' from mana value alone and never offered the Canyon dig to the autonomous search.",
+  "deck": "decks/Modern RW Burn/Modern RW Burn.cod",
+  "turn": 5,
+  "on_the_play": false,
+  "active_life": 14,
+  "opponent_life": 1,
+  "resume_at": "main1",
+  "battlefield": [
+    { "name": "Sunbaked Canyon" },
+    { "name": "Sunbaked Canyon" },
+    { "name": "Mountain" },
+    { "name": "Arid Mesa" }
+  ],
+  "hand": ["Searing Blaze", "Inspiring Vantage"],
+  "library_top": ["Goblin Guide"],
+  "library_filler": "Mountain",
+  "library_size": 30,
+  "depth": 5,
+  "budget_ms": 20,
+  "max_turns": 5,
+  "expect_win_turn": 5
+}
