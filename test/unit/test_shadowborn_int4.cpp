@@ -249,7 +249,7 @@ TEST_CASE("Shadowborn INT-4 tutor: Profane Tutor's upkeep pin and the cast's sea
         Lib4(s, kFullLib);
         const VS early = Tut4(s, "Profane Tutor");
         REQUIRE(early == VS{ kStone, kRitual, kAp4 });
-        s.scripted_suspend_tutor = static_cast<std::int16_t>(pin);   // the crossing's pin (MTG_PROFANE_RESOLVE_FAN)
+        s.scripted_suspend_tutor = static_cast<std::int16_t>(pin < 0 ? -1 : SuspendTutorPinPack(1, &pin));   // the crossing's pin (MTG_PROFANE_RESOLVE_FAN)
         CastOffSuspend(s, 0, Card4("Profane Tutor", 93));
         REQUIRE(s.players[0].hand.size() == 1);
         const std::size_t want = pin < 0 ? 0 : std::min<std::size_t>(static_cast<std::size_t>(pin), early.size() - 1);

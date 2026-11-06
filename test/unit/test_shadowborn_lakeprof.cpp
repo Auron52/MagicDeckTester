@@ -171,7 +171,8 @@ TEST_CASE("Profane fetch: CastOffSuspend reads scripted_suspend_tutor, a rank in
     for (int pin : { -1, 0, 1 })
     {
         GameState s = ProfaneDueState();
-        s.scripted_suspend_tutor = static_cast<std::int16_t>(pin);
+        const int rank = pin;
+        s.scripted_suspend_tutor = static_cast<std::int16_t>(pin < 0 ? -1 : SuspendTutorPinPack(1, &rank));
         const std::vector<std::string> cands =
             RankedTutorCandidates(ProvLp(), s, 0, CardDatabase::Instance().Lookup("Profane Tutor")->params);
         REQUIRE(cands.size() >= 2);
@@ -212,7 +213,8 @@ TEST_CASE("Profane fetch: the main-phase menu stages no fetch; the crossing fans
     std::set<std::string> fetched;
     for (std::size_t i = 0; i < x.size(); ++i)
     {
-        CHECK(x[i].first == static_cast<int>(i));
+        const int ri = static_cast<int>(i);
+        CHECK(x[i].first == SuspendTutorPinPack(1, &ri));   // rank i, covering the one search
         fetched.insert(x[i].second);
     }
     CHECK(fetched.size() == width);
@@ -229,5 +231,130 @@ TEST_CASE("Profane fetch: lever OFF restores the main-phase upkeep pin")
         for (const TurnSolver::Plan& p : menu) { if (p.upkeep_land_search_choice > 0) { staged = true; } }
         CHECK(staged);
         CHECK(TurnSolver::SuspendTutorBoundaryForTest(s).size() == 1);   // one plain crossing
+    }
+}
+
+TEST_CASE("Profane fetch: the executor's crossing node searches an unpinned fetch and pins it for the upkeep")
+{
+    // USER 2026-11-04: "We should search and use a heuristic on that decision like any other." The real turn's end
+    // decides a fetch the committed line left unpinned (TurnSolver::ChooseRealCrossingFetch), over the same
+    // resolution-state ranks the BoundaryFan crosses.
+    ArmScope a(heurarm::PROFANE_RESOLVE_FAN, true);
+    const std::size_t width = TurnSolver::SuspendTutorBoundaryForTest(ProfaneDueState()).size();
+    REQUIRE(width >= 2);
+    {
+        ArmScope n(heurarm::PROFANE_REAL_NODE, true);
+        GameState s = ProfaneDueState();
+        const int pin = TurnSolver::ChooseRealCrossingFetch(s, /*depth=*/2, /*max_turns=*/8, nullptr, true);
+        REQUIRE(pin >= 0);
+        CHECK(SuspendTutorPinCover(pin) == 1);
+        CHECK((pin & kLandSearchPinMask) < static_cast<int>(width));
+        CHECK(s.scripted_suspend_tutor == pin);
+        // Deterministic: the same state decides the same rank.
+        GameState s2 = ProfaneDueState();
+        CHECK(TurnSolver::ChooseRealCrossingFetch(s2, 2, 8, nullptr, true) == pin);
+        // A fetch already pinned (the committed line's crossing recorded one) is covered: nothing to decide.
+        GameState sp = ProfaneDueState();
+        const int one = 1;
+        const int covered = SuspendTutorPinPack(1, &one);
+        sp.scripted_suspend_tutor = static_cast<std::int16_t>(covered);
+        CHECK(TurnSolver::ChooseRealCrossingFetch(sp, 2, 8, nullptr, true) == -2);
+        CHECK(sp.scripted_suspend_tutor == covered);
+        // Depth 0 (the d0 runner) keeps the front: no node.
+        GameState s0 = ProfaneDueState();
+        CHECK(TurnSolver::ChooseRealCrossingFetch(s0, 0, 8, nullptr, true) == -2);
+        CHECK(s0.scripted_suspend_tutor == -1);
+        // Nothing due: no node.
+        GameState sn = ProfaneDueState();
+        sn.players[0].suspended_cards.clear();
+        CHECK(TurnSolver::ChooseRealCrossingFetch(sn, 2, 8, nullptr, true) == -2);
+    }
+    {
+        ArmScope n(heurarm::PROFANE_REAL_NODE, false);   // the old fallback: the upkeep takes the front
+        GameState s = ProfaneDueState();
+        CHECK(TurnSolver::ChooseRealCrossingFetch(s, 2, 8, nullptr, true) == -2);
+        CHECK(s.scripted_suspend_tutor == -1);
+    }
+}
+
+TEST_CASE("Profane fetch: the suspended-tutor pin carries a cover, and a covered front is not 'unpinned'")
+{
+    const int ranks[2] = { 3, 0 };
+    int pin = SuspendTutorPinPack(2, ranks);
+    CHECK(SuspendTutorPinCover(pin) == 2);
+    CHECK_FALSE(SuspendTutorPinIsFront(pin));
+    CHECK(ConsumeSuspendTutorPin(pin) == 3);
+    CHECK(SuspendTutorPinCover(pin) == 1);
+    CHECK(ConsumeSuspendTutorPin(pin) == 0);   // a DECIDED front, not an uncovered search
+    CHECK(pin == -1);
+    CHECK(ConsumeSuspendTutorPin(pin) == -1);   // past the cover: uncovered
+    const int zero = 0;
+    CHECK(SuspendTutorPinIsFront(SuspendTutorPinPack(1, &zero)));
+    // Two due arrivals against a one-ordinal pin: the second is still to be decided at the crossing.
+    ArmScope a(heurarm::PROFANE_RESOLVE_FAN, true);
+    GameState s = ProfaneDueState();
+    s.scripted_suspend_tutor = static_cast<std::int16_t>(SuspendTutorPinPack(1, &zero));
+    CHECK(TurnSolver::SuspendTutorBoundaryForTest(s).size() == 1);   // covered: one plain crossing
+    SuspendedCard sc2 = s.players[0].suspended_cards[0];
+    sc2.card = FullCardLp("Profane Tutor", 96);
+    s.players[0].suspended_cards.push_back(sc2);
+    CHECK(TurnSolver::SuspendTutorBoundaryForTest(s).size() >= 2);   // the second arrival is fanned
+}
+
+namespace
+{
+int g_lp_node_calls = 0;
+int LpNodeReturnsOne(void*, GameState&, int, const CardParams&, const Card&, const SuspendArrivalCtx&)
+{ ++g_lp_node_calls; return 1; }
+}   // namespace
+
+TEST_CASE("Profane fetch: the executor's resolution node decides an UNCOVERED search at resolution")
+{
+    // A ripple free copy can take the pinned rank and leave the arrival's own search uncovered (Shadowborn seed
+    // 940184 T5). The real upkeep's tutor branch then asks the node, for the REAL state only.
+    ArmScope a(heurarm::PROFANE_RESOLVE_FAN, true);
+    const CardParams& pp = CardDatabase::Instance().Lookup("Profane Tutor")->params;
+    for (int mode = 0; mode < 3; ++mode)   // 0 = uncovered real state, 1 = covered, 2 = another state (a copy)
+    {
+        GameState s = ProfaneDueState();
+        const Card card = s.players[0].suspended_cards[0].card;
+        const std::vector<SuspendedCard> snap = s.players[0].suspended_cards;
+        const std::vector<SuspendedCard> rem;
+        s.players[0].suspended_cards.clear();
+        const int zero = 0;
+        if (mode == 1) { s.scripted_suspend_tutor = static_cast<std::int16_t>(SuspendTutorPinPack(1, &zero)); }
+        const std::vector<std::string> cands = RankedTutorCandidates(ProvLp(), s, 0, pp);
+        REQUIRE(cands.size() >= 2);
+        GameState other;
+        const SuspendArrivalCtx ctx{ &snap, 0, &rem };
+        g_lp_node_calls = 0;
+        t_real_stut_node = &LpNodeReturnsOne; t_real_stut_state = (mode == 2) ? &other : &s; t_suspend_arrival_ctx = &ctx;
+        CastOffSuspend(s, 0, card);
+        t_real_stut_node = nullptr; t_real_stut_state = nullptr; t_suspend_arrival_ctx = nullptr;
+        REQUIRE(s.players[0].hand.size() == 1);
+        CHECK(g_lp_node_calls == (mode == 0 ? 1 : 0));
+        CHECK(s.players[0].hand[0].m_name.str() == cands[mode == 0 ? 1 : 0]);
+    }
+    // The node itself: one searched copy per rank, deterministic, nothing at depth 0 or with the lever off.
+    GameState s = ProfaneDueState();
+    const Card card = s.players[0].suspended_cards[0].card;
+    s.players[0].suspended_cards[0].arrive_turn = s.TurnSeq();
+    const std::vector<SuspendedCard> snap = s.players[0].suspended_cards;
+    const std::vector<SuspendedCard> rem;
+    s.players[0].suspended_cards.clear();
+    const SuspendArrivalCtx ctx{ &snap, 0, &rem };
+    const int width = SuspendTutorPickWidth(s, 0, pp);
+    REQUIRE(width >= 2);
+    {
+        ArmScope n(heurarm::PROFANE_REAL_NODE, true);
+        const int r = TurnSolver::ChooseRealResolutionFetch(s, 0, pp, card, ctx, 2, 8, nullptr, true);
+        CHECK(r >= 0);
+        CHECK(r < width);
+        CHECK(TurnSolver::ChooseRealResolutionFetch(s, 0, pp, card, ctx, 2, 8, nullptr, true) == r);
+        CHECK(TurnSolver::ChooseRealResolutionFetch(s, 0, pp, card, ctx, 0, 8, nullptr, true) == -1);
+    }
+    {
+        ArmScope n(heurarm::PROFANE_REAL_NODE, false);
+        CHECK(TurnSolver::ChooseRealResolutionFetch(s, 0, pp, card, ctx, 2, 8, nullptr, true) == -1);
     }
 }
