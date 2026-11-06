@@ -8965,8 +8965,11 @@ static int LineRestAfter(const ManaCost& cost_in, int rest_pips[5])
     return holds_this ? lu.ManaValue() - cost_in.ManaValue() : 0;
 }
 
-// A lump's colour order for paying `cost_in` on `state`: the pip this cost is shortest of on the board, then
-// the line's remaining pips, then the hand's pips, then WUBRG. Every colour is listed (a lump's three units
+// A lump's colour order for paying `cost_in` on `state`: the pip this cost is shortest of on the board,
+// then this cost's coloured pips, the line's remaining pips, the hand's pips, then WUBRG. The current
+// bill's pips break a no-shortage tie: otherwise a red Lotus bill chooses white because the pool counts
+// both the Lotus and a depletion land as supply, then spends the land's last counter for the red pips.
+// Every colour is listed (a lump's three units
 // can pay a generic-only shortfall in any of them; the order only picks which colour floats on).
 static void LumpColourOrder(const GameState& state, const ManaCost& cost_in, int out[5])
 {
@@ -8985,8 +8988,10 @@ static void LumpColourOrder(const GameState& state, const ManaCost& cost_in, int
     for (int c = 0; c < 5; ++c)
     {
         const int short_by = std::max(0, pip[c] - have[c]);
-        key[c] = (static_cast<long long>(short_by) << 40) | (static_cast<long long>(std::min(rest[c], 0xFFFF)) << 24)
-               | (static_cast<long long>(std::min(hand[c], 0xFFFF)) << 8) | (4 - c);
+        key[c] = (static_cast<long long>(std::min(short_by, 0x7FFF)) << 48)
+               | (static_cast<long long>(std::min(pip[c], 0xFFFF)) << 32)
+               | (static_cast<long long>(std::min(rest[c], 0xFFFF)) << 16)
+               | (static_cast<long long>(std::min(hand[c], 0x1FFF)) << 3) | (4 - c);
         out[c] = c;
     }
     std::sort(out, out + 5, [&](int a, int b) { return key[a] > key[b]; });
