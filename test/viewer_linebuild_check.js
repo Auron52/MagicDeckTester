@@ -446,7 +446,7 @@ function checkFetchSuspendRoute() {
   const land = { name: 'Wooded Foothills', kind: 'land' };
   const suspend = { name: 'Rift Bolt', kind: 'suspend' };
   const decision = { plans: [{ land: land.name, actions: [
-    { card: land.name, verb: 'landsearch', activate: true }
+    { card: land.name, verb: 'landsearch', activate: true, fetch_mana: true }
   ] }] };
   const route = LB.fetchSuspendRoute(decision, [land, suspend]);
   const want = ['land=Wooded Foothills', 'landsearch=Wooded Foothills', 'suspend=Rift Bolt'];
@@ -454,6 +454,31 @@ function checkFetchSuspendRoute() {
     fails.push(`fetch, crack, suspend route: ${route && JSON.stringify(LB.encodeSegments(route))}`);
   if (LB.fetchSuspendRoute({ plans: [] }, [land, suspend]) !== null)
     fails.push('offered a fetch route without an enumerated activation');
+  const bolt = { name: 'Lightning Bolt', kind: 'nonpermanent' };
+  const castRoute = LB.fetchAutoRoute(decision, [land, bolt], 'illegal',
+    "can't pay for 'Lightning Bolt': no untapped source produces red mana");
+  const castWant = ['land=Wooded Foothills', 'landsearch=Wooded Foothills', 'cast=Lightning Bolt'];
+  if (!castRoute || JSON.stringify(LB.encodeSegments(castRoute)) !== JSON.stringify(castWant))
+    fails.push(`fetch, crack, cast route: ${castRoute && JSON.stringify(LB.encodeSegments(castRoute))}`);
+  if (LB.fetchAutoRoute(decision, [land, bolt], 'illegal', 'invalid target') !== null
+      || LB.fetchAutoRoute(decision, [land, bolt], 'accept', '') !== null)
+    fails.push('auto-cracked a fetch for a line that did not fail its mana payment');
+  if (!LB.fetchAutoRoute(decision, [land, suspend], 'legal_not_enumerated', ''))
+    fails.push('did not auto-crack for the fetchland suspend gap');
+  const boardDecision = { me: { battlefield: [{ name: land.name }] }, plans: [
+    { actions: [{ card: land.name, verb: 'landsearch', activate: true, fetch_mana: true }] }
+  ] };
+  const boardRoute = LB.fetchAutoRoute(boardDecision, [bolt], 'illegal',
+    "can't pay for 'Lightning Bolt': no untapped source produces red mana");
+  if (!boardRoute || JSON.stringify(LB.encodeSegments(boardRoute))
+      !== JSON.stringify(['landsearch=Wooded Foothills', 'cast=Lightning Bolt']))
+    fails.push('did not crack a held fetch before the queued cast');
+  const tappedBasic = { plans: [{ land: 'Evolving Wilds', actions: [
+    { card: 'Evolving Wilds', verb: 'landsearch', activate: true }
+  ] }] };
+  if (LB.fetchAutoRoute(tappedBasic, [{ name: 'Evolving Wilds', kind: 'land' }, bolt],
+    'illegal', "can't pay for 'Lightning Bolt'") !== null)
+    fails.push('treated a tapped-basic search as same-turn mana');
   return fails;
 }
 

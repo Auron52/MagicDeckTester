@@ -2839,7 +2839,21 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                 else if (ac.kind == Action::Kind::ActivatePermAbility
                          && (ac.ability_mode == Action::AbilityMode::SacLandSearch
                              || ac.ability_mode == Action::AbilityMode::QuestSacLandSearch))
-                { os << ", \"verb\": \"landsearch\""; }
+                {
+                    os << ", \"verb\": \"landsearch\"";
+                    // The viewer may insert this activation before a queued cast that needs
+                    // its mana. Evolving Wilds and the other tapped-basic searches cannot
+                    // supply that mana now, so advertise only the untapped fetch template.
+                    const CardDefinition* fd = ac.def ? ac.def
+                        : CardDatabase::Instance().Lookup(ac.card_name);
+                    if (fd && !fd->params.fetch_land_types.empty()
+                        && fd->params.land_search_activation_cost.has_value()
+                        && fd->params.land_search_activation_cost->ManaValue() == 0
+                        && !fd->params.land_search_tapped
+                        && fd->params.land_search_activation_sacrifice_self
+                        && fd->params.land_search_count == 1)
+                    { os << ", \"fetch_mana\": true"; }
+                }
                 // Captivating Vampire's steal and Bloodline Keeper's transform (Vampires B): the list
                 // runs two copies of each card, so `cast=<name>` is ambiguous with a HAND copy -- the
                 // taplife= reason. The value is the SOURCE on the battlefield; the steal's target and

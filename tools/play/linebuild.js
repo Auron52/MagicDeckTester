@@ -218,21 +218,45 @@
     return parts.length ? parts : [[]];
   }
 
-  // A freshly played fetchland is a permanent, not a mana source. The engine offers its
-  // activation after the land drop, and the fetched land can then pay a suspend cost. If the
-  // player queued "fetchland, suspend" as one line, offer this explicit three-segment route
-  // instead of pinning the two names into a menu that cannot contain the missing activation.
-  // Only derive it from an activation the current engine menu actually offers.
-  function fetchSuspendRoute(decision, plan) {
-    if (!Array.isArray(plan) || plan.length !== 2
-        || plan[0].kind !== 'land' || plan[1].kind !== 'suspend') return null;
+  // A freshly played fetchland has no mana ability. Its activation becomes available only
+  // after the land drop, and a fetched land can then pay the queued action. Split that
+  // request into land, crack, continuation; the caller uses this only when validation found
+  // the original line unpayable (or the known land+suspend enumeration gap). The offered
+  // activation is the engine's evidence that the source really is crackable.
+  function fetchManaRoute(decision, plan) {
+    if (!Array.isArray(plan) || plan.length < 2 || plan[0].kind !== 'land') return null;
     const land = plan[0].name;
     const offered = ((decision && decision.plans) || []).some(p =>
       p.land === land && (p.actions || []).some(a =>
-        a.card === land && a.verb === 'landsearch' && a.activate));
+        a.card === land && a.verb === 'landsearch' && a.activate && a.fetch_mana));
     if (!offered) return null;
     return [plan[0], { name: land, src: land, kind: 'activate', verb: 'landsearch', defer: true },
-            Object.assign({}, plan[1], { defer: true })];
+            Object.assign({}, plan[1], { defer: true }), ...plan.slice(2)];
+  }
+  const fetchSuspendRoute = fetchManaRoute; // Keep the existing check's interface.
+  function fetchAutoRoute(decision, plan, verdict, reason) {
+    const needsFetch = (verdict === 'illegal' && /^can't pay for /i.test(reason || ''))
+      || (verdict === 'legal_not_enumerated' && plan && plan.length === 2
+          && plan[1].kind === 'suspend');
+    if (!needsFetch) return null;
+    const played = fetchManaRoute(decision, plan);
+    if (played) return played;
+    // A fetch already on the battlefield can supply the queued spell without a land drop.
+    // Take this route only with one distinct offered source; with several, the player may
+    // need a particular search range and should choose the source explicitly.
+    if (!plan || !plan.length || plan.some(p => p.kind === 'land')) return null;
+    const onBoard = new Set(((decision && decision.me && decision.me.battlefield) || []).map(p => p.name));
+    const sources = new Set();
+    for (const p of ((decision && decision.plans) || [])) {
+      for (const a of (p.actions || [])) {
+        if (a.fetch_mana && a.verb === 'landsearch' && a.activate && onBoard.has(a.card))
+          sources.add(a.card);
+      }
+    }
+    if (sources.size !== 1) return null;
+    const land = sources.values().next().value;
+    return [{ name: land, src: land, kind: 'activate', verb: 'landsearch' },
+            Object.assign({}, plan[0], { defer: true }), ...plan.slice(1)];
   }
 
   // Repeat plan entries [from, to) `n` times in total (n=1 is a no-op), returning the new plan.
@@ -896,7 +920,7 @@
            stampPlanNums, isPreTap, preTapToken,
            // segmentParts is exported (not just encodeSegments) because applyAccepted needs the
            // committing segment's ENTRIES, not its encoded string, to scope the full-order pin.
-           segmentParts, isDeferred, fetchSuspendRoute, repeatBlock, loopBlock, segmentLoopable,
+           segmentParts, isDeferred, fetchSuspendRoute, fetchAutoRoute, repeatBlock, loopBlock, segmentLoopable,
            untapNeed, untapNeedToken,
            fusedInvestigateEntries, removeFusedAt, CLUE_TOKEN,
            nextDimension, filterByChoice, dimensionsRemaining, choiceOf, subOf };

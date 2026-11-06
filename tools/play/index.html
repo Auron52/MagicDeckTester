@@ -3888,6 +3888,18 @@ function handleVerdict(v, line) {
   if (v.verdict==='accept') return applyAccepted(v.plan_index, v.matched_summary || line,
                                                  validationPlanView(v, v.plan_index));
   if (v.verdict==='choose') return renderChooseDialog(v, line);   // central image dialog, not the side panel
+  // A newly played fetch cannot pay a cast until it is cracked on the next main-phase
+  // decision. When the engine says the queued order cannot pay, insert that activation
+  // and keep the rest of the user's line queued. The land-search target remains a real
+  // engine choice at resolution. The same route covers the land+suspend enumeration gap.
+  const fetchRoute=LB.fetchAutoRoute(v.decision, S.plan, v.verdict, v.reason);
+  if (fetchRoute) {
+    const land=fetchRoute[0].name;
+    S.plan=fetchRoute; hideVerdict(); renderBoard();
+    flashHint(`Cracking ${land} to pay the queued line. Choose the fetched land when prompted.`);
+    commitLine();
+    return;
+  }
   // REJECT (illegal / legal_not_enumerated / unsupported): the committed line did NOT play, so a
   // pending "Pass turn" skip (S.commitTurn, set by the Commit-turn button) must be dropped -- otherwise
   // picking an ALTERNATE plan from the menu below inherits the skip and auto-passes the rest of THIS

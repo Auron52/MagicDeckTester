@@ -55,6 +55,11 @@ viewer now offers a "Crack Wooded Foothills, then suspend" route that commits
 the land, activation, and suspend as consecutive main-phase segments, with the
 fetched-land choice between them. This preserves the legal line and avoids a
 misleading `cannot pay` verdict.
+The viewer now takes that route automatically when the queued line needs the
+fetch's mana. The same payment-triggered route handles an ordinary cast and
+a single fetch already on the battlefield. The engine marks only untapped
+fetch activations as same-turn mana; Evolving Wilds-style tapped searches do
+not trigger the automatic route. The fetched land remains a player choice.
 
 ## Provider routing
 
