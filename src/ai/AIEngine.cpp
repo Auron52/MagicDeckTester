@@ -3175,9 +3175,30 @@ void AIEngine::DecideCrossingFetch(GameState& state)
     GameState view = blindsearch::View(state, _bsv, 0x5354524Eull);
     const int pin = TurnSolver::ChooseRealCrossingFetch(view, m_lookahead_depth, m_max_turns, &budget,
                                                         m_search_post_combat);
-    if (pin == -2) { return; }
-    state.scripted_suspend_tutor = static_cast<std::int16_t>(pin);
-    if (!SuspendTutorPinIsFront(pin)) { m_committed_line.clear(); }
+    if (pin != -2)
+    {
+        state.scripted_suspend_tutor = static_cast<std::int16_t>(pin);
+        if (!SuspendTutorPinIsFront(pin)) { m_committed_line.clear(); }
+    }
+    const auto reanim = TurnSolver::ChooseRealCrossingReanimate(view, m_lookahead_depth, m_max_turns, &budget,
+                                                                m_search_post_combat);
+    if (reanim.first != -2)
+    {
+        state.scripted_grace_choice = static_cast<std::int16_t>(reanim.first);
+        if (reanim.first != 0) { m_committed_line.clear(); }
+    }
+    if (reanim.second != -2)
+    {
+        state.scripted_upkeep_gy_reanimate = static_cast<std::int16_t>(reanim.second);
+        if (reanim.second != 0) { m_committed_line.clear(); }
+    }
+    const int land_pin = TurnSolver::ChooseRealCrossingLand(view, m_lookahead_depth, m_max_turns, &budget,
+                                                            m_search_post_combat);
+    if (land_pin != -2)
+    {
+        state.scripted_upkeep_land_search = land_pin;
+        if (land_pin != 0) { m_committed_line.clear(); }
+    }
 }
 // ...and its RESOLUTION node (TurnSolver::ChooseRealResolutionFetch has the why): an uncovered suspended-tutor search
 // met by the REAL upkeep is searched there, from the search's view of the real state, under the same scopes and
@@ -3202,6 +3223,26 @@ int AIEngine::RealStutNodeThunk(void* owner, GameState& state, int controller, c
                                 const SuspendArrivalCtx& ctx)
 {
     return static_cast<AIEngine*>(owner)->DecideResolutionFetch(state, controller, pp, card, ctx);
+}
+int AIEngine::DecideResolutionLand(GameState& state, int controller, const CardParams& pp, const Card& card,
+                                   const SuspendArrivalCtx& ctx)
+{
+    if (m_in_rollout || m_lookahead_depth <= 0 || HumanPlayActive() || m_external_chooser) { return -1; }
+    UnbudgetedPlayScope _unbudgeted_play(m_budget_ms <= 0);
+    TurnSolver::SearchLeafDepthScope _sld(m_profile.search_leaf_depth, m_profile.search_leaf_first_turn_depth);
+    DeckShapeScope _shape(m_profile);
+    SearchBudget budget = DecisionBudget();
+    std::optional<GameState> _bsv;
+    const GameState& view = blindsearch::View(state, _bsv, 0x534C414Eull);
+    const int rank = TurnSolver::ChooseRealResolutionLand(view, controller, pp, card, ctx, m_lookahead_depth,
+                                                          m_max_turns, &budget, m_search_post_combat);
+    if (rank > 0) { m_committed_line.clear(); }
+    return rank;
+}
+int AIEngine::RealLandNodeThunk(void* owner, GameState& state, int controller, const CardParams& pp,
+                                const Card& card, const SuspendArrivalCtx& ctx)
+{
+    return static_cast<AIEngine*>(owner)->DecideResolutionLand(state, controller, pp, card, ctx);
 }
 
 

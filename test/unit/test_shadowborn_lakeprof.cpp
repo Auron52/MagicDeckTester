@@ -221,17 +221,38 @@ TEST_CASE("Profane fetch: the main-phase menu stages no fetch; the crossing fans
     CHECK(x[0].second == cands[0]);   // the provider's front first: it keeps every tie
 }
 
-TEST_CASE("Profane fetch: lever OFF restores the main-phase upkeep pin")
+TEST_CASE("Profane fetch: legacy stream also chooses at the crossing")
 {
     {
         ArmScope a(heurarm::PROFANE_RESOLVE_FAN, false);
         GameState s = ProfaneDueState();
         const std::vector<TurnSolver::Plan> menu = TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true);
-        bool staged = false;
-        for (const TurnSolver::Plan& p : menu) { if (p.upkeep_land_search_choice > 0) { staged = true; } }
-        CHECK(staged);
-        CHECK(TurnSolver::SuspendTutorBoundaryForTest(s).size() == 1);   // one plain crossing
+        for (const TurnSolver::Plan& p : menu) { CHECK(p.upkeep_land_search_choice == -1); }
+        const auto x = TurnSolver::UpkeepLandBoundaryForTest(s);
+        REQUIRE(x.size() >= 2);
+        for (std::size_t i = 0; i < x.size(); ++i) { CHECK(x[i].first == static_cast<int>(i)); }
     }
+}
+
+TEST_CASE("Search for Tomorrow off suspend: the basic is chosen at the upkeep crossing")
+{
+    GameState s = BaseLp();
+    s.deck_has_land_search = true;
+    s.players[0].library = Library{};
+    s.players[0].library.push_back(FullCardLp("Forest", 401));
+    s.players[0].library.push_back(FullCardLp("Mountain", 402));
+    SuspendedCard sc;
+    sc.card = FullCardLp("Search for Tomorrow", 403);
+    sc.arrive_turn = s.TurnSeq() + 1;
+    s.players[0].suspended_cards.push_back(sc);
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true))
+    { CHECK(p.upkeep_land_search_choice == -1); }
+    const auto x = TurnSolver::UpkeepLandBoundaryForTest(s);
+    REQUIRE(x.size() == 2);
+    CHECK(x[0].first == 0);
+    CHECK(x[1].first == 1);
+    CHECK_FALSE(x[0].second.empty());
+    CHECK(x[0].second != x[1].second);
 }
 
 TEST_CASE("Profane fetch: the executor's crossing node searches an unpinned fetch and pins it for the upkeep")
