@@ -483,6 +483,17 @@ function checkFetchSuspendRoute() {
   const castWant = ['land=Wooded Foothills', 'landsearch=Wooded Foothills', 'cast=Lightning Bolt'];
   if (!castRoute || JSON.stringify(LB.encodeSegments(castRoute)) !== JSON.stringify(castWant))
     fails.push(`fetch, crack, cast route: ${castRoute && JSON.stringify(LB.encodeSegments(castRoute))}`);
+  const burnRoute = LB.fetchAutoRoute({ plans: [{ land: 'Arid Mesa', actions: [
+    { card: 'Arid Mesa', verb: 'landsearch', activate: true, fetch_mana: true }
+  ] }] }, [
+    { name: 'Arid Mesa', kind: 'land' },
+    { name: 'Monastery Swiftspear', kind: 'permanent' },
+    { name: 'Goblin Guide', kind: 'permanent' }
+  ], 'illegal', "can't pay {R} for 'Goblin Guide' with the mana available this phase");
+  const burnWant = ['land=Arid Mesa', 'landsearch=Arid Mesa',
+                    'cast=Monastery Swiftspear;cast=Goblin Guide'];
+  if (!burnRoute || JSON.stringify(LB.encodeSegments(burnRoute)) !== JSON.stringify(burnWant))
+    fails.push(`Modern RW Burn seed 5 T2 did not crack Mesa between the land drop and two casts: ${burnRoute && JSON.stringify(LB.encodeSegments(burnRoute))}`);
   if (LB.fetchAutoRoute(decision, [land, bolt], 'illegal', 'invalid target') !== null
       || LB.fetchAutoRoute(decision, [land, bolt], 'accept', '') !== null)
     fails.push('auto-cracked a fetch for a line that did not fail its mana payment');
@@ -496,6 +507,19 @@ function checkFetchSuspendRoute() {
   if (!boardRoute || JSON.stringify(LB.encodeSegments(boardRoute))
       !== JSON.stringify(['landsearch=Wooded Foothills', 'cast=Lightning Bolt']))
     fails.push('did not crack a held fetch before the queued cast');
+  const manualCrack = { name: land.name, src: land.name, kind: 'activate', verb: 'landsearch' };
+  const manualRoute = LB.fetchAutoRoute(boardDecision, [manualCrack, bolt], 'illegal',
+    "can't pay for 'Lightning Bolt': no untapped source produces red mana");
+  if (!manualRoute || JSON.stringify(LB.encodeSegments(manualRoute))
+      !== JSON.stringify(['landsearch=Wooded Foothills', 'cast=Lightning Bolt'])
+      || manualRoute.filter(p=>p.verb==='landsearch').length !== 1)
+    fails.push('manual fetch crack was duplicated instead of split before the cast');
+  const playedManual = LB.fetchAutoRoute(decision, [land, manualCrack, bolt], 'illegal',
+    "can't pay for 'Lightning Bolt': no untapped source produces red mana");
+  if (!playedManual || JSON.stringify(LB.encodeSegments(playedManual))
+      !== JSON.stringify(['land=Wooded Foothills', 'landsearch=Wooded Foothills', 'cast=Lightning Bolt'])
+      || playedManual.filter(p=>p.verb==='landsearch').length !== 1)
+    fails.push('newly played fetch duplicated its explicitly queued crack');
   const tappedBasic = { plans: [{ land: 'Evolving Wilds', actions: [
     { card: 'Evolving Wilds', verb: 'landsearch', activate: true }
   ] }] };

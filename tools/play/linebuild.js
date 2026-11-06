@@ -230,12 +230,21 @@
       p.land === land && (p.actions || []).some(a =>
         a.card === land && a.verb === 'landsearch' && a.activate && a.fetch_mana));
     if (!offered) return null;
+    // If the player already queued this crack, retain that action and its order. It must
+    // run after the land drop, and any cast funded by it needs the following decision.
+    if (plan[1].kind === 'activate' && plan[1].verb === 'landsearch'
+        && (plan[1].src || plan[1].name) === land) {
+      return [plan[0], Object.assign({}, plan[1], { defer: true }),
+              ...(plan[2] ? [Object.assign({}, plan[2], { defer: true })] : []), ...plan.slice(3)];
+    }
+    if (plan.some(p => p.kind === 'activate' && p.verb === 'landsearch'
+                    && (p.src || p.name) === land)) return null;
     return [plan[0], { name: land, src: land, kind: 'activate', verb: 'landsearch', defer: true },
             Object.assign({}, plan[1], { defer: true }), ...plan.slice(2)];
   }
   const fetchSuspendRoute = fetchManaRoute; // Keep the existing check's interface.
   function fetchAutoRoute(decision, plan, verdict, reason) {
-    const needsFetch = (verdict === 'illegal' && /^can't pay for /i.test(reason || ''))
+    const needsFetch = (verdict === 'illegal' && /^can't pay\b/i.test(reason || ''))
       || (verdict === 'legal_not_enumerated' && plan && plan.length === 2
           && plan[1].kind === 'suspend');
     if (!needsFetch) return null;
@@ -253,6 +262,13 @@
           sources.add(a.card);
       }
     }
+    // A manually queued crack is the source itself. Split AFTER it; prepending another
+    // activation would sacrifice the fetch once, then reject the stale duplicate.
+    const first = plan[0];
+    if (first.kind === 'activate' && first.verb === 'landsearch'
+        && sources.has(first.src || first.name) && plan.length > 1)
+      return [first, Object.assign({}, plan[1], { defer: true }), ...plan.slice(2)];
+    if (plan.some(p => p.kind === 'activate' && p.verb === 'landsearch')) return null;
     if (sources.size !== 1) return null;
     const land = sources.values().next().value;
     return [{ name: land, src: land, kind: 'activate', verb: 'landsearch' },
