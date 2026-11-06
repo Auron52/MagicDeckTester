@@ -2746,7 +2746,7 @@ inline int ConsumeSuspendTutorPin(int& pin)
 }
 // Depth of the free casts a suspend arrival's ripple makes (ResolveSuspendRipple, below): 0 = the arrival itself.
 inline thread_local int t_suspend_ripple_depth = 0;
-// THE EXECUTOR'S RESOLUTION NODE for a suspended tutor's search (MTG_PROFANE_REAL_NODE): GameEngine::UpkeepStep
+// THE EXECUTOR'S RESOLUTION NODE for a suspended tutor's search: GameEngine::UpkeepStep
 // installs it around its ProcessSuspendArrivals for the REAL state only (t_real_stut_state; every copy a search
 // makes has another address), and the tutor branch of CastOffSuspend calls it for an UNCOVERED, non-nested
 // search with a choice. It returns the searched rank (-1 = take the front). The arrival context lets it finish
@@ -22239,7 +22239,7 @@ inline void CastOffSuspend(GameState& state, int controller, const Card& card)
                 state.scripted_suspend_tutor = static_cast<std::int16_t>(packed);
                 // UNCOVERED in the REAL upkeep (the committed crossing resolved fewer searches -- a ripple free
                 // copy it could not foresee): the executor's resolution node SEARCHES it here, with what is known
-                // now (MTG_PROFANE_REAL_NODE; AIEngine::DecideResolutionFetch). Only the arrival's own search (a
+                // now (AIEngine::DecideResolutionFetch). Only the arrival's own search (a
                 // nested free copy's continuation is the arrival's resolution, which no copy can finish).
                 if (pin < 0 && t_real_stut_node != nullptr && &state == t_real_stut_state
                     && t_suspend_ripple_depth == 0 && t_suspend_arrival_ctx != nullptr)
@@ -44599,12 +44599,6 @@ inline void PerformUpkeepSacrificeCreature(GameState& state)
     }
 }
 
-// Crop Rotation's searched pick (see PerformLandTutorToBattlefield). DEFAULT ON; =0 -> the provider's front.
-inline bool LandTutorPinOn()
-{
-    static const bool e = EnvOn("MTG_LAND_TUTOR_PIN", true);
-    return heurarm::Flag(heurarm::LAND_TUTOR_PIN, e);
-}
 // Crop Rotation resolution (CardParams::tutor_land_to_battlefield): "Search your library for a
 // land card, put that card onto the battlefield, then shuffle." Like PerformFetch but WITHOUT the
 // 1-life fetch payment, with the tutor axis choosing the target (target_name = the searched
@@ -44627,7 +44621,7 @@ inline void PerformLandTutorToBattlefield(GameState& state, int controller_index
         // Whiff: no land left in the library. "...then shuffle" still happens (CR 701.19b).
         if (cands.empty()) { WhiffShuffle(state, controller_index, "land tutor"); return; }
         want = cands.front();
-        // THE SEARCHED PICK (MTG_LAND_TUTOR_PIN, DEFAULT ON; =0 -> the provider's front, A/B arm only). USER
+        // THE SEARCHED PICK. USER
         // 2026-11-04 on Crop Rotation: "If that is in the engine there should be search, but the only deck with
         // the card (Creature Giving) has a serious pruning heuristic which should remain." The resolution tutor
         // axis already fans this cast (Plan::tutor_choice -> ScriptedTutor); consume that pin exactly as the
@@ -44635,7 +44629,8 @@ inline void PerformLandTutorToBattlefield(GameState& state, int controller_index
         // at the TRUE resolution state, clamped. The provider still RESTRICTS the menu (Creature Giving: the
         // Orchard alone while one is in the library). Consuming it here also stops the pin leaking to the next
         // tutor of the apply.
-        if (LandTutorPinOn() && (tutorpin::NoteRead(), g_scripted_tutor_choice >= 0))
+        tutorpin::NoteRead();
+        if (g_scripted_tutor_choice >= 0)
         {
             const int pick = g_scripted_tutor_choice;
             g_scripted_tutor_choice = -1;

@@ -3157,7 +3157,7 @@ struct DeckShapeScope
 };
 }   // namespace
 
-// THE EXECUTOR'S CROSSING NODE (MTG_PROFANE_REAL_NODE; TurnSolver::ChooseRealCrossingFetch has the full why). Called
+// THE EXECUTOR'S CROSSING NODE (TurnSolver::ChooseRealCrossingFetch has the full why). Called
 // by GameEngine at the end of the real turn, after the second main and before the end step: a Profane Tutor fetch
 // due at the next upkeep that the committed line left unpinned is SEARCHED here, at this engine's depth and per-
 // decision budget and under the deck's search shape, instead of resolving the provider's front at the upkeep.

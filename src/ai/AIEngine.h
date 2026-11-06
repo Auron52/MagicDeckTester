@@ -264,7 +264,7 @@ public:
     // executing plan's searched pin (Plan::vial_charge_choice, when MTG_VIAL_AXIS opts in), else the
     // provider's WantVialCharge. Consults the external vial chooser if set.
     bool DecideVialCharge(const GameState& state, const Permanent& vial);
-    // The executor's crossing node for an unpinned Profane Tutor fetch (MTG_PROFANE_REAL_NODE): searched at the end
+    // The executor's crossing node for an unpinned Profane Tutor fetch: searched at the end
     // of the real turn and pinned on `state` for the next upkeep. No-op in rollouts, at depth 0 and in human play.
     void DecideCrossingFetch(GameState& state);
     // ...and the resolution node for an uncovered one met by the real upkeep (a ripple free copy); the thunk is what
