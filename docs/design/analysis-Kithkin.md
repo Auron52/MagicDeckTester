@@ -146,6 +146,18 @@ another 0.0545 over lookahead bottoming. Both passed the generator's adoption
 gates. The subsequent regression audit showed 202 faster and 75 slower searched
 games, and the new baseline was accepted.
 
+## Value leaf and play setting
+
+The value-leaf workflow trained on 11,308 labelled positions and completed
+all 52 matrix cells at 400 games each without condemned cells. Its live A/B
+selected the final-depth single-pass shape: average win turn improved by
+0.00225 across 8,000 paired games while search work fell to 0.397 of the
+previous setting. The play-setting grid then adopted depth 6 with a 30 ms
+budget. Under that shipped setting, search still matches or beats all ten new
+human references, with three earlier wins. The regular regression audit found
+four faster searched games and none slower; strict replay passed all 777 saved
+references with no protocol drift. The smoke and regular baselines were accepted.
+
 <!-- verify_deck:begin (generated -- do not edit inside) -->
 ## Last verification (2026-11-06)
 

@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 4ff8dffab  date 2026-11-06
+# Regression ground truth -- commit 1ddf68267  date 2026-11-06
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-05): Full overnight rebaseline requested after Jumbo exhaustive keep adoption and current engine changes: 118 matching, 424 changed, 11 new Shadowborn rows. Searched games 3953 faster vs 1889 slower; Angels +0.0064t/6065 searched, Angels2HG +0.0150t/600, Bruna +0.0122t/2131 remain visible follow-ups. Jumbo full overnight rows already adopted and match.
 # accepted-with-regressions (smoke, 2026-11-06): Shadowborn main-1 rule + USER cast order + ritual-payoff prune DEFAULT ON (held-out ab7 -0.035 turns, -14..-20% units; d8 b0: every unrecovered game is the clairvoyant ripple-dig the USER ruled out). Also accepts 4 digest-only rows (edf_smoke_d0_s1001, edf_regression_d0_s2002, edf_regression_d5_s3003, bruna_regression_d5_s2002; averages unchanged): pre-existing origin drift, reproduced byte-identically by origin 36d3672bc's own binary
@@ -40,9 +40,9 @@ knights_smoke_d5_s1001=4.3846/3eac45778696cd40
 whiteknights_smoke_d0_s1001=4.5830/1f86383d17efda44
 whiteknights_smoke_d3_s1001=4.1600/a89caf65bd1917e1
 whiteknights_smoke_d5_s1001=4.1323/73be1445b1781acf
-kithkin_smoke_d0_s1001=5.1520/dc26a4ff202e433d
-kithkin_smoke_d3_s1001=4.6267/3d07179843a058d7
-kithkin_smoke_d5_s1001=4.6246/bd638de003634c67
+kithkin_smoke_d0_s1001=4.9870/aa5a1b0b762a9fa3
+kithkin_smoke_d3_s1001=4.5067/7a59a24f833bd703
+kithkin_smoke_d5_s1001=4.4923/cd3b05ba09385d0d
 antilife_smoke_d0_s1001=4.9000/607c0e5d81f6a61c
 antilife_smoke_d3_s1001=4.0533/27f0d4944fbefc06
 antilife_smoke_d5_s1001=4.2154/81494ae4657e7c1d
@@ -299,9 +299,9 @@ whiteknights_regression_d3_s2002=4.0900/7bf0e912b2753e1a
 whiteknights_regression_d5_s2002=4.1620/87050a6da27e5081
 whiteknights_regression_d5_s3003=4.1220/d69782f1d0ff2795
 kithkin_regression_d0_s2002=4.9920/6c937c86f2bca990
-kithkin_regression_d3_s2002=4.4700/1d1fff64bc19bc20
-kithkin_regression_d5_s2002=4.5000/db58095226bfbd80
-kithkin_regression_d5_s3003=4.4780/04c9e5d43aa0cdec
+kithkin_regression_d3_s2002=4.4600/a955aadbe3f75ab5
+kithkin_regression_d5_s2002=4.4960/74f59b5edb17a077
+kithkin_regression_d5_s3003=4.4760/60841990dd5edfb8
 antilife_regression_d0_s2002=5.0120/5be41ad99b2c4002
 antilife_regression_d3_s2002=4.2200/27787b129bc8fb5e
 antilife_regression_d5_s2002=4.2580/23091191dc34ebc6
