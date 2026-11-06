@@ -1,6 +1,6 @@
 # Checkpoint: mana-clean per-deck pass (pass 1) and what follows it
 
-Shared state for whoever picks this up (Claude or Codex). Last updated 2026-11-06 ~12:45 UTC.
+Shared state for whoever picks this up (Claude or Codex). Last updated 2026-11-06 ~12:50 UTC.
 Related: `docs/design/mana-clean-followups-2026-11-04.md` (USER rulings, queued fixes; sections 7-8 are 11-06),
 `docs/design/mana-oracle-memory-time.md` (the oracle memory + time fixes), `scripts/mana_clean.py`.
 
@@ -16,7 +16,7 @@ before every push. "Feel free to delay any iterations that seem to be getting st
 1. **Pass driver** `build/scratch/mana_clean/pass1/drive2.sh`, PID in `pass1/driver2.pid`. Queue `pass1/QUEUE2`
    (consumed from the top), log `pass1/status.log` (START / END / DEFERRED / DONE2), per-deck log `pass1/<deck>.log`,
    reports `logs/mana_clean/pass1-<deck>[-rN]/report.md`. `touch pass1/PAUSE2` stops it before the next deck.
-   Snow END 09:45Z (7,000 games, 27,293 issues). Niv DEFERRED 3x at 10:38Z (sizing probe 63/64, gi 47 stalled again, same as 11-04; added to stall.json). LFE DEFERRED 12:37Z (4 games ~2 h, all inside the oracle: followups s9). DONE2 12:37Z; the post-pass chain is running.
+   Snow END 09:45Z (7,000 games, 27,293 issues). Niv DEFERRED 3x at 10:38Z (sizing probe 63/64, gi 47 stalled again, same as 11-04; added to stall.json). LFE DEFERRED 12:37Z (4 games ~2 h, all inside the oracle: followups s9). DONE2 12:37Z; rescored records committed + pushed (4c0ace610). Stall diagnosis: with the analyzer OFF all 5 stall games (EDF 19 61, AA 29 59, Niv 47) finish in 7 s total -> EVERY stall is analyzer-side (followups s9). The ON arm (`postpass/stall.o2.*`) + sampler are left running only to collect oracle stacks per deck; they are my own runs, safe to kill by the PIDs of the `mtg` under chain.pid and `sampler.pid`.
    Each `mana_clean.py run` calls `pgo_ensure` at its start, so Niv will first rebuild build/PGO on the current
    `HEAD:src` (7bd2b9ac28ff; the pass so far ran on 2878388e7f18). Each record names its src.
 2. **Post-pass chain** `build/scratch/mana_clean/postpass/chain.sh`, PID in `postpass/chain.pid`, log

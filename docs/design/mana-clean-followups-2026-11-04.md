@@ -120,7 +120,7 @@ breakpoint deck re-derives the continuation menu every time. Bounds today: `MTG_
 plan, then the capped retry (`_RETRY`), times every plan on the menu (`MaxPlans`) plus up to 400 ENUM-GAP gate checks
 (`MTG_MANA_ORACLE_GATE_MAX`). Nothing bounds a DECISION or a GAME, so one decision can take hours.
 
-Same pattern, still to confirm per deck: EDF gi 19/61, Alchemist gi 29/59, Niv gi 47 (all stall again after the 11-06
+CONFIRMED for every deferred deck 12:38Z: with MTG_MANA_ORACLE=0 the EDF gi 19/61, Alchemist gi 29/59, Niv gi 47 games finish in 7 s total (`postpass/stall.o0.out`); they stall only with the analyzer on (all stall again after the 11-06
 time fix). The post-pass chain (`postpass/chain.sh`, stall.json, arms ORACLE=0 then 2) plus `postpass/sampler.sh`
 (gdb + perf every ~5 min into `postpass/samples/a<arm>-*`) confirms each: an OFF-arm game that finishes fast = analyzer.
 
