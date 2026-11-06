@@ -134,3 +134,42 @@ The queued build of 0f46edde0 (PID 3317473, waiting on the lock, never started c
 - The payer widens the SEARCH for Dragonstorm: EnumeratePlans' payoff prune no longer drops a no-payoff subset funded
   by an implicit Lotus crack (it used to drop {crack, X} with no payoff). 0f46edde0 restores the rule in the greedy
   policy only. Mirror it in EnumeratePlans too? Default taken: no (a widening is not lossy; searched d3/d5 improved).
+
+## Codex continuation (2026-11-06 ~06:50 UTC) -- provisional, DO NOT LAND
+
+Built 0f46edde0 and verified unit 2613/2613, scenarios 419/419, d0 repro seed 91009 gi8 T4.
+Added the Dragonstorm d0 go-off verification: suspended Lotus can increment spells before main 1;
+the go-off candidate now gets a direct apply and combat check even when the damage projection
+misses a fetched haste attacker (seed 91148 gi147). Both isolated repros recovered T4.
+
+Held-out paired A/B `build/scratch/sb-sacpayer/ab4` (same seed matrix as ab2, 640 jobs):
+Dragonstorm d0 n3000 net -17 turns (22 slower/42 faster), d3 n1000 net -12 (2 slower/14 faster),
+d5 n600 net -8 (0 slower/8 faster). Shadowborn d0 n3000 net -1365 (181 slower/737 faster),
+d3 n600 net -13 (14 slower/26 faster), d5 n400 net 0 (5 slower/5 faster).
+All six cells meet the aggregate net <=0 bar. `ab4rc/` rechecked EVERY 21 searched slower
+games at d8 b0 in one paired batch: FOUR still slower -- Dragonstorm d3 gi137 5->6;
+Shadowborn d3 gi94 5->6, gi345 4->5; Shadowborn d5 gi351 4->5. The adoption bar
+therefore FAILS. No push, GT accept, regression, or ref benchmark on this candidate.
+
+`ab4rc/repro/` has direct game logs for those four. `ab4rc/trace/` has FSW traces.
+Shadowborn gi345: base T2 Swamp, T3 Lake+Stone+Apostle, T4 win; on-demand T2 Lake,
+T3 Stone, T5 win. At T2 depth3, the base's Swamp branch sees T4; on-demand's does
+not. Both branch lists offer T3 Lake+Stone+Apostle. The on-demand apply CAN reach
+the same T3 battlefield (Lake tapped, Stone, three Apostles, hand Sire/Culling/Overlord),
+but the traced T3 continuation scores no win; the ripple/library continuation differs.
+A proposed fix to include trailing activation cost in the Lake plain-tap check was
+built/tested on all four seeds and recovered NONE; it was removed. Do not assert that
+Lake plain-tap is the cause of the searched loss without more evidence.
+
+Dragonstorm gi137: base suspends opening-hand Lotus Bloom on T1 and wins T5 after
+its T4 arrival funds a second Scourge; on-demand leaves it in hand and wins T6.
+T1 search offers Suspend in BOTH arms, but base rates the suspended T1 line T5
+at d5; on-demand rates it no-win through d5. `ab4rc/trace/ds137t4_*` will show
+why its T4 Scourge continuation fails under on-demand; inspect that next.
+
+Temporary MTG_SAC_ON_DEMAND selector has been removed from final source in the
+worktree (HeuristicArm, GoldFishRunner, main), but this tree is committed locally and
+UNPUSHED pending the d8 exceptions. It built and passed unit 2613/2613, scenarios
+419/419 before the discarded activation-cost experiment; rebuild after source
+reverts before further validation. The last local commit contains the
+combat go-off verification plus selector removal.

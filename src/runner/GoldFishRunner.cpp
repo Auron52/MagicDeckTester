@@ -1393,7 +1393,6 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
     // reasoning -- the stamp moves the source from the plan enumerator to the payer, a behaviour. A
     // conjured Black Lotus (Garth) is not in the list, so FiveColour keeps its own conjure-and-crack route.
     state.deck_has_ondemand_sac = [&deck]{
-        if (!heurarm::Flag(heurarm::SAC_ON_DEMAND, EnvOn("MTG_SAC_ON_DEMAND", true))) { return false; }   // A/B ONLY
         for (const Card& c : deck.mainboard)
         {
             const CardDefinition* d = CardDatabase::Instance().LookupCached(c);

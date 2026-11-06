@@ -833,7 +833,6 @@ enum Slot : int
     SERVANT_HASTE_KEEP,       // MTG_SERVANT_HASTE_KEEP  a noncreature payment keeps Generator Servant's haste-tagged {C} floating for a LATER creature cast in the same line (g_line_haste_takers), tapping other sources instead, when that payment still pays and the rest of the line stays payable on the board it leaves. It drained them first, so 'crack the Servant, Signet, hasty Niv-Mizzet' lost the haste at any budget (NivMizzetCombo cast-order draft p5; viewer references). =0 -> the drain-first payment
     NIV_CAST_ORDER,           // MTG_NIV_CAST_ORDER  the USER's NivMizzetCombo cast order (2026-10-31): Sol Ring > Izzet Signet > the Nivs > Curiosity on a Niv > Lookout with a Niv > Brainstorm > Ponder > Preordain > Gitaxian Probe > Remand > [no Niv: Curiosity > Lookout] > Generator Servant, binding inside cantrip plans, with the cantrip-first VALUE hoist of Curiosity / Lookout conditional on a Niv. =0 -> the generic tiers
     SLIVERS_REPLICATE_TOPK,   // MTG_SLIVERS_REPLICATE_TOPK  SliversProvider: of the plans that differ ONLY in their replicate counts, search the one whose counts, read in cast order, are largest (the USER's "max remaining mana" prune, 2026-11-03). Default ON; =0 -> every enumerated count
-    SAC_ON_DEMAND,            // MTG_SAC_ON_DEMAND        TEMPORARY A/B selector (2026-11-05, removed before landing): =0 stamps GameState::deck_has_ondemand_sac false, i.e. the shipped Lotus Bloom / Lake of the Dead SacForMana plan-action route
     PROFANE_RESOLVE_FAN,      // MTG_PROFANE_RESOLVE_FAN  a suspended to-hand tutor's (Profane Tutor's) fetch is decided where the search CROSSES into its upkeep (BoundaryFan, over the resolution-state candidates; GameState::scripted_suspend_tutor), never staged in the previous turn's main-phase plan (USER 2026-11-04: "The card that the tutor fetches should not be staged upfront"). DEFAULT ON; =0 -> the old main-phase upkeep pin (Plan::upkeep_land_search_choice; A/B arm only)
     SLIVERS_ORDER,            // MTG_SLIVERS_ORDER        Slivers TOTAL cast order, USER-APPROVED 2026-11-03 (docs/design/cast-order-drafts-2026-10-14/slivers_vial.md section 3, one row per card): Hatchery first, Thrumming Hivepool last. Default ON; =0 -> VialProvider's generic tiers
     REFINE_VICTIM_SPENT,      // MTG_REFINE_VICTIM_SPENT  the payment refine (MTG_PAY_REFINE) reads a cast's sacrifice victim (g_pay_sac_victim) as tapped: it leaves with the cost, so giving it back is no source released and no strict gain (ManaOracle.cpp RefinePaymentImpl). StompySurprise mana-clean APPLY-DROP, seed 31000062 T3: Natural Order's {2}{G}{G} kept {Forest, Archdruid} over {Mystic (the victim), Archdruid} and Worldly Tutor had no {G}. DEFAULT ON; =0 -> the victim counts like any source
@@ -1620,7 +1619,6 @@ inline const char* Name(int slot)
         "MTG_SERVANT_HASTE_KEEP",
         "MTG_NIV_CAST_ORDER",
         "MTG_SLIVERS_REPLICATE_TOPK",
-        "MTG_SAC_ON_DEMAND",
         "MTG_PROFANE_RESOLVE_FAN",
         "MTG_SLIVERS_ORDER",
         "MTG_REFINE_VICTIM_SPENT",
