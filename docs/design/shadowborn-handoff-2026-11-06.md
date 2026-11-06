@@ -48,26 +48,14 @@ recovers at `--depth 8 --budget-ms 0`. Clairvoyance-only losses are accepted (US
 explained origin drift ONLY if origin's own binary reproduces the same digest. `--accept-with-regressions="<note>"`
 promotes the last inspected run, and only while origin has not moved.
 
-## Red shared-branch CI -- fix in progress (do this FIRST)
+## Red shared-branch CI -- fix PUSHED, CI result not yet read
 
-- Run 42137011583 is red on ubuntu (Windows/parity were cancelled). The cause is another session's commits
-  25261417f (Modern RW Burn) and df30bfce1 (fetchlands now enter the battlefield; the crack is a
-  `PermAbilityMode::SacLandSearch` activation). Two stale tests:
-  - `test_landfall.cpp:216` expects 2 Beasts;
-  - `test_pirates_provider.cpp:371` says "decks/ holds 47 folders but the table pins 46".
-- Fix is uncommitted in worktree `sb-push` (branch ci-fix-fetch-tests off origin c1cba3e87):
-  - test_landfall plays Wooded Foothills, checks 1 Beast, then cracks via
-    `ApplyPermAbility(..., PermAbilityMode::SacLandSearch)` and checks 2 Beasts and life-1;
-  - test_pirates_provider adds `{"Modern RW Burn", "Burn"},`. **"Burn" is a guess**: if the test fails,
-    its message prints the real provider name.
-- A build plus the full unit run was queued on the lock (output `build/scratch/sbpush-build3.log`; the test
-  run follows it). Next:
-  1. Run `.claude/worktrees/sb-push/build/Release/mtg-test` and confirm everything passes.
-  2. Commit "test: update the fetchland landfall test and deck-routing table for the battlefield fetchland
-     and Modern RW Burn".
-  3. `git fetch`, rebase onto `origin/phase-1-2-deck-analyzer`, push to that branch.
-  4. Watch the run with `gh run watch <id> --exit-status` in the background, then report Linux, Windows and
-     parity.
+- 161606220 (test-only) updates `test_landfall.cpp` for the battlefield fetchland plus SacLandSearch crack, and
+  routes Modern RW Burn to `ModernRwBurn` in `test_pirates_provider.cpp`. Unit 2611/2611 on origin c1cba3e87.
+  It was rebased onto newer origin before the push and NOT rebuilt after the rebase.
+- The GitHub API was rate-limited at push time (02:03 UTC). NEXT: run
+  `gh run list --branch phase-1-2-deck-analyzer --limit 3`, then `gh run watch <id> --exit-status`, and report
+  Linux, Windows and parity. If it is red, fix it first.
 
 ## Other pending items
 
