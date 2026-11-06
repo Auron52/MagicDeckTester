@@ -173,3 +173,25 @@ UNPUSHED pending the d8 exceptions. It built and passed unit 2613/2613, scenario
 419/419 before the discarded activation-cost experiment; rebuild after source
 reverts before further validation. The last local commit contains the
 combat go-off verification plus selector removal.
+
+## Codex continuation (2026-11-06, after the above) -- still provisional
+
+Dragonstorm d3 gi137 is now recovered at d8 b0, turn 5. The old source's
+`LumpColourOrder` chose W for a `{2}{R}{R}{R}` Scourge payment: its pool estimate
+already credited Lotus and Sandstone Needle, so every colour had zero reported
+shortage and the WUBRG tie-break won. That forced the actual payment to consume
+Needle's last depletion counter. The turn-5 firebreathing then had only two red
+mana and missed lethal. Ranking the *current bill's coloured pips* after shortage
+chooses R, preserves Needle, and recovers the win. An experimental extra depletion
+hold did not fix any d8 case by itself and was removed. All diagnostic traces and
+source prints were removed. The colour-only source was rebuilt; all four d8 seeds
+were rerun: Dragonstorm 5 (recovered), Shadowborn gi94 6, gi345 5, gi351 5
+(still slower). No full regression or GT accept until those three are understood.
+
+Shadowborn gi345 detail: T2 Swamp branch at d3 has tail 4 under the base and no
+win under on-demand. Both consider Profane Tutor suspend in T2 main 2. T3 Lake +
+Thrumming Stone + Apostle reaches three Apostles under both; the old plan includes
+an explicit Lake crack action. T4 candidate continuations diverge around ripple and
+Lake mana. Compare the T2 main-2 Profane branch's hidden T3/T4 library and float
+state next; `build/scratch/sb-sacpayer/ab4rc/trace/sb345m2_{base,new}.err` and
+`sb345t4p_{base,new}.err` carry the relevant traces.
