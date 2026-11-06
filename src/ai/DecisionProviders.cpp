@@ -58793,7 +58793,7 @@ bool ShadowbornProvider::ComboCardValue(const GameState& s, const CardDefinition
         if (d != nullptr && d->params.grants_ripple > 0) { granter_lib = true; break; }
     }
     if (!granter_lib) { return false; }
-    out = 8 * dmg_unit;
+    out = 9 * dmg_unit;
     return true;
 }
 bool ShadowbornProvider::SearchEarlySacLandPolicy(const GameState& s, const std::vector<Action>& acts) const
