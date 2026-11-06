@@ -283,6 +283,18 @@
    "shortfalls": [],
    "src": "15b08e56da68debe1e9c2b54f27c4020bb3af8c1"
   },
+  "kithkin": {
+   "hand_mismatch": 0,
+   "hand_mismatch_games": [],
+   "human": 4.6,
+   "max_turns": 8,
+   "n": 10,
+   "policy": "committed value_play",
+   "search": 4.3,
+   "short": 0,
+   "shortfalls": [],
+   "src": "2327c1d07fa2d82b1b22548faddea01f5917e0c6"
+  },
   "kittyequipment_v1_kemba_balan": {
    "hand_mismatch": 0,
    "hand_mismatch_games": [],

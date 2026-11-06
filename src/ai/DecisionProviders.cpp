@@ -47,6 +47,29 @@ uint16_t KithkinProvider::ChosenCreatureSubtypeId(const GameState& state, int co
     return DecisionProvider::ChosenCreatureSubtypeId(state, controller, entering);
 }
 
+bool KithkinProvider::ArchetypeCardValue(const GameState& state, const CardDefinition& def,
+                                         int dmg_unit, int& out) const
+{
+    if (def.card.m_name != "Aether Vial" || state.turn_number != 1) { return false; }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index == state.active_player_index && p.card.m_name == "Aether Vial")
+        { return false; }
+    }
+    int two_drops = 0;
+    for (const Card& c : state.players[state.active_player_index].hand)
+    {
+        const Card& printed = ZoneCard(c);
+        if (printed.IsCreature() && printed.m_mana_cost.ManaValue() == 2) { ++two_drops; }
+    }
+    if (two_drops < 2) { return false; }
+    // A turn-one Vial can put one of these bodies in on each following turn while
+    // lands pay for another. Rank it ahead of a lone one-drop for the budgeted
+    // candidate walk; the search still compares the legal plans.
+    out = 5 * dmg_unit;
+    return true;
+}
+
 // Standing unpruned-vs-pruned A/B (search-primary requirement): when MTG_UNPRUNED is set,
 // the search-narrowing heuristics return their MAXIMALLY-PERMISSIVE value so the general
 // search explores the full branch space instead of the heuristic-narrowed one. Run the

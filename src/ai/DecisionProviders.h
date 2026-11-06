@@ -365,6 +365,8 @@ class KithkinProvider : public DeckProvider
 public:
     uint16_t ChosenCreatureSubtypeId(const GameState& state, int controller,
                                       const CardDefinition& entering) const override;
+    bool ArchetypeCardValue(const GameState& state, const CardDefinition& def,
+                            int dmg_unit, int& out) const override;
     CertStance Certificate() const override
     { return { CertState::NotAssessed,
                "NOT ASSESSED. Price Figure's persistent activations and Militia's Pride's "

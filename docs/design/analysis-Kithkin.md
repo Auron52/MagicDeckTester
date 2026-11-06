@@ -113,16 +113,25 @@ four Plains, two Unexpectedly Absent, and Borderguard; drew another Plains on
 turn 2 and its first one-drop on turn 3. The turn-7 clock follows the slow draw,
 not a missing play line.
 
-The final strict reference replay passed 757 saved games: 294 unchanged, 462
+The final strict reference replay passed 777 saved games: 313 unchanged, 463
 intent-repaired, one beaten, and zero play drift, board divergence, enumeration
 gaps, mulligan drift, or contract failures. Both suboptimal references remain
 strictly beaten. The one-command verifier passed its runtime viewer audit, 120
 nonconvergence/fidelity games with no flags, and eight protocol-invariant games
 covering 204 decisions.
 
+The ten new Kithkin human references average a turn-4.6 win. At the shipped
+depth-5, 20 ms play setting, search matches or beats all ten (three faster;
+average turn 4.3). One turn-4 line initially took until turn 5 because the
+budgeted root search examined Figure of Destiny before Aether Vial. The Kithkin
+provider now ranks a turn-one Vial first when at least two two-mana creatures
+are in hand. This changes candidate order only; the searched plans still decide
+the play. The regular and overnight per-game audits found no slower searched
+games after the change, with two overnight games winning a turn earlier.
+
 Across the four overnight depth-5 play rows, Kithkin wins 7,696 of 7,700
-games and averages 4.6304 turns (unwon games score as turn 9). The four depth-0
-rows average 5.1179 turns over 8,000 games. These rows use different seed blocks
+games and averages 4.6301 turns (unwon games score as turn 9). The four depth-0
+rows average 5.1174 turns over 8,000 games. These rows use different seed blocks
 and sample sizes; the paired 75-game smoke comparison above is the same-seed
 depth sanity check.
 
