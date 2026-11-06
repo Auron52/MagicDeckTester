@@ -470,6 +470,10 @@ struct GameState
     // reads off the same state, so lockstep holds either way); a FALSE stamp is what keeps a deck with no
     // such card off the payer's extra board scan. A deck constant: never folded.
     bool                     deck_has_ondemand_sac = true;
+    // A searched payment policy for the current main-phase line. When set, the next eligible
+    // outermost payment may crack a Lake of the Dead before paying its own bill. The payer
+    // consumes the pin only after a successful crack; it survives a draw breakpoint.
+    bool                     scripted_early_ondemand_crack = false;
     // EXTRA TURNS (Emrakul, the Aeons Torn -- CardParams::cast_trigger_extra_turns; Unpredictable Cyclone
     // phase 2, 2026-10-27). USER RULING 2026-10-26: *"Importantly, extra turns do not count toward the
     // turn count."* So `turn_number` stays the ROUND (how many turns the opponent has been given; every
