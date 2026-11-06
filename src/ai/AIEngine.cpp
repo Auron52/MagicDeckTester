@@ -3245,6 +3245,23 @@ int AIEngine::RealLandNodeThunk(void* owner, GameState& state, int controller, c
     return static_cast<AIEngine*>(owner)->DecideResolutionLand(state, controller, pp, card, ctx);
 }
 
+void AIEngine::DecideAttackLand(GameState& state, const std::vector<int>& attackers, bool additional)
+{
+    if (m_in_rollout || m_lookahead_depth <= 0 || HumanPlayActive() || m_external_chooser
+        || !state.deck_has_land_search) { return; }
+    UnbudgetedPlayScope _unbudgeted_play(m_budget_ms <= 0);
+    TurnSolver::SearchLeafDepthScope _sld(m_profile.search_leaf_depth, m_profile.search_leaf_first_turn_depth);
+    DeckShapeScope _shape(m_profile);
+    SearchBudget budget = DecisionBudget();
+    std::optional<GameState> _bsv;
+    const GameState& view = blindsearch::View(state, _bsv, 0x41544B4Cull);
+    const int pin = TurnSolver::ChooseRealAttackLand(view, attackers, additional, m_lookahead_depth,
+                                                     m_max_turns, &budget, m_search_post_combat);
+    if (pin < 0) { return; }
+    if (pin != state.scripted_attack_land_search) { m_committed_line.clear(); }
+    state.scripted_attack_land_search = pin;
+}
+
 
 bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         const std::function<void(GameState&)>& resolve_stack)

@@ -796,6 +796,23 @@ TEST_CASE("Idle pass: an inherited crack / attack pick makes the front a variant
     CHECK_FALSE(HasLs(va, 1, -1));
 }
 
+TEST_CASE("Titan attack resolution node searches from the declared-attacker state")
+{
+    LoadCardsGaps();
+    GameState s = IdleTitanBoard();
+    int titan = -1;
+    for (int i = 0; i < static_cast<int>(s.battlefield.size()); ++i)
+    { if (s.battlefield[static_cast<std::size_t>(i)].card.m_name.str() == "Primeval Titan") { titan = i; break; } }
+    REQUIRE(titan >= 0);
+    s.scripted_attack_land_search = 1;   // a main-phase estimate; the real node may replace it
+    const int rank = TurnSolver::ChooseRealAttackLand(s, {titan}, /*additional=*/false,
+                                                      /*depth=*/1, /*max_turns=*/7,
+                                                      /*budget=*/nullptr, /*second_main=*/false);
+    CHECK(rank >= 0);                    // more than one resolution-state pick was searched
+    CHECK(s.scripted_attack_land_search == 1);  // trials never mutate the real state
+    CHECK(TurnSolver::ChooseRealAttackLand(s, {}, false, 1, 7, nullptr, false) == -1);
+}
+
 // ---- THE POST-APPLY STATE PINS, one body for both worlds (2026-10-17; TurnSolver::WritePostApplyStatePins)
 // ApplyPlanDirect's preamble and the executor (its committed plan, and a breakpoint re-solve's plan) write the
 // same fields the same way: WRITE-WHEN-SET, so a re-solve's plan that did not branch on an axis leaves the

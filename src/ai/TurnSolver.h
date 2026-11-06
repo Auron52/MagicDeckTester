@@ -2693,6 +2693,9 @@ public:
     static int ChooseRealResolutionLand(const GameState& state, int controller, const CardParams& pp,
                                         const Card& card, const SuspendArrivalCtx& ctx, int depth, int max_turns,
                                         SearchBudget* budget, bool second_main);
+    static int ChooseRealAttackLand(const GameState& state, const std::vector<int>& attackers,
+                                    bool additional, int depth, int max_turns, SearchBudget* budget,
+                                    bool second_main);
     // Test hook: run the fold over an explicit plan list (the list EnumeratePlans would return).
     static std::vector<Plan> FoldIdleLandCracksForTest(const GameState& state, bool is_pre_combat,
                                                        std::vector<Plan> plans);

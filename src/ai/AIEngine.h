@@ -275,6 +275,7 @@ public:
                                  const SuspendArrivalCtx& ctx);
     int DecideResolutionLand(GameState& state, int controller, const CardParams& pp, const Card& card,
                              const SuspendArrivalCtx& ctx);
+    void DecideAttackLand(GameState& state, const std::vector<int>& attackers, bool additional);
     static int RealLandNodeThunk(void* owner, GameState& state, int controller, const CardParams& pp,
                                  const Card& card, const SuspendArrivalCtx& ctx);
 
