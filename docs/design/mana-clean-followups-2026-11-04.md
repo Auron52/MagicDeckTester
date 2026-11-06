@@ -103,3 +103,34 @@ capped" flags, nearly all Crackle with Power with a large X on boards of 10+ lan
 likely cause of the container OOM at ~12:50Z. Games in flight at the abort: gi 1457, 1827, 2157, 2179, 2291, 2417, 2445.
 Galadriel is NOT requeued: root-cause the oracle's memory on X-spell payment enumeration first (per-game RSS with
 `MTG_MANA_ORACLE=2`, one thread), then rerun the deck alone.
+
+## 9. Analyzer stalls: the oracle's per-plan replays (diagnosed 2026-11-06, NOT fixed yet)
+USER 2026-11-06: *"Yes, I would like to sort out the stall cases. Whatever the case we don't want to get indefinitely
+stuck on those. If it is the engine's search being slow that might be difficult to fix, but I suspect it would be easier
+if it is just the analyzer, since I don't believe it has been optimized much."*
+
+Evidence: LandfallElementals pass1-landfallelementals-r3 (src 7bd2b9ac28ff), on arm 1663/1667 chunks after 2 h, with 4
+games at ~2 h (gi 8496 and 9503 also stalled 11-05; 11201, 11679). `sudo gdb` of the batch (stacks in
+`build/scratch/mana_clean/postpass/samples/lfe-live.bt`): EVERY busy thread is in
+`manaoracle::AuditDecision > AuditPlan > Realize > TurnSolver::ApplyPlan > BpUnbranchedCanon > BpDeriveContinuationList >
+EnumeratePlans(WithLand)`. A 45 s `perf` profile: the self time is all plan enumeration and copying (BuildSimKeyBase,
+AppendSubdecisionAxes, Plan copy/dtor, EnumeratePlans, GameState copy) plus `ParetoKeep` ~2%. So the play search is not
+stuck; the ANALYZER is, and its cost is that each oracle "node" is a full `ApplyPlan` from the decision board, which on a
+breakpoint deck re-derives the continuation menu every time. Bounds today: `MTG_MANA_ORACLE_NODES` 2000 applies per
+plan, then the capped retry (`_RETRY`), times every plan on the menu (`MaxPlans`) plus up to 400 ENUM-GAP gate checks
+(`MTG_MANA_ORACLE_GATE_MAX`). Nothing bounds a DECISION or a GAME, so one decision can take hours.
+
+Same pattern, still to confirm per deck: EDF gi 19/61, Alchemist gi 29/59, Niv gi 47 (all stall again after the 11-06
+time fix). The post-pass chain (`postpass/chain.sh`, stall.json, arms ORACLE=0 then 2) plus `postpass/sampler.sh`
+(gdb + perf every ~5 min into `postpass/samples/a<arm>-*`) confirms each: an OFF-arm game that finishes fast = analyzer.
+
+Fix, in order (analyzer only, play untouched, so no NO-GREEDY or GT question):
+1. Make an apply cheap: within one Realize all scripts apply the SAME plan from the SAME root, so the continuation
+   menus `BpDeriveContinuationList` builds repeat across scripts whenever the paid board is identical. Memo them per
+   Realize (key = the sim key of the board at the breakpoint), exact (same key = same menu). Measure applies/s and
+   the output byte-identical (`MTG_ORACLE_RESUME_CHECK`-style self-check).
+2. Never indefinitely stuck: a per-DECISION apply budget (env, generous, e.g. 50k applies) after which the remaining
+   plans are reported as a new CAPPED-DECISION census bucket (partial, never a verdict), counted in the report so a
+   deck cannot pass clean on capped decisions. This is the measurement's own bound, inert below the cap.
+3. Re-run the deferred decks (eldrazidisplacerflicker, accomplishedalchemist, nivmizzetcombo, landfallelementals) and
+   check the stall games finish.

@@ -1,6 +1,6 @@
 # Checkpoint: mana-clean per-deck pass (pass 1) and what follows it
 
-Shared state for whoever picks this up (Claude or Codex). Last updated 2026-11-06 ~10:40 UTC.
+Shared state for whoever picks this up (Claude or Codex). Last updated 2026-11-06 ~12:45 UTC.
 Related: `docs/design/mana-clean-followups-2026-11-04.md` (USER rulings, queued fixes; sections 7-8 are 11-06),
 `docs/design/mana-oracle-memory-time.md` (the oracle memory + time fixes), `scripts/mana_clean.py`.
 
@@ -16,7 +16,7 @@ before every push. "Feel free to delay any iterations that seem to be getting st
 1. **Pass driver** `build/scratch/mana_clean/pass1/drive2.sh`, PID in `pass1/driver2.pid`. Queue `pass1/QUEUE2`
    (consumed from the top), log `pass1/status.log` (START / END / DEFERRED / DONE2), per-deck log `pass1/<deck>.log`,
    reports `logs/mana_clean/pass1-<deck>[-rN]/report.md`. `touch pass1/PAUSE2` stops it before the next deck.
-   Snow END 09:45Z (7,000 games, 27,293 issues). Niv DEFERRED 3x at 10:38Z (sizing probe 63/64, gi 47 stalled again, same as 11-04; added to stall.json). At 10:38Z: `landfallelementals` (last in queue).
+   Snow END 09:45Z (7,000 games, 27,293 issues). Niv DEFERRED 3x at 10:38Z (sizing probe 63/64, gi 47 stalled again, same as 11-04; added to stall.json). LFE DEFERRED 12:37Z (4 games ~2 h, all inside the oracle: followups s9). DONE2 12:37Z; the post-pass chain is running.
    Each `mana_clean.py run` calls `pgo_ensure` at its start, so Niv will first rebuild build/PGO on the current
    `HEAD:src` (7bd2b9ac28ff; the pass so far ran on 2878388e7f18). Each record names its src.
 2. **Post-pass chain** `build/scratch/mana_clean/postpass/chain.sh`, PID in `postpass/chain.pid`, log
@@ -40,7 +40,7 @@ before every push. "Feel free to delay any iterations that seem to be getting st
 - Triage of finished decks' issues is PARKED (budget); route them per deck to fix work next week.
 
 ## After the chain (in order, one engine job at a time)
-1. Read the stall diagnosis; root-cause whichever arm is slow.
+1. Read the stall diagnosis (LFE already shown ANALYZER-side, followups s9); build the s9 fix (memo + per-decision cap), rerun the 4 deferred decks.
 2. Hinata2 regression game 27 (seed 3003, gi 27) at `--depth 8 --budget-ms 0` on the `fix/c-wild` binary (old
    manifest `build/scratch/cwild/regslow/new.json`; the 11-04 run was lost to the OOM kill). Wins on T8 -> no
    ruling needed; otherwise ask the USER (accept as budget churn vs root-cause). c-wild is parked on `fix/c-wild`.
