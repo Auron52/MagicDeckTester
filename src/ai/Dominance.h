@@ -589,7 +589,10 @@ static_assert(sizeof(Player) == 208,
 // name's per-name reveal budget, which a later copy of the SAME name carrying kRippleContinue reads; two states
 // that differ only there differ only in what such a copy (a plan duplicate of the first copy's own budget line)
 // reveals, never in a decision the search scored from the key.
-static_assert(sizeof(GameState) == 1272,   // 1264 + upstream's upkeep_tutor (+8)
+// The on-demand deck trait and searched early-payment pin add eight bytes after
+// the existing trait group. The trait is constant for a deck; the pin is folded
+// below when set, so equal dominance keys still imply equal future payments.
+static_assert(sizeof(GameState) == 1280,   // 1272 + on-demand payment state (+8)
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 
