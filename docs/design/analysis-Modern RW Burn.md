@@ -65,8 +65,11 @@ not trigger the automatic route. The fetched land remains a player choice.
 
 The provider audit showed that fetchland search sends this list to
 `AntiLifegainProvider` before the Burn branch. `ModernRwBurnProvider` therefore
-derives from `AntiLifegainProvider` and is routed immediately above that branch;
-the inherited play policy is byte-identical to the pre-onboarding route.
+derives from `AntiLifegainProvider` and is routed immediately above that branch.
+Its fetch target choice is now Burn-specific: fetch Sacred Foundry until two
+white-producing lands are on the battlefield, then Mountain, falling back to
+the other legal target if the preferred one is absent. Human play and the
+unpruned audit still expose every legal target.
 Detection requires one of Boros Charm, Boltwave, Sunbaked Canyon, or Inspiring
 Vantage, all unique to this repository decklist. Its certificate is
 `NotAssessed`. A Claude game found that the inherited opaque-cast policy omits
@@ -83,6 +86,32 @@ above. It also found a pre-existing Slivers certificate inherited without an
 override. A Slivers-specific `NotAssessed` declaration now preserves that
 stance while satisfying the own-provider metadata rule. The provider audit
 passes, including Modern RW Burn routing.
+
+## Saved references and fetch regression (2026-11-06)
+
+At the shipped play settings, search matched or beat all ten saved user games:
+six ties, four one-turn improvements, zero opening-hand mismatches, and zero
+shortfalls. The result remained identical after the Burn fetch target rule.
+
+The first full smoke run after the fetch activation change found 14 moved keys
+concentrated in Anti-Lifegain, FiveColour, Burn, and Modern RW Burn. Holding a
+fetchland until activation cost Anti-Lifegain and FiveColour about a tenth of a
+turn at depth 0 (4.999 and 5.566 versus 4.900 and 5.477 with immediate cracking).
+Those two providers now explicitly crack the reviewed zero-mana, one-life
+fetchlands on play in autonomous search. Human play and the unpruned audit keep
+the activation choice. After this policy change, the affected smoke and
+regression searched games had zero slower outcomes versus the committed GT;
+strict replay passed 767 active references with zero play drift, board
+divergence, or enumeration gaps. The affected smoke and regression rows were
+accepted together with their per-game logs; `check_gt_logs.py` reported all
+1,027 entries consistent. The affected overnight rows were subsequently
+measured on the same source tree with PGO and accepted with their per-game
+logs; the full 1,027-entry consistency check passed again. Its searched game
+audit reported 27 slower and 202 faster games. Higher-budget replays recovered
+all Anti-Lifegain and FiveColour slowdowns. Persistent Burn slowdowns had a
+different kept hand or a different post-fetch draw, so they are not
+like-for-like search regressions. Burn's four solo depth-5 overnight rows each
+improved by roughly 0.04–0.07 turns.
 
 ## Verification
 
