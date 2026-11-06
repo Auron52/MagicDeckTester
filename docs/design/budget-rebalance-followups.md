@@ -152,17 +152,24 @@ diagnosis in `docs/design/lfe-plan-fan-explosion.md` (sections 3 and 7). These 5
 are below what the four concurrent heavy LFE rollouts need. The stored plan and breakpoint
 continuation caches share the accounted plan pool; changing their limits does not fix this case.
 
-## 4. Held for the USER (do not adopt without them)
+## 4. Held or decided by the USER (do not adopt held items without them)
 
 USER 2026-11-04: hold these "unless they are shown to help the HEAVY TAIL; not keen on a new per-deck
 setting for a few percent."
 1. **Per-deck price R** (each deck's own ns/unit). Over 31,082 paired games: 27 better, 10 worse, wall
    +0.9%. It redistributes quality within a deck at the same cost and does not shrink the tail. The
    build-in shape is also open: a fit table in the profile, or derived in-engine.
-2. **Lower search budget for three decks.**
+2. **Lower search budget for three decks — declined 2026-11-06; keep 20 virtual ms.**
    - Snow x0.7: +1 / 1,300, 0.72x wall.
    - Selesnya v2 x0.5: 0 / 1,800, 0.74x wall.
    - Colossus x0.5: -1 / 1,767, 0.77x wall.
+   These earlier arms changed the priced-work rate, not `budget_ms`. A direct play-budget A/B on
+   600 fresh paired games per deck at shipped depth tested Snow 20 -> 14 and Selesnya v2 / Colossus
+   20 -> 10: Snow had 3 slower games, 0 faster, net +3 loss-penalized turns at 0.84x wall;
+   Selesnya had 0 win-turn changes at 0.86x wall; Colossus had 1 slower game (T5 -> T7), net +2
+   turns at 0.77x wall. In the same pooled batch Hinata at its shipped b30 averaged 3.03 s/game,
+   Snow b20 2.99 s/game, Selesnya b20 0.098 s/game, Colossus b20 0.064 s/game. Evidence:
+   `build/scratch/budget/direct_budget_ab/`. USER: stick with 20 ms and drop this question.
 3. **A tighter priced ceiling at low budgets (X=30 at b1/b3).** On all 40 complete decks (200 games
    each):
    - b1: 0.93x wall, p99.9 7.9 -> 5.8 s.
