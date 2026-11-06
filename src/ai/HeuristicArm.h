@@ -844,6 +844,7 @@ enum Slot : int
     SB_CAST_ORDER,            // MTG_SB_CAST_ORDER  Shadowborn Apostle: the USER's cast order (2026-11-04): land, Dark Ritual, [Culling's hand victim], Culling the Weak, Thrumming Stone, Apostle, Reaper, Sire, Overlord, Jetmir, Demonic Tutor, Diabolic Intent, Profane Tutor, Lotus Bloom (total by name); Culling's hand victim is cast just before it; within one main the Overlord (hard cast or fetched) never follows a Jetmir fetch
     SB_RITUAL_PAYOFF,         // MTG_SB_RITUAL_PAYOFF  Shadowborn Apostle (USER 2026-11-05, "prune rituals with no payoff like we have for other decks"): a plan subset that casts a mana ritual (Dark Ritual, Culling the Weak) and spends mana on nothing that is not itself a ritual is dropped (DecisionProvider::PrunesRitualWithoutSpend; TurnSolver SubsetRitualSpendsNothing) -- its float empties at the end of the phase, so the same subset without the ritual dominates it. Search branch list and greedy policy alike. DEFAULT ON (2026-11-05, ab7/ab8)
     PROFANE_REAL_NODE,        // MTG_PROFANE_REAL_NODE    the EXECUTOR's crossing node: a Profane Tutor fetch the committed line left unpinned (its crossing lay beyond the line's horizon) is SEARCHED at the end of the real turn (TurnSolver::ChooseRealCrossingFetch), never the provider's front by fallback (USER 2026-11-04: "We should search and use a heuristic on that decision like any other."). DEFAULT ON; =0 -> the front (A/B arm only)
+    LAND_TUTOR_PIN,           // MTG_LAND_TUTOR_PIN       Crop Rotation (PerformLandTutorToBattlefield) consumes the resolution tutor axis's pin (Plan::tutor_choice -> ScriptedTutor), an index into the provider's deduped candidates at resolution -- the axis fanned it but the put took the front and the pin leaked to the next tutor (USER 2026-11-04: "If that is in the engine there should be search, but the only deck with the card (Creature Giving) has a serious pruning heuristic which should remain."). DEFAULT ON; =0 -> the front (A/B arm only)
     COUNT
 };
 
@@ -1632,6 +1633,7 @@ inline const char* Name(int slot)
         "MTG_SB_CAST_ORDER",
         "MTG_SB_RITUAL_PAYOFF",
         "MTG_PROFANE_REAL_NODE",
+        "MTG_LAND_TUTOR_PIN",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

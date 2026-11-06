@@ -44087,6 +44087,12 @@ inline void PerformUpkeepSacrificeCreature(GameState& state)
     }
 }
 
+// Crop Rotation's searched pick (see PerformLandTutorToBattlefield). DEFAULT ON; =0 -> the provider's front.
+inline bool LandTutorPinOn()
+{
+    static const bool e = EnvOn("MTG_LAND_TUTOR_PIN", true);
+    return heurarm::Flag(heurarm::LAND_TUTOR_PIN, e);
+}
 // Crop Rotation resolution (CardParams::tutor_land_to_battlefield): "Search your library for a
 // land card, put that card onto the battlefield, then shuffle." Like PerformFetch but WITHOUT the
 // 1-life fetch payment, with the tutor axis choosing the target (target_name = the searched
@@ -44109,6 +44115,23 @@ inline void PerformLandTutorToBattlefield(GameState& state, int controller_index
         // Whiff: no land left in the library. "...then shuffle" still happens (CR 701.19b).
         if (cands.empty()) { WhiffShuffle(state, controller_index, "land tutor"); return; }
         want = cands.front();
+        // THE SEARCHED PICK (MTG_LAND_TUTOR_PIN, DEFAULT ON; =0 -> the provider's front, A/B arm only). USER
+        // 2026-11-04 on Crop Rotation: "If that is in the engine there should be search, but the only deck with
+        // the card (Creature Giving) has a serious pruning heuristic which should remain." The resolution tutor
+        // axis already fans this cast (Plan::tutor_choice -> ScriptedTutor); consume that pin exactly as the
+        // single-put branch of PerformTutorToBattlefield does: an index into the provider's deduped candidates
+        // at the TRUE resolution state, clamped. The provider still RESTRICTS the menu (Creature Giving: the
+        // Orchard alone while one is in the library). Consuming it here also stops the pin leaking to the next
+        // tutor of the apply.
+        if (LandTutorPinOn() && (tutorpin::NoteRead(), g_scripted_tutor_choice >= 0))
+        {
+            const int pick = g_scripted_tutor_choice;
+            g_scripted_tutor_choice = -1;
+            std::vector<std::string> uniq;
+            for (const std::string& c : cands)
+            { if (std::find(uniq.begin(), uniq.end(), c) == uniq.end()) { uniq.push_back(c); } }
+            want = uniq[std::min<std::size_t>(static_cast<std::size_t>(pick), uniq.size() - 1)];
+        }
     }
     int idx = -1;
     for (int i = 0; i < static_cast<int>(ap.library.size()); ++i)
