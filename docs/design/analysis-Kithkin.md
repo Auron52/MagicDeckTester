@@ -129,11 +129,22 @@ are in hand. This changes candidate order only; the searched plans still decide
 the play. The regular and overnight per-game audits found no slower searched
 games after the change, with two overnight games winning a turn earlier.
 
-Across the four overnight depth-5 play rows, Kithkin wins 7,696 of 7,700
+Before adopting the exhaustive mulligan profile, across the four overnight
+depth-5 play rows, Kithkin wins 7,696 of 7,700
 games and averages 4.6301 turns (unwon games score as turn 9). The four depth-0
 rows average 5.1174 turns over 8,000 games. These rows use different seed blocks
 and sample sizes; the paired 75-game smoke comparison above is the same-seed
 depth sanity check.
+
+## Exhaustive mulligan profile
+
+The generator found 13 hand buckets and selected depth 1 with a 3 ms budget
+for its rollouts. The accepted table covers 39,945 seven-card compositions and
+has bottoming enabled. In paired validation, exhaustive keep improved the
+average win turn by 0.1645 over static keep; its bottoming policy improved by
+another 0.0545 over lookahead bottoming. Both passed the generator's adoption
+gates. The subsequent regression audit showed 202 faster and 75 slower searched
+games, and the new baseline was accepted.
 
 <!-- verify_deck:begin (generated -- do not edit inside) -->
 ## Last verification (2026-11-06)

@@ -1,4 +1,5 @@
 {
+  "value_play": { "expected_buckets": 13, "mull_gen_depth": 1, "mull_gen_budget_ms": 3 },
   "card_scores": {
     "Adaptive Automaton": [
       0.051429725208160804,

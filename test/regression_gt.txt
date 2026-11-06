@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 62784300d  date 2026-11-06
+# Regression ground truth -- commit 4ff8dffab  date 2026-11-06
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-05): Full overnight rebaseline requested after Jumbo exhaustive keep adoption and current engine changes: 118 matching, 424 changed, 11 new Shadowborn rows. Searched games 3953 faster vs 1889 slower; Angels +0.0064t/6065 searched, Angels2HG +0.0150t/600, Bruna +0.0122t/2131 remain visible follow-ups. Jumbo full overnight rows already adopted and match.
 # accepted-with-regressions (smoke, 2026-11-06): Shadowborn main-1 rule + USER cast order + ritual-payoff prune DEFAULT ON (held-out ab7 -0.035 turns, -14..-20% units; d8 b0: every unrecovered game is the clairvoyant ripple-dig the USER ruled out). Also accepts 4 digest-only rows (edf_smoke_d0_s1001, edf_regression_d0_s2002, edf_regression_d5_s3003, bruna_regression_d5_s2002; averages unchanged): pre-existing origin drift, reproduced byte-identically by origin 36d3672bc's own binary
@@ -298,10 +298,10 @@ whiteknights_regression_d0_s2002=4.5700/86fdc5f908b7b772
 whiteknights_regression_d3_s2002=4.0900/7bf0e912b2753e1a
 whiteknights_regression_d5_s2002=4.1620/87050a6da27e5081
 whiteknights_regression_d5_s3003=4.1220/d69782f1d0ff2795
-kithkin_regression_d0_s2002=5.1430/b9ee90a29578e241
-kithkin_regression_d3_s2002=4.5100/f23ac556801e3733
-kithkin_regression_d5_s2002=4.6200/8c067a98cfff834a
-kithkin_regression_d5_s3003=4.6340/3378c51c18be8668
+kithkin_regression_d0_s2002=4.9920/6c937c86f2bca990
+kithkin_regression_d3_s2002=4.4700/1d1fff64bc19bc20
+kithkin_regression_d5_s2002=4.5000/db58095226bfbd80
+kithkin_regression_d5_s3003=4.4780/04c9e5d43aa0cdec
 antilife_regression_d0_s2002=5.0120/5be41ad99b2c4002
 antilife_regression_d3_s2002=4.2200/27787b129bc8fb5e
 antilife_regression_d5_s2002=4.2580/23091191dc34ebc6
