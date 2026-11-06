@@ -1,6 +1,6 @@
 # Checkpoint: mana-clean per-deck pass (pass 1) and what follows it
 
-Shared state for whoever picks this up (Claude or Codex). Last updated 2026-11-06 ~10:05 UTC.
+Shared state for whoever picks this up (Claude or Codex). Last updated 2026-11-06 ~10:40 UTC.
 Related: `docs/design/mana-clean-followups-2026-11-04.md` (USER rulings, queued fixes; sections 7-8 are 11-06),
 `docs/design/mana-oracle-memory-time.md` (the oracle memory + time fixes), `scripts/mana_clean.py`.
 
@@ -16,13 +16,13 @@ before every push. "Feel free to delay any iterations that seem to be getting st
 1. **Pass driver** `build/scratch/mana_clean/pass1/drive2.sh`, PID in `pass1/driver2.pid`. Queue `pass1/QUEUE2`
    (consumed from the top), log `pass1/status.log` (START / END / DEFERRED / DONE2), per-deck log `pass1/<deck>.log`,
    reports `logs/mana_clean/pass1-<deck>[-rN]/report.md`. `touch pass1/PAUSE2` stops it before the next deck.
-   Snow END 09:45Z (7,000 games, 27,293 issues). At 10:03Z: `nivmizzetcombo` running, then `landfallelementals`.
+   Snow END 09:45Z (7,000 games, 27,293 issues). Niv DEFERRED 3x at 10:38Z (sizing probe 63/64, gi 47 stalled again, same as 11-04; added to stall.json). At 10:38Z: `landfallelementals` (last in queue).
    Each `mana_clean.py run` calls `pgo_ensure` at its start, so Niv will first rebuild build/PGO on the current
    `HEAD:src` (7bd2b9ac28ff; the pass so far ran on 2878388e7f18). Each record names its src.
 2. **Post-pass chain** `build/scratch/mana_clean/postpass/chain.sh`, PID in `postpass/chain.pid`, log
    `postpass/status.log`. Waits for the driver to exit; if the last status line is DONE2 it runs
    `mana_clean.py rescore` and COMMITS `test/mana_clean.json` (not pushed: push it after the references check +
-   `git pull --rebase`). Then the EDF / Alchemist stall diagnosis: `postpass/stall.json` (EDF gi 19, 61;
+   `git pull --rebase`). Then the EDF / Alchemist stall diagnosis: `postpass/stall.json` (EDF gi 19, 61; Niv gi 47;
    Alchemist gi 29, 59; seed 30000000+gi) as one batch with `MTG_MANA_ORACLE=0` (`stall.o0.*`), then `=2`
    (`stall.o2.*`), under `/usr/bin/time -v`. Reading: if the OFF arm is slow too, the stall is play-side (a search
    blow-up, not the analyzer); if only ON is slow, it is another oracle path.
