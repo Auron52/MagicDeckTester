@@ -70612,6 +70612,7 @@ static void NoteDothUncoveredSearch(const GameState& s, int ordinal, int pin)
     }
 }
 static thread_local int* t_upkeep_tutor_width_probe = nullptr;
+static bool SimulateUpkeepAfterArrivals(GameState& state);   // its second half (below)
 static bool SimulateEndAndStartNextTurn(GameState& state)
 {
     Player& ap = state.ActivePlayer();
@@ -71000,7 +71001,14 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     // empty-library draw is the draw step's loss (the caller's `return false` convention).
     if (!PerformUpkeepHellbentDraw(state)) { return false; }
     ProcessSuspendArrivals(state, state.active_player_index);
-
+    return SimulateUpkeepAfterArrivals(state);
+}
+// The rollout's upkeep after the suspend arrivals, through the draw (SimulateEndAndStartNextTurn's second half,
+// split out so the executor's resolution node, TurnSolver::ChooseRealResolutionFetch, can finish an upkeep it
+// interrupted at a suspended tutor's search).
+static bool SimulateUpkeepAfterArrivals(GameState& state)
+{
+    Player& ap = state.ActivePlayer();
     Player& ap_upkeep = state.ActivePlayer();
     for (Permanent& p : state.battlefield)
     {
@@ -97472,18 +97480,22 @@ static bool DothUncoveredPending(const GameState& state)
 // constant-leaf edge. False for every deck without a suspended to-hand tutor.
 static bool SuspendTutorUncoveredPending(const GameState& state)
 {
-    if (state.scripted_suspend_tutor >= 0 || g_bp_enum_depth != 0 || t_rollout_narrow || HumanPlayActive()) { return false; }
+    if (g_bp_enum_depth != 0 || t_rollout_narrow || HumanPlayActive()) { return false; }
     const Player& ap = state.players[static_cast<std::size_t>(state.active_player_index)];
     if (ap.suspended_cards.empty() || !ProfaneResolveFanOn()) { return false; }
-    bool due = false;
+    // The arrivals due at the next upkeep against the ordinals the state's pin covers (the Defense of the Heart
+    // rule): a pin recorded by a crossing that resolved fewer searches leaves the rest to be decided. (A ripple
+    // free copy is not foreseeable here -- the blind search cannot see the library top -- so it is decided at
+    // resolution, by the executor's resolution node.)
+    int due = 0;
     for (const SuspendedCard& sc : ap.suspended_cards)
     {
         if (sc.arrive_turn < 0 || sc.arrive_turn > state.TurnSeq() + 1) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(sc.card);
         if (d != nullptr && !d->card.IsPermanentCard() && d->params.tutor_to_hand && !d->params.land_search_on_resolve)
-        { due = true; break; }
+        { ++due; }
     }
-    return due && !EchoEdgeFoldHere(state);
+    return due > SuspendTutorPinCover(state.scripted_suspend_tutor) && !EchoEdgeFoldHere(state);
 }
 // MTG_STUT_AXIS_STATS: the no-greedy census for Profane's fetch -- an UNPINNED suspended-tutor search resolved while
 // the innermost search frame still had depth, in a searched frame (a crossing no BoundaryFan covered: must read 0),
@@ -97536,8 +97548,16 @@ static Installer s_installer;
 class BoundaryFan
 {
 public:
-    BoundaryFan(const GameState& pre, bool with_echo)
+    // stut_only: fan ONLY Profane's fetch (the executor's crossing node, TurnSolver::ChooseRealCrossingFetch,
+    // which records that pin alone, so no other axis may be iterated beside it).
+    BoundaryFan(const GameState& pre, bool with_echo, bool stut_only = false)
     {
+        if (stut_only)
+        {
+            stut_ = SuspendTutorUncoveredPending(pre);
+            if (stut_) { InitStutCover(pre); }
+            return;
+        }
         if (with_echo) { echo_ = EchoBoundaryPins(pre); }
         // Upkeep effects can change the top card before the first draw. Fan
         // whenever an actual miracle card can reach that window, even if it
@@ -97558,7 +97578,7 @@ public:
         // PROFANE TUTOR's fetch (MTG_PROFANE_RESOLVE_FAN): a suspended to-hand tutor arriving at the next upkeep,
         // its fetch not yet covered. Same scope as the tutor-to-top axis above (beyond the horizon -- a narrowed
         // playout, the d0 runner -- and at a constant-leaf edge the provider's front is the permitted policy).
-        if (SuspendTutorUncoveredPending(pre)) { stut_ = true; }
+        if (SuspendTutorUncoveredPending(pre)) { stut_ = true; InitStutCover(pre); }
         if (DothAxisLiveHere(pre))
         {
             c0_ = DothPinCover(pre.scripted_doth_put);
@@ -97588,7 +97608,7 @@ public:
         // widths learned by that crossing's probe), the provider's front (rank 0) first so it keeps every tie.
         if (stut_)
         {
-            for (int j = std::min(s_nobs_, kSuspendTutorPinOrdinals) - 1; j >= 0; --j)
+            for (int j = std::min(s_nobs_, kSuspendTutorPinOrdinals) - 1; j >= s_c0_; --j)
             {
                 if (s_ranks_[j] + 1 < s_sizes_[j])
                 {
@@ -97642,7 +97662,7 @@ public:
     {
         if (!stut_) { return -2; }
         bool wide = false;
-        for (int j = 0; j < std::min(s_nobs_, kSuspendTutorPinOrdinals); ++j) { if (s_sizes_[j] > 1) { wide = true; } }
+        for (int j = s_c0_; j < std::min(s_nobs_, kSuspendTutorPinOrdinals); ++j) { if (s_sizes_[j] > 1) { wide = true; } }
         return wide ? StutPack(s_nobs_) : -2;
     }
     void Record(TurnSolver::Plan& p) const
@@ -97664,16 +97684,18 @@ public:
         if (stut_pin != -2) { sx.scripted_suspend_tutor = static_cast<std::int16_t>(stut_pin); }
     }
 private:
-    int StutPack(int n) const
-    {
-        int v = 0;
-        for (int j = 0; j < std::min(n, kSuspendTutorPinOrdinals); ++j) { v |= s_ranks_[j] << (kLandSearchPinBits * j); }
-        return v;
-    }
+    int StutPack(int n) const { return SuspendTutorPinPack(n, s_ranks_); }   // ranks + cover (SpellEffects.h)
     void ResetStut()
     {
         s_nobs_ = 0;
-        for (int k = 0; k < kSuspendTutorPinOrdinals; ++k) { s_ranks_[k] = 0; s_sizes_[k] = 1; }
+        for (int k = s_c0_; k < kSuspendTutorPinOrdinals; ++k) { s_ranks_[k] = 0; s_sizes_[k] = 1; }
+    }
+    // The ordinals the state's pin already covers stay fixed (the Defense of the Heart fan's c0_).
+    void InitStutCover(const GameState& pre)
+    {
+        const int pin = pre.scripted_suspend_tutor;
+        s_c0_ = std::min(SuspendTutorPinCover(pin), kSuspendTutorPinOrdinals);
+        for (int j = 0; j < s_c0_; ++j) { s_ranks_[j] = (pin >> (kLandSearchPinBits * j)) & kLandSearchPinMask; }
     }
     void ResetDoth()
     {
@@ -97692,6 +97714,7 @@ private:
     int              tutor_rank_ = 0;
     int              tutor_width_ = 1;
     bool             stut_    = false;                // Profane's fetch is decided at this crossing
+    int              s_c0_    = 0;                    // suspended-tutor ordinals the state's pin already covers
     int              s_nobs_  = 0;                    // suspended-tutor searches the last crossing resolved
     int              s_ranks_[kSuspendTutorPinOrdinals] = {};
     int              s_sizes_[kSuspendTutorPinOrdinals] = { 1, 1 };
@@ -97772,6 +97795,116 @@ std::vector<std::pair<int, std::string>> TurnSolver::SuspendTutorBoundaryForTest
         out.emplace_back(fan.StutPin() == -2 ? -1 : fan.StutPin(), ap.hand.empty() ? std::string() : ap.hand.front().m_name.str());
     }
     return out;
+}
+// THE EXECUTOR'S CROSSING NODE for Profane Tutor's fetch (MTG_PROFANE_REAL_NODE, DEFAULT ON; =0 -> the real upkeep
+// takes the provider's front, the old fallback). USER 2026-11-04, on the executor's upkeep falling back to the
+// provider's pick: "We should search and use a heuristic on that decision like any other." The fetch is normally
+// decided by the BoundaryFan where the SEARCH crosses into that upkeep and rides the committed plan
+// (Plan::suspend_tutor_choice). When the committed line's own crossing lay beyond its horizon (an early ladder pass
+// committed the turn), nothing was recorded, and the real upkeep resolved the front unsearched (the 1-in-200
+// "real-upkeep" case, Shadowborn seed 940184 T5). So the executor searches it HERE, at the end of the real turn
+// (after the second main, before the end step), with the same node every in-window crossing uses: one crossing
+// per rank of the resolution-state candidate list (the provider's ranked, USER-table-restricted TutorCandidates,
+// capped by TutorSearchWidth: the provider only RESTRICTS and ORDERS), each crossing's next turns SEARCHED by
+// SimulateToEnd, iteratively deepened under the decision budget (sub-depth 0 .. depth-1, as the main-phase solve
+// at this turn would cross). The deepest COMPLETED pass decides; a strictly earlier win is required to leave the
+// front (rank 0 keeps every tie). The budget only prices the deepening: at an unlimited budget every pass runs, so
+// no rank is unfindable. Writes the pin on `state` (consumed at the upkeep) and returns it; -2 = nothing to decide
+// (no uncovered fetch, or a single candidate).
+static bool ProfaneRealNodeOn()
+{
+    static const bool e = EnvOn("MTG_PROFANE_REAL_NODE", true);   // DEFAULT ON; =0 disables
+    return heurarm::Flag(heurarm::PROFANE_REAL_NODE, e);
+}
+int TurnSolver::ChooseRealCrossingFetch(GameState& state, int depth, int max_turns, SearchBudget* budget,
+                                        bool second_main)
+{
+    if (depth <= 0 || !ProfaneRealNodeOn() || !SuspendTutorUncoveredPending(state)) { return -2; }
+    RevealLogPause _rlp;   // a search, not the real game: no reveal logging, no viewer sink
+    TranspositionTable tt;
+    int chosen = -2;
+    for (int sub = 0; sub <= depth - 1; ++sub)
+    {
+        if (sub > 0 && budget != nullptr && (budget->Exhausted() || budget->Overrun())) { break; }
+        BoundaryFan fan(state, /*with_echo=*/false, /*stut_only=*/true);
+        if (!fan.StutLive()) { return -2; }
+        int best_wt = max_turns + 2, best_pin = -2;
+        bool wide = false;
+        while (fan.Next())
+        {
+            GameState ce = state;
+            fan.Stamp(ce);
+            int wt = max_turns + 1;
+            const int cut = (best_wt <= max_turns) ? best_wt - 1 : max_turns + 1;
+            if (fan.Cross(ce)) { wt = SimulateToEnd(std::move(ce), sub, max_turns, budget, cut, second_main, &tt); }
+            if (fan.StutPin() != -2) { wide = true; }
+            if (wt < best_wt) { best_wt = wt; best_pin = fan.StutPin(); }
+        }
+        if (!wide) { return -2; }   // one candidate at resolution: the same pick either way
+        // A pass the budget cut short is not a completed pass: keep the shallower answer (pass 0 always stands).
+        if (sub > 0 && budget != nullptr && (budget->Exhausted() || budget->Overrun())) { break; }
+        chosen = best_pin;
+    }
+    if (chosen != -2) { state.scripted_suspend_tutor = static_cast<std::int16_t>(chosen); }
+    static const bool s_dbg = EnvInt("MTG_STUT_AXIS_STATS", 0) >= 2;
+    if (s_dbg)
+    {
+        std::fprintf(stderr, "[stut-axis] REAL crossing node: seed=%llu T%d pin=%d\n",
+                     static_cast<unsigned long long>(state.game_seed), state.turn_number, chosen);
+    }
+    return chosen;
+}
+// THE EXECUTOR'S RESOLUTION NODE (MTG_PROFANE_REAL_NODE, same lever): a suspended tutor's search the real upkeep
+// meets UNCOVERED -- the committed line's crossing resolved fewer searches, because a ripple free copy (Thrumming
+// Stone revealing the other Profane Tutor) depends on a library top the blind search cannot see, so no crossing
+// can foresee it (Shadowborn seed 940184 T5: the free copy took the pinned rank, the arrival's own search had
+// none). USER 2026-11-04: "We should search and use a heuristic on that decision like any other." -- and, on the
+// other resolution-time picks: "it makes the most sense to decide what you need in the context of the situation
+// at the time it is cast." So it is searched HERE, at resolution, from the real state with the reveal known: one
+// copy per rank of the resolution-state candidates (the provider's ranked, USER-table-restricted TutorCandidates,
+// capped by TutorSearchWidth: the provider only RESTRICTS and ORDERS), each copy finishing the upkeep
+// (FinishSuspendArrivalsForNode, then the rollout's own upkeep tail and draw) and searched by SimulateToEnd,
+// iteratively deepened as the crossing node is. The deepest completed pass decides; leaving rank 0 needs a
+// strictly earlier win. The budget only prices the deepening (at an unlimited budget every pass runs). `state`
+// is the search's view of the real state (blind beyond what is known). Returns the rank, or -1 (one candidate).
+int TurnSolver::ChooseRealResolutionFetch(const GameState& state, int controller, const CardParams& pp,
+                                          const Card& card, const SuspendArrivalCtx& ctx, int depth, int max_turns,
+                                          SearchBudget* budget, bool second_main)
+{
+    if (depth <= 0 || !ProfaneRealNodeOn()) { return -1; }
+    const int width = SuspendTutorPickWidth(state, controller, pp);
+    if (width <= 1) { return -1; }
+    RevealLogPause _rlp;   // a search, not the real game: no reveal logging, no viewer sink
+    TranspositionTable tt;
+    int chosen = -1;
+    for (int sub = 0; sub <= depth - 1; ++sub)
+    {
+        if (sub > 0 && budget != nullptr && (budget->Exhausted() || budget->Overrun())) { break; }
+        int best_wt = max_turns + 2, best_rank = 0;
+        for (int r = 0; r < width; ++r)
+        {
+            GameState ce = state;
+            const int saved = g_scripted_tutor_choice;
+            g_scripted_tutor_choice = r;
+            PerformTutor(ce, controller, pp, /*target_name=*/std::string{}, card.m_name.str(), /*human_repick=*/false);
+            g_scripted_tutor_choice = saved;
+            FinishSuspendArrivalsForNode(ce, controller, card, ctx);
+            int wt = max_turns + 1;
+            const int cut = (best_wt <= max_turns) ? best_wt - 1 : max_turns + 1;
+            if (SimulateUpkeepAfterArrivals(ce)) { wt = SimulateToEnd(std::move(ce), sub, max_turns, budget, cut, second_main, &tt); }
+            if (wt < best_wt) { best_wt = wt; best_rank = r; }
+        }
+        // A pass the budget cut short is not a completed pass: keep the shallower answer (pass 0 always stands).
+        if (sub > 0 && budget != nullptr && (budget->Exhausted() || budget->Overrun())) { break; }
+        chosen = best_rank;
+    }
+    static const bool s_dbg = EnvInt("MTG_STUT_AXIS_STATS", 0) >= 2;
+    if (s_dbg)
+    {
+        std::fprintf(stderr, "[stut-axis] REAL resolution node: seed=%llu T%d width=%d rank=%d\n",
+                     static_cast<unsigned long long>(state.game_seed), state.turn_number, width, chosen);
+    }
+    return chosen;
 }
 // ---- MTG_DEV_SEQ_TAIL_SKIP (DEFAULT ON; =0 restores the full second-pass re-walk) ------------------------------
 //

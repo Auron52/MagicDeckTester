@@ -2718,6 +2718,51 @@ inline void (*g_stut_unpinned_hook)(const GameState&, int controller, const Card
 // DID branch on) is not counted as an uncovered pick by the census.
 inline thread_local bool t_stut_fan_crossing = false;
 int SuspendTutorPickWidth(const GameState& state, int controller, const CardParams& pp);   // SpellEffects.cpp
+// The suspended-tutor pin (GameState::scripted_suspend_tutor) carries a COVER, the Defense of the Heart pin's shape:
+// bits 0..11 a rank per search ordinal (kLandSearchPinBits each, ordinal 0 lowest), bits 12..13 how many ordinals
+// the pin covers. An ordinal past the cover is UNCOVERED (the crossing that recorded the pin resolved fewer
+// searches than this upkeep does -- a ripple free copy the blind search could not see coming), which is what the
+// executor's resolution node (t_real_stut_node) searches. Unlike the packed land-search pin, a covered rank 0 is
+// never collapsed into "unpinned", so a decided front and an undecided search stay apart. -1 = no pin.
+constexpr int kSuspendTutorCoverShift = kLandSearchPinBits * kSuspendTutorPinOrdinals;   // 12
+inline int SuspendTutorPinCover(int pin) { return pin < 0 ? 0 : (pin >> kSuspendTutorCoverShift) & 0x3; }
+inline int SuspendTutorPinPack(int cover, const int* ranks)
+{
+    cover = std::max(0, std::min(cover, kSuspendTutorPinOrdinals));
+    int v = cover << kSuspendTutorCoverShift;
+    for (int j = 0; j < cover; ++j) { v |= (std::max(0, std::min(ranks[j], kLandSearchPinMask))) << (kLandSearchPinBits * j); }
+    return v;
+}
+// Are all the covered ranks the provider's front (rank 0)?
+inline bool SuspendTutorPinIsFront(int pin) { return pin < 0 || (pin & ((1 << kSuspendTutorCoverShift) - 1)) == 0; }
+inline int ConsumeSuspendTutorPin(int& pin)
+{
+    const int cover = SuspendTutorPinCover(pin);
+    if (cover == 0) { pin = -1; return -1; }
+    const int k = pin & kLandSearchPinMask;
+    const int rest = (pin & ((1 << kSuspendTutorCoverShift) - 1)) >> kLandSearchPinBits;
+    pin = (cover - 1 == 0) ? -1 : (((cover - 1) << kSuspendTutorCoverShift) | rest);
+    return k;
+}
+// Depth of the free casts a suspend arrival's ripple makes (ResolveSuspendRipple, below): 0 = the arrival itself.
+inline thread_local int t_suspend_ripple_depth = 0;
+// THE EXECUTOR'S RESOLUTION NODE for a suspended tutor's search (MTG_PROFANE_REAL_NODE): GameEngine::UpkeepStep
+// installs it around its ProcessSuspendArrivals for the REAL state only (t_real_stut_state; every copy a search
+// makes has another address), and the tutor branch of CastOffSuspend calls it for an UNCOVERED, non-nested
+// search with a choice. It returns the searched rank (-1 = take the front). The arrival context lets it finish
+// ProcessSuspendArrivals on its copies (FinishSuspendArrivalsForNode).
+struct SuspendArrivalCtx
+{
+    const std::vector<SuspendedCard>* snap      = nullptr;   // the arrivals of this upkeep, in order
+    std::size_t                       i         = 0;         // the one being cast
+    const std::vector<SuspendedCard>* remaining = nullptr;   // the not-yet-arrived ones collected so far
+};
+inline thread_local const SuspendArrivalCtx* t_suspend_arrival_ctx = nullptr;
+using RealStutNodeFn = int (*)(void* owner, GameState& state, int controller, const CardParams& pp, const Card& card,
+                               const SuspendArrivalCtx& ctx);
+inline thread_local RealStutNodeFn t_real_stut_node  = nullptr;
+inline thread_local void*          t_real_stut_owner = nullptr;
+inline thread_local const GameState* t_real_stut_state = nullptr;
 // `put_credit` (land-search gap 2): the land-put mana credit the CAST was emitted with
 // (Action::rock_mana on a LandSearchPutsUntapped cast), which restricts the pick to the picks earning
 // exactly that credit -- see LandSearchCreditGroups. nullptr / empty = unrestricted (every other site).
@@ -22190,8 +22235,20 @@ inline void CastOffSuspend(GameState& state, int controller, const Card& card)
             {
                 // The fetch decided at the crossing into THIS upkeep (scripted_suspend_tutor), never in a plan.
                 int packed = state.scripted_suspend_tutor;
-                pin = ConsumePackedLandSearchPin(packed);
+                pin = ConsumeSuspendTutorPin(packed);
                 state.scripted_suspend_tutor = static_cast<std::int16_t>(packed);
+                // UNCOVERED in the REAL upkeep (the committed crossing resolved fewer searches -- a ripple free
+                // copy it could not foresee): the executor's resolution node SEARCHES it here, with what is known
+                // now (MTG_PROFANE_REAL_NODE; AIEngine::DecideResolutionFetch). Only the arrival's own search (a
+                // nested free copy's continuation is the arrival's resolution, which no copy can finish).
+                if (pin < 0 && t_real_stut_node != nullptr && &state == t_real_stut_state
+                    && t_suspend_ripple_depth == 0 && t_suspend_arrival_ctx != nullptr)
+                {
+                    const RealStutNodeFn fn = t_real_stut_node;
+                    t_real_stut_node = nullptr;   // the node's own searches never re-enter it
+                    pin = fn(t_real_stut_owner, state, controller, def->params, card, *t_suspend_arrival_ctx);
+                    t_real_stut_node = fn;
+                }
                 if (SuspendTutorProbe* pr = t_suspend_tutor_probe)
                 {
                     if (pr->n < kSuspendTutorPinOrdinals)
@@ -22567,14 +22624,44 @@ inline void ProcessSuspendArrivals(GameState& state, int controller)
     // observe a half-processed list; arrivals are cast in the order they were suspended.
     std::vector<SuspendedCard> snap = std::move(pl.suspended_cards);
     pl.suspended_cards.clear();
-    for (SuspendedCard& sc : snap)
+    const SuspendArrivalCtx* prior_ctx = t_suspend_arrival_ctx;
+    for (std::size_t i = 0; i < snap.size(); ++i)
     {
-        if (sc.arrive_turn >= 0 && sc.arrive_turn <= state.TurnSeq()) { CastOffSuspend(state, controller, sc.card); }
+        SuspendedCard& sc = snap[i];
+        if (sc.arrive_turn >= 0 && sc.arrive_turn <= state.TurnSeq())
+        {
+            // The resolution node's context (read only by the executor's node; inert everywhere else).
+            const SuspendArrivalCtx ctx{ &snap, i, &remaining };
+            t_suspend_arrival_ctx = &ctx;
+            CastOffSuspend(state, controller, sc.card);
+            t_suspend_arrival_ctx = prior_ctx;
+        }
         else                                     { remaining.push_back(std::move(sc)); }
     }
     // Re-attach anything an arrival's cascade may have added, plus the not-yet-arrived remainder.
     for (SuspendedCard& sc : pl.suspended_cards) { remaining.push_back(std::move(sc)); }
     pl.suspended_cards = std::move(remaining);
+}
+// The resolution node's continuation, on a COPY taken at the tutor branch of arrival ctx.i (the search itself
+// already performed by the caller): the rest of that instant's resolution (to the graveyard), the rest of
+// ProcessSuspendArrivals from ctx.i + 1 (same loop, same re-attach), and its pin expiry. The upkeep after the
+// arrivals is the caller's (TurnSolver's rollout twin).
+inline void FinishSuspendArrivalsForNode(GameState& state, int controller, const Card& card, const SuspendArrivalCtx& ctx)
+{
+    Player& pl = state.players[controller];
+    pl.graveyard.push_back(card);
+    std::vector<SuspendedCard> remaining = *ctx.remaining;
+    std::vector<SuspendedCard> snap = *ctx.snap;
+    for (std::size_t j = ctx.i + 1; j < snap.size(); ++j)
+    {
+        SuspendedCard& sc = snap[j];
+        if (sc.arrive_turn >= 0 && sc.arrive_turn <= state.TurnSeq()) { CastOffSuspend(state, controller, sc.card); }
+        else                                     { remaining.push_back(std::move(sc)); }
+    }
+    for (SuspendedCard& sc : pl.suspended_cards) { remaining.push_back(std::move(sc)); }
+    pl.suspended_cards = std::move(remaining);
+    state.scripted_upkeep_land_search = -1;
+    state.scripted_suspend_tutor = -1;
 }
 
 // Forbidden Orchard: "{T}: Add one mana of any color. Whenever you tap this land for mana, target
@@ -47671,7 +47758,7 @@ inline std::vector<Card> RippleResolveTrigger(GameState& s, int controller, cons
 // and decline. -1 = unpinned = rank 0 (the front; beyond the horizon). A free card cast here is cast by
 // CastOffSuspend itself (it resolves at once, as the arrival does); ITS ripple answers rank 0 without
 // consuming an ordinal [disclosed: unreachable for this pool -- two Profane Tutors leave nothing to match].
-inline thread_local int t_suspend_ripple_depth = 0;
+// t_suspend_ripple_depth: declared with the suspended-tutor pin (top of this file).
 inline void CastOffSuspend(GameState& state, int controller, const Card& card);
 inline void ResolveSuspendRipple(GameState& state, int controller, const CardDefinition& def)
 {

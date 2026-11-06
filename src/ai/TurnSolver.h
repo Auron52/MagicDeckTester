@@ -5,6 +5,7 @@
 #include "SearchBudget.h"
 #include "../core/MadnessTypes.h"   // MadnessPin (Action's madness pin helpers)
 #include "../core/EnvFlags.h"      // EnvOn (MTG_PUMP_HAND_CAP)
+struct SuspendArrivalCtx;   // SpellEffects.h (the executor's suspended-tutor resolution node)
 #include <chrono>
 #include <functional>
 #include <memory>
@@ -2674,6 +2675,16 @@ public:
     static void              IdleCrackFoldCounters(long long* tested, long long* folded);
     // Test hook: every crossing BoundaryFan makes from `state` -> (Profane-fetch pin recorded or -1, hand.front()).
     static std::vector<std::pair<int, std::string>> SuspendTutorBoundaryForTest(const GameState& state);
+    // The EXECUTOR's crossing node (MTG_PROFANE_REAL_NODE): an unpinned Profane Tutor fetch due at the next upkeep is
+    // searched at the end of the real turn, one crossing per resolution-state rank, iteratively deepened under
+    // `budget`; the winner is written to state.scripted_suspend_tutor and returned (-2 = nothing to decide).
+    static int ChooseRealCrossingFetch(GameState& state, int depth, int max_turns, SearchBudget* budget,
+                                       bool second_main);
+    // ...and its RESOLUTION node: a suspended tutor's search the real upkeep meets uncovered (a ripple free copy no
+    // crossing could foresee) is searched at resolution, one copy per rank; returns the rank (-1 = one candidate).
+    static int ChooseRealResolutionFetch(const GameState& state, int controller, const CardParams& pp,
+                                         const Card& card, const SuspendArrivalCtx& ctx, int depth, int max_turns,
+                                         SearchBudget* budget, bool second_main);
     // Test hook: run the fold over an explicit plan list (the list EnumeratePlans would return).
     static std::vector<Plan> FoldIdleLandCracksForTest(const GameState& state, bool is_pre_combat,
                                                        std::vector<Plan> plans);
