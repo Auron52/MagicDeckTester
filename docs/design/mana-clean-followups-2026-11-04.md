@@ -74,6 +74,26 @@ How this applies:
 - The price (4 vs 12 probes a unit, pricing pass 1) is budget accounting, inert at unlimited budget. Default when the
   work resumes: 12 and price pass 1, measured; still open for the USER to override.
 
+## 8. USER rulings 2026-11-06 on Q23 / Q25 / Q29 (open-questions file, 2026-11-04)
+- **Q23 Dragonstorm {B} hold before Apex: NOT adopted as built; root-cause gi37 (2HG, seed 1920001+37).** The hold
+  is added to the line's named demand, so a search payability walk may see the Apex line one mana short and
+  undervalue it (hypothesis, unverified). By the 11-06 principle (section 7) the hold may only ORDER spending; it must
+  never make a payable plan look unpayable to the search. Branch `worktree-agent-afe476c961652c9b8` (9eaae0e16,
+  76381fad5; drop TEMP 212197e8d).
+- **Q25a Mirrorwing Std +1 (g662, seed 73000662).** USER: *"It might be good to actually look at the game and see how
+  the clairvoyance is working if that is the case just to be certain our decision is correct."* So before accepting,
+  replay g662 base vs new (play settings, then `MTG_NC_SEARCH=1`) with game logs, and show where the base's T4 win
+  depends on the draw order. Branch `wip/mc-mirrorwing` (fa7990254, 3d9a6d692, f6572c7a7).
+- **Q25b H1/H2 hedges: build both.** USER: *"Those would be fine and I that should be the order anyway, particularly on
+  Mirrorwing."* H1: on an attack turn with a copy creature out or in the plan, pay cantrips from lands (even if mana
+  floats) before tapping a creature that could attack. H2: while a draw is still to come in the line, a Treasure pays
+  only pips no untapped land can. Payer-order changes: held-out A/B on the decks that move.
+- **Q29 known cards across reshuffles.** USER: *"I don't know how the training labels work entirely, but that makes
+  some sense. We should also fix the non-clairvoyant search if it doesn't handle this."* So: port `ShuffleUnseen`
+  (cc3b47aea, `wip/niv-nc-known-top`) onto main's `m_known_top`; make the non-clairvoyant search (`BlindUnknownOrder`
+  / `MTG_NC_SEARCH`) keep known top/bottom cards (verify on Niv gi887, seed 1650001); switch `EmitEvalRows` training
+  labels to it. Blind leaf and keep trainer unchanged.
+
 ## Galadriel: the oracle-on arm exhausts memory (found 2026-11-04 16:30Z, deferred)
 
 The pass run `pass1-galadriel-r2` (src `aa9f15b9b77f`) hit the 43 GB RSS cap about two minutes into the full oracle-ON
