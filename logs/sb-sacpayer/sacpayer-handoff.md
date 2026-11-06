@@ -195,3 +195,23 @@ an explicit Lake crack action. T4 candidate continuations diverge around ripple 
 Lake mana. Compare the T2 main-2 Profane branch's hidden T3/T4 library and float
 state next; `build/scratch/sb-sacpayer/ab4rc/trace/sb345m2_{base,new}.err` and
 `sb345t4p_{base,new}.err` carry the relevant traces.
+
+Further gi345 diagnosis: with a temporary two-arm selector and TurnSolver diagnostics,
+the relevant T3 m2 state has the SAME full 128-bit `BuildDedupKey`
+`a77909523f59bd4/bb00fa44af245e45`, the same three Apostles, no float, the same
+hand, one suspended card, and library top `19,24,44,25,26,45,5,27` in both arms.
+Both reach the SAME T4 state key `35d95f3a4c6418e3/6abdbfdb6043ba25`, hand
+`39,3,1,28,31,43` and library top `55,46,11,2,33,37,32,42`. Memo off and
+game-line-cache off do not recover OD. The base's T4 win plan is EXACTLY:
+`Swamp; Shadowborn Apostle, Shadowborn Apostle, SacNamedTutorPut(Jetmir),
+SacForMana(Lake of the Dead)`; the explicit Lake crack is pre-applied before
+casts. OD's corresponding plan reaches many Apostles but the activation no-ops;
+combat leaves opponent at 17. The Lake is tapped for plain {B} with the new Swamp
+tapped too, so the activation cannot pay. `ActLineHoldMask` and `PlanTraits` are
+present on some payments but not enough to preserve the future activation through
+the ripple breakpoint. `LineRestAfter` + pending `act_mana_total` did not recover
+any of the three Shadowborn losses; an experimental crack-first-on-needed-cost
+arm recovered gi94 (5) but not gi345 (5) or gi351 (5). These experimental source
+edits and the temporary selector were restored after the tests. The next fix must
+preserve a Lake crack option across the breakpoint, without reinstating a direct
+plan action or a greedy pick inside the search window.
