@@ -16,18 +16,25 @@ Shared branch: `origin/phase-1-2-deck-analyzer`.
 2. On-demand Lotus Bloom / Lake of the Dead payer as the ONLY route: retire the SacForMana action and delete
    `MTG_IDLE_CRACK_FOLD`. Worktree `sb-sacpayer`.
    Handoff: `sb-sacpayer/logs/sb-sacpayer/sacpayer-handoff.md`.
-   State: built, unit + scenarios green earlier, crash fixed; head a832f5128 plus an uncommitted
-   `src/ai/TurnSolver.cpp` edit. **NOT yet measured** (needs smoke + regression + the adoption bar below).
+   State (local, not pushed; handoff committed 547c2d3e2): held-out A/B FAILS the bar only on Dragonstorm d0
+   (4.981 -> 5.073, +0.092). Every other cell is net <= 0 (Shadowborn d0 -0.455). Cause: the Dragonstorm
+   storm-card ritual rule never sees the hidden Lotus crack. The proposed fix 0f46edde0 is NOT built or tested.
+   Still to do: d8 b0 repros, regression, ref_bench, removing the temporary `MTG_SAC_ON_DEMAND` selector.
 3. Searched picks. Worktree `sb-picks`. Handoff: `sb-picks/logs/sb-picks/handoff.md`.
    - 895e54b14: Profane Tutor executor upkeep searched (`MTG_PROFANE_REAL_NODE`, default ON).
    - 9e7984961: Crop Rotation consumes the searched pin (`MTG_LAND_TUTOR_PIN`, default ON).
    - Remaining item 3: decide at resolution for Search for Tomorrow, Emeria, Abiding Grace, and Titan's
      attack trigger.
-   - At handoff a `test/regression.sh` run was in flight in sb-picks (PIDs 3303444 / 3311198); see the
-     handoff file for its output path.
+   - Unit 2614/2614, scenarios 419/419, smoke unmoved. A detached chain (PID 3279052) runs regression
+     (`build/scratch/sb-picks/reg.txt`) and then the pooled A/B (`build/scratch/sb-picks/ab1/`).
+     Status is in `chain1.status`; `chain1.DONE` marks the end. Nothing is accepted yet. Item 3 is not
+     started.
 4. nlfit redesign (leafless-first reserve). Worktree `shadowborn`, branch shadowborn-analysis (LOCAL).
    Handoff: `shadowborn/logs/shadowborn/nlfit-reserve-handoff.md`.
-   Commits: 8ae1bc7b1, 748f78582, 33c80063f, plus uncommitted TurnSolver.cpp / ValueArm.h edits.
+   Commits: 8ae1bc7b1, 748f78582, 33c80063f, plus WIP 0d8cf8958 (mode 3, hard reserve), which is NOT built or
+   measured. Mode 2 fixes Alchemist (-0.0175) but is +0.04 worse on Shadowborn (a memo-hit misprice), and
+   Angels/Pirates still cost 1.8-2.5x. The ab4 manifest is ready in `build/scratch/nlfit/ab4`. The Hinata2
+   before/after has not been run.
    Ledger: `docs/design/analysis-Shadowborn Apostle.md`. Hinata counts as another before-vs-after case for it.
 5. After 2-4 land: emul adoption, ALONE on the box:
    1. copy `logs/vlq_shadowborn_apostle/Shadowborn Apostle.value.EMUL.json` via the DECISIONS.txt route;
@@ -76,3 +83,5 @@ promotes the last inspected run, and only while origin has not moved.
 2. Hinata2: filter out the d4 arms at the E.7 verdict step?
 3. Keep the ported MTG_BATCH_RESUME, and who lands keepgen-slow-tail-fix?
 4. nlfit reserve: adopt or not (the agent's recommendation was "not yet"; see its handoff file).
+5. Payer: should the Dragonstorm Lotus/ritual rule also apply inside the SEARCH, or only in the d0/playout
+   policy? The fix 0f46edde0 assumes playout only, since the widening loses nothing.
