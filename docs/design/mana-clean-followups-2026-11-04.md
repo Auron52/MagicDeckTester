@@ -61,6 +61,17 @@ Shape: from the decklist, derive which colour the deck's cheap spells (1-drops, 
 a payment before a draw leaves a choice of which source to keep untapped and nothing in the line decides it, keep the
 deck's most-demanded colour up. A provider-side ordering (allowed under NO-GREEDY), default computed per deck.
 
+2026-11-07 experiment on `wip/predraw-color-1107` (`fa3e8e945`, NOT adopted): stamp the unique most
+common colour among mainboard one- and two-drops (one-drops weighted double) and break equal source
+tap ranks in its favour on a plan that draws. The state byte was packed into the unused high bits
+of `deck_creature_pip_colors` to avoid growing every GameState copy. Build, focused test and all
+2,633 units passed. Smoke: Cyclone gi10 T6->T5 at both searched depths; Auras gi315 T4->T5,
+still slow at 4x budget, plus one same-score play change. In 3,600 heldout paired games,
+Cyclone had 3 faster / 1 slower (net -2 turns across 1,200); Auras, Merfolk and Pirates had
+zero win-turn changes across 2,400. The small net gain does not justify a global default with
+a persistent searched slowdown. Next attempt needs a clearer per-deck preference threshold and
+must keep the draw plan's current payment context, not just its decklist colour frequency.
+
 ## 5. Matron tutor ranking cost (TutorCandidates ~25% of Goblins instructions)
 USER: *"This is up to you, but probably when looking into fixing the issues with it."* Do it with the next TutorCandidates
 change (after the Matron combat fix on wip/mc-matron lands).
