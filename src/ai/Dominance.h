@@ -598,7 +598,7 @@ static_assert(sizeof(Player) == 208,
 // prepay's kept {C} still floating, EDF only (0 elsewhere). FUTURE-DETERMINING within the phase (it orders the
 // payer's generic drain): mixed value-gated into the main-phase key (TurnSolver, beside floating_haste_c),
 // which, like floating_haste_c, Build() does not fold separately.
-static_assert(sizeof(GameState) == 1272,   // 1264 + upstream's upkeep_tutor (+8)
+static_assert(sizeof(GameState) == 1280,   // 1264 + upstream's upkeep_tutor (+8) + c-wild's three bytes, which no longer fit padding (+8)
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 
