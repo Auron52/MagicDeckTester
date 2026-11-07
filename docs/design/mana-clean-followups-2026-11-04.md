@@ -152,6 +152,12 @@ doing cases that have potential to fix the colours, not those that require more 
   undervalue it (hypothesis, unverified). By the 11-06 principle (section 7) the hold may only ORDER spending; it must
   never make a payable plan look unpayable to the search. Branch `worktree-agent-afe476c961652c9b8` (9eaae0e16,
   76381fad5; drop TEMP 212197e8d).
+  The branch's later isolation (`docs/design/handoff-dragonstorm-mana.md`, UPDATE 3/4) disproved the re-pay
+  hypothesis: hold on with re-pay off still loses gi37, while re-pay alone wins T8. The held {B} order changes
+  the search's T4 valuation of its T7 Apex route and leads to an early Scourge cast. Restoring the historical
+  WUBRG fallback does not recover it; a red margin recovers play settings at 6, but d8/b0 only when the
+  margin reaches 15 and the hold never applies. That is the hedge's own cost. Keep the hold unadopted;
+  the branch's payer fixes are separate, and its temporary diagnostic commit is not for landing.
 - **Q25a Mirrorwing Std +1 (g662, seed 73000662).** USER: *"It might be good to actually look at the game and see how
   the clairvoyance is working if that is the case just to be certain our decision is correct."* So before accepting,
   replay g662 base vs new (play settings, then `MTG_NC_SEARCH=1`) with game logs, and show where the base's T4 win
