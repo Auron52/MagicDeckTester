@@ -180,13 +180,10 @@
    "max_turns": 8,
    "n": 10,
    "policy": "committed value_play",
-   "search": 4.9,
-   "short": 2,
-   "shortfalls": [
-    "claude_s6_gi5.json",
-    "claude_s7_gi6.json"
-   ],
-   "src": "1aa815613401106302ee1c725e28aaa54e7d9a16"
+   "search": 4.7,
+   "short": 0,
+   "shortfalls": [],
+   "src": "bd3d785377400fad0c2d1329f20a62e4c9ca9110"
   },
   "fivecolour": {
    "hand_mismatch": 0,
