@@ -8414,11 +8414,11 @@ bool LineRepayRemakeAt(GameState& b, const LineRepayChain& ch, int k, const mana
 // the re-pay is COMPLETE. A cut pass found nothing it can vouch for, so it is never memoised as a failure.
 // The price: one unit per kLineRepayProbesPerUnit probes (a board copy, the taps and a float-only payment) or trials
 // of a re-made payment (manaoracle::ProbeCharge::Admit; the remainder carries over within the decision). Measured
-// 2026-11-03: 5-21 us a probe or trial (p2_ms / units charged: FiveColour 5, Dragons gate slice 12, Angels 11) against
-// 40-77 us an ordinary unit (Angels, MTG_TURN_CENSUS wall_us / units), i.e. 4-15 probes a unit. One unit a probe
-// over-charged 4-15x: the units census grew 3-8% on decks where nothing was re-made (Angels +3.3%, 0 digests moved)
-// and the decision budget lost that much search. 4 is the dear end of the measured range -- the safe side for wall.
-constexpr int kLineRepayProbesPerUnit = 4;
+// 2026-11-07 EDF/Dragons/Angels 900-game sample: 4,144,780 pass-2 probes in 16,358 ms = 3.95 us/probe,
+// versus 5,260,630 ordinary units in 374,268 ms = 71.15 us/unit. One unit therefore buys about 18 probes.
+// The paired 4-vs-18 batch changed no win turns; four EDF decision digests changed, while Dragons/Angels were
+// byte-identical. This charge prices the actual work without reserving 4x too much search budget for it.
+constexpr int kLineRepayProbesPerUnit = 18;
 // TEMPORARY DIAGNOSTIC (successor 9): MTG_LR_PROBES_PER_UNIT=<n> overrides the price for a re-pricing A/B.
 int LineRepayProbesPerUnit()
 {
