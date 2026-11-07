@@ -57,7 +57,7 @@ MODELED_ELSEWHERE_KEYWORDS = {
     # provably inert in the card's oracle bracket note -- nothing in this sim deals damage
     # to our creatures, and the passive opponent never controls a creature to fight. This
     # strip is about the TAG being categorically wrong, NOT a sign-off on that ability.
-    "enrage",
+    "enrage", "imprint", "council's dilemma",
     # Keyword ACTIONS -- what an ability DOES, never an innate property of a permanent
     # (CR 701). `scry` and `surveil` are the same class and already sit in the bucket
     # below for historical reasons.
@@ -89,6 +89,11 @@ MODELED_ELSEWHERE_KEYWORDS = {
     "fight", "double", "exert",
     # Keyword abilities this engine models via params / oracle logic, not a tag:
     "cycling", "scry", "surveil", "cascade", "retrace", "replicate",
+    # Walk's buyback cost, Mastery's first-draw miracle cost, and Part's awaken
+    # alternative cost/counters are cast and resolution mechanics, not innate
+    # battlefield keyword tags. Their CardParams paths are reviewed in the
+    # Extra Turns analysis ledger.
+    "buyback", "miracle", "awaken",
     "entwine",  # Tooth and Nail's {2} mode cost is modeled by tooth_and_nail.
     "affinity", "treasure",
     # Food: token-type keyword (like treasure) -- Oko's Food-making is modeled structurally

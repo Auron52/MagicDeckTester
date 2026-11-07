@@ -1,0 +1,65 @@
+{
+  "value_play": { "expected_buckets": 14 },
+  "card_scores": {
+    "Emrakul, the Aeons Torn": [
+      0.15291817245412886
+    ],
+    "Expropriate": [
+      -0.04209387104123863
+    ],
+    "Extraplanar Lens": [
+      -0.1664580455801108
+    ],
+    "Horn of Greed": [
+      0.07949222303074421
+    ],
+    "Howling Mine": [
+      0.2449853039756622,
+      0.11942095372327799
+    ],
+    "Mind Stone": [
+      0.0019611009851647765,
+      -0.020347209258913423
+    ],
+    "Myriad Landscape": [
+      -0.12966099830609146,
+      0.16755725190839676
+    ],
+    "Nexus of Fate": [
+      0.022422972855023815
+    ],
+    "Part the Waterveil": [
+      -0.06063304666429126
+    ],
+    "Temporal Manipulation": [
+      0.13440860215053618,
+      0.008448540706606167
+    ],
+    "Temporal Mastery": [
+      -0.036089742854850115
+    ],
+    "Time Warp": [
+      -0.014035359002113168,
+      0.40092514718250527
+    ],
+    "Ulamog, the Ceaseless Hunger": [
+      0.014387725708393972
+    ],
+    "Walk the Aeons": [
+      -0.3988776159865264,
+      -0.11986301369863028
+    ]
+  },
+  "hand_score_threshold": -1e+18,
+  "mulligan": {
+    "bottom_order": "count_first",
+    "curve_check": "two_drop",
+    "max_lands": 5,
+    "min_color_sources": {},
+    "min_lands": 1,
+    "min_playable": 1,
+    "required_pieces": [],
+    "stop_at": 4
+  },
+  "version": 1
+}

@@ -1,0 +1,23 @@
+{
+  "_comment": [
+    "Ulamog's first 10-damage attack cannot kill an opponent at 21 life.",
+    "The attack trigger exiles their remaining 20 cards before combat damage,",
+    "so the passive opponent loses at their scheduled draw this round."
+  ],
+  "deck": "decks/Extra Turns/Extra Turns.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 21,
+  "opponent_library_size": 20,
+  "battlefield": [
+    { "name": "Ulamog, the Ceaseless Hunger", "controller": 0 }
+  ],
+  "hand": [],
+  "library_filler": "Snow-Covered Island",
+  "library_size": 30,
+  "depth": 2,
+  "budget_ms": 100,
+  "max_turns": 5,
+  "expect_win_turn": 3
+}

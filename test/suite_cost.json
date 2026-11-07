@@ -138,6 +138,15 @@
    "total_core_ms": 205031,
    "worst_case": "elementals_regression_d5_b20"
   },
+  "extraturns": {
+   "cost_metric": "searched_depth_budget_pooled_seeds_v2",
+   "cost_per_game_ms": 12797.77,
+   "jobs": 5,
+   "key": "extraturns",
+   "tier": "regression",
+   "total_core_ms": 4704922,
+   "worst_case": "extraturns_regression_d5_b20"
+  },
   "fivecolour": {
    "cost_metric": "searched_depth_budget_pooled_seeds_v2",
    "cost_per_game_ms": 2942.6533,
@@ -194,11 +203,11 @@
   },
   "hinata": {
    "cost_metric": "searched_depth_budget_pooled_seeds_v2",
-   "cost_per_game_ms": 13205.9333,
+   "cost_per_game_ms": 4293.9867,
    "jobs": 7,
    "key": "hinata",
    "tier": "regression",
-   "total_core_ms": 5073814,
+   "total_core_ms": 1673769,
    "worst_case": "hinata2hg_regression_d5_b30"
   },
   "jumbo": {

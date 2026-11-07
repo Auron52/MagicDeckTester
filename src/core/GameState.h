@@ -179,6 +179,7 @@ struct StackEntry
                                         // at the cast site; Apex adds its 10-of-one-colour float ONLY when
                                         // true. True/unused for every non-impulse spell.
     int                 enchant_target = 0;         // Aura cast: the card.m_number of the creature this Aura
+    bool                awaken = false; // cast for awaken alternative cost; enchant_target is its land.
                                         // enters attached to (a SEARCH decision -- one plan variant per legal
                                         // creature). Set at the cast site from Action::enchant_target; read at
                                         // resolution (EffectHandler default case) to set the aura permanent's
@@ -479,9 +480,17 @@ struct GameState
     // Every other deck: pending == extra_turns_taken == 0 forever, so TurnSeq() == turn_number and every
     // site moved to TurnSeq() is byte-identical by construction.
     bool                     deck_has_extra_turn          = false;
+    bool                     deck_has_miracle             = false;
+    // -1 = unpinned playout; 0 = decline; 1 = cast if payable.
+    std::int8_t              scripted_miracle_choice      = -1;
     bool                     in_extra_turn                = false;
     std::uint8_t             pending_extra_turns          = 0;
     std::uint8_t             extra_turns_taken            = 0;
+    // Extra turns are taken in reverse creation order (CR 500.7). Zero names our player;
+    // one names the passive opponent. Keep the old own-turn count for the existing search
+    // gates and for scenario states that install pending_extra_turns directly.
+    std::vector<std::uint8_t> extra_turn_order;
+    std::uint8_t             pending_opponent_extra_turns = 0;
     // GRAVEYARD-SHUFFLE TRIGGER (CardParams::put_into_graveyard_shuffles_graveyard: Emrakul, Ulamog the
     // Infinite Gyre). DECK CONSTANT (StampDeckTraits, main + sideboard): FireGraveyardEntryTriggers'
     // scan runs only while set, so every other deck pays one bool test per graveyard entry. DEFAULT
@@ -536,20 +545,47 @@ struct GameState
     // the regular turn of a round is stale inside that round's extra turn.
     int TurnSeq() const { return turn_number + static_cast<int>(extra_turns_taken); }
     // TERMINATION BACKSTOP for extra-turn chains (both worlds): a game / rollout / search node whose
-    // turns taken exceed 4x the round horizon is ended as a no-win. Unreachable in practice (every extra
-    // turn needs a cast Emrakul, and each Emrakul attack is 15 damage), but Emrakul's graveyard shuffle
-    // plus the legend rule can return it to the library, so in principle a chain recurs, and depth
-    // counted in ROUNDS would not bound it at an unlimited budget. Value-gated on extra_turns_taken:
+    // turns taken exceed 4x the round horizon is ended as a no-win. A deck can
+    // repeatedly cast turn spells, so depth counted in ROUNDS alone would not
+    // bound an unlimited-budget search. This guard does not change scored rounds.
+    // Value-gated on extra_turns_taken:
     // false for every deck that never takes an extra turn.
     bool TurnSeqCapped(int max_turns) const
-    { return extra_turns_taken != 0 && TurnSeq() > 4 * max_turns; }
+    { return (extra_turns_taken != 0 || pending_opponent_extra_turns != 0)
+             && TurnSeq() + pending_opponent_extra_turns > 4 * max_turns; }
+    void QueueExtraTurn(int player_index)
+    {
+        const bool opponent = player_index != active_player_index;
+        if (opponent)
+        {
+            if (pending_opponent_extra_turns == 255) { return; }
+            ++pending_opponent_extra_turns;
+        }
+        else
+        {
+            if (pending_extra_turns == 255) { return; }
+            ++pending_extra_turns;
+        }
+        extra_turn_order.push_back(opponent ? 1 : 0);
+    }
+    bool NextExtraTurnIsOpponent() const
+    { return !extra_turn_order.empty() && extra_turn_order.back() == 1; }
+    bool NextExtraTurnIsOurs() const
+    { return !extra_turn_order.empty() ? extra_turn_order.back() == 0 : pending_extra_turns > 0; }
+    void ConsumeOpponentExtraTurn()
+    {
+        if (!NextExtraTurnIsOpponent()) { return; }
+        extra_turn_order.pop_back();
+        --pending_opponent_extra_turns;
+    }
     // THE TURN COUNTER STEP, shared by both worlds' turn transition (GameEngine::RunTurnFrom's NewTurn
     // entry, TurnSolver's SimulateEndAndStartNextTurn) so they cannot drift: a pending extra turn is
     // taken now and the ROUND does not advance; otherwise the next round begins.
     void AdvanceTurnCounter()
     {
-        if (pending_extra_turns > 0)
+        if (NextExtraTurnIsOurs())
         {
+            if (!extra_turn_order.empty()) { extra_turn_order.pop_back(); }
             --pending_extra_turns;
             if (extra_turns_taken < 255) { ++extra_turns_taken; }
             in_extra_turn = true;
@@ -1581,8 +1617,8 @@ struct GameState
     }
 };
 
-// Can WHERE in a plan the land drop happens change the outcome? Only when a cast can put a permanent
-// that watches the land's entry: a landfall payoff (deck_has_landfall), or a scry watcher whose
+// Can WHERE in a plan the land drop happens change the outcome? When a cast can put a permanent
+// that watches the land's entry (landfall), its play (Horn of Greed), or a scry watcher whose
 // trigger the land's own ETB scry fires (deck_has_scry_watcher -- Galadriel). Gates the land-POSITION
 // axis (Plan::land_slot) in the enumeration; every other deck keeps the land-first order only.
 inline bool LandOrderMatters(const GameState& s)

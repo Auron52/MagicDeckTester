@@ -459,6 +459,11 @@ void TapSourceIntoFloat(GameState& state, int active, Permanent& p, const CardDe
         if (state.dmg_events_armed) { dmgev::ArmedManaTap(state, active, p, 0); }
         floating.Add(Color::Blue);
         if (available) { available->Add(Color::Blue, -1); }
+        if (const int ln = LensBonusCount(state, p))
+        {
+            floating.Add(Color::Blue, ln);
+            if (available) { available->Add(Color::Blue, -ln); }
+        }
         ManaPool bonus;
         LandAuraAddToPool(bonus, state, p, aura_colors);
         floating.AddPool(bonus);
@@ -678,6 +683,19 @@ void TapSourceIntoFloat(GameState& state, int active, Permanent& p, const CardDe
             available->black -= bonus.black; available->red       -= bonus.red;
             available->green -= bonus.green; available->colorless -= bonus.colorless;
             available->wild  -= bonus.wild;
+        }
+    }
+    if (const int ln = LensBonusCount(state, p))
+    {
+        AddLensMana(floating, state, p, def, col, ln);
+        if (available)
+        {
+            ManaPool bonus;
+            AddLensMana(bonus, state, p, def, col, ln);
+            available->white -= bonus.white; available->blue -= bonus.blue;
+            available->black -= bonus.black; available->red -= bonus.red;
+            available->green -= bonus.green; available->colorless -= bonus.colorless;
+            available->wild -= bonus.wild; available->wild_c -= bonus.wild_c;
         }
     }
 }
@@ -3837,16 +3855,17 @@ static int NoncreatureSpellTax(const CardDefinition& def, const GameState& state
     return tax;
 }
 
-ManaCost EffectiveSpellCost(const CardDefinition& def, const GameState& state, int copies)
+static ManaCost EffectiveSpellCostImpl(const CardDefinition& def, const GameState& state, int copies,
+                                       const ManaCost* alternate_base)
 {
-    if (def.params.spectacle_cost.has_value() && state.opponent_lost_life_this_turn)
+    if (alternate_base == nullptr && def.params.spectacle_cost.has_value() && state.opponent_lost_life_this_turn)
     {
         // An alternative cost still takes cost increases (CR 118.9d).
         ManaCost sc = def.params.spectacle_cost.value();
         sc.generic += NoncreatureSpellTax(def, state);
         return sc;
     }
-    ManaCost cost = def.card.m_mana_cost;
+    ManaCost cost = alternate_base ? *alternate_base : def.card.m_mana_cost;
     // Splice onto Arcane: casting ONE base while splicing k = copies-1 OTHER copies adds each spliced
     // copy's SPLICE cost (params.splice_cost; unset -> the card's own printed cost) to the base's RAW
     // cost FIRST, so the Medallion/affinity/Hinata reductions below apply ONCE to the combined total
@@ -4043,6 +4062,13 @@ ManaCost EffectiveSpellCost(const CardDefinition& def, const GameState& state, i
     }
     return cost;
 }
+
+ManaCost EffectiveSpellCost(const CardDefinition& def, const GameState& state, int copies)
+{ return EffectiveSpellCostImpl(def, state, copies, nullptr); }
+
+ManaCost EffectiveSpellCostWithBase(const CardDefinition& def, const GameState& state,
+                                    const ManaCost& alternate_base)
+{ return EffectiveSpellCostImpl(def, state, 1, &alternate_base); }
 
 // THE cast-order comparator (C1 unit 3): provider RANK first, then CHEAPEST-FIRST by the action's
 // ACTUAL cost. The rank alone is not enough -- every mana ritual shares one rank, so their relative

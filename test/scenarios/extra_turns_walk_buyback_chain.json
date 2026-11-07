@@ -1,0 +1,31 @@
+{
+  "_comment": [
+    "Nine Islands let Walk the Aeons be bought back once, then cast again",
+    "from the six remaining Islands. Three Emrakul attacks in the same round",
+    "kill a 45-life opponent. A plain Walk grants only one extra attack."
+  ],
+  "deck": "decks/Extra Turns/Extra Turns.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 45,
+  "battlefield": [
+    { "name": "Emrakul, the Aeons Torn", "controller": 0 },
+    { "name": "Snow-Covered Island", "controller": 0 },
+    { "name": "Snow-Covered Island", "controller": 0 },
+    { "name": "Snow-Covered Island", "controller": 0 },
+    { "name": "Snow-Covered Island", "controller": 0 },
+    { "name": "Snow-Covered Island", "controller": 0 },
+    { "name": "Snow-Covered Island", "controller": 0 },
+    { "name": "Snow-Covered Island", "controller": 0 },
+    { "name": "Snow-Covered Island", "controller": 0 },
+    { "name": "Snow-Covered Island", "controller": 0 }
+  ],
+  "hand": ["Walk the Aeons"],
+  "library_filler": "Snow-Covered Island",
+  "library_size": 30,
+  "depth": 2,
+  "budget_ms": 400,
+  "max_turns": 5,
+  "expect_win_turn": 3
+}

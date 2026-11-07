@@ -358,6 +358,31 @@ public:
     virtual CertStance Certificate() const = 0;
 };
 
+// Extra Turns starts with the generic decision surface. Its own provider gives the
+// deck an explicit routing and certificate stance before any pruning is measured.
+class ExtraTurnsProvider : public DeckProvider
+{
+public:
+    bool PreferIdleTappedFirstOpeningLand(const GameState& state) const override;
+    int CastOrderRank(const GameState& state, const CardDefinition& def) const override;
+    bool ComboCardValue(const GameState& state, const CardDefinition& def,
+                        int dmg_unit, int& out) const override;
+    bool ArchetypeCardValue(const GameState& state, const CardDefinition& def,
+                            int dmg_unit, int& out) const override;
+    bool ExtraTurnChainWalkEnabled() const override { return true; }
+    bool ExtraTurnChainFinisherPlanAllowed(const GameState& state, bool casts_emrakul,
+                                           bool casts_ulamog, bool casts_turn_spell) const override;
+    int WalkBuybackValueBonus(const GameState& state, const CardDefinition& def) const override;
+    int LensImprintValueBonus(const GameState& state, const Permanent& land) const override;
+    std::vector<int> CleanupDiscardCandidates(
+        const GameState& state, const std::vector<std::string>* required_pieces) const override;
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed,
+               "NOT ASSESSED. Check extra-turn chains, buyback, miracle and Lens mana "
+               "before claiming a sound winless-turn proof." }; }
+    const char* Name() const override { return "ExtraTurns"; }
+};
+
 // Kithkin's Vial charge rule is the root default. Its own provider prevents this
 // list from inheriting VialProvider's Sliver-specific cleanup policy.
 class KithkinProvider : public DeckProvider

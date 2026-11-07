@@ -211,6 +211,18 @@ namespace handentry
             { g_census.in_cast[static_cast<int>(why)].fetch_add(1, std::memory_order_relaxed); }
         }
     }
+
+    inline void NoteFirstDraw(GameState& state, int player_index, const Card& card,
+                              HandEntryReason why)
+    {
+        if (!state.deck_has_miracle
+            || (why != HandEntryReason::Draw && why != HandEntryReason::DrawStep)) { return; }
+        Player& p = state.players[player_index];
+        if (p.first_draw_card_number_this_turn != 0) { return; }
+        p.first_draw_card_number_this_turn = card.m_number;
+        // The trigger is inspected only after the enclosing draw effect finishes.
+        p.pending_miracle_card_number = card.m_number;
+    }
 }
 
 // THE SPLIT THAT SIZES THE HOLE. Today's arming can only see a hand entry that happens INSIDE a
@@ -239,12 +251,14 @@ inline void EnterHand(GameState& state, int player_index, Card&& card, HandEntry
 {
     handentry::Note(state, player_index, why);
     state.players[player_index].hand.push_back(std::move(card));
+    handentry::NoteFirstDraw(state, player_index, state.players[player_index].hand.back(), why);
 }
 
 inline void EnterHand(GameState& state, int player_index, const Card& card, HandEntryReason why)
 {
     handentry::Note(state, player_index, why);
     state.players[player_index].hand.push_back(card);
+    handentry::NoteFirstDraw(state, player_index, state.players[player_index].hand.back(), why);
 }
 
 // THE SECOND ROUTE, and the reason the design doc's audit undercounted: `Library::DrawN` appends
@@ -258,7 +272,12 @@ inline void EnterHand(GameState& state, int player_index, const Card& card, Hand
 inline int DrawIntoHand(GameState& state, int player_index, int n, HandEntryReason why)
 {
     Player& p = state.players[player_index];
+    const std::size_t old_size = p.hand.size();
     const int drew = p.library.DrawN(n, p.hand);
-    for (int i = 0; i < drew; ++i) { handentry::Note(state, player_index, why); }
+    for (int i = 0; i < drew; ++i)
+    {
+        handentry::Note(state, player_index, why);
+        handentry::NoteFirstDraw(state, player_index, p.hand[old_size + static_cast<std::size_t>(i)], why);
+    }
     return drew;
 }

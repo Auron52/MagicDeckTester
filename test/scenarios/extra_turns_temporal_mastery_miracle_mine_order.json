@@ -1,0 +1,26 @@
+{
+  "_comment": [
+    "CR 504.1: ordinary draw comes before Howling Mine's draw trigger.",
+    "The ordinary draw is an Island, so Mastery from Mine is the second",
+    "draw and cannot be cast for its miracle cost."
+  ],
+  "deck": "decks/Extra Turns/Extra Turns.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 30,
+  "battlefield": [
+    { "name": "Emrakul, the Aeons Torn", "controller": 0 },
+    { "name": "Howling Mine", "controller": 0 },
+    { "name": "Snow-Covered Island", "controller": 0 },
+    { "name": "Snow-Covered Island", "controller": 0 }
+  ],
+  "hand": [],
+  "library_top": ["Snow-Covered Island", "Temporal Mastery"],
+  "library_filler": "Snow-Covered Island",
+  "library_size": 30,
+  "depth": 2,
+  "budget_ms": 100,
+  "max_turns": 3,
+  "expect_no_win": true
+}

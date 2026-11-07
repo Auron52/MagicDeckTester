@@ -1286,6 +1286,18 @@ public:
     // site in CollectActions consults this first, so a deck without it never scans. Generic = false.
     virtual bool ComboRouteEnabled() const { return false; }
 
+    // Extra Turns may try a depth-zero continuation through consecutive own turns.
+    // The solver accepts it only after simulation reaches a real same-round win.
+    virtual bool ExtraTurnChainWalkEnabled() const { return false; }
+    // The depth-zero extra-turn trial asks the deck whether its chosen whole-turn
+    // plan respects its finisher timing. A rejected trial falls back to search.
+    virtual bool ExtraTurnChainFinisherPlanAllowed(const GameState&, bool, bool, bool) const
+    { return true; }
+    virtual int WalkBuybackValueBonus(const GameState&, const CardDefinition&) const { return 0; }
+    // Orders Extraplanar Lens's optional physical-land imprint variants. Zero
+    // leaves the generic legal menu and its historical scores unchanged.
+    virtual int LensImprintValueBonus(const GameState&, const Permanent&) const { return 0; }
+
     // UntapLoopRouteEnabled -- does this deck get the MECHANICAL UNTAP-LOOP GO-OFF (AccomplishedAlchemist,
     // 2026-10-20; AlchemistComboRouteOffer / AlchemistComboRouteApply in DecisionProviders.cpp) as a
     // searched plan action? The third ComboRoute sibling, same contract: ONE standalone action, emitted in
@@ -2559,6 +2571,12 @@ public:
     // DEFAULT "" -> no prune, every deck byte-identical; only an archetype provider opts in.
     virtual std::string ForcedEarlyLandName(const GameState& s, int controller) const
     { (void)s; (void)controller; return {}; }
+
+    // Opening-land tie order only: let a deck opt into the shared proof that
+    // an untapped first land cannot spend its mana, so a tapped first land can
+    // be developed now. The search still sees every legal land choice.
+    virtual bool PreferIdleTappedFirstOpeningLand(const GameState& s) const
+    { (void)s; return false; }
 
     // HoldDeferredDropForLethal -- after a deferred Treasure Hunt (DrawUntilNonland) resolves, HOLD the
     // still-open land drop entirely rather than developing it, because the lands now in hand are the marginal

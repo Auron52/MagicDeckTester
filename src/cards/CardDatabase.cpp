@@ -374,6 +374,27 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
         }
         m_cards[def.card.m_name] = std::move(def);
     }
+    // The goldfish opponent's basic-land marker can be gained with Expropriate.
+    // Its subtype is deliberately unknown, so give a controller the conservative
+    // mana ability of Wastes: one colorless mana. Keep the marker's name and
+    // numbering intact for opponent-target and regression fixtures.
+    {
+        const json marker = {
+            {"name", "Opponent Basic Land"}, {"mana_cost", ""},
+            {"types", json::array({"Land"})},
+            {"supertypes", json::array({"Basic"})},
+            {"subtypes", json::array()}, {"keywords", json::array()},
+            {"oracle_text", "{T}: Add {C}."},
+            {"template", "basic_land"},
+            {"parameters", {{"produces", json::array({"C"})}}}
+        };
+        CardDefinition def;
+        def.card = BuildCardFromJson(marker);
+        def.tier = CardTier::Template;
+        def.tmpl = CardTemplate::BasicLand;
+        def.params = BuildParamsFromJson(marker["parameters"]);
+        m_cards[def.card.m_name] = std::move(def);
+    }
     RebuildInternedIndex();
 }
 
@@ -1523,6 +1544,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.land_search_to_hand             = params.value("land_search_to_hand", 0);
     p.land_search_tapped              = params.value("land_search_tapped", false);
     p.land_search_optional            = params.value("land_search_optional", false);
+    p.land_search_allow_partial       = params.value("land_search_allow_partial", false);
     p.land_search_subtype_id          = SubtypeRegistry::Instance().Intern(
                                             params.value("land_search_subtype", std::string()));
     p.land_search_on_resolve          = params.value("land_search_on_resolve", false);
@@ -1904,9 +1926,21 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     // phase 2 wired cast_trigger_extra_turns; phase 3 wires the replacement + the watcher.
     p.cycle_draw_exile_shared_type_freecast = params.value("cycle_draw_exile_shared_type_freecast", false);
     p.cast_trigger_extra_turns              = params.value("cast_trigger_extra_turns", 0);
+    p.extra_turns_on_resolve                 = params.value("extra_turns_on_resolve", 0);
+    if (params.contains("awaken_cost"))
+    { p.awaken_cost = ManaCostFromString(params["awaken_cost"].get<std::string>()); }
+    p.awaken_counters                        = params.value("awaken_counters", 0);
+    p.expropriate_vote                       = params.value("expropriate_vote", false);
+    p.buyback_sacrifice_islands              = params.value("buyback_sacrifice_islands", 0);
+    if (params.contains("miracle_cost"))
+    { p.miracle_cost = ManaCostFromString(params["miracle_cost"].get<std::string>()); }
+    p.lens_imprint_land = params.value("lens_imprint_land", false);
+    p.horn_draw_on_land_play = params.value("horn_draw_on_land_play", false);
+    p.mine_extra_draw = params.value("mine_extra_draw", false);
     p.cycle_or_discard_trigger_scry         = params.value("cycle_or_discard_trigger_scry", 0);
     // Phase 2 (2026-10-27): the Eldrazi.
     p.cast_trigger_exile_target_permanents  = params.value("cast_trigger_exile_target_permanents", 0);
+    p.attack_exile_defender_top             = params.value("attack_exile_defender_top", 0);
     p.cast_trigger_destroy_target_permanents = params.value("cast_trigger_destroy_target_permanents", 0);
     p.annihilator                           = params.value("annihilator", 0);
     p.put_into_graveyard_shuffles_graveyard = params.value("put_into_graveyard_shuffles_graveyard", false);

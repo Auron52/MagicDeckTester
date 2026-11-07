@@ -232,6 +232,31 @@ TEST_CASE("Cyclone phase 2: TurnSeq derives from the round + extra turns; Advanc
     CHECK(s.TurnSeqCapped(8));                    // 45 > 4 x 8
 }
 
+TEST_CASE("Extra turns resolve in reverse creation order across both players")
+{
+    GameState s;
+    s.turn_number = 4;
+    s.active_player_index = 0;
+    s.QueueExtraTurn(0);
+    s.QueueExtraTurn(1);
+    s.QueueExtraTurn(0);
+    CHECK(s.pending_extra_turns == 2);
+    CHECK(s.pending_opponent_extra_turns == 1);
+    CHECK(s.NextExtraTurnIsOurs());
+    s.AdvanceTurnCounter();
+    CHECK(s.turn_number == 4);
+    CHECK(s.pending_extra_turns == 1);
+    CHECK(s.NextExtraTurnIsOpponent());
+    s.ConsumeOpponentExtraTurn();
+    CHECK(s.pending_opponent_extra_turns == 0);
+    CHECK(s.NextExtraTurnIsOurs());
+    s.AdvanceTurnCounter();
+    CHECK(s.turn_number == 4);
+    CHECK(s.pending_extra_turns == 0);
+    s.AdvanceTurnCounter();
+    CHECK(s.turn_number == 5);
+}
+
 TEST_CASE("Cyclone phase 2: Emrakul's cast trigger -- executor hand cast, free cast, and the rollout")
 {
     EnsureCards2();
@@ -275,7 +300,20 @@ TEST_CASE("Cyclone phase 2: an extra turn -- win in ROUNDS, sickness ends, no sp
     static const std::vector<OpponentSpawn> spawns = { { 3, 1, 1 }, { 4, 2, 2 } };
     GameState s = Base2(3, 2, 20);
     s.players[0].lands_played_this_turn = 1;
-    Put2(s, kHunger, 61, 0, /*sick=*/true);
+    // Use a vanilla body: Ulamog now exiles the defender's library on attack,
+    // which would win this fixture early by deck-out instead of testing rounds.
+    Card body;
+    body.m_name = "Fixture 10/10 Creature";
+    body.RehashName();
+    body.AddType(CardType::Creature);
+    body.m_power = 10;
+    body.m_toughness = 10;
+    body.m_number = 61;
+    Permanent attacker;
+    attacker.card = body;
+    attacker.owner_index = attacker.controller_index = 0;
+    attacker.entered_this_turn = true;
+    s.battlefield.push_back(attacker);
     s.pending_extra_turns = 1;
     s.opponent_spawns     = &spawns;
     s.deck_has_annihilator = false;   // a non-annihilator body: the spawns stay countable

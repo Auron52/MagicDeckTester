@@ -2627,6 +2627,7 @@ struct CardParams
     int  land_search_to_hand          = 0;
     bool land_search_tapped           = false;
     bool land_search_optional         = false;
+    bool land_search_allow_partial    = false;
     std::uint16_t land_search_subtype_id = 0;
     // WHERE it fires. on_resolve: an instant/sorcery's resolution (Rampant Growth, Search for
     // Tomorrow -- also off suspend -- Cultivate). on_enter_or_attack: ONE printed trigger with two
@@ -4212,6 +4213,17 @@ struct CardParams
     // next turn transition consumes (GameState::AdvanceTurnCounter). Extra turns do NOT advance
     // turn_number (USER 2026-10-26: they do not count toward the turn count). 0 = none.
     int cast_trigger_extra_turns = 0;
+    // Extra turns granted when an instant or sorcery RESOLVES, rather than by a cast trigger.
+    // The target-player variant also needs a player target carried through the stack.
+    int extra_turns_on_resolve = 0;
+    std::optional<ManaCost> awaken_cost;
+    int awaken_counters = 0;
+    bool expropriate_vote = false;
+    int buyback_sacrifice_islands = 0;
+    std::optional<ManaCost> miracle_cost;
+    bool lens_imprint_land = false;
+    bool horn_draw_on_land_play = false;
+    bool mine_extra_draw = false;
     // Ulamog, the Ceaseless Hunger: "When you cast this spell, exile N target permanents." A MANDATORY
     // cast trigger with N DISTINCT targets (CR 115.3) chosen as it is put on the stack (CR 603.3d) from
     // every permanent on the battlefield, either side (the spell itself is on the stack, not a target).
@@ -4219,6 +4231,9 @@ struct CardParams
     // resolution (608.2b): a target that left is skipped. Exile ignores indestructible and is not a
     // graveyard. The target CHOICE is searched (Plan::cast_trigger_target_choice). 0 = none.
     int cast_trigger_exile_target_permanents = 0;
+    // "Whenever this creature attacks, defending player exiles the top N cards of their library."
+    // Ulamog, the Ceaseless Hunger. A mandatory trigger before combat damage; 0 = none.
+    int attack_exile_defender_top = 0;
     // Ulamog, the Infinite Gyre: "When you cast this spell, destroy N target permanent(s)." Same trigger
     // shape and target axis as above, DESTROY semantics: an indestructible target is a legal no-op; a
     // destroyed creature dies through OnCreatureDies. 0 = none.

@@ -66,6 +66,9 @@ KNOWN_TYPES = {
     # tutor pick at RESOLUTION (main.cpp WriteTutorDecisionJson): every tutor CAST since 543f540d
     # (2026-09-10) and a tutor ETB off a put. Single int, engine pick exposed as heuristic_default.
     "tutor_etb",
+    # Extraplanar Lens's optional imprint uses the existing flicker-style
+    # board choice. The emitted heuristic_default is a single option index.
+    "flicker",
     # attach host / soulbond pairing (main.cpp WriteAttachHostDecisionJson: Armored Skyhunter's
     # attach, Raubahn's two stages, Silverblade Paladin's and Tandem Lookout's soulbond). One int,
     # the engine pick exposed as heuristic_default -- the generic fallback below follows it.

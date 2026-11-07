@@ -86,6 +86,7 @@ declare -A DECK_FILE=(
   [vampires]=decks/Vampires/Vampire.cod
   [alchemist]=decks/AccomplishedAlchemist/AccomplishedAlchemist.cod
   [elementals]=decks/LandfallElementals/LandfallElementals.cod
+  [extraturns]="decks/Extra Turns/Extra Turns.cod"
 )
 declare -A DECK_PROF=(
   [fungusv3]=decks/Fungus/Fungus.profile.json
@@ -134,6 +135,7 @@ declare -A DECK_PROF=(
   [vampires]=decks/Vampires/Vampire.profile.json
   [alchemist]=decks/AccomplishedAlchemist/AccomplishedAlchemist.profile.json
   [elementals]=decks/LandfallElementals/LandfallElementals.profile.json
+  [extraturns]="decks/Extra Turns/Extra Turns.profile.json"
 )
 
 # PLAY-SETTING SHAPE (USER 2026-10-27: "I would cut d3 b10 games to run more at play settings. d3 b10 is a nice
@@ -162,6 +164,12 @@ declare -A DECK_PROF=(
 # into turn 11 -- legal but volatile), and slivers actively spins on its heavy tail. The
 # deeper/generous budgets live in OVERNIGHT instead. See search-perf-investigation memory.
 SMOKE_CASES=(
+  # Extra Turns entry at its built-in d5/b20 play setting. Expropriate and
+  # Eldrazi attacks warrant a 2HG row.
+  "extraturns 0 1001 1000 0"
+  "extraturns 3 1001   50 10"
+  "extraturns 5 1001  100 20"
+  "extraturns2hg 5 1001 25 20"
   # Merfolk: provisional pre-keep-table ENTRY set; cost gate decides admission.
   "merfolk     0 1001 1000 0"
   "merfolk     3 1001   50 10"
@@ -672,6 +680,12 @@ SMOKE_CASES=(
 # (see SMOKE block). slivers must stay low regardless -- it spins on its heavy tail (s2002 d5
 # was 16.5 min at budget 200) for zero benefit. d0 has no search. Only antilife is new here.
 REGRESSION_CASES=(
+  # Extra Turns: two independent play blocks before the keep table.
+  "extraturns 0 2002 1000 0"
+  "extraturns 3 2002  75 10"
+  "extraturns 5 2002 150 20"
+  "extraturns 5 3003 150 20"
+  "extraturns2hg 5 2002 25 20"
   # Cyclone unlimited backstop: screened 30031..30033 at d3 and d5; all six games
   # finished below the 2e6-unit per-game cap. Keep this block fixed as a regression signal.
   "cyclone          3 30031 3 0"
@@ -1088,6 +1102,17 @@ REGRESSION_CASES=(
 # See .claude/skills/regression-testing.md rule 7 and
 # docs/design/searched-design-audit-blind-spots.md ("Method trap: overlapping seed bases").
 OVERNIGHT_CASES=(
+  # Extra Turns entry set; expand play rows to the Hinata floor after keep adoption.
+  "extraturns 0 4004 2000 0"
+  "extraturns 0 6006 2000 0"
+  "extraturns 0 8008 2000 0"
+  "extraturns 0 10010 2000 0"
+  "extraturns 3 4004 125 10"
+  "extraturns 5 4004 300 20"
+  "extraturns 5 5005 300 20"
+  "extraturns 5 6006 300 20"
+  "extraturns 5 7007 300 20"
+  "extraturns2hg 5 4004 50 20"
   # Cyclone unlimited backstop: screened 30051..30053 at d3 and d5; all six games
   # finished below the 2e6-unit per-game cap. Disjoint from the regression block.
   "cyclone          3 30051 3 0"

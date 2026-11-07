@@ -710,7 +710,7 @@ inline bool CarriesPostApplyPin(const TurnSolver::Plan& p)
         || p.attack_land_search_choice >= 0 || p.combat_crack_choice >= 0 || p.discard_choice >= 0
         || p.vial_charge_choice >= 0 || p.saga_target_choice >= 0 || p.upkeep_land_search_choice >= 0
         || p.grace_choice >= 0 || p.upkeep_gy_reanimate_choice >= 0 || p.demon_trigger_choice >= 0
-        || p.upkeep_tutor_choice >= 0 || p.suspend_tutor_choice >= 0 || p.echo_choice >= 0
+        || p.upkeep_tutor_choice >= 0 || p.miracle_choice >= 0 || p.suspend_tutor_choice >= 0 || p.echo_choice >= 0
         || p.doth_put_choice >= 0
         || p.atk_dork_release >= 0 || p.combat_landfall_target_choice >= 0 || p.landfall_target_choice >= 0
         || p.cast_trigger_target_choice >= 0
@@ -761,6 +761,7 @@ inline void RecordReSolveRealized(const GameState& s, const TurnSolver::Plan& p,
     if (p.upkeep_gy_reanimate_choice >= 0
         && s.scripted_upkeep_gy_reanimate != p.upkeep_gy_reanimate_choice)                       { ok = false; }
     if (p.upkeep_tutor_choice >= 0 && s.scripted_upkeep_tutor != p.upkeep_tutor_choice)            { ok = false; }
+    if (p.miracle_choice >= 0 && s.scripted_miracle_choice != p.miracle_choice)                    { ok = false; }
     if (p.suspend_tutor_choice >= 0 && s.scripted_suspend_tutor != p.suspend_tutor_choice)          { ok = false; }
     if (p.demon_trigger_choice >= 0 && s.scripted_demon_trigger != p.demon_trigger_choice)      { ok = false; }
     if (p.upkeep_land_search_choice >= 0 && s.scripted_upkeep_land_search != p.upkeep_land_search_choice) { ok = false; }
@@ -4345,7 +4346,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         // affordable single pass was tuned/measured at the deck's own depth. 0 => use env / off.
                         vp_here ? m_profile.value_play.escalation_cap : 0,
                         // Per-deck FROZEN cost-per-leaf R for the predicted walk (determinism). <=0 => 120 prior.
-                        vp_here ? m_profile.value_play.escalation_r : -1.0);
+                        vp_here ? m_profile.value_play.escalation_r : -1.0,
+                        /*allow_chain_tape=*/!m_in_rollout);
 
                     // Oracle: track the EARLIEST win the search actually FOUND this game --
                     // i.e. a win VERIFIED inside the searched horizon (win_turn within
@@ -9312,6 +9314,7 @@ AIEngine::DigOutcome AIEngine::PerformDigFull(GameState& state, const std::strin
     const int drawn_num = drawn.m_number;
     EnterHand(state, state.active_player_index, std::move(drawn), HandEntryReason::Draw);
     if (state.deck_has_draw_ping) { ResolveDrawTriggers(state); }   // the Niv loop (rollout twins: both dig loops)
+    ResolvePendingMiracle(state, m_logger);
     LandDrawCensusAfterDig(state, drew_land, drawn_num);   // MTG_LANDDRAW_CENSUS (diagnostic only)
     return drew_land ? DigOutcome::DrewLand : DigOutcome::DrewNonland;
 }
@@ -9467,6 +9470,23 @@ bool AIEngine::CastUpkeepTutor(GameState& state, int hand_number, const std::str
     { return c.m_number == hand_number; });
 }
 
+bool AIEngine::CastMiracleFromHand(GameState& state, int hand_number)
+{
+    Player& ap = state.ActivePlayer();
+    auto it = std::find_if(ap.hand.begin(), ap.hand.end(), [&](const Card& c)
+    { return c.m_number == hand_number; });
+    if (it == ap.hand.end()) { return false; }
+    const CardDefinition* def = CardDatabase::Instance().LookupCached(*it);
+    if (!def || !def->params.miracle_cost.has_value()) { return false; }
+    ManaPool available = AvailableManaPool(state);
+    CastRiders riders;
+    riders.miracle = true;
+    CastSpellFromHand(state, *it, available, 0, "", 0, 0, -1, -1, 0, "", 0,
+                      false, false, -1, 0, 0, 0, false, false, false, riders);
+    return std::none_of(ap.hand.begin(), ap.hand.end(), [&](const Card& c)
+    { return c.m_number == hand_number; });
+}
+
 // Public payment entry. Delegates to the UNIFIED TapForCostShared (ManaPayment.cpp) -- formerly a
 // twin of TurnSolver's TapForCostDirect kept in lockstep by comment discipline. The executor
 // threads its `available` accounting pool through and has no MTG_LEGACY_CCO_PAY hatch.
@@ -9592,6 +9612,8 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
     // ...and an Aura spell whose searched host is not a legal target now (CR 303.4a / 601.2c; the SHARED
     // AuraSpellCastLegal; lockstep twin of apply_one's guard).
     if (!AuraSpellCastLegal(state, state.active_player_index, *def, enchant_target)) { return; }
+    if (riders.awaken && AwakenLandTargetIndex(state, state.active_player_index, enchant_target) < 0)
+    { return; }
     // PITCH EVOKE (Fury): the evoke's cost is a hand card (riders.pitch_name). No such card left -> the
     // spell is not cast, nothing paid (lockstep twin of apply_one's guard, same shared predicate).
     const bool cast_pitch = evoke && !def->params.evoke_exile_color.empty();
@@ -9708,6 +9730,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
     // aura_attached_to to the same creature the rollout's apply_one did (lockstep). 0 = not an aura /
     // heuristic fallback (ResolveEnchantTarget). Inert for every non-aura spell.
     entry.enchant_target     = enchant_target;
+    entry.awaken             = riders.awaken;
     entry.bestow             = bestow;
     // Evoke (Reveillark): carried to resolution so EnterBattlefield self-sacrifices the entered
     // permanent through the shared cascade (the LTB fires as on any leave). Lockstep: apply_one.
@@ -9735,7 +9758,21 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
             // Action::draw_target, carried here as a consume-once cast rider (0 = us, 1 = the
             // opponent). Read at resolution by ResolveDrawX -> PerformDrawX, the rollout's twin.
             // Param-gated: every other Player/Any spell keeps the opponent target.
-            if (def->params.draw_target_player)
+            if (def->params.extra_turns_on_resolve > 0)
+            {
+                t.player_index = riders.player_target != 0 ? opp_index : state.active_player_index;
+                if (g_play_target_chooser != nullptr)
+                {
+                    const std::vector<ChosenTarget> picked = (*g_play_target_chooser)(
+                        state, *def, state.active_player_index, 1, 0,
+                        { ChosenTarget{ 0, t.player_index, 0 } });
+                    if (!picked.empty() && picked[0].kind == 0
+                        && (picked[0].index == state.active_player_index || picked[0].index == opp_index))
+                    { t.player_index = picked[0].index; }
+                }
+                entry.player_target = t.player_index == opp_index ? 1 : 0;
+            }
+            else if (def->params.draw_target_player)
             { t.player_index = riders.draw_target != 0 ? opp_index : state.active_player_index; }
             entry.targets.push_back(t);
             break;
@@ -9891,10 +9928,13 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
     // Desperate Ritual SPLICE: pay (splice_count+1)*printed cost (single Medallion floor inside
     // EffectiveCost). Matches the enum's a.cost and the rollout's apply_one -> lockstep. copies=1 for
     // every non-spliced cast -> byte-identical.
-    ManaCost effective = EffectiveCost(*def, state, splice_count + 1);
+    ManaCost effective = riders.miracle && def->params.miracle_cost.has_value()
+        ? EffectiveSpellCostWithBase(*def, state, *def->params.miracle_cost)
+        : EffectiveCost(*def, state, splice_count + 1);
     // EVOKE (Reveillark): the alternate cost replaces the printed one wholesale (CR 702.75;
     // lockstep with the enumeration's a.cost and the rollout's apply_one).
     if (evoke && def->params.evoke_cost.has_value()) { effective = *def->params.evoke_cost; }
+    if (riders.awaken && def->params.awaken_cost.has_value()) { effective = *def->params.awaken_cost; }
     // Soulfire Eruption: extra Hinata discount from the searched own-creature targets (mirrors the
     // enumeration cost and the rollout's apply_one -> lockstep).
     effective.generic = std::max(0, effective.generic
@@ -10242,6 +10282,8 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
         // resolution (CR 601.2h), so a Crop Rotation's fetched land is never a legal victim.
         PerformSacrificeLandCost(state, (*hand_card_p).m_name.str());
     }
+    if (IsWalkBuyback(*def, tutor_target)
+        && !PayWalkBuyback(state, state.active_player_index, tutor_target)) { return; }
 
     // Natural Order: "sacrifice a green creature" additional cost, paid at cast (CR 601.2h) --
     // the searched victim rides own_targets (the soulfire int, reused as a card m_number here);

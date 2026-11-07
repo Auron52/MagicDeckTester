@@ -160,21 +160,26 @@ TEST_CASE("Land search: Cultivate emits every ordered (battlefield, hand) split;
     CHECK(LandSearchBattlefieldCount(sp, 2) == 1);
 }
 
-TEST_CASE("Land search: Myriad Landscape's picks share a land type and are maximal")
+TEST_CASE("Land search: Myriad Landscape keeps every 0, 1, 2 basic count")
 {
     LoadCards();
     const LandSearchSpec sp = LandSearchSpecOf(D("Myriad Landscape").params);
     GameState s = Fresh();
     Lib(s, "Forest", 50); Lib(s, "Forest", 51); Lib(s, "Mountain", 52); Lib(s, "Mountain", 53);
     Picks p = LandSearchPicks(s, 0, sp);
-    CHECK(p.size() == 2);
+    CHECK(p.size() == 5);
+    CHECK(HasPick(p, {}));
+    CHECK(HasPick(p, { "Forest" }));
+    CHECK(HasPick(p, { "Mountain" }));
     CHECK(HasPick(p, { "Forest", "Forest" }));
     CHECK(HasPick(p, { "Mountain", "Mountain" }));
-    // A lone Mountain: {Mountain} is maximal (no other Mountain; a Forest shares no type with it).
+    // A lone Mountain remains an optional one-card find even though a Forest pair exists.
     GameState s2 = Fresh();
     Lib(s2, "Forest", 50); Lib(s2, "Forest", 51); Lib(s2, "Mountain", 52);
     p = LandSearchPicks(s2, 0, sp);
-    CHECK(p.size() == 2);
+    CHECK(p.size() == 4);
+    CHECK(HasPick(p, {}));
+    CHECK(HasPick(p, { "Forest" }));
     CHECK(HasPick(p, { "Forest", "Forest" }));
     CHECK(HasPick(p, { "Mountain" }));
 }

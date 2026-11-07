@@ -3423,6 +3423,11 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
                 srcs.push_back({ abits, aura_units, aura_units, i });
             }
         }
+        // A Lens supplies a separate extra unit when this named land taps. It shares the land's
+        // possible mana types, but is not snow mana (the Lens is the ability's source).
+        const int lens_units = LensBonusCount(state, state.battlefield[i]);
+        if (lens_units > 0)
+        { srcs.push_back({ bits, lens_units, lens_units, i }); }
         if (bundle_per_col > 0) { srcs.push_back({ bits, bundle_total, bundle_per_col, i }); continue; }
         srcs.push_back({ bits, amt, amt, i });   // non-domain: one colour takes the whole tap
     }
@@ -4697,6 +4702,12 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
             ManaPool next_with_aura = next;
             if (LandAuraBonus(state, state.battlefield[i]) > 0)
             { LandAuraAddToPool(next_with_aura, state, state.battlefield[i]); }
+            if (const int ln = LensBonusCount(state, state.battlefield[i]))
+            {
+                const auto& lp = EffectiveProducesFor(state, active, *def, &state.battlefield[i]);
+                AddLensMana(next_with_aura, state, state.battlefield[i], *def,
+                            lp.size() == 1 ? lp[0] : Color::Colorless, ln);
+            }
             // ARBOR ELF re-tapping one of several INCOMPARABLE enchanted Forests (a blue Sprawl's {U}
             // vs a Wild Growth's {G}): which Forest is the payer's choice, so the child is tried once
             // per class (UntapLandHostsOf; class 0 is the default credited above). 0 for every other

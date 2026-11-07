@@ -177,7 +177,11 @@ inline std::vector<std::vector<std::string>> LandSearchPicksUncached(const GameS
                   cls.end());
     }
     const int n = static_cast<int>(cls.size());
-    if (n == 0) { return out; }
+    if (n == 0)
+    {
+        if (spec.allow_partial) { out.push_back({}); }
+        return out;
+    }
     // Multisets of class indices (non-decreasing), size 1..count, respecting copy counts and the
     // shared-type constraint; only MAXIMAL ones are kept.
     std::vector<int> cur;
@@ -213,7 +217,7 @@ inline std::vector<std::vector<std::string>> LandSearchPicksUncached(const GameS
                 cur.pop_back(); --used[static_cast<std::size_t>(c)];
             }
         }
-        if (!cur.empty() && !extendable) { multisets.push_back(cur); }
+        if (spec.allow_partial || (!cur.empty() && !extendable)) { multisets.push_back(cur); }
     };
     rec(rec, 0);
 
@@ -288,7 +292,7 @@ struct Key
     std::size_t           prov_type = 0;
     std::uint64_t         prov_key  = 0;
     int                   count = 0, to_hand = 0;
-    bool                  basic_only = false, share = false;
+    bool                  basic_only = false, share = false, allow_partial = false;
     std::uint16_t         subtype = 0;      // LandSearchSpec::subtype (Nature's Lore's "Forest card")
     std::uint16_t         subtype_alt = 0;  // fetchland's second legal subtype
     bool                  pruned = false;   // LandSearchPickPruned() -- the provider's narrowing applied
@@ -299,6 +303,7 @@ struct Key
     {
         if (prov_type != o.prov_type || prov_key != o.prov_key || count != o.count
             || to_hand != o.to_hand || basic_only != o.basic_only || share != o.share
+            || allow_partial != o.allow_partial
             || subtype != o.subtype || subtype_alt != o.subtype_alt || pruned != o.pruned || n != o.n)
         { return false; }
         for (int i = 0; i < n; ++i)
@@ -317,6 +322,7 @@ struct Key
         mix(prov_type); mix(prov_key);
         mix(static_cast<std::uint64_t>(count) | (static_cast<std::uint64_t>(to_hand) << 8)
             | (basic_only ? 1ull << 16 : 0ull) | (share ? 1ull << 17 : 0ull) | (pruned ? 1ull << 18 : 0ull)
+            | (allow_partial ? 1ull << 51 : 0ull)
             | (static_cast<std::uint64_t>(subtype) << 19)
             | (static_cast<std::uint64_t>(subtype_alt) << 35));
         for (int i = 0; i < n; ++i)
@@ -382,6 +388,7 @@ inline const landsearchmemo::Slot& LandSearchMemoSlot(const GameState& s, int ct
     k.subtype    = spec.subtype;
     k.subtype_alt = spec.subtype_alt;
     k.pruned     = LandSearchPickPruned();
+    k.allow_partial = spec.allow_partial;
     bool ok = true;
     if (spec.count > 0)
     {

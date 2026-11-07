@@ -56,6 +56,8 @@ inline std::uint64_t SelfTapSourceHoldBit(const GameState& state, int card_numbe
 // {X} spells apply the discount where the chosen X is known). Was a byte-identical twin pair
 // (AIEngine::EffectiveCost / TurnSolver's file-static EffectiveCost); both now delegate here.
 ManaCost EffectiveSpellCost(const CardDefinition& def, const GameState& state, int copies = 1);
+ManaCost EffectiveSpellCostWithBase(const CardDefinition& def, const GameState& state,
+                                    const ManaCost& alternate_base);
 
 // THE REMAND RIDER's share of a cast's bill (Action::remand_by -- "cast X, then Remand it", one
 // combined action): the Remand's own EffectiveSpellCost on this board, so Hinata's per-target discount

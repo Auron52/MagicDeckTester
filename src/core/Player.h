@@ -75,6 +75,10 @@ struct Player
     // cast_draw / dig-draw resolvers, the shared trick draw). Reset at BOTH untap sites in
     // lockstep; folded into the sim key. 0 forever for decks with no drawn-count payload.
     int cards_drawn_this_turn = 0;
+    // Miracle needs the identity of the first real draw. Draw-count callers
+    // increment before or after EnterHand, so this marker is independent.
+    int first_draw_card_number_this_turn = 0;
+    int pending_miracle_card_number = 0;
     // LIFE GAINED this turn by this player (the sum of the amounts gained, NOT the net life change --
     // life LOSS does not reduce it, per "the amount of life you gained this turn"). Read only by
     // Fortifying Draught's pump_per_life_gained_power payload; incremented at every controller-side

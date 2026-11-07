@@ -879,7 +879,7 @@
   // slots, one play appearing 18 times) purely because it had no dimension to live in.
   // `pumptarget` (WHICH creature Kessig Wolf Run's "+X/+0" lands on) is a per-action target pick like
   // `equip`, so it is asked before that pump's `x`.
-  const SUBKIND_PRI = { borosmode: -2, face: -1, fetch: 0, free: 0.5, sacrifice: 0.75, tutor: 1, loyalty: 1.3,
+  const SUBKIND_PRI = { borosmode: -2, face: -1, fetch: 0, free: 0.5, sacrifice: 0.75, exprovote: 0.8, exprotake: 0.9, tutor: 1, loyalty: 1.3,
                         bestow: 1.4, enchant: 1.5, equip: 1.5, pumptarget: 1.5, untapland: 1.5, borostarget: 1.5, jitte: 1.6, x: 2, activations: 2,
                         modal: 2.5, soulfire: 3, crackle: 4, splice: 5, devour: 5.5, replicate: 6,
                         color: 7, pitch: 9.5 };   // pitch: Fury's evoke-exile card, after its `evoke` mode (9)

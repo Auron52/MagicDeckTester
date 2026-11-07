@@ -125,6 +125,7 @@ static void JsonBattlefield(std::ostream& os, const GameState& s, int controller
     struct Cnt { const char* kind; const char* label; int count; };
     struct Row { std::string name; bool is_land; bool is_le; std::vector<Cnt> counters; int idx; bool tapped;
                  int num; bool is_aura; bool is_equip; int attached_to;
+                 std::string imprinted_land; // Lens's exiled land name, displayed under that Lens
                  std::string printed;      // copy-entrant's PRINTED card name ("" = not a copy)
                  std::string taps;         // MANUAL TAP/PAY faces ("GU"); "" = none needing no feed
                  // ...and the rest of HumanPreTapOfferFor's answer, for the sources the first version
@@ -260,7 +261,8 @@ static void JsonBattlefield(std::ostream& os, const GameState& s, int controller
             sick = !CanAttackFull(q, s.battlefield, p.controller_index);
         }
         rows.push_back({ p.card.m_name, p.card.IsLand(), is_le, std::move(cs), pi, p.tapped,
-                         p.card.m_number, is_aura, is_equip, att, p.copy_printed_name.str(),
+                         p.card.m_number, is_aura, is_equip, att, p.lens_imprinted_land.str(),
+                         p.copy_printed_name.str(),
                          std::move(taps), std::move(tap_fed), std::move(tap_feed), tap_sac,
                          std::move(tap_note), std::move(tap_auras), tap_energy, yield, has_pt, pw, tf, sick });
     }
@@ -290,6 +292,8 @@ static void JsonBattlefield(std::ostream& os, const GameState& s, int controller
                 { os << ", \"attached_to_idx\": " << hi; break; }
             }
         }
+        if (!rows[i].imprinted_land.empty())
+        { os << ", \"imprinted_land\": "; JsonStr(os, rows[i].imprinted_land); }
         // Copy-entrant provenance (Sakashima's Protege): the row's `name` is the COPIED card
         // (that IS what the permanent is); `printed` names the card that was actually cast so
         // the viewer can badge it -- otherwise the copy is indistinguishable from a real one.
@@ -760,6 +764,16 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                     else if (a.chosen_x == 3)
                     { tag += " (double strike to " + AuraHostLabel(s, a.enchant_target) + ")"; }
                 }
+                else if (const CardDefinition* vote_def = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                         vote_def && vote_def->params.expropriate_vote)
+                {
+                    tag += a.chosen_x ? " (your vote: time; opponent: money)"
+                                      : " (your vote: money; opponent: money)";
+                    if (a.enchant_target > 0)
+                    { tag += " — take " + AuraHostLabel(s, a.enchant_target); }
+                }
+                else if (a.awaken)
+                { tag += " (awaken " + AuraHostLabel(s, a.enchant_target) + ")"; }
                 else if (a.enchant_target > 0) { tag += " \xE2\x86\x92 " + AuraHostLabel(s, a.enchant_target); }
                 // The no-own-creature "cash the cantrip off their body" variant (kTrickOpponentTarget).
                 else if (a.enchant_target == kTrickOpponentTarget)
@@ -3997,6 +4011,7 @@ static void WriteFlickerDecisionJson(std::ostream& os, const GameState& s, const
                                      int decision_index)
 {
     DecisionJson d(os, decision_index);
+    const bool lens = source == "Extraplanar Lens";
     d.Type("flicker").Source(source).Turn(s)
      .Board(s).HeuristicDefault(heuristic_default);
     d.Array("options", legal.size(), [&](std::size_t i)
@@ -4006,8 +4021,12 @@ static void WriteFlickerDecisionJson(std::ostream& os, const GameState& s, const
            << (p.tapped ? "true" : "false") << ", \"name\": "; JsonStr(os, p.card.m_name.str());
         os << ", \"label\": "; JsonStr(os, p.card.m_name.str()); os << " }";
     });
-    d.Note("reply an option index -- the permanent to exile and return (it re-enters untapped and "
-           "fresh; its ETB/LTB triggers fire), or -1 to decline the flicker. Default = the AI's pick.");
+    if (lens)
+    { d.Note("reply a land option index to exile and imprint on this Lens, or -1 to decline. "
+             "The Lens adds mana only for lands with that exact name. Default = the searched pick."); }
+    else
+    { d.Note("reply an option index -- the permanent to exile and return (it re-enters untapped and "
+             "fresh; its ETB/LTB triggers fire), or -1 to decline the flicker. Default = the AI's pick."); }
 }
 
 // Kitesail Larcenist `treasurify` decision: for ONE player's side, the human picks WHICH artifact or

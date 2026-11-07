@@ -518,6 +518,8 @@ add_executable(mtg-test
     test/unit/test_lfe_fixpay.cpp
     test/unit/test_lfe_integration.cpp
     test/unit/test_cyclone_phase1.cpp
+    test/unit/test_extra_turns_big_spells.cpp
+    test/unit/test_extra_turns_permanents.cpp
     test/unit/test_cyclone_phase2.cpp
     test/unit/test_cyclone_phase3.cpp
     test/unit/test_cyclone_phase4.cpp

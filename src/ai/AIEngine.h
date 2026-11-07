@@ -50,6 +50,7 @@ public:
     // Cast a selected instant tutor during upkeep, using the ordinary paid-spell path.
     // The caller supplies the library target selected before the draw step.
     bool CastUpkeepTutor(GameState& state, int hand_number, const std::string& target);
+    bool CastMiracleFromHand(GameState& state, int hand_number);
 
     // Echo upkeep resolution (CR 702.29) at TRUE upkeep timing -- called from
     // GameEngine::UpkeepTail BEFORE the draw step, mirroring the rollout's position in

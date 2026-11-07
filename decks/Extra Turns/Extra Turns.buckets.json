@@ -1,0 +1,51 @@
+{
+  "keep_apart": [
+    {
+      "cards": [
+        "Emrakul, the Aeons Torn",
+        "Expropriate",
+        "Extraplanar Lens",
+        "Horn of Greed",
+        "Howling Mine",
+        "Mind Stone",
+        "Myriad Landscape",
+        "Nexus of Fate",
+        "Part the Waterveil",
+        "Snow-Covered Island",
+        "Temporal Mastery",
+        "Time Warp",
+        "Ulamog, the Ceaseless Hunger",
+        "Walk the Aeons"
+      ],
+      "why": "USER RULING 2026-11-07: exactly 14 Extra Turns buckets, with no merge among these fourteen distinct card roles."
+    },
+    {
+      "cards": [
+        "Emrakul, the Aeons Torn",
+        "Expropriate",
+        "Extraplanar Lens",
+        "Horn of Greed",
+        "Howling Mine",
+        "Mind Stone",
+        "Myriad Landscape",
+        "Nexus of Fate",
+        "Part the Waterveil",
+        "Snow-Covered Island",
+        "Temporal Manipulation",
+        "Temporal Mastery",
+        "Ulamog, the Ceaseless Hunger",
+        "Walk the Aeons"
+      ],
+      "why": "USER RULING 2026-11-07: Temporal Manipulation may merge only with Time Warp."
+    }
+  ],
+  "merge": [
+    {
+      "cards": [
+        "Temporal Manipulation",
+        "Time Warp"
+      ],
+      "why": "USER RULING 2026-11-07: the Extra Turns mulligan profile should have 14 buckets, with only Temporal Manipulation and Time Warp merged. Both are five-mana extra-turn spells with the same useful effect in this goldfish deck. All other card names retain separate buckets."
+    }
+  ]
+}

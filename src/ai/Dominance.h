@@ -207,7 +207,9 @@
 // such link as a wired board. It is also folded in TurnSolver's mid-turn state key.
 // Figure of Destiny extends ManaCost's hybrid metadata from four to six symbols. This adds eight
 // bytes to every Card/Permanent but no mutable Permanent field; existing card and state folds apply.
-static_assert(sizeof(Permanent) == 320,
+// Extraplanar Lens adds an interned imprinted land name (8 bytes). It is exact-match state:
+// two otherwise identical Lenses can double different named lands. Folded below when set.
+static_assert(sizeof(Permanent) == 328,
               "Permanent changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 // The point of CounterList: this is what makes the erase path a memmove. If a future field breaks
@@ -265,7 +267,7 @@ static_assert(std::is_trivially_copyable_v<Permanent>,
 // cast, and Build() compares only END-OF-TURN states -- so two end-of-turn siblings differing only in
 // it have identical futures. (Mid-turn identity keys are another matter: TurnSolver's BuildSimKey
 // folds its vanished-land residual, gated on a same-turn reader in hand.)
-static_assert(sizeof(Player) == 208,
+static_assert(sizeof(Player) == 216,
               "Player changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 // 688 -> 696 (2026-09-01): ManaPool gained `wild_c`, and GameState embeds one as floating_mana.
@@ -598,7 +600,7 @@ static_assert(sizeof(Player) == 208,
 // prepay's kept {C} still floating, EDF only (0 elsewhere). FUTURE-DETERMINING within the phase (it orders the
 // payer's generic drain): mixed value-gated into the main-phase key (TurnSolver, beside floating_haste_c),
 // which, like floating_haste_c, Build() does not fold separately.
-static_assert(sizeof(GameState) == 1280,   // 1264 + upstream's upkeep_tutor (+8) + c-wild's three bytes, which no longer fit padding (+8)
+static_assert(sizeof(GameState) == 1328,   // c-wild fields and extra-turn order stack, miracle pin and opponent count
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 
@@ -852,10 +854,13 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     fold(static_cast<std::uint64_t>(s.turn_number));
     // EXTRA TURNS: pending / taken / in_extra_turn are exact-match (more pending is never worse, but the
     // simple sound choice is equality). Value-gated: every deck without an extra-turn card keeps its key.
-    if (s.pending_extra_turns != 0 || s.extra_turns_taken != 0)
+    if (s.pending_extra_turns != 0 || s.extra_turns_taken != 0
+        || s.pending_opponent_extra_turns != 0)
     {
         fold(0xE77E000ull + static_cast<std::uint64_t>(s.pending_extra_turns) * 0x10000ull
              + static_cast<std::uint64_t>(s.extra_turns_taken) * 2ull + (s.in_extra_turn ? 1u : 0u));
+        fold(s.pending_opponent_extra_turns);
+        for (std::uint8_t target : s.extra_turn_order) { fold(target + 1u); }
     }
     fold(static_cast<std::uint64_t>(s.active_player_index));
     fold(static_cast<std::uint64_t>(s.priority_player_index));
@@ -1004,6 +1009,8 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     { fold(0xD0E700000000ull + static_cast<std::uint64_t>(s.scripted_doth_put)); }
     if (s.scripted_upkeep_tutor >= 0)
     { fold(0x555054555400ull + static_cast<std::uint64_t>(s.scripted_upkeep_tutor)); }
+    if (s.scripted_miracle_choice >= 0)
+    { fold(0x4D4952410000ull + static_cast<std::uint64_t>(s.scripted_miracle_choice)); }
     // Profane Tutor's off-suspend fetch (GameState::scripted_suspend_tutor): set at a crossing, consumed at the
     // upkeep -- the same class, value-gated with its own domain tag.
     if (s.scripted_suspend_tutor >= 0)
@@ -1144,6 +1151,11 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
         fold(static_cast<std::uint64_t>(p.lands_played_this_turn));
         fold(static_cast<std::uint64_t>(p.bonus_land_drops_this_turn));
         fold(static_cast<std::uint64_t>(p.cards_drawn_this_turn));
+        if (s.deck_has_miracle)
+        {
+            fold(0x4D4952410001ull + static_cast<std::uint64_t>(p.first_draw_card_number_this_turn));
+            fold(0x4D4952410002ull + static_cast<std::uint64_t>(p.pending_miracle_card_number));
+        }
         fold(static_cast<std::uint64_t>(p.life_gained_this_turn));
         // The city's blessing (ascend, Ocelot Pride). NOT a per-turn counter like its neighbours:
         // it is a monotone designation held for the rest of the game, so two states that differ in
@@ -1385,6 +1397,8 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
         // NOT until-EOT. Nonzero-gated -> every other deck's key is unchanged.
         if (p.chosen_keyword_mask != 0) { mfold(0xC4057ull); mfold(static_cast<std::uint64_t>(p.chosen_keyword_mask)); }
         if (p.linked_exile_number != 0) { mfold(0x11E7Eull); mfold(static_cast<std::uint64_t>(p.linked_exile_number)); }
+        if (!p.lens_imprinted_land.empty())
+        { mfold(0x1E45ull); mfold(std::hash<std::string>{}(p.lens_imprinted_land.str())); }
         // Fresh-hold exemption (MTG_ETB_TREASURE_SPEND): an exempt fresh Treasure pays THIS turn and
         // a held one does not, while both read "sick" on the axis below -- so they must MATCH
         // exactly rather than compare. Set only on the ETB / Larcenist Treasures and cleared at the

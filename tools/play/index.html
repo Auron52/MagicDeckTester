@@ -274,7 +274,7 @@
   .hand .thumb.spent { opacity:.42; }
   .hand .thumb .lealloc { position:absolute; bottom:2px; right:2px; background:rgba(255,184,77,.95); color:#0c1116;
       border-radius:4px; font-size:10px; font-weight:700; padding:0 3px; z-index:2; }
-  /* Dig abilities: cycling (a land in HAND) + sacrifice-to-draw (Fiery Islet on the board). Single-click. */
+  /* Dig abilities: cycling (a card in hand) + sacrifice-to-draw (Fiery Islet or Mind Stone on the board). Single-click. */
   .thumb .digbadge { position:absolute; bottom:2px; left:2px; background:rgba(90,200,180,.95); color:#0c1116;
       border-radius:4px; font-size:9px; font-weight:700; padding:0 3px; z-index:2; cursor:pointer; }
   /* MDFC land BACK on a nonland front (Turntimber Symbiosis): the card's own kind is the front's,
@@ -364,6 +364,8 @@
   .enchgroup .aura-att, .enchgroup .aura-plan { position:absolute; left:0; width:90px; }  /* full size (== creature) so the name reads; stacked behind, top-bar peeks */
   .enchgroup .aura-att em, .enchgroup .aura-plan em { display:none; }   /* only the top bar (name) shows */
   .enchgroup .aura-att img  { box-shadow:0 0 0 1px rgba(230,200,120,.6), 0 2px 5px rgba(0,0,0,.5); }   /* resolved: gold */
+  .enchgroup .imprint-att img { box-shadow:0 0 0 2px rgba(130,190,255,.85), 0 2px 5px rgba(0,0,0,.5); }
+  .enchgroup .imprint-att::after { content:'EXILED'; position:absolute; top:5px; right:4px; padding:1px 3px; border-radius:3px; background:#173657; color:#d5e9ff; font-size:9px; font-weight:700; letter-spacing:.04em; }
   .enchgroup .aura-plan img { box-shadow:0 0 0 2px var(--good), 0 2px 5px rgba(0,0,0,.5); }             /* queued: green */
   .enchgroup .enchbadge { position:absolute; left:-6px; z-index:60; background:rgba(230,200,120,.95);
     color:#0c1116; border-radius:9px; font-size:10px; font-weight:800; padding:1px 5px; box-shadow:0 1px 3px rgba(0,0,0,.5); }
@@ -1216,7 +1218,7 @@ function energyHtml(me) {
   return `<span class="floatmana"><span class="mpip" style="background:${e>0?'#8fd6c0':'#5a6b66'}" title="${t}">⚡${e}</span></span>`;
 }
 // Dig abilities (human play). The engine enumerates cycling (a land in HAND, e.g. Lonely Sandbar /
-// Forgotten Cave) and sac-to-draw (a land in play, e.g. Fiery Islet) as standalone ONE-action plans
+// Forgotten Cave) and sac-to-draw (a permanent in play, e.g. Fiery Islet or Mind Stone) as standalone ONE-action plans
 // with actions:[{card, dig:true, dig_sacrifice}]. Surface them as single-click abilities: find the
 // matching plan and commit its index (the engine draws a card and re-prompts). Memoized per decision.
 // Names the engine offers as THIS phase's land drop, harvested from the enumerated plans. Used to
@@ -2158,8 +2160,9 @@ function bfThumb(o) {   // battlefield entry {name, is_land, is_le, counters?}
   const charge = (o.counters||[]).find(c=>c.kind==='charge');
   const isVial = !!charge && !S.over;
   const vialActive = isVial && S.vialMode===charge.count;
-  // A land in play with a sacrifice-to-draw ability (Fiery Islet), untapped so it can pay its own {T}.
-  const canSac = land && !le && !isVial && !o.tapped && !S.over && (digSources().sac[o.name] != null);
+  // The offered dig plan is the legality check; artifacts such as Mind Stone can
+  // sacrifice themselves for a card as well as lands such as Fiery Islet.
+  const canSac = !le && !isVial && !o.tapped && !S.over && (digSources().sac[o.name] != null);
   // A permanent with an enumerated activated ability (Krenko's token tap, a Goblin sac outlet):
   // single-click queues one activation. The engine already gates legality (summoning sickness, an
   // untapped source, the cost), because the offer is derived from the plans it actually enumerated.
@@ -2269,6 +2272,12 @@ function plannedThumb(entry, planIdx, ord) {   // a card that is part of THIS tu
 // Greaves on the next threat). Without data-activate here an equipment became unusable the moment it
 // was attached, because attached permanents render through this path instead of bfThumb.
 function auraAttThumb(o, z, top) {
+  if (o.imprint) {
+    return `<span class="thumb spell aura-att imprint-att" style="z-index:${z};top:${top}px" `+
+      `title="${esc(o.name)} is exiled and imprinted under Extraplanar Lens; lands with that name add one mana when tapped">`+
+      `<img loading="lazy" src="${scryImg(o.name,'small')}" onerror="this.style.opacity=.15"/>`+
+      `<em>Exiled: ${esc(o.name)}</em></span>`;
+  }
   const clickOpts = !S.over ? clickActivationOptions(o.name) : [];
   const actCap = clickOpts.length ? (activatableSources()[o.name]||0) : 0;
   const actN   = actCap ? clickActivateCount(o.name) : 0;
@@ -2522,7 +2531,9 @@ function renderBoard() {
   mePermsRaw.forEach(p=>{ if((p.is_aura||p.is_equip) && p.attached_to>0){ (aurasByHost[p.attached_to]=aurasByHost[p.attached_to]||[]).push(p); } });
   // One renderer for both zones, so a land host and a creature host can never drift apart.
   const withAttachments = host => {
-    const at = aurasByHost[host.num]||[], pl = plannedAurasByHost[host.num]||[];
+    const at = (aurasByHost[host.num]||[]).slice(), pl = plannedAurasByHost[host.num]||[];
+    if (host.name==='Extraplanar Lens' && host.imprinted_land)
+      at.push({name:host.imprinted_land, imprint:true});
     return (at.length||pl.length) ? enchantedGroup(host, at, pl) : bfThumb(host);
   };
   const meLandPerms = meBf.filter(x=>x.is_land);
@@ -3107,7 +3118,7 @@ function wireBoard() {
   // click an Eternalize card in the graveyard (Timeless Witness) to queue its eternalize
   $('board').querySelectorAll('.thumb[data-eternalize]').forEach(t =>
     t.onclick = e => { e.stopPropagation(); eternalizeCard(t.dataset.name); });
-  // click a land with a sacrifice-to-draw ability (Fiery Islet) to sacrifice it for a card
+  // click a permanent with a sacrifice-to-draw ability to sacrifice it for a card
   $('board').querySelectorAll('.thumb[data-sacdig]').forEach(t =>
     t.onclick = e => { e.stopPropagation(); const nm=t.dataset.sacdig;
       fireDig(digSources().sac[nm], `sacrifice ${nm} to draw`); });
@@ -3565,7 +3576,7 @@ function renderChooseDialog(v, line){
     // Every relation word a dimension key can end with must be listed, or the leftover text is asked
     // of Scryfall as a card name and the header art comes back broken ("Natural Order sacrifices" is
     // not a card). Keep this in sync with the addSub() keys in TurnSolver::CheckLine.
-    const srcName = dim.key.replace(/\s*(\u2192|fetches|X|own targets|extra targets|splice|replicate|devours|floats|face|sacrifices|activations|equips to|untaps|counter|ability|modes|mode|entwine|strive|cost|timing)\s*$/,'').trim();
+    const srcName = dim.key.replace(/\s*(\u2192|fetches|X|own targets|extra targets|splice|replicate|devours|floats|face|sacrifices|activations|equips to|untaps|counter|ability|modes|mode|entwine|strive|cost|timing|vote|takes)\s*$/,'').trim();
     const crumbs = picks.length
       ? `<div class="chosen">${picks.map(p=>`<span class="crumb">${esc(p.key)} <b>${esc(p.label||p.choice)}</b></span>`).join('')}</div>`
       : '';
@@ -3595,11 +3606,16 @@ function renderChooseDialog(v, line){
     // dimension reports '—').
     const sameCard = choices.every(c => (c.card||'') === (choices[0].card||''));
     const listShape = sameCard || choices.some(c => !c.card)
-                   || ['modal','borosmode','x','splice','replicate','devour','color','free','loyalty'].indexOf(dim.kind) >= 0;
+                   || ['modal','borosmode','x','splice','replicate','devour','color','free','loyalty','exprovote','exprotake'].indexOf(dim.kind) >= 0;
+    const prompt = dim.kind==='exprovote'
+      ? 'You vote first. The passive opponent votes Money, so you will also choose one of their permanents to take.'
+      : dim.kind==='exprotake'
+      ? 'Choose an opponent-owned permanent to take for their Money vote. This choice does not target.'
+      : `pick one of ${choices.length}.`;
     let h=`<div class="dimhead">${srcName?cardMini(srcName,'dimsrc'):''}`+
           `<div class="dimtext"><h3>${esc(dim.key)}?</h3>`+
           `<div class="sub">${total>1?`Decision ${step} of ${total} for this line — `:''}`+
-          `pick one of ${choices.length}.</div></div></div>`+crumbs;
+          `${esc(prompt)}</div></div></div>`+crumbs;
     if (listShape){
       h+=`<div class="optlist">`;
       choices.forEach((c,i)=>{
@@ -5278,6 +5294,13 @@ function promptPanelHtml(d, dec){
   if (dec==='flicker'){
     const sel=[...(S.boardSel||[])];
     const opt=sel.length?(d.options||[]).find(o=>'m:'+o.perm_index===sel[0]):null;
+    if (d.source==='Extraplanar Lens'){
+      return `<h3>Extraplanar Lens — imprint a land?</h3>`+
+        `<div class="sub">Click a land you control to exile it under this Lens, or decline. Lands with that name produce one additional mana when tapped.</div>`+
+        `<div class="pbtns"><span class="pcount">Imprinting: <b>${opt?esc(opt.name):'(pick a land)'}</b></span>`+
+        `<span class="spacer"></span><button id="decnoattach" class="ghost">Decline</button>`+
+        `<button id="decconfirm" class="primary" ${sel.length?'':'disabled'}>Confirm</button></div>`;
+    }
     return `<h3>${esc(d.source||'Felidar Guardian')} — flicker which permanent?</h3>`+
       `<div class="sub">Click one of your other permanents to exile and return: it comes back untapped and fresh (a tapped Birthing Pod can activate again, a persisted Finks returns clean, a flickered Reveillark fires its return trigger) — or decline. The AI's pick is preselected.</div>`+
       `<div class="pbtns"><span class="pcount">Flickering: <b>${opt?esc(opt.name):'(pick a permanent)'}</b></span>`+
@@ -5490,7 +5513,7 @@ function wireDecisionPanel(d, dec){
     // attach_host: "Leave unattached" replies -1 (the equipment stays on the battlefield loose).
     // flicker reuses the same button as its "Decline" (reply -1 = no flicker at all).
     const na=panel.querySelector('#decnoattach');
-    if (na) na.onclick=()=>pushChoice(d, -1, dec==='flicker' ? `${d.source}: decline flicker`
+    if (na) na.onclick=()=>pushChoice(d, -1, dec==='flicker' ? `${d.source}: decline ${d.source==='Extraplanar Lens'?'imprint':'flicker'}`
                                            : dec==='treasurify' ? `${d.source}: no Treasure (${d.side==='opponent'?'opponent':'yours'})`
                                            : (dec==='attach_host' && d.soulbond) ? `${d.source}: soulbond — not paired`
                                            : (dec==='attach_host' && d.pick) ? `${d.source}: attach nothing`
@@ -6127,7 +6150,9 @@ function commitBoardSel(d, dec){
                    : `${d.source}: attach to ${opt?opt.name:'creature'}`;
   } else if (dec==='flicker'){
     const opt=(d.options||[]).find(o=>'m:'+o.perm_index===sel[0]);
-    oi=opt?opt.index:d.heuristic_default; lab=`${d.source}: flicker ${opt?opt.name:'permanent'}`;
+    oi=opt?opt.index:d.heuristic_default;
+    lab=d.source==='Extraplanar Lens' ? `${d.source}: imprint ${opt?opt.name:'land'}`
+                                     : `${d.source}: flicker ${opt?opt.name:'permanent'}`;
   } else if (dec==='treasurify'){
     const opt=(d.options||[]).find(o=>'m:'+o.perm_index===sel[0]);
     oi=opt?opt.index:-1; lab=`${d.source}: ${opt?(opt.label||opt.name)+' becomes a Treasure':'no Treasure'}`;

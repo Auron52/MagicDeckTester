@@ -1,0 +1,26 @@
+{
+  "_comment": [
+    "Time Warp grants its turn when the sorcery resolves. Two 15-point attacks in",
+    "the current round kill the 30-life opponent; without the spell, round 4 is needed."
+  ],
+  "deck": "decks/Extra Turns/Extra Turns.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 30,
+  "battlefield": [
+    { "name": "Emrakul, the Aeons Torn", "controller": 0 },
+    { "name": "Snow-Covered Island", "controller": 0 },
+    { "name": "Snow-Covered Island", "controller": 0 },
+    { "name": "Snow-Covered Island", "controller": 0 },
+    { "name": "Snow-Covered Island", "controller": 0 },
+    { "name": "Snow-Covered Island", "controller": 0 }
+  ],
+  "hand": ["Time Warp"],
+  "library_filler": "Snow-Covered Island",
+  "library_size": 30,
+  "depth": 2,
+  "budget_ms": 100,
+  "max_turns": 5,
+  "expect_win_turn": 3
+}

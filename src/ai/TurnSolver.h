@@ -367,6 +367,7 @@ struct Action
     // or the replay plays a hand copy the search never played.
     bool        land_from_top  = false;
     bool        alt_cost       = false;// CastFromHand via an alternative cost (Invigorate /
+    bool        awaken         = false; // Part the Waterveil: alternative mana cost and target land.
                                        // Skyshroud Cutter / Reverent Silence): pay no mana and
                                        // instead make the opponent gain alt_lifegain life (-> that
                                        // much damage with Tainted Remedy). cost is empty.
@@ -1036,6 +1037,8 @@ inline const Action* CycleSeedOf(const std::vector<Action>& acts)
 
 struct CastRiders
 {
+    bool     miracle         = false;   // exact first-drawn card, offered only in its trigger window
+    bool     awaken          = false;
     int      loyalty_ability = -1;   // Action::loyalty_ability on a walker CAST (the rollout's activation;
                                      // the executor's walker_cast_activation reads the Action, gated on
                                      // the cast having been paid)
@@ -1073,6 +1076,7 @@ struct CastRiders
     static CastRiders Of(const Action& a)
     {
         CastRiders r;
+        r.awaken = a.awaken;
         r.loyalty_ability = a.loyalty_ability;
         r.devour_count    = a.devour_count;
         r.twobrid_colored = a.twobrid_colored;
@@ -1431,7 +1435,7 @@ public:
         //                                  == true; the `landafter=` verb, unchanged), through the
         //                                  Karoo deferral path in both worlds.
         //   k >= 1                      -- right after the k-th cast of this plan's cast section that
-        //                                  puts a landfall watcher onto the battlefield
+        //                                  puts a landfall or land-play watcher onto the battlefield
         //                                  (TurnSolver::PutsLandfallWatcher), counted in DISPATCH order,
         //                                  before the next cast -- so every later cast can spend the
         //                                  land's mana. If fewer than k such casts are dispatched, the
@@ -1444,8 +1448,8 @@ public:
         // otherwise-arbitrary plan-order tie-break moves, never a provider rank), so "Khalni, land,
         // Rampant Growth" is reachable whichever card the hand happened to list first.
         //
-        // EMITTED ONLY where the order can matter (a deck with a landfall card, a plan that casts a
-        // landfall watcher -- GameState::deck_has_landfall keeps every other deck byte-identical):
+        // EMITTED ONLY where the order can matter (a deck with a landfall or Horn watcher, a plan
+        // that casts that watcher -- GameState::deck_has_landfall keeps other decks byte-identical):
         //   -1: cloned from each DEFERRED-drop plan (casts enumerated, so affordable, WITHOUT the land)
         //       once per offered land option;
         //   k : cloned from each LAND-FIRST plan (casts enumerated WITH the land's mana) once per
@@ -1789,6 +1793,7 @@ public:
         // Next upkeep's paid tutor-to-top choice: 0 hold, positive index into the
         // live payable source/target menu. The boundary fan chooses it before draw.
         std::int16_t upkeep_tutor_choice = -1;
+        std::int8_t miracle_choice = -1; // first-draw optional cast: 0 decline, 1 cast
         // Profane Tutor's off-suspend fetch at the NEXT upkeep (MTG_PROFANE_RESOLVE_FAN), packed per tutor-search
         // ordinal: chosen by the BOUNDARY FAN where the search crosses into that upkeep and recorded on the plan of
         // the turn that crossed (never a main-phase axis variant); written to GameState::scripted_suspend_tutor.
@@ -3766,6 +3771,7 @@ public:
         // caller stamps it there (StampBoundaryPins); -2 = nothing chosen. Never set by FSLineWin itself.
         int boundary_doth = -2;
         int boundary_tutor = -2;
+        int boundary_miracle = -2;
         int boundary_stut = -2;   // ...and Profane Tutor's off-suspend fetch (Plan::suspend_tutor_choice)
     };
 
@@ -3886,7 +3892,8 @@ public:
                                            // Per-deck FROZEN heuristic cost-per-probe-leaf (value_play.escalation_r),
                                            // used by the predicted-affordable walk. <=0 => 120 prior. Freezing it
                                            // keeps the adopted single-pass DETERMINISTIC (no adaptive thread_local).
-                                           double escalation_r = -1.0);
+                                           double escalation_r = -1.0,
+                                           bool allow_chain_tape = false);
 
     // ---- Rule-miner: enumerate-all-earliest-wins (offline diagnostic) -------------------
     // For the CURRENT pre-combat main, score EVERY candidate top-level play (the same

@@ -1,0 +1,27 @@
+{
+  "_comment": [
+    "The opponent has one card left. Giving them an extra turn draws it, then",
+    "their scheduled regular turn tries to draw from an empty library, winning",
+    "in this round. Self-targeting cannot win this round with no attacker."
+  ],
+  "deck": "decks/Extra Turns/Extra Turns.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "opponent_library_size": 1,
+  "battlefield": [
+    { "name": "Snow-Covered Island", "controller": 0 },
+    { "name": "Snow-Covered Island", "controller": 0 },
+    { "name": "Snow-Covered Island", "controller": 0 },
+    { "name": "Snow-Covered Island", "controller": 0 },
+    { "name": "Snow-Covered Island", "controller": 0 }
+  ],
+  "hand": ["Time Warp"],
+  "library_filler": "Snow-Covered Island",
+  "library_size": 30,
+  "depth": 2,
+  "budget_ms": 100,
+  "max_turns": 5,
+  "expect_win_turn": 3
+}

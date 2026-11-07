@@ -4628,6 +4628,424 @@ bool GenericProvider::ArchetypeCardValue(const GameState&, const CardDefinition&
     return false;   // no archetype card-value override; EvalCard's generic estimate applies.
 }
 
+bool ExtraTurnsProvider::PreferIdleTappedFirstOpeningLand(const GameState& s) const
+{
+    static const bool on = EnvOn("MTG_ET_T1_TAPPED_FIRST", true); // =0 restores ordinary land order
+    return on && s.turn_number == 1;
+}
+
+int ExtraTurnsProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
+{
+    // Resolve the imprint before paying for spells that need its doubled Islands.
+    if (def.params.lens_imprint_land) { return 5; }
+    return DeckProvider::CastOrderRank(s, def);
+}
+
+bool ExtraTurnsProvider::ComboCardValue(const GameState& s, const CardDefinition& def,
+                                        int dmg_unit, int& out) const
+{
+    static const bool on = EnvOn("MTG_ET_CHAIN_VALUE", true);
+    if (!on) { return false; }
+    static const bool finisher_on = []
+    {
+        const char* e = std::getenv("MTG_ET_FINISHER_VALUE");
+        return !e || *e != '0';
+    }();
+    if (!finisher_on) { return false; }
+    const std::string& name = def.card.m_name.str();
+    if (name == "Emrakul, the Aeons Torn")
+    {
+        // Its cast queues the attack turn. The generic creature estimate falls to
+        // zero at the scored-round horizon even while extra turns remain playable.
+        out = 1000 * dmg_unit;
+        return true;
+    }
+    if (name == "Ulamog, the Ceaseless Hunger")
+    {
+        // Ulamog does not grant a turn on cast. When the queue is empty, an
+        // affordable turn spell must go first so deploying him cannot break
+        // the chain just before his first attack.
+        bool can_extend = false;
+        if (s.pending_extra_turns <= 0)
+        {
+            const ManaPool mana_now = AvailableManaPool(s);
+            for (const Card& c : s.ActivePlayer().hand)
+            {
+                const CardDefinition* h = CardDatabase::Instance().LookupCached(c);
+                if (h && (h->params.extra_turns_on_resolve > 0 || h->params.expropriate_vote)
+                    && mana_now.CanPay(h->card.m_mana_cost)
+                    && mana_now.Total() >= def.card.m_mana_cost.ManaValue()
+                                         + h->card.m_mana_cost.ManaValue())
+                { can_extend = true; break; }
+            }
+        }
+        out = (s.pending_extra_turns > 0 ? 35 : can_extend ? 4 : -100) * dmg_unit;
+        return true;
+    }
+    return false;
+}
+
+bool ExtraTurnsProvider::ExtraTurnChainFinisherPlanAllowed(const GameState& s,
+                                                            bool casts_emrakul,
+                                                            bool casts_ulamog,
+                                                            bool casts_turn_spell) const
+{
+    // Emrakul's cast grants its own attack turn. Take it whenever this turn's
+    // available mana already pays for it; a land/Lens enabled cast is strongly
+    // preferred by ComboCardValue as well.
+    if (!casts_emrakul)
+    {
+        const ManaPool mana = AvailableManaPool(s);
+        for (const Card& c : s.ActivePlayer().hand)
+        {
+            if (c.m_name.str() == "Emrakul, the Aeons Torn"
+                && mana.CanPay(c.m_mana_cost)) { return false; }
+        }
+    }
+    // Ulamog needs another own turn to attack. The walk may use a queued turn
+    // or cast a turn spell alongside it; otherwise it must try another plan.
+    return !casts_ulamog || s.pending_extra_turns > 0 || casts_turn_spell || casts_emrakul;
+}
+
+bool ExtraTurnsProvider::ArchetypeCardValue(const GameState& s, const CardDefinition& def,
+                                            int dmg_unit, int& out) const
+{
+    // Experimental chain ordering. The ordinary fallback prices a Time Warp as a one-card
+    // cantrip, even though it untaps our board, draws again, and lets a newly cast Eldrazi
+    // attack before the opponent acts. The depth-0 continuation already walks successive
+    // extra turns with the same round number; this value makes that path attractive when
+    // ordering plans at each step. It changes neither legal options nor turn accounting.
+    // DEFAULT ON after the paired reference and held-block comparisons.
+    static const bool on = EnvOn("MTG_ET_CHAIN_VALUE", true);
+    if (!on) { return false; }
+
+    if (def.params.lens_imprint_land)
+    {
+        int snow_islands = 0, lenses = 0;
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != s.active_player_index) { continue; }
+            if (p.card.m_name.str() == "Snow-Covered Island") { ++snow_islands; }
+            const CardDefinition* live = CardDatabase::Instance().LookupCached(p.card);
+            if (live && live->params.lens_imprint_land)
+            { ++lenses; }
+        }
+        // The first Lens reaches the main mana breakpoints. A second has no
+        // future-setup credit; its imprint action below receives credit only
+        // when the mana still available THIS turn pays back its cost. A third
+        // is needless setup.
+        if (lenses >= 2) { out = -100 * dmg_unit; return true; }
+        if (lenses == 1) { out = 0; return true; }
+        // Imprinting spends one Island now; the others produce an extra mana on
+        // every later turn.
+        // With four Islands, imprinting one leaves three doubled Islands next
+        // turn: six mana, enough for a five-mana turn spell. Three Islands leave
+        // only four mana, so wait there unless a turn is already queued.
+        out = (s.pending_extra_turns <= 0 && snow_islands < 4)
+            ? dmg_unit
+            : (2 + 2 * std::min(5, std::max(0, snow_islands - 1))) * dmg_unit;
+        return true;
+    }
+    if (def.params.mine_extra_draw || def.params.horn_draw_on_land_play)
+    {
+        int engines = 0, mines = 0;
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != s.active_player_index) { continue; }
+            const CardDefinition* live = CardDatabase::Instance().LookupCached(p.card);
+            if (live && (live->params.mine_extra_draw || live->params.horn_draw_on_land_play))
+            { ++engines; }
+            if (live && live->params.mine_extra_draw) { ++mines; }
+        }
+        // Two engines are the strong setup target; the third is useful but
+        // lower priority. Once three are live with a Mine, further artifacts
+        // consume mana without enough extra yield. A Mine can still upgrade a
+        // board of three Horns.
+        const int value = engines < 2 ? (def.params.mine_extra_draw ? 8 : 6)
+                        : engines < 3 ? (def.params.mine_extra_draw ? 4 : 2)
+                        : mines == 0 && def.params.mine_extra_draw ? 4 : -2;
+        out = value * dmg_unit;
+        return true;
+    }
+    if (def.params.extra_turns_on_resolve <= 0 && !def.params.expropriate_vote)
+    { return false; }
+
+    if (def.params.buyback_sacrifice_islands > 0)
+    {
+        // Keep the repeatable Walk for the end of the chain when another turn
+        // spell is already in hand. If that spell cannot be paid, the trial may
+        // fail and the complete search still has every Walk line available.
+        int other_turns = 0;
+        const ManaPool mana_now = AvailableManaPool(s);
+        for (const Card& c : s.ActivePlayer().hand)
+        {
+            const CardDefinition* h = CardDatabase::Instance().LookupCached(c);
+            if (h && h != &def && (h->params.extra_turns_on_resolve > 0
+                                   || h->params.expropriate_vote)
+                && mana_now.CanPay(h->card.m_mana_cost)) { ++other_turns; }
+        }
+        if (other_turns > 0) { out = -5 * dmg_unit; return true; }
+    }
+
+    int attack = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index == s.active_player_index && p.card.IsCreature())
+        { attack += std::max(0, p.card.m_power.value_or(0)); }
+    }
+    // A draw and a fresh mana step are useful without a creature. With a threat on the
+    // battlefield, the next turn converts its attack power into immediate progress.
+    // The cap prevents a large board from drowning every other plan-order signal.
+    // An extra turn with nothing queued must buy its successor now. Preserve
+    // the setup window when a turn is already banked; a plan that casts both
+    // an engine and a turn spell still gains both values.
+    out = (s.pending_extra_turns > 0 ? 3 : (s.in_extra_turn ? 30 : 12)) * dmg_unit
+        + std::min(15, attack) * dmg_unit;
+    // Both seven-mana spells grant one turn. Mastery is one-shot while Nexus
+    // shuffles back for later draws, so preserve Nexus when both are in hand.
+    // This is an ordering preference in the depth-zero walk; searched plans
+    // remain available. MTG_ET_MASTERY_BEFORE_NEXUS=0 restores the old order.
+    static const bool mastery_before_nexus = EnvOn("MTG_ET_MASTERY_BEFORE_NEXUS", true);
+    if (mastery_before_nexus && def.card.m_name.str() == "Nexus of Fate")
+    {
+        for (const Card& c : s.ActivePlayer().hand)
+        {
+            if (c.m_name.str() == "Temporal Mastery")
+            { out -= 4 * dmg_unit; break; }
+        }
+    }
+    return true;
+}
+
+int ExtraTurnsProvider::WalkBuybackValueBonus(const GameState& s,
+                                              const CardDefinition& def) const
+{
+    static const bool on = EnvOn("MTG_ET_CHAIN_VALUE", true);
+    if (!on || def.params.buyback_sacrifice_islands != 3
+        || s.pending_extra_turns > 1) { return 0; }
+    int islands = 0, lenses = 0, other_mana = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != s.active_player_index) { continue; }
+        if (p.card.m_name.str() == "Snow-Covered Island") { ++islands; }
+        else if (p.card.IsLand() || p.card.m_name.str() == "Mind Stone") { ++other_mana; }
+        const CardDefinition* live = CardDatabase::Instance().LookupCached(p.card);
+        if (live && live->params.lens_imprint_land
+            && p.lens_imprinted_land.str() == "Snow-Covered Island") { ++lenses; }
+    }
+    const int before = islands * (1 + lenses) + other_mana;
+    const int after = std::max(0, islands - 3) * (1 + lenses) + other_mana;
+    int other_turn_spells = 0;
+    for (const Card& c : s.ActivePlayer().hand)
+    {
+        const CardDefinition* h = CardDatabase::Instance().LookupCached(c);
+        if (!h || h == &def || (h->params.extra_turns_on_resolve <= 0
+                               && !h->params.expropriate_vote)) { continue; }
+        ++other_turn_spells;
+        const int cost = h->card.m_mana_cost.ManaValue();
+        // A plain Walk preserves the mana for a seven-mana Nexus or Mastery.
+        // The actual trial still uses the exact colored payment and state replay.
+        // Also account for the next land drop: six mana can grow into a
+        // seven-mana turn spell next turn if Walk is cast without buyback.
+        if (cost <= before + 1 && cost > after + 1) { return -10 * 100; }
+    }
+    // If sacrificing three Islands strands Walk itself, buyback does not keep
+    // the chain going. Its ordinary cast remains available at full priority.
+    if (after < def.card.m_mana_cost.ManaValue()) { return -10 * 100; }
+    if (other_turn_spells > 0) { return 0; }
+    return 6 * 100;   // one additional reusable turn, in EvalCard's damage units
+}
+
+int ExtraTurnsProvider::LensImprintValueBonus(const GameState& s,
+                                             const Permanent& land) const
+{
+    static const bool on = EnvOn("MTG_ET_CHAIN_VALUE", true);
+    if (!on || land.card.m_name.str() != "Snow-Covered Island") { return 0; }
+    int snow_islands = 0, lenses = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != s.active_player_index) { continue; }
+        if (p.card.m_name.str() == "Snow-Covered Island") { ++snow_islands; }
+        const CardDefinition* live = CardDatabase::Instance().LookupCached(p.card);
+        if (live && live->params.lens_imprint_land)
+        { ++lenses; }
+    }
+    if (lenses >= 2) { return -1000; }
+    if (lenses == 1)
+    {
+        // Compare total mana reachable now, before casting, with total mana
+        // reachable after paying three, imprinting this physical Island, and
+        // adding the second Lens. A full search can still choose any legal
+        // second-Lens line; this is the depth-zero walk's setup ordering.
+        const CardDefinition* lens = CardDatabase::Instance().Lookup("Extraplanar Lens");
+        if (!lens) { return -1000; }
+        const int before = AvailableManaPool(s).Total();
+        GameState paid = s;
+        if (!TapForCostDirect(paid, lens->card.m_mana_cost, false)) { return -1000; }
+        auto imprinted = std::find_if(paid.battlefield.begin(), paid.battlefield.end(),
+            [&](const Permanent& p) { return p.card.m_number == land.card.m_number; });
+        if (imprinted == paid.battlefield.end()) { return -1000; }
+        paid.battlefield.erase(imprinted);
+        Permanent second;
+        second.card = lens->card;
+        second.owner_index = second.controller_index = s.active_player_index;
+        second.lens_imprinted_land = land.card.m_name;
+        paid.battlefield.push_back(second);
+        const int after = AvailableManaPool(paid).Total();
+        return after >= before ? 100 * std::min(4, after - before + 1) : -200;
+    }
+    // Imprinting costs one source now, then each matching Island produces one
+    // more mana every following turn. With fewer than four and no queued turn,
+    // that immediate cost can delay the first five-mana turn spell; otherwise
+    // prefer a productive imprint over the legal decline variant.
+    if (snow_islands < 4 && s.pending_extra_turns <= 0) { return -200; }
+    return 100 * std::min(5, std::max(1, snow_islands - 2));
+}
+
+std::vector<int> ExtraTurnsProvider::CleanupDiscardCandidates(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    // DEFAULT ON; =0 restores the old highest-mana-value cleanup order.
+    static const bool on = EnvOn("MTG_ET_CHAIN_DISCARD", true);
+    if (!on) { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+
+    const Player& ap = s.ActivePlayer();
+    int lands = 0, snow_islands = 0, stones = 0;
+    int engines = 0, mines = 0, lenses = 0, productive_lenses = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != s.active_player_index) { continue; }
+        if (p.card.IsLand()) { ++lands; }
+        if (p.card.m_name == "Snow-Covered Island") { ++snow_islands; }
+        if (p.card.m_name == "Mind Stone") { ++stones; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d) { continue; }
+        if (d->params.mine_extra_draw || d->params.horn_draw_on_land_play) { ++engines; }
+        if (d->params.mine_extra_draw) { ++mines; }
+        if (d->params.lens_imprint_land)
+        {
+            ++lenses;
+            if (p.lens_imprinted_land.str() == "Snow-Covered Island") { ++productive_lenses; }
+        }
+    }
+    std::vector<int> engine_hand;
+    std::vector<int> land_hand;
+    std::vector<int> turn_hand;
+    int first_lens = -1;
+    int first_walk = -1;
+    bool finisher_in_hand = false;
+    for (int i = 0; i < static_cast<int>(ap.hand.size()); ++i)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(ap.hand[static_cast<std::size_t>(i)]);
+        if (!d) { continue; }
+        if (d->params.mine_extra_draw || d->params.horn_draw_on_land_play)
+        { engine_hand.push_back(i); }
+        if (ap.hand[static_cast<std::size_t>(i)].IsLand()) { land_hand.push_back(i); }
+        if (d->params.lens_imprint_land && first_lens < 0) { first_lens = i; }
+        if (ap.hand[static_cast<std::size_t>(i)].m_name == "Emrakul, the Aeons Torn"
+            || ap.hand[static_cast<std::size_t>(i)].m_name == "Ulamog, the Ceaseless Hunger")
+        { finisher_in_hand = true; }
+        if (d->params.extra_turns_on_resolve > 0 || d->params.expropriate_vote)
+        {
+            turn_hand.push_back(i);
+            if (d->params.buyback_sacrifice_islands > 0 && first_walk < 0)
+            { first_walk = i; }
+        }
+    }
+    std::stable_sort(engine_hand.begin(), engine_hand.end(), [&](int a, int b)
+    {
+        const CardDefinition* da = CardDatabase::Instance().LookupCached(ap.hand[static_cast<std::size_t>(a)]);
+        const CardDefinition* db = CardDatabase::Instance().LookupCached(ap.hand[static_cast<std::size_t>(b)]);
+        return da->params.mine_extra_draw && !db->params.mine_extra_draw;
+    });
+    std::vector<char> keep_engine(ap.hand.size(), 0);
+    // Three engines with a Mine are enough. If the board reached three with
+    // Horns alone, preserve one Mine as the upgrade rather than treating it
+    // like a fourth redundant artifact.
+    int needed_engines = std::max(0, 3 - engines);
+    if (mines == 0 && !engine_hand.empty())
+    {
+        const CardDefinition* first = CardDatabase::Instance().LookupCached(
+            ap.hand[static_cast<std::size_t>(engine_hand.front())]);
+        if (first && first->params.mine_extra_draw)
+        { needed_engines = std::max(needed_engines, 1); }
+    }
+    for (int k = 0; k < needed_engines && k < static_cast<int>(engine_hand.size()); ++k)
+    { keep_engine[static_cast<std::size_t>(engine_hand[static_cast<std::size_t>(k)])] = 1; }
+    // Preserve a repeatable Walk and the cheapest other ways to secure the
+    // next turns. When a flooded hand contains eight turn spells and an
+    // Eldrazi, the excess spells go before the only way to finish the game.
+    std::stable_sort(turn_hand.begin(), turn_hand.end(), [&](int a, int b)
+    {
+        if (a == first_walk || b == first_walk) { return a == first_walk; }
+        const CardDefinition* da = CardDatabase::Instance().LookupCached(ap.hand[static_cast<std::size_t>(a)]);
+        const CardDefinition* db = CardDatabase::Instance().LookupCached(ap.hand[static_cast<std::size_t>(b)]);
+        return da->card.m_mana_cost.ManaValue() < db->card.m_mana_cost.ManaValue();
+    });
+    std::vector<char> keep_turn(ap.hand.size(), 0);
+    for (int k = 0; k < 3 && k < static_cast<int>(turn_hand.size()); ++k)
+    { keep_turn[static_cast<std::size_t>(turn_hand[static_cast<std::size_t>(k)])] = 1; }
+    // One land drop per chained extra turn. Below seven projected mana, keep
+    // at least two land drops, and as many more as the shortfall requires to
+    // reach seven. Afterward, keep one for the next drop with a Mine drawing
+    // extra cards, or two without it.
+    std::stable_sort(land_hand.begin(), land_hand.end(), [&](int a, int b)
+    {
+        return ap.hand[static_cast<std::size_t>(a)].m_name == "Snow-Covered Island"
+            && ap.hand[static_cast<std::size_t>(b)].m_name != "Snow-Covered Island";
+    });
+    std::vector<char> keep_land(ap.hand.size(), 0);
+    const int next_mana = lands + stones + productive_lenses * snow_islands;
+    // A miracle can start the chain before the mana base is ready. Extra-turn
+    // status alone must not turn its remaining land drops into spare cards.
+    int needed_lands = next_mana < 7 ? std::max(2, 7 - next_mana)
+                                      : (mines > 0 ? 1 : 2);
+    const int blue_per_island = 1 + productive_lenses;
+    const int blue_shortfall = std::max(0, 2 - snow_islands * blue_per_island);
+    needed_lands = std::max(needed_lands,
+        (blue_shortfall + blue_per_island - 1) / blue_per_island);
+    for (int k = 0; k < needed_lands && k < static_cast<int>(land_hand.size()); ++k)
+    { keep_land[static_cast<std::size_t>(land_hand[static_cast<std::size_t>(k)])] = 1; }
+    std::vector<int> order(ap.hand.size());
+    std::iota(order.begin(), order.end(), 0);
+    // Buckets are ordered from first to discard to last. Quotas above make
+    // the fourth draw engine, duplicate Lens, and excess land genuinely
+    // disposable. A surplus turn spell goes only after ordinary setup cards,
+    // but before discarding either finisher.
+    auto bucket_rank = [&](int i)
+    {
+        const Card& c = ap.hand[static_cast<std::size_t>(i)];
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        const std::string& name = c.m_name.str();
+        if (c.m_is_staged) { return 10000; }
+        if (required_pieces && std::find(required_pieces->begin(), required_pieces->end(), name)
+                               != required_pieces->end()) { return 9000; }
+        // A chain that discards its finishers can survive indefinitely without winning.
+        if (d && (d->params.extra_turns_on_resolve > 0 || d->params.expropriate_vote))
+        { return keep_turn[static_cast<std::size_t>(i)]
+            ? (d->params.buyback_sacrifice_islands > 0 ? 1200 : 1100)
+            : 850 - d->card.m_mana_cost.ManaValue(); }
+        if (name == "Emrakul, the Aeons Torn") { return 1050; }
+        if (name == "Ulamog, the Ceaseless Hunger") { return 1000; }
+        if (d && (d->params.mine_extra_draw || d->params.horn_draw_on_land_play))
+        { return keep_engine[static_cast<std::size_t>(i)]
+            ? (engines < 2 ? (d->params.mine_extra_draw ? 980 : 970)
+                           : (d->params.mine_extra_draw ? 550 : 450)) : 0; }
+        if (d && d->params.lens_imprint_land)
+        { return lenses == 0 && i == first_lens
+            ? (finisher_in_hand && snow_islands >= 3 ? 950
+               : next_mana >= 5 ? 400 : 70) : 1; }
+        if (c.IsLand())
+        { return keep_land[static_cast<std::size_t>(i)] ? 300
+            : name == "Myriad Landscape" ? 5 : 10; }
+        if (name == "Mind Stone") { return next_mana < 7 ? 250 : 40; }
+        return 100;
+    };
+    std::stable_sort(order.begin(), order.end(), [&](int a, int b)
+    { return bucket_rank(a) < bucket_rank(b); });
+    return order;
+}
+
 bool GenericProvider::ShouldAttackWith(const GameState&, const Permanent&) const
 {
     return true;    // goldfish default: attack with everything that can attack (no blockers).
@@ -21317,6 +21735,7 @@ namespace
     // Stateless, read-only -> single shared const instances are thread-safe (same model as
     // CardDatabase). Process lifetime, so GameState's raw pointer stays valid.
     const GenericProvider        g_generic;
+    const ExtraTurnsProvider     g_extra_turns;
     const KithkinProvider        g_kithkin;
     const AngelsProvider         g_angels;
     const BrunaProvider          g_bruna;
@@ -23647,6 +24066,7 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // Archetype detection by card params (same shape as GoldFishRunner::DeckUsesSecondMain).
     // Order matters only if a deck mixed signatures; today each is exclusive (verified).
     bool anti = false, th = false, vial = false, hinata = false, burn = false, dragonstorm = false;
+    bool extra_turn_resolve = false, extra_turn_signature = false;
     bool slivers = false;   // Hatchery Sliver / Thrumming Hivepool: SliversProvider, inside `vial`
     bool merfolk = false; // Image, Tide Shaper, and Spreading Seas carry independent gated signatures.
     bool midrange_burn = false;
@@ -23897,6 +24317,9 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
             || p.sac_named_count > 0
             || p.grants_ripple > 0) { shadowborn = true; }   // INT-2: Apostle's activation; INT-3: Thrumming Stone
         if (p.cast_trigger_extra_turns > 0)          { cy_extra_turn = true; }
+        if (p.extra_turns_on_resolve > 0)            { extra_turn_resolve = true; }
+        if (p.buyback_sacrifice_islands > 0 || p.miracle_cost.has_value())
+        { extra_turn_signature = true; }
         if (p.cycle_or_discard_trigger_scry > 0)     { cy_cycle_scry = true; }
         if (p.draw_trigger_damage > 0 || p.cast_trigger_instant_sorcery_draw > 0
             || p.aura_damage_trigger_draw || p.soulbond_damage_trigger_draw)
@@ -24377,6 +24800,9 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // Shadowborn Apostle: FIRST (see the flag) -- above `anti`, which its tutors set alone.
     if (shadowborn)  { return g_shadowborn; }
     if (kithkin)     { return g_kithkin; }
+    // Several resolved-turn spells plus Walk's buyback or Mastery's miracle distinguish
+    // this list from Cyclone's Emrakul cast trigger and from generic blue staples.
+    if (extra_turn_resolve && extra_turn_signature) { return g_extra_turns; }
     cyclone = cyclone || (cy_extra_turn && cy_cycle_scry);
     if (jumbo_cactuar) { return g_jumbo_cactuar; }
     if (cyclone)     { return g_cyclone; }

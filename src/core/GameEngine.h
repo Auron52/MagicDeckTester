@@ -63,6 +63,7 @@ public:
     static std::vector<std::pair<int, std::string>> UpkeepTutorOptions(const GameState& state);
     // One shared paid-cast and stack-resolution path for the real game and search rollout.
     bool CastUpkeepTutor(GameState& state, int hand_number, const std::string& target);
+    bool CastMiracleFromHand(GameState& state, int hand_number);
 
 private:
     AIEngine&    m_ai;

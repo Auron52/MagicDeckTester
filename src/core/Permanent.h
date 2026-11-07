@@ -791,6 +791,9 @@ struct Permanent
     // is returned to the battlefield under its owner when this permanent leaves (ReturnLinkedExile).
     // Sits in the pad before copy_printed_name (sizeof unchanged). Folded NONZERO-gated.
     int       linked_exile_number  = 0;
+    // Extraplanar Lens: the name of the land exiled by this copy's optional imprint trigger.
+    // Empty means the trigger was declined or its target was no longer legal.
+    InternedName lens_imprinted_land;
     // Sakashima's Protege (CardParams::enter_as_copy_of_entrant): when the enter swap replaced the
     // entering card with the copied permanent's PRINTED card (CR 706.2), this holds the PRINTED
     // name of the card that was cast ("Sakashima's Protege"). DISPLAY-ONLY: set at both worlds'

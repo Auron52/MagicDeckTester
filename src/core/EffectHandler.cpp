@@ -235,10 +235,17 @@ void EffectHandler::MoveToGraveyard(GameState& state, const StackEntry& entry)
     // "Exile Living Wish": a self-exiling spell goes to EXILE instead.
     if (d != nullptr && d->params.exiles_self_on_resolve)
     { state.exile.push_back(entry.source); return; }
+    if (d != nullptr && IsWalkBuyback(*d, entry.tutor_target))
+    {
+        EnterHand(state, entry.controller_index, entry.source, HandEntryReason::Recur);
+        return;
+    }
     // Green Sun's Zenith: "Shuffle Green Sun's Zenith into its owner's library." LOCKSTEP with the
     // rollout's instant/sorcery line in TurnSolver's apply_one.
     if (d != nullptr && d->params.shuffles_self_into_library_on_resolve)
     { ShuffleSelfIntoLibrary(state, entry.controller_index, entry.source); return; }
+    if (MaybeReplaceGraveyardWithLibraryShuffle(state, entry.controller_index, entry.source))
+    { return; }
     // KICKER (CR 702.33): entry.source is the "(Kicked)" face the cast swapped in, but the card that
     // goes to the graveyard is the printed spell card (CR 608.2m). LOCKSTEP with the rollout's
     // instant/sorcery line in TurnSolver's apply_one. Identity for every non-kicked resolution.
@@ -469,6 +476,20 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
             {
                 // Non-permanent custom spell: tutor / destroy-all-enchantments / cascade,
                 // then graveyard.
+                if (entry.awaken && AwakenLandTargetIndex(state, entry.controller_index,
+                                                         entry.enchant_target) < 0)
+                {
+                    // The awaken cast has one target. If it is illegal, the whole spell
+                    // fails to resolve: no extra turn and no self-exile (CR 608.2b).
+                    state.players[entry.controller_index].graveyard.push_back(entry.source);
+                    return true;
+                }
+                if (entry.awaken)
+                { ResolveAwakenLand(state, entry.controller_index, entry.enchant_target,
+                                    def.params.awaken_counters); }
+                if (def.params.expropriate_vote)
+                { ResolveExpropriate(state, entry.controller_index,
+                                     entry.chosen_x.value_or(0) != 0, entry.enchant_target); }
                 if (def.params.boros_charm_modal)
                 {
                     ApplyBorosCharm(state, entry.controller_index,
@@ -699,6 +720,11 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
                     ApplyRitualFloat(state, def, entry.chosen_x.value_or(0),
                                      entry.splice_count.value_or(0) + 1);
                 }
+                // Extra-turn sorceries grant the turn only on successful resolution.
+                // A cast trigger (Emrakul) is handled separately above the spell.
+                for (int k = 0; k < def.params.extra_turns_on_resolve; ++k)
+                { ResolveCastTriggerExtraTurn(state, def.card.m_name.str(),
+                    entry.player_target != 0 ? 1 - entry.controller_index : entry.controller_index); }
                 MoveToGraveyard(state, entry);
             }
             return true;

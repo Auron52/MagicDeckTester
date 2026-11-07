@@ -12682,7 +12682,7 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "This land enters tapped.\n{T}: Add {C}.\n{2}, {T}, Sacrifice this land: Search your library for up to two basic land cards that share a land type, put them onto the battlefield tapped, then shuffle. [Enters tapped (enters_tapped); taps for {C} (produces [C]). '{2}, {T}, Sacrifice this land' is the searched SacLandSearch activation (land_search_activation_cost {2}): the {T} is paid BEFORE the mana half, so it can never pay its own {2}, and the activation-line hold keeps an earlier cast in the same plan from tapping it for mana. Puts up to two basic land cards SHARING A LAND TYPE (e.g. two Forests, or two Mountains) onto the battlefield tapped: PerformLandSearch places both, then resolves their own enter triggers, then shuffles ONCE; each is a landfall event through EnterLand. WHICH land type = the in-plan land-search pin over the maximal picks; the human picks each land at resolution (`tutor_etb`; the second prompt offers only basics sharing a type with the first; -1 stops at one). 'Up to two' collapsed for the search to as many as the library allows (dominance; ruling 2018-03-16 lets you take one -- PROVISIONAL). Instant-speed timing collapsed to our main phase's trailing pass (PROVISIONAL, inert vs the passive opponent: see Evolving Wilds).]",
+   "oracle_text": "This land enters tapped.\n{T}: Add {C}.\n{2}, {T}, Sacrifice this land: Search your library for up to two basic land cards that share a land type, put them onto the battlefield tapped, then shuffle. [Enters tapped (enters_tapped); taps for {C} (produces [C]). '{2}, {T}, Sacrifice this land' is the searched SacLandSearch activation (land_search_activation_cost {2}): the {T} is paid BEFORE the mana half, so it can never pay its own {2}, and the activation-line hold keeps an earlier cast in the same plan from tapping it for mana. Puts up to two basic land cards SHARING A LAND TYPE (e.g. two Forests, or two Mountains) onto the battlefield tapped: PerformLandSearch places both, then resolves their own enter triggers, then shuffles ONCE; each is a landfall event through EnterLand. WHICH land type = the in-plan land-search pin over all 0, 1, and 2-card picks; the human picks each land at resolution (`tutor_etb`; the second prompt offers only basics sharing a type with the first; -1 stops at one). 'Up to two' keeps zero, one, and two-card searched picks: drawing repeatedly on extra turns makes library thinning a real cost. Instant-speed timing collapsed to our main phase's trailing pass (PROVISIONAL, inert vs the passive opponent: see Evolving Wilds).]",
    "template": "basic_land",
    "parameters": {
     "produces": [
@@ -12695,7 +12695,8 @@
     "land_search_count": 2,
     "land_search_basic_only": true,
     "land_search_share_land_type": true,
-    "land_search_tapped": true
+    "land_search_tapped": true,
+    "land_search_allow_partial": true
    }
   },
   {
@@ -14270,10 +14271,11 @@
    ],
    "power": 10,
    "toughness": 10,
-   "oracle_text": "When you cast this spell, exile two target permanents.\nIndestructible\nWhenever Ulamog attacks, defending player exiles the top twenty cards of their library. [Cast trigger: cast_trigger_exile_target_permanents 2 -- MANDATORY, fires at every cast (hand casts, free casts); the two targets are DISTINCT (CR 115.3) and chosen as the trigger is put on the stack (CR 603.3d) from EVERY permanent on the battlefield, either side (the spell itself is on the stack, not a target): the goldfish opponent's scheduled spawns when present, otherwise our own permanents (lands, Unpredictable Cyclone, creatures) -- forced. With fewer than two legal permanents the trigger is removed (CR 603.3d). SEARCHED: Plan::cast_trigger_target_choice ranks the options (multisets of identity-folded permanents, two identical Islands being one option) in DecisionProvider::CastTriggerTargetOrder's order -- ORDER only, opponent permanents first; the human picks on the board (the target decision, one pick at a time; a forced pick is not prompted). Re-checked on resolution (CR 608.2b): a target that left is skipped, the other is still exiled. Exile ignores indestructible and is not a graveyard (no Emrakul shuffle); a token exiled ceases to exist. Indestructible modelled (destroy does nothing; -X/-X and 0 toughness still kill). Attack trigger NOT modelled, PROVISIONAL inert: the opponent is dealt a library only for decks that touch it (DeckTouchesOpponentZones), and even with a 53-card library Ulamog's 10 power kills a 20-life opponent on its 2nd attack while the exile needs a 3rd attack plus their draw; at 2HG's 30 life the 3rd attack is lethal by damage in the same combat. Legend rule modelled (one copy in the list).]",
+   "oracle_text": "When you cast this spell, exile two target permanents.\nIndestructible\nWhenever Ulamog attacks, defending player exiles the top twenty cards of their library. [Cast trigger: cast_trigger_exile_target_permanents 2 -- MANDATORY, fires at every cast (hand casts, free casts); the two targets are DISTINCT (CR 115.3) and chosen as the trigger is put on the stack (CR 603.3d) from EVERY permanent on the battlefield, either side (the spell itself is on the stack, not a target): the goldfish opponent's scheduled spawns when present, otherwise our own permanents (lands, Unpredictable Cyclone, creatures) -- forced. With fewer than two legal permanents the trigger is removed (CR 603.3d). SEARCHED: Plan::cast_trigger_target_choice ranks the options (multisets of identity-folded permanents, two identical Islands being one option) in DecisionProvider::CastTriggerTargetOrder's order -- ORDER only, opponent permanents first; the human picks on the board (the target decision, one pick at a time; a forced pick is not prompted). Re-checked on resolution (CR 608.2b): a target that left is skipped, the other is still exiled. Exile ignores indestructible and is not a graveyard (no Emrakul shuffle); a token exiled ceases to exist. Indestructible modelled (destroy does nothing; -X/-X and 0 toughness still kill). Attack trigger: attack_exile_defender_top 20 -- MANDATORY for each declared attack, before combat damage, via opponentdeck::TakeFromTop; it exiles up to the remaining library size and an emptied passive-opponent library is recognized as a same-turn deck-out win. DeckTouchesOpponentZones deals the opponent a real library whenever this card is present. A creature put onto the battlefield attacking does not fire this trigger (CR 508.4). Legend rule modelled (one copy in the list).]",
    "template": "vanilla_creature",
    "parameters": {
-    "cast_trigger_exile_target_permanents": 2
+    "cast_trigger_exile_target_permanents": 2,
+    "attack_exile_defender_top": 20
    }
   },
   {
@@ -15067,6 +15069,148 @@
     "figure_two_cost": "{R/W}",
     "figure_four_cost": "{R/W}{R/W}{R/W}",
     "figure_eight_cost": "{R/W}{R/W}{R/W}{R/W}{R/W}{R/W}"
+   }
+  }
+,
+  {
+   "name": "Expropriate",
+   "mana_cost": "{7}{U}{U}",
+   "types": [
+    "Sorcery"
+   ],
+   "oracle_text": "Council's dilemma \u2014 Starting with you, each player votes for time or money. For each time vote, take an extra turn after this one. For each money vote, choose a permanent owned by the voter and gain control of it. Exile Expropriate.",
+   "template": "custom",
+   "parameters": {
+    "exiles_self_on_resolve": true,
+    "expropriate_vote": true
+   }
+  },
+  {
+   "name": "Extraplanar Lens",
+   "mana_cost": "{3}",
+   "types": [
+    "Artifact"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Imprint \u2014 When this artifact enters, you may exile target land you control.\nWhenever a land with the same name as the exiled card is tapped for mana, its controller adds one mana of any type that land produced. [lens_imprint_land: optional ETB target is a searched cast variant over distinct own land states, plus decline. The chosen physical land is exiled and its name stored per Lens copy. Each matching land tap gains one additional mana of a type it produced; projected mana, greedy payment, and backtracking payment include the bonus. The bonus is sourced by Lens and is not snow mana.]",
+   "template": "custom",
+   "parameters": {
+    "lens_imprint_land": true
+   }
+  },
+  {
+   "name": "Horn of Greed",
+   "mana_cost": "{3}",
+   "types": [
+    "Artifact"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Whenever a player plays a land, that player draws a card. [horn_draw_on_land_play: the shared PlayLandCore fires one draw per Horn for every successful land PLAY, including fetch and a land-play replacement. EnterLand and Myriad search PUTS do not fire it. Draws enter through DrawIntoHand for first-draw miracle timing. The passive opponent plays no lands in this model.]",
+   "template": "custom",
+   "parameters": {
+    "horn_draw_on_land_play": true
+   }
+  },
+  {
+   "name": "Howling Mine",
+   "mana_cost": "{2}",
+   "types": [
+    "Artifact"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "At the beginning of each player's draw step, if this artifact is untapped, that player draws an additional card. [mine_extra_draw: each untapped Mine adds one draw in the controller\\'s draw step after the turn-based draw, in both executor and rollout. The passive opponent\\'s draw-step twin receives the same count; an empty library loses on the attempted draw. Tapped copies add nothing. The first player\\'s skipped first draw step adds nothing.]",
+   "template": "custom",
+   "parameters": {
+    "mine_extra_draw": true
+   }
+  },
+  {
+   "name": "Nexus of Fate",
+   "mana_cost": "{5}{U}{U}",
+   "types": [
+    "Instant"
+   ],
+   "keywords": [],
+   "oracle_text": "Take an extra turn after this one.\nIf Nexus of Fate would be put into a graveyard from anywhere, reveal Nexus of Fate and shuffle it into its owner's library instead.",
+   "template": "custom",
+   "parameters": {
+    "extra_turns_on_resolve": 1,
+    "graveyard_replace_shuffle_library": true
+   }
+  },
+  {
+   "name": "Part the Waterveil",
+   "mana_cost": "{4}{U}{U}",
+   "types": [
+    "Sorcery"
+   ],
+   "oracle_text": "Take an extra turn after this one. Exile Part the Waterveil.\nAwaken 6\u2014{6}{U}{U}{U} (If you cast this spell for {6}{U}{U}{U}, also put six +1/+1 counters on target land you control and it becomes a 0/0 Elemental creature with haste. It's still a land.)",
+   "template": "custom",
+   "parameters": {
+    "extra_turns_on_resolve": 1,
+    "exiles_self_on_resolve": true,
+    "awaken_cost": "{6}{U}{U}{U}",
+    "awaken_counters": 6
+   }
+  },
+  {
+   "name": "Temporal Manipulation",
+   "mana_cost": "{3}{U}{U}",
+   "types": [
+    "Sorcery"
+   ],
+   "keywords": [],
+   "oracle_text": "Take an extra turn after this one.",
+   "template": "custom",
+   "parameters": {
+    "extra_turns_on_resolve": 1
+   }
+  },
+  {
+   "name": "Temporal Mastery",
+   "mana_cost": "{5}{U}{U}",
+   "types": [
+    "Sorcery"
+   ],
+   "keywords": [],
+   "oracle_text": "Take an extra turn after this one. Exile Temporal Mastery.\nMiracle {1}{U} (You may cast this card for its miracle cost when you draw it if it's the first card you drew this turn.)",
+   "template": "custom",
+   "parameters": {
+    "extra_turns_on_resolve": 1,
+    "exiles_self_on_resolve": true,
+    "miracle_cost": "{1}{U}"
+   }
+  },
+  {
+   "name": "Time Warp",
+   "mana_cost": "{3}{U}{U}",
+   "types": [
+    "Sorcery"
+   ],
+   "keywords": [],
+   "oracle_text": "Target player takes an extra turn after this one.",
+   "template": "custom",
+   "parameters": {
+    "extra_turns_on_resolve": 1,
+    "targeting": "player"
+   }
+  },
+  {
+   "name": "Walk the Aeons",
+   "mana_cost": "{4}{U}{U}",
+   "types": [
+    "Sorcery"
+   ],
+   "keywords": [],
+   "oracle_text": "Buyback\u2014Sacrifice three Islands. (You may sacrifice three Islands in addition to any other costs as you cast this spell. If you do, put this card into your hand as it resolves.)\nTarget player takes an extra turn after this one.",
+   "template": "custom",
+   "parameters": {
+    "extra_turns_on_resolve": 1,
+    "buyback_sacrifice_islands": 3,
+    "targeting": "player"
    }
   }
  ]

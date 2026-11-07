@@ -1959,6 +1959,28 @@
     "toughness": null,
     "type_line": "Sorcery"
   },
+  "Expropriate": {
+    "cmc": 9.0,
+    "keywords": [
+      "Council's dilemma"
+    ],
+    "mana_cost": "{7}{U}{U}",
+    "oracle_text": "Council's dilemma — Starting with you, each player votes for time or money. For each time vote, take an extra turn after this one. For each money vote, choose a permanent owned by the voter and gain control of it. Exile Expropriate.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
+  "Extraplanar Lens": {
+    "cmc": 3.0,
+    "keywords": [
+      "Imprint"
+    ],
+    "mana_cost": "{3}",
+    "oracle_text": "Imprint — When this artifact enters, you may exile target land you control.\nWhenever a land with the same name as the exiled card is tapped for mana, its controller adds one mana of any type that land produced.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Artifact"
+  },
   "Ezuri, Renegade Leader": {
     "cmc": 3.0,
     "keywords": [
@@ -2876,6 +2898,15 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Horn of Greed": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{3}",
+    "oracle_text": "Whenever a player plays a land, that player draws a card.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Artifact"
+  },
   "Hornet Queen": {
     "cmc": 7.0,
     "keywords": [
@@ -2887,6 +2918,15 @@
     "power": "2",
     "toughness": "2",
     "type_line": "Creature — Insect"
+  },
+  "Howling Mine": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{2}",
+    "oracle_text": "At the beginning of each player's draw step, if this artifact is untapped, that player draws an additional card.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Artifact"
   },
   "Hunted Phantasm": {
     "cmc": 3.0,
@@ -4109,6 +4149,15 @@
     "toughness": "2",
     "type_line": "Creature — Eldrazi Drone"
   },
+  "Nexus of Fate": {
+    "cmc": 7.0,
+    "keywords": [],
+    "mana_cost": "{5}{U}{U}",
+    "oracle_text": "Take an extra turn after this one.\nIf Nexus of Fate would be put into a graveyard from anywhere, reveal Nexus of Fate and shuffle it into its owner's library instead.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
+  },
   "Nicol Bolas, Planeswalker": {
     "cmc": 8.0,
     "keywords": [],
@@ -4292,6 +4341,17 @@
     "power": null,
     "toughness": null,
     "type_line": "Enchantment"
+  },
+  "Part the Waterveil": {
+    "cmc": 6.0,
+    "keywords": [
+      "Awaken"
+    ],
+    "mana_cost": "{4}{U}{U}",
+    "oracle_text": "Take an extra turn after this one. Exile Part the Waterveil.\nAwaken 6—{6}{U}{U}{U} (If you cast this spell for {6}{U}{U}{U}, also put six +1/+1 counters on target land you control and it becomes a 0/0 Elemental creature with haste. It's still a land.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
   },
   "Pashalik Mons": {
     "cmc": 3.0,
@@ -6140,6 +6200,26 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Temporal Manipulation": {
+    "cmc": 5.0,
+    "keywords": [],
+    "mana_cost": "{3}{U}{U}",
+    "oracle_text": "Take an extra turn after this one.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
+  "Temporal Mastery": {
+    "cmc": 7.0,
+    "keywords": [
+      "Miracle"
+    ],
+    "mana_cost": "{5}{U}{U}",
+    "oracle_text": "Take an extra turn after this one. Exile Temporal Mastery.\nMiracle {1}{U} (You may cast this card for its miracle cost when you draw it if it's the first card you drew this turn.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
   "Terastodon": {
     "cmc": 8.0,
     "keywords": [],
@@ -6291,6 +6371,15 @@
     "power": "1",
     "toughness": "1",
     "type_line": "Creature — Merfolk Wizard"
+  },
+  "Time Warp": {
+    "cmc": 5.0,
+    "keywords": [],
+    "mana_cost": "{3}{U}{U}",
+    "oracle_text": "Target player takes an extra turn after this one.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
   },
   "Timeless Witness": {
     "cmc": 4.0,
@@ -6750,6 +6839,17 @@
     "power": "1",
     "toughness": "2",
     "type_line": "Creature — Satyr Druid"
+  },
+  "Walk the Aeons": {
+    "cmc": 6.0,
+    "keywords": [
+      "Buyback"
+    ],
+    "mana_cost": "{4}{U}{U}",
+    "oracle_text": "Buyback—Sacrifice three Islands. (You may sacrifice three Islands in addition to any other costs as you cast this spell. If you do, put this card into your hand as it resolves.)\nTarget player takes an extra turn after this one.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
   },
   "Walking Ballista": {
     "cmc": 0.0,

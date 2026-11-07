@@ -1,0 +1,69 @@
+{
+  "_comment": [
+    "Ten Islands pay awaken 6\u2014{6}{U}{U}{U} while leaving one land untapped to animate.",
+    "Emrakul plus 6/6 Elemental land attack twice in round 3 for at least 36; normal cast deals only 30."
+  ],
+  "deck": "decks/Extra Turns/Extra Turns.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 36,
+  "battlefield": [
+    {
+      "name": "Emrakul, the Aeons Torn",
+      "controller": 0
+    },
+    {
+      "name": "Snow-Covered Island",
+      "controller": 0
+    },
+    {
+      "name": "Snow-Covered Island",
+      "controller": 0
+    },
+    {
+      "name": "Snow-Covered Island",
+      "controller": 0
+    },
+    {
+      "name": "Snow-Covered Island",
+      "controller": 0
+    },
+    {
+      "name": "Snow-Covered Island",
+      "controller": 0
+    },
+    {
+      "name": "Snow-Covered Island",
+      "controller": 0
+    },
+    {
+      "name": "Snow-Covered Island",
+      "controller": 0
+    },
+    {
+      "name": "Snow-Covered Island",
+      "controller": 0
+    },
+    {
+      "name": "Snow-Covered Island",
+      "controller": 0
+    },
+    {
+      "name": "Snow-Covered Island",
+      "controller": 0
+    }
+  ],
+  "hand": [
+    "Part the Waterveil"
+  ],
+  "library_filler": "Snow-Covered Island",
+  "library_size": 30,
+  "depth": 2,
+  "budget_ms": 500,
+  "max_turns": 5,
+  "expect_win_turn": 3,
+  "expect_exile_contains": [
+    "Part the Waterveil"
+  ]
+}

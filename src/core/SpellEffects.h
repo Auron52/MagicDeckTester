@@ -2471,6 +2471,7 @@ struct LandSearchSpec
     int  to_hand         = 0;      // how many picks go to HAND (the rest: battlefield)
     bool tapped          = false;  // battlefield entries forced tapped
     bool optional        = false;  // "you MAY search" -- human-only decline
+    bool allow_partial   = false;  // retain 0..N for search sources where thinning can hurt
     std::uint16_t subtype = 0;     // "a <Subtype> card" (Nature's Lore: Forest) -- SubtypeRegistry id; 0 = any
     std::uint16_t subtype_alt = 0; // fetchland: the second permitted land subtype
 };
@@ -2483,6 +2484,7 @@ inline LandSearchSpec LandSearchSpecOf(const CardParams& p)
     s.to_hand         = p.land_search_to_hand;
     s.tapped          = p.land_search_tapped;
     s.optional        = p.land_search_optional;
+    s.allow_partial   = p.land_search_allow_partial;
     s.subtype         = p.land_search_subtype_id;
     if (p.land_search_activation_cost.has_value() && p.fetch_land_types.size() >= 2)
     {
@@ -8936,7 +8938,8 @@ inline bool LandfallTargetFoldKey(const GameState& state, const Permanent& p, st
         || p.AttacksThisTurn() != 0)                                              { return false; }
     if (p.chosen_color != -1 || p.garth_chosen_mask != 0 || p.chosen_keyword_mask != 0
         || p.chosen_subtype_id != 0 || p.linked_exile_number != 0)                { return false; }
-    if (!static_cast<const std::string&>(p.copy_printed_name).empty())           { return false; }
+    if (!static_cast<const std::string&>(p.copy_printed_name).empty()
+        || !p.lens_imprinted_land.empty())                                         { return false; }
     // ...and nothing attached TO it / paired WITH it: that link lives on the OTHER permanent.
     // `linked` (when given) is exactly the set of numbers some permanent's aura_attached_to /
     // equipped_to / paired_with names -- the same test, the board walked once per resolution
@@ -10839,6 +10842,72 @@ inline void TreasurifyPermanent(GameState& state, int bi)
     }
 }
 
+// These artifacts watch actions and turn structure, not ordinary land entry. The same helpers run
+// in the executor and the rollout; a card drawn here uses the shared hand-entry route so a first-
+// draw miracle window sees it at the moment it is drawn.
+// The trigger is offered after the draw effect that created it has finished.
+// Implemented by GameEngine so it can use the ordinary paid cast and stack path.
+bool ResolvePendingMiracle(GameState& state, GameLogger* logger = nullptr);
+
+inline int ActiveHornCount(const GameState& state)
+{
+    int n = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.horn_draw_on_land_play) { ++n; }
+    }
+    return n;
+}
+inline void DrawForPlayedLand(GameState& state, int player, GameLogger* logger = nullptr)
+{
+    const int n = ActiveHornCount(state);
+    for (int i = 0; i < n; ++i)
+    {
+        if (state.players[player].library.empty())
+        {
+            if (player == state.active_player_index) { state.player_lost_on_draw = true; }
+            else { state.opponent_decked = true; }
+            break;
+        }
+        DrawIntoHand(state, player, 1, HandEntryReason::Draw);
+        ++state.players[player].cards_drawn_this_turn;
+        if (player == 0 && g_play_draw_sink)
+        { g_play_draw_sink->push_back({ state.turn_number, state.players[player].hand.back().m_name.str() }); }
+        if (player == state.active_player_index) { ResolvePendingMiracle(state, logger); }
+    }
+}
+inline int UntappedHowlingMineCount(const GameState& state)
+{
+    int n = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.mine_extra_draw) { ++n; }
+    }
+    return n;
+}
+inline void DrawHowlingMineCards(GameState& state, int player, GameLogger* logger = nullptr)
+{
+    if (player != state.active_player_index && !state.opponent_library_dealt) { return; }
+    const int n = UntappedHowlingMineCount(state);
+    for (int i = 0; i < n; ++i)
+    {
+        if (state.players[player].library.empty())
+        {
+            if (player == state.active_player_index) { state.player_lost_on_draw = true; }
+            else { state.opponent_decked = true; }
+            break;
+        }
+        DrawIntoHand(state, player, 1, HandEntryReason::Draw);
+        ++state.players[player].cards_drawn_this_turn;
+        if (player == 0 && g_play_draw_sink)
+        { g_play_draw_sink->push_back({ state.turn_number, state.players[player].hand.back().m_name.str() }); }
+        if (player == state.active_player_index) { ResolvePendingMiracle(state, logger); }
+    }
+}
+
 // The entrant's own ETB triggers -- see FireOwnEtbTriggers below, which wraps this body so the
 // LOOK-TOP queue drains once at the outermost exit (every early `return` in here included).
 inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered_index,
@@ -11752,6 +11821,52 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
             { entered_index = i; break; }
         }
         if (entered_index < 0) { return; }
+    }
+
+    // Extraplanar Lens: optional imprint is a targeted ETB trigger. The searched cast carries the
+    // physical land number in etb_kx (zero declines); a human may repick or decline on resolution.
+    // Recheck control and land type now. The exiled card stays in exile when Lens later leaves.
+    if (p.lens_imprint_land)
+    {
+        const int lens_num = state.battlefield[entered_index].card.m_number;
+        int target = std::max(0, etb_kx);
+        if (g_play_flicker_chooser != nullptr)
+        {
+            std::vector<int> legal;
+            int def_pick = -1;
+            for (int bi = 0; bi < static_cast<int>(state.battlefield.size()); ++bi)
+            {
+                const Permanent& q = state.battlefield[bi];
+                if (q.controller_index != controller || !q.card.IsLand()) { continue; }
+                if (q.card.m_number == target) { def_pick = static_cast<int>(legal.size()); }
+                legal.push_back(bi);
+            }
+            if (!legal.empty())
+            {
+                const int pick = (*g_play_flicker_chooser)(state, controller,
+                                                            def->card.m_name.str(), legal, def_pick);
+                target = pick >= 0 && pick < static_cast<int>(legal.size())
+                    ? state.battlefield[legal[static_cast<std::size_t>(pick)]].card.m_number : 0;
+            }
+        }
+        if (target > 0)
+        {
+            for (int bi = 0; bi < static_cast<int>(state.battlefield.size()); ++bi)
+            {
+                const Permanent& q = state.battlefield[bi];
+                if (q.card.m_number != target || q.controller_index != controller || !q.card.IsLand())
+                { continue; }
+                const Card exiled = q.card;
+                state.exile.push_back(exiled);
+                state.battlefield.erase(state.battlefield.begin() + bi);
+                for (Permanent& src : state.battlefield)
+                {
+                    if (src.card.m_number == lens_num)
+                    { src.lens_imprinted_land = exiled.m_name; break; }
+                }
+                break;
+            }
+        }
     }
 
     // Felidar Guardian: "When this creature enters, you may exile another target permanent you
@@ -15994,14 +16109,46 @@ inline void ResolveCastTriggerTargets(GameState& state, int controller, const st
     SweepOrphanedAuras(state);   // an Aura on an exiled / destroyed host (CR 704.5m)
 }
 // "When you cast this spell, take an extra turn after this one" (Emrakul): resolving the trigger.
-inline void ResolveCastTriggerExtraTurn(GameState& state, const std::string& src_name)
+inline void ResolveCastTriggerExtraTurn(GameState& state, const std::string& src_name,
+                                       int target_player = -1)
 {
-    if (state.pending_extra_turns < 255) { ++state.pending_extra_turns; }
+    state.QueueExtraTurn(target_player < 0 ? state.active_player_index : target_player);
     if (g_play_event_sink && !g_tap_speculating)
     {
         EmitPlayEvent(state.turn_number, "trigger",
                       "\xE2\x8F\xB3 " + src_name + ": take an extra turn after this one ("
                       + std::to_string(static_cast<int>(state.pending_extra_turns)) + " pending)");
+    }
+}
+
+// Goldfish council policy: the passive opponent votes MONEY, which denies the
+// caster an extra turn. The caster's vote and the opponent-owned permanent are
+// searched cast variants (and visible as separate human-play plans). "Choose"
+// does not target, so shroud and hexproof do not constrain this selection.
+inline void ResolveExpropriate(GameState& state, int caster, bool own_vote_time,
+                               int opponent_money_card_number)
+{
+    if (own_vote_time) { ResolveCastTriggerExtraTurn(state, "Expropriate", caster); }
+    // An own MONEY vote is a no-op in this goldfish: all caster-owned permanents
+    // are already under the caster's control (the passive opponent never steals).
+    // The opponent's MONEY vote chooses a permanent OWNED by that voter.
+    const int voter = 1 - caster;
+    Permanent* chosen = nullptr;
+    for (Permanent& p : state.battlefield)
+    {
+        if (p.owner_index != voter) { continue; }
+        if (!chosen) { chosen = &p; }
+        if (p.card.m_number == opponent_money_card_number) { chosen = &p; break; }
+    }
+    // Money chooses on resolution. If a preselected permanent left the battlefield,
+    // the voter still owns any remaining legal permanent and must choose one.
+    if (chosen && chosen->controller_index != caster)
+    {
+        chosen->controller_index = caster;
+        chosen->gained_control_this_turn = true;
+        if (g_play_event_sink && !g_tap_speculating)
+        { EmitPlayEvent(state.turn_number, "ability",
+                        "Expropriate: gain control of " + chosen->card.m_name.str()); }
     }
 }
 
@@ -20247,6 +20394,32 @@ inline void ApplyAnnihilator(GameState& state, int controller, std::vector<int>&
     }
 }
 
+// Ulamog, the Ceaseless Hunger: each declared attack exiles the top twenty cards of the
+// defending player's library before combat damage. Cards put onto the battlefield attacking
+// are absent from attacker_indices, as required by CR 508.4. The goldfish opponent never
+// attacks; its library is dealt whenever a deck contains this parameter.
+inline void ApplyAttackExileDefenderTop(GameState& state, int controller,
+                                       const std::vector<int>& attacker_indices)
+{
+    if (controller != 0 || !state.opponent_library_dealt || attacker_indices.empty()) { return; }
+    for (int idx : attacker_indices)
+    {
+        if (idx < 0 || idx >= static_cast<int>(state.battlefield.size())) { continue; }
+        const Permanent& attacker = state.battlefield[static_cast<std::size_t>(idx)];
+        if (attacker.controller_index != controller) { continue; }
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(attacker.card);
+        const int count = def ? def->params.attack_exile_defender_top : 0;
+        if (count <= 0) { continue; }
+        const int exiled = opponentdeck::TakeFromTop(state, count);
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "trigger", attacker.card.m_name.str()
+                + " attacks: defending player exiles " + std::to_string(exiled)
+                + " cards from the top of their library");
+        }
+    }
+}
+
 // ---- Two-Headed Hellkite: "Whenever this creature attacks, draw two cards." ---------------------
 // Self-only attack-trigger draw (CardParams::attack_draw_cards), applied once per attacking copy at
 // declare-attackers alongside ApplyAttackSelfPumps, in BOTH worlds (GameEngine::CombatPhase executor
@@ -21813,6 +21986,52 @@ inline std::vector<int> FireblastMountains(const GameState& state, int controlle
         { out.push_back(i); }
     }
     return out;
+}
+
+// Walk the Aeons: buyback is a cast-time, optional additional cost, pinned to three
+// physical Islands. The pin survives the stack so only a resolving bought-back spell
+// returns to hand. The sacrifice chooser already has a board-click viewer surface.
+inline bool IsWalkBuyback(const CardDefinition& def, const std::string& pin)
+{ return def.params.buyback_sacrifice_islands == 3 && pin.compare(0, 8, "buyback:") == 0; }
+
+inline std::vector<int> WalkBuybackIslands(const GameState& state, int controller)
+{
+    std::vector<int> out;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& p = state.battlefield[i];
+        if (p.controller_index == controller && p.card.IsLand() && CardHasSubtype(p.card, "Island"))
+        { out.push_back(i); }
+    }
+    return out;
+}
+
+inline bool PayWalkBuyback(GameState& state, int controller, const std::string& pin)
+{
+    auto lands = WalkBuybackIslands(state, controller);
+    if (lands.size() < 3 || pin.compare(0, 8, "buyback:") != 0) { return false; }
+    int ids[3] = {};
+    if (std::sscanf(pin.c_str() + 8, "%d,%d,%d", &ids[0], &ids[1], &ids[2]) != 3) { return false; }
+    std::vector<int> chosen;
+    for (int k = 0; k < 3; ++k)
+    {
+        int idx = -1;
+        for (int i : lands)
+        { if (state.battlefield[i].card.m_number == ids[k]) { idx = i; break; } }
+        if (idx < 0) { return false; }
+        if (g_play_sacrifice_chooser)
+        {
+            const int dflt = static_cast<int>(std::find(lands.begin(), lands.end(), idx) - lands.begin());
+            const std::string label = "Walk the Aeons (Island " + std::to_string(k + 1) + " of 3)";
+            const int choice = (*g_play_sacrifice_chooser)(state, controller, label, lands, dflt);
+            if (choice >= 0 && choice < static_cast<int>(lands.size())) { idx = lands[choice]; }
+        }
+        chosen.push_back(idx);
+        lands.erase(std::find(lands.begin(), lands.end(), idx));
+    }
+    std::sort(chosen.begin(), chosen.end(), std::greater<int>());
+    for (int idx : chosen) { SacrificePermanentAt(state, controller, idx); }
+    return true;
 }
 
 inline bool PayFireblastAlternative(GameState& state, int controller, const std::string& pin)
@@ -39275,6 +39494,34 @@ inline bool AnyUntappedFilterSource(const GameState& state)
 // `yield_override` (>= 0) supplies the source's per-tap amount when the caller has the PERMANENT
 // (e.g. a storage land's live counter count via PermanentManaYield); -1 falls back to the static
 // per-tap yield, keeping every existing caller byte-identical.
+inline int LensBonusCount(const GameState& state, const Permanent& land)
+{
+    if (!land.card.IsLand()) { return 0; }
+    int n = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.lens_imprinted_land.empty() || p.lens_imprinted_land != land.card.m_name) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.lens_imprint_land) { ++n; }
+    }
+    return n;
+}
+inline void AddLensMana(ManaPool& pool, const GameState& state, const Permanent& land,
+                        const CardDefinition& def, Color made, int n)
+{
+    if (n <= 0) { return; }
+    if (LandTypeChangedToIsland(state, land)) { pool.Add(Color::Blue, n); return; }
+    const auto& prod = EffectiveProducesFor(state, land.controller_index, def, &land);
+    if (prod.empty()) { return; }
+    if (made != Color::Colorless || prod.size() == 1) { pool.Add(made, n); }
+    else
+    {
+        pool.wild += n;
+        if (std::find(prod.begin(), prod.end(), Color::Colorless) != prod.end())
+        { pool.wild_c += n; }
+    }
+}
+
 inline void AddSourceToPool(ManaPool& pool, const GameState& state, const CardDefinition& def,
                             int yield_override, const Permanent* perm)
 {
@@ -39287,10 +39534,25 @@ inline void AddSourceToPool(ManaPool& pool, const GameState& state, const CardDe
     // early-return branch below (filters, karoos, storage) is covered without touching it.
     struct SnowTag
     {
-        ManaPool& p; bool snow; int before;
-        SnowTag(ManaPool& pool_, bool s) : p(pool_), snow(s), before(pool_.Total()) {}
-        ~SnowTag() { if (snow) { p.snow_units += p.Total() - before; } }
-    } _snow_tag(pool, def.card.HasSupertype(Supertype::Snow));
+        ManaPool& p; const GameState& state; const CardDefinition& def; const Permanent* perm;
+        bool snow; int before;
+        SnowTag(ManaPool& pool_, const GameState& state_, const CardDefinition& def_, const Permanent* perm_)
+            : p(pool_), state(state_), def(def_), perm(perm_),
+              snow(def_.card.HasSupertype(Supertype::Snow)), before(pool_.Total()) {}
+        ~SnowTag()
+        {
+            const int produced = p.Total() - before;
+            if (snow) { p.snow_units += produced; }
+            // Lens's trigger is sourced by the artifact, so its extra mana is NOT snow even when
+            // the imprinted Snow-Covered Island made the first snow {U}.
+            if (perm == nullptr || produced <= 0) { return; }
+            const int n = LensBonusCount(state, *perm);
+            if (n <= 0) { return; }
+            const auto& prod = EffectiveProducesFor(state, perm->controller_index, def, perm);
+            if (prod.size() == 1) { AddLensMana(p, state, *perm, def, prod[0], n); }
+            else if (!prod.empty()) { AddLensMana(p, state, *perm, def, Color::Colorless, n); }
+        }
+    } _snow_tag(pool, state, def, perm);
     // A land Aura's "additional mana" is the AURA's, in the AURA's colour -- so credit it up front,
     // independently of whichever mode the enchanted land itself is in, and then remove it from a
     // caller-supplied yield_override below. PermanentManaYield deliberately FOLDS the aura into the
@@ -44769,7 +45031,7 @@ inline int SourceMaxNetLive(const GameState& state, const Permanent& pp, const C
     {
         const int aura = (aura_fold && (pp.card.IsLand() || aura_fold->empty()))
             ? LandAuraBonusFolded(*aura_fold, pp) : LandAuraBonus(state, pp);
-        return 1 + aura;
+        return 1 + aura + LensBonusCount(state, pp);
     }
     int b = SourceMaxNet(pp, dd);
     // Scaled LAND (Three Tree City): N of a chosen colour, N = creatures you control, minus its feeder.
@@ -44792,6 +45054,7 @@ inline int SourceMaxNetLive(const GameState& state, const Permanent& pp, const C
     // "credit no aura" (PaymentManaCovers' cheap arm), for it as for a land.
     b += (aura_fold && (pp.card.IsLand() || aura_fold->empty()))
              ? LandAuraBonusFolded(*aura_fold, pp) : LandAuraBonus(state, pp);
+    b += LensBonusCount(state, pp);
     return b;
 }
 
@@ -45814,6 +46077,36 @@ inline bool SpellCanTargetPermanent(const GameState& s, int controller, const Pe
     return true;
 }
 
+inline int AwakenLandTargetIndex(const GameState& s, int controller, int card_number)
+{
+    if (card_number <= 0) { return -1; }
+    for (int i = 0; i < static_cast<int>(s.battlefield.size()); ++i)
+    {
+        const Permanent& p = s.battlefield[i];
+        if (p.card.m_number == card_number && p.controller_index == controller && p.card.IsLand()
+            && SpellCanTargetPermanent(s, controller, p)) { return i; }
+    }
+    return -1;
+}
+
+// Awaken changes only the battlefield object. Its printed card remains a land in every
+// other zone; preserve its per-copy number while giving the permanent the lasting 0/0
+// Elemental creature characteristics and haste before putting the counters on it.
+inline bool ResolveAwakenLand(GameState& s, int controller, int card_number, int counters)
+{
+    const int i = AwakenLandTargetIndex(s, controller, card_number);
+    if (i < 0) { return false; }
+    Permanent& p = s.battlefield[static_cast<std::size_t>(i)];
+    p.card.AddType(CardType::Creature);
+    p.card.m_power = 0;
+    p.card.m_toughness = 0;
+    if (!CardHasSubtype(p.card, "Elemental"))
+    { p.card.m_subtypes.push_back("Elemental"); }
+    p.card.AddKeyword(Keyword::Haste);
+    PutPlusCounters(s, p, counters);
+    return true;
+}
+
 // CAN THIS FREE-CAST HIT BE CAST AT ALL? -- the ONE legality test every "you may cast it without paying
 // its mana cost" walk reads, in BOTH worlds: cascade (CR 702.85a), Creative Technique's reveal and
 // Breaching Dragonstorm's enter trigger -- TurnSolver's ApplyPlanDirect walks before their apply_one
@@ -46338,6 +46631,7 @@ inline std::string RemovalSelfTargetFoldKey(const GameState& s, const Permanent&
     add(p.fade_counters); add(p.quest_counters); add(p.hone_counters); add(p.mana_tap_mark);
     add(p.chosen_color); add(p.garth_chosen_mask); add(p.chosen_keyword_mask); add(p.chosen_subtype_id);
     add(p.paired_with); add(p.linked_exile_number); add(p.created_by_number);
+    if (!p.lens_imprinted_land.empty()) { k += "|lens:" + p.lens_imprinted_land.str(); }
     add(p.equipped_to); add(p.aura_attached_to);
     k += "|c" + p.counters.KeyFragment();
     add(static_cast<long long>(p.card.m_type_mask));

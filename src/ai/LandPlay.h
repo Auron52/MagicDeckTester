@@ -89,7 +89,8 @@ bool PlayLandFromLibraryTop(GameState& state, const CardDefinition& def, const L
 // land carries enters_tapped == false yet may come down tapped). Skips Apex-exiled lands and a Karoo
 // bounce land with no other land in play (its bounce would return itself).
 //
-// MTG_LAND_IDLE_TAPPED_FIRST (default OFF, measuring) swaps the untapped and tapped halves of the
+// MTG_LAND_IDLE_TAPPED_FIRST (default OFF, measuring), or a provider's opening-land opt-in,
+// swaps the untapped and tapped halves of the
 // four passes on the FIRST drop of the game when the untapped land's mana provably cannot be spent
 // this turn -- deferring it is free then, and it buys an extra mana on every later turn. Scoped to
 // the empty board because that is the only state where "no mana sink exists" is cheap to prove.

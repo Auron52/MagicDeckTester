@@ -173,7 +173,8 @@ int GameEngine::PlayOutFrom(GameState& state, int max_turns, ResumeAt from)
     // An extra turn owed at the end of round max_turns is still played (it is part of that round:
     // USER 2026-10-26, extra turns do not count toward the turn count). `pending_extra_turns` is 0 for
     // every deck without an extra-turn card, so the guard is the old one there.
-    while (state.turn_number < max_turns || state.pending_extra_turns > 0)
+    while (state.turn_number < max_turns || state.pending_extra_turns > 0
+           || state.pending_opponent_extra_turns > 0)
     {
         if (state.player_lost_on_draw) { return -1; }
         // Extra-turn chain backstop (GameState::TurnSeqCapped; inert unless an extra turn was taken).
@@ -187,7 +188,8 @@ int GameEngine::PlayOutFrom(GameState& state, int max_turns, ResumeAt from)
         if (m_stop_after_turn > 0
             && (state.turn_number > m_stop_after_turn
                 || (state.turn_number == m_stop_after_turn
-                    && state.pending_extra_turns == 0)))
+                    && state.pending_extra_turns == 0
+                    && state.pending_opponent_extra_turns == 0)))
         { return tnote(-1); }
         // Stop playing a game that has already been voided. The search bails out of its recursion as
         // soon as the meter trips (SearchBudget::Overrun), but the game itself would otherwise keep
@@ -312,7 +314,7 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
     // EXTRA TURN NEXT (pending_extra_turns > 0): the opponent takes NO turn before it, so neither
     // their upkeep nor their notional draw happens (CR 500.7: the extra turn is taken directly after
     // this one). Lockstep twin: SimulateEndAndStartNextTurn. 0 for every deck without the card.
-    if (state.pending_extra_turns == 0)
+    auto opponent_turn = [&]()
     {
         // Asylum Visitor at THE OPPONENT'S upkeep (Vampires A1), which precedes their notional draw below.
         // A no-op unless the opponent was dealt a hand and holds none. Lockstep twin: the rollout's.
@@ -322,14 +324,22 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
         // No-op for every deck that was not dealt an opponent library. Lockstep with the rollout's
         // TurnSolver::SimulateEndAndStartNextTurn.
         opponentdeck::EndOfTurnDraw(state);
+        if (!state.opponent_decked) { DrawHowlingMineCards(state, 1 - state.active_player_index); }
         // Sire of Insanity at the OPPONENT's notional end step ("each end step"): after their draw.
         // Our hand is empty by then in this pool (our own end step discarded it), so it is faithful and
         // inert; the opponent discards a dealt hand. Lockstep twin in the rollout; deck-gated.
         PerformEndStepDiscardHands(state, state.active_player_index);
+        DayNightTurnBoundary(state);
+    };
+    while (state.NextExtraTurnIsOpponent() && !state.opponent_decked)
+    {
+        state.ConsumeOpponentExtraTurn();
+        opponent_turn();
     }
+    if (!state.NextExtraTurnIsOurs() && !state.opponent_decked) { opponent_turn(); }
     // DAY / NIGHT turn-based check (CR 726.3a) for the opponent's notional untap and our next one
     // (Brutal Cathar). Lockstep with SimulateEndAndStartNextTurn; no-op unless a daybound card set it.
-    DayNightTurnBoundary(state);
+    if (state.NextExtraTurnIsOurs()) { DayNightTurnBoundary(state); }
 }
 
 void GameEngine::UntapStep(GameState& state)
@@ -382,6 +392,8 @@ void GameEngine::UntapStep(GameState& state)
     // rollout's reset. No-op without the loop.
     if (state.deck_has_draw_ping) { ResolveDrawTriggers(state); }
     ap.cards_drawn_this_turn     = 0;   // Fists of Flame drawn-count resets each turn (lockstep w/ SimulateEndAndStartNextTurn)
+    ap.first_draw_card_number_this_turn = 0;
+    ap.pending_miracle_card_number = 0;
     state.draw_trigger_mark      = 0;   // ...and the Niv draw-trigger watermark with it (same lockstep)
     ap.life_gained_this_turn     = 0;   // Fortifying Draught lifegain-count resets each turn (same lockstep)
     ap.cards_cycled_or_discarded_this_turn = 0;   // Hollow One cycle/discard count (same lockstep)
@@ -559,6 +571,52 @@ bool GameEngine::CastUpkeepTutor(GameState& state, int hand_number, const std::s
     if (UpkeepFloatClearEnabled())
     { state.floating_mana = ManaPool{}; state.floating_haste_c = 0; }
     return true;
+}
+
+bool GameEngine::CastMiracleFromHand(GameState& state, int hand_number)
+{
+    if (!m_ai.CastMiracleFromHand(state, hand_number)) { return false; }
+    ResolveStack(state);
+    return true;
+}
+
+bool ResolvePendingMiracle(GameState& state, GameLogger* logger)
+{
+    Player& ap = state.ActivePlayer();
+    const int number = ap.pending_miracle_card_number;
+    if (number == 0) { return false; }
+    ap.pending_miracle_card_number = 0;  // the offer is consumed even on decline
+    const int choice = state.scripted_miracle_choice;
+    state.scripted_miracle_choice = -1;
+    auto it = std::find_if(ap.hand.begin(), ap.hand.end(), [number](const Card& c)
+    { return c.m_number == number; });
+    if (it == ap.hand.end()) { return false; }
+    const CardDefinition* def = CardDatabase::Instance().LookupCached(*it);
+    if (!def || !def->params.miracle_cost.has_value()) { return false; }
+    const ManaCost cost = EffectiveSpellCostWithBase(*def, state, *def->params.miracle_cost);
+    GameState trial = state;
+    {
+        RevealLogPause pause;
+        if (!TapForCostShared(trial, cost, /*for_creature=*/false, nullptr,
+                              /*honor_legacy_cco=*/true)) { return false; }
+    }
+    bool cast = choice != 0;  // autonomous depth-0 playout takes a payable extra turn
+    if (g_play_free_cast_chooser)
+    {
+        const FreeCastPaidInfo paid{ cost.ToString(), "you", "take an extra turn" };
+        const FreeCastPaidScope paid_scope(&paid);
+        cast = (*g_play_free_cast_chooser)(state, state.active_player_index,
+                                           def->card.m_name.str() + " (miracle)",
+                                           std::vector<Card>{ *it }, cast ? 0 : -1,
+                                           std::vector<std::string>{}) == 0;
+    }
+    if (!cast) { return false; }
+    EmitReveal(state.turn_number, def->card.m_name.str() + " (miracle)",
+               {number}, {def->card.m_name.str()}, {number}, {}, {"revealed"});
+    AIEngine ai(MulliganProfile::DefaultProfile(), g_searched_play ? 1 : 0);
+    GameEngine game(ai);
+    if (logger) { game.SetLogger(logger); }
+    return game.CastMiracleFromHand(state, number);
 }
 
 void GameEngine::UpkeepTail(GameState& state)
@@ -757,6 +815,8 @@ void GameEngine::DrawStep(GameState& state)
         m_logger->CommitPhase(ap.life, state.Opponent().life, bf, hand, obf, gy, staged, PhaseLibraryTop(state));
     }
     EnterHand(state, state.active_player_index, std::move(drawn), HandEntryReason::DrawStep);
+    ResolvePendingMiracle(state, m_logger);
+    DrawHowlingMineCards(state, state.active_player_index, m_logger);
     // The Niv draw/damage loop: the draw step's draw pings here, in the draw step, before the Saga
     // lore counter below (lockstep with the rollout's draw step). No-op without the loop.
     if (state.deck_has_draw_ping) { ResolveDrawTriggers(state); }
@@ -1005,6 +1065,7 @@ void GameEngine::CombatPhase(GameState& state, bool additional)
     // Annihilator (Emrakul, Ulamog the Infinite Gyre): the defending player sacrifices N permanents.
     // Mirrors TurnSolver::SimulateCombat (lockstep, ONE shared helper). Deck-gated inert.
     ApplyAnnihilator(state, state.active_player_index, atk_idx);
+    ApplyAttackExileDefenderTop(state, state.active_player_index, atk_idx);
 
     // Two-Headed Hellkite attack-trigger draw (attack_draw_cards): drawn at declare-attackers,
     // so the cards are in hand for the post-combat main. Mirrors TurnSolver::SimulateCombat.
@@ -1334,6 +1395,9 @@ void GameEngine::ResolveStack(GameState& state)
             m_logger->FlushPutBack(hand_before_nums);   // Brainstorm's drawn-and-put-back cards + the put-back (log only)
         }
 
+        // A miracle offer belongs to this draw's resolution window. Resolve it
+        // before the next stack object or turn action can see the new hand.
+        ResolvePendingMiracle(state, m_logger);
         CheckStateBasedActions(state);
     }
 }

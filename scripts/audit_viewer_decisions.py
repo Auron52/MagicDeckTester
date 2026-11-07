@@ -68,6 +68,10 @@ def positive(v):      return isinstance(v, (int, float)) and v > 0
 def real_target(v):   return isinstance(v, str) and v not in ("none", "player", "")
 
 MANIFEST = {
+    # Temporal Mastery: the first drawn card each turn can be revealed and
+    # cast immediately for its miracle cost. The hand-zone paid-cast prompt
+    # uses the shared optional-cast protocol at the draw event.
+    "miracle_cost":         ("free_cast",            present),
     "targeting":             ("target",               real_target),
     "spectacle_cost":        ("target",               truthy),   # cast post-combat, still targets
     "damage_divided":        ("divide",               truthy),
@@ -149,11 +153,14 @@ MANIFEST = {
     "land_aura_can_target_opponent": ("main_phase",     truthy),
     "reveal_subtype_or_pay": ("main_phase",             truthy),
     "kicker_cost": ("main_phase",                        truthy),
+    "awaken_cost": ("main_phase",                        truthy),  # normal/awaken and each legal land are separate plans
+    "expropriate_vote": ("main_phase",                   truthy),  # own vote and opponent-money permanent are separate plans
     "has_replicate":              ("replicate",       truthy),   # Hatchery Sliver's own replicate
     "grants_replicate_to_subtypes": ("replicate",     truthy),   # + grants it to Sliver spells
     "etb_bounce_land":       ("bounce",               truthy),
     "sacrifice_land":        ("sacrifice",            truthy),
     "sacrifice_mountains_alternative": ("sacrifice", truthy),
+    "buyback_sacrifice_islands": ("sacrifice", truthy),
     "chain_lightning_copy": ("free_cast", truthy),
     "incinerator_damage_trigger": ("target", truthy),
     "expressive_iteration":  ("expressive_iteration", truthy),
@@ -234,6 +241,7 @@ MANIFEST = {
     # board-pick chooser (g_play_flicker_chooser in FireOwnEtbTriggers' blink block, reply -1 =
     # decline) wired 2026-09-05. Default = the provider's FlickerTarget pick.
     "etb_blink_permanent":   ("flicker",              truthy),
+    "lens_imprint_land":     ("flicker",              truthy),
     # Kitesail Larcenist: the OWN-side Treasure target on a cast rides the CastFromHand chosen_x
     # plan-variant axis (+ "none", + the human-only choose-on-resolution variant); the OPPONENT
     # side (always) and the own side on an Aether Vial put surface the `treasurify` board-pick
@@ -837,10 +845,13 @@ def _cost_mv(card, cost_from):
 # one dangerous error; under-listing just yields a longer, safe review list.
 # ---------------------------------------------------------------------------
 INERT_PARAMS = {
+    "extra_turns_on_resolve": "mandatory extra turn after successful resolution; target-player choice is separate",
+    "awaken_counters": "printed number of +1/+1 counters put on the chosen land; land choice is awaken_cost",
     "damage_each_opponent": "Boltwave hits each opponent automatically; no target choice",
     "players_cant_gain_life_this_turn": "Skullcrack turn-scoped rule effect; no player choice",
     "damage_cant_be_prevented_this_turn": "Skullcrack turn-scoped rule effect; no player choice",
     "attack_defending_player_reveal_land_to_hand": "Goblin Guide attack trigger is mandatory; no player choice",
+    "attack_exile_defender_top": "Ulamog, the Ceaseless Hunger exiles the defending player's top N cards on attack; mandatory trigger, no player choice (trigger event only)",
     # Midrange Burn: fixed arithmetic/cost semantics; the existing cast/tap actions own timing.
     "damage_per_nonbasic_land": "Price of Progress deals its printed multiple to EACH player from the live nonbasic count; no targets or chosen amount",
     "tap_is_life_payment": "Fiery Islet's printed life payment is a mandatory mana-ability cost, not preventable damage; the mana activation is the existing tap action",
@@ -898,7 +909,10 @@ INERT_PARAMS = {
     "attack_count_team_power": "Moraug's static '+1/+0 for each time it has attacked this turn' -- automatic, no choice",
     "landfall_target_second_doubles": "Scythecat Cub's 'if this is the second time this ability has resolved this turn, double the counters instead' -- WHICH resolution doubles is fixed by the rules, not chosen; its target rides the same surfaced `target` board-click",
     "landfall_lifegain": "automatic landfall lifegain (Courser of Kruphix), through GainLife -- no target, no choice",
-    "land_search_count": "how many lands the search may find ('up to N') -- the pick itself rides the land-search fire-site param -> tutor_etb; 'up to' is collapsed for the search to the maximal picks by dominance (PROVISIONAL), the human may stop early with -1",
+    "land_search_count": "how many lands the search may find ('up to N') -- the pick rides the land-search fire-site param -> tutor_etb; the human may stop early with -1",
+    "land_search_allow_partial": "Myriad's autonomous searched pick retains zero, one and two basics; the human tutor_etb prompts already permit early stop",
+    "horn_draw_on_land_play": "mandatory draw for each Horn when a land is played; no player choice",
+    "mine_extra_draw": "mandatory additional draw at each player's draw step while untapped; no player choice",
     "land_search_basic_only": "search FILTER ('basic land card', the Basic supertype) -- legality, not a choice; the pick rides tutor_etb",
     "land_search_share_land_type": "search FILTER (Myriad Landscape: the picks share a land type) -- legality, not a choice; the second tutor_etb prompt offers only matching basics",
     "land_search_to_hand": "DESTINATION split (Cultivate: one to the battlefield, one to hand) -- the human's prompt order IS the split (prompt 1 = battlefield, prompt 2 = hand); the search fans every ordered split",
@@ -2012,7 +2026,7 @@ def modeled_tokens(card):
     # Diabolic Intent / Culling the Weak (any creature) and Lake of the Dead's two Swamp sacrifices:
     # all surfaced through the `sacrifice` board click (see MANIFEST).
     if p.get("sac_additional_creature") or p.get("etb_replace_sacrifice_land_subtype") \
-            or p.get("sac_for_mana_victim_land_subtype"):
+            or p.get("sac_for_mana_victim_land_subtype") or p.get("buyback_sacrifice_islands"):
         t.add("sacrifice")
     # Shadowborn INT-2: the Apostle's six (and its Demon search, a plan variant) and the Overlord's upkeep
     # sacrifice are `sacrifice` board clicks; Reaper's morbid destroy is a `target` board click.
@@ -2398,6 +2412,8 @@ def run_sweep(deck, prof, base_seed, n_games, max_turns, mana_names=frozenset())
     Only the chosen plan's summary counts as "cast" -- scanning every offered variant would
     mark a card merely OFFERED as cast and produce false hard-misses.
     """
+    # A finite cap prevents a broken decision loop. Extra-turn decks can reach this
+    # cap during real play, so distinguish those games by recent turn_seq progress.
     GUARD = 160
     observed = collections.Counter()
     activations = set()             # activation markers OFFERED (board-activation gate, below)
@@ -2406,14 +2422,18 @@ def run_sweep(deck, prof, base_seed, n_games, max_turns, mana_names=frozenset())
     max_open_mana = collections.defaultdict(int)
     cast_text = []
     stuck = 0                       # games that hit the guard without finishing (driver pathology)
+    productive_truncations = 0      # games still advancing through extra turns at the cap
     for gi in range(n_games):
         choices, jitte, guard = [], [], 0
         seen_states = set()         # (turn, plan-summaries) already offered this game -- see below
+        recent_turn_seqs = collections.deque(maxlen=32)
         while guard < GUARD:
             guard += 1
             d = step(deck, prof, base_seed, gi, choices, max_turns, jitte)
             if d is None:
                 break
+            if isinstance(d.get("turn_seq"), int):
+                recent_turn_seqs.append(d["turn_seq"])
             observed[d.get("type", "?")] += 1
             # Board activations are gated on being OFFERED, not chosen: the question is whether a
             # human COULD express the ability, which the plan menu answers on its own.
@@ -2458,7 +2478,13 @@ def run_sweep(deck, prof, base_seed, n_games, max_turns, mana_names=frozenset())
                         break
             push_choice(choices, choice)
         if guard >= GUARD:
-            stuck += 1
+            if len(recent_turn_seqs) > 1 and recent_turn_seqs[-1] > recent_turn_seqs[0]:
+                productive_truncations += 1
+            else:
+                stuck += 1
+    if productive_truncations:
+        print(f"  {productive_truncations} game(s) reached the decision cap while still advancing "
+              "through turns; their observed choices count toward decision coverage.")
     return observed, cast_text, stuck, activations, max_open_mana
 
 

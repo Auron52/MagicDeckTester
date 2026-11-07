@@ -44,6 +44,7 @@ static bool PlayLandCore(GameState& state, const Card& card, const CardDefinitio
         // every deck without a landfall card is byte-identical.
         OnLandEntered(state, state.active_player_index, fetchland.m_number);
         PerformFetch(state, state.active_player_index, def.params, opts.fetch_target);
+        DrawForPlayedLand(state, state.active_player_index, opts.logger);
         return true;
     }
 
@@ -94,6 +95,7 @@ static bool PlayLandCore(GameState& state, const Card& card, const CardDefinitio
                               gone.m_name.str() + " -- no " + fdef.params.etb_replace_sacrifice_land_subtype
                               + " to sacrifice: put into the graveyard (the land drop is used)");
             }
+            DrawForPlayedLand(state, state.active_player_index, opts.logger);
             return true;
         }
         FloatLandBeforeSacrifice(state, state.active_player_index, vic, "before sacrificing it");
@@ -230,6 +232,7 @@ static bool PlayLandCore(GameState& state, const Card& card, const CardDefinitio
     // card's NUMBER and our controller, never by slot, so a Karoo that bounced ITSELF still triggers
     // (the trigger exists from the entry). Gated per game inside -> byte-identical without landfall.
     OnLandEntered(state, state.active_player_index, perm.card.m_number);
+    DrawForPlayedLand(state, state.active_player_index, opts.logger);
     return true;
 }
 
@@ -330,8 +333,6 @@ static bool FirstDropManaWouldSitIdle(const GameState& state, bool hold_top_cons
         if (d->params.cycling_cost.has_value()
             && CyclingLifePayable(state, state.active_player_index, *d))
         { note(EffectiveCyclingCostFor(state, *d).ManaValue()); }
-        if (d->params.sacrifice_draw_cost.has_value())
-        { note(d->params.sacrifice_draw_cost->ManaValue()); }
     }
     if (cheapest < 0) { return true; }        // nothing but lands in hand: nothing to spend on
 
@@ -472,7 +473,8 @@ static GreedyLandPick GreedyLandRank(const GameState& state, const Card* top, bo
     // rates the two lines equal at the horizon and falls through to this ranker as its last-resort
     // plan-ordering tiebreak (see greedy_land_name in TurnSolver's EnumeratePlansWithLandUncached).
     // Fixing the ranker therefore reaches all three land-drop sites at once.
-    const bool idle_first_drop = LandIdleTappedFirstEnabled()
+    const bool idle_first_drop = (LandIdleTappedFirstEnabled()
+                               || ResolveProvider(state).PreferIdleTappedFirstOpeningLand(state))
                               && FirstDropManaWouldSitIdle(state, hold_top_consumer);
 
     // Four-pass priority: 0 = untapped+multi, 1 = untapped+any, 2 = tapped+multi, 3 = tapped+any.

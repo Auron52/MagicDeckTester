@@ -571,6 +571,7 @@ bool GoldFishRunner::DeckTouchesOpponentZones(const Decklist& deck)
             // deck-out needs a library to empty (opponentdeck::ForcedDraw).
             if (def->params.draw_target_player) { return true; }
             if (def->params.attack_defending_player_reveal_land_to_hand) { return true; }
+            if (def->params.attack_exile_defender_top > 0) { return true; }
         }
         return false;
     };
@@ -1202,7 +1203,16 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         for (const Card& c : deck.mainboard)
         {
             const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
-            if (d && d->params.cast_trigger_extra_turns > 0) { return true; }
+            if (d && (d->params.cast_trigger_extra_turns > 0
+                      || d->params.extra_turns_on_resolve > 0)) { return true; }
+        }
+        return false;
+    }();
+    state.deck_has_miracle = [&deck]{
+        for (const Card& c : deck.mainboard)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d && d->params.miracle_cost.has_value()) { return true; }
         }
         return false;
     }();
@@ -1449,8 +1459,8 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         bool uncond_endstep = false;
         // The land-Aura walkers (see GameState::deck_has_land_aura): the same `is_land_aura` test.
         bool land_aura = false;
-        // The landfall dispatch (see GameState::deck_has_landfall): the same DefHasLandfallTrigger
-        // disjunction the per-definition landfall_watcher byte is computed from.
+        // The landfall dispatch and land-drop position gate: landfall triggers
+        // plus Horn's land-play draw, whose cast-before-land order matters.
         bool landfall = false;
         // The scry-watcher walk (see GameState::deck_has_scry_watcher): the param FireScryWatchers tests.
         bool scry_watcher = false;
@@ -1535,7 +1545,10 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                 if (DefHasCreatureEnterWatcher(d->params)) { creature_enter_watcher = true; }
                 if (d->params.soulbond)                    { soulbond = true; }
                 if (d->params.is_land_aura)                { land_aura = true; }
-                if (DefHasLandfallTrigger(d->params))      { landfall = true; }
+                // Horn watches the land PLAY, so casting it before the drop is
+                // a distinct line even though it is not a landfall ETB trigger.
+                if (DefHasLandfallTrigger(d->params) || d->params.horn_draw_on_land_play)
+                { landfall = true; }
                 // Bloodghast's GRAVEYARD landfall (CardDefinition::gy_landfall_watcher): the same
                 // chokepoint must run its graveyard walk, and LandOrderMatters must be live so the
                 // searched land-after-the-activations position exists (design_A2 §4.2).
@@ -1611,9 +1624,8 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         // Same reasoning, and likewise no lever: a clear bit PROVES every land-Aura walk returns
         // nothing (each one tests is_land_aura on what it finds), so this is dead-code elimination.
         state.deck_has_land_aura         = garth || land_aura;
-        // Same reasoning, and no lever either: a clear bit PROVES the landfall walk finds no watcher
-        // (the stamp and the walk's per-definition byte are one disjunction), so this is dead-code
-        // elimination for every deck without a landfall card -- every suite deck at landing.
+        // Same reasoning, and no lever either: a clear bit PROVES no landfall or
+        // land-play watcher can make this deck's land position matter.
         state.deck_has_landfall          = garth || landfall;
         // Same reasoning, no lever: a clear bit proves FireScryWatchers' walk finds no scry watcher.
         state.deck_has_scry_watcher      = garth || scry_watcher;
@@ -1962,15 +1974,17 @@ GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed, int gam
     static constexpr int kNonbasics[10] = {0, 2, 1, 3, 2, 0, 3, 1, 2, 3};
     const int pattern_index = game_index >= 0 ? game_index % 10 : static_cast<int>(seed % 10);
     const int nonbasics = kNonbasics[pattern_index];
-    const bool merfolk_land_targets = std::any_of(deck.mainboard.begin(), deck.mainboard.end(),
+    const bool numbered_land_targets = std::any_of(deck.mainboard.begin(), deck.mainboard.end(),
         [](const Card& c) { return c.m_name == "Tide Shaper" || c.m_name == "Spreading Seas"
-                                  || c.m_name == "Sink into Stupor"; });
+                                  || c.m_name == "Sink into Stupor" || c.m_name == "Expropriate"; });
     for (int i = 0; i < 3; ++i)
     {
         Card land;
         land.m_name = i < nonbasics ? "Opponent Nonbasic Land" : "Opponent Basic Land";
         land.RehashName();
-        if (merfolk_land_targets) { land.m_number = 600000 + i; }
+        // Expropriate must distinguish the three physical opponent lands when
+        // choosing the permanent gained for a MONEY vote.
+        if (numbered_land_targets) { land.m_number = 600000 + i; }
         land.AddType(CardType::Land);
         if (i >= nonbasics) { land.AddSupertype(Supertype::Basic); }
         Permanent perm;

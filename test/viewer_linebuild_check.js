@@ -238,6 +238,25 @@ function checkBorosCharmDimensions() {
   return fails;
 }
 
+function checkExpropriateDimensions() {
+  const vote = choice => ({ key:'Expropriate vote', choice, card:'Expropriate', kind:'exprovote' });
+  const take = (choice, num) => ({ key:'Expropriate takes', choice,
+                                  card:'Opponent Basic Land', kind:'exprotake', num });
+  const variants = [];
+  for (const v of ['Time — take an extra turn', 'Money — no effect'])
+    for (const [name, num] of [['Opponent Basic Land #1', 41], ['Opponent Basic Land #2', 42]])
+      variants.push({ subs:[vote(v), take(name, num)] });
+  const fails = [];
+  const first = LB.nextDimension(variants);
+  if (!first || first.dim.kind !== 'exprovote' || first.choices.length !== 2)
+    fails.push('Expropriate must ask for your vote before the permanent');
+  const second = LB.nextDimension(LB.filterByChoice(variants, 'Expropriate vote',
+                                                    'Time — take an extra turn'));
+  if (!second || second.dim.kind !== 'exprotake' || second.choices.map(c=>c.num).join(',') !== '41,42')
+    fails.push('the opponent Money vote must offer both same-named permanents by identity');
+  return fails;
+}
+
 // ---- A MIXED variant set is still walked, never dumped flat ----------------------------------
 // Some variants of a line carry a dimension and others simply do not: "cast Bonesplitter" versus
 // "cast Bonesplitter AND equip the copy in play" is the shape that got reported (KittyEquipment
@@ -1206,6 +1225,10 @@ function main() {
   borosFails.forEach(m => console.log(`  FAIL  Boros Charm picker: ${m}`));
   console.log(`Viewer Boros Charm picker: ${borosFails.length ? 'WRONG' : 'mode first, then board target'} ` +
               `(${borosFails.length} FAIL)`);
+  const exproFails = checkExpropriateDimensions();
+  exproFails.forEach(m => console.log(`  FAIL  Expropriate picker: ${m}`));
+  console.log(`Viewer Expropriate picker: ${exproFails.length ? 'WRONG' : 'vote first, then opponent-owned permanent'} ` +
+              `(${exproFails.length} FAIL)`);
   const verbFails = checkActivationVerbs();
   verbFails.forEach(m => console.log(`  FAIL  activation verb: ${m}`));
   console.log(`Viewer activation verbs: ${verbFails.length ? 'WRONG' : 'cast/sacout/equip/attachall/sfput/jittemode all encode'} ` +
@@ -1266,7 +1289,7 @@ function main() {
   fetchSuspendFails.forEach(m => console.log(`  FAIL  fetch suspend: ${m}`));
   console.log(`Viewer fetch suspend route: ${fetchSuspendFails.length ? 'WRONG' : 'land, crack, suspend become three payable segments'} ` +
               `(${fetchSuspendFails.length} FAIL)`);
-  return (fail + dimFails.length + landFails.length + sacFails.length + borosFails.length + verbFails.length
+  return (fail + dimFails.length + landFails.length + sacFails.length + borosFails.length + exproFails.length + verbFails.length
           + mixFails.length + hostFails.length + stackFails.length + macroFails.length
           + tapFails.length + topFails.length + posFails.length + kickFails.length
           + suspendFails.length + fetchSuspendFails.length + karooFails.length + seqFails.length + shrinkFails.length + segFails.length) ? 1 : 0;

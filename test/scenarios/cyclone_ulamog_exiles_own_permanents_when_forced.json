@@ -2,7 +2,8 @@
   "_comment": [
     "Phase 2: Ulamog, the Ceaseless Hunger's cast trigger 'exile two target permanents' is MANDATORY",
     "and 'target permanent' includes ours (CR 115.1 / 603.3d): with no opponent permanent on the",
-    "board it must exile two of our own. Cast round 3 off exactly 10 Islands (two exiled), attacks rounds 4 and 5."
+    "board it must exile two of our own. Cast round 3 off exactly 10 Islands (two exiled), attacks rounds 4 and 5.",
+    "The attack trigger also exiles the opponent library's top twenty; this fixed seed contributes one Island there."
   ],
   "deck": "decks/Unpredictable Cyclone/Unpredictable Cyclone.cod",
   "turn": 3,
@@ -61,6 +62,6 @@
   "max_turns": 5,
   "expect_win_turn": 5,
   "expect_exile_counts": {
-    "Island": 2
+    "Island": 3
   }
 }

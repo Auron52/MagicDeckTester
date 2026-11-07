@@ -1,0 +1,27 @@
+{
+  "_comment": [
+    "On the play, turn one skips its draw step. Mind Stone's activated draw",
+    "is therefore the first draw of the turn. Temporal Mastery must be",
+    "offered for {1}{U} immediately when that activation resolves."
+  ],
+  "deck": "decks/Extra Turns/Extra Turns.cod",
+  "turn": 1,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 30,
+  "battlefield": [
+    { "name": "Emrakul, the Aeons Torn", "controller": 0 },
+    { "name": "Mind Stone", "controller": 0 },
+    { "name": "Snow-Covered Island", "controller": 0 },
+    { "name": "Snow-Covered Island", "controller": 0 },
+    { "name": "Snow-Covered Island", "controller": 0 }
+  ],
+  "hand": [],
+  "library_top": ["Temporal Mastery"],
+  "library_filler": "Snow-Covered Island",
+  "library_size": 30,
+  "depth": 2,
+  "budget_ms": 100,
+  "max_turns": 3,
+  "expect_win_turn": 1
+}
