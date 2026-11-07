@@ -159,10 +159,11 @@ def _explain(key, gi):
         from explain_game import diff_game
     except Exception:
         return None
+    # Bound attempts, including failed replays. A stale baseline or replay error can raise on
+    # every game; counting only successes turns this cap into an unbounded overnight rerun.
+    _explained[0] += 1
     try:
-        blk = diff_game(MODE, key, gi)
-        _explained[0] += 1
-        return blk
+        return diff_game(MODE, key, gi)
     except Exception as ex:
         return f"    [explain: {ex}]"
 

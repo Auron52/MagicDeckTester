@@ -129,6 +129,14 @@ doing cases that have potential to fix the colours, not those that require more 
   the NC search and `EmitEvalRows` use it. Niv gi887 at d8/b0 under NC wins T5; the T4 menu scores Servant + Signet
   5.000 and Lookout + Signet 6.000. Full units 2631/2631; smoke 179/179; regression 286/286; 777 saved references
   replayed without drift or gaps. The blind leaf and keep trainer remain on their original paths.
+  The full overnight tier on 2026-11-07 completed 578 jobs in 28m08s: 484 matched the prior GT and 94 moved. Its
+  per-game audit found 2,375 faster / 1,189 slower searched games; the adopted Cyclone, Kithkin, Shadowborn and Jumbo
+  artifacts produced the largest net improvements (respectively -491, -882, -72 and -11 turns), while the c-wild
+  legality correction left Hinata +24 and Niv +3 searched turns on those blocks. Accepted as the periodic overnight
+  baseline in `0abfec2e9`; `check_gt_logs.py` found all 578 keys consistent. The old local overnight trace snapshot
+  was from 2026-10-19 and could not parse the current `Madness` keyword, so its inline old-vs-new explanations were
+  unusable; the outcome audit and committed per-game logs were intact. The audit harness now caps attempted explanations
+  even when replay raises, preventing that stale-baseline condition from causing an unbounded replay loop.
 
 ## Galadriel: the oracle-on arm exhausts memory (found 2026-11-04 16:30Z, deferred)
 

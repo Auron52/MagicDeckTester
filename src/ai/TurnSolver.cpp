@@ -105853,7 +105853,7 @@ TurnSolver::Plan TurnSolver::ReshuffleAvgChoosePlan(const GameState& state, int 
         // player's known top/bottom pinned), so a ranking can be read straight off the trace.
         if (EnvInt("MTG_NC_TRACE", 0) >= 2)
         {
-            std::fprintf(stderr, "[nc] T%d %s known top=%zu bottom=%zu\n", turn, is_pre_combat ? "pre" : "post",
+            std::fprintf(stderr, "[nc] T%d %s known top=%d bottom=%zu\n", turn, is_pre_combat ? "pre" : "post",
                          state.ActivePlayer().library.KnownTopRun(), state.ActivePlayer().library.KnownBottom());
             for (size_t i = 0; i < plans.size(); ++i)
             {
