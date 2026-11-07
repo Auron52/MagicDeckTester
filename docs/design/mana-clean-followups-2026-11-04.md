@@ -125,6 +125,10 @@ doing cases that have potential to fix the colours, not those that require more 
   (cc3b47aea, `wip/niv-nc-known-top`) onto main's `m_known_top`; make the non-clairvoyant search (`BlindUnknownOrder`
   / `MTG_NC_SEARCH`) keep known top/bottom cards (verify on Niv gi887, seed 1650001); switch `EmitEvalRows` training
   labels to it. Blind leaf and keep trainer unchanged.
+  DONE at 5718ccb5b: `ShuffleUnseen` preserves the current mask's noncontiguous known positions and bottom block;
+  the NC search and `EmitEvalRows` use it. Niv gi887 at d8/b0 under NC wins T5; the T4 menu scores Servant + Signet
+  5.000 and Lookout + Signet 6.000. Full units 2631/2631; smoke 179/179; regression 286/286; 777 saved references
+  replayed without drift or gaps. The blind leaf and keep trainer remain on their original paths.
 
 ## Galadriel: the oracle-on arm exhausts memory (found 2026-11-04 16:30Z, deferred)
 
@@ -174,7 +178,10 @@ counts are 244,344 / 334,159 / 357,114 / 286,755, so these runs are partial cens
 The records landed in `test/mana_clean.json` at 6260a1dc6. A g61 `perf` sample
 (`build/scratch/queue1107/g61.perf.data`) still puts most time in plan enumeration, sim-key construction, and
 state/plan copying while an oracle apply re-derives breakpoint continuations. The exact per-Realize continuation
-memo in step 1 remains open.
+memo in step 1 remains open. A 30-priced-second g61 probe with `MTG_BP_ENUM_PROBE=1`
+(`build/scratch/queue1107/g61.bp30.*`) recorded 581 existing breakpoint-cache hits, 521 derivations,
+and zero evictions. The game-scoped memo already serves many repeats on this case; another memo with the same
+key would not remove distinct or otherwise unstoreable derivations. Attribute the remaining misses before adding it.
 
 ## 10. USER ruling 2026-11-07: Hinata regression d5 s3003 gi27 on fix/c-wild
 *"For 2 I think it is fine to move on if we can show it is recoverable at any depth + budget."* Shown: the c-wild
