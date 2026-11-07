@@ -9972,14 +9972,16 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
         ManaCost pay_bill = effective;
         haste_from_mana = def->card.IsCreature() && !bestow && TakeHasteFloatForCreatureSpell(state, pay_bill);
         bool paid_ok;
+        bool host_tapped_by_repay = false;
         const std::uint64_t lr_mark = LineRepayMark();
         {
+            LineRepayHeldHostScope _lrhh(reserved_host, &host_tapped_by_repay);
             ScarceHeldOnlyScope _sho(reserved_host > 0);   // the scarce hold outranks the host's (ManaPayment.h)
             paid_ok = TapForCost(state, pay_bill, available, def->card.IsCreature());
         }
         if (reserved_host > 0)
         {
-            LineRepayHostUntap(state, lr_mark, reserved_host);   // the hold released, the repay record with it
+            LineRepayHostUntap(state, lr_mark, reserved_host, host_tapped_by_repay);   // release the temporary hold
             available = AvailableManaPool(state);
             if (!paid_ok) { paid_ok = TapForCost(state, pay_bill, available, def->card.IsCreature()); }
         }

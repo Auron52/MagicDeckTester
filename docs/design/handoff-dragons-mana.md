@@ -1,5 +1,36 @@
 # Handoff: Dragons mana-clean fixes (branch wip/mc-dragons)
 
+## Successor 12 (2026-11-07, in progress): find-side Aura host hold
+
+The prior branch commit `e8ae5aa3b` prices LINE_REPAY at 18 probes/unit (measured 3.95 us/probe versus 71.15 us/ordinary unit;
+900-game price A/B no win-turn changes, held-out 1,500 EDF net two turns faster). This candidate edit in
+`ManaPayment.cpp/.h`, `AIEngine.cpp`, and `TurnSolver.cpp` virtually untaps an Aura's temporarily held host for the
+initial LineRepayFind digest, leaves earlier re-payments free to use the host, and taps it only for the current Aura's
+payment. Every Aura cast site scopes the held host; `LineRepayHostUntap` preserves a real earlier-payment tap.
+`./build.sh` passed; full units 2437/2437. Scratch: `build/scratch/mcdragons/lrprice/`.
+
+The four saved slower games at both shipped settings and unlimited d8/b0: standard EDF gi3280, gi3295, gi4144 now
+match the off arm's T5/T4/T4 win and play digest. Pre-patch at the same price18 still takes T6/T5/T5. EDF2HG gi1194
+remains T5 on versus T4 off, byte-identical to pre-patch at d8/b0. Its on arm commits a T1-predicted T4 line through
+Living Wish/Emiel, then the T4 breakpoint continuation casts Wish/Cloud/Trace and wins T5; the off arm commits a
+Trace-first line and wins T4 (`host-1194-{on,off}-fd.err`). The old hold mismatch does not explain that fourth game.
+
+Fresh pooled A/B `hostfix-ab.json` (seed 2860001, 5,000 EDF Standard; seed 2870001, 1,500 EDF2HG; price18) is still
+running. At 4,800 Standard pairs: 6 slower / 5 faster, net zero turns; 1,500 2HG: 1 slower / 1 faster, net zero.
+The final Standard on-arm chunk `edf_on_2400` is a CPU-active tail at gi2535 (>10 minutes; off gi2535 took 33 s).
+Do not cancel this user-requested measurement. A 15 s perf sample `hostfix-gi2535.perf.data` is dominated by plan
+key construction, copies and payer walks, with LINE_REPAY a smaller direct share. Pre-patch price18 and price4
+single-game controls (`hostfix-2535-base.json`) are running to attribute the tail. Unlimited d8/b0 replays of the seven fresh-seed
+slower games (`hostfix-slow-d8.json`) are running: standard gi812, gi1312, gi2627, gi359, gi4575 recovered to the
+off arm's win turn and digest; standard gi2069 wins T7 in both arms (different digests), and 2HG gi926 remains in flight. Decide on the branch only after these tails
+finish; then add a focused find-side test, smoke/scoped regression, and a mana-clean gate slice before landing.
+
+The shipped-budget 2HG gi926 slowdown is T8 -> unwon, with the first different plan on T1 (off plays Yavimaya Coast
+and Training Grounds; on plays Kitchen only). It is byte-identical on the pre-host-fix binary at both 4 and 18
+probes/unit (`hostfix-926-prepatch.out`, `hostfix-926-price4.out`), so neither the host patch nor probe price caused
+it. At d5 b80 and b320 both arms win T8 (`hostfix-926-budget.out`); this is a budget-sensitive plan choice, not an
+Aura payment mismatch. The high-depth d8/b0 replay is still in flight.
+
 Task (from the coordinator): fix the mana defects the mana-clean gate found on Dragons
 (`/workspaces/MagicDeckTester/logs/mana_clean/pass1-dragons/report.md`: 71,000 games, ENUM-GAP 1,691, APPLY-DROP
 4,164, ORACLE-GAP 3,074), measure on a fresh 10k slice with both binaries, A/B the play change, unit test + scenario +

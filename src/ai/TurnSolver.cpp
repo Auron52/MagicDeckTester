@@ -10173,10 +10173,13 @@ static bool SubsetPayableWithFiltersImpl(const GameState& state, const std::vect
                                           ColoredPipReserveMask(bill), &bill, &g_line_unpaid_cost);
             }
             const std::uint64_t lr_mark = LineRepayMark();
-            bool cost_ok = TapForCostDirect(cp, bill, for_creature);
+            bool cost_ok;
+            bool host_tapped_by_repay = false;
+            { LineRepayHeldHostScope _lrhh(reserved_host, &host_tapped_by_repay);
+              cost_ok = TapForCostDirect(cp, bill, for_creature); }
             if (reserved_host > 0)
             {
-                LineRepayHostUntap(cp, lr_mark, reserved_host);   // the apply twins' release (ManaPayment.h)
+                LineRepayHostUntap(cp, lr_mark, reserved_host, host_tapped_by_repay);   // the apply twins' release
                 if (!cost_ok) { cost_ok = TapForCostDirect(cp, bill, for_creature); reserved_host = -1; }
             }
             if (!cost_ok) { return false; }
@@ -10884,10 +10887,13 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
             { std::fprintf(stderr, "[dbgseq]     aura target=%d reserved=%d\n", a.enchant_target, reserved_host); }
             SpellSubtypePayScope _ssps(&def.card);   // Giada: see the note at the enumeration site
             const std::uint64_t lr_mark = LineRepayMark();
-            bool paid_ok = TapForCostDirect(cp, ec, def.card.IsCreature());
+            bool paid_ok;
+            bool host_tapped_by_repay = false;
+            { LineRepayHeldHostScope _lrhh(reserved_host, &host_tapped_by_repay);
+              paid_ok = TapForCostDirect(cp, ec, def.card.IsCreature()); }
             if (reserved_host > 0)
             {
-                LineRepayHostUntap(cp, lr_mark, reserved_host);   // the apply twins' release (ManaPayment.h)
+                LineRepayHostUntap(cp, lr_mark, reserved_host, host_tapped_by_repay);   // the apply twins' release
                 if (!paid_ok) { paid_ok = TapForCostDirect(cp, ec, def.card.IsCreature()); }
             }
             if (!paid_ok)
@@ -61454,14 +61460,16 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             ManaCost pay_bill = ec;
             cast_haste_from_mana = is_creature && !bestow && TakeHasteFloatForCreatureSpell(state, pay_bill);
             bool paid_ok;
+            bool host_tapped_by_repay = false;
             const std::uint64_t lr_mark = LineRepayMark();
             {
+                LineRepayHeldHostScope _lrhh(reserved_host, &host_tapped_by_repay);
                 ScarceHeldOnlyScope _sho(reserved_host > 0);   // the scarce hold outranks the host's (ManaPayment.h)
                 paid_ok = TapForCostDirect(state, pay_bill, is_creature);
             }
             if (reserved_host > 0)
             {
-                LineRepayHostUntap(state, lr_mark, reserved_host);   // the executor's twin (AIEngine)
+                LineRepayHostUntap(state, lr_mark, reserved_host, host_tapped_by_repay);   // the executor's twin
                 if (!paid_ok) { paid_ok = TapForCostDirect(state, pay_bill, is_creature); }
             }
             _esp.End(paid_ok);

@@ -7968,6 +7968,8 @@ void PayRefineAfter(GameState& state, const ManaCost& cost_in, bool for_creature
 // Not here: human play (the human chose those taps), the reference replay's tap preference, the mana oracle's own
 // copies and float-only probes, an armed damage board, a payment the earlier one cannot be undone around.
 thread_local int g_line_repay_suspend = 0;   // SpellEffects.h LineRepaySuspendScope
+thread_local int g_line_repay_held_host = 0; // ManaPayment.h LineRepayHeldHostScope
+thread_local bool* g_line_repay_held_host_tapped_out = nullptr;
 namespace
 {
 std::atomic<long long> g_lr_record{0}, g_lr_try{0}, g_lr_amount{0}, g_lr_joint{0}, g_lr_fired{0}, g_lr_fired_d2{0},
@@ -8014,11 +8016,13 @@ std::uint64_t LineRepayDigestSeed(const GameState& s)
     LineRepayMix(h, static_cast<std::uint64_t>(s.TurnSeq())); LineRepayMix(h, static_cast<std::uint64_t>(s.active_player_index));
     return h;
 }
-void LineRepayDigestStep(std::uint64_t& h, const Permanent& p, int a)
+void LineRepayDigestStep(std::uint64_t& h, const Permanent& p, int a, int virtual_untapped_host = 0)
 {
     int dep = -1;
     for (const Counter& c : p.counters) { if (c.type == Counter::Type::Depletion) { dep = c.count; break; } }
-    LineRepayMix(h, static_cast<std::uint64_t>(p.card.m_number) * 4u + (p.tapped ? 1u : 0u) + (p.controller_index == a ? 2u : 0u));
+    LineRepayMix(h, static_cast<std::uint64_t>(p.card.m_number) * 4u
+                    + (p.tapped && p.card.m_number != virtual_untapped_host ? 1u : 0u)
+                    + (p.controller_index == a ? 2u : 0u));
     LineRepayMix(h, static_cast<std::uint64_t>(static_cast<std::uint32_t>(p.storage_counters))
                     | (static_cast<std::uint64_t>(static_cast<std::uint32_t>(p.charge_counters)) << 32));
     LineRepayMix(h, static_cast<std::uint64_t>(static_cast<std::uint32_t>(dep)));
@@ -8204,7 +8208,7 @@ bool LineRepayAcrossDraw(const LineRepayRec& r, const LineRepayRec* const* newer
 // when LineRepayAcrossDraw allows it (the chain's newer records are `skip`).
 // `full` (optional): LineRepayDigest(s, s.battlefield.size()), from the same pass (LineRepayMemoKey folds it).
 const LineRepayRec* LineRepayFind(const GameState& s, const LineRepayRec* const* skip = nullptr, int nskip = 0,
-                                  std::uint64_t* full = nullptr)
+                                  std::uint64_t* full = nullptr, int virtual_untapped_host = 0)
 {
     thread_local std::vector<std::uint64_t> prefix;   // prefix[i]: the permanents hash over the first i (valid to prefix_n)
     std::size_t prefix_n = 0;
@@ -8218,7 +8222,8 @@ const LineRepayRec* LineRepayFind(const GameState& s, const LineRepayRec* const*
         for (; prefix_n < to; ++prefix_n)
         {
             prefix[prefix_n + 1] = prefix[prefix_n];
-            LineRepayDigestStep(prefix[prefix_n + 1], s.battlefield[prefix_n], s.active_player_index);
+            LineRepayDigestStep(prefix[prefix_n + 1], s.battlefield[prefix_n], s.active_player_index,
+                                virtual_untapped_host);
         }
     };
     for (int k = 1; k <= kLineRepayRing; ++k)
@@ -8638,6 +8643,7 @@ std::uint64_t LineRepayMemoKey(const GameState& s, const LineRepayChain& ch, boo
     mix(ManaCostDigest(g_act_line_current));
     mix(static_cast<std::uint64_t>(static_cast<std::uint32_t>(g_seed_pay_split)));
     mix(g_seed_pay_hold);
+    mix(static_cast<std::uint64_t>(static_cast<std::uint32_t>(g_line_repay_held_host)));
     mix(static_cast<std::uint64_t>(g_plan_reserved_sources.size()));
     for (int x : g_plan_reserved_sources) { mix(static_cast<std::uint64_t>(static_cast<std::uint32_t>(x))); }
     mix(LineRepayArmFold());
@@ -8653,7 +8659,7 @@ bool LineRepayTry(GameState& state, const ManaCost& cost_in, bool for_creature, 
 {
     LineRepayChain ch;
     std::uint64_t digest_now = 0;
-    ch.rec[0] = LineRepayFind(state, nullptr, 0, &digest_now);
+    ch.rec[0] = LineRepayFind(state, nullptr, 0, &digest_now, g_line_repay_held_host);
     if (ch.rec[0] == nullptr) { return false; }
     g_lr_try.fetch_add(1, std::memory_order_relaxed);
     const int a = state.active_player_index;
@@ -8688,7 +8694,15 @@ bool LineRepayTry(GameState& state, const ManaCost& cost_in, bool for_creature, 
     SnapPayFields(state.battlefield, ch.now_bf);
     ch.life_now = state.players[a].life;
     ch.energy_now = state.players[a].energy_counters;
-    auto try_now = [&](GameState& b) { return TapForCostSharedDiag(b, cost_in, for_creature, nullptr, honor_legacy_cco); };
+    auto try_now = [&](GameState& b)
+    {
+        if (g_line_repay_held_host > 0)
+        {
+            for (Permanent& p : b.battlefield)
+            { if (p.card.m_number == g_line_repay_held_host) { p.tapped = true; break; } }
+        }
+        return TapForCostSharedDiag(b, cost_in, for_creature, nullptr, honor_legacy_cco);
+    };
     // Depth 1, then depth 2: each deeper attempt only after the shallower one found nothing. `undone` is the board
     // chain[0] found; the record of the payment before it must match that board (found here, before the search, so
     // the memo key holds the whole chain: nothing is recorded while a re-pay runs, so the depth-2 attempt would
@@ -8755,6 +8769,17 @@ bool LineRepayTry(GameState& state, const ManaCost& cost_in, bool for_creature, 
         bool made = true;
         for (int k = 0; k < depth; ++k) { LineRepayUndo(state, *ch.rec[k]); }
         for (int k = depth - 1; k >= 0 && made; --k) { made = LineRepayRemakeAt(state, ch, k, pk[static_cast<std::size_t>(k)]); }
+        if (made && g_line_repay_held_host > 0)
+        {
+            for (Permanent& p : state.battlefield)
+            {
+                if (p.card.m_number != g_line_repay_held_host) { continue; }
+                if (g_line_repay_held_host_tapped_out != nullptr)
+                { *g_line_repay_held_host_tapped_out = p.tapped; }
+                p.tapped = true; // the current Aura's own payment still cannot use its host
+                break;
+            }
+        }
         if (!made) { undo.Restore(state, available); }
         return made;
     };
@@ -8976,8 +9001,11 @@ void LineRepayClearPerGame()
 // board the line really stands on: the host untapped in both. Only the record this very payment pushed (exactly one
 // push since `mark`) is touched, and only when nothing else moved since (its digest still reads the held board).
 std::uint64_t LineRepayMark() { return t_lr_pushes; }
-void LineRepayHostUntap(GameState& s, std::uint64_t mark, int host_number)
+void LineRepayHostUntap(GameState& s, std::uint64_t mark, int host_number, bool tapped_by_repay)
 {
+    // A re-made EARLIER payment may legitimately have tapped this land. The Aura's temporary hold
+    // then ends, but that real tap remains; the current payment's record already describes it.
+    if (tapped_by_repay) { return; }
     std::size_t hi = s.battlefield.size();
     for (std::size_t i = 0; i < s.battlefield.size(); ++i)
     {
@@ -9071,6 +9099,8 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
                 // The trial on the scratch board paid it; the real board did not: keep the game as it was.
                 g_lr_fail.fetch_add(1, std::memory_order_relaxed);
                 undo.Restore(state, available);
+                if (g_line_repay_held_host_tapped_out != nullptr)
+                { *g_line_repay_held_host_tapped_out = false; }
             }
         }
     }

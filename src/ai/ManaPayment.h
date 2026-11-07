@@ -883,7 +883,24 @@ private:
 // payment pushed onto the board the line really stands on (host untapped), so the next payment of the line can find
 // and re-make it. A bare untap left the record on the held board, which no later board matches (ManaPayment.cpp).
 std::uint64_t LineRepayMark();
-void LineRepayHostUntap(GameState& s, std::uint64_t mark, int host_number);
+void LineRepayHostUntap(GameState& s, std::uint64_t mark, int host_number, bool tapped_by_repay = false);
+// While a land Aura's host is temporarily tapped for its own payment, a previous payment's
+// released-board digest must still be findable. Earlier payments can use the host, but the Aura's
+// own failing payment cannot. If an earlier re-payment taps it, release preserves that real tap.
+extern thread_local int g_line_repay_held_host;
+extern thread_local bool* g_line_repay_held_host_tapped_out;
+struct LineRepayHeldHostScope
+{
+    int prev;
+    bool* prev_out;
+    explicit LineRepayHeldHostScope(int host, bool* tapped_out)
+        : prev(g_line_repay_held_host), prev_out(g_line_repay_held_host_tapped_out)
+    { if (host > 0) { g_line_repay_held_host = host; g_line_repay_held_host_tapped_out = tapped_out; } }
+    ~LineRepayHeldHostScope()
+    { g_line_repay_held_host = prev; g_line_repay_held_host_tapped_out = prev_out; }
+    LineRepayHeldHostScope(const LineRepayHeldHostScope&) = delete;
+    LineRepayHeldHostScope& operator=(const LineRepayHeldHostScope&) = delete;
+};
 
 // THE SCARCE HOLD OUTRANKS A LAND AURA'S HOST HOLD (MTG_SCARCE_COLOR_MASK). Both per-cast host holds (the rollout's
 // apply_one and AIEngine's cast) mark the Aura's host tapped for a first payment and release it only if that payment
