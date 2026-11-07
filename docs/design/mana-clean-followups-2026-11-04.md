@@ -101,6 +101,15 @@ plan and execute it based on cards in hand allocating mana as necessary and the 
 The clairvoyant idea of what to hold up is something we could add a heuristic for, but should try not to touch
 otherwise if possible."*
 
+2026-11-07 progress: branch `wip/mc-dragons` now has the Aura-host fix committed as WIP
+`25d75bf49`. Full units passed 2,437/2,437, and three of four old EDF slower replays now match
+the off arm's win turn and digest at d8/b0; the fourth is unchanged from prepatch. A fresh pooled
+5,000 EDF + 1,500 EDF2HG A/B is still finishing its final CPU-heavy Standard game. At 4,800
+Standard pairs the net win-turn delta is zero (5 faster, 6 slower); 2HG has 1 faster, 1 slower,
+net zero. Unlimited-depth slower replays and prepatch controls are also running. Keep those jobs
+alive; decide adoption after their final results. `docs/design/handoff-dragons-mana.md` on the WIP
+branch has paths, traces, and current findings.
+
 How this applies:
 - The redo stays the non-clairvoyant kind (re-pay only against cards known at that payment), per the 11-03 ruling.
 - Its purpose is that principle: a plan made from the cards in hand must be payable by the search exactly as a player
