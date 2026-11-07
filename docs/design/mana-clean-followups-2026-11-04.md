@@ -25,6 +25,16 @@ board's {C} demands need it -- Displacer's {2}{C}, the {C} wincons) {C} source/u
 only beyond that stock. Root-cause the two scenarios first; held-out A/B (EDF std + 2HG). Note fix/c-wild already
 exempts EDF from "floating {C} pays generic first" (`deck_spends_c_pip`).
 
+2026-11-07 experiment on `wip/edf-c-conserve-1107` (`baf98b2da`, NOT adopted): split source ranks
+so autonomous tap-ahead harvest keeps its current order while actual payment conserves {C} sources.
+Both old T4 scenarios (`edf_blink_loop_cashes_deckout`, `edf_depleter_drain`) and all 2,633 units
+passed. Paired A/B (2,000 standard, 600 two-headed) changed 98 play digests but no win turns in
+either direction. Smoke then found `edf_smoke_d0_s1001` gi961 T4->T5: the same visible T4 casts,
+but the new main-2 loop no longer draws 21 cards and kills; with the flag off it recovers T4.
+Restricting the autonomous rule to printed {C}-only sources still reproduces the loss. No measured
+upside justifies accepting that regression. Next attempt must trace the loop's exact payment path
+and hold only the {C} supply it can safely spare; do not repeat a blanket source-rank demotion.
+
 ## 3. Pirates: Malcolm and an Aether Vial'd Corsair Captain
 USER: *"This is one of those cases where we could apply a 'if cost requires' rule if needed. The default order is the
 ideal, though. That said, if the Captain is dropped off Aether Vial it no longer matters with respect to Malcolm's
