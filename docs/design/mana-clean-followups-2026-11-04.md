@@ -89,6 +89,16 @@ doing cases that have potential to fix the colours, not those that require more 
   (recorded / tried / amount_short / joint_short / fired, and pass-2 probes) plus probe-vs-unit cost on EDF, Dragons,
   Angels (300 games each, seeds 88100000+, `build/scratch/mcdragons/lrprice/`, queued behind the pass driver), then
   set the price to the measured ratio and look for what still reaches the priced passes without re-making anything.
+- MEASURED 2026-11-07: the 900-game batch finished (`build/scratch/mcdragons/lrprice/run.{out,err}`). Funnel:
+  recorded 8,399,053; tried 2,894,233; amount-short 2,448,997; joint-short 112,301; fired 39,300. The priced
+  second pass made 4,144,780 probes in 16,358 ms, or 3.95 us/probe. The batch spent 374,268 ms on 5,260,630
+  ordinary units, or 71.15 us/unit. That sample prices one unit at about 18 probes, rather than the current four.
+  Same-seed 4-vs-18 A/B (`wins4/`, `wins18/`) changed no win turns among 900 games. Dragons and Angels were
+  byte-identical; four EDF games (36, 218, 227, 286) changed play digest but kept their win turns. The branch
+  default is now 18; the temporary runtime selector remains for A/B. On a held-out 1,500 EDF games (seed
+  88200000), 18 changed 15 decision digests: three T1 faster, one T1 slower, 11 same-turn, for a net two turns
+  faster. The slower gi711 is a budget anomaly: at b20, price 4 wins T6 and price 18 wins T7; at b80 and b320,
+  both win T7 with the same digest. The 2,437-case unit suite passes on the branch build.
 
 ## 8. USER rulings 2026-11-06 on Q23 / Q25 / Q29 (open-questions file, 2026-11-04)
 - **Q23 Dragonstorm {B} hold before Apex: NOT adopted as built; root-cause gi37 (2HG, seed 1920001+37).** The hold
@@ -100,6 +110,12 @@ doing cases that have potential to fix the colours, not those that require more 
   the clairvoyance is working if that is the case just to be certain our decision is correct."* So before accepting,
   replay g662 base vs new (play settings, then `MTG_NC_SEARCH=1`) with game logs, and show where the base's T4 win
   depends on the draw order. Branch `wip/mc-mirrorwing` (fa7990254, 3d9a6d692, f6572c7a7).
+  REPLAYED 2026-11-07 (`build/scratch/queue1107/mw/traces/`): the base's ordinary-search T4 line casts Ancestral
+  Anger, draws Oracle's Restoration, then casts that newly drawn card to draw Elvish Mystic and Frontline Heroism;
+  it casts Frontline Heroism plus Gold Rush for the T4 kill. The new arm sequences its early lands/Hierarch differently,
+  gets the same Restoration draw on T4, and kills T5. With `MTG_NC_SEARCH=1` both arms choose the same line and win
+  T6 (same play digest `4b2558f70c91284e`). Thus the ordinary-search T4 advantage depends on its knowledge of
+  post-draw cards; the non-clairvoyant result gives no evidence that the base payment order is stronger.
 - **Q25b H1/H2 hedges: build both.** USER: *"Those would be fine and I that should be the order anyway, particularly on
   Mirrorwing."* H1: on an attack turn with a copy creature out or in the plan, pay cantrips from lands (even if mana
   floats) before tapping a creature that could attack. H2: while a draw is still to come in the line, a Treasure pays
@@ -150,6 +166,15 @@ Fix, in order (analyzer only, play untouched, so no NO-GREEDY or GT question):
    deck cannot pass clean on capped decisions. This is the measurement's own bound, inert below the cap.
 3. Re-run the deferred decks (eldrazidisplacerflicker, accomplishedalchemist, nivmizzetcombo, landfallelementals) and
    check the stall games finish.
+
+2026-11-07 queue result: the decision apply budget is in place, and all four deferred 5,000-game pass-1 runs finished
+with oracle-off play byte-identical. Reports are `logs/mana_clean/pass1-{eldrazidisplacerflicker-r5,accomplishedalchemist-r4,nivmizzetcombo-r4,landfallelementals-r4}/report.md`.
+Their issue counts are 688,211 / 411,496 / 376,668 / 292,714 respectively. The corresponding CAPPED-DECISION
+counts are 244,344 / 334,159 / 357,114 / 286,755, so these runs are partial censuses, not clean verdicts.
+The records landed in `test/mana_clean.json` at 6260a1dc6. A g61 `perf` sample
+(`build/scratch/queue1107/g61.perf.data`) still puts most time in plan enumeration, sim-key construction, and
+state/plan copying while an oracle apply re-derives breakpoint continuations. The exact per-Realize continuation
+memo in step 1 remains open.
 
 ## 10. USER ruling 2026-11-07: Hinata regression d5 s3003 gi27 on fix/c-wild
 *"For 2 I think it is fine to move on if we can show it is recoverable at any depth + budget."* Shown: the c-wild
