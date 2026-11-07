@@ -1,10 +1,12 @@
-# Regression ground truth -- commit 1ddf68267  date 2026-11-06
+# Regression ground truth -- commit ba449a646  date 2026-11-07
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-05): Full overnight rebaseline requested after Jumbo exhaustive keep adoption and current engine changes: 118 matching, 424 changed, 11 new Shadowborn rows. Searched games 3953 faster vs 1889 slower; Angels +0.0064t/6065 searched, Angels2HG +0.0150t/600, Bruna +0.0122t/2131 remain visible follow-ups. Jumbo full overnight rows already adopted and match.
 # accepted-with-regressions (smoke, 2026-11-06): Shadowborn main-1 rule + USER cast order + ritual-payoff prune DEFAULT ON (held-out ab7 -0.035 turns, -14..-20% units; d8 b0: every unrecovered game is the clairvoyant ripple-dig the USER ruled out). Also accepts 4 digest-only rows (edf_smoke_d0_s1001, edf_regression_d0_s2002, edf_regression_d5_s3003, bruna_regression_d5_s2002; averages unchanged): pre-existing origin drift, reproduced byte-identically by origin 36d3672bc's own binary
 # accepted-with-regressions (regression, 2026-11-06): Shadowborn main-1 rule + USER cast order + ritual-payoff prune DEFAULT ON (held-out ab7 -0.035 turns, -14..-20% units; d8 b0: every unrecovered game is the clairvoyant ripple-dig the USER ruled out). Also accepts 4 digest-only rows (edf_smoke_d0_s1001, edf_regression_d0_s2002, edf_regression_d5_s3003, bruna_regression_d5_s2002; averages unchanged): pre-existing origin drift, reproduced byte-identically by origin 36d3672bc's own binary
 # accepted-with-regressions (regression, 2026-11-06): gi32,gi54: fetch-timing shuffle changes next draw (both d3 and d5); gi121: mulligan bottom hand changed; gi147: fetch timing changes draw; all persist at 16x and searched net improves 20 games
 # accepted-with-regressions (regression, 2026-11-06): gi46: changed fetch line and T5 draw divergence; gi68: same-draw T1 pass from budget churn; both recover old T6 at 4x and 16x; net 2HG mean improves 4.9733 to 4.9600
+# accepted-with-regressions (smoke, 2026-11-07): c-wild mana correctness: physical colorless mana no longer pays colored pips; Hinata smoke gi59 and d0 gi46 lose an illegal old line; other changed searched lines keep their win turn; USER approved landing after recoverability evidence for gi27.
+# accepted-with-regressions (regression, 2026-11-07): c-wild mana correctness: old Hinata lines in gi54,66,51,68,82 paid colored pips with physical {C}; gi6,27,64,100 recover with more budget and gi27 matches old T8 at d5 b300. USER approved landing after recoverability evidence; changed Niv and EDF rows preserve or improve score.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -25,7 +27,7 @@ fungusv3_smoke_d0_s1001=5.2450/c1ddece5a55e2df4
 fungusv3_smoke_d3_s1001=4.4600/7c3b478beb7cebd5
 fungusv3_smoke_d5_s1001=4.5314/9439236508fb9c5b
 fungusv32hg_smoke_d5_s1001=4.8000/c82be545c530218b
-slivers_smoke_d0_s1001=4.6570/ad9079d2de30ab4f
+slivers_smoke_d0_s1001=4.6570/07af00f3511bedda
 slivers_smoke_d3_s1001=4.2000/569fe65e4173f3ba
 slivers_smoke_d5_s1001=4.2400/c07248c5534840b4
 burn_smoke_d0_s1001=4.4480/bcb8ebccd0c2af38
@@ -46,12 +48,12 @@ kithkin_smoke_d5_s1001=4.4923/cd3b05ba09385d0d
 antilife_smoke_d0_s1001=4.9000/607c0e5d81f6a61c
 antilife_smoke_d3_s1001=4.0533/27f0d4944fbefc06
 antilife_smoke_d5_s1001=4.2154/81494ae4657e7c1d
-hinata_smoke_d0_s1001=6.7830/780989093156f2ff
+hinata_smoke_d0_s1001=6.7840/83750f1f1c650711
 hinata_smoke_d3_s1001=6.0000/b65957bf1bcf627b
-hinata_smoke_d5_s1001=5.7200/7bc7abd2624edf82
+hinata_smoke_d5_s1001=5.7300/7ba11a50359a5437
 cyclone_smoke_d0_s1001=8.3610/801db26870908ec5
 cyclone_smoke_d3_s1001=4.9400/f6bc7069a092a949
-cyclone_smoke_d5_s1001=4.7400/3d63886aa9c3f850
+cyclone_smoke_d5_s1001=4.7400/f1a120c2724fcb5b
 cyclone2hg_smoke_d3_s1001=5.0000/af9bdd10df486e96
 shadowborn_smoke_d0_s1001=7.7820/7730f80b348be6d8
 shadowborn_smoke_d3_s1001=5.1000/c9ac5c768a2dbe7a
@@ -101,11 +103,11 @@ lhc_smoke_d3_s1001=4.6200/29747fc604328541
 lhc_smoke_d5_s1001=4.6400/6129ae996f1d300b
 melira_smoke_d0_s1001=6.2590/3a950b0e6551c1b5
 melira_smoke_d3_s1001=4.7600/e64e5158c278149d
-melira_smoke_d5_s1001=4.6200/5c28fae50a4e697d
+melira_smoke_d5_s1001=4.6200/598aaac5d0217c18
 angels_smoke_d0_s1001=5.2600/7b9b092ba94cc19d
 angels_smoke_d3_s1001=4.5333/d2f8e60259be3e61
 angels_smoke_d5_s1001=4.6154/db3aaecbcbf4a950
-hinata2hg_smoke_d5_s1001=5.8000/f15b7a78af009ccb
+hinata2hg_smoke_d5_s1001=5.8000/fd8e4bbeb0691f8f
 antilife2hg_smoke_d5_s1001=3.9500/cca6a4dbd63380de
 minotaur2hg_smoke_d5_s1001=5.3300/e4cd44da8730235a
 goblins2hg_smoke_d5_s1001=4.0133/fd3920316f6be542
@@ -156,10 +158,10 @@ bruna2hg_smoke_d5_s1001=5.2800/67815150ef1aa4f3
 bruna_smoke_d0_s1001=5.9380/2a15903b6921345a
 bruna_smoke_d3_s1001=4.7200/85d856117563930f
 bruna_smoke_d5_s1001=4.7067/3690ecb08804ac0f
-edf2hg_smoke_d5_s1001=3.9600/1fe51d246fc62a23
-edf_smoke_d0_s1001=5.3040/f1a2647d180d3d77
-edf_smoke_d3_s1001=4.0000/97b239e36a080abc
-edf_smoke_d5_s1001=4.1100/de932d8cc8b91920
+edf2hg_smoke_d5_s1001=3.9600/2c55524724e494f7
+edf_smoke_d0_s1001=5.3030/40c175a1e92e0002
+edf_smoke_d3_s1001=4.0000/e8da459a417633e4
+edf_smoke_d5_s1001=4.1100/42cf4f22466101f8
 snow_smoke_d0_s1001=6.1300/b7b2200cd612c515
 snow_smoke_d3_s1001=5.7600/f36d4ce93c929921
 snow_smoke_d5_s1001=5.7440/fceb7ba27dfe318d
@@ -171,9 +173,9 @@ galadriel_smoke_d3_s1001=4.8200/27c8079c8746ce2a
 galadriel_smoke_d5_s1001=5.0343/de12b4178a6498b1
 galadriel2hg_smoke_d5_s1001=4.8933/c5dceba1c36445b0
 niv_smoke_d0_s1001=6.0810/302490098358f61f
-niv_smoke_d3_s1001=4.5200/2cb2eb351553e706
-niv_smoke_d5_s1001=4.6400/8064de6028070146
-niv2hg_smoke_d5_s1001=4.4800/b272bd2b6a4fea6c
+niv_smoke_d3_s1001=4.4800/f11ca6e94cd5728a
+niv_smoke_d5_s1001=4.6400/a6c3310342cad409
+niv2hg_smoke_d5_s1001=4.4800/85fc752eebb5e430
 colossus_smoke_d0_s1001=4.3580/f1a3ce0a59cfc500
 colossus_smoke_d3_s1001=3.2800/5928c76b96dbd120
 colossus_smoke_d5_s1001=3.2571/229f44d762f6d520
@@ -278,7 +280,7 @@ fungusv3_regression_d0_s2002=5.3110/6788118c549f68e7
 fungusv3_regression_d3_s2002=4.5333/3ff31eef51ace5a4
 fungusv3_regression_d5_s2002=4.5480/71ed8eaadd574efd
 fungusv3_regression_d5_s3003=4.5560/c1744ff5c57db690
-slivers_regression_d0_s2002=4.6900/b76f1b7876eb65f3
+slivers_regression_d0_s2002=4.6880/685b4def6233a86c
 slivers_regression_d3_s2002=4.2160/dac64041ea2f0cd7
 slivers_regression_d5_s2002=4.2138/23458244f94e1dc1
 slivers_regression_d5_s3003=4.2277/483e18d20825df7a
@@ -306,10 +308,10 @@ antilife_regression_d0_s2002=5.0120/5be41ad99b2c4002
 antilife_regression_d3_s2002=4.2200/27787b129bc8fb5e
 antilife_regression_d5_s2002=4.2580/23091191dc34ebc6
 antilife_regression_d5_s3003=4.1960/1ea4f851ecbe3cf0
-hinata_regression_d0_s2002=6.8470/8773fd2849120167
-hinata_regression_d3_s2002=5.6933/dcd9057de29ae636
-hinata_regression_d5_s2002=5.5667/7ef5353f84700e7b
-hinata_regression_d5_s3003=5.6267/28cc9af17a725e22
+hinata_regression_d0_s2002=6.8480/d6c43486796d220d
+hinata_regression_d3_s2002=5.6933/8e26c71f73b14642
+hinata_regression_d5_s2002=5.5800/a74f6f3a2af8185b
+hinata_regression_d5_s3003=5.6667/eeb8c5755de41358
 cyclone_regression_d0_s2002=8.3410/ff285c765cd3e471
 cyclone_regression_d3_s2002=4.8533/f22dcd37081f4918
 cyclone_regression_d3_s3003=4.9333/437a6de4a37c0d52
@@ -384,7 +386,7 @@ angels_regression_d0_s2002=5.2530/c75747feb668552f
 angels_regression_d3_s2002=4.6600/fbeb83c79a683f84
 angels_regression_d5_s2002=4.6040/22c5f344d4cc2621
 angels_regression_d5_s3003=4.6200/634ec04e8b45e88c
-hinata2hg_regression_d5_s2002=5.5333/a6a09f666cf26fcf
+hinata2hg_regression_d5_s2002=5.5467/a4ecaa0e6dd2a7b5
 antilife2hg_regression_d5_s2002=4.2667/1ada4027d7d4be75
 minotaur2hg_regression_d5_s2002=5.3733/adb92c8ebcfdf734
 goblins2hg_regression_d5_s2002=4.0267/7dc943690102b7e8
@@ -423,7 +425,7 @@ bruna_regression_d0_s2002=5.8900/a62272d0283ee665
 bruna_regression_d3_s2002=4.7400/7541f6db13751006
 bruna_regression_d5_s2002=4.8600/6445e609aad25c70
 bruna_regression_d5_s3003=4.7000/2308913291316525
-edf_regression_d0_s2002=5.3210/26c3e8ebc2836ba0
+edf_regression_d0_s2002=5.3210/110612a1985c55c9
 edf_regression_d3_s2002=3.9200/9714f65d77852488
 edf_regression_d5_s2002=4.0533/f05160882f89c629
 edf_regression_d5_s3003=4.1200/9462293c0c57d08a
@@ -440,11 +442,11 @@ galadriel_regression_d3_s2002=4.6600/a5a93fee0901ef15
 galadriel_regression_d5_s2002=4.8650/92994d5299b8490e
 galadriel_regression_d5_s3003=4.9600/34de41de690c60d6
 galadriel2hg_regression_d5_s2002=4.8133/d5c14dd1b4a66662
-niv_regression_d0_s2002=6.0520/c90cea07b6765438
+niv_regression_d0_s2002=6.0500/c48d234830aa812b
 niv_regression_d3_s2002=4.4400/074b661d960781b3
-niv_regression_d5_s2002=4.5067/760b2a4f0402f026
-niv_regression_d5_s3003=4.5067/038236fe1bf2e781
-niv2hg_regression_d5_s2002=4.4800/9863508d36400eb4
+niv_regression_d5_s2002=4.5067/44e9e030a83a15ca
+niv_regression_d5_s3003=4.5067/b388a26b5c91178b
+niv2hg_regression_d5_s2002=4.4800/1db351728a105485
 colossus_regression_d0_s2002=4.4220/ae6fe0b99f69692d
 colossus_regression_d3_s2002=3.4800/256c45f4dbd5f29b
 colossus_regression_d5_s2002=3.4350/8051c222be08e92d
