@@ -7,6 +7,11 @@ the USER's words verbatim. Delete an entry when its work lands (or move it to th
 USER: *"Sure, we can give it a shot."* An engine-wide memo of the sequential-payability verdict; 67% of the checks
 repeat an earlier "no". Must be an exact memo (same key = same answer); measure units/instructions.
 
+Resolved by `MTG_PAY_PROBE_CANON` (default on): `SubsetPayableSequential` now caches the exact rank-ordered,
+copy-equivalent cast sequence inside the enumerator's payment-memo scope. The existing
+`MTG_PAY_PROBE_MEMO_VERIFY` reruns hits to detect mismatches. Landed before this queue was written
+(`3639b9bc3`, 2026-11-03); no second memo is needed.
+
 ## 2. EldraziDisplacerFlicker: conserve colourless in autonomous play
 USER: *"Yes, EDF needs to be careful about colourless and should not generically do this for sure. I suppose it could
 turn it on when there is nothing that needs it, but it might be easier to just keep it off. That isn't to say that we
@@ -120,6 +125,15 @@ doing cases that have potential to fix the colours, not those that require more 
   Mirrorwing."* H1: on an attack turn with a copy creature out or in the plan, pay cantrips from lands (even if mana
   floats) before tapping a creature that could attack. H2: while a draw is still to come in the line, a Treasure pays
   only pips no untapped land can. Payer-order changes: held-out A/B on the decks that move.
+  CHECKED 2026-11-07: the 19 original oracle seeds were replayed on current main; none still show a cantrip tapping
+  an attacker while a copy creature is live or in that turn's plan. A direct payer prototype added H1/H2 ordering.
+  Its first H2 rank put Treasure *after creatures*, violating the intended land-then-Treasure order: on a 4,800-game
+  heldout Mirrorwing block it went 10 faster / 25 slower, net +15 turns, and 2HG smoke gi8 went T4->T5 at both
+  shipped and unlimited depth. Correcting the rank to land, Treasure, creature restored gi8 exactly; the corrected
+  build was byte-identical to main on 6,000 heldout Mirrorwing games (1,200 + 4,800) and passed 179/179 smoke jobs.
+  The current Mirrorwing lands already rank before Treasure (26), and Treasure before mana creatures (64+); the
+  corrected prototype has no live Mirrorwing decision to improve. It was not adopted. Reopen only with a current
+  payment trace that violates H1/H2; the historical oracle trace no longer supplies one.
 - **Q29 known cards across reshuffles.** USER: *"I don't know how the training labels work entirely, but that makes
   some sense. We should also fix the non-clairvoyant search if it doesn't handle this."* So: port `ShuffleUnseen`
   (cc3b47aea, `wip/niv-nc-known-top`) onto main's `m_known_top`; make the non-clairvoyant search (`BlindUnknownOrder`
