@@ -10825,11 +10825,13 @@ static const CardDefinition* KickedFaceOr(const CardDefinition* d, bool kicked)
 // The walk over ONE fixed cast order -- SubsetPayableSequential's body, lifted out so a caller that
 // already holds the order (the EDF provider's ArrangeCastOrder range projection, via
 // TurnSolver::OrderPaysSequentially) prices it with exactly this walk. No sort, no arrangement, no
-// retry: `ord` is walked as given. `sel` is the subset (its Vial puts lay their Treasure down first),
+// retry: `ord` is walked as given. `sel` is the subset; the rescue walk grants its Vial Treasures
+// up front, while OrderPaysSequentially uses vial_in_order to grant each at its actual position.
 // `seq_rv_charged` the casts SameSubsetRevealSurcharge debited.
 static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>& cands,
                               const std::vector<int>& sel, const std::vector<int>& ord,
-                              const std::vector<int>& seq_rv_charged, int* fail_at = nullptr)
+                              const std::vector<int>& seq_rv_charged, int* fail_at = nullptr,
+                              bool vial_in_order = false)
 {
     if (fail_at != nullptr) { *fail_at = -1; }
     int walk_pos = -1;   // index into `ord` of the cast being paid (reported through fail_at)
@@ -10862,6 +10864,7 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
     // A Vial-PUT ETB Treasure maker (MTG_ETB_TREASURE_SPEND): its exempt Treasure is on the board for
     // the whole walk, as the payable order hoists the put ahead of the casts it funds (rescue-only
     // walk; IsEtbTreasureMakerCast covers puts).
+    if (!vial_in_order)
     {
         for (int j : sel)
         {
@@ -10872,8 +10875,21 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
                                  /*fresh_hold_exempt=*/true);
         }
     }
+    std::size_t vial_pos = 0;
     for (int j : ord)
     {
+        if (vial_in_order)
+        {
+            while (vial_pos < sel.size() && sel[vial_pos] != j)
+            {
+                const Action& va = cands[sel[vial_pos++]];
+                if (va.kind == Action::Kind::ActivateVial && va.rock_mana.Total() > 0
+                    && va.def != nullptr && va.def->params.etb_creates_treasures > 0)
+                { CreateTreasureTokens(cp, cp.active_player_index, va.def->params.etb_creates_treasures,
+                                       /*fresh_hold_exempt=*/true); }
+            }
+            if (vial_pos < sel.size()) { ++vial_pos; }
+        }
         ++walk_pos;
         const Action& a   = cands[j];
         // KICKER: price the "(Kicked)" face when this action paid the kicker, BEFORE EffectiveCost,
@@ -11481,7 +11497,8 @@ static bool OrderPaysSequentiallyImpl(const GameState& state, const std::vector<
     std::vector<int> charged;
     SameSubsetRevealSurcharge(state, *use, order, &charged);
     int walk_fail = -1;
-    const bool ok = SeqWalkFixedOrder(state, *use, order, ord, charged, &walk_fail);
+    const bool ok = SeqWalkFixedOrder(state, *use, order, ord, charged, &walk_fail,
+                                       /*vial_in_order=*/true);
     // The prefix rule's exclusions (see OrderPaysSequentially): `ord` == `order` exactly when no Vial put
     // or free attach was skipped, so a walk index is then an `order` position.
     if (!ok && walk_fail >= 0 && charged.empty() && ord.size() == order.size()) { *fail_pos = walk_fail; }

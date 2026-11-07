@@ -32,6 +32,17 @@ order."* Seeds 30017240 / 30024789 T4: plan {Malcolm, Vial puts Corsair Captain}
 (the Captain's ETB Treasure). The cast order (Malcolm 2nd, Captain 3rd) should not bind a Vial PUT (not a cast); the
 put may go first. Only if that is not enough, an "if the cost requires" exception. Default order otherwise unchanged.
 
+2026-11-07 candidate: `ApplyPayableCastOrder` now checks this Vial Treasure case with the exact sequential
+payment walk. That walk creates the Captain's Treasure at the Vial put's actual position. The old aggregate
+pool treated Blackcleave Cliffs as if it could supply Malcolm's blue pip before the put. Both reported oracle
+seeds now avoid `APPLY-DROP-ORDER`; a unit test also keeps Malcolm first when an Island already pays the pip.
+Held-out Pirates A/B (2,400 standard and 600 two-headed games) found 0 standard win-turn changes and 1
+two-headed faster win, with no slower games. Smoke changed only Pirates depth zero (one faster game, four
+same-score play changes); regression changed only five same-score Pirates depth-zero plays. Searched-depth
+cases were unchanged in both tiers. Strict reference replay passed: 777 references, zero play drift,
+board divergence, or enumeration gaps; both suboptimal references remain beaten. Adopted with the
+smoke and regression ground truth updated; overnight ground truth awaits the next pooled run.
+
 ## 4. Deck-derived default colour to keep up (instead of a searched pre-draw payment option)
 USER, rejecting a searched "how to pay before a draw" option: *"No, we shouldn't do that. If anything this is a case for
 deck heuristics or perhaps some kind of analysis of the deck itself. That could be a good default way to handle this.

@@ -1,12 +1,8 @@
-# Regression ground truth -- commit a0b1ecfa9  date 2026-11-07
+# Regression ground truth -- commit 19a309c7d  date 2026-11-07
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
-# accepted-with-regressions (smoke, 2026-11-06): Shadowborn main-1 rule + USER cast order + ritual-payoff prune DEFAULT ON (held-out ab7 -0.035 turns, -14..-20% units; d8 b0: every unrecovered game is the clairvoyant ripple-dig the USER ruled out). Also accepts 4 digest-only rows (edf_smoke_d0_s1001, edf_regression_d0_s2002, edf_regression_d5_s3003, bruna_regression_d5_s2002; averages unchanged): pre-existing origin drift, reproduced byte-identically by origin 36d3672bc's own binary
-# accepted-with-regressions (regression, 2026-11-06): Shadowborn main-1 rule + USER cast order + ritual-payoff prune DEFAULT ON (held-out ab7 -0.035 turns, -14..-20% units; d8 b0: every unrecovered game is the clairvoyant ripple-dig the USER ruled out). Also accepts 4 digest-only rows (edf_smoke_d0_s1001, edf_regression_d0_s2002, edf_regression_d5_s3003, bruna_regression_d5_s2002; averages unchanged): pre-existing origin drift, reproduced byte-identically by origin 36d3672bc's own binary
-# accepted-with-regressions (regression, 2026-11-06): gi32,gi54: fetch-timing shuffle changes next draw (both d3 and d5); gi121: mulligan bottom hand changed; gi147: fetch timing changes draw; all persist at 16x and searched net improves 20 games
-# accepted-with-regressions (regression, 2026-11-06): gi46: changed fetch line and T5 draw divergence; gi68: same-draw T1 pass from budget churn; both recover old T6 at 4x and 16x; net 2HG mean improves 4.9733 to 4.9600
-# accepted-with-regressions (smoke, 2026-11-07): c-wild mana correctness: physical colorless mana no longer pays colored pips; Hinata smoke gi59 and d0 gi46 lose an illegal old line; other changed searched lines keep their win turn; USER approved landing after recoverability evidence for gi27.
-# accepted-with-regressions (regression, 2026-11-07): c-wild mana correctness: old Hinata lines in gi54,66,51,68,82 paid colored pips with physical {C}; gi6,27,64,100 recover with more budget and gi27 matches old T8 at d5 b300. USER approved landing after recoverability evidence; changed Niv and EDF rows preserve or improve score.
 # accepted-with-regressions (overnight, 2026-11-07): Periodic baseline after adopted Cyclone, Kithkin, Shadowborn and Jumbo artifacts plus c-wild mana legality: 94/578 cells moved; searched 2375 faster versus 1189 slower; Cyclone -491t, Kithkin -882t, Shadowborn -72t, Jumbo -11t. Hinata +24t/1831 searched and Niv +3t/2225 reflect the colorless-mana legality correction reviewed in shorter tiers; EDF d0 +4t/8000. Prior Angels +0.0064t/6065 searched, Angels2HG +0.0150t/600, and Bruna +0.0122t/2131 remain follow-ups. Per-game outcome audit completed; old trace snapshot was stale and could not parse Madness, so its trace explanations were unavailable.
+# accepted-with-regressions (smoke, 2026-11-07): Shadowborn main-1 rule + USER cast order + ritual-payoff prune DEFAULT ON (held-out ab7 -0.035 turns, -14..-20% units; d8 b0: every unrecovered game is the clairvoyant ripple-dig the USER ruled out). Also accepts 4 digest-only rows (edf_smoke_d0_s1001, edf_regression_d0_s2002, edf_regression_d5_s3003, bruna_regression_d5_s2002; averages unchanged): pre-existing origin drift, reproduced byte-identically by origin 36d3672bc's own binary | c-wild mana correctness: physical colorless mana no longer pays colored pips; Hinata smoke gi59 and d0 gi46 lose an illegal old line; other changed searched lines keep their win turn; USER approved landing after recoverability evidence for gi27. | Pirates Q3 Vial Treasure payment ordering: smoke d0 improves one game and has four same-score play changes; regression d0 has five same-score play changes; no searched-depth changes; 777 strict references pass.
+# accepted-with-regressions (regression, 2026-11-07): Shadowborn main-1 rule + USER cast order + ritual-payoff prune DEFAULT ON (held-out ab7 -0.035 turns, -14..-20% units; d8 b0: every unrecovered game is the clairvoyant ripple-dig the USER ruled out). Also accepts 4 digest-only rows (edf_smoke_d0_s1001, edf_regression_d0_s2002, edf_regression_d5_s3003, bruna_regression_d5_s2002; averages unchanged): pre-existing origin drift, reproduced byte-identically by origin 36d3672bc's own binary | gi32,gi54: fetch-timing shuffle changes next draw (both d3 and d5); gi121: mulligan bottom hand changed; gi147: fetch timing changes draw; all persist at 16x and searched net improves 20 games | gi46: changed fetch line and T5 draw divergence; gi68: same-draw T1 pass from budget churn; both recover old T6 at 4x and 16x; net 2HG mean improves 4.9733 to 4.9600 | c-wild mana correctness: old Hinata lines in gi54,66,51,68,82 paid colored pips with physical {C}; gi6,27,64,100 recover with more budget and gi27 matches old T8 at d5 b300. USER approved landing after recoverability evidence; changed Niv and EDF rows preserve or improve score. | Pirates Q3 Vial Treasure payment ordering: smoke d0 improves one game and has four same-score play changes; regression d0 has five same-score play changes; no searched-depth changes; 777 strict references pass.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -141,7 +137,7 @@ fluctuator_smoke_d5_s1001=3.5314/1719605529d48639
 giants_smoke_d0_s1001=6.0330/ac033f026198e3c8
 giants_smoke_d3_s1001=5.9000/36e129d00a2a3b84
 giants_smoke_d5_s1001=5.7600/040251ed81f25b1b
-pirates_smoke_d0_s1001=4.7320/b65be8e3dc55b85b
+pirates_smoke_d0_s1001=4.7310/49587004560c9fef
 pirates_smoke_d3_s1001=4.3200/9f34e8d62b2d4abe
 pirates_smoke_d5_s1001=4.3543/c5c0725c5fdedcfe
 selesnyav2_smoke_d0_s1001=5.0810/4a744ed63d2156c5
@@ -404,7 +400,7 @@ giants_regression_d0_s2002=5.9740/2f68d8c66225e84e
 giants_regression_d3_s2002=5.5600/a84b860838ab21ec
 giants_regression_d5_s2002=5.5900/87793dd2c8245967
 giants_regression_d5_s3003=5.5200/4b0f70f98d9486bd
-pirates_regression_d0_s2002=4.7350/d5ad1e50807a61d4
+pirates_regression_d0_s2002=4.7350/c1789b700fdfe0a9
 pirates_regression_d3_s2002=4.4000/fc603d10004511e4
 pirates_regression_d5_s2002=4.3350/24e3e10611067e36
 pirates_regression_d5_s3003=4.4000/f0870b1ef4bdcf11

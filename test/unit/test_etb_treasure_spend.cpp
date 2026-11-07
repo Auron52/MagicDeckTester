@@ -244,6 +244,44 @@ TEST_CASE("ETB Treasure spend: {Corsair Captain, 1-drop} on exactly three lands 
     CHECK(after.players[0].hand.empty());
 }
 
+TEST_CASE("Vial Corsair funds Malcolm only when the put comes first")
+{
+    EtbSpendArm on(true);
+    GameState s = BaseState();
+    PutEts(s, "Mountain", 40, false);
+    PutEts(s, "Blackcleave Cliffs", 9, false);
+    PutEts(s, "Aether Vial", 7, false);
+    s.battlefield.back().charge_counters = 3;
+    s.players[0].hand.push_back(HandEts("Malcolm, the Eyes", 33));
+    s.players[0].hand.push_back(HandEts("Corsair Captain", 11));
+
+    Action malcolm;
+    malcolm.kind = Action::Kind::CastFromHand;
+    malcolm.card_name = "Malcolm, the Eyes";
+    malcolm.def = &DefEts("Malcolm, the Eyes");
+    malcolm.cost = malcolm.def->card.m_mana_cost;
+    Action put;
+    put.kind = Action::Kind::ActivateVial;
+    put.card_name = "Corsair Captain";
+    put.def = &DefEts("Corsair Captain");
+    put.rock_mana.wild = 1;
+    std::vector<Action> acts{malcolm, put};
+
+    CHECK_FALSE(TurnSolver::OrderPaysSequentially(s, acts, {0, 1}));
+    CHECK(TurnSolver::OrderPaysSequentially(s, acts, {1, 0}));
+    std::vector<int> order{0, 1};
+    ApplyPayableCastOrder(s, acts, order);
+    CHECK(order == std::vector<int>{1, 0});
+
+    // With a real blue source the reviewed Malcolm-first order already pays.
+    GameState easy = s;
+    easy.battlefield[1].card = DefEts("Island").card;
+    easy.battlefield[1].card.m_number = 9;
+    order = {0, 1};
+    ApplyPayableCastOrder(easy, acts, order);
+    CHECK(order == std::vector<int>{0, 1});
+}
+
 TEST_CASE("ETB Treasure spend OFF: the three-land {Corsair Captain, 1-drop} line is not offered")
 {
     EtbSpendArm off(false);

@@ -5686,8 +5686,34 @@ static bool PayableCastOrderCoreImpl(const GameState& state, const std::vector<A
         if (extra_wild > 0) { la_pool0.wild += extra_wild; }
     }
     const PoLandAuraHold* la_p = (la_host != nullptr && !exact) ? &la : nullptr;
+    bool vial_treasure_maker = false;
+    if (extra_wild == 0 && la_host == nullptr && !widen_only
+        && (hand_exits == nullptr || hand_exits->empty()))
+    {
+        for (int i : order)
+        {
+            vial_treasure_maker |= acts[i].kind == Action::Kind::ActivateVial
+                                && IsEtbTreasureMakerCast(acts[i]);
+        }
+    }
+    static thread_local bool in_vial_order_walk = false;
     auto pays = [&](const std::vector<int>& ord) -> bool
     {
+        // A Vial put can mint the only colour a preceding cast needs. The aggregate pool
+        // treats a dual land as wildcard mana and can falsely call that cast payable.
+        // Walk real payments with the Vial Treasure entering at its actual order slot.
+        // SameSubsetRevealSurcharge calls this decider to price the reveal cast; its
+        // nested question uses the existing aggregate walk to avoid re-entering itself.
+        if (vial_treasure_maker && !in_vial_order_walk)
+        {
+            struct WalkScope
+            {
+                bool& active;
+                explicit WalkScope(bool& v) : active(v) { active = true; }
+                ~WalkScope() { active = false; }
+            } scope(in_vial_order_walk);
+            return TurnSolver::OrderPaysSequentially(state, acts, ord);
+        }
         if (widen_only) { return PoWidenFirstUnpayable(acts, ord, pool0, w_dom, w_live) < 0; }
         if (exact) { return ExactOrderFirstUnpayable(state, acts, ord) < 0; }
         if (producer_only) { return FirstUnpayablePosImpl(state, acts, ord, la_pool0, nullptr, la_p) < 0; }
