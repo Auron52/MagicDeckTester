@@ -93662,6 +93662,44 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
         {
             pre_plan = RolloutPreCombatSolve(state, turn_depth, max_turns, budget, second_main, tt);
         }
+        if (chain_only && state.pending_extra_turns <= 1)
+        {
+            // A depth-zero plan may spend the only available mana on setup and
+            // strand the chain. When that happens, inspect the full legal plan
+            // list and take the highest-ranked plan that actually queues the
+            // next own turn. Apply on a copy: a proposed multi-cast can drop
+            // its turn spell when the payer cannot fund its declared order.
+            auto secures_next_turn = [&](const TurnSolver::Plan& candidate)
+            {
+                GameState probe = state;
+                ApplyPlanDirect(probe, candidate, true);
+                return OpponentHasLost(probe) || probe.pending_extra_turns > 0;
+            };
+            if (!secures_next_turn(pre_plan))
+            {
+                const auto alternatives = EnumeratePlansWithLand(state, /*is_pre_combat=*/true);
+                for (const TurnSolver::Plan& candidate : alternatives)
+                {
+                    bool promises_turn = false;
+                    for (const Action& action : candidate.actions)
+                    {
+                        // A planned Mind Stone sacrifice may draw the missing
+                        // turn spell, which its breakpoint continuation casts.
+                        // The resolved-state probe below decides whether it did.
+                        if (action.kind == Action::Kind::ActivatePermAbility
+                            && action.ability_mode == Action::AbilityMode::SacDraw)
+                        { promises_turn = true; }
+                        if (action.kind != Action::Kind::CastFromHand || !action.def) { continue; }
+                        promises_turn |= action.def->params.extra_turns_on_resolve > 0
+                            || action.def->params.expropriate_vote
+                            || action.def->params.cast_trigger_extra_turns > 0;
+                    }
+                    if (promises_turn && secures_next_turn(candidate))
+                    { pre_plan = candidate; break; }
+                    if (g_et_chain_trial_aborted) { break; }
+                }
+            }
+        }
         if (chain_only && g_et_chain_trial_aborted)
         { leafeval::Publish(leafeval::kInvalid); return max_turns + 1; }
         if (chain_only)
@@ -106989,6 +107027,23 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
     g_bp_root_enum = false;
     const int gw_dropped = groupwave::g_state.max_dropped;
     CandSeq cands(candidates, &pb_lazy);   // reads pb_lazy live: a materialised layout falls back to the vector
+    // When Emrakul is already held and no draw artifact is live, converting
+    // Myriad to two Islands is the fastest route to Lens and fifteen mana.
+    // Myriad reshuffles the library; the whole-turn trial verifies any later
+    // chain, while the ordinary search handles lines where the trial fails.
+    if (is_pre_combat && ResolveProvider(state).ExtraTurnPreferMyriadNow(state))
+    {
+        for (const Plan& p : candidates)
+        {
+            for (const Action& a : p.actions)
+            {
+                if (a.kind == Action::Kind::ActivatePermAbility
+                    && a.ability_mode == Action::AbilityMode::SacLandSearch
+                    && a.card_name.str() == "Myriad Landscape")
+                { report(max_turns + 1, depth - 1); return p; }
+            }
+        }
+    }
     // Candidates are sorted highest-value first, so the first winning plan
     // (if any) is also the highest-value winning plan.
     for (const Plan& p : candidates)

@@ -1289,6 +1289,9 @@ public:
     // Extra Turns may try a depth-zero continuation through consecutive own turns.
     // The solver accepts it only after simulation reaches a real same-round win.
     virtual bool ExtraTurnChainWalkEnabled() const { return false; }
+    // A deck may order a Myriad activation ahead of other legal plans when
+    // committing that land search is its preferred setup line.
+    virtual bool ExtraTurnPreferMyriadNow(const GameState&) const { return false; }
     // The depth-zero extra-turn trial asks the deck whether its chosen whole-turn
     // plan respects its finisher timing. A rejected trial falls back to search.
     virtual bool ExtraTurnChainFinisherPlanAllowed(const GameState&, bool, bool, bool) const

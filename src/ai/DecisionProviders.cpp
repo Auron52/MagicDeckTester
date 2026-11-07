@@ -4698,13 +4698,34 @@ bool ExtraTurnsProvider::ExtraTurnChainFinisherPlanAllowed(const GameState& s,
         const ManaPool mana = AvailableManaPool(s);
         for (const Card& c : s.ActivePlayer().hand)
         {
-            if (c.m_name.str() == "Emrakul, the Aeons Torn"
-                && mana.CanPay(c.m_mana_cost)) { return false; }
+            if (c.m_name.str() != "Emrakul, the Aeons Torn") { continue; }
+            const CardDefinition* emrakul = CardDatabase::Instance().LookupCached(c);
+            // Runtime hand cards can carry an empty cost; the database is the
+            // authority for whether Emrakul is actually affordable here.
+            if (emrakul && mana.CanPay(emrakul->card.m_mana_cost)) { return false; }
         }
     }
     // Ulamog needs another own turn to attack. The walk may use a queued turn
     // or cast a turn spell alongside it; otherwise it must try another plan.
     return !casts_ulamog || s.pending_extra_turns > 0 || casts_turn_spell || casts_emrakul;
+}
+
+bool ExtraTurnsProvider::ExtraTurnPreferMyriadNow(const GameState& s) const
+{
+    if (!EnvOn("MTG_ET_T3_MYRIAD_PREFER", true) || s.turn_number != 3
+        || s.pending_extra_turns > 0) { return false; }
+    bool emrakul_held = false;
+    for (const Card& card : s.ActivePlayer().hand)
+    { emrakul_held |= card.m_name.str() == "Emrakul, the Aeons Torn"; }
+    if (!emrakul_held) { return false; }
+    for (const Permanent& permanent : s.battlefield)
+    {
+        if (permanent.controller_index != s.active_player_index) { continue; }
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(permanent.card);
+        if (def && (def->params.mine_extra_draw || def->params.horn_draw_on_land_play))
+        { return false; }
+    }
+    return true;
 }
 
 bool ExtraTurnsProvider::ArchetypeCardValue(const GameState& s, const CardDefinition& def,
@@ -4718,6 +4739,17 @@ bool ExtraTurnsProvider::ArchetypeCardValue(const GameState& s, const CardDefini
     // DEFAULT ON after the paired reference and held-block comparisons.
     static const bool on = EnvOn("MTG_ET_CHAIN_VALUE", true);
     if (!on) { return false; }
+
+    // An early Mind Stone lets Myriad Landscape activate on turn three while
+    // still advancing the next turn's mana. The draw artifacts cannot replace
+    // that mana before the first five- and seven-mana breakpoints.
+    static const bool early_ramp = EnvOn("MTG_ET_EARLY_RAMP_VALUE", true);
+    if (early_ramp && def.card.m_name.str() == "Mind Stone" && s.turn_number <= 3
+        && s.pending_extra_turns <= 0)
+    {
+        out = 12 * dmg_unit;
+        return true;
+    }
 
     if (def.params.lens_imprint_land)
     {
@@ -4761,9 +4793,18 @@ bool ExtraTurnsProvider::ArchetypeCardValue(const GameState& s, const CardDefini
         // lower priority. Once three are live with a Mine, further artifacts
         // consume mana without enough extra yield. A Mine can still upgrade a
         // board of three Horns.
-        const int value = engines < 2 ? (def.params.mine_extra_draw ? 8 : 6)
+        int value = engines < 2 ? (def.params.mine_extra_draw ? 8 : 6)
                         : engines < 3 ? (def.params.mine_extra_draw ? 4 : 2)
                         : mines == 0 && def.params.mine_extra_draw ? 4 : -2;
+        if (early_ramp && s.turn_number == 3 && s.pending_extra_turns <= 0)
+        {
+            for (const Permanent& p : s.battlefield)
+            {
+                if (p.controller_index == s.active_player_index
+                    && p.card.m_name.str() == "Myriad Landscape")
+                { value = std::min(value, 1); break; }
+            }
+        }
         out = value * dmg_unit;
         return true;
     }

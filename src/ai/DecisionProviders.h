@@ -370,6 +370,7 @@ public:
     bool ArchetypeCardValue(const GameState& state, const CardDefinition& def,
                             int dmg_unit, int& out) const override;
     bool ExtraTurnChainWalkEnabled() const override { return true; }
+    bool ExtraTurnPreferMyriadNow(const GameState& state) const override;
     bool ExtraTurnChainFinisherPlanAllowed(const GameState& state, bool casts_emrakul,
                                            bool casts_ulamog, bool casts_turn_spell) const override;
     int WalkBuybackValueBonus(const GameState& state, const CardDefinition& def) const override;
