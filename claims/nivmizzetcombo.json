@@ -3,18 +3,16 @@
   "mulligan": "3c8c9283f11f5f93bb6fd5b87b5529e892545bac"
  },
  "deck": "nivmizzetcombo",
- "detail": "paused by the USER: resumes when worker artifact-queue-d7d6a5 next starts; set aside for every other worker",
  "frozen": "8ea3bb015c20ee7f62af13ce8369448f1ebec058",
- "heartbeat": "2026-11-06T21:46:59Z",
+ "heartbeat": "2026-11-07T21:40:38Z",
  "host": "550a08fdc1f3",
- "paused": "2026-11-06T21:46:57Z",
- "run_id": "nivmizzetcombo-artifact-queue-d7d6a5-20261105T190812",
+ "run_id": "nivmizzetcombo-artifact-queue-d7d6a5-20261107T214038",
  "score": 0.3477,
  "stage": "mulligan",
  "stages": [
   "mulligan"
  ],
- "started": "2026-11-06T12:37:09Z",
- "state": "paused",
+ "started": "2026-11-07T21:40:38Z",
+ "state": "running",
  "worker": "artifact-queue-d7d6a5"
 }
