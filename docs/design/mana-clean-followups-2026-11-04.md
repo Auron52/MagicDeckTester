@@ -74,6 +74,22 @@ How this applies:
 - The price (4 vs 12 probes a unit, pricing pass 1) is budget accounting, inert at unlimited budget. Default when the
   work resumes: 12 and price pass 1, measured; still open for the USER to override.
 
+### 7a. USER ruling 2026-11-07 on the price (supersedes "default 12 + price pass 1")
+*"We should charge the redo fairly and also look to minimize how often it happens. For certain, we should only be
+doing cases that have potential to fix the colours, not those that require more total mana."*
+- Fair charge: the price follows the measured cost of a probe against a unit (re-measure; not the dear end, 4).
+- Minimise how often it runs: the redo is ADMITTED only when re-allocating could fix it -- the line is short of a
+  COLOUR, not of total mana. A line whose remaining bill exceeds the most mana the board could make in total
+  (every source at its best yield, floating mana included) cannot be fixed by re-paying and must not start a redo.
+  This is a sound identity prune (no re-payment changes the total), so it is default ON.
+- FOUND 2026-11-07: `wip/mc-dragons` already has both halves. LineRepayTry refuses a bill the board cannot cover by
+  AMOUNT (`PaymentManaCovers`, before any search; counter `amount_short`) and, per depth, a chain whose JOINT bill
+  (every re-made payment plus the failing one) does not pay on the oldest board (`ch.JointPays`, `joint_short`) --
+  the second is the colour test: only a re-allocation that can exist is searched. Next: measure the funnel
+  (recorded / tried / amount_short / joint_short / fired, and pass-2 probes) plus probe-vs-unit cost on EDF, Dragons,
+  Angels (300 games each, seeds 88100000+, `build/scratch/mcdragons/lrprice/`, queued behind the pass driver), then
+  set the price to the measured ratio and look for what still reaches the priced passes without re-making anything.
+
 ## 8. USER rulings 2026-11-06 on Q23 / Q25 / Q29 (open-questions file, 2026-11-04)
 - **Q23 Dragonstorm {B} hold before Apex: NOT adopted as built; root-cause gi37 (2HG, seed 1920001+37).** The hold
   is added to the line's named demand, so a search payability walk may see the Apex line one mana short and
@@ -134,3 +150,10 @@ Fix, in order (analyzer only, play untouched, so no NO-GREEDY or GT question):
    deck cannot pass clean on capped decisions. This is the measurement's own bound, inert below the cap.
 3. Re-run the deferred decks (eldrazidisplacerflicker, accomplishedalchemist, nivmizzetcombo, landfallelementals) and
    check the stall games finish.
+
+## 10. USER ruling 2026-11-07: Hinata regression d5 s3003 gi27 on fix/c-wild
+*"For 2 I think it is fine to move on if we can show it is recoverable at any depth + budget."* Shown: the c-wild
+binary (gcf3) at d5 b300 WINS T8 (= old turn; `build/scratch/cwild/regslow/g27.out`, digest 9c9019ccf4c39588); d5 b0
+loses on BOTH arms. So gi27 is dispositioned recoverable; c-wild is clear to land (rebase onto origin, rebuild, smoke,
+accept GT through the normal flow).
+

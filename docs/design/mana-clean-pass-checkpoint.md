@@ -51,6 +51,12 @@ before every push. "Feel free to delay any iterations that seem to be getting st
 - Next: verify on g61 + the 5-game stall.json, commit, rerun the 4 deferred decks. The continuation-menu memo is moot
   (the engine's own bp memo already serves it); the real per-node cost is the derivation on NEW boards.
 
+## 2026-11-07
+- s9 fix COMMITTED 94bfbd7b1. Pass driver `pass1/drive2.sh` relaunched (PID `pass1/driver3.pid`) on EDF, AA, Niv, LFE.
+- Queued behind it: LINE_REPAY funnel + price measurement (`build/scratch/mcdragons/lrprice/chain.sh`, DONE marker
+  there), per the USER's 11-07 price ruling (followups s7a).
+- Hinata gi27 (c-wild) dispositioned recoverable by the USER's 11-07 ruling (followups s10): c-wild is clear to land.
+
 ## After the chain (in order, one engine job at a time)
 1. Read the stall diagnosis (LFE already shown ANALYZER-side, followups s9); build the s9 fix (memo + per-decision cap), rerun the 4 deferred decks.
 2. Hinata2 regression game 27 (seed 3003, gi 27) at `--depth 8 --budget-ms 0` on the `fix/c-wild` binary (old
@@ -66,7 +72,5 @@ before every push. "Feel free to delay any iterations that seem to be getting st
 5. Remove the worktree `.claude/worktrees/oracle-time` with `scripts/safe_worktree_remove.sh` (content is pushed).
 
 ## Still open for the USER
-- LINE_REPAY price (default 12 + price pass 1 unless the USER says otherwise).
-- Hinata2 gi27 only if the d8 b0 replay does not recover.
 - Two unit failures on the branch are another session's: `test_landfall` fetchland (Beast count 1 != 2) and
   `test_pirates_provider` (deck folders 47 != 46, after the RW Burn deck).
