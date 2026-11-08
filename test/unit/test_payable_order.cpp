@@ -158,6 +158,37 @@ const std::vector<std::string> kHoist   = { "Corsair Captain", "Malcolm, the Eye
 
 }   // namespace
 
+TEST_CASE("payable order keeps Figure's hybrid choice in the reveal-cost bound")
+{
+    EnsureCardsPo();
+    GameState s;
+    s.active_player_index = 0;
+    s.turn_number = 3;
+    static const KithkinProvider kithkin;
+    s.m_provider = &kithkin;
+    PutPo(s, "Plains", 400);
+    PutPo(s, "Plains", 401);
+    s.players[0].hand.push_back(HandPo("Figure of Destiny", 402));
+    s.players[0].hand.push_back(HandPo("Goldmeadow Stalwart", 403));
+
+    const auto plans = TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true);
+    const TurnSolver::Plan* both = nullptr;
+    for (const auto& p : plans)
+    {
+        if (p.actions.size() != 2) { continue; }
+        bool figure = false, stalwart = false;
+        for (const Action& a : p.actions)
+        {
+            figure |= a.kind == Action::Kind::CastFromHand && a.card_name.str() == "Figure of Destiny";
+            stalwart |= a.kind == Action::Kind::CastFromHand && a.card_name.str() == "Goldmeadow Stalwart";
+        }
+        if (figure && stalwart) { both = &p; break; }
+    }
+    REQUIRE(both != nullptr);
+    const auto order = RealisedNames(s, *both, /*decide=*/true);
+    CHECK(order == std::vector<std::string>{"Goldmeadow Stalwart", "Figure of Destiny"});
+}
+
 TEST_CASE("Payable order ON, five lands: {Malcolm, Corsair, Buccaneer} is offered and realised Corsair -> Buccaneer -> Malcolm")
 {
     PoArms arms(/*order_on=*/true, /*payable_on=*/true);

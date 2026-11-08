@@ -5728,6 +5728,18 @@ static bool PayableCastOrderCoreImpl(const GameState& state, const std::vector<A
     {
         ManaPool bound = pool0;
         ManaCost total{};
+        bool hybrid_overflow = false;
+        auto add_bound_cost = [&](const ManaCost& c)
+        {
+            AddManaCost(total, c);
+            // AddManaCost sums the baked first colours but does not carry the hybrid
+            // choices. Losing one would make this necessary bound reject a payable order.
+            for (int h = 0; h < c.hybrid_count; ++h)
+            {
+                if (total.hybrid_count == 6) { hybrid_overflow = true; break; }
+                total.hybrid_pair[total.hybrid_count++] = c.hybrid_pair[h];
+            }
+        };
         // Exact mode: the walk also credits terms CreditCastOutput does not -- every impulse float
         // (Apex's ten), every graveyard escalation (k Rites: 0+1+..+k-1 extra), and a same-turn
         // reducer discounting EVERY spell of its colour. Credit them all, order-free and
@@ -5771,7 +5783,7 @@ static bool PayableCastOrderCoreImpl(const GameState& state, const std::vector<A
                                    + (mc.green > 0 ? ex_green : 0);
                     c.generic = std::max(0, c.generic - disc);
                 }
-                AddManaCost(total, c);
+                add_bound_cost(c);
                 continue;
             }
             if (a.alt_cost) { continue; }
@@ -5788,13 +5800,16 @@ static bool PayableCastOrderCoreImpl(const GameState& state, const std::vector<A
                 c.red       = std::max(0, c.red       - rc.red);
                 c.green     = std::max(0, c.green     - rc.green);
                 c.colorless = std::max(0, c.colorless - rc.colorless);
-                AddManaCost(total, c);
+                add_bound_cost(c);
             }
-            else { AddManaCost(total, a.cost); }
+            else { add_bound_cost(a.cost); }
         }
         if (widen_only) { bound.wild += w_live * std::popcount(static_cast<unsigned>(w_union)); }
         if (la_host != nullptr) { for (const ManaPool& b : la.bonus) { bound.AddPool(b); } }
-        if (!bound.CanPay(total))
+        // More than six hybrid pips cannot fit in ManaCost's metadata. In that
+        // case the aggregate check is no longer a necessary condition; let the
+        // exact order walks decide instead of rejecting a legal permutation.
+        if (!hybrid_overflow && !bound.CanPay(total))
         { g_po_stats.bound_fail[site].fetch_add(1, std::memory_order_relaxed); return false; }
     }
 
