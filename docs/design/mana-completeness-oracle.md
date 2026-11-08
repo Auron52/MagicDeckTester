@@ -2190,3 +2190,13 @@ APPLY-DROP-ORDER, 956 DOMINATED-CREATURE, 320 ORACLE-GAP, 213 UNMODELED,
 and 12 CAPPED. Oracle-off play was byte-identical. This is a new seed range;
 the first block's one large capped decision prevents a valid comparison of
 total issue counts. The exact gi1874 reproduction is the fix's direct check.
+
+The current-source low-count beta pool (5,000 games each, source
+`3bda5c647e7c`) found Minotaur clean on games 167000-171999. Vampires had
+two ORACLE-GAP flags on one new Estate/Blood-draw seed (30107056); Angels had
+18 flags (14 APPLY-DROP, four DOMINATED-CREATURE); Slivers Vial had 22 (20
+APPLY-DROP, two ORACLE-GAP). All four retained oracle-off byte identity. The
+new Vampires seed permits an Estate {R} payment, but no oracle outcome covers
+the engine's final untapped Blackcleave Cliffs and one-life-lower Blood-draw
+line. The earlier Vampires seed 30104266 instead misses a second Blood token
+from a continuation. Both remain open.
