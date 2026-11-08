@@ -1,5 +1,35 @@
 # Handoff: Dragons mana-clean fixes (branch wip/mc-dragons)
 
+## 2026-11-08 validation update (Codex)
+
+The candidate at `25d75bf49` was validated while the three gi2535 tails remained CPU active. Do not cancel those
+measurements: `hostfix-ab.json` still has 65/66 jobs (final `edf_on_2400`), and the pre-patch price18/price4 single-game
+controls are still running. The separate seven-slower-game d8/b0 batch finished: EDF2HG gi926 recovers to T8 on both
+arms with identical digest, as did the five previously reported Standard games; Standard gi2069 is T7 on both arms
+with different digests. The shipped-setting gi926 slowdown remains a budget-sensitive plan choice.
+
+Completed independent checks on this candidate:
+
+* Dragons mana oracle gate, same 10,000-game slice as the November 3 base: `gate_hostfix32.{out,err}` (32 threads),
+  exit 0, ENUM-GAP 1 / APPLY-DROP 142 / ORACLE-GAP 6 = 149 flags. Base `gate_base.err` had 247 / 564 / 316 = 1,127;
+  the earlier WIP `gate_new.err` had 1 / 142 / 28 = 171. The old base output is reused, not a new base run.
+* Fresh paired host-path A/B, 600 games each arm for Fungus and Accomplished Alchemist, seeds 2880001 and 2890001,
+  `lrprice/hostfix-aura-ab.{json,out,err}` plus `hostfix-aura-ab-wins/`: Fungus 600/600 paired, zero play digests and
+  zero win-turn changes; Alchemist 600/600 paired, two play digests, zero win-turn changes. Both used 32 threads.
+* Scoped smoke on Dragons, EDF/EDF2HG, Bruna, Alchemist, Fungus: `lrprice/hostfix-smoke.log`. 392 scenarios pass.
+  Against shipped ground truth, one searched slowdown (Alchemist gi99 T5->T6) recovers to T5 at 4x and 16x budget
+  (`lrprice/hostfix-smoke-classify.log`); one searched faster, 12 searched play changes at equal score. No GT accepted.
+* Scoped regression on the same decks: `lrprice/hostfix-regression.log`. Searched games: zero slower, two faster,
+  26 play changes at equal score. Strict reference replay: 747 refs, 288 ok / 458 repaired / one beaten, zero play
+  drift, board divergence, enum gap, shuffle dead, mull drift, or contract fail. Both suboptimal references beaten.
+  No GT accepted, per the worktree brief. The run returns mismatch against current shipped GT as expected for WIP.
+
+Still required before landing: let the three gi2535 measurements finish and inspect their paired result; add a
+focused find-side host-hold unit/scenario test that fails without the fix; review the remaining smoke/regression play
+changes and the gate residue; update `mana-completeness-oracle.md` with final measurements. Branch adoption waits on
+the final EDF A/B tail and the test, not on another broad CPU run. The remaining tails are effectively serial, so
+their low total CPU utilization does not mean a ready validation run was left unstarted.
+
 ## Successor 12 (2026-11-07, in progress): find-side Aura host hold
 
 The prior branch commit `e8ae5aa3b` prices LINE_REPAY at 18 probes/unit (measured 3.95 us/probe versus 71.15 us/ordinary unit;
