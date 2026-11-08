@@ -73550,6 +73550,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // RAMP-FILTER {C} FEED relabel below. Plus, per subset, the ramp-filter rocks it casts.
     int n_ramp_filters = 0;
     bool any_cast_ramp_filter = false;
+    bool fresh_ramp_filter = false;
     if (RampFilterCFeedOn())
     {
         for (const Permanent& p : state.battlefield)
@@ -73558,6 +73559,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
             if (!d || !d->params.ramp_filter || !CanTapNow(p, state.battlefield)) { continue; }
             ++n_ramp_filters;
+            if (p.entered_this_turn) { fresh_ramp_filter = true; }
         }
         for (const Action& a : cands)
         {
@@ -75496,6 +75498,16 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                         || (!mana_ok && !(any_filter && SubsetPayableWithFilters(state, cands, sel)));
         if (mana_reject) { _ct.label = "flat-pool"; }
         if (mana_reject && exec_feas_rescues()) { mana_reject = false; _ct.label = "early-gate"; }
+        // A newly played ramp-filter land is already in this frame's board, but
+        // the filter fallback walks only one payment for each cast. That greedy
+        // choice can strand the following cast even when another feed/payment
+        // order pays both (Breaching Dragonstorm gi101733 T8). Admit only a
+        // multi-cast subset whose total and noncreature totals fit the optimistic
+        // pool; the real apply still judges the exact sequence.
+        const bool fresh_filter_uncertain = mana_reject && fresh_ramp_filter && sel.size() >= 2
+            && combined.ManaValue() <= static_cast<int>(pool.Total())
+            && noncreature_combined.ManaValue() <= static_cast<int>(pool_noncreature.Total());
+        if (fresh_filter_uncertain) { mana_reject = false; _ct.label = "fresh-ramp-filter"; }
         // The flat pool excludes a human Satyr's literal target choice. A
         // selected untap action may supply the later cast, and the exact
         // ApplyPlan trial (then the committed apply) judges the real order.
@@ -75598,7 +75610,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             for (int ci = 0; ci < 5; ++ci) { have_haste[ci] = have_eff[ci] || ((haste_cols >> ci) & 1); }
             have_eff = have_haste;
         }
-        if (!sel_col_reducer && !SubsetPayable(have_eff, cands, sel, &colour_demand))
+        if (!sel_col_reducer && !fresh_filter_uncertain
+            && !SubsetPayable(have_eff, cands, sel, &colour_demand))
         {
             _ct.label = "colour-exists";                    // ef-* labels overwrite on a failed rescue
             if (!exec_feas_rescues() && !manaoracle::t_gate_observe) { return; }

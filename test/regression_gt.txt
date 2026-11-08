@@ -1,8 +1,7 @@
-# Regression ground truth -- commit e7b99f029  date 2026-11-08
+# Regression ground truth -- commit 0d88a9d20  date 2026-11-08
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-07): Periodic baseline after adopted Cyclone, Kithkin, Shadowborn and Jumbo artifacts plus c-wild mana legality: 94/578 cells moved; searched 2375 faster versus 1189 slower; Cyclone -491t, Kithkin -882t, Shadowborn -72t, Jumbo -11t. Hinata +24t/1831 searched and Niv +3t/2225 reflect the colorless-mana legality correction reviewed in shorter tiers; EDF d0 +4t/8000. Prior Angels +0.0064t/6065 searched, Angels2HG +0.0150t/600, and Bruna +0.0122t/2131 remain follow-ups. Per-game outcome audit completed; old trace snapshot was stale and could not parse Madness, so its trace explanations were unavailable.
 # accepted-with-regressions (smoke, 2026-11-08): Modern RW Burn exhaustive keep adoption: changed mulligan or bottom; all changed games attributed; net smoke improvement
-# accepted-with-regressions (regression, 2026-11-08): Modern RW Burn exhaustive keep adoption: changed mulligan or bottom; all changed games attributed; net regression improvement
 # accepted-with-regressions (overnight, 2026-11-08): Modern RW Burn exhaustive keep adoption: all changed games attributed to mulligan or bottom; all overnight cells improve
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -288,7 +287,7 @@ burn_regression_d5_s3003=4.2544/eecad9d55032a4a5
 th_regression_d0_s2002=5.5420/e24d3ceb60f57a76
 th_regression_d3_s2002=4.0229/0988bdef8b048519
 th_regression_d5_s2002=4.1267/51b2caec1a1788b8
-th_regression_d5_s3003=3.9767/fa8b91c26342b2eb
+th_regression_d5_s3003=3.9767/b1736898c14b5f1b
 knights_regression_d0_s2002=4.5610/d71421c58495ca0a
 knights_regression_d3_s2002=4.2800/2d0134810fce8b08
 knights_regression_d5_s2002=4.3180/1cadf9100c46c412
@@ -442,8 +441,8 @@ galadriel2hg_regression_d5_s2002=4.8133/d5c14dd1b4a66662
 niv_regression_d0_s2002=6.0500/c48d234830aa812b
 niv_regression_d3_s2002=4.4400/074b661d960781b3
 niv_regression_d5_s2002=4.5067/44e9e030a83a15ca
-niv_regression_d5_s3003=4.5067/b388a26b5c91178b
-niv2hg_regression_d5_s2002=4.4800/1db351728a105485
+niv_regression_d5_s3003=4.5067/fca5dedd0fdf6af8
+niv2hg_regression_d5_s2002=4.4800/c9139f94099720db
 colossus_regression_d0_s2002=4.4220/ae6fe0b99f69692d
 colossus_regression_d3_s2002=3.4800/256c45f4dbd5f29b
 colossus_regression_d5_s2002=3.4350/8051c222be08e92d

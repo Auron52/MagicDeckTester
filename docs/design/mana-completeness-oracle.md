@@ -2120,3 +2120,34 @@ tries a `{2}` sacrifice outlet payment. The oracle's nearest outcome taps
 Secluded Courtyard, while the engine's board leaves it untapped. This is an
 open checker gap; Minotaur remains in beta and needs a fresh clean block after
 it is fixed.
+
+### 13.18 Fresh ramp-filter land gate (2026-11-08)
+
+BreachingDragonstorm's current-source 5,000-game block (100000-104999,
+`bc60d82d28ef`) found five ENUM-GAPs in one T8 game (gi101733): a newly
+played Mossfire Valley and two casts, Breaching Dragonstorm followed by
+Maelstrom Wanderer or Annoyed Altisaur. The oracle pays the sequence, but the
+flat pool cannot express the Valley's `{1},{T}` color conversion and the
+filter fallback tries one payment order, which rejects the later cast. The
+`MTG_DBG_MULTI=8` trace showed pool total 13, combined cost 13 for Wanderer,
+with one active ramp filter and a flat-gate rejection. Disabling the scalar
+mana prune alone left all five gaps.
+
+When an untapped ramp filter entered this turn, the enumerator now admits a
+multi-cast subset rejected by that single-order fallback if its total and
+noncreature total costs fit the optimistic pool. The apply validates the actual
+sequence. The gi101733 repro fell from five ENUM-GAPs to zero. An attempt to
+sort the fallback's payment walk by cast rank did not clear any of the five,
+so the single-order limitation remains; the bounded admission is the adopted
+fix. All 2,636 unit cases passed, smoke had 179 unchanged configurations, and
+regression had 283 unchanged plus three equal-win-turn play changes (Niv 2HG
+T4, Niv T5, Treasure Hunt T4), no slower or faster games. Strict replay of 777
+references found zero drift or enum gaps. The accepted regression baseline
+records those three line choices. BreachingDragonstorm still needs a fresh
+5,000-game clean block on this source before leaving beta.
+
+The same source's pooled queue also gave clean 5,000-game blocks for Knights,
+KittyEquipment, CritterLifegain, LifegainHeliodCombo, Fluctuator,
+Colossus Hammer, Burn, Auras, and Modern RW Burn after its new profile was
+adopted. The other refreshed decks remain beta with their issue counts in
+`test/mana_clean.json`.
