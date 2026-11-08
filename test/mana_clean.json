@@ -1277,6 +1277,49 @@
      "seed": 30000000,
      "src": "7ec55bb505a80a04bb75eebca1ef10ce9740acd7",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 35,
+      "CONTINUATION-DIFFERS": 25683,
+      "DOMINATED-LAND": 135,
+      "DROP-COVERED": 958,
+      "ENUM-GAP": 13,
+      "ORACLE-GAP": 572,
+      "PHANTOM": 1247,
+      "UNMODELED": 8
+     },
+     "commit": "1427f72910f7e63dc181b45d01e95282bd59c11b",
+     "date": "2026-11-08T07:48:46Z",
+     "decisions": 33141,
+     "deck": "decks/Goblins/Goblins.cod",
+     "deck_sha": "93d7505d6f7a9b4cdc0e56d682e625f2ceca594f",
+     "game_index": 100000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 628,
+     "life_breakpoints": [],
+     "ms_off": 758877,
+     "ms_on": 1122068,
+     "report": "logs/mana_clean/20261108-074511/report.md",
+     "run": "20261108-074511",
+     "seed": 30100000,
+     "src": "bc60d82d28ef90188f704a69f018debe51a9ee60",
+     "verdict": "issues"
     }
    ]
   },
@@ -2028,6 +2071,47 @@
      "run": "pass1-merfolk",
      "seed": 30000000,
      "src": "aa9f15b9b77f5ce74cb10086d88ce9fe70b5f023",
+     "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 273,
+      "CONTINUATION-DIFFERS": 9,
+      "DOMINATED-LAND": 107,
+      "DOMINATED-LIFE": 55,
+      "DROP-COVERED": 98,
+      "PHANTOM": 3270
+     },
+     "commit": "1427f72910f7e63dc181b45d01e95282bd59c11b",
+     "date": "2026-11-08T07:48:46Z",
+     "decisions": 36955,
+     "deck": "decks/Merfolk/Merfolk.cod",
+     "deck_sha": "364493b093d34f6bff6cd9ab78396a770cc6f6e5",
+     "game_index": 100000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 273,
+     "life_breakpoints": [],
+     "ms_off": 498456,
+     "ms_on": 1379076,
+     "report": "logs/mana_clean/20261108-074511/report.md",
+     "run": "20261108-074511",
+     "seed": 30100000,
+     "src": "bc60d82d28ef90188f704a69f018debe51a9ee60",
      "verdict": "issues"
     }
    ]
@@ -3067,6 +3151,47 @@
      "run": "pass1-vampires",
      "seed": 30000000,
      "src": "7ec55bb505a80a04bb75eebca1ef10ce9740acd7",
+     "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "CONTINUATION-DIFFERS": 567,
+      "DOMINATED-LAND": 278,
+      "DOMINATED-LIFE": 2308,
+      "DROP-COVERED": 785,
+      "ORACLE-GAP": 2,
+      "PHANTOM": 208
+     },
+     "commit": "1427f72910f7e63dc181b45d01e95282bd59c11b",
+     "date": "2026-11-08T07:48:46Z",
+     "decisions": 37468,
+     "deck": "decks/Vampires/Vampire.cod",
+     "deck_sha": "05203a82cccc57fdd85568e2dd4db39ed04e0528",
+     "game_index": 100000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 2,
+     "life_breakpoints": [],
+     "ms_off": 556548,
+     "ms_on": 1130706,
+     "report": "logs/mana_clean/20261108-074511/report.md",
+     "run": "20261108-074511",
+     "seed": 30100000,
+     "src": "bc60d82d28ef90188f704a69f018debe51a9ee60",
      "verdict": "issues"
     }
    ]
