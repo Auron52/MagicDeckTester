@@ -882,6 +882,44 @@
      "seed": 30000000,
      "src": "7ec55bb505a80a04bb75eebca1ef10ce9740acd7",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "DOMINATED-LAND": 862,
+      "ENUM-GAP": 2,
+      "PHANTOM": 873
+     },
+     "commit": "e7b99f0290affe24457e795de0e37cb5f7833382",
+     "date": "2026-11-08T05:42:15Z",
+     "decisions": 51320,
+     "deck": "decks/Giants/Giants.cod",
+     "deck_sha": "8fc24c122bfa3ac9116c551c44de4584b040650b",
+     "game_index": 64000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 2,
+     "life_breakpoints": [],
+     "ms_off": 478307,
+     "ms_on": 1114793,
+     "report": "logs/mana_clean/pass2-giants/report.md",
+     "run": "pass2-giants",
+     "seed": 30064000,
+     "src": "90af1f5c88b803c9043e2bf0cbb725beb441b468",
+     "verdict": "issues"
     }
    ]
   },

@@ -8053,21 +8053,20 @@ static int SameTurnAffinityGenericCredit(const GameState& state, const std::vect
     return credit;
 }
 
-// Same-turn cost-reducer generic credit (Ruby Medallion: "Red spells you cast cost {1} less"). A
+// Same-turn generic cost-reducer credit (Medallion, Daredevil, Incubator). A
 // spell's per-Action cost (EffectiveCost) only credits reducers ALREADY in play; a reducer cast in
 // the SAME subset is deferred here (the ManaPruneBound bail already disables the scalar prune for
 // such subsets). When the plan casts a reducer, the executor casts it before the spells it discounts
-// (Apex-containing sets are OrderingOpaque -> plan-action order; a same-turn Medallion resolves
-// ahead of the later red casts, whose per-cast EffectiveCost then sees it in play). Returns the extra
+// (Apex-containing sets are OrderingOpaque -> plan-action order; a same-turn reducer resolves
+// ahead of later matching casts, whose per-cast EffectiveCost then sees it in play). Returns the extra
 // generic discount to subtract from the subset's combined cost so an affordable
-// "Medallion + discounted rituals + Apex" line is ENUMERATED instead of dropped as too costly. Each
-// matching same-colour spell's generic drops by 1 per same-turn reducer (floored at its generic;
-// colour pips never reduce -- matching "cost {1} less"). The credit is OPTIMISTIC (it assumes the
+// "Medallion + discounted rituals + Apex" or "Daredevil + Giant" line is enumerated. Matching
+// spells lose the reducer's printed generic amount (floored at their generic); colour pips never
+// reduce. The credit is OPTIMISTIC (it assumes the
 // reducer precedes every discounted cast); that is SOUND because it can only ADD plans -- a plan the
 // executor's realised order cannot actually pay rolls out to a non-win and the search discards it, so
 // over-crediting never picks an unpayable line. Returns 0 unless the subset holds a reducer, so every
-// non-reducer deck/seed is byte-identical. Only Ruby Medallion sets reduces_spell_color today, so the
-// whole path is Dragonstorm-scoped.
+// non-reducer deck/seed is byte-identical.
 // Same-turn reducers present in a subset, counted once so the per-candidate discount below is O(1)
 // per spell rather than re-scanning `sel`.
 struct SameTurnReducerCounts
@@ -73577,10 +73576,15 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // Same-turn affinity scan (mirrors Solve). Inert without an affinity card (Thrumming Hivepool).
     bool any_affinity = false;
     for (const Action& ra : cands) { if (ra.def && ra.def->params.affinity_for_subtype) { any_affinity = true; break; } }
-    // Same-turn cost reducer (Ruby Medallion) castable this turn? Gates the reducer generic credit
-    // (mirrors Solve). Inert unless a reducer is a candidate -> every non-reducer deck byte-identical.
+    // A castable generic reducer (Medallion, Daredevil, Incubator) gates the same-subset credit.
     bool any_reducer = false;
-    for (const Action& ra : cands) { if (ra.def && !ra.def->params.reduces_spell_color.empty()) { any_reducer = true; break; } }
+    for (const Action& ra : cands)
+    {
+        if (ra.def && (!ra.def->params.reduces_spell_color.empty()
+                       || !ra.def->params.reduces_spell_subtype.empty()
+                       || ra.def->params.chooses_creature_type))
+        { any_reducer = true; break; }
+    }
     // Same-subset reveal-or-pay additional cost (Daring Buccaneer) among the candidates -- gates the
     // per-subset SameSubsetRevealSurcharge debit. Inert for every deck without one.
     const bool any_reveal_cost = AnyRevealCostCand(cands);
@@ -74953,9 +74957,27 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 noncreature_combined.generic = std::max(0, noncreature_combined.generic - acred);
             }
         }
-        // Same-turn cost reducer (Ruby Medallion): subtract the extra generic discount it gives the
-        // later same-colour casts in this subset, so the Medallion-discounted go-off enumerates.
+        // A free attach already on a summoning-sick host is not a modeled sequential step:
+        // moving it can take away the {T} ability the cast walk counted. A newly cast Equip
+        // has no old host to lose. Keep the free-attach control arm's refusal as well.
+        bool reducer_attach_safe = true;
         if (any_reducer)
+        {
+            for (int j : sel)
+            {
+                const Action& a = cands[j];
+                if (a.kind != Action::Kind::Equip && a.kind != Action::Kind::AttachAllFreeEquipment) { continue; }
+                if (a.cost.ManaValue() != 0 || a.cost.has_x) { continue; }
+                if (!SeqFreeAttachOn()) { reducer_attach_safe = false; break; }
+                if (SeqWalkSkipsFreeAttach(state, a)) { continue; }
+                for (const Permanent& p : state.battlefield)
+                    if (p.card.m_number == a.sac_source_id) { reducer_attach_safe = false; break; }
+                if (!reducer_attach_safe) { break; }
+            }
+        }
+        // Same-turn generic reducers: subtract the extra discount the selected reducers grant
+        // later casts (Daredevil -> Harbinger, Medallion -> red spells).
+        if (any_reducer && reducer_attach_safe)
         {
             int rcred = CostTricksEnabled() ? SameTurnReducerGenericCredit(state, cands, sel) : 0;
             if (rcred > 0)
@@ -75504,7 +75526,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             }
         }
         if (seq_on && seq_spend && !mana_reject) { apply_seq(); }   // survivor: keep its pool honest
-        if (mana_reject && CostReframeEnabled())
+        if (mana_reject && CostReframeEnabled() && reducer_attach_safe)
         {
             // Cost reframe (MTG_COST_REFRAME): an INTERACTING subset (reducer/ritual/affinity/rock) the
             // flat-pool aggregate rejects may still be payable once its same-turn discount/float RESOLVES in
@@ -75520,7 +75542,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 const Action& c = cands[j];
                 if (c.ritual_float > 0 || c.rock_mana.Total() > 0
                     || (c.def && c.def->params.affinity_for_subtype)
-                    || (c.def && !c.def->params.reduces_spell_color.empty())
+                    || (c.def && (!c.def->params.reduces_spell_color.empty()
+                                  || !c.def->params.reduces_spell_subtype.empty()
+                                  || c.def->params.chooses_creature_type))
                     || ActionColoredReducerDef(c) != nullptr) { interacts = true; break; }
             }
             if (interacts)

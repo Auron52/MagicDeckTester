@@ -1,4 +1,4 @@
-# Regression ground truth -- commit ac1f9732c  date 2026-11-08
+# Regression ground truth -- commit e7b99f029  date 2026-11-08
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-07): Periodic baseline after adopted Cyclone, Kithkin, Shadowborn and Jumbo artifacts plus c-wild mana legality: 94/578 cells moved; searched 2375 faster versus 1189 slower; Cyclone -491t, Kithkin -882t, Shadowborn -72t, Jumbo -11t. Hinata +24t/1831 searched and Niv +3t/2225 reflect the colorless-mana legality correction reviewed in shorter tiers; EDF d0 +4t/8000. Prior Angels +0.0064t/6065 searched, Angels2HG +0.0150t/600, and Bruna +0.0122t/2131 remain follow-ups. Per-game outcome audit completed; old trace snapshot was stale and could not parse Madness, so its trace explanations were unavailable.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
@@ -60,8 +60,8 @@ auras_smoke_d0_s1001=4.3440/3d6879e20a8e97b5
 auras_smoke_d3_s1001=3.9300/f9e5834fbb0153ed
 auras_smoke_d5_s1001=4.1089/a13f3545c6498631
 goblins_smoke_d0_s1001=3.9810/3ccef3879cfef236
-goblins_smoke_d3_s1001=3.6800/257399be3208cd54
-goblins_smoke_d5_s1001=3.6000/4e353110a5bf46cf
+goblins_smoke_d3_s1001=3.6800/ec74319d1b322f1e
+goblins_smoke_d5_s1001=3.6000/24ea48d08fde94b5
 creature_giving_smoke_d0_s1001=5.5200/190baa428eac7f32
 creature_giving_smoke_d3_s1001=4.6400/eb80825afda62976
 creature_giving_smoke_d5_s1001=4.6600/f3d42350ffeada9a
@@ -85,7 +85,7 @@ kittyv3_smoke_d3_s1001=3.8400/04da9c42718f1d65
 kittyv3_smoke_d5_s1001=3.8160/d652ab27a2659bec
 dragons_smoke_d0_s1001=5.8750/21d51b5a277cca36
 dragons_smoke_d3_s1001=5.6667/c0ee72eb64148473
-dragons_smoke_d5_s1001=5.6277/dd3394129301c569
+dragons_smoke_d5_s1001=5.6277/dcc0f70c82760e21
 breaching_smoke_d0_s1001=4.8460/d7152eee2ef2f433
 breaching_smoke_d3_s1001=3.0800/f7ff527dd38a2821
 breaching_smoke_d5_s1001=3.0971/4c4debfd5590bdff
@@ -104,7 +104,7 @@ angels_smoke_d5_s1001=4.6154/db3aaecbcbf4a950
 hinata2hg_smoke_d5_s1001=5.8000/fd8e4bbeb0691f8f
 antilife2hg_smoke_d5_s1001=3.9500/cca6a4dbd63380de
 minotaur2hg_smoke_d5_s1001=5.3300/e4cd44da8730235a
-goblins2hg_smoke_d5_s1001=4.0133/fd3920316f6be542
+goblins2hg_smoke_d5_s1001=4.0133/835d639e125e00ad
 knights2hg_smoke_d5_s1001=5.0933/910e9cf21b958db0
 whiteknights2hg_smoke_d5_s1001=4.6400/49a4ea985e62b143
 fivecolour2hg_smoke_d5_s1001=5.3800/b5c33a4f334304c9
@@ -325,9 +325,9 @@ auras_regression_d3_s2002=4.0171/c520eaa268bda7a9
 auras_regression_d5_s2002=4.0867/adfcc7d33d37929f
 auras_regression_d5_s3003=4.1044/807b4432b98b6e3a
 goblins_regression_d0_s2002=4.0340/72caca88eea362f7
-goblins_regression_d3_s2002=3.6900/e6f6b27e5f6b79aa
-goblins_regression_d5_s2002=3.7920/0b57a252410af155
-goblins_regression_d5_s3003=3.7840/7d414f2bbdfbaff2
+goblins_regression_d3_s2002=3.6900/c3fec9f608d2f48d
+goblins_regression_d5_s2002=3.7920/f781c7c23d23e663
+goblins_regression_d5_s3003=3.7840/e392fe2c720b6110
 creature_giving_regression_d0_s2002=5.5800/11ce70f7d2e1011f
 creature_giving_regression_d3_s2002=4.5500/c53e2ddaf0e952dd
 creature_giving_regression_d5_s2002=4.6188/a9584dbea43c2f57
@@ -358,8 +358,8 @@ kittyv3_regression_d5_s2002=3.8067/93c29c484adc0b26
 kittyv3_regression_d5_s3003=3.6800/12b7950fca7c124f
 dragons_regression_d0_s2002=5.8670/ac1a8f8c25435ebe
 dragons_regression_d3_s2002=5.5200/f0df74131496a82f
-dragons_regression_d5_s2002=5.5540/af3b5cc5625f4962
-dragons_regression_d5_s3003=5.5300/910174bb0613e04c
+dragons_regression_d5_s2002=5.5540/19441a8c20fcde44
+dragons_regression_d5_s3003=5.5300/9aa1b202e2651468
 breaching_regression_d0_s2002=4.8260/6a698b1862790630
 breaching_regression_d3_s2002=3.1200/abcd838f1b9f0f3b
 breaching_regression_d5_s2002=3.1020/59d591bfb06f270c

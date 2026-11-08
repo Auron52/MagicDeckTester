@@ -144,6 +144,49 @@ TEST_CASE("Free attach: the lever off refuses the subset as an unmodelled kind")
     CHECK_FALSE(Offered(GiantsBoard(1)));
 }
 
+TEST_CASE("Giants: a second Daredevil discounts Harbinger in a Greaves plan")
+{
+    GameState s;
+    s.active_player_index = 0;
+    s.turn_number = 5;
+    s.players[0].lands_played_this_turn = 1;
+    for (int k = 0; k < 5; ++k) { PutFa(s, "Mountain", 10 + k); }
+    PutFa(s, "Fire Diamond", 20);
+    PutFa(s, "Stinkdrinker Daredevil", 21);
+    PutFa(s, "Inferno Titan", 22);
+    HandFa(s, "Giant Harbinger", 30);
+    HandFa(s, "Lightning Greaves", 31);
+    HandFa(s, "Giant Harbinger", 32);
+    HandFa(s, "Stinkdrinker Daredevil", 33);
+    for (int k = 0; k < 8; ++k)
+    {
+        Card c = DefFa(k == 0 ? "Tectonic Giant" : "Mountain").card;
+        c.m_number = 200 + k;
+        s.players[0].library.push_back(c);
+    }
+
+    bool offered = false;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
+    {
+        bool harbinger = false, daredevil = false, greaves = false, equip = false;
+        for (const Action& a : p.actions)
+        {
+            if (a.kind == Action::Kind::Equip && a.card_name == "Lightning Greaves") { equip = true; }
+            if (a.kind != Action::Kind::CastFromHand) { continue; }
+            harbinger |= a.card_name == "Giant Harbinger";
+            daredevil |= a.card_name == "Stinkdrinker Daredevil";
+            greaves   |= a.card_name == "Lightning Greaves";
+        }
+        if (!harbinger || !daredevil || !greaves || !equip) { continue; }
+        GameState r = s;
+        TurnSolver::ApplyPlan(r, p, true);
+        if (CountOnBoard(r, "Giant Harbinger") > 0 && CountOnBoard(r, "Stinkdrinker Daredevil") == 2
+            && CountOnBoard(r, "Lightning Greaves") > 0)
+        { offered = true; break; }
+    }
+    CHECK(offered);
+}
+
 TEST_CASE("Free attach: moving Greaves off a summoning-sick host it lets tap is still refused")
 {
     ArmFa arm(heurarm::SEQ_FREE_ATTACH, true);

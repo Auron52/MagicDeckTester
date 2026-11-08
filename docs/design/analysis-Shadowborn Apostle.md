@@ -1435,3 +1435,21 @@ deterministic; thread-ms ran on a shared box.
     payer (`docs/design/sac-for-mana-on-demand.md`) is the ONLY route for these cracks: the SacForMana plan action
     for both cards is retired, not kept beside the payer. The Lake fold (`MTG_IDLE_CRACK_FOLD`, default off) is not
     made cheaper; it is deleted with the action when the payer lands. Order unchanged: after the main-phase work.
+
+## 2026-11-08 mana gate baseline
+
+The first current-source gate (`pass1-shadowborn-apostle`, games 0-4999, source tree
+`90af1f5c88b8`) found 11,100 issues: 2,890 APPLY-DROP-ORDER, 999 APPLY-DROP,
+6 ENUM-GAP, and 7,205 UNMODELED. ORACLE-GAP was zero, and oracle-on and
+oracle-off play were byte-identical. The full signatures and repro commands are
+in `logs/mana_clean/pass1-shadowborn-apostle/report.md`; counts are recorded in
+`test/mana_clean.json`.
+
+The largest order signatures require a hand cast before the Lake of the Dead
+crack and Profane Tutor suspend. Both apply worlds currently pre-apply
+SacForMana and Suspend before hand casts, so they cannot realize that order.
+The on-demand payer in `docs/design/sac-for-mana-on-demand.md` is the user-approved
+route for Lake and Lotus Bloom. A local cast-order workaround would leave the
+same pre-pass mechanism in place and conflict with that ruling. The remaining
+payment drops and the action-count cap need a fresh census after the on-demand
+payer lands.
