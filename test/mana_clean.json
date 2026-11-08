@@ -1741,6 +1741,46 @@
      "seed": 30073000,
      "src": "aa9f15b9b77f5ce74cb10086d88ce9fe70b5f023",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "CONTINUATION-DIFFERS": 12,
+      "DOMINATED-LAND": 1470,
+      "DROP-COVERED": 4,
+      "ORACLE-GAP": 5,
+      "PHANTOM": 112
+     },
+     "commit": "82352abb23985a498f8eb141a367ddf425440c6c",
+     "date": "2026-11-08T06:41:40Z",
+     "decisions": 43608,
+     "deck": "decks/Minotaur/Minotaur.cod",
+     "deck_sha": "7e12c6578154b7a2117d9413e67a92b07b777125",
+     "game_index": 162000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 5,
+     "life_breakpoints": [],
+     "ms_off": 287926,
+     "ms_on": 1033849,
+     "report": "logs/mana_clean/pass2-minotaur-whiteknights/report.md",
+     "run": "pass2-minotaur-whiteknights",
+     "seed": 30162000,
+     "src": "95d103c9dfa9b3b2cdfc1c768727fe9d70992a31",
+     "verdict": "issues"
     }
    ]
   },
@@ -2604,6 +2644,43 @@
      "seed": 30000000,
      "src": "7ec55bb505a80a04bb75eebca1ef10ce9740acd7",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "DOMINATED-LAND": 460,
+      "PHANTOM": 1641
+     },
+     "commit": "82352abb23985a498f8eb141a367ddf425440c6c",
+     "date": "2026-11-08T06:41:40Z",
+     "decisions": 36490,
+     "deck": "decks/WhiteKnights/WhiteKnights.cod",
+     "deck_sha": "378155ff9c7ff85c4474ab4554befd4c3f924414",
+     "game_index": 100000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 0,
+     "life_breakpoints": [],
+     "ms_off": 42249,
+     "ms_on": 278493,
+     "report": "logs/mana_clean/pass2-minotaur-whiteknights/report.md",
+     "run": "pass2-minotaur-whiteknights",
+     "seed": 30100000,
+     "src": "95d103c9dfa9b3b2cdfc1c768727fe9d70992a31",
+     "verdict": "clean"
     }
    ]
   }
