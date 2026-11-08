@@ -2221,3 +2221,9 @@ UNMODELED, and eight CAPPED, concentrated in a cycling turn with an Unearth
 continuation that the base plan did not declare. There were no ORACLE-GAPs,
 and all three decks retained oracle-off byte identity. Details and the
 gi118147 reproduction are in `logs/mana_clean/20261108-104402/report.md`.
+
+The third pooled 100,000-game challenge on the same source covered
+CritterLifegain (210000-309999), LifegainHeliodCombo (210000-309999), and
+Modern RW Burn (25000-124999). All three were clean, with zero MISS,
+ORACLE-GAP, UNMODELED, or CAPPED flags and byte-identical oracle-off play.
+The full gate report is `logs/mana_clean/20261108-112821/report.md`.
