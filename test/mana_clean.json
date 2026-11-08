@@ -351,6 +351,44 @@
      "seed": 30100000,
      "src": "bc60d82d28ef90188f704a69f018debe51a9ee60",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "CONTINUATION-DIFFERS": 35,
+      "DOMINATED-LAND": 438,
+      "PHANTOM": 35
+     },
+     "commit": "23c21933cc66184702696e42ab9e519656e8f01d",
+     "date": "2026-11-08T08:39:53Z",
+     "decisions": 26013,
+     "deck": "decks/BreachingDragonstorm/BreachingDragonstorm.cod",
+     "deck_sha": "2ed89a6d3c452b73650700fdf538d68f59d51d5f",
+     "game_index": 105000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 0,
+     "life_breakpoints": [],
+     "ms_off": 17914,
+     "ms_on": 195633,
+     "report": "logs/mana_clean/20261108-083945/report.md",
+     "run": "20261108-083945",
+     "seed": 30105000,
+     "src": "8b9a23e598f8c80a65d276e3edd17e07e0a56a72",
+     "verdict": "clean"
     }
    ]
   },
