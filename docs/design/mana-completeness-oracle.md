@@ -2255,3 +2255,11 @@ ORACLE-GAP, and 193 UNMODELED flags; Treasure Hunt had 501 APPLY-DROP,
 18 ENUM-GAP, five APPLY-DROP-ORDER, 83 ORACLE-GAP, and one UNMODELED flag.
 All four retained byte-identical oracle-off play. The fresh cases are in
 `logs/mana_clean/20261108-140909/report.md`.
+
+The sixth 100,000-game challenge tested Angels, Slivers Vial, and Vampires
+on fresh games 110000-209999 each. Angels found 13 ENUM-GAP, 50 APPLY-DROP,
+and 40 DOMINATED-CREATURE flags; Slivers Vial found 440 APPLY-DROP and 65
+ORACLE-GAP flags; Vampires found 42 ORACLE-GAP and 29 UNMODELED flags, with
+no payment drops. All three remained byte-identical with the oracle off,
+but none earned a clean stamp. The cases are in
+`logs/mana_clean/20261108-142402/report.md`.
