@@ -51,6 +51,16 @@ plainly that completion will not wake the agent, where to check the job, and
 which work remains. Starting a background command is not completion of its
 dependent workflow.
 
+**Codex IDE equivalent:** Claude Code's `run_in_background` and `CronCreate` tools
+are not necessarily available to Codex. Check the actual Codex tool list. When
+`functions.exec` supports `yield_control()` and `notify()`, keep a yielded cell
+alive while it awaits a PID-based shell waiter (`kill -0 <captured-pid>`; never
+`pgrep -f`). `notify()` on completion wakes the *active* Codex turn; use a timed
+notification for the two-hour status check. Verify that the yielded cell is
+still running. Do not treat a finalized turn or a detached shell process as a
+verified same-conversation wakeup. A durable follow-up after the turn ends needs
+a session automation tool exposed by the Codex host.
+
 ## CPU concurrency
 
 **Use the maximum concurrency the machine supports by default** (USER,
