@@ -1,0 +1,3 @@
+=== BATCH (streaming per-job results as each job finishes) ===
+invig_fresh_g95000: played=5000 avg=4.1970 digest=eb17d5f4f8292b3b ms=1344176 units=17753153
+=== BATCH done (1 jobs, 5000 games) ===
