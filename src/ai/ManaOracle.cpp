@@ -738,9 +738,14 @@ thread_local const std::set<int>* t_plan_srcs = nullptr;
 // Vial with Estate #57 and its continuation makes a Blood with #59; the board where #59 paid the Vial
 // continued with no Blood, and the prune had dropped the #57 branch as the same resources -- ORACLE-GAP).
 thread_local bool t_key_twin_taps = false;
+// A deferred Karoo drop can choose which land to return after payments. Two
+// identical lands tapped in different orders are therefore distinct resources.
+// Keep this distinction only while a Karoo is available in hand.
+thread_local bool t_key_karoo_lands = false;
 bool KeyedApart(const GameState& s, const Permanent& p)
 {
     if (t_plan_srcs != nullptr && t_plan_srcs->count(p.card.m_number) != 0) { return true; }
+    if (t_key_karoo_lands && p.card.IsLand()) { return true; }
     if (!t_key_twin_taps || s.battlefield.empty()) { return false; }
     const std::ptrdiff_t i = &p - s.battlefield.data();
     return i >= 0 && static_cast<std::size_t>(i) < s.battlefield.size()
@@ -2476,6 +2481,12 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
     // of one of THOSE is the action, not an unscripted payment.
     std::set<int> plan_srcs;
     std::set<std::string> plan_names;
+    bool has_karoo_in_hand = false;
+    for (const Card& c : root.players[root.active_player_index].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d != nullptr && d->params.etb_bounce_land) { has_karoo_in_hand = true; break; }
+    }
     for (const Action& a : plan.actions)
     {
         if (a.sac_source_id != 0) { plan_srcs.insert(a.sac_source_id); }
@@ -2490,10 +2501,12 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
     {
         const std::set<int>* saved;
         bool                 saved_twin;
-        explicit PlanSrcScope(const std::set<int>* s) : saved(t_plan_srcs), saved_twin(t_key_twin_taps)
-        { t_plan_srcs = s; t_key_twin_taps = true; }
-        ~PlanSrcScope() { t_plan_srcs = saved; t_key_twin_taps = saved_twin; }
-    } _plan_src_scope(&plan_srcs);   // + t_key_twin_taps: the continuation's twinned {T} sources (KeyedApart)
+        bool                 saved_karoo;
+        PlanSrcScope(const std::set<int>* s, bool karoo)
+            : saved(t_plan_srcs), saved_twin(t_key_twin_taps), saved_karoo(t_key_karoo_lands)
+        { t_plan_srcs = s; t_key_twin_taps = true; t_key_karoo_lands = karoo; }
+        ~PlanSrcScope() { t_plan_srcs = saved; t_key_twin_taps = saved_twin; t_key_karoo_lands = saved_karoo; }
+    } _plan_src_scope(&plan_srcs, has_karoo_in_hand);   // + the continuation's twinned {T} sources (KeyedApart)
     const int act = root.active_player_index;
     // THE CAPPED RETRY CONTINUES FROM THE CUT (lever (b) of docs/design/mana-oracle-memory-time.md, USER 2026-11-06).
     // Under a larger ceiling the scripts are applied in exactly the same order -- a layer's scripts are its kept

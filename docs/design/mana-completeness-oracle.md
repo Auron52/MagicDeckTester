@@ -2097,3 +2097,26 @@ The pooled current-source refresh (source `95d103c9dfa9`) also passed Modern RW
 Burn games 10000-14999 and Soldiers games 81000-85999: 5,000 each, zero issues,
 byte-identical oracle-off play. Together with the Giants and Kithkin blocks,
 these four decks have clean 5,000-game stamps on the same source.
+
+### 13.17 Lifegain refresh and Minotaur Karoo identity (2026-11-08)
+
+The pooled fresh-source gate for CritterLifegain and LifegainHeliodCombo ran
+100,000 games each (100000-199999, source `95d103c9dfa9`), found zero mana
+issues, and reproduced byte-identical play with the oracle off. Both clean
+records are in `test/mana_clean.json`.
+
+Minotaur's 5,000-game block (162000-166999, same source) found five ORACLE-GAP
+flags on two seeds and no engine MISS. Seed 30163325 has two Unclaimed Territory
+copies: the payment table folded tapping #58 into tapping #57 even though a
+later deferred Rakdos Carnarium bounce returns a specific land. While a Karoo
+is in hand, the oracle now keys battlefield lands by card number through its
+payment table and frontier resources. That seed replays with zero gaps; all
+2,636 unit cases, all 179 smoke and 286 regression configurations, and strict
+replay of 777 references passed without play changes or reference drift.
+
+Seed 30164916 still has four ORACLE-GAP flags. Its no-land plan casts
+Slaughter-Priest of Mogis, then a continuation plays Rakdos Carnarium and
+tries a `{2}` sacrifice outlet payment. The oracle's nearest outcome taps
+Secluded Courtyard, while the engine's board leaves it untapped. This is an
+open checker gap; Minotaur remains in beta and needs a fresh clean block after
+it is fixed.
