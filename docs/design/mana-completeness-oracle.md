@@ -2066,3 +2066,34 @@ unit cases pass and Niv gi887 wins T5 under `MTG_NC_SEARCH=1` at d8/b0. The T4 m
 top and two known bottom cards: Generator Servant + Izzet Signet scores 5.000, versus Izzet
 Signet + Tandem Lookout at 6.000. `EmitEvalRows` now uses the same known-preserving shuffle for
 training labels; the blind leaf and mulligan trainer remain on their existing paths.
+
+### 13.16 Modern RW Burn and Giants mana gates (2026-11-08)
+
+Modern RW Burn's first 5,000-game gate found 10 ENUM-GAPs, all two-copy
+`Skewer the Critics` lines. The first Skewer pays its full `{2}{R}`, deals face
+damage, and the second pays spectacle `{R}`. `SpectacleCreditCtx` now prices
+each selected cast against face-damage casts before it in the executor's stable
+order, including an earlier Skewer. The fresh 5,000-game block (5000-9999,
+source `90af1f5c88b8`) was clean with oracle-off play identity.
+
+Giants' next 5,000-game block (64000-68999, same source) found two ENUM-GAPs:
+`Stinkdrinker Daredevil` cast this turn discounts `Giant Harbinger`, allowing
+Harbinger plus `Lightning Greaves` and its equip on six mana. The existing
+`SameTurnReducerGenericCredit` supported subtype reducers, but the enumerator's
+frame-level `any_reducer` scan only enabled it for color reducers. It now
+recognizes subtype and chosen-type reducers. The free-attach guard preserves
+the old refusal when an equip moves haste away from a fresh host, while a
+newly cast Greaves has no old host to lose. Both original repro seeds have
+`MISS=0`, 2,636 unit cases passed, and strict replay of 777 references found
+zero drift. The fresh 5,000-game Giants block (69000-73999, source
+`95d103c9dfa9`) was clean with oracle-off play identity.
+
+Kithkin's hybrid payable-order bound and oracle frontier payment-history fixes
+remained clean on this source: games 15000-19999, zero issues, with oracle-off
+play identity. The earlier clean block was games 10000-14999 on source
+`a93beb64c687`.
+
+The pooled current-source refresh (source `95d103c9dfa9`) also passed Modern RW
+Burn games 10000-14999 and Soldiers games 81000-85999: 5,000 each, zero issues,
+byte-identical oracle-off play. Together with the Giants and Kithkin blocks,
+these four decks have clean 5,000-game stamps on the same source.

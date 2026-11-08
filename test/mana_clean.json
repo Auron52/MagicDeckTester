@@ -920,6 +920,43 @@
      "seed": 30064000,
      "src": "90af1f5c88b803c9043e2bf0cbb725beb441b468",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "DOMINATED-LAND": 639,
+      "PHANTOM": 1072
+     },
+     "commit": "7cd3154033064c413000240b98c261cceb4a5822",
+     "date": "2026-11-08T06:33:32Z",
+     "decisions": 51372,
+     "deck": "decks/Giants/Giants.cod",
+     "deck_sha": "8fc24c122bfa3ac9116c551c44de4584b040650b",
+     "game_index": 69000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 0,
+     "life_breakpoints": [],
+     "ms_off": 437179,
+     "ms_on": 1043084,
+     "report": "logs/mana_clean/pass3-giants/report.md",
+     "run": "pass3-giants",
+     "seed": 30069000,
+     "src": "95d103c9dfa9b3b2cdfc1c768727fe9d70992a31",
+     "verdict": "clean"
     }
    ]
   },
@@ -1133,6 +1170,43 @@
      "run": "pass3-kithkin",
      "seed": 30010000,
      "src": "a93beb64c68741822524b0c65321fd8c77acb15b",
+     "verdict": "clean"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "CONTINUATION-DIFFERS": 3251,
+      "DROP-COVERED": 184
+     },
+     "commit": "7cd3154033064c413000240b98c261cceb4a5822",
+     "date": "2026-11-08T06:34:06Z",
+     "decisions": 40264,
+     "deck": "decks/Kithkin/Kithkin.cod",
+     "deck_sha": "8e49f48ad9010cc247022551291f5b24ff99d149",
+     "game_index": 15000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 0,
+     "life_breakpoints": [],
+     "ms_off": 229729,
+     "ms_on": 488232,
+     "report": "logs/mana_clean/pass4-kithkin/report.md",
+     "run": "pass4-kithkin",
+     "seed": 30015000,
+     "src": "95d103c9dfa9b3b2cdfc1c768727fe9d70992a31",
      "verdict": "clean"
     }
    ]
@@ -1795,6 +1869,42 @@
      "seed": 30005000,
      "src": "90af1f5c88b803c9043e2bf0cbb725beb441b468",
      "verdict": "clean"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "PHANTOM": 17
+     },
+     "commit": "7cd3154033064c413000240b98c261cceb4a5822",
+     "date": "2026-11-08T06:40:05Z",
+     "decisions": 34993,
+     "deck": "decks/Modern RW Burn/Modern RW Burn.cod",
+     "deck_sha": "d12faa070733d241dc9193875371dfc28b5e7ce3",
+     "game_index": 10000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 0,
+     "life_breakpoints": [],
+     "ms_off": 4803859,
+     "ms_on": 5120457,
+     "report": "logs/mana_clean/pass3-burn-soldiers/report.md",
+     "run": "pass3-burn-soldiers",
+     "seed": 30010000,
+     "src": "95d103c9dfa9b3b2cdfc1c768727fe9d70992a31",
+     "verdict": "clean"
     }
    ]
   },
@@ -2218,6 +2328,44 @@
      "run": "pass2-soldiers",
      "seed": 30076000,
      "src": "90af1f5c88b803c9043e2bf0cbb725beb441b468",
+     "verdict": "clean"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "DOMINATED-LAND": 15,
+      "DROP-COVERED": 4,
+      "PHANTOM": 78
+     },
+     "commit": "7cd3154033064c413000240b98c261cceb4a5822",
+     "date": "2026-11-08T06:40:05Z",
+     "decisions": 37435,
+     "deck": "decks/Soldiers/soldiers.cod",
+     "deck_sha": "a98c057cb566d0dc84075d28e0a3d20a5dfefc3f",
+     "game_index": 81000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 0,
+     "life_breakpoints": [],
+     "ms_off": 214028,
+     "ms_on": 796838,
+     "report": "logs/mana_clean/pass3-burn-soldiers/report.md",
+     "run": "pass3-burn-soldiers",
+     "seed": 30081000,
+     "src": "95d103c9dfa9b3b2cdfc1c768727fe9d70992a31",
      "verdict": "clean"
     }
    ]
