@@ -2143,11 +2143,31 @@ fix. All 2,636 unit cases passed, smoke had 179 unchanged configurations, and
 regression had 283 unchanged plus three equal-win-turn play changes (Niv 2HG
 T4, Niv T5, Treasure Hunt T4), no slower or faster games. Strict replay of 777
 references found zero drift or enum gaps. The accepted regression baseline
-records those three line choices. BreachingDragonstorm still needs a fresh
-5,000-game clean block on this source before leaving beta.
+records those three line choices. BreachingDragonstorm's next 5,000-game block
+(105000-109999, source `8b9a23e598f8`) passed with zero issues and oracle-off
+byte identity.
 
 The same source's pooled queue also gave clean 5,000-game blocks for Knights,
 KittyEquipment, CritterLifegain, LifegainHeliodCombo, Fluctuator,
 Colossus Hammer, Burn, Auras, and Modern RW Burn after its new profile was
 adopted. The other refreshed decks remain beta with their issue counts in
 `test/mana_clean.json`.
+
+### 13.19 Current-source refresh and Jumbo Cactuar baseline (2026-11-08)
+
+The source `8b9a23e598f8` pooled 5,000 fresh games each for Auras, Burn,
+Colossus Hammer, Fluctuator, Modern RW Burn, Knights, CritterLifegain,
+LifegainHeliodCombo, Giants, Kithkin, Soldiers, and WhiteKnights. All twelve
+were clean, with oracle-off byte identity. KittyEquipment's next 5,000 games
+had no MISS or ORACLE-GAP, but one large T4 decision exhausted its 300-priced-
+second audit budget, leaving 888 CAPPED-DECISION flags. This is an audit
+coverage limit on a new game range, not a fresh-ramp-filter path (the deck has
+no ramp filter).
+
+Jumbo Cactuar's first 5,000-game block (0-4999) found 17,966 issue flags:
+1,450 ENUM-GAP, 589 APPLY-DROP, 870 APPLY-DROP-ORDER, 653 DOMINATED-CREATURE,
+333 ORACLE-GAP, 340 UNMODELED, and 13,731 CAPPED-DECISION. The capped flags
+come from one decision. Oracle-off play remained byte-identical. The first
+repair target is the repeated T3 Wild Growth / Overgrowth / Tooth and Nail
+enumeration gap; the per-class signatures and reproductions are in
+`logs/mana_clean/20261108-090123/report.md`.
