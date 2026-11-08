@@ -10205,6 +10205,11 @@ HumanPreTapOffer HumanPreTapOfferFor(const GameState& state, const Permanent& p)
     // ---- PLAIN sources (the original feature; unchanged) -----------------------------------------
     o.route = HumanPreTapOffer::Route::Plain;
     for (Color c : EffectiveProduces(state, active, *def)) { add_free(c); }
+    // Grove's separate painless {C} ability is chosen for a generic pip by
+    // DripLandAnyPipColor, although `produces` lists only its coloured modes.
+    // The oracle scripts taps through this offer and must be able to choose
+    // that same {C} mode to reproduce the engine's opponent-life result.
+    if (q.tap_opponent_lifegain > 0) { add_free(Color::Colorless); }
     // A scaled mana LAND (Three Tree City): its "{T}: Add {C}" is the plain face above, and its
     // "{2},{T}: Add N mana of one colour" (N = creatures you control -- the backtracker's model,
     // ScaledManaCreatureCount) is a fed face per colour, through the same feed-from-float path as a

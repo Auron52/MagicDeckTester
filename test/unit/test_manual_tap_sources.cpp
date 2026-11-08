@@ -153,6 +153,31 @@ bool Contains(const std::string& hay, const std::string& needle) { return hay.fi
 }   // namespace
 
 // ---------------------------------------------------------------------------------------------------
+TEST_CASE("Manual tap / Grove offers its painless colorless mode separately from the life-gain modes")
+{
+    GameState s = FreshMt();
+    PutMt(s, "Grove of the Burnwillows", 10);
+    const HumanPreTapOffer o = HumanPreTapOfferFor(s, *FindMt(s, 10));
+    CHECK(Contains(o.free_faces, "C"));
+    CHECK(Contains(o.free_faces, "R"));
+    CHECK(Tap(s, "Grove of the Burnwillows#10:C").empty());
+    CHECK(s.floating_mana.colorless == 1);
+    CHECK(s.players[1].life == 20);
+
+    s = FreshMt();
+    PutMt(s, "Grove of the Burnwillows", 10);
+    CHECK(Tap(s, "Grove of the Burnwillows#10:R").empty());
+    CHECK(s.floating_mana.red == 1);
+    CHECK(s.players[1].life == 21);
+
+    s = FreshMt();
+    PutMt(s, "Grove of the Burnwillows", 10);
+    PutMt(s, "Tainted Remedy", 11);
+    CHECK(Tap(s, "Grove of the Burnwillows#10:R").empty());
+    CHECK(s.players[1].life == 19);
+}
+
+// ---------------------------------------------------------------------------------------------------
 TEST_CASE("Manual tap / Generator Servant: the pre-tap IS the executor's crack -- {C}{C} tagged, Servant gone")
 {
     GameState s = FreshMt();
