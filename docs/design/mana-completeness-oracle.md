@@ -2273,3 +2273,14 @@ Selesnya Lifegain 9,425, Shadowborn Apostle 11,991, and Stompy Surprise
 dominated by 25,464 UNMODELED flags; Midrange Burn has 8,275
 APPLY-DROP-ORDER flags. The exact classes, fresh game ranges, and
 reproductions are in `logs/mana_clean/due-fast-20261108/report.md`.
+
+The current-source medium refresh (`due-medium-20261108`, 5,000 fresh games per
+deck) also left all ten decks in beta. Issue counts were FiveColour 35,012,
+Hinata2 58,243, Landfall 81,161, LandfallElementals 94,137, Melira Pod
+299,501, Mirrorwing Dragon 12,549, NivMizzetCombo 333,811, Prevent Damage
+3,775, Snow 44,095, and Unpredictable Cyclone 13,103. All ten retained
+byte-identical oracle-off play. The classes include 7,128 ENUM-GAP and
+3,082 ORACLE-GAP flags in Mirrorwing Dragon, 11,368 APPLY-DROP and 5,407
+DOMINATED-HASTE flags in NivMizzetCombo, and 10,604 CAPPED flags in Snow.
+The exact classes and fresh game ranges are in
+`logs/mana_clean/due-medium-20261108/report.md`.
