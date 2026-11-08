@@ -2143,6 +2143,44 @@
      "seed": 30000000,
      "src": "7ec55bb505a80a04bb75eebca1ef10ce9740acd7",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "DOMINATED-LAND": 9,
+      "DROP-COVERED": 6,
+      "PHANTOM": 60
+     },
+     "commit": "2ca8bcfbc1333788ad3372e462917a3fd84a26cf",
+     "date": "2026-11-08T05:40:49Z",
+     "decisions": 37308,
+     "deck": "decks/Soldiers/soldiers.cod",
+     "deck_sha": "a98c057cb566d0dc84075d28e0a3d20a5dfefc3f",
+     "game_index": 76000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 0,
+     "life_breakpoints": [],
+     "ms_off": 176640,
+     "ms_on": 731681,
+     "report": "logs/mana_clean/pass2-soldiers/report.md",
+     "run": "pass2-soldiers",
+     "seed": 30076000,
+     "src": "90af1f5c88b803c9043e2bf0cbb725beb441b468",
+     "verdict": "clean"
     }
    ]
   },
