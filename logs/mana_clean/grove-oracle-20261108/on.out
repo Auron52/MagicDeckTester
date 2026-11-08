@@ -1,0 +1,3 @@
+=== BATCH (streaming per-job results as each job finishes) ===
+grove_fresh_g90000: played=5000 avg=4.1922 digest=a6e9201ba1c03bab ms=1485647 units=17695925
+=== BATCH done (1 jobs, 5000 games) ===

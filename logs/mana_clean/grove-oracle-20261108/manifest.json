@@ -1,0 +1,12 @@
+{
+  "jobs": [
+    {
+      "name": "grove_fresh_g90000",
+      "deck": "decks/Anti-Lifegain/Anti-Lifegain.cod",
+      "profile": "decks/Anti-Lifegain/Anti-Lifegain.profile.json",
+      "games": 5000,
+      "seed": 30090000,
+      "game_index": 90000
+    }
+  ]
+}
