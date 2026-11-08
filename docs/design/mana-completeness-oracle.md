@@ -2213,3 +2213,11 @@ drops. All three decks retained oracle-off byte identity. The exact plans and
 reproduction commands are in `logs/mana_clean/20261108-102410/report.md`;
 Breaching Dragonstorm and Burn need focused gate repairs before new clean
 stamps.
+
+The next pooled 100,000-game blocks on the same source (Auras 108000-207999,
+Fluctuator 110000-209999, Colossus Hammer 85000-184999) left Auras and
+Colossus Hammer clean. Fluctuator found 70 issue flags: 28 APPLY-DROP, 34
+UNMODELED, and eight CAPPED, concentrated in a cycling turn with an Unearth
+continuation that the base plan did not declare. There were no ORACLE-GAPs,
+and all three decks retained oracle-off byte identity. Details and the
+gi118147 reproduction are in `logs/mana_clean/20261108-104402/report.md`.

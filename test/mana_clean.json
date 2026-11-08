@@ -349,6 +349,44 @@
      "seed": 30103000,
      "src": "8b9a23e598f8c80a65d276e3edd17e07e0a56a72",
      "verdict": "clean"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "DOMINATED-LAND": 5,
+      "DOMINATED-LIFE": 168466,
+      "HIDDEN-INFO": 1
+     },
+     "commit": "7ec21f2d5eba5beb2940c6e483fbf6c545bf1724",
+     "date": "2026-11-08T11:27:43Z",
+     "decisions": 719577,
+     "deck": "decks/Auras/Auras.cod",
+     "deck_sha": "d460059a235b04e8773cca0272efac80f4784d3c",
+     "game_index": 108000,
+     "games": 100000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 0,
+     "life_breakpoints": [],
+     "ms_off": 5106817,
+     "ms_on": 21077967,
+     "report": "logs/mana_clean/20261108-104402/report.md",
+     "run": "20261108-104402",
+     "seed": 30108000,
+     "src": "3bda5c647e7c49dbe493bd77d1ef4a0da0a689b6",
+     "verdict": "clean"
     }
    ]
   },
@@ -879,6 +917,45 @@
      "seed": 30080000,
      "src": "8b9a23e598f8c80a65d276e3edd17e07e0a56a72",
      "verdict": "clean"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "DOMINATED-LAND": 2
+     },
+     "commit": "7ec21f2d5eba5beb2940c6e483fbf6c545bf1724",
+     "date": "2026-11-08T11:27:43Z",
+     "decisions": 571122,
+     "deck": "decks/Colossus Hammer/Colossus Hammer.cod",
+     "deck_sha": "0e2635c93550d518c72a4432604b62580b491507",
+     "game_index": 85000,
+     "games": 100000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION",
+      "DOMINATED-LIFE"
+     ],
+     "issues": 0,
+     "life_breakpoints": [
+      "Speaker of the Heavens"
+     ],
+     "ms_off": 4784297,
+     "ms_on": 25225904,
+     "report": "logs/mana_clean/20261108-104402/report.md",
+     "run": "20261108-104402",
+     "seed": 30085000,
+     "src": "3bda5c647e7c49dbe493bd77d1ef4a0da0a689b6",
+     "verdict": "clean"
     }
    ]
   },
@@ -1403,6 +1480,48 @@
      "seed": 30105000,
      "src": "8b9a23e598f8c80a65d276e3edd17e07e0a56a72",
      "verdict": "clean"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 28,
+      "CAPPED": 8,
+      "CONTINUATION-DIFFERS": 3,
+      "DOMINATED-LAND": 597,
+      "DROP-COVERED": 12545,
+      "PHANTOM": 135917,
+      "UNMODELED": 34
+     },
+     "commit": "7ec21f2d5eba5beb2940c6e483fbf6c545bf1724",
+     "date": "2026-11-08T11:27:43Z",
+     "decisions": 610678,
+     "deck": "decks/Fluctuator/Fluctuator.cod",
+     "deck_sha": "71daafa2a8ed6440fe065d12c82f4d368193d9b6",
+     "game_index": 110000,
+     "games": 100000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 70,
+     "life_breakpoints": [],
+     "ms_off": 9146641,
+     "ms_on": 24219062,
+     "report": "logs/mana_clean/20261108-104402/report.md",
+     "run": "20261108-104402",
+     "seed": 30110000,
+     "src": "3bda5c647e7c49dbe493bd77d1ef4a0da0a689b6",
+     "verdict": "issues"
     }
    ]
   },
