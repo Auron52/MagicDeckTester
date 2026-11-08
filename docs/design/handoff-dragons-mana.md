@@ -8,6 +8,14 @@ controls are still running. The separate seven-slower-game d8/b0 batch finished:
 arms with identical digest, as did the five previously reported Standard games; Standard gi2069 is T7 on both arms
 with different digests. The shipped-setting gi926 slowdown remains a budget-sensitive plan choice.
 
+The focused find-side regression is now `test/unit/test_line_repay.cpp`, "a held Aura host remains findable for a
+previous payment". A Forest pays the first {G}; Razorverge Thicket is then temporarily held as the second Aura's
+host, leaving an untapped Plains but no available green. The previous payment's record is found only when the held
+host is read as untapped; it is re-made on Thicket, freeing Forest for the second {G}, and the Thicket's real tap is
+preserved. The same board without the held-host scope cannot repay. Focused test: 61/61 assertions; full suite:
+2,438/2,438 tests and 3,568,575/3,568,575 assertions (`/tmp/dragon-host-units.log`). This covers the find-side
+case that the earlier gi323 unit (record-side) did not.
+
 Completed independent checks on this candidate:
 
 * Dragons mana oracle gate, same 10,000-game slice as the November 3 base: `gate_hostfix32.{out,err}` (32 threads),
@@ -24,8 +32,7 @@ Completed independent checks on this candidate:
   drift, board divergence, enum gap, shuffle dead, mull drift, or contract fail. Both suboptimal references beaten.
   No GT accepted, per the worktree brief. The run returns mismatch against current shipped GT as expected for WIP.
 
-Still required before landing: let the three gi2535 measurements finish and inspect their paired result; add a
-focused find-side host-hold unit/scenario test that fails without the fix; review the remaining smoke/regression play
+Still required before landing: let the three gi2535 measurements finish and inspect their paired result; review the remaining smoke/regression play
 changes and the gate residue; update `mana-completeness-oracle.md` with final measurements. Branch adoption waits on
 the final EDF A/B tail and the test, not on another broad CPU run. The remaining tails are effectively serial, so
 their low total CPU utilization does not mean a ready validation run was left unstarted.

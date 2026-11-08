@@ -15,6 +15,7 @@
 
 #include "ai/DecisionProviders.h"
 #include "ai/HeuristicArm.h"
+#include "ai/ManaPayment.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
 #include "core/GameSetup.h"
@@ -287,4 +288,49 @@ TEST_CASE("Line repay: a land Aura paid under its host hold can still be re-made
     };
     CHECK(line_pays(true) == 1);
     CHECK(line_pays(false) != 1);   // off: the per-cast payer strands the {W} (or the menu never offers the line)
+}
+
+TEST_CASE("Line repay: a held Aura host remains findable for a previous payment")
+{
+    EnsureCardsLoaded();
+    ArmPin on(heurarm::LINE_REPAY, true);
+    auto second_pays = [&](bool scope_host)
+    {
+        GameState s = BaseBoard();
+        s.deck_has_land_aura = true;
+        Put(s, "Razorverge Thicket", 1); // the host, held while the second Aura pays
+        Put(s, "Forest", 2);
+        Put(s, "Plains", 3); // enough total mana remains; only green is stranded
+        ManaCost g;
+        g.green = 1;
+        ManaCost total = g;
+        total.green = 2;
+        LineRepayClearPerGame();
+        LineUnpaidCostScope line(total);
+        const auto before = LineRepayMark();
+        REQUIRE(TapForCostDirect(s, g, false));
+        CHECK(LineRepayMark() == before + 1);
+        SubManaCost(g_line_unpaid_cost, g);
+        CHECK_FALSE(s.battlefield[0].tapped); // the first payment chose Forest
+        CHECK(s.battlefield[1].tapped);
+        s.battlefield[0].tapped = true; // temporary hold on the second Aura's host
+        bool host_tapped_by_repay = false;
+        bool paid = false;
+        if (scope_host)
+        {
+            LineRepayHeldHostScope held(1, &host_tapped_by_repay);
+            paid = TapForCostDirect(s, g, false);
+        }
+        else { paid = TapForCostDirect(s, g, false); }
+        if (paid)
+        {
+            CHECK(host_tapped_by_repay == scope_host);
+            CHECK(s.battlefield[0].tapped); // the re-made first payment really tapped the host
+            CHECK(s.battlefield[1].tapped); // the second payment used Forest
+            CHECK_FALSE(s.battlefield[2].tapped);
+        }
+        return paid;
+    };
+    CHECK_FALSE(second_pays(false)); // pre-fix find sees the temporary tap and misses the record
+    CHECK(second_pays(true));
 }
