@@ -1960,6 +1960,53 @@
     }
    ]
   },
+  "shadowborn_apostle": {
+   "runs": [
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 999,
+      "APPLY-DROP-ORDER": 2890,
+      "CONTINUATION-DIFFERS": 853,
+      "DOMINATED-LAND": 931,
+      "DROP-COVERED": 1225,
+      "ENUM-GAP": 6,
+      "PHANTOM": 20517,
+      "UNMODELED": 7205
+     },
+     "commit": "fe76fd850b6aad945ce9dc8e47c181626328cac8",
+     "date": "2026-11-08T05:39:09Z",
+     "decisions": 43047,
+     "deck": "decks/Shadowborn Apostle/Shadowborn Apostle.cod",
+     "deck_sha": "a23edb97dcaeb1e61888de6616f4f35299abf43d",
+     "game_index": 0,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 11100,
+     "life_breakpoints": [],
+     "ms_off": 2993163,
+     "ms_on": 3312044,
+     "report": "logs/mana_clean/pass1-shadowborn-apostle/report.md",
+     "run": "pass1-shadowborn-apostle",
+     "seed": 30000000,
+     "src": "90af1f5c88b803c9043e2bf0cbb725beb441b468",
+     "verdict": "issues"
+    }
+   ]
+  },
   "slivers_vial": {
    "runs": [
     {
