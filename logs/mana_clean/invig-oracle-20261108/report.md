@@ -6,4 +6,8 @@ Anti-Lifegain seed `30090033`, game index `90033`, turn 3 had an `ORACLE-GAP`: t
 
 Fresh 5,000-game block: seed `30095000`, indices 95000–99999, one thread. Oracle-on and oracle-off both played 5,000 games, averaged 4.1970 turns, used 17,753,153 work units, and produced digest `eb17d5f4f8292b3b`. The oracle-on run still reported 47 `ORACLE-GAP`s across 31 games, so Anti-Lifegain is not clean. Forty-four gaps mention a pump difference; eight flags have no Invigorate action listed in the plan, including tutor continuations that auto-fire Invigorate from hand. No `UNMODELED` flag occurred. `DOMINATED-LAND` (2,663) and `CONTINUATION-DIFFERS` (8) were disclosed context.
 
+Focused replay of seed `30095038`, game index `95038`, turn 4 showed that the oracle offers the engine's three-payment script (Stomping Ground `{G}`, Godless Shrine `{W}`, Birds of Paradise `{W}`); the resulting board still differs only in the Birds pump. This narrows that residual to Invigorate timing or target selection after payment enumeration.
+
 Full local unit suite: 2,638 tests and 3,578,069 assertions passed. Files: `manifest.json`, `on.out`, `off.out`, and `issues.err` (whole issue lines). Unfiltered oracle stderr is scratch output under `/tmp/invig-fresh-on.err` in the current container.
+
+CI run `42512372037` completed successfully on Linux and Windows, including Linux/Windows determinism parity. This validates the WIP source and focused test; the 47 residual oracle gaps above still prevent a clean gate.
