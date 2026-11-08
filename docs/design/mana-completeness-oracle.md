@@ -2171,3 +2171,17 @@ come from one decision. Oracle-off play remained byte-identical. The first
 repair target is the repeated T3 Wild Growth / Overgrowth / Tooth and Nail
 enumeration gap; the per-class signatures and reproductions are in
 `logs/mana_clean/20261108-090123/report.md`.
+
+The first repair is the Aura-only scalar ceiling. Jumbo seed 30001874 gi1874
+T3 casts Overgrowth and Wild Growth on a Forest that Voyaging Satyr can retap,
+then Tooth and Nail. The old ceiling credited each new Aura bonus only once
+and rejected the subset as `ef-aura-scalar`; the payer's sequenced walk and the
+oracle both pay it. The ceiling now credits each new Aura bonus once more per
+ready land untapper already on the board, using only a cheap optimistic bound;
+the sequenced walk still decides actual payability. The focused seed fell from
+54 ENUM-GAP flags to zero. All 2,636 unit cases passed. Smoke changed one
+equal-win-turn Jumbo line; full regression had 282 unchanged configurations,
+two faster Jumbo configurations, twelve equal-score Jumbo line changes, and no
+slower games. All 777 strict references replayed with zero drift or enum gap.
+The reviewed changed lines and updated regression ground truth were accepted.
+A fresh 5,000-game block on this source remains to run.

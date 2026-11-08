@@ -73551,6 +73551,22 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     int n_ramp_filters = 0;
     bool any_cast_ramp_filter = false;
     bool fresh_ramp_filter = false;
+    // A land Aura cast in this subset can boost every later tap of its host,
+    // including taps earned by a ready Arbor Elf or Voyaging Satyr. Count the
+    // existing untappers once for the Aura-only scalar ceiling below.
+    int ready_aura_untappers = 0;
+    if (state.deck_has_land_aura)
+    {
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index || p.tapped
+                || !CanTapNow(p, state.battlefield)) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d != nullptr && (d->params.untap_target_land
+                                 || UntapLandSourceDef(state, p) != nullptr))
+            { ++ready_aura_untappers; }
+        }
+    }
     if (RampFilterCFeedOn())
     {
         for (const Permanent& p : state.battlefield)
@@ -75431,7 +75447,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             {
                 if (nonaura == 0 && !(s_aura_funds_aura && n_aura >= 2))
                 { _ct.label = "ef-aura-solo"; return false; }
-                if (static_cast<int>(pool.Total()) + aura_bonus < combined.ManaValue())
+                if (static_cast<int>(pool.Total())
+                    + aura_bonus * (1 + ready_aura_untappers) < combined.ManaValue())
                 { _ct.label = "ef-aura-scalar"; return false; }
             }
             // STATIC for the same reason as the walk's own tracer read (see SubsetPayableSequential):

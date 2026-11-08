@@ -1,7 +1,6 @@
-# Regression ground truth -- commit 0d88a9d20  date 2026-11-08
+# Regression ground truth -- commit 4bded6426  date 2026-11-08
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-07): Periodic baseline after adopted Cyclone, Kithkin, Shadowborn and Jumbo artifacts plus c-wild mana legality: 94/578 cells moved; searched 2375 faster versus 1189 slower; Cyclone -491t, Kithkin -882t, Shadowborn -72t, Jumbo -11t. Hinata +24t/1831 searched and Niv +3t/2225 reflect the colorless-mana legality correction reviewed in shorter tiers; EDF d0 +4t/8000. Prior Angels +0.0064t/6065 searched, Angels2HG +0.0150t/600, and Bruna +0.0122t/2131 remain follow-ups. Per-game outcome audit completed; old trace snapshot was stale and could not parse Madness, so its trace explanations were unavailable.
-# accepted-with-regressions (smoke, 2026-11-08): Modern RW Burn exhaustive keep adoption: changed mulligan or bottom; all changed games attributed; net smoke improvement
 # accepted-with-regressions (overnight, 2026-11-08): Modern RW Burn exhaustive keep adoption: all changed games attributed to mulligan or bottom; all overnight cells improve
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -78,7 +77,7 @@ stompy_smoke_d3_s1001=3.9800/e2e95d4626254be2
 stompy_smoke_d5_s1001=4.0000/12c9e20788d4ea9d
 jumbo_smoke_d0_s1001=5.6540/f16fa7a3f7fc3c1e
 jumbo_smoke_d3_s1001=3.9400/a8c923c3e73fc5e1
-jumbo_smoke_d5_s1001=3.9829/5483716a171458b1
+jumbo_smoke_d5_s1001=3.9829/7488fcbd62da68f1
 minotaur_smoke_d0_s1001=5.3050/948ae97fa1052211
 minotaur_smoke_d3_s1001=4.9867/c2ccc2adcb805a03
 minotaur_smoke_d5_s1001=4.8954/e73569ee4e3d2ade
@@ -236,8 +235,8 @@ goblins_regression_d3_s30001=3.7500/91809def39c75fce
 goblins_regression_d5_s30001=3.7500/91809def39c75fce
 hinata_regression_d3_s30001=5.4000/dc809bb9e08d2f85
 hinata_regression_d5_s30001=5.4000/dc809bb9e08d2f85
-jumbo_regression_d3_s30001=4.3000/797d6d2d769db88b
-jumbo_regression_d5_s30001=4.0526/d848a42275b51ede
+jumbo_regression_d3_s30001=4.2500/29ded14822d7f59b
+jumbo_regression_d5_s30001=4.0000/c5737c31e4e53b4e
 kittyv3_regression_d3_s30301=3.4000/20266003fb5e888b
 kittyv3_regression_d5_s30301=3.4000/20266003fb5e888b
 knights_regression_d3_s30001=4.3500/5dc667b9fee7d29e
@@ -348,8 +347,8 @@ stompy_regression_d5_s2002=4.1000/9fbcebdbc6b697f6
 stompy_regression_d5_s3003=4.0560/415f29b0a90fb76e
 jumbo_regression_d0_s2002=5.5870/db8dea0bf0cf0f92
 jumbo_regression_d3_s2002=4.2400/9502daee72117f48
-jumbo_regression_d5_s2002=4.0840/723a18554dfe149f
-jumbo_regression_d5_s3003=4.0780/914c04ed1eec2993
+jumbo_regression_d5_s2002=4.0840/2663cc683e8edf45
+jumbo_regression_d5_s3003=4.0780/5eee0083d1e3fec7
 minotaur_regression_d0_s2002=5.3100/0d522c9d270f350f
 minotaur_regression_d3_s2002=4.8800/2192c7cd2cc8d894
 minotaur_regression_d5_s2002=4.8780/c3f0de692d29640b
