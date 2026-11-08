@@ -2227,3 +2227,12 @@ CritterLifegain (210000-309999), LifegainHeliodCombo (210000-309999), and
 Modern RW Burn (25000-124999). All three were clean, with zero MISS,
 ORACLE-GAP, UNMODELED, or CAPPED flags and byte-identical oracle-off play.
 The full gate report is `logs/mana_clean/20261108-112821/report.md`.
+
+The fourth pooled 100,000-game challenge on the same source left Giants
+(79000-178999), Kithkin (25000-124999), and WhiteKnights (110000-209999)
+clean. Soldiers (91000-190999) had six APPLY-DROP flags on two T4 seeds:
+gi94711 and gi150641. In both, the oracle pays Harbin, Vanguard Aviator
+after a preceding payment; the engine drops that cast. The rollback census
+marks all six as depth-one cases whose lost action was not declared in the
+base plan. All four decks retained byte-identical oracle-off play. The exact
+plans are in `logs/mana_clean/20261108-120432/report.md`.
