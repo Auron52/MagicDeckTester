@@ -504,6 +504,45 @@
      "seed": 30000000,
      "src": "7ec55bb505a80a04bb75eebca1ef10ce9740acd7",
      "verdict": "clean"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "DOMINATED-LAND": 28406
+     },
+     "commit": "c70d1cf68753935fc508e2466b3b8e459f75ab9e",
+     "date": "2026-11-08T06:59:13Z",
+     "decisions": 763021,
+     "deck": "decks/CritterLifegain/CritterLifegain.cod",
+     "deck_sha": "680d8e3bcc6c9f441d585b5e1e65828212584df5",
+     "game_index": 100000,
+     "games": 100000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION",
+      "DOMINATED-LIFE"
+     ],
+     "issues": 0,
+     "life_breakpoints": [
+      "Serra Ascendant"
+     ],
+     "ms_off": 2498992,
+     "ms_on": 8081914,
+     "report": "logs/mana_clean/20261108-064356/report.md",
+     "run": "20261108-064356",
+     "seed": 30100000,
+     "src": "95d103c9dfa9b3b2cdfc1c768727fe9d70992a31",
+     "verdict": "clean"
     }
    ]
   },
@@ -1514,6 +1553,46 @@
      "run": "pass1-lifegainheliodcombo",
      "seed": 30000000,
      "src": "aa9f15b9b77f5ce74cb10086d88ce9fe70b5f023",
+     "verdict": "clean"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "DROP-COVERED": 56,
+      "PHANTOM": 19
+     },
+     "commit": "c70d1cf68753935fc508e2466b3b8e459f75ab9e",
+     "date": "2026-11-08T06:59:13Z",
+     "decisions": 823285,
+     "deck": "decks/LifegainHeliodCombo/LifegainHeliodCombo.cod",
+     "deck_sha": "abe7a6d72f0b87dd3655037026b236f1098bcc3b",
+     "game_index": 100000,
+     "games": 100000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION",
+      "DOMINATED-LIFE"
+     ],
+     "issues": 0,
+     "life_breakpoints": [
+      "Serra Ascendant"
+     ],
+     "ms_off": 5799576,
+     "ms_on": 14109130,
+     "report": "logs/mana_clean/20261108-064356/report.md",
+     "run": "20261108-064356",
+     "seed": 30100000,
+     "src": "95d103c9dfa9b3b2cdfc1c768727fe9d70992a31",
      "verdict": "clean"
     }
    ]
