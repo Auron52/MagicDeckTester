@@ -2675,6 +2675,17 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                                                    + "t" + std::to_string(fronts[i].tapahead)
                                                    + (fronts[i].has_spell ? "|" + fronts[i].spell.m_name.str() : "")
                                                    + "v" + std::to_string(fronts[i].sac_victim));
+                // A failed payment can leave the same board as a successful but
+                // effect-free activation. It still drops an action from the line,
+                // and a later payment cannot repair that drop. Keep frontiers with
+                // different failed steps apart before comparing their resources.
+                std::uint64_t failures = 0;
+                for (std::size_t step = 0; step < fronts[i].script.size(); ++step)
+                {
+                    if (!fronts[i].script[step].fail) { continue; }
+                    failures = (failures ^ (step + 1)) * 0x100000001b3ULL;
+                }
+                if (failures != 0) { keys[i] ^= failures; }
                 res[i]  = Resources(fronts[i].st, /*with_float=*/true);
             }
             keep = ParetoKeep(keys, res);

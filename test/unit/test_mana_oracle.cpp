@@ -1045,6 +1045,37 @@ TEST_CASE("mana oracle: a Sliver paid off the other Mutavault, the animated one 
     CHECK(manaoracle::CoversEngineOutcome(s, /*pre=*/true, plan));
 }
 
+// Kithkin seed 30002411 T4: paying Figure's {R/W} ability when it is already
+// a 2/2 changes no board field. The unpaid branch leaves more mana, but cannot
+// stand in for the paid branch before a later Mutavault animation.
+TEST_CASE("mana oracle: an unpaid effect-free Figure activation cannot prune the paid line")
+{
+    EnsureOracleCards();
+    static const KithkinProvider prov;
+    GameState s = Board({ "Plains", "Figure of Destiny", "Mutavault", "Metallic Mimic",
+                          "Mutavault", "Adaptive Automaton" });
+    s.m_provider = &prov;
+    s.players[0].life = s.players[1].life = 20;
+    s.battlefield[1].card.m_power = 2;
+    s.battlefield[1].card.m_toughness = 2;
+    s.battlefield[1].card.m_subtypes = { "Kithkin", "Spirit" };
+    Hand(s, { "Wizened Cenn", "Plains", "Aether Vial", "Figure of Destiny" });
+    SetLibrary(s, std::vector<std::string>(20, "Plains"));
+
+    Action level;
+    level.kind = Action::Kind::ActivatePermAbility;
+    level.card_name = CardDatabase::Instance().Lookup("Figure of Destiny")->card.m_name;
+    level.def = CardDatabase::Instance().Lookup("Figure of Destiny");
+    level.sac_source_id = 2;
+    level.ability_mode = Action::AbilityMode::FigureTwo;
+    level.cost = *level.def->params.figure_two_cost;
+    level.chosen_x = 1;
+    TurnSolver::Plan plan = PlanOf({ CastAction(s, "Aether Vial"), CastAction(s, "Figure of Destiny"),
+                                     level, AnimateAction(5) });
+    plan.land_to_play = "Plains";
+    CHECK(manaoracle::CoversEngineOutcome(s, /*pre=*/true, plan));
+}
+
 // Sliver Hive's "{5}, {T}: create a 1/1 Sliver" is an ACTIVATED ABILITY of a land: Ancient Ziggurat's mana ("only to
 // cast a creature spell") cannot pay it, and Cavern of Souls pays it only with its {C} face (CR 106.6). Both apply worlds
 // paid it as a creature spell (for_creature=true), so a Hive token was bought with Ziggurat mana -- 48 ENUM-GAPs whose
