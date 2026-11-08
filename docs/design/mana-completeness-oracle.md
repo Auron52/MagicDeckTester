@@ -2245,3 +2245,13 @@ four decisions exhausted the oracle audit budget, leaving 3,560 plans marked
 CAPPED-DECISION. Both decks kept byte-identical oracle-off play. Neither has
 a clean stamp; the exact cases are in
 `logs/mana_clean/20261108-124250/report.md`.
+
+A current-source 5,000-game refresh then checked four older issue stamps:
+Goblins (105000-109999), Merfolk (105000-109999), Pirates (44000-48999),
+and Treasure Hunt (55000-59999). All still failed. Goblins had 35
+APPLY-DROP, six ENUM-GAP, and 683 ORACLE-GAP flags; Merfolk had 349
+APPLY-DROP flags; Pirates had 223 APPLY-DROP, four APPLY-DROP-ORDER, 49
+ORACLE-GAP, and 193 UNMODELED flags; Treasure Hunt had 501 APPLY-DROP,
+18 ENUM-GAP, five APPLY-DROP-ORDER, 83 ORACLE-GAP, and one UNMODELED flag.
+All four retained byte-identical oracle-off play. The fresh cases are in
+`logs/mana_clean/20261108-140909/report.md`.
