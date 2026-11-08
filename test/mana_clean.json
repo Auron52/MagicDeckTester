@@ -233,6 +233,42 @@
      "seed": 30000000,
      "src": "7ec55bb505a80a04bb75eebca1ef10ce9740acd7",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "DOMINATED-LIFE": 8800
+     },
+     "commit": "97dc0982fc3f4708ba3bd032306f7db3879b0a28",
+     "date": "2026-11-08T07:53:35Z",
+     "decisions": 36020,
+     "deck": "decks/Auras/Auras.cod",
+     "deck_sha": "d460059a235b04e8773cca0272efac80f4784d3c",
+     "game_index": 98000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 0,
+     "life_breakpoints": [],
+     "ms_off": 257304,
+     "ms_on": 1150680,
+     "report": "logs/mana_clean/20261108-075111/report.md",
+     "run": "20261108-075111",
+     "seed": 30098000,
+     "src": "bc60d82d28ef90188f704a69f018debe51a9ee60",
+     "verdict": "clean"
     }
    ]
   },
@@ -2825,6 +2861,44 @@
      "seed": 30000000,
      "src": "7ec55bb505a80a04bb75eebca1ef10ce9740acd7",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 23,
+      "DOMINATED-LAND": 593,
+      "ORACLE-GAP": 7
+     },
+     "commit": "97dc0982fc3f4708ba3bd032306f7db3879b0a28",
+     "date": "2026-11-08T07:53:35Z",
+     "decisions": 37056,
+     "deck": "decks/slivers_vial/slivers_vial.txt",
+     "deck_sha": "5dc06506ec9bf6473190653c54364149ff579cdc",
+     "game_index": 100000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 30,
+     "life_breakpoints": [],
+     "ms_off": 144215,
+     "ms_on": 986987,
+     "report": "logs/mana_clean/20261108-075111/report.md",
+     "run": "20261108-075111",
+     "seed": 30100000,
+     "src": "bc60d82d28ef90188f704a69f018debe51a9ee60",
+     "verdict": "issues"
     }
    ]
   },
@@ -3092,6 +3166,50 @@
      "run": "pass1-treasure_hunt-r2",
      "seed": 30000000,
      "src": "7ec55bb505a80a04bb75eebca1ef10ce9740acd7",
+     "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 448,
+      "CONTINUATION-DIFFERS": 265,
+      "DOMINATED-LAND": 16022,
+      "DOMINATED-LIFE": 322,
+      "DROP-COVERED": 19997,
+      "ENUM-GAP": 19,
+      "HIDDEN-INFO": 1,
+      "ORACLE-GAP": 27,
+      "PHANTOM": 3198
+     },
+     "commit": "97dc0982fc3f4708ba3bd032306f7db3879b0a28",
+     "date": "2026-11-08T07:53:35Z",
+     "decisions": 35590,
+     "deck": "decks/treasure_hunt/treasure_hunt.txt",
+     "deck_sha": "484793063a628b48ddafcdef071d68beadc6f2a8",
+     "game_index": 50000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 494,
+     "life_breakpoints": [],
+     "ms_off": 882687,
+     "ms_on": 1355904,
+     "report": "logs/mana_clean/20261108-075111/report.md",
+     "run": "20261108-075111",
+     "seed": 30050000,
+     "src": "bc60d82d28ef90188f704a69f018debe51a9ee60",
      "verdict": "issues"
     }
    ]
