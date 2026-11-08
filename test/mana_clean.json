@@ -1683,6 +1683,47 @@
     }
    ]
   },
+  "modern_rw_burn": {
+   "runs": [
+    {
+     "binary": "PGO",
+     "by_class": {
+      "ENUM-GAP": 10,
+      "PHANTOM": 17
+     },
+     "commit": "ac1f9732c53321183d52605f6376b4437d91ca12",
+     "date": "2026-11-08T04:48:37Z",
+     "decisions": 34952,
+     "deck": "decks/Modern RW Burn/Modern RW Burn.cod",
+     "deck_sha": "d12faa070733d241dc9193875371dfc28b5e7ce3",
+     "game_index": 0,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 10,
+     "life_breakpoints": [],
+     "ms_off": 4916852,
+     "ms_on": 5083109,
+     "report": "logs/mana_clean/pass1-modern-rw-burn/report.md",
+     "run": "pass1-modern-rw-burn",
+     "seed": 30000000,
+     "src": "a93beb64c68741822524b0c65321fd8c77acb15b",
+     "verdict": "issues"
+    }
+   ]
+  },
   "nivmizzetcombo": {
    "runs": [
     {

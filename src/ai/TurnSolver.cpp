@@ -53229,14 +53229,16 @@ struct SpectacleCreditCtx
 {
     bool                  live = false;     // some cast can turn spectacle on for some spectacle cast
     int                   bound_credit = 0; // sum over spectacle casts of (printed MV - spectacle MV)
-    std::vector<char>     trig;             // cand j turns spectacle on, ordered before the spectacle cast
+    std::vector<char>     trig;             // cand j deals face damage and turns spectacle on
     std::vector<char>     spec;             // cand j is a creditable spectacle cast
     std::vector<ManaCost> live_cost;        // cand j's spectacle cost (spec[j] only)
-    // Does this selection both carry a trigger and a creditable spectacle cast?
-    bool On(const std::vector<int>& sel) const
+    std::vector<std::vector<int>> prior_trig; // trigger candidates before each spectacle cast
+    bool On(const std::vector<int>& sel, int cast) const
     {
-        if (!live) { return false; }
-        for (int j : sel) { if (trig[static_cast<std::size_t>(j)]) { return true; } }
+        if (!live || !spec[static_cast<std::size_t>(cast)]) { return false; }
+        for (int j : sel)
+            for (int prior : prior_trig[static_cast<std::size_t>(cast)])
+                if (j == prior) { return true; }
         return false;
     }
 };
@@ -53249,20 +53251,21 @@ static void BuildSpectacleCreditCtx(const GameState& state, const std::vector<Ac
     // MTG_SPECTACLE_CREDIT_SEARCH_ONLY: the greedy walk (Solve -- the d0 runner and every rollout
     // leaf) keeps the pre-plan cost; only the search's enumeration credits (see the reader).
     if (greedy && SpectacleCreditSearchOnly()) { return; }
-    int rep = -1;
+    bool any_spec = false;
     for (int j = 0; j < static_cast<int>(cands.size()); ++j)
     {
         const Action& a = cands[static_cast<std::size_t>(j)];
         if (a.kind == Action::Kind::CastFromHand && a.has_spectacle && !a.alt_cost && !a.free_cast
             && a.def != nullptr && a.def->params.spectacle_cost.has_value())
-        { rep = j; break; }
+        { any_spec = true; break; }
     }
-    if (rep < 0 || !OpaqueCastOrderActive(state)) { return; }
+    if (!any_spec || !OpaqueCastOrderActive(state)) { return; }
     const bool sac_in_order = SacLandCastsInOrder(state);
     const std::size_t m = cands.size();
     out.trig.assign(m, 0);
     out.spec.assign(m, 0);
     out.live_cost.assign(m, ManaCost{});
+    out.prior_trig.resize(m);
     int credit = 0;
     for (std::size_t j = 0; j < m; ++j)
     {
@@ -53276,11 +53279,20 @@ static void BuildSpectacleCreditCtx(const GameState& state, const std::vector<Ac
                 out.live_cost[j] = SpectacleLiveCost(*a.def, state);
                 credit += std::max(0, a.cost.ManaValue() - out.live_cost[j].ManaValue());
             }
-            continue;
         }
-        if (a.direct_damage <= 0) { continue; }
-        if (a.sacrifice_land && !sac_in_order) { continue; }
-        if (CastOrderLess(state, a, cands[static_cast<std::size_t>(rep)])) { out.trig[j] = 1; out.live = true; }
+        if (a.direct_damage > 0 && (!a.sacrifice_land || sac_in_order)) { out.trig[j] = 1; }
+    }
+    // The executor stable-sorts casts by CastOrderLess. Equal-ranked copies retain candidate order.
+    for (std::size_t j = 0; j < m; ++j)
+    {
+        if (!out.spec[j]) { continue; }
+        for (std::size_t k = 0; k < m; ++k)
+        {
+            if (k == j || !out.trig[k]) { continue; }
+            const bool before = CastOrderLess(state, cands[k], cands[j])
+                || (!CastOrderLess(state, cands[j], cands[k]) && k < j);
+            if (before) { out.prior_trig[j].push_back(static_cast<int>(k)); out.live = true; }
+        }
     }
     out.bound_credit = out.live ? credit : 0;
 }
@@ -54411,13 +54423,12 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         bool subset_adds_artifact = false;
         // The spectacle plan credit: this selection's spectacle casts pay their spectacle cost (an
         // earlier face-damage cast in it turns spectacle on). False -> byte-identical.
-        const bool spec_sub = spec_ctx.On(sel);
 
         for (int j : sel)
         {
             const Action& c = cands[j];
             discard_lands_used += c.discard_lands;
-            const ManaCost& c_cost = (spec_sub && spec_ctx.spec[static_cast<std::size_t>(j)])
+            const ManaCost& c_cost = spec_ctx.On(sel, j)
                                    ? spec_ctx.live_cost[static_cast<std::size_t>(j)] : c.cost;
 
             // Through the CARRYING helper: a plain field-by-field sum drops the hybrid
@@ -74521,13 +74532,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         int  cond_art_haste       = 0;     // Tomb Raider: hasty only if the subset adds a durable artifact
         bool subset_adds_artifact = false;
         // The spectacle plan credit (lockstep twin of Solve::consider's). False -> byte-identical.
-        const bool spec_sub = spec_ctx.On(sel);
 
         for (int j : sel)
         {
             const Action& c = cands[j];
             discard_lands_used += c.discard_lands;
-            const ManaCost& c_cost = (spec_sub && spec_ctx.spec[static_cast<std::size_t>(j)])
+            const ManaCost& c_cost = spec_ctx.On(sel, j)
                                    ? spec_ctx.live_cost[static_cast<std::size_t>(j)] : c.cost;
             // Through the CARRYING helper: a plain field-by-field sum drops the hybrid
             // metadata, leaving a fully BAKED cost that demands each pip's first colour

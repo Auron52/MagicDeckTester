@@ -725,6 +725,31 @@ TEST_CASE("midrange burn: an offered Bolt and Skewer bundle labels any dropped c
     CHECK(offered > 0);
 }
 
+TEST_CASE("midrange burn: first Skewer enables the second Skewer at spectacle cost")
+{
+    GameState s; s.active_player_index = 0; s.turn_number = 4;
+    static const MidrangeBurnProvider provider; s.m_provider = &provider;
+    for (int i = 0; i < 4; ++i) { MBPut(s, "Mountain", 10 + i); }
+    s.players[0].hand = {MBCard("Skewer the Critics", 20), MBCard("Skewer the Critics", 21)};
+    const auto plans = TurnSolver::EnumerateMainPlans(s, true);
+    bool offered = false;
+    for (const auto& p : plans)
+    {
+        int skewers = 0;
+        for (const auto& a : p.actions)
+            if (a.kind == Action::Kind::CastFromHand && a.card_name == "Skewer the Critics") { ++skewers; }
+        if (skewers != 2) { continue; }
+        GameState copy = s;
+        TurnSolver::ApplyPlan(copy, p, true);
+        if (copy.players[0].hand.empty())
+        {
+            CHECK(copy.players[1].life == s.players[1].life - 6);
+            offered = true;
+        }
+    }
+    CHECK(offered);
+}
+
 TEST_CASE("midrange burn: Searing Blaze cannot target a creature before it is cast")
 {
     if (!HumanPlayActive()) { return; } // This is a searched-order human menu invariant.
