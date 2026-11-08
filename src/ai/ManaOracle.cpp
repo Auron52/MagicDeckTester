@@ -2482,6 +2482,7 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
     std::set<int> plan_srcs;
     std::set<std::string> plan_names;
     bool has_karoo_in_hand = false;
+    bool targets_own_creature = false;
     for (const Card& c : root.players[root.active_player_index].hand)
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
@@ -2489,6 +2490,11 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
     }
     for (const Action& a : plan.actions)
     {
+        if (a.kind == Action::Kind::CastFromHand)
+        {
+            const CardDefinition* d = a.def != nullptr ? a.def : CardDatabase::Instance().Lookup(a.card_name.str());
+            if (d != nullptr && d->params.target_own_creature) { targets_own_creature = true; }
+        }
         if (a.sac_source_id != 0) { plan_srcs.insert(a.sac_source_id); }
         if (a.sac_victim_id != 0) { plan_srcs.insert(a.sac_victim_id); }
         // ...and an Aura's HOST (Wild Growth@13): it is not its twins' equal -- the engine pays the Aura with the
@@ -2496,6 +2502,19 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
         // fold let #13 stand for #12, and the engine's "#12 pays, #13 carries Wild Growth" was an ORACLE-GAP).
         if (a.enchant_target > 0 && OracleAuraHostApartOn()) { plan_srcs.insert(a.enchant_target); }
         if (a.kind != Action::Kind::CastFromHand) { plan_names.insert(a.card_name.str()); }
+    }
+    // A mana creature tapped for an earlier cast may no longer be the best
+    // attacker when a later own-creature pump (Invigorate) chooses its target.
+    // Copies of that creature therefore lead to different plan outcomes even
+    // if their mana faces match. Keep their identities through the source
+    // table, payment-result dedupe and frontier resource prune.
+    if (targets_own_creature)
+    {
+        for (const Permanent& p : root.battlefield)
+        {
+            if (p.controller_index == root.active_player_index && p.card.IsCreature())
+            { plan_srcs.insert(p.card.m_number); }
+        }
     }
     struct PlanSrcScope
     {

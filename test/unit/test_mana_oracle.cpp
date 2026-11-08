@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace
@@ -643,6 +644,68 @@ TurnSolver::Plan PlanOf(std::vector<Action> actions)
     return p;
 }
 } // namespace
+
+// Anti-Lifegain seed 30090033 T3: the Remedy payment precedes Invigorate's
+// delayed own-creature pump. Which Ignoble Hierarch pays can change the pump
+// target, so a payment through one copy cannot stand in for its twin.
+TEST_CASE("mana oracle: Invigorate's later pump keeps identical mana creatures distinct")
+{
+    EnsureOracleCards();
+    static const AntiLifegainProvider prov;
+    GameState s = Board({ "Temple Garden", "Ignoble Hierarch", "Stomping Ground",
+                          "Ignoble Hierarch", "Ignoble Hierarch" });
+    const int ids[] = { 53, 22, 45, 23, 24 };
+    for (std::size_t i = 0; i < s.battlefield.size(); ++i)
+    { s.battlefield[i].card.m_number = ids[i]; }
+    s.turn_number = 3;
+    s.game_seed   = 30090033;
+    s.phase       = Phase::PreCombatMain;
+    s.m_provider  = &prov;
+    s.players[0].life = 14;
+    s.players[1].life = 17;
+    Hand(s, { "Invigorate", "Reverent Silence", "Forest", "Wooded Foothills", "Tainted Remedy" });
+    const int hand_ids[] = { 26, 37, 16, 59, 52 };
+    for (std::size_t i = 0; i < s.players[0].hand.size(); ++i)
+    { s.players[0].hand[i].m_number = hand_ids[i]; }
+    for (const auto& item : { std::pair{ "Windswept Heath", 54 }, std::pair{ "Wooded Foothills", 58 } })
+    {
+        Card c = CardDatabase::Instance().Lookup(item.first)->card;
+        c.m_number = item.second;
+        s.players[0].graveyard.push_back(c);
+    }
+    for (int i = 0; i < 3; ++i)
+    {
+        Card land;
+        land.m_name = "Opponent Nonbasic Land";
+        land.RehashName();
+        land.AddType(CardType::Land);
+        Permanent p;
+        p.card = land;
+        p.controller_index = p.owner_index = 1;
+        s.battlefield.push_back(p);
+    }
+    for (int i = 0; i < 3; ++i)
+    {
+        Card body;
+        body.m_name = "2/2 Creature";
+        body.RehashName();
+        body.m_number = 500000 + i;
+        body.AddType(CardType::Creature);
+        body.m_power = body.m_toughness = 2;
+        Permanent p;
+        p.card = body;
+        p.controller_index = p.owner_index = 1;
+        s.battlefield.push_back(p);
+    }
+    Action pump = CastAction(s, "Invigorate");
+    pump.alt_cost     = true;
+    pump.alt_lifegain = 3;
+    pump.cost         = ManaCost{};
+    pump.eval         = 300;
+    pump.direct_damage = 3;
+    const TurnSolver::Plan plan = PlanOf({ pump, CastAction(s, "Tainted Remedy") });
+    CHECK(manaoracle::CoversEngineOutcome(s, /*pre=*/true, plan));
+}
 
 // Giada, Font of Hope: "{T}: Add {W}. Spend this mana only to cast an Angel spell." The oracle's restricted route once
 // offered it to ANY creature spell, and paid Bishop of Wings (a Human Cleric) with it -- Angels eg1, two ENUM-GAPs no
