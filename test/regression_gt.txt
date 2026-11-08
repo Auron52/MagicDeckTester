@@ -1,6 +1,9 @@
 # Regression ground truth -- commit e7b99f029  date 2026-11-08
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-07): Periodic baseline after adopted Cyclone, Kithkin, Shadowborn and Jumbo artifacts plus c-wild mana legality: 94/578 cells moved; searched 2375 faster versus 1189 slower; Cyclone -491t, Kithkin -882t, Shadowborn -72t, Jumbo -11t. Hinata +24t/1831 searched and Niv +3t/2225 reflect the colorless-mana legality correction reviewed in shorter tiers; EDF d0 +4t/8000. Prior Angels +0.0064t/6065 searched, Angels2HG +0.0150t/600, and Bruna +0.0122t/2131 remain follow-ups. Per-game outcome audit completed; old trace snapshot was stale and could not parse Madness, so its trace explanations were unavailable.
+# accepted-with-regressions (smoke, 2026-11-08): Modern RW Burn exhaustive keep adoption: changed mulligan or bottom; all changed games attributed; net smoke improvement
+# accepted-with-regressions (regression, 2026-11-08): Modern RW Burn exhaustive keep adoption: changed mulligan or bottom; all changed games attributed; net regression improvement
+# accepted-with-regressions (overnight, 2026-11-08): Modern RW Burn exhaustive keep adoption: all changed games attributed to mulligan or bottom; all overnight cells improve
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -13,10 +16,10 @@ midrangeburn_smoke_d0_s1001=5.2510/9e5cd29ce09f769b
 midrangeburn_smoke_d3_s1001=4.5000/6693204da7693b41
 midrangeburn_smoke_d5_s1001=4.4400/f4c364e91457f880
 midrangeburn2hg_smoke_d5_s1001=5.7600/70d97af185417b31
-modernrwburn_smoke_d0_s1001=4.3280/cb76be702e49af30
-modernrwburn_smoke_d3_s1001=3.9400/b2b30eda08c1b566
-modernrwburn_smoke_d5_s1001=3.9700/421f48b18d4a2937
-modernrwburn2hg_smoke_d5_s1001=5.2400/27d43472edb76a64
+modernrwburn_smoke_d0_s1001=4.0680/b6dd74249faea8cc
+modernrwburn_smoke_d3_s1001=3.7400/4331f3cd6c80a7f7
+modernrwburn_smoke_d5_s1001=3.7500/2e0c494102513e39
+modernrwburn2hg_smoke_d5_s1001=5.0000/c740abb37be29643
 fungusv3_smoke_d0_s1001=5.2450/c1ddece5a55e2df4
 fungusv3_smoke_d3_s1001=4.4600/7c3b478beb7cebd5
 fungusv3_smoke_d5_s1001=4.5314/9439236508fb9c5b
@@ -463,11 +466,11 @@ midrangeburn_regression_d3_s2002=4.5467/3eebd67c8cfe2750
 midrangeburn_regression_d5_s2002=4.4333/ba999bfc3828dbb3
 midrangeburn_regression_d5_s3003=4.2733/ecdc58112064d976
 midrangeburn2hg_regression_d5_s2002=5.9333/ff2c389975b3330d
-modernrwburn_regression_d0_s2002=4.3700/c73217347e8367dd
-modernrwburn_regression_d3_s2002=3.9333/2e70ff98cf06d7b5
-modernrwburn_regression_d5_s2002=3.9533/7f5c227ad7286c3a
-modernrwburn_regression_d5_s3003=3.9200/b58df8c4d84233b7
-modernrwburn2hg_regression_d5_s2002=4.9600/a30d35da3000eb80
+modernrwburn_regression_d0_s2002=4.0800/b2e04c390501f562
+modernrwburn_regression_d3_s2002=3.9067/b97207f3e8a07333
+modernrwburn_regression_d5_s2002=3.8267/632a21db7c94b10c
+modernrwburn_regression_d5_s3003=3.8667/64f9dc5d0ef87fbb
+modernrwburn2hg_regression_d5_s2002=4.7867/37395e80e5f94a92
 merfolk_regression_d0_s2002=4.4450/8ef0370788e04854
 merfolk_regression_d3_s2002=4.2133/3844dd6262e39628
 merfolk_regression_d5_s2002=4.1800/6824241f83b7d727
@@ -1024,22 +1027,22 @@ midrangeburn2hg_overnight_d5_s4004=5.9176/cbe8d828801627a0
 midrangeburn2hg_overnight_d5_s5005=5.6706/62d5068f265b7007
 midrangeburn2hg_overnight_d5_s6006=5.9529/4327d96577da012d
 midrangeburn2hg_overnight_d5_s7007=5.7353/ba151827c11d8a55
-modernrwburn_overnight_d0_s4004=4.3450/5f3d97e52366a254
-modernrwburn_overnight_d0_s6006=4.3650/d154c041c44472a7
-modernrwburn_overnight_d0_s8008=4.3270/e0fecbc3b98f0f8e
-modernrwburn_overnight_d0_s10010=4.3345/fc33c7c5455e294d
-modernrwburn_overnight_d3_s4004=4.0100/fe7d663849c2bf4a
-modernrwburn_overnight_d3_s5005=3.9925/163faf6d7f21f6cd
-modernrwburn_overnight_d3_s6006=4.0025/406ca346796f0219
-modernrwburn_overnight_d3_s7007=3.9375/3047583429cb055e
-modernrwburn_overnight_d5_s4004=4.0233/d54bbe023a4b04c3
-modernrwburn_overnight_d5_s5005=4.0100/048ea2f9e3e5b241
-modernrwburn_overnight_d5_s6006=3.9800/fe329a13722ee718
-modernrwburn_overnight_d5_s7007=3.9567/bc93df07c3fd9e21
-modernrwburn2hg_overnight_d5_s4004=5.0500/9c130d53db8b9137
-modernrwburn2hg_overnight_d5_s5005=5.1400/de84866156f4a49a
-modernrwburn2hg_overnight_d5_s6006=5.1200/e2d2b0972a8ed1d6
-modernrwburn2hg_overnight_d5_s7007=5.1000/e2f457e788658f88
+modernrwburn_overnight_d0_s4004=4.0810/736fd57005d447e6
+modernrwburn_overnight_d0_s6006=4.0945/1ff9de6ab4b15ac2
+modernrwburn_overnight_d0_s8008=4.0720/1136e34bab9c040a
+modernrwburn_overnight_d0_s10010=4.0800/8b325d8184d70652
+modernrwburn_overnight_d3_s4004=3.8425/d50c56e37d7adbff
+modernrwburn_overnight_d3_s5005=3.8525/70b07da6d435afd9
+modernrwburn_overnight_d3_s6006=3.8625/86d17bf997845d15
+modernrwburn_overnight_d3_s7007=3.8250/ca4777255a82af49
+modernrwburn_overnight_d5_s4004=3.8376/ac7bfde446e7edda
+modernrwburn_overnight_d5_s5005=3.8588/57af84874111f1d9
+modernrwburn_overnight_d5_s6006=3.8706/2a5e2b14774ce62b
+modernrwburn_overnight_d5_s7007=3.8141/29c30f7470c3b74d
+modernrwburn2hg_overnight_d5_s4004=4.8500/080e2b2e6ed13583
+modernrwburn2hg_overnight_d5_s5005=4.8700/97fd736d91bb59d7
+modernrwburn2hg_overnight_d5_s6006=4.7400/4a8fb6057051d29e
+modernrwburn2hg_overnight_d5_s7007=5.0500/aad2274242bd7733
 merfolk_overnight_d0_s4004=4.4580/70c33e70cfe2fa5e
 merfolk_overnight_d0_s6006=4.4785/e0afa195a212b4a6
 merfolk_overnight_d0_s8008=4.4710/41eeda7453ca863a

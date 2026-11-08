@@ -324,3 +324,41 @@ Mill and other decks that depend heavily on the opponent's hand or library are
 deferred until the passive opponent uses an actual decklist and plays lands
 from hand. This is a deck-onboarding dependency, not a deferred RW Burn card
 clause. See `docs/design/passive-opponent-actual-deck.md`.
+
+## Exhaustive mulligan profile
+
+The adopted 12-bucket exhaustive profile contains the fully sampled keep and
+bottoming policy (raw sidecar R=30). Its keep-only A/B improved mean win turn
+by 0.1885; the confounded bottoming A/B improved it by 0.04125. Mountain is
+grouped with Inspiring Vantage and Sacred Foundry in the measured bucket set:
+the list has enough white sources that forcing a separate Mountain bucket did
+not justify regenerating the table.
+
+Before adoption, the no-table smoke and regression cells reproduced their
+committed ground truth exactly. The overnight depth-five sample was increased
+from 300 to 425 games per seed to meet the profile-adoption floor, and its
+no-table baseline was accepted first. The current engine's Skewer fix moved
+three searched overnight lines at the same win turn and improved one greedy
+game by a turn; there were no slower no-table games.
+
+With the table active, all smoke, regression, and overnight cells improved.
+The overnight solo means moved from 4.3450–4.3645 to 4.0720–4.0945 at depth
+zero, from 3.9375–4.0100 to 3.8250–3.8625 at depth three, and from
+3.9294–4.0094 to 3.8141–3.8706 at depth five. The four overnight 2HG means
+moved from 5.0500–5.1400 to 4.7400–5.0500. Search work also fell sharply.
+The adoption replay reproduced both baselines exactly: 5,695 solo games changed
+mulligan count, 924 changed the bottomed hand, 15 changed only bottom order,
+and none were unexplained. The 2HG replay likewise had zero unexplained games.
+
+## Value leaf
+
+The completed value-leaf sweep selected the emulated ladder. Its paired
+8,000-game A/B against live search improved mean win turn by 0.00100 at 0.999
+times the work units. The direct staged model improved by 0.00112 but cost
+1.442 times the units, so it was not selected. After installing the emulated
+ladder on the exhaustive keep table, the smoke tier had no win-turn changes;
+the regression tier improved one 2HG game by one turn and had no slower games.
+The solo searched cells changed some same-turn play digests without changing
+their mean win turns. Smoke and regression ground truth were accepted with
+the leaf active; the overnight tier records the table-only adoption and is
+left to the periodic full-suite run under the value-leaf workflow.
