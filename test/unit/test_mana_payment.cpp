@@ -1094,6 +1094,85 @@ TEST_CASE("payment: the painless {C} is not taken where it would strand a pip or
 // visits are free. Inside that scope they consume actual SearchBudget units: a hot lookup
 // must do the same work as a cold computation, not only produce a different key bit.
 extern std::vector<long long> CanonBillPlanCacheForTest(const GameState& state);
+TEST_CASE("counter lands spend only their limited mana mode")
+{
+    EnsureCards();
+
+    SUBCASE("Gemstone Mine uses three mining counters and sacrifices after the last tap")
+    {
+        GameState s = MakeBoard({"Gemstone Mine"});
+        s.battlefield[0].charge_counters = 3;
+        ManaCost colorless; colorless.colorless = 1;
+        CHECK_FALSE(TapForCostDirect(s, colorless, false));
+        CHECK(s.battlefield[0].charge_counters == 3);
+        for (int n = 2; n >= 0; --n)
+        {
+            REQUIRE(TapForCostDirect(s, Cost(0, 0, 0, 0, 1), false));
+            CHECK(s.battlefield[0].charge_counters == n);
+            s.battlefield[0].tapped = false;
+        }
+        SacrificeDepletedLands(s);
+        CHECK(s.battlefield.empty());
+        REQUIRE(s.players[0].graveyard.size() == 1);
+        CHECK(s.players[0].graveyard[0].m_name == "Gemstone Mine");
+    }
+
+    SUBCASE("Tendo keeps its charge on a colorless tap and remains colorless after spending it")
+    {
+        GameState s = MakeBoard({"Tendo Ice Bridge"});
+        s.battlefield[0].charge_counters = 1;
+        REQUIRE(TapForCostDirect(s, Cost(1), false));
+        CHECK(s.battlefield[0].charge_counters == 1);
+        s.battlefield[0].tapped = false;
+        REQUIRE(TapForCostDirect(s, Cost(0, 0, 0, 0, 1), false));
+        CHECK(s.battlefield[0].charge_counters == 0);
+        s.battlefield[0].tapped = false;
+        CHECK_FALSE(TapForCostDirect(s, Cost(0, 0, 0, 0, 1), false));
+        CHECK(TapForCostDirect(s, Cost(1), false));
+    }
+
+    SUBCASE("Vivid Creek keeps charges on blue taps and remains blue after spending them")
+    {
+        GameState s = MakeBoard({"Vivid Creek"});
+        s.battlefield[0].charge_counters = 2;
+        REQUIRE(TapForCostDirect(s, Cost(0, 0, 1), false));
+        CHECK(s.battlefield[0].charge_counters == 2);
+        s.battlefield[0].tapped = false;
+        for (int n = 1; n >= 0; --n)
+        {
+            REQUIRE(TapForCostDirect(s, Cost(0, 0, 0, 1), false));
+            CHECK(s.battlefield[0].charge_counters == n);
+            s.battlefield[0].tapped = false;
+        }
+        CHECK_FALSE(TapForCostDirect(s, Cost(0, 0, 0, 1), false));
+        CHECK(TapForCostDirect(s, Cost(0, 0, 1), false));
+    }
+
+    SUBCASE("a failed payment refunds a counter consumed by a trial tap")
+    {
+        GameState s = MakeBoard({"Tendo Ice Bridge"});
+        s.battlefield[0].charge_counters = 1;
+        CHECK_FALSE(TapForCostDirect(s, Cost(0, 1, 0, 0, 1), false));
+        CHECK(s.battlefield[0].charge_counters == 1);
+        CHECK_FALSE(s.battlefield[0].tapped);
+        CHECK(TapForCostDirect(s, Cost(0, 1), false));
+        CHECK(s.battlefield[0].charge_counters == 0);
+    }
+
+    SUBCASE("the filter fallback payer also charges the chosen mode")
+    {
+        GameState mine = MakeBoard({"Gemstone Mine"});
+        mine.battlefield[0].charge_counters = 1;
+        CHECK(TapForCostBacktrack(mine, Cost(0, 0, 0, 0, 1), false, ManaPool{}));
+        CHECK(mine.battlefield[0].charge_counters == 0);
+
+        GameState tendo = MakeBoard({"Tendo Ice Bridge"});
+        tendo.battlefield[0].charge_counters = 1;
+        CHECK(TapForCostBacktrack(tendo, Cost(1), false, ManaPool{}));
+        CHECK(tendo.battlefield[0].charge_counters == 1);
+    }
+}
+
 TEST_CASE("plan cache: a free warm entry cannot skip canon-wave enumeration billing")
 {
     EnsureCards();

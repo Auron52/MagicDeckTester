@@ -582,9 +582,11 @@ def CheckExistingCoverage(card_names: list[str], cards_json: Path,
         # Giada's / Mimic's "each other ... enters with" and devour's reminder text do not match.)
         if re.search(r"this creature enters with (?:a|an|one|two|three|four|five|six|x|\d+) \+1/\+1 counters?",
                      oracle, re.I) \
-                and not params.get("enters_with_plus_counters") and not is_d("enters with"):
+                and not (params.get("enters_with_plus_counters")
+                         or params.get("enters_with_gy_creature_counters")) \
+                and not is_d("enters with"):
             gaps.append("'This creature enters with N +1/+1 counters' in oracle text but "
-                        "enters_with_plus_counters not set")
+                        "no fixed or graveyard-scaled as-enters counter param set")
 
         # Playing lands from the top of the library (Courser of Kruphix; Oracle of Mul Daya, Radha,
         # Augur later): the source-zone permission is its own param, read by every land-drop site
@@ -661,6 +663,10 @@ def CheckExistingCoverage(card_names: list[str], cards_json: Path,
             "other_creature_gy_enter_team_counters",
             "doubles_tokens", "doubles_counters",   # replacement effects on trigger output
             "ascend",
+            "karametra_cast_land_search",  # Karametra's whenever-you-cast-a-creature search
+            "athreos_passage",              # Athreos's another-owned-creature death trigger
+            "athreos_shroud",               # Athreos's coin end-step and death/exile triggers
+            "xenagos_combat_pump",           # Xenagos's beginning-of-combat target trigger
         }
         trigger_implemented = any(
             v and (TRIGGER_PARAM_RE.search(k) or k in TRIGGER_PARAMS_LEGACY)

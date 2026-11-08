@@ -1,0 +1,29 @@
+{
+  "merge": [
+    {
+      "cards": [
+        "Athreos, God of Passage",
+        "Athreos, Shroud-Veiled",
+        "Ephara, God of the Polis",
+        "Iroas, God of Victory",
+        "Karametra, God of Harvests",
+        "Keranos, God of Storms",
+        "Klothys, God of Destiny",
+        "Kruphix, God of Horizons",
+        "Mogis, God of Slaughter",
+        "Nylea, God of the Hunt",
+        "Pharika, God of Affliction",
+        "Phenax, God of Deception",
+        "Xenagos, God of Revels"
+      ],
+      "why": "Provisional Gods keep-policy ruling: each is a one-of Replenish payload and the opening hand usually wants to discard it. The exact God matters after the graveyard is stocked, but this first bucket trial tests whether opening-hand keep decisions can treat these thirteen as payload count. Compare with a split policy before final adoption."
+    },
+    {
+      "cards": [
+        "Purphoros, Bronze-Blooded",
+        "Purphoros, God of the Forge"
+      ],
+      "why": "Provisional K=17 trial requested for the first feasible exhaustive mulligan table. Both are unique Purphoros payoffs; one grants haste and the other deals entry damage, so compare this merge against a K=18 split before final adoption."
+    }
+  ]
+}

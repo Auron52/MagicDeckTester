@@ -68,6 +68,11 @@ def positive(v):      return isinstance(v, (int, float)) and v > 0
 def real_target(v):   return isinstance(v, str) and v not in ("none", "player", "")
 
 MANIFEST = {
+    "xenagos_combat_pump": ("target", truthy),
+    "karametra_cast_land_search": ("tutor_etb", truthy),
+    "athreos_shroud": ("target", truthy),
+    "keranos_first_draw":   ("target",             truthy),
+    "klothys_first_main":   ("tutor_etb",          truthy),
     "targeting":             ("target",               real_target),
     "spectacle_cost":        ("target",               truthy),   # cast post-combat, still targets
     "damage_divided":        ("divide",               truthy),
@@ -92,9 +97,15 @@ MANIFEST = {
     # by the shared ResolvePutBackFromHand (SpellEffects.h); the autonomous engine searches it
     # (Plan::putback_choice).
     "put_back_from_hand":    ("dig",                  positive),
+    "post_draw_discard":     ("discard",              positive),
+    "tap_post_draw_discard": ("discard",            positive),
+    "threshold_loot_cost":   ("main_phase",           truthy),
     "etb_dig_count":         ("dig",                  positive),
     "upkeep_adds_charge":    ("vial_charge",          truthy),
     "retrace":               ("retrace_discard",      truthy),
+    "flashback_cost":         ("main_phase",           truthy),
+    "dredge":                 ("dredge",               positive),
+    "return_up_to_gy_lands": ("main_phase",           positive),
     # ---- Giants (2026-09-22) ----
     # Tectonic Giant's "choose one" attack trigger -> the NEW `attack_mode` decision type
     # (chooser g_play_attack_mode_chooser in ApplyAttackModalTriggers, emitter
@@ -203,6 +214,11 @@ MANIFEST = {
     # STANDS (put nothing). The value of X is a separate `main_phase` plan variant -- the {X}
     # enumeration branch emits every legal X 0..max under HumanPlayActive().
     "reveal_x_put_permanents": ("dragon",             truthy),
+    # Replenish is mandatory for every non-Aura enchantment. When an Aura is
+    # present, choosing its legal host reuses the generic board-click target
+    # chooser at the simultaneous-entry resolution site.
+    "replenish_enchantments": ("target",               truthy),
+    "team_pump_mainphase": ("main_phase",               truthy),
     "fetch_land_types":      ("main_phase",           truthy),
     # Resplendent Angel's "{3}{W}{W}{W}: +2/+2 and gains lifelink": routed OUT of the greedy combat
     # firebreathing converter and INTO a searched main-phase Action::Kind::ActivatePump (mode 3), so
@@ -227,6 +243,10 @@ MANIFEST = {
     # Scavenging Ooze: WHICH graveyard card to exile (and how many activations) are independent
     # main_phase plan actions, one per distinct graveyard name (Action::GraveyardExileGrow).
     "gy_exile_grow_cost":    ("main_phase",           truthy),
+    "grants_tap_mill_toughness": ("main_phase", truthy),
+    "pharika_exile_cost":   ("main_phase",           truthy),
+    "bronze_put_cost":      ("main_phase",           truthy),
+    "kruphix_banks_mana":   ("main_phase",           truthy),
     "tap_graveyard_exile_damage": ("gy_return_one", positive),
     # Felidar Guardian: WHICH permanent to flicker (+ decline) rides the CastFromHand chosen_x
     # plan-variant axis on a cast; a PUT entry (Pod/Chord/Reveillark) surfaces its own `flicker`
@@ -667,6 +687,7 @@ NAME_CHOICES = {
     # NAME rather than team_pump_cost so the Lathliss deferral below is not silently re-scoped.
     # AccomplishedAlchemist 2026-10-19 (sweep seeds 80003/80006/80008 read it as "silent").
     "Ezuri, Renegade Leader": "firebreathe",
+    "Purphoros, God of the Forge": "firebreathe",
 }
 
 # ---------------------------------------------------------------------------
@@ -830,6 +851,13 @@ def _cost_mv(card, cost_from):
 # one dangerous error; under-listing just yields a longer, safe review list.
 # ---------------------------------------------------------------------------
 INERT_PARAMS = {
+    "athreos_passage": "mandatory trigger for another owned creature's death; with one passive opponent, its pay-three-life choice has no human decision",
+    "iroas_combat_guard": "menace and combat damage prevention have no decision or observable effect against the passive nonblocking opponent; provisional scope",
+    "land_search_subtype": "static eligibility filter for the surfaced land-search choice",
+    "mogis_opponent_upkeep": "mandatory opponent upkeep trigger; the passive opponent chooses its sacrifice, if available",
+    "ephara_upkeep_draw": "mandatory draw at each upkeep when another own creature entered last turn",
+    "enters_with_gy_creature_counters": "Grave-Troll's as-enters counter count is mandatory, read from its controller's graveyard; no player choice",
+    "own_creature_enters_opp_damage": "Purphoros's other-creature entry trigger deals its printed damage to every opponent; no target or optional choice",
     "damage_each_opponent": "Boltwave hits each opponent automatically; no target choice",
     "players_cant_gain_life_this_turn": "Skullcrack turn-scoped rule effect; no player choice",
     "damage_cant_be_prevented_this_turn": "Skullcrack turn-scoped rule effect; no player choice",
@@ -1137,6 +1165,9 @@ INERT_PARAMS = {
     "ritual_floating_mana": "ritual mana added",
     # lands: static enter-state
     "enters_tapped": "static land property", "enters_tapped_with_depletion": "static land property",
+    "enters_with_mana_counters": "counter count on entry; mana mode and color are chosen through manual pre-tap or plan payment",
+    "mana_counters_are_mining": "counter label only; mana mode and color are chosen through manual pre-tap or plan payment",
+    "sacrifice_when_mana_counters_empty": "mandatory consequence of paying the last counter; mana mode and color are chosen through manual pre-tap or plan payment",
     # targeting MODIFIER -- the target choice surfaces via `targeting` (already mapped). NB the card
     # CAN target an opponent creature (real line: Invigorate + Swords to Plowshares); the goldfish
     # model picks own best attacker only because the passive opponent has no board -> a disclosed
@@ -1188,6 +1219,7 @@ INERT_PARAMS = {
     "sac_lifegain_per_creature": "Blighted Steppe -- life gained PER CREATURE (2), a printed constant of the card; the activation itself rides sac_lifegain_per_creature_cost -> main_phase, and the total (2xN) is fixed by the board with nothing to pick at resolution (no target, no X, no mode, no 'may')",
     "tap_lifegain_count_all": "Wellwisher -- COUNT SCOPE: true = 'each Elf on the battlefield' (both players, Priest of Titania's reading), false = 'Elves you control'. A reading of the oracle text, not a choice; the activation rides tap_lifegain_per_subtype -> main_phase / verb:taplife",
     "tap_draw_cost_less_per_rad": "cost-reduction detail (rides tap_draw_cost)",
+    "tap_draw_count": "printed number of cards drawn by the tap_draw_cost activation",
     "reduces_creature_activation": "cost reduction (static, like hinata_cost_reducer)",
     # Emiel the Blessed's "you may pay {G/W} ... put a +1/+1 counter on it". A DISCLOSED
     # always-taken "you may": a +1/+1 counter is monotone-good against an opponent that never
@@ -1888,7 +1920,7 @@ def load_deck_cards(deck_path, cards_json="src/cards/data/cards.json", include_s
     return [c for c in cards if c.get("name") in names], names
 
 
-def expected_for_card(card):
+def expected_for_card(card, deck_cards=None):
     """(set of expected decision types, set of unmapped choice-param keys) for one card."""
     p = card.get("parameters", {}) or {}
     exp, unmapped = set(), set()
@@ -1930,6 +1962,13 @@ def expected_for_card(card):
         exp.add("x_value")
     if card.get("name") in NAME_CHOICES:
         exp.add(NAME_CHOICES[card["name"]])
+    if p.get("klothys_first_main"):
+        exp.add("choose_color")
+    if p.get("replenish_enchantments") and deck_cards is not None:
+        # Its only choice is an Aura's attachment host. A deck with no Aura
+        # cannot surface that prompt, even when Replenish is cast repeatedly.
+        if not any("Aura" in (c.get("subtypes") or []) for c in deck_cards):
+            exp.discard("target")
     return exp, unmapped
 
 
@@ -1968,7 +2007,7 @@ def modeled_tokens(card):
         for a in p.get("loyalty_abilities", [])
     ):
         t.add("target")
-    if real_target(p.get("targeting", "none")) or p.get("spectacle_cost") \
+    if real_target(p.get("targeting", "none")) or p.get("keranos_first_draw") or p.get("spectacle_cost") \
             or p.get("target_pump_cost") or p.get("untap_target_land"):
         t.add("target")
     if p.get("sacrifice_land"):                                            t.add("sacrifice")
@@ -1979,7 +2018,9 @@ def modeled_tokens(card):
     if p.get("etb_damage_divided_creatures", 0) > 0:                      t.add("divide")   # Fury's ETB
     if p.get("etb_bounce_land"):                                          t.add("bounce")
     if p.get("retrace") or p.get("discard_land_damage"):                  t.add("discard")
-    if p.get("tap_draw_then_discard"):                                    t.add("discard")   # Troyan's loot
+    if (p.get("tap_draw_then_discard") or p.get("post_draw_discard", 0) > 0
+            or p.get("tap_post_draw_discard", 0) > 0 or p.get("threshold_loot_cost") is not None):
+        t.add("discard")   # Troyan / Study / Magus / Coliseum
     # Vampires A2: Pit Fighter / Condemned / the Blood token (Voldaren Estate's reminder text quotes the
     # Blood's "Discard a card", whose crack is the token's own `discard` decision).
     if p.get("sac_outlet_discard_cost", 0) > 0 or p.get("discard_team_pump_power", 0) > 0 \
@@ -2173,7 +2214,7 @@ def push_choice(choices, choice):
         choices.append(choice)
 
 
-def pick_toward(d, target_lc):
+def pick_toward(d, target_lc, land_names=()):
     """Like pick(), but on a main_phase choice PREFER a plan that casts the target card, so a
     seed-search can force a specific card into play to verify its decision surfaces."""
     if d.get("type") == "main_phase":
@@ -2189,6 +2230,11 @@ def pick_toward(d, target_lc):
             want = [p for p in plans if target_lc in p.get("summary", "").lower()]
         pool = want or plans
         return max(pool, key=lambda p: len(p.get("summary", "")))["index"]
+    if (d.get("type") == "tutor_etb" and target_lc == "klothys, god of destiny"
+            and "klothys" in str(d.get("source", "")).lower()):
+        for candidate in d.get("candidates", []):
+            if any(name + " (#" in candidate.get("name", "") for name in land_names):
+                return candidate["index"]  # land exile should surface the red/green mana choice
     return pick(d)
 
 
@@ -2226,6 +2272,8 @@ def verify_card(deck, prof, card_name, expected_types, base_seed, budget, max_tu
     target_lc = card_name.lower()
     want = set(expected_types)
     card = next((c for c in load_deck_cards(deck)[0] if c.get("name", "").lower() == target_lc), {})
+    land_names = {c.get("name", "") for c in load_deck_cards(deck)[0]
+                  if "Land" in c.get("types", [])}
     back_lc = str((card.get("parameters") or {}).get("mdfc_back_name") or "").lower()
     covered, cover_src, first_hit = set(), set(), {}
     cast_seen_anywhere = False
@@ -2257,7 +2305,7 @@ def verify_card(deck, prof, card_name, expected_types, base_seed, budget, max_tu
             hand = (d.get("me", {}) or {}).get("hand") or []
             if any(str(c.get("name", "")).lower() == target_lc for c in hand):
                 in_hand_here = True
-            choice = pick_toward(d, target_lc)
+            choice = pick_toward(d, target_lc, land_names)
             if t in ("jitte", "firebreathe"):   # side-channel reply, keyed by turn (see step())
                 jitte.append(("fb|" if t == "firebreathe" else "") + f"{d.get('turn_seq', d.get('turn'))}:{choice}")
                 continue
@@ -2309,6 +2357,14 @@ def verify_card(deck, prof, card_name, expected_types, base_seed, budget, max_tu
             return ("NOT_FORCED", {"note": "MDFC face needed for " + ", ".join(missing)
                                     + " was not played in the seed search", "missing": missing,
                                     "covered": sorted(covered)})
+        if set(missing) <= {"firebreathe"}:
+            # This is a combat-spend choice, not a cast trigger. The source
+            # must remain in play while we attack AND have spare payable mana;
+            # a seed that casts it proves neither condition. The targeted
+            # Purphoros chooser test constructs that state directly.
+            return ("NOT_FORCED", {"note": "card was cast, but no combat with an attacker "
+                                    "and payable pump mana was reached",
+                                    "missing": missing, "covered": sorted(covered)})
         return ("HARD_MISS", {"note": "card was cast but these expected decisions never surfaced: "
                                       + ", ".join(missing),
                               "missing": missing, "covered": sorted(covered)})
@@ -2502,7 +2558,7 @@ def main():
         if match is None:
             print(f"ERROR: '{verify_name}' not found in {deck}.")
             return 2
-        exp, _ = expected_for_card(match)
+        exp, _ = expected_for_card(match, cards)
         exp.discard("main_phase")
         if not exp:
             print(f"{verify_name}: no param-driven interactive decision expected. Nothing to verify.")
@@ -2523,7 +2579,7 @@ def main():
     per_card = {}
     guard_fail = {}
     for c in cards:
-        exp, unmapped = expected_for_card(c)
+        exp, unmapped = expected_for_card(c, cards)
         exp.discard("main_phase")   # always present; not an interesting expectation
         if exp:
             per_card[c["name"]] = exp

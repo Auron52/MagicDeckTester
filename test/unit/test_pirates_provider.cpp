@@ -329,6 +329,9 @@ TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pir
         // Demonic Tutor / Diabolic Intent / Profane Tutor's tutor_to_hand would capture it into
         // AntiLifegainProvider.
         {"Shadowborn Apostle", "ShadowbornApostle"},
+        // Gods is routed by the Replenish/dredge God signature, not Mystic
+        // Retrieval's otherwise overlapping AntiLifegain tutor signature.
+        {"Gods", "Gods"},
         // GSZ can create a Chariot/Greaves host after the initial action set is built.
         {"Jumbo Cactuar", "JumboCactuar"},
     };

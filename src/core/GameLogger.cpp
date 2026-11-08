@@ -77,6 +77,7 @@ thread_local AttackersChooser* g_play_attackers_chooser = nullptr;
 thread_local TapPrefChooser* g_play_tap_pref_chooser = nullptr;
 thread_local int g_play_cur_main_ordinal = -1;
 thread_local StorageHoldChooser* g_play_storage_hold_chooser = nullptr;
+thread_local bool g_play_magus_upkeep_prompt = false;
 thread_local std::vector<std::pair<int, std::string>>* g_play_draw_sink = nullptr;
 thread_local std::vector<PlayEvent>* g_play_event_sink = nullptr;
 thread_local int g_play_extra_turns_taken = 0;

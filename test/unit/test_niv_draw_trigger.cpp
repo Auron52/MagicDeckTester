@@ -205,12 +205,12 @@ TEST_CASE("Niv draw trigger: a deck stamped WITHOUT the loop resolves nothing (t
     without.mainboard.push_back(DefNiv("Ponder").card);
     GameState a;
     GoldFishRunner::StampDeckTraits(a, without);
-    CHECK_FALSE(a.deck_has_draw_ping);
+    CHECK_FALSE(static_cast<bool>(a.deck_has_draw_ping));
     Decklist with_niv = without;
     with_niv.mainboard.push_back(DefNiv("Curiosity").card);
     GameState b;
     GoldFishRunner::StampDeckTraits(b, with_niv);
-    CHECK(b.deck_has_draw_ping);
+    CHECK(static_cast<bool>(b.deck_has_draw_ping));
 }
 
 // ---- 2. Curiosity: the optional loop ------------------------------------------------------------------

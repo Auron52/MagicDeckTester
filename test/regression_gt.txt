@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 1382e9510  date 2026-11-06
+# Regression ground truth -- commit ae306111c  date 2026-11-08
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-05): Full overnight rebaseline requested after Jumbo exhaustive keep adoption and current engine changes: 118 matching, 424 changed, 11 new Shadowborn rows. Searched games 3953 faster vs 1889 slower; Angels +0.0064t/6065 searched, Angels2HG +0.0150t/600, Bruna +0.0122t/2131 remain visible follow-ups. Jumbo full overnight rows already adopted and match.
 # accepted-with-regressions (smoke, 2026-11-06): Shadowborn main-1 rule + USER cast order + ritual-payoff prune DEFAULT ON (held-out ab7 -0.035 turns, -14..-20% units; d8 b0: every unrecovered game is the clairvoyant ripple-dig the USER ruled out). Also accepts 4 digest-only rows (edf_smoke_d0_s1001, edf_regression_d0_s2002, edf_regression_d5_s3003, bruna_regression_d5_s2002; averages unchanged): pre-existing origin drift, reproduced byte-identically by origin 36d3672bc's own binary
@@ -9,6 +9,10 @@
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
 # --- smoke ---
+gods_smoke_d0_s1001=8.8210/0cf3cce49b5878f9
+gods_smoke_d3_s1001=5.6400/3dfa8033ee5b5e5a
+gods_smoke_d5_s1001=5.5200/588c75d60a061e84
+gods2hg_smoke_d5_s1001=5.8000/1b04ca480cb56a87
 merfolk_smoke_d0_s1001=4.4960/e9b4322db7865929
 merfolk_smoke_d3_s1001=4.1800/e2d4ed3a62295b80
 merfolk_smoke_d5_s1001=4.1700/f2c8e9e392a196b1
@@ -303,6 +307,10 @@ hinata_regression_d0_s2002=6.8470/8773fd2849120167
 hinata_regression_d3_s2002=5.6933/dcd9057de29ae636
 hinata_regression_d5_s2002=5.5667/7ef5353f84700e7b
 hinata_regression_d5_s3003=5.6267/28cc9af17a725e22
+gods_regression_d0_s2002=8.7680/9549862cb7990bed
+gods_regression_d3_s2002=5.5200/7b925d0e6b847eb4
+gods_regression_d5_s2002=5.4600/e3604d06d9d150a0
+gods2hg_regression_d5_s2002=5.4200/01602c1aec50f250
 cyclone_regression_d0_s2002=8.3410/ff285c765cd3e471
 cyclone_regression_d3_s2002=4.8533/f22dcd37081f4918
 cyclone_regression_d3_s3003=4.9333/437a6de4a37c0d52

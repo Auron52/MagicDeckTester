@@ -10,7 +10,7 @@
    "search": 4.9,
    "short": 0,
    "shortfalls": [],
-   "src": "15b08e56da68debe1e9c2b54f27c4020bb3af8c1"
+   "src": "821628d6b167783bdb371cde55f2ac73c23910a7"
   },
   "angels_v1_thune4_chancery": {
    "hand_mismatch": 0,
@@ -22,7 +22,7 @@
    "search": 5.0,
    "short": 0,
    "shortfalls": [],
-   "src": "15b08e56da68debe1e9c2b54f27c4020bb3af8c1"
+   "src": "821628d6b167783bdb371cde55f2ac73c23910a7"
   },
   "anti_lifegain": {
    "hand_mismatch": 0,
@@ -34,7 +34,7 @@
    "search": 4.1667,
    "short": 0,
    "shortfalls": [],
-   "src": "15b08e56da68debe1e9c2b54f27c4020bb3af8c1"
+   "src": "821628d6b167783bdb371cde55f2ac73c23910a7"
   },
   "auras": {
    "hand_mismatch": 0,
@@ -46,7 +46,7 @@
    "search": 4.2333,
    "short": 0,
    "shortfalls": [],
-   "src": "15b08e56da68debe1e9c2b54f27c4020bb3af8c1"
+   "src": "821628d6b167783bdb371cde55f2ac73c23910a7"
   },
   "breachingdragonstorm": {
    "hand_mismatch": 0,
@@ -58,7 +58,7 @@
    "search": 3.2,
    "short": 0,
    "shortfalls": [],
-   "src": "15b08e56da68debe1e9c2b54f27c4020bb3af8c1"
+   "src": "821628d6b167783bdb371cde55f2ac73c23910a7"
   },
   "bruna": {
    "hand_mismatch": 0,
@@ -73,7 +73,7 @@
     "claude_s12_gi11.json",
     "claude_s8_gi7.json"
    ],
-   "src": "15b08e56da68debe1e9c2b54f27c4020bb3af8c1"
+   "src": "821628d6b167783bdb371cde55f2ac73c23910a7"
   },
   "burn": {
    "hand_mismatch": 0,
@@ -85,7 +85,7 @@
    "search": 4.375,
    "short": 0,
    "shortfalls": [],
-   "src": "15b08e56da68debe1e9c2b54f27c4020bb3af8c1"
+   "src": "821628d6b167783bdb371cde55f2ac73c23910a7"
   },
   "colossus_hammer": {
    "hand_mismatch": 0,
@@ -97,7 +97,7 @@
    "search": 3.2,
    "short": 0,
    "shortfalls": [],
-   "src": "15b08e56da68debe1e9c2b54f27c4020bb3af8c1"
+   "src": "821628d6b167783bdb371cde55f2ac73c23910a7"
   },
   "creature_giving": {
    "hand_mismatch": 0,
@@ -109,7 +109,7 @@
    "search": 4.9,
    "short": 0,
    "shortfalls": [],
-   "src": "15b08e56da68debe1e9c2b54f27c4020bb3af8c1"
+   "src": "821628d6b167783bdb371cde55f2ac73c23910a7"
   },
   "critterlifegain": {
    "hand_mismatch": 0,
@@ -121,7 +121,7 @@
    "search": 4.3,
    "short": 0,
    "shortfalls": [],
-   "src": "15b08e56da68debe1e9c2b54f27c4020bb3af8c1"
+   "src": "821628d6b167783bdb371cde55f2ac73c23910a7"
   },
   "critterlifegain_v1_thune4_basilica": {
    "hand_mismatch": 0,
@@ -133,7 +133,7 @@
    "search": 4.6,
    "short": 0,
    "shortfalls": [],
-   "src": "15b08e56da68debe1e9c2b54f27c4020bb3af8c1"
+   "src": "821628d6b167783bdb371cde55f2ac73c23910a7"
   },
   "dragons": {
    "hand_mismatch": 0,
@@ -145,7 +145,7 @@
    "search": 6.0,
    "short": 0,
    "shortfalls": [],
-   "src": "15b08e56da68debe1e9c2b54f27c4020bb3af8c1"
+   "src": "821628d6b167783bdb371cde55f2ac73c23910a7"
   },
   "dragonstorm": {
    "hand_mismatch": 0,
@@ -159,7 +159,7 @@
    "shortfalls": [
     "claude_s1_gi0.json"
    ],
-   "src": "15b08e56da68debe1e9c2b54f27c4020bb3af8c1"
+   "src": "821628d6b167783bdb371cde55f2ac73c23910a7"
   },
   "eldrazidisplacerflicker": {
    "hand_mismatch": 0,
@@ -171,7 +171,7 @@
    "search": 4.125,
    "short": 0,
    "shortfalls": [],
-   "src": "15b08e56da68debe1e9c2b54f27c4020bb3af8c1"
+   "src": "821628d6b167783bdb371cde55f2ac73c23910a7"
   },
   "fivecolour": {
    "hand_mismatch": 0,
@@ -183,7 +183,7 @@
    "search": 4.4615,
    "short": 0,
    "shortfalls": [],
-   "src": "15b08e56da68debe1e9c2b54f27c4020bb3af8c1"
+   "src": "821628d6b167783bdb371cde55f2ac73c23910a7"
   },
   "fluctuator": {
    "hand_mismatch": 0,
@@ -195,7 +195,7 @@
    "search": 3.5,
    "short": 0,
    "shortfalls": [],
-   "src": "15b08e56da68debe1e9c2b54f27c4020bb3af8c1"
+   "src": "821628d6b167783bdb371cde55f2ac73c23910a7"
   },
   "fungus": {
    "hand_mismatch": 0,
@@ -207,7 +207,7 @@
    "search": 4.5,
    "short": 0,
    "shortfalls": [],
-   "src": "15b08e56da68debe1e9c2b54f27c4020bb3af8c1"
+   "src": "821628d6b167783bdb371cde55f2ac73c23910a7"
   },
   "fungus_candidate_b_2026_09": {
    "hand_mismatch": 0,
@@ -221,7 +221,7 @@
    "shortfalls": [
     "claude_s5_gi4.json"
    ],
-   "src": "15b08e56da68debe1e9c2b54f27c4020bb3af8c1"
+   "src": "821628d6b167783bdb371cde55f2ac73c23910a7"
   },
   "fungus_v1_sporesower_shelldweller": {
    "hand_mismatch": 0,
@@ -233,7 +233,7 @@
    "search": 5.7,
    "short": 0,
    "shortfalls": [],
-   "src": "15b08e56da68debe1e9c2b54f27c4020bb3af8c1"
+   "src": "821628d6b167783bdb371cde55f2ac73c23910a7"
   },
   "galadriel": {
    "hand_mismatch": 0,
@@ -245,7 +245,7 @@
    "search": 5.6,
    "short": 0,
    "shortfalls": [],
-   "src": "15b08e56da68debe1e9c2b54f27c4020bb3af8c1"
+   "src": "821628d6b167783bdb371cde55f2ac73c23910a7"
   },
   "giants": {
    "hand_mismatch": 0,
@@ -257,7 +257,7 @@
    "search": 5.9,
    "short": 0,
    "shortfalls": [],
-   "src": "15b08e56da68debe1e9c2b54f27c4020bb3af8c1"
+   "src": "821628d6b167783bdb371cde55f2ac73c23910a7"
   },
   "goblins": {
    "hand_mismatch": 0,
@@ -269,7 +269,7 @@
    "search": 3.7742,
    "short": 0,
    "shortfalls": [],
-   "src": "15b08e56da68debe1e9c2b54f27c4020bb3af8c1"
+   "src": "821628d6b167783bdb371cde55f2ac73c23910a7"
   },
   "hinata2": {
    "hand_mismatch": 0,
@@ -281,7 +281,7 @@
    "search": 5.6,
    "short": 0,
    "shortfalls": [],
-   "src": "15b08e56da68debe1e9c2b54f27c4020bb3af8c1"
+   "src": "821628d6b167783bdb371cde55f2ac73c23910a7"
   },
   "kittyequipment_v1_kemba_balan": {
    "hand_mismatch": 0,
@@ -293,7 +293,7 @@
    "search": 4.25,
    "short": 0,
    "shortfalls": [],
-   "src": "15b08e56da68debe1e9c2b54f27c4020bb3af8c1"
+   "src": "821628d6b167783bdb371cde55f2ac73c23910a7"
   },
   "kittyequipment_v2_puresteel_hammer": {
    "hand_mismatch": 0,
@@ -305,7 +305,7 @@
    "search": 3.3571,
    "short": 0,
    "shortfalls": [],
-   "src": "15b08e56da68debe1e9c2b54f27c4020bb3af8c1"
+   "src": "821628d6b167783bdb371cde55f2ac73c23910a7"
   },
   "knights": {
    "hand_mismatch": 0,
@@ -317,7 +317,7 @@
    "search": 4.3548,
    "short": 0,
    "shortfalls": [],
-   "src": "15b08e56da68debe1e9c2b54f27c4020bb3af8c1"
+   "src": "821628d6b167783bdb371cde55f2ac73c23910a7"
   },
   "landfall": {
    "hand_mismatch": 0,
@@ -329,7 +329,7 @@
    "search": 5.6,
    "short": 0,
    "shortfalls": [],
-   "src": "15b08e56da68debe1e9c2b54f27c4020bb3af8c1"
+   "src": "821628d6b167783bdb371cde55f2ac73c23910a7"
   },
   "melira_pod": {
    "hand_mismatch": 0,
@@ -341,7 +341,7 @@
    "search": 4.4,
    "short": 0,
    "shortfalls": [],
-   "src": "15b08e56da68debe1e9c2b54f27c4020bb3af8c1"
+   "src": "821628d6b167783bdb371cde55f2ac73c23910a7"
   },
   "minotaur": {
    "hand_mismatch": 0,
@@ -353,7 +353,7 @@
    "search": 5.3,
    "short": 0,
    "shortfalls": [],
-   "src": "15b08e56da68debe1e9c2b54f27c4020bb3af8c1"
+   "src": "821628d6b167783bdb371cde55f2ac73c23910a7"
   },
   "mirrorwing_dragon": {
    "hand_mismatch": 0,
@@ -365,7 +365,7 @@
    "search": 4.4,
    "short": 0,
    "shortfalls": [],
-   "src": "15b08e56da68debe1e9c2b54f27c4020bb3af8c1"
+   "src": "821628d6b167783bdb371cde55f2ac73c23910a7"
   },
   "mirrorwing_dragon_v1_twinflame_anger": {
    "hand_mismatch": 0,
@@ -377,7 +377,7 @@
    "search": 4.875,
    "short": 0,
    "shortfalls": [],
-   "src": "15b08e56da68debe1e9c2b54f27c4020bb3af8c1"
+   "src": "821628d6b167783bdb371cde55f2ac73c23910a7"
   },
   "mirrorwing_dragon_v2_instigator_entrance": {
    "hand_mismatch": 0,
@@ -389,7 +389,7 @@
    "search": 5.0,
    "short": 0,
    "shortfalls": [],
-   "src": "15b08e56da68debe1e9c2b54f27c4020bb3af8c1"
+   "src": "821628d6b167783bdb371cde55f2ac73c23910a7"
   },
   "pirates": {
    "hand_mismatch": 0,
@@ -401,7 +401,7 @@
    "search": 4.3,
    "short": 0,
    "shortfalls": [],
-   "src": "15b08e56da68debe1e9c2b54f27c4020bb3af8c1"
+   "src": "821628d6b167783bdb371cde55f2ac73c23910a7"
   },
   "prevent_damage": {
    "hand_mismatch": 0,
@@ -413,7 +413,7 @@
    "search": 5.2727,
    "short": 0,
    "shortfalls": [],
-   "src": "15b08e56da68debe1e9c2b54f27c4020bb3af8c1"
+   "src": "821628d6b167783bdb371cde55f2ac73c23910a7"
   },
   "selesnyalifegain_v1_avatar_alchemist": {
    "hand_mismatch": 0,
@@ -425,7 +425,7 @@
    "search": 5.4,
    "short": 0,
    "shortfalls": [],
-   "src": "15b08e56da68debe1e9c2b54f27c4020bb3af8c1"
+   "src": "821628d6b167783bdb371cde55f2ac73c23910a7"
   },
   "slivers_vial": {
    "hand_mismatch": 0,
@@ -437,7 +437,7 @@
    "search": 4.2,
    "short": 0,
    "shortfalls": [],
-   "src": "15b08e56da68debe1e9c2b54f27c4020bb3af8c1"
+   "src": "821628d6b167783bdb371cde55f2ac73c23910a7"
   },
   "snow": {
    "hand_mismatch": 0,
@@ -449,7 +449,7 @@
    "search": 5.9,
    "short": 0,
    "shortfalls": [],
-   "src": "15b08e56da68debe1e9c2b54f27c4020bb3af8c1"
+   "src": "821628d6b167783bdb371cde55f2ac73c23910a7"
   },
   "soldiers": {
    "hand_mismatch": 0,
@@ -461,7 +461,7 @@
    "search": 4.1333,
    "short": 0,
    "shortfalls": [],
-   "src": "15b08e56da68debe1e9c2b54f27c4020bb3af8c1"
+   "src": "821628d6b167783bdb371cde55f2ac73c23910a7"
   },
   "stompysurprise": {
    "hand_mismatch": 0,
@@ -473,7 +473,7 @@
    "search": 4.0,
    "short": 0,
    "shortfalls": [],
-   "src": "15b08e56da68debe1e9c2b54f27c4020bb3af8c1"
+   "src": "821628d6b167783bdb371cde55f2ac73c23910a7"
   },
   "stompysurprise_v1_arborelf_worldspine4": {
    "hand_mismatch": 0,
@@ -485,7 +485,7 @@
    "search": 4.4545,
    "short": 0,
    "shortfalls": [],
-   "src": "15b08e56da68debe1e9c2b54f27c4020bb3af8c1"
+   "src": "821628d6b167783bdb371cde55f2ac73c23910a7"
   },
   "treasure_hunt": {
    "hand_mismatch": 0,
@@ -497,7 +497,7 @@
    "search": 3.9091,
    "short": 0,
    "shortfalls": [],
-   "src": "15b08e56da68debe1e9c2b54f27c4020bb3af8c1"
+   "src": "821628d6b167783bdb371cde55f2ac73c23910a7"
   },
   "vampires": {
    "hand_mismatch": 0,
@@ -509,7 +509,7 @@
    "search": 4.1,
    "short": 0,
    "shortfalls": [],
-   "src": "15b08e56da68debe1e9c2b54f27c4020bb3af8c1"
+   "src": "821628d6b167783bdb371cde55f2ac73c23910a7"
   },
   "whiteknights": {
    "hand_mismatch": 0,
@@ -521,7 +521,7 @@
    "search": 4.2,
    "short": 0,
    "shortfalls": [],
-   "src": "15b08e56da68debe1e9c2b54f27c4020bb3af8c1"
+   "src": "821628d6b167783bdb371cde55f2ac73c23910a7"
   },
   "whiteknights_v1_contender_vial": {
    "hand_mismatch": 0,
@@ -533,7 +533,7 @@
    "search": 4.4,
    "short": 0,
    "shortfalls": [],
-   "src": "15b08e56da68debe1e9c2b54f27c4020bb3af8c1"
+   "src": "821628d6b167783bdb371cde55f2ac73c23910a7"
   }
  }
 }

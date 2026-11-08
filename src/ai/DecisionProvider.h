@@ -771,8 +771,42 @@ public:
     // discard buckets gets a put-back default that agrees with them.
     virtual std::vector<int> PutBackRanking(const GameState& s, int controller) const;
 
+    // Search-only dredge menu. Entries are physical graveyard card numbers;
+    // zero means take the ordinary draw. The default keeps the complete menu.
+    // Human play and the full-search oracle bypass provider restrictions.
+    virtual std::vector<int> DredgeSearchCandidates(
+        const GameState&, int, const std::vector<int>& numbers) const
+    {
+        std::vector<int> out{0};
+        out.insert(out.end(), numbers.begin(), numbers.end());
+        return out;
+    }
+    // True only when every reachable dredge menu has one answer. The in-plan
+    // axis can then use that answer at resolution without replaying every plan.
+    virtual bool DredgeSearchAlwaysSingleton() const { return false; }
+
+    // Viewer suggestion for the full human menu, indexed like its 0=draw,
+    // 1..n=dredger options. Independent of the search-only prune above.
+    virtual int DredgeHumanDefault(const GameState&, int,
+                                   const std::vector<int>&) const { return 0; }
+
+    // Experimental provider timing for a zero-mana tap/draw/discard ability.
+    // TRUE moves autonomous use to upkeep before the draw step; the shared
+    // upkeep resolver applies it there and the main-phase action fan omits it.
+    virtual bool UpkeepOnlyTapDraw(const GameState&, const CardDefinition&) const
+    { return false; }
+
+    // Deck-specific single-target policies for the two Gods triggers. A pinned
+    // search rank still overrides these at resolution; the generic menu stays full.
+    virtual bool PrunesGodTargetAxes() const { return false; }
+    virtual bool UsesPhenaxGodMassMill() const { return false; }
+    virtual int XenagosCombatTargetRank(const GameState&, int,
+                                       const std::vector<int>&) const { return 0; }
+    virtual int AthreosCoinTargetRank(const GameState&, int,
+                                     const std::vector<int>&) const { return 0; }
+
     // PutBackRankingPerCard -- read PutBackRanking per CARD for the put-back DEFAULT (candidate 0): the
-    // two most expendable eligible hand cards by the ranking, the less expendable of them on top, moved
+    // two or three most expendable eligible hand cards by the ranking, the less expendable of them first, moved
     // to the FRONT of the otherwise unchanged candidate list (PutBackCandidates / PutBackPickAt in
     // core/SpellEffects.h). The identity fold ranks a CLASS at its best member, so a class whose copies
     // differ in need -- a duplicate Niv beside the one being kept, a surplus Island beside two needed
@@ -786,6 +820,18 @@ public:
     // whose provider carries a user-given put-back rule. Human play is never pruned (its put-back is
     // asked at resolution). Default false -> every candidate is searched.
     virtual bool PutBackSingleCandidate(const GameState& s) const { (void)s; return false; }
+
+    // A nonempty answer replaces the autonomous Life from the Loam target
+    // subset fan at cast declaration. Human play keeps every legal subset.
+    virtual std::vector<std::string> LoamTargetSearchCandidates(
+        const GameState& s, int controller, int maximum) const
+    { (void)s; (void)controller; (void)maximum; return {}; }
+
+    // The first actual own-turn draw may make Keranos deal 3 damage. A provider
+    // may choose the opponent as the single autonomous in-plan target.
+    virtual bool KeranosDamageFaceOnly(const GameState& s) const { (void)s; return false; }
+
+    // A deck may refine fewer bottoming finalists in a specific game format.
 
     // ---- THE SCORED CANTRIP ORDER (docs/design/cantrip-search-optimization.md §3.2-3.3) -----------------
     // CantripReadinessOf -- the provider's cheap GO-OFF estimate at a cantrip resolution: k = our draw steps

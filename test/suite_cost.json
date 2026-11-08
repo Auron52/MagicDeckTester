@@ -192,13 +192,22 @@
    "total_core_ms": 110275,
    "worst_case": "goblins2hg_regression_d5_b60"
   },
+  "gods": {
+   "cost_metric": "searched_depth_budget_pooled_seeds_v2",
+   "cost_per_game_ms": 5291.58,
+   "jobs": 4,
+   "key": "gods",
+   "tier": "regression",
+   "total_core_ms": 668412,
+   "worst_case": "gods2hg_regression_d5_b20"
+  },
   "hinata": {
    "cost_metric": "searched_depth_budget_pooled_seeds_v2",
-   "cost_per_game_ms": 13205.9333,
+   "cost_per_game_ms": 3592.72,
    "jobs": 7,
    "key": "hinata",
    "tier": "regression",
-   "total_core_ms": 5073814,
+   "total_core_ms": 1430115,
    "worst_case": "hinata2hg_regression_d5_b30"
   },
   "jumbo": {

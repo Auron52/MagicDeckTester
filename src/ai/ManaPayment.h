@@ -991,6 +991,7 @@ private:
 void TapSourceIntoFloat(GameState& state, int active, Permanent& p, const CardDefinition& def,
                         Color col, ManaPool& floating, ManaPool* available, bool for_creature,
                         const std::vector<int>* aura_colors = nullptr);
+bool ApplyKruphixBankTap(GameState& state, int source_id, char face);
 
 // ---- The viewer's MANUAL TAP/PAY fallback (docs/design/viewer-manual-tap-pay.md) ---------------
 // ONE token format -- `tap=<card name>#<m_number>:<FACE>[+<AURA>...]` -- and ONE parser for it,

@@ -226,7 +226,7 @@ function collectRefs() {
 
 function main() {
   const refs = collectRefs();
-  if (!refs.length) { console.log('no references found'); return 0; }
+  if (!refs.length) { console.log('no references found'); return runPinned() ? 1 : 0; }
   const tally = { accept: 0, choose: 0, unsupported: 0, skipped: 0 };
   const fails = [];
   // EMITTER-CONTRACT gaps (2026-09-11), tracked apart from `fails` and NOT baseline-gated: a
@@ -255,6 +255,7 @@ function main() {
     const extra = (al && Array.isArray(al.side) && al.side.length)
       ? al.side
       : sideChannelArgs(ref.decisions || []);   // fallback: --firebreathe / --storage-hold / --cast-order
+    if (ref.magus_upkeep_prompt && !extra.includes('--magus-upkeep-prompt')) extra.push('--magus-upkeep-prompt');
     // Deck + profile come from the RESOLVER, not from a second name->path guess here. The
     // references/<dir> name need not match decks/<dir> (references/Creature_Giving vs
     // "decks/Creature Giving"), and the local guess silently skipped that whole deck.
@@ -485,7 +486,11 @@ function main() {
 //     shouldn't be marked as Rules-legal." Control: ONE Wish is payable.
 //   * the same game's T5 one-step line (USER: "if I cast Bruna and Glittering Wish in one step it
 //     reverts my line"): payable -- the Wish's Chancery {U} floats into Bruna -- in either click order.
+//   * Gods seed 1 T2: previewing Careful Study used to emit a dredge prompt from a simulated draw
+//     before the validation verdict, so the viewer lost the Reflecting Pool and Study cast history.
 const PINNED = [
+  { deck: 'Gods', seed: 1, gi: 0, choices: [0,1,0,1,5,0,0,0,1],
+    line: 'land=Reflecting Pool;cast=Careful Study', want: ['accept'] },
   { deck: 'Bruna', seed: 13, gi: 12, choices: [0,0,1,4,0,1,-1,-1,0,0,-1,-1,0,-1,-1],
     line: 'land=Razorverge Thicket;cast=Glittering Wish;cast=Glittering Wish', want: ['illegal'] },
   { deck: 'Bruna', seed: 13, gi: 12, choices: [0,0,1,4,0,1,-1,-1,0,0,-1,-1,0,-1,-1],

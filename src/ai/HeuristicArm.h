@@ -843,6 +843,7 @@ enum Slot : int
     SB_MAIN1_RULE,            // MTG_SB_MAIN1_RULE  Shadowborn Apostle: the USER's main-1 rule (2026-11-04) -- a root pre-combat plan beyond the land drop is admitted only on a JETMIR TURN (an attack-ready creature of ours AND Jetmir on our battlefield, or a plan that can still deploy him before combat); every other plan is folded to its main-2 twin (ShadowbornProvider::Main1PlanAdmitted). Searched play only. The sick-turn Demon search moves to main 2 with it
     SB_CAST_ORDER,            // MTG_SB_CAST_ORDER  Shadowborn Apostle: the USER's cast order (2026-11-04): land, Dark Ritual, [Culling's hand victim], Culling the Weak, Thrumming Stone, Apostle, Reaper, Sire, Overlord, Jetmir, Demonic Tutor, Diabolic Intent, Profane Tutor, Lotus Bloom (total by name); Culling's hand victim is cast just before it; within one main the Overlord (hard cast or fetched) never follows a Jetmir fetch
     SB_RITUAL_PAYOFF,         // MTG_SB_RITUAL_PAYOFF  Shadowborn Apostle (USER 2026-11-05, "prune rituals with no payoff like we have for other decks"): a plan subset that casts a mana ritual (Dark Ritual, Culling the Weak) and spends mana on nothing that is not itself a ritual is dropped (DecisionProvider::PrunesRitualWithoutSpend; TurnSolver SubsetRitualSpendsNothing) -- its float empties at the end of the phase, so the same subset without the ritual dominates it. Search branch list and greedy policy alike. DEFAULT ON (2026-11-05, ab7/ab8)
+    GODS_PHARIKA_GOD_ONE,    // MTG_GODS_PHARIKA_GOD_ONE  experimental: one own-graveyard God fuel target per Pharika state
     COUNT
 };
 
@@ -1630,6 +1631,7 @@ inline const char* Name(int slot)
         "MTG_SB_MAIN1_RULE",
         "MTG_SB_CAST_ORDER",
         "MTG_SB_RITUAL_PAYOFF",
+        "MTG_GODS_PHARIKA_GOD_ONE",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

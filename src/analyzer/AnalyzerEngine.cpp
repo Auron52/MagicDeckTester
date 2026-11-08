@@ -6,10 +6,13 @@
 #include "../ai/MulliganProfileIO.h"
 #include "../cards/CardDatabase.h"
 #include "../core/HardwareConcurrency.h"
+#include "../core/MemBudget.h"
 #include "../runner/GoldFishRunner.h"
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cmath>
+#include <cstdio>
 #include <iostream>
 #include <limits>
 #include <nlohmann/json.hpp>
@@ -140,12 +143,27 @@ std::vector<AnalyzerEngine::GameRecord> AnalyzerEngine::RunForRecords(
     const bool needs_second_main = GoldFishRunner::DeckUsesSecondMain(deck);
     int nth = std::min(HardwareThreads(), num_games);
     std::atomic<int> next_game{0};
+    std::atomic<int> completed{0};
+    std::vector<std::atomic<int>> running(static_cast<std::size_t>(nth));
+    for (auto& slot : running) { slot.store(-1, std::memory_order_relaxed); }
+    membudget::SetCapContext([&]()
+    {
+        std::string out = "[rss-cap]   card-score games dispatched="
+                        + std::to_string(std::min(next_game.load(std::memory_order_relaxed), num_games))
+                        + "/" + std::to_string(num_games) + "\n";
+        for (int t = 0; t < nth; ++t)
+        {
+            const int gi = running[static_cast<std::size_t>(t)].load(std::memory_order_acquire);
+            if (gi >= 0) { out += "[rss-cap]   in flight: gi=" + std::to_string(gi) + "\n"; }
+        }
+        return out;
+    });
     std::vector<std::thread> threads;
     threads.reserve(nth);
 
     for (int t = 0; t < nth; ++t)
     {
-        threads.emplace_back([&]()
+        threads.emplace_back([&, t]()
         {
             AIEngine   ai(profile, depth, timeout_ms);
             ai.SetSearchPostCombat(needs_second_main);
@@ -154,13 +172,25 @@ std::vector<AnalyzerEngine::GameRecord> AnalyzerEngine::RunForRecords(
             {
                 int gi = next_game.fetch_add(1, std::memory_order_relaxed);
                 if (gi >= num_games) { break; }
+                running[static_cast<std::size_t>(t)].store(gi, std::memory_order_release);
                 GameState state = GoldFishRunner::SetupGame(deck, seed + static_cast<uint64_t>(gi), gi);
+                const auto started = std::chrono::steady_clock::now();
                 records[gi].win_turn     = engine.RunGame(state, max_turns);
                 records[gi].opening_hand = ai.GetKeptOpeningHand();
+                const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now() - started).count();
+                if (elapsed >= 30'000)
+                { std::fprintf(stderr, "  Card-score slow game: gi=%d elapsed=%lldms\n",
+                               gi, static_cast<long long>(elapsed)); }
+                running[static_cast<std::size_t>(t)].store(-1, std::memory_order_release);
+                const int done = completed.fetch_add(1, std::memory_order_relaxed) + 1;
+                if (done % 50 == 0 || done == num_games)
+                { std::fprintf(stderr, "  Card-score progress: %d/%d games\n", done, num_games); }
             }
         });
     }
     for (std::thread& th : threads) { th.join(); }
+    membudget::SetCapContext({});
     return records;
 }
 

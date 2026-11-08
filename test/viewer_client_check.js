@@ -150,6 +150,110 @@ function buildDom() {
   return win;
 }
 
+// Graveyard cards share one line verb, but only Retrace pays the additional land discard.
+function testGraveyardCastAndHistoryText() {
+  const win = buildDom(), S = win.__getS(), fails = [];
+  const check = (ok, message) => { if (!ok) fails.push(message); };
+  S.over = false;
+  S.decision = { type: 'main_phase', turn: 7,
+    me: { hand: [], flashback_gy: ['Mystic Retrieval'], retrace_gy: ['Mystic Retrieval', 'Throes of Chaos'] } };
+  S.plan = [];
+  win.retraceCard('Mystic Retrieval');
+  check(S.plan.length === 1 && S.plan[0].name === 'Mystic Retrieval',
+    'Flashback can be queued with no land in hand');
+  check(win.document.querySelector('#verdict').textContent.includes('Flashback'),
+    'Flashback click names the correct ability');
+  win.retraceCard('Throes of Chaos');
+  check(S.plan.length === 1, 'Retrace still requires a land in hand');
+  S.history = [{ turn: 0, label: 'Keep (4-card hand)' },
+               { turn: 7, label: 'Dredge Stinkweed Imp' }];
+  win.renderHistory();
+  const entries = [...win.document.querySelectorAll('#hist li')];
+  check(entries[0]?.textContent === 'T0 Keep (4-card hand)',
+    'Turn 0 history copies with a space after the marker');
+  check(entries[1]?.textContent === 'T7 Dredge Stinkweed Imp',
+    'Turn 7 history copies with a space after the marker');
+  win.close();
+  return fails;
+}
+
+function testLoamTargetPicker() {
+  const win = buildDom(), S = win.__getS(), fails = [];
+  const check = (ok, message) => { if (!ok) fails.push(message); };
+  S.decision = { type: 'main_phase', turn: 4, plans: [],
+    loam_lands: [{ number: 101, name: 'City of Brass' },
+                 { number: 102, name: 'City of Brass' },
+                 { number: 103, name: 'Gemstone Mine' }] };
+  const variants = ['L', 'L101', 'L102', 'L101,102', 'L101,103'].map((pin, index) => ({
+    plan_index: index, label: 'Life from the Loam',
+    subs: [{ key: 'Life from the Loam →', choice: pin, card: pin, kind: 'tutor' }]
+  }));
+  win.renderChooseDialog({ variants }, 'cast=Life from the Loam');
+  const panel = win.document.querySelector('#decpanel');
+  check(panel.textContent.includes('Choose up to three land cards from your graveyard'),
+    'Loam picker explains the real graveyard target choice');
+  check(panel.querySelectorAll('[data-loam]').length === 3,
+    'Loam picker shows physical land cards, including same-named copies');
+  check(!panel.textContent.includes('L101'), 'Loam internal target pins are hidden');
+  panel.querySelector('[data-loam="102"]').click();
+  check(panel.querySelector('#loamconfirm')?.disabled === false,
+    'second same-named land is a legal individual target');
+  panel.querySelector('[data-loam="103"]').click();
+  check(panel.querySelector('#loamconfirm')?.disabled === true,
+    'only offered land subsets can be confirmed');
+  win.close();
+  return fails;
+}
+
+function testMagusUpkeepPanel() {
+  const win = buildDom(), fails = [];
+  const d = { type: 'tutor_etb', source: 'Magus of the Bazaar (upkeep ability)',
+    upkeep_ability: true, candidates: [{ index: 0, name: 'Activate' }], heuristic_default: -1 };
+  const html = win.tutorPanelHtml(d);
+  if (!html.includes('activate in upkeep?') || !html.includes('before your draw step'))
+    fails.push('Magus dialog explains pre-draw timing');
+  if (!html.includes('data-opt="0"') || !html.includes('data-opt="-1"'))
+    fails.push('Magus dialog offers activate and leave untapped');
+  if (html.includes('search your library')) fails.push('Magus dialog does not claim to search');
+  win.close();
+  return fails;
+}
+
+function testMysticRetrievalPanel() {
+  const win = buildDom(), fails = [];
+  const d = { type: 'tutor_etb', source: 'Mystic Retrieval', from_graveyard: true,
+    candidates: [{ index: 0, name: 'Faithless Looting' }, { index: 1, name: 'Replenish' }],
+    heuristic_default: 1 };
+  const html = win.tutorPanelHtml(d);
+  if (!html.includes('choose a graveyard card') || !html.includes('return to your hand'))
+    fails.push('Mystic Retrieval dialog describes a graveyard return');
+  if (html.includes('search your library') || html.includes('Decline'))
+    fails.push('Mystic Retrieval dialog does not offer a library search or decline');
+  if (!html.includes('Use AI target') || !html.includes('Replenish'))
+    fails.push('Mystic Retrieval dialog offers the AI target');
+  win.close();
+  return fails;
+}
+
+function testGodsSeed5NoPreviewDredge() {
+  const fails = [];
+  // Keep; T1 Looting discards two Gods; T2 plays Coliseum and Magus;
+  // T3 activates Magus and discards three Gods. No dredger entered the
+  // graveyard, so the next real decision must be the T3 main phase.
+  const choices = [1, 0, 5, 0, 0, 0, 3, 0, 0, 0, 5, 4, 2];
+  const r = server.runStep({ deck:'Gods.cod', seed:5, gameIndex:4, maxTurns:8,
+    depth:0, choices, magusUpkeepPrompt:true }, null);
+  const d = r.decision || {};
+  if (r.kind !== 'decision' || d.type !== 'main_phase' || d.turn !== 3)
+    fails.push(`after upkeep discard expected T3 main phase, got ${r.kind} ${d.type} T${d.turn}`);
+  const zones = [...(d.me?.hand || []).map(c => c.name), ...(d.me?.graveyard || [])];
+  if (zones.some(n => n === 'Golgari Grave-Troll' || n === 'Stinkweed Imp'))
+    fails.push('a dredger appeared in hand or graveyard without being drawn or milled');
+  if (d.me?.library_size !== 46)
+    fails.push(`expected three ordinary T3 draws, library has ${d.me?.library_size} cards`);
+  return fails;
+}
+
 // #4 firebreathe GUI bookkeeping (isolated — a real firebreathing combat is hard to drive via the
 // line-building viewer). Verifies the modal renders and, crucially, that committing an amount rides the
 // TURN-keyed side-channel (S.firebreathe) WITHOUT consuming a --choices slot, and that undo drops it —
@@ -2000,6 +2104,59 @@ async function testOneStepLineNoSilentRevert() {
   return fails;
 }
 
+// Gods seed 1: the turn draw plus Study's two draws are three real dredge
+// decisions. A validation preview must not add a fourth history entry, and
+// replaying a Study draw after Undo must not duplicate the previous entry.
+async function testGodsStudyDredgeHistory() {
+  const fails = [];
+  const chk = (ok, msg) => { if (!ok) fails.push(msg); };
+  const win = buildDom(); await settle(win);
+  await startGame(win, { deck:'Gods', seed:1, turns:8 });
+  const prefix = [0,1,0,1,5,0,0,0,1];
+  for (const pick of prefix) {
+    const d = S(win).decision;
+    chk(!!d, `prefix ended before choice ${pick}`);
+    if (!d) return fails;
+    win.pushChoice(d, pick, `seed-1 setup ${d.type}`);
+    await settle(win);
+  }
+  const st = S(win);
+  chk(st.decision && st.decision.type === 'main_phase' && st.decision.turn === 2,
+      `prefix did not reach T2 main phase (${st.decision && st.decision.type})`);
+  if (fails.length) return fails;
+  st.plan = [{ name:'Reflecting Pool', kind:'land' }, { name:'Careful Study', kind:'spell' }];
+  await win.commitLine(); await settle(win);
+  chk(st.history.some(h => h.label.includes('land=Reflecting Pool; cast: Careful Study')),
+      'Study commit is missing from history');
+  chk(st.decision && st.decision.heuristic_default === 1,
+      'Study draw should suggest the available Stinkweed Imp');
+  const drawImage = win.document.querySelector('#decpanel [data-opt="0"] img');
+  chk(drawImage && drawImage.getAttribute('src').includes('backs.scryfall.io/normal/'),
+      'ordinary-draw option is missing its Magic card back image');
+  chk(!!win.document.querySelector('#decpanel [data-opt="1"] .deftag'),
+      'the AI badge should mark the dredger, not the ordinary draw');
+  for (const name of ['Stinkweed Imp', 'Golgari Grave-Troll']) {
+    const d = st.decision;
+    chk(d && d.type === 'dredge' && (d.options || []).some(o => o.index === 1 && o.name === name),
+        `expected ${name} dredge, got ${d && d.type}`);
+    if (fails.length) return fails;
+    win.commitDredge(d, 1); await settle(win);
+  }
+  chk(st.decision && st.decision.type === 'discard',
+      `Study should ask for two discards after two draws (got ${st.decision && st.decision.type}, di=${st.decision && st.decision.decision_index}, choices=${st.choices.join(',')}, castOrder=${JSON.stringify(st.castOrder)}, options=${JSON.stringify(st.decision && st.decision.options)})`);
+  const before = histSnapshot(win);
+  chk(before.filter(x => x.includes('|Dredge ')).length === 2,
+      `expected two Study dredges, got ${before.filter(x => x.includes('|Dredge ')).length}`);
+  await win.undo(); await settle(win);
+  chk(st.decision && st.decision.type === 'dredge', 'Undo did not return to second Study draw');
+  if (st.decision && st.decision.type === 'dredge') {
+    win.commitDredge(st.decision, 1); await settle(win);
+    chk(JSON.stringify(histSnapshot(win)) === JSON.stringify(before),
+        'replaying the second Study dredge duplicated or changed its history');
+  }
+  return fails;
+}
+
 async function testColorlessFirstTapOrder() {
   const fails = [];
   const chk = (c, m) => { if (!c) fails.push(m); };
@@ -2073,7 +2230,62 @@ async function testColorlessFirstTapOrder() {
 }
 
 (async () => {
+  if (process.argv.includes('--only-graveyard-cast')) {
+    const fails = testGraveyardCastAndHistoryText();
+    fails.forEach(m => console.error(m));
+    process.exit(fails.length ? 1 : 0);
+  }
+  if (process.argv.includes('--only-loam-picker')) {
+    const fails = testLoamTargetPicker();
+    fails.forEach(m => console.error(m));
+    process.exit(fails.length ? 1 : 0);
+  }
+  if (process.argv.includes('--only-magus-upkeep')) {
+    const fails = testMagusUpkeepPanel();
+    fails.forEach(m => console.error(m));
+    process.exit(fails.length ? 1 : 0);
+  }
+  if (process.argv.includes('--only-mystic-retrieval')) {
+    const fails = testMysticRetrievalPanel();
+    fails.forEach(m => console.error(m));
+    process.exit(fails.length ? 1 : 0);
+  }
+  if (process.argv.includes('--only-gods-seed5')) {
+    const fails = testGodsSeed5NoPreviewDredge();
+    fails.forEach(m => console.error(m));
+    process.exit(fails.length ? 1 : 0);
+  }
+  if (process.argv.includes('--only-gods-study')) {
+    const fails = await testGodsStudyDredgeHistory();
+    fails.forEach(m => console.error(m));
+    process.exit(fails.length ? 1 : 0);
+  }
   let anyFail = false;
+  {
+    const fails = testGraveyardCastAndHistoryText();
+    if (fails.length) { anyFail = true; console.log(`✗ graveyard cast/history text: ${fails.length} fail`); fails.forEach(m => console.log('  - ' + m)); }
+    else { console.log('✓ graveyard cast types and copyable history spacing'); }
+  }
+  {
+    const fails = testLoamTargetPicker();
+    if (fails.length) { anyFail = true; console.log(`✗ Life from the Loam target picker: ${fails.length} fail`); fails.forEach(m => console.log('  - ' + m)); }
+    else { console.log('✓ Life from the Loam graveyard land picker'); }
+  }
+  {
+    const fails = testMagusUpkeepPanel();
+    if (fails.length) { anyFail = true; console.log(`✗ Magus upkeep choice: ${fails.length} fail`); fails.forEach(m => console.log('  - ' + m)); }
+    else { console.log('✓ Magus upkeep choice'); }
+  }
+  {
+    const fails = testMysticRetrievalPanel();
+    if (fails.length) { anyFail = true; console.log(`✗ Mystic Retrieval target choice: ${fails.length} fail`); fails.forEach(m => console.log('  - ' + m)); }
+    else { console.log('✓ Mystic Retrieval graveyard target choice'); }
+  }
+  {
+    const fails = testGodsSeed5NoPreviewDredge();
+    if (fails.length) { anyFail = true; console.log(`✗ Gods seed 5 upkeep dredge: ${fails.length} fail`); fails.forEach(m => console.log('  - ' + m)); }
+    else { console.log('✓ Gods seed 5 upkeep excludes speculative dredge choices'); }
+  }
   // #4 firebreathe GUI bookkeeping (fast, DOM-only — no game needed).
   {
     const win = buildDom(); await settle(win);
@@ -2304,6 +2516,13 @@ async function testColorlessFirstTapOrder() {
     else { console.log('✓ equip from hand (drop a hand Equipment on a creature → cast + host-stamped equip → attached)'); }
   }
   // Colourless-first tap order: an exactly-payable line must not lose a coloured pip to a generic one.
+  {
+    let gdFails;
+    try { gdFails = await testGodsStudyDredgeHistory(); }
+    catch (e) { console.error(`✗ Gods Study dredge history: harness error: ${e.stack || e}`); process.exit(2); }
+    if (gdFails.length) { anyFail = true; console.log(`✗ Gods Study dredge history: ${gdFails.length} fail`); gdFails.forEach(m => console.log('  - ' + m)); }
+    else { console.log('✓ Gods seed 1 Study: one cast, two dredges, Undo replay keeps history exact'); }
+  }
   {
     let cfFails;
     try { cfFails = await testColorlessFirstTapOrder(); }

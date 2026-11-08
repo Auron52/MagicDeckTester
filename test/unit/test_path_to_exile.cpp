@@ -5,7 +5,7 @@
 // The removal template's exile branch + land_search_for_removal_controller, resolved in BOTH worlds
 // by the shared ResolveCreatureRemovalAt (SpellEffects.h). These pin what a game log cannot show:
 //   1. a self-target Path exiles our creature and fetches a TAPPED basic (search_count +1, the land
-//      drop untouched); the basic is the searched land_search_pins axis (Plains vs Mountain: width 2);
+//      drop untouched); the optional search is the land_search_pins axis (Plains, Mountain, decline);
 //      the rollout (ApplyPlan) and the executor (AIEngine through the committed-line seam) realise
 //      byte-identical boards, libraries and zones;
 //   2. an opponent-target Path exiles the creature and nothing else: no land, no shuffle, no pin;
@@ -253,8 +253,8 @@ TEST_CASE_FIXTURE(PathOfferedPe, "Path: a self-target cast exiles our creature a
     const int sc0 = s.search_count;
     const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
     const std::vector<const TurnSolver::Plan*> self = SolePathPlans(plans, 50);
-    // The basic is the land_search_pins axis: Plains and Mountain are the two picks -> two variants.
-    REQUIRE(self.size() == 2);
+    // Path's optional search has Plains, Mountain, and decline variants.
+    REQUIRE(self.size() == 3);
     std::set<std::string> fetched;
     for (const TurnSolver::Plan* p : self)
     {
@@ -267,21 +267,23 @@ TEST_CASE_FIXTURE(PathOfferedPe, "Path: a self-target cast exiles our creature a
             CHECK(FindPe(*g, 50) == nullptr);                 // the Duelist is gone...
             CHECK(InZone(g->exile, 50));                       // ...into exile
             CHECK(NamedIn(g->players[0].graveyard, kPath));    // Path resolved
-            CHECK(g->search_count == sc0 + 1);                 // ONE shuffle
             CHECK(g->players[0].lands_played_this_turn == 0);  // never the land drop
-            CHECK(g->battlefield.size() == 2);                 // the Plains + the fetched basic
-            CHECK(CountBf(*g, "Plains", true) + CountBf(*g, "Mountain", true) == 2);   // both tapped
-            CHECK(g->players[0].library.size() == 9);
+            const bool searched = g->battlefield.size() == 2;
+            CHECK(g->search_count == sc0 + (searched ? 1 : 0));
+            CHECK(g->battlefield.size() == (searched ? 2 : 1));
+            CHECK(CountBf(*g, "Plains", true) + CountBf(*g, "Mountain", true) == (searched ? 2 : 1));
+            CHECK(g->players[0].library.size() == (searched ? 9 : 10));
         }
         CheckSameWorld(roll, exec);
-        fetched.insert(CountBf(roll, "Mountain", true) == 1 ? "Mountain" : "Plains");
+        fetched.insert(roll.battlefield.size() == 1 ? "decline"
+            : (CountBf(roll, "Mountain", true) == 1 ? "Mountain" : "Plains"));
     }
-    CHECK(fetched == std::set<std::string>{ "Mountain", "Plains" });
-    // One basic left in the library -> width 1: the self-target cast has no pin fan.
+    CHECK(fetched == std::set<std::string>{ "Mountain", "Plains", "decline" });
+    // One basic left in the library -> fetch or decline.
     GameState one = BoardPe(1, { kPath }, true, /*mountains=*/0);
     PutPe(one, "Kor Duelist", 50);
     const std::vector<TurnSolver::Plan> one_plans = TurnSolver::EnumerateMainPlans(one, true);
-    CHECK(SolePathPlans(one_plans, 50).size() == 1);
+    CHECK(SolePathPlans(one_plans, 50).size() == 2);
 }
 
 TEST_CASE_FIXTURE(PathOfferedPe, "Path: an opponent target exiles it and nothing else; the ColossusHammer provider refuses that cast")

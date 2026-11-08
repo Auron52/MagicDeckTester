@@ -487,6 +487,8 @@ def recording_rule_args(ref):
         args.append("--legacy-spell-copy")
     if not ref.get("combat_damage_steps"):
         args.append("--legacy-single-damage-step")
+    if ref.get("magus_upkeep_prompt"):
+        args.append("--magus-upkeep-prompt")
     return args
 
 
@@ -1990,8 +1992,20 @@ def walk_reference(path, collect=None, valve=None, pin_lines=False):
                     if x < 0:
                         resolved.append(x)
                         continue
-                    rec_opt = ref_opts[x] if 0 <= x < len(ref_opts) else None
-                    q = find_option(rec_opt, cur_opts, recorded_index=x, source=dec.get("source"))
+                    # Discard options publish stable hand indices. After one card is
+                    # discarded their indices are sparse, so `x` is not a position
+                    # in the options array (for example [0, 2, 5] with choice 5).
+                    if dec.get("type") == "discard":
+                        rec_opt = next((o for o in ref_opts if o.get("index") == x), None)
+                        old_pos = next((i for i, o in enumerate(ref_opts)
+                                        if o.get("index") == x), None)
+                        qpos = find_option(rec_opt, cur_opts, recorded_index=old_pos,
+                                           source=dec.get("source"))
+                        q = (cur_opts[qpos].get("index", qpos)
+                             if qpos is not None else None)
+                    else:
+                        rec_opt = ref_opts[x] if 0 <= x < len(ref_opts) else None
+                        q = find_option(rec_opt, cur_opts, recorded_index=x, source=dec.get("source"))
                     if q is None:
                         cur_hand = hand_names(dec.get("me", {}).get("hand", []))
                         ref_hand = hand_names(rd.get("me", {}).get("hand", []))

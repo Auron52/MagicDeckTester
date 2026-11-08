@@ -80,6 +80,7 @@ declare -A DECK_FILE=(
   [landfall]=decks/Landfall/Landfall.cod
   [galadriel]=decks/Galadriel/Galadriel.cod
   [niv]=decks/NivMizzetCombo/NivMizzetCombo.cod
+  [gods]=decks/Gods/Gods.cod
   [colossus]="decks/Colossus Hammer/Colossus Hammer.cod"
   [edf]=decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod
   [vampires]=decks/Vampires/Vampire.cod
@@ -127,6 +128,7 @@ declare -A DECK_PROF=(
   [landfall]=decks/Landfall/Landfall.profile.json
   [galadriel]=decks/Galadriel/Galadriel.profile.json
   [niv]=decks/NivMizzetCombo/NivMizzetCombo.profile.json
+  [gods]=decks/Gods/Gods.profile.json
   [colossus]="decks/Colossus Hammer/Colossus Hammer.profile.json"
   [edf]=decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json
   [vampires]=decks/Vampires/Vampire.profile.json
@@ -160,6 +162,11 @@ declare -A DECK_PROF=(
 # into turn 11 -- legal but volatile), and slivers actively spins on its heavy tail. The
 # deeper/generous budgets live in OVERNIGHT instead. See search-perf-investigation memory.
 SMOKE_CASES=(
+  # Gods: provisional pre-artifact entry set; the regression tier measures admission cost.
+  "gods       0  1001 1000  0"
+  "gods       3  1001   50 10"
+  "gods       5  1001   50 20"
+  "gods2hg    5  1001   25 20"
   # Merfolk: provisional pre-keep-table ENTRY set; cost gate decides admission.
   "merfolk     0 1001 1000 0"
   "merfolk     3 1001   50 10"
@@ -832,6 +839,11 @@ REGRESSION_CASES=(
   "hinata     3  2002    75 10"
   "hinata     5  2002   150 30"
   "hinata     5  3003   150 30"
+  # Gods: provisional pre-artifact entry rows for the same-run Hinata cost gate.
+  "gods       0  2002  1000  0"
+  "gods       3  2002    50 10"
+  "gods       5  2002    50 20"
+  "gods2hg    5  2002    50 20"
   # Cyclone: both seeds at each searched shape, with bottoming on and no artifacts yet.
   "cyclone 0 2002 1000 0"
   "cyclone 3 2002   75 10"
@@ -1078,6 +1090,11 @@ REGRESSION_CASES=(
 # See .claude/skills/regression-testing.md rule 7 and
 # docs/design/searched-design-audit-blind-spots.md ("Method trap: overlapping seed bases").
 OVERNIGHT_CASES=(
+  # Gods: provisional pre-artifact entry set. Expand after the keep table is adopted.
+  "gods       0  4004 2000  0"
+  "gods       3  4004   75 10"
+  "gods       5  4004   75 20"
+  "gods2hg    5  4004   50 20"
   # Cyclone unlimited backstop: screened 30051..30053 at d3 and d5; all six games
   # finished below the 2e6-unit per-game cap. Disjoint from the regression block.
   "cyclone          3 30051 3 0"

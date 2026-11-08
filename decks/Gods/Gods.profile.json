@@ -1,0 +1,100 @@
+{
+  "card_scores": {
+    "Athreos, God of Passage": [
+      -0.19382022471910076
+    ],
+    "Athreos, Shroud-Veiled": [
+      -0.12851037851037894
+    ],
+    "Careful Study": [
+      0.12670341448476474
+    ],
+    "Cephalid Coliseum": [
+      -0.07114152275442631
+    ],
+    "City of Brass": [
+      -0.005952380952380487
+    ],
+    "Ephara, God of the Polis": [
+      0.08611111111111125
+    ],
+    "Faithless Looting": [
+      0.5031601930590668
+    ],
+    "Forest": [
+      0.06077779949188944
+    ],
+    "Gemstone Mine": [
+      0.22409321556098405
+    ],
+    "Golgari Grave-Troll": [
+      0.3122504657971783
+    ],
+    "Karametra, God of Harvests": [
+      -0.23070198443919931
+    ],
+    "Keranos, God of Storms": [
+      -0.18956043956043978
+    ],
+    "Klothys, God of Destiny": [
+      0.2238832065740013
+    ],
+    "Life from the Loam": [
+      -0.14308724832214725
+    ],
+    "Magus of the Bazaar": [
+      0.47291513817559316
+    ],
+    "Mogis, God of Slaughter": [
+      -0.49279279279279287
+    ],
+    "Mystic Retrieval": [
+      -0.12162074131978429
+    ],
+    "Pharika, God of Affliction": [
+      -0.3215015321756889
+    ],
+    "Phenax, God of Deception": [
+      0.011711711711711814
+    ],
+    "Purphoros, Bronze-Blooded": [
+      -0.30176457449184735
+    ],
+    "Purphoros, God of the Forge": [
+      -0.12851037851037894
+    ],
+    "Reflecting Pool": [
+      -0.15499638739672683
+    ],
+    "Replenish": [
+      0.22702079960144417
+    ],
+    "Stinkweed Imp": [
+      0.13039291217257265
+    ],
+    "Tendo Ice Bridge": [
+      0.011806873286949404
+    ],
+    "Vivid Creek": [
+      0.08128155581873742
+    ],
+    "Xenagos, God of Revels": [
+      -0.36870516371901463
+    ]
+  },
+  "hand_score_threshold": -1e+18,
+  "mulligan": {
+    "bottom_eval_budget_ms": 1,
+    "bottom_eval_depth": 1,
+    "bottom_eval_topk": 2,
+    "bottom_order": "count_first",
+    "curve_check": "two_drop",
+    "max_lands": 5,
+    "min_color_sources": {},
+    "min_lands": 1,
+    "min_playable": 1,
+    "required_pieces": [],
+    "stop_at": 4
+  },
+  "version": 1
+}

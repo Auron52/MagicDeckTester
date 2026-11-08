@@ -579,6 +579,14 @@ goblins_regression_d5_s3003	9105
 goblins_smoke_d0_s1001	1
 goblins_smoke_d3_s1001	3849
 goblins_smoke_d5_s1001	11655
+gods2hg_regression_d5_s2002	100483
+gods2hg_smoke_d5_s1001	70167
+gods_regression_d0_s2002	1
+gods_regression_d3_s2002	53189
+gods_regression_d5_s2002	78224
+gods_smoke_d0_s1001	1
+gods_smoke_d3_s1001	34672
+gods_smoke_d5_s1001	51516
 hinata2hg_overnight_d5_s4004	74700
 hinata2hg_overnight_d5_s5005	64267
 hinata2hg_overnight_d5_s6006	65814
