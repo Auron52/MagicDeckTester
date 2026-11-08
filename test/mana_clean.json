@@ -543,6 +543,45 @@
      "seed": 30100000,
      "src": "95d103c9dfa9b3b2cdfc1c768727fe9d70992a31",
      "verdict": "clean"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "DOMINATED-LAND": 1536
+     },
+     "commit": "875d359ee280983bde3721d1aa84e61fcc64cedf",
+     "date": "2026-11-08T07:37:54Z",
+     "decisions": 38114,
+     "deck": "decks/CritterLifegain/CritterLifegain.cod",
+     "deck_sha": "680d8e3bcc6c9f441d585b5e1e65828212584df5",
+     "game_index": 200000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION",
+      "DOMINATED-LIFE"
+     ],
+     "issues": 0,
+     "life_breakpoints": [
+      "Serra Ascendant"
+     ],
+     "ms_off": 127347,
+     "ms_on": 398668,
+     "report": "logs/mana_clean/20261108-073316/report.md",
+     "run": "20261108-073316",
+     "seed": 30200000,
+     "src": "bc60d82d28ef90188f704a69f018debe51a9ee60",
+     "verdict": "clean"
     }
    ]
   },
@@ -1323,6 +1362,42 @@
      "seed": 30042000,
      "src": "2d767a1caac79e99b319ec329ff1e4d1b8141d14",
      "verdict": "clean"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "DOMINATED-LAND": 5747
+     },
+     "commit": "875d359ee280983bde3721d1aa84e61fcc64cedf",
+     "date": "2026-11-08T07:37:54Z",
+     "decisions": 33265,
+     "deck": "decks/KittyEquipment/KittyEquipment.cod",
+     "deck_sha": "8f27616cefc34bc1fd7cf21aacee55b5af9ac1db",
+     "game_index": 47000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 0,
+     "life_breakpoints": [],
+     "ms_off": 2143565,
+     "ms_on": 4567819,
+     "report": "logs/mana_clean/20261108-073316/report.md",
+     "run": "20261108-073316",
+     "seed": 30047000,
+     "src": "bc60d82d28ef90188f704a69f018debe51a9ee60",
+     "verdict": "clean"
     }
    ]
   },
@@ -1363,6 +1438,42 @@
      "seed": 30000000,
      "src": "7ec55bb505a80a04bb75eebca1ef10ce9740acd7",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "DOMINATED-LAND": 17
+     },
+     "commit": "875d359ee280983bde3721d1aa84e61fcc64cedf",
+     "date": "2026-11-08T07:37:54Z",
+     "decisions": 38331,
+     "deck": "decks/Knights/Knights.cod",
+     "deck_sha": "90cb9f1c21cb75f24aac11d363b12710f7fe7aef",
+     "game_index": 100000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 0,
+     "life_breakpoints": [],
+     "ms_off": 126294,
+     "ms_on": 575227,
+     "report": "logs/mana_clean/20261108-073316/report.md",
+     "run": "20261108-073316",
+     "seed": 30100000,
+     "src": "bc60d82d28ef90188f704a69f018debe51a9ee60",
+     "verdict": "clean"
     }
    ]
   },
@@ -1593,6 +1704,43 @@
      "run": "20261108-064356",
      "seed": 30100000,
      "src": "95d103c9dfa9b3b2cdfc1c768727fe9d70992a31",
+     "verdict": "clean"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {},
+     "commit": "875d359ee280983bde3721d1aa84e61fcc64cedf",
+     "date": "2026-11-08T07:37:54Z",
+     "decisions": 41077,
+     "deck": "decks/LifegainHeliodCombo/LifegainHeliodCombo.cod",
+     "deck_sha": "abe7a6d72f0b87dd3655037026b236f1098bcc3b",
+     "game_index": 200000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION",
+      "DOMINATED-LIFE"
+     ],
+     "issues": 0,
+     "life_breakpoints": [
+      "Serra Ascendant"
+     ],
+     "ms_off": 234176,
+     "ms_on": 627368,
+     "report": "logs/mana_clean/20261108-073316/report.md",
+     "run": "20261108-073316",
+     "seed": 30200000,
+     "src": "bc60d82d28ef90188f704a69f018debe51a9ee60",
      "verdict": "clean"
     }
    ]
