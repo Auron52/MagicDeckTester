@@ -2184,4 +2184,9 @@ equal-win-turn Jumbo line; full regression had 282 unchanged configurations,
 two faster Jumbo configurations, twelve equal-score Jumbo line changes, and no
 slower games. All 777 strict references replayed with zero drift or enum gap.
 The reviewed changed lines and updated regression ground truth were accepted.
-A fresh 5,000-game block on this source remains to run.
+The next 5,000-game block (5000-9999, source `3bda5c647e7c`) remained beta:
+4,141 issue flags, including 1,166 ENUM-GAP, 924 APPLY-DROP, 550
+APPLY-DROP-ORDER, 956 DOMINATED-CREATURE, 320 ORACLE-GAP, 213 UNMODELED,
+and 12 CAPPED. Oracle-off play was byte-identical. This is a new seed range;
+the first block's one large capped decision prevents a valid comparison of
+total issue counts. The exact gi1874 reproduction is the fix's direct check.
