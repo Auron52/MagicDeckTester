@@ -2263,3 +2263,13 @@ ORACLE-GAP flags; Vampires found 42 ORACLE-GAP and 29 UNMODELED flags, with
 no payment drops. All three remained byte-identical with the oracle off,
 but none earned a clean stamp. The cases are in
 `logs/mana_clean/20261108-142402/report.md`.
+
+The current-source refresh of 11 older issue stamps (`due-fast-20261108`,
+5,000 fresh games per deck) left every deck in beta. Issue counts were
+Anti-Lifegain 4,007, Bruna 3,524, Creature Giving 284, Dragons 1,189,
+Dragonstorm 2,781, Fungus 1,571, Galadriel 26,372, Midrange Burn 10,503,
+Selesnya Lifegain 9,425, Shadowborn Apostle 11,991, and Stompy Surprise
+6,010. All retained byte-identical oracle-off play. Galadriel's result is
+dominated by 25,464 UNMODELED flags; Midrange Burn has 8,275
+APPLY-DROP-ORDER flags. The exact classes, fresh game ranges, and
+reproductions are in `logs/mana_clean/due-fast-20261108/report.md`.
