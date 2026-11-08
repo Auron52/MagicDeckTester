@@ -2200,3 +2200,16 @@ new Vampires seed permits an Estate {R} payment, but no oracle outcome covers
 the engine's final untapped Blackcleave Cliffs and one-life-lower Blood-draw
 line. The earlier Vampires seed 30104266 instead misses a second Blood token
 from a continuation. Both remain open.
+
+### 13.20 Hundred-thousand-game clean-stamp challenge (2026-11-08)
+
+On source `3bda5c647e7c`, fresh games 110000-209999 challenged three
+5,000-game clean stamps. Knights stayed clean across 100,000 games. Breaching
+Dragonstorm found six ENUM-GAP flags on two seeds: gi111157 with a freshly
+played Ferrous Lake and gi203663 with a Mountain and paired Breaching
+Dragonstorms. Burn found four APPLY-DROP-ORDER flags on gi195145, where Light
+Up the Stage before Searing Blaze pays a continuation the engine's chosen order
+drops. All three decks retained oracle-off byte identity. The exact plans and
+reproduction commands are in `logs/mana_clean/20261108-102410/report.md`;
+Breaching Dragonstorm and Burn need focused gate repairs before new clean
+stamps.
