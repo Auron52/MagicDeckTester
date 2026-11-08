@@ -2277,3 +2277,42 @@ averaged 5.0200 over 100 games; regression depth-5 rows averaged 5.0667 and
 5.1000 over 150 games each; overnight depth-5 rows averaged 5.0900, 5.0533,
 5.0500, and 5.2500 over 300 games each. All new rows passed their audits and
 were accepted as ground truth.
+
+## Current artifact handoff (2026-11-08)
+
+Source commit `e22ef9fb0` corrected the extra-turn walk's Emrakul cost read,
+added a chain-preserving legal-plan fallback including explicit Mind Stone
+sacrifice plans, and placed the narrow turn-three Myriad preference in the
+Extra Turns provider. The updated ten-reference benchmark is 4.7 searched
+rounds versus 4.8 recorded, with no late references. Strict replay reproduced
+all ten; the Release unit suite passed 2,646 cases and 3,577,873 assertions.
+The same-run suite cost gate passed at 2.63x Hinata. Benchmark and cost artifacts
+were committed in `255731460` and `a7bf5e7ad`.
+
+The `fast` mulligan generator is running as PID 610346, with `mtg-analyze` PID
+620829, at source tree `bd3d785377400fad0c2d1329f20a62e4c9ca9110` on
+PGO+LTO. Its journal is under `decks/Extra Turns/`; progress is readable with
+`python3 scripts/mullgen_progress.py 'decks/Extra Turns'`, and its report is
+`logs/Extra_Turns_mullgen/VALIDATION.txt`. At the last check it had finalized
+the 86,150 size-seven keep cell sides and was refining the 52,616 bottoming
+cell sides. The journal and rolling backups from the superseded play version
+are archived in `logs/et_superseded_mullgen_e22ef9fb0/`.
+
+The value leaf is queued by `logs/et_valueleaf_queue.sh` (PID 649949). It waits
+for the mulligan driver to exit, verifies `VALIDATION PASSED`, a live keep
+profile, and the source-tree fingerprint, then runs
+`bash scripts/valueleaf.sh run 'decks/Extra Turns'`. Its output is
+`logs/et_valueleaf_queue.log`; `logs/et_valueleaf_queue.status` is the concise
+state. A separate two-hour status checker runs as PID 649958 and writes
+`logs/et_status_timer.log`. Both use the local Codex daemon's `queue --resume`
+to send status or terminal events back to this same session. A queued test
+message reached the session after the prior turn ended, confirming the idle
+delivery path. The daemon is available through `codex app-server daemon`.
+
+After mulligan validation, inspect its A/B and regression report, gzip and
+commit the definitive raw sidecar and keep profile, and handle the deck's moved
+ground truth. After value-leaf completion, read
+`logs/vlq_extra_turns/DECISIONS.txt`, verify the adoption and play-setting
+measurements, then commit the selected artifact and corresponding ground truth.
+Do not run another generator alongside either stage. The automated handoff
+does not itself commit artifacts.
