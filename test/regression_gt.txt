@@ -479,6 +479,10 @@ merfolk_regression_d5_s2002=4.1800/6824241f83b7d727
 merfolk_regression_d5_s3003=4.1267/57d9c44cc412b9db
 
 # --- overnight ---
+gods_overnight_d0_s4004=8.7900/b56338186f3292a9
+gods_overnight_d3_s4004=5.5867/c3862299ef16b5f8
+gods_overnight_d5_s4004=5.5333/7499902ba41e0a54
+gods2hg_overnight_d5_s4004=5.3600/07069323b43c9866
 cyclone_overnight_d3_s30051=5.0000/8c00f4fc85f4b21a
 cyclone_overnight_d5_s30051=5.0000/3b4f7adf5b66853f
 shadowborn_overnight_d3_s30081=4.6667/10e0ccf26b4dd9cd
