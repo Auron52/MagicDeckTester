@@ -2465,6 +2465,44 @@
      "seed": 30052000,
      "src": "8b9a23e598f8c80a65d276e3edd17e07e0a56a72",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "CAPPED-DECISION": 3560,
+      "DECISION-COST": 4,
+      "DOMINATED-LAND": 110106
+     },
+     "commit": "ea5c0e638d0eb56cfc130da635e6d50430083026",
+     "date": "2026-11-08T14:08:41Z",
+     "decisions": 661452,
+     "deck": "decks/KittyEquipment/KittyEquipment.cod",
+     "deck_sha": "8f27616cefc34bc1fd7cf21aacee55b5af9ac1db",
+     "game_index": 57000,
+     "games": 100000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 3560,
+     "life_breakpoints": [],
+     "ms_off": 46765039,
+     "ms_on": 101031230,
+     "report": "logs/mana_clean/20261108-124250/report.md",
+     "run": "20261108-124250",
+     "seed": 30057000,
+     "src": "3bda5c647e7c49dbe493bd77d1ef4a0da0a689b6",
+     "verdict": "issues"
     }
    ]
   },
@@ -3306,6 +3344,47 @@
      "seed": 30167000,
      "src": "3bda5c647e7c49dbe493bd77d1ef4a0da0a689b6",
      "verdict": "clean"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 23,
+      "CONTINUATION-DIFFERS": 216,
+      "DOMINATED-LAND": 28417,
+      "DROP-COVERED": 224,
+      "ORACLE-GAP": 20,
+      "PHANTOM": 2681
+     },
+     "commit": "ea5c0e638d0eb56cfc130da635e6d50430083026",
+     "date": "2026-11-08T14:08:41Z",
+     "decisions": 872111,
+     "deck": "decks/Minotaur/Minotaur.cod",
+     "deck_sha": "7e12c6578154b7a2117d9413e67a92b07b777125",
+     "game_index": 172000,
+     "games": 100000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 43,
+     "life_breakpoints": [],
+     "ms_off": 6175121,
+     "ms_on": 23333701,
+     "report": "logs/mana_clean/20261108-124250/report.md",
+     "run": "20261108-124250",
+     "seed": 30172000,
+     "src": "3bda5c647e7c49dbe493bd77d1ef4a0da0a689b6",
+     "verdict": "issues"
     }
    ]
   },

@@ -2236,3 +2236,12 @@ after a preceding payment; the engine drops that cast. The rollback census
 marks all six as depth-one cases whose lost action was not declared in the
 base plan. All four decks retained byte-identical oracle-off play. The exact
 plans are in `logs/mana_clean/20261108-120432/report.md`.
+
+The fifth pooled 100,000-game challenge covered Minotaur (172000-271999)
+and KittyEquipment (57000-156999). Minotaur found 23 APPLY-DROP and 20
+ORACLE-GAP flags; several lost lines use Aether Vial for Ragemonger before a
+discounted Minotaur cast. KittyEquipment found no payment or oracle gaps, but
+four decisions exhausted the oracle audit budget, leaving 3,560 plans marked
+CAPPED-DECISION. Both decks kept byte-identical oracle-off play. Neither has
+a clean stamp; the exact cases are in
+`logs/mana_clean/20261108-124250/report.md`.
