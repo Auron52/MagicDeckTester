@@ -135,6 +135,14 @@ doing cases that have potential to fix the colours, not those that require more 
   (recorded / tried / amount_short / joint_short / fired, and pass-2 probes) plus probe-vs-unit cost on EDF, Dragons,
   Angels (300 games each, seeds 88100000+, `build/scratch/mcdragons/lrprice/`, queued behind the pass driver), then
   set the price to the measured ratio and look for what still reaches the priced passes without re-making anything.
+- MEASURED 2026-11-07 (`lrprice/run.err`, branch tip 06d079365, 900 games, 32 threads): tried 2,894,233; refused by
+  AMOUNT 2,448,997 (85%); by the JOINT (colour) test 112,301; memo hits 129,928; fired 39,300 (found in pass 1:
+  14,280, pass 2: 737). Pass 2 entered 200,363 times, CUT by the budget 179,049 (89%), 4,144,780 probes in 16.4 s =
+  3.95 us a probe; an ordinary unit costs 60.7 us (wall minus the redo's 55.1 s over 5.26M units): FAIR PRICE ~15
+  probes a unit (the branch charges 4). Pass 2 is the waste: 0.37% of entries re-make anything. And 70% of the redo's
+  time (55.1 s total, 16.4 s pass 2) is pass 1 + find + memo work that is charged NOTHING. The LINE_REPAY line was
+  picked up by another session on `wip/mc-dragons` 11-07 (price 4 vs 18, Aura host-hold fix 25d75bf49..2881ff71f);
+  these numbers are for it.
 - MEASURED 2026-11-07: the 900-game batch finished (`build/scratch/mcdragons/lrprice/run.{out,err}`). Funnel:
   recorded 8,399,053; tried 2,894,233; amount-short 2,448,997; joint-short 112,301; fired 39,300. The priced
   second pass made 4,144,780 probes in 16,358 ms, or 3.95 us/probe. The batch spent 374,268 ms on 5,260,630
@@ -257,4 +265,22 @@ key would not remove distinct or otherwise unstoreable derivations. Attribute th
 binary (gcf3) at d5 b300 WINS T8 (= old turn; `build/scratch/cwild/regslow/g27.out`, digest 9c9019ccf4c39588); d5 b0
 loses on BOTH arms. So gi27 is dispositioned recoverable; c-wild is clear to land (rebase onto origin, rebuild, smoke,
 accept GT through the normal flow).
+
+## 11. Mirrorwing g662 (Q25a) looked at, 2026-11-09: NOT clear clairvoyance
+Replays (seed 73000662 gi662, play settings b20; base = `build/scratch/mirrorwing/mtg.wip` (digest 30bd27827a1bab5e),
+new = `mirrorwing4/mtg.b8`; JSON logs in `build/scratch/queue1107/mw/log_*`). Hand after the mulligan to 5: Gold Rush,
+Ignoble Hierarch, Game Trail, Zada, Sandstone Needle (Mountain + Mirrorwing bottomed).
+- Base (clairvoyant), T4 win: T1 Game Trail; T2 draw Needle#2, play Needle#1, Hierarch off Game Trail's {G}; T3 play
+  Needle#2 (enters tapped), Zada; T4 Ancestral Anger on Zada (copies draw Oracle's Restoration and a Forest), play the
+  Forest (the land drop is still free), Restoration, Frontline Heroism, Gold Rush, Elvish Mystic, attack.
+- Base with MTG_NC_SEARCH=1, T6: identical through T2, then T3 casts Zada and does NOT play Needle#2 (the only land in
+  hand); T4 plays it before Anger, so the Forest Anger finds cannot be played. Same at b200 and b2000. Holding a
+  tapped land with no other land in hand is not a draw-dependent choice, so the T4 loss under NC is a search miss,
+  not the clairvoyance the earlier verdict named. Only the T4 chain's yield depends on the draws, and an NC search
+  meets those draws as they happen.
+- New (clairvoyant), T5: T1 Needle, T2 Game Trail (enters tapped: no Mountain/Forest to reveal), so no Hierarch until
+  T3. Under NC the new arm plays T1 Game Trail like the base. The early-mint rung's evaluation shift moves the
+  clairvoyant T1 land, and that line is worse whatever the draws.
+Next: why the NC search leaves the T3 land drop unused (a tapped land, nothing else to play) -- a search question,
+then decide g662.
 

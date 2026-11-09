@@ -128,7 +128,7 @@ def flag_record(ln, deck_of, group=None):
     """One `[mana-oracle] <CLASS> ...` stderr line -> its record (None for anything else). `gi` becomes the
     GLOBAL game index (the engine prints the job-local one); `deck` is group(job)."""
     m = LINE.match(ln)
-    if not m or m.group("cls") == "DECISION":
+    if not m or m.group("cls") in ("DECISION", "DECISION-COST"):   # DECISION-COST: a per-decision cost line, not a flag
         return None
     rec = m.groupdict()
     j0 = deck_of.get(rec["job"])
