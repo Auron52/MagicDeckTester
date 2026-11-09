@@ -1112,8 +1112,17 @@ phase_matrix() {
     done_p C_matrix && return 0
     local keys; keys=$(staged_keys)
     [ -n "$keys" ] || { log "PHASE C ABORT: no staged models"; return 1; }
+    local matrix_predict_sec=$MAX_GAME_PREDICT_SEC matrix_wall_sec=$MAX_GAME_WALL_SEC
+    # Extra Turns' unbounded H/V tail reached the 44 GB RSS guard with only eight games
+    # in flight, each already 14-22 minutes old. Its 40M-unit ceiling does not bound
+    # their transient search state. Bound this single-deck matrix at 5/10 minutes;
+    # the driver filters abandoned physical games from every arm and backfills them.
+    if [[ $keys =~ ^[[:space:]]*extra_turns_staged[[:space:]]*$ ]]; then
+        matrix_predict_sec=300
+        matrix_wall_sec=600
+    fi
     log "PHASE C: matrix over$keys -- ONE pool, all available cores, target $MATRIX_TARGET/cell, H=[$HDEPTHS], V=[$VDEPTHS], cutoff median ${INTRACTABLE_MEDIAN_SPG}s/game, never-condemn<=$NEVER_CONDEMN, per-game ceiling ${ABANDON_K}x median of first $ABANDON_CALIB"
-    log "  wall-clock backstop: predictive cut at $((MAX_GAME_PREDICT_SEC/60)) min, hard cap at $((MAX_GAME_WALL_SEC/60)) min -- a FAILSAFE for when the unit ceiling stops bounding wall clock, not a cost control"
+    log "  wall-clock backstop: predictive cut at $((matrix_predict_sec/60)) min, hard cap at $((matrix_wall_sec/60)) min -- a FAILSAFE for when the unit ceiling stops bounding wall clock"
     log "  lazy leaf: ARMED on the H arm (MTG_LAZY_LEAF=1, set per-cell by the driver). One leafless"
     log "    full-depth pass before the ladder; answer-identical (per-game win turns verified), worth"
     log "    -10.4% at d4 / -36.8% at d5 in units on Snow. A MEDIAN-game lever -- the tail is the"
@@ -1130,8 +1139,8 @@ phase_matrix() {
         --abandon-k "$ABANDON_K" --abandon-calib "$ABANDON_CALIB" \
         --abandon-floor-units "$ABANDON_FLOOR_UNITS" \
         --abandon-units "$ABANDON_FLOOR_UNITS" \
-        --max-game-predict-sec "$MAX_GAME_PREDICT_SEC" \
-        --max-game-wall-sec "$MAX_GAME_WALL_SEC" \
+        --max-game-predict-sec "$matrix_predict_sec" \
+        --max-game-wall-sec "$matrix_wall_sec" \
         ${LEAFCAL_ARG[@]+"${LEAFCAL_ARG[@]}"} \
         --out "$MATRIX_TXT" >> "$VLQ/matrix.log" 2>&1
     local mrc=$?
