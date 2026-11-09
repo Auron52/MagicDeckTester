@@ -53,6 +53,7 @@ struct Job
 {
     std::string     name;
     Decklist        deck;
+    std::string     deck_path;                  // identity for per-seed scheduling across jobs
     std::string     profile_path;               // key into ProfileCache; loaded lazily by the worker
     int             games               = 0;
     uint64_t        seed                = 0;
@@ -65,6 +66,10 @@ struct Job
     // exactly as the single-run `--seed (base+off) --game-index off` form does). Default 0 keeps
     // every existing manifest byte-identical.
     int             game_index          = 0;
+    // Limit simultaneous searches for the same physical game across matrix arms. Different depths
+    // can each hold gigabytes of transient state on a hard seed; serialising just those copies
+    // leaves the other workers free to take different games from the same pooled queue.
+    int             same_seed_inflight  = 0;   // 0 = no limit (all existing manifests)
     // INDEX-CARRY SKIP LIST ("skip_games": [<global gi>, ...]), the consumer half of
     // src/core/IndexCarry.h. GLOBAL indices (i.e. game_index + i), matching every other gi the
     // manifest and the `[win]` lines speak in. A listed game is NEVER ENQUEUED: no work item, no
@@ -691,10 +696,13 @@ Job ParseJob(const json& jspec, ProfileCache& cache)
 
     std::filesystem::path deck_path = jspec["deck"].get<std::string>();
     j.deck = DeckLoader::LoadFromFile(deck_path);
+    j.deck_path = deck_path.lexically_normal().string();
 
     j.games               = jspec["games"].get<int>();
     j.seed                = jspec["seed"].get<uint64_t>();
     j.game_index          = jspec.value("game_index", 0);   // chunk offset; see Job::game_index
+    j.same_seed_inflight  = jspec.value("same_seed_inflight", 0);
+    if (j.same_seed_inflight < 0) { throw std::runtime_error("same_seed_inflight must be nonnegative"); }
     // Index-carry skip list (see Job::skip_games). VALIDATED HERE, loudly, because a silently
     // ignored or out-of-range entry would read as "the carry skipped that game" while the game
     // actually ran -- or worse, as a game the driver then fills in from base having never checked
@@ -1288,6 +1296,9 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
         std::map<std::size_t, WorkItem>                          ready;
         std::vector<std::deque<std::pair<std::size_t, WorkItem>>> parked;   // per cell, with index
         std::vector<int>                  inflight;           // games running, per cell
+        std::map<std::pair<std::string, uint64_t>, int> seed_inflight;
+        std::map<std::pair<std::string, uint64_t>,
+                 std::deque<std::pair<std::size_t, WorkItem>>> seed_parked;
         long long                         outstanding = 0;    // items taken but not yet finalised
         long long                         parked_total = 0;   // items sitting in `parked`
         int                               drip = 1;
@@ -1295,6 +1306,8 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
         // judgment atomics, which move under the workers and the heartbeat).
         enum class Verdict { kProtected, kCondemnable, kCapped };
         std::function<Verdict(const WorkItem&)> classify;
+        std::function<std::pair<std::string, uint64_t>(const WorkItem&)> seed_key;
+        std::function<int(const WorkItem&)> seed_limit;
 
         bool Take(WorkItem& out)
         {
@@ -1316,11 +1329,19 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                         ++parked_total;
                         continue;
                     }
+                    const int limit = seed_limit(wi);
+                    if (limit > 0 && seed_inflight[seed_key(wi)] >= limit)
+                    {
+                        seed_parked[seed_key(wi)].push_back({idx, wi});
+                        ++parked_total;
+                        continue;
+                    }
                     // Every taken item counts against its cell, not just condemnable ones: a cell
                     // can now also park work behind its CALIBRATION (see CellCeiling), and that
                     // includes protected d<=5 cells -- which is the point, since the protected H
                     // rungs are exactly where the degenerate games live.
                     ++inflight[cell_of(wi)];
+                    if (limit > 0) { ++seed_inflight[seed_key(wi)]; }
                     out = wi;
                     return true;
                 }
@@ -1344,11 +1365,29 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
         // a condemnation may have landed (they drain as skips). Promotion is wholesale rather than
         // one-at-a-time: Take re-parks whatever is still capped, and the churn is bounded by the
         // cell's own game count, once per finished game -- microseconds against multi-second games.
-        void OnFinished(int cell_id)
+        void OnFinished(const WorkItem& wi)
         {
             std::lock_guard<std::mutex> lk(mtx);
             --outstanding;
+            const int cell_id = cell_of(wi);
             --inflight[static_cast<std::size_t>(cell_id)];
+            if (seed_limit(wi) > 0)
+            {
+                const auto key = seed_key(wi);
+                auto it = seed_inflight.find(key);
+                if (--it->second == 0) { seed_inflight.erase(it); }
+                auto pq = seed_parked.find(key);
+                if (pq != seed_parked.end())
+                {
+                    while (!pq->second.empty())
+                    {
+                        ready.emplace(pq->second.front().first, pq->second.front().second);
+                        pq->second.pop_front();
+                        --parked_total;
+                    }
+                    seed_parked.erase(pq);
+                }
+            }
             auto& q = parked[static_cast<std::size_t>(cell_id)];
             while (!q.empty())
             {
@@ -1420,6 +1459,12 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
              ? Pool::Verdict::kCondemnable : Pool::Verdict::kCapped;
     };
     pool.cell_of = [&](const WorkItem& wi) { return jobs[wi.job].cell_id; };
+    pool.seed_limit = [&](const WorkItem& wi) { return jobs[wi.job].same_seed_inflight; };
+    pool.seed_key = [&](const WorkItem& wi)
+    {
+        const Job& j = jobs[wi.job];
+        return std::make_pair(j.deck_path, j.seed + static_cast<uint64_t>(wi.game));
+    };
 
     const long long s_slow_game_ms = SlowGameMs();
     const bool      s_dump_wins    = EnvOn("MTG_DUMP_WINS");   // see the emission in the worker
@@ -1767,7 +1812,7 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                     }
                     // Finalise in the pool as well: a skipped game is still a game accounted for,
                     // and if `outstanding` never drains the workers wait forever.
-                    pool.OnFinished(job.cell_id);
+                    pool.OnFinished(wi);
                     if (on_job_done && remaining[wi.job].fetch_sub(1, std::memory_order_acq_rel) == 1)
                     {
                         BatchJobResult r = reduce_job(wi.job);
@@ -2360,7 +2405,7 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                 // every item (a protected cell can park work behind its calibration), and a
                 // protected game that never finalised would leave that counter permanently above
                 // zero -- Take would block on the condition variable at the end of the run.
-                pool.OnFinished(job.cell_id);
+                pool.OnFinished(wi);
 
                 // Stream this job the instant its last game lands.
                 if (on_job_done

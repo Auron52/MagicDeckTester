@@ -1273,6 +1273,11 @@ def run_incremental(args):
                      # in build_queue so the queue's order survives into the pool; a bare cost weight
                      # here silently reimposed LPT and made the set-completion ordering inert.
                      "weight":ch["w"]}
+                # One hard shuffle appears in every H/V arm. Running all of those copies at once
+                # multiplied Extra Turns' transient search memory until even the 44 GB RSS guard
+                # tripped. Keep four copies in flight and fill the other workers with different
+                # games from this same pooled queue; the ordering changes no result.
+                job["same_seed_inflight"] = 4
                 # Per-deck greedy-leaf threshold (see LEAF_K / run_leafcal).
                 if c["arm"] == "H" and LEAF_K.get(dname) and c["depth"] >= LEAF_K[dname]:
                     job["leaf_greedy_from_depth"]=LEAF_K[dname]
