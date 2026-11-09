@@ -11,3 +11,11 @@ Focused replay of seed `30095038`, game index `95038`, turn 4 showed that the or
 Full local unit suite: 2,638 tests and 3,578,069 assertions passed. Files: `manifest.json`, `on.out`, `off.out`, and `issues.err` (whole issue lines). Unfiltered oracle stderr is scratch output under `/tmp/invig-fresh-on.err` in the current container.
 
 CI run `42512372037` completed successfully on Linux and Windows, including Linux/Windows determinism parity. This validates the WIP source and focused test; the 47 residual oracle gaps above still prevent a clean gate.
+
+## Upfront payment timing diagnostic (WIP, 2026-11-09)
+
+The engine's whole-turn batch prepay taps the old Birds of Paradise before Invigorate chooses its own-creature target. The oracle normally pays each cast in order, so the same three taps pumped a different Bird on seed `30095038`. The new fallback replays an oracle payment script with its taps made upfront, and accepts coverage only if a full apply reaches the engine's line and core with at least its resources. It is limited to no-land plans made only of hand casts with an own-creature target; land and tutor continuations remain open work. The reconstructed seed test was red before this change and is green afterward.
+
+Release binary SHA-256 `29f8fda7dfcc324194f0ea30406debfcd6329a6675022e716af8d0ea39423d9a`. The same 5,000-game manifest and seed range as above completed oracle-on: 5,000 played, average 4.1970, digest `eb17d5f4f8292b3b`, 17,753,153 work units, 27 `ORACLE-GAP` flags across 20 games, zero `UNMODELED` and zero `CAPPED`. This removes 20 of the prior 47 flags and introduces none. Twenty-four remaining flags still mention a pump difference; eight plans do not explicitly list Invigorate. The paired 50-game slice, indices 90000–90049, had identical oracle-on/off average 4.2200, digest `1c6ad43509e29993`, and 232,656 work units; oracle-on had zero gaps. The full unit suite passed 2,639 tests and 3,578,075 assertions. The reference safety scan passed all 186 checkouts/worktrees before this report was pushed.
+
+Files: `timing-on.out`, `timing-issues.err`, `timing-ab-on.out`, and `timing-ab-off.out`. This is a Release diagnostic, not the formal PGO mana-clean gate. Anti-Lifegain remains unclean.

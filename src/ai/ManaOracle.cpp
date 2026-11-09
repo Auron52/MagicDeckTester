@@ -3025,6 +3025,45 @@ EngineReal EngineApply(const GameState& root, bool pre, const TurnSolver::Plan& 
     return e;
 }
 
+// Whole-turn batch prepay taps its sources before the first cast. A later own-creature pump can
+// therefore see a different untapped creature than the oracle's sequential payment replay does.
+// Check that timing with the oracle's own tap choices, and accept it only when a full engine apply
+// on the pre-tapped board reaches the same line and core with at least the unhooked resources.
+bool UpfrontTapsCover(const GameState& root, bool pre, const TurnSolver::Plan& plan,
+                     const GameState& engine, const Realization& r)
+{
+    if (!plan.land_decided || !plan.land_to_play.empty()) { return false; }
+    bool has_pump = false;
+    for (const Action& a : plan.actions)
+    {
+        if (a.kind != Action::Kind::CastFromHand) { return false; }
+        if (a.def != nullptr && a.def->params.target_own_creature) { has_pump = true; }
+    }
+    if (!has_pump) { return false; }
+    const std::string line = LineKey(root, engine);
+    const std::uint64_t key = CoreKey(engine);
+    const Res resources = Resources(engine, /*with_float=*/false);
+    for (const Outcome& o : r.outcomes)
+    {
+        if (!o.Clean() || !o.unscripted.empty()) { continue; }
+        GameState upfront = root;
+        bool legal = true;
+        for (const PayOption& pay : o.script)
+        {
+            if (pay.engine || pay.fail || !PerformTaps(upfront, pay)) { legal = false; break; }
+        }
+        if (!legal) { continue; }
+        const bool saved = t_float_only;
+        t_float_only = true; // all mana needed by the casts must already be floating
+        const EngineReal replay = EngineApply(upfront, pre, plan);
+        t_float_only = saved;
+        if (replay.Full() && LineKey(root, replay.st) == line && CoreKey(replay.st) == key
+            && Covers(Resources(replay.st, /*with_float=*/false), resources, nullptr))
+        { return true; }
+    }
+    return false;
+}
+
 // A plan's ACTIONS as a set (order, and an order variant's searched_order, ignored) plus its land:
 // two plans with the same key offer the search the same option.
 std::string SiblingKey(const TurnSolver::Plan& p)
@@ -3716,6 +3755,7 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
     if (!covered)
     {
         if (r.capped || !unscripted.empty()) { return; }
+        if (UpfrontTapsCover(root, pre, plan, e, r)) { return; }
         // A gap the oracle can NAME (a source class it does not drive yet) is UNMODELED, not a defect in
         // what it does drive; only an unexplained gap is an ORACLE-GAP.
         if (!r.unmodeled.empty())
@@ -3982,7 +4022,7 @@ bool CoversEngineOutcome(const GameState& state, bool pre, const TurnSolver::Pla
         if (scripted_only && !o.unscripted.empty()) { continue; }
         if (Covers(Resources(o.st, /*with_float=*/false), eres, nullptr)) { return true; }
     }
-    return false;
+    return !r.capped && UpfrontTapsCover(state, pre, plan, er.st, r);
 }
 
 std::vector<std::string> PlanVerdict(const GameState& state, bool pre, const TurnSolver::Plan& plan,

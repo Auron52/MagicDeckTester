@@ -707,6 +707,66 @@ TEST_CASE("mana oracle: Invigorate's later pump keeps identical mana creatures d
     CHECK(manaoracle::CoversEngineOutcome(s, /*pre=*/true, plan));
 }
 
+// Anti-Lifegain seed 30095038 T4: the engine pays Birds and two Swords
+// with Stomping Ground, Godless Shrine and the old Bird. The oracle offers
+// that exact script, yet the pump lands on a different creature when the
+// payments are made only after Invigorate. The pre-tapped replay must cover.
+TEST_CASE("mana oracle: Invigorate target respects the upfront Bird mana tap")
+{
+    EnsureOracleCards();
+    static const AntiLifegainProvider prov;
+    GameState s = Board({ "Stomping Ground", "Birds of Paradise", "Godless Shrine", "Tainted Remedy" });
+    const int ids[] = { 45, 7, 17, 50 };
+    for (std::size_t i = 0; i < s.battlefield.size(); ++i)
+    { s.battlefield[i].card.m_number = ids[i]; }
+    s.turn_number = 4;
+    s.game_seed = 30095038;
+    s.phase = Phase::PreCombatMain;
+    s.m_provider = &prov;
+    s.players[0].life = 15;
+    s.players[1].life = 20;
+    Hand(s, { "Invigorate", "Reverent Silence", "Birds of Paradise",
+              "Swords to Plowshares", "Swords to Plowshares" });
+    const int hand_ids[] = { 26, 37, 6, 47, 48 };
+    for (std::size_t i = 0; i < s.players[0].hand.size(); ++i)
+    { s.players[0].hand[i].m_number = hand_ids[i]; }
+    for (int i = 0; i < 3; ++i)
+    {
+        Card land;
+        land.m_name = i < 2 ? "Opponent Nonbasic Land" : "Opponent Basic Land";
+        land.RehashName();
+        land.AddType(CardType::Land);
+        Permanent p;
+        p.card = land;
+        p.controller_index = p.owner_index = 1;
+        s.battlefield.push_back(p);
+    }
+    for (const auto& body : { std::pair{ "6/6 Creature", 6 }, std::pair{ "1/1 Creature", 1 } })
+    {
+        Card c;
+        c.m_name = body.first;
+        c.RehashName();
+        c.m_number = 500000 + (body.second == 1);
+        c.AddType(CardType::Creature);
+        c.m_power = c.m_toughness = body.second;
+        Permanent p;
+        p.card = c;
+        p.controller_index = p.owner_index = 1;
+        s.battlefield.push_back(p);
+    }
+    Action pump = CastAction(s, "Invigorate");
+    pump.alt_cost = true;
+    pump.alt_lifegain = 3;
+    pump.cost = ManaCost{};
+    pump.eval = 300;
+    pump.direct_damage = 3;
+    Action swords2 = CastAction(s, "Swords to Plowshares");
+    swords2.hand_index = 4;
+    const TurnSolver::Plan plan = PlanOf({ pump, CastAction(s, "Birds of Paradise"),
+                                            CastAction(s, "Swords to Plowshares"), swords2 });
+    CHECK(manaoracle::CoversEngineOutcome(s, /*pre=*/true, plan));
+}
+
 // Giada, Font of Hope: "{T}: Add {W}. Spend this mana only to cast an Angel spell." The oracle's restricted route once
 // offered it to ANY creature spell, and paid Bishop of Wings (a Human Cleric) with it -- Angels eg1, two ENUM-GAPs no
 // legal payment realises. The paying spell (the frontier's PayingSpellCard) now rides into the table.
