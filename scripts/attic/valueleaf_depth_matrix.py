@@ -1275,9 +1275,10 @@ def run_incremental(args):
                      "weight":ch["w"]}
                 # One hard shuffle appears in every H/V arm. Running all of those copies at once
                 # multiplied Extra Turns' transient search memory until even the 44 GB RSS guard
-                # tripped. Keep four copies in flight and fill the other workers with different
+                # tripped. Four copies still climbed past 40 GB; keep one in flight and fill the
+                # other workers with different
                 # games from this same pooled queue; the ordering changes no result.
-                job["same_seed_inflight"] = 4
+                job["same_seed_inflight"] = 1
                 # Per-deck greedy-leaf threshold (see LEAF_K / run_leafcal).
                 if c["arm"] == "H" and LEAF_K.get(dname) and c["depth"] >= LEAF_K[dname]:
                     job["leaf_greedy_from_depth"]=LEAF_K[dname]
