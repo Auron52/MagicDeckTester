@@ -3032,7 +3032,7 @@ EngineReal EngineApply(const GameState& root, bool pre, const TurnSolver::Plan& 
 bool UpfrontTapsCover(const GameState& root, bool pre, const TurnSolver::Plan& plan,
                      const GameState& engine, const Realization& r)
 {
-    if (!plan.land_decided || !plan.land_to_play.empty()) { return false; }
+    if (!plan.land_decided || plan.land_slot != 0) { return false; }
     bool has_pump = false;
     for (const Action& a : plan.actions)
     {
@@ -3040,13 +3040,33 @@ bool UpfrontTapsCover(const GameState& root, bool pre, const TurnSolver::Plan& p
         if (a.def != nullptr && a.def->params.target_own_creature) { has_pump = true; }
     }
     if (!has_pump) { return false; }
+    // The engine plays a land-first drop before batch prepay. Stage that same drop with the
+    // ordinary apply, but reject a stage that also casts anything; the oracle's payment taps
+    // must then be legal on this board, including a newly fetched land.
+    GameState after_land = root;
+    TurnSolver::Plan casts = plan;
+    if (!plan.land_to_play.empty())
+    {
+        const CardDefinition* land = CardDatabase::Instance().Lookup(plan.land_to_play);
+        if (land == nullptr || land->params.etb_bounce_land) { return false; }
+        TurnSolver::Plan land_only = plan;
+        land_only.actions.clear();
+        const EngineReal staged = EngineApply(root, pre, land_only);
+        const int ap = root.active_player_index;
+        if (!staged.Full() || staged.st.players[ap].lands_played_this_turn
+                                  != root.players[ap].lands_played_this_turn + 1
+            || staged.st.spells_cast_this_turn != root.spells_cast_this_turn)
+        { return false; }
+        after_land = staged.st;
+        casts.land_to_play.clear();
+    }
     const std::string line = LineKey(root, engine);
     const std::uint64_t key = CoreKey(engine);
     const Res resources = Resources(engine, /*with_float=*/false);
     for (const Outcome& o : r.outcomes)
     {
         if (!o.Clean() || !o.unscripted.empty()) { continue; }
-        GameState upfront = root;
+        GameState upfront = after_land;
         bool legal = true;
         for (const PayOption& pay : o.script)
         {
@@ -3055,7 +3075,7 @@ bool UpfrontTapsCover(const GameState& root, bool pre, const TurnSolver::Plan& p
         if (!legal) { continue; }
         const bool saved = t_float_only;
         t_float_only = true; // all mana needed by the casts must already be floating
-        const EngineReal replay = EngineApply(upfront, pre, plan);
+        const EngineReal replay = EngineApply(upfront, pre, casts);
         t_float_only = saved;
         if (replay.Full() && LineKey(root, replay.st) == line && CoreKey(replay.st) == key
             && Covers(Resources(replay.st, /*with_float=*/false), resources, nullptr))
