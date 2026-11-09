@@ -2316,3 +2316,87 @@ ground truth. After value-leaf completion, read
 measurements, then commit the selected artifact and corresponding ground truth.
 Do not run another generator alongside either stage. The automated handoff
 does not itself commit artifacts.
+
+## Value-leaf matrix tail investigation (2026-11-09)
+
+The matrix is paused at the user's request; phase A rows (23,954 pooled), the
+9,124-row train/holdout split, phase B model (heldout RMSE 0.4474), phase C0
+calibration, and 105 matrix attempts remain banked. There is no active
+generator. At the measured rate the remaining matrix projected to about
+2,489 core-hours, so resuming it unchanged would take roughly 104 hours on
+24 cores. Of 170 unique observed attempts in the expensive-first sample, 36
+exceeded 30 seconds and 29 hit the two-hour predictive cutoff. This is a tail
+problem, not a worker-count problem; the sample is scheduled expensive-first,
+so its slow percentage is not a population estimate.
+
+The reproducible H2 game is seed 10010, game index 0, max round 8, unbounded
+budget. A Release run with the experimental candidate prunes still exceeded
+two minutes; end-of-turn dominance exceeded 90 seconds. A Profile stack sample
+was in ordinary depth-one rollout search, expanding 1,152 plans at a late
+extra turn. It was not stuck in the chain trial or a memory cap. The same seed
+at depth zero finishes in 2 ms and wins in round 5, chaining multiple spells
+to Ulamog and Emrakul. Its real line casts Nexus of Fate and Time Warp in one
+main phase; therefore a blanket one-turn-spell plan prune deletes a useful
+legal line and is not an acceptable search optimization.
+
+Experiments are saved in `logs/et_tail_experiments.patch`; all source changes
+from these experiments were restored after measurement. The paired 200-game
+depth-5/budget-20 screen (seed 88001) found:
+
+| arm | mean round | summed CPU ms | units | earlier/later vs baseline |
+|---|---:|---:|---:|---:|
+| baseline | 5.170 | 425,566 | 1,763,956 | — |
+| opponent-turn target + one-turn-spell prune | 5.145 | 223,132 | 1,714,617 | 7 / 2 |
+| rollout land before spells | 5.125 | 531,606 | 2,158,138 | 30 / 18 |
+| shared rollout land ranker | 5.175 | 456,075 | 1,932,871 | 4 / 4 |
+| land before spells + shared ranker | 5.125 | 538,049 | 2,079,700 | 30 / 18 |
+
+The ordinary depth-zero rollout chose spells before its heuristic land drop,
+and the legacy rollout land picker chose a tapped Myriad Landscape over an
+untapped Snow-Covered Island. In the H1 seed-10010 trace that delayed Howling
+Mine from round 2 to round 3 and the greedy continuation's win from round 5
+to round 6. Enabling land-before-spells with the shared ranker reproduced the
+round-2 Mine and the round-5 rollout win. An experimental verified depth-zero
+incumbent then bounded full search to strictly earlier rounds, but the complete
+H1 game still exceeded 60 seconds. The extra-turn same-round search needs a
+stronger, coverage-preserving state or sequence dominance argument before the
+matrix should resume. Any adopted rollout change must recheck the frozen play
+digest before using banked phase A labels.
+
+### Rollout correction and tail retest
+
+The late extra-turn leaf was still receiving a one-ply search after the
+ordinary depth-zero rollout crossed into an extra turn. Routing that leaf to
+the existing chain heuristic removed the nested plan explosion. Two supporting
+changes matter: play the Extra Turns rollout land before choosing spells, using
+the shared untapped-land ranker; and use a verified depth-zero win as the
+unbounded search's incumbent. The chain trial can resolve a win in the current
+scored round; that result is optimal at its node. Extra turns still do not
+advance the scored round.
+
+With all five Extra Turns switches plus the shared ranker on, four seed blocks
+at H2/H4/H5 (240 games) had **zero games over 30 seconds**, with a 5.4-second
+maximum. V8 across the same blocks (80 games) had zero over 30 seconds and an
+11.4-second maximum. On a same-binary paired 200-game depth-5/budget-20 block,
+the baseline averaged 5.170 (414,461 summed CPU ms) and the candidate 5.025
+(318,112 ms): 41 games earlier, 14 later, 145 unchanged. The 10 hand-played
+references averaged 4.8; the candidate averaged 4.6, with no shortfalls.
+
+The original value-leaf queue is frozen at `48267e612` and banked phase A/B
+labels belong to that source. The value-leaf driver checks the changed play
+digest on resume and retains only complete, consistent matrix chunks across
+the source transition; it regenerates incomplete sets. Resume the existing
+queue after the clean-environment verification and source adoption, and
+inspect its digest transition report before accepting the matrix.
+
+The optimized Extra Turns rollout is now default-on with individual `=0`
+legacy switches. The clean-environment 200-game digest matches the experimental
+arm (`d78304ec84f7db44`); disabling all six Extra Turns switches reproduces
+the prior digest (`e3ee8ec1228348c2`). The strict viewer protocol replay
+reproduced all 10 Extra Turns references with no play drift or enumeration gap.
+All 445 rule scenarios passed in smoke, regression, and overnight tiers.
+Ground truth was accepted after per-game audit. In the overnight tier every
+Extra Turns case mean improved; among 241 searched games slower than stored
+ground truth, 74 recovered at larger budget, 125 followed divergent draws,
+and a same-binary legacy comparison of the remaining 42 found 38 ties, three
+improvements, and one actual one-turn slowdown.

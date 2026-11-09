@@ -71431,7 +71431,12 @@ static std::string SimulateLandPlay(GameState& state)
     // Under the legacy two-pass the pick is taken here; under the shared ranker the ranker's own pick
     // is offered first and kept whenever it already supplies the colour.
     const bool act_color = RolloutLandActColorEnabled();
-    if (act_color && !RolloutLandRankerEnabled())
+    // Extra Turns' rollout pays for its turn spell only if it makes the untapped
+    // land drop. DEFAULT ON for this provider; =0 restores the legacy pick.
+    static const bool et_ranker = EnvOn("MTG_ET_ROLLOUT_LAND_RANKER", true);
+    const bool ranker_on = RolloutLandRankerEnabled()
+        || (et_ranker && ResolveProvider(state).ExtraTurnChainWalkEnabled());
+    if (act_color && !ranker_on)
     {
         const int ci = ActivationColorLandIndex(state);
         if (ci >= 0)
@@ -71446,7 +71451,7 @@ static std::string SimulateLandPlay(GameState& state)
         }
     }
 
-    if (RolloutLandRankerEnabled())
+    if (ranker_on)
     {
         const GreedyLandPick gp = GreedyLandChoice(state);   // == GreedyLandChoiceIndex with no top
         if (gp.from_top)
@@ -93631,10 +93636,22 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
         // decrements before SimulateEndAndStartNextTurn), but the round did not advance -- so the turns of
         // the entry round get the ply back. Later extra turns inside the rollout share their round's depth.
         // roll_entry_extra is false for every other deck: identity.
-        const int turn_depth = (first_turn_depth >= 0 && state.turn_number == roll_start)
-                             ? first_turn_depth
-                             : depth + ((roll_entry_extra && state.turn_number == roll_start) ? 1 : 0);
+        static const bool s_et_chain_true_d0 = EnvOn("MTG_ET_CHAIN_TRUE_D0", true); // DEFAULT ON; =0 disables
+        static const bool s_et_rollout_true_d0 = EnvOn("MTG_ET_ROLLOUT_TRUE_D0", true); // DEFAULT ON; =0 disables
+        const int turn_depth = ((chain_only && s_et_chain_true_d0)
+                                || (s_et_rollout_true_d0 && !chain_only && depth == 0
+                                    && roll_entry_extra && state.turn_number == roll_start
+                                    && ResolveProvider(state).ExtraTurnChainWalkEnabled())) ? 0
+                             : ((first_turn_depth >= 0 && state.turn_number == roll_start)
+                                ? first_turn_depth
+                                : depth + ((roll_entry_extra && state.turn_number == roll_start) ? 1 : 0));
         t_echo_rollout_turn_depth = turn_depth;   // the echo census's playout test (NoteEchoUncoveredSearch)
+        static const bool s_et_rollout_preland = EnvOn("MTG_ET_ROLLOUT_PRELAND", true); // DEFAULT ON; =0 disables
+        if (s_et_rollout_preland && turn_depth <= 0 && !chain_only && chain_steps == nullptr
+            && ResolveProvider(state).ExtraTurnChainWalkEnabled()
+            && !ResolveProvider(state).LandDropAfterDrawEngine(state, state.active_player_index)
+            && !ResolveProvider(state).LandDropAfterHandLandTutor(state, state.active_player_index))
+        { SimulateLandPlay(state); }
         // Pre-combat main: pick and apply plan (includes Vial activations), then animate + tokens.
         TurnSolver::Plan pre_plan;
         if (g_honest_teacher && depth > 0)
@@ -97928,6 +97945,75 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
 {
     // Mid-pass overrun guard (see FSLineWin): abort the runaway pass -- or a VOID game's (see FSLineWin).
     if ((budget && budget->Overrun()) || gamework::Abandoned()) { ++g_fs_trunc_events; return { max_turns + 1, {} }; }
+    // Extra Turns: a verified chain that wins in THIS scored round is optimal
+    // at this node. Probe only mature, unbounded interior states; a failure
+    // leaves the complete search untouched. The trial's own priced cap keeps
+    // this from becoming another unbounded search at every transposition.
+    static const bool s_et_node_chain = EnvOn("MTG_ET_NODE_CHAIN_PROOF");
+    if (s_et_node_chain && depth > 0 && budget && budget->Unlimited()
+        && state.in_extra_turn && !g_et_chain_trial_active && !HumanPlayActive()
+        && ResolveProvider(state).ExtraTurnChainWalkEnabled())
+    {
+        int engines = 0, mines = 0;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d && (d->params.mine_extra_draw || d->params.horn_draw_on_land_play)) { ++engines; }
+            if (d && d->params.mine_extra_draw) { ++mines; }
+        }
+        if (engines >= 2 && mines >= 1)
+        {
+            static std::atomic<int> et_trace_count{0};
+            const bool et_trace_this = EnvOn("MTG_ET_NODE_CHAIN_TRACE")
+                && et_trace_count.fetch_add(1, std::memory_order_relaxed) < 20;
+            if (et_trace_this)
+            { std::fprintf(stderr, "[et-node-chain] TRY round=%d seq=%d depth=%d engines=%d mines=%d\n",
+                           state.turn_number, state.TurnSeq(), depth, engines, mines); }
+            struct TrialScope
+            {
+                bool active = g_et_chain_trial_active;
+                bool aborted = g_et_chain_trial_aborted;
+                long long start = g_et_chain_trial_price_start;
+                long long cap = g_et_chain_trial_price_cap;
+                TrialScope()
+                {
+                    g_et_chain_trial_active = true;
+                    g_et_chain_trial_aborted = false;
+                    g_et_chain_trial_price_start = workctr::t_priced;
+                    static const int m = std::max(0, EnvInt("MTG_ET_NODE_CHAIN_PRICE_CAP_M", 100));
+                    g_et_chain_trial_price_cap = static_cast<long long>(m) * 1000000LL;
+                }
+                ~TrialScope()
+                {
+                    g_et_chain_trial_active = active;
+                    g_et_chain_trial_aborted = aborted;
+                    g_et_chain_trial_price_start = start;
+                    g_et_chain_trial_price_cap = cap;
+                }
+            } trial_scope;
+            GameState trial = state;
+            std::vector<EtChainStep> steps;
+            const int win = SimulateToEndImpl(trial, /*depth=*/0, max_turns, nullptr,
+                                               state.turn_number, second_main, nullptr,
+                                               &steps, /*chain_only=*/true);
+            if (et_trace_this)
+            { std::fprintf(stderr, "[et-node-chain] RESULT round=%d win=%d steps=%zu aborted=%d\n",
+                           state.turn_number, win, steps.size(), g_et_chain_trial_aborted ? 1 : 0); }
+            if (!g_et_chain_trial_aborted && win == state.turn_number
+                && trial.extra_turns_taken > state.extra_turns_taken && !steps.empty())
+            {
+                if (EnvOn("MTG_ET_NODE_CHAIN_TRACE"))
+                { std::fprintf(stderr, "[et-node-chain] round=%d seq=%d depth=%d steps=%zu\n",
+                               state.turn_number, state.TurnSeq(), depth, steps.size()); }
+                TurnSolver::SearchLine out;
+                out.win_turn = win;
+                for (EtChainStep& step : steps)
+                { out.phases.push_back({ true, std::move(step.plan) }); }
+                return out;
+            }
+        }
+    }
     GreedyChargeGuard _gcg(state, budget);   // MTG_SOLVE_CHARGE: greedy walks under this host bill here
     // MTG_FSL_EDGE_NO_REACH (see FslEdgeNoReachOn): on the cutoff turn, under a win an ancestor already
     // holds, only a post-combat kill could matter -- and the deck vouches it has none.
@@ -103032,7 +103118,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         std::vector<DvsNodeMeta>* const meta_prev = g_devseq_dirty_meta;
         DevSeqDirtyKeys dirty_keys;
         g_devseq_latent_hit = false;
-        g_fsl_root_cut      = 0;
+        g_fsl_root_cut      = cut_prev;
         const int lmt_prev = g_devseq_latent_min_turn;
         g_devseq_latent_min_turn = INT_MAX;
         const long long dsu0 = gamework::t_used;   // MTG_DEV_SEQ_STATS (diagnostic)
@@ -103062,7 +103148,8 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         const int  miss1 = g_fsl_leafless_miss_depth;
         const bool emul1 = g_fsl_emul_heuristic_commit;
         g_devseq_latent_hit = latent_prev || met_latent;
-        const int cut2 = (line1.win_turn <= max_turns) ? line1.win_turn - 1 : max_turns + 1;
+        const int cut2 = std::min(cut_prev > 0 ? cut_prev : max_turns + 1,
+                                  (line1.win_turn <= max_turns) ? line1.win_turn - 1 : max_turns + 1);
         devseqstats::Pass1(met_latent);
         if (!met_latent || cut2 < state.turn_number || AnytimeStop(budget))
         {
@@ -104773,7 +104860,52 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
         static const bool s_condemn_honest_probe = EnvOn("MTG_CONDEMN_HONEST_PROBE");
         CondemnSuppressGuard _hp(s_condemn_honest_probe);
         escstats::RecGuard _esk_rec(esk_outer ? 1 : 0);
-        line = FullSearchLine(state, depth, max_turns, second_main, tt, probe_budget, &committed);
+        SearchLine et_incumbent;
+        bool et_have_incumbent = false;
+        static const bool s_et_d0_bound = EnvOn("MTG_ET_D0_BOUND", true); // DEFAULT ON; =0 disables
+        if (s_et_d0_bound && depth > 0 && budget && budget->Unlimited()
+            && ResolveProvider(state).ExtraTurnChainWalkEnabled() && !UseValueModel())
+        {
+            GameState trial = state;
+            const int win = SimulateToEndImpl(trial, /*depth=*/0, max_turns, nullptr,
+                                               max_turns + 1, second_main, nullptr);
+            if (win <= max_turns)
+            {
+                GameState plan_state = state;
+                const bool preland = EnvOn("MTG_ET_ROLLOUT_PRELAND", true);
+                std::string land;
+                if (preland) { land = SimulateLandPlay(plan_state); }
+                Plan first = RolloutPreCombatSolve(plan_state, /*depth=*/0, max_turns,
+                                                   nullptr, second_main, nullptr);
+                if (!first.land_decided)
+                {
+                    if (!preland) { land = SimulateLandPlay(plan_state); }
+                    first.land_to_play = land;
+                    first.land_decided = true;
+                }
+                et_incumbent.win_turn = win;
+                et_incumbent.phases.push_back({ true, std::move(first) });
+                et_have_incumbent = true;
+            }
+        }
+        if (et_have_incumbent && et_incumbent.win_turn == state.turn_number)
+        {
+            // No line can win before the current scored round. The rollout is
+            // a real, replayable win, so the search has nothing left to prove.
+            line = std::move(et_incumbent);
+            committed = depth;
+        }
+        else
+        {
+            const int et_prev_cut = g_fsl_root_cut;
+            if (et_have_incumbent)
+            { g_fsl_root_cut = std::min(et_prev_cut > 0 ? et_prev_cut : max_turns + 1,
+                                       et_incumbent.win_turn - 1); }
+            line = FullSearchLine(state, depth, max_turns, second_main, tt, probe_budget, &committed);
+            g_fsl_root_cut = et_prev_cut;
+            if (et_have_incumbent && line.win_turn > et_incumbent.win_turn)
+            { line = std::move(et_incumbent); }
+        }
     }
     const int value_leafless_miss = g_fsl_leafless_miss_depth;   // hand-off to the escalation (g_lazy_known_miss_depth)
     const bool emul_heuristic_line = g_fsl_emul_heuristic_commit;  // the probe committed the heuristic's own line
@@ -106986,6 +107118,72 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         greedy_leaf.horizon_leaf = true;   // SimulateToEnd's future-turn rollout swap pin keys on it
         greedysite::RecordOutcome(90, !greedy_leaf.actions.empty());
         return greedy_leaf;
+    }
+
+    // The leaf rollout normally searches every plan of every extra turn. When
+    // a cheap chain trial resolves a win in this same scored round, use its
+    // first step as the rollout policy and let the outer simulator resolve it.
+    // No candidate is removed from the full search; a failed proof falls
+    // through to the complete nested solve.
+    static const bool s_et_rollout_chain = EnvOn("MTG_ET_ROLLOUT_CHAIN_PROOF", true); // DEFAULT ON; =0 disables
+    if (s_et_rollout_chain && !enforce_budget && is_pre_combat
+        && budget && budget->Unlimited() && g_rollout_nest > 0
+        && state.in_extra_turn && !g_et_chain_trial_active && !HumanPlayActive()
+        && ResolveProvider(state).ExtraTurnChainWalkEnabled())
+    {
+        int engines = 0, mines = 0;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d && (d->params.mine_extra_draw || d->params.horn_draw_on_land_play)) { ++engines; }
+            if (d && d->params.mine_extra_draw) { ++mines; }
+        }
+        if (engines >= 2 && mines >= 1)
+        {
+            static std::atomic<int> et_trace_count{0};
+            const bool et_trace_this = EnvOn("MTG_ET_ROLLOUT_CHAIN_TRACE")
+                && et_trace_count.fetch_add(1, std::memory_order_relaxed) < 20;
+            if (et_trace_this)
+            { std::fprintf(stderr, "[et-rollout-chain] TRY round=%d seq=%d depth=%d\n",
+                           state.turn_number, state.TurnSeq(), depth); }
+            struct TrialScope
+            {
+                bool active = g_et_chain_trial_active;
+                bool aborted = g_et_chain_trial_aborted;
+                long long start = g_et_chain_trial_price_start;
+                long long cap = g_et_chain_trial_price_cap;
+                TrialScope()
+                {
+                    g_et_chain_trial_active = true;
+                    g_et_chain_trial_aborted = false;
+                    g_et_chain_trial_price_start = workctr::t_priced;
+                    static const int m = std::max(0, EnvInt("MTG_ET_ROLLOUT_CHAIN_PRICE_CAP_M", 100));
+                    g_et_chain_trial_price_cap = static_cast<long long>(m) * 1000000LL;
+                }
+                ~TrialScope()
+                {
+                    g_et_chain_trial_active = active;
+                    g_et_chain_trial_aborted = aborted;
+                    g_et_chain_trial_price_start = start;
+                    g_et_chain_trial_price_cap = cap;
+                }
+            } trial_scope;
+            GameState trial = state;
+            std::vector<EtChainStep> steps;
+            const int win = SimulateToEndImpl(trial, /*depth=*/0, max_turns, nullptr,
+                                               state.turn_number, second_main, nullptr,
+                                               &steps, /*chain_only=*/true);
+            if (et_trace_this)
+            { std::fprintf(stderr, "[et-rollout-chain] RESULT round=%d win=%d steps=%zu aborted=%d\n",
+                           state.turn_number, win, steps.size(), g_et_chain_trial_aborted ? 1 : 0); }
+            if (!g_et_chain_trial_aborted && win == state.turn_number
+                && trial.extra_turns_taken > state.extra_turns_taken && !steps.empty())
+            {
+                report(win, depth);
+                return std::move(steps.front().plan);
+            }
+        }
     }
 
     // The enforcing top-level call owns the per-decision transposition table and
