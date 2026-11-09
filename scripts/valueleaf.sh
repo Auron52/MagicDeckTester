@@ -1050,7 +1050,7 @@ L.setdefault("provenance", {}).update({
     "regenerated_commit": commit, "rows": n, "featurizer": want,
     "note": "eval_model retrained on rows dumped at SHIPPED play WITH the deck profile, so the "
             "exhaustive keep model was live. Labels are searched K=3 for every deck (a pooled dump "
-            "forces one label mode). value_leaf_table/crossover here are the OLD ones until the "
+            "forces one label mode). The value_leaf_table/crossover are replaced when the "
             "regenerated matrix lands.",
 })
 json.dump(L, open(out, "w"), indent=1)
