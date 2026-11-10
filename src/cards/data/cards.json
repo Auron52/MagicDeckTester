@@ -15212,6 +15212,53 @@
     "buyback_sacrifice_islands": 3,
     "targeting": "player"
    }
+  },
+  {
+   "name": "Thraben Inspector",
+   "mana_cost": "{W}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Human",
+    "Soldier"
+   ],
+   "keywords": [
+    "Investigate"
+   ],
+   "power": 1,
+   "toughness": 2,
+   "oracle_text": "When this creature enters, investigate. (Create a Clue token. It's an artifact with \"{2}, Sacrifice this token: Draw a card.\") [All clauses modelled. etb_investigate 1 -> CreateClueTokens (the 'Clue Token' def, whose {2}-sac-draw is a real searched ActivatePermAbility in executor and rollout), fired in the universal FireOwnEtbTriggers, so every entry route counts: cast, a put, a graveyard return (Abiding Grace, Lurrus). The Clue is banked; WHEN to crack it is searched. The Investigate keyword is an inert tag. [PARTIAL: a Clue made at END STEP (Abiding Grace returning Inspector) cannot be cracked that turn with leftover mana -- there is no instant-speed priority window outside the main phase; it is crackable from the next main. PROVISIONAL disclosure.]]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "etb_investigate": 1
+   }
+  },
+  {
+   "name": "Squadron Hawk",
+   "mana_cost": "{1}{W}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Bird"
+   ],
+   "keywords": [
+    "Flying"
+   ],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "Flying\nWhen this creature enters, you may search your library for up to three cards named Squadron Hawk, reveal them, put them into your hand, then shuffle. [ETB MULTI-tutor to HAND (the Ranger of Eos path, PerformEtbTutorToHandMulti): etb_tutor_hand_count 3 + tutor_to_hand + tutor_types [Creature] (an equivalent filter: every Squadron Hawk is a creature; the multi path matches on a non-empty type list) + wish_requires_name 'Squadron Hawk' (the zone-agnostic NAME conjunct in TutorNumericFilterOk; not a wish -- no wish_from_sideboard, so the search zone stays the library) + tutor_shuffle_after. Every candidate is an identical copy, so there is no WHICH axis; human play can still take fewer (or none) through the sac_tutor multi-pick. [PARTIAL: 'up to three' / 'you may' are taken at the FULL available count autonomously. WHY inert: fewer, or declining, is legal but weakly dominated -- a Hawk in hand costs nothing and the cleanup discard can shed a surplus card; the only difference is the post-search shuffle's effect on the library order, which a real player cannot see. Same treatment as Ranger of Eos. PROVISIONAL disclosure.] ONE shuffle, even with no Hawk found (the search still happened). Reveal inert (the passive opponent makes no decisions). Flying inert (the passive opponent never blocks).]",
+   "template": "custom",
+   "parameters": {
+    "tutor_to_hand": true,
+    "etb_tutor_hand_count": 3,
+    "tutor_types": [
+     "Creature"
+    ],
+    "wish_requires_name": "Squadron Hawk",
+    "tutor_shuffle_after": true
+   }
   }
  ]
 }

@@ -11509,6 +11509,21 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
                           + std::to_string(p.etb_creates_treasures) + " Treasure");
         }
     }
+    // (1-i) ETB investigate (Thraben Inspector: "When this creature enters, investigate."). The
+    //     existing "Clue Token" def via CreateClueTokens -- a real, searched {2}-sac-draw source,
+    //     crackable the turn it is made (no {T}). This one site covers every entry route (cast, put,
+    //     Abiding Grace / Lurrus graveyard returns, both worlds). Param-gated -> byte-identical for
+    //     every deck without such a card.
+    if (p.etb_investigate > 0)
+    {
+        CreateClueTokens(state, controller, p.etb_investigate);
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "ability",
+                          def->card.m_name.str() + " -- investigate ("
+                          + std::to_string(p.etb_investigate) + " Clue)");
+        }
+    }
 
     // (1b) ETB OPPONENT-token gift (Hunted Phantasm: "target opponent creates five 1/1 red Goblin
     //      creature tokens"; single opponent -> no target choice). Same etb_created_token_* spec.

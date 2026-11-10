@@ -5740,6 +5740,9 @@ function sacTutorPanelHtml(d){
   const finale=d.source==='Finale of Devastation';
   const toothHand=(d.source||'').startsWith('Tooth and Nail (to hand)');
   const toothPut=(d.source||'').startsWith('Tooth and Nail (from hand)');
+  // An ETB multi-tutor TO HAND (Ranger of Eos, Squadron Hawk): PerformEtbTutorToHandMulti tags its
+  // source "<name> (put in HAND)".
+  const etbHand=!toothHand&&(d.source||'').endsWith('(put in HAND)');
   if (S._sacTutorFor !== d.decision_index){ S._sacTutorFor=d.decision_index; S.sacTutorSel=new Set(aiDragonSet(d)); }
   const sel=S.sacTutorSel, aiSet=new Set(aiDragonSet(d));
   let h=`<h3>${esc(d.source||'Defense of the Heart')} — put which creatures?</h3>`;
@@ -5749,6 +5752,8 @@ function sacTutorPanelHtml(d){
     ? `<div class="sub">Choose up to <b>${cap}</b> creature cards from your library to reveal and put into your hand. Your library will be shuffled.</div>`
     : toothPut
     ? `<div class="sub">Choose up to <b>${cap}</b> creature cards from your hand. They enter the battlefield together.</div>`
+    : etbHand
+    ? `<div class="sub">Search your library for up to <b>${cap}</b> card${cap===1?'':'s'}, reveal them and put them into your hand. Your library will be shuffled. The AI’s picks are preselected.</div>`
     : `<div class="sub">Search your library for up to <b>${cap}</b> creature card${cap===1?'':'s'} and put them onto the battlefield. They enter in the order shown (left to right) — enter token-makers before a Massacre Wurm so its sweep catches the new tokens. The AI’s picks are preselected.</div>`;
   h+=`<div class="tutgrid">`;
   (d.candidates||[]).forEach(c=>{
@@ -5761,7 +5766,7 @@ function sacTutorPanelHtml(d){
   const n=sel.size, ok=(n<=cap);
   h+=`<div class="pbtns"><span class="pcount">${n} / ${cap} selected</span>`+
      `<button class="ghost" id="sactutai">Follow AI</button><span class="spacer"></span>`+
-     `<button id="decconfirm" class="primary" ${ok?'':'disabled'}>${finale&&n===0?'Find nothing':`${toothHand?'Take':'Put'} ${n} creature${n===1?'':'s'}`}</button></div>`;
+     `<button id="decconfirm" class="primary" ${ok?'':'disabled'}>${finale&&n===0?'Find nothing':`${(toothHand||etbHand)?'Take':'Put'} ${n} creature${n===1?'':'s'}`}</button></div>`;
   return h;
 }
 function toggleSacTutor(d, oi){

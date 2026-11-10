@@ -3420,6 +3420,11 @@ struct CardParams
     // The Treasure is fresh-hold EXEMPT (Permanent::fresh_hold_exempt; MTG_ETB_TREASURE_SPEND, default
     // ON): spendable the turn it enters, and credited to later casts of the same plan.
     int  etb_creates_treasures = 0;
+    // Thraben Inspector: "When this creature enters, investigate." An OWN-ETB Clue mint, fired in the
+    // universal FireOwnEtbTriggers cascade via CreateClueTokens (the "Clue Token" def, whose {2}-sac-draw
+    // is a searched ActivatePermAbility), so every entry route counts (cast, put, graveyard return).
+    // N = Clues created. 0 = off.
+    int  etb_investigate = 0;
     // Expedite: "target creature gains haste until end of turn" -> Permanent::temp_haste (read by
     // CanAttackFull / CanTapNow -- a hasted fresh dork may tap for mana; reset each cleanup).
     bool grants_temp_haste = false;

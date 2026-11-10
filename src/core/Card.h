@@ -113,6 +113,7 @@ enum class Keyword
     Devoid,
     // Investigate (Conservatory / Kitchen): an INERT keyword-ACTION tag (Scryfall marks Clue-token
     // makers with it) -- the mechanic is modelled structurally via CardParams::tap_investigate_cost
+    // (or nth_spell_investigate / etb_investigate)
     // + the "Clue Token" card def's sac_draw_cost. Kept only so the Scryfall keywords field stays
     // faithful; no engine code reads it.
     Investigate,

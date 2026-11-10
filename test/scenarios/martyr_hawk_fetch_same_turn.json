@@ -1,0 +1,37 @@
+{
+  "deck": "decks/Martyr Lifegain/Martyr Lifegain.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 10,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 50,
+  "max_turns": 8,
+  "lands_played_this_turn": 1,
+  "_comment": "Martyr Lifegain (2026-11-10), Squadron Hawk: the ETB multi-tutor puts up to three Hawks in HAND and a fetched Hawk is castable in the SAME main (the hand-entry breakpoint). Board: 4 Plains (land drop used), no creatures. Hand: one Hawk. Library: Plains filler with exactly three Hawks at the bottom. Same-turn: T4 two Hawks, T5 two more, attacks 2 (T5) + 4 (T6) + 4 (T7) = 10 by T7. If the fetched Hawk waited a turn: 1 (T5) + 3 (T6) + 4 (T7) = 8, win T8.",
+  "battlefield": [
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    }
+  ],
+  "hand": [
+    "Squadron Hawk"
+  ],
+  "library": [
+    "Squadron Hawk",
+    "Squadron Hawk",
+    "Squadron Hawk"
+  ],
+  "expect_win_turn": 7
+}

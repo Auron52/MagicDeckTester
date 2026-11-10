@@ -24524,7 +24524,11 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
             || p.grants_lifelink
             || angel_self_counter_watcher
             || p.life_above_start_anthem_life > 0
-            || !p.wish_requires_name.empty())
+            // Legion Angel's name-restricted WISH. The wish_from_sideboard conjunct is load-bearing:
+            // Squadron Hawk (Martyr Lifegain, 2026-11-10) reuses wish_requires_name as the NAME filter
+            // on a LIBRARY multi-tutor, and must not route its deck here. Legion Angel carries both,
+            // so the Angels routing is byte-identical.
+            || (p.wish_from_sideboard && !p.wish_requires_name.empty()))
         {
             angels = true;
         }
