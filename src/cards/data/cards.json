@@ -13836,6 +13836,91 @@
    }
   },
   {
+   "name": "Three Visits",
+   "mana_cost": "{1}{G}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Search your library for a Forest card, put it onto the battlefield, then shuffle. [Nature's Lore's exact model (the text differs only in 'that card' -> 'it'): land_search_on_resolve + count 1 + land_search_subtype Forest -- 'a Forest card' is the Forest LAND SUBTYPE (LandSearchLegal), basic or not. The land enters by its OWN entry rule (untapped for a basic) through EnterLand -- a landfall -- then ONE shuffle. An untapped basic is LAND-PUT CREDITED (Action::rock_mana), so it funds the same main phase, and the credit includes every live Vernal Bloom / Gauntlet of Power / Nissa bonus on its first tap (LandSearchPickCredit). WHICH Forest = the in-plan land-search pin; the human picks at resolution (`tutor_etb`). 'May fail to find' is not offered to the search (dominance, as Nature's Lore; PROVISIONAL).]",
+   "template": "custom",
+   "parameters": {
+    "land_search_on_resolve": true,
+    "land_search_count": 1,
+    "land_search_subtype": "Forest"
+   }
+  },
+  {
+   "name": "Vernal Bloom",
+   "mana_cost": "{3}{G}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Whenever a Forest is tapped for mana, its controller adds an additional {G}. [land_tap_bonus 1 + land_tap_bonus_subtype Forest + land_tap_bonus_produces G: a TRIGGERED MANA ABILITY (CR 605.1b) -- no stack, it resolves inside the tap (CR 605.4a) -- credited by the same land-Aura readers that credit Wild Growth (LandAuraBonus / LandAuraAddToPool / LandAuraColorMask, the land-Aura fold, the payability-cache key), at the projection, the payment and the real tap alike, executor and rollout. Any Forest by its CURRENT type (an islandized Forest is not one); every tap fires it, re-taps included (CR 106.12a); stacks additively with every other Bloom, Gauntlet and Nissa. SAME-PLAN: a cast Bloom carries the credit of the Forests still untapped after its own cost on rock_mana (the Brightcap Badger shape, MTG_LANDTAP_CAST_CREDIT), so 'Bloom, then the doubled Forests pay the next spell' is enumerable. SYMMETRIC ('its controller'): modelled for every controller; the passive opponent never taps a land, so that half never fires.]",
+   "template": "custom",
+   "parameters": {
+    "land_tap_bonus": 1,
+    "land_tap_bonus_subtype": "Forest",
+    "land_tap_bonus_produces": [
+     "G"
+    ]
+   }
+  },
+  {
+   "name": "Gauntlet of Power",
+   "mana_cost": "{5}",
+   "types": [
+    "Artifact"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "As this artifact enters, choose a color.\nCreatures of the chosen color get +1/+1.\nWhenever a basic land is tapped for mana of the chosen color, its controller adds an additional one mana of that color. [THE COLOUR: an as-enters REPLACEMENT (CR 614.12) locked per object in Permanent::chosen_color -- etb_choose_color with land_tap_bonus_produces as the five-colour MENU (the Utopia Sprawl route, EtbColorChoiceIsNonSource). A SEARCHED choice: every cast is fanned into one variant per provider-admitted colour on the ETB CHOICE AXIS (chosen_x = colour + 1, both worlds); HydrasProvider restricts it to green by a stated dominance proof (re-checked against the list at runtime); human play is asked with every colour (choose_color). Choosing is mandatory, so an unpinned entry (a rollout leaf, a put) always locks the provider's colour. It is NOT a mana source of its own (excluded from EffectiveProducesFor). THE MANA: a triggered mana ability (CR 605.1b/605.4a) -- land_tap_bonus 1 on a BASIC land tapped FOR the chosen colour, adding that colour, credited inside the tap by the land-Aura readers (projection, payment, real tap; executor and rollout); stacks additively with Vernal Bloom / Nissa / a second Gauntlet. A cast Gauntlet carries its colour variant's same-plan credit on rock_mana. THE PUMP: +1/+1 to creatures of the chosen colour (chosen_color_pump, a ComputeLordBonus anthem pass; colour read off the definition, a token's off its own mask; lands are colourless, so a Nissa-animated Forest is not pumped). SYMMETRIC halves: the mana bonus is modelled for every controller (the opponent never taps a land); the pump reaches only its controller's creatures -- PROVISIONAL collapse: the opponent's creatures are colourless spawns, so 'creatures of the chosen color' never includes one.]",
+   "template": "custom",
+   "parameters": {
+    "etb_choose_color": true,
+    "land_tap_bonus": 1,
+    "land_tap_bonus_basic": true,
+    "land_tap_bonus_same_color": true,
+    "land_tap_bonus_produces": [
+     "W",
+     "U",
+     "B",
+     "R",
+     "G"
+    ],
+    "chosen_color_pump_power": 1,
+    "chosen_color_pump_tough": 1
+   }
+  },
+  {
+   "name": "Nissa, Who Shakes the World",
+   "mana_cost": "{3}{G}{G}",
+   "types": [
+    "Planeswalker"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Nissa"
+   ],
+   "keywords": [],
+   "oracle_text": "Whenever you tap a Forest for mana, add an additional {G}.\n+1: Put three +1/+1 counters on up to one target noncreature land you control. Untap it. It becomes a 0/0 Elemental creature with vigilance and haste that's still a land.\n−8: You get an emblem with \"Lands you control have indestructible.\" Search your library for any number of Forest cards, put them onto the battlefield tapped, then shuffle. [STATIC: land_tap_bonus 1 + subtype Forest + produces G + land_tap_bonus_you_only -- the Vernal Bloom machinery restricted to Forests HER CONTROLLER taps ('whenever YOU tap'): a triggered mana ability (CR 605.1b/605.4a) credited inside every tap by the land-Aura readers, executor and rollout; a cast Nissa carries the same-plan credit of the Forests left untapped after her cost (MTG_LANDTAP_CAST_CREDIT). Enters with loyalty 5. PENDING (Hydras integration group I3): the +1 and -8 LOYALTY ABILITIES are NOT YET IMPLEMENTED -- until I3 lands them she resolves as a loyalty-5 permanent whose only effect is the static.]",
+   "template": "custom",
+   "parameters": {
+    "loyalty_start": 5,
+    "land_tap_bonus": 1,
+    "land_tap_bonus_subtype": "Forest",
+    "land_tap_bonus_produces": [
+     "G"
+    ],
+    "land_tap_bonus_you_only": true
+   }
+  },
+  {
    "name": "Skyshroud Claim",
    "mana_cost": "{3}{G}",
    "types": [

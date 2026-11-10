@@ -3194,9 +3194,9 @@ public:
         (void)s; (void)controller;
         std::vector<int> out;
         const CardParams& p = def.params;
-        if (p.is_land_aura && p.etb_choose_color)
+        if (EtbColorChoiceIsNonSource(p))   // Utopia Sprawl; Gauntlet of Power (land_tap_bonus)
         {
-            for (Color c : p.land_aura_produces)
+            for (Color c : EtbColorMenu(p))
             {
                 const int ci = static_cast<int>(c);
                 if (ci >= 0 && ci < 5 && std::find(out.begin(), out.end(), ci + 1) == out.end())

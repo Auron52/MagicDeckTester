@@ -477,9 +477,11 @@ inline bool LandSearchPutsUntapped(const CardDefinition& d)
         && (d.card.IsInstant() || d.card.IsSorcery());
 }
 inline bool LandSearchPickCredit(const GameState& s, const LandSearchSpec& spec,
-                                 const std::vector<const CardDefinition*>& pick, ManaPool& out)
+                                 const std::vector<const CardDefinition*>& pick, ManaPool& out,
+                                 int ctrl = -1)
 {
     out.Clear();
+    if (ctrl < 0) { ctrl = s.active_player_index; }   // the searcher: only the active player casts
     if (spec.tapped) { return false; }
     const int bf = LandSearchBattlefieldCount(spec, static_cast<int>(pick.size()));
     if (bf <= 0) { return false; }
@@ -490,6 +492,13 @@ inline bool LandSearchPickCredit(const GameState& s, const LandSearchSpec& spec,
             || d->params.enters_tapped_with_depletion > 0 || d->params.produces.empty())
         { return false; }
         AddSourceToPool(out, s, *d);
+        // GLOBAL LAND-TAP BONUSES (Vernal Bloom / Gauntlet / Nissa's static) already live: the fetched
+        // untapped basic's first tap fires them too (CR 106.12a), so its credit is its WHOLE tap. The def
+        // credit above has no Permanent, so it sees no bonus; without this a fetched Forest under a Bloom
+        // was credited {G} for a {G}{G} tap, and "fetch, then spend the doubled Forest" was pruned by the
+        // scalar gates before any exact walk ran -- unfindable at any budget. LandSearchCreditFilter
+        // compares through this same function, so the variant partition stays exact.
+        out.AddPool(LandTapBonusForDef(s, ctrl, *d));
     }
     return out.Total() > 0;
 }
@@ -502,7 +511,7 @@ inline std::vector<ManaPool> LandSearchCreditGroups(const GameState& s, int ctrl
     ManaPool c;
     for (const std::vector<const CardDefinition*>& pd : ms.pick_defs)
     {
-        if (!LandSearchPickCredit(s, spec, pd, c)) { out.clear(); return out; }
+        if (!LandSearchPickCredit(s, spec, pd, c, ctrl)) { out.clear(); return out; }
         if (std::find(out.begin(), out.end(), c) == out.end()) { out.push_back(c); }
     }
     return out;

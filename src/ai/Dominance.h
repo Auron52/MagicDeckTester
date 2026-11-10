@@ -603,6 +603,9 @@ static_assert(sizeof(Player) == 216,
 // The on-demand deck trait and searched early-payment pin add eight bytes after
 // the existing trait group. The trait is constant for a deck; the pin is folded
 // below when set, so equal dominance keys still imply equal future payments.
+// +2 bits (2026-11-10, Hydras; no size change -- the deck_has_turn_gods bitfield byte): `deck_has_land_tap_bonus`
+// and `deck_has_chosen_color_pump`. Classification: DECK CONSTANTS, stamped once in StampDeckTraits and never
+// written again; they only skip walks that provably find nothing -- nothing to fold.
 static_assert(sizeof(GameState) == 1408,   // verify combined current fields in the integrated build
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");

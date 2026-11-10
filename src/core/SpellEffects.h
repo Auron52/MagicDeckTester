@@ -6370,6 +6370,36 @@ inline std::pair<int,int> ComputeLordBonus(
         { for (const Permanent& src : battlefield) { process_quest_anthem(src); } }
     }
 
+    // CHOSEN-COLOUR ANTHEM (Gauntlet of Power: "Creatures of the chosen color get +1/+1"). A static P/T
+    // effect (layer 7c, CR 613.4c) keyed on the source's LOCKED Permanent::chosen_color (CR 614.12; an
+    // unlocked Gauntlet pumps nothing). The creature's colour is read off its DEFINITION (a zone Card is a
+    // placeholder whose colour mask may be empty -- the trap at EtbChosenColorFrom); a token has no
+    // definition and carries its own mask. Lands are colourless (CR 105.2c), so a Nissa-animated Forest
+    // is not pumped. Applied to the source controller's creatures (PROVISIONAL collapse of "any
+    // controller": the opponent's creatures are colourless spawns). Gated per game on
+    // GameState::deck_has_chosen_color_pump (a DB-wide constant is always true: cards.json holds every
+    // deck), and on the prefiltered anthem list when the caller has one (GatherBoardSources admits it).
+    if (state.deck_has_chosen_color_pump)
+    {
+        const CardDefinition* cdef = CardDatabase::Instance().LookupCached(creature);
+        const Card& colour_src = cdef ? cdef->card : creature;
+        auto process_color_pump = [&](const Permanent& src)
+        {
+            if (src.controller_index != controller_index) { return; }
+            if (src.def_absent) { return; }
+            if (src.chosen_color < 0 || src.chosen_color >= 5) { return; }
+            const CardDefinition* sd = CardDatabase::Instance().LookupCached(src.card);
+            if (!sd || (sd->params.chosen_color_pump_power == 0 && sd->params.chosen_color_pump_tough == 0)) { return; }
+            if (!colour_src.HasColor(static_cast<Color>(src.chosen_color))) { return; }
+            pb += sd->params.chosen_color_pump_power;
+            tb += sd->params.chosen_color_pump_tough;
+        };
+        if (controlled_anthem_idx)
+        { for (int ai : *controlled_anthem_idx) { process_color_pump(battlefield[ai]); } }
+        else
+        { for (const Permanent& src : battlefield) { process_color_pump(src); } }
+    }
+
     // TIERED CREATURE-COUNT ANTHEM (Jetmir, Nexus of Revels: "Creatures you control get +1/+0 ... as
     // long as you control three or more creatures. ... also get +1/+0 ... six or more ... also get
     // +1/+0 ... nine or more"). A CONDITIONAL STATIC (CR 604.3 / 611.3), read live at every query, so a
@@ -6818,7 +6848,8 @@ inline BoardSources GatherBoardSources(const std::vector<Permanent>& battlefield
         if (pp.grants_double_strike || pp.soulbond_grants_double_strike)
         { bs.ds.push_back(i); }
         if (pp.hand_size_anthem_max >= 0 || pp.life_above_start_anthem_life > 0
-            || pp.quest_anthem_threshold > 0)
+            || pp.quest_anthem_threshold > 0
+            || pp.chosen_color_pump_power != 0 || pp.chosen_color_pump_tough != 0)   // Gauntlet of Power
         { bs.anthems.push_back(i); }
         if ((pp.is_aura && pp.aura_grants_lifelink)
             || (pp.is_aura && !pp.aura_color_bonuses.empty())   // Steel: a CONDITIONAL lifelink (superset)
@@ -11350,9 +11381,11 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
     if (p.etb_choose_color && EtbColorLockEnabled()
         && state.battlefield[entered_index].chosen_color < 0)
     {
-        const std::vector<Color>& menu_cols = p.is_land_aura ? p.land_aura_produces : p.produces;
+        // GAUNTLET OF POWER takes the Sprawl route too (EtbColorChoiceIsNonSource: a searched pin, the
+        // land_tap_bonus_produces menu); Coldsteel Heart keeps `produces` and the provider pick.
+        const std::vector<Color>& menu_cols = EtbColorMenu(p);
         int pick = -1;
-        if (p.is_land_aura && etb_kx >= 1 && etb_kx <= 5)
+        if (EtbColorChoiceIsNonSource(p) && etb_kx >= 1 && etb_kx <= 5)
         {
             for (Color c : menu_cols)
             { if (static_cast<int>(c) == etb_kx - 1) { pick = etb_kx - 1; break; } }
@@ -26921,11 +26954,142 @@ inline const std::vector<Color>& LandAuraProducesFor(const CardDefinition& ad, c
     return ad.params.land_aura_produces;
 }
 
+// ---- GLOBAL LAND-TAP BONUS (Vernal Bloom / Gauntlet of Power / Nissa, Who Shakes the World) --------
+// "Whenever a <qualifying> land is tapped for mana, its controller adds an additional <c>." A TRIGGERED
+// MANA ABILITY (CR 605.1b: no target, triggers from a mana ability, could add mana) that resolves inside
+// the tap with no stack (CR 605.4a) -- so it rides the tap exactly as a land Aura's bonus does, and is
+// folded into the three land-Aura primitives below (bonus count, typed credit, colour mask). Every one of
+// the ~60 land-mana readers (the pool, the payers executor and rollout, the flow oracle, the backtracker,
+// the colour gates, the viewer JSON) therefore sees it with no per-site edit. The bonus belongs to a
+// permanent ELSEWHERE on the battlefield, so -- like an Aura -- it is found by a board walk, not off the
+// land's own definition. Gated on GameState::deck_has_land_tap_bonus (a clear bit proves no source).
+//
+// The bonus colour: a fixed colour (Bloom / Nissa: land_tap_bonus_produces {G}); for an etb_choose_color
+// source (Gauntlet) ONLY the colour it LOCKED as it entered (CR 614.12) -- an unlocked one credits
+// NOTHING (fail toward not crediting; choosing is mandatory, so every resolved Gauntlet is locked).
+const std::vector<Color>& EffectiveProducesFor(const GameState& state, int controller,
+                                               const CardDefinition& def, const Permanent* perm,
+                                               bool in_hand);   // defined below (default arg there)
+
+inline const std::vector<Color>& LandTapBonusColorsFor(const CardDefinition& sd, const Permanent& src)
+{
+    static const std::vector<Color> kNone{};
+    if (sd.params.etb_choose_color)
+    {
+        static const std::vector<Color> k1[5] = { { Color::White }, { Color::Blue }, { Color::Black },
+                                                  { Color::Red },   { Color::Green } };
+        return (src.chosen_color >= 0 && src.chosen_color < 5) ? k1[src.chosen_color] : kNone;
+    }
+    return sd.params.land_tap_bonus_produces;
+}
+
+// Visit every live land-tap bonus that fires when a land of definition `ld`, controlled by `land_ctrl`,
+// is tapped for mana: f(colour, amount). `land` is the permanent when there is one (its CURRENT subtype
+// and produced colour -- an islandized Forest is no Forest and makes {U}); nullptr = a land not yet on
+// the battlefield (a land-search pick), read off its definition.
+// Would a land-tap bonus source with params `p`, bonus colour `c`, controlled by `src_ctrl`, fire when a
+// land of definition `ld`, controlled by `land_ctrl`, is tapped for mana? `land` is the permanent when
+// there is one (its CURRENT subtype and produced colour -- an islandized Forest is no Forest and makes
+// {U}); nullptr = a land not yet on the battlefield (a land-search pick), read off its definition.
+inline bool LandTapBonusQualifies(const GameState& state, const CardParams& p, Color c, int src_ctrl,
+                                  int land_ctrl, const CardDefinition& ld, const Permanent* land)
+{
+    if (!ld.card.IsLand()) { return false; }
+    if (p.land_tap_bonus_you_only && src_ctrl != land_ctrl) { return false; }
+    if (!p.land_tap_bonus_subtype.empty())
+    {
+        bool has = false;
+        if (land != nullptr) { has = LandHasSubtypeNow(state, *land, p.land_tap_bonus_subtype); }
+        else { for (const std::string& st : ld.card.m_subtypes) { if (st == p.land_tap_bonus_subtype) { has = true; break; } } }
+        if (!has) { return false; }
+    }
+    if (p.land_tap_bonus_basic && !ld.card.HasSupertype(Supertype::Basic)) { return false; }
+    if (p.land_tap_bonus_same_color)
+    {
+        // "tapped for mana of the chosen color": the land must make that colour. A basic land makes
+        // exactly one colour, so for the basic-only Gauntlet this is "its one colour is c".
+        const std::vector<Color>& prod = EffectiveProducesFor(state, land_ctrl, ld, land, false);
+        if (std::find(prod.begin(), prod.end(), c) == prod.end()) { return false; }
+    }
+    return true;
+}
+
+// Visit every live land-tap bonus that fires when a land of definition `ld`, controlled by `land_ctrl`,
+// is tapped for mana: f(colour, amount). See LandTapBonusQualifies for `land`.
+template <class F>
+inline void ForEachLandTapBonus(const GameState& state, int land_ctrl, const CardDefinition& ld,
+                                const Permanent* land, F&& f)
+{
+    if (!state.deck_has_land_tap_bonus || !ld.card.IsLand()) { return; }
+    for (const Permanent& a : state.battlefield)
+    {
+        const CardDefinition* sd = CardDatabase::Instance().LookupCached(a.card);
+        if (sd == nullptr || sd->params.land_tap_bonus <= 0) { continue; }
+        const std::vector<Color>& cols = LandTapBonusColorsFor(*sd, a);
+        if (cols.size() != 1) { continue; }   // unlocked chooser (no multi-colour source exists)
+        if (!LandTapBonusQualifies(state, sd->params, cols[0], a.controller_index, land_ctrl, ld, land)) { continue; }
+        f(cols[0], sd->params.land_tap_bonus);
+    }
+}
+
+inline int LandTapBonusOfLand(const GameState& state, const Permanent& land)
+{
+    if (!state.deck_has_land_tap_bonus || !land.card.IsLand()) { return 0; }
+    const CardDefinition* ld = CardDatabase::Instance().LookupCached(land.card);
+    if (ld == nullptr) { return 0; }
+    int n = 0;
+    ForEachLandTapBonus(state, land.controller_index, *ld, &land, [&](Color, int k) { n += k; });
+    return n;
+}
+
+inline void LandTapBonusAddToPool(ManaPool& pool, const GameState& state, const Permanent& land)
+{
+    if (!state.deck_has_land_tap_bonus || !land.card.IsLand()) { return; }
+    const CardDefinition* ld = CardDatabase::Instance().LookupCached(land.card);
+    if (ld == nullptr) { return; }
+    ForEachLandTapBonus(state, land.controller_index, *ld, &land, [&](Color c, int k) { pool.Add(c, k); });
+}
+
+inline int LandTapBonusColorMask(const GameState& state, const Permanent& land)
+{
+    if (!state.deck_has_land_tap_bonus || !land.card.IsLand()) { return 0; }
+    const CardDefinition* ld = CardDatabase::Instance().LookupCached(land.card);
+    if (ld == nullptr) { return 0; }
+    int mask = 0;
+    ForEachLandTapBonus(state, land.controller_index, *ld, &land, [&](Color c, int)
+    { const int ci = static_cast<int>(c); if (ci >= 0 && ci < 5) { mask |= (1 << ci); } });
+    return mask;
+}
+
+// The bonus a land NOT YET ON THE BATTLEFIELD would get on its first tap (a land-search pick that enters
+// untapped this turn): the def-level twin of LandTapBonusAddToPool. See LandSearchPickCredit.
+inline ManaPool LandTapBonusForDef(const GameState& state, int ctrl, const CardDefinition& land_def)
+{
+    ManaPool out;
+    ForEachLandTapBonus(state, ctrl, land_def, nullptr, [&](Color c, int k) { out.Add(c, k); });
+    return out;
+}
+
+// Does `controller` have a live land-tap bonus that could reach one of THEIR lands? Cheap presence test
+// for the fold (CollectLandAuraFold) and the payability-cache key.
+inline bool AnyLandTapBonusLive(const GameState& state, int controller)
+{
+    if (!state.deck_has_land_tap_bonus) { return false; }
+    for (const Permanent& a : state.battlefield)
+    {
+        const CardDefinition* sd = CardDatabase::Instance().LookupCached(a.card);
+        if (sd == nullptr || sd->params.land_tap_bonus <= 0) { continue; }
+        if (sd->params.land_tap_bonus_you_only && a.controller_index != controller) { continue; }
+        if (LandTapBonusColorsFor(*sd, a).size() == 1) { return true; }
+    }
+    return false;
+}
+
 inline int LandAuraBonusOfLandUncached(const GameState& state, const Permanent& land)
 {
     if (!land.card.IsLand()) { return 0; }
     if (!state.deck_has_land_aura) { return 0; }   // no land Aura in this game (StampDeckTraits)
-    int bonus = 0;
+    int bonus = LandTapBonusOfLand(state, land);   // global land-tap bonuses (0 unless such a deck)
     for (const Permanent& a : state.battlefield)
     {
         if (a.aura_attached_to != land.card.m_number) { continue; }
@@ -27007,6 +27171,7 @@ inline void LandAuraAddToPoolOfLand(ManaPool& pool, const GameState& state, cons
         else if (prod.size() == 1) { pool.Add(prod[0], ad->params.land_aura_extra_mana); }
         else                     { pool.wild += ad->params.land_aura_extra_mana; }
     }
+    LandTapBonusAddToPool(pool, state, land);   // global land-tap bonuses (fixed colour: no pick)
 }
 
 // The COLOUR MASK (bit i == Color(i), i in 0..4) that land Auras attached to `land` can supply.
@@ -27044,6 +27209,7 @@ inline int LandAuraColorMaskOfLand(const GameState& state, const Permanent& land
             if (ci >= 0 && ci < 5) { mask |= (1 << ci); }
         }
     }
+    mask |= LandTapBonusColorMask(state, land);   // global land-tap bonuses
     return mask;
 }
 
@@ -35414,6 +35580,60 @@ inline ManaPool SamePlanGrantCredit(const GameState& state, int controller, cons
     return out;
 }
 
+// THE SAME-PLAN LAND-TAP BONUS CREDIT (MTG_LANDTAP_CAST_CREDIT; CollectActions stamps it on
+// Action::rock_mana, the Brightcap Badger shape above). What casting a land-tap bonus source THIS turn
+// (Vernal Bloom, Nissa, a Gauntlet of colour `colour_pin`) adds to the casts after it: `bonus` of its
+// colour per own untapped qualifying land STILL UNTAPPED once the source's own cost is paid. The cost
+// is paid from every other source first, then from the qualifying lands with the LARGEST current yield
+// (bonuses already live included), so the count is the MOST lands that can remain -- an upper bound,
+// exact when every source is such a land (always so in Hydras: 23 basic Forests). Not a plain
+// M x bonus: that credits Forests the doubler's own cost must tap, and an optimistic enumeration credit
+// spends breadth on plans the executor cannot pay (the Wild Growth note in SubsetPayableWithFiltersImpl).
+// `colour_pin` = the Gauntlet's colour (0..4); ignored for a fixed-colour source; < 0 on a chooser = 0.
+inline ManaPool SamePlanLandTapBonusCredit(const GameState& state, int controller, const CardDefinition& def,
+                                           int colour_pin = -1)
+{
+    ManaPool out;
+    const CardParams& p = def.params;
+    if (p.land_tap_bonus <= 0) { return out; }
+    Color c;
+    if (p.etb_choose_color)
+    {
+        if (colour_pin < 0 || colour_pin >= 5) { return out; }
+        c = static_cast<Color>(colour_pin);
+        const std::vector<Color>& menu = EtbColorMenu(p);
+        if (std::find(menu.begin(), menu.end(), c) == menu.end()) { return out; }
+    }
+    else
+    {
+        if (p.land_tap_bonus_produces.size() != 1) { return out; }
+        c = p.land_tap_bonus_produces[0];
+    }
+    int other = state.floating_mana.Total();
+    int yields[64];
+    int m = 0;
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != controller || q.tapped) { continue; }
+        const CardDefinition* qd = q.def_absent ? nullptr : CardDatabase::Instance().LookupCached(q.card);
+        if (qd == nullptr) { continue; }
+        if (!q.card.IsLand() && !IsBaselineManaSource(*qd)) { continue; }
+        if (!CanTapNow(q, state.battlefield, nullptr)) { continue; }
+        const int y = PermanentManaYield(state, q, *qd);
+        if (q.card.IsLand() && m < 64 && LandTapBonusQualifies(state, p, c, controller, controller, *qd, &q))
+        { yields[m++] = y; }
+        else { other += y; }
+    }
+    if (m == 0) { return out; }
+    std::sort(yields, yields + m, [](int a, int b) { return a > b; });
+    int rem = std::max(0, def.card.m_mana_cost.ManaValue() - other);
+    int used = 0;
+    while (rem > 0 && used < m) { rem -= std::max(1, yields[used]); ++used; }
+    const int left = m - used;
+    if (left > 0) { out.Add(c, p.land_tap_bonus * left); }
+    return out;
+}
+
 inline int LooseManaCeiling(const GameState& state, int controller)
 {
     int total = state.floating_mana.Total();
@@ -40037,8 +40257,11 @@ inline const std::vector<Color>& EffectiveProducesFor(const GameState& state, in
     }
     // (A colour-choosing LAND AURA -- Utopia Sprawl -- is not a mana source of its own: its colour rides
     // the host's tap through LandAuraProducesFor, so it never resolves here.)
+    // ...nor is Gauntlet of Power (its colour rides every basic land's tap -- land_tap_bonus): a
+    // green Gauntlet reported as a {G} source here would be a phantom source to every reader that does
+    // not pre-filter to lands/dorks/rocks (EtbChosenColorFrom's supply count among them).
     if (perm != nullptr && def.params.etb_choose_color && perm->chosen_color >= 0
-        && !def.params.is_land_aura && EtbColorLockEnabled())
+        && !EtbColorChoiceIsNonSource(def.params) && EtbColorLockEnabled())
     {
         static const std::vector<Color> kW{ Color::White }, kU{ Color::Blue }, kB{ Color::Black },
                                         kR{ Color::Red },   kG{ Color::Green },
@@ -46514,6 +46737,24 @@ inline void CollectLandAuraFold(const GameState& state, int controller,
         for (std::pair<int, int>& e : out)
         { if (e.first == a.aura_attached_to) { e.second += ad->params.land_aura_extra_mana; merged = true; break; } }
         if (!merged) { out.push_back({ a.aura_attached_to, ad->params.land_aura_extra_mana }); }
+    }
+    // GLOBAL land-tap bonuses (Vernal Bloom / Gauntlet / Nissa's static) belong to no host, so the Aura
+    // walk above never sees them. They MUST be in the fold: PaymentManaCovers reads an EMPTY fold as
+    // "credit no bonus" and returns UNPAYABLE, so a Bloom board with no Aura would refuse a payable cost
+    // before the payer ever ran (a soundness hole, not a perf one). One entry per own land, merged with
+    // that land's Aura sum -- exactly LandAuraBonus's value, which is what LandAuraBonusFolded promises.
+    if (AnyLandTapBonusLive(state, controller))
+    {
+        for (const Permanent& q : state.battlefield)
+        {
+            if (q.controller_index != controller || !q.card.IsLand()) { continue; }
+            const int b = LandTapBonusOfLand(state, q);
+            if (b <= 0) { continue; }
+            bool merged = false;
+            for (std::pair<int, int>& e : out)
+            { if (e.first == q.card.m_number) { e.second += b; merged = true; break; } }
+            if (!merged) { out.push_back({ q.card.m_number, b }); }
+        }
     }
 }
 

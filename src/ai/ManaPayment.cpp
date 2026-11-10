@@ -7542,8 +7542,10 @@ std::vector<std::int32_t> SeedPaySplits(const GameState& state, int me, const Ma
     for (const Permanent& q : state.battlefield)
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+        // land_tap_bonus (Vernal Bloom / Gauntlet / Nissa): like a land Aura it changes a land's
+        // yield from elsewhere on the board, which SeedPaySourceSig's per-source key does not see.
         if (d != nullptr && (d->params.is_land_aura || !d->params.granted_tap_mana_subtypes.empty()
-                            || d->params.equip_grants_tap_mana_any)) { return out; }
+                            || d->params.equip_grants_tap_mana_any || d->params.land_tap_bonus > 0)) { return out; }
     }
     // Source key, available count, colour menu. Special sources have distinct stable identities.
     struct Class { int key, count, colors; };

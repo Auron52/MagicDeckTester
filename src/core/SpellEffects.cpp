@@ -5816,6 +5816,33 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
         { if (e.first == ap.aura_attached_to) { e.second += ah; merged = true; break; } }
         if (!merged) { s_aura_fold.push_back({ ap.aura_attached_to, ah }); }
     }
+    // GLOBAL LAND-TAP BONUSES (Vernal Bloom / Gauntlet of Power / Nissa's static): the same stale-hit
+    // hole as the Auras above, from a permanent attached to nothing -- a pre-Bloom and a post-Bloom board
+    // with the same untapped Forests would otherwise share a key and replay a cached "unpayable". Fold
+    // each own land's TYPED bonus into that land's entry (distinct tag from the Aura terms). Every deck
+    // without such a source (GameState::deck_has_land_tap_bonus clear) keys byte-identically.
+    if (AnyLandTapBonusLive(state, active))
+    {
+        for (int i = 0; i < n; ++i)
+        {
+            const Permanent& q = state.battlefield[i];
+            if (q.controller_index != active || !q.card.IsLand()) { continue; }
+            ManaPool b;
+            LandTapBonusAddToPool(b, state, q);
+            if (b.Total() <= 0) { continue; }
+            std::uint64_t th = 0x7A9B'0E05ull;
+            th = th * 31ull + static_cast<std::uint64_t>(b.white);
+            th = th * 31ull + static_cast<std::uint64_t>(b.blue);
+            th = th * 31ull + static_cast<std::uint64_t>(b.black);
+            th = th * 31ull + static_cast<std::uint64_t>(b.red);
+            th = th * 31ull + static_cast<std::uint64_t>(b.green);
+            th *= 0x9E3779B97F4A7C15ull;
+            bool merged = false;
+            for (auto& e : s_aura_fold)
+            { if (e.first == q.card.m_number) { e.second += th; merged = true; break; } }
+            if (!merged) { s_aura_fold.push_back({ q.card.m_number, th }); }
+        }
+    }
     int gy_fuel = -1;       // lazy, hashed once on the first Deathrite-style source
     int energy_fuel = -1;   // lazy, hashed once on the first energy-gated source (Aether Hub)
     int drip_useful = -1;   // lazy, hashed once on the first drip source
