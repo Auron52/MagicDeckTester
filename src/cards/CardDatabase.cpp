@@ -631,6 +631,7 @@ static Keyword KeywordFromString(const std::string& s)
     if (s == "Landwalk")      { return Keyword::Landwalk; }   // inert evasion tag; nothing blocks
     if (s == "Swampwalk")     { return Keyword::Swampwalk; }  // inert evasion tag; nothing blocks
     if (s == "Morbid")        { return Keyword::Morbid; }     // inert ability-word tag; morbid params
+    if (s == "Companion")     { return Keyword::Companion; }  // inert tag; main-deck card, no companion zone
     throw std::runtime_error("Unknown keyword: " + s);
 }
 
@@ -1752,6 +1753,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.creates_treasures           = params.value("creates_treasures", 0);
     p.etb_creates_treasures       = params.value("etb_creates_treasures", 0);
     p.etb_investigate             = params.value("etb_investigate", 0);
+    p.gy_cast_permanent_max_mv    = params.value("gy_cast_permanent_max_mv", 0);
     p.grants_temp_haste           = params.value("grants_temp_haste", false);
     p.counters_on_target          = params.value("counters_on_target", 0);
     p.cast_lifegain               = params.value("cast_lifegain", 0);

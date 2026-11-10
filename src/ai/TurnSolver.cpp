@@ -18249,6 +18249,8 @@ static std::uint64_t ActionFoldSig(const Action& a)
     // "Target player gains N life": the searched player target (folded only when set, so every
     // other action's signature -- the self-target cast included -- is byte-identical).
     if (a.player_target != 0) { FoldMix(h, 0x9A7Eull + static_cast<std::uint64_t>(a.player_target)); }
+    // Lurrus: the permission source of a graveyard cast (folded only when set -> every other key unchanged).
+    if (a.gy_cast_source_id >= 0) { FoldMix(h, 0x1A7705ull + static_cast<std::uint64_t>(a.gy_cast_source_id)); }
     // Vampires A2: the searched discard pin, the Blood cost variant and a discard-cost outlet's
     // same-plan victim. Folded only when set, so every other deck's signature is byte-identical.
     if (!a.discard_name.empty())
@@ -26919,6 +26921,8 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
         // Stroke of Genius's target player: a must-fold like devour_count (self vs opponent draw are
         // two plays). Folded only when set, so every other plan's fingerprint is unchanged.
         if (a.draw_target != 0) { fold(0x4454ull + static_cast<uint64_t>(a.draw_target) * 977); }   // "DT"
+        // Lurrus: a graveyard cast's permission source (gated on set -> every other fingerprint unchanged).
+        if (a.gy_cast_source_id >= 0) { fold(0x4C555252ull + static_cast<uint64_t>(a.gy_cast_source_id)); }   // "LURR"
         fold(static_cast<uint64_t>(a.convoke_green) * 37
              + static_cast<uint64_t>(a.convoke_other));
         if (a.convoke_plan_pip != 0 || a.convoke_plan_other != 0)   // Vampires item B; gated on set
@@ -27153,6 +27157,8 @@ static std::string ExactFalseActionDiff(const Action& x, const Action& y)
     if (static_cast<long long>(x.loyalty_ability) != static_cast<long long>(y.loyalty_ability))
     { add("loyalty_ability", std::to_string(static_cast<long long>(x.loyalty_ability)),
            std::to_string(static_cast<long long>(y.loyalty_ability))); }
+    if (x.gy_cast_source_id != y.gy_cast_source_id)
+    { add("gy_cast_source_id", std::to_string(x.gy_cast_source_id), std::to_string(y.gy_cast_source_id)); }
     if (static_cast<long long>(x.free_cast) != static_cast<long long>(y.free_cast))
     { add("free_cast", std::to_string(static_cast<long long>(x.free_cast)),
            std::to_string(static_cast<long long>(y.free_cast))); }
@@ -28301,6 +28307,7 @@ inline std::uint64_t ActH(const Action& a, int ax)
     h = Mix(h, NameH(a.land_face));
     h = Mix(h, NameH(a.land_fetch_target));
     h = Mix(h, a.alt_cost ? 1u : 0u);
+    if (a.gy_cast_source_id >= 0) { h = Mix(h, 0x1A7705ull + static_cast<std::uint64_t>(a.gy_cast_source_id)); }   // Lurrus
     const bool own_disc = (ax == kDiscCond && IsCond(a)) || (ax == kDiscPitf && IsPitf(a))
                        || (ax == kDiscBlood && IsBlood(a));
     if (ax != kDisc && ax != kPin && !own_disc) { h = Mix(h, NameH(a.discard_name)); }
@@ -29768,7 +29775,10 @@ enum : uint64_t {
     kActLoyaltyManaContinuation = 208,
     // Shadowborn Apostle (INT-2): ONE board-level key per named-sacrifice ability, its value
     // floor(copies / N) in bits 40+ -- see CollectActivationKeys.
-    kActSacNamed = 209
+    kActSacNamed = 209,
+    // Lurrus of the Dream-Den (2026-11-10): ONE key per (open graveyard-cast permission, distinct legal
+    // graveyard NAME), the name's hash in bits 40+ -- see CollectActivationKeys.
+    kActGyCast = 210
 };
 inline uint64_t ActKey(int m_number, uint64_t ability)
 { return (static_cast<uint64_t>(static_cast<uint32_t>(m_number)) << 8) | ability; }
@@ -30083,6 +30093,32 @@ void CollectActivationKeys(const GameState& state, int ctrl, const Permanent& p,
             ok = CanonicalSacVictim(state, ctrl, num, pp.sac_creature_requires_subtype) >= 0;
         }
         if (ok) { out.push_back(ActKey(num, kActSacOutlet)); }
+    }
+
+    // LURRUS OF THE DREAM-DEN: a graveyard CAST permission is not an activated ability, but it is the
+    // same USER rule -- "a new [option] we can activate that we could not before" (2026-09-19). The
+    // plan's CastFromGraveyard actions were enumerated against the graveyard and battlefield it STARTED
+    // from, so a card that reaches the graveyard mid-plan (Martyr of Sands sacrificed, then recast and
+    // sacrificed again -- the deck's core loop) or a Lurrus the plan itself casts had no cast in the same
+    // phase at any budget. One key per (this source, distinct castable name), from the SAME list the
+    // enumeration emits (GyCastOptionsNow), priced like every other key (total mana vs the card's cost):
+    // a newly castable name opens the site, a name castable at plan start (a declined cast) does not, and
+    // a spent permission offers none. The name rides bits 40+ (24 bits of its hash; a collision can only
+    // miss an arm, never invent one). Empty at one mask test for every deck without the permission.
+    if (pp.gy_cast_permanent_max_mv > 0 && !p.once_per_turn_used)
+    {
+        for (const GyCastOption& o : GyCastOptionsNow(state, ctrl))
+        {
+            if (o.source_id != num) { continue; }
+            if (total_cache < 0)
+            {
+                ManaPool have = AvailableManaPool(state);
+                have.AddPool(state.floating_mana);
+                total_cache = static_cast<int>(have.Total());
+            }
+            if (EffectiveCost(*o.def, state).ManaValue() > total_cache) { continue; }
+            out.push_back(ActKey(num, kActGyCast) | ((o.card->m_name_hash & 0xFFFFFFull) << 40));
+        }
     }
 }
 
@@ -40813,6 +40849,34 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         }
     }
 
+    // --- Graveyard CAST PERMISSION (Lurrus of the Dream-Den: "Once during each of your turns, you may
+    // cast a permanent spell with mana value 2 or less from your graveyard") ---
+    // One CastFromGraveyard per (open permission, distinct legal graveyard NAME) -- GyCastOptionsNow,
+    // the SAME list the viewer shows and the site-9 key reads -- all of one source in ONE activation
+    // family (ActivationFamilyKey), so WHICH card is a searched alternative and a plan holds at most one.
+    // No provider narrowing, no cap: every legal card is offered to the search and to the human. A REAL
+    // cast: the cost is the card's own (EffectiveCost), no retrace discard; both worlds re-check the
+    // permission before paying and spend it once paid. Sorcery timing for a non-flash card, as a hand
+    // cast. A card that reaches the graveyard mid-plan, or a Lurrus the plan itself casts, is offered
+    // through breakpoint site 9 (the permission's activation key, CollectActivationKeys). Empty at one
+    // mask test for every deck without the permission (GyR_GyCastNames).
+    for (const GyCastOption& o : GyCastOptionsNow(state, state.active_player_index))
+    {
+        const CardDefinition& gdef = *o.def;
+        if (!(gdef.card.IsInstant() || gdef.card.HasKeyword(Keyword::Flash) || state.stack.empty())) { continue; }
+        Action a;
+        a.kind              = Action::Kind::CastFromGraveyard;
+        a.card_name         = o.card->m_name;
+        a.hand_index        = -1;            // sourced from the graveyard, not hand
+        a.cost              = EffectiveCost(gdef, state);
+        a.discard_lands     = 0;             // a permission cast, not retrace: no additional cost
+        a.eval              = EvalCard(gdef, state);
+        a.is_noncreature    = !gdef.card.IsCreature();
+        a.card_mv           = gdef.card.m_mana_cost.ManaValue();
+        a.gy_cast_source_id = static_cast<std::int16_t>(o.source_id);
+        actions.push_back(std::move(a));
+    }
+
     // --- Suspend (Lotus Bloom "Suspend 3-{0}") ---
     // A {0} main-phase action: exile the card from hand with suspend_time_counters time counters (it
     // arrives, cast off suspend, turn+N). NOT a cast -- adds no storm and no board THIS turn. eval 0:
@@ -48411,6 +48475,14 @@ static int ActivationFamilyKey(const Action& a)
         // Sethron / Valiant Knight keep their independent bits (byte-identical).
         case Action::Kind::ActivatePump:
             return (a.gy_exile_mode == 4 && a.sac_source_id >= 0) ? -5000000 - a.sac_source_id : 0;
+        // Lurrus of the Dream-Den: every graveyard name a permission can cast is an ALTERNATIVE for its
+        // one use per turn -- one family per source, so N legal names cost N+1 positions, never 2^N, and
+        // a plan never holds two casts off one permission. (Under the MTG_NO_ACTIVATION_FAMILY_GROUPS=1
+        // A/B lever a plan CAN select two: both worlds' apply re-checks GyCastPermissionLegal, so the
+        // second is stranded -- a no-op duplicate of its sibling, never an illegal line.) A retrace cast
+        // (-1) keeps its independent bit -> byte-identical. Base -8000000 is clear of every other key space.
+        case Action::Kind::CastFromGraveyard:
+            return a.gy_cast_source_id >= 0 ? -8000000 - a.gy_cast_source_id : 0;
         default:
             return 0;
     }
@@ -61290,6 +61362,7 @@ static bool HumanVerbMatchesKind(const std::string& verb, Action::Kind k)
     if (verb == "cast")       { return k == K::CastFromHand; }
     if (verb == "vial")       { return k == K::ActivateVial; }
     if (verb == "retrace")    { return k == K::CastFromGraveyard; }
+    if (verb == "gycast")     { return k == K::CastFromGraveyard; }   // a Lurrus permission cast
     if (verb == "suspend")    { return k == K::Suspend; }
     if (verb == "channel")    { return k == K::Channel; }
     if (verb == "eternalize") { return k == K::Eternalize; }
@@ -61310,7 +61383,7 @@ static const char* HumanStepLabel(const Action& a)
     switch (a.kind)
     {
         case K::CastFromHand:      return "cast";
-        case K::CastFromGraveyard: return "retrace";
+        case K::CastFromGraveyard: return a.gy_cast_source_id >= 0 ? "graveyard cast (Lurrus)" : "retrace";
         case K::ActivateVial:      return "Vial put";
         case K::DiscardToLandsEdge:return "Land's Edge discard";
         case K::Equip:             return "equip";
@@ -64173,6 +64246,23 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         const CardDefinition& def = *opt;
         if (it != ap.hand.end() && !CanRevealAdditionalCost(state, state.active_player_index,
                 it->m_number, def.params.reveal_subtype_or_pay)) { return; }
+        // LURRUS OF THE DREAM-DEN: a graveyard cast made under a cast PERMISSION (the rider) is legal only
+        // while that permission is open and covers this card -- the SHARED GyCastPermissionLegal, checked
+        // before anything is paid (AIEngine::CastSpellFromHand returns on the same predicate). A plan whose
+        // permission was spent or left (a second cast off one Lurrus, a sacrificed Lurrus) strands the
+        // cast: nothing paid, the card stays in the graveyard. Spent below, once the cost is paid.
+        const int gy_cast_src = riders.gy_cast_source_id;
+        if (gy_cast_src >= 0
+            && (!from_graveyard || !GyCastPermissionLegal(state, state.active_player_index, gy_cast_src, def)))
+        {
+            if (sink_stack.empty() && g_play_dropped_cast_sink)
+            {
+                PlayReportDrop(name, PlayDropReasonWanted()
+                    ? name + " cannot be cast from the graveyard now (no open Lurrus permission covers it)"
+                    : std::string());
+            }
+            return;
+        }
 
         // Irencrag Feat "you can cast only one more spell this turn": once a restrictor has resolved, the
         // turn-scoped budget counts down; at 0 no further spell may be cast -- hand OR staged (an Apex-of-
@@ -64603,6 +64693,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // Does the Remand counter X? Not when X can't be countered: then X resolves after it.
         const bool remand_countered = remand_def != nullptr && remand_chain_def == nullptr
                                    && !def.params.cant_be_countered;
+        // Lurrus: the cast is paid, so its permission is spent (the executor spends at the same point).
+        if (gy_cast_src >= 0) { ConsumeGyCastPermission(state, state.active_player_index, gy_cast_src); }
         zone.erase(it);
         // "As an additional cost to cast this spell, sacrifice a creature" -- the GENERIC route
         // (sac_additional_creature: Diabolic Intent, Culling the Weak). Paid here, at CAST, with the
@@ -64996,6 +65088,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // replay cast nothing at the breakpoint and realised opp 5, T5 ([fd-diverge]
             // realized_win=5 predicted_win=4). pitch_slot is enumeration-only (the subset guard).
             rec.pitch_name         = riders.pitch_name;
+            // ...and a Lurrus cast's permission source: without it the replay casts nothing (no rider ->
+            // the executor's graveyard path reads it as retrace) while the rollout recast the card.
+            rec.gy_cast_source_id  = static_cast<std::int16_t>(riders.gy_cast_source_id);
             // MTG_BP_REPLAY_COST (see EngineFlags.h): the cost this cast PAID rides the record, so
             // the executor's replay traits (ComputePlanTraits over the records) count the same mana
             // casts the rollout's continuation traits counted -- the one-shot hold read mana_casts=0
@@ -72949,7 +73044,11 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                 w.End();
                 break;
             }
-            case Action::Kind::CastFromGraveyard: w.Begin(kSigG); w.Put(act.card_name); w.End(); break;
+            // A Lurrus cast carries its permission source (lockstep with the legacy key's #LU).
+            case Action::Kind::CastFromGraveyard:
+                w.Begin(kSigG); w.Put(act.card_name);
+                if (act.gy_cast_source_id >= 0) { w.Put("#LU"); w.Int(act.gy_cast_source_id); }
+                w.End(); break;
             case Action::Kind::DiscardToLandsEdge:
                 w.Begin(kSigL); w.Put(act.card_name); w.Put('#'); w.Int(act.discard_lands); w.End(); break;
             case Action::Kind::Suspend: w.Begin(kSigU); w.Put(act.card_name); w.End(); break;
@@ -78187,7 +78286,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                             k += std::to_string(act.ripple_granter_req);
                         }
                     } break;
-                case Action::Kind::CastFromGraveyard: g.push_back(act.card_name); break;
+                // A Lurrus cast carries its permission source (gated on set -> no other key moves).
+                case Action::Kind::CastFromGraveyard:
+                    g.push_back(act.gy_cast_source_id >= 0
+                                    ? act.card_name.str() + "#LU" + std::to_string(act.gy_cast_source_id)
+                                    : std::string(act.card_name.str()));
+                    break;
                 case Action::Kind::DiscardToLandsEdge:
                     l.push_back(act.card_name + "#" + std::to_string(act.discard_lands)); break;
                 case Action::Kind::Suspend:  u.push_back(act.card_name); break;
@@ -80009,6 +80113,9 @@ static bool CardHasPostEntryActivation(const CardParams& pp)
     // loop (kActPingLoopLive) becomes live the moment a cast Ballista lands next to Heliod -- all three
     // carry keys in CollectActivationKeys, so a Ballista CAST this plan must be fanned.
     if (pp.self_counter_cost.has_value() || pp.remove_counter_ping_damage > 0) { return true; }
+    // Lurrus of the Dream-Den (2026-11-10): a cast Lurrus's graveyard-cast permission is live the moment
+    // it lands -- CollectActivationKeys' kActGyCast -- so a plan that casts it must be fanned.
+    if (pp.gy_cast_permanent_max_mv > 0) { return true; }
     return false;
 }
 
@@ -80246,8 +80353,36 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
     // [NOHOST] -- an apply with no capture and no carried choice, where there is no fan-out to be
     // selected by in the first place. Extra marking there buys intent, not reachability, and it
     // costs a wider candidate set. See docs/design/canon-default-reachability.md.
+    // Site 9's GRAVEYARD-CAST route (Lurrus of the Dream-Den): an ACTIVATION that can put a permanent card
+    // into our graveyard (Martyr of Sands / Kami of False Hope / Curious Farm Animals sacrificing
+    // themselves, a Jitte -1/-1 on our own X/1) gives an open permission a NEW castable name -- the
+    // kActGyCast key PostEntryActivationPending accepts -- so the plan must be fanned or the recast
+    // (and the loop it feeds) is an unchallengeable canon at any budget. A superset in the safe
+    // direction, as this predicate's contract requires: any non-cast action while a permission is open
+    // on our battlefield or cast by this plan. A Lurrus CAST is marked by CardHasPostEntryActivation, a
+    // graveyard cast of an activatable card by the same. Deck-gated (GyR_GyCastNames).
+    bool gy_cast_live = false;
+    if ((state.deck_gy_readers & GyR_GyCastNames) != 0 && TurnSolver::PostEntryBreakpointClassOn())
+    {
+        for (const Permanent& perm : state.battlefield)
+        {
+            if (perm.controller_index != state.active_player_index || perm.once_per_turn_used) { continue; }
+            const CardDefinition* w = CardDatabase::Instance().LookupCached(perm.card);
+            if (w && w->params.gy_cast_permanent_max_mv > 0) { gy_cast_live = true; break; }
+        }
+        for (const Action& a : p.actions)
+        {
+            if (gy_cast_live) { break; }
+            if (a.kind != Action::Kind::CastFromHand) { continue; }
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+            if (d && d->params.gy_cast_permanent_max_mv > 0) { gy_cast_live = true; }
+        }
+    }
     for (const Action& a : p.actions)
     {
+        if (gy_cast_live && a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard
+            && a.kind != Action::Kind::PlayLand && a.kind != Action::Kind::ActivateVial)
+        { mask |= 1 << 9; }
         if (a.kind == Action::Kind::ActivateLoyalty)
         {
             const CardDefinition* d = CardDatabase::Instance().Lookup(a.card_name);
@@ -92569,6 +92704,28 @@ static TranspositionTable::Key BuildSimKeyBase(const GameState& state, int max_t
                 Fold(k, 0x67B1);
                 Fold(k, static_cast<uint64_t>(gl_n));
                 Fold(k, gl_acc);
+            }
+        }
+        // GRAVEYARD-CAST PERMISSION readers (GyR_GyCastNames; Lurrus of the Dream-Den): which permanent
+        // cards sit in OUR graveyard decides which CastFromGraveyard actions exist this turn and every
+        // later one (the permission refreshes each turn), so two states differing only there must not
+        // share a memo / TT entry. Folds every NONLAND PERMANENT card name (a superset of the legal
+        // targets -- finer only declines a hit). Same shape and gate as the folds above -> every other
+        // deck keeps its exact key.
+        if (gy_stamped && (state.deck_gy_readers & GyR_GyCastNames) != 0)
+        {
+            uint64_t gc_acc = 0;
+            int      gc_n   = 0;
+            for (const Card& c : p.graveyard)
+            {
+                const Card& zc = ZoneCard(c);
+                if (!zc.IsLand() && zc.IsPermanentCard()) { gc_acc += c.m_name_hash; ++gc_n; }
+            }
+            if (gc_n > 0)
+            {
+                Fold(k, 0x67CA);
+                Fold(k, static_cast<uint64_t>(gc_n));
+                Fold(k, gc_acc);
             }
         }
         const bool gy_retrace_possible = !gy_stamped

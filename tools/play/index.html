@@ -2246,6 +2246,7 @@ function bfThumb(o) {   // battlefield entry {name, is_land, is_le, counters?}
 }
 function plannedThumb(entry, planIdx, ord) {   // a card that is part of THIS turn's plan
   const src = entry.kind==='vial'    ? `<span class="srcbadge vial" title="deployed via Aether Vial (free)">⚡</span>`
+            : entry.kind==='retrace' && entry.gycast ? `<span class="srcbadge retrace" title="cast from the graveyard with Lurrus of the Dream-Den">↩</span>`
             : entry.kind==='retrace' ? `<span class="srcbadge retrace" title="cast from graveyard via Retrace (discards a land)">↩</span>`
             : entry.kind==='activate'? `<span class="srcbadge act" title="activated ability of a permanent already on the battlefield">⟳</span>` : '';
   // data-num on a queued creature makes it a drop target for a same-turn Aura (drag Rancor onto it).
@@ -2699,6 +2700,7 @@ function renderBoard() {
   }
   if (me.graveyard && me.graveyard.length) {
     const rset = new Set(me.retrace_gy||[]);   // graveyard spells castable via Retrace
+    const gset = new Set(me.gycast_gy||[]);    // graveyard permanents castable via Lurrus of the Dream-Den
     const eset = new Set(me.eternalize_gy||[]); // graveyard creatures with Eternalize (Timeless Witness)
     const gyThumbs = me.graveyard.map(n => eset.has(n)
       ? `<span class="thumb spell retrace-src" data-name="${esc(n)}" data-eternalize="1" title="click to ETERNALIZE from the graveyard (pay {5}{G}{G}, exile it: a 4/4 black Zombie token copy)">`+
@@ -2708,8 +2710,13 @@ function renderBoard() {
       ? `<span class="thumb spell retrace-src" data-name="${esc(n)}" data-retrace="1" title="click to cast from graveyard via Retrace (discards a land)">`+
         `<img loading="lazy" src="${scryImg(n,'small')}" alt="${esc(n)}" onerror="this.style.opacity=.15"/>`+
         `<span class="rtbadge" title="Retrace — cast from here, discarding a land">↩</span><em>${esc(n)}</em></span>`
+      : gset.has(n)
+      ? `<span class="thumb spell retrace-src" data-name="${esc(n)}" data-gycast="1" title="click to CAST from the graveyard with Lurrus of the Dream-Den (pay its cost; once each turn)">`+
+        `<img loading="lazy" src="${scryImg(n,'small')}" alt="${esc(n)}" onerror="this.style.opacity=.15"/>`+
+        `<span class="rtbadge" title="Lurrus — cast from here (once each turn)">↩</span><em>${esc(n)}</em></span>`
       : bfThumb({name:n,is_land:false}));
-    const hint = rset.size ? ` <span class="help">↩ click a Retrace card to cast it from here (discards a land)</span>` : '';
+    const hint = rset.size ? ` <span class="help">↩ click a Retrace card to cast it from here (discards a land)</span>`
+               : gset.size ? ` <span class="help">↩ click a highlighted permanent to cast it from here with Lurrus (once each turn)</span>` : '';
     var gyZone = `<div class="zone gy"><h3>Graveyard (${me.graveyard.length})${hint}</h3>`+zoneRow(gyThumbs)+`</div>`;
   }
   // Exiled — unusable: Apex-exiled LANDS (gone for good), shown beside the graveyard (a "second
@@ -3115,6 +3122,9 @@ function wireBoard() {
   // click a Retrace card in the graveyard to cast it from there (discards a land)
   $('board').querySelectorAll('.thumb[data-retrace]').forEach(t =>
     t.onclick = e => { e.stopPropagation(); retraceCard(t.dataset.name); });
+  // click a highlighted graveyard permanent to cast it with Lurrus of the Dream-Den's permission
+  $('board').querySelectorAll('.thumb[data-gycast]').forEach(t =>
+    t.onclick = e => { e.stopPropagation(); gycastCard(t.dataset.name); });
   // click an Eternalize card in the graveyard (Timeless Witness) to queue its eternalize
   $('board').querySelectorAll('.thumb[data-eternalize]').forEach(t =>
     t.onclick = e => { e.stopPropagation(); eternalizeCard(t.dataset.name); });
@@ -3258,6 +3268,26 @@ function retraceCard(name) {
   if (!hasLand) { flashHint(`Retrace needs a land in hand to discard.`); return; }
   S.plan.push({name, kind:'retrace'});
   flashHint(`Retracing ${name} from the graveyard (a land will be discarded). Commit to resolve.`);
+  renderBoard();
+}
+
+// Click a graveyard permanent Lurrus of the Dream-Den can cast ("once during each of your turns, you may
+// cast a permanent spell with mana value 2 or less from your graveyard"). Queued as a retrace-kind entry
+// flagged `gycast` (the engine runs graveyard casts in one pass after the hand casts) and written as
+// `gycast=<name>`. One permission = one card per turn, so a second click on ANOTHER card swaps the pick;
+// a click on the queued card toggles it off. The cast's own ETBs (Hawk's search, Inspector's Clue) and a
+// card that only reaches the graveyard later in the turn come back as the NEXT main-phase decision.
+function gycastCard(name) {
+  if (S.over || !S.decision || S.decision.type!=='main_phase') return;
+  hideVerdict();
+  const existing = S.plan.findIndex(p=>p.kind==='retrace' && p.gycast);
+  if (existing >= 0) {
+    const same = S.plan[existing].name === name;
+    S.plan.splice(existing,1);
+    if (same) { renderBoard(); return; }
+  }
+  S.plan.push({name, kind:'retrace', gycast:true});
+  flashHint(`Casting ${name} from the graveyard with Lurrus (once this turn). Commit to resolve.`);
   renderBoard();
 }
 

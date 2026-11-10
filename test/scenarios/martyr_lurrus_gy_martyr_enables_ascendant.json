@@ -1,0 +1,22 @@
+{
+  "deck": "decks/Martyr Lifegain/Martyr Lifegain.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 24,
+  "opponent_life": 9,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 100,
+  "max_turns": 5,
+  "lands_played_this_turn": 1,
+  "_comment": "Martyr Lifegain (2026-11-10), Lurrus of the Dream-Den: a graveyard cast as a BASE plan action. Lurrus + Serra Ascendant (not sick), 2 Plains (drop used), Martyr of Sands in the graveyard; hand: two Ranger of Eos. Life 24, opponent 9. Cast Martyr from the graveyard ({W}), activate it revealing 2 ({1}, +6 -> 30): Serra 6/6 + Lurrus 3 = 9, win T4. Without the graveyard cast: 1 + 3 = 4.",
+  "battlefield": [
+    { "name": "Plains" }, { "name": "Plains" },
+    { "name": "Lurrus of the Dream-Den", "sick": false },
+    { "name": "Serra Ascendant", "sick": false }
+  ],
+  "graveyard": [ "Martyr of Sands" ],
+  "hand": [ "Ranger of Eos", "Ranger of Eos" ],
+  "expect_win_turn": 4
+}

@@ -116,6 +116,14 @@ enum GyReader : std::uint32_t
     // WHICH of our graveyard cards carry that ability, so "Bloodghast in the graveyard" and "Bloodghast
     // exiled / absent" reach different boards on the next land. Folds the gy-landfall card names.
     GyR_GyLandfallNames = 1u << 10,
+    // GRAVEYARD CAST PERMISSION (Lurrus of the Dream-Den, 2026-11-10: "cast a permanent spell with mana
+    // value 2 or less from your graveyard", CardParams::gy_cast_permanent_max_mv). Which permanent cards
+    // sit in our graveyard decides which CastFromGraveyard actions exist this turn and every later one.
+    // Folds the NONLAND PERMANENT card names (a superset of the legal targets -- finer only declines a
+    // fold). ALSO the deck gate of every Lurrus site (enumeration, the site-9 key, the death-payoff
+    // clause): the bit is clear exactly when no card in the deck carries the param (and set on an
+    // unstamped state, deck_gy_readers' 0xFFFFFFFF default), so every other deck skips them all.
+    GyR_GyCastNames     = 1u << 11,
 };
 
 enum class Phase { Beginning, PreCombatMain, Combat, PostCombatMain, Ending };

@@ -191,6 +191,12 @@ enum class Keyword
     // creature_died_this_turn; no engine code reads this enumerator. It exists so Scryfall's keywords array
     // can be pasted VERBATIM (KeywordFromString throws on an unmapped keyword -- see Jump's note).
     Morbid,
+    // Companion (Lurrus of the Dream-Den): an INERT keyword-ability tag. A companion condition matters only
+    // for a card chosen as the companion from OUTSIDE the game (the sideboard), and this engine plays the
+    // card from the MAIN deck with no companion zone at all -- so the condition and the "{3}: put it into
+    // your hand" special action never apply. No engine code reads this enumerator; it exists so Scryfall's
+    // keywords array can be pasted VERBATIM (KeywordFromString throws on an unmapped keyword -- see Jump).
+    Companion,
     // Sentinel: MUST stay last. Keyword ordinals are bit indices into Card::m_keyword_mask (uint64_t).
     KeywordCount_
 };

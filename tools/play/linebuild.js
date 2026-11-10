@@ -598,7 +598,9 @@
     if (p.kind === 'land') return (p.fromTop ? 'landtop=' : 'land=') + p.name;
     if (p.kind === 'le') return 'le=' + p.name;
     if (p.kind === 'vial') return 'vial=' + p.name;
-    if (p.kind === 'retrace') return 'retrace=' + p.name;
+    // A Lurrus graveyard cast is queued as a retrace-kind entry flagged `gycast` (same graveyard
+    // source, same canonical pass), and writes its own verb.
+    if (p.kind === 'retrace') return (p.gycast ? 'gycast=' : 'retrace=') + p.name;
     const v = lineVerb(p);
     const card = (v === 'gyreturn' || v === 'pod' || v === 'ooze') ? (p.src || p.name) : p.name;
     // An activated untapper (untapact= / untaploop=) carries its source and target as untapSrc /
@@ -676,7 +678,7 @@
     for (const p of plan) if (isPreTap(p)) parts.push(preTapToken(p));
     for (const p of plan) if (p.kind !== 'land' && p.kind !== 'le' && p.kind !== 'vial' && p.kind !== 'retrace' && !isPreTap(p) && (lineVerb(p) === 'cast' || lineVerb(p) === 'act')) parts.push(lineVerb(p) + '=' + p.name);
     for (const p of plan) if (p.kind === 'vial') parts.push('vial=' + p.name);
-    for (const p of plan) if (p.kind === 'retrace') parts.push('retrace=' + p.name);
+    for (const p of plan) if (p.kind === 'retrace') parts.push((p.gycast ? 'gycast=' : 'retrace=') + p.name);
     // ADVENTURE (CR 715) rides ALONGSIDE its own `cast=`, not instead of it -- the adventure half is
     // genuinely a cast of that hand card, so the entry keeps its ordinary kind and the cast loop
     // above has already emitted `cast=<parent>`. This token only says WHICH MODE, which is why it is

@@ -830,7 +830,8 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                 }
                 break;
             }
-            case Action::Kind::CastFromGraveyard: tag = a.card_name + " (retrace)"; break;
+            case Action::Kind::CastFromGraveyard:
+                tag = a.card_name + (a.gy_cast_source_id >= 0 ? " (from graveyard, Lurrus)" : " (retrace)"); break;
             case Action::Kind::ActivateVial:      tag = a.card_name + " (vial)"; break;
             case Action::Kind::PlayLand:          tag = a.card_name + " (land)"; break;
             // A suspend card that is ALSO castable (Search for Tomorrow) needs its suspend variant told
@@ -1536,6 +1537,16 @@ static void WriteBoardContext(std::ostream& os, const GameState& s, int reveal_c
             if (d && d->params.retrace) { rt.push_back(c.m_name); }
         }
         if (!rt.empty()) { std::sort(rt.begin(), rt.end()); os << ", \"retrace_gy\": "; JsonNameArray(os, rt); }
+    }
+    // Lurrus of the Dream-Den: graveyard PERMANENT cards castable right now under an open cast permission
+    // (GyCastOptionsNow -- the same list the enumeration emits CastFromGraveyard actions from). The GUI
+    // makes them clickable in the graveyard zone (the `gycast=` verb). Absent when there are none, so
+    // every other deck's state JSON is byte-identical.
+    {
+        std::vector<std::string> gc;
+        for (const GyCastOption& o : GyCastOptionsNow(s, s.active_player_index))
+        { gc.push_back(o.card->m_name); }
+        if (!gc.empty()) { std::sort(gc.begin(), gc.end()); os << ", \"gycast_gy\": "; JsonNameArray(os, gc); }
     }
     // Eternalize (Timeless Witness): graveyard cards with an eternalize cost -- the GUI makes them
     // clickable in the graveyard zone (the `eternalize=` verb). Absent when there are none, so every
@@ -2249,6 +2260,8 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                  + (a.remand_chain_by.empty() ? std::string() : "|rc" + a.remand_chain_by.str())
                  // "Target player gains N life" at the opponent: a different payload (set -> keyed).
                  + (a.player_target != 0 ? "|pt" + std::to_string(a.player_target) : std::string())
+                 // A Lurrus graveyard cast's permission source (set -> keyed; every other key unchanged).
+                 + (a.gy_cast_source_id >= 0 ? "|gc" + std::to_string(a.gy_cast_source_id) : std::string())
                  // A creature-spell convoke arm (Markov Baron; Vampires item D) is a payload too: two
                  // arms are two lines. Gated on such an arm, so every other key is unchanged.
                  + (((a.convoke_green > 0 || a.convoke_other > 0) && ConvokeTapsAtCast(a.def))
@@ -5233,6 +5246,9 @@ static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
         else if (key == "landsedge") { ls.lands_edge = std::atoi(val.c_str()); }
         else if (key == "vial")      { ls.vial_deploys.push_back(val); }
         else if (key == "retrace")   { ls.retrace_casts.push_back(val); }
+        // "gycast=<name>": a Lurrus graveyard cast. It matches the same CastFromGraveyard action set as
+        // retrace= (a retrace card is never a permanent, so one name can never mean both).
+        else if (key == "gycast")    { ls.retrace_casts.push_back(val); }
         // An ON-DEMAND source's crack (Lotus Bloom, Lake of the Dead) is the payer's, never a plan action
         // (IsOnDemandSacDef; USER 2026-11-04 "it should be on-demand and only done that way"): a recorded
         // `sacout=` of one is implicit payment now, so it is dropped here -- the payer cracks it at the cast

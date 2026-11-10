@@ -100,6 +100,11 @@ MANIFEST = {
     "etb_dig_count":         ("dig",                  positive),
     "upkeep_adds_charge":    ("vial_charge",          truthy),
     "retrace":               ("retrace_discard",      truthy),
+    # Lurrus of the Dream-Den (2026-11-10): WHICH graveyard permanent to cast under the once-each-turn
+    # permission is a main_phase plan choice -- one CastFromGraveyard action per legal graveyard name
+    # (the state JSON's `gycast_gy`, clickable graveyard thumbnails, the `gycast=` verb). No
+    # resolution-time prompt: the cast's own choices (Hawk's search, a Jitte equip) are the card's.
+    "gy_cast_permanent_max_mv": ("main_phase",        positive),
     # ---- Giants (2026-09-22) ----
     # Tectonic Giant's "choose one" attack trigger -> the NEW `attack_mode` decision type
     # (chooser g_play_attack_mode_chooser in ApplyAttackModalTriggers, emitter

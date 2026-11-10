@@ -3677,6 +3677,18 @@
     "toughness": null,
     "type_line": "Artifact — Equipment"
   },
+  "Lurrus of the Dream-Den": {
+    "cmc": 3.0,
+    "keywords": [
+      "Companion",
+      "Lifelink"
+    ],
+    "mana_cost": "{1}{W/B}{W/B}",
+    "oracle_text": "Companion — Each permanent card in your starting deck has mana value 2 or less. (If this card is your chosen companion, you may put it into your hand from outside the game for {3} as a sorcery.)\nLifelink\nOnce during each of your turns, you may cast a permanent spell with mana value 2 or less from your graveyard.",
+    "power": "3",
+    "toughness": "2",
+    "type_line": "Legendary Creature — Cat Nightmare"
+  },
   "Luxurious Libation": {
     "cmc": 1.0,
     "keywords": [],

@@ -12335,6 +12335,7 @@ inline int CountControlledLandsWithSubtype(const GameState& state, int controlle
     return n;
 }
 
+inline bool GyCastSpellLegal(int max_mv, const CardDefinition& spell);   // Lurrus -- defined below (Kaldring block)
 // Would sacrificing `source_id` (an own creature) produce ANYTHING on death? True iff a
 // controller-side permanent carries a death watcher that would fire for it (Daxos's
 // own_creature_dies_lifegain; a subtype-keyed dies_watch_subtype matching the source; an LTB
@@ -12361,11 +12362,28 @@ inline bool SelfSacHasDeathPayoff(const GameState& state, int controller, int so
         if (wp.ltb_return_creatures > 0)       { return true; }
         if (!wp.dies_watch_subtype.empty() && CardHasSubtype(src->card, wp.dies_watch_subtype)) { return true; }
     }
-    // TODO(Lurrus of the Dream-Den, Martyr Lifegain integration): a Lurrus on our battlefield with its
-    // once-each-turn graveyard-cast permission unused (or one in hand and castable) makes a NONTOKEN
-    // permanent card of mana value 2 or less a recursion target, so its death pays too (Kami of False
-    // Hope, Curious Farm Animals, Martyr of Sands, Squadron Hawk...). Add that clause HERE, beside the
-    // Abiding Grace clause below, so the self-only outlet gate (SelfSacOutletUseful) opens for it.
+    // A GRAVEYARD CAST PERMISSION (Lurrus of the Dream-Den): a Lurrus on our battlefield with its
+    // once-each-turn use still open, or one in our HAND (this plan can cast it first -- a superset of
+    // "castable", which errs toward keeping the option), makes a NONTOKEN permanent card it can cast a
+    // recursion target, so the death is a real trade-off (Kami of False Hope, Curious Farm Animals,
+    // Martyr of Sands: sacrifice, recast, re-enter -- the deck's core loop). Only a card we OWN reaches
+    // our graveyard. Deck-gated on GyR_GyCastNames (one mask test for every other deck). Conservative in
+    // the TRUE direction, like the reanimator clause below.
+    if ((state.deck_gy_readers & GyR_GyCastNames) != 0 && !src->is_token
+        && src->card.m_number > 0 && src->card.m_number < GameState::kFirstTokenNumber
+        && src->owner_index == controller && sd != nullptr)
+    {
+        auto permits = [&](const CardDefinition* ld)
+        { return ld != nullptr && GyCastSpellLegal(ld->params.gy_cast_permanent_max_mv, *sd); };
+        for (const Permanent& w : state.battlefield)
+        {
+            if (w.controller_index != controller || w.card.m_number == source_id || w.def_absent
+                || w.once_per_turn_used) { continue; }
+            if (permits(CardDatabase::Instance().LookupCached(w.card))) { return true; }
+        }
+        for (const Card& c : state.players[static_cast<std::size_t>(controller)].hand)
+        { if (permits(CardDatabase::Instance().LookupCached(c))) { return true; } }
+    }
     // A GRAVEYARD REANIMATOR makes the death a real trade-off rather than a no-op: the card comes back
     // through the enter cascade (Ranger-Captain of Eos re-tutors, Soul Warden & co. fire). Only a CARD
     // returns (a token ceases to exist, CR 111.7), and only a creature card. Conservative in the TRUE
@@ -15158,6 +15176,99 @@ inline void ApplyGraveyardReturnAbility(GameState& state, int controller, int so
                       src_label + ": returned " + returned.m_name.str()
                       + " from the graveyard to hand");
     }
+}
+
+// ---- Lurrus of the Dream-Den -- "Once during each of your turns, you may cast a permanent ------
+// ---- spell with mana value 2 or less from your graveyard." (CardParams::gy_cast_permanent_max_mv) --
+// A STATIC cast permission of the permanent that carries it: one use per OBJECT per turn
+// (Permanent::once_per_turn_used, reset at our untap in both worlds; a re-entered Lurrus is a new
+// object with a fresh use). These are the ONE legality test shared by the enumeration
+// (CollectActions), the site-9 activation keys, the rollout's apply_one, the executor's
+// CastSpellFromHand and the viewer's state JSON -- the worlds agree by construction. The cast itself
+// is a REAL cast through each world's ordinary cast path (costs, on-cast triggers, ETBs); only the
+// zone the card leaves differs. Graveyard cards are name-only placeholders, so every type / cost test
+// reads the card's DEFINITION (never the zone copy's empty masks).
+
+// Is `spell` a legal card for a permission of max mana value `max_mv`? "A permanent SPELL": a land is
+// never cast (CR 305.9), so only a nonland permanent card; MV <= max_mv. A card with {X} in its cost is
+// refused: its MV on the stack includes the chosen X (CR 202.3e), so only small X would be legal, and no
+// list carrying the permission holds an X permanent -- the X axis is not offered rather than mis-priced.
+inline bool GyCastSpellLegal(int max_mv, const CardDefinition& spell)
+{
+    if (max_mv <= 0) { return false; }
+    const Card& c = spell.card;
+    if (c.IsLand() || !c.IsPermanentCard()) { return false; }
+    if (c.m_mana_cost.has_x) { return false; }
+    return c.m_mana_cost.ManaValue() <= max_mv;
+}
+
+// The battlefield index of `controller`'s permission source `source_id` with its use still OPEN this
+// turn, or -1 (gone, not ours, used, or not a permission carrier). "Each of YOUR turns": only the
+// active player's own permission is ever live.
+inline int GyCastPermissionSourceIndex(const GameState& state, int controller, int source_id)
+{
+    if (source_id <= 0 || state.active_player_index != controller) { return -1; }
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+        if (p.controller_index != controller || p.card.m_number != source_id || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || d->params.gy_cast_permanent_max_mv <= 0 || p.once_per_turn_used) { return -1; }
+        return i;
+    }
+    return -1;
+}
+
+// THE legality test: may `controller` cast `spell` from their graveyard RIGHT NOW off permission
+// `source_id`? (Timing -- an empty stack for a non-flash spell -- is the caller's: the enumeration
+// offers these only at a main-phase decision, exactly like a hand cast.)
+inline bool GyCastPermissionLegal(const GameState& state, int controller, int source_id,
+                                  const CardDefinition& spell)
+{
+    const int i = GyCastPermissionSourceIndex(state, controller, source_id);
+    if (i < 0) { return false; }
+    const CardDefinition* d =
+        CardDatabase::Instance().LookupCached(state.battlefield[static_cast<std::size_t>(i)].card);
+    return d != nullptr && GyCastSpellLegal(d->params.gy_cast_permanent_max_mv, spell);
+}
+
+// Spend the permission (called by both worlds once the cast's costs are PAID, before the card leaves
+// the graveyard). A source that left during payment has nothing left to spend.
+inline void ConsumeGyCastPermission(GameState& state, int controller, int source_id)
+{
+    const int i = GyCastPermissionSourceIndex(state, controller, source_id);
+    if (i >= 0) { state.battlefield[static_cast<std::size_t>(i)].once_per_turn_used = true; }
+}
+
+// Every (source, graveyard card) pair castable now: per OPEN permission source, the FIRST graveyard
+// copy of each distinct legal name (copies of one name are the same cast). Graveyard order, sources in
+// battlefield order. Empty -- at one mask test -- for every deck without the permission
+// (GyR_GyCastNames). The pointers are into `state` and live until it is next mutated.
+struct GyCastOption { int source_id; const Card* card; const CardDefinition* def; };
+inline std::vector<GyCastOption> GyCastOptionsNow(const GameState& state, int controller)
+{
+    std::vector<GyCastOption> out;
+    if ((state.deck_gy_readers & GyR_GyCastNames) == 0) { return out; }
+    if (state.active_player_index != controller) { return out; }
+    const std::vector<Card>& gy = state.players[static_cast<std::size_t>(controller)].graveyard;
+    if (gy.empty()) { return out; }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller || p.once_per_turn_used || p.def_absent || p.card.m_number <= 0)
+        { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || d->params.gy_cast_permanent_max_mv <= 0) { continue; }
+        const std::size_t first = out.size();
+        for (const Card& gc : gy)
+        {
+            const CardDefinition* gd = CardDatabase::Instance().LookupCached(gc);
+            if (gd == nullptr || !GyCastSpellLegal(d->params.gy_cast_permanent_max_mv, *gd)) { continue; }
+            bool dup = false;
+            for (std::size_t k = first; k < out.size(); ++k) { if (out[k].card->m_name == gc.m_name) { dup = true; break; } }
+            if (!dup) { out.push_back(GyCastOption{ p.card.m_number, &gc, gd }); }
+        }
+    }
+    return out;
 }
 
 // ---- Kaldring, the Rimestaff -- "{T}: You may play target snow permanent card from your ----

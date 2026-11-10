@@ -1290,6 +1290,8 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
                          || ((gy_bits & GyR_CreatureNames) && zc.IsCreature())
                          // Bloodghast: a graveyard-landfall card returns on the next land.
                          || ((gy_bits & GyR_GyLandfallNames) && gd->gy_landfall_watcher)
+                         // Lurrus of the Dream-Den: a nonland permanent card is a possible cast.
+                         || ((gy_bits & GyR_GyCastNames) && !zc.IsLand() && zc.IsPermanentCard())
                          // Forge Anew: every Equipment card is a possible return.
                          || ((gy_bits & GyR_EquipmentNames) && [&zc]() {
                                 for (const std::string& st : zc.m_subtypes)

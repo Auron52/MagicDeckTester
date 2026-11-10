@@ -1,0 +1,30 @@
+{
+  "deck": "decks/Martyr Lifegain/Martyr Lifegain.cod",
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "turn": 5,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 50,
+  "max_turns": 5,
+  "lands_played_this_turn": 1,
+  "_comment": "Martyr Lifegain (2026-11-10), Lurrus of the Dream-Den, HUMAN PLAY: the line `gycast=Thraben Inspector` casts the Inspector from the graveyard (paid {W}) and its ETB investigates -- a REAL cast through the shared ApplyPlan path. Martyr of Sands stays in the graveyard: one permission, one card.",
+  "battlefield": [
+    { "name": "Plains" }, { "name": "Plains" },
+    { "name": "Lurrus of the Dream-Den", "sick": false }
+  ],
+  "graveyard": [ "Thraben Inspector", "Martyr of Sands" ],
+  "hand": [],
+  "human_lines": [
+    "gycast=Thraben Inspector"
+  ],
+  "expect_no_win": true,
+  "expect_dropped": [],
+  "expect_history_contains": [ "Thraben Inspector", "Clue" ],
+  "expect_graveyard_contains": [ "Martyr of Sands" ]
+}

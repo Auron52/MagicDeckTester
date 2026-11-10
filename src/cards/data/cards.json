@@ -15330,6 +15330,31 @@
     "own_creature_enters_draw_once_each_turn": true,
     "dies_return_as_noncreature_enchantment": true
    }
+  },
+  {
+   "name": "Lurrus of the Dream-Den",
+   "mana_cost": "{1}{W/B}{W/B}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Cat",
+    "Nightmare"
+   ],
+   "keywords": [
+    "Lifelink",
+    "Companion"
+   ],
+   "power": 3,
+   "toughness": 2,
+   "oracle_text": "Companion — Each permanent card in your starting deck has mana value 2 or less. (If this card is your chosen companion, you may put it into your hand from outside the game for {3} as a sorcery.)\nLifelink\nOnce during each of your turns, you may cast a permanent spell with mana value 2 or less from your graveyard. [GRAVEYARD CAST: gy_cast_permanent_max_mv 2, a STATIC cast permission of this OBJECT, one use per turn (Permanent::once_per_turn_used, reset at our untap in both worlds; a Lurrus that leaves and re-enters is a new object with a fresh use; only during OUR turn). Enumerated as CastFromGraveyard actions carrying the permission source (Action::gy_cast_source_id), one per distinct legal graveyard NAME, all in ONE activation family per Lurrus, so WHICH card is a searched alternative and a plan casts at most one; no provider narrowing, every legal card is offered to the search and to the human. Legal = a NONLAND permanent card with mana value 2 or less (a land is never a spell); in this list Serra Ascendant, Martyr of Sands, Speaker of the Heavens, Mother of Runes, Kami of False Hope, Thraben Inspector, Curious Farm Animals, Squadron Hawk and Umezawa's Jitte -- never Lurrus, Ranger-Captain, Abiding Grace, Enduring Innocence, Ranger of Eos, Swords or Unexpectedly Absent. An {X} permanent is not offered (none in any list carrying the permission). A REAL cast through each world's ordinary cast path (the card's own cost, on-cast triggers, the stack, every ETB: Inspector's Clue, Hawk's search, Innocence's draw watcher); the ONE legality test GyCastPermissionLegal is re-checked by both worlds before paying, and the use is spent once the cost is paid. Sorcery timing, like a hand cast. A card that reaches the graveyard mid-plan (Martyr's sacrifice, then recast and sacrificed again) and a Lurrus cast this main open breakpoint site 9 (the permission's activation key), so both are castable in the same main phase. The viewer offers the castable cards as clickable graveyard thumbnails (the gycast= verb). Companion: INERT -- the card is played from the MAIN deck and the engine has no companion zone, so the deck-building condition and the {3} put-into-hand action never apply (this list would also fail the condition: Ranger of Eos is MV 4). [PARTIAL: PROVISIONAL disclosure.] LIFELINK: the combat core (CreatureHasLifelink). LEGENDARY: the legend rule (EnforceLegendRule).]",
+   "template": "custom",
+   "parameters": {
+    "gy_cast_permanent_max_mv": 2
+   }
   }
  ]
 }

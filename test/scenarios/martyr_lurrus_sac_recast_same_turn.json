@@ -1,0 +1,22 @@
+{
+  "deck": "decks/Martyr Lifegain/Martyr Lifegain.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 18,
+  "opponent_life": 9,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 200,
+  "max_turns": 5,
+  "lands_played_this_turn": 1,
+  "_comment": "Martyr Lifegain (2026-11-10), Lurrus of the Dream-Den: THE CORE LOOP IN ONE MAIN. Lurrus, Martyr of Sands and Serra Ascendant (none sick), 3 Plains (drop used); hand: two Ranger of Eos (white cards to reveal, uncastable beside the loop). Life 18, opponent 9. The only T4 kill: activate Martyr revealing 2 ({1}, +6 -> 24), CAST IT FROM THE GRAVEYARD with Lurrus ({W}), activate it again ({1}, +6 -> 30): Serra is a 6/6 lifelink and swings with Lurrus for 6 + 3 = 9. One activation (24 life) leaves Serra 1/1: 4 damage. The recast is reachable only through the site-9 graveyard-cast key (the card reached the graveyard mid-plan) and the second sacrifice through its re-open (the recast Martyr's own new key).",
+  "battlefield": [
+    { "name": "Plains" }, { "name": "Plains" }, { "name": "Plains" },
+    { "name": "Lurrus of the Dream-Den", "sick": false },
+    { "name": "Martyr of Sands", "sick": false },
+    { "name": "Serra Ascendant", "sick": false }
+  ],
+  "hand": [ "Ranger of Eos", "Ranger of Eos" ],
+  "expect_win_turn": 4
+}

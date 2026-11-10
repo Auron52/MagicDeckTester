@@ -497,7 +497,14 @@ struct Action
     // and is folded into plan_signature / ActionFoldSig only when nonzero, so every other key is
     // unchanged. In the padding after the int8 block above (sizeof(Action) unchanged).
     std::int8_t player_target      = 0;
-    int         gy_exile_mode  = 0;    // GraveyardExileAbility: 1 = exile instant/sorcery -> opponent
+    // LURRUS OF THE DREAM-DEN (CardParams::gy_cast_permanent_max_mv, 2026-11-10): a CastFromGraveyard
+    // cast made under a graveyard CAST PERMISSION -- the permission source's card.m_number (a deck card
+    // number, so it fits). -1 for every other action, including a retrace cast (which carries
+    // discard_lands instead). Rides CastRiders to both worlds' cast paths, which re-check
+    // GyCastPermissionLegal before paying and spend the permission once paid. Its variants share ONE
+    // activation family per source (ActivationFamilyKey), so a plan casts at most one card per permission.
+    std::int16_t gy_cast_source_id = -1;
+    int         gy_exile_mode  = 0;   // GraveyardExileAbility: 1 = exile instant/sorcery -> opponent
                                        // loses N (Deathrite {B}); 2 = exile creature -> gain N ({G}).
     int         loyalty_ability = -1;  // ActivateLoyalty: index into the walker's loyalty_abilities.
     bool        free_cast      = false; // Maelstrom Archangel: this CastFromHand variant spends one
@@ -1073,10 +1080,14 @@ struct CastRiders
     std::uint8_t  ripple_decline     = 0;
     std::uint16_t ripple_free_tutor  = 0;
     std::uint16_t ripple_free_victim = 0;
+    // Action::gy_cast_source_id (Lurrus): the cast leaves the GRAVEYARD under that permission. Both
+    // worlds' cast paths re-check GyCastPermissionLegal before paying and spend it once paid.
+    int      gy_cast_source_id = -1;
 
     static CastRiders Of(const Action& a)
     {
         CastRiders r;
+        r.gy_cast_source_id = a.gy_cast_source_id;
         r.awaken = a.awaken;
         r.loyalty_ability = a.loyalty_ability;
         r.devour_count    = a.devour_count;

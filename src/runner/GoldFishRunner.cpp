@@ -733,6 +733,9 @@ std::uint32_t GoldFishRunner::DeckGraveyardReaders(const Decklist& deck)
         // Bloodghast: a GRAVEYARD landfall watcher -- whether a copy sits in our graveyard decides
         // whether the next land returns it (see GyR_GyLandfallNames).
         if (p.landfall_return_self_from_gy)  { m |= GyR_GyLandfallNames; }
+        // Lurrus of the Dream-Den: a graveyard CAST permission reads which permanent cards sit in our
+        // graveyard (see GyR_GyCastNames -- also the deck gate of every Lurrus site).
+        if (p.gy_cast_permanent_max_mv > 0)  { m |= GyR_GyCastNames; }
     }
     // Timeless Witness (Prevent Damage, 2026-09-27): its ETB returns ANY card from the graveyard and
     // Eternalize reads its own copy there. It is a SIDEBOARD card (reached by Living Wish), and the

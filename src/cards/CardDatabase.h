@@ -3425,6 +3425,14 @@ struct CardParams
     // is a searched ActivatePermAbility), so every entry route counts (cast, put, graveyard return).
     // N = Clues created. 0 = off.
     int  etb_investigate = 0;
+    // Lurrus of the Dream-Den: "Once during each of your turns, you may cast a permanent spell with mana
+    // value N or less from your graveyard." A STATIC cast permission of the permanent carrying it, one use
+    // per OBJECT per turn (Permanent::once_per_turn_used -- reset at our untap in both worlds; a Lurrus that
+    // leaves and re-enters is a new object with a fresh use). Enumerated as CastFromGraveyard actions
+    // carrying Action::gy_cast_source_id (one per distinct legal graveyard NAME, one activation family per
+    // source); the cast is a REAL cast through the shared cast path. Legality is ONE predicate in both
+    // worlds and the viewer (SpellEffects.h GyCastPermissionLegal). 0 = no permission.
+    int  gy_cast_permanent_max_mv = 0;
     // Expedite: "target creature gains haste until end of turn" -> Permanent::temp_haste (read by
     // CanAttackFull / CanTapNow -- a hasted fresh dork may tap for mana; reset each cleanup).
     bool grants_temp_haste = false;

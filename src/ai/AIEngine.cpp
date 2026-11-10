@@ -1883,7 +1883,7 @@ void AIEngine::FlagNonConvergence(const GameState& state, const TurnSolver::Plan
     for (const Action& a : plan.actions)
     {
         const char* kind = a.kind == Action::Kind::ActivateVial      ? "vial:"
-                         : a.kind == Action::Kind::CastFromGraveyard ? "retrace:"
+                         : a.kind == Action::Kind::CastFromGraveyard ? (a.gy_cast_source_id >= 0 ? "gycast:" : "retrace:")
                          : a.kind == Action::Kind::DiscardToLandsEdge ? "LE:"
                          : "";
         os << (first ? "" : ", ") << kind << a.card_name;
@@ -4758,7 +4758,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 for (const Action& a : plan.actions)
                 {
                     const char* k = a.kind == Action::Kind::ActivateVial      ? "vial:"
-                                  : a.kind == Action::Kind::CastFromGraveyard ? "retrace:"
+                                  : a.kind == Action::Kind::CastFromGraveyard ? (a.gy_cast_source_id >= 0 ? "gycast:" : "retrace:")
                                   : a.kind == Action::Kind::DiscardToLandsEdge ? "LE:"
                                   : "";
                     os << (tfirst ? "" : ", ") << k << a.card_name; tfirst = false;
@@ -5246,11 +5246,16 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // fd-diverge cast the drawn Skullcrack on T3 and lapsed the staged one, so the committed T4
         // second-Skullcrack line was never realised (predict T4, realise T6). Byte-identical when no
         // staged copy of `name` is in hand.
-        auto it = ap.hand.end();
-        for (auto c = ap.hand.begin(); c != ap.hand.end(); ++c)
+        // LURRUS: a graveyard cast under a cast permission (CastRiders::gy_cast_source_id) is the SAME
+        // real cast, from the graveyard zone -- CastSpellFromHand reads the rider for the zone it
+        // re-finds and erases in, re-checks GyCastPermissionLegal before paying and spends it once paid
+        // (rollout twin: apply_one with from_graveyard). Every other cast reads the hand, unchanged.
+        std::vector<Card>& zone = riders.gy_cast_source_id >= 0 ? ap.graveyard : ap.hand;
+        auto it = zone.end();
+        for (auto c = zone.begin(); c != zone.end(); ++c)
         {
             if (c->m_name != name) { continue; }
-            if (it == ap.hand.end()) { it = c; continue; }       // first match (fallback)
+            if (it == zone.end()) { it = c; continue; }          // first match (fallback)
             // Prefer a staged (expiring) copy over a persistent hand copy, and among staged copies the
             // EARLIEST-EXPIRING one (kept in lockstep with ApplyPlanDirect's apply_one). Byte-identical
             // when no staged copy of `name` is in hand.
@@ -5260,7 +5265,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             }
         }
         last_cast_paid = false;
-        if (it == ap.hand.end()) { return; }   // a miss: its riders were already taken above
+        if (it == zone.end()) { return; }   // a miss: its riders were already taken above
         ManaPool available = AvailableManaPool(state);
         // MTG_EXEC_TAP_TRACE=1 (diagnosis only, default off): which permanents this EXECUTOR cast
         // tapped, and the float it left -- the executor-only twin of MTG_FLOAT_TRACE, which prints
@@ -5289,7 +5294,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // cannot be told apart from a copy, so it keeps the old always-armed reading. A REMANDED cast
         // is paid although the card is back in hand (m_last_cast_remanded, set by CastSpellFromHand).
         last_cast_paid = cast_num <= 0 || m_last_cast_remanded
-            || std::none_of(ap.hand.begin(), ap.hand.end(),
+            || std::none_of(zone.begin(), zone.end(),
                             [&](const Card& c) { return c.m_number == cast_num; });
         // MTG_USER_ORDER_TRACE (diagnostic, default off): every REAL cast, in the order it happened.
         if (UserOrderTraceOn() && !m_in_rollout)
@@ -5438,6 +5443,24 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // pin (no retrace card shares a list with a ripple source): stamped UNPINNED.
         StampRippleScript(state, *def, false, -1, -1, 0, 0, 0, 0);
         EffectHandler::PushCastTriggers(state, *def, state.active_player_index, number);
+    };
+
+    // ONE dispatch for a CastFromGraveyard action. A LURRUS cast (gy_cast_source_id >= 0) is a REAL cast
+    // through cast_by_name with the action's riders -- costs, on-cast triggers, the stack and every ETB,
+    // exactly as a hand cast (rollout twin: apply_one with from_graveyard and the same riders). A
+    // retrace cast keeps the bare retrace path above, unchanged.
+    auto cast_gy_action = [&](const Action& a)
+    {
+        if (a.gy_cast_source_id >= 0)
+        {
+            m_cast_riders = CastRiders::Of(a);
+            cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep,
+                         a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target,
+                         a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other,
+                         a.phyrexian_life, a.evoke, a.adventure, a.kicked);
+            return;
+        }
+        cast_from_graveyard(a.card_name, a.discard_lands);
     };
 
     // Note whether an action casts a draw-engine spell (DrawUntilNonland / cascade /
@@ -5828,7 +5851,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
               m_cast_riders = CastRiders::Of(a); if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); } else { cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked); } resolve_now(); walker_cast_activation(a);
  }
             else if (a.kind == Action::Kind::CastFromGraveyard)
-            { cast_from_graveyard(a.card_name, a.discard_lands); resolve_now(); }
+            { cast_gy_action(a); resolve_now(); }
             // `recs`, NOT `plan.actions`: SacFloatColorFor finds `self` in the list by POINTER
             // identity and charges demand from THAT list, so it must be the list being replayed --
             // the search's apply resolved the same sac against the continuation (sp.actions). Passing
@@ -6489,7 +6512,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         for (const Action& a : extra.actions)
         {
             if (a.kind == Action::Kind::CastFromGraveyard)
-            { cast_from_graveyard(a.card_name, a.discard_lands); resolve_now(); exec_cont_land_hook(rdb_land, a); }
+            { cast_gy_action(a); resolve_now(); exec_cont_land_hook(rdb_land, a); }
         }
         // ...and a positioned land whose watcher never came: after the continuation's casts, as the
         // rollout's apply_continuation_plan plays it.
@@ -8505,7 +8528,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     {
         if (staged_break || bp_trunc_exec) { break; }
         if (a.kind == Action::Kind::CastFromGraveyard)
-        { exec_karoo_pre_hook(a); cast_from_graveyard(a.card_name, a.discard_lands); note_draw_engine(BpNameOf(a)); resolve_now(); exec_slot_hook(a); }
+        { exec_karoo_pre_hook(a); cast_gy_action(a); note_draw_engine(BpNameOf(a)); resolve_now(); exec_slot_hook(a); }
     }
 
     // Deferred-for-tutor drop (LandDropAfterHandLandTutor, depth-0 only): the pre-combat land
@@ -8800,6 +8823,18 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     if (pe_trunc) { break; }
                     if (ca.kind == Action::Kind::CastFromHand && ca.sacrifice_land)
                     { pe_cast(ca); exec_cont_land_hook(pe_land, ca); pe_trunc = pe_truncates(ca); }
+                }
+                // ...and the continuation's LURRUS graveyard casts, after the hand and sac-land casts --
+                // the rollout's apply_plan_actions order (its graveyard pass). Without this the scored
+                // "sacrifice Martyr -> recast it from the graveyard -> sacrifice again" continuation was
+                // realised with no recast (test/scenarios/martyr_lurrus_sac_recast_same_turn.json: a
+                // proven T4 kill realised T5). Gated on the permission rider: a RETRACE cast in a site-9
+                // continuation is still not realised here (a pre-existing gap, left byte-identical).
+                for (const Action& ca : extra.actions)
+                {
+                    if (pe_trunc) { break; }
+                    if (ca.kind == Action::Kind::CastFromGraveyard && ca.gy_cast_source_id >= 0)
+                    { cast_gy_action(ca); resolve_now(); exec_cont_land_hook(pe_land, ca); }
                 }
                 exec_cont_land_finish(pe_land);   // a positioned land whose watcher never came
                 pe_unlock.reset();   // the cast section ends before the trailing activations
@@ -9718,6 +9753,12 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
     // executor in lockstep with the enforced rollout. Inert (budget == -1) for every deck without a
     // max_casts_after card. See GameState::casts_remaining_this_turn.
     if (state.casts_remaining_this_turn == 0) { return; }   // budget spent: this cast is illegal
+    // LURRUS OF THE DREAM-DEN: a graveyard cast under a cast PERMISSION -- the SHARED
+    // GyCastPermissionLegal, checked before anything is paid (lockstep twin of apply_one's guard). The
+    // card itself is the graveyard copy (`cast_zone`, re-found and erased there below); spent once paid.
+    const int gy_cast_src = riders.gy_cast_source_id;
+    if (gy_cast_src >= 0 && !GyCastPermissionLegal(state, state.active_player_index, gy_cast_src, *def)) { return; }
+    std::vector<Card>& cast_zone = gy_cast_src >= 0 ? ap.graveyard : ap.hand;
 
     // Magnetic Theft with no legal (Equipment, creature) pair cannot be cast (CR 601.2c) -- e.g. the only
     // creature left to a Path to Exile that resolved first. Not cast, nothing paid: the card stays in
@@ -10313,7 +10354,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
     }
     // Re-find the cast card by its stable number: the payment above may have sacrificed creatures
     // whose death triggers reallocated the hand (see hand_card_p). Same element when nothing moved.
-    for (Card& hc : ap.hand) { if (hc.m_number == hand_card_number) { hand_card_p = &hc; break; } }
+    for (Card& hc : cast_zone) { if (hc.m_number == hand_card_number) { hand_card_p = &hc; break; } }
 
     if (m_logger)
     {
@@ -10419,7 +10460,9 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
     Card remand_x_card;
     if (remand_def != nullptr) { remand_x_card = (*hand_card_p); }
     const int pitch_cast_number = (*hand_card_p).m_number;   // `hand_card` dies with the erase below
-    ap.hand.erase(std::find_if(ap.hand.begin(), ap.hand.end(),
+    // Lurrus: the cast is paid, so its permission is spent (apply_one spends at the same point).
+    if (gy_cast_src >= 0) { ConsumeGyCastPermission(state, state.active_player_index, gy_cast_src); }
+    cast_zone.erase(std::find_if(cast_zone.begin(), cast_zone.end(),
         [hand_card_p](const Card& c) { return &c == hand_card_p; }));
     // ...and the PITCH half of the evoke cost (validated before payment above): exile the pinned red
     // card -- any copy of that name other than the cast card (lockstep twin of apply_one).
