@@ -8835,6 +8835,64 @@ void PayRefineAfter(GameState& state, const ManaCost& cost_in, bool for_creature
         made.Restore(state, available);
     }
 }
+
+// The greedy payer consumes a multi-unit tap as each generic pip arrives. With
+// untappers, the last tap can supply a colour the greedy already spent on an
+// earlier generic pip. Re-solve the SAME payment only when a named later bill
+// is now unpayable; accept the backtracker's float assignment only with the
+// same tapped sources and an exact proof that the later bill becomes payable.
+// The gate is narrow because the full backtracker is too costly for ordinary
+// payments, and an X spell is the case batch prepay deliberately declines.
+void ExactLineFloatAfter(GameState& state, const ManaCost& cost_in, const PayRefineSnap& pre)
+{
+    if (!cost_in.has_x || !state.deck_has_land_aura || !state.deck_has_mana_untapper
+        || HumanPlayActive() || state.dmg_events_armed || pre.fm.Total() != 0
+        || pre.fcm.Total() != 0 || pre.fbm.Total() != 0
+        || state.floating_creature_mana.Total() != 0 || state.floating_bigspell_mana.Total() != 0
+        || pre.fhc != 0 || state.floating_haste_c != 0
+        || state.battlefield.size() != pre.bf.size())
+    { return; }
+    ManaCost later = g_line_unpaid_cost;
+    if (later.ManaValue() < cost_in.ManaValue()) { return; }
+    SubManaCost(later, cost_in);
+    if (later.ManaValue() == 0 || later.white + later.blue + later.black + later.red + later.green == 0)
+    { return; }
+    const int active = state.active_player_index;
+    if (state.players[active].life != pre.life || state.players[1 - active].life != pre.opp_life
+        || state.players[active].energy_counters != pre.energy
+        || state.players[active].graveyard.size() != pre.gy
+        || state.opponent_lost_life_this_turn != pre.oll)
+    { return; }
+    GameState ordinary_later = state;
+    if (TapForCostBacktrack(ordinary_later, later, false, state.floating_mana)) { return; }
+    GameState alternate = state;
+    pre.Restore(alternate, nullptr);
+    ManaPool leftover;
+    if (!TapForCostBacktrack(alternate, cost_in, false, pre.fm, nullptr, nullptr, &leftover)) { return; }
+    if (leftover.Total() != state.floating_mana.Total()
+        || alternate.battlefield.size() != state.battlefield.size()
+        || alternate.players[active].life != state.players[active].life
+        || alternate.players[1 - active].life != state.players[1 - active].life
+        || alternate.players[active].energy_counters != state.players[active].energy_counters
+        || alternate.players[active].graveyard.size() != state.players[active].graveyard.size()
+        || alternate.opponent_lost_life_this_turn != state.opponent_lost_life_this_turn)
+    { return; }
+    for (std::size_t i = 0; i < state.battlefield.size(); ++i)
+    {
+        const Permanent& a = state.battlefield[i];
+        const Permanent& b = alternate.battlefield[i];
+        if (a.card.m_number != b.card.m_number || a.tapped != b.tapped
+            || a.charge_counters != b.charge_counters || a.storage_counters != b.storage_counters
+            || a.pay_sac_eaten != b.pay_sac_eaten || a.mana_tap_mark != b.mana_tap_mark)
+        { return; }
+    }
+    alternate.floating_mana = leftover;
+    GameState alternate_later = alternate;
+    if (!TapForCostBacktrack(alternate_later, later, false, leftover)) { return; }
+    // The committed tap history belongs to the original payment. The exact
+    // solver does not write the rollback ledger, so only its float is adopted.
+    state.floating_mana = leftover;
+}
 } // namespace
 
 static bool TapForCostSharedCore(GameState& state, const ManaCost& cost_in, bool for_creature,
@@ -8883,10 +8941,13 @@ static bool TapForCostSharedCore(GameState& state, const ManaCost& cost_in, bool
     // MTG_PAY_REFINE (above): the board as this payment found it, for the dominance check once it has committed.
     // (The oracle's own copy never gets here -- its payments returned through ScriptedPay above -- and its
     // float-only probes, like the refine's own, are skipped.)
-    const bool refine = t_pay_nest == 1 && !t_pay_refining && !manaoracle::t_float_only && !state.dmg_events_armed
-                     && g_seed_pay_split == 0 && PayRefineOn();
+    const bool can_snap = t_pay_nest == 1 && !t_pay_refining && !manaoracle::t_float_only
+                       && !state.dmg_events_armed && g_seed_pay_split == 0;
+    const bool refine = can_snap && PayRefineOn();
+    const bool exact_float = can_snap && !for_creature && cost_in.has_x
+                          && state.deck_has_land_aura && state.deck_has_mana_untapper;
     std::optional<PayRefineSnap> refine_pre;
-    if (refine) { refine_pre.emplace(); refine_pre->Take(state, available); }
+    if (refine || exact_float) { refine_pre.emplace(); refine_pre->Take(state, available); }
     bool ok;
     if (haste_keep > 0)
     {
@@ -8932,7 +8993,11 @@ static bool TapForCostSharedCore(GameState& state, const ManaCost& cost_in, bool
         // so the re-pay is undone too (its own taps were restored by the failure path above).
         if (!ok) { payroll::UndoLast(state); }
     }
-    if (ok && refine_pre) { PayRefineAfter(state, cost_in, for_creature, available, honor_legacy_cco, *refine_pre); }
+    if (ok && refine_pre)
+    {
+        if (refine) { PayRefineAfter(state, cost_in, for_creature, available, honor_legacy_cco, *refine_pre); }
+        if (exact_float) { ExactLineFloatAfter(state, cost_in, *refine_pre); }
+    }
     return ok;
 }
 

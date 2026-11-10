@@ -253,6 +253,39 @@ TEST_CASE("Jumbo Cactuar enumerates a newly hasted Arbor Elf funding Tooth and N
     CHECK(found);
 }
 
+TEST_CASE("Jumbo Zenith X payment retains green for a named Finale")
+{
+    LoadJumboCards();
+    JumboCactuarProvider provider;
+    GameState s;
+    s.active_player_index = 0;
+    s.turn_number = 3;
+    s.deck_has_land_aura = true;
+    s.deck_has_mana_untapper = true;
+    s.m_provider = &provider;
+    PutOnBoard(s, "Forest", 10);
+    PutOnBoard(s, "Arbor Elf", 1);
+    PutOnBoard(s, "Utopia Sprawl", 49);
+    s.battlefield.back().aura_attached_to = 10;
+    s.battlefield.back().chosen_color = static_cast<int8_t>(Color::White);
+    PutOnBoard(s, "Voyaging Satyr", 53);
+    PutOnBoard(s, "Forest", 11, true); // paid the preceding Sprawl
+    PutOnBoard(s, "Utopia Sprawl", 50);
+    s.battlefield.back().aura_attached_to = 10;
+    s.battlefield.back().chosen_color = static_cast<int8_t>(Color::White);
+
+    ManaCost zenith = CardDatabase::Instance().Lookup("Green Sun's Zenith")->card.m_mana_cost;
+    zenith.generic = 6;
+    const ManaCost finale = CardDatabase::Instance().Lookup("Finale of Devastation")->card.m_mana_cost;
+    ManaCost line = zenith;
+    AddManaCost(line, finale);
+    LineUnpaidCostScope line_hold(line);
+    LineOpensUnseenScope opener(false);
+    CHECK(TapForCostDirect(s, zenith, false));
+    CHECK(s.floating_mana.green >= 2);
+    CHECK(TapForCostDirect(s, finale, false));
+}
+
 TEST_CASE("Finale graveyard-only whiff preserves library order and still pumps at X ten")
 {
     LoadJumboCards();

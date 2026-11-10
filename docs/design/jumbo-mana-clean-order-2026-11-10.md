@@ -3,7 +3,7 @@
 The 5,000-game fast gate at `logs/mana_clean/lastweek-20261110-fast/report.md`
 reported 2,948 Jumbo issues: 529 ENUM-GAP, 992 APPLY-DROP-ORDER, 421
 APPLY-DROP, 613 DOMINATED-CREATURE, 291 ORACLE-GAP, and 102 UNMODELED.
-These changes address sampled APPLY-DROP-ORDER and ENUM-GAP families; they are
+These changes address sampled APPLY-DROP-ORDER, ENUM-GAP, and APPLY-DROP families; they are
 not a replacement for a full mana-clean gate.
 
 ## Reproduction and cause
@@ -51,14 +51,37 @@ binary emitted zero ENUM-GAP, APPLY-DROP, or APPLY-DROP-ORDER lines and retained
 the turn-three win. This is a targeted result, not a measured 5,000-game
 reduction.
 
-## Remaining adjacent issue
+## Same-source X-spell floating color
 
-Two different top signatures still reproduce on the fixed binary:
+The adjacent payment signature on the second fixed binary was:
 
 | seed / game-index | turn | class | lines | example |
 | --- | ---: | --- | ---: | --- |
 | 30010653 / 10653 | 3 | APPLY-DROP | 40 | Green Sun's Zenith + Finale of Devastation + Utopia Sprawl |
 
-The remaining sample casts neither same-host Aura pair nor same-plan haste
-pair. Its per-cast payment mechanism needs separate diagnosis before a
-mana-clean gate can be accepted.
+In seed 30010653, game-index 10653, turn 3, the plan casts Utopia Sprawl,
+Green Sun's Zenith at X=6, then Finale of Devastation. The engine's Zenith
+payment taps Forest #10, Arbor Elf #1, and Voyaging Satyr #53 and leaves
+`{W}{G}` floating, so Finale cannot pay `{G}{G}`. The oracle makes the same
+source taps but floats `{G}{G}`, which pays Finale. Its log reports 40
+APPLY-DROP lines on the second fixed binary. This is a payment color-selection
+failure after an X spell, not a candidate-order or mana-bound failure.
+`BatchPrepayMainCasts` declines to prepay an X spell (`PP_XSPELL`); the
+per-cast payer must retain the useful green. The same-tap, different-float
+choice also explains why the source-swap rollback does not recover the line.
+
+The greedy payer spends each generic pip as it appears. In the directed
+fixture, the last untap adds the second white Aura mana only after it spent
+one green; an exact backtracker can use the same Forest, Arbor Elf, and
+Voyaging Satyr taps while spending both white pips on Zenith. The new rescue
+is limited to X-cost payments with a later named colored bill on a land-Aura
+and untapper board. It runs only when the ordinary float cannot pay that bill,
+and commits the alternative float only if the backtracker proves the later
+bill payable with equal total mana, identical taps and counters, and no other
+resource change. The standalone fixture now leaves `{G}{G}` and pays Finale.
+The focused Zenith/Finale unit passed 10 assertions; all 13 Jumbo unit cases
+passed 171 assertions on the fixed binary.
+Replaying seed 30010653 at the same oracle setting reduced APPLY-DROP 40→0,
+retained the turn-four win, and left PHANTOM=236, DOMINATED-CREATURE=4, and
+DOMINATED-LAND=241 unchanged. This is a targeted result; a full mana-clean
+gate remains necessary after integration.
