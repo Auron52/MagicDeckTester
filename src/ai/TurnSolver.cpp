@@ -59725,42 +59725,88 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         };
         const std::uint64_t idle_crea = idle(c_crea, /*for_crea=*/true);
         const std::uint64_t idle_nonc = have_nonc ? idle(c_nonc, /*for_crea=*/false) : 0;
-        // Same hold ladder as the single solve -- every rung, then unreserved -- so a dork or
-        // depletion counter the turn can spare is still spared on this path.
+        // A coloured-creature-only land can supply {C} to a noncreature bill with
+        // generic mana, so the idle mask above cannot hold it. The first DFS may
+        // then tap every such land before reaching the unrestricted coloured
+        // source, leaving none for a later creature. Retry with one or two of
+        // those lands reserved for the creature stage. Merfolk gi105430: Tide Shaper
+        // needs Courtyard's creature-only {U}; Spreading Seas needs Island {U}
+        // plus the other Courtyard's {C}. Existing attempts stay first.
+        std::vector<std::uint64_t> reserve_one;
+        if (have_nonc && c_nonc.generic > 0
+            && c_crea.white + c_crea.blue + c_crea.black + c_crea.red + c_crea.green > 0)
+        {
+            for (std::size_t i = 0; i < bf_snap.size() && i < 64; ++i)
+            {
+                const Permanent& bp = bf_snap[i];
+                if (bp.controller_index != active || bp.tapped || bp.def_absent) { continue; }
+                const CardDefinition* bd = CardDatabase::Instance().LookupCached(bp.card);
+                if (bd && bd->params.colored_creature_only) { reserve_one.push_back(1ull << i); }
+            }
+        }
+        auto try_stages = [&](std::uint64_t hold, int order, std::uint64_t extra_hold)
+        {
+            restore();   // the failed solve above (or the prior attempt) may have tapped/paid
+            const bool      first_c = !(order == 0 && have_nonc);
+            const ManaCost& first   = first_c ? c_crea : c_nonc;
+            ManaPool p1, p2;
+            bool o = TapForCostBacktrack(state, first, first_c, ManaPool{},
+                                         /*rp_colors=*/nullptr, /*fail_memo=*/nullptr,
+                                         /*out_leftover=*/nullptr, /*tapped_mask=*/0,
+                                         /*untapped_max=*/-1,
+                                         /*reserved_mask=*/hold | (first_c ? idle_crea : idle_nonc) | extra_hold,
+                                         /*out_full_pool=*/&p1);
+            if (o && have_nonc)
+            {
+                const ManaCost& second = first_c ? c_nonc : c_crea;
+                o = TapForCostBacktrack(state, second, !first_c, ManaPool{},
+                                        /*rp_colors=*/nullptr, /*fail_memo=*/nullptr,
+                                        /*out_leftover=*/nullptr, /*tapped_mask=*/0,
+                                        /*untapped_max=*/-1,
+                                        /*reserved_mask=*/hold | (first_c ? idle_nonc : idle_crea),
+                                        /*out_full_pool=*/&p2);
+            }
+            if (!o) { return; }
+            ManaPool sum = p1;
+            sum.white += p2.white; sum.blue += p2.blue; sum.black += p2.black;
+            sum.red += p2.red; sum.green += p2.green; sum.colorless += p2.colorless;
+            sum.wild += p2.wild;
+            if (!PrepayColoursFit(sum, combined, nullptr, nullptr)) { return; }   // the single solve's bar
+            produced = sum; ok = true; mixed_ok = true; won_hold = hold;
+            mixed_p_crea = first_c ? p1 : p2;
+            mixed_p_nonc = first_c ? p2 : p1;
+        };
+        // Preserve the existing successful assignment and tap choices. Reserve a
+        // Courtyard only after every ordinary rung and order declined.
         for (int r = 0; r <= n_rungs && !mixed_ok; ++r)
         {
             const std::uint64_t hold = (r < n_rungs) ? rungs[r] : 0;
             for (int order = 0; order < (have_nonc ? 2 : 1) && !mixed_ok; ++order)
+            { try_stages(hold, order, 0); }
+        }
+        for (int r = 0; r <= n_rungs && !mixed_ok && !reserve_one.empty(); ++r)
+        {
+            const std::uint64_t hold = (r < n_rungs) ? rungs[r] : 0;
+            for (const std::uint64_t extra_hold : reserve_one)
             {
-                restore();   // the failed solve above (or the prior attempt) may have tapped/paid
-                const bool      first_c = !(order == 0 && have_nonc);
-                const ManaCost& first   = first_c ? c_crea : c_nonc;
-                ManaPool p1, p2;
-                bool o = TapForCostBacktrack(state, first, first_c, ManaPool{},
-                                             /*rp_colors=*/nullptr, /*fail_memo=*/nullptr,
-                                             /*out_leftover=*/nullptr, /*tapped_mask=*/0,
-                                             /*untapped_max=*/-1,
-                                             /*reserved_mask=*/hold | (first_c ? idle_crea : idle_nonc),
-                                             /*out_full_pool=*/&p1);
-                if (o && have_nonc)
+                if (mixed_ok) { break; }
+                try_stages(hold, /*noncreature first=*/0, extra_hold);
+            }
+        }
+        // A two-colour creature may need two creature-only sources, while a
+        // third such land remains available for the noncreature generic pip.
+        if (!mixed_ok && reserve_one.size() > 1
+            && c_crea.generic + c_crea.white + c_crea.blue + c_crea.black
+                + c_crea.red + c_crea.green > 1)
+        {
+            for (int r = 0; r <= n_rungs && !mixed_ok; ++r)
+            {
+                const std::uint64_t hold = (r < n_rungs) ? rungs[r] : 0;
+                for (std::size_t i = 0; i < reserve_one.size() && !mixed_ok; ++i)
                 {
-                    const ManaCost& second = first_c ? c_nonc : c_crea;
-                    o = TapForCostBacktrack(state, second, !first_c, ManaPool{},
-                                            /*rp_colors=*/nullptr, /*fail_memo=*/nullptr,
-                                            /*out_leftover=*/nullptr, /*tapped_mask=*/0,
-                                            /*untapped_max=*/-1,
-                                            /*reserved_mask=*/hold | (first_c ? idle_nonc : idle_crea),
-                                            /*out_full_pool=*/&p2);
+                    for (std::size_t j = i + 1; j < reserve_one.size() && !mixed_ok; ++j)
+                    { try_stages(hold, /*noncreature first=*/0, reserve_one[i] | reserve_one[j]); }
                 }
-                if (!o) { continue; }
-                ManaPool sum = p1;
-                sum.white += p2.white; sum.blue += p2.blue; sum.black += p2.black;
-                sum.red += p2.red; sum.green += p2.green; sum.colorless += p2.colorless;
-                sum.wild += p2.wild;
-                if (!PrepayColoursFit(sum, combined, nullptr, nullptr)) { continue; }   // the single solve's bar
-                produced = sum; ok = true; mixed_ok = true; won_hold = hold;
-                mixed_p_crea = first_c ? p1 : p2;
-                mixed_p_nonc = first_c ? p2 : p1;
             }
         }
         if (!mixed_ok) { restore(); }
