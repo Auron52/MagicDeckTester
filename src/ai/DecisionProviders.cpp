@@ -57786,9 +57786,10 @@ bool IsLifeGatedTapTokenSource(const CardDefinition* d)
     return d != nullptr && d->params.tap_token_cost.has_value()
         && d->params.tap_token_min_life_above_start > 0;
 }
-}   // namespace
 
-bool ColossusHammerProvider::RestrictedSecondMainLive(const GameState& s) const
+// The phase test and the menu test, shared by every provider that opens Speaker's narrow second main
+// (ColossusHammerProvider, MartyrLifegainProvider): one body, so the two decks cannot drift apart.
+bool SpeakerSecondMainLive(const GameState& s)
 {
     if (!SpeakerM2Enabled()) { return false; }
     const int me = s.active_player_index;
@@ -57803,13 +57804,49 @@ bool ColossusHammerProvider::RestrictedSecondMainLive(const GameState& s) const
     return false;
 }
 
-bool ColossusHammerProvider::RestrictedSecondMainAdmits(const GameState& s, const Action& a) const
+bool SpeakerSecondMainAdmits(const Action& a)
 {
-    (void)s;
     if (a.kind != Action::Kind::TapForTokenPay) { return false; }
     // CollectActions emitted it only after TapTokenSourceLive passed, so the definition is the whole
     // remaining test: admit the life-gated source (Speaker), never Sliver Hive / Basri shapes.
     return IsLifeGatedTapTokenSource(CardDatabase::Instance().Lookup(a.card_name));
+}
+}   // namespace
+
+bool ColossusHammerProvider::RestrictedSecondMainLive(const GameState& s) const
+{
+    return SpeakerSecondMainLive(s);
+}
+
+bool ColossusHammerProvider::RestrictedSecondMainAdmits(const GameState& s, const Action& a) const
+{
+    (void)s;
+    return SpeakerSecondMainAdmits(a);
+}
+
+// ---- MartyrLifegainProvider: Speaker of the Heavens' narrow second main --------------------------
+//
+// The SAME lever as ColossusHammerProvider's (MTG_SPEAKER_M2, heurarm SPEAKER_M2; default ON,
+// PROVISIONAL -- main 1 vs main 2 is the USER's call per deck). This list's life comes IN COMBAT too
+// (lifelink: Serra Ascendant, Lurrus, Speaker, Enduring Innocence; Umezawa's Jitte counters), so
+// "attack, cross starting life + 7, THEN tap Speaker for a 4/4 Angel" was unfindable at any budget
+// (claude-play sweep 2026-11-10, seed 61015 gi14: Claude T5 vs the search's T6 at budget 0).
+//
+// WHAT IT ADDS, AND WHAT IT STILL CANNOT EXPRESS. The phase opens only when a live Speaker passes its
+// life gate after combat, and admits only that activation, so it adds one resource and refuses
+// nothing that was offered before (there was no post-combat main). Unlike Colossus Hammer this list
+// DOES create other things in combat -- Jitte counters (a "gain 2 life" spend could be what crosses
+// the gate), and the attack itself (sacrificing Kami / Farm Animals / Martyr AFTER they attacked) --
+// and none of those is admitted: they are the deck-level main-2 question, which is the USER's.
+bool MartyrLifegainProvider::RestrictedSecondMainLive(const GameState& s) const
+{
+    return SpeakerSecondMainLive(s);
+}
+
+bool MartyrLifegainProvider::RestrictedSecondMainAdmits(const GameState& s, const Action& a) const
+{
+    (void)s;
+    return SpeakerSecondMainAdmits(a);
 }
 
 // ---- Path to Exile: the opponent-target prune (OffersRemovalCast) ------------------------------

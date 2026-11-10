@@ -89,6 +89,7 @@ declare -A DECK_FILE=(
   [elementals]=decks/LandfallElementals/LandfallElementals.cod
   [extraturns]="decks/Extra Turns/Extra Turns.cod"
   [hydras]=decks/Hydras/Hydras.cod
+  [martyr]="decks/Martyr Lifegain/Martyr Lifegain.cod"
 )
 declare -A DECK_PROF=(
   [fungusv3]=decks/Fungus/Fungus.profile.json
@@ -140,6 +141,7 @@ declare -A DECK_PROF=(
   [elementals]=decks/LandfallElementals/LandfallElementals.profile.json
   [extraturns]="decks/Extra Turns/Extra Turns.profile.json"
   [hydras]=decks/Hydras/Hydras.profile.json
+  [martyr]="decks/Martyr Lifegain/Martyr Lifegain.profile.json"
 )
 
 # PLAY-SETTING SHAPE (USER 2026-10-27: "I would cut d3 b10 games to run more at play settings. d3 b10 is a nice
@@ -690,6 +692,16 @@ SMOKE_CASES=(
   "elementals 0 1001 1000 0"
   "elementals 3  1001    50 10"
   "elementals 5  1001   125 20"
+  # martyr (Martyr Lifegain): ADDED 2026-11-10 by the analysis (docs/design/analysis-Martyr Lifegain.md), all three
+  # tiers at once (the all-or-none rule), at HINATA's row shape (its d5 b20 games cost ~1.75x Hinata's in search
+  # units; the 3x gate measured 0.69x Hinata in ms on a contended 12-thread box) and the overnight ENTRY set. Mono-W Martyr of
+  # Sands / Serra Ascendant lifegain with a Lurrus graveyard-recast loop and Umezawa's Jitte. No value leaf and no
+  # keep table yet, so GT WILL move when they land. martyr2hg: Serra Ascendant's 30-life and Speaker of the
+  # Heavens' "7 more than your starting life" both read the 2HG starting life (30).
+  "martyr 0 1001 1000 0"
+  "martyr     3  1001    50 10"
+  "martyr     5  1001   100 20"
+  "martyr2hg  5  1001    25 20"
 )
 
 # regression: ~8-9 min pre-commit sweep -- two seeds at d3/d5, d0 single seed.
@@ -802,6 +814,11 @@ REGRESSION_CASES=(
   # 1-3 games in EVERY block, and the games that finished spent ~30-70 s each on work the unit meter does not count,
   # so abandon_units cannot bound them. The deck entered the budgeted tiers without it so its mulligan generation
   # (USER 2026-10-22) has GT under it; the block lands with the uncharged-work fix (docs/design/analysis-NivMizzetCombo.md).
+  # martyr: added 2026-11-10 with the deck. Screened 16 five-game blocks (30001..30301 step 20, d3+d5, budget 0,
+  # abandon_units 2000000): d5 abandoned 7 of 80 games (blocks 30041/30101/30121/30161/30241/30281); 30201 and 30301
+  # finished every game at both depths (~0.28M units per block, ~13 core-s single-thread). Heavy-deck size (5 games).
+  "martyr           3 30201   5 0"
+  "martyr           5 30201   5 0"
   "melira           3 30001  20 0"
   "melira           5 30001  20 0"
   "minotaur         3 30001  20 0"
@@ -1111,6 +1128,12 @@ REGRESSION_CASES=(
   "merfolk 3 2002   75 10"
   "merfolk 5 2002  150 20"
   "merfolk 5 3003  150 20"
+  # martyr: see the SMOKE block.
+  "martyr 0 2002 1000 0"
+  "martyr     3  2002    50 10"
+  "martyr     5  2002   150 20"
+  "martyr     5  3003   150 20"
+  "martyr2hg  5  2002    75 20"
 
 )
 
@@ -1250,6 +1273,9 @@ OVERNIGHT_CASES=(
   # 1-3 games in EVERY block, and the games that finished spent ~30-70 s each on work the unit meter does not count,
   # so abandon_units cannot bound them. The deck entered the budgeted tiers without it so its mulligan generation
   # (USER 2026-10-22) has GT under it; the block lands with the uncharged-work fix (docs/design/analysis-NivMizzetCombo.md).
+  # martyr: see the REGRESSION backstop note (the other clean block).
+  "martyr           3 30301   5 0"
+  "martyr           5 30301   5 0"
   "melira           3 30101  20 0"
   "melira           5 30101  20 0"
   "minotaur         3 30101  20 0"
@@ -1955,5 +1981,19 @@ OVERNIGHT_CASES=(
   "merfolk 5  5005  425 20"
   "merfolk 5  6006  425 20"
   "merfolk 5  7007  425 20"
+  # martyr: see the SMOKE block. Pre-keep-table overnight ENTRY set: one d3 b10 sanity row + d5 play rows (USER 2026-10-27).
+  "martyr 0  4004 2000 0"
+  "martyr 0  6006 2000 0"
+  "martyr 0  8008 2000 0"
+  "martyr 0 10010 2000 0"
+  "martyr     3  4004  125 10"
+  "martyr     5  4004  300 20"
+  "martyr     5  5005  300 20"
+  "martyr     5  6006  300 20"
+  "martyr     5  7007  300 20"
+  "martyr2hg  5  4004   75 20"
+  "martyr2hg  5  5005   75 20"
+  "martyr2hg  5  6006   75 20"
+  "martyr2hg  5  7007   75 20"
 
 )

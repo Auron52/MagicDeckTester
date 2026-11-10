@@ -2335,15 +2335,16 @@ public:
 };
 
 // Martyr Lifegain (onboarding 2026-11-10) -- mono-white Martyr of Sands / Serra Ascendant lifegain
-// with a Lurrus graveyard-recast engine and Umezawa's Jitte. An EMPTY derivation of
+// with a Lurrus graveyard-recast engine and Umezawa's Jitte. A derivation of
 // EquipmentProvider, the provider it ROUTED TO before this class existed (Jitte's
 // equip_combat_damage_charges alone sets the `equipment` signature). It therefore inherits every
 // judgement hook byte-for-byte -- KittyEquipment's removal NeverCast (Swords / Unexpectedly Absent),
 // its land-first / equip-last activation order, its cleanup-discard buckets, the equip-route trial,
-// the fold opt-ins -- and is play-neutral by construction (smoke play-changed=0 is the check). It
+// the fold opt-ins -- so the routing itself was play-neutral (smoke play-changed=0, 6bbc57216). It
 // exists for the every-deck-owns-a-provider rule: a name in scripts/provider_audit.py and a place
 // for a certificate and for this deck's own hooks once they are MEASURED and the USER rules on them
-// (second main for the sacrifice outlets; Enduring Innocence cast order; discard buckets).
+// (second main for the sacrifice outlets; Enduring Innocence cast order; discard buckets). Its one
+// hook so far is Speaker's narrow second main (below), shared with ColossusHammerProvider.
 // Routed ABOVE `equipment` on a signature OR-ed over four different cards' new gated params.
 class MartyrLifegainProvider : public EquipmentProvider
 {
@@ -2353,6 +2354,12 @@ public:
                "Heavens makes a 4/4 flier at instant speed and Serra Ascendant jumps to 6/6 at 30 life "
                "mid-turn (Martyr / Lurrus loops), so any bound has to price the life total first." }; }
     const char* Name() const override { return "MartyrLifegain"; }
+    // SPEAKER OF THE HEAVENS' NARROW SECOND MAIN -- ColossusHammerProvider's lever, shared body
+    // (MTG_SPEAKER_M2; default ON, PROVISIONAL: main 1 vs main 2 is the USER's call). Opens after combat
+    // only when a live Speaker passes its life gate; admits only that activation. DecisionProviders.cpp.
+    bool RestrictedSecondMainLive(const GameState& s) const override;
+    bool MayOpenRestrictedSecondMain() const override { return true; }
+    bool RestrictedSecondMainAdmits(const GameState& s, const Action& a) const override;
 };
 
 // The new Jumbo Cactuar and Surrak mechanics identify this deck without

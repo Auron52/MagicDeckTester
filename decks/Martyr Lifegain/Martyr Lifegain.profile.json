@@ -1,0 +1,74 @@
+{
+  "card_scores": {
+    "Abiding Grace": [
+      -0.16421296296296273,
+      -0.0340653153153152
+    ],
+    "Curious Farm Animals": [
+      0.005580357142856762
+    ],
+    "Enduring Innocence": [
+      -0.11394508272239712
+    ],
+    "Kami of False Hope": [
+      -0.10565186669376914
+    ],
+    "Lurrus of the Dream-Den": [
+      -0.17142172140973422
+    ],
+    "Martyr of Sands": [
+      0.4065065681444997,
+      -0.18693845462713377
+    ],
+    "Mother of Runes": [
+      0.010389341757631954
+    ],
+    "Orzhov Basilica": [
+      -0.16757977937555424
+    ],
+    "Ranger of Eos": [
+      -0.12898868200073021
+    ],
+    "Ranger-Captain of Eos": [
+      0.218356593929113,
+      -0.031034987556727067
+    ],
+    "Serra Ascendant": [
+      0.5625258799171844,
+      0.45341614906832284
+    ],
+    "Speaker of the Heavens": [
+      0.16918240935094886,
+      0.023591845313156945
+    ],
+    "Squadron Hawk": [
+      0.049866341693529215,
+      -0.2959282263630092
+    ],
+    "Swords to Plowshares": [
+      -0.4074384079119815
+    ],
+    "Thraben Inspector": [
+      -0.08177212978732662
+    ],
+    "Umezawa's Jitte": [
+      -0.1513675574460711
+    ],
+    "Unexpectedly Absent": [
+      -0.17032967032966972,
+      -0.22818199028207253
+    ]
+  },
+  "hand_score_threshold": -1e+18,
+  "mulligan": {
+    "bottom_order": "count_first",
+    "curve_check": "two_drop",
+    "max_lands": 5,
+    "min_color_sources": {},
+    "min_lands": 1,
+    "min_playable": 0,
+    "required_pieces": [],
+    "stop_at": 4
+  },
+  "version": 1
+}

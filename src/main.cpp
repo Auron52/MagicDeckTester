@@ -4909,6 +4909,8 @@ static void WriteSacTutorDecisionJson(std::ostream& os, const GameState& s, cons
     { d.Note("reply one int per candidate (1 = take this library creature into hand), up to max_puts total. Default = the AI's pick."); }
     else if (source == "Finale of Devastation")
     { d.Note("reply one int per candidate (1 = put this library or graveyard creature onto the battlefield), at most one. Choosing none may offer a library-search choice. Default = the AI's pick."); }
+    else if (source.size() >= 13 && source.compare(source.size() - 13, 13, "(put in HAND)") == 0)
+    { d.Note("reply one int per candidate (1 = put this card into your hand), up to max_puts total. Default = the AI's pick."); }
     else
     { d.Note("reply one int per candidate (1 = put this creature onto the battlefield), up to max_puts total. They enter in ascending candidate order. Default = the AI's pick."); }
 }

@@ -273,6 +273,16 @@
    "total_core_ms": 56987,
    "worst_case": "lhc_regression_d3_b10"
   },
+  "martyr": {
+   "cost_metric": "searched_depth_budget_pooled_seeds_v2",
+   "cost_per_game_ms": 3356.0202,
+   "jobs": 7,
+   "key": "martyr",
+   "note": "SCALED to hinata's committed entry: measured 0.690x hinata in ONE pooled --cost run (martyr 30515.215 vs hinata 44227.64 ms/game) on a 12-thread i5-1235U laptop (2026-11-10), whose absolute ms are ~9x this table's box. Refill with --measure-all on the reference box.",
+   "tier": "regression",
+   "total_core_ms": 1694052,
+   "worst_case": "martyr_regression_d5_b20"
+  },
   "melira": {
    "cost_metric": "searched_depth_budget_pooled_seeds_v2",
    "cost_per_game_ms": 954.71,
