@@ -345,6 +345,7 @@ add_executable(mtg-test
     test/unit/test_fungus_revision.cpp
     test/unit/test_paradise_mantle.cpp
     test/unit/test_badger_grant_sites.cpp
+    test/unit/test_land_tap_bonus.cpp
     test/unit/test_domain_widen_partial.cpp
     test/unit/test_ramp_filter_c_feed.cpp
     test/unit/test_land_aura_order_hold.cpp

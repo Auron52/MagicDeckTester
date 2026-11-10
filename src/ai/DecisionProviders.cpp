@@ -136,6 +136,7 @@ static const std::pair<const char*, UnprunedGate> kGateNames[] = {
     {"karoobounce",UnprunedGate::KarooBounce},
     {"landpick",   UnprunedGate::LandPick},
     {"counterping",UnprunedGate::CounterPing},
+    {"etbcolor",   UnprunedGate::EtbColor},
 };
 
 const char* GateName(UnprunedGate g)
@@ -6639,6 +6640,42 @@ static int EtbChosenColorFrom(const GameState& s, int controller, const CardDefi
 int GenericProvider::EtbChosenColor(const GameState& s, int controller,
                                     const CardDefinition& def) const
 {
+    // GAUNTLET OF POWER (a land_tap_bonus colour chooser). Only the UNPINNED entry reaches here -- a
+    // rollout leaf beyond the horizon, a put, a staged permanent; every searched cast carries its colour
+    // as an ETB-choice pin (CastCarriesEtbChoice). Choosing is MANDATORY (CR 614.12: "choose a color"),
+    // so this must always lock one, and the shared demand rule below returns -1 on an empty hand -- which
+    // would leave a Gauntlet that adds nothing. Its value is the basic lands that tap for the colour
+    // (own battlefield + hand), then own creatures of that colour (the pump); ties by menu order.
+    if (def.params.land_tap_bonus > 0 && def.params.etb_choose_color)
+    {
+        const std::vector<Color>& menu = EtbColorMenu(def.params);
+        int lands[6] = {}, bodies[6] = {};
+        auto count_land = [&](const CardDefinition& d)
+        {
+            if (!d.card.IsLand() || !d.card.HasSupertype(Supertype::Basic)) { return; }
+            for (Color pc : d.params.produces) { if (static_cast<int>(pc) < 6) { ++lands[static_cast<int>(pc)]; } }
+        };
+        for (const Card& c : s.players[controller].hand)
+        { if (const CardDefinition* hd = CardDatabase::Instance().LookupCached(c)) { count_land(*hd); } }
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != controller) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d == nullptr) { continue; }
+            count_land(*d);
+            if (p.card.IsCreature())
+            { for (int ci = 0; ci < 5; ++ci) { if (d->card.HasColor(static_cast<Color>(ci))) { ++bodies[ci]; } } }
+        }
+        int best = -1;
+        for (Color c : menu)
+        {
+            const int ci = static_cast<int>(c);
+            if (ci < 0 || ci >= 5) { continue; }
+            if (best < 0 || lands[ci] > lands[best] || (lands[ci] == lands[best] && bodies[ci] > bodies[best]))
+            { best = ci; }
+        }
+        return best;
+    }
     // A colour-choosing LAND Aura (Utopia Sprawl) carries its menu in land_aura_produces.
     return EtbChosenColorFrom(s, controller, def,
                               def.params.is_land_aura ? def.params.land_aura_produces : def.params.produces);
@@ -22611,6 +22648,7 @@ namespace
     const NivMizzetComboProvider g_niv_mizzet_combo;
     const LandfallElementalsProvider g_landfall_elementals;
     const CycloneProvider        g_cyclone;
+    const HydrasProvider         g_hydras;
     const FluctuatorProvider     g_fluctuator;
     const AurasProvider          g_auras;
     const EldraziFlickerProvider g_eldrazi_flicker;
@@ -25145,6 +25183,26 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // the cantrips' / Remand's / Seething Song's params (Hinata, Niv, Dragonstorm), fetch / shock lands.
     // Must beat `anti` (Scalding Tarn's fetch_land_types), which the deck rode by accident.
     bool cyclone = false, cy_extra_turn = false, cy_cycle_scry = false;
+    // HYDRAS (onboarding 2026-11-10). Signature = Hydras-only gated params OR'd across SEVERAL different
+    // cards, so a deckbuilding swap that cuts one cannot silently lose the routing:
+    //   * Vernal Bloom + Nissa, Who Shakes the World + Gauntlet of Power: land_tap_bonus (the global
+    //     "whenever a land is tapped for mana, add an additional" mana ability -- new 2026-11-10);
+    //   * Gauntlet of Power: chosen_color_pump_power / _tough (the chosen-colour anthem -- new).
+    // OWED (Hydras Stage-2 integration, groups I2 / I3 -- add each term HERE when its param lands):
+    //   I2: Primordial Hydra's upkeep counter doubling (upkeep_double_self_counters), Voracious Hydra's
+    //       modal double-or-fight ETB, Neverwinter Hydra's dice counters (enters_with_x_dice_sides),
+    //       Steelbane Hydra's remove-a-counter destroy activation;
+    //   I3: Kalonian Hydra's attack-trigger team counter doubling (attack_double_team_counters),
+    //       Nissa's untap_land_animate / fetch_forests_tapped loyalty effects, Garruk's
+    //       draw_greatest_power / wurm_tokens_per_land.
+    // EXCLUDED, with reasons: Lightning Greaves (equip_grants_haste/shroud -- a colourless staple any
+    // deck may add, the Dragons exclusion); Nature's Lore / Three Visits / Search for Tomorrow
+    // (land_search_* -- generic green ramp); Gargos's reduces_spell_subtype (archetype-NEUTRAL: it is
+    // exactly the param that routes Dragons/Giants/Kitty to `goblin`); enters_with_x_plus_counters
+    // (Walking Ballista and every X-creature). Routed FIRST (below): Gargos's reduces_spell_subtype sets
+    // `goblin`, and a counter-doubling param of the `doubles_counters` family would set `fungus`, so the
+    // deck must return above both; its signature is carried by no other deck, so the position is free.
+    bool hydras = false;
     // SHADOWBORN APOSTLE (onboarding 2026-11-03). Signature = gated params OR'd across several of the
     // list's own cards, none a staple another archetype would plausibly add:
     //   * Lake of the Dead's entry replacement (etb_replace_sacrifice_land_subtype);
@@ -25215,6 +25273,8 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
         if (p.scry_reveal_land_to_battlefield || p.mana_colors_of_graveyard_legends) { galadriel = true; }
         if (p.enters_look_top_land_or_hand || p.mana_only_subtype_abilities) { lfe = true; }
         if (p.cycle_draw_exile_shared_type_freecast) { cyclone = true; }
+        if (p.land_tap_bonus > 0 || p.chosen_color_pump_power != 0 || p.chosen_color_pump_tough != 0)
+        { hydras = true; }
         if (!p.etb_replace_sacrifice_land_subtype.empty()
             || (p.tutor_to_hand && p.suspend_time_counters > 0)
             || p.sac_named_count > 0
@@ -25713,6 +25773,9 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // Cyclone: FIRST -- its signature is carried by no other card, so the position is free, and it must
     // beat `anti` (Scalding Tarn) and whatever a later card's param might trip (see the flag).
     // Shadowborn Apostle: FIRST (see the flag) -- above `anti`, which its tutors set alone.
+    // Hydras: FIRST -- above `goblin` (Gargos's reduces_spell_subtype) and `fungus` (a counter-doubling
+    // param); its signature is carried by no other deck (see the flag).
+    if (hydras)      { return g_hydras; }
     if (shadowborn)  { return g_shadowborn; }
     if (kithkin)     { return g_kithkin; }
     // Several resolved-turn spells plus Walk's buyback or Mastery's miracle distinguish
@@ -48834,6 +48897,62 @@ std::vector<int> JumboCactuarProvider::EtbChoiceCandidates(const GameState& s, i
     if (!(def.params.is_land_aura && def.params.etb_choose_color)) { return out; }
     const int green = static_cast<int>(Color::Green) + 1;
     if (std::find(out.begin(), out.end(), green) == out.end()) { return out; }
+    return { green };
+}
+
+// ---- HydrasProvider::EtbChoiceCandidates -----------------------------------------------------------------
+// Gauntlet of Power's colour axis restricted to GREEN -- a SOUND DOMINANCE PRUNE (the JumboCactuar Sprawl
+// precedent above), never a pick: it removes only colours that provably change nothing. Gauntlet does two
+// things with its colour: (1) "Whenever a BASIC land is tapped for mana of the chosen color, its controller
+// adds an additional one mana of that color" and (2) "Creatures of the chosen color get +1/+1".
+//   (1) Every land this list can ever control is a basic Forest, which taps only for {G}; the opponent's
+//       lands never tap (GoldFishRunner). So only a green Gauntlet ever adds mana.
+//   (2) Every creature card in the list is green (the five Hydras, Gargos), so are Garruk's Beast and Wurm
+//       tokens, Nissa's animated lands are colourless (CR 105.2c -- no colour gains them a pump), and the
+//       opponent's spawns are colourless. So only a green Gauntlet ever pumps anything.
+// Hence any non-green Gauntlet leaves every board identical to having no colour bonus at all, and green
+// weakly dominates it on both halves: nothing is unfindable at any budget. The proof is LIST-SPECIFIC, so it
+// is re-checked at runtime over the controller's own cards in every zone: a basic land that makes a
+// non-green colour, or a coloured non-green creature card, means the list changed (a screening arm) and the
+// full fan is returned. (Tokens are not re-checked: the only token makers are Garruk's green ones -- extend
+// this check if a list gains a non-green token maker.) Human play never consults this hook (the viewer
+// asks at resolution with every colour); MTG_UNPRUNED / MTG_UNPRUNE=etbcolor opens the full fan.
+std::vector<int> HydrasProvider::EtbChoiceCandidates(const GameState& s, int controller,
+                                                     const CardDefinition& def) const
+{
+    std::vector<int> out = DecisionProvider::EtbChoiceCandidates(s, controller, def);
+    if (!(def.params.land_tap_bonus > 0 && def.params.etb_choose_color)) { return out; }
+    if (DecisionUnpruned(UnprunedGate::EtbColor)) { return out; }
+    const int green = static_cast<int>(Color::Green) + 1;
+    if (std::find(out.begin(), out.end(), green) == out.end()) { return out; }
+    auto breaks_proof = [](const CardDefinition* d)
+    {
+        if (d == nullptr) { return false; }
+        if (d->card.IsLand())
+        {
+            for (Color c : d->params.produces) { if (c != Color::Green && c != Color::Colorless) { return true; } }
+            return false;
+        }
+        if (!d->card.IsCreature()) { return false; }
+        for (int ci = 0; ci < 5; ++ci)
+        { if (ci != static_cast<int>(Color::Green) && d->card.HasColor(static_cast<Color>(ci))) { return true; } }
+        return false;
+    };
+    // The list's COMPOSITION, not its order: hand, library (RawAt -- a composition scan, not a library
+    // read the index-carry recorder should log), graveyard, exile, battlefield.
+    const Player& me = s.players[controller];
+    for (const std::vector<Card>* zone : { &me.hand, &me.graveyard, &s.exile })
+    {
+        for (const Card& c : *zone)
+        { if (breaks_proof(CardDatabase::Instance().LookupCached(c))) { return out; } }
+    }
+    for (std::size_t i = 0; i < me.library.size(); ++i)
+    { if (breaks_proof(CardDatabase::Instance().LookupCached(me.library.RawAt(i)))) { return out; } }
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller || p.def_absent) { continue; }
+        if (breaks_proof(CardDatabase::Instance().LookupCached(p.card))) { return out; }
+    }
     return { green };
 }
 

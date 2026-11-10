@@ -1180,6 +1180,21 @@ INERT_PARAMS = {
     "blink_returns_tapped": "blink resolution detail (rides blink_cost -> main_phase)",
     "land_aura_extra_mana": "mana amount (the host pick rides is_land_aura -> main_phase)",
     "land_aura_produces": "mana colour (auto-resolved in payment, like `produces`)",
+    # Vernal Bloom / Gauntlet of Power / Nissa's static (Hydras, 2026-11-10): a GLOBAL triggered MANA
+    # ability on a land tap (CR 605.1b/605.4a). Like a land Aura's bonus it rides the tap itself -- no
+    # stack, no target, no choice: a fixed colour, or (Gauntlet) the colour LOCKED at entry, whose pick
+    # is the etb_choose_color -> choose_color decision. The extra mana just appears in the hand-tap
+    # faces' yield and the pool, exactly as Wild Growth's does.
+    "land_tap_bonus": "mana amount on every qualifying land tap (no decision; a mana ability resolving inside the tap)",
+    "land_tap_bonus_subtype": "land-tap bonus qualifying detail (rides land_tap_bonus)",
+    "land_tap_bonus_basic": "land-tap bonus qualifying detail (rides land_tap_bonus)",
+    "land_tap_bonus_produces": "land-tap bonus colour, or Gauntlet's colour MENU (the pick rides etb_choose_color -> choose_color)",
+    "land_tap_bonus_same_color": "land-tap bonus qualifying detail (rides land_tap_bonus)",
+    "land_tap_bonus_you_only": "land-tap bonus controller filter (rides land_tap_bonus)",
+    # Gauntlet of Power's "Creatures of the chosen color get +1/+1": a static P/T anthem keyed on the
+    # colour locked at entry (the choose_color decision); the anthem itself takes no decision.
+    "chosen_color_pump_power": "static anthem on the chosen colour (the colour rides etb_choose_color -> choose_color)",
+    "chosen_color_pump_tough": "static anthem on the chosen colour (the colour rides etb_choose_color -> choose_color)",
     # Trace of Abundance. Shroud is a STATIC ability, so it takes no decision at any point: it
     # narrows the set of legal enchant targets for LATER auras, and that pick already rides
     # is_land_aura -> main_phase, where the legality filter applies before the variants are

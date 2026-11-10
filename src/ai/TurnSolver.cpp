@@ -9603,6 +9603,16 @@ inline Dump g_dump;
 }   // namespace spwfgate
 // MTG_GRANT_CAST_CREDIT (DEFAULT ON; =0 -> no credit). See the SAME-PLAN MANA GRANT stamp in
 // CollectActions and SamePlanGrantCredit (SpellEffects.h).
+// MTG_LANDTAP_CAST_CREDIT (DEFAULT ON; =0 -> a land-tap bonus source never carries the same-plan
+// credit). Vernal Bloom / Nissa / Gauntlet of Power cast THIS turn: the untapped qualifying lands left
+// after the source's own cost tap for `bonus` more each, funding the casts after it in the same plan
+// (SamePlanLandTapBonusCredit, SpellEffects.h -- the Brightcap Badger shape). Without it "Bloom, then
+// the doubled Forests pay the next spell" is priced off the pre-Bloom board and kept off the menu.
+static bool LandTapCastCreditOn()
+{
+    static const bool on = EnvOn("MTG_LANDTAP_CAST_CREDIT", true);
+    return on;
+}
 static bool GrantCastCreditOn()
 {
     static const bool on = EnvOn("MTG_GRANT_CAST_CREDIT", true);
@@ -9651,6 +9661,22 @@ static bool IsGrantCreditCast(const Action& a)
         && !a.def->params.granted_tap_mana_subtypes.empty();
 }
 
+// Is `a` a same-plan LAND-TAP BONUS cast carrying the credit (Vernal Bloom / Nissa / Gauntlet of Power;
+// MTG_LANDTAP_CAST_CREDIT)? A zero stamp (no qualifying land left untapped) is an ordinary cast.
+static bool IsLandTapCreditCast(const Action& a)
+{
+    return a.kind == Action::Kind::CastFromHand && a.rock_mana.Total() > 0 && a.def != nullptr
+        && a.def->params.land_tap_bonus > 0;
+}
+// The colour a land-tap bonus cast locks as it enters (Gauntlet: its ETB-choice pin, else the provider's
+// unpinned default -- exactly what FireOwnEtbTriggers resolves). -1 for a fixed-colour source.
+static int LandTapCastColor(const GameState& state, const Action& a)
+{
+    if (a.def == nullptr || !a.def->params.etb_choose_color) { return -1; }
+    if (a.chosen_x >= 1 && a.chosen_x <= 5) { return a.chosen_x - 1; }
+    return ResolveProvider(state).EtbChosenColor(state, state.active_player_index, *a.def);
+}
+
 // True = the subset provably cannot be paid (see above); false = not provable, run the walk.
 static bool SpwfProvablySupplyShort(const GameState& state, const std::vector<Action>& cands,
                                     const std::vector<int>& sel)
@@ -9674,7 +9700,8 @@ static bool SpwfProvablySupplyShort(const GameState& state, const std::vector<Ac
         if (def == nullptr) { continue; }
         if (a.kind == Action::Kind::CastFromHand && a.rock_mana.Total() > 0
             && (def->params.etb_creates_treasures > 0 || LandSearchPutsUntapped(*def)
-                || !def->params.granted_tap_mana_subtypes.empty())) { return false; }
+                || !def->params.granted_tap_mana_subtypes.empty()
+                || def->params.land_tap_bonus > 0)) { return false; }
         if (def->params.mana_rock && !def->card.IsCreature() && !def->params.enters_tapped) { return false; }
         if (def->params.is_land_aura && def->params.land_aura_extra_mana > 0)
         { aura_extra += def->params.land_aura_extra_mana; }
@@ -10256,9 +10283,13 @@ static bool SubsetPayableWithFiltersImpl(const GameState& state, const std::vect
             // later payment of the walk (LiveManaGrant reads the board) -- so the bodies it unlocks pay
             // exactly as the executor will tap them, and never the Badger's own cost.
             const bool is_grant = IsGrantCreditCast(a);
+            // A credited LAND-TAP BONUS cast (Vernal Bloom / Nissa / Gauntlet; MTG_LANDTAP_CAST_CREDIT)
+            // likewise: it pays first, joins the scratch board (a Gauntlet with its pinned colour), and
+            // every later payment's land taps read the live bonus through the land-Aura readers.
+            const bool is_land_tap = IsLandTapCreditCast(a);
             const bool is_rock = (def && def->params.mana_rock && !def->card.IsCreature()
                                   && !def->params.enters_tapped)
-                              || is_etb_treasure || is_land_put || is_grant;
+                              || is_etb_treasure || is_land_put || is_grant || is_land_tap;
             // A land AURA ("enchanted land taps for an additional {G}") is a same-turn mana PRODUCER
             // as well: it resolves before the casts it funds, so its bonus is genuine supply for the
             // rest of the subset -- but ONLY if a land survives the Aura's own cost still untapped to
@@ -10328,6 +10359,7 @@ static bool SubsetPayableWithFiltersImpl(const GameState& state, const std::vect
                 perm.card             = def->card;
                 perm.controller_index = cp.active_player_index;
                 perm.owner_index      = cp.active_player_index;
+                if (is_land_tap) { perm.chosen_color = static_cast<int8_t>(LandTapCastColor(cp, a)); }
                 cp.battlefield.push_back(perm);
             }
             else if (is_aura && def)   // attach it, so the host's later tap carries the extra mana
@@ -11296,7 +11328,10 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
                                  || def.params.noncreature_spell_tax > 0
                                  || (HasteDorkCreditEnabled()
                                      && def.params.other_nontoken_enters_counter_haste > 0)
-                                 || enter_haste_for_mana;
+                                 || enter_haste_for_mana
+                                 // A land-tap bonus source (Vernal Bloom / Nissa / Gauntlet): the
+                                 // lands still untapped after it tap for more (the Lens note above).
+                                 || def.params.land_tap_bonus > 0;
         if (joins_for_mana)
         {
             Permanent perm;
@@ -11316,6 +11351,8 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
             if (def.params.chooses_creature_type)
             { perm.chosen_subtype_id = ResolveProvider(cp).ChosenCreatureSubtypeId(
                 cp, cp.active_player_index, def); }
+            if (def.params.land_tap_bonus > 0 && def.params.etb_choose_color)   // Gauntlet's colour
+            { perm.chosen_color = static_cast<int8_t>(LandTapCastColor(cp, a)); }
             cp.battlefield.push_back(perm);
         }
         // ETB TREASURE (Corsair Captain; MTG_ETB_TREASURE_SPEND): the enter trigger's Treasure --
@@ -33873,18 +33910,32 @@ static int OptimisticTurnMana(const GameState& state)
         { m += d->params.sac_for_mana_amount; }
     }
     bool any_land_in_hand = false;
+    // LAND-TAP BONUSES (Vernal Bloom / Gauntlet / Nissa): a land drop taps for 1 + every live bonus (up to
+    // 8 in Hydras), so the "+3" below is no longer "more than any single land produces"; a bonus source in
+    // hand grows the budget by more than its cost once enough Forests are up, and a land-put spell fetches
+    // a doubled land. All three are 0 / false unless the deck has such a source (deck_has_land_tap_bonus).
+    const bool ltb_live = AnyLandTapBonusLive(state, state.active_player_index);
+    int land_drop_yield = 3;
     for (const Card& c : ap.hand)
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
         if (!d) { return kNoManaCeiling; }               // unknown card: assume it could
-        if (d->card.IsLand()) { any_land_in_hand = true; continue; }
+        if (d->card.IsLand())
+        {
+            any_land_in_hand = true;
+            if (ltb_live)
+            { land_drop_yield = std::max(land_drop_yield, 1 + LandTapBonusForDef(state, state.active_player_index, *d).Total()); }
+            continue;
+        }
+        if (d->params.land_tap_bonus > 0) { return kNoManaCeiling; }
+        if (ltb_live && LandSearchPutsUntapped(*d)) { return kNoManaCeiling; }
         if (budget_can_grow(*d, /*from_hand=*/true)) { return kNoManaCeiling; }
         // A spell that MINTS sac-for-mana tokens (Gold Rush) grows the turn's budget once it resolves.
         // Credited GROSS -- the cast's own cost is not subtracted -- because the ceiling only needs an
         // upper bound, and an over-credit can never prune a payable line.
         if (d->params.creates_treasures > 0) { m += d->params.creates_treasures; }
     }
-    if (any_land_in_hand) { m += 3; } // a land drop, at more than any single land in any deck produces
+    if (any_land_in_hand) { m += land_drop_yield; } // a land drop, at more than any single land produces
 
     // BANKED FREE CAST (Maelstrom Archangel -- GameState::free_casts_available). THE defect that made
     // this whole prune lossy: a free cast is a cost BYPASS, not a mana source, so a total-MANA ceiling
@@ -34838,7 +34889,7 @@ static bool KaroosHostAdmitted(const GameState& state, const CardParams& pp)
 // and Trufflesnout's mode.
 static bool CastCarriesEtbChoice(const CardDefinition& d)
 {
-    return (d.params.is_land_aura && d.params.etb_choose_color)
+    return EtbColorChoiceIsNonSource(d.params)   // Utopia Sprawl; Gauntlet of Power (land_tap_bonus)
         || (d.params.etb_modal_self_counters > 0 && d.params.etb_modal_lifegain > 0)
         // Galvanic Alchemist: the soulbond PARTNER (an ability-granting pair) -- SoulbondPinForCast.
         || (d.params.soulbond && d.params.soulbond_grants_untap_self_cost.has_value());
@@ -40455,6 +40506,17 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // live -> no stamp.
         if (!def.params.granted_tap_mana_subtypes.empty() && GrantCastCreditOn())
         { a.rock_mana.AddPool(SamePlanGrantCredit(state, state.active_player_index, def)); }
+        // SAME-PLAN LAND-TAP BONUS (Vernal Bloom / Nissa / Gauntlet of Power; MTG_LANDTAP_CAST_CREDIT):
+        // the same rock_mana discipline as the grant above. A colour-choosing source (Gauntlet) is
+        // stamped here with the provider's UNPINNED default colour -- what a rollout leaf or human play
+        // resolves it to -- and the ETB CHOICE AXIS post-pass below re-stamps every searched colour
+        // variant with its own colour's credit (a non-green Gauntlet on a Forest board credits 0).
+        if (def.params.land_tap_bonus > 0 && LandTapCastCreditOn())
+        {
+            const int pin = def.params.etb_choose_color
+                ? ResolveProvider(state).EtbChosenColor(state, state.active_player_index, def) : -1;
+            a.rock_mana.AddPool(SamePlanLandTapBonusCredit(state, state.active_player_index, def, pin));
+        }
         // PATH TO EXILE (land_search_for_removal_controller): WHICH creature is exiled is a SEARCHED
         // axis on enchant_target (the solo-trick / Aura target channel): > 0 = that own creature, whose
         // controller -- us -- then searches for a tapped basic (the pick rides Plan::land_search_pins);
@@ -48767,13 +48829,36 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 ? SoulbondPartnerPinCandidates(state)
                 : ResolveProvider(state).EtbChoiceCandidates(state, state.active_player_index, *actions[i].def);
             if (vals.empty()) { continue; }
+            // Gauntlet of Power: each colour variant carries ITS colour's same-plan land-tap credit in
+            // place of the unpinned default stamped by the rock pass (see the stamp there).
+            const bool restamp = actions[i].def->params.land_tap_bonus > 0
+                              && actions[i].def->params.etb_choose_color && LandTapCastCreditOn();
+            ManaPool rock_base = actions[i].rock_mana;
+            if (restamp)
+            {
+                const int dflt = ResolveProvider(state).EtbChosenColor(state, state.active_player_index,
+                                                                       *actions[i].def);
+                const ManaPool old = SamePlanLandTapBonusCredit(state, state.active_player_index,
+                                                                *actions[i].def, dflt);
+                rock_base.white -= old.white; rock_base.blue -= old.blue; rock_base.black -= old.black;
+                rock_base.red   -= old.red;   rock_base.green -= old.green;
+            }
+            auto stamp = [&](Action& v)
+            {
+                if (!restamp) { return; }
+                v.rock_mana = rock_base;
+                v.rock_mana.AddPool(SamePlanLandTapBonusCredit(state, state.active_player_index, *v.def,
+                                                               v.chosen_x - 1));
+            };
             for (std::size_t k = 1; k < vals.size(); ++k)
             {
                 Action v = actions[i];               // copy BEFORE push_back (reallocation)
                 v.chosen_x = vals[k];
+                stamp(v);
                 actions.push_back(std::move(v));
             }
             actions[i].chosen_x = vals[0];
+            stamp(actions[i]);
         }
     }
 
@@ -50649,6 +50734,31 @@ static int UntapLandActionBoundCredit(const GameState* s, const Action& a)
     return 0;
 }
 
+// LAND-TAP BONUS x LAND-PUT CROSS TERM (Hydras, 2026-11-10). A cast land-tap bonus source's credit
+// (SamePlanLandTapBonusCredit) counts only lands ON THE BOARD at emission, and a land-put cast's credit
+// (LandSearchPickCredit) counts only bonus sources already on the board -- so "Vernal Bloom, then Nature's
+// Lore, then a Hydra" under-counts by `bonus` per fetched land, and the scalar bounds could prune a
+// payable selection. Bound-only, an OVER-count by construction: every land-put candidate is credited
+// every bonus-source candidate's bonus per untapped pick, selected or not, colour-matching or not.
+// 0 unless the candidate list holds both shapes.
+static int LandTapBonusCandSum(const std::vector<Action>& cands)
+{
+    int sum = 0;
+    for (const Action& c : cands)
+    {
+        if (c.kind == Action::Kind::CastFromHand && c.def != nullptr && c.def->params.land_tap_bonus > 0)
+        { sum += c.def->params.land_tap_bonus; }
+    }
+    return sum;
+}
+static int LandTapCrossBoundCredit(int bonus_sum, const Action& a)
+{
+    if (bonus_sum <= 0 || a.kind != Action::Kind::CastFromHand || a.def == nullptr
+        || !LandSearchPutsUntapped(*a.def)) { return 0; }
+    const int picks = std::max(0, a.def->params.land_search_count - a.def->params.land_search_to_hand);
+    return picks * bonus_sum;
+}
+
 static int LandAuraBoundCredit(const GameState* s, const Action& a)
 {
     if (a.def == nullptr || a.kind != Action::Kind::CastFromHand) { return 0; }
@@ -50747,8 +50857,10 @@ static int ManaPruneBound(const ManaPool& pool, const std::vector<Action>& cands
     long long b = pool.Total() + extra_credit;
     int gy = 0;
     int hero = -1, hero_bodies = 0;   // MTG_MINT_CREDIT_EXACT: same-plan Heroism copies / bodies, counted once, only if a minter is present
+    const int ltb_sum = LandTapBonusCandSum(cands);   // land-tap x land-put cross term (0 elsewhere)
     for (const Action& a : cands)
     {
+        b += LandTapCrossBoundCredit(ltb_sum, a);
         b += a.ritual_float;
         b += a.rock_mana.Total();
         b += a.mint_gain;                         // MTG_MINT_CREDIT_EXACT: the minted Treasures (0 off)
@@ -50935,6 +51047,7 @@ static bool BuildManaGateIndex(const ManaPool& pool, const std::vector<Action>& 
     const int m = static_cast<int>(cands.size());
     out.term.assign(m, ManaGateTerm{});
     int hero = -1, hero_bodies = 0;   // MTG_MINT_CREDIT_EXACT: same-plan Heroism copies / bodies (PlanHeroismCopies), lazily
+    const int ltb_sum = LandTapBonusCandSum(cands);   // land-tap x land-put cross term (0 elsewhere)
     for (int j = 0; j < m; ++j)
     {
         const Action& a = cands[j];
@@ -50953,7 +51066,8 @@ static bool BuildManaGateIndex(const ManaPool& pool, const std::vector<Action>& 
         t.gain = a.ritual_float + a.rock_mana.Total() + a.mint_gain + MintHeroismBonus(a, hero, hero_bodies)
                + EtbUntapBoundCredit(etb_state, a) + LandAuraBoundCredit(etb_state, a)
                + UntapLandActionBoundCredit(etb_state, a)
-               + WidenBoundGain(a, w_dom, w_live);
+               + WidenBoundGain(a, w_dom, w_live)
+               + LandTapCrossBoundCredit(ltb_sum, a);
         t.gy   = (a.def && a.def->params.ritual_float_gy_self_bonus) ? 1 : 0;
         t.block = ((a.def && (a.def->params.affinity_for_subtype
                               || !a.def->params.reduces_spell_color.empty()
@@ -115470,6 +115584,8 @@ static void BpVerifyStateSwap(const GameState& stored, const GameState& now, boo
     if (stored.deck_has_gy_equipment_return != now.deck_has_gy_equipment_return) { d += " deck_has_gy_equipment_return=" + std::to_string(static_cast<long long>(stored.deck_has_gy_equipment_return)) + "/" + std::to_string(static_cast<long long>(now.deck_has_gy_equipment_return)); }
     if (stored.deck_has_gy_shuffle != now.deck_has_gy_shuffle) { d += " deck_has_gy_shuffle=" + std::to_string(static_cast<long long>(stored.deck_has_gy_shuffle)) + "/" + std::to_string(static_cast<long long>(now.deck_has_gy_shuffle)); }
     if (stored.deck_has_land_aura != now.deck_has_land_aura) { d += " deck_has_land_aura=" + std::to_string(static_cast<long long>(stored.deck_has_land_aura)) + "/" + std::to_string(static_cast<long long>(now.deck_has_land_aura)); }
+    if (stored.deck_has_land_tap_bonus != now.deck_has_land_tap_bonus) { d += " deck_has_land_tap_bonus=" + std::to_string(static_cast<long long>(stored.deck_has_land_tap_bonus)) + "/" + std::to_string(static_cast<long long>(now.deck_has_land_tap_bonus)); }
+    if (stored.deck_has_chosen_color_pump != now.deck_has_chosen_color_pump) { d += " deck_has_chosen_color_pump=" + std::to_string(static_cast<long long>(stored.deck_has_chosen_color_pump)) + "/" + std::to_string(static_cast<long long>(now.deck_has_chosen_color_pump)); }
     if (stored.deck_has_land_search != now.deck_has_land_search) { d += " deck_has_land_search=" + std::to_string(static_cast<long long>(stored.deck_has_land_search)) + "/" + std::to_string(static_cast<long long>(now.deck_has_land_search)); }
     if (stored.deck_has_landfall != now.deck_has_landfall) { d += " deck_has_landfall=" + std::to_string(static_cast<long long>(stored.deck_has_landfall)) + "/" + std::to_string(static_cast<long long>(now.deck_has_landfall)); }
     if (stored.deck_has_look_top_watcher != now.deck_has_look_top_watcher) { d += " deck_has_look_top_watcher=" + std::to_string(static_cast<long long>(stored.deck_has_look_top_watcher)) + "/" + std::to_string(static_cast<long long>(now.deck_has_look_top_watcher)); }

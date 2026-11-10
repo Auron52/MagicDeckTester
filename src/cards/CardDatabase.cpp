@@ -1947,6 +1947,18 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     {
         p.land_aura_produces.push_back(ColorFromString(c));
     }
+    // Global land-tap bonus (Vernal Bloom / Gauntlet of Power / Nissa's static) -- see CardParams.
+    p.land_tap_bonus                = params.value("land_tap_bonus", 0);
+    p.land_tap_bonus_subtype        = params.value("land_tap_bonus_subtype", std::string());
+    p.land_tap_bonus_basic          = params.value("land_tap_bonus_basic", false);
+    p.land_tap_bonus_same_color     = params.value("land_tap_bonus_same_color", false);
+    p.land_tap_bonus_you_only       = params.value("land_tap_bonus_you_only", false);
+    for (const std::string& c : params.value("land_tap_bonus_produces", json::array()))
+    {
+        p.land_tap_bonus_produces.push_back(ColorFromString(c));
+    }
+    p.chosen_color_pump_power       = params.value("chosen_color_pump_power", 0);
+    p.chosen_color_pump_tough       = params.value("chosen_color_pump_tough", 0);
     if (params.contains("blink_cost"))
         p.blink_cost = ManaCostFromString(params["blink_cost"].get<std::string>());
     p.blink_returns_tapped          = params.value("blink_returns_tapped", false);

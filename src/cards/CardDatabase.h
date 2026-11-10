@@ -4217,6 +4217,37 @@ struct CardParams
     // locked Permanent::chosen_color afterwards (LandAuraProducesFor).
     std::string        land_aura_host_subtype;
 
+    // GLOBAL TRIGGERED MANA ABILITY ON A LAND TAP (Vernal Bloom, Gauntlet of Power, Nissa, Who Shakes
+    // the World's static; Hydras 2026-11-10): "Whenever a <qualifying> land is tapped for mana, its
+    // controller adds an additional <c>." CR 605.1b makes it a MANA ability (no target, triggers from a
+    // mana ability, could add mana) and CR 605.4a resolves it inside the tap with no stack, so it is
+    // credited exactly where a land Aura's bonus is: inside LandAuraBonusOfLandUncached /
+    // LandAuraAddToPoolOfLand / LandAuraColorMaskOfLand (SpellEffects.h, LandTapBonus* helpers), the
+    // land-Aura fold and the payability-cache key. Every one of the ~60 land-mana readers therefore
+    // sees it with no per-site edit, executor and rollout alike. Stacks additively per tap.
+    //   land_tap_bonus            extra mana per qualifying tap (0 = no such ability)
+    //   land_tap_bonus_subtype    the land must have this subtype NOW ("Forest"; LandHasSubtypeNow)
+    //   land_tap_bonus_basic      the land's definition must carry the Basic supertype (Gauntlet)
+    //   land_tap_bonus_produces   the bonus colour; with etb_choose_color it is the colour MENU and only
+    //                             the LOCKED Permanent::chosen_color is credited (an unlocked one: none)
+    //   land_tap_bonus_same_color only a tap FOR the bonus colour fires it (Gauntlet: the land must
+    //                             produce that colour -- basics produce exactly one)
+    //   land_tap_bonus_you_only   "whenever YOU tap" (Nissa): the land's controller must be the source's
+    //                             controller. False = "its controller adds" (Bloom / Gauntlet: symmetric).
+    int                land_tap_bonus = 0;
+    std::string        land_tap_bonus_subtype;
+    bool               land_tap_bonus_basic = false;
+    std::vector<Color> land_tap_bonus_produces;
+    bool               land_tap_bonus_same_color = false;
+    bool               land_tap_bonus_you_only = false;
+    // Gauntlet of Power: "Creatures of the chosen color get +1/+1." A static P/T anthem (layer 7c,
+    // CR 613.4c) on every creature of the source's LOCKED Permanent::chosen_color (etb_choose_color).
+    // Applied by ComputeLordBonus to its controller's creatures (PROVISIONAL collapse: the opponent's
+    // creatures are colourless spawns, so the "any controller" half has no reachable application).
+    // Colour is read off the creature's DEFINITION (tokens: their own mask). Lands are colourless.
+    int                chosen_color_pump_power = 0;
+    int                chosen_color_pump_tough = 0;
+
     // Eldrazi Displacer "{2}{C}: Exile another target creature, then return it to the battlefield
     // tapped under its owner's control" / Emiel the Blessed "{3}: Exile another target creature you
     // control, then return it". A repeatable, NON-tap activated ability: no {T} in the cost, so a
@@ -4788,6 +4819,21 @@ inline bool SacCreatureCostLegacyRoute(const CardParams& p)
 
 inline bool IsLibraryTutor(const CardParams& p)
 { return p.tutor_to_hand || p.tutor_to_top || p.tutor_library_position > 1; }
+
+// "As this permanent enters, choose a color" on a permanent that is NOT a mana source of its own: the
+// colour rides OTHER sources' taps (Utopia Sprawl: its host's; Gauntlet of Power: every basic land's).
+// Such a choice is SEARCHED on the ETB CHOICE AXIS (etb_kx = colour + 1), its menu is not `produces`,
+// and the locked colour must NEVER be reported as what the permanent itself produces (that is Coldsteel
+// Heart's shape -- the one etb_choose_color card that IS a source). One predicate for every site.
+inline bool EtbColorChoiceIsNonSource(const CardParams& p)
+{ return p.etb_choose_color && (p.is_land_aura || p.land_tap_bonus > 0); }
+// The colour MENU an etb_choose_color permanent picks from.
+inline const std::vector<Color>& EtbColorMenu(const CardParams& p)
+{
+    if (p.is_land_aura) { return p.land_aura_produces; }
+    if (p.land_tap_bonus > 0) { return p.land_tap_bonus_produces; }
+    return p.produces;
+}
 
 // A fully resolved card definition: base Card data plus template + parameters.
 struct CardDefinition

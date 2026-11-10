@@ -274,14 +274,11 @@ TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pir
         // attack_gather_auras) routes at the TOP -- Open the Armory's and Glittering Wish's
         // tutor_to_hand would otherwise route it to AntiLifegain (a greedy shuffle-order tutor pick).
         {"Bruna", "Bruna"},
-        // Hydras (committed as-is 2026-10-08, USER: "We can commit Hydras as-is for now" / "I want it
-        // to be the same") -- the SAME treatment as Mill and Unpredictable Cyclone above: an
-        // unprofiled, not-fully-modelled list whose routing is PINNED FROM A MEASUREMENT rather than
-        // decided. Probed on this binary: Generic. That is the informative value here -- a green-field
-        // ramp list (Kalonian/Primordial/Voracious Hydra, Gargos, Vernal Bloom, Gauntlet of Power,
-        // Nature's Lore / Three Visits / Search for Tomorrow) trips NO archetype signature today, so
-        // this pin is what will catch the first future signature broad enough to capture it.
-        {"Hydras", "Generic"},
+        // Hydras (committed as-is 2026-10-08; analysed from 2026-11-10). Pinned to Generic until Stage 4a
+        // gave it HydrasProvider: its own `hydras` signature (land_tap_bonus on Vernal Bloom / Nissa /
+        // Gauntlet of Power, Gauntlet's chosen_color_pump) routes FIRST, above `goblin` (Gargos's
+        // reduces_spell_subtype) and `fungus`.
+        {"Hydras", "Hydras"},
         // Landfall (onboarded 2026-10-15): its own `landfall` signature (the landfall-PAYOFF params of
         // Baloths / Omnath / Avenger / Phylath / Khalni Heart Expedition) routes ABOVE `selesnya` --
         // Genesis Wave's reveal_x_put_permanents alone would otherwise capture it into

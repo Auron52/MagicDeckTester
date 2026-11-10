@@ -148,6 +148,8 @@ enum class UnprunedGate
     FireblastPair,   // Midrange Burn: restore every legal Mountain pair for Fireblast's alternative cost
     FireblastPaid,   // Midrange Burn: restore the printed-cost cast below its optimistic mana ceiling
     LavamancerFuel,  // Midrange Burn: restore every graveyard fuel pair for Grim Lavamancer
+    EtbColor,        // Hydras: Gauntlet of Power's searched colour fan opened to its whole menu instead of
+                     // HydrasProvider::EtbChoiceCandidates' green-only dominance prune
     _Count
 };
 static_assert(static_cast<int>(UnprunedGate::_Count) <= 64, "UnprunedGate masks are 64-bit");
@@ -3667,6 +3669,31 @@ public:
                                const std::vector<int>& legal) const override;
     int AthreosCoinTargetRank(const GameState& s, int controller,
                              const std::vector<int>& legal) const override;
+};
+
+// HYDRAS (mono-green X-Hydras + Forest mana doublers; onboarding 2026-11-10). Its own provider per the
+// always-own-a-provider rule (analyze-deck Stage 4a). Before it the deck routed to Generic (pinned by a
+// measurement in test_pirates_provider.cpp); this is a DeckProvider derivation, so every hook it does
+// not override inherits Generic byte-for-byte. It holds ONE sound prune today: Gauntlet of Power's
+// colour fan restricted to green (EtbChoiceCandidates; proof at the definition). Routed FIRST in
+// DetectDecisionProvider, above every archetype-neutral branch a Hydras card's params could trip
+// (see the `hydras` flag there).
+class HydrasProvider : public DeckProvider
+{
+public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed, "NOT ASSESSED. Damage is combat only (X-Hydras sized by the "
+               "turn's mana, Kalonian Hydra doubling every own creature's +1/+1 counters on attack, "
+               "Gargos 8/7, Garruk's Beast/Wurms, Nissa's 3/3 haste lands), against a passive "
+               "opponent whose creatures never block. A winless-this-turn bound must cap the turn's "
+               "mana INCLUDING every Vernal Bloom / Gauntlet / Nissa bonus (up to 8 per Forest tap) and "
+               "the same-plan doublers and land-puts, the largest X each Hydra in hand can reach at "
+               "that mana (after Gargos's reduction), Kalonian's doubling of the attackers' counters, "
+               "and the haste sources (Lightning Greaves, Nissa's lands); the hasteless bodies cast "
+               "this turn do not attack." }; }
+    const char* Name() const override { return "Hydras"; }
+    std::vector<int> EtbChoiceCandidates(const GameState& s, int controller,
+                                         const CardDefinition& def) const override;
 };
 
 class CycloneProvider : public DeckProvider

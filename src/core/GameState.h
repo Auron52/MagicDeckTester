@@ -1059,6 +1059,18 @@ struct GameState
     // graveyard eligibility scan at every draw.
     bool                     deck_has_dredge : 1             = true;
     bool                     deck_has_turn_gods : 1          = true;
+    // deck_has_land_aura's sub-gate, 2026-11-10 (Hydras), a BITFIELD beside the three above (their byte had
+    // room; sizeof(GameState) unchanged): a GLOBAL land-tap bonus source (Vernal Bloom, Gauntlet
+    // of Power, Nissa's static -- CardParams::land_tap_bonus). Those ride the land-Aura readers, so a deck
+    // with one also stamps deck_has_land_aura; THIS bit lets every land-Aura deck WITHOUT one skip the
+    // extra battlefield walk for global sources (a clear bit proves the walk finds none). Same stamp
+    // discipline: mainboard + sideboard, Garth holds it open, DEFAULT TRUE for an unstamped state.
+    bool                     deck_has_land_tap_bonus : 1     = true;  // Vernal Bloom & co.
+    // Gauntlet of Power's chosen-colour anthem (CardParams::chosen_color_pump_*): gates ComputeLordBonus's
+    // battlefield walk when the caller passes no prefiltered anthem list. cards.json holds every deck's
+    // cards, so a DB-wide constant would always be true; this per-game stamp is the real gate. Same
+    // discipline: mainboard + sideboard, Garth holds it open, DEFAULT TRUE for an unstamped state.
+    bool                     deck_has_chosen_color_pump : 1  = true;  // Gauntlet of Power
     // Does the deck hold an upkeep SAC-TUTOR (CardParams::upkeep_sac_tutor_creatures: Defense of the Heart)?
     // DECK CONSTANT, stamped by StampDeckTraits (mainboard + sideboard, Garth holding it open); gates the
     // searched put-list fan (MTG_DOTH_AXIS) so every deck without one never walks its battlefield for a

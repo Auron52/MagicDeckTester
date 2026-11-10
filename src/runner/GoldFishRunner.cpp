@@ -1495,6 +1495,10 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         bool uncond_endstep = false;
         // The land-Aura walkers (see GameState::deck_has_land_aura): the same `is_land_aura` test.
         bool land_aura = false;
+        // ...and its global sub-gate (GameState::deck_has_land_tap_bonus): Vernal Bloom & co. ride the
+        // land-Aura readers, so such a card stamps BOTH bits.
+        bool land_tap_bonus = false;
+        bool chosen_color_pump = false;   // GameState::deck_has_chosen_color_pump (Gauntlet of Power)
         // The landfall dispatch and land-drop position gate: landfall triggers
         // plus Horn's land-play draw, whose cast-before-land order matters.
         bool landfall = false;
@@ -1587,6 +1591,9 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                 if (DefHasCreatureEnterWatcher(d->params)) { creature_enter_watcher = true; }
                 if (d->params.soulbond)                    { soulbond = true; }
                 if (d->params.is_land_aura)                { land_aura = true; }
+                if (d->params.land_tap_bonus > 0)          { land_aura = true; land_tap_bonus = true; }
+                if (d->params.chosen_color_pump_power != 0
+                    || d->params.chosen_color_pump_tough != 0) { chosen_color_pump = true; }
                 // Horn watches the land PLAY, so casting it before the drop is
                 // a distinct line even though it is not a landfall ETB trigger.
                 if (DefHasLandfallTrigger(d->params) || d->params.horn_draw_on_land_play)
@@ -1666,6 +1673,8 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         // Same reasoning, and likewise no lever: a clear bit PROVES every land-Aura walk returns
         // nothing (each one tests is_land_aura on what it finds), so this is dead-code elimination.
         state.deck_has_land_aura         = garth || land_aura;
+        state.deck_has_land_tap_bonus    = garth || land_tap_bonus;
+        state.deck_has_chosen_color_pump = garth || chosen_color_pump;
         // Same reasoning, and no lever either: a clear bit PROVES no landfall or
         // land-play watcher can make this deck's land position matter.
         state.deck_has_landfall          = garth || landfall;
