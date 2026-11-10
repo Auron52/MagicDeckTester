@@ -1,0 +1,888 @@
+{
+  "seed": 10, "game_index": 9, "win_turn": 6, "won": true,
+  "mulligan": { "count": 1, "bottom": [2] }, "karoo_float": 1, "fetch_activation": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1, "spell_copy_id": 1, "magus_upkeep_prompt": 1,
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 17, "name": "Gemstone Mine" }, { "num": 49, "name": "Stinkweed Imp" }, { "num": 34, "name": "Mogis, God of Slaughter" }, { "num": 12, "name": "Faithless Looting" }, { "num": 38, "name": "Phenax, God of Deception" }, { "num": 7, "name": "City of Brass" }, { "num": 8, "name": "City of Brass" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": true,
+  "to_bottom": 1,
+  "hand": [{ "num": 42, "name": "Reflecting Pool" }, { "num": 13, "name": "Faithless Looting" }, { "num": 30, "name": "Magus of the Bazaar" }, { "num": 5, "name": "Cephalid Coliseum" }, { "num": 31, "name": "Magus of the Bazaar" }, { "num": 2, "name": "Athreos, Shroud-Veiled" }, { "num": 28, "name": "Life from the Loam" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 5, "decision": {
+  "decision_index": 2,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 1,
+  "hand": [{ "num": 42, "name": "Reflecting Pool", "win_optimal": true }, { "num": 13, "name": "Faithless Looting", "win_optimal": true }, { "num": 30, "name": "Magus of the Bazaar", "win_optimal": true }, { "num": 5, "name": "Cephalid Coliseum", "win_optimal": true }, { "num": 31, "name": "Magus of the Bazaar", "win_optimal": true }, { "num": 2, "name": "Athreos, Shroud-Veiled", "win_optimal": true }, { "num": 28, "name": "Life from the Loam", "win_optimal": true }],
+  "ai_choice": { "index": 5, "num": 2, "name": "Athreos, Shroud-Veiled" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 1)"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 3,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 5, "name": "Cephalid Coliseum", "cost": "", "mv": 0, "kind": "land" }, { "num": 13, "name": "Faithless Looting", "cost": "{R}", "mv": 1, "kind": "nonpermanent", "is_draw": true }, { "num": 28, "name": "Life from the Loam", "cost": "{1}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 30, "name": "Magus of the Bazaar", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 31, "name": "Magus of the Bazaar", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 42, "name": "Reflecting Pool", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 53 },
+  "plans": [
+    { "index": 0, "summary": "land=Reflecting Pool; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Reflecting Pool", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=Cephalid Coliseum; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Cephalid Coliseum", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 4,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Cephalid Coliseum", "idx": 4, "num": 5, "is_land": true, "taps": "U" }], "vial_counters": [], "hand": [{ "num": 13, "name": "Faithless Looting", "cost": "{R}", "mv": 1, "kind": "nonpermanent", "is_draw": true }, { "num": 28, "name": "Life from the Loam", "cost": "{1}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 30, "name": "Magus of the Bazaar", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 31, "name": "Magus of the Bazaar", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 42, "name": "Reflecting Pool", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 53 },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Cephalid Coliseum", "idx": 4, "num": 5, "is_land": true, "taps": "U" }], "vial_counters": [], "hand": [{ "num": 13, "name": "Faithless Looting", "cost": "{R}", "mv": 1, "kind": "nonpermanent", "is_draw": true }, { "num": 28, "name": "Life from the Loam", "cost": "{1}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 30, "name": "Magus of the Bazaar", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 31, "name": "Magus of the Bazaar", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 42, "name": "Reflecting Pool", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 53 },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "cast_order": ["**", "land=Reflecting Pool", "cast=Magus of the Bazaar"], "decision": {
+  "decision_index": 6,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 2, "card": "Reflecting Pool" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Cephalid Coliseum", "idx": 4, "num": 5, "is_land": true, "taps": "U" }], "vial_counters": [], "hand": [{ "num": 13, "name": "Faithless Looting", "cost": "{R}", "mv": 1, "kind": "nonpermanent", "is_draw": true }, { "num": 28, "name": "Life from the Loam", "cost": "{1}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 30, "name": "Magus of the Bazaar", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 31, "name": "Magus of the Bazaar", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 42, "name": "Reflecting Pool", "cost": "", "mv": 0, "kind": "land" }, { "num": 43, "name": "Reflecting Pool", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 52 },
+  "plans": [
+    { "index": 0, "summary": "land=Reflecting Pool; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Reflecting Pool", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=Reflecting Pool; cast: Magus of the Bazaar", "declared_order_payability": "not_verified", "land": "Reflecting Pool", "casts": ["Magus of the Bazaar"], "actions": [{ "card": "Magus of the Bazaar" }] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 6,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 7,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 19, "battlefield": [{ "name": "Cephalid Coliseum", "idx": 4, "num": 5, "tapped": true, "is_land": true }, { "name": "Magus of the Bazaar", "idx": 7, "num": 30, "sick": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Reflecting Pool", "idx": 6, "num": 42, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 13, "name": "Faithless Looting", "cost": "{R}", "mv": 1, "kind": "nonpermanent", "is_draw": true }, { "num": 28, "name": "Life from the Loam", "cost": "{1}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 31, "name": "Magus of the Bazaar", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Reflecting Pool", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 52 },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 19, "battlefield": [{ "name": "Cephalid Coliseum", "idx": 4, "num": 5, "tapped": true, "is_land": true }, { "name": "Magus of the Bazaar", "idx": 7, "num": 30, "sick": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Reflecting Pool", "idx": 6, "num": 42, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 13, "name": "Faithless Looting", "cost": "{R}", "mv": 1, "kind": "nonpermanent", "is_draw": true }, { "num": 28, "name": "Life from the Loam", "cost": "{1}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 31, "name": "Magus of the Bazaar", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Reflecting Pool", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 52 },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 9,
+  "type": "tutor_etb",
+  "source": "Magus of the Bazaar (upkeep ability)",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 19, "battlefield": [{ "name": "Cephalid Coliseum", "idx": 4, "num": 5, "is_land": true, "taps": "U" }, { "name": "Magus of the Bazaar", "idx": 7, "num": 30, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Reflecting Pool", "idx": 6, "num": 42, "is_land": true, "taps": "U" }], "vial_counters": [], "hand": [{ "num": 13, "name": "Faithless Looting", "cost": "{R}", "mv": 1, "kind": "nonpermanent", "is_draw": true }, { "num": 28, "name": "Life from the Loam", "cost": "{1}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 31, "name": "Magus of the Bazaar", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Reflecting Pool", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 51 },
+  "heuristic_default": -1,
+  "upkeep_ability": true,
+  "candidates": [{ "index": 0, "name": "Activate" }],
+  "note": "reply 0 to tap Magus of the Bazaar before the draw step, drawing two and discarding three; -1 to leave it untapped. Dredge choices are offered for each draw."
+}
+},
+    { "chosen": 4, "decision": {
+  "decision_index": 10,
+  "type": "discard",
+  "turn": 3,
+  "over_by": 3,
+  "discard_context": "effect",
+  "source": "Magus of the Bazaar",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 19, "battlefield": [{ "name": "Cephalid Coliseum", "idx": 4, "num": 5, "is_land": true, "taps": "U" }, { "name": "Magus of the Bazaar", "idx": 7, "num": 30, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Reflecting Pool", "idx": 6, "num": 42, "is_land": true, "taps": "U" }], "vial_counters": [], "hand": [{ "num": 13, "name": "Faithless Looting", "cost": "{R}", "mv": 1, "kind": "nonpermanent", "is_draw": true }, { "num": 22, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 24, "name": "Karametra, God of Harvests", "cost": "{3}{W}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 28, "name": "Life from the Loam", "cost": "{1}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 31, "name": "Magus of the Bazaar", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Reflecting Pool", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 51 },
+  "ai_set": [4, 2, 5],
+  "heuristic_default": 4,
+  "options": [{ "index": 0, "name": "Faithless Looting" }, { "index": 1, "name": "Magus of the Bazaar" }, { "index": 2, "name": "Life from the Loam" }, { "index": 3, "name": "Reflecting Pool" }, { "index": 4, "name": "Karametra, God of Harvests" }, { "index": 5, "name": "Golgari Grave-Troll" }],
+  "note": "reply the `index` VALUE of one of the options below (the engine's draw-order hand index) -- NOT a position in the displayed `me.hand`, which is sorted by name. An index that is not in options is silently replaced by the AI's pick. Default = the AI's pick."
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 11,
+  "type": "discard",
+  "turn": 3,
+  "over_by": 2,
+  "discard_context": "effect",
+  "source": "Magus of the Bazaar",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 19, "battlefield": [{ "name": "Cephalid Coliseum", "idx": 4, "num": 5, "is_land": true, "taps": "U" }, { "name": "Magus of the Bazaar", "idx": 7, "num": 30, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Reflecting Pool", "idx": 6, "num": 42, "is_land": true, "taps": "U" }], "vial_counters": [], "hand": [{ "num": 13, "name": "Faithless Looting", "cost": "{R}", "mv": 1, "kind": "nonpermanent", "is_draw": true }, { "num": 22, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 24, "name": "Karametra, God of Harvests", "cost": "{3}{W}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 28, "name": "Life from the Loam", "cost": "{1}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 31, "name": "Magus of the Bazaar", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Reflecting Pool", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 51 },
+  "ai_set": [2, 5],
+  "heuristic_default": 2,
+  "options": [{ "index": 0, "name": "Faithless Looting" }, { "index": 1, "name": "Magus of the Bazaar" }, { "index": 2, "name": "Life from the Loam" }, { "index": 3, "name": "Reflecting Pool" }, { "index": 5, "name": "Golgari Grave-Troll" }],
+  "note": "reply the `index` VALUE of one of the options below (the engine's draw-order hand index) -- NOT a position in the displayed `me.hand`, which is sorted by name. An index that is not in options is silently replaced by the AI's pick. Default = the AI's pick."
+}
+},
+    { "chosen": 5, "decision": {
+  "decision_index": 12,
+  "type": "discard",
+  "turn": 3,
+  "over_by": 1,
+  "discard_context": "effect",
+  "source": "Magus of the Bazaar",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 19, "battlefield": [{ "name": "Cephalid Coliseum", "idx": 4, "num": 5, "is_land": true, "taps": "U" }, { "name": "Magus of the Bazaar", "idx": 7, "num": 30, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Reflecting Pool", "idx": 6, "num": 42, "is_land": true, "taps": "U" }], "vial_counters": [], "hand": [{ "num": 13, "name": "Faithless Looting", "cost": "{R}", "mv": 1, "kind": "nonpermanent", "is_draw": true }, { "num": 22, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 24, "name": "Karametra, God of Harvests", "cost": "{3}{W}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 28, "name": "Life from the Loam", "cost": "{1}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 31, "name": "Magus of the Bazaar", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Reflecting Pool", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 51 },
+  "ai_set": [5],
+  "heuristic_default": 5,
+  "options": [{ "index": 0, "name": "Faithless Looting" }, { "index": 1, "name": "Magus of the Bazaar" }, { "index": 3, "name": "Reflecting Pool" }, { "index": 5, "name": "Golgari Grave-Troll" }],
+  "note": "reply the `index` VALUE of one of the options below (the engine's draw-order hand index) -- NOT a position in the displayed `me.hand`, which is sorted by name. An index that is not in options is silently replaced by the AI's pick. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 13,
+  "type": "dredge",
+  "source": "Draw replacement",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 19, "battlefield": [{ "name": "Cephalid Coliseum", "idx": 4, "num": 5, "is_land": true, "taps": "U" }, { "name": "Magus of the Bazaar", "idx": 7, "num": 30, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Reflecting Pool", "idx": 6, "num": 42, "is_land": true, "taps": "U" }], "vial_counters": [], "hand": [{ "num": 13, "name": "Faithless Looting", "cost": "{R}", "mv": 1, "kind": "nonpermanent", "is_draw": true }, { "num": 31, "name": "Magus of the Bazaar", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Reflecting Pool", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Golgari Grave-Troll", "Karametra, God of Harvests", "Life from the Loam"], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 51 },
+  "player_index": 0,
+  "heuristic_default": 1,
+  "options": [{ "index": 0, "name": "Draw a card" }, { "index": 1, "name": "Golgari Grave-Troll" }, { "index": 2, "name": "Life from the Loam" }],
+  "note": "Reply 0 to draw normally, or 1..n to mill the listed card's dredge number and return it to hand. Each draw has its own choice."
+}
+},
+    { "chosen": 5, "cast_order": ["**", "cast=Magus of the Bazaar", "land=Tendo Ice Bridge"], "decision": {
+  "decision_index": 14,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 3, "card": "Karametra, God of Harvests" }, { "turn": 3, "card": "Golgari Grave-Troll" }, { "turn": 3, "card": "Tendo Ice Bridge" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 19, "battlefield": [{ "name": "Cephalid Coliseum", "idx": 4, "num": 5, "is_land": true, "taps": "U" }, { "name": "Magus of the Bazaar", "idx": 7, "num": 30, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Reflecting Pool", "idx": 6, "num": 42, "is_land": true, "taps": "U" }], "vial_counters": [], "hand": [{ "num": 13, "name": "Faithless Looting", "cost": "{R}", "mv": 1, "kind": "nonpermanent", "is_draw": true }, { "num": 31, "name": "Magus of the Bazaar", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Reflecting Pool", "cost": "", "mv": 0, "kind": "land" }, { "num": 54, "name": "Tendo Ice Bridge", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Golgari Grave-Troll", "Karametra, God of Harvests", "Life from the Loam"], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 51 },
+  "plans": [
+    { "index": 0, "summary": "land=Tendo Ice Bridge; cast: Faithless Looting", "declared_order_payability": "not_verified", "land": "Tendo Ice Bridge", "casts": ["Faithless Looting"], "actions": [{ "card": "Faithless Looting" }] },
+    { "index": 1, "summary": "land=Tendo Ice Bridge; cast: Faithless Looting, Magus of the Bazaar", "declared_order_payability": "not_verified", "land": "Tendo Ice Bridge", "casts": ["Faithless Looting", "Magus of the Bazaar"], "cast_order_canonical": ["Faithless Looting", "Magus of the Bazaar"], "actions": [{ "card": "Faithless Looting" }, { "card": "Magus of the Bazaar" }] },
+    { "index": 2, "summary": "land=Reflecting Pool; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Reflecting Pool", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Reflecting Pool; cast: Magus of the Bazaar", "declared_order_payability": "not_verified", "land": "Reflecting Pool", "casts": ["Magus of the Bazaar"], "actions": [{ "card": "Magus of the Bazaar" }] },
+    { "index": 4, "summary": "land=Tendo Ice Bridge; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Tendo Ice Bridge", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=Tendo Ice Bridge; cast: Magus of the Bazaar", "declared_order_payability": "not_verified", "land": "Tendo Ice Bridge", "casts": ["Magus of the Bazaar"], "actions": [{ "card": "Magus of the Bazaar" }] },
+    { "index": 6, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=none; cast: Magus of the Bazaar", "declared_order_payability": "not_verified", "land": null, "casts": ["Magus of the Bazaar"], "actions": [{ "card": "Magus of the Bazaar" }] }
+  ],
+  "plans_hidden": 24,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 15,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Cephalid Coliseum", "idx": 4, "num": 5, "tapped": true, "is_land": true }, { "name": "Magus of the Bazaar", "idx": 7, "num": 30, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Magus of the Bazaar", "idx": 9, "num": 31, "sick": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Reflecting Pool", "idx": 6, "num": 42, "tapped": true, "is_land": true }, { "name": "Tendo Ice Bridge", "idx": 10, "num": 54, "is_land": true, "taps": "CWUBRG", "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 13, "name": "Faithless Looting", "cost": "{R}", "mv": 1, "kind": "nonpermanent", "is_draw": true }, { "num": 43, "name": "Reflecting Pool", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Golgari Grave-Troll", "Karametra, God of Harvests", "Life from the Loam"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 51 },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Faithless Looting", "declared_order_payability": "not_verified", "land": null, "casts": ["Faithless Looting"], "actions": [{ "card": "Faithless Looting" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 16,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Cephalid Coliseum", "idx": 4, "num": 5, "tapped": true, "is_land": true }, { "name": "Magus of the Bazaar", "idx": 7, "num": 30, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Magus of the Bazaar", "idx": 9, "num": 31, "sick": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Reflecting Pool", "idx": 6, "num": 42, "tapped": true, "is_land": true }, { "name": "Tendo Ice Bridge", "idx": 10, "num": 54, "is_land": true, "taps": "CWUBRG", "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 13, "name": "Faithless Looting", "cost": "{R}", "mv": 1, "kind": "nonpermanent", "is_draw": true }, { "num": 43, "name": "Reflecting Pool", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Golgari Grave-Troll", "Karametra, God of Harvests", "Life from the Loam"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 51 },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Faithless Looting", "declared_order_payability": "not_verified", "land": null, "casts": ["Faithless Looting"], "actions": [{ "card": "Faithless Looting" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 17,
+  "type": "tutor_etb",
+  "source": "Magus of the Bazaar (upkeep ability)",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Cephalid Coliseum", "idx": 4, "num": 5, "is_land": true, "taps": "U" }, { "name": "Magus of the Bazaar", "idx": 7, "num": 30, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Magus of the Bazaar", "idx": 9, "num": 31, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Reflecting Pool", "idx": 6, "num": 42, "is_land": true, "taps": "WUBRGC" }, { "name": "Tendo Ice Bridge", "idx": 10, "num": 54, "is_land": true, "taps": "CWUBRG", "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 13, "name": "Faithless Looting", "cost": "{R}", "mv": 1, "kind": "nonpermanent", "is_draw": true }, { "num": 43, "name": "Reflecting Pool", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Golgari Grave-Troll", "Karametra, God of Harvests", "Life from the Loam"], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 50 },
+  "heuristic_default": -1,
+  "upkeep_ability": true,
+  "candidates": [{ "index": 0, "name": "Activate" }],
+  "note": "reply 0 to tap Magus of the Bazaar before the draw step, drawing two and discarding three; -1 to leave it untapped. Dredge choices are offered for each draw."
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 18,
+  "type": "dredge",
+  "source": "Draw replacement",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Cephalid Coliseum", "idx": 4, "num": 5, "is_land": true, "taps": "U" }, { "name": "Magus of the Bazaar", "idx": 7, "num": 30, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Magus of the Bazaar", "idx": 9, "num": 31, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Reflecting Pool", "idx": 6, "num": 42, "is_land": true, "taps": "WUBRGC" }, { "name": "Tendo Ice Bridge", "idx": 10, "num": 54, "is_land": true, "taps": "CWUBRG", "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 13, "name": "Faithless Looting", "cost": "{R}", "mv": 1, "kind": "nonpermanent", "is_draw": true }, { "num": 43, "name": "Reflecting Pool", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Golgari Grave-Troll", "Karametra, God of Harvests", "Life from the Loam"], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 50 },
+  "player_index": 0,
+  "heuristic_default": 1,
+  "options": [{ "index": 0, "name": "Draw a card" }, { "index": 1, "name": "Golgari Grave-Troll" }, { "index": 2, "name": "Life from the Loam" }],
+  "note": "Reply 0 to draw normally, or 1..n to mill the listed card's dredge number and return it to hand. Each draw has its own choice."
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 19,
+  "type": "dredge",
+  "source": "Draw replacement",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Cephalid Coliseum", "idx": 4, "num": 5, "is_land": true, "taps": "U" }, { "name": "Magus of the Bazaar", "idx": 7, "num": 30, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Magus of the Bazaar", "idx": 9, "num": 31, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Reflecting Pool", "idx": 6, "num": 42, "is_land": true, "taps": "WUBRGC" }, { "name": "Tendo Ice Bridge", "idx": 10, "num": 54, "is_land": true, "taps": "CWUBRG", "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 13, "name": "Faithless Looting", "cost": "{R}", "mv": 1, "kind": "nonpermanent", "is_draw": true }, { "num": 22, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Reflecting Pool", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Golgari Grave-Troll", "Iroas, God of Victory", "Karametra, God of Harvests", "Life from the Loam", "Mogis, God of Slaughter", "Purphoros, Bronze-Blooded", "Tendo Ice Bridge", "Tendo Ice Bridge"], "library_size": 44, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 50 },
+  "player_index": 0,
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "name": "Draw a card" }, { "index": 1, "name": "Life from the Loam" }, { "index": 2, "name": "Golgari Grave-Troll" }],
+  "note": "Reply 0 to draw normally, or 1..n to mill the listed card's dredge number and return it to hand. Each draw has its own choice."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 20,
+  "type": "discard",
+  "turn": 4,
+  "over_by": 3,
+  "discard_context": "effect",
+  "source": "Magus of the Bazaar",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Cephalid Coliseum", "idx": 4, "num": 5, "is_land": true, "taps": "U" }, { "name": "Magus of the Bazaar", "idx": 7, "num": 30, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Magus of the Bazaar", "idx": 9, "num": 31, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Reflecting Pool", "idx": 6, "num": 42, "is_land": true, "taps": "WUBRGC" }, { "name": "Tendo Ice Bridge", "idx": 10, "num": 54, "is_land": true, "taps": "CWUBRG", "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 13, "name": "Faithless Looting", "cost": "{R}", "mv": 1, "kind": "nonpermanent", "is_draw": true }, { "num": 22, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Reflecting Pool", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Forest", "Golgari Grave-Troll", "Iroas, God of Victory", "Karametra, God of Harvests", "Kruphix, God of Horizons", "Life from the Loam", "Mogis, God of Slaughter", "Purphoros, Bronze-Blooded", "Purphoros, God of the Forge", "Reflecting Pool", "Tendo Ice Bridge", "Tendo Ice Bridge", "Vivid Creek"], "library_size": 38, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 50 },
+  "ai_set": [0, 2, 3],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "name": "Faithless Looting" }, { "index": 1, "name": "Reflecting Pool" }, { "index": 2, "name": "Golgari Grave-Troll" }, { "index": 3, "name": "Golgari Grave-Troll" }],
+  "note": "reply the `index` VALUE of one of the options below (the engine's draw-order hand index) -- NOT a position in the displayed `me.hand`, which is sorted by name. An index that is not in options is silently replaced by the AI's pick. Default = the AI's pick."
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 21,
+  "type": "discard",
+  "turn": 4,
+  "over_by": 2,
+  "discard_context": "effect",
+  "source": "Magus of the Bazaar",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Cephalid Coliseum", "idx": 4, "num": 5, "is_land": true, "taps": "U" }, { "name": "Magus of the Bazaar", "idx": 7, "num": 30, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Magus of the Bazaar", "idx": 9, "num": 31, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Reflecting Pool", "idx": 6, "num": 42, "is_land": true, "taps": "WUBRGC" }, { "name": "Tendo Ice Bridge", "idx": 10, "num": 54, "is_land": true, "taps": "CWUBRG", "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 13, "name": "Faithless Looting", "cost": "{R}", "mv": 1, "kind": "nonpermanent", "is_draw": true }, { "num": 22, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Reflecting Pool", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Forest", "Golgari Grave-Troll", "Iroas, God of Victory", "Karametra, God of Harvests", "Kruphix, God of Horizons", "Life from the Loam", "Mogis, God of Slaughter", "Purphoros, Bronze-Blooded", "Purphoros, God of the Forge", "Reflecting Pool", "Tendo Ice Bridge", "Tendo Ice Bridge", "Vivid Creek"], "library_size": 38, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 50 },
+  "ai_set": [2, 3],
+  "heuristic_default": 2,
+  "options": [{ "index": 1, "name": "Reflecting Pool" }, { "index": 2, "name": "Golgari Grave-Troll" }, { "index": 3, "name": "Golgari Grave-Troll" }],
+  "note": "reply the `index` VALUE of one of the options below (the engine's draw-order hand index) -- NOT a position in the displayed `me.hand`, which is sorted by name. An index that is not in options is silently replaced by the AI's pick. Default = the AI's pick."
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 22,
+  "type": "discard",
+  "turn": 4,
+  "over_by": 1,
+  "discard_context": "effect",
+  "source": "Magus of the Bazaar",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Cephalid Coliseum", "idx": 4, "num": 5, "is_land": true, "taps": "U" }, { "name": "Magus of the Bazaar", "idx": 7, "num": 30, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Magus of the Bazaar", "idx": 9, "num": 31, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Reflecting Pool", "idx": 6, "num": 42, "is_land": true, "taps": "WUBRGC" }, { "name": "Tendo Ice Bridge", "idx": 10, "num": 54, "is_land": true, "taps": "CWUBRG", "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 13, "name": "Faithless Looting", "cost": "{R}", "mv": 1, "kind": "nonpermanent", "is_draw": true }, { "num": 22, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Reflecting Pool", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Forest", "Golgari Grave-Troll", "Iroas, God of Victory", "Karametra, God of Harvests", "Kruphix, God of Horizons", "Life from the Loam", "Mogis, God of Slaughter", "Purphoros, Bronze-Blooded", "Purphoros, God of the Forge", "Reflecting Pool", "Tendo Ice Bridge", "Tendo Ice Bridge", "Vivid Creek"], "library_size": 38, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 50 },
+  "ai_set": [3],
+  "heuristic_default": 3,
+  "options": [{ "index": 1, "name": "Reflecting Pool" }, { "index": 3, "name": "Golgari Grave-Troll" }],
+  "note": "reply the `index` VALUE of one of the options below (the engine's draw-order hand index) -- NOT a position in the displayed `me.hand`, which is sorted by name. An index that is not in options is silently replaced by the AI's pick. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 23,
+  "type": "tutor_etb",
+  "source": "Magus of the Bazaar (upkeep ability)",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Cephalid Coliseum", "idx": 4, "num": 5, "is_land": true, "taps": "U" }, { "name": "Magus of the Bazaar", "idx": 7, "num": 30, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Magus of the Bazaar", "idx": 9, "num": 31, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Reflecting Pool", "idx": 6, "num": 42, "is_land": true, "taps": "WUBRGC" }, { "name": "Tendo Ice Bridge", "idx": 10, "num": 54, "is_land": true, "taps": "CWUBRG", "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 43, "name": "Reflecting Pool", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Faithless Looting", "Forest", "Golgari Grave-Troll", "Golgari Grave-Troll", "Golgari Grave-Troll", "Iroas, God of Victory", "Karametra, God of Harvests", "Kruphix, God of Horizons", "Life from the Loam", "Mogis, God of Slaughter", "Purphoros, Bronze-Blooded", "Purphoros, God of the Forge", "Reflecting Pool", "Tendo Ice Bridge", "Tendo Ice Bridge", "Vivid Creek"], "retrace_gy": ["Faithless Looting"], "flashback_gy": ["Faithless Looting"], "library_size": 38, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 50 },
+  "heuristic_default": -1,
+  "upkeep_ability": true,
+  "candidates": [{ "index": 0, "name": "Activate" }],
+  "note": "reply 0 to tap Magus of the Bazaar before the draw step, drawing two and discarding three; -1 to leave it untapped. Dredge choices are offered for each draw."
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 24,
+  "type": "dredge",
+  "source": "Draw replacement",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Cephalid Coliseum", "idx": 4, "num": 5, "is_land": true, "taps": "U" }, { "name": "Magus of the Bazaar", "idx": 7, "num": 30, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Magus of the Bazaar", "idx": 9, "num": 31, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Reflecting Pool", "idx": 6, "num": 42, "is_land": true, "taps": "WUBRGC" }, { "name": "Tendo Ice Bridge", "idx": 10, "num": 54, "is_land": true, "taps": "CWUBRG", "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 43, "name": "Reflecting Pool", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Faithless Looting", "Forest", "Golgari Grave-Troll", "Golgari Grave-Troll", "Golgari Grave-Troll", "Iroas, God of Victory", "Karametra, God of Harvests", "Kruphix, God of Horizons", "Life from the Loam", "Mogis, God of Slaughter", "Purphoros, Bronze-Blooded", "Purphoros, God of the Forge", "Reflecting Pool", "Tendo Ice Bridge", "Tendo Ice Bridge", "Vivid Creek"], "retrace_gy": ["Faithless Looting"], "flashback_gy": ["Faithless Looting"], "library_size": 38, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 50 },
+  "player_index": 0,
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "name": "Draw a card" }, { "index": 1, "name": "Life from the Loam" }, { "index": 2, "name": "Golgari Grave-Troll" }, { "index": 3, "name": "Golgari Grave-Troll" }, { "index": 4, "name": "Golgari Grave-Troll" }],
+  "note": "Reply 0 to draw normally, or 1..n to mill the listed card's dredge number and return it to hand. Each draw has its own choice."
+}
+},
+    { "chosen": 10, "cast_order": ["**", "land=Reflecting Pool", "act=Magus of the Bazaar#31"], "decision": {
+  "decision_index": 25,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Cephalid Coliseum", "idx": 4, "num": 5, "is_land": true, "taps": "U" }, { "name": "Magus of the Bazaar", "idx": 7, "num": 30, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Magus of the Bazaar", "idx": 9, "num": 31, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Reflecting Pool", "idx": 6, "num": 42, "is_land": true, "taps": "WUBRGC" }, { "name": "Tendo Ice Bridge", "idx": 10, "num": 54, "is_land": true, "taps": "CWUBRG", "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 20, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Reflecting Pool", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Careful Study", "Cephalid Coliseum", "Faithless Looting", "Forest", "Golgari Grave-Troll", "Golgari Grave-Troll", "Iroas, God of Victory", "Karametra, God of Harvests", "Kruphix, God of Horizons", "Life from the Loam", "Mogis, God of Slaughter", "Pharika, God of Affliction", "Purphoros, Bronze-Blooded", "Purphoros, God of the Forge", "Reflecting Pool", "Stinkweed Imp", "Tendo Ice Bridge", "Tendo Ice Bridge", "Vivid Creek", "Vivid Creek", "Vivid Creek"], "retrace_gy": ["Faithless Looting"], "flashback_gy": ["Faithless Looting"], "library_size": 32, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 50 },
+  "plans": [
+    { "index": 0, "summary": "land=Reflecting Pool; cast: Magus of the Bazaar: draw a card, Faithless Looting (flashback)", "declared_order_payability": "not_verified", "land": "Reflecting Pool", "casts": ["Magus of the Bazaar", "Faithless Looting"], "actions": [{ "card": "Magus of the Bazaar", "src_num": 31, "activate": true, "act_label": "draw a card", "x": 1 }, { "card": "Faithless Looting" }] },
+    { "index": 1, "summary": "land=none; cast: Magus of the Bazaar: draw a card, Faithless Looting (flashback)", "declared_order_payability": "not_verified", "land": null, "casts": ["Magus of the Bazaar", "Faithless Looting"], "actions": [{ "card": "Magus of the Bazaar", "src_num": 31, "activate": true, "act_label": "draw a card", "x": 1 }, { "card": "Faithless Looting" }] },
+    { "index": 2, "summary": "land=Reflecting Pool; cast: Faithless Looting (flashback)", "declared_order_payability": "not_verified", "land": "Reflecting Pool", "casts": ["Faithless Looting"], "actions": [{ "card": "Faithless Looting" }] },
+    { "index": 3, "summary": "land=none; cast: Faithless Looting (flashback)", "declared_order_payability": "not_verified", "land": null, "casts": ["Faithless Looting"], "actions": [{ "card": "Faithless Looting" }] },
+    { "index": 4, "summary": "land=Reflecting Pool; cast: Cephalid Coliseum: sacrifice: target player draws three, then discards three (opponent draws), Magus of the Bazaar: draw a card", "declared_order_payability": "not_verified", "land": "Reflecting Pool", "casts": ["Cephalid Coliseum", "Magus of the Bazaar"], "actions": [{ "card": "Cephalid Coliseum", "src_num": 5, "activate": true, "cost_pips": "U", "activation_cost": "{U}", "act_label": "sacrifice: target player draws three, then discards three", "draw_target": "opponent", "x": 1 }, { "card": "Magus of the Bazaar", "src_num": 31, "activate": true, "act_label": "draw a card", "x": 1 }] },
+    { "index": 5, "summary": "land=Reflecting Pool; cast: Cephalid Coliseum: sacrifice: target player draws three, then discards three (you draw), Magus of the Bazaar: draw a card", "declared_order_payability": "not_verified", "land": "Reflecting Pool", "casts": ["Cephalid Coliseum", "Magus of the Bazaar"], "actions": [{ "card": "Cephalid Coliseum", "src_num": 5, "activate": true, "cost_pips": "U", "activation_cost": "{U}", "act_label": "sacrifice: target player draws three, then discards three", "draw_target": "self", "x": 1 }, { "card": "Magus of the Bazaar", "src_num": 31, "activate": true, "act_label": "draw a card", "x": 1 }] },
+    { "index": 6, "summary": "land=none; cast: Cephalid Coliseum: sacrifice: target player draws three, then discards three (opponent draws), Magus of the Bazaar: draw a card", "declared_order_payability": "not_verified", "land": null, "casts": ["Cephalid Coliseum", "Magus of the Bazaar"], "actions": [{ "card": "Cephalid Coliseum", "src_num": 5, "activate": true, "cost_pips": "U", "activation_cost": "{U}", "act_label": "sacrifice: target player draws three, then discards three", "draw_target": "opponent", "x": 1 }, { "card": "Magus of the Bazaar", "src_num": 31, "activate": true, "act_label": "draw a card", "x": 1 }] },
+    { "index": 7, "summary": "land=none; cast: Cephalid Coliseum: sacrifice: target player draws three, then discards three (you draw), Magus of the Bazaar: draw a card", "declared_order_payability": "not_verified", "land": null, "casts": ["Cephalid Coliseum", "Magus of the Bazaar"], "actions": [{ "card": "Cephalid Coliseum", "src_num": 5, "activate": true, "cost_pips": "U", "activation_cost": "{U}", "act_label": "sacrifice: target player draws three, then discards three", "draw_target": "self", "x": 1 }, { "card": "Magus of the Bazaar", "src_num": 31, "activate": true, "act_label": "draw a card", "x": 1 }] },
+    { "index": 8, "summary": "land=Reflecting Pool; cast: Cephalid Coliseum: sacrifice: target player draws three, then discards three (opponent draws)", "declared_order_payability": "not_verified", "land": "Reflecting Pool", "casts": ["Cephalid Coliseum"], "actions": [{ "card": "Cephalid Coliseum", "src_num": 5, "activate": true, "cost_pips": "U", "activation_cost": "{U}", "act_label": "sacrifice: target player draws three, then discards three", "draw_target": "opponent", "x": 1 }] },
+    { "index": 9, "summary": "land=Reflecting Pool; cast: Cephalid Coliseum: sacrifice: target player draws three, then discards three (you draw)", "declared_order_payability": "not_verified", "land": "Reflecting Pool", "casts": ["Cephalid Coliseum"], "actions": [{ "card": "Cephalid Coliseum", "src_num": 5, "activate": true, "cost_pips": "U", "activation_cost": "{U}", "act_label": "sacrifice: target player draws three, then discards three", "draw_target": "self", "x": 1 }] },
+    { "index": 10, "summary": "land=Reflecting Pool; cast: Magus of the Bazaar: draw a card", "declared_order_payability": "not_verified", "land": "Reflecting Pool", "casts": ["Magus of the Bazaar"], "actions": [{ "card": "Magus of the Bazaar", "src_num": 31, "activate": true, "act_label": "draw a card", "x": 1 }] },
+    { "index": 11, "summary": "land=none; cast: Cephalid Coliseum: sacrifice: target player draws three, then discards three (opponent draws)", "declared_order_payability": "not_verified", "land": null, "casts": ["Cephalid Coliseum"], "actions": [{ "card": "Cephalid Coliseum", "src_num": 5, "activate": true, "cost_pips": "U", "activation_cost": "{U}", "act_label": "sacrifice: target player draws three, then discards three", "draw_target": "opponent", "x": 1 }] },
+    { "index": 12, "summary": "land=none; cast: Cephalid Coliseum: sacrifice: target player draws three, then discards three (you draw)", "declared_order_payability": "not_verified", "land": null, "casts": ["Cephalid Coliseum"], "actions": [{ "card": "Cephalid Coliseum", "src_num": 5, "activate": true, "cost_pips": "U", "activation_cost": "{U}", "act_label": "sacrifice: target player draws three, then discards three", "draw_target": "self", "x": 1 }] },
+    { "index": 13, "summary": "land=none; cast: Magus of the Bazaar: draw a card", "declared_order_payability": "not_verified", "land": null, "casts": ["Magus of the Bazaar"], "actions": [{ "card": "Magus of the Bazaar", "src_num": 31, "activate": true, "act_label": "draw a card", "x": 1 }] },
+    { "index": 14, "summary": "land=Reflecting Pool; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Reflecting Pool", "casts": [], "actions": [] },
+    { "index": 15, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 48,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 26,
+  "type": "dredge",
+  "source": "Draw replacement",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Cephalid Coliseum", "idx": 4, "num": 5, "is_land": true, "taps": "U" }, { "name": "Magus of the Bazaar", "idx": 7, "num": 30, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Magus of the Bazaar", "idx": 9, "num": 31, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Reflecting Pool", "idx": 6, "num": 42, "is_land": true, "taps": "WUBRGC" }, { "name": "Reflecting Pool", "idx": 11, "num": 43, "is_land": true, "taps": "WUBRGC" }, { "name": "Tendo Ice Bridge", "idx": 10, "num": 54, "is_land": true, "taps": "CWUBRG", "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 20, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }], "graveyard": ["Careful Study", "Cephalid Coliseum", "Faithless Looting", "Forest", "Golgari Grave-Troll", "Golgari Grave-Troll", "Iroas, God of Victory", "Karametra, God of Harvests", "Kruphix, God of Horizons", "Life from the Loam", "Mogis, God of Slaughter", "Pharika, God of Affliction", "Purphoros, Bronze-Blooded", "Purphoros, God of the Forge", "Reflecting Pool", "Stinkweed Imp", "Tendo Ice Bridge", "Tendo Ice Bridge", "Vivid Creek", "Vivid Creek", "Vivid Creek"], "retrace_gy": ["Faithless Looting"], "flashback_gy": ["Faithless Looting"], "library_size": 32, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 50 },
+  "player_index": 0,
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "name": "Draw a card" }, { "index": 1, "name": "Life from the Loam" }, { "index": 2, "name": "Golgari Grave-Troll" }, { "index": 3, "name": "Golgari Grave-Troll" }, { "index": 4, "name": "Stinkweed Imp" }],
+  "note": "Reply 0 to draw normally, or 1..n to mill the listed card's dredge number and return it to hand. Each draw has its own choice."
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 27,
+  "type": "dredge",
+  "source": "Draw replacement",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Cephalid Coliseum", "idx": 4, "num": 5, "is_land": true, "taps": "U" }, { "name": "Magus of the Bazaar", "idx": 7, "num": 30, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Magus of the Bazaar", "idx": 9, "num": 31, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Reflecting Pool", "idx": 6, "num": 42, "is_land": true, "taps": "WUBRGC" }, { "name": "Reflecting Pool", "idx": 11, "num": 43, "is_land": true, "taps": "WUBRGC" }, { "name": "Tendo Ice Bridge", "idx": 10, "num": 54, "is_land": true, "taps": "CWUBRG", "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 20, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }], "graveyard": ["Careful Study", "Careful Study", "Cephalid Coliseum", "City of Brass", "City of Brass", "Faithless Looting", "Faithless Looting", "Forest", "Golgari Grave-Troll", "Golgari Grave-Troll", "Iroas, God of Victory", "Karametra, God of Harvests", "Klothys, God of Destiny", "Kruphix, God of Horizons", "Life from the Loam", "Mogis, God of Slaughter", "Pharika, God of Affliction", "Purphoros, Bronze-Blooded", "Purphoros, God of the Forge", "Reflecting Pool", "Stinkweed Imp", "Tendo Ice Bridge", "Tendo Ice Bridge", "Vivid Creek", "Vivid Creek", "Vivid Creek"], "retrace_gy": ["Faithless Looting", "Faithless Looting"], "flashback_gy": ["Faithless Looting", "Faithless Looting"], "library_size": 26, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 50 },
+  "player_index": 0,
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "name": "Draw a card" }, { "index": 1, "name": "Life from the Loam" }, { "index": 2, "name": "Golgari Grave-Troll" }, { "index": 3, "name": "Stinkweed Imp" }, { "index": 4, "name": "Golgari Grave-Troll" }],
+  "note": "Reply 0 to draw normally, or 1..n to mill the listed card's dredge number and return it to hand. Each draw has its own choice."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 28,
+  "type": "discard",
+  "turn": 4,
+  "over_by": 3,
+  "discard_context": "effect",
+  "source": "Magus of the Bazaar",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Cephalid Coliseum", "idx": 4, "num": 5, "is_land": true, "taps": "U" }, { "name": "Magus of the Bazaar", "idx": 7, "num": 30, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Magus of the Bazaar", "idx": 9, "num": 31, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Reflecting Pool", "idx": 6, "num": 42, "is_land": true, "taps": "WUBRGC" }, { "name": "Reflecting Pool", "idx": 11, "num": 43, "is_land": true, "taps": "WUBRGC" }, { "name": "Tendo Ice Bridge", "idx": 10, "num": 54, "is_land": true, "taps": "CWUBRG", "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 20, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }], "graveyard": ["Careful Study", "Careful Study", "Cephalid Coliseum", "City of Brass", "City of Brass", "City of Brass", "Faithless Looting", "Faithless Looting", "Forest", "Gemstone Mine", "Golgari Grave-Troll", "Iroas, God of Victory", "Karametra, God of Harvests", "Klothys, God of Destiny", "Kruphix, God of Horizons", "Life from the Loam", "Life from the Loam", "Magus of the Bazaar", "Mogis, God of Slaughter", "Nylea, God of the Hunt", "Pharika, God of Affliction", "Purphoros, Bronze-Blooded", "Purphoros, God of the Forge", "Reflecting Pool", "Reflecting Pool", "Stinkweed Imp", "Tendo Ice Bridge", "Tendo Ice Bridge", "Vivid Creek", "Vivid Creek", "Vivid Creek"], "retrace_gy": ["Faithless Looting", "Faithless Looting"], "flashback_gy": ["Faithless Looting", "Faithless Looting"], "library_size": 20, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 50 },
+  "ai_set": [0, 1, 2],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "name": "Golgari Grave-Troll" }, { "index": 1, "name": "Golgari Grave-Troll" }, { "index": 2, "name": "Golgari Grave-Troll" }],
+  "note": "reply the `index` VALUE of one of the options below (the engine's draw-order hand index) -- NOT a position in the displayed `me.hand`, which is sorted by name. An index that is not in options is silently replaced by the AI's pick. Default = the AI's pick."
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 29,
+  "type": "discard",
+  "turn": 4,
+  "over_by": 2,
+  "discard_context": "effect",
+  "source": "Magus of the Bazaar",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Cephalid Coliseum", "idx": 4, "num": 5, "is_land": true, "taps": "U" }, { "name": "Magus of the Bazaar", "idx": 7, "num": 30, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Magus of the Bazaar", "idx": 9, "num": 31, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Reflecting Pool", "idx": 6, "num": 42, "is_land": true, "taps": "WUBRGC" }, { "name": "Reflecting Pool", "idx": 11, "num": 43, "is_land": true, "taps": "WUBRGC" }, { "name": "Tendo Ice Bridge", "idx": 10, "num": 54, "is_land": true, "taps": "CWUBRG", "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 20, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }], "graveyard": ["Careful Study", "Careful Study", "Cephalid Coliseum", "City of Brass", "City of Brass", "City of Brass", "Faithless Looting", "Faithless Looting", "Forest", "Gemstone Mine", "Golgari Grave-Troll", "Iroas, God of Victory", "Karametra, God of Harvests", "Klothys, God of Destiny", "Kruphix, God of Horizons", "Life from the Loam", "Life from the Loam", "Magus of the Bazaar", "Mogis, God of Slaughter", "Nylea, God of the Hunt", "Pharika, God of Affliction", "Purphoros, Bronze-Blooded", "Purphoros, God of the Forge", "Reflecting Pool", "Reflecting Pool", "Stinkweed Imp", "Tendo Ice Bridge", "Tendo Ice Bridge", "Vivid Creek", "Vivid Creek", "Vivid Creek"], "retrace_gy": ["Faithless Looting", "Faithless Looting"], "flashback_gy": ["Faithless Looting", "Faithless Looting"], "library_size": 20, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 50 },
+  "ai_set": [1, 2],
+  "heuristic_default": 1,
+  "options": [{ "index": 1, "name": "Golgari Grave-Troll" }, { "index": 2, "name": "Golgari Grave-Troll" }],
+  "note": "reply the `index` VALUE of one of the options below (the engine's draw-order hand index) -- NOT a position in the displayed `me.hand`, which is sorted by name. An index that is not in options is silently replaced by the AI's pick. Default = the AI's pick."
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 30,
+  "type": "discard",
+  "turn": 4,
+  "over_by": 1,
+  "discard_context": "effect",
+  "source": "Magus of the Bazaar",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Cephalid Coliseum", "idx": 4, "num": 5, "is_land": true, "taps": "U" }, { "name": "Magus of the Bazaar", "idx": 7, "num": 30, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Magus of the Bazaar", "idx": 9, "num": 31, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Reflecting Pool", "idx": 6, "num": 42, "is_land": true, "taps": "WUBRGC" }, { "name": "Reflecting Pool", "idx": 11, "num": 43, "is_land": true, "taps": "WUBRGC" }, { "name": "Tendo Ice Bridge", "idx": 10, "num": 54, "is_land": true, "taps": "CWUBRG", "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 20, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }], "graveyard": ["Careful Study", "Careful Study", "Cephalid Coliseum", "City of Brass", "City of Brass", "City of Brass", "Faithless Looting", "Faithless Looting", "Forest", "Gemstone Mine", "Golgari Grave-Troll", "Iroas, God of Victory", "Karametra, God of Harvests", "Klothys, God of Destiny", "Kruphix, God of Horizons", "Life from the Loam", "Life from the Loam", "Magus of the Bazaar", "Mogis, God of Slaughter", "Nylea, God of the Hunt", "Pharika, God of Affliction", "Purphoros, Bronze-Blooded", "Purphoros, God of the Forge", "Reflecting Pool", "Reflecting Pool", "Stinkweed Imp", "Tendo Ice Bridge", "Tendo Ice Bridge", "Vivid Creek", "Vivid Creek", "Vivid Creek"], "retrace_gy": ["Faithless Looting", "Faithless Looting"], "flashback_gy": ["Faithless Looting", "Faithless Looting"], "library_size": 20, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 50 },
+  "ai_set": [2],
+  "heuristic_default": 2,
+  "options": [{ "index": 2, "name": "Golgari Grave-Troll" }],
+  "note": "reply the `index` VALUE of one of the options below (the engine's draw-order hand index) -- NOT a position in the displayed `me.hand`, which is sorted by name. An index that is not in options is silently replaced by the AI's pick. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 31,
+  "main_ordinal": 6,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Cephalid Coliseum", "idx": 4, "num": 5, "is_land": true, "taps": "U" }, { "name": "Magus of the Bazaar", "idx": 7, "num": 30, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Magus of the Bazaar", "idx": 9, "num": 31, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Reflecting Pool", "idx": 6, "num": 42, "is_land": true, "taps": "WUBRGC" }, { "name": "Reflecting Pool", "idx": 11, "num": 43, "is_land": true, "taps": "WUBRGC" }, { "name": "Tendo Ice Bridge", "idx": 10, "num": 54, "is_land": true, "taps": "CWUBRG", "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }], "vial_counters": [], "hand": [], "graveyard": ["Careful Study", "Careful Study", "Cephalid Coliseum", "City of Brass", "City of Brass", "City of Brass", "Faithless Looting", "Faithless Looting", "Forest", "Gemstone Mine", "Golgari Grave-Troll", "Golgari Grave-Troll", "Golgari Grave-Troll", "Golgari Grave-Troll", "Iroas, God of Victory", "Karametra, God of Harvests", "Klothys, God of Destiny", "Kruphix, God of Horizons", "Life from the Loam", "Life from the Loam", "Magus of the Bazaar", "Mogis, God of Slaughter", "Nylea, God of the Hunt", "Pharika, God of Affliction", "Purphoros, Bronze-Blooded", "Purphoros, God of the Forge", "Reflecting Pool", "Reflecting Pool", "Stinkweed Imp", "Tendo Ice Bridge", "Tendo Ice Bridge", "Vivid Creek", "Vivid Creek", "Vivid Creek"], "retrace_gy": ["Faithless Looting", "Faithless Looting"], "flashback_gy": ["Faithless Looting", "Faithless Looting"], "library_size": 20, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 50 },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Faithless Looting (flashback)", "declared_order_payability": "not_verified", "land": null, "casts": ["Faithless Looting"], "actions": [{ "card": "Faithless Looting" }] },
+    { "index": 1, "summary": "land=none; cast: Cephalid Coliseum: sacrifice: target player draws three, then discards three (opponent draws)", "declared_order_payability": "not_verified", "land": null, "casts": ["Cephalid Coliseum"], "actions": [{ "card": "Cephalid Coliseum", "src_num": 5, "activate": true, "cost_pips": "U", "activation_cost": "{U}", "act_label": "sacrifice: target player draws three, then discards three", "draw_target": "opponent", "x": 1 }] },
+    { "index": 2, "summary": "land=none; cast: Cephalid Coliseum: sacrifice: target player draws three, then discards three (you draw)", "declared_order_payability": "not_verified", "land": null, "casts": ["Cephalid Coliseum"], "actions": [{ "card": "Cephalid Coliseum", "src_num": 5, "activate": true, "cost_pips": "U", "activation_cost": "{U}", "act_label": "sacrifice: target player draws three, then discards three", "draw_target": "self", "x": 1 }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 32,
+  "type": "dredge",
+  "source": "Draw replacement",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Cephalid Coliseum", "idx": 4, "num": 5, "is_land": true, "taps": "U" }, { "name": "Magus of the Bazaar", "idx": 7, "num": 30, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Magus of the Bazaar", "idx": 9, "num": 31, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Reflecting Pool", "idx": 6, "num": 42, "tapped": true, "is_land": true }, { "name": "Reflecting Pool", "idx": 11, "num": 43, "tapped": true, "is_land": true }, { "name": "Tendo Ice Bridge", "idx": 10, "num": 54, "tapped": true, "is_land": true, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }], "vial_counters": [], "hand": [], "graveyard": ["Careful Study", "Careful Study", "Cephalid Coliseum", "City of Brass", "City of Brass", "City of Brass", "Faithless Looting", "Forest", "Gemstone Mine", "Golgari Grave-Troll", "Golgari Grave-Troll", "Golgari Grave-Troll", "Golgari Grave-Troll", "Iroas, God of Victory", "Karametra, God of Harvests", "Klothys, God of Destiny", "Kruphix, God of Horizons", "Life from the Loam", "Life from the Loam", "Magus of the Bazaar", "Mogis, God of Slaughter", "Nylea, God of the Hunt", "Pharika, God of Affliction", "Purphoros, Bronze-Blooded", "Purphoros, God of the Forge", "Reflecting Pool", "Reflecting Pool", "Stinkweed Imp", "Tendo Ice Bridge", "Tendo Ice Bridge", "Vivid Creek", "Vivid Creek", "Vivid Creek"], "retrace_gy": ["Faithless Looting"], "flashback_gy": ["Faithless Looting"], "library_size": 20, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 50 },
+  "player_index": 0,
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "name": "Draw a card" }, { "index": 1, "name": "Life from the Loam" }, { "index": 2, "name": "Stinkweed Imp" }, { "index": 3, "name": "Golgari Grave-Troll" }, { "index": 4, "name": "Life from the Loam" }, { "index": 5, "name": "Golgari Grave-Troll" }, { "index": 6, "name": "Golgari Grave-Troll" }, { "index": 7, "name": "Golgari Grave-Troll" }],
+  "note": "Reply 0 to draw normally, or 1..n to mill the listed card's dredge number and return it to hand. Each draw has its own choice."
+}
+},
+    { "chosen": 4, "decision": {
+  "decision_index": 33,
+  "type": "dredge",
+  "source": "Draw replacement",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Cephalid Coliseum", "idx": 4, "num": 5, "is_land": true, "taps": "U" }, { "name": "Magus of the Bazaar", "idx": 7, "num": 30, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Magus of the Bazaar", "idx": 9, "num": 31, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Reflecting Pool", "idx": 6, "num": 42, "tapped": true, "is_land": true }, { "name": "Reflecting Pool", "idx": 11, "num": 43, "tapped": true, "is_land": true }, { "name": "Tendo Ice Bridge", "idx": 10, "num": 54, "tapped": true, "is_land": true, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 21, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }], "graveyard": ["Careful Study", "Careful Study", "Cephalid Coliseum", "City of Brass", "City of Brass", "City of Brass", "Ephara, God of the Polis", "Faithless Looting", "Faithless Looting", "Forest", "Gemstone Mine", "Golgari Grave-Troll", "Golgari Grave-Troll", "Golgari Grave-Troll", "Iroas, God of Victory", "Karametra, God of Harvests", "Klothys, God of Destiny", "Kruphix, God of Horizons", "Life from the Loam", "Life from the Loam", "Magus of the Bazaar", "Magus of the Bazaar", "Mogis, God of Slaughter", "Nylea, God of the Hunt", "Pharika, God of Affliction", "Purphoros, Bronze-Blooded", "Purphoros, God of the Forge", "Reflecting Pool", "Reflecting Pool", "Replenish", "Replenish", "Stinkweed Imp", "Stinkweed Imp", "Tendo Ice Bridge", "Tendo Ice Bridge", "Vivid Creek", "Vivid Creek", "Vivid Creek"], "retrace_gy": ["Faithless Looting", "Faithless Looting"], "flashback_gy": ["Faithless Looting", "Faithless Looting"], "library_size": 14, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 50 },
+  "player_index": 0,
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "name": "Draw a card" }, { "index": 1, "name": "Life from the Loam" }, { "index": 2, "name": "Stinkweed Imp" }, { "index": 3, "name": "Life from the Loam" }, { "index": 4, "name": "Golgari Grave-Troll" }, { "index": 5, "name": "Golgari Grave-Troll" }, { "index": 6, "name": "Golgari Grave-Troll" }, { "index": 7, "name": "Stinkweed Imp" }],
+  "note": "Reply 0 to draw normally, or 1..n to mill the listed card's dredge number and return it to hand. Each draw has its own choice."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 34,
+  "type": "discard",
+  "turn": 4,
+  "over_by": 2,
+  "discard_context": "effect",
+  "source": "Faithless Looting",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Cephalid Coliseum", "idx": 4, "num": 5, "is_land": true, "taps": "U" }, { "name": "Magus of the Bazaar", "idx": 7, "num": 30, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Magus of the Bazaar", "idx": 9, "num": 31, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Reflecting Pool", "idx": 6, "num": 42, "tapped": true, "is_land": true }, { "name": "Reflecting Pool", "idx": 11, "num": 43, "tapped": true, "is_land": true }, { "name": "Tendo Ice Bridge", "idx": 10, "num": 54, "tapped": true, "is_land": true, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 21, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }], "graveyard": ["Careful Study", "Careful Study", "Cephalid Coliseum", "City of Brass", "City of Brass", "City of Brass", "Ephara, God of the Polis", "Faithless Looting", "Faithless Looting", "Forest", "Gemstone Mine", "Gemstone Mine", "Golgari Grave-Troll", "Golgari Grave-Troll", "Iroas, God of Victory", "Karametra, God of Harvests", "Keranos, God of Storms", "Klothys, God of Destiny", "Kruphix, God of Horizons", "Life from the Loam", "Life from the Loam", "Magus of the Bazaar", "Magus of the Bazaar", "Mogis, God of Slaughter", "Nylea, God of the Hunt", "Pharika, God of Affliction", "Purphoros, Bronze-Blooded", "Purphoros, God of the Forge", "Reflecting Pool", "Reflecting Pool", "Replenish", "Replenish", "Replenish", "Stinkweed Imp", "Stinkweed Imp", "Stinkweed Imp", "Tendo Ice Bridge", "Tendo Ice Bridge", "Tendo Ice Bridge", "Vivid Creek", "Vivid Creek", "Vivid Creek", "Xenagos, God of Revels"], "retrace_gy": ["Faithless Looting", "Faithless Looting"], "flashback_gy": ["Faithless Looting", "Faithless Looting"], "library_size": 8, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 50 },
+  "ai_set": [0, 1],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "name": "Golgari Grave-Troll" }, { "index": 1, "name": "Golgari Grave-Troll" }],
+  "note": "reply the `index` VALUE of one of the options below (the engine's draw-order hand index) -- NOT a position in the displayed `me.hand`, which is sorted by name. An index that is not in options is silently replaced by the AI's pick. Default = the AI's pick."
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 35,
+  "type": "discard",
+  "turn": 4,
+  "over_by": 1,
+  "discard_context": "effect",
+  "source": "Faithless Looting",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Cephalid Coliseum", "idx": 4, "num": 5, "is_land": true, "taps": "U" }, { "name": "Magus of the Bazaar", "idx": 7, "num": 30, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Magus of the Bazaar", "idx": 9, "num": 31, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Reflecting Pool", "idx": 6, "num": 42, "tapped": true, "is_land": true }, { "name": "Reflecting Pool", "idx": 11, "num": 43, "tapped": true, "is_land": true }, { "name": "Tendo Ice Bridge", "idx": 10, "num": 54, "tapped": true, "is_land": true, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 21, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }], "graveyard": ["Careful Study", "Careful Study", "Cephalid Coliseum", "City of Brass", "City of Brass", "City of Brass", "Ephara, God of the Polis", "Faithless Looting", "Faithless Looting", "Forest", "Gemstone Mine", "Gemstone Mine", "Golgari Grave-Troll", "Golgari Grave-Troll", "Iroas, God of Victory", "Karametra, God of Harvests", "Keranos, God of Storms", "Klothys, God of Destiny", "Kruphix, God of Horizons", "Life from the Loam", "Life from the Loam", "Magus of the Bazaar", "Magus of the Bazaar", "Mogis, God of Slaughter", "Nylea, God of the Hunt", "Pharika, God of Affliction", "Purphoros, Bronze-Blooded", "Purphoros, God of the Forge", "Reflecting Pool", "Reflecting Pool", "Replenish", "Replenish", "Replenish", "Stinkweed Imp", "Stinkweed Imp", "Stinkweed Imp", "Tendo Ice Bridge", "Tendo Ice Bridge", "Tendo Ice Bridge", "Vivid Creek", "Vivid Creek", "Vivid Creek", "Xenagos, God of Revels"], "retrace_gy": ["Faithless Looting", "Faithless Looting"], "flashback_gy": ["Faithless Looting", "Faithless Looting"], "library_size": 8, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 50 },
+  "ai_set": [1],
+  "heuristic_default": 1,
+  "options": [{ "index": 1, "name": "Golgari Grave-Troll" }],
+  "note": "reply the `index` VALUE of one of the options below (the engine's draw-order hand index) -- NOT a position in the displayed `me.hand`, which is sorted by name. An index that is not in options is silently replaced by the AI's pick. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 36,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Cephalid Coliseum", "idx": 4, "num": 5, "is_land": true, "taps": "U" }, { "name": "Magus of the Bazaar", "idx": 7, "num": 30, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Magus of the Bazaar", "idx": 9, "num": 31, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Reflecting Pool", "idx": 6, "num": 42, "tapped": true, "is_land": true }, { "name": "Reflecting Pool", "idx": 11, "num": 43, "tapped": true, "is_land": true }, { "name": "Tendo Ice Bridge", "idx": 10, "num": 54, "tapped": true, "is_land": true, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }], "vial_counters": [], "hand": [], "graveyard": ["Careful Study", "Careful Study", "Cephalid Coliseum", "City of Brass", "City of Brass", "City of Brass", "Ephara, God of the Polis", "Faithless Looting", "Faithless Looting", "Forest", "Gemstone Mine", "Gemstone Mine", "Golgari Grave-Troll", "Golgari Grave-Troll", "Golgari Grave-Troll", "Golgari Grave-Troll", "Iroas, God of Victory", "Karametra, God of Harvests", "Keranos, God of Storms", "Klothys, God of Destiny", "Kruphix, God of Horizons", "Life from the Loam", "Life from the Loam", "Magus of the Bazaar", "Magus of the Bazaar", "Mogis, God of Slaughter", "Nylea, God of the Hunt", "Pharika, God of Affliction", "Purphoros, Bronze-Blooded", "Purphoros, God of the Forge", "Reflecting Pool", "Reflecting Pool", "Replenish", "Replenish", "Replenish", "Stinkweed Imp", "Stinkweed Imp", "Stinkweed Imp", "Tendo Ice Bridge", "Tendo Ice Bridge", "Tendo Ice Bridge", "Vivid Creek", "Vivid Creek", "Vivid Creek", "Xenagos, God of Revels"], "retrace_gy": ["Faithless Looting", "Faithless Looting"], "flashback_gy": ["Faithless Looting", "Faithless Looting"], "library_size": 8, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 50 },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 37,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Cephalid Coliseum", "idx": 4, "num": 5, "is_land": true, "taps": "U" }, { "name": "Magus of the Bazaar", "idx": 7, "num": 30, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Magus of the Bazaar", "idx": 9, "num": 31, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Reflecting Pool", "idx": 6, "num": 42, "tapped": true, "is_land": true }, { "name": "Reflecting Pool", "idx": 11, "num": 43, "tapped": true, "is_land": true }, { "name": "Tendo Ice Bridge", "idx": 10, "num": 54, "tapped": true, "is_land": true, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }], "vial_counters": [], "hand": [], "graveyard": ["Careful Study", "Careful Study", "Cephalid Coliseum", "City of Brass", "City of Brass", "City of Brass", "Ephara, God of the Polis", "Faithless Looting", "Faithless Looting", "Forest", "Gemstone Mine", "Gemstone Mine", "Golgari Grave-Troll", "Golgari Grave-Troll", "Golgari Grave-Troll", "Golgari Grave-Troll", "Iroas, God of Victory", "Karametra, God of Harvests", "Keranos, God of Storms", "Klothys, God of Destiny", "Kruphix, God of Horizons", "Life from the Loam", "Life from the Loam", "Magus of the Bazaar", "Magus of the Bazaar", "Mogis, God of Slaughter", "Nylea, God of the Hunt", "Pharika, God of Affliction", "Purphoros, Bronze-Blooded", "Purphoros, God of the Forge", "Reflecting Pool", "Reflecting Pool", "Replenish", "Replenish", "Replenish", "Stinkweed Imp", "Stinkweed Imp", "Stinkweed Imp", "Tendo Ice Bridge", "Tendo Ice Bridge", "Tendo Ice Bridge", "Vivid Creek", "Vivid Creek", "Vivid Creek", "Xenagos, God of Revels"], "retrace_gy": ["Faithless Looting", "Faithless Looting"], "flashback_gy": ["Faithless Looting", "Faithless Looting"], "library_size": 8, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 50 },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 38,
+  "type": "tutor_etb",
+  "source": "Magus of the Bazaar (upkeep ability)",
+  "turn": 5,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Cephalid Coliseum", "idx": 4, "num": 5, "is_land": true, "taps": "U" }, { "name": "Magus of the Bazaar", "idx": 7, "num": 30, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Magus of the Bazaar", "idx": 9, "num": 31, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Reflecting Pool", "idx": 6, "num": 42, "is_land": true, "taps": "WUBRGC" }, { "name": "Reflecting Pool", "idx": 11, "num": 43, "is_land": true, "taps": "WUBRGC" }, { "name": "Tendo Ice Bridge", "idx": 10, "num": 54, "is_land": true, "taps": "CWUBRG", "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }], "vial_counters": [], "hand": [], "graveyard": ["Careful Study", "Careful Study", "Cephalid Coliseum", "City of Brass", "City of Brass", "City of Brass", "Ephara, God of the Polis", "Faithless Looting", "Faithless Looting", "Forest", "Gemstone Mine", "Gemstone Mine", "Golgari Grave-Troll", "Golgari Grave-Troll", "Golgari Grave-Troll", "Golgari Grave-Troll", "Iroas, God of Victory", "Karametra, God of Harvests", "Keranos, God of Storms", "Klothys, God of Destiny", "Kruphix, God of Horizons", "Life from the Loam", "Life from the Loam", "Magus of the Bazaar", "Magus of the Bazaar", "Mogis, God of Slaughter", "Nylea, God of the Hunt", "Pharika, God of Affliction", "Purphoros, Bronze-Blooded", "Purphoros, God of the Forge", "Reflecting Pool", "Reflecting Pool", "Replenish", "Replenish", "Replenish", "Stinkweed Imp", "Stinkweed Imp", "Stinkweed Imp", "Tendo Ice Bridge", "Tendo Ice Bridge", "Tendo Ice Bridge", "Vivid Creek", "Vivid Creek", "Vivid Creek", "Xenagos, God of Revels"], "retrace_gy": ["Faithless Looting", "Faithless Looting"], "flashback_gy": ["Faithless Looting", "Faithless Looting"], "library_size": 8, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 49 },
+  "heuristic_default": -1,
+  "upkeep_ability": true,
+  "candidates": [{ "index": 0, "name": "Activate" }],
+  "note": "reply 0 to tap Magus of the Bazaar before the draw step, drawing two and discarding three; -1 to leave it untapped. Dredge choices are offered for each draw."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 39,
+  "type": "tutor_etb",
+  "source": "Magus of the Bazaar (upkeep ability)",
+  "turn": 5,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Cephalid Coliseum", "idx": 4, "num": 5, "is_land": true, "taps": "U" }, { "name": "Magus of the Bazaar", "idx": 7, "num": 30, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Magus of the Bazaar", "idx": 9, "num": 31, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Reflecting Pool", "idx": 6, "num": 42, "is_land": true, "taps": "WUBRGC" }, { "name": "Reflecting Pool", "idx": 11, "num": 43, "is_land": true, "taps": "WUBRGC" }, { "name": "Tendo Ice Bridge", "idx": 10, "num": 54, "is_land": true, "taps": "CWUBRG", "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }], "vial_counters": [], "hand": [], "graveyard": ["Careful Study", "Careful Study", "Cephalid Coliseum", "City of Brass", "City of Brass", "City of Brass", "Ephara, God of the Polis", "Faithless Looting", "Faithless Looting", "Forest", "Gemstone Mine", "Gemstone Mine", "Golgari Grave-Troll", "Golgari Grave-Troll", "Golgari Grave-Troll", "Golgari Grave-Troll", "Iroas, God of Victory", "Karametra, God of Harvests", "Keranos, God of Storms", "Klothys, God of Destiny", "Kruphix, God of Horizons", "Life from the Loam", "Life from the Loam", "Magus of the Bazaar", "Magus of the Bazaar", "Mogis, God of Slaughter", "Nylea, God of the Hunt", "Pharika, God of Affliction", "Purphoros, Bronze-Blooded", "Purphoros, God of the Forge", "Reflecting Pool", "Reflecting Pool", "Replenish", "Replenish", "Replenish", "Stinkweed Imp", "Stinkweed Imp", "Stinkweed Imp", "Tendo Ice Bridge", "Tendo Ice Bridge", "Tendo Ice Bridge", "Vivid Creek", "Vivid Creek", "Vivid Creek", "Xenagos, God of Revels"], "retrace_gy": ["Faithless Looting", "Faithless Looting"], "flashback_gy": ["Faithless Looting", "Faithless Looting"], "library_size": 8, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 49 },
+  "heuristic_default": -1,
+  "upkeep_ability": true,
+  "candidates": [{ "index": 0, "name": "Activate" }],
+  "note": "reply 0 to tap Magus of the Bazaar before the draw step, drawing two and discarding three; -1 to leave it untapped. Dredge choices are offered for each draw."
+}
+},
+    { "chosen": 4, "decision": {
+  "decision_index": 40,
+  "type": "dredge",
+  "source": "Draw replacement",
+  "turn": 5,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Cephalid Coliseum", "idx": 4, "num": 5, "is_land": true, "taps": "U" }, { "name": "Magus of the Bazaar", "idx": 7, "num": 30, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Magus of the Bazaar", "idx": 9, "num": 31, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Reflecting Pool", "idx": 6, "num": 42, "is_land": true, "taps": "WUBRGC" }, { "name": "Reflecting Pool", "idx": 11, "num": 43, "is_land": true, "taps": "WUBRGC" }, { "name": "Tendo Ice Bridge", "idx": 10, "num": 54, "is_land": true, "taps": "CWUBRG", "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }], "vial_counters": [], "hand": [], "graveyard": ["Careful Study", "Careful Study", "Cephalid Coliseum", "City of Brass", "City of Brass", "City of Brass", "Ephara, God of the Polis", "Faithless Looting", "Faithless Looting", "Forest", "Gemstone Mine", "Gemstone Mine", "Golgari Grave-Troll", "Golgari Grave-Troll", "Golgari Grave-Troll", "Golgari Grave-Troll", "Iroas, God of Victory", "Karametra, God of Harvests", "Keranos, God of Storms", "Klothys, God of Destiny", "Kruphix, God of Horizons", "Life from the Loam", "Life from the Loam", "Magus of the Bazaar", "Magus of the Bazaar", "Mogis, God of Slaughter", "Nylea, God of the Hunt", "Pharika, God of Affliction", "Purphoros, Bronze-Blooded", "Purphoros, God of the Forge", "Reflecting Pool", "Reflecting Pool", "Replenish", "Replenish", "Replenish", "Stinkweed Imp", "Stinkweed Imp", "Stinkweed Imp", "Tendo Ice Bridge", "Tendo Ice Bridge", "Tendo Ice Bridge", "Vivid Creek", "Vivid Creek", "Vivid Creek", "Xenagos, God of Revels"], "retrace_gy": ["Faithless Looting", "Faithless Looting"], "flashback_gy": ["Faithless Looting", "Faithless Looting"], "library_size": 8, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 49 },
+  "player_index": 0,
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "name": "Draw a card" }, { "index": 1, "name": "Life from the Loam" }, { "index": 2, "name": "Stinkweed Imp" }, { "index": 3, "name": "Life from the Loam" }, { "index": 4, "name": "Golgari Grave-Troll" }, { "index": 5, "name": "Golgari Grave-Troll" }, { "index": 6, "name": "Stinkweed Imp" }, { "index": 7, "name": "Stinkweed Imp" }, { "index": 8, "name": "Golgari Grave-Troll" }, { "index": 9, "name": "Golgari Grave-Troll" }],
+  "note": "Reply 0 to draw normally, or 1..n to mill the listed card's dredge number and return it to hand. Each draw has its own choice."
+}
+},
+    { "chosen": 7, "decision": {
+  "decision_index": 41,
+  "main_ordinal": 7,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Cephalid Coliseum", "idx": 4, "num": 5, "is_land": true, "taps": "U" }, { "name": "Magus of the Bazaar", "idx": 7, "num": 30, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Magus of the Bazaar", "idx": 9, "num": 31, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Reflecting Pool", "idx": 6, "num": 42, "is_land": true, "taps": "WUBRGC" }, { "name": "Reflecting Pool", "idx": 11, "num": 43, "is_land": true, "taps": "WUBRGC" }, { "name": "Tendo Ice Bridge", "idx": 10, "num": 54, "is_land": true, "taps": "CWUBRG", "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 19, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }], "graveyard": ["Athreos, God of Passage", "Careful Study", "Careful Study", "Cephalid Coliseum", "City of Brass", "City of Brass", "City of Brass", "Ephara, God of the Polis", "Faithless Looting", "Faithless Looting", "Faithless Looting", "Forest", "Gemstone Mine", "Gemstone Mine", "Golgari Grave-Troll", "Golgari Grave-Troll", "Golgari Grave-Troll", "Iroas, God of Victory", "Karametra, God of Harvests", "Keranos, God of Storms", "Klothys, God of Destiny", "Kruphix, God of Horizons", "Life from the Loam", "Life from the Loam", "Magus of the Bazaar", "Magus of the Bazaar", "Mogis, God of Slaughter", "Mystic Retrieval", "Nylea, God of the Hunt", "Pharika, God of Affliction", "Phenax, God of Deception", "Purphoros, Bronze-Blooded", "Purphoros, God of the Forge", "Reflecting Pool", "Reflecting Pool", "Replenish", "Replenish", "Replenish", "Replenish", "Stinkweed Imp", "Stinkweed Imp", "Stinkweed Imp", "Stinkweed Imp", "Tendo Ice Bridge", "Tendo Ice Bridge", "Tendo Ice Bridge", "Vivid Creek", "Vivid Creek", "Vivid Creek", "Xenagos, God of Revels"], "retrace_gy": ["Faithless Looting", "Faithless Looting", "Faithless Looting", "Mystic Retrieval"], "flashback_gy": ["Faithless Looting", "Faithless Looting", "Faithless Looting", "Mystic Retrieval"], "library_size": 2, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 49 },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Magus of the Bazaar: draw a card, Magus of the Bazaar: draw a card, Faithless Looting (flashback)", "declared_order_payability": "not_verified", "land": null, "casts": ["Magus of the Bazaar", "Magus of the Bazaar", "Faithless Looting"], "actions": [{ "card": "Magus of the Bazaar", "src_num": 30, "activate": true, "act_label": "draw a card", "x": 1 }, { "card": "Magus of the Bazaar", "src_num": 31, "activate": true, "act_label": "draw a card", "x": 1 }, { "card": "Faithless Looting" }] },
+    { "index": 1, "summary": "land=none; cast: Magus of the Bazaar: draw a card, Faithless Looting (flashback)", "declared_order_payability": "not_verified", "land": null, "casts": ["Magus of the Bazaar", "Faithless Looting"], "actions": [{ "card": "Magus of the Bazaar", "src_num": 30, "activate": true, "act_label": "draw a card", "x": 1 }, { "card": "Faithless Looting" }] },
+    { "index": 2, "summary": "land=none; cast: Magus of the Bazaar: draw a card, Faithless Looting (flashback)", "declared_order_payability": "not_verified", "land": null, "casts": ["Magus of the Bazaar", "Faithless Looting"], "actions": [{ "card": "Magus of the Bazaar", "src_num": 31, "activate": true, "act_label": "draw a card", "x": 1 }, { "card": "Faithless Looting" }] },
+    { "index": 3, "summary": "land=none; cast: Faithless Looting (flashback)", "declared_order_payability": "not_verified", "land": null, "casts": ["Faithless Looting"], "actions": [{ "card": "Faithless Looting" }] },
+    { "index": 4, "summary": "land=none; cast: Magus of the Bazaar: draw a card, Magus of the Bazaar: draw a card, Mystic Retrieval (flashback)", "declared_order_payability": "not_verified", "land": null, "casts": ["Magus of the Bazaar", "Magus of the Bazaar", "Mystic Retrieval"], "actions": [{ "card": "Magus of the Bazaar", "src_num": 30, "activate": true, "act_label": "draw a card", "x": 1 }, { "card": "Magus of the Bazaar", "src_num": 31, "activate": true, "act_label": "draw a card", "x": 1 }, { "card": "Mystic Retrieval" }] },
+    { "index": 5, "summary": "land=none; cast: Magus of the Bazaar: draw a card, Mystic Retrieval (flashback)", "declared_order_payability": "not_verified", "land": null, "casts": ["Magus of the Bazaar", "Mystic Retrieval"], "actions": [{ "card": "Magus of the Bazaar", "src_num": 30, "activate": true, "act_label": "draw a card", "x": 1 }, { "card": "Mystic Retrieval" }] },
+    { "index": 6, "summary": "land=none; cast: Magus of the Bazaar: draw a card, Mystic Retrieval (flashback)", "declared_order_payability": "not_verified", "land": null, "casts": ["Magus of the Bazaar", "Mystic Retrieval"], "actions": [{ "card": "Magus of the Bazaar", "src_num": 31, "activate": true, "act_label": "draw a card", "x": 1 }, { "card": "Mystic Retrieval" }] },
+    { "index": 7, "summary": "land=none; cast: Mystic Retrieval (flashback)", "declared_order_payability": "not_verified", "land": null, "casts": ["Mystic Retrieval"], "actions": [{ "card": "Mystic Retrieval" }] },
+    { "index": 8, "summary": "land=none; cast: Cephalid Coliseum: sacrifice: target player draws three, then discards three (opponent draws), Magus of the Bazaar: draw a card, Magus of the Bazaar: draw a card", "declared_order_payability": "not_verified", "land": null, "casts": ["Cephalid Coliseum", "Magus of the Bazaar", "Magus of the Bazaar"], "actions": [{ "card": "Cephalid Coliseum", "src_num": 5, "activate": true, "cost_pips": "U", "activation_cost": "{U}", "act_label": "sacrifice: target player draws three, then discards three", "draw_target": "opponent", "x": 1 }, { "card": "Magus of the Bazaar", "src_num": 30, "activate": true, "act_label": "draw a card", "x": 1 }, { "card": "Magus of the Bazaar", "src_num": 31, "activate": true, "act_label": "draw a card", "x": 1 }] },
+    { "index": 9, "summary": "land=none; cast: Cephalid Coliseum: sacrifice: target player draws three, then discards three (you draw), Magus of the Bazaar: draw a card, Magus of the Bazaar: draw a card", "declared_order_payability": "not_verified", "land": null, "casts": ["Cephalid Coliseum", "Magus of the Bazaar", "Magus of the Bazaar"], "actions": [{ "card": "Cephalid Coliseum", "src_num": 5, "activate": true, "cost_pips": "U", "activation_cost": "{U}", "act_label": "sacrifice: target player draws three, then discards three", "draw_target": "self", "x": 1 }, { "card": "Magus of the Bazaar", "src_num": 30, "activate": true, "act_label": "draw a card", "x": 1 }, { "card": "Magus of the Bazaar", "src_num": 31, "activate": true, "act_label": "draw a card", "x": 1 }] },
+    { "index": 10, "summary": "land=none; cast: Cephalid Coliseum: sacrifice: target player draws three, then discards three (opponent draws), Magus of the Bazaar: draw a card", "declared_order_payability": "not_verified", "land": null, "casts": ["Cephalid Coliseum", "Magus of the Bazaar"], "actions": [{ "card": "Cephalid Coliseum", "src_num": 5, "activate": true, "cost_pips": "U", "activation_cost": "{U}", "act_label": "sacrifice: target player draws three, then discards three", "draw_target": "opponent", "x": 1 }, { "card": "Magus of the Bazaar", "src_num": 30, "activate": true, "act_label": "draw a card", "x": 1 }] },
+    { "index": 11, "summary": "land=none; cast: Cephalid Coliseum: sacrifice: target player draws three, then discards three (you draw), Magus of the Bazaar: draw a card", "declared_order_payability": "not_verified", "land": null, "casts": ["Cephalid Coliseum", "Magus of the Bazaar"], "actions": [{ "card": "Cephalid Coliseum", "src_num": 5, "activate": true, "cost_pips": "U", "activation_cost": "{U}", "act_label": "sacrifice: target player draws three, then discards three", "draw_target": "self", "x": 1 }, { "card": "Magus of the Bazaar", "src_num": 30, "activate": true, "act_label": "draw a card", "x": 1 }] },
+    { "index": 12, "summary": "land=none; cast: Cephalid Coliseum: sacrifice: target player draws three, then discards three (opponent draws), Magus of the Bazaar: draw a card", "declared_order_payability": "not_verified", "land": null, "casts": ["Cephalid Coliseum", "Magus of the Bazaar"], "actions": [{ "card": "Cephalid Coliseum", "src_num": 5, "activate": true, "cost_pips": "U", "activation_cost": "{U}", "act_label": "sacrifice: target player draws three, then discards three", "draw_target": "opponent", "x": 1 }, { "card": "Magus of the Bazaar", "src_num": 31, "activate": true, "act_label": "draw a card", "x": 1 }] },
+    { "index": 13, "summary": "land=none; cast: Cephalid Coliseum: sacrifice: target player draws three, then discards three (you draw), Magus of the Bazaar: draw a card", "declared_order_payability": "not_verified", "land": null, "casts": ["Cephalid Coliseum", "Magus of the Bazaar"], "actions": [{ "card": "Cephalid Coliseum", "src_num": 5, "activate": true, "cost_pips": "U", "activation_cost": "{U}", "act_label": "sacrifice: target player draws three, then discards three", "draw_target": "self", "x": 1 }, { "card": "Magus of the Bazaar", "src_num": 31, "activate": true, "act_label": "draw a card", "x": 1 }] },
+    { "index": 14, "summary": "land=none; cast: Magus of the Bazaar: draw a card, Magus of the Bazaar: draw a card", "declared_order_payability": "not_verified", "land": null, "casts": ["Magus of the Bazaar", "Magus of the Bazaar"], "actions": [{ "card": "Magus of the Bazaar", "src_num": 30, "activate": true, "act_label": "draw a card", "x": 1 }, { "card": "Magus of the Bazaar", "src_num": 31, "activate": true, "act_label": "draw a card", "x": 1 }] },
+    { "index": 15, "summary": "land=none; cast: Cephalid Coliseum: sacrifice: target player draws three, then discards three (opponent draws)", "declared_order_payability": "not_verified", "land": null, "casts": ["Cephalid Coliseum"], "actions": [{ "card": "Cephalid Coliseum", "src_num": 5, "activate": true, "cost_pips": "U", "activation_cost": "{U}", "act_label": "sacrifice: target player draws three, then discards three", "draw_target": "opponent", "x": 1 }] },
+    { "index": 16, "summary": "land=none; cast: Cephalid Coliseum: sacrifice: target player draws three, then discards three (you draw)", "declared_order_payability": "not_verified", "land": null, "casts": ["Cephalid Coliseum"], "actions": [{ "card": "Cephalid Coliseum", "src_num": 5, "activate": true, "cost_pips": "U", "activation_cost": "{U}", "act_label": "sacrifice: target player draws three, then discards three", "draw_target": "self", "x": 1 }] },
+    { "index": 17, "summary": "land=none; cast: Magus of the Bazaar: draw a card", "declared_order_payability": "not_verified", "land": null, "casts": ["Magus of the Bazaar"], "actions": [{ "card": "Magus of the Bazaar", "src_num": 30, "activate": true, "act_label": "draw a card", "x": 1 }] },
+    { "index": 18, "summary": "land=none; cast: Magus of the Bazaar: draw a card", "declared_order_payability": "not_verified", "land": null, "casts": ["Magus of the Bazaar"], "actions": [{ "card": "Magus of the Bazaar", "src_num": 31, "activate": true, "act_label": "draw a card", "x": 1 }] },
+    { "index": 19, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 90,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 42,
+  "type": "tutor_etb",
+  "source": "Mystic Retrieval",
+  "turn": 5,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Cephalid Coliseum", "idx": 4, "num": 5, "is_land": true, "taps": "U" }, { "name": "Magus of the Bazaar", "idx": 7, "num": 30, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Magus of the Bazaar", "idx": 9, "num": 31, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Reflecting Pool", "idx": 6, "num": 42, "tapped": true, "is_land": true }, { "name": "Reflecting Pool", "idx": 11, "num": 43, "tapped": true, "is_land": true }, { "name": "Tendo Ice Bridge", "idx": 10, "num": 54, "tapped": true, "is_land": true, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 19, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }], "graveyard": ["Athreos, God of Passage", "Careful Study", "Careful Study", "Cephalid Coliseum", "City of Brass", "City of Brass", "City of Brass", "Ephara, God of the Polis", "Faithless Looting", "Faithless Looting", "Faithless Looting", "Forest", "Gemstone Mine", "Gemstone Mine", "Golgari Grave-Troll", "Golgari Grave-Troll", "Golgari Grave-Troll", "Iroas, God of Victory", "Karametra, God of Harvests", "Keranos, God of Storms", "Klothys, God of Destiny", "Kruphix, God of Horizons", "Life from the Loam", "Life from the Loam", "Magus of the Bazaar", "Magus of the Bazaar", "Mogis, God of Slaughter", "Nylea, God of the Hunt", "Pharika, God of Affliction", "Phenax, God of Deception", "Purphoros, Bronze-Blooded", "Purphoros, God of the Forge", "Reflecting Pool", "Reflecting Pool", "Replenish", "Replenish", "Replenish", "Replenish", "Stinkweed Imp", "Stinkweed Imp", "Stinkweed Imp", "Stinkweed Imp", "Tendo Ice Bridge", "Tendo Ice Bridge", "Tendo Ice Bridge", "Vivid Creek", "Vivid Creek", "Vivid Creek", "Xenagos, God of Revels"], "retrace_gy": ["Faithless Looting", "Faithless Looting", "Faithless Looting"], "flashback_gy": ["Faithless Looting", "Faithless Looting", "Faithless Looting"], "library_size": 2, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 49 },
+  "heuristic_default": 0,
+  "from_graveyard": true,
+  "candidates": [{ "index": 0, "name": "Replenish" }, { "index": 1, "name": "Life from the Loam" }, { "index": 2, "name": "Careful Study" }, { "index": 3, "name": "Faithless Looting" }],
+  "note": "reply a candidate index to return that target card from your graveyard to your hand. This choice is mandatory; -1 uses the AI's target."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 43,
+  "main_ordinal": 8,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "reveals": [{ "turn": 5, "source": "Mystic Retrieval (returned from graveyard)", "cards": [{ "name": "Replenish", "disposition": "to hand" }] }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Cephalid Coliseum", "idx": 4, "num": 5, "is_land": true, "taps": "U" }, { "name": "Magus of the Bazaar", "idx": 7, "num": 30, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Magus of the Bazaar", "idx": 9, "num": 31, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Reflecting Pool", "idx": 6, "num": 42, "tapped": true, "is_land": true }, { "name": "Reflecting Pool", "idx": 11, "num": 43, "tapped": true, "is_land": true }, { "name": "Tendo Ice Bridge", "idx": 10, "num": 54, "tapped": true, "is_land": true, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 19, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Replenish", "cost": "{3}{W}", "mv": 4, "kind": "nonpermanent" }], "graveyard": ["Athreos, God of Passage", "Careful Study", "Careful Study", "Cephalid Coliseum", "City of Brass", "City of Brass", "City of Brass", "Ephara, God of the Polis", "Faithless Looting", "Faithless Looting", "Faithless Looting", "Forest", "Gemstone Mine", "Gemstone Mine", "Golgari Grave-Troll", "Golgari Grave-Troll", "Golgari Grave-Troll", "Iroas, God of Victory", "Karametra, God of Harvests", "Keranos, God of Storms", "Klothys, God of Destiny", "Kruphix, God of Horizons", "Life from the Loam", "Life from the Loam", "Magus of the Bazaar", "Magus of the Bazaar", "Mogis, God of Slaughter", "Nylea, God of the Hunt", "Pharika, God of Affliction", "Phenax, God of Deception", "Purphoros, Bronze-Blooded", "Purphoros, God of the Forge", "Reflecting Pool", "Reflecting Pool", "Replenish", "Replenish", "Replenish", "Stinkweed Imp", "Stinkweed Imp", "Stinkweed Imp", "Stinkweed Imp", "Tendo Ice Bridge", "Tendo Ice Bridge", "Tendo Ice Bridge", "Vivid Creek", "Vivid Creek", "Vivid Creek", "Xenagos, God of Revels"], "retrace_gy": ["Faithless Looting", "Faithless Looting", "Faithless Looting"], "flashback_gy": ["Faithless Looting", "Faithless Looting", "Faithless Looting"], "library_size": 2, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 49 },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Magus of the Bazaar: draw a card, Magus of the Bazaar: draw a card", "declared_order_payability": "not_verified", "land": null, "casts": ["Magus of the Bazaar", "Magus of the Bazaar"], "actions": [{ "card": "Magus of the Bazaar", "src_num": 30, "activate": true, "act_label": "draw a card", "x": 1 }, { "card": "Magus of the Bazaar", "src_num": 31, "activate": true, "act_label": "draw a card", "x": 1 }] },
+    { "index": 1, "summary": "land=none; cast: Magus of the Bazaar: draw a card", "declared_order_payability": "not_verified", "land": null, "casts": ["Magus of the Bazaar"], "actions": [{ "card": "Magus of the Bazaar", "src_num": 30, "activate": true, "act_label": "draw a card", "x": 1 }] },
+    { "index": 2, "summary": "land=none; cast: Magus of the Bazaar: draw a card", "declared_order_payability": "not_verified", "land": null, "casts": ["Magus of the Bazaar"], "actions": [{ "card": "Magus of the Bazaar", "src_num": 31, "activate": true, "act_label": "draw a card", "x": 1 }] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 18,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 44,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Cephalid Coliseum", "idx": 4, "num": 5, "is_land": true, "taps": "U" }, { "name": "Magus of the Bazaar", "idx": 7, "num": 30, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Magus of the Bazaar", "idx": 9, "num": 31, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Reflecting Pool", "idx": 6, "num": 42, "tapped": true, "is_land": true }, { "name": "Reflecting Pool", "idx": 11, "num": 43, "tapped": true, "is_land": true }, { "name": "Tendo Ice Bridge", "idx": 10, "num": 54, "tapped": true, "is_land": true, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 19, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Replenish", "cost": "{3}{W}", "mv": 4, "kind": "nonpermanent" }], "graveyard": ["Athreos, God of Passage", "Careful Study", "Careful Study", "Cephalid Coliseum", "City of Brass", "City of Brass", "City of Brass", "Ephara, God of the Polis", "Faithless Looting", "Faithless Looting", "Faithless Looting", "Forest", "Gemstone Mine", "Gemstone Mine", "Golgari Grave-Troll", "Golgari Grave-Troll", "Golgari Grave-Troll", "Iroas, God of Victory", "Karametra, God of Harvests", "Keranos, God of Storms", "Klothys, God of Destiny", "Kruphix, God of Horizons", "Life from the Loam", "Life from the Loam", "Magus of the Bazaar", "Magus of the Bazaar", "Mogis, God of Slaughter", "Nylea, God of the Hunt", "Pharika, God of Affliction", "Phenax, God of Deception", "Purphoros, Bronze-Blooded", "Purphoros, God of the Forge", "Reflecting Pool", "Reflecting Pool", "Replenish", "Replenish", "Replenish", "Stinkweed Imp", "Stinkweed Imp", "Stinkweed Imp", "Stinkweed Imp", "Tendo Ice Bridge", "Tendo Ice Bridge", "Tendo Ice Bridge", "Vivid Creek", "Vivid Creek", "Vivid Creek", "Xenagos, God of Revels"], "retrace_gy": ["Faithless Looting", "Faithless Looting", "Faithless Looting"], "flashback_gy": ["Faithless Looting", "Faithless Looting", "Faithless Looting"], "library_size": 2, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 49 },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 45,
+  "type": "tutor_etb",
+  "source": "Magus of the Bazaar (upkeep ability)",
+  "turn": 6,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Cephalid Coliseum", "idx": 4, "num": 5, "is_land": true, "taps": "U" }, { "name": "Magus of the Bazaar", "idx": 7, "num": 30, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Magus of the Bazaar", "idx": 9, "num": 31, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Reflecting Pool", "idx": 6, "num": 42, "is_land": true, "taps": "WUBRGC" }, { "name": "Reflecting Pool", "idx": 11, "num": 43, "is_land": true, "taps": "WUBRGC" }, { "name": "Tendo Ice Bridge", "idx": 10, "num": 54, "is_land": true, "taps": "CWUBRG", "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 19, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Replenish", "cost": "{3}{W}", "mv": 4, "kind": "nonpermanent" }], "graveyard": ["Athreos, God of Passage", "Careful Study", "Careful Study", "Cephalid Coliseum", "City of Brass", "City of Brass", "City of Brass", "Ephara, God of the Polis", "Faithless Looting", "Faithless Looting", "Faithless Looting", "Forest", "Gemstone Mine", "Gemstone Mine", "Golgari Grave-Troll", "Golgari Grave-Troll", "Golgari Grave-Troll", "Iroas, God of Victory", "Karametra, God of Harvests", "Keranos, God of Storms", "Klothys, God of Destiny", "Kruphix, God of Horizons", "Life from the Loam", "Life from the Loam", "Magus of the Bazaar", "Magus of the Bazaar", "Mogis, God of Slaughter", "Nylea, God of the Hunt", "Pharika, God of Affliction", "Phenax, God of Deception", "Purphoros, Bronze-Blooded", "Purphoros, God of the Forge", "Reflecting Pool", "Reflecting Pool", "Replenish", "Replenish", "Replenish", "Stinkweed Imp", "Stinkweed Imp", "Stinkweed Imp", "Stinkweed Imp", "Tendo Ice Bridge", "Tendo Ice Bridge", "Tendo Ice Bridge", "Vivid Creek", "Vivid Creek", "Vivid Creek", "Xenagos, God of Revels"], "retrace_gy": ["Faithless Looting", "Faithless Looting", "Faithless Looting"], "flashback_gy": ["Faithless Looting", "Faithless Looting", "Faithless Looting"], "library_size": 2, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 48 },
+  "heuristic_default": -1,
+  "upkeep_ability": true,
+  "candidates": [{ "index": 0, "name": "Activate" }],
+  "note": "reply 0 to tap Magus of the Bazaar before the draw step, drawing two and discarding three; -1 to leave it untapped. Dredge choices are offered for each draw."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 46,
+  "type": "tutor_etb",
+  "source": "Magus of the Bazaar (upkeep ability)",
+  "turn": 6,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Cephalid Coliseum", "idx": 4, "num": 5, "is_land": true, "taps": "U" }, { "name": "Magus of the Bazaar", "idx": 7, "num": 30, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Magus of the Bazaar", "idx": 9, "num": 31, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Reflecting Pool", "idx": 6, "num": 42, "is_land": true, "taps": "WUBRGC" }, { "name": "Reflecting Pool", "idx": 11, "num": 43, "is_land": true, "taps": "WUBRGC" }, { "name": "Tendo Ice Bridge", "idx": 10, "num": 54, "is_land": true, "taps": "CWUBRG", "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 19, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Replenish", "cost": "{3}{W}", "mv": 4, "kind": "nonpermanent" }], "graveyard": ["Athreos, God of Passage", "Careful Study", "Careful Study", "Cephalid Coliseum", "City of Brass", "City of Brass", "City of Brass", "Ephara, God of the Polis", "Faithless Looting", "Faithless Looting", "Faithless Looting", "Forest", "Gemstone Mine", "Gemstone Mine", "Golgari Grave-Troll", "Golgari Grave-Troll", "Golgari Grave-Troll", "Iroas, God of Victory", "Karametra, God of Harvests", "Keranos, God of Storms", "Klothys, God of Destiny", "Kruphix, God of Horizons", "Life from the Loam", "Life from the Loam", "Magus of the Bazaar", "Magus of the Bazaar", "Mogis, God of Slaughter", "Nylea, God of the Hunt", "Pharika, God of Affliction", "Phenax, God of Deception", "Purphoros, Bronze-Blooded", "Purphoros, God of the Forge", "Reflecting Pool", "Reflecting Pool", "Replenish", "Replenish", "Replenish", "Stinkweed Imp", "Stinkweed Imp", "Stinkweed Imp", "Stinkweed Imp", "Tendo Ice Bridge", "Tendo Ice Bridge", "Tendo Ice Bridge", "Vivid Creek", "Vivid Creek", "Vivid Creek", "Xenagos, God of Revels"], "retrace_gy": ["Faithless Looting", "Faithless Looting", "Faithless Looting"], "flashback_gy": ["Faithless Looting", "Faithless Looting", "Faithless Looting"], "library_size": 2, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 48 },
+  "heuristic_default": -1,
+  "upkeep_ability": true,
+  "candidates": [{ "index": 0, "name": "Activate" }],
+  "note": "reply 0 to tap Magus of the Bazaar before the draw step, drawing two and discarding three; -1 to leave it untapped. Dredge choices are offered for each draw."
+}
+},
+    { "chosen": 23, "decision": {
+  "decision_index": 47,
+  "main_ordinal": 9,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 6, "card": "City of Brass" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Cephalid Coliseum", "idx": 4, "num": 5, "is_land": true, "taps": "U" }, { "name": "Magus of the Bazaar", "idx": 7, "num": 30, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Magus of the Bazaar", "idx": 9, "num": 31, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Reflecting Pool", "idx": 6, "num": 42, "is_land": true, "taps": "WUBRGC" }, { "name": "Reflecting Pool", "idx": 11, "num": 43, "is_land": true, "taps": "WUBRGC" }, { "name": "Tendo Ice Bridge", "idx": 10, "num": 54, "is_land": true, "taps": "CWUBRG", "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 8, "name": "City of Brass", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Replenish", "cost": "{3}{W}", "mv": 4, "kind": "nonpermanent" }], "graveyard": ["Athreos, God of Passage", "Careful Study", "Careful Study", "Cephalid Coliseum", "City of Brass", "City of Brass", "City of Brass", "Ephara, God of the Polis", "Faithless Looting", "Faithless Looting", "Faithless Looting", "Forest", "Gemstone Mine", "Gemstone Mine", "Golgari Grave-Troll", "Golgari Grave-Troll", "Golgari Grave-Troll", "Iroas, God of Victory", "Karametra, God of Harvests", "Keranos, God of Storms", "Klothys, God of Destiny", "Kruphix, God of Horizons", "Life from the Loam", "Life from the Loam", "Magus of the Bazaar", "Magus of the Bazaar", "Mogis, God of Slaughter", "Nylea, God of the Hunt", "Pharika, God of Affliction", "Phenax, God of Deception", "Purphoros, Bronze-Blooded", "Purphoros, God of the Forge", "Reflecting Pool", "Reflecting Pool", "Replenish", "Replenish", "Replenish", "Stinkweed Imp", "Stinkweed Imp", "Stinkweed Imp", "Stinkweed Imp", "Tendo Ice Bridge", "Tendo Ice Bridge", "Tendo Ice Bridge", "Vivid Creek", "Vivid Creek", "Vivid Creek", "Xenagos, God of Revels"], "retrace_gy": ["Faithless Looting", "Faithless Looting", "Faithless Looting"], "flashback_gy": ["Faithless Looting", "Faithless Looting", "Faithless Looting"], "library_size": 1, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 48 },
+  "plans": [
+    { "index": 0, "summary": "land=City of Brass; cast: Cephalid Coliseum: sacrifice: target player draws three, then discards three (opponent draws), Magus of the Bazaar: draw a card, Magus of the Bazaar: draw a card, Faithless Looting (flashback)", "declared_order_payability": "not_verified", "land": "City of Brass", "casts": ["Cephalid Coliseum", "Magus of the Bazaar", "Magus of the Bazaar", "Faithless Looting"], "actions": [{ "card": "Cephalid Coliseum", "src_num": 5, "activate": true, "cost_pips": "U", "activation_cost": "{U}", "act_label": "sacrifice: target player draws three, then discards three", "draw_target": "opponent", "x": 1 }, { "card": "Magus of the Bazaar", "src_num": 30, "activate": true, "act_label": "draw a card", "x": 1 }, { "card": "Magus of the Bazaar", "src_num": 31, "activate": true, "act_label": "draw a card", "x": 1 }, { "card": "Faithless Looting" }] },
+    { "index": 1, "summary": "land=City of Brass; cast: Cephalid Coliseum: sacrifice: target player draws three, then discards three (you draw), Magus of the Bazaar: draw a card, Magus of the Bazaar: draw a card, Faithless Looting (flashback)", "declared_order_payability": "not_verified", "land": "City of Brass", "casts": ["Cephalid Coliseum", "Magus of the Bazaar", "Magus of the Bazaar", "Faithless Looting"], "actions": [{ "card": "Cephalid Coliseum", "src_num": 5, "activate": true, "cost_pips": "U", "activation_cost": "{U}", "act_label": "sacrifice: target player draws three, then discards three", "draw_target": "self", "x": 1 }, { "card": "Magus of the Bazaar", "src_num": 30, "activate": true, "act_label": "draw a card", "x": 1 }, { "card": "Magus of the Bazaar", "src_num": 31, "activate": true, "act_label": "draw a card", "x": 1 }, { "card": "Faithless Looting" }] },
+    { "index": 2, "summary": "land=City of Brass; cast: Cephalid Coliseum: sacrifice: target player draws three, then discards three (opponent draws), Magus of the Bazaar: draw a card, Faithless Looting (flashback)", "declared_order_payability": "not_verified", "land": "City of Brass", "casts": ["Cephalid Coliseum", "Magus of the Bazaar", "Faithless Looting"], "actions": [{ "card": "Cephalid Coliseum", "src_num": 5, "activate": true, "cost_pips": "U", "activation_cost": "{U}", "act_label": "sacrifice: target player draws three, then discards three", "draw_target": "opponent", "x": 1 }, { "card": "Magus of the Bazaar", "src_num": 30, "activate": true, "act_label": "draw a card", "x": 1 }, { "card": "Faithless Looting" }] },
+    { "index": 3, "summary": "land=City of Brass; cast: Cephalid Coliseum: sacrifice: target player draws three, then discards three (you draw), Magus of the Bazaar: draw a card, Faithless Looting (flashback)", "declared_order_payability": "not_verified", "land": "City of Brass", "casts": ["Cephalid Coliseum", "Magus of the Bazaar", "Faithless Looting"], "actions": [{ "card": "Cephalid Coliseum", "src_num": 5, "activate": true, "cost_pips": "U", "activation_cost": "{U}", "act_label": "sacrifice: target player draws three, then discards three", "draw_target": "self", "x": 1 }, { "card": "Magus of the Bazaar", "src_num": 30, "activate": true, "act_label": "draw a card", "x": 1 }, { "card": "Faithless Looting" }] },
+    { "index": 4, "summary": "land=City of Brass; cast: Cephalid Coliseum: sacrifice: target player draws three, then discards three (opponent draws), Magus of the Bazaar: draw a card, Faithless Looting (flashback)", "declared_order_payability": "not_verified", "land": "City of Brass", "casts": ["Cephalid Coliseum", "Magus of the Bazaar", "Faithless Looting"], "actions": [{ "card": "Cephalid Coliseum", "src_num": 5, "activate": true, "cost_pips": "U", "activation_cost": "{U}", "act_label": "sacrifice: target player draws three, then discards three", "draw_target": "opponent", "x": 1 }, { "card": "Magus of the Bazaar", "src_num": 31, "activate": true, "act_label": "draw a card", "x": 1 }, { "card": "Faithless Looting" }] },
+    { "index": 5, "summary": "land=City of Brass; cast: Cephalid Coliseum: sacrifice: target player draws three, then discards three (you draw), Magus of the Bazaar: draw a card, Faithless Looting (flashback)", "declared_order_payability": "not_verified", "land": "City of Brass", "casts": ["Cephalid Coliseum", "Magus of the Bazaar", "Faithless Looting"], "actions": [{ "card": "Cephalid Coliseum", "src_num": 5, "activate": true, "cost_pips": "U", "activation_cost": "{U}", "act_label": "sacrifice: target player draws three, then discards three", "draw_target": "self", "x": 1 }, { "card": "Magus of the Bazaar", "src_num": 31, "activate": true, "act_label": "draw a card", "x": 1 }, { "card": "Faithless Looting" }] },
+    { "index": 6, "summary": "land=City of Brass; cast: Magus of the Bazaar: draw a card, Magus of the Bazaar: draw a card, Faithless Looting (flashback)", "declared_order_payability": "not_verified", "land": "City of Brass", "casts": ["Magus of the Bazaar", "Magus of the Bazaar", "Faithless Looting"], "actions": [{ "card": "Magus of the Bazaar", "src_num": 30, "activate": true, "act_label": "draw a card", "x": 1 }, { "card": "Magus of the Bazaar", "src_num": 31, "activate": true, "act_label": "draw a card", "x": 1 }, { "card": "Faithless Looting" }] },
+    { "index": 7, "summary": "land=none; cast: Magus of the Bazaar: draw a card, Magus of the Bazaar: draw a card, Faithless Looting (flashback)", "declared_order_payability": "not_verified", "land": null, "casts": ["Magus of the Bazaar", "Magus of the Bazaar", "Faithless Looting"], "actions": [{ "card": "Magus of the Bazaar", "src_num": 30, "activate": true, "act_label": "draw a card", "x": 1 }, { "card": "Magus of the Bazaar", "src_num": 31, "activate": true, "act_label": "draw a card", "x": 1 }, { "card": "Faithless Looting" }] },
+    { "index": 8, "summary": "land=City of Brass; cast: Cephalid Coliseum: sacrifice: target player draws three, then discards three (opponent draws), Faithless Looting (flashback)", "declared_order_payability": "not_verified", "land": "City of Brass", "casts": ["Cephalid Coliseum", "Faithless Looting"], "actions": [{ "card": "Cephalid Coliseum", "src_num": 5, "activate": true, "cost_pips": "U", "activation_cost": "{U}", "act_label": "sacrifice: target player draws three, then discards three", "draw_target": "opponent", "x": 1 }, { "card": "Faithless Looting" }] },
+    { "index": 9, "summary": "land=City of Brass; cast: Cephalid Coliseum: sacrifice: target player draws three, then discards three (you draw), Faithless Looting (flashback)", "declared_order_payability": "not_verified", "land": "City of Brass", "casts": ["Cephalid Coliseum", "Faithless Looting"], "actions": [{ "card": "Cephalid Coliseum", "src_num": 5, "activate": true, "cost_pips": "U", "activation_cost": "{U}", "act_label": "sacrifice: target player draws three, then discards three", "draw_target": "self", "x": 1 }, { "card": "Faithless Looting" }] },
+    { "index": 10, "summary": "land=City of Brass; cast: Magus of the Bazaar: draw a card, Faithless Looting (flashback)", "declared_order_payability": "not_verified", "land": "City of Brass", "casts": ["Magus of the Bazaar", "Faithless Looting"], "actions": [{ "card": "Magus of the Bazaar", "src_num": 30, "activate": true, "act_label": "draw a card", "x": 1 }, { "card": "Faithless Looting" }] },
+    { "index": 11, "summary": "land=City of Brass; cast: Magus of the Bazaar: draw a card, Faithless Looting (flashback)", "declared_order_payability": "not_verified", "land": "City of Brass", "casts": ["Magus of the Bazaar", "Faithless Looting"], "actions": [{ "card": "Magus of the Bazaar", "src_num": 31, "activate": true, "act_label": "draw a card", "x": 1 }, { "card": "Faithless Looting" }] },
+    { "index": 12, "summary": "land=none; cast: Magus of the Bazaar: draw a card, Faithless Looting (flashback)", "declared_order_payability": "not_verified", "land": null, "casts": ["Magus of the Bazaar", "Faithless Looting"], "actions": [{ "card": "Magus of the Bazaar", "src_num": 30, "activate": true, "act_label": "draw a card", "x": 1 }, { "card": "Faithless Looting" }] },
+    { "index": 13, "summary": "land=none; cast: Magus of the Bazaar: draw a card, Faithless Looting (flashback)", "declared_order_payability": "not_verified", "land": null, "casts": ["Magus of the Bazaar", "Faithless Looting"], "actions": [{ "card": "Magus of the Bazaar", "src_num": 31, "activate": true, "act_label": "draw a card", "x": 1 }, { "card": "Faithless Looting" }] },
+    { "index": 14, "summary": "land=City of Brass; cast: Faithless Looting (flashback)", "declared_order_payability": "not_verified", "land": "City of Brass", "casts": ["Faithless Looting"], "actions": [{ "card": "Faithless Looting" }] },
+    { "index": 15, "summary": "land=none; cast: Faithless Looting (flashback)", "declared_order_payability": "not_verified", "land": null, "casts": ["Faithless Looting"], "actions": [{ "card": "Faithless Looting" }] },
+    { "index": 16, "summary": "land=City of Brass; cast: Replenish, Magus of the Bazaar: draw a card, Magus of the Bazaar: draw a card", "declared_order_payability": "not_verified", "land": "City of Brass", "casts": ["Replenish", "Magus of the Bazaar", "Magus of the Bazaar"], "actions": [{ "card": "Replenish" }, { "card": "Magus of the Bazaar", "src_num": 30, "activate": true, "act_label": "draw a card", "x": 1 }, { "card": "Magus of the Bazaar", "src_num": 31, "activate": true, "act_label": "draw a card", "x": 1 }] },
+    { "index": 17, "summary": "land=none; cast: Replenish, Magus of the Bazaar: draw a card, Magus of the Bazaar: draw a card", "declared_order_payability": "not_verified", "land": null, "casts": ["Replenish", "Magus of the Bazaar", "Magus of the Bazaar"], "actions": [{ "card": "Replenish" }, { "card": "Magus of the Bazaar", "src_num": 30, "activate": true, "act_label": "draw a card", "x": 1 }, { "card": "Magus of the Bazaar", "src_num": 31, "activate": true, "act_label": "draw a card", "x": 1 }] },
+    { "index": 18, "summary": "land=City of Brass; cast: Replenish, Magus of the Bazaar: draw a card", "declared_order_payability": "not_verified", "land": "City of Brass", "casts": ["Replenish", "Magus of the Bazaar"], "actions": [{ "card": "Replenish" }, { "card": "Magus of the Bazaar", "src_num": 30, "activate": true, "act_label": "draw a card", "x": 1 }] },
+    { "index": 19, "summary": "land=City of Brass; cast: Replenish, Magus of the Bazaar: draw a card", "declared_order_payability": "not_verified", "land": "City of Brass", "casts": ["Replenish", "Magus of the Bazaar"], "actions": [{ "card": "Replenish" }, { "card": "Magus of the Bazaar", "src_num": 31, "activate": true, "act_label": "draw a card", "x": 1 }] },
+    { "index": 20, "summary": "land=none; cast: Replenish, Magus of the Bazaar: draw a card", "declared_order_payability": "not_verified", "land": null, "casts": ["Replenish", "Magus of the Bazaar"], "actions": [{ "card": "Replenish" }, { "card": "Magus of the Bazaar", "src_num": 30, "activate": true, "act_label": "draw a card", "x": 1 }] },
+    { "index": 21, "summary": "land=none; cast: Replenish, Magus of the Bazaar: draw a card", "declared_order_payability": "not_verified", "land": null, "casts": ["Replenish", "Magus of the Bazaar"], "actions": [{ "card": "Replenish" }, { "card": "Magus of the Bazaar", "src_num": 31, "activate": true, "act_label": "draw a card", "x": 1 }] },
+    { "index": 22, "summary": "land=City of Brass; cast: Replenish", "declared_order_payability": "not_verified", "land": "City of Brass", "casts": ["Replenish"], "actions": [{ "card": "Replenish" }] },
+    { "index": 23, "summary": "land=none; cast: Replenish", "declared_order_payability": "not_verified", "land": null, "casts": ["Replenish"], "actions": [{ "card": "Replenish" }] },
+    { "index": 24, "summary": "land=City of Brass; cast: Cephalid Coliseum: sacrifice: target player draws three, then discards three (opponent draws), Magus of the Bazaar: draw a card, Magus of the Bazaar: draw a card", "declared_order_payability": "not_verified", "land": "City of Brass", "casts": ["Cephalid Coliseum", "Magus of the Bazaar", "Magus of the Bazaar"], "actions": [{ "card": "Cephalid Coliseum", "src_num": 5, "activate": true, "cost_pips": "U", "activation_cost": "{U}", "act_label": "sacrifice: target player draws three, then discards three", "draw_target": "opponent", "x": 1 }, { "card": "Magus of the Bazaar", "src_num": 30, "activate": true, "act_label": "draw a card", "x": 1 }, { "card": "Magus of the Bazaar", "src_num": 31, "activate": true, "act_label": "draw a card", "x": 1 }] },
+    { "index": 25, "summary": "land=City of Brass; cast: Cephalid Coliseum: sacrifice: target player draws three, then discards three (you draw), Magus of the Bazaar: draw a card, Magus of the Bazaar: draw a card", "declared_order_payability": "not_verified", "land": "City of Brass", "casts": ["Cephalid Coliseum", "Magus of the Bazaar", "Magus of the Bazaar"], "actions": [{ "card": "Cephalid Coliseum", "src_num": 5, "activate": true, "cost_pips": "U", "activation_cost": "{U}", "act_label": "sacrifice: target player draws three, then discards three", "draw_target": "self", "x": 1 }, { "card": "Magus of the Bazaar", "src_num": 30, "activate": true, "act_label": "draw a card", "x": 1 }, { "card": "Magus of the Bazaar", "src_num": 31, "activate": true, "act_label": "draw a card", "x": 1 }] },
+    { "index": 26, "summary": "land=none; cast: Cephalid Coliseum: sacrifice: target player draws three, then discards three (opponent draws), Magus of the Bazaar: draw a card, Magus of the Bazaar: draw a card", "declared_order_payability": "not_verified", "land": null, "casts": ["Cephalid Coliseum", "Magus of the Bazaar", "Magus of the Bazaar"], "actions": [{ "card": "Cephalid Coliseum", "src_num": 5, "activate": true, "cost_pips": "U", "activation_cost": "{U}", "act_label": "sacrifice: target player draws three, then discards three", "draw_target": "opponent", "x": 1 }, { "card": "Magus of the Bazaar", "src_num": 30, "activate": true, "act_label": "draw a card", "x": 1 }, { "card": "Magus of the Bazaar", "src_num": 31, "activate": true, "act_label": "draw a card", "x": 1 }] },
+    { "index": 27, "summary": "land=none; cast: Cephalid Coliseum: sacrifice: target player draws three, then discards three (you draw), Magus of the Bazaar: draw a card, Magus of the Bazaar: draw a card", "declared_order_payability": "not_verified", "land": null, "casts": ["Cephalid Coliseum", "Magus of the Bazaar", "Magus of the Bazaar"], "actions": [{ "card": "Cephalid Coliseum", "src_num": 5, "activate": true, "cost_pips": "U", "activation_cost": "{U}", "act_label": "sacrifice: target player draws three, then discards three", "draw_target": "self", "x": 1 }, { "card": "Magus of the Bazaar", "src_num": 30, "activate": true, "act_label": "draw a card", "x": 1 }, { "card": "Magus of the Bazaar", "src_num": 31, "activate": true, "act_label": "draw a card", "x": 1 }] },
+    { "index": 28, "summary": "land=City of Brass; cast: Cephalid Coliseum: sacrifice: target player draws three, then discards three (opponent draws), Magus of the Bazaar: draw a card", "declared_order_payability": "not_verified", "land": "City of Brass", "casts": ["Cephalid Coliseum", "Magus of the Bazaar"], "actions": [{ "card": "Cephalid Coliseum", "src_num": 5, "activate": true, "cost_pips": "U", "activation_cost": "{U}", "act_label": "sacrifice: target player draws three, then discards three", "draw_target": "opponent", "x": 1 }, { "card": "Magus of the Bazaar", "src_num": 30, "activate": true, "act_label": "draw a card", "x": 1 }] },
+    { "index": 29, "summary": "land=City of Brass; cast: Cephalid Coliseum: sacrifice: target player draws three, then discards three (you draw), Magus of the Bazaar: draw a card", "declared_order_payability": "not_verified", "land": "City of Brass", "casts": ["Cephalid Coliseum", "Magus of the Bazaar"], "actions": [{ "card": "Cephalid Coliseum", "src_num": 5, "activate": true, "cost_pips": "U", "activation_cost": "{U}", "act_label": "sacrifice: target player draws three, then discards three", "draw_target": "self", "x": 1 }, { "card": "Magus of the Bazaar", "src_num": 30, "activate": true, "act_label": "draw a card", "x": 1 }] },
+    { "index": 30, "summary": "land=City of Brass; cast: Cephalid Coliseum: sacrifice: target player draws three, then discards three (opponent draws), Magus of the Bazaar: draw a card", "declared_order_payability": "not_verified", "land": "City of Brass", "casts": ["Cephalid Coliseum", "Magus of the Bazaar"], "actions": [{ "card": "Cephalid Coliseum", "src_num": 5, "activate": true, "cost_pips": "U", "activation_cost": "{U}", "act_label": "sacrifice: target player draws three, then discards three", "draw_target": "opponent", "x": 1 }, { "card": "Magus of the Bazaar", "src_num": 31, "activate": true, "act_label": "draw a card", "x": 1 }] },
+    { "index": 31, "summary": "land=City of Brass; cast: Cephalid Coliseum: sacrifice: target player draws three, then discards three (you draw), Magus of the Bazaar: draw a card", "declared_order_payability": "not_verified", "land": "City of Brass", "casts": ["Cephalid Coliseum", "Magus of the Bazaar"], "actions": [{ "card": "Cephalid Coliseum", "src_num": 5, "activate": true, "cost_pips": "U", "activation_cost": "{U}", "act_label": "sacrifice: target player draws three, then discards three", "draw_target": "self", "x": 1 }, { "card": "Magus of the Bazaar", "src_num": 31, "activate": true, "act_label": "draw a card", "x": 1 }] },
+    { "index": 32, "summary": "land=City of Brass; cast: Magus of the Bazaar: draw a card, Magus of the Bazaar: draw a card", "declared_order_payability": "not_verified", "land": "City of Brass", "casts": ["Magus of the Bazaar", "Magus of the Bazaar"], "actions": [{ "card": "Magus of the Bazaar", "src_num": 30, "activate": true, "act_label": "draw a card", "x": 1 }, { "card": "Magus of the Bazaar", "src_num": 31, "activate": true, "act_label": "draw a card", "x": 1 }] },
+    { "index": 33, "summary": "land=City of Brass; cast: Golgari Grave-Troll, Magus of the Bazaar: draw a card, Magus of the Bazaar: draw a card", "declared_order_payability": "not_verified", "land": "City of Brass", "casts": ["Golgari Grave-Troll", "Magus of the Bazaar", "Magus of the Bazaar"], "actions": [{ "card": "Golgari Grave-Troll" }, { "card": "Magus of the Bazaar", "src_num": 30, "activate": true, "act_label": "draw a card", "x": 1 }, { "card": "Magus of the Bazaar", "src_num": 31, "activate": true, "act_label": "draw a card", "x": 1 }] },
+    { "index": 34, "summary": "land=none; cast: Cephalid Coliseum: sacrifice: target player draws three, then discards three (opponent draws), Magus of the Bazaar: draw a card", "declared_order_payability": "not_verified", "land": null, "casts": ["Cephalid Coliseum", "Magus of the Bazaar"], "actions": [{ "card": "Cephalid Coliseum", "src_num": 5, "activate": true, "cost_pips": "U", "activation_cost": "{U}", "act_label": "sacrifice: target player draws three, then discards three", "draw_target": "opponent", "x": 1 }, { "card": "Magus of the Bazaar", "src_num": 30, "activate": true, "act_label": "draw a card", "x": 1 }] },
+    { "index": 35, "summary": "land=none; cast: Cephalid Coliseum: sacrifice: target player draws three, then discards three (you draw), Magus of the Bazaar: draw a card", "declared_order_payability": "not_verified", "land": null, "casts": ["Cephalid Coliseum", "Magus of the Bazaar"], "actions": [{ "card": "Cephalid Coliseum", "src_num": 5, "activate": true, "cost_pips": "U", "activation_cost": "{U}", "act_label": "sacrifice: target player draws three, then discards three", "draw_target": "self", "x": 1 }, { "card": "Magus of the Bazaar", "src_num": 30, "activate": true, "act_label": "draw a card", "x": 1 }] },
+    { "index": 36, "summary": "land=none; cast: Cephalid Coliseum: sacrifice: target player draws three, then discards three (opponent draws), Magus of the Bazaar: draw a card", "declared_order_payability": "not_verified", "land": null, "casts": ["Cephalid Coliseum", "Magus of the Bazaar"], "actions": [{ "card": "Cephalid Coliseum", "src_num": 5, "activate": true, "cost_pips": "U", "activation_cost": "{U}", "act_label": "sacrifice: target player draws three, then discards three", "draw_target": "opponent", "x": 1 }, { "card": "Magus of the Bazaar", "src_num": 31, "activate": true, "act_label": "draw a card", "x": 1 }] },
+    { "index": 37, "summary": "land=none; cast: Cephalid Coliseum: sacrifice: target player draws three, then discards three (you draw), Magus of the Bazaar: draw a card", "declared_order_payability": "not_verified", "land": null, "casts": ["Cephalid Coliseum", "Magus of the Bazaar"], "actions": [{ "card": "Cephalid Coliseum", "src_num": 5, "activate": true, "cost_pips": "U", "activation_cost": "{U}", "act_label": "sacrifice: target player draws three, then discards three", "draw_target": "self", "x": 1 }, { "card": "Magus of the Bazaar", "src_num": 31, "activate": true, "act_label": "draw a card", "x": 1 }] },
+    { "index": 38, "summary": "land=none; cast: Magus of the Bazaar: draw a card, Magus of the Bazaar: draw a card", "declared_order_payability": "not_verified", "land": null, "casts": ["Magus of the Bazaar", "Magus of the Bazaar"], "actions": [{ "card": "Magus of the Bazaar", "src_num": 30, "activate": true, "act_label": "draw a card", "x": 1 }, { "card": "Magus of the Bazaar", "src_num": 31, "activate": true, "act_label": "draw a card", "x": 1 }] },
+    { "index": 39, "summary": "land=City of Brass; cast: Cephalid Coliseum: sacrifice: target player draws three, then discards three (opponent draws)", "declared_order_payability": "not_verified", "land": "City of Brass", "casts": ["Cephalid Coliseum"], "actions": [{ "card": "Cephalid Coliseum", "src_num": 5, "activate": true, "cost_pips": "U", "activation_cost": "{U}", "act_label": "sacrifice: target player draws three, then discards three", "draw_target": "opponent", "x": 1 }] },
+    { "index": 40, "summary": "land=City of Brass; cast: Cephalid Coliseum: sacrifice: target player draws three, then discards three (you draw)", "declared_order_payability": "not_verified", "land": "City of Brass", "casts": ["Cephalid Coliseum"], "actions": [{ "card": "Cephalid Coliseum", "src_num": 5, "activate": true, "cost_pips": "U", "activation_cost": "{U}", "act_label": "sacrifice: target player draws three, then discards three", "draw_target": "self", "x": 1 }] },
+    { "index": 41, "summary": "land=City of Brass; cast: Magus of the Bazaar: draw a card", "declared_order_payability": "not_verified", "land": "City of Brass", "casts": ["Magus of the Bazaar"], "actions": [{ "card": "Magus of the Bazaar", "src_num": 30, "activate": true, "act_label": "draw a card", "x": 1 }] },
+    { "index": 42, "summary": "land=City of Brass; cast: Golgari Grave-Troll, Magus of the Bazaar: draw a card", "declared_order_payability": "not_verified", "land": "City of Brass", "casts": ["Golgari Grave-Troll", "Magus of the Bazaar"], "actions": [{ "card": "Golgari Grave-Troll" }, { "card": "Magus of the Bazaar", "src_num": 30, "activate": true, "act_label": "draw a card", "x": 1 }] },
+    { "index": 43, "summary": "land=City of Brass; cast: Magus of the Bazaar: draw a card", "declared_order_payability": "not_verified", "land": "City of Brass", "casts": ["Magus of the Bazaar"], "actions": [{ "card": "Magus of the Bazaar", "src_num": 31, "activate": true, "act_label": "draw a card", "x": 1 }] },
+    { "index": 44, "summary": "land=City of Brass; cast: Golgari Grave-Troll, Magus of the Bazaar: draw a card", "declared_order_payability": "not_verified", "land": "City of Brass", "casts": ["Golgari Grave-Troll", "Magus of the Bazaar"], "actions": [{ "card": "Golgari Grave-Troll" }, { "card": "Magus of the Bazaar", "src_num": 31, "activate": true, "act_label": "draw a card", "x": 1 }] },
+    { "index": 45, "summary": "land=none; cast: Cephalid Coliseum: sacrifice: target player draws three, then discards three (opponent draws)", "declared_order_payability": "not_verified", "land": null, "casts": ["Cephalid Coliseum"], "actions": [{ "card": "Cephalid Coliseum", "src_num": 5, "activate": true, "cost_pips": "U", "activation_cost": "{U}", "act_label": "sacrifice: target player draws three, then discards three", "draw_target": "opponent", "x": 1 }] },
+    { "index": 46, "summary": "land=none; cast: Cephalid Coliseum: sacrifice: target player draws three, then discards three (you draw)", "declared_order_payability": "not_verified", "land": null, "casts": ["Cephalid Coliseum"], "actions": [{ "card": "Cephalid Coliseum", "src_num": 5, "activate": true, "cost_pips": "U", "activation_cost": "{U}", "act_label": "sacrifice: target player draws three, then discards three", "draw_target": "self", "x": 1 }] },
+    { "index": 47, "summary": "land=none; cast: Magus of the Bazaar: draw a card", "declared_order_payability": "not_verified", "land": null, "casts": ["Magus of the Bazaar"], "actions": [{ "card": "Magus of the Bazaar", "src_num": 30, "activate": true, "act_label": "draw a card", "x": 1 }] },
+    { "index": 48, "summary": "land=none; cast: Magus of the Bazaar: draw a card", "declared_order_payability": "not_verified", "land": null, "casts": ["Magus of the Bazaar"], "actions": [{ "card": "Magus of the Bazaar", "src_num": 31, "activate": true, "act_label": "draw a card", "x": 1 }] },
+    { "index": 49, "summary": "land=City of Brass; cast: (nothing)", "declared_order_payability": "not_verified", "land": "City of Brass", "casts": [], "actions": [] },
+    { "index": 50, "summary": "land=City of Brass; cast: Golgari Grave-Troll", "declared_order_payability": "not_verified", "land": "City of Brass", "casts": ["Golgari Grave-Troll"], "actions": [{ "card": "Golgari Grave-Troll" }] },
+    { "index": 51, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 96,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 6, "kind": "damage", "text": "Purphoros, God of the Forge: 2 damage to opponent (20→18)" },
+    { "turn": 6, "kind": "damage", "text": "Purphoros, God of the Forge: 2 damage to opponent (18→16)" },
+    { "turn": 6, "kind": "damage", "text": "Purphoros, God of the Forge: 2 damage to opponent (16→14)" },
+    { "turn": 6, "kind": "damage", "text": "Purphoros, God of the Forge: 2 damage to opponent (14→12)" },
+    { "turn": 6, "kind": "damage", "text": "Purphoros, God of the Forge: 2 damage to opponent (12→10)" },
+    { "turn": 6, "kind": "damage", "text": "Purphoros, God of the Forge: 2 damage to opponent (10→8)" },
+    { "turn": 6, "kind": "damage", "text": "Purphoros, God of the Forge: 2 damage to opponent (8→6)" },
+    { "turn": 6, "kind": "damage", "text": "Purphoros, God of the Forge: 2 damage to opponent (6→4)" },
+    { "turn": 6, "kind": "damage", "text": "Purphoros, God of the Forge: 2 damage to opponent (4→2)" },
+    { "turn": 6, "kind": "damage", "text": "Purphoros, God of the Forge: 2 damage to opponent (2→0)" },
+    { "turn": 6, "kind": "damage", "text": "Purphoros, God of the Forge: 2 damage to opponent (0→-2)" },
+    { "turn": 6, "kind": "damage", "text": "Purphoros, God of the Forge: 2 damage to opponent (-2→-4)" },
+    { "turn": 6, "kind": "damage", "text": "Purphoros, God of the Forge: 2 damage to opponent (-4→-6)" },
+    { "turn": 6, "kind": "return", "text": "Replenish: 14 enchantment card(s) returned" }
+  ]
+}
