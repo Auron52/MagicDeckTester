@@ -289,6 +289,63 @@ TEST_CASE("Awaken payment preserves its untapped haste land when other lands suf
     CHECK(found);
 }
 
+TEST_CASE("Horn drawn by the land cannot validate as a pre-land cast")
+{
+    if (!HumanPlayActive()) { return; }
+    EnsureCards();
+    GameState s;
+    static const ExtraTurnsProvider extra_turns;
+    s.m_provider = &extra_turns;
+    s.turn_number = 5;
+    for (int i = 1; i <= 5; ++i) { Land(s, i); }
+    Permanent horn;
+    horn.card = Copy("Horn of Greed", 20);
+    horn.owner_index = horn.controller_index = 0;
+    s.battlefield.push_back(horn);
+    s.players[0].hand.push_back(Copy("Snow-Covered Island", 21));
+    s.players[0].library.push_back(Copy("Horn of Greed", 22));
+
+    const auto plans = TurnSolver::EnumerateMainPlans(s, true);
+    bool land_first_horn = false;
+    for (const auto& plan : plans)
+    {
+        if (plan.land_to_play != "Snow-Covered Island" || plan.land_slot != 0
+            || plan.actions.size() != 1) { continue; }
+        const Action& a = plan.actions.front();
+        if (a.kind == Action::Kind::CastFromHand && a.card_name == "Horn of Greed")
+        { land_first_horn = true; break; }
+    }
+    REQUIRE(land_first_horn); // the fallback has a tempting land-first match
+    TurnSolver::LineSpec after;
+    after.has_land = true;
+    after.land = "Snow-Covered Island";
+    after.land_slot = TurnSolver::kLandSlotAfterCasts;
+    after.casts = {"Horn of Greed"};
+    const auto rejected = TurnSolver::CheckLine(s, true, after, &plans);
+    CHECK(rejected.verdict == TurnSolver::LineCheck::Verdict::Illegal);
+    CHECK(rejected.failed_action == "cast=Horn of Greed");
+    TurnSolver::LineSpec after_first_cast = after;
+    after_first_cast.land_slot = 0;
+    after_first_cast.land_at_cast = 1;
+    after_first_cast.land_at_raw = 1;
+    const auto rejected_slot = TurnSolver::CheckLine(s, true, after_first_cast, &plans);
+    CHECK(rejected_slot.verdict == TurnSolver::LineCheck::Verdict::Illegal);
+    CHECK(rejected_slot.failed_action == "cast=Horn of Greed");
+    TurnSolver::LineSpec land_first = after;
+    land_first.land_slot = 0;
+    land_first.land_at_raw = 0;
+    const auto first = TurnSolver::CheckLine(s, true, land_first, &plans);
+    CHECK(first.verdict == TurnSolver::LineCheck::Verdict::Accept);
+
+    // The same requested order is legitimate when the Horn is already in hand.
+    s.players[0].hand.push_back(Copy("Horn of Greed", 23));
+    const auto payable_plans = TurnSolver::EnumerateMainPlans(s, true);
+    const auto accepted = TurnSolver::CheckLine(s, true, after, &payable_plans);
+    const bool legal = accepted.verdict == TurnSolver::LineCheck::Verdict::Accept
+                    || accepted.verdict == TurnSolver::LineCheck::Verdict::Choose;
+    CHECK(legal);
+}
+
 TEST_CASE("Extra Turns viewer accepts Lens into Ulamog and two turn spells")
 {
     EnsureCards();

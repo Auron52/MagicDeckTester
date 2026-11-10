@@ -114867,6 +114867,35 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
     LineCheck exact = CheckLineExact(state_in, is_pre_combat, spec, menu);
     const bool positioned = spec.has_land
         && (spec.land_slot != 0 || spec.land_at_cast > 0 || spec.land_at_raw >= 0);
+    // A positioned one-cast plan can name a hand card drawn by the land only
+    // AFTER that cast was requested. This affects both an exact landat=<k>
+    // match and the land-first fallback used for landafter=/landat=all.
+    std::vector<Plan> own;
+    auto missing_pre_land_cast = [&](const LineCheck& answer) -> bool
+    {
+        const bool cast_before_land = spec.land_slot == kLandSlotAfterCasts
+                                   || spec.land_at_cast > 0;
+        if (!positioned || !cast_before_land || answer.verdict != LineCheck::Verdict::Accept
+            || answer.plan_index < 0 || spec.casts.size() != 1) { return false; }
+        const auto& hand = state_in.ActivePlayer().hand;
+        if (std::any_of(hand.begin(), hand.end(),
+                [&](const Card& c) { return c.m_name.str() == spec.casts.front(); })) { return false; }
+        if (menu == nullptr) { own = EnumerateMainPlans(state_in, is_pre_combat); }
+        const std::vector<Plan>& plans = menu != nullptr ? *menu : own;
+        if (static_cast<std::size_t>(answer.plan_index) >= plans.size()) { return false; }
+        const Plan& p = plans[static_cast<std::size_t>(answer.plan_index)];
+        return p.actions.size() == 1 && p.actions.front().kind == Action::Kind::CastFromHand
+            && p.actions.front().card_name.str() == spec.casts.front();
+    };
+    auto reject_missing = [&]() -> LineCheck
+    {
+        LineCheck bad;
+        bad.verdict = LineCheck::Verdict::Illegal;
+        bad.failed_action = "cast=" + spec.casts.front();
+        bad.reason = "'" + spec.casts.front() + "' is not in hand before the land plays";
+        return bad;
+    };
+    if (missing_pre_land_cast(exact)) { return reject_missing(); }
     if (exact.verdict != LineCheck::Verdict::LegalNotEnumerated || !positioned || !HumanPlayActive())
     { return exact; }
     LineSpec first = spec;
@@ -114874,6 +114903,11 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
     first.land_at_cast = 0;
     first.land_at_raw  = -1;
     LineCheck loose = CheckLineExact(state_in, is_pre_combat, first, menu);
+    // An existing Horn on the battlefield made CheckLineExact's legacy
+    // board-activation peel call the missing cast legal_not_enumerated in
+    // seed 62008. A land-first plan then drew and cast Horn, but that does
+    // not execute the human's requested cast-before-land sequence.
+    if (missing_pre_land_cast(loose)) { return reject_missing(); }
     if (loose.verdict == LineCheck::Verdict::Accept || loose.verdict == LineCheck::Verdict::Choose)
     { return loose; }
     return exact;
