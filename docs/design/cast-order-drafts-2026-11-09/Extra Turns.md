@@ -140,3 +140,12 @@ remain guidance for the existing plan search rather than forced static ranks.
 For Horn before the land, the order hook can also verify the payable prefix
 through Horn when the following turn spell needs that land; the land-position
 probe then verifies the suffix with the chosen drop.
+
+The final extension to Lens/Stone lines without Horn passed all 14 Extra Turns
+unit cases (321 assertions), 452 scenarios, and strict replay of all ten saved
+Extra Turns references. In the accepted smoke and regression matrices, searched
+win turns were unchanged; 34 searched games changed cast sequence without
+changing their result. The regression depth-zero cell had two one-turn slower
+greedy lines, while the smoke depth-zero cell had one faster line. The two
+greedy slowdowns involved long chain turns with multiple Lenses and did not
+reappear at searched depth.
