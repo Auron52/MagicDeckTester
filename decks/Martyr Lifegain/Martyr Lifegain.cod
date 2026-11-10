@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cockatrice_deck version="1">
+    <deckname></deckname>
+    <comments></comments>
+    <zone name="main">
+        <card number="1" name="Lurrus of the Dream-Den"/>
+        <card number="2" name="Ranger of Eos"/>
+        <card number="4" name="Ranger-Captain of Eos"/>
+        <card number="4" name="Serra Ascendant"/>
+        <card number="4" name="Martyr of Sands"/>
+        <card number="1" name="Swords to Plowshares"/>
+        <card number="4" name="Unexpectedly Absent"/>
+        <card number="4" name="Speaker of the Heavens"/>
+        <card number="2" name="Orzhov Basilica"/>
+        <card number="19" name="Plains"/>
+        <card number="4" name="Squadron Hawk"/>
+        <card number="4" name="Abiding Grace"/>
+        <card number="1" name="Kami of False Hope"/>
+        <card number="1" name="Thraben Inspector"/>
+        <card number="1" name="Mother of Runes"/>
+        <card number="1" name="Curious Farm Animals"/>
+        <card number="2" name="Enduring Innocence"/>
+        <card number="1" name="Umezawa's Jitte"/>
+    </zone>
+</cockatrice_deck>
