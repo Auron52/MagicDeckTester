@@ -39,6 +39,11 @@ Source of the work: `logs/mana_clean/lastweek-20261110-shadowborn-order/report.m
 * **Gate `sb-victimclaim-20261110` (6c42d7bd4, games 25000-29999): issues 1773** (MISS 87 = APPLY-DROP 74 +
   ENUM-GAP 10 + ORDER 3; ORACLE-GAP 28; UNMODELED 1658). Was 5429 (ORDER 554, UNMODELED 4759). Top APPLY-DROP: Sire
   {4}{B}{R} dropped where Lotus Bloom (R, keep-floating) + Lake crack pay it (x28 T4 m2 Intent+Intent+Apostle).
+* **PARKED (owed behind floatseq, USER 2026-10-31 colour-at-spend ruling):** the remaining Shadowborn APPLY-DROPs
+  are need-later colour commits. (1) Lotus Bloom cracked for {B} where Sire's later {R} needed it (x28, s30027361
+  T4). (2) s30025422 T3: the line needs an EARLY Lake crack that taps Blood Crypt for {R} before sacrificing it; the
+  victim pin only looks at the current cost ({B} for Culling), not Sire's later {R}. Both are "commit the colour at
+  spend against the rest of the line" (docs/design/mana-issues-carryover-2026-11.md section 3).
 * Open (minor): the 6 PHANTOMs left on s30020789 are mana, not victims -- {Apostle + Culling} on one Swamp.
 * ORACLE-GAP (16): Lake + Lotus Bloom recipes; "core keys differ in a field not listed" -- analyzer-side, open.
 * Chain order: build -> unit -> the s30020022 repro -> smoke (expect only Shadowborn rows to move) -> regression ->
