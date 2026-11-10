@@ -83,4 +83,18 @@ Lower priority: OptimisticTurnMana assumes a land drop adds <=3 mana; dominance 
 
 ## Approved deferrals
 
-(none)
+USER 2026-11-10: *"All of the deferrals are okay."* — covers every PROVISIONAL item listed above
+(Gargos fight trigger, trample on Kalonian/Primordial, Steelbane sorcery-speed timing, Nissa -8 emblem,
+Gauntlet +1/+1 controller-only, Three Visits never fails to find). Neverwinter's dice model is superseded
+by the X ruling below.
+
+## USER rulings (verbatim, 2026-11-10)
+
+- Cast order: *"Doublers and Gargos should be before the Hydras as you mentioned."*
+- Max X: *"I think we should play around with the maximum X and it is probably not going to lose lines,
+  since a huge creature will usually kill before we deck out."* -> build a max-X narrowing in
+  HydrasProvider and measure it (A/B vs full X range) rather than refusing it outright.
+- Second main: *"Second main -3 makes sense."* -> enable the second main for Garruk's -3 after combat.
+- Neverwinter Hydra: *"For Neverwinter I would rather not have it figuring out how to game X. Trying the
+  maximum is a good way to minimize this."* -> Neverwinter casts at maximum affordable X so the search
+  cannot pick X against the known dice results.
