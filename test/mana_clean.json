@@ -2872,6 +2872,54 @@
      "seed": 30010000,
      "src": "8ec9533150e1302e9e71ee58e29d6abf334c9ae1",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 607,
+      "APPLY-DROP-ORDER": 638,
+      "CAPPED-DECISION": 4400,
+      "CONTINUATION-DIFFERS": 4491,
+      "DECISION-COST": 1,
+      "DOMINATED-CREATURE": 574,
+      "DOMINATED-LAND": 154660,
+      "DROP-COVERED": 92,
+      "ENUM-GAP": 504,
+      "HIDDEN-INFO": 3,
+      "ORACLE-GAP": 75,
+      "PHANTOM": 17541,
+      "UNMODELED": 149
+     },
+     "commit": "69c8e657d49d063bc44e9aa2fbff1147990c117f",
+     "date": "2026-11-10T09:31:27Z",
+     "decisions": 35913,
+     "deck": "decks/Jumbo Cactuar/Jumbo Cactuar.cod",
+     "deck_sha": "d4bb1e60e05f9036b3482f46e5ee6d4f230c0479",
+     "game_index": 15000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 6947,
+     "life_breakpoints": [],
+     "ms_off": 1278299,
+     "ms_on": 14118022,
+     "report": "logs/mana_clean/lastweek-20261110-next/report.md",
+     "run": "lastweek-20261110-next",
+     "seed": 30015000,
+     "src": "740823c3f48237e38c8fe9c9c941d849b2bfdccc",
+     "verdict": "issues"
     }
    ]
   },
@@ -4327,6 +4375,46 @@
      "seed": 30110000,
      "src": "8ec9533150e1302e9e71ee58e29d6abf334c9ae1",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "CONTINUATION-DIFFERS": 2,
+      "DOMINATED-LAND": 68,
+      "DOMINATED-LIFE": 32,
+      "DROP-COVERED": 37,
+      "PHANTOM": 2795
+     },
+     "commit": "69c8e657d49d063bc44e9aa2fbff1147990c117f",
+     "date": "2026-11-10T09:31:27Z",
+     "decisions": 37004,
+     "deck": "decks/Merfolk/Merfolk.cod",
+     "deck_sha": "364493b093d34f6bff6cd9ab78396a770cc6f6e5",
+     "game_index": 115000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 0,
+     "life_breakpoints": [],
+     "ms_off": 394212,
+     "ms_on": 1067372,
+     "report": "logs/mana_clean/lastweek-20261110-next/report.md",
+     "run": "lastweek-20261110-next",
+     "seed": 30115000,
+     "src": "740823c3f48237e38c8fe9c9c941d849b2bfdccc",
+     "verdict": "clean"
     }
    ]
   },
@@ -5545,6 +5633,50 @@
      "run": "lastweek-20261110-fast",
      "seed": 30010000,
      "src": "8ec9533150e1302e9e71ee58e29d6abf334c9ae1",
+     "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 83,
+      "APPLY-DROP-ORDER": 550,
+      "CONTINUATION-DIFFERS": 150,
+      "DOMINATED-LAND": 10455,
+      "DROP-COVERED": 807,
+      "ENUM-GAP": 11,
+      "ORACLE-GAP": 35,
+      "PHANTOM": 22689,
+      "UNMODELED": 6167
+     },
+     "commit": "69c8e657d49d063bc44e9aa2fbff1147990c117f",
+     "date": "2026-11-10T09:31:27Z",
+     "decisions": 42919,
+     "deck": "decks/Shadowborn Apostle/Shadowborn Apostle.cod",
+     "deck_sha": "a23edb97dcaeb1e61888de6616f4f35299abf43d",
+     "game_index": 15000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 6846,
+     "life_breakpoints": [],
+     "ms_off": 2640990,
+     "ms_on": 3140531,
+     "report": "logs/mana_clean/lastweek-20261110-next/report.md",
+     "run": "lastweek-20261110-next",
+     "seed": 30015000,
+     "src": "740823c3f48237e38c8fe9c9c941d849b2bfdccc",
      "verdict": "issues"
     }
    ]
