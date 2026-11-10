@@ -2465,3 +2465,19 @@ Extra Turns case mean improved; among 241 searched games slower than stored
 ground truth, 74 recovered at larger budget, 125 followed divergent draws,
 and a same-binary legacy comparison of the remaining 42 found 38 ties, three
 improvements, and one actual one-turn slowdown.
+
+## Mana-clean gate sizing attempt (2026-11-10)
+
+The first 5,000-game due block remains unconsumed. On the PGO build stamped
+`8ec9533150e1302e9e71ee58e29d6abf334c9ae1`,
+`scripts/mana_clean.py run --games 5000 --threads 16 --name lastweek-20261110-extra extra_turns`
+entered its 32 one-game oracle-on sizing probe. After more than ten minutes,
+only nine jobs had completed. Their engine times ranged from 125 ms to
+628,597 ms, and the batch used about 13 GiB of memory while occupying roughly
+16 cores. The attempt was stopped before either 5,000-game arm or a gate
+record began. The probe output is in
+`build/scratch/mana_clean/lastweek-20261110-extra/probe.extra_turns.on.out`.
+
+The next step is a focused oracle-on profile of a slow probe game, followed by
+a coverage-preserving fix to the long tail. Rerun this due block only after
+the cost is practical; the partial sizing probe is not a clean-gate verdict.
