@@ -93,6 +93,13 @@ Source of the work: `logs/mana_clean/lastweek-20261110-shadowborn-order/report.m
   - APPLY-DROP (108) top x10: still the land-Aura host hold below; the sequence-aware shape needs the remaining
     plan at the apply sites (ApplyPlanDirect apply_one, AIEngine CastSpellFromHand, both walks) via a scope like
     LineUnpaidCostScope, then a state copy + OrderPaysSequentially on the rest per land-Aura cast. PARKED.
+* **Gate `jumbo-unlockequip-20261110` (e0afecb7d + GT 9df2e007e, PGO, games 30000-34999): 1,336 issues** (was 25,065
+  on 25000-29999; this block hit no capped decision): ENUM-GAP 241 (was 337; top shapes now T&N + Overgrowth +
+  Chariot + Arbor Elf + equip, x19 s-T7 -- still to diagnose), APPLY-DROP 100, APPLY-DROP-ORDER 427 (USER cast-order
+  decision, unchanged), DOMINATED-CREATURE 218 (parked above), ORACLE-GAP 311 (was 129; 56+28+10 are the Nylea x4
+  pump shape: the nearest oracle outcome has the SAME taps and float, only the pump TARGET differs -- the pump target
+  follows the moment each Elf is tapped, so the oracle must compare modulo pump target or replay the engine's; analyzer
+  side, parked), UNMODELED 39. Play identity oracle-off: byte-identical.
 * Open (minor): the 6 PHANTOMs left on s30020789 are mana, not victims -- {Apostle + Culling} on one Swamp.
 * ORACLE-GAP (16): Lake + Lotus Bloom recipes; "core keys differ in a field not listed" -- analyzer-side, open.
 * Chain order: build -> unit -> the s30020022 repro -> smoke (expect only Shadowborn rows to move) -> regression ->
