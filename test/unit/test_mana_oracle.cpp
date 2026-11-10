@@ -1162,6 +1162,31 @@ TEST_CASE("mana oracle: a replicate drop whose board a same-actions sibling reac
     CHECK(Has(v, "DROP-COVERED"));
 }
 
+TEST_CASE("mana oracle: repeated casts admit exactly bounded six-action order proofs")
+{
+    EnsureOracleCards();
+    GameState s = Board({});
+    s.players[0].life = s.players[1].life = 20;
+    Hand(s, { "Diabolic Intent", "Diabolic Intent", "Shadowborn Apostle", "Shadowborn Apostle",
+              "Dark Ritual", "Thrumming Stone", "Sire of Insanity" });
+    // No source can pay the first cast. The multiset has 6!/(2!2!) = 180 orders,
+    // so a PHANTOM verdict requires the oracle to inspect every one.
+    const TurnSolver::Plan bounded = PlanOf({ CastAction(s, "Diabolic Intent"), CastAction(s, "Shadowborn Apostle"),
+                                               CastAction(s, "Dark Ritual"), CastAction(s, "Thrumming Stone"),
+                                               CastAction(s, "Shadowborn Apostle"), CastAction(s, "Diabolic Intent") });
+    const auto exact = manaoracle::PlanVerdict(s, true, bounded, { bounded });
+    CHECK(Has(exact, "PHANTOM"));
+    CHECK_FALSE(Has(exact, "UNMODELED"));
+
+    // Replacing one duplicate leaves 6!/2! = 360 distinct orders, beyond the bound.
+    const TurnSolver::Plan beyond = PlanOf({ CastAction(s, "Diabolic Intent"), CastAction(s, "Shadowborn Apostle"),
+                                              CastAction(s, "Dark Ritual"), CastAction(s, "Thrumming Stone"),
+                                              CastAction(s, "Sire of Insanity"), CastAction(s, "Diabolic Intent") });
+    const auto partial = manaoracle::PlanVerdict(s, true, beyond, { beyond });
+    CHECK(Has(partial, "UNMODELED"));
+    CHECK_FALSE(Has(partial, "PHANTOM"));
+}
+
 // THE EQUIP ROUTE'S TAPE (KittyEquipment mana-clean, 2026-11-04). The route's links go through RouteLinkApply: with no
 // tape armed (all of play) it is ApplyPlan and nothing else; armed, it records the link -- the board before and after,
 // the plan, the DFS frame -- and a DFS branch that does not win is rewound off it.

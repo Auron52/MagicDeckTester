@@ -2955,11 +2955,13 @@ std::string ActionKey(const Action& x)
 }
 
 // Every other order of a plan's casts -- and, with `with_acts`, of its activations too (the land
-// drop and a sacrifice-a-land cast keep their places). `*all_tried` says whether that is EVERY order:
-// past five movable actions none is generated, so a caller claiming "no order realises it" must not.
+// drop and a sacrifice-a-land cast keep their places). Bound the number of DISTINCT orders, rather
+// than the number of actions: repeated copies of a card do not add any order to try. Six different
+// actions still exceed the bound; six actions with two repeated pairs can be checked exactly.
 std::vector<TurnSolver::Plan> OtherOrders(const TurnSolver::Plan& plan, bool with_acts = false,
                                           bool* all_tried = nullptr)
 {
+    constexpr std::size_t kMaxDistinctOrders = 180; // bounded near the old five-action ceiling (120)
     std::vector<TurnSolver::Plan> out;
     std::vector<std::size_t> slots;
     for (std::size_t i = 0; i < plan.actions.size(); ++i)
@@ -2968,26 +2970,35 @@ std::vector<TurnSolver::Plan> OtherOrders(const TurnSolver::Plan& plan, bool wit
         if (a.kind == Action::Kind::PlayLand || a.sacrifice_land) { continue; }
         if (a.kind == Action::Kind::CastFromHand || with_acts) { slots.push_back(i); }
     }
-    if (all_tried != nullptr) { *all_tried = slots.size() <= 5; }
-    if (slots.size() < 2 || slots.size() > 5) { return out; }
+    std::vector<std::string> keys;
+    std::map<std::string, std::size_t> copies;
+    std::size_t distinct = 1;
+    for (const std::size_t slot : slots)
+    {
+        const std::string key = ActionKey(plan.actions[slot]);
+        keys.push_back(key);
+        const std::size_t count = ++copies[key];
+        distinct = distinct * keys.size() / count; // exact multiset-permutation recurrence
+        if (distinct > kMaxDistinctOrders) { break; }
+    }
+    const bool complete = distinct <= kMaxDistinctOrders;
+    if (all_tried != nullptr) { *all_tried = complete; }
+    if (slots.size() < 2 || !complete) { return out; }
     std::vector<std::size_t> perm(slots.size());
     for (std::size_t i = 0; i < perm.size(); ++i) { perm[i] = i; }
-    std::set<std::string> seen;   // two copies of a card swapped are the same order
+    const auto less_key = [&](std::size_t a, std::size_t b) { return keys[a] < keys[b]; };
+    std::sort(perm.begin(), perm.end(), less_key);
+    do
     {
-        std::string k;
-        for (const Action& a : plan.actions) { k += ActionKey(a) + "|"; }
-        seen.insert(k);
-    }
-    while (std::next_permutation(perm.begin(), perm.end()))
-    {
+        bool original = true;
+        for (std::size_t i = 0; i < perm.size(); ++i)
+        { if (keys[perm[i]] != keys[i]) { original = false; break; } }
+        if (original) { continue; }
         TurnSolver::Plan p = plan;
         for (std::size_t i = 0; i < slots.size(); ++i) { p.actions[slots[i]] = plan.actions[slots[perm[i]]]; }
-        std::string k;
-        for (const Action& a : p.actions) { k += ActionKey(a) + "|"; }
-        if (!seen.insert(k).second) { continue; }
         p.searched_order = true;
         out.push_back(p);
-    }
+    } while (std::next_permutation(perm.begin(), perm.end(), less_key));
     return out;
 }
 

@@ -1453,3 +1453,29 @@ route for Lake and Lotus Bloom. A local cast-order workaround would leave the
 same pre-pass mechanism in place and conflict with that ruling. The remaining
 payment drops and the action-count cap need a fresh census after the on-demand
 payer lands.
+
+## 2026-11-10 mana oracle order coverage
+
+The later 5,000-game gate (`lastweek-20261110-next`, indices 15000-19999,
+source tree `740823c3f482`) reports 6,846 Shadowborn issues: 6,167 UNMODELED,
+550 APPLY-DROP-ORDER, 83 APPLY-DROP, 35 ORACLE-GAP, and 11 ENUM-GAP.
+The UNMODELED reason is specifically `too many actions to try every order`.
+It means the oracle cannot prove that a dropped plan is impossible; it is not
+evidence that the engine missed a payable plan. The order search previously
+stopped at five movable actions even when identical copies made the number of
+distinct orders small. It also started `next_permutation` at the plan's order,
+which could skip lexicographically earlier orders while claiming to have tried
+all of them.
+
+`OtherOrders` now sorts the movable actions before permutation, skips duplicate
+orders, and admits a plan only when its exact multiset permutation count is at
+most 180. It still gives no impossibility verdict beyond that bound. This is
+an oracle-only coverage change; it does not alter the search menu or payer.
+The targeted gate seed 30015115 shows the narrowed proof: its six-action line
+with two Dark Rituals and two Apostles (180 distinct orders) changes from
+UNMODELED to PHANTOM, with zero `too many actions` flags in that one-game run.
+Seed 30015427's six-action line with only one repeated pair (360 orders)
+remains UNMODELED, as do its six-unique-action plans. These are exact
+order-and-payment no-claims for the audited plan, not fixes to the 550 known
+payable order misses or 83 payment drops. A new 5,000-game census is still
+needed to quantify the gate-wide reduction.
