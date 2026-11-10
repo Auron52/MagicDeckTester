@@ -1,4 +1,6 @@
 #include <doctest/doctest.h>
+#include "ai/ManaOracle.h"
+#include "ai/ManaPayment.h"
 #include "cards/CardDatabase.h"
 #include "core/GameState.h"
 #include "core/HeuristicDefaults.h"
@@ -42,6 +44,32 @@ TEST_CASE("Figure six hybrid pips are all payable with white")
     CHECK(white.CanPay(c));
     white.white = 5;
     CHECK_FALSE(white.CanPay(c));
+}
+
+TEST_CASE("Figure six hybrid pips pay through the shared payer and scripted float")
+{
+    const ManaCost& c = *FigureDef().params.figure_eight_cost;
+    REQUIRE(c.hybrid_count == 6); // the payer must enumerate all 64 assignments
+
+    // A later white bill makes the float-aware assignment order score all 64 entries.
+    ManaCost line;
+    line.white = 1;
+    line.red = 6;
+    LineUnpaidCostScope hold(line);
+    GameState normal = FigureState();
+    normal.floating_mana.white = 6;
+    CHECK(TapForCostShared(normal, c, false, nullptr, true));
+    CHECK(normal.floating_mana.Total() == 0);
+
+    // The oracle pre-taps sources and requires this exact payment to use only that float.
+    GameState scripted = FigureState();
+    scripted.floating_mana.white = 6;
+    const bool prior = manaoracle::t_float_only;
+    manaoracle::t_float_only = true;
+    const bool paid = TapForCostShared(scripted, c, false, nullptr, true);
+    manaoracle::t_float_only = prior;
+    CHECK(paid);
+    CHECK(scripted.floating_mana.Total() == 0);
 }
 
 TEST_CASE("Figure checks Spirit and Warrior on resolution and retains granted keywords")

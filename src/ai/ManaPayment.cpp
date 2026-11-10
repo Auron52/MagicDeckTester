@@ -24,6 +24,7 @@
 #include <functional>
 #include <initializer_list>   // ManaCostDigest packs byte fields
 #include <optional>    // TapForCostShared's MTG_RAMP_FEED_ROUTE scope
+#include <type_traits> // derive the hybrid-assignment array size from ManaCost's pip capacity
 #include <vector>
 
 // ---- NEEDS-BASED TAP ORDER (MTG_NEEDS_TAP_ORDER; NeedsTapOrderOn in EngineFlags.h) -------------
@@ -9670,8 +9671,11 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
         // drain, wild covering any colour), ties in bits order. ORDERING ONLY: every assignment is still
         // tried, so a payable cost is never refused, and with no float or no later demand every score is 0
         // and the order is the historical one exactly.
+        // Figure of Destiny has six hybrid pips: 64 assignments. The former 16-slot arrays
+        // overflowed on both the normal and float-aware paths, corrupting this payment's stack.
+        constexpr unsigned kMaxHybridAssignments = 1u << std::extent_v<decltype(ManaCost::hybrid_pair)>;
         const unsigned n_assign = 1u << cost_in.hybrid_count;
-        unsigned order[16];
+        unsigned order[kMaxHybridAssignments];
         for (unsigned b = 0; b < n_assign; ++b) { order[b] = b; }
         if (HybridFloatOrderOn() && state.floating_mana.Total() > 0)
         {
@@ -9681,7 +9685,7 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
                                    std::max(0, lu.green - cost_in.green) };
             if (later[0] + later[1] + later[2] + later[3] + later[4] > 0)
             {
-                int score[16];
+                int score[kMaxHybridAssignments];
                 for (unsigned b = 0; b < n_assign; ++b)
                 {
                     ManaPool f = state.floating_mana;
