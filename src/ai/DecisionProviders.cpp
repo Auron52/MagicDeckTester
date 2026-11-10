@@ -23725,6 +23725,22 @@ static bool MerfolkCastOrderEnabled()
     return on;
 }
 
+int MerfolkProvider::ManaSourceRank(const GameState& s, const CardDefinition& def) const
+{
+    // Spreading Seas needs true blue mana, while Courtyard and Territory make only {C}
+    // for it. When Seas is in hand, spend those lands before an unrestricted blue
+    // land on a generic or creature pip so the following Seas remains payable.
+    if (def.params.colored_creature_only)
+    {
+        const Player& ap = s.players[s.active_player_index];
+        for (const Card& c : ap.hand)
+        {
+            if (c.m_name == "Spreading Seas") { return 5; }
+        }
+    }
+    return DeckProvider::ManaSourceRank(s, def);
+}
+
 int MerfolkProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
 {
     // Silvergill must see another Merfolk still in hand for its reveal cost.

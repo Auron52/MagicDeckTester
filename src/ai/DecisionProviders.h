@@ -3997,6 +3997,7 @@ public:
     CertStance Certificate() const override
     { return { CertState::NotAssessed, "NOT ASSESSED. Check the Image/lord attack clock and Vial timing before proving a winless turn." }; }
     const char* Name() const override { return "Merfolk"; }
+    int ManaSourceRank(const GameState& s, const CardDefinition& def) const override;
     int CastOrderRank(const GameState& s, const CardDefinition& def) const override;
     bool OrderOpaqueCastsByRank() const override;
     bool OffersSpellBounceTarget(const GameState& s, const CardDefinition& def) const override;

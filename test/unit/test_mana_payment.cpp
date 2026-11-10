@@ -183,6 +183,38 @@ void CheckTwinsAgree(const GameState& board, const ManaCost& cost, bool for_crea
 
 } // namespace
 
+TEST_CASE("Merfolk keeps true blue sources for Spreading Seas after a first payment")
+{
+    EnsureCards();
+    static const MerfolkProvider merfolk;
+    auto seas_in_hand = [](GameState& s)
+    {
+        Card c;
+        c.m_name = "Spreading Seas";
+        c.RehashName();
+        s.players[0].hand.push_back(c);
+    };
+
+    // The first Seas can spend two Islands, but doing so strands the second Seas.
+    GameState two_seas = MakeBoard({"Secluded Courtyard", "Secluded Courtyard", "Island", "Island"});
+    two_seas.m_provider = &merfolk;
+    seas_in_hand(two_seas);
+    seas_in_hand(two_seas);
+    REQUIRE(TapForCostDirect(two_seas, Cost(1, 0, 1), false));
+    CHECK(two_seas.battlefield[0].tapped);
+    CHECK_FALSE(two_seas.battlefield[1].tapped);
+    REQUIRE(TapForCostDirect(two_seas, Cost(1, 0, 1), false));
+
+    // An Adept can use Courtyard's creature-only blue; the following Seas cannot.
+    GameState adept_then_seas = MakeBoard({"Secluded Courtyard", "Secluded Courtyard",
+                                           "Island", "Unclaimed Territory"});
+    adept_then_seas.m_provider = &merfolk;
+    seas_in_hand(adept_then_seas);
+    REQUIRE(TapForCostDirect(adept_then_seas, Cost(1, 0, 1), true));
+    CHECK_FALSE(adept_then_seas.battlefield[2].tapped);
+    REQUIRE(TapForCostDirect(adept_then_seas, Cost(1, 0, 1), false));
+}
+
 TEST_CASE("unpayable cost: both twins fail and leave the board untouched")
 {
     EnsureCards();
