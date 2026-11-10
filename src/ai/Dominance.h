@@ -589,7 +589,7 @@ static_assert(sizeof(Player) == 208,
 // name's per-name reveal budget, which a later copy of the SAME name carrying kRippleContinue reads; two states
 // that differ only there differ only in what such a copy (a plan duplicate of the first copy's own budget line)
 // reveals, never in a decision the search scored from the key.
-static_assert(sizeof(GameState) == 1272,   // 1264 + upstream's upkeep_tutor (+8)
+static_assert(sizeof(GameState) == 1360,   // +32: Athreos coin LKI IDs and end-step pin, folded below
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 
@@ -949,6 +949,10 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     // its exact key.
     if (s.scripted_grace_choice >= 0)
     { fold(0x6EACE0000ull + static_cast<std::uint64_t>(s.scripted_grace_choice)); }
+    if (s.scripted_athreos_coin >= 0)
+    { fold(0xA7E05C010000ull + static_cast<std::uint64_t>(s.scripted_athreos_coin)); }
+    for (int id : s.athreos_coin_ids)
+    { fold(0xA7E05C020000ull + static_cast<std::uint64_t>(id)); }
     // Emeria's packed next-upkeep pin: FUTURE-DETERMINING across the turn boundary (set during the turn's
     // apply, consumed at the NEXT upkeep), value-gated with its own domain tag so every deck without the
     // card keeps its exact key.
@@ -997,6 +1001,24 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     // upkeep -- the same class, value-gated with its own domain tag.
     if (s.scripted_suspend_tutor >= 0)
     { fold(0x5354555400000ull + static_cast<std::uint64_t>(s.scripted_suspend_tutor)); }
+    if (s.scripted_draw_dredge >= 0)
+    { fold(0xD0ED6E000000ull + static_cast<std::uint64_t>(s.scripted_draw_dredge)); }
+    for (int v : s.scripted_boundary_dredge)
+    { fold(0xD0ED6E120000ull + static_cast<std::uint64_t>(v + 1)); }
+    if (s.boundary_dredge_active)
+    { fold(0xD0ED6E130000ull + s.scripted_boundary_dredge_cursor); }
+    if (s.scripted_boundary_klothys >= 0)
+    { fold(0x4B4C4F540000ull + static_cast<std::uint64_t>(s.scripted_boundary_klothys)); }
+    if (s.scripted_boundary_keranos >= 0)
+    { fold(0x4B4552410000ull + static_cast<std::uint64_t>(s.scripted_boundary_keranos)); }
+    if (s.deck_has_turn_gods)
+    {
+        fold(0x474F44530000ull + (s.keranos_first_own_draw_seen ? 1ull : 0ull));
+        fold(0x474F44531000ull + static_cast<std::uint64_t>(s.keranos_pending_land_draws));
+        fold(0x474F44532000ull + static_cast<std::uint64_t>(s.keranos_pending_nonland_hits));
+        fold(0x474F44533000ull + (s.ephara_creature_entered_this_turn ? 1ull : 0ull));
+        fold(0x474F44534000ull + (s.ephara_creature_entered_last_turn ? 1ull : 0ull));
+    }
     // Moraug's queued additional combats (GameState::pending_extra_combats): future-determining, value-gated.
     if (s.pending_extra_combats != 0)
     { fold(0xE7C0000ull + static_cast<std::uint64_t>(s.pending_extra_combats)); }
@@ -1256,7 +1278,7 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
                          || ((gy_bits & GyR_LandsEdgeNames) && gp.discard_land_damage > 0)
                          || ((gy_bits & GyR_MulticolorNames) && zc.IsMulticolored())
                          // Haven / Haunted Fengraf: every creature card is a possible return.
-                         || ((gy_bits & GyR_CreatureNames) && zc.IsCreature())
+                         || ((gy_bits & (GyR_CreatureNames | GyR_BothCreatureNames)) && zc.IsCreature())
                          // Bloodghast: a graveyard-landfall card returns on the next land.
                          || ((gy_bits & GyR_GyLandfallNames) && gd->gy_landfall_watcher)
                          // Forge Anew: every Equipment card is a possible return.

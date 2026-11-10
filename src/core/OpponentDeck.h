@@ -178,6 +178,23 @@ inline int TakeFromTop(GameState& state, int n)
     return taken;
 }
 
+// Literal mill: cards move from the opponent's library into their graveyard.
+// Keep the same immediate deck-out projection as TakeFromTop: the passive
+// opponent's next draw is unavoidable before our next turn.
+inline int MillToGraveyard(GameState& state, int n)
+{
+    if (!state.opponent_library_dealt || n <= 0) { return 0; }
+    Player& opp = state.players[1];
+    int milled = 0;
+    for (; milled < n && !opp.library.empty(); ++milled)
+    {
+        opp.graveyard.push_back(opp.library.front());
+        opp.library.erase(opp.library.begin());
+    }
+    if (opp.library.empty()) { state.opponent_decked = true; }
+    return milled;
+}
+
 // THE forced-draw primitive: the opponent draws `n` cards ("Target player draws X cards" aimed at
 // them -- Stroke of Genius). Returns the number actually drawn. Called from BOTH worlds through the
 // one shared resolver (PerformDrawX, SpellEffects.h), never open-coded.

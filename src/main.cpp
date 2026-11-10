@@ -8,6 +8,7 @@
 #include <string>
 #include <random>
 #include <algorithm>
+#include <charconv>
 #include <vector>
 #include <thread>
 #include <tuple>
@@ -178,7 +179,10 @@ static void JsonBattlefield(std::ostream& os, const GameState& s, int controller
         if (loy)                { cs.push_back({ "loyalty",   "loyalty",   loy }); }
         if (poi)                { cs.push_back({ "poison",    "poison",    poi }); }
         if (dep)                { cs.push_back({ "depletion", "depletion", dep }); }
-        if (p.charge_counters)  { cs.push_back({ "charge",    "charge",    p.charge_counters }); }
+        if (p.charge_counters)
+        { const bool mine = d && d->params.mana_counters_are_mining;
+          cs.push_back({ mine ? "mining" : "charge", mine ? "mining" : "charge",
+                         p.charge_counters }); }
         if (p.verse_counters)   { cs.push_back({ "verse",     "verse",     p.verse_counters }); }
         if (p.storage_counters) { cs.push_back({ "storage",   "storage",   p.storage_counters }); }
         // Cumulative upkeep AGE counters (Varchild's War-Riders): the cost SCALES with this count
@@ -799,6 +803,36 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                 { tag += " (sacrifice two Mountains)"; }
                 else if (a.tutor_target.str() == kTutorDeclineTarget)
                 { tag += " \xE2\x86\x92 fail to find (X=" + std::to_string(a.chosen_x) + ")"; }
+                else if (const CardDefinition* ld = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                         ld && ld->params.return_up_to_gy_lands > 0)
+                {
+                    const std::string& pin = a.tutor_target.str();
+                    if (pin == "L") { tag += " (return no lands)"; }
+                    else
+                    {
+                        tag += " (return ";
+                        std::size_t pos = 1;
+                        bool first = true;
+                        while (pos < pin.size())
+                        {
+                            const std::size_t end = pin.find(',', pos);
+                            const std::string token = pin.substr(pos, end == std::string::npos
+                                                                   ? end : end - pos);
+                            int number = 0;
+                            const auto parsed = std::from_chars(token.data(), token.data() + token.size(), number);
+                            if (!first) { tag += ", "; }
+                            first = false;
+                            const auto& gy = s.players[static_cast<std::size_t>(s.active_player_index)].graveyard;
+                            const auto it = std::find_if(gy.begin(), gy.end(), [&](const Card& c)
+                            { return c.m_number == number; });
+                            tag += it == gy.end() ? "card" : it->m_name.str();
+                            tag += " #" + std::to_string(number);
+                            if (end == std::string::npos) { break; }
+                            pos = end + 1;
+                        }
+                        tag += ")";
+                    }
+                }
                 else if (!a.tutor_target.empty())
                 {
                     tag += " \xE2\x86\x92 " + a.tutor_target.str();
@@ -816,7 +850,12 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                 }
                 break;
             }
-            case Action::Kind::CastFromGraveyard: tag = a.card_name + " (retrace)"; break;
+            case Action::Kind::CastFromGraveyard:
+            {
+                const CardDefinition* gd = CardDatabase::Instance().Lookup(a.card_name.str());
+                tag = a.card_name + (gd && gd->params.flashback_cost ? " (flashback)" : " (retrace)");
+                break;
+            }
             case Action::Kind::ActivateVial:      tag = a.card_name + " (vial)"; break;
             case Action::Kind::PlayLand:          tag = a.card_name + " (land)"; break;
             // A suspend card that is ALSO castable (Search for Tomorrow) needs its suspend variant told
@@ -1089,6 +1128,8 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                 // The Blood token's searched discard (Vampires A2); absent in human play.
                 if (a.ability_mode == Action::AbilityMode::BloodDraw && !a.discard_name.empty())
                 { tag += " (discard " + a.discard_name.str() + ")"; }
+                if (a.ability_mode == Action::AbilityMode::ThresholdLoot)
+                { tag += a.draw_target ? " (opponent draws)" : " (you draw)"; }
                 // Kessig Wolf Run's pump: the X and the TARGET are the whole decision (the blink lesson).
                 if (a.ability_mode == Action::AbilityMode::TapTargetPump)
                 {
@@ -1113,6 +1154,30 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
             // Scavenging Ooze: which graveyard card is exiled distinguishes the variants.
             case Action::Kind::GraveyardExileGrow:
                 tag = a.card_name + ": exile " + a.tutor_target.str();
+                break;
+            case Action::Kind::TapMillToughness:
+            {
+                int amount = 0;
+                for (const Permanent& q : s.battlefield)
+                { if (q.card.m_number == a.sac_source_id) { amount = PhenaxMillAmount(q, s); break; } }
+                tag = a.card_name + " #" + std::to_string(a.sac_source_id) + ": tap to mill "
+                    + (a.player_target == s.active_player_index ? "self " : "opponent ")
+                    + std::to_string(amount);
+                break;
+            }
+            case Action::Kind::PharikaExile:
+                tag = "Pharika: exile " + a.tutor_target.str() + " #"
+                    + std::to_string(a.sac_victim_id) + " from "
+                    + (a.player_target == s.active_player_index ? "own" : "opponent")
+                    + " graveyard; owner creates Snake";
+                break;
+            case Action::Kind::BronzePut:
+                tag = "Purphoros, Bronze-Blooded: put " + a.card_name.str()
+                    + " (sacrifice at next end step)";
+                break;
+            case Action::Kind::BankManaTap:
+                tag = "tap " + a.card_name.str() + " #" + std::to_string(a.sac_source_id)
+                    + " to bank {" + a.chosen_float_color.str() + "} with Kruphix";
                 break;
             case Action::Kind::Eternalize:
                 tag = a.card_name + ": eternalize from graveyard (4/4 black Zombie token copy)";
@@ -1515,13 +1580,18 @@ static void WriteBoardContext(std::ostream& os, const GameState& s, int reveal_c
     // Retrace: graveyard spells castable from the yard (pay cost + discard a land). The GUI makes
     // these clickable in the graveyard zone; absent when the yard holds no retrace card.
     {
-        std::vector<std::string> rt;
+        std::vector<std::string> rt, fb;
         for (const Card& c : me.graveyard)
         {
             const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
-            if (d && d->params.retrace) { rt.push_back(c.m_name); }
+            if (d && (d->params.retrace || d->params.flashback_cost))
+            {
+                rt.push_back(c.m_name);
+                if (d->params.flashback_cost) { fb.push_back(c.m_name); }
+            }
         }
         if (!rt.empty()) { std::sort(rt.begin(), rt.end()); os << ", \"retrace_gy\": "; JsonNameArray(os, rt); }
+        if (!fb.empty()) { std::sort(fb.begin(), fb.end()); os << ", \"flashback_gy\": "; JsonNameArray(os, fb); }
     }
     // Eternalize (Timeless Witness): graveyard cards with an eternalize cost -- the GUI makes them
     // clickable in the graveyard zone (the `eternalize=` verb). Absent when there are none, so every
@@ -1935,6 +2005,23 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
         }
     }
     WriteBoardContext(os, s, reveal_count);
+    // Life from the Loam targets physical graveyard lands. Its variant pins carry card numbers
+    // (L123,456), so give the viewer the corresponding art and names for a direct 0–3 card pick.
+    if (std::any_of(me.hand.begin(), me.hand.end(), [](const Card& c)
+        { return c.m_name == "Life from the Loam"; }))
+    {
+        bool first = true;
+        for (const Card& c : me.graveyard)
+        {
+            const CardDefinition* cd = CardDatabase::Instance().LookupCached(c);
+            if (!(cd ? cd->card.IsLand() : c.IsLand())) { continue; }
+            if (first) { os << "  \"loam_lands\": ["; first = false; }
+            else { os << ", "; }
+            os << "{ \"number\": " << c.m_number << ", \"name\": ";
+            JsonStr(os, c.m_name); os << " }";
+        }
+        if (!first) { os << "],\n"; }
+    }
     // Land's Edge availability: when the active player controls a Land's Edge (or any
     // "discard a land: deal N" outlet) and holds lands, the GUI single-click-activates it.
     // rate = damage per land discarded; lands_in_hand = how many can be fired (the UI caps
@@ -2263,6 +2350,39 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             for (const Action& a : p.actions) { k += payload_key(a); k += ';'; }
             return k;
         };
+        // Reserve basic plays before target and land-return variants consume the
+        // display cap. Gods can enumerate hundreds of Life from the Loam subsets
+        // before a legal Mystic Retrieval cast, Replenish cast, or land-only plan.
+        // Prefer direct single-action plans over larger optimistic proposals.
+        // DEFAULT ON; =0 restores the previous capped display for diagnosis.
+        if (EnvOn("MTG_PLAY_CAP_BASIC_COVER", true))
+        {
+            std::map<std::string, size_t> basic_plans;
+            for (size_t i = 0; i < plans.size(); ++i)
+            {
+                if (hide_bundle[i]) { continue; }
+                if (plans[i].actions.empty() && !plans[i].land_to_play.empty())
+                {
+                    const std::string key = "land|" + plans[i].land_to_play + "|" + plans[i].land_face;
+                    basic_plans.emplace(key, i);
+                }
+                for (const Action& a : plans[i].actions)
+                {
+                    const std::string key = std::to_string(static_cast<int>(a.kind)) + "|"
+                        + a.card_name.str() + "|" + std::to_string(static_cast<int>(a.ability_mode));
+                    auto [it, inserted] = basic_plans.emplace(key, i);
+                    if (!inserted && plans[i].actions.size() < plans[it->second].actions.size())
+                    { it->second = i; }
+                }
+            }
+            for (const auto& basic : basic_plans)
+            {
+                if (emit_order.size() >= n_emit) { break; }
+                const size_t i = basic.second;
+                if (taken[i]) { continue; }
+                emit_order.push_back(i); taken[i] = 1;
+            }
+        }
         // MTG_PLAY_CAP_PAYLOAD_COVER=0 disables this pass (the A/B control that shows the class is
         // real: with it off, a deep EDF go-off frame drops distinct blink (outlet, target) pairs
         // out of the emitted slice). DEFAULT ON.
@@ -2270,6 +2390,8 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
         if (s_cap_payload_cover)
         {
             std::unordered_set<std::string> covered;
+            for (size_t i : emit_order)
+                for (const Action& a : plans[i].actions) { covered.insert(payload_key(a)); }
             for (size_t i = 0; i < plans.size() && emit_order.size() < n_emit; ++i)
             {
                 if (hide_bundle[i] || taken[i]) { continue; }
@@ -2657,6 +2779,10 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                                         || !sd->params.sac_for_mana_victim_land_subtype.empty())); }();
             if (!self_sac_mana
              && (ac.kind == Action::Kind::TapForTokens
+             || ac.kind == Action::Kind::TapMillToughness
+             || ac.kind == Action::Kind::PharikaExile
+             || ac.kind == Action::Kind::BronzePut
+             || ac.kind == Action::Kind::BankManaTap
              || ac.kind == Action::Kind::SacForMana
              || ac.kind == Action::Kind::ActivatePump
              || ac.kind == Action::Kind::SacCreatureOutlet
@@ -2769,6 +2895,28 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                      << ", \"pieces\": "
                      << FreeAttachableEquipment(s, s.active_player_index, ac.sac_victim_id).size(); }
                 else if (ac.kind == Action::Kind::PutFromHandAbility) { os << ", \"verb\": \"sfput\""; }
+                else if (ac.kind == Action::Kind::BronzePut)
+                { os << ", \"verb\": \"sfput\", \"act_label\": \"put creature (sacrifice at next end step)\""; }
+                else if (ac.kind == Action::Kind::TapMillToughness)
+                {
+                    os << ", \"act_label\": ";
+                    JsonStr(os, std::string("tap to mill ")
+                        + (ac.player_target == s.active_player_index ? "self" : "opponent"));
+                    os << ", \"target\": " << ac.sac_victim_id;
+                }
+                else if (ac.kind == Action::Kind::PharikaExile)
+                {
+                    os << ", \"act_label\": ";
+                    JsonStr(os, std::string("exile ") + ac.tutor_target.str()
+                        + (ac.player_target == s.active_player_index ? " (own graveyard)" : " (opponent graveyard)"));
+                    os << ", \"target\": " << ac.sac_victim_id;
+                }
+                else if (ac.kind == Action::Kind::BankManaTap)
+                {
+                    os << ", \"act_label\": ";
+                    JsonStr(os, std::string("bank {") + ac.chosen_float_color.str() + "} with Kruphix");
+                    os << ", \"target\": " << ac.sac_victim_id;
+                }
                 // Arcanum Wings' swap names the Aura brought IN (card_name, in HAND), so `cast=` would
                 // read as hard-casting it -- its own verb, like sfput.
                 else if (ac.kind == Action::Kind::AuraSwap)
@@ -2898,7 +3046,8 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                 // `activate_source` = the permanent the human CLICKS, when that is not `card`.
                 // PutFromHandAbility's card_name is the Equipment being PUT (it is in hand), so
                 // without this the viewer would look for a board thumb that isn't there.
-                if (ac.kind == Action::Kind::PutFromHandAbility || ac.kind == Action::Kind::AuraSwap)
+                if (ac.kind == Action::Kind::PutFromHandAbility || ac.kind == Action::Kind::BronzePut
+                    || ac.kind == Action::Kind::AuraSwap)
                 {
                     // The swap's source is the Wings PERMANENT (clicked on the board); its card_name
                     // is the hand Aura brought in.
@@ -2970,7 +3119,9 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             // "Target player draws X" (Stroke of Genius): who draws -- the searched target player.
             {
                 const CardDefinition* dd = ac.def ? ac.def : CardDatabase::Instance().Lookup(ac.card_name);
-                if (dd && dd->params.draw_target_player)
+                if (dd && (dd->params.draw_target_player
+                           || (ac.kind == Action::Kind::ActivatePermAbility
+                               && ac.ability_mode == Action::AbilityMode::ThresholdLoot)))
                 { os << ", \"draw_target\": \"" << (ac.draw_target != 0 ? "opponent" : "self") << "\""; }
             }
             // Evoke variant (Reveillark): same bestow lesson -- the two casts share a name.
@@ -3133,7 +3284,8 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             // of the perm-ability modes only Drain / ExileTop do (the Tap* modes tap their source).
             // An activated untapper re-activates in a later segment: Umbra / Galvanic / Witch have no
             // {T}, and the Staff pays its own "{1}: Untap this artifact" ahead of a repeat.
-            if (ac.kind == Action::Kind::ActivateBlink
+            if (ac.kind == Action::Kind::PharikaExile || ac.kind == Action::Kind::BronzePut
+                || ac.kind == Action::Kind::ActivateBlink
                 || ac.kind == Action::Kind::ActivateUntap
                 || (ac.kind == Action::Kind::ActivatePermAbility
                     && (ac.ability_mode == Action::AbilityMode::Drain
@@ -4190,8 +4342,11 @@ static void WriteEtbColorDecisionJson(std::ostream& os, const GameState& s, cons
         JsonStr(os, (ci >= 0 && ci < 6) ? kNames[ci] : "?");
         os << " }";
     });
-    d.Note("reply a color ORDINAL (0=W 1=U 2=B 3=R 4=G) to lock that color in for this permanent "
-           "for the rest of the game. Default = the AI's pick.");
+    if (source.find("Klothys, God of Destiny") != std::string::npos)
+    { d.Note("reply 3 for red or 4 for green mana from the exiled land. The mana is available this turn. Default = red."); }
+    else
+    { d.Note("reply a color ORDINAL (0=W 1=U 2=B 3=R 4=G) to lock that color in for this permanent "
+             "for the rest of the game. Default = the AI's pick."); }
 }
 
 // "As this enters, choose two abilities" decision (Rick, Steadfast Leader / Greymond, Avacyn's
@@ -4539,8 +4694,8 @@ static void WriteLifegainCountersDecisionJson(std::ostream& os, const GameState&
 //     of one tutor in a single plan each get their own pick, each against the LIVE zone. (Before
 //     2026-09-10 a cast never reached here at all: the plan baked the target, and two Living Wishes
 //     in one plan were handed the SAME name, so the second silently whiffed on a spent singleton.)
-// `heuristic_default` = the engine's pick, pre-selected in the viewer; -1 = decline, which is also
-// what a baked target that has left the zone defaults to (reproducing the old whiff for replays).
+// `heuristic_default` = the engine's pick, pre-selected in the viewer; -1 = decline for optional
+// searches. For targeted graveyard returns, -1 uses the AI target instead.
 // `suggested` (indices into `candidates`) = the provider's narrowed set (Bruna's Glittering Wish
 // candidate rule): emitted as `"suggested": true` on those candidates ONLY, so every other tutor's
 // payload is byte-identical. A badge in the viewer; the order is never changed.
@@ -4552,6 +4707,12 @@ static void WriteTutorDecisionJson(std::ostream& os, const GameState& s, const s
     d.Type("tutor_etb").Source(source).Turn(s).Board(s).HeuristicDefault(heuristic_default);
     const bool upkeep_cast = source.find(" (upkeep cast)") != std::string::npos;
     if (upkeep_cast) { d.Bool("upkeep_cast", true); }
+    const bool upkeep_ability = source == "Magus of the Bazaar (upkeep ability)";
+    if (upkeep_ability) { d.Bool("upkeep_ability", true); }
+    const CardDefinition* source_def = CardDatabase::Instance().Lookup(source);
+    const bool from_graveyard = source_def != nullptr && source_def->params.tutor_from_graveyard
+                             && source_def->params.tutor_to_hand;
+    if (from_graveyard) { d.Bool("from_graveyard", true); }
     d.Array("candidates", candidates.size(), [&](std::size_t i)
     {
         os << "{ \"index\": " << i << ", \"name\": "; JsonStr(os, candidates[i]);
@@ -4559,7 +4720,13 @@ static void WriteTutorDecisionJson(std::ostream& os, const GameState& s, const s
         { os << ", \"suggested\": true"; }
         os << " }";
     });
-    if (upkeep_cast)
+    if (upkeep_ability)
+    { d.Note("reply 0 to tap Magus of the Bazaar before the draw step, drawing two and discarding three; -1 to leave it untapped. Dredge choices are offered for each draw."); }
+    else if (source == "Klothys, God of Destiny")
+    { d.Note("reply a candidate index to exile that graveyard card. Exiling a land adds red or green mana; exiling a nonland gains 2 life and deals 2 damage to each opponent. This choice is mandatory; -1 uses the default."); }
+    else if (from_graveyard)
+    { d.Note("reply a candidate index to return that target card from your graveyard to your hand. This choice is mandatory; -1 uses the AI's target."); }
+    else if (upkeep_cast)
     { d.Note("reply a candidate index to cast this tutor during upkeep and put that card on top before your draw, or -1 to hold the tutor. The chosen cast pays its mana cost now."); }
     else
     { d.Note("reply a candidate index to search that card up, or -1 to decline the optional search. Default = the AI's pick."); }
@@ -4712,11 +4879,13 @@ static void WriteDiscardDecisionJson(std::ostream& os, const GameState& s,
     // framing's over_by (hand - 7) goes negative on a small hand ("Select -5 cards", Minotaur
     // seed 1). The context carries the ability's source so the viewer can title it honestly.
     const bool cost_discard = !NonCleanupDiscardContext().empty();
+    const bool effect_discard = cost_discard && NonCleanupDiscardIsEffect();
     d.Type("discard").Turn(s)
-     .Int("over_by", cost_discard ? 1 : static_cast<int>(ap.hand.size()) - 7);
+     .Int("over_by", cost_discard ? (effect_discard ? NonCleanupDiscardRemaining() : 1)
+                                   : static_cast<int>(ap.hand.size()) - 7);
     if (cost_discard)
     {
-        d.Word("discard_context", "cost");
+        d.Word("discard_context", effect_discard ? "effect" : "cost");
         d.Str("source", NonCleanupDiscardContext());
     }
     d.Board(s);
@@ -4725,6 +4894,11 @@ static void WriteDiscardDecisionJson(std::ostream& os, const GameState& s,
     // Lets the viewer pre-select and commit the whole set in ONE step instead of one card per engine
     // round-trip. ai_set[0] equals heuristic_default (same selector, same starting state).
     std::vector<int> ai_set;
+    if (effect_discard)
+    { ai_set = NonCleanupDiscardAiSet(); }
+    else if (cost_discard)
+    { ai_set.push_back(heuristic_default); }
+    else
     {
         GameState copy = s;
         Player& cp = copy.players[copy.active_player_index];
@@ -4757,6 +4931,28 @@ static void WriteDiscardDecisionJson(std::ostream& os, const GameState& s,
     d.Note("reply the `index` VALUE of one of the options below (the engine's draw-order hand index) "
            "-- NOT a position in the displayed `me.hand`, which is sorted by name. An index that is "
            "not in options is silently replaced by the AI's pick. Default = the AI's pick.");
+}
+
+static void WriteDredgeDecisionJson(std::ostream& os, const GameState& s,
+                                    int player_index, const std::vector<int>& numbers,
+                                    int decision_index)
+{
+    DecisionJson d(os, decision_index);
+    const int suggestion = ResolveProvider(s).DredgeHumanDefault(s, player_index, numbers);
+    d.Type("dredge").SourceLiteral("Draw replacement").Turn(s).Board(s)
+     .Int("player_index", player_index).HeuristicDefault(suggestion);
+    const Player& player = s.players[static_cast<std::size_t>(player_index)];
+    d.Array("options", numbers.size() + 1, [&](std::size_t i)
+    {
+        if (i == 0) { os << "{ \"index\": 0, \"name\": \"Draw a card\" }"; return; }
+        const int number = numbers[i - 1];
+        const auto it = std::find_if(player.graveyard.begin(), player.graveyard.end(),
+            [number](const Card& card) { return card.m_number == number; });
+        os << "{ \"index\": " << i << ", \"name\": ";
+        JsonStr(os, it == player.graveyard.end() ? "" : it->m_name.str());
+        os << " }";
+    });
+    d.Note("Reply 0 to draw normally, or 1..n to mill the listed card's dredge number and return it to hand. Each draw has its own choice.");
 }
 
 // Expressive Iteration: enumerate the legal (hand_idx, exile_idx) splits over `look` looked cards
@@ -5614,6 +5810,7 @@ g_play_dig_chooser = nullptr;
 g_play_etb_color_chooser = nullptr;
 g_play_etb_keywords_chooser = nullptr;
 g_play_discard_chooser = nullptr;
+g_dredge_chooser = nullptr;
 g_play_ei_chooser = nullptr;
 g_play_retrace_chooser = nullptr;
 g_play_replicate_chooser = nullptr;
@@ -5714,6 +5911,9 @@ if (!log_dir.empty())
     // ...and for a resolved spell's COPY ID in the graveyard / exile (SpellCopyIdOn, GameLogger.h, Cyclone Q53):
     // a reference without `spell_copy_id` predates it and replays under --legacy-spell-copy.
     if (SpellCopyIdOn()) { out << ", \"spell_copy_id\": 1"; }
+    // This adds a positional pre-draw decision only to viewer sessions that opted in.
+    // Reference replay must pass the same flag; older games omit the stamp and keep their choices.
+    if (g_play_magus_upkeep_prompt) { out << ", \"magus_upkeep_prompt\": 1"; }
     out << ",\n  \"decisions\": [\n";
     for (size_t i = 0; i < trace.size(); ++i)
     {
@@ -5846,6 +6046,14 @@ int ChosenToSentinel(const ChosenTarget& c, int ci)
 // The choosers capture `this` only. That is deliberate and load-bearing: a `[&]` lambda built inside
 // a helper function would capture that helper's REFERENCE PARAMETERS, which die when it returns --
 // so the naive "pass the context in by reference" split would leave every chooser dangling.
+struct PlayDredgeChooser final : DredgeChooser
+{
+    std::function<int(const GameState&, int, const std::vector<int>&)> callback;
+    int Choose(const GameState& state, int player_index,
+               const std::vector<int>& numbers) override
+    { return callback ? callback(state, player_index, numbers) : 0; }
+};
+
 struct ClaudePlayHarness
 {
     // ---- context the choosers thread ----
@@ -5968,6 +6176,7 @@ struct ClaudePlayHarness
     BounceChooser         treasurify_chooser;
     RummageChooser        rummage_chooser;
     DiscardChooser        discard_chooser;
+    PlayDredgeChooser     dredge_chooser;
     EIChooser             ei_chooser;
     RetraceDiscardChooser retrace_chooser;
     ReplicateChooser      replicate_chooser;
@@ -6194,6 +6403,15 @@ void ClaudePlayHarness::WriteValidation(std::ostream& os, const std::string& lin
                                         const std::vector<TurnSolver::Plan>& plans, bool is_pre,
                                         int di, int this_main_ordinal)
 {
+    // Validation previews a copy of the board. A draw spell in that preview must
+    // not consume or emit a human dredge choice before the validation verdict.
+    // The real commit will prompt for each draw after its plan index is chosen.
+    struct DredgePreviewGuard
+    {
+        DredgeChooser* saved = g_dredge_chooser;
+        DredgePreviewGuard() { g_dredge_chooser = nullptr; }
+        ~DredgePreviewGuard() { g_dredge_chooser = saved; }
+    } dredge_preview_guard;
     TurnSolver::LineSpec spec = ParseLineSpec(line);
     // Hand CheckLine the menu the engine just enumerated -- the SAME list `--choices`
     // will index when the viewer commits the variant it picks. Without this the two
@@ -7847,6 +8065,35 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
         };
     g_play_discard_chooser = &discard_chooser;
 
+    dredge_chooser.callback = [this](const GameState& s, int player_index,
+                                     const std::vector<int>& numbers) -> int
+    {
+        const int di = static_cast<int>(cursor);
+    claude_retry_dredge:
+        if (cursor < choices.size())
+        {
+            int chosen = choices[cursor++];
+            ++decisions_made;
+            if (chosen < 0 || chosen > static_cast<int>(numbers.size())) { chosen = 0; }
+            if (!log_dir.empty())
+            {
+                std::ostringstream ss;
+                ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
+                WriteDredgeDecisionJson(ss, s, player_index, numbers, di);
+                ss << "}";
+                trace.push_back(ss.str());
+            }
+            return chosen;
+        }
+        std::cout << "<<<CLAUDE_DECISION>>>\n";
+        WriteDredgeDecisionJson(std::cout, s, player_index, numbers, di);
+        std::cout << "<<<END_DECISION>>>\n";
+        std::cout.flush();
+        if (AwaitMoreChoices()) { goto claude_retry_dredge; }
+        std::exit(70);
+    };
+    g_dredge_chooser = &dredge_chooser;
+
     // Expressive Iteration (#): the player assigns the looked-at top cards to hand / exile (play this
     // turn) / bottom. Shares the --choices stream; the reply is an option index into the enumerated
     // splits. Default = the engine's heuristic split (heur_hand_idx, heur_exile_idx).
@@ -8414,6 +8661,7 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
                          const std::string& cast_order_spec = "",
                          const std::string& storage_hold_spec = "",
                          bool storage_hold_prompt = false,
+                         bool magus_upkeep_prompt = false,
                          const std::string& jitte_spec = "",
                          bool jitte_prompt = false,
                          const std::string& force_attackers_spec = "",
@@ -8423,6 +8671,7 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
                          const std::string& full_enum_spec = "",
                          int auto_depth = -1, int auto_budget_ms = -1)
 {
+    g_play_magus_upkeep_prompt = magus_upkeep_prompt;
     GameState state = GoldFishRunner::SetupGame(deck, seed, game_index);
     GoldFishRunner::PopulateOpponentSpawns(state, game_index);
     // Stamp stable per-copy card numbers (goldfish only does this under --log-dir). Claude-play needs
@@ -10232,7 +10481,7 @@ int main(int argc, char* argv[])
     // Warn on MTG_* env vars this binary does not read (typo / deleted flag = silent no-op).
     WarnUnknownMtgFlags();
     ValidateHeuristicArmNames();
-    // Hard memory cap (MTG_RSS_CAP_GB, default 3/4 of RAM): abort THIS process before the host is
+    // Hard memory cap (MTG_RSS_CAP_GB, default 85% of RAM): abort THIS process before the host is
     // starved, naming the games in flight. See src/core/MemBudget.h.
     membudget::StartRssWatchdog("mtg");
     if (argc >= 2 && std::string(argv[1]) == "--list-flags") { PrintFlagRegistry(std::cout); return 0; }
@@ -10446,6 +10695,7 @@ int main(int argc, char* argv[])
     std::string tap_pref_str;         // ref replay: "<turn>:<pre|post>:<idx>,..." payment-tap preference
     std::string storage_hold_str;     // #6: "turn:num:val,..." storage tap-vs-charge side-channel
     bool storage_hold_prompt = false; // #6: --storage-hold-prompt -> exit-70 to ask per charged storage land
+    bool magus_upkeep_prompt = false; // viewer-only pre-draw Magus activation choice
     int         reveal_count = 0;     // --reveal N: expose top N upcoming draws (claude-play)
     std::string validate_line;        // --validate-line "<spec>": human-play line to reconcile
                                        // at the first un-chosen main phase (tools/play GUI)
@@ -10481,6 +10731,7 @@ int main(int argc, char* argv[])
         if (flag == "--ignore-play-profile") { ignore_play_profile = true; continue; }
         if (flag == "--eval-draw")           { eval_on_play = false; continue; }
         if (flag == "--storage-hold-prompt") { storage_hold_prompt = true; continue; }   // #6: value-less; parse regardless of position (the else-if chain below is gated on i+1<argc, so a trailing value-less flag would be dropped)
+        if (flag == "--magus-upkeep-prompt") { magus_upkeep_prompt = true; continue; }
         if (flag == "--firebreathe-prompt")  { firebreathe_prompt = true; continue; }
         if (flag == "--legacy-combat-swap-defer") { g_play_legacy_combat_swap_defer = true; continue; }   // replay a reference recorded UNDER the 2026-10-06..22 human combat-swap deferral (stamp combat_swap_timing; value-less)
         if (flag == "--legacy-karoo-float")  { g_play_legacy_karoo_float = true; continue; } // replay a reference recorded before the human Karoo tap-in-response float (value-less; see HumanKarooFloatOn)
@@ -10780,6 +11031,7 @@ int main(int argc, char* argv[])
                                  lookahead_depth, timeout_ms, choices, reveal_count, log_dir,
                                  validate_line, force_mulligan, firebreathe_str, firebreathe_prompt,
                                  cast_order_str, storage_hold_str, storage_hold_prompt,
+                                 magus_upkeep_prompt,
                                  jitte_str, jitte_prompt, force_attackers_str, tap_pref_str,
                                  play_interactive, choices_then_auto, full_enum_str,
                                  auto_depth, auto_budget_ms);

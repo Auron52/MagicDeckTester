@@ -704,6 +704,9 @@ extern thread_local bool g_play_frame_no_ordinal;
 // replay byte-identically as the heuristic. Nulled by RevealLogPause; inert unless set.
 using StorageHoldChooser = std::function<bool(const GameState& state, const Permanent& land, int counters)>;
 extern thread_local StorageHoldChooser* g_play_storage_hold_chooser;
+// The play viewer opts into a pre-draw Magus of the Bazaar activation choice. Saved
+// reference replays without the flag keep their original positional choices.
+extern thread_local bool g_play_magus_upkeep_prompt;
 
 // ---- Human-play land-entry chooser (enter a "pay a cost, or the land enters tapped" land) ------
 // Two lands present this choice as they enter: a shock land (etb_pay_life_to_untap -> pay N life to
@@ -1120,12 +1123,15 @@ struct PlayDropSinkScope
 // flag would permanently kill the fast path on every logged/digest run -- strictly worse than today,
 // where the outer pause nulls it and the nested pauses (the hot case) still hit the fast path.
 extern thread_local bool g_play_hooks_installed;
+struct DredgeChooser;
+extern thread_local DredgeChooser* g_dredge_chooser;
 void PauseHookAuditFail();
 
 // The pre-flag predicate, kept as the hatch + audit reference implementation.
 inline bool AllPlayHooksNull()
 {
     return g_play_top_chooser == nullptr && g_play_target_chooser == nullptr
+        && g_dredge_chooser == nullptr
         && g_play_bounce_chooser == nullptr && g_play_dig_chooser == nullptr
         && g_play_discard_chooser == nullptr && g_play_ei_chooser == nullptr
         && g_play_retrace_chooser == nullptr && g_play_soulfire_chooser == nullptr
@@ -1176,6 +1182,7 @@ struct RevealLogPause
     BounceChooser* saved_bchooser;
     DigChooser* saved_dchooser;
     DiscardChooser* saved_dischooser;
+    DredgeChooser* saved_dredgechooser;
     EIChooser* saved_eichooser;
     RetraceDiscardChooser* saved_rtchooser;
     SoulfireTargetChooser* saved_sfchooser;
@@ -1241,6 +1248,7 @@ struct RevealLogPause
         saved = g_reveal_logger; saved_real = g_real_resolution; saved_chooser = g_play_top_chooser;
         saved_tchooser = g_play_target_chooser; saved_bchooser = g_play_bounce_chooser;
         saved_dchooser = g_play_dig_chooser; saved_dischooser = g_play_discard_chooser;
+        saved_dredgechooser = g_dredge_chooser;
         saved_eichooser = g_play_ei_chooser; saved_rtchooser = g_play_retrace_chooser;
         saved_sfchooser = g_play_soulfire_chooser; saved_drawsink = g_play_draw_sink;
         saved_revealsink = g_play_reveal_sink;
@@ -1275,6 +1283,7 @@ struct RevealLogPause
         saved_madchooser = g_play_madness_chooser;
         g_real_resolution = false; g_reveal_logger = nullptr; g_play_top_chooser = nullptr; g_play_target_chooser = nullptr;
         g_play_bounce_chooser = nullptr; g_play_dig_chooser = nullptr; g_play_discard_chooser = nullptr;
+        g_dredge_chooser = nullptr;
         g_play_ei_chooser = nullptr; g_play_retrace_chooser = nullptr; g_play_soulfire_chooser = nullptr;
         g_play_draw_sink = nullptr; g_play_reveal_sink = nullptr; g_play_event_sink = nullptr; g_play_dropped_cast_sink = nullptr;
         g_play_sacrifice_chooser = nullptr;
@@ -1303,6 +1312,7 @@ struct RevealLogPause
                         g_real_resolution = saved_real; g_reveal_logger = saved; g_play_top_chooser = saved_chooser;
                         g_play_target_chooser = saved_tchooser; g_play_bounce_chooser = saved_bchooser;
                         g_play_dig_chooser = saved_dchooser; g_play_discard_chooser = saved_dischooser;
+                        g_dredge_chooser = saved_dredgechooser;
                         g_play_ei_chooser = saved_eichooser; g_play_retrace_chooser = saved_rtchooser;
                         g_play_soulfire_chooser = saved_sfchooser; g_play_draw_sink = saved_drawsink;
                         g_play_reveal_sink = saved_revealsink;

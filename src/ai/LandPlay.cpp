@@ -162,6 +162,9 @@ static bool PlayLandCore(GameState& state, const Card& card, const CardDefinitio
     // same rule that doubles devour's enters-with counters). Stamping the Counter here directly is
     // what made depletion the one counter kind a doubler could not see; see PutDepletionCounters.
     PutDepletionCounters(state, perm, fdef.params.enters_tapped_with_depletion);
+    if (fdef.params.enters_with_mana_counters > 0)
+    { perm.charge_counters = fdef.params.enters_with_mana_counters
+                           << DoublerShift(state, perm.controller_index, /*for_tokens=*/false); }
     state.battlefield.push_back(perm);
     // ASCEND (Ocelot Pride): a land drop raises the permanent count, and land drops deliberately do
     // NOT route through FireEtbWatchers (see the snow-watcher note below), so the city's-blessing

@@ -3,14 +3,19 @@
   {
    "name": "Arid Mesa",
    "mana_cost": "",
-   "types": ["Land"],
+   "types": [
+    "Land"
+   ],
    "subtypes": [],
    "keywords": [],
    "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for a Mountain or Plains card, put it onto the battlefield, then shuffle.",
    "template": "custom",
    "parameters": {
     "produces": [],
-    "fetch_land_types": ["Mountain", "Plains"],
+    "fetch_land_types": [
+     "Mountain",
+     "Plains"
+    ],
     "land_search_count": 1,
     "land_search_activation_cost": "",
     "land_search_activation_taps": true,
@@ -21,26 +26,39 @@
   {
    "name": "Sacred Foundry",
    "mana_cost": "",
-   "types": ["Land"],
-   "subtypes": ["Mountain", "Plains"],
+   "types": [
+    "Land"
+   ],
+   "subtypes": [
+    "Mountain",
+    "Plains"
+   ],
    "keywords": [],
    "oracle_text": "({T}: Add {R} or {W}.)\nAs this land enters, you may pay 2 life. If you don't, it enters tapped.",
    "template": "basic_land",
    "parameters": {
-    "produces": ["R", "W"],
+    "produces": [
+     "R",
+     "W"
+    ],
     "etb_pay_life_to_untap": 2
    }
   },
   {
    "name": "Sunbaked Canyon",
    "mana_cost": "",
-   "types": ["Land"],
+   "types": [
+    "Land"
+   ],
    "subtypes": [],
    "keywords": [],
    "oracle_text": "{T}, Pay 1 life: Add {R} or {W}.\n{1}, {T}, Sacrifice this land: Draw a card.",
    "template": "basic_land",
    "parameters": {
-    "produces": ["R", "W"],
+    "produces": [
+     "R",
+     "W"
+    ],
     "tap_self_damage": 1,
     "tap_is_life_payment": true,
     "sacrifice_draw_cost": "{1}"
@@ -49,13 +67,18 @@
   {
    "name": "Inspiring Vantage",
    "mana_cost": "",
-   "types": ["Land"],
+   "types": [
+    "Land"
+   ],
    "subtypes": [],
    "keywords": [],
    "oracle_text": "This land enters tapped unless you control two or fewer other lands.\n{T}: Add {R} or {W}.",
    "template": "basic_land",
    "parameters": {
-    "produces": ["R", "W"],
+    "produces": [
+     "R",
+     "W"
+    ],
     "fastland_max_other_lands": 2
    }
   },
@@ -271,7 +294,9 @@
   {
    "name": "Boros Charm",
    "mana_cost": "{R}{W}",
-   "types": ["Instant"],
+   "types": [
+    "Instant"
+   ],
    "keywords": [],
    "oracle_text": "Choose one —\n• Boros Charm deals 4 damage to target player or planeswalker.\n• Permanents you control gain indestructible until end of turn.\n• Target creature gains double strike until end of turn.",
    "template": "custom",
@@ -282,7 +307,9 @@
   {
    "name": "Lightning Helix",
    "mana_cost": "{R}{W}",
-   "types": ["Instant"],
+   "types": [
+    "Instant"
+   ],
    "keywords": [],
    "oracle_text": "Lightning Helix deals 3 damage to any target and you gain 3 life.",
    "template": "direct_damage",
@@ -295,7 +322,9 @@
   {
    "name": "Boltwave",
    "mana_cost": "{R}",
-   "types": ["Sorcery"],
+   "types": [
+    "Sorcery"
+   ],
    "keywords": [],
    "oracle_text": "Boltwave deals 3 damage to each opponent.",
    "template": "direct_damage",
@@ -14956,6 +14985,478 @@
      "Creature"
     ]
    }
+  },
+  {
+   "name": "Gemstone Mine",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "This land enters with three mining counters on it.\n{T}, Remove a mining counter from this land: Add one mana of any color. If there are no mining counters on this land, sacrifice it.",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "W",
+     "U",
+     "B",
+     "R",
+     "G"
+    ],
+    "enters_with_mana_counters": 3,
+    "mana_counters_are_mining": true,
+    "sacrifice_when_mana_counters_empty": true
+   }
+  },
+  {
+   "name": "Tendo Ice Bridge",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "This land enters with a charge counter on it.\n{T}: Add {C}.\n{T}, Remove a charge counter from this land: Add one mana of any color.",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "C",
+     "W",
+     "U",
+     "B",
+     "R",
+     "G"
+    ],
+    "enters_with_mana_counters": 1
+   }
+  },
+  {
+   "name": "Vivid Creek",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "This land enters tapped with two charge counters on it.\n{T}: Add {U}.\n{T}, Remove a charge counter from this land: Add one mana of any color.",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "U",
+     "W",
+     "B",
+     "R",
+     "G"
+    ],
+    "enters_tapped": true,
+    "enters_with_mana_counters": 2
+   }
+  },
+  {
+   "name": "Careful Study",
+   "mana_cost": "{U}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Draw two cards, then discard two cards. [The two cards are chosen from the post-draw hand using the searched put-back choice fan, and are moved to the graveyard through the shared discard hook. Human play selects each card through the discard prompt.]",
+   "template": "draw_spell",
+   "parameters": {
+    "draw": 2,
+    "post_draw_discard": 2
+   }
+  },
+  {
+   "name": "Faithless Looting",
+   "mana_cost": "{R}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Draw two cards, then discard two cards.\nFlashback {2}{R} (You may cast this card from your graveyard for its flashback cost. Then exile it.) [Draw and post-draw discard use Careful Study's searched choice and human discard prompts. Flashback is a graveyard cast for {2}{R}; only that cast is exiled after leaving the stack.]",
+   "template": "draw_spell",
+   "parameters": {
+    "draw": 2,
+    "post_draw_discard": 2,
+    "flashback_cost": "{2}{R}"
+   }
+  },
+  {
+   "name": "Replenish",
+   "mana_cost": "{3}{W}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Return all enchantment cards from your graveyard to the battlefield. (Auras with nothing to enchant remain in your graveyard.)",
+   "template": "custom",
+   "parameters": {
+    "replenish_enchantments": true
+   }
+  },
+  {
+   "name": "Purphoros, God of the Forge",
+   "mana_cost": "{3}{R}",
+   "types": [
+    "Enchantment",
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "God"
+   ],
+   "keywords": [
+    "Indestructible"
+   ],
+   "power": 6,
+   "toughness": 5,
+   "oracle_text": "Indestructible\nAs long as your devotion to red is less than five, Purphoros isn't a creature.\nWhenever another creature you control enters, Purphoros deals 2 damage to each opponent.\n{2}{R}: Creatures you control get +1/+0 until end of turn. [The creature-entry watcher deals damage to each opposing head through the shared damage event path; it observes a completed simultaneous Replenish batch. The {2}{R} activation pumps each own creature +1/+0 until end of turn. Devotion is read live, and Purphoros can trigger and activate while it is only an enchantment.]",
+   "template": "custom",
+   "parameters": {
+    "creature_requires_devotion": 5,
+    "devotion_color": "R",
+    "own_creature_enters_opp_damage": 2,
+    "team_pump_cost": "{2}{R}",
+    "team_pump_power": 1,
+    "team_pump_mainphase": true
+   }
+  },
+  {
+   "name": "Mystic Retrieval",
+   "mana_cost": "{3}{U}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Return target instant or sorcery card from your graveyard to your hand.\nFlashback {2}{R} [Target selection uses the graveyard tutor path with Instant/Sorcery filtering. The flashback cast pays {2}{R} and exiles this spell as it leaves the stack; a hand cast uses {3}{U} and goes to the graveyard. Both cast modes require a legal target before casting. The target is selected for search and viewer play.]",
+   "template": "custom",
+   "parameters": {
+    "tutor_to_hand": true,
+    "tutor_from_graveyard": true,
+    "tutor_types": [
+     "Instant",
+     "Sorcery"
+    ],
+    "flashback_cost": "{2}{R}"
+   }
+  },
+  {
+   "name": "Magus of the Bazaar",
+   "mana_cost": "{1}{U}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Human",
+    "Wizard"
+   ],
+   "keywords": [],
+   "power": 0,
+   "toughness": 1,
+   "oracle_text": "{T}: Draw two cards, then discard three cards. [A TapDraw activation draws two cards through the shared draw hook, then selects three cards from the post-draw hand through the shared discard-choice fan. The ability cannot be used while the creature has summoning sickness; each discard goes to its owner's graveyard and triggers discard watchers. Human play selects all three.]",
+   "template": "custom",
+   "parameters": {
+    "tap_draw_cost": "",
+    "tap_draw_count": 2,
+    "tap_post_draw_discard": 3
+   }
+  },
+  {
+   "name": "Cephalid Coliseum",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "{T}: Add {U}. Cephalid Coliseum deals 1 damage to you.\nThreshold — {U}, {T}, Sacrifice Cephalid Coliseum: Target player draws three cards, then discards three cards. Activate only if seven or more cards are in your graveyard. [Threshold is checked before the cost. The source cannot pay its own blue cost. Self and opponent targets are searched; self discards are searched and shown in the viewer, and an opponent chooses their own discards.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "U"
+    ],
+    "tap_self_damage": 1,
+    "threshold_loot_cost": "{U}"
+   }
+  },
+  {
+   "name": "Golgari Grave-Troll",
+   "mana_cost": "{4}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Troll",
+    "Skeleton"
+   ],
+   "keywords": [
+    "Regenerate"
+   ],
+   "power": 0,
+   "toughness": 0,
+   "template": "custom",
+   "parameters": {
+    "dredge": 6,
+    "enters_with_gy_creature_counters": true
+   },
+   "oracle_text": "This creature enters with a +1/+1 counter on it for each creature card in your graveyard.\n{1}, Remove a +1/+1 counter from this creature: Regenerate this creature.\nDredge 6 (If you would draw a card, you may mill six cards instead. If you do, return this card from your graveyard to your hand.) [The counter count is read as it enters, after it leaves the graveyard, and counter doublers apply. Dredge is an optional per-draw replacement. The regeneration activation is inert against the passive goldfish opponent: it never blocks or deals combat damage to our creature, and this deck has no spell or ability that destroys its own Grave-Troll. The activation spends mana and a counter for no reachable benefit; no shield is created.]"
+  },
+  {
+   "name": "Stinkweed Imp",
+   "mana_cost": "{2}{B}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Imp"
+   ],
+   "keywords": [
+    "Flying"
+   ],
+   "power": 1,
+   "toughness": 2,
+   "template": "custom",
+   "parameters": {
+    "dredge": 5
+   },
+   "oracle_text": "Flying\nWhenever this creature deals combat damage to a creature, destroy that creature.\nDredge 5 (If you would draw a card, you may mill five cards instead. If you do, return this card from your graveyard to your hand.) [Flying is a keyword. Dredge is an optional per-draw replacement. The combat-damage trigger is unreachable in the passive-opponent goldfish: the opponent declares no blockers, so this creature never deals combat damage to a creature.]"
+  },
+  {
+   "name": "Life from the Loam",
+   "mana_cost": "{1}{G}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "template": "custom",
+   "parameters": {
+    "dredge": 3,
+    "return_up_to_gy_lands": 3
+   },
+   "oracle_text": "Return up to three target land cards from your graveyard to your hand.\nDredge 3 (If you would draw a card, you may mill three cards instead. If you do, return this card from your graveyard to your hand.) [The cast selects zero to three distinct physical land cards in the graveyard; resolution returns each surviving target without shuffling. Dredge is an optional per-draw replacement.]"
+  },
+  {
+   "name": "Keranos, God of Storms",
+   "mana_cost": "{3}{U}{R}",
+   "types": ["Enchantment", "Creature"],
+   "supertypes": ["Legendary"],
+   "subtypes": ["God"],
+   "keywords": ["Indestructible"],
+   "power": 6,
+   "toughness": 5,
+   "template": "custom",
+   "oracle_text": "Indestructible\nAs long as your devotion to blue and red is less than seven, Keranos isn't a creature.\nReveal the first card you draw on each of your turns. Whenever you reveal a land card this way, draw a card. Whenever you reveal a nonland card this way, Keranos deals 3 damage to any target. [keranos_first_draw: the central actual-draw hook ignores dredge replacements and opponent-turn draws, consumes a per-own-turn marker before bonus draws, and queues the land bonus draw or nonland damage trigger. BoundaryFan searches next-turn targets after adaptive draw replacements; in-plan draw effects search live damage targets with keranos_targets. The target chooser surfaces the same legal board options in human play.]",
+   "parameters": {"creature_requires_devotion": 7, "devotion_color": "UR", "keranos_first_draw": true}
+  },
+  {
+   "name": "Mogis, God of Slaughter",
+   "mana_cost": "{2}{B}{R}",
+   "types": ["Enchantment", "Creature"],
+   "supertypes": ["Legendary"],
+   "subtypes": ["God"],
+   "keywords": ["Indestructible"],
+   "power": 7,
+   "toughness": 5,
+   "template": "custom",
+   "oracle_text": "Indestructible\nAs long as your devotion to black and red is less than seven, Mogis isn't a creature.\nAt the beginning of each opponent's upkeep, Mogis deals 2 damage to that player unless they sacrifice a creature. [mogis_opponent_upkeep: the executor and rollout both fire this at the compressed opponent upkeep, skipped before an extra turn; the passive opponent sacrifices an available creature if one exists and otherwise takes two damage. Its choice is resolved by a deterministic passive opponent policy.]",
+   "parameters": {"creature_requires_devotion": 7, "devotion_color": "BR", "mogis_opponent_upkeep": true}
+  },
+  {
+   "name": "Klothys, God of Destiny",
+   "mana_cost": "{1}{R}{G}",
+   "types": ["Enchantment", "Creature"],
+   "supertypes": ["Legendary"],
+   "subtypes": ["God"],
+   "keywords": ["Indestructible"],
+   "power": 4,
+   "toughness": 5,
+   "template": "custom",
+   "oracle_text": "Indestructible\nAs long as your devotion to red and green is less than seven, Klothys isn't a creature.\nAt the beginning of your precombat main phase, exile target card from a graveyard. If it was a land card, add {R} or {G}. Otherwise, you gain 2 life and Klothys deals 2 damage to each opponent. [klothys_first_main: executor and rollout select a live physical card from either graveyard and exile it at first-main entry. BoundaryFan searches every graveyard card and both mana colours for land targets after upkeep/draw changes; human play shows the graveyard target and land-colour prompts.]",
+   "parameters": {"creature_requires_devotion": 7, "devotion_color": "RG", "klothys_first_main": true}
+  },
+  {
+   "name": "Ephara, God of the Polis",
+   "mana_cost": "{2}{W}{U}",
+   "types": ["Enchantment", "Creature"],
+   "supertypes": ["Legendary"],
+   "subtypes": ["God"],
+   "keywords": ["Indestructible"],
+   "power": 6,
+   "toughness": 5,
+   "template": "custom",
+   "oracle_text": "Indestructible\nAs long as your devotion to white and blue is less than seven, Ephara isn't a creature.\nAt the beginning of each upkeep, if you had another creature enter the battlefield under your control last turn, draw a card. [ephara_upkeep_draw: the shared creature-entry watcher records own entries; executor and rollout advance this history over the compressed opponent turn and extra-turn boundary, then draw on each qualifying upkeep. Each draw uses the ordinary replacement/actual-draw hook, and BoundaryFan searches any dredge replacement at its occurrence.]",
+   "parameters": {"creature_requires_devotion": 7, "devotion_color": "WU", "ephara_upkeep_draw": true}
   }
- ]
+   ,{
+   "name": "Phenax, God of Deception",
+   "mana_cost": "{3}{U}{B}",
+   "types": ["Enchantment", "Creature"],
+   "supertypes": ["Legendary"],
+   "subtypes": ["God"],
+   "keywords": ["Indestructible"],
+   "power": 4,
+   "toughness": 7,
+   "template": "custom",
+   "oracle_text": "Indestructible\nAs long as your devotion to blue and black is less than seven, Phenax isn't a creature.\nCreatures you control have \"{T}: Target player mills X cards, where X is this creature's toughness.\" [grants_tap_mill_toughness: every live creature gets a tap action, targeting either player; live toughness includes all buffs. Opponent mill moves cards to graveyard and preserves the deck-out win projection.]",
+   "parameters": {"creature_requires_devotion": 7, "devotion_color": "UB", "grants_tap_mill_toughness": true}
+  }
+
+   ,{
+      "name": "Pharika, God of Affliction",
+      "mana_cost": "{1}{B}{G}",
+      "types": [
+         "Enchantment",
+         "Creature"
+      ],
+      "supertypes": [
+         "Legendary"
+      ],
+      "subtypes": [
+         "God"
+      ],
+      "keywords": [
+         "Indestructible"
+      ],
+      "power": 5,
+      "toughness": 5,
+      "template": "custom",
+      "oracle_text": "Indestructible\nAs long as your devotion to black and green is less than seven, Pharika isn't a creature.\n{B}{G}: Exile target creature card from a graveyard. Its owner creates a 1/1 black and green Snake enchantment creature token with deathtouch.",
+      "parameters": {
+         "creature_requires_devotion": 7,
+         "devotion_color": "BG",
+         "pharika_exile_cost": "{B}{G}"
+      }
+   }
+   ,{
+      "name": "Purphoros, Bronze-Blooded",
+      "mana_cost": "{4}{R}",
+      "types": [
+         "Enchantment",
+         "Creature"
+      ],
+      "supertypes": [
+         "Legendary"
+      ],
+      "subtypes": [
+         "God"
+      ],
+      "keywords": [
+         "Indestructible"
+      ],
+      "power": 7,
+      "toughness": 6,
+      "template": "custom",
+      "oracle_text": "Indestructible\nAs long as your devotion to red is less than five, Purphoros isn't a creature.\nOther creatures you control have haste.\n{2}{R}: You may put a red creature card or an artifact creature card from your hand onto the battlefield. Sacrifice it at the beginning of the next end step.",
+      "parameters": {
+         "creature_requires_devotion": 5,
+         "devotion_color": "R",
+         "grants_haste": true,
+         "affects_all_creatures": true,
+         "lord_excludes_self": true,
+         "bronze_put_cost": "{2}{R}"
+      }
+   }
+   ,{
+      "name": "Xenagos, God of Revels",
+      "mana_cost": "{3}{R}{G}",
+      "types": ["Enchantment", "Creature"],
+      "supertypes": ["Legendary"],
+      "subtypes": ["God"],
+      "keywords": ["Indestructible"],
+      "power": 6,
+      "toughness": 5,
+      "template": "custom",
+      "oracle_text": "Indestructible\nAs long as your devotion to red and green is less than seven, Xenagos isn't a creature.\nAt the beginning of combat on your turn, another target creature you control gains haste and gets +X/+X until end of turn, where X is that creature's power.",
+      "parameters": {"creature_requires_devotion": 7, "devotion_color": "RG", "xenagos_combat_pump": true}
+   }
+   ,{
+      "name": "Iroas, God of Victory",
+      "mana_cost": "{2}{R}{W}",
+      "types": ["Enchantment", "Creature"],
+      "supertypes": ["Legendary"],
+      "subtypes": ["God"],
+      "keywords": ["Indestructible"],
+      "power": 7,
+      "toughness": 4,
+      "template": "custom",
+      "oracle_text": "Indestructible\nAs long as your devotion to red and white is less than seven, Iroas isn't a creature.\nCreatures you control have menace.\nPrevent all damage that would be dealt to attacking creatures you control.",
+      "parameters": {"creature_requires_devotion": 7, "devotion_color": "RW", "iroas_combat_guard": true}
+   }
+   ,{
+      "name": "Karametra, God of Harvests",
+      "mana_cost": "{3}{G}{W}",
+      "types": ["Enchantment", "Creature"],
+      "supertypes": ["Legendary"],
+      "subtypes": ["God"],
+      "keywords": ["Indestructible"],
+      "power": 6,
+      "toughness": 7,
+      "template": "custom",
+      "oracle_text": "Indestructible\nAs long as your devotion to green and white is less than seven, Karametra isn't a creature.\nWhenever you cast a creature spell, you may search your library for a Forest or Plains card, put it onto the battlefield tapped, then shuffle.",
+      "parameters": {"creature_requires_devotion": 7, "devotion_color": "GW", "karametra_cast_land_search": true,
+         "land_search_count": 1, "land_search_tapped": true, "land_search_optional": true,
+         "land_search_subtype": "Forest"}
+   }
+   ,{
+      "name": "Athreos, God of Passage",
+      "mana_cost": "{1}{W}{B}",
+      "types": ["Enchantment", "Creature"],
+      "supertypes": ["Legendary"],
+      "subtypes": ["God"],
+      "keywords": ["Indestructible"],
+      "power": 5,
+      "toughness": 4,
+      "template": "custom",
+      "oracle_text": "Indestructible\nAs long as your devotion to white and black is less than seven, Athreos isn't a creature.\nWhenever another creature you own dies, return it to your hand unless target opponent pays 3 life.",
+      "parameters": {"creature_requires_devotion": 7, "devotion_color": "WB", "athreos_passage": true}
+   }
+   ,{
+      "name": "Athreos, Shroud-Veiled",
+      "mana_cost": "{4}{W}{B}",
+      "types": ["Enchantment", "Creature"],
+      "supertypes": ["Legendary"],
+      "subtypes": ["God"],
+      "keywords": ["Indestructible"],
+      "power": 4,
+      "toughness": 7,
+      "template": "custom",
+      "oracle_text": "Indestructible\nAs long as your devotion to white and black is less than seven, Athreos isn't a creature.\nAt the beginning of your end step, put a coin counter on another target creature.\nWhenever a creature with a coin counter on it dies or is put into exile, return that card to the battlefield under your control.",
+      "parameters": {"creature_requires_devotion": 7, "devotion_color": "WB", "athreos_shroud": true}
+   }
+   ,{
+      "name": "Kruphix, God of Horizons",
+      "mana_cost": "{3}{G}{U}",
+      "types": [
+         "Enchantment",
+         "Creature"
+      ],
+      "supertypes": [
+         "Legendary"
+      ],
+      "subtypes": [
+         "God"
+      ],
+      "keywords": [
+         "Indestructible"
+      ],
+      "power": 4,
+      "toughness": 7,
+      "template": "custom",
+      "oracle_text": "Indestructible\nAs long as your devotion to green and blue is less than seven, Kruphix isn't a creature.\nYou have no maximum hand size.\nIf you would lose unspent mana, that mana becomes colorless instead.",
+      "parameters": {
+         "creature_requires_devotion": 7,
+         "devotion_color": "GU",
+         "no_max_hand_size": true,
+         "kruphix_banks_mana": true
+      }
+   }
+]
 }

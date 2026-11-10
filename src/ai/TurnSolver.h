@@ -16,6 +16,7 @@
 class TranspositionTable;  // per-decision SimulateToEnd memo (see TranspositionTable.h)
 class GameLogger;         // ApplyLandSearchActs: the executor's logger (null in the rollout)
 
+
 // A single atomic play the active player can make in a main phase. Unifies the
 // formerly-separate action sources (hand cast, Aether Vial activation, Land's Edge
 // discard, graveyard retrace) so enumeration, evaluation and execution each handle
@@ -50,6 +51,7 @@ struct ContPins
     std::vector<int> land_search;   // Plan::land_search_pins (the continuation's own land searches)
     std::vector<int> incinerator_targets;
     std::vector<int> look_top;      // Plan::look_top_pins (the continuation's own Risen Reef looks / orders)
+    std::vector<int> dredge;        // physical graveyard card number per optional draw; 0 = normal draw
     int put_bounce = -1;   // Plan::bounce_choice as the put-Karoo pin (a Genesis Wave the continuation
                            // casts; PutBouncePinOf -- -1 when its own drop is the Karoo)
     int putback    = -1;   // Plan::putback_choice (a Brainstorm the continuation casts)
@@ -57,7 +59,7 @@ struct ContPins
     {
         return etbdig >= 0 || saga_ch1 >= 0 || ponder >= 0 || etbcounter >= 0 || tutor >= 0
             || scry >= 0 || bounce >= 1 || !sac.empty() || !land_search.empty() || put_bounce >= 1
-            || putback >= 0 || !look_top.empty() || !incinerator_targets.empty();
+            || putback >= 0 || !look_top.empty() || !dredge.empty() || !incinerator_targets.empty();
     }
 };
 
@@ -97,6 +99,12 @@ struct Action
                              // tap the source (sac_source_id = its card.m_number); at apply, create
                              // (controlled matching-subtype permanents) tokens. cost = {0} (tap only).
                              // Emitted only when tap_creates_tokens_per_controlled_subtype is set.
+        TapMillToughness,    // Phenax grants each controlled creature {T}: target player mills
+                             // cards equal to current toughness. sac_source_id is the creature;
+                             // player_target is 0 (self) or 1 (opponent).
+        PharikaExile,       // {B}{G}: creature card in either graveyard -> owner Snake token
+        BronzePut,          // {2}{R}: red/artifact creature from hand -> end-step sacrifice
+        BankManaTap,        // Kruphix: optional mana-source tap before a phase boundary
         SacCreatureOutlet,   // Skirk Prospector / Siege-Gang / Pashalik: pay sac_creature_cost + Sacrifice
                              // one controlled creature with sac_creature_requires_subtype (sac_source_id),
                              // then apply the outlet payload (float mana / face damage / create tokens).
@@ -1605,6 +1613,12 @@ public:
         // Folded into the plan hash, SamePlan, IsApplyEmptyPlan, PlanIsAxisVariant, the census key,
         // the dominance Xaxes key and (live) the breakpoint key.
         std::vector<int> look_top_pins;
+        std::vector<int> dredge_pins; // one physical card number per in-plan optional draw, 0 = normal
+        std::vector<int> keranos_targets; // one live target rank per in-plan nonland reveal
+        std::int16_t next_draw_dredge_choice = -1; // draw step after this turn's boundary
+        std::vector<int> next_draw_dredge_pins; // all eligible boundary draws, in event order
+        int next_klothys_choice = -1; // resolution-time graveyard card and mana mode
+        int next_keranos_choice = -1; // resolution-time damage target
         std::vector<int> incinerator_targets; // stable target id per actual queued trigger ordinal
         // bp_pre -- the FOURTH breakpoint axis beside bp_choice / bp_at / bp_all: the earlier entries
         // of a deviation SEQUENCE (MTG_BP_DEV_SEQ; docs/design/bp-empty-arm-deferred-site.md 6.1).
@@ -1892,6 +1906,7 @@ public:
         // PerformEndStepAbidingGrace in both worlds (no AIEngine member). The search branches over
         // mode AND target; only beyond the horizon does the unpinned front pick apply.
         int grace_choice = -1;
+        int athreos_coin_choice = -1; // physical end-step target rank; -1 inherits state
 
         // SEARCHED SAGA CHAPTER I FREE CAST (World War Hulk I: "the next red or green creature
         // spell you cast this turn can be cast without paying its mana cost"). A RANK into
@@ -2795,6 +2810,9 @@ public:
     // Test hook (searched Defense of the Heart, MTG_DOTH_AXIS): every crossing the boundary fan makes from `state`
     // (a state at the end of its turn), in order, as the pin it would record (-1 = that crossing decided nothing).
     static std::vector<int> DothBoundaryPinsForTest(const GameState& state);
+    static std::vector<int> DredgeBoundaryPinsForTest(const GameState& state);
+    static std::vector<std::vector<int>> DredgeBoundaryPinSequencesForTest(const GameState& state);
+    static std::vector<std::pair<int, int>> GodBoundaryPinsForTest(const GameState& state);
     // MTG_LEAF_KILL_ONLY test hook: one horizon rollout exactly as FSLineWin's leaf runs it (SimulateToEnd
     // at `depth` under `cutoff`, a fresh leaf table, no budget), and how many kill-only turns it armed /
     // candidate rollouts it skipped on this thread (counted in every build, thread-local).
@@ -3722,6 +3740,10 @@ public:
     // The graded no-win leaf quantity of the line the last enforcing SolveWithLookahead on this thread committed
     // (LOWER = better; LLONG_MAX = none). Read by the blind resolution chooser only.
     static long long LastCommittedTieBreak();
+    // Root state of the current outer lookahead decision, retained across its
+    // recursive future turns. Null outside a lookahead solve.
+    static const GameState* CurrentSearchRootState();
+    static const GameState* CurrentFullSearchRootState();
     static Plan SolveWithLookahead(const GameState& state, bool is_pre_combat,
                                    int depth, int max_turns = 20,
                                    SearchBudget* budget = nullptr,
@@ -3762,6 +3784,10 @@ public:
         int boundary_doth = -2;
         int boundary_tutor = -2;
         int boundary_stut = -2;   // ...and Profane Tutor's off-suspend fetch (Plan::suspend_tutor_choice)
+        int boundary_klothys = -2;
+        int boundary_keranos = -2;
+        int boundary_dredge = -2; // next draw step's physical dredger, 0 = normal draw
+        std::vector<int> boundary_dredge_pins;
     };
 
     // fd-oracle diagnostic (MTG_FD_ORACLE only, inert otherwise): the smallest WIN-CLAIMING estimate

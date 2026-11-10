@@ -24,6 +24,7 @@
 #include "../core/SpellEffects.h"
 #include "../core/RolloutTouch.h"
 #include "../core/GameSetup.h"   // gamesetup::BlindSearchSalt (the known-respecting blind search)
+#include "../core/MemBudget.h"  // MTG_BOTTOM_TRIAL_TRACE RSS diagnostics
 #include <algorithm>
 #include <cstdlib>
 #include <functional>
@@ -371,6 +372,14 @@ HumanCommitPreview PrepareHumanCommit(const GameState& state, const TurnSolver::
         std::vector<std::string> drops, reasons;
         std::vector<std::string>* const prev_sink = g_play_dropped_cast_sink;
         {
+            // Trial applies are previews. A draw spell here must not ask the
+            // human for dredge choices; only the committed apply may do that.
+            struct DredgeTrialGuard
+            {
+                DredgeChooser* saved = g_dredge_chooser;
+                DredgeTrialGuard() { g_dredge_chooser = nullptr; }
+                ~DredgeTrialGuard() { g_dredge_chooser = saved; }
+            } dredge_trial_guard;
             ComboOffApplyPause co_quiet;
             RevealLogPause quiet;
             // The trial's OWN (casts, reasons) pair: the harness's logs never see a trial's drops.
@@ -1787,7 +1796,7 @@ void AIEngine::ResolveEchoUpkeep(GameState& state)
     // this fixes, was untouched. The echo loop is idempotent via Permanent::echo_resolved, so
     // keying on "an obligation actually came due in THIS pass" inherits that once-per-turn
     // latch. Nothing else floats mana during upkeep, so this is exactly the echo leftover.
-    if (echo_processed && UpkeepFloatClearEnabled()) { state.floating_mana = ManaPool{}; state.floating_haste_c = 0; }
+    if (echo_processed && UpkeepFloatClearEnabled()) { CrossManaBoundary(state, state.active_player_index); }
     if (echo_processed) { state.scripted_echo = -1; }   // the pin this upkeep consumed
 }
 
@@ -1825,7 +1834,7 @@ void AIEngine::ResolveUpkeepRevealTop(GameState& state)
     // over-produced by a lumpy source paying {2}{G}{G} must not survive into this main phase, or the
     // rollout scores a turn the executor cannot pay. Unconditional here (unlike echo's
     // echo_processed latch) because reaching this line means we DID just pay at upkeep.
-    if (UpkeepFloatClearEnabled()) { state.floating_mana = ManaPool{}; state.floating_haste_c = 0; }
+    if (UpkeepFloatClearEnabled()) { CrossManaBoundary(state, state.active_player_index); }
 }
 
 void AIEngine::FlagNonConvergence(const GameState& state, const TurnSolver::Plan& plan,
@@ -2303,7 +2312,7 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
     static const bool s_beval_topk_set   = EnvSet("MTG_BOTTOM_EVAL_TOPK");
     const int eff_beval_depth  = s_beval_depth_set  ? s_beval_depth    : m_profile.bottom_eval_depth;
     const int eff_beval_budget = s_beval_budget_set ? s_beval_budget   : m_profile.bottom_eval_budget_ms;
-    const int eff_beval_topk   = s_beval_topk_set   ? s_beval_topk_env : m_profile.bottom_eval_topk;
+    const int eff_beval_topk   = s_beval_topk_set ? s_beval_topk_env : m_profile.bottom_eval_topk;
     static const int  s_beval_units_env  = EnvInt("MTG_BOTTOM_EVAL_UNITS", -1);
     const int eff_beval_units  = EnvSet("MTG_BOTTOM_EVAL_UNITS") ? s_beval_units_env : m_profile.bottom_eval_units;
     // TURN CUT (MTG_BOTTOM_TURN_CUT, SOUND, default ON; =0 plays every candidate out). A candidate whose
@@ -2722,7 +2731,20 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
                     Player& trial_ap = trial.ActivePlayer();
                     trial_ap.library.push_back(trial_ap.hand[j]);
                     trial_ap.hand.erase(trial_ap.hand.begin() + j);
+                    if (s_trial_trace)
+                    {
+                        t_bottom_trial_trace = (2LL << 24) | (i << 8) | j;
+                        std::fprintf(stderr, "[btrial-start] seed=%llu refine=%d card=%s rss_mb=%lld\n",
+                                     static_cast<unsigned long long>(state.game_seed), j,
+                                     ap.hand[j].m_name.c_str(), membudget::CurrentRssBytes() / (1024 * 1024));
+                    }
                     win_turn[j] = RolloutWinTurn(std::move(trial), max_turns);
+                    if (s_trial_trace)
+                    {
+                        std::fprintf(stderr, "[btrial-done] seed=%llu refine=%d win=%d rss_mb=%lld\n",
+                                     static_cast<unsigned long long>(state.game_seed), j, win_turn[j],
+                                     membudget::CurrentRssBytes() / (1024 * 1024));
+                    }
                 }
                 best_win = std::numeric_limits<int>::max();
                 for (int j = 0; j < hand_size; ++j)
@@ -4886,6 +4908,13 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                                                     // resolved at the true state); empty inert
     IncineratorPinScope _incinerator_pins_exec(plan.incinerator_targets);
     ScriptedLookTop _slt_exec(plan.look_top_pins);   // executor/rollout lockstep for the searched Risen
+    ScriptedDredge _sdredge_exec(plan.dredge_pins);
+    ScriptedKeranosTargets _skeranos_exec(plan.keranos_targets);
+    struct KeranosPassFlush
+    {
+        GameState& s;
+        ~KeranosPassFlush() { if (s.deck_has_turn_gods) { FlushKeranosTriggers(s); } }
+    } _keranos_pass_flush{state};
                                                      // Reef land / trigger-order entries; empty inert
     ScriptedLandSearch _sls_exec(plan.land_search_pins);   // executor/rollout lockstep for the
                                                     // searched land-search picks (core/LandSearch.h:
@@ -5246,10 +5275,15 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (git == ap.graveyard.end()) { return; }
         const CardDefinition* def = CardDatabase::Instance().Lookup(name);
         if (!def) { return; }
+        if (!HasGraveyardTutorTarget(state, state.active_player_index, def->params, git->m_number))
+        { return; }
 
         // Pay the mana cost first; abort cleanly (graveyard untouched) if unpayable.
         ManaPool available = AvailableManaPool(state);
-        ManaCost effective = EffectiveCost(*def, state);
+        CardDefinition pay_def = *def;
+        const bool flashback = def->params.flashback_cost.has_value();
+        if (flashback) { pay_def.card.m_mana_cost = *def->params.flashback_cost; }
+        ManaCost effective = EffectiveCost(pay_def, state);
         if (AffordAuditOn()) { g_afford_real_attempts.fetch_add(1, std::memory_order_relaxed); }
         if (!available.CanPay(effective))
         { if (AffordAuditOn()) { g_afford_real_fails.fetch_add(1, std::memory_order_relaxed); } return; }
@@ -5306,6 +5340,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         entry.source           = def->card;
         entry.source.m_number  = number;
         entry.controller_index = state.active_player_index;
+        entry.cast_with_flashback = flashback;
         // Retrace cards in this set (Throes of Chaos) target nothing; if a future
         // retrace card needs targets, mirror CastSpellFromHand's targeting switch here.
 
@@ -6884,6 +6919,43 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                                         a.tutor_target.str());
             }
         }
+        else if (a.kind == Action::Kind::TapMillToughness)
+        {
+            const bool applied = a.sac_source_id == -1
+                ? ApplyPhenaxGodsMassMill(state, state.active_player_index) > 0
+                : ApplyPhenaxTapMill(state, state.active_player_index, a.sac_source_id, a.player_target);
+            if (applied && m_logger)
+            { m_logger->LogAbility(a.sac_source_id, a.card_name.str(),
+                                   a.sac_source_id == -1 ? "mass mill opponent"
+                                   : (a.player_target == state.active_player_index ? "mill self" : "mill opponent")); }
+        }
+        else if (a.kind == Action::Kind::PharikaExile)
+        {
+            ManaPool avail = AvailableManaPool(state);
+            if (TapForCost(state, a.cost, avail, /*for_creature=*/false)
+                && ApplyPharikaExile(state, state.active_player_index, a.sac_source_id,
+                                      a.player_target, a.sac_victim_id) && m_logger)
+            { m_logger->LogAbility(a.sac_source_id, a.card_name.str(), "exile creature; Snake token"); }
+        }
+        else if (a.kind == Action::Kind::BronzePut)
+        {
+            if (PutFromHandLegalIndex(state, state.active_player_index, a.sac_source_id,
+                                      a.card_name.str()) >= 0)
+            {
+                ManaPool avail = AvailableManaPool(state);
+                if (TapForCost(state, a.cost, avail, /*for_creature=*/false)
+                    && ApplyPutFromHand(state, state.active_player_index, a.sac_source_id,
+                                        a.card_name.str()) && m_logger)
+                { m_logger->LogAbility(a.sac_source_id, "Purphoros, Bronze-Blooded", "put creature; sacrifice at end step"); }
+            }
+        }
+        else if (a.kind == Action::Kind::BankManaTap)
+        {
+            if (ApplyKruphixBankTap(state, a.sac_source_id,
+                                    a.chosen_float_color.str().empty() ? 'C' : a.chosen_float_color.str()[0])
+                && m_logger)
+            { m_logger->LogAbility(a.sac_source_id, a.card_name.str(), "bank mana with Kruphix"); }
+        }
         else if (a.kind == Action::Kind::Eternalize)
         {
             // Timeless Witness eternalize (executor mirror of the rollout's trailing pass).
@@ -7032,6 +7104,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     std::vector<int> snow_hand_before;
                     if (snow_look && TurnSolver::BreakpointHandSnapshotWanted(state))
                     { snow_hand_before = TurnSolver::HandCardNumbers(state); }
+                    const ThresholdLootTargetScope _loot_target(a.draw_target);
                     ApplyPermAbility(state, state.active_player_index, src_id,
                                      a.ability_mode);
                     if (m_logger)
@@ -7948,8 +8021,14 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // cost of the main hand casts and pre-load floating so the casts below drain the pool instead of
     // the stranding per-cast greedy. Same (state, plan.actions) inputs as the rollout at the same
     // logical point (after the land drop; Vial puts now ride the cast sequence) -> identical prepay. Declined -> greedy.
-    TurnSolver::BatchPrepayMainCasts(state, plan.actions, /*mint_prefix=*/false, /*hand_demand=*/false,
-                                     /*allow_partial=*/true);
+    const bool loam_target_plan = std::any_of(plan.actions.begin(), plan.actions.end(), [](const Action& a)
+    {
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        return a.kind == Action::Kind::CastFromHand && d && d->params.return_up_to_gy_lands > 0;
+    });
+    if (!loam_target_plan)
+    { TurnSolver::BatchPrepayMainCasts(state, plan.actions, /*mint_prefix=*/false, /*hand_demand=*/false,
+                                      /*allow_partial=*/true); }
     // Indices of sac-land casts hoisted ahead of the Spectacle spell (mirrors ApplyPlanDirect);
     // the trailing sac loop skips them so they are not double-cast. Empty unless a Spectacle
     // enabler is hoisted below.
@@ -9293,20 +9372,19 @@ AIEngine::DigOutcome AIEngine::PerformDigFull(GameState& state, const std::strin
         }
     }
 
-    if (ap.library.empty()) { return DigOutcome::Failed; }
     // MTG_TRACE=dig -- the REALISED dig, in the real game (the rollout has its own inline loop).
     // This is the census instrument for the generic dig gate: a capability whose only symptom is
     // "an ability is never offered" cannot be verified by a digest diff, because zero-variants-
     // emitted and no-change-wanted look identical ([[digest-equality-can-mean-broken]]). Counting
     // lines here on both arms of MTG_GENERIC_DIG is the direct evidence.
     TRACE("dig", "T%d %s %s", state.turn_number, is_sacrifice ? "sac" : "cycle", source.c_str());
-    Card drawn = ap.library.DrawTop();
-    ap.cards_drawn_this_turn += 1;   // a cycle/sac dig is a real draw (Fists of Flame counts it)
-    const CardDefinition* ddef = CardDatabase::Instance().LookupCached(drawn);
-    bool drew_land = ddef ? ddef->card.IsLand() : drawn.IsLand();
-    if (m_logger) { m_logger->LogDraw(drawn.m_number, drawn.m_name); }
-    const int drawn_num = drawn.m_number;
-    EnterHand(state, state.active_player_index, std::move(drawn), HandEntryReason::Draw);
+    const DrawAttemptResult draw = AttemptDrawIntoHand(state, state.active_player_index,
+                                                       HandEntryReason::Draw);
+    if (!draw.satisfied) { state.player_lost_on_draw = true; return DigOutcome::Failed; }
+    if (draw.drew) { ++ap.cards_drawn_this_turn; }
+    const bool drew_land = draw.drew && draw.card_is_land;
+    if (draw.drew && m_logger) { m_logger->LogDraw(draw.card_number, draw.card_name); }
+    const int drawn_num = draw.drew ? draw.card_number : 0;
     if (state.deck_has_draw_ping) { ResolveDrawTriggers(state); }   // the Niv loop (rollout twins: both dig loops)
     LandDrawCensusAfterDig(state, drew_land, drawn_num);   // MTG_LANDDRAW_CENSUS (diagnostic only)
     return drew_land ? DigOutcome::DrewLand : DigOutcome::DrewNonland;
@@ -9580,6 +9658,9 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
     // executor in lockstep with the enforced rollout. Inert (budget == -1) for every deck without a
     // max_casts_after card. See GameState::casts_remaining_this_turn.
     if (state.casts_remaining_this_turn == 0) { return; }   // budget spent: this cast is illegal
+    if (def->params.return_up_to_gy_lands > 0
+        && !GraveyardLandTargetsLegal(state, state.active_player_index, tutor_target,
+                                     def->params.return_up_to_gy_lands)) { return; }
 
     // Magnetic Theft with no legal (Equipment, creature) pair cannot be cast (CR 601.2c) -- e.g. the only
     // creature left to a Path to Exile that resolved first. Not cast, nothing paid: the card stays in

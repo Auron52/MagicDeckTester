@@ -25,7 +25,7 @@
 //   FSL pool   = 2/5 of cache_mb, in KB, GLOBAL       (MTG_FSL_POOL)
 //   FSL cap    = 2,000,000 entries PER DECISION       (MTG_FSL_CAP)
 //   plan cache = min(workers x 100 MB, cache_mb / 4), in KB, GLOBAL   (MTG_PLAN_CACHE_KB)
-//   RSS cap    = MTG_RSS_CAP_GB if set, else 3/4 of MemTotal              (this box: ~35 GB)
+//   RSS cap    = MTG_RSS_CAP_GB if set, else 85% of MemTotal              (this box: ~20 GiB)
 // Result-neutral by the pools' own contract: bounding them moves wall clock on cache-hungry tail
 // games, never a decision. The smoke/regression digests are the check on every change here.
 //
@@ -61,7 +61,7 @@ long long   DefaultTier2OverflowKb();
 
 // This process's resident set in bytes (0 = unavailable on this platform).
 long long CurrentRssBytes();
-// Hard cap in bytes: MTG_RSS_CAP_GB (fractional ok; 0 = off), else 3/4 of MemTotal (0 if unknown).
+// Hard cap in bytes: MTG_RSS_CAP_GB (fractional ok; 0 = off), else 85% of MemTotal (0 if unknown).
 long long RssCapBytes();
 
 // One line for startup logs: the budget, the four derived bounds and the cap.

@@ -1,14 +1,22 @@
-# Regression ground truth -- commit 1382e9510  date 2026-11-06
+# Regression ground truth -- commit ae306111c  date 2026-11-10
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-05): Full overnight rebaseline requested after Jumbo exhaustive keep adoption and current engine changes: 118 matching, 424 changed, 11 new Shadowborn rows. Searched games 3953 faster vs 1889 slower; Angels +0.0064t/6065 searched, Angels2HG +0.0150t/600, Bruna +0.0122t/2131 remain visible follow-ups. Jumbo full overnight rows already adopted and match.
 # accepted-with-regressions (smoke, 2026-11-06): Shadowborn main-1 rule + USER cast order + ritual-payoff prune DEFAULT ON (held-out ab7 -0.035 turns, -14..-20% units; d8 b0: every unrecovered game is the clairvoyant ripple-dig the USER ruled out). Also accepts 4 digest-only rows (edf_smoke_d0_s1001, edf_regression_d0_s2002, edf_regression_d5_s3003, bruna_regression_d5_s2002; averages unchanged): pre-existing origin drift, reproduced byte-identically by origin 36d3672bc's own binary
 # accepted-with-regressions (regression, 2026-11-06): Shadowborn main-1 rule + USER cast order + ritual-payoff prune DEFAULT ON (held-out ab7 -0.035 turns, -14..-20% units; d8 b0: every unrecovered game is the clairvoyant ripple-dig the USER ruled out). Also accepts 4 digest-only rows (edf_smoke_d0_s1001, edf_regression_d0_s2002, edf_regression_d5_s3003, bruna_regression_d5_s2002; averages unchanged): pre-existing origin drift, reproduced byte-identically by origin 36d3672bc's own binary
 # accepted-with-regressions (regression, 2026-11-06): gi32,gi54: fetch-timing shuffle changes next draw (both d3 and d5); gi121: mulligan bottom hand changed; gi147: fetch timing changes draw; all persist at 16x and searched net improves 20 games
 # accepted-with-regressions (regression, 2026-11-06): gi46: changed fetch line and T5 draw divergence; gi68: same-draw T1 pass from budget churn; both recover old T6 at 4x and 16x; net 2HG mean improves 4.9733 to 4.9600
+# accepted-with-regressions (regression, 2026-11-10): Gods profile-off baseline: standard searched rows improve; 2HG +0.04t with five budget-churn slower games; one d3 depth-limited divergent line
+# accepted-with-regressions (regression, 2026-11-10): Gods K17 exhaustive profile: source-only mulligan changes; regression seed 2002 repeats eight slower openings across searched rows; confounded bottoming ties/improves at d5 and independent seed 3003 improves both d5 formats; three same-hand digests are bottoming-method search residue
+# accepted-with-regressions (smoke, 2026-11-10): Gods profile-off smoke baseline: all four averages improve; three searched slowdowns recover at 4x or 16x budget; equal-score lines and d0 examples reviewed
+# accepted-with-regressions (smoke, 2026-11-10): Gods K17 exhaustive profile smoke: both arms reproduce, zero unexplained changes; 12 slower searched rows are six repeated openings with different keep counts; searched aggregate ties and d0/2HG improve
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
 # --- smoke ---
+gods_smoke_d0_s1001=8.7860/e5c758deb4dcf261
+gods_smoke_d3_s1001=5.5600/4595ef00d2398216
+gods_smoke_d5_s1001=5.4000/22c2c2ab2e11c8d7
+gods2hg_smoke_d5_s1001=5.6400/497d8fe0f8af0143
 merfolk_smoke_d0_s1001=4.4960/e9b4322db7865929
 merfolk_smoke_d3_s1001=4.1800/e2d4ed3a62295b80
 merfolk_smoke_d5_s1001=4.1700/f2c8e9e392a196b1
@@ -303,6 +311,10 @@ hinata_regression_d0_s2002=6.8470/8773fd2849120167
 hinata_regression_d3_s2002=5.6933/dcd9057de29ae636
 hinata_regression_d5_s2002=5.5667/7ef5353f84700e7b
 hinata_regression_d5_s3003=5.6267/28cc9af17a725e22
+gods_regression_d0_s2002=8.7520/c7abdb06bd6cc25e
+gods_regression_d3_s2002=5.7000/f10e2733b4395ff5
+gods_regression_d5_s2002=5.4800/71511434dafaf4ec
+gods2hg_regression_d5_s2002=5.5600/1043687993bdcb4d
 cyclone_regression_d0_s2002=8.3410/ff285c765cd3e471
 cyclone_regression_d3_s2002=4.8533/f22dcd37081f4918
 cyclone_regression_d3_s3003=4.9333/437a6de4a37c0d52
@@ -471,6 +483,10 @@ merfolk_regression_d5_s2002=4.1800/6824241f83b7d727
 merfolk_regression_d5_s3003=4.1267/57d9c44cc412b9db
 
 # --- overnight ---
+gods_overnight_d0_s4004=8.7900/b56338186f3292a9
+gods_overnight_d3_s4004=5.5867/c3862299ef16b5f8
+gods_overnight_d5_s4004=5.5333/7499902ba41e0a54
+gods2hg_overnight_d5_s4004=5.3600/07069323b43c9866
 cyclone_overnight_d3_s30051=5.0000/8c00f4fc85f4b21a
 cyclone_overnight_d5_s30051=5.0000/3b4f7adf5b66853f
 shadowborn_overnight_d3_s30081=4.6667/10e0ccf26b4dd9cd

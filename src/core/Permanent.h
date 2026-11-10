@@ -8,7 +8,7 @@
 
 struct Counter
 {
-    enum class Type { PlusOnePlusOne, MinusOneMinusOne, Loyalty, Poison, Depletion };
+    enum class Type { PlusOnePlusOne, MinusOneMinusOne, Loyalty, Poison, Depletion, Coin };
     Type type;
     int count = 1;
 };
@@ -59,7 +59,7 @@ struct CounterList
     // permanent can hold; the sixth slot is spare (and keeps sizeof(Permanent) where it was).
     static constexpr int kCap = 6;
     // Keep in step with the LAST Counter::Type enumerator.
-    static_assert(static_cast<int>(Counter::Type::Depletion) < kCap,
+    static_assert(static_cast<int>(Counter::Type::Coin) < kCap,
                   "CounterList::kCap must cover every Counter::Type (storage is one entry per type)");
 
     using value_type     = Counter;
@@ -345,6 +345,9 @@ enum class PermAbilityMode
     TargetPump,
     // Voyaging Satyr in human play: tap source to untap a chosen land.
     UntapLand,
+    // Cephalid Coliseum: threshold, {U}, {T}, sacrifice; target player draws three,
+    // then discards three. Target choice is carried by Action::draw_target.
+    ThresholdLoot,
 };
 
 // Does this mode's cost include {T}? THE single source of truth, because three separate sites used
