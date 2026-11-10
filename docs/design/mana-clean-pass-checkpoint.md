@@ -61,6 +61,12 @@ Source of the work: `logs/mana_clean/lastweek-20261110-shadowborn-order/report.m
   ArrangeCastOrder's proven swap covers Utopia Sprawl only); (3) Chariot of Victory after Voyaging Satyr where
   Chariot-first + equip pays (several). Proposed: tutor->Elf rank after the hand Elf; extend the proven Aura swap
   to Wild Growth; Chariot's equip-funded slot. Raised with the USER.
+* **Jumbo APPLY-DROP top (x10, s30027358 T3), diagnosed, NOT fixed:** the own-host hold makes Wild Growth@F10 pay
+  off F11, the pending Overgrowth@F11's host (-2), where paying off F10 (-1) funds Finale. A naive "yield to a
+  larger pending bonus" fixed the repro (13 -> 0) but broke EDF gi1264 (test_prepay_colours: the own host already
+  carries a bonus, so yielding loses more) and the Cloud-of-Faeries scarce-hold test -> reverted. The sound shape
+  is sequence-aware: at a land-Aura payment with other pending land-Aura hosts, try both hosts and keep the one
+  whose remaining casts pay (OrderPaysSequentially), i.e. the floatseq-style commit.
 * Open (minor): the 6 PHANTOMs left on s30020789 are mana, not victims -- {Apostle + Culling} on one Swamp.
 * ORACLE-GAP (16): Lake + Lotus Bloom recipes; "core keys differ in a field not listed" -- analyzer-side, open.
 * Chain order: build -> unit -> the s30020022 repro -> smoke (expect only Shadowborn rows to move) -> regression ->
