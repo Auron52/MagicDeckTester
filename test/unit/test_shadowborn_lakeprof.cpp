@@ -124,6 +124,32 @@ TEST_CASE("On-demand Lake: cracked when the cost needs it, and the surplus float
     CHECK(s.floating_mana.Total() == 2);         // leftover rule: the rest floats for the phase
 }
 
+TEST_CASE("On-demand Lake: Blood Crypt as the only victim floats {R} when the cost needs it")
+{
+    // Shadowborn mana-clean seed 30020022 T3: Lake of the Dead + Blood Crypt, {B} floating (the Swamp the Lake's
+    // entry ate). {4}{B}{R} Sire of Insanity: Crypt tapped for {R} before it goes + the crack's {B}{B}{B}{B} + the
+    // float = six. The shared tap-first commit floats the Crypt's first colour {B} and the payment then had no {R}.
+    GameState s = BaseLp();
+    s.battlefield.push_back(PermLp("Lake of the Dead", 80));
+    s.battlefield.push_back(PermLp("Blood Crypt", 81));
+    s.floating_mana.Add(Color::Black, 1);
+    REQUIRE(PayLp(s, 4, 1, 1));
+    CHECK(CountPerm(s, "Blood Crypt") == 0);
+    CHECK(CountPerm(s, "Lake of the Dead") == 1);
+    CHECK(s.floating_mana.Total() == 0);
+}
+
+TEST_CASE("On-demand Lake: a crack the shared commit already pays keeps its colour")
+{
+    // {4}{B}: the unpinned crack pays (Crypt's {B} + {B}{B}{B}{B}), so no pin is tried and nothing floats red.
+    GameState s = BaseLp();
+    s.battlefield.push_back(PermLp("Lake of the Dead", 80));
+    s.battlefield.push_back(PermLp("Blood Crypt", 81));
+    REQUIRE(PayLp(s, 4, 1));
+    CHECK(CountPerm(s, "Blood Crypt") == 0);
+    CHECK(s.floating_mana.Total() == 0);
+}
+
 TEST_CASE("On-demand Lake: paid suspend stays in the line hold until it is paid")
 {
     GameState s = BaseLp();

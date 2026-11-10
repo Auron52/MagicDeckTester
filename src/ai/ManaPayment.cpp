@@ -9025,7 +9025,9 @@ static bool TapForCostSharedCore(GameState& state, const ManaCost& cost_in, bool
 // victim prompt see exactly the crack that is made. Executor, rollout and the human's automatic payment all
 // pay through this function, so the crack is made at the same cast in both apply worlds (lockstep).
 namespace {
-struct OnDemandCrack { int num; bool land; std::string color; int amount; };
+// `victim_color`: a land crack's victim tap-first colour (Color index; -1 = the shared commit rule). See
+// SacVictimFloatPin (SpellEffects.h): the payer pins it only after the unpinned crack fails to pay.
+struct OnDemandCrack { int num; bool land; std::string color; int amount; int victim_color = -1; };
 
 // The applying line's remainder AFTER this payment (mana value + coloured pips), when g_line_unpaid_cost is
 // evidently this line's hold (it still owes this cost -- the test PainAwarePay's exact-line check uses).
@@ -9076,8 +9078,12 @@ static bool ApplyOnDemandCrack(GameState& state, const OnDemandCrack& k)
 {
     const std::size_t n0 = state.battlefield.size();
     const ManaPool f0 = state.floating_mana;
+    t_sac_victim_float_pin = SacVictimFloatPin{ k.victim_color, false };
     ApplySacForMana(state, state.active_player_index, k.num, k.color, k.amount);
-    return state.battlefield.size() != n0 || state.floating_mana.Total() != f0.Total();
+    const bool pin_ok = k.victim_color < 0 || t_sac_victim_float_pin.applied;
+    t_sac_victim_float_pin = SacVictimFloatPin{};
+    // A pin the victim could not honour is a different crack from the one asked for: refuse it.
+    return pin_ok && (state.battlefield.size() != n0 || state.floating_mana.Total() != f0.Total());
 }
 
 // The crackable on-demand sources on the board, land cracks first (board order), then lumps (board order).
@@ -9205,6 +9211,20 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
     {
         recipe.push_back(k);
         if (trial(recipe, true)) { return commit(recipe, true); }
+        // The victim's tap-first colour (SacVictimFloatPin): the cost's coloured pips first, then WUBRG. A
+        // colour the victim cannot make is refused by ApplyOnDemandCrack, so only real alternatives pay.
+        if (!k.color.empty())
+        {
+            const int pip[5] = { cost_in.white, cost_in.blue, cost_in.black, cost_in.red, cost_in.green };
+            int corder[5] = { 0, 1, 2, 3, 4 };
+            std::stable_sort(corder, corder + 5, [&](int x, int y) { return pip[x] > pip[y]; });
+            for (int c : corder)
+            {
+                recipe.back().victim_color = c;
+                if (trial(recipe, true)) { return commit(recipe, true); }
+            }
+            recipe.back().victim_color = -1;
+        }
     }
     static const char* kCol[5] = { "W", "U", "B", "R", "G" };
     for (const OnDemandCrack& k0 : lumps)

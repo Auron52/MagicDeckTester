@@ -22519,6 +22519,15 @@ inline int  ChooseSubtypeLandSacrifice(GameState& state, int controller, const s
                                        int exclude_number, const std::string& source_name);
 inline bool FloatLandBeforeSacrifice(GameState& state, int controller, int idx, const char* why);
 inline void SacrificeLandAt(GameState& state, int controller, int idx);
+// THE VICTIM'S COLOUR, pinned by the on-demand payer (ManaPayment.cpp TapForCostShared step 3). A Lake of the
+// Dead crack taps its victim for mana first (tap-first), and that tap's colour is a PAYMENT choice: Blood Crypt
+// as the only Swamp left floats {B} under the shared commit rule, and a {4}{B}{R} Sire of Insanity then has no
+// {R} although Crypt {R} + the crack's {B}{B}{B}{B} + a floating {B} pays it (Shadowborn mana-clean,
+// seed 30020022 T3). The payer tries the shared rule first and pins another colour only when that fails, so
+// every payment that already succeeded is unchanged. -1 = no pin. Consumed by the next
+// FloatLandBeforeSacrifice; `applied` reports whether the victim could make the pinned colour.
+struct SacVictimFloatPin { int color = -1; bool applied = false; };
+inline thread_local SacVictimFloatPin t_sac_victim_float_pin;
 
 // Apply a SacForMana ability: find the untapped source in play by its per-instance id, float `amount`
 // mana of `color` into the turn-scoped reserve (AddChosenColorFloat), then SACRIFICE the source (to the
@@ -43038,9 +43047,19 @@ inline bool FloatLandBeforeSacrifice(GameState& state, int controller, int idx, 
     if (p.controller_index != controller) { return false; }
     const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
     if (d == nullptr || !KarooBounceFloatable(state, p, *d)) { return false; }
+    const int pin = t_sac_victim_float_pin.color;
+    t_sac_victim_float_pin.color = -1;
+    bool pinned = false;
+    if (pin >= 0 && ManaProducedPerTap(*d) == 1)
+    {
+        for (Color c : EffectiveProducesFor(state, controller, *d, &p))
+        { if (static_cast<int>(c) == pin) { pinned = true; break; } }
+    }
+    t_sac_victim_float_pin.applied = pinned;
     p.tapped = true;
     const ManaPool before = state.floating_mana;
-    FloatSourceTapCommitted(state, controller, *d, &p);
+    if (pinned) { state.floating_mana.Add(static_cast<Color>(pin), 1); }
+    else        { FloatSourceTapCommitted(state, controller, *d, &p); }
     if (LandAuraBonus(state, p) > 0) { LandAuraAddToPool(state.floating_mana, state, p); }
     if (g_play_event_sink)   // nulled by RevealLogPause for search/rollout -> real play only
     {

@@ -1,6 +1,6 @@
 # Checkpoint: mana-clean per-deck pass (pass 1) and what follows it
 
-Shared state for whoever picks this up (Claude or Codex). Last updated 2026-11-06 ~12:50 UTC.
+Shared state for whoever picks this up (Claude or Codex). Last updated 2026-11-10 ~14:00 UTC.
 Related: `docs/design/mana-clean-followups-2026-11-04.md` (USER rulings, queued fixes; sections 7-8 are 11-06),
 `docs/design/mana-oracle-memory-time.md` (the oracle memory + time fixes), `scripts/mana_clean.py`.
 
@@ -12,23 +12,31 @@ after an out-of-memory container kill; check `free -g`; `MTG_RSS_CAP_GB=40` is p
 PIDs with `kill -0`, never `pgrep -f`/`pkill -f`; rebase, never merge; `python3 scripts/check_references_safe.py`
 before every push. "Feel free to delay any iterations that seem to be getting stuck for further discussion" (USER).
 
-## What is running (all scratch on the build volume)
-1. **Pass driver** `build/scratch/mana_clean/pass1/drive2.sh`, PID in `pass1/driver2.pid`. Queue `pass1/QUEUE2`
-   (consumed from the top), log `pass1/status.log` (START / END / DEFERRED / DONE2), per-deck log `pass1/<deck>.log`,
-   reports `logs/mana_clean/pass1-<deck>[-rN]/report.md`. `touch pass1/PAUSE2` stops it before the next deck.
-   Snow END 09:45Z (7,000 games, 27,293 issues). Niv DEFERRED 3x at 10:38Z (sizing probe 63/64, gi 47 stalled again, same as 11-04; added to stall.json). LFE DEFERRED 12:37Z (4 games ~2 h, all inside the oracle: followups s9). DONE2 12:37Z; rescored records committed + pushed (4c0ace610). Stall diagnosis: with the analyzer OFF all 5 stall games (EDF 19 61, AA 29 59, Niv 47) finish in 7 s total -> EVERY stall is analyzer-side (followups s9). The ON arm (`postpass/stall.o2.*`) + sampler are left running only to collect oracle stacks per deck; they are my own runs, safe to kill by the PIDs of the `mtg` under chain.pid and `sampler.pid`.
-   Each `mana_clean.py run` calls `pgo_ensure` at its start, so Niv will first rebuild build/PGO on the current
-   `HEAD:src` (7bd2b9ac28ff; the pass so far ran on 2878388e7f18). Each record names its src.
-2. **Post-pass chain** `build/scratch/mana_clean/postpass/chain.sh`, PID in `postpass/chain.pid`, log
-   `postpass/status.log`. Waits for the driver to exit; if the last status line is DONE2 it runs
-   `mana_clean.py rescore` and COMMITS `test/mana_clean.json` (not pushed: push it after the references check +
-   `git pull --rebase`). Then the EDF / Alchemist stall diagnosis: `postpass/stall.json` (EDF gi 19, 61; Niv gi 47;
-   Alchemist gi 29, 59; seed 30000000+gi) as one batch with `MTG_MANA_ORACLE=0` (`stall.o0.*`), then `=2`
-   (`stall.o2.*`), under `/usr/bin/time -v`. Reading: if the OFF arm is slow too, the stall is play-side (a search
-   blow-up, not the analyzer); if only ON is slow, it is another oracle path.
-   `postpass/sampler.sh` (PID in `sampler.pid`) takes gdb stacks + a 60 s `perf` profile of each running stall-batch
-   mtg every ~5 min into `postpass/samples/a<arm>-<time>.{bt,perf}`. USER 11-06: sort out the stalls so no deck can
-   get indefinitely stuck (suspects the analyzer, which has had little optimisation).
+## What is running (2026-11-10 overnight; scratch on the build volume)
+Codex handed this queue over in `docs/design/handoff-codex-mana-2026-11-10.md` (read it first). The 11-06 pass
+driver and post-pass chain are long finished. Live now:
+1. **Three Dragons gi2535 tails, NOT this agent's** (PIDs 347828, 356311, 356792;
+   `build/scratch/mcdragons/lrprice/hostfix-*.{out,err}`). Leave running; inspect the paired results when all three exit.
+2. **Claude's overnight chain** for the Lake victim-colour fix (below). Its status is in
+   `build/scratch/claude1110/STATUS` (one line per stage); a 2-hourly session timer checks it.
+
+## 2026-11-10 overnight: Shadowborn payment fixes
+Source of the work: `logs/mana_clean/lastweek-20261110-shadowborn-order/report.md` (games 20000-24999).
+* **FIXED (uncommitted until validated): the Lake crack's victim colour.** When Lake of the Dead's on-demand crack
+  sacrifices Blood Crypt (the only Swamp), tap-first floated the Crypt's first colour {B}, so {4}{B}{R} Sire of
+  Insanity was unpayable although Crypt {R} + {B}{B}{B}{B} + a floating {B} pays it (seed 30020022 T3; nearly
+  every APPLY-DROP signature). `SacVictimFloatPin` (SpellEffects.h) + `OnDemandCrack::victim_color` (ManaPayment.cpp
+  TapForCostShared step 3): only after the unpinned crack fails, the payer retries with the victim pinned to each
+  colour (the cost's pips first). Payments that already succeeded are unchanged. Unit tests in
+  `test_shadowborn_lakeprof.cpp`.
+* **USER DECISION, not changed: 544 of 554 APPLY-DROP-ORDER** are the USER's Shadowborn cast order ("Dark Ritual,
+  <shadowborn sacrifice for culling if needed>, Culling, Thrumming stone"): with Diabolic Intent in the same plan
+  and one creature before the Stone, Culling eats it and Intent has no sacrifice. The oracle's paying order puts
+  Culling and Intent after the Stone's ripple bodies (ripple-dependent). Proposed amendment / alternative oracle
+  classification raised with the USER.
+* ORACLE-GAP (16): Lake + Lotus Bloom recipes; "core keys differ in a field not listed" -- analyzer-side, open.
+* Chain order: build -> unit -> the s30020022 repro -> smoke (expect only Shadowborn rows to move) -> regression ->
+  `./build.sh pgo` -> Shadowborn 5,000 gate on block 25000-29999 -> record, commit, push.
 
 ## Pass verdicts (this segment; earlier ones are in test/mana_clean.json and status.log)
 - galadriel: 71,000 games, 372,073 issues (MISS 453 = 425 APPLY-DROP + 28 ENUM-GAP "cast both Galadriels",
