@@ -51,6 +51,21 @@ instant-speed activation not modelled.
 - "Cast Abiding Grace, then sacrifice in the same plan" may need a re-collect breakpoint.
 - Clue created at END STEP (Grace returning Inspector) cannot be cracked that turn (no instant-speed window).
 
+## Checkpoint (2026-11-10 12:40 UTC)
+
+- Pushed through 20082c69e; CI green (Linux, Windows, determinism parity) on run 42809513650.
+- 20082c69e is an INTERIM routing-table pin `{"Martyr Lifegain", "Equipment"}` in
+  `test/unit/test_pirates_provider.cpp` (the folder landing without a row failed CI on both OSes).
+- Lurrus integrator B is RUNNING in the primary checkout (uncommitted src edits; logs in
+  `logs/martyr-lifegain/lurrus-build*.log`; handoff file would be `logs/martyr-lifegain/lurrus-handoff.md`).
+  Do not `git pull`/stash while its edits are uncommitted.
+- A session-only 2-hourly status timer is armed for this chain.
+- NEXT after Lurrus lands: review its report, push, watch CI; Stage 2d-bis (`audit_card_costs.py`,
+  `audit_card_fields.py`); Stage 3 coverage re-run; Stage 4a own provider `MartyrLifegainProvider` derived
+  from `EquipmentProvider` (replace the interim pin; `provider_audit.py --check`); Stage 4 profile;
+  4-bis/5j regression tiers (3x Hinata cost gate); Stage 5 (`verify_deck.py`, 5a-5h, 5c2, 5d claude-play
+  sweep fan-out); decide/propose second main + Innocence cast order (USER-owned, surfaced, defaults taken).
+
 ## Provider
 
 (Stage 4a — pending)
