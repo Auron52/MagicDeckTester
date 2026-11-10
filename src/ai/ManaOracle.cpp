@@ -236,6 +236,7 @@ bool ScriptedTapAhead(GameState& state, int count, bool lands_only)
     const PayOption& opt = h.script[h.next++];
     h.pay_steps.push_back(t_seq_step);
     if (opt.fail) { return true; }
+    const bool eats_pin = OracleOptionConsumesEarlyCrackPin(state, opt.taps);
     for (std::size_t i = 0; i < opt.taps.size(); ++i)
     {
         const TurnSolver::PreTap& t = opt.taps[i];
@@ -244,6 +245,7 @@ bool ScriptedTapAhead(GameState& state, int count, bool lands_only)
         if (!why.empty()) { h.ended = true; h.tap_error = why; return true; }
         h.tapped_by_script.push_back(t.num);
     }
+    if (eats_pin) { state.scripted_early_ondemand_crack = false; }
     return true;
 }
 
@@ -1352,11 +1354,13 @@ bool MaybeCovers(const int col[6], int total, const ManaCost& cost)
 
 bool PerformTaps(GameState& sc, const PayOption& o)
 {
+    const bool eats_pin = OracleOptionConsumesEarlyCrackPin(sc, o.taps);   // the payer's own pin rule
     for (std::size_t i = 0; i < o.taps.size(); ++i)
     {
         const bool cr = i < o.creature_route.size() && o.creature_route[i] != 0;
         if (!(cr ? OracleCreatureTap(sc, o.taps[i]) : ApplyEnginePreTap(sc, o.taps[i])).empty()) { return false; }
     }
+    if (eats_pin) { sc.scripted_early_ondemand_crack = false; }
     return true;
 }
 
@@ -2858,6 +2862,9 @@ std::string DiffText(const GameState& e, const GameState& o)
     if (e.players[a].library.size() != o.players[a].library.size()) { add("library size differs"); }
     if (e.players[1 - a].life != o.players[1 - a].life) { add("opponent life differs"); }
     if (e.spells_cast_this_turn != o.spells_cast_this_turn) { add("spells cast differs"); }
+    if (e.scripted_early_ondemand_crack != o.scripted_early_ondemand_crack)
+    { add(std::string("early-crack pin engine ") + (e.scripted_early_ondemand_crack ? "set" : "spent") + " oracle "
+          + (o.scripted_early_ondemand_crack ? "set" : "spent")); }
     if (CoreKey(e) == CoreKey(o)) { add("same core"); }
     else if (s.empty()) { add("core keys differ in a field not listed here"); }
     add("float engine " + PoolText(e.floating_mana, e.floating_haste_c) + " oracle " + PoolText(o.floating_mana, o.floating_haste_c));
@@ -2958,10 +2965,17 @@ std::string ActionKey(const Action& x)
 // drop and a sacrifice-a-land cast keep their places). Bound the number of DISTINCT orders, rather
 // than the number of actions: repeated copies of a card do not add any order to try. Six different
 // actions still exceed the bound; six actions with two repeated pairs can be checked exactly.
+// `max_distinct`: the bound. A YES search (does another order pay?) keeps the small default; the PHANTOM claim
+// ("no order and no payment realises it", a NO claim that needs EVERY order) passes kPhantomOrderBound, because a
+// six-action line with one repeated pair (360 orders) or six distinct actions (720) is the common Shadowborn shape
+// and stopping short of it left ~1,650 per 5,000 games without a verdict (UNMODELED "too many actions"). The
+// per-decision work budget (MTG_MANA_ORACLE_DECISION_S) still bounds the cost: past it the verdict is
+// CAPPED-DECISION, never a claim.
+constexpr std::size_t kPhantomOrderBound = 5040;   // seven distinct movable actions
 std::vector<TurnSolver::Plan> OtherOrders(const TurnSolver::Plan& plan, bool with_acts = false,
-                                          bool* all_tried = nullptr)
+                                          bool* all_tried = nullptr, std::size_t max_distinct = 180)
 {
-    constexpr std::size_t kMaxDistinctOrders = 180; // bounded near the old five-action ceiling (120)
+    const std::size_t kMaxDistinctOrders = max_distinct; // default: bounded near the old five-action ceiling (120)
     std::vector<TurnSolver::Plan> out;
     std::vector<std::size_t> slots;
     for (std::size_t i = 0; i < plan.actions.size(); ++i)
@@ -3127,6 +3141,18 @@ bool TapsHiddenCard(const GameState& root, const Outcome& o, std::string* what)
             if (what != nullptr) { *what = t.name + "#" + std::to_string(t.num); }
             return true;
         }
+    }
+    // ...or a RITUAL taken off the top and cast for free (Thrumming Stone's ripple): its floating mana is the hidden
+    // card's exactly as a tapped one's is. Shadowborn gate sb-victimclaim-20261110, ENUM-GAP s30028086 T3 {Apostle +
+    // Thrumming Stone + Dark Ritual} off two Swamps: the hand Ritual's ripple revealed and cast a library Dark Ritual,
+    // and Thrumming Stone's {5} was paid from the float only that hidden Ritual made.
+    for (const Card& c : o.st.players[a].graveyard)
+    {
+        if (top.count(c.m_number) == 0) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr || d->params.ritual_floating_mana <= 0) { continue; }
+        if (what != nullptr) { *what = c.m_name.str() + "#" + std::to_string(c.m_number) + " (a ritual cast off the top)"; }
+        return true;
     }
     // ...or a SCALED dork's tap that COUNTED such a card (StompySurprise mana-clean pass 1, 302 of 459 ENUM-GAPs,
     // seed 30008581 T4 {Craterhoof + Turntimber Symbiosis}): Turntimber Symbiosis puts a Priest of Titania off the
@@ -3646,13 +3672,28 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
             return;
         }
         bool all_tried = true, other_partial = false;
-        for (const TurnSolver::Plan& alt : OtherOrders(plan, /*with_acts=*/true, &all_tried))
+        std::string other_why;   // the first reason another order's search was partial
+        for (const TurnSolver::Plan& alt : OtherOrders(plan, /*with_acts=*/true, &all_tried, kPhantomOrderBound))
         {
+            if (DecisionOut())
+            { other_partial = true; if (other_why.empty()) { other_why = "the decision work budget ran out"; } break; }
             Realization ra = Realize(root, alt, pre, /*stop_at_full=*/true, {}, false, &e_want);
-            if (ra.capped || !ra.unmodeled.empty()) { other_partial = true; }
+            if (ra.capped || !ra.unmodeled.empty())
+            {
+                other_partial = true;
+                if (other_why.empty())
+                {
+                    other_why = ra.capped ? "an order's payment search hit its cap (" + std::to_string(NodeCap()) + " applies)"
+                                          : ra.unmodeled.front();
+                }
+            }
             for (const Outcome& o : ra.outcomes)
             {
-                if (!o.unscripted.empty()) { other_partial = true; }
+                if (!o.unscripted.empty())
+                {
+                    other_partial = true;
+                    if (other_why.empty()) { other_why = "a mana choice the oracle does not drive: " + o.unscripted; }
+                }
                 if (!o.Clean() || !Includes(o.left, e_want)) { continue; }
                 std::string order;
                 for (const Action& a : alt.actions)
@@ -3672,7 +3713,16 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
             Emit(C_CONT_DIFFERS, root, pre, plan, dropped + "; the oracle's full realisations continued with different cards");
             return;
         }
-        if (partial || other_partial) { return; }   // no verdict on a partial side
+        if (partial) { return; }   // no verdict on a partial side (CAPPED / UNMODELED said so above)
+        // ...and a partial OTHER order is no verdict either, but it is said: the NO claim below needs every order's
+        // search complete, and a silent return here would let an unchecked drop vanish from the counts.
+        if (other_partial)
+        {
+            NoteUnmodeled("another order's search was partial");
+            Emit(C_UNMODELED, root, pre, plan, dropped + "; no payment of this order realises it, and another order's "
+                                               "search was partial: " + other_why);
+            return;
+        }
         // PHANTOM is a NO claim -- "no order and no payment realises it" -- so it needs every order tried.
         if (!all_tried)
         {

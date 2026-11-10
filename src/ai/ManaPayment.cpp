@@ -9383,6 +9383,7 @@ bool manaoracle::ScriptedPay(GameState& state, const ManaCost& cost_in, bool for
     const PayOption& opt = h.script[h.next++];
     h.pay_steps.push_back(t_seq_step);
     if (opt.fail) { return false; }   // the oracle found no payment here: dropped, as the engine drops it
+    const bool eats_pin = OracleOptionConsumesEarlyCrackPin(state, opt.taps);
     for (std::size_t i = 0; i < opt.taps.size(); ++i)
     {
         const TurnSolver::PreTap& t = opt.taps[i];
@@ -9404,6 +9405,7 @@ bool manaoracle::ScriptedPay(GameState& state, const ManaCost& cost_in, bool for
         if (!why.empty()) { h.ended = true; h.tap_error = why; return false; }
         h.tapped_by_script.push_back(t.num);
     }
+    if (eats_pin) { state.scripted_early_ondemand_crack = false; }
     ManaPool& f = state.floating_mana;
     const ManaPool& st = opt.stash;
     if (f.white < st.white || f.blue < st.blue || f.black < st.black || f.red < st.red
@@ -10723,7 +10725,8 @@ static std::string ApplyPreTapImpl(GameState& state, const TurnSolver::PreTap& t
         ApplySacForMana(state, active, found->card.m_number, d->params.sac_for_mana_color,
                         d->params.sac_for_mana_amount);
         if (state.battlefield.size() >= before) { return reject("on-demand land crack was refused"); }
-        state.scripted_early_ondemand_crack = false;   // the normal payer consumes this searched pin on a crack
+        // (The searched early-crack pin is NOT consumed here: whether the payer would have consumed it depends on the
+        // rest of the payment -- OracleOptionConsumesEarlyCrackPin, applied by the oracle per payment option.)
         return std::string();
     }
     // THE one legality function (see HumanPreTapOfferFor): the offer the viewer drew from IS the rule.
@@ -10911,6 +10914,33 @@ static std::string ApplyPreTapImpl(GameState& state, const TurnSolver::PreTap& t
                      f.white, f.blue, f.black, f.red, f.green, f.colorless, f.wild, haste.c_str());
     }
     return std::string();
+}
+
+// THE SEARCHED EARLY-CRACK PIN, CONSUMED AS THE PAYER CONSUMES IT (the mana oracle's scripted payments). The payer
+// (TapForCostShared) consumes `scripted_early_ondemand_crack` only on its PINNED branch: one crackable LAND alone
+// (no Lotus-Bloom-style lump) cracked for the bill. A bill that needs the Lake AND a lump falls through that branch
+// to the ordinary on-demand crack, which leaves the pin standing for a later payment this turn. An oracle option
+// that cracks the Lake is that payment spelled out, so it consumes the pin exactly when it cracks a land and no lump.
+// Clearing it on every scripted crack left the engine's own Lake + Lotus Bloom line (pin still set) a different
+// core from the oracle's identical payment (pin cleared): Shadowborn ORACLE-GAP "core keys differ in a field not
+// listed here" (gate sb-victimclaim-20261110, s30025089 T5 Abhorrent Overlord). Read BEFORE the option's taps.
+bool OracleOptionConsumesEarlyCrackPin(const GameState& state, const std::vector<TurnSolver::PreTap>& taps)
+{
+    if (!state.scripted_early_ondemand_crack) { return false; }
+    bool land_crack = false;
+    for (const TurnSolver::PreTap& t : taps)
+    {
+        if (t.sac_crack) { land_crack = true; continue; }
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.card.m_number != t.num || p.controller_index != state.active_player_index) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d != nullptr && IsOnDemandSacDef(*d) && d->params.sac_for_mana_victim_land_subtype.empty())
+            { return false; }   // a lump: the payer's ordinary crack, which keeps the pin
+            break;
+        }
+    }
+    return land_crack;
 }
 
 std::string ApplyHumanPreTap(GameState& state, const TurnSolver::PreTap& t)  { return ApplyPreTapImpl(state, t, true); }

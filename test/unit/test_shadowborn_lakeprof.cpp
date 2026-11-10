@@ -227,6 +227,26 @@ TEST_CASE("On-demand Lotus Bloom: kept when the lands pay; pays a colour no land
     CHECK(t.floating_mana.Total() == 1);
 }
 
+TEST_CASE("Mana oracle: a scripted Lake crack consumes the early-crack pin as the payer does (no lump beside it)")
+{
+    // The payer consumes scripted_early_ondemand_crack only on its pinned branch (one land crack, no Lotus Bloom);
+    // a bill paid by the Lake AND a Lotus Bloom falls through to the ordinary crack and keeps the pin. The oracle's
+    // payment option must leave the same pin (gate sb-victimclaim-20261110 ORACLE-GAP "a field not listed here").
+    GameState s = BaseLp();
+    s.battlefield.push_back(PermLp("Lake of the Dead", 60));
+    s.battlefield.push_back(PermLp("Lotus Bloom", 70));
+    s.battlefield.push_back(PermLp("Swamp", 71));
+    TurnSolver::PreTap crack; crack.name = "Lake of the Dead"; crack.num = 60; crack.sac_crack = true;
+    TurnSolver::PreTap lotus; lotus.name = "Lotus Bloom"; lotus.num = 70;
+    TurnSolver::PreTap swamp; swamp.name = "Swamp"; swamp.num = 71;
+    CHECK_FALSE(OracleOptionConsumesEarlyCrackPin(s, { crack }));          // no pin: nothing to consume
+    s.scripted_early_ondemand_crack = true;
+    CHECK(OracleOptionConsumesEarlyCrackPin(s, { crack }));
+    CHECK(OracleOptionConsumesEarlyCrackPin(s, { swamp, crack }));
+    CHECK_FALSE(OracleOptionConsumesEarlyCrackPin(s, { crack, lotus }));   // the ordinary crack: the pin stays
+    CHECK_FALSE(OracleOptionConsumesEarlyCrackPin(s, { swamp }));          // no crack at all
+}
+
 TEST_CASE("On-demand: no SacForMana plan action for Lake / Lotus, and a cast that needs the crack is offered")
 {
     // The enumeration is tested alone: the Shadowborn main-1 rule (default ON) folds main-1 casts, and the

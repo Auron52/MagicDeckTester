@@ -1028,6 +1028,9 @@ bool ParseHumanPreTapToken(const std::string& tok, TurnSolver::PreTap& out);
 // A filter whose feed the floating pool cannot pay is one such report ("tap a source for the Izzet
 // Signet's {1} first"). MTG_PRE_TAP_TRACE (default off) prints one stderr line per tap and rejection.
 std::string ApplyHumanPreTap(GameState& state, const TurnSolver::PreTap& t);
+// Does a mana-oracle payment option consume the searched early-crack pin as the payer would (a land crack, no
+// lump)? Read before the option's taps; see ManaPayment.cpp.
+bool OracleOptionConsumesEarlyCrackPin(const GameState& state, const std::vector<TurnSolver::PreTap>& taps);
 // The SAME mechanic for an ENGINE caller -- the mana oracle's scripted payments and scratch probes, the
 // MTG_PAY_REFINE payment -- which is not a human's tap and therefore never prints the MTG_PRE_TAP_TRACE
 // witness. That trace is read as "the taps the HUMAN forced" (test/manual_tap_check.py); routing engine taps

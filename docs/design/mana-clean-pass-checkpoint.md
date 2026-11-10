@@ -100,8 +100,34 @@ Source of the work: `logs/mana_clean/lastweek-20261110-shadowborn-order/report.m
   pump shape: the nearest oracle outcome has the SAME taps and float, only the pump TARGET differs -- the pump target
   follows the moment each Elf is tapped, so the oracle must compare modulo pump target or replay the engine's; analyzer
   side, parked), UNMODELED 39. Play identity oracle-off: byte-identical.
-* Open (minor): the 6 PHANTOMs left on s30020789 are mana, not victims -- {Apostle + Culling} on one Swamp.
-* ORACLE-GAP (16): Lake + Lotus Bloom recipes; "core keys differ in a field not listed" -- analyzer-side, open.
+* **Shadowborn sb-victimclaim follow-up (agent 2026-11-10 night), all ANALYZER-side; play byte-identical
+  (smoke 183/183 unchanged; regression below):**
+  - **UNMODELED 1,658: FIXED (oracle).** Every one was "too many actions to try every order": the PHANTOM (NO) claim
+    stopped at 180 distinct orders, and the gate's flags were 360 (1,035), 720 (333), 420-2,520 (290). The NO claim
+    now enumerates up to `kPhantomOrderBound` = 5,040 distinct orders (the YES searches keep 180); the per-decision
+    budget still turns an over-long search into CAPPED-DECISION. Every top repro (s30028549, 27949, 28345, 26491,
+    29741, 29715 at 2,520, 28492 at 1,120, 25077) now reads PHANTOM (the planner's ripple optimism), none an engine
+    miss; heaviest turn 2.8 -> 19.7 s oracle-on. Also: another ORDER's partial search used to return SILENTLY (no
+    verdict, no count); it now emits UNMODELED "another order's search was partial: <why>".
+  - **ORACLE-GAP "a field not listed" (24 of 28): FIXED (oracle).** The field was `scripted_early_ondemand_crack`: the
+    payer consumes the searched early-crack pin only on its pinned branch (one Lake, no lump), so the engine's Lake +
+    Lotus Bloom payment keeps it set; the oracle's scripted crack cleared it on every crack. Now
+    `OracleOptionConsumesEarlyCrackPin` (ManaPayment.cpp) applies the payer's rule per payment option; DiffText names
+    the pin. s30025089 / 27390 / 29714 / 29719 / 26470: 0 ORACLE-GAP.
+  - **ORACLE-GAP rest (s30028232 x2, s30025999 x1): PARKED, diagnosed.** The engine cracks Lake FIRST (tap-first
+    victim = the first Swamp, +5) then taps two more Swamps; the oracle applies a crack face LAST, after the Swamp
+    class's first copies (folded, lowest numbers first) are tapped, so the victim is an already-tapped Swamp (+4) and
+    {Lake crack + 2 Swamps} falls one short; the only crack options it keeps tap everything. Fix shape: apply a
+    sac_crack face first within an option and remap a folded copy the crack ate (the class is interchangeable).
+  - **ENUM-GAP 10: 5 FIXED (now HIDDEN-INFO), 5 PARKED.** s30028086 / 25451 / 26299: the line paid only with a Dark
+    Ritual that Thrumming Stone's ripple revealed and cast off the hidden library top -- `TapsHiddenCard` now counts a
+    ritual taken off the top as hidden information (as a tapped hidden land already was). Not diagnosed: s30026059
+    (two Lakes), 26548, 27751, 29585, 29667 (ripple chains; possibly the same hidden-reveal family via free Apostles).
+  - **PHANTOM s30020789 (6): PARKED.** {Apostle + Culling (+ act)} on ONE Swamp: Culling needs a creature victim
+    already in play AND its own {B}, so Apostle must be paid first and nothing is left for Culling; the gate counts
+    Culling's +4 as if it funded the casts before it. Sound tightening: in `SubsetOverclaimsSacCostVictims`, require the
+    mana available BEFORE a sac-cost ritual to pay the ritual plus every cast that supplies its victim. PHANTOM is not
+    an issue class.
 * Chain order: build -> unit -> the s30020022 repro -> smoke (expect only Shadowborn rows to move) -> regression ->
   `./build.sh pgo` -> Shadowborn 5,000 gate on block 25000-29999 -> record, commit, push.
 

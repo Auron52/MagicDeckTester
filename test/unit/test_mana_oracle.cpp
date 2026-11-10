@@ -1178,11 +1178,26 @@ TEST_CASE("mana oracle: repeated casts admit exactly bounded six-action order pr
     CHECK(Has(exact, "PHANTOM"));
     CHECK_FALSE(Has(exact, "UNMODELED"));
 
-    // Replacing one duplicate leaves 6!/2! = 360 distinct orders, beyond the bound.
-    const TurnSolver::Plan beyond = PlanOf({ CastAction(s, "Diabolic Intent"), CastAction(s, "Shadowborn Apostle"),
-                                              CastAction(s, "Dark Ritual"), CastAction(s, "Thrumming Stone"),
-                                              CastAction(s, "Sire of Insanity"), CastAction(s, "Diabolic Intent") });
-    const auto partial = manaoracle::PlanVerdict(s, true, beyond, { beyond });
+    // Replacing one duplicate leaves 6!/2! = 360 distinct orders: within the PHANTOM claim's bound
+    // (kPhantomOrderBound, 5,040 -- the Shadowborn gate's ~1,650 "too many actions" were mostly 360 and 720).
+    const TurnSolver::Plan wider = PlanOf({ CastAction(s, "Diabolic Intent"), CastAction(s, "Shadowborn Apostle"),
+                                             CastAction(s, "Dark Ritual"), CastAction(s, "Thrumming Stone"),
+                                             CastAction(s, "Sire of Insanity"), CastAction(s, "Diabolic Intent") });
+    const auto wide = manaoracle::PlanVerdict(s, true, wider, { wider });
+    CHECK(Has(wide, "PHANTOM"));
+    CHECK_FALSE(Has(wide, "UNMODELED"));
+
+    // Eight distinct actions are 40,320 orders, beyond the bound: no NO claim, UNMODELED.
+    GameState s8 = Board({});
+    s8.players[0].life = s8.players[1].life = 20;
+    Hand(s8, { "Diabolic Intent", "Shadowborn Apostle", "Dark Ritual", "Thrumming Stone", "Sire of Insanity",
+               "Culling the Weak", "Abhorrent Overlord", "Reaper from the Abyss" });
+    const TurnSolver::Plan beyond = PlanOf({ CastAction(s8, "Diabolic Intent"), CastAction(s8, "Shadowborn Apostle"),
+                                              CastAction(s8, "Dark Ritual"), CastAction(s8, "Thrumming Stone"),
+                                              CastAction(s8, "Sire of Insanity"), CastAction(s8, "Culling the Weak"),
+                                              CastAction(s8, "Abhorrent Overlord"), CastAction(s8, "Reaper from the Abyss") });
+    const auto partial = manaoracle::PlanVerdict(s8, true, beyond, { beyond });
+    INFO("beyond: ", Joined(partial));
     CHECK(Has(partial, "UNMODELED"));
     CHECK_FALSE(Has(partial, "PHANTOM"));
 }
