@@ -1420,6 +1420,7 @@ inline thread_local const int* g_generic_spend_budget = nullptr;
 // paths and by the payability walks). Redeclared here so SpendFloatingTowardCost's surplus order
 // below can read it -- see the MTG_LINE_SURPLUS_GENERIC note at the drain site.
 extern thread_local ManaCost g_line_unpaid_cost;
+void SubManaCost(ManaCost& dst, const ManaCost& paid);
 
 // THE PAYMENT'S OWN COLOURED PIPS, as the line hold still counts them (W,U,B,R,G). Every cast site
 // that binds g_line_unpaid_cost (both plan-apply paths, SubsetPayableSequential, CheckLine's walk)
@@ -22345,6 +22346,8 @@ inline void ApplySuspend(GameState& state, int controller, const std::string& na
         if (d->params.suspend_cost.has_value() && d->params.suspend_cost->ManaValue() > 0
             && !TapForCostDirect(state, d->params.suspend_cost.value(), /*for_creature=*/false))
         { return; }
+        if (d->params.suspend_cost.has_value())
+        { SubManaCost(g_line_unpaid_cost, d->params.suspend_cost.value()); }
         SuspendedCard sc;
         sc.card        = *it;
         sc.arrive_turn = state.TurnSeq() + d->params.suspend_time_counters;

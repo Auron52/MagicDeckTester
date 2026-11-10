@@ -21,7 +21,13 @@ The pre-change ten-game manifest is `/tmp/codex-sb-oracle-lake-ten.json`, using 
 | `ENUM-GAP` | 0 | 1 |
 | `UNMODELED` | 0 | 0 |
 
-All ten `.wins` files are byte identical before and after. The 23 newly visible misses are not claimed as fixed: 19 `APPLY-DROP` flags come from seed 30010014, three from seed 30010160, and the `ENUM-GAP` is seed 30010331. These were previously masked by the oracle's inability to replay Lake's crack. A focused unit case covers the crack face, four black floating mana, Swamp sacrifice, pin consumption, and absence of a crack face without a victim. Its translation unit compiled, but the full isolated `mtg-test` build was stopped after seven of 245 steps to avoid contention with other builds; the unit case has not been run yet.
+All ten `.wins` files are byte identical before and after. At this stage, 19 `APPLY-DROP` flags came from seed 30010014, three from seed 30010160, and the `ENUM-GAP` was seed 30010331. These were previously masked by the oracle's inability to replay Lake's crack. A focused unit case covers the crack face, one black mana remaining after a `{B}{B}{B}{B}` bill, Swamp sacrifice, pin consumption, and absence of a crack face without a victim. Its translation unit compiled, but the full isolated `mtg-test` build was stopped after seven of 245 steps to avoid contention with other builds; the unit case has not been run yet.
+
+## Paid-suspend follow-up
+
+The 22 new `APPLY-DROP` flags shared a payer defect. `LineCastCostTotal` counted casts and certain activations but omitted a mana-costed `Suspend` action. In seed 30010014, the first `{1}{B}` payment spent Lake's ordinary `{B}` plus the Swamp's `{B}` because the payer saw no later bill. The following Apostle casts could not pay. A line hold that includes the suspend cost makes the payer account for the complete line; successful `ApplySuspend` then subtracts its paid cost from that hold.
+
+The same ten-game manifest, run after this follow-up against the post-Lake oracle baseline, produced `APPLY-DROP=0`, `ORACLE-GAP=0`, and `MISS=1` (the unchanged seed 30010331 `ENUM-GAP`). All ten `.wins` remain byte identical. The two focused unit translation units compiled through `build.sh`; the full test executable has not been linked or run. This is a focused diagnosis, not a replacement for the 5,000-game gate.
 
 ## Remaining classification
 

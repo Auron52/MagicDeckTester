@@ -124,6 +124,37 @@ TEST_CASE("On-demand Lake: cracked when the cost needs it, and the surplus float
     CHECK(s.floating_mana.Total() == 2);         // leftover rule: the rest floats for the phase
 }
 
+TEST_CASE("On-demand Lake: paid suspend stays in the line hold until it is paid")
+{
+    GameState s = BaseLp();
+    s.deck_has_ondemand_sac = true;
+    s.battlefield.push_back(PermLp("Lake of the Dead", 80));
+    s.battlefield.push_back(PermLp("Swamp", 81));
+    s.players[0].hand.push_back(FullCardLp("Profane Tutor", 82));
+
+    Action suspend;
+    suspend.kind = Action::Kind::Suspend;
+    suspend.card_name = "Profane Tutor";
+    suspend.cost = CardDatabase::Instance().Lookup("Profane Tutor")->params.suspend_cost.value();
+    Action apostle;
+    apostle.kind = Action::Kind::CastFromHand;
+    apostle.card_name = "Shadowborn Apostle";
+    apostle.cost = FullCardLp("Shadowborn Apostle", 83).m_mana_cost;
+    const ManaCost owed = LineCastCostTotal({ suspend, apostle });
+    CHECK(owed.ManaValue() == 3);
+    CHECK(owed.black == 2);
+
+    {
+        LineUnpaidCostScope hold(owed);
+        ApplySuspend(s, 0, "Profane Tutor");
+        CHECK(s.players[0].suspended_cards.size() == 1);
+        CHECK(CountPerm(s, "Swamp") == 0);   // plain Lake + Swamp strands the Apostle
+        CHECK(s.floating_mana.black == 3);   // tapped victim {B} plus Lake's {B}{B}{B}{B}, less {1}{B}
+        CHECK(g_line_unpaid_cost.ManaValue() == 1);
+        CHECK(g_line_unpaid_cost.black == 1);
+    }
+}
+
 TEST_CASE("On-demand Lake: searched early crack preserves mana for later payments")
 {
     GameState ordinary = BaseLp();

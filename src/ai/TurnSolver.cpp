@@ -60829,6 +60829,13 @@ ManaCost LineCastCostTotal(const std::vector<Action>& acts)
     const bool hold_blink = heurarm::Flag(heurarm::HOLD_C_FOR_LINE, s_hold_c_line_env);
     for (const Action& a : acts)
     {
+        if (a.kind == Action::Kind::Suspend)
+        {
+            // Profane Tutor and Search for Tomorrow suspend for mana. Their cost is paid by
+            // ApplySuspend before later casts, so Lake must see it in the line's remaining bill.
+            AddManaCost(total, a.cost);
+            continue;
+        }
         if (a.kind == Action::Kind::ActivatePermAbility
             && a.ability_mode == Action::AbilityMode::SacNamedTutorPut)
         {
