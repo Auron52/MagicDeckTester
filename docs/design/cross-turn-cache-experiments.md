@@ -82,11 +82,26 @@ jobs: **digests 244/244 identical, units 243/244 identical**. The one residual i
 replays at both pool sizes in `build/scratch/xturn/hin27/`). The `off` arm (guard-off A/B) was skipped: the guard is a
 defect fix, and the regression GT accept shows how play moves.
 
-**Landing (2026-11-10, branch xturn-cache rebased on origin 50f7034c0):** one commit -- guard ON, E1 + E2 default ON,
-E3 probe kept (default OFF, read-only), flip-fresh diagnostic stripped, MTG_BP_DERIVE_PRICED_STOP comment corrected.
-Unit tests 2699/2699. Gates: smoke + regression on the landing build, then a 1 KB-pool + `MTG_ROLLOUT_SUFFIX_PROBE=1`
-re-run of the regression manifest (digests must equal the tier run; probe = do the same-cutoff disagreements vanish),
-then GT accept + push.
+**LANDED 2026-11-10** (commit "search: MTG_CACHE_READ_GUARD ..." + its "gt: accept" commit, on origin phase-1-2-deck-analyzer): guard ON, E1 + E2 default ON,
+E3 probe kept default OFF, flip-fresh diagnostic stripped, MTG_BP_DERIVE_PRICED_STOP comment corrected. Unit tests
+2699/2699. Smoke 156/183, regression 245/291 -- every move avg-identical except one churn game each (hinata smoke d3
+gi46, elementals regression d5 s2002 gi121; both recover at higher budget). GT accepted.
+
+Residency check of the landed binary (regression manifest at `MTG_PLAN_CACHE_KB=1`, `build/scratch/xturn/inv/`):
+digests 291/291 identical. Units: hinata d5 s3003 +1 (OPEN, below) and four Extra Turns jobs -- which turned out to be
+the PROBE, not the plan pool: `MTG_ROLLOUT_SUFFIX_PROBE=1` moves Extra Turns d3 s2002 961,979 -> 961,601 units at
+EITHER pool size (same digest). Without the probe, Extra Turns is pool-invariant with E1/E2 on or off. So the probe is
+not unit-neutral (cause not found; its comment now says so), and its earlier "Extra Turns d5 s2002 digest differs"
+was likely the probe plus the plan-cache hole together.
+
+**E3 after the guard:** same-cutoff disagreements are NOT removed (DIS[samecut][win] 46 win / 2 no-win, was 49/2;
+same_cutoff usable 93,307, agree 93,259). They are a separate rollout path dependence -- still to root-cause before
+E3 can become a real cache.
+
+**OPEN: the 1-unit Hinata residual.** hinata_regression_d5_s3003 gi27 (seed 3030, unwon, wt=-1): 510,771 units at
+the default pool vs 510,772 at 1 KB, single-threaded, same digest, with E1/E2 on or off. `MTG_BP_ENUM_VERIFY=3`: 342,601
+hits, CONTENT-DIFF 0, so not the bp list. Charge-accumulator residuals are already unstorable (cachecharge Done). Next:
+bisect by cache (canon front / enum memo / shadow ledger) with each one's own verify switch.
 
 ## Method
 
