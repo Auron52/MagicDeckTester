@@ -484,7 +484,7 @@ TEST_CASE("mana oracle: Lake's on-demand crack is distinct from its ordinary bla
         if (o.taps.size() != 1 || !o.taps[0].sac_crack) { continue; }
         GameState paid = s;
         REQUIRE(manaoracle::PerformPayTaps(paid, o));
-        CHECK(paid.floating_mana.black == 1);   // victim Swamp adds {B}, then Lake adds {B}{B}{B}{B}
+        CHECK(paid.floating_mana.black == 5);   // taps add {B}+{B}{B}{B}{B}; PerformPayTaps does not pay the bill
         CHECK(paid.battlefield.size() == 1);
         CHECK_FALSE(paid.scripted_early_ondemand_crack);
         found_crack = true;
