@@ -1,14 +1,17 @@
-# Extra Turns: proposed cast order for review (2026-11-09)
+# Extra Turns: cast-order decision (2026-11-10)
 
 ## Status
 
-This is a **proposal**, not an installed cast order. The current
-`ExtraTurnsProvider::CastOrderRank` only promotes Extraplanar Lens to the mana-rock
-tier. Everything else uses the generic order. In particular, the current report
-puts Ulamog and Emrakul before the draw artifacts and turn spells. Draw-sensitive
-plans may bypass those ranks, so the report is not the whole execution policy.
+**Reviewed order.** The table below resolves the ordering questions for Extra
+Turns. It is a line-level rule, not a static `CastOrderRank` table: whether Horn
+draws from this land, whether acceleration fits, and whether the chain survives
+depend on the whole selected line and its exact payments. The engine searches
+the land's position relative to Horn and repairs a cast sequence that cannot
+pay. `ExtraTurnsProvider::CastOrderRank` still promotes Lens to the mana-rock
+tier; the other ordinary spells keep their generic ranks. The static cast-order
+report therefore does not fully describe the searched execution order.
 
-The proposed order below concerns **the order of actions already chosen for this
+This order concerns **the order of actions already chosen for this
 turn**. Deciding whether to cast a card at all belongs to the plan search and
 the extra-turn walk. Horn may straddle the land drop, and the acceleration
 selected for the turn may need to precede Horn to pay for it. Lens and Mind
@@ -16,7 +19,7 @@ Stone swap places according to Lens's current-turn mana benefit. Temporal
 Mastery's miracle cast happens at the draw event, outside the ordinary
 main-phase order.
 
-## Proposed full order
+## Reviewed line order
 
 Earlier rows execute first. Cards in the same row have the explicit order shown.
 All ordinary casts are in the deck's single main phase.
@@ -99,5 +102,20 @@ Temporal Mastery has an ordinary slot at 10 and a separate miracle opportunity
 at the draw event. The remaining slots form a straightforward order; their
 exact relative positions usually do not change the outcome of a payable plan.
 
-No code or measured results are claimed for this proposal. Implementing it
-would require the deck's order to apply consistently through draw breakpoints.
+## Measurement and implementation boundary
+
+A fixed rank for every row was tried against the existing engine. In a paired
+held-out batch (1,000 depth-zero and 400 depth-five games), it changed the
+depth-five average from 4.7725 to 4.7700 turns, while the depth-zero average
+remained 5.6850. It also made three existing regression games one turn slower.
+A narrower Lens/Stone rank and a Horn-only rank retained two of those slower
+games. Those static ranks are rejected: a card-only rank cannot see the chosen
+line's mana needs, and the Horn rank can change search choices even when Horn
+is not cast on the winning turn.
+
+The existing land-position search and payment repair are the execution tools
+for this order. The reviewed preference for **acceleration + Horn before the
+land whenever the whole selected line can pay** remains a line-level decision;
+the rank report alone cannot certify that the search always chooses it. Any
+future change to enforce that preference must compare full payable lines and
+be checked against the reference wins before adoption.
