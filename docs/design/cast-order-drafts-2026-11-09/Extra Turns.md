@@ -8,7 +8,7 @@ draws from this land, whether acceleration fits, and whether the chain survives
 depend on the whole selected line and its exact payments. The engine searches
 the land's position relative to Horn, now prefers the latest payable position
 after Horn, and keeps land-first as the searched alternative. In a selected
-Horn line containing Lens and Mind Stone, it moves Lens first only when the
+line containing Lens and Mind Stone, it moves Lens first only when the
 exact whole cast sequence pays. `ExtraTurnsProvider::CastOrderRank` still
 promotes Lens to the mana-rock tier; the other ordinary spells keep their
 generic ranks. The static cast-order report therefore does not fully describe
@@ -132,8 +132,11 @@ The adopted implementation uses `ExtraTurnsProvider::LandEntrySpotsRule` to
 prefer Horn before the land when the selected plan's payment probe succeeds;
 land-first stays in search for the draw-versus-mana choice. Its
 `ArrangeCastOrder` tests the full selected sequence before moving Lens ahead
-of Mind Stone in a Horn line. The sequential payment probe now resolves Lens's
-chosen imprint, so that test sees the doubled Islands; it also respects the
-decline-imprint variant. Both switches default on (`MTG_ET_HORN_SPOTS=0`
+of Mind Stone, whether Horn is selected or not. The sequential payment probe
+now resolves Lens's chosen imprint, so that test sees the doubled Islands and
+respects the decline-imprint variant. Both switches default on (`MTG_ET_HORN_SPOTS=0`
 and `MTG_ET_LINE_ORDER=0` restore the prior behaviors). Other nominal slots
 remain guidance for the existing plan search rather than forced static ranks.
+For Horn before the land, the order hook can also verify the payable prefix
+through Horn when the following turn spell needs that land; the land-position
+probe then verifies the suffix with the chosen drop.

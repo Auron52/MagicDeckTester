@@ -4689,20 +4689,18 @@ void ExtraTurnsProvider::ArrangeCastOrder(const GameState& s, const std::vector<
                                           std::vector<int>& order) const
 {
     // DEFAULT ON; =0 restores the prior tie. The land-position axis already searches Horn
-    // before/after the drop. This hook only resolves the Lens/Stone tie in a selected Horn
-    // line; the other casts (including the chain spell) stay in the exact-payment probe.
+    // before/after the drop. This hook resolves the Lens/Stone tie in the selected line;
+    // every other cast (including the chain spell) stays in the exact-payment probe.
     static const bool on = EnvOn("MTG_ET_LINE_ORDER", true);
-    if (!on || order.size() < 3) { return; }
-    int horn = -1, lens = -1, stone = -1, lens_count = 0;
+    if (!on || order.size() < 2) { return; }
+    int lens = -1, stone = -1, lens_count = 0;
     for (int p = 0; p < static_cast<int>(order.size()); ++p)
     {
         const std::string& name = acts[static_cast<std::size_t>(order[p])].card_name.str();
-        if (name == "Horn of Greed") { horn = p; }
-        else if (name == "Extraplanar Lens") { lens = p; ++lens_count; }
+        if (name == "Extraplanar Lens") { lens = p; ++lens_count; }
         else if (name == "Mind Stone") { stone = p; }
     }
-    if (horn < 0 || lens < 0 || stone < 0 || lens_count != 1
-        || lens < stone || horn < stone) { return; }
+    if (lens < 0 || stone < 0 || lens_count != 1 || lens < stone) { return; }
     const int imprint_id = acts[static_cast<std::size_t>(order[lens])].chosen_x;
     if (imprint_id <= 0) { return; }
 
@@ -4725,7 +4723,19 @@ void ExtraTurnsProvider::ArrangeCastOrder(const GameState& s, const std::vector<
     const int chosen_lens = trial[static_cast<std::size_t>(lens)];
     trial.erase(trial.begin() + lens);
     trial.insert(trial.begin() + stone, chosen_lens);
-    if (TurnSolver::OrderPaysSequentially(s, acts, trial)) { order.swap(trial); }
+    if (TurnSolver::OrderPaysSequentially(s, acts, trial)) { order.swap(trial); return; }
+    // In a Horn-before-land plan, later casts may need the land's mana. The
+    // provider has no land-slot argument, so the full pre-land walk is too
+    // strict. Move Lens first only if the old order also fails that walk and
+    // the entire prefix through Horn pays; the land-position plan probe then
+    // checks the suffix with the actual land in the chosen slot.
+    int horn = -1;
+    for (int p = 0; p < static_cast<int>(trial.size()); ++p)
+    { if (acts[static_cast<std::size_t>(trial[p])].card_name == "Horn of Greed") { horn = p; break; } }
+    if (horn < 0 || horn <= std::max(lens, stone)
+        || TurnSolver::OrderPaysSequentially(s, acts, order)) { return; }
+    std::vector<int> prefix(trial.begin(), trial.begin() + horn + 1);
+    if (TurnSolver::OrderPaysSequentially(s, acts, prefix)) { order.swap(trial); }
 }
 
 bool ExtraTurnsProvider::ComboCardValue(const GameState& s, const CardDefinition& def,

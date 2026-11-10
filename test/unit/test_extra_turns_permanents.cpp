@@ -125,6 +125,19 @@ TEST_CASE("Extra Turns orders a mana-beneficial Lens before Stone with Horn and 
     std::vector<int> decline_order{0, 1, 2, 3};
     policy.ArrangeCastOrder(s, decline, decline_order);
     CHECK(decline_order == std::vector<int>{0, 1, 2, 3});
+    std::vector<int> no_horn{0, 1, 3};
+    policy.ArrangeCastOrder(s, acts, no_horn);
+    CHECK(no_horn == std::vector<int>{1, 0, 3});
+    CHECK(TurnSolver::OrderPaysSequentially(s, acts, no_horn));
+    GameState before_drop = s;
+    before_drop.battlefield.back().tapped = true; // seven available Islands until the drop
+    std::vector<int> land_after_horn{0, 1, 2, 3};
+    CHECK_FALSE(TurnSolver::OrderPaysSequentially(before_drop, acts, {1, 0, 2, 3}));
+    policy.ArrangeCastOrder(before_drop, acts, land_after_horn);
+    CHECK(land_after_horn == std::vector<int>{1, 0, 2, 3});
+    CHECK(TurnSolver::OrderPaysSequentially(before_drop, acts, {1, 0, 2}));
+    Put(before_drop, "Snow-Covered Island", 109); // the land played after Horn
+    CHECK(TurnSolver::OrderPaysSequentially(before_drop, acts, land_after_horn));
 }
 
 TEST_CASE("Extra Turns chain trial takes Emrakul and protects Ulamog's attack turn")
