@@ -29,6 +29,10 @@ The 22 new `APPLY-DROP` flags shared a payer defect. `LineCastCostTotal` counted
 
 The same ten-game manifest, run after this follow-up against the post-Lake oracle baseline, produced `APPLY-DROP=0`, `ORACLE-GAP=0`, and `MISS=1` (the unchanged seed 30010331 `ENUM-GAP`). All ten `.wins` remain byte identical. The two focused unit translation units compiled through `build.sh`; the full test executable has not been linked or run. This is a focused diagnosis, not a replacement for the 5,000-game gate.
 
+## Remaining seed 30010331
+
+The one remaining focused `ENUM-GAP` is a different mechanism. The rejected plan casts two Thrumming Stones, a Shadowborn Apostle, and Dark Ritual. Oracle mode finds a legal order, Stone > Apostle > Ritual > Stone, using Lake's crack and Lotus Bloom. The first Stone makes the Ritual's ripple live; the rippled Ritual copy supplies the mana for the second Stone. With `MTG_DBG_MULTI=4`, this exact four-action subset reports `cost=12`, `mana_ok=0`, `why=ef-walk-fail`. Setting `MTG_MANA_PRUNE=0` and disabling the walk cuts leaves the `ENUM-GAP`, so the scalar bound is not the refusing gate. The executor-feasibility rescue calls `SubsetPayableSequential`, whose `SeqWalkFixedOrder` credits `ApplyRitualFloat` for the directly cast Ritual but does not resolve its ripple chain. Its modeled line therefore ends short although the oracle's full apply pays. A fix needs a sound ripple-aware rescue or a deliberately bounded optimistic admission; this isolated patch does not change that gate.
+
 ## Remaining classification
 
 The 3,714 `UNMODELED` flags are oracle search-budget limits on long combo plans, not proof of a payment defect. Seed 30012345 alone produces 390 such flags with the message `too many actions to try every order`. The 108 historical `APPLY-DROP-ORDER`, seven `APPLY-DROP`, and three `ENUM-GAP` flags need separate engine investigation. In seed 30013493, for example, a Diabolic Intent line drops in engine order although an oracle action order pays. This patch has not rerun the 5,000-game gate, so the new full-row count is unknown.
