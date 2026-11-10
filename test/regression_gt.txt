@@ -1,4 +1,4 @@
-# Regression ground truth -- commit ae306111c  date 2026-11-10
+# Regression ground truth -- commit 0d8c8cdbb  date 2026-11-10
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-05): Full overnight rebaseline requested after Jumbo exhaustive keep adoption and current engine changes: 118 matching, 424 changed, 11 new Shadowborn rows. Searched games 3953 faster vs 1889 slower; Angels +0.0064t/6065 searched, Angels2HG +0.0150t/600, Bruna +0.0122t/2131 remain visible follow-ups. Jumbo full overnight rows already adopted and match.
 # accepted-with-regressions (smoke, 2026-11-06): Shadowborn main-1 rule + USER cast order + ritual-payoff prune DEFAULT ON (held-out ab7 -0.035 turns, -14..-20% units; d8 b0: every unrecovered game is the clairvoyant ripple-dig the USER ruled out). Also accepts 4 digest-only rows (edf_smoke_d0_s1001, edf_regression_d0_s2002, edf_regression_d5_s3003, bruna_regression_d5_s2002; averages unchanged): pre-existing origin drift, reproduced byte-identically by origin 36d3672bc's own binary
@@ -9,14 +9,16 @@
 # accepted-with-regressions (regression, 2026-11-10): Gods K17 exhaustive profile: source-only mulligan changes; regression seed 2002 repeats eight slower openings across searched rows; confounded bottoming ties/improves at d5 and independent seed 3003 improves both d5 formats; three same-hand digests are bottoming-method search residue
 # accepted-with-regressions (smoke, 2026-11-10): Gods profile-off smoke baseline: all four averages improve; three searched slowdowns recover at 4x or 16x budget; equal-score lines and d0 examples reviewed
 # accepted-with-regressions (smoke, 2026-11-10): Gods K17 exhaustive profile smoke: both arms reproduce, zero unexplained changes; 12 slower searched rows are six repeated openings with different keep counts; searched aggregate ties and d0/2HG improve
+# accepted-with-regressions (smoke, 2026-11-10): Gods leaf adoption: 18 searched wins faster, one 2HG seed (gi18) slower by one turn at b20; 4x/16x budget finds T6/T5. Net average improves in all changed cases.
+# accepted-with-regressions (regression, 2026-11-10): Gods leaf adoption: 37 searched wins faster, four slower. d3 gi12/43 recover at 16x/4x budget. Seed 2009 gi7 is T7 old versus T8 new at b20 in both formats, persists at 16x; old reaches T6 at 16x, so this is a real individual search tradeoff. Net average improves by 0.30-0.36 turns in all changed cases; strict references pass.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
 # --- smoke ---
 gods_smoke_d0_s1001=8.7860/e5c758deb4dcf261
-gods_smoke_d3_s1001=5.5600/4595ef00d2398216
-gods_smoke_d5_s1001=5.4000/22c2c2ab2e11c8d7
-gods2hg_smoke_d5_s1001=5.6400/497d8fe0f8af0143
+gods_smoke_d3_s1001=5.3600/13b747a7aac4b20a
+gods_smoke_d5_s1001=5.2200/4f7a38bcc22eb34a
+gods2hg_smoke_d5_s1001=5.4000/7995557e1f24928f
 merfolk_smoke_d0_s1001=4.4960/e9b4322db7865929
 merfolk_smoke_d3_s1001=4.1800/e2d4ed3a62295b80
 merfolk_smoke_d5_s1001=4.1700/f2c8e9e392a196b1
@@ -312,9 +314,9 @@ hinata_regression_d3_s2002=5.6933/dcd9057de29ae636
 hinata_regression_d5_s2002=5.5667/7ef5353f84700e7b
 hinata_regression_d5_s3003=5.6267/28cc9af17a725e22
 gods_regression_d0_s2002=8.7520/c7abdb06bd6cc25e
-gods_regression_d3_s2002=5.7000/f10e2733b4395ff5
-gods_regression_d5_s2002=5.4800/71511434dafaf4ec
-gods2hg_regression_d5_s2002=5.5600/1043687993bdcb4d
+gods_regression_d3_s2002=5.3800/bfd83889b41c9493
+gods_regression_d5_s2002=5.1800/ead53aeb6feec08c
+gods2hg_regression_d5_s2002=5.2000/52142563dc5da66a
 cyclone_regression_d0_s2002=8.3410/ff285c765cd3e471
 cyclone_regression_d3_s2002=4.8533/f22dcd37081f4918
 cyclone_regression_d3_s3003=4.9333/437a6de4a37c0d52
