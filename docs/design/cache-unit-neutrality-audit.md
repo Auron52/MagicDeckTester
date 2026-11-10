@@ -1,5 +1,22 @@
 # Cache unit-neutrality audit (2026-10-30)
 
+> **STATUS 2026-11-10 -- read this first; the table below is the 10-30 state.** Written 10-30 and held locally until
+> 11-10, so it was not on origin while the fix was built. Since then, on 11-03:
+> - **Tier 1** (`docs/design/two-tier-search-cache.md`, `src/core/Tier1Ledger.h`, `MTG_TIER1` default ON): fixed
+>   per-thread allocations for the TT, FSL, m1 memo, game line cache and mana cache. This replaces the R- and G-class
+>   caps of #7, #11, #12, #14 and #22 below.
+> - **Tier 2 overflow** (`docs/design/tier2-cache-overflow.md`, `MTG_TIER2_OVERFLOW` default ON).
+> - **Plan caches** (#1-#4): `cachecharge` mode 1 (a computation that charged units is never stored) plus the
+>   **priced ledger** (`MTG_PLAN_PRICED_LEDGER` default ON). They still draw on the GLOBAL shared byte pool
+>   (`MTG_PLAN_CACHE_KB`).
+> - **Still open (seen 11-10):** the plan pool's residency still moves UNITS. Extra Turns d5 s2002 gi66, replayed alone,
+>   gives 57,526 units at the default pool and 56,198 at `MTG_PLAN_CACHE_KB=1`, with the same digest. In the pooled
+>   regression tier, the same job gave three distinct digests in four runs. Suspected channel: the lazy-entry admission
+>   price (`docs/design/niv-putback-fan-memory.md`, "Work units under a BINDING plan pool").
+>
+> The USER rulings recorded below (always-pay vs floor+overflow at matched cost; no per-thread quota that starves
+> heavy games; a 50-100 MB floor sized from usage) still stand.
+
 **The rule (USER 2026-10-30):** *"If we are adding caches we should make sure they don't change the units."* And: *"it
 would be nice to fix it entirely if there are more caches that are inconsistent this way."*
 
