@@ -77,7 +77,74 @@ a provider-stage question for this deck (discard buckets are USER-owned, 5i).
 
 ## Verification
 
-(Stage 5 — pending)
+### Stage 4 (2026-11-10)
+- Profile: card-scores-only, 17 cards, no hand-score gate, default land window (1-5). Cost diagnostic
+  NO_COST_INTERACTIONS. Discard analysis STATUS_QUO_OK (50 sheds in 400 d3 games, 98% multi-optimal; status quo
+  = the INHERITED KittyEquipment bucket rule, mean regret 0.06 vs band 0.02 / derived order 0.04).
+
+### 4-bis / 5j regression tiers
+- Cost gate (`suite_gate.py --cost`, pooled with Hinata): PASS, martyr 30,515 ms/game vs hinata 44,228 = 0.69x.
+  In UNITS martyr's d5 b20 games are ~1.75x Hinata's (113K vs 65K units/game); the box is a 12-thread laptop
+  (i5-1235U), so ms are contention-noisy. Rows sized at HINATA's shape (smoke d5 100 + 2hg 25; regression d5
+  2x150 + 2hg 75; overnight ENTRY d3 125 + d5 4x300 + 2hg 4x75), plus `martyr2hg` (Serra's 30 and Speaker's
+  start+7 read the 2HG life total).
+- Backstop (budget 0, abandon 2M units): screened 16 five-game blocks 30001..30301 at d3+d5. d3 all clean; d5
+  ABANDONED 7 of 80 games (blocks 30041/30101/30121/30161/30241/30281) -- a degenerate UNBUDGETED d5 tail on
+  this deck (~11 s/game single-thread mean, 25 s worst finished). Chosen: regression 30201, overnight 30301
+  (5 games each, every game finished at both depths).
+- Smoke rows ran once (4 NEW keys) on the pre-M2 binary; the chain was stopped before regression because the
+  Speaker second main (below) changes play. Tiers re-run after it.
+
+## Claude-play sweep
+- commit: `d6b1c6b12` (binary of 6bbc57216 + ledger)
+- seeds: 61001 games: 16 (gi 0-15, Sonnet players)
+- flags: 0 unresolved
+- Results: 11 games matched the search's win turn, 4 were one turn SLOWER (weak signal), and 1 was FASTER
+  (gi14: Claude T5 vs search T6).
+- Dismissed / fixed: the `sac_tutor` note said "onto the battlefield" for Squadron Hawk / Ranger of Eos (cards
+  correctly go to HAND) -> note now keyed on the "(put in HAND)" source (src/main.cpp). gi3's Abiding Grace
+  gained 1 with no decision: verified the graveyard was empty at that end step (gain is the only mode).
+- Exercised: Martyr x_value reveal, Ranger-Captain tutor_target variants, Hawk + Ranger of Eos sac_tutor,
+  Basilica bounce, Serra 6/6 at >= 30, Speaker's token at >= 27 only, Innocence once-per-copy draws, Jitte modes,
+  `gycast_gy` / Lurrus "(from graveyard, Lurrus)" plan, mulligan + bottom, discard. NOT exercised: Abiding Grace
+  return mode, Farm Animals' optional destroy, an actual Lurrus gy cast in a committed line.
+- gi14 ROOT CAUSES (search miss, structural -- unlimited budget still T6):
+  1. Speaker's token needed life >= 27, reached only via LIFELINK in T4 combat -> the post-combat activation was
+     unfindable (no second main). Fixed provisionally: MartyrLifegainProvider now opens ColossusHammer's NARROW
+     Speaker second main (MTG_SPEAKER_M2, shared body, default ON, PROVISIONAL -- main 1 vs main 2 is the USER's).
+  2. Even from the human's own T5 board the search does not find "Jitte: gain 2 life x2 -> Serra 6/6 -> 13
+     exactly lethal" (budget 0 -> T6). Under investigation.
+
+## Checkpoint (2026-11-10 ~21:00 UTC) -- RESUME HERE
+
+Pushed: through d6b1c6b12 (Lurrus 46467b0e5, own provider 6bbc57216); CI green on 42843623386 (both OSes).
+UNCOMMITTED in the primary checkout (orchestrator's, keep): `src/ai/DecisionProviders.{h,cpp}` + `src/ai/HeuristicArm.h`
+(MartyrLifegainProvider opens Speaker's NARROW second main, shared body with ColossusHammer -- SpeakerSecondMainLive /
+SpeakerSecondMainAdmits; MTG_SPEAKER_M2 default ON, PROVISIONAL); `src/main.cpp` (sac_tutor note for "(put in HAND)");
+`test/regression_cases.sh` (martyr + martyr2hg rows, all three tiers + backstop 30201/30301); `test/suite_cost.json`
+(martyr entry SCALED to hinata's committed number -- hinata's own entry deliberately NOT updated: this box inflates ms
+~9x); `decks/Martyr Lifegain/Martyr Lifegain.profile.json` (Stage 4 profile, untracked). User's own edits
+`.vscode/settings.json`, `test/ref_bench.json`: never touch.
+Box: 12-thread i5-1235U laptop, 10 GB (not the 32-CPU box) -- use --threads 12.
+
+Speaker M2 A/B (held-out, one pooled batch, `build/scratch/martyr/m2ab/`): std 600 games d5 b20 seed 71001:
+5.5400 -> 5.4083 (81 faster / 2 slower; both slower, gi174/gi417, recover to T5 at b200 and b0); 2HG 200 games
+seed 72001: 5.7300 -> 5.6200 (22 faster / 0 slower). Kept ON (provisional) -> REPORT to the USER.
+
+RUNNING: (1) Opus agent root-causing the gi14 Jitte miss (from the human's T5 board, "Jitte gain 2 life x2 -> Serra
+6/6 -> 13 exactly lethal" is unfindable at budget 0); handoff would be `logs/martyr-lifegain/jitte-miss-handoff.md`.
+It may rebuild build/Release with temporary prints -- after it finishes, verify `git diff` has no instrumentation and
+REBUILD clean. (2) `leaf_tiebreak_check.py` (5c2) -> `logs/martyr-lifegain/tiebreak.log`.
+Smoke tier for martyr ran once on the pre-M2 binary (not accepted); tier chain stopped (play changed).
+
+NEXT: act on the Jitte finding (fix if a sound searched option/breakpoint; scenario test) -> rebuild -> unit tests ->
+full smoke (play-changed must be ColossusHammer-neutral: shared body) -> commit src + rows -> run
+`logs/martyr-lifegain/tiers.sh` (smoke, regression, overnight for --deck=martyr,martyr2hg) -> inspect -> accept each
+tier with the SAME --deck -> `python3 test/check_gt_logs.py` -> commit GT + push + watch CI. Then 5a nonconv/fd-diverge,
+5b multi-depth, 5h `audit_viewer_decisions.py`, 5i discard bucket PROPOSAL (inherited Kitty buckets today),
+`verify_deck.py --write-ledger`, Stage 6 report (repeat USER questions: second main [Speaker narrow M2 kept ON; wider
+attack-then-sac main 2]; Innocence cast order; discard buckets; provisional deferrals: Companion inert, Hawk full
+count, end-step Clue, Kami/Farm Animals instant speed, {X} not Lurrus-castable). CronDelete 7869914f at the end.
 
 ## Provisional decisions awaiting the user
 
