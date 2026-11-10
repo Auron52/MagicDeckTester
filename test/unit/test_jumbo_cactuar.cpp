@@ -213,6 +213,46 @@ TEST_CASE("Jumbo Cactuar moves Overgrowth before Sprawl when only that order fun
     CHECK(TurnSolver::OrderPaysSequentially(s, acts, order));
 }
 
+TEST_CASE("Jumbo Cactuar enumerates a newly hasted Arbor Elf funding Tooth and Nail")
+{
+    LoadJumboCards();
+    JumboCactuarProvider provider;
+    GameState s;
+    s.active_player_index = 0;
+    s.turn_number = 3;
+    s.deck_has_land_aura = true;
+    s.deck_has_creature_enter_watcher = true;
+    s.m_provider = &provider;
+    PutOnBoard(s, "Forest", 27);
+    PutOnBoard(s, "Arbor Elf", 4);
+    PutOnBoard(s, "Forest", 10);
+    PutOnBoard(s, "Utopia Sprawl", 52);
+    s.battlefield.back().aura_attached_to = 10;
+    s.battlefield.back().chosen_color = static_cast<int8_t>(Color::Green);
+    PutOnBoard(s, "Overgrowth", 40);
+    s.battlefield.back().aura_attached_to = 10;
+    s.players[0].hand.push_back(CopyOf("Tooth and Nail", 70));
+    s.players[0].hand.push_back(CopyOf("Surrak and Goreclaw", 44));
+    s.players[0].hand.push_back(CopyOf("Forest", 17));
+    s.players[0].hand.push_back(CopyOf("Arbor Elf", 2));
+    s.players[0].library.push_back(CopyOf("Jumbo Cactuar", 33));
+
+    const auto plans = TurnSolver::EnumerateMainPlans(s, true);
+    const bool found = std::any_of(plans.begin(), plans.end(), [](const TurnSolver::Plan& p)
+    {
+        if (p.land_to_play != "Forest") { return false; }
+        bool tooth = false, surrak = false, elf = false;
+        for (const Action& a : p.actions)
+        {
+            tooth |= a.card_name.str() == "Tooth and Nail";
+            surrak |= a.card_name.str() == "Surrak and Goreclaw";
+            elf |= a.card_name.str() == "Arbor Elf";
+        }
+        return tooth && surrak && elf;
+    });
+    CHECK(found);
+}
+
 TEST_CASE("Finale graveyard-only whiff preserves library order and still pumps at X ten")
 {
     LoadJumboCards();

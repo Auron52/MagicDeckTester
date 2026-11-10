@@ -73855,15 +73855,41 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // equipped with Greaves can. Credit its real one-tap yield only to subsets
     // that cast it; the cast itself must already be payable from the old pool.
     std::vector<ManaPool> enter_haste_unlock, enter_haste_unlock_nc;
+    int pending_enter_haste_bound = 0;
     if (HasteDorkCreditEnabled())
     {
         bool live_enter_haste = false;
+        bool pending_enter_haste = false;
         for (const Permanent& p : state.battlefield)
         {
             if (p.controller_index != state.active_player_index || p.def_absent) { continue; }
             const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
             if (d && d->params.other_nontoken_enters_counter_haste > 0)
             { live_enter_haste = true; break; }
+        }
+        for (const Action& a : cands)
+        {
+            if (a.kind == Action::Kind::CastFromHand && a.def
+                && a.def->params.other_nontoken_enters_counter_haste > 0)
+            { pending_enter_haste = true; break; }
+        }
+        // The scalar odometer must admit the same-plan watcher + hand dork to
+        // consider() before its exact sequential rescue can judge the line.
+        // This is only an upper bound: selecting either card alone earns no
+        // mana. The exact walk below is the arbiter for every rescued subset.
+        if (pending_enter_haste && !live_enter_haste)
+        {
+            for (const Action& a : cands)
+            {
+                if (a.kind != Action::Kind::CastFromHand || !a.def
+                    || a.def->tmpl != CardTemplate::ManaDork || a.hand_index < 0
+                    || a.hand_index >= static_cast<int>(state.ActivePlayer().hand.size()))
+                { continue; }
+                const int id = state.ActivePlayer().hand[a.hand_index].m_number;
+                ManaPool add, add_nc;
+                HasteUnlockedManaOf(state, id, add, add_nc);
+                pending_enter_haste_bound += add.Total();
+            }
         }
         if (live_enter_haste)
         {
@@ -75756,9 +75782,24 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             const bool seq_on_aura = SeqLandAuraEnabled();
             const bool pending_noncombat_discount =
                 SubsetHasPendingNoncombatDiscount(state, cands, sel);
-            if (!ef_on && !seq_on_etb && !seq_on_aura && !pending_noncombat_discount)
+            bool pending_enter_haste = false;
+            if (pending_enter_haste_bound > 0)
+            {
+                bool watcher = false, dork = false;
+                for (int j : sel)
+                {
+                    const Action& c = cands[j];
+                    if (c.kind != Action::Kind::CastFromHand || !c.def) { continue; }
+                    watcher |= c.def->params.other_nontoken_enters_counter_haste > 0;
+                    dork |= c.def->tmpl == CardTemplate::ManaDork;
+                }
+                pending_enter_haste = watcher && dork;
+            }
+            if (!ef_on && !seq_on_etb && !seq_on_aura && !pending_noncombat_discount
+                && !pending_enter_haste)
             { return false; }
-            bool interacts = (ef_on && any_hinata_credit) || pending_noncombat_discount;
+            bool interacts = (ef_on && any_hinata_credit) || pending_noncombat_discount
+                          || pending_enter_haste;
             int  aura_bonus  = 0;           // new mana a same-subset land Aura brings online
             bool other_inter = interacts;   // any interaction OTHER than a land Aura?
             int  nonaura     = 0;           // casts the Aura could be funding
@@ -76494,6 +76535,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     int haste_unlock_bound = 0;
     for (const ManaPool& u : haste_unlock) { haste_unlock_bound += u.Total(); }
     for (const ManaPool& u : enter_haste_unlock) { haste_unlock_bound += u.Total(); }
+    haste_unlock_bound += pending_enter_haste_bound;
     // ... and the same addend for the same-turn METALCRAFT credit, for exactly the reason above and
     // under ManaPruneBound's own maintenance breadcrumb ("any FUTURE cost reducer credited per-subset
     // in consider() rather than baked into a.cost"). MEASURED, not anticipated: with the credit on but
