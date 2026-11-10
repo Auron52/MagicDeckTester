@@ -24,8 +24,9 @@ the current checkout has newer decks and source changes. No old ground-truth fil
 
 * Release `mtg` build: PASS with `MTG_BUILD_JOBS=4`.
 * Scenarios: 445 passed, zero failed/error.
-* Full smoke, unit binary and regression: pending at this checkpoint. Do not accept ground truth until the changed
-  games have been reviewed under `.claude/skills/regression-testing.md`.
+* Full unit suite: 2,672 cases and 3,579,151 assertions passed, zero failed.
+* Full smoke and regression: pending at this checkpoint. Do not accept ground truth until the changed games have
+  been reviewed under `.claude/skills/regression-testing.md`.
 
 ## Value-leaf sidecar
 
