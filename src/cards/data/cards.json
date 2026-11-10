@@ -15259,6 +15259,52 @@
     "wish_requires_name": "Squadron Hawk",
     "tutor_shuffle_after": true
    }
+  },
+  {
+   "name": "Curious Farm Animals",
+   "mana_cost": "{W}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Boar",
+    "Elk",
+    "Bird",
+    "Ox"
+   ],
+   "keywords": [],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "When this creature dies, you gain 3 life.\n{2}, Sacrifice this creature: Destroy up to one target artifact or enchantment. [All clauses modelled. DIES: dies_watch_includes_self + dies_trigger_self_gain 3 -- OnCreatureDies' self-watcher, ONE GainLife event (CR 119.10) on ANY death (sacrifice, Jitte -1/-1, a destroy). ACTIVATION: a self-only sacrifice outlet (sac_creature_outlet + sac_outlet_self_only, the Fulminator Mage shape) costing sac_creature_cost {2}; no {T}, so usable the turn it enters. PAYLOAD sac_outlet_destroy_artifact_enchantment_optional = Foundation Breaker's resolver (ResolveOptionalDestroyArtifactEnchantment): legal set = every artifact or enchantment on BOTH sides; 'up to one' means it activates with no legal target (no target gate). The dies trigger resolves BEFORE the destroy (CR 603.3: it goes on the stack above the ability). Autonomous target = DecisionProvider::EtbOptionalDestroyTargetPick, a SOUND DOMINANCE FOLD: an opponent's target, else none -- the goldfish opponent never has one, and destroying one of our own (Umezawa's Jitte, a Clue, Abiding Grace, a creature Enduring Innocence) removes a permanent and buys nothing in this list (Innocence would return as a noncreature enchantment, strictly worse). HUMAN play: the dig '(may destroy)' modal over every legal target, ours included; -1 = none. A destroyed token (a Clue) ceases to exist. The activation is offered to the search while the death pays (SelfSacOutletUseful: its own 3-life gain is read in this deck -- Serra Ascendant, Speaker of the Heavens -- or an Abiding Grace / Lurrus recursion); the human always sees it. [PARTIAL: instant-speed activation (in response, during combat, at end of turn, on the opponent's turn) is not modelled -- there is no such priority window, so the activation happens in a main phase; a pre-combat activation forgoes the 1-power attack (no second main in this deck). PROVISIONAL deferral.]]",
+   "template": "custom",
+   "parameters": {
+    "dies_watch_includes_self": true,
+    "dies_trigger_self_gain": 3,
+    "sac_creature_outlet": true,
+    "sac_outlet_self_only": true,
+    "sac_creature_cost": "{2}",
+    "sac_outlet_destroy_artifact_enchantment_optional": true
+   }
+  },
+  {
+   "name": "Kami of False Hope",
+   "mana_cost": "{W}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Spirit"
+   ],
+   "keywords": [],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "Sacrifice this creature: Prevent all combat damage that would be dealt this turn. [Self-only sacrifice outlet (sac_creature_outlet + sac_outlet_self_only, the Ranger-Captain of Eos shape); no {T}, so usable the turn it enters. Payload sac_outlet_prevent_combat_damage sets GameState::combat_damage_prevented_this_turn (reset at both untap sites; folded into dominance::Build and BuildSimKey, so a 'sacked Kami' board never merges with an otherwise identical one). While it holds, ResolveCombatDamage (shared by the real game and the rollout) deals NO combat damage -- no life loss, no lifelink, no Jitte counters spent or earned, no combat-damage triggers -- and the search's attack projections (PendingAttackDamage, BeginCombatProjectedDamage, AttackersCombatDamage) read 0 combat damage; attacking still taps and noncombat attack-trigger life loss still happens. The passive opponent never attacks, so the effect only ever prevents OUR damage: modelled faithfully, as a pure cost. The death itself is the value: Abiding Grace's MV-1 return, a Lurrus recast. Offered to the search only while a death payoff is live (SelfSacHasDeathPayoff); with none it loses a 1/1 and blanks combat -- strictly dominated, a lossless removal. Human play always sees it (sacout=Kami of False Hope). [PARTIAL: instant-speed activation (after combat damage, at end of turn, on the opponent's turn) is not modelled -- there is no such priority window, so a sacrifice happens in a main phase and a pre-combat one forgoes the turn's combat (no second main in this deck). PROVISIONAL deferral.]]",
+   "template": "custom",
+   "parameters": {
+    "sac_creature_outlet": true,
+    "sac_outlet_self_only": true,
+    "sac_outlet_prevent_combat_damage": true
+   }
   }
  ]
 }

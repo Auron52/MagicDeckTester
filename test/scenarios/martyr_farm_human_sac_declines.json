@@ -1,0 +1,47 @@
+{
+  "deck": "decks/Martyr Lifegain/Martyr Lifegain.cod",
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "turn": 5,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 50,
+  "max_turns": 5,
+  "lands_played_this_turn": 1,
+  "battlefield": [
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Curious Farm Animals",
+      "sick": true
+    },
+    {
+      "name": "Umezawa's Jitte"
+    }
+  ],
+  "hand": [],
+  "expect_no_win": true,
+  "_comment": "Martyr Lifegain (2026-11-10), Curious Farm Animals: '{2}, Sacrifice this creature: Destroy up to one target artifact or enchantment.' The human activates it (sacout=, two Plains pay {2}) and DECLINES the '(may destroy)' dig: the dies trigger gains 3 (20 -> 23), Jitte survives (not in the graveyard). Sister: martyr_farm_human_sac_destroys_own_jitte.",
+  "human_lines": [
+    "sacout=Curious Farm Animals"
+  ],
+  "human_dig_picks": [
+    "decline"
+  ],
+  "expect_active_life": 23,
+  "expect_graveyard_contains": [
+    "Curious Farm Animals"
+  ],
+  "expect_history_contains": [
+    "declines to destroy anything"
+  ]
+}

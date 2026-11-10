@@ -1,0 +1,36 @@
+{
+  "deck": "decks/Martyr Lifegain/Martyr Lifegain.cod",
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "turn": 5,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 50,
+  "max_turns": 5,
+  "lands_played_this_turn": 1,
+  "battlefield": [
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Serra Ascendant",
+      "sick": false
+    },
+    {
+      "name": "Kami of False Hope"
+    }
+  ],
+  "hand": [],
+  "expect_no_win": true,
+  "_comment": "CONTROL for martyr_kami_human_sac_prevents: the human passes; Serra Ascendant (1/1 lifelink) and Kami of False Hope (1/1) both attack -- opponent 20 -> 18, we 20 -> 21 (Serra's lifelink).",
+  "human_lines": [
+    "pass"
+  ],
+  "expect_opponent_life": 18,
+  "expect_active_life": 21
+}

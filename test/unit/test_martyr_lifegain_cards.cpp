@@ -8,6 +8,8 @@
 #include "core/GameState.h"
 #include "core/HeuristicDefaults.h"
 #include "core/SpellEffects.h"
+#include "ai/Combat.h"
+#include "ai/TurnSolver.h"
 
 #include <algorithm>
 #include <string>
@@ -148,3 +150,116 @@ TEST_CASE("Squadron Hawk: one Hawk left -> one fetched; none left -> nothing, st
     CHECK(t.players[0].library.size() == 2);
     CHECK(t.search_count == searches + 1);
 }
+
+// ---- Curious Farm Animals ------------------------------------------------------------------------
+
+TEST_CASE("Curious Farm Animals: its own read dies-gain opens the self-only gate; Ranger-Captain's does not")
+{
+    GameState s = MlState();
+    s.deck_reads_life_total = true;   // Serra Ascendant / Speaker of the Heavens read the life total
+    MlAdd(s, "Curious Farm Animals", 40);
+    MlAdd(s, "Ranger-Captain of Eos", 41);
+    CHECK(SelfSacOutletUseful(s, 0, 40));
+    CHECK(!SelfSacOutletUseful(s, 0, 41));   // no payload, no death payoff: still dominated
+
+    // Nothing reads the gain: the activation is a dominated no-op again.
+    GameState t = MlState();
+    t.deck_reads_life_total = false;
+    MlAdd(t, "Curious Farm Animals", 40);
+    CHECK(!SelfSacOutletUseful(t, 0, 40));
+}
+
+TEST_CASE("Curious Farm Animals: the sacrifice gains 3 (one event) and autonomously destroys nothing of ours")
+{
+    GameState s = MlState();
+    s.players[0].life = 20;
+    MlAdd(s, "Curious Farm Animals", 40);
+    MlAdd(s, "Umezawa's Jitte", 42);
+    MlAdd(s, "Abiding Grace", 43);
+    CreateClueTokens(s, 0, 1);
+    ApplySacCreatureOutlet(s, 0, 40, 40);
+    CHECK(s.players[0].life == 23);
+    CHECK(s.players[0].life_gained_this_turn == 3);
+    CHECK(MlCount(s, "Curious Farm Animals") == 0);
+    CHECK(MlCount(s, "Umezawa's Jitte") == 1);   // dominance fold: no opponent target -> none
+    CHECK(MlCount(s, "Abiding Grace") == 1);
+    CHECK(MlCount(s, "Clue Token") == 1);
+    REQUIRE(!s.players[0].graveyard.empty());
+    CHECK(s.players[0].graveyard.back().m_name.str() == "Curious Farm Animals");
+}
+
+TEST_CASE("Curious Farm Animals: an opponent's artifact IS destroyed (the fold's purposeful target)")
+{
+    GameState s = MlState();
+    MlAdd(s, "Curious Farm Animals", 40);
+    MlAdd(s, "Umezawa's Jitte", 44, /*controller=*/1);
+    ApplySacCreatureOutlet(s, 0, 40, 40);
+    CHECK(MlCount(s, "Umezawa's Jitte", 1) == 0);
+}
+
+TEST_CASE("Curious Farm Animals: any death (not just the sacrifice) gains 3")
+{
+    GameState s = MlState();
+    s.players[0].life = 20;
+    const Card dead = MlDef("Curious Farm Animals").card;
+    OnCreatureDies(s, 0, dead, false, 0, nullptr, 0);
+    CHECK(s.players[0].life == 23);
+}
+
+// ---- Kami of False Hope --------------------------------------------------------------------------
+
+TEST_CASE("Kami of False Hope: a sacrifice prevents this turn's combat damage, in the core and the projection")
+{
+    auto board = [](GameState& s)
+    {
+        s.players[0].life = 20;
+        s.players[1].life = 20;
+        MlAdd(s, "Kami of False Hope", 50);
+        MlAdd(s, "Serra Ascendant", 51);   // 1/1 lifelink, not summoning sick
+        const int j = MlAdd(s, "Umezawa's Jitte", 52);
+        s.battlefield[static_cast<std::size_t>(j)].equipped_to = 51;
+    };
+    auto serra_idx = [](const GameState& s)
+    {
+        for (int i = 0; i < static_cast<int>(s.battlefield.size()); ++i)
+        { if (s.battlefield[static_cast<std::size_t>(i)].card.m_number == 51) { return i; } }
+        return -1;
+    };
+    auto jitte = [](const GameState& s)
+    {
+        for (const Permanent& p : s.battlefield) { if (p.card.m_number == 52) { return p.charge_counters; } }
+        return -1;
+    };
+
+    // Control: no sacrifice -> Serra connects for 1, gains 1, Jitte earns two counters.
+    GameState c = MlState();
+    board(c);
+    CHECK(TurnSolver::ProjectedAttackDamage(c) > 0);
+    ResolveCombatDamage(c, { serra_idx(c) }, 0, false);
+    CHECK(c.players[1].life < 20);
+    CHECK(c.players[0].life > 20);
+    CHECK(jitte(c) == 2);
+
+    // Sacrificed: nothing is dealt, nothing is gained, Jitte earns nothing.
+    GameState s = MlState();
+    board(s);
+    ApplySacCreatureOutlet(s, 0, 50, 50);
+    CHECK(s.combat_damage_prevented_this_turn);
+    CHECK(MlCount(s, "Kami of False Hope") == 0);
+    CHECK(TurnSolver::ProjectedAttackDamage(s) == 0);
+    ResolveCombatDamage(s, { serra_idx(s) }, 0, false);
+    CHECK(s.players[1].life == 20);
+    CHECK(s.players[0].life == 20);
+    CHECK(jitte(s) == 0);
+}
+
+TEST_CASE("Kami of False Hope: the self-only gate opens only with a death payoff (Abiding Grace's MV-1 return)")
+{
+    GameState s = MlState();
+    s.deck_has_endstep_reanimate = true;
+    MlAdd(s, "Kami of False Hope", 50);
+    CHECK(!SelfSacOutletUseful(s, 0, 50));
+    MlAdd(s, "Abiding Grace", 53);
+    CHECK(SelfSacOutletUseful(s, 0, 50));
+}
+

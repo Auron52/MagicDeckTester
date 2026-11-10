@@ -977,6 +977,10 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     if (s.scripted_demon_trigger >= 0)
     { fold(0xDE404E0000ull + static_cast<std::uint64_t>(s.scripted_demon_trigger)); }
     if (s.deck_has_morbid && s.creature_died_this_turn) { fold(0x40B1D0000ull); }
+    // Kami of False Hope's prevention: FUTURE-DETERMINING within the turn (a prevented combat deals
+    // nothing), so a "sacked Kami" board must not merge with an otherwise identical one (a Lurrus
+    // recast or a Grace return can rebuild the same permanents). Folded only when TRUE.
+    if (s.combat_damage_prevented_this_turn) { fold(0xFA15E40000ull); }
     // LAND SEARCH pins (core/LandSearch.h): Primeval Titan's attack-trigger pick (consumed at this
     // turn's declare-attackers) and Search for Tomorrow's off-suspend pick (consumed at the NEXT
     // upkeep -- live across exactly this boundary, the scripted_vial_charge class). Both

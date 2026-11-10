@@ -404,6 +404,11 @@ MANIFEST = {
     # main_phase (sac_creature_outlet), WHICH land is the `target` board-click (loyalty shape) at
     # ResolveDestroyTargetNonbasicLand; a forced single target is not prompted.
     "sac_outlet_destroy_nonbasic_land": ("target",    truthy),
+    # Curious Farm Animals: "{2}, Sacrifice this creature: Destroy UP TO ONE target artifact or
+    # enchantment" -- the activation rides main_phase (sac_creature_outlet); the target reuses
+    # Foundation Breaker's `dig` "(may destroy)" modal (every legal target, both sides; -1 = none) at
+    # ResolveOptionalDestroyArtifactEnchantment.
+    "sac_outlet_destroy_artifact_enchantment_optional": ("dig", truthy),
     # Timeless Witness: "return target card from your graveyard to your hand" -- human play asks the
     # shared `dig` chooser over the graveyard at resolution (no named plan variants under human play).
     "etb_return_gy_to_hand":         ("dig",         truthy),
@@ -1368,6 +1373,7 @@ INERT_PARAMS = {
     # Sac-outlet EFFECT detail -- the ACTIVATION rides main_phase (sac_creature_outlet); these are its payload/cost:
     "sac_creature_cost": "sac-outlet activation cost detail (rides sac_creature_outlet main_phase)",
     "sac_creature_requires_subtype": "sac-outlet victim gating detail (which subtype; rides sac_creature_outlet)",
+    "sac_outlet_prevent_combat_damage": "Kami of False Hope: automatic sac payload ('prevent all combat damage that would be dealt this turn') -- untargeted, no choice; rides sac_creature_outlet -> activate",
     "sac_outlet_self_only": "sac-outlet victim gating detail ('Sacrifice THIS creature' -- the source is the only legal victim, so the `sacrifice` decision is a forced non-choice; rides sac_creature_outlet -> activate)",
     # ---- CritterLifegain (2026-09-08) -- every trigger here is automatic and untargeted except Heliod's (MANIFEST) ----
     "lifegain_self_counters": "automatic 'whenever you gain life' trigger: +1/+1 counter on THIS creature (Ajani's Pridemate / Voice of the Blessed / the Ajani token) -- no target, no may",
@@ -2059,7 +2065,8 @@ def modeled_tokens(card):
         t.add("target")
     # Foundation Breaker's optional twin (the `dig` "(may destroy)" pick IS its target choice) and
     # Fulminator Mage's sacrifice payload (the `target` board-click).
-    if p.get("etb_destroy_artifact_enchantment_optional") or p.get("sac_outlet_destroy_nonbasic_land"):
+    if (p.get("etb_destroy_artifact_enchantment_optional") or p.get("sac_outlet_destroy_nonbasic_land")
+            or p.get("sac_outlet_destroy_artifact_enchantment_optional")):
         t.add("target")
     # Unpredictable Cyclone phase 2: the Ulamogs' targeted CAST triggers (the `target` board-click,
     # one pick per target, at ChooseCastTriggerTargets).

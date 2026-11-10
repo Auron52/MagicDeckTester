@@ -1,0 +1,39 @@
+{
+  "deck": "decks/Martyr Lifegain/Martyr Lifegain.cod",
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "turn": 5,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 50,
+  "max_turns": 5,
+  "lands_played_this_turn": 1,
+  "battlefield": [
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Serra Ascendant",
+      "sick": false
+    },
+    {
+      "name": "Kami of False Hope"
+    }
+  ],
+  "hand": [],
+  "expect_no_win": true,
+  "_comment": "Martyr Lifegain (2026-11-10), Kami of False Hope: the human sacrifices Kami in main 1 (sacout=). All combat damage this turn is prevented, so the attacking Serra Ascendant (1/1 lifelink) deals nothing and gains nothing: opponent stays 20, we stay 20. Control: martyr_kami_human_control (18 / 21 -- Kami attacks there too).",
+  "human_lines": [
+    "sacout=Kami of False Hope"
+  ],
+  "expect_opponent_life": 20,
+  "expect_active_life": 20,
+  "expect_graveyard_contains": [
+    "Kami of False Hope"
+  ]
+}

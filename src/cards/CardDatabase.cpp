@@ -1896,6 +1896,9 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.sac_outlet_lifegain           = params.value("sac_outlet_lifegain", 0);
     p.sac_outlet_lifegain_per_revealed_color = params.value("sac_outlet_lifegain_per_revealed_color", std::string());
     p.sac_outlet_destroy_nonbasic_land = params.value("sac_outlet_destroy_nonbasic_land", false);
+    p.sac_outlet_destroy_artifact_enchantment_optional =
+        params.value("sac_outlet_destroy_artifact_enchantment_optional", false);
+    p.sac_outlet_prevent_combat_damage = params.value("sac_outlet_prevent_combat_damage", false);
     if (params.contains("bestow_cost"))
         p.bestow_cost = ManaCostFromString(params["bestow_cost"].get<std::string>());
 

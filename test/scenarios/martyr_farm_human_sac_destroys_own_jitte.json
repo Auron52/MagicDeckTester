@@ -1,0 +1,45 @@
+{
+  "deck": "decks/Martyr Lifegain/Martyr Lifegain.cod",
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "turn": 5,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 50,
+  "max_turns": 5,
+  "lands_played_this_turn": 1,
+  "battlefield": [
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Curious Farm Animals",
+      "sick": true
+    },
+    {
+      "name": "Umezawa's Jitte"
+    }
+  ],
+  "hand": [],
+  "expect_no_win": true,
+  "_comment": "Martyr Lifegain (2026-11-10), Curious Farm Animals: human play must offer OUR OWN artifacts/enchantments as targets (the autonomous fold never takes one). The human picks Umezawa's Jitte in the '(may destroy)' dig: it goes to the graveyard; the dies trigger still gains 3.",
+  "human_lines": [
+    "sacout=Curious Farm Animals"
+  ],
+  "human_dig_picks": [
+    "Umezawa's Jitte"
+  ],
+  "expect_active_life": 23,
+  "expect_graveyard_contains": [
+    "Curious Farm Animals",
+    "Umezawa's Jitte"
+  ]
+}

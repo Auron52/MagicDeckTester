@@ -1,0 +1,32 @@
+{
+  "deck": "decks/Martyr Lifegain/Martyr Lifegain.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 2,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 50,
+  "max_turns": 6,
+  "lands_played_this_turn": 1,
+  "_comment": "Martyr Lifegain (2026-11-10), Kami of False Hope + Abiding Grace: with Grace out the self-only gate OFFERS the Kami sacrifice to the search (its MV-1 return pays), but sacrificing it pre-combat prevents this turn's combat damage. Serra Ascendant + Kami (both 1/1, not sick) are exactly lethal at 2: the search must attack, not sacrifice -- the projection (PendingAttackDamage) reads 0 after a sacrifice, so it cannot mistake a prevented combat for lethal.",
+  "battlefield": [
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Abiding Grace"
+    },
+    {
+      "name": "Serra Ascendant",
+      "sick": false
+    },
+    {
+      "name": "Kami of False Hope",
+      "sick": false
+    }
+  ],
+  "hand": [],
+  "expect_win_turn": 4
+}

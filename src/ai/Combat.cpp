@@ -322,7 +322,12 @@ static CombatDamageResult ResolveCombatDamageTwoStep(GameState& state, const std
             base_pw += AuraBonusFor(p, state, &bs.attached).first;
             base_pw += EquipBonusFor(p, state, &bs.attached).first;
             int power = base_pw;
-            const int jitte_bf = FindAttachedChargeEquip(state, p, &bs.attached);
+            // Kami of False Hope: all combat damage this turn is prevented -- nothing is dealt, so
+            // Jitte neither spends nor earns, and the power>0 consequences below (life loss, lifelink,
+            // combat-damage triggers) do not happen. Attacking (and its tap) still did.
+            const bool prevented = state.combat_damage_prevented_this_turn;
+            const int jitte_bf = prevented ? -1 : FindAttachedChargeEquip(state, p, &bs.attached);
+            if (prevented) { power = 0; }
             if (jitte_bf >= 0)
             {
                 if (jitte_done[k]) { power = 0; }   // the closed form already dealt both halves
@@ -511,7 +516,13 @@ CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>&
         // side-channel), earn 2 per damage event -- the shared closed form (JitteDamageMath) the
         // two TurnSolver projections also use, so search and execution stay lockstep.
         int power = base_pw * (ds ? 2 : 1);
-        const int jitte_bf = FindAttachedChargeEquip(state, p, &bs.attached);
+        // Kami of False Hope: all combat damage this turn is prevented (CR 615) -- no damage is dealt,
+        // so Jitte neither spends nor earns, and every power>0 consequence below (life loss,
+        // lifelink, Lackey / Shroofus / draw grants, the free-cast bank) is skipped. The attack
+        // itself (tap, attack triggers' life loss, Utvara tokens) still happens.
+        const bool prevented = state.combat_damage_prevented_this_turn;
+        if (prevented) { power = 0; }
+        const int jitte_bf = prevented ? -1 : FindAttachedChargeEquip(state, p, &bs.attached);
         if (jitte_bf >= 0)
         {
             Permanent& je = state.battlefield[jitte_bf];

@@ -12319,6 +12319,11 @@ inline bool SelfSacHasDeathPayoff(const GameState& state, int controller, int so
         if (wp.ltb_return_creatures > 0)       { return true; }
         if (!wp.dies_watch_subtype.empty() && CardHasSubtype(src->card, wp.dies_watch_subtype)) { return true; }
     }
+    // TODO(Lurrus of the Dream-Den, Martyr Lifegain integration): a Lurrus on our battlefield with its
+    // once-each-turn graveyard-cast permission unused (or one in hand and castable) makes a NONTOKEN
+    // permanent card of mana value 2 or less a recursion target, so its death pays too (Kami of False
+    // Hope, Curious Farm Animals, Martyr of Sands, Squadron Hawk...). Add that clause HERE, beside the
+    // Abiding Grace clause below, so the self-only outlet gate (SelfSacOutletUseful) opens for it.
     // A GRAVEYARD REANIMATOR makes the death a real trade-off rather than a no-op: the card comes back
     // through the enter cascade (Ranger-Captain of Eos re-tutors, Soul Warden & co. fire). Only a CARD
     // returns (a token ceases to exist, CR 111.7), and only a creature card. Conservative in the TRUE
@@ -12424,8 +12429,23 @@ inline bool SelfSacOutletUseful(const GameState& state, int controller, int sour
     {
         if (p.controller_index != controller || p.card.m_number != source_id) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        return d && SacOutletLifegainAmount(state, controller, d->params) > 0
-                 && SacOutletLifegainRead(state, controller);
+        if (!d) { return false; }
+        if (SacOutletLifegainAmount(state, controller, d->params) > 0
+            && SacOutletLifegainRead(state, controller)) { return true; }
+        // The source's OWN dies trigger (Curious Farm Animals: "When this creature dies, you gain 3
+        // life"): its sacrifice fires it (OnCreatureDies' self-watcher, the same self_ok test), so it
+        // pays exactly as an outlet payload would -- face damage or tokens always, a life gain while
+        // something reads it. No pre-existing self-only outlet carries a dies_* self-watcher, so this
+        // is byte-identical for every other deck.
+        const CardParams& dp = d->params;
+        if (dp.dies_watch_includes_self
+            && (dp.dies_watch_subtype.empty() || CardHasSubtype(p.card, dp.dies_watch_subtype)))
+        {
+            if (dp.dies_trigger_damage > 0 || dp.dies_trigger_creates_tokens > 0
+                || dp.dies_trigger_impulse_exile) { return true; }
+            if (dp.dies_trigger_self_gain > 0 && SacOutletLifegainRead(state, controller)) { return true; }
+        }
+        return false;
     }
     return false;
 }
@@ -14352,6 +14372,7 @@ inline int BeginCombatHostDamage(const GameState& state, const Permanent& host)
 // Sum of BeginCombatHostDamage over every creature `controller` controls.
 inline int BeginCombatProjectedDamage(const GameState& state, int controller)
 {
+    if (state.combat_damage_prevented_this_turn) { return 0; }   // Kami of False Hope
     int total = 0;
     for (const Permanent& p : state.battlefield)
     {
@@ -16248,16 +16269,21 @@ inline void ResolveExpropriate(GameState& state, int caster, bool own_vote_time,
 // board-click `target` shape has no decline. Erases a permanent, so callers must not hold a slot
 // across it (FireOwnEtbTriggers' note: nothing below it reads entered_index for this card; the evoke
 // sacrifice re-finds by number).
-inline void ResolveEtbDestroyOptional(GameState& state, int controller, const CardDefinition& def)
+//
+// SHARED with Curious Farm Animals' "{2}, Sacrifice this creature: Destroy UP TO ONE target artifact or
+// enchantment" (CardParams::sac_outlet_destroy_artifact_enchantment_optional, called from
+// ApplySacCreatureOutlet): the same legal set, the same provider fold and the same human modal. A
+// destroyed TOKEN (a Clue) ceases to exist rather than entering the graveyard (CR 111.7).
+inline void ResolveOptionalDestroyArtifactEnchantment(GameState& state, int controller,
+                                                      const std::string& src_name)
 {
-    const CardParams& p = def.params;
     std::vector<int> legal;
     for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
     {
-        if (EtbDestroyTargetLegal(state.battlefield[static_cast<std::size_t>(i)], p)) { legal.push_back(i); }
+        const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+        if (q.card.HasType(CardType::Artifact) || q.card.IsEnchantment()) { legal.push_back(i); }
     }
-    if (legal.empty()) { return; }   // no legal target: the trigger is removed
-    const std::string src_name = def.card.m_name.str();
+    if (legal.empty()) { return; }   // no legal target: the trigger is removed / "up to one" takes none
     int k = ResolveProvider(state).EtbOptionalDestroyTargetPick(state, controller, legal);
     if (k >= static_cast<int>(legal.size())) { k = -1; }
     if (g_play_dig_chooser != nullptr && !g_tap_speculating)
@@ -16295,7 +16321,7 @@ inline void ResolveEtbDestroyOptional(GameState& state, int controller, const Ca
                       + (dead_ctrl == controller ? std::string("your ") : std::string("the opponent's "))
                       + dead.m_name.str());
     }
-    state.players[q.owner_index].graveyard.push_back(dead);
+    if (!was_token) { state.players[q.owner_index].graveyard.push_back(dead); }
     state.battlefield.erase(state.battlefield.begin() + bi);
     for (Permanent& o : state.battlefield)
     {
@@ -16307,6 +16333,12 @@ inline void ResolveEtbDestroyOptional(GameState& state, int controller, const Ca
         OnCreatureDies(state, dead_ctrl, dead, was_token, m1, nullptr, total_counters);
         if (dead_ctrl != controller) { FireOppCreatureDies(state, dead_ctrl); }
     }
+}
+// Foundation Breaker's ETB (etb_destroy_artifact_enchantment_optional): the shared resolver above.
+// EtbDestroyTargetLegal's optional arm is the same artifact-or-enchantment predicate.
+inline void ResolveEtbDestroyOptional(GameState& state, int controller, const CardDefinition& def)
+{
+    ResolveOptionalDestroyArtifactEnchantment(state, controller, def.card.m_name.str());
 }
 
 // Fury's ETB (CardParams::etb_damage_divided_creatures): "it deals N damage divided as you choose
@@ -18705,6 +18737,22 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
     FireSacrificeWatchers(state, controller);   // Slaughter-Priest ("whenever YOU sacrifice ...")
     OnCreatureDies(state, controller, victim, victim_tok, victim_m1,
                    nullptr, victim_total_counters);   // death triggers / persist
+    // The ability's own effects resolve AFTER the death triggers its cost caused (CR 603.3: those
+    // triggers go on the stack above it). `op` points into the card DB, unaffected by the cascade.
+    // Kami of False Hope: "Prevent all combat damage that would be dealt this turn."
+    if (op->sac_outlet_prevent_combat_damage)
+    {
+        state.combat_damage_prevented_this_turn = true;
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "ability",
+                          src_name + ": all combat damage this turn is prevented");
+        }
+    }
+    // Curious Farm Animals: "Destroy up to one target artifact or enchantment" (Foundation Breaker's
+    // resolver; zero targets is legal, so no legal-target gate on the activation).
+    if (op->sac_outlet_destroy_artifact_enchantment_optional)
+    { ResolveOptionalDestroyArtifactEnchantment(state, controller, src_name); }
 
     // "Infinite life" detection (USER feature 2026-09-04; NOT a win since the 2026-09-05 review --
     // see GameState::inf_life_turn: turn-stamped once, reported separately, search tiebreak only).
@@ -23961,6 +24009,7 @@ inline int CombatPowerOf(const Permanent& p, const GameState& state)
 // projection addend (CountAttackAttachPump) -- ONE function, so the two cannot disagree.
 inline int AttackersCombatDamage(const GameState& g, const std::vector<int>& atk_nums)
 {
+    if (g.combat_damage_prevented_this_turn) { return 0; }   // Kami of False Hope
     int dmg = 0;
     for (const int num : atk_nums)
     {

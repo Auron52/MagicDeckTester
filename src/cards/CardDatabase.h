@@ -4063,6 +4063,21 @@ struct CardParams
     // reviewed ranking (the human picks from the full legal set). Rides the self-only gate: offered
     // to the search only while a death payoff is live (SelfSacHasDeathPayoff); humans always see it.
     bool sac_outlet_destroy_nonbasic_land = false;
+    // Curious Farm Animals: "{2}, Sacrifice this creature: Destroy UP TO ONE target artifact or
+    // enchantment." A self-only outlet whose payload is the OPTIONAL artifact/enchantment destroy
+    // Foundation Breaker's ETB uses (ResolveOptionalDestroyArtifactEnchantment: legal set = every
+    // artifact or enchantment on BOTH sides; autonomous pick = EtbOptionalDestroyTargetPick, a
+    // dominance fold -- an opponent's target, else none; human play = the dig "(may destroy)" modal,
+    // -1 = none). "Up to one" means the activation needs NO legal target (unlike Fulminator's). The
+    // destroy resolves AFTER the source's own dies trigger (CR 603.3: the trigger goes on the stack
+    // above the ability). false = no such payload (byte-identical).
+    bool sac_outlet_destroy_artifact_enchantment_optional = false;
+    // Kami of False Hope: "Sacrifice this creature: Prevent all combat damage that would be dealt this
+    // turn." Stamps GameState::combat_damage_prevented_this_turn in ApplySacCreatureOutlet (both
+    // worlds); ResolveCombatDamage and the search's attack projections then deal / project 0 combat
+    // damage this turn. The passive opponent never attacks, so it only ever prevents OUR damage: a
+    // pure cost, offered to the search only with a death payoff live (the self-only gate).
+    bool sac_outlet_prevent_combat_damage = false;
 
     // Gnarled Scarhide: "Bestow {3}{B}". An ALTERNATE cast mode (CR 702.103): the same card may be
     // cast for its printed cost as a creature, or for this cost as an AURA that enters attached to

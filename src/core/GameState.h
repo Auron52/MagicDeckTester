@@ -372,6 +372,13 @@ struct GameState
     // No reader yet (INT-2's Reaper adds one, and with it the state-key folds a reader needs);
     // until then it is write-only, so it changes no decision.
     bool                     creature_died_this_turn      = false;
+    // Kami of False Hope: "Prevent all combat damage that would be dealt this turn." Set by the sac
+    // payload (ApplySacCreatureOutlet, both worlds); cleared at BOTH untap sites (GameEngine::UntapStep,
+    // TurnSolver::SimulateEndAndStartNextTurn), the creature_died_this_turn pattern. While set,
+    // ResolveCombatDamage deals no combat damage and the search's attack projections read 0.
+    // FUTURE-DETERMINING within the turn (it blanks this turn's combat), so it is folded into
+    // dominance::Build and BuildSimKey when TRUE. Never set for any deck without the card.
+    bool                     combat_damage_prevented_this_turn = false;
     // Was the opponent DEALT a library (and an opening hand)? See core/OpponentDeck.h. Stamped by
     // GoldFishRunner::StampDeckTraits from the decklist: false for every deck that cannot touch the
     // opponent's library or hand, which is what keeps those decks byte-identical.

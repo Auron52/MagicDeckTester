@@ -12136,11 +12136,15 @@ static int PendingAttackDamageImpl(const GameState& state)
         ds_of.push_back(ds);
         bc_total += bc;
     }
-    dmg += CountAttackTriggerLifeLoss(state.battlefield, active, attackers);
+    // The NONCOMBAT addends (attack-trigger life loss / damage) are kept apart so Kami of False
+    // Hope's prevention can zero the combat share alone (see the return below).
+    const int trig_life_loss = CountAttackTriggerLifeLoss(state.battlefield, active, attackers);
+    dmg += trig_life_loss;
     // Inferno Titan: 3 per attacking copy. Without this the search under-rates attacking with the
     // Titan by 3 a copy and mis-sequences Lightning Greaves (which makes both halves of the
     // trigger fire on the landing turn).
-    dmg += CountAttackTriggerDamageAny(attackers);
+    const int trig_damage_any = CountAttackTriggerDamageAny(attackers);
+    dmg += trig_damage_any;
     // Dwalin: the hone trigger resolves IN the declare-attackers step, so the +1/+0 per
     // counter applies to THIS combat. Without this the search reads the pre-trigger power.
     dmg += CountAttackHonePump(state, active, attackers);
@@ -12155,7 +12159,8 @@ static int PendingAttackDamageImpl(const GameState& state)
     // Tectonic Giant: 3 to each opponent, but ONLY when the resolved mode is the damage one --
     // resolved through the same ResolveAttackModalMode the combat uses, so the projection cannot
     // credit damage a mode-B trigger will not deal (the overshoot/fd-diverge class).
-    dmg += CountAttackTriggerModalDamage(state, active, attackers);
+    const int trig_modal = CountAttackTriggerModalDamage(state, active, attackers);
+    dmg += trig_modal;
 
     // Exalted (Ignoble Hierarch): a creature attacking ALONE gets +1/+1 per Exalted ability.
     if (static_cast<int>(attackers.size()) == 1)
@@ -12252,6 +12257,10 @@ static int PendingAttackDamageImpl(const GameState& state)
             dmg += per * regular;
         }
     }
+    // Kami of False Hope: this turn's COMBAT damage is prevented, so only the noncombat attack-trigger
+    // addends reach the opponent -- exactly what ResolveCombatDamage will deal. Every lethal check
+    // that reads this projection (BoardLethalAsIs, the lethal cuts) inherits it.
+    if (state.combat_damage_prevented_this_turn) { return trig_life_loss + trig_damage_any + trig_modal; }
     return dmg;
 }
 
@@ -71041,6 +71050,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     state.players_cant_gain_life_this_turn = false;
     state.damage_cant_be_prevented_this_turn = false;
     state.creature_died_this_turn = false;   // morbid resets each turn (lockstep w/ GameEngine::UntapStep)
+    state.combat_damage_prevented_this_turn = false;   // Kami of False Hope (lockstep w/ GameEngine::UntapStep)
     state.ripple_script = RippleScript{};    // the ripple chain script is turn-scoped (lockstep w/ GameEngine::UntapStep)
     state.noncombat_damage_received_this_turn = {};
     state.pending_incinerator_damage.clear();
@@ -92190,6 +92200,12 @@ static TranspositionTable::Key BuildSimKeyBase(const GameState& state, int max_t
         // deck keeps its exact prior key.
         if (state.deck_has_morbid && state.creature_died_this_turn && pi == state.active_player_index)
         { Fold(k, 0x40B1D); }
+        // Kami of False Hope: this turn's combat damage is prevented. Same class and shape as MORBID
+        // (a flag flipped mid-turn by a sacrifice, reset at both untap sites); BuildDedupKey and
+        // BuildBreakpointKey both start from BuildSimKey, so this one fold covers them. Folded only
+        // when TRUE -> every other deck keeps its exact key.
+        if (state.combat_damage_prevented_this_turn && pi == state.active_player_index)
+        { Fold(k, 0xFA15E); }
         if (p.has_enduring_story)        { Fold(k, 0x5709A); }   // STORIED designation (monotone)
         if (p.equip_activated_this_turn) { Fold(k, 0xE9A1F); }   // Kili waiver already spent
         // Emblem anthem count (Gideon, Ally of Zendikar -4). Same shape as the city's blessing above
