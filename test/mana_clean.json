@@ -3091,6 +3091,44 @@
      "seed": 30125000,
      "src": "3bda5c647e7c49dbe493bd77d1ef4a0da0a689b6",
      "verdict": "invalid"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "CONTINUATION-DIFFERS": 3837,
+      "DROP-COVERED": 169,
+      "UNMODELED": 8
+     },
+     "commit": "83e0ad0415482c88b7140048a75baaa6da0f9bc4",
+     "date": "2026-11-10T05:05:17Z",
+     "decisions": 40155,
+     "deck": "decks/Kithkin/Kithkin.cod",
+     "deck_sha": "8e49f48ad9010cc247022551291f5b24ff99d149",
+     "game_index": 225000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 8,
+     "life_breakpoints": [],
+     "ms_off": 294451,
+     "ms_on": 658010,
+     "report": "logs/mana_clean/kithkin-identity-refresh-20261110/report.md",
+     "run": "kithkin-identity-refresh-20261110",
+     "seed": 30225000,
+     "src": "c3b6ce358884edf985506c932671c2f09c02f579",
+     "verdict": "issues"
     }
    ]
   },
