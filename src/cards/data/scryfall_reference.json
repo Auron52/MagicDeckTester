@@ -7127,5 +7127,285 @@
     "power": null,
     "toughness": null,
     "type_line": "Land"
+  },
+  "Athreos, God of Passage": {
+    "cmc": 3.0,
+    "keywords": [
+      "Indestructible"
+    ],
+    "mana_cost": "{1}{W}{B}",
+    "oracle_text": "Indestructible\nAs long as your devotion to white and black is less than seven, Athreos isn't a creature.\nWhenever another creature you own dies, return it to your hand unless target opponent pays 3 life.",
+    "power": "5",
+    "toughness": "4",
+    "type_line": "Legendary Enchantment Creature — God"
+  },
+  "Athreos, Shroud-Veiled": {
+    "cmc": 6.0,
+    "keywords": [
+      "Indestructible"
+    ],
+    "mana_cost": "{4}{W}{B}",
+    "oracle_text": "Indestructible\nAs long as your devotion to white and black is less than seven, Athreos isn't a creature.\nAt the beginning of your end step, put a coin counter on another target creature.\nWhenever a creature with a coin counter on it dies or is put into exile, return that card to the battlefield under your control.",
+    "power": "4",
+    "toughness": "7",
+    "type_line": "Legendary Enchantment Creature — God"
+  },
+  "Careful Study": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{U}",
+    "oracle_text": "Draw two cards, then discard two cards.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
+  "Cephalid Coliseum": {
+    "cmc": 0.0,
+    "keywords": [
+      "Threshold"
+    ],
+    "mana_cost": "",
+    "oracle_text": "{T}: Add {U}. This land deals 1 damage to you.\nThreshold — {U}, {T}, Sacrifice this land: Target player draws three cards, then discards three cards. Activate only if there are seven or more cards in your graveyard.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
+  "Ephara, God of the Polis": {
+    "cmc": 4.0,
+    "keywords": [
+      "Indestructible"
+    ],
+    "mana_cost": "{2}{W}{U}",
+    "oracle_text": "Indestructible\nAs long as your devotion to white and blue is less than seven, Ephara isn't a creature.\nAt the beginning of each upkeep, if you had another creature enter the battlefield under your control last turn, draw a card.",
+    "power": "6",
+    "toughness": "5",
+    "type_line": "Legendary Enchantment Creature — God"
+  },
+  "Faithless Looting": {
+    "cmc": 1.0,
+    "keywords": [
+      "Flashback"
+    ],
+    "mana_cost": "{R}",
+    "oracle_text": "Draw two cards, then discard two cards.\nFlashback {2}{R} (You may cast this card from your graveyard for its flashback cost. Then exile it.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
+  "Gemstone Mine": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters with three mining counters on it.\n{T}, Remove a mining counter from this land: Add one mana of any color. If there are no mining counters on this land, sacrifice it.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
+  "Golgari Grave-Troll": {
+    "cmc": 5.0,
+    "keywords": [
+      "Dredge",
+      "Regenerate",
+      "Mill"
+    ],
+    "mana_cost": "{4}{G}",
+    "oracle_text": "This creature enters with a +1/+1 counter on it for each creature card in your graveyard.\n{1}, Remove a +1/+1 counter from this creature: Regenerate this creature.\nDredge 6 (If you would draw a card, you may mill six cards instead. If you do, return this card from your graveyard to your hand.)",
+    "power": "0",
+    "toughness": "0",
+    "type_line": "Creature — Troll Skeleton"
+  },
+  "Iroas, God of Victory": {
+    "cmc": 4.0,
+    "keywords": [
+      "Indestructible"
+    ],
+    "mana_cost": "{2}{R}{W}",
+    "oracle_text": "Indestructible\nAs long as your devotion to red and white is less than seven, Iroas isn't a creature.\nCreatures you control have menace.\nPrevent all damage that would be dealt to attacking creatures you control.",
+    "power": "7",
+    "toughness": "4",
+    "type_line": "Legendary Enchantment Creature — God"
+  },
+  "Karametra, God of Harvests": {
+    "cmc": 5.0,
+    "keywords": [
+      "Indestructible"
+    ],
+    "mana_cost": "{3}{G}{W}",
+    "oracle_text": "Indestructible\nAs long as your devotion to green and white is less than seven, Karametra isn't a creature.\nWhenever you cast a creature spell, you may search your library for a Forest or Plains card, put it onto the battlefield tapped, then shuffle.",
+    "power": "6",
+    "toughness": "7",
+    "type_line": "Legendary Enchantment Creature — God"
+  },
+  "Keranos, God of Storms": {
+    "cmc": 5.0,
+    "keywords": [
+      "Indestructible"
+    ],
+    "mana_cost": "{3}{U}{R}",
+    "oracle_text": "Indestructible\nAs long as your devotion to blue and red is less than seven, Keranos isn't a creature.\nReveal the first card you draw on each of your turns. Whenever you reveal a land card this way, draw a card. Whenever you reveal a nonland card this way, Keranos deals 3 damage to any target.",
+    "power": "6",
+    "toughness": "5",
+    "type_line": "Legendary Enchantment Creature — God"
+  },
+  "Klothys, God of Destiny": {
+    "cmc": 3.0,
+    "keywords": [
+      "Indestructible"
+    ],
+    "mana_cost": "{1}{R}{G}",
+    "oracle_text": "Indestructible\nAs long as your devotion to red and green is less than seven, Klothys isn't a creature.\nAt the beginning of your first main phase, exile target card from a graveyard. If it was a land card, add {R} or {G}. Otherwise, you gain 2 life and Klothys deals 2 damage to each opponent.",
+    "power": "4",
+    "toughness": "5",
+    "type_line": "Legendary Enchantment Creature — God"
+  },
+  "Kruphix, God of Horizons": {
+    "cmc": 5.0,
+    "keywords": [
+      "Indestructible"
+    ],
+    "mana_cost": "{3}{G}{U}",
+    "oracle_text": "Indestructible\nAs long as your devotion to green and blue is less than seven, Kruphix isn't a creature.\nYou have no maximum hand size.\nIf you would lose unspent mana, that mana becomes colorless instead.",
+    "power": "4",
+    "toughness": "7",
+    "type_line": "Legendary Enchantment Creature — God"
+  },
+  "Life from the Loam": {
+    "cmc": 2.0,
+    "keywords": [
+      "Dredge",
+      "Mill"
+    ],
+    "mana_cost": "{1}{G}",
+    "oracle_text": "Return up to three target land cards from your graveyard to your hand.\nDredge 3 (If you would draw a card, you may mill three cards instead. If you do, return this card from your graveyard to your hand.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
+  "Magus of the Bazaar": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{U}",
+    "oracle_text": "{T}: Draw two cards, then discard three cards.",
+    "power": "0",
+    "toughness": "1",
+    "type_line": "Creature — Human Wizard"
+  },
+  "Mogis, God of Slaughter": {
+    "cmc": 4.0,
+    "keywords": [
+      "Indestructible"
+    ],
+    "mana_cost": "{2}{B}{R}",
+    "oracle_text": "Indestructible\nAs long as your devotion to black and red is less than seven, Mogis isn't a creature.\nAt the beginning of each opponent's upkeep, Mogis deals 2 damage to that player unless they sacrifice a creature of their choice.",
+    "power": "7",
+    "toughness": "5",
+    "type_line": "Legendary Enchantment Creature — God"
+  },
+  "Mystic Retrieval": {
+    "cmc": 4.0,
+    "keywords": [
+      "Flashback"
+    ],
+    "mana_cost": "{3}{U}",
+    "oracle_text": "Return target instant or sorcery card from your graveyard to your hand.\nFlashback {2}{R} (You may cast this card from your graveyard for its flashback cost. Then exile it.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
+  "Pharika, God of Affliction": {
+    "cmc": 3.0,
+    "keywords": [
+      "Indestructible"
+    ],
+    "mana_cost": "{1}{B}{G}",
+    "oracle_text": "Indestructible\nAs long as your devotion to black and green is less than seven, Pharika isn't a creature.\n{B}{G}: Exile target creature card from a graveyard. Its owner creates a 1/1 black and green Snake enchantment creature token with deathtouch.",
+    "power": "5",
+    "toughness": "5",
+    "type_line": "Legendary Enchantment Creature — God"
+  },
+  "Phenax, God of Deception": {
+    "cmc": 5.0,
+    "keywords": [
+      "Indestructible",
+      "Mill"
+    ],
+    "mana_cost": "{3}{U}{B}",
+    "oracle_text": "Indestructible\nAs long as your devotion to blue and black is less than seven, Phenax isn't a creature.\nCreatures you control have \"{T}: Target player mills X cards, where X is this creature's toughness.\"",
+    "power": "4",
+    "toughness": "7",
+    "type_line": "Legendary Enchantment Creature — God"
+  },
+  "Purphoros, Bronze-Blooded": {
+    "cmc": 5.0,
+    "keywords": [
+      "Indestructible"
+    ],
+    "mana_cost": "{4}{R}",
+    "oracle_text": "Indestructible\nAs long as your devotion to red is less than five, Purphoros isn't a creature.\nOther creatures you control have haste.\n{2}{R}: You may put a red creature card or an artifact creature card from your hand onto the battlefield. Sacrifice it at the beginning of the next end step.",
+    "power": "7",
+    "toughness": "6",
+    "type_line": "Legendary Enchantment Creature — God"
+  },
+  "Purphoros, God of the Forge": {
+    "cmc": 4.0,
+    "keywords": [
+      "Indestructible"
+    ],
+    "mana_cost": "{3}{R}",
+    "oracle_text": "Indestructible\nAs long as your devotion to red is less than five, Purphoros isn't a creature.\nWhenever another creature you control enters, Purphoros deals 2 damage to each opponent.\n{2}{R}: Creatures you control get +1/+0 until end of turn.",
+    "power": "6",
+    "toughness": "5",
+    "type_line": "Legendary Enchantment Creature — God"
+  },
+  "Replenish": {
+    "cmc": 4.0,
+    "keywords": [],
+    "mana_cost": "{3}{W}",
+    "oracle_text": "Return all enchantment cards from your graveyard to the battlefield. (Auras with nothing to enchant remain in your graveyard.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
+  "Stinkweed Imp": {
+    "cmc": 3.0,
+    "keywords": [
+      "Flying",
+      "Dredge",
+      "Mill"
+    ],
+    "mana_cost": "{2}{B}",
+    "oracle_text": "Flying\nWhenever this creature deals combat damage to a creature, destroy that creature.\nDredge 5 (If you would draw a card, you may mill five cards instead. If you do, return this card from your graveyard to your hand.)",
+    "power": "1",
+    "toughness": "2",
+    "type_line": "Creature — Imp"
+  },
+  "Tendo Ice Bridge": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters with a charge counter on it.\n{T}: Add {C}.\n{T}, Remove a charge counter from this land: Add one mana of any color.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
+  "Vivid Creek": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped with two charge counters on it.\n{T}: Add {U}.\n{T}, Remove a charge counter from this land: Add one mana of any color.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
+  "Xenagos, God of Revels": {
+    "cmc": 5.0,
+    "keywords": [
+      "Indestructible"
+    ],
+    "mana_cost": "{3}{R}{G}",
+    "oracle_text": "Indestructible\nAs long as your devotion to red and green is less than seven, Xenagos isn't a creature.\nAt the beginning of combat on your turn, another target creature you control gains haste and gets +X/+X until end of turn, where X is that creature's power.",
+    "power": "6",
+    "toughness": "5",
+    "type_line": "Legendary Enchantment Creature — God"
   }
 }

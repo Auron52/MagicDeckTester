@@ -1,6 +1,7 @@
-# Regression ground truth -- commit e0afecb7d  date 2026-11-10
+# Regression ground truth -- commit 9df2e007e  date 2026-11-10
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-10): Full 2026-11-10 rebaseline: 120/588 keys changed; searched overlap 64 faster, 6 slower, net 60 scored turns faster, no searched win became unwon. Five slowdowns recover at 4x budget; Modern RW Burn 2HG s7007 gi58 recovers at unlimited budget. 583 same-score searched line changes reviewed by mechanical grouping and samples. Full oracle: 588/588 matching fingerprints, 0 nonconv, 54 off-by-one fd-diverge, 3 severe flags from 2 distinct preexisting Treasure Hunt seeds (5216, 8468); legacy per-turn search wins T6, current committed-line result is unwon/T7, and disabling batch payment does not fix it. Prior Angels, Angels2HG, and Bruna small searched slowdowns remain follow-ups.
+# accepted-with-regressions (regression, 2026-11-10): Shared-branch integration: standard seed 2016 gi14 and 2HG seed 2041 gi39 each one turn slower at 20ms; both recover at 4x budget; strict references pass
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -9,6 +10,10 @@ extraturns_smoke_d0_s1001=5.6980/85f9b9dba82fb5d7
 extraturns_smoke_d3_s1001=4.7400/01ae387c53685a23
 extraturns_smoke_d5_s1001=4.7300/7fe10742e31e5f06
 extraturns2hg_smoke_d5_s1001=4.6000/cc399f1a95984da0
+gods_smoke_d0_s1001=8.7860/e5c758deb4dcf261
+gods_smoke_d3_s1001=5.3600/13b747a7aac4b20a
+gods_smoke_d5_s1001=5.2200/8ea61a6c09c94bd9
+gods2hg_smoke_d5_s1001=5.4000/7995557e1f24928f
 merfolk_smoke_d0_s1001=4.4960/8ecc0b71dee90a10
 merfolk_smoke_d3_s1001=4.1800/e2d4ed3a62295b80
 merfolk_smoke_d5_s1001=4.1700/f2c8e9e392a196b1
@@ -315,6 +320,10 @@ hinata_regression_d0_s2002=6.8480/d6c43486796d220d
 hinata_regression_d3_s2002=5.6933/cfa41fb5799f0846
 hinata_regression_d5_s2002=5.5800/756c9682dffb7629
 hinata_regression_d5_s3003=5.6667/49f1d252a247e377
+gods_regression_d0_s2002=8.7520/c7abdb06bd6cc25e
+gods_regression_d3_s2002=5.3800/76f2637c32c7c880
+gods_regression_d5_s2002=5.2000/b888b06e54ecefaf
+gods2hg_regression_d5_s2002=5.2200/471b5d27277f67c5
 cyclone_regression_d0_s2002=8.3410/ff285c765cd3e471
 cyclone_regression_d3_s2002=4.8533/f22dcd37081f4918
 cyclone_regression_d3_s3003=4.9333/437a6de4a37c0d52
@@ -493,6 +502,10 @@ extraturns_overnight_d5_s5005=4.7271/d62530a7a0c8de62
 extraturns_overnight_d5_s6006=4.6894/b57cc12a7a083ffc
 extraturns_overnight_d5_s7007=4.7412/4a8da8c897064c6e
 extraturns2hg_overnight_d5_s4004=4.8100/6730fb8595216111
+gods_overnight_d0_s4004=8.7900/b56338186f3292a9
+gods_overnight_d3_s4004=5.5867/c3862299ef16b5f8
+gods_overnight_d5_s4004=5.5333/7499902ba41e0a54
+gods2hg_overnight_d5_s4004=5.3600/07069323b43c9866
 cyclone_overnight_d3_s30051=5.0000/324fa7c36f5a9360
 cyclone_overnight_d5_s30051=5.0000/a3910a0eddbff923
 shadowborn_overnight_d3_s30081=5.0000/dc1cd7b8bfb17312

@@ -31,6 +31,7 @@
 #include "EngineFlags.h"            // TutorAxisResolveEnabled (capacity-anchored deploy read)
 #include "ManaPayment.h"            // AvailableManaPool (echo "no gas" check; MTG_LACKEY_RANK=uncast)
 #include "GameWorkMeter.h"          // gamework::t_used (MTG_AA_ROUTE_STATS: the work a route walk runs)
+#include "TurnCensus.h"             // whole-game trial tag for Gods' bottoming-only Loam A/B
 
 uint16_t DecisionProvider::ChosenCreatureSubtypeId(const GameState& state, int controller,
                                                     const CardDefinition&) const
@@ -21866,6 +21867,701 @@ bool ModernRwBurnProvider::ShouldConsiderDig(const GameState& s) const
     return dead_blaze;
 }
 
+// Gods' bounded-search policy. MTG_UNPRUNED restores every physical dredge and
+// discard choice; the per-rule switches retain A/B access to the older menu.
+static int GodsDredgeRule(bool ignore_unpruned = false)
+{
+    static const int variant = [] {
+        const char* e = std::getenv("MTG_GODS_DREDGE_RULE");
+        return e != nullptr ? std::atoi(e) : 4;
+    }();
+    return !ignore_unpruned && DecisionUnpruned() ? 0 : variant;
+}
+
+// In this deck the only same-turn kill from an empty nonland board is a
+// four-mana Replenish. The three-mana Klothys has already missed its
+// beginning-of-main-phase trigger when cast, and Magus cannot tap on entry.
+// Count even tapped lands as possible mana, so the bound only rejects turns
+// that remain short after every available land drop and all floating mana.
+bool GodsProvider::ProvenWinlessThisTurn(const GameState& s, int controller) const
+{
+    static const bool on = EnvOn("MTG_GODS_WINLESS_LANDFLOOR", true);
+    if (!on || s.players[static_cast<std::size_t>(1 - controller)].library.size() <= 3)
+    { return false; }
+    const auto one_mana_land = [](const Card& c)
+    {
+        const std::string& n = c.m_name.str();
+        return n == "Forest" || n == "City of Brass" || n == "Gemstone Mine"
+            || n == "Reflecting Pool" || n == "Tendo Ice Bridge"
+            || n == "Vivid Creek" || n == "Cephalid Coliseum";
+    };
+    int lands = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        if (p.is_animated || !one_mana_land(p.card)) { return false; }
+        ++lands;
+    }
+    const Player& pl = s.players[static_cast<std::size_t>(controller)];
+    const int drops = std::max(0, 1 + pl.bonus_land_drops_this_turn - pl.lands_played_this_turn);
+    const int mana_upper = s.floating_mana.Total() + lands + drops;
+    if (drops > 0)
+    {
+        for (const Card& c : pl.hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d != nullptr && d->card.IsLand() && !one_mana_land(c)) { return false; }
+        }
+    }
+    if (mana_upper < 4) { return true; }
+    // At most five mana permits one one-mana, two-draw spell before a
+    // four-mana Replenish. Two dredge-six draws expose at most twelve cards.
+    // Coliseum draws three, but its activation also sacrifices a land, so it
+    // cannot be followed by Replenish with this mana bound. Without either
+    // Purphoros, a Xenagos-hasted seven-power God (14) plus Keranos (3) is
+    // the largest same-turn damage. The opponent-library guard also excludes
+    // a single Phenax/Coliseum mill finish.
+    static const bool reach5 = EnvOn("MTG_GODS_WINLESS_REACH5"); // diagnostic, DEFAULT OFF
+    if (!reach5 || mana_upper > 5 || s.players[static_cast<std::size_t>(1 - controller)].life <= 17
+        || s.players[static_cast<std::size_t>(1 - controller)].library.size() <= 14)
+    { return false; }
+    const auto threat = [](const Card& c)
+    { return c.m_name == "Purphoros, God of the Forge" || c.m_name == "Purphoros, Bronze-Blooded"; };
+    for (const Card& c : pl.hand) { if (threat(c)) { return false; } }
+    for (const Card& c : pl.graveyard) { if (threat(c)) { return false; } }
+    const std::size_t reach = std::min<std::size_t>(12, pl.library.size());
+    for (std::size_t i = 0; i < reach; ++i)
+    { if (threat(pl.library[i])) { return false; } }
+    return true;
+}
+
+static bool GodsDiscardRankingOn()
+{
+    static const bool on = EnvOn("MTG_GODS_DISCARD_RULE", true);
+    return on;
+}
+
+static bool GodsDiscardRuleOn()
+{ return GodsDiscardRankingOn() && !DecisionUnpruned(); }
+
+bool GodsProvider::DredgeSearchAlwaysSingleton() const
+{ return GodsDredgeRule() >= 4 && !HumanPlayActive(); }
+
+static std::vector<int> GodsDredgeCandidatesForRule(
+    const GameState& s, int controller, const std::vector<int>& numbers, int rule)
+{
+    const int base_rule = rule == 7 ? 4 : rule;
+    if (rule == 0)
+    {
+        std::vector<int> out{0};
+        out.insert(out.end(), numbers.begin(), numbers.end());
+        return out;
+    }
+
+    const Player& pl = s.players[controller];
+    int best = 0;
+    int best_mill = -1;
+    int loam = 0;
+    int grave_lands = 0;
+    const auto is_land = [](const Card& c)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        return d ? d->card.IsLand() : c.IsLand();
+    };
+    for (const Card& c : pl.graveyard) { grave_lands += is_land(c); }
+    for (int number : numbers)
+    {
+        const auto it = std::find_if(pl.graveyard.begin(), pl.graveyard.end(),
+                                     [number](const Card& c) { return c.m_number == number; });
+        if (it == pl.graveyard.end()) { continue; }
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(*it);
+        if (def == nullptr) { continue; }
+        if (def->params.dredge > best_mill)
+        { best_mill = def->params.dredge; best = number; }
+        if (it->m_name == "Life from the Loam") { loam = number; }
+    }
+    int lands_in_play = 0;
+    for (const Permanent& p : s.battlefield)
+    { lands_in_play += p.controller_index == controller && is_land(p.card); }
+    if (base_rule >= 2)
+    {
+        // The narrow user rule: one decision in ordinary states. A natural draw
+        // is useful when land development has stalled or Gods are already in the
+        // graveyard but Replenish is still missing from hand. Those exceptions
+        // are observable from public zones and our hand, not the library order.
+        int hand_lands = 0;
+        bool has_replenish = false;
+        int grave_gods = 0;
+        for (const Card& c : pl.hand)
+        {
+            hand_lands += is_land(c);
+            has_replenish |= c.m_name == "Replenish";
+        }
+        for (const Card& c : pl.graveyard)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            grave_gods += d != nullptr && CardHasSubtype(d->card, "God");
+        }
+        // Trial 7: when Replenish is ready but its fourth land is missing,
+        // take a land via Loam or a natural draw before spending more draws on
+        // dredging. Keep the rest of the established rule-4 policy unchanged.
+        if (rule == 7 && has_replenish && hand_lands == 0
+            && lands_in_play >= 2 && lands_in_play < 4)
+        {
+            if (loam != 0 && grave_lands > 0) { return { loam }; }
+            return { 0 };
+        }
+        if (base_rule >= 5)
+        {
+            // Variant for paired screening: secure the second mana source
+            // before recurring a Loam land, and leave room for a later draw.
+            // The deck still dredges its largest available card in ordinary
+            // states; this is one answer per live draw, not another axis.
+            if (lands_in_play < 2 && hand_lands == 0)
+            { return { 0 }; }
+            if (best_mill > 0 && pl.library.size() <= static_cast<std::size_t>(best_mill + 2))
+            { return { 0 }; }
+            if (loam != 0 && lands_in_play < 3 && hand_lands == 0 && grave_lands > 0)
+            { return { loam }; }
+            if (base_rule >= 6 && lands_in_play >= 3 && grave_gods >= 3 && !has_replenish)
+            { return { 0 }; }
+            return { best };
+        }
+        if (loam != 0 && lands_in_play < 3 && hand_lands == 0 && grave_lands > 0)
+        { return { loam }; }
+        if (base_rule >= 4)
+        {
+            if ((lands_in_play < 2 && hand_lands == 0)
+                || (lands_in_play >= 3 && grave_gods >= 3 && !has_replenish))
+            { return { 0 }; }
+            return { best };
+        }
+        if (base_rule >= 3 && ((lands_in_play < 2 && hand_lands == 0)
+                          || (grave_gods >= 2 && !has_replenish)))
+        { return { 0, best }; }
+        if ((lands_in_play < 2 && hand_lands == 0)
+            || (grave_gods >= 4 && !has_replenish))
+        { return { 0 }; }
+        return { best };
+    }
+    std::vector<int> out{0}; // Finding Replenish or mana can beat another mill.
+    if (best != 0) { out.push_back(best); }
+    // Loam is a distinct, searchable route only while land development is short
+    // and its graveyard has a land to recover. The search decides against draw/Troll.
+    if (loam != 0 && loam != best && lands_in_play < 3 && grave_lands > 0)
+    { out.push_back(loam); }
+    return out;
+}
+
+std::vector<int> GodsProvider::DredgeSearchCandidates(
+    const GameState& s, int controller, const std::vector<int>& numbers) const
+{ return GodsDredgeCandidatesForRule(s, controller, numbers, GodsDredgeRule()); }
+
+std::vector<std::string> GodsProvider::TutorCandidates(
+    const GameState& s, int controller, const CardParams& pp) const
+{
+    std::vector<std::string> all = GenericProvider::TutorCandidates(s, controller, pp);
+    if (!pp.tutor_from_graveyard || !pp.tutor_to_hand
+        || DecisionUnpruned(UnprunedGate::Tutor) || all.empty()) { return all; }
+
+    const auto has = [&](const char* name)
+    { return std::find(all.begin(), all.end(), name) != all.end(); };
+    const Player& pl = s.players[static_cast<std::size_t>(controller)];
+    const bool replenish_in_hand = std::any_of(pl.hand.begin(), pl.hand.end(),
+        [](const Card& c) { return c.m_name == "Replenish"; });
+    // Retrieval's target is normally the win spell. Once one is already in hand,
+    // a draw-and-discard spell advances the dredge setup instead; the two outlets
+    // serve the same purpose here. The tutor unprune gate retains every legal target.
+    if (!replenish_in_hand && has("Replenish")) { return {"Replenish"}; }
+    if (has("Careful Study")) { return {"Careful Study"}; }
+    if (has("Faithless Looting")) { return {"Faithless Looting"}; }
+    if (has("Replenish")) { return {"Replenish"}; }
+    return {all.front()};
+}
+
+int GodsProvider::DredgeHumanDefault(const GameState& s, int controller,
+                                    const std::vector<int>& numbers) const
+{
+    const std::vector<int> ranked = GodsDredgeCandidatesForRule(
+        s, controller, numbers, GodsDredgeRule(true));
+    if (ranked.empty() || ranked.front() == 0) { return 0; }
+    const auto it = std::find(numbers.begin(), numbers.end(), ranked.front());
+    return it == numbers.end() ? 0 : static_cast<int>(it - numbers.begin()) + 1;
+}
+
+static int GodsDiscardTier(const Player& pl, int i, int protected_replenish, bool gods_first)
+{
+    const Card& c = pl.hand[static_cast<std::size_t>(i)];
+    const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
+    if (def != nullptr && CardHasSubtype(def->card, "God")) { return gods_first ? 0 : 3; }
+    if (c.m_name == "Golgari Grave-Troll") { return gods_first ? 1 : 0; }
+    if (c.m_name == "Stinkweed Imp") { return gods_first ? 2 : 1; }
+    if (c.m_name == "Life from the Loam") { return gods_first ? 3 : 2; }
+    if (c.m_name == "Mystic Retrieval") { return 4; } // flashback works from the graveyard
+    if (c.m_name == "Replenish") { return i == protected_replenish ? 9 : 5; }
+    if (c.m_name == "Faithless Looting" || c.m_name == "Careful Study"
+        || c.m_name == "Magus of the Bazaar") { return 7; }
+    if (def != nullptr ? def->card.IsLand() : c.IsLand()) { return 8; }
+    return 6;
+}
+
+static std::vector<int> GodsDiscardOrder(const GameState& s, int controller)
+{
+    const Player& pl = s.players[controller];
+    std::vector<int> out(pl.hand.size());
+    for (int i = 0; i < static_cast<int>(out.size()); ++i) { out[static_cast<std::size_t>(i)] = i; }
+    int protected_replenish = -1;
+    int gods_ready = 0;
+    bool payoff_ready = false;
+    const auto is_payoff = [](const Card& c)
+    { return c.m_name == "Purphoros, God of the Forge" || c.m_name == "Purphoros, Bronze-Blooded"; };
+    for (int i = 0; i < static_cast<int>(pl.hand.size()); ++i)
+    {
+        const Card& c = pl.hand[static_cast<std::size_t>(i)];
+        if (protected_replenish < 0 && c.m_name == "Replenish") { protected_replenish = i; }
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
+        gods_ready += def != nullptr && CardHasSubtype(def->card, "God");
+        payoff_ready |= is_payoff(c);
+    }
+    for (const Card& c : pl.graveyard)
+    {
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
+        gods_ready += def != nullptr && CardHasSubtype(def->card, "God");
+        payoff_ready |= is_payoff(c);
+    }
+    for (const Permanent& p : s.battlefield)
+    { if (p.controller_index == controller) { payoff_ready |= is_payoff(p.card); } }
+    // Only switch from dredge setup to pitching Gods when the payoff is
+    // nearly assembled. A few Gods do not justify losing a dredge outlet.
+    const bool gods_first = gods_ready >= 10 && payoff_ready;
+    std::vector<int> tiers(pl.hand.size());
+    for (int i = 0; i < static_cast<int>(pl.hand.size()); ++i)
+    { tiers[static_cast<std::size_t>(i)] = GodsDiscardTier(pl, i, protected_replenish, gods_first); }
+    std::stable_sort(out.begin(), out.end(), [&](int a, int b)
+    { return tiers[static_cast<std::size_t>(a)] < tiers[static_cast<std::size_t>(b)]; });
+    return out;
+}
+
+std::vector<int> GodsProvider::PutBackRanking(const GameState& s, int controller) const
+{
+    if (!GodsDiscardRankingOn()) { return DeckProvider::PutBackRanking(s, controller); }
+    return GodsDiscardOrder(s, controller);
+}
+
+bool GodsProvider::PutBackRankingPerCard(const GameState&) const
+{ return GodsDiscardRankingOn(); }
+
+std::vector<int> GodsProvider::CleanupDiscardShedOrder(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    if (!GodsDiscardRankingOn())
+    { return DeckProvider::CleanupDiscardCandidates(s, required_pieces); }
+    return CleanupDiscardRankingWithOrder(s, required_pieces,
+                                          GodsDiscardOrder(s, s.active_player_index));
+}
+
+std::vector<int> GodsProvider::CleanupDiscardCandidates(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    std::vector<int> out = CleanupDiscardShedOrder(s, required_pieces);
+    if (GodsDiscardRuleOn() && out.size() > 1) { out.resize(1); }
+    return out;
+}
+
+bool GodsProvider::PutBackSingleCandidate(const GameState&) const
+{ return GodsDiscardRuleOn(); }
+
+std::vector<std::string> GodsProvider::LoamTargetSearchCandidates(
+    const GameState& s, int controller, int maximum) const
+{
+    // Loam's three-land subsets multiply every existing plan. Trial rollouts
+    // use one ranked set. In live search, keep all sets until six lands are
+    // available, then use the actual full-depth decision root to keep Magus
+    // setup lines searchable. With one opponent, a late Magus no longer
+    // restores the giant fan once the root itself has six graveyard lands.
+    // =0 restores all choices, =1 forces one set, =2 prunes trials only, and
+    // =7 retains the prior eight-land/partial-root policy for paired A/B.
+    static const int mode = EnvInt("MTG_GODS_LOAM_SINGLE", 9);
+    if (mode <= 0 || DecisionUnpruned()
+        || (mode == 2 && turncensus::t_probe == 0))
+    { return {}; }
+    // Physical copies of the same land make equivalent Loam target sets. Keep
+    // one representative of each land-name multiset when the existing policy
+    // would otherwise expose every physical combination. A Magus in the full
+    // search root is a setup-sensitive exception: the paired-budget audit
+    // found that changing its future Loam menu could delay casting Magus.
+    // =0 restores the full physical-copy menu for differential checks.
+    static const bool merge_names = EnvOn("MTG_GODS_LOAM_SAME_NAME", true);
+    const auto same_name_choices = [&]() -> std::vector<std::string>
+    {
+        if (!merge_names || mode != 9) { return {}; }
+        const GameState* search_root = TurnSolver::CurrentFullSearchRootState();
+        if (search_root != nullptr)
+        {
+            const Player& rp = search_root->players[static_cast<std::size_t>(controller)];
+            for (const Card& c : rp.hand)
+            { if (c.m_name == "Magus of the Bazaar") { return {}; } }
+            for (const Permanent& p : search_root->battlefield)
+            {
+                if (p.controller_index == controller && p.card.m_name == "Magus of the Bazaar")
+                { return {}; }
+            }
+        }
+        const auto all = GraveyardLandTargetSubsets(s, controller, maximum);
+        std::unordered_map<int, std::string> names_by_number;
+        for (const Card& c : s.players[static_cast<std::size_t>(controller)].graveyard)
+        { names_by_number.emplace(c.m_number, c.m_name.str()); }
+        std::set<std::vector<std::string>> seen;
+        std::vector<std::string> out;
+        for (const std::string& target : all)
+        {
+            std::vector<std::string> names;
+            std::size_t pos = 1;
+            while (pos < target.size())
+            {
+                const std::size_t end = target.find(',', pos);
+                const int id = std::stoi(target.substr(pos, end == std::string::npos ? end : end - pos));
+                names.push_back(names_by_number.at(id));
+                if (end == std::string::npos) { break; }
+                pos = end + 1;
+            }
+            std::sort(names.begin(), names.end());
+            if (seen.insert(std::move(names)).second) { out.push_back(target); }
+        }
+        return out;
+    };
+    struct LandChoice { int number; int rank; };
+    std::vector<LandChoice> lands;
+    const Player& pl = s.players[static_cast<std::size_t>(controller)];
+    for (const Card& c : pl.graveyard)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (!(d ? d->card.IsLand() : c.IsLand())) { continue; }
+        const std::string& name = c.m_name.str();
+        const int rank = name == "Cephalid Coliseum" && pl.graveyard.size() >= 7 ? 0
+                       : name == "City of Brass" ? 1
+                       : name == "Gemstone Mine" ? 2
+                       : name == "Reflecting Pool" ? 3
+                       : name == "Tendo Ice Bridge" ? 4
+                       : name == "Forest" ? 5
+                       : name == "Cephalid Coliseum" ? 6
+                       : name == "Vivid Creek" ? 7 : 8;
+        lands.push_back({c.m_number, rank});
+    }
+    if ((mode == 7 || mode == 9) && turncensus::t_probe == 0)
+    {
+        const int land_threshold = mode == 7 ? 8 : 6;
+        if (lands.size() < static_cast<std::size_t>(land_threshold)) { return same_name_choices(); }
+        const GameState* root = mode == 9 ? TurnSolver::CurrentFullSearchRootState() : nullptr;
+        if (root == nullptr) { root = TurnSolver::CurrentSearchRootState(); }
+        const GameState& guard = root ? *root : s;
+        const Player& guard_pl = guard.players[static_cast<std::size_t>(controller)];
+        bool keep_magus_guard = gamesetup::OpponentHeads() >= 2;
+        if (!keep_magus_guard)
+        {
+            int root_lands = 0;
+            for (const Card& c : guard_pl.graveyard)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                if (d ? d->card.IsLand() : c.IsLand()) { ++root_lands; }
+            }
+            keep_magus_guard = root_lands < land_threshold;
+        }
+        if (keep_magus_guard)
+        {
+            for (const Card& c : guard_pl.hand)
+            { if (c.m_name == "Magus of the Bazaar") { return same_name_choices(); } }
+            for (const Permanent& p : guard.battlefield)
+            {
+                if (p.controller_index == controller && p.card.m_name == "Magus of the Bazaar")
+                { return same_name_choices(); }
+            }
+        }
+    }
+    std::stable_sort(lands.begin(), lands.end(), [](const LandChoice& a, const LandChoice& b)
+    { return a.rank < b.rank; });
+    std::string target = "L";
+    for (int i = 0; i < maximum && i < static_cast<int>(lands.size()); ++i)
+    {
+        if (i > 0) { target += ','; }
+        target += std::to_string(lands[static_cast<std::size_t>(i)].number);
+    }
+    return {target};
+}
+
+bool GodsProvider::KeranosDamageFaceOnly(const GameState&) const
+{
+    // The current Loam policy recovered the earlier two-headed counterexample.
+    // Two independent 50-game blocks and the exact 50-game suite batch kept
+    // every win turn; the suite batch saved 18% CPU and about 1.6 GiB peak RSS.
+    // =0 restores full target search; =1 keeps the prior one-headed-only policy.
+    static const int mode = EnvInt("MTG_GODS_KERANOS_FACE", 2);
+    return mode > 0 && (mode >= 2 || gamesetup::OpponentHeads() == 1)
+        && !DecisionUnpruned();
+}
+
+bool GodsProvider::UpkeepOnlyTapDraw(const GameState&, const CardDefinition& source) const
+{
+    // With the early Magus setup value, this policy tied or beat all ten
+    // references and cut the paired two-head CPU by 60%. The off switch
+    // restores main-phase timing for differential checks.
+    static const bool on = EnvOn("MTG_GODS_MAGUS_UPKEEP", true);
+    return on && GodsDiscardRuleOn() && !DecisionUnpruned()
+        && source.card.m_name == "Magus of the Bazaar";
+}
+
+bool GodsProvider::PrunesGodTargetAxes() const
+{
+    static const bool on = EnvOn("MTG_GODS_TARGET_RULE", true); // =0 restores target search
+    return on && !DecisionUnpruned();
+}
+
+bool GodsProvider::UsesPhenaxGodMassMill() const
+{
+    static const bool on = EnvOn("MTG_GODS_PHENAX_MASS", true); // =0 restores individual taps
+    return on && !DecisionUnpruned();
+}
+
+bool GodsProvider::RestrictsCollectedActions() const
+{
+    static const bool no_hardcast = EnvOn("MTG_GODS_NO_HARDCAST", true); // Gods default; =0 restores casts
+    static const bool no_dredger_cast = EnvOn("MTG_GODS_NO_DREDGER_CAST", true);
+    static const bool phenax_target = EnvOn("MTG_GODS_PHENAX_TARGET"); // experimental, DEFAULT OFF
+    static const bool pharika_class = EnvOn("MTG_GODS_PHARIKA_CLASS", true); // =0 restores physical targets
+    static const bool pharika_skip = EnvOn("MTG_GODS_PHARIKA_SKIP", true); // =0 restores Snake activations
+    static const bool pharika_nogod = EnvOn("MTG_GODS_PHARIKA_NOGOD"); // experimental, DEFAULT OFF
+    static const bool pharika_god_one_env = EnvOn("MTG_GODS_PHARIKA_GOD_ONE", true); // =0 restores God targets
+    const bool pharika_god_one = heurarm::Flag(heurarm::GODS_PHARIKA_GOD_ONE, pharika_god_one_env);
+    static const bool bank_face = EnvOn("MTG_GODS_BANK_FACE", true); // =0 restores colour-face search
+    static const bool col_opp = EnvOn("MTG_GODS_COL_OPP", true); // =0 restores opponent loot
+    static const bool no_bank = EnvOn("MTG_GODS_NO_BANK", true); // =0 restores Kruphix pre-taps
+    return (no_hardcast || no_dredger_cast || phenax_target || pharika_class || pharika_skip || pharika_nogod || pharika_god_one || bank_face
+            || col_opp || no_bank || UsesPhenaxGodMassMill()) && !DecisionUnpruned();
+}
+
+bool GodsProvider::CollectedActionAllowed(const GameState& s, const Action& a, bool is_pre_combat) const
+{
+    static const bool no_hardcast = EnvOn("MTG_GODS_NO_HARDCAST", true);
+    static const bool no_dredger_cast = EnvOn("MTG_GODS_NO_DREDGER_CAST", true);
+    static const bool phenax_target = EnvOn("MTG_GODS_PHENAX_TARGET");
+    static const bool pharika_class = EnvOn("MTG_GODS_PHARIKA_CLASS", true);
+    static const bool pharika_skip = EnvOn("MTG_GODS_PHARIKA_SKIP", true);
+    static const bool pharika_nogod = EnvOn("MTG_GODS_PHARIKA_NOGOD"); // experimental, DEFAULT OFF
+    static const bool pharika_god_one_env = EnvOn("MTG_GODS_PHARIKA_GOD_ONE", true); // =0 restores God targets
+    const bool pharika_god_one = heurarm::Flag(heurarm::GODS_PHARIKA_GOD_ONE, pharika_god_one_env);
+    static const bool bank_face = EnvOn("MTG_GODS_BANK_FACE", true);
+    static const bool col_opp = EnvOn("MTG_GODS_COL_OPP", true);
+    if (col_opp && a.kind == Action::Kind::ActivatePermAbility
+        && a.card_name == "Cephalid Coliseum" && a.draw_target != s.active_player_index)
+    { return false; }
+    static const bool no_bank = EnvOn("MTG_GODS_NO_BANK", true);
+    if (no_bank && a.kind == Action::Kind::BankManaTap) { return false; }
+    // Two clean copies offer the same draw/discard. Keep the older source
+    // first; after it is sacrificed, the other copy is offered again.
+    static const bool col_twin = EnvOn("MTG_GODS_COL_TWIN", true);
+    if (col_twin && a.kind == Action::Kind::ActivatePermAbility
+        && a.card_name == "Cephalid Coliseum" && a.draw_target == s.active_player_index)
+    {
+        const Permanent* source = nullptr;
+        for (const Permanent& p : s.battlefield)
+        { if (p.card.m_number == a.sac_source_id) { source = &p; break; } }
+        const auto plain = [](const Permanent& p)
+        { return !p.tapped && !p.is_animated && p.counters.empty() && p.charge_counters == 0
+              && p.aura_attached_to == 0 && p.equipped_to == 0; };
+        if (source != nullptr && plain(*source))
+        {
+            for (const Permanent& p : s.battlefield)
+            {
+                if (p.card.m_number >= source->card.m_number
+                    || p.controller_index != source->controller_index
+                    || p.card.m_name != source->card.m_name || !plain(p)) { continue; }
+                bool attached = false;
+                for (const Permanent& q : s.battlefield)
+                { attached |= q.aura_attached_to == p.card.m_number
+                           || q.aura_attached_to == source->card.m_number
+                           || q.equipped_to == p.card.m_number
+                           || q.equipped_to == source->card.m_number; }
+                if (!attached) { return false; }
+            }
+        }
+    }
+    // This deck's graveyard creatures are Replenish payloads or dredgers. Paying
+    // {B}{G} to exile one for a 1/1 Snake is too slow in its eight-turn goldfish;
+    // keep the full legal choice in human play and the unpruned audit.
+    if (pharika_skip && a.kind == Action::Kind::PharikaExile) { return false; }
+    if (no_hardcast && s.turn_number <= 8 && a.kind == Action::Kind::CastFromHand && a.def != nullptr
+        && CardHasSubtype(a.def->card, "God"))
+    { return false; }
+    if (no_dredger_cast && a.kind == Action::Kind::CastFromHand)
+    {
+        if (a.card_name == "Stinkweed Imp") { return false; }
+        if (a.card_name == "Golgari Grave-Troll")
+        {
+            int grave_creatures = 0;
+            for (const Card& c : s.ActivePlayer().graveyard)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                grave_creatures += d != nullptr && d->card.IsCreature();
+            }
+            // A buried Mystic Retrieval can make attacking with Troll the
+            // backup line. It cannot normally attack until the next turn, so
+            // admit a cast once its counters could win in one or two attacks
+            // within the eight-turn goldfish horizon.
+            const int attacks_left = std::max(1, std::min(2, 8 - s.turn_number));
+            const int opponent_life = s.players[1 - s.active_player_index].life;
+            if (grave_creatures * attacks_left < opponent_life)
+            { return false; }
+        }
+    }
+    if (pharika_class && a.kind == Action::Kind::PharikaExile && a.player_target >= 0
+        && a.player_target < 2)
+    {
+        // Physical copies with the same name yield the same Snake and exile
+        // effect. Keep one representative per owner/name, preserving the choice
+        // between distinct creature cards and between the two graveyards.
+        for (const Card& c : s.players[a.player_target].graveyard)
+        {
+            if (c.m_name == a.tutor_target && c.m_number < a.sac_victim_id)
+            { return false; }
+        }
+    }
+    if (pharika_nogod && a.kind == Action::Kind::PharikaExile
+        && a.player_target == s.active_player_index)
+    {
+        // A God in our graveyard is a Replenish payload. Prefer an available
+        // non-God creature as Pharika's Snake fuel; keep God targets legal when
+        // no such creature exists (the Snake may still be an emergency payoff).
+        bool target_is_god = false, other_fuel = false;
+        for (const Card& c : s.players[a.player_target].graveyard)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d == nullptr || !d->card.IsCreature()) { continue; }
+            const bool god = CardHasSubtype(d->card, "God");
+            if (c.m_number == a.sac_victim_id) { target_is_god = god; }
+            else if (!god) { other_fuel = true; }
+        }
+        if (target_is_god && other_fuel) { return false; }
+    }
+    if (pharika_god_one && a.kind == Action::Kind::PharikaExile
+        && a.player_target == s.active_player_index)
+    {
+        // Keep a single God as emergency Snake fuel in each state. After an
+        // activation exiles it, the next God is available at the breakpoint.
+        // Prefer Iroas, whose combat clauses are inert against this opponent;
+        // keep Purphoros and Phenax available for the deck's main win lines.
+        auto rank = [](const Card& c) -> int
+        {
+            if (c.m_name == "Iroas, God of Victory") { return 0; }
+            if (c.m_name == "Mogis, God of Slaughter") { return 1; }
+            if (c.m_name == "Nylea, God of the Hunt") { return 2; }
+            return 3;
+        };
+        const Card* chosen = nullptr;
+        const Card* target = nullptr;
+        for (const Card& c : s.players[a.player_target].graveyard)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d == nullptr || !d->card.IsCreature() || !CardHasSubtype(d->card, "God"))
+            { continue; }
+            if (c.m_number == a.sac_victim_id) { target = &c; }
+            if (chosen == nullptr || rank(c) < rank(*chosen)
+                || (rank(c) == rank(*chosen) && c.m_number < chosen->m_number))
+            { chosen = &c; }
+        }
+        if (target != nullptr && chosen != nullptr && target->m_number != chosen->m_number)
+        { return false; }
+    }
+    if (bank_face && a.kind == Action::Kind::BankManaTap)
+    {
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.card.m_number != a.sac_source_id) { continue; }
+            const std::string faces = HumanPreTapOfferFor(s, p).free_faces;
+            if (faces.empty()) { return false; }
+            char preferred = faces.front();
+            if (p.card.m_name == "Tendo Ice Bridge" && faces.find('C') != std::string::npos)
+            { preferred = 'C'; } // preserve the counter
+            else if (p.card.m_name == "Vivid Creek" && faces.find('U') != std::string::npos)
+            { preferred = 'U'; } // preserve a charge counter
+            const std::string& choice = a.chosen_float_color.str();
+            return choice.size() == 1 && choice.front() == preferred;
+        }
+    }
+    if ((phenax_target || UsesPhenaxGodMassMill())
+        && a.kind == Action::Kind::TapMillToughness && a.sac_source_id > 0)
+    {
+        const int me = s.active_player_index;
+        const int opponent = 1 - me;
+        // Fill our graveyard while it is safe. Mill the opponent when self-mill
+        // would run out of library, or when this activation can exhaust theirs.
+        const int amount = [&]() {
+            for (const Permanent& p : s.battlefield)
+            { if (p.card.m_number == a.sac_source_id) { return PhenaxMillAmount(p, s); } }
+            return 0;
+        }();
+        const bool opponent_target = s.players[me].library.size() <= static_cast<std::size_t>(amount + 2)
+            || s.players[opponent].library.size() <= static_cast<std::size_t>(amount);
+        return a.player_target == (opponent_target ? opponent : me);
+    }
+    return true;
+}
+
+bool GodsProvider::ComboCardValue(const GameState& s, const CardDefinition& def,
+                                  int dmg_unit, int& out) const
+{
+    static const int magus_value = EnvInt("MTG_GODS_MAGUS_VALUE", 5); // =0 restores generic valuation
+    if (magus_value <= 0 || s.turn_number > 3 || def.card.m_name != "Magus of the Bazaar")
+    { return false; }
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index == s.active_player_index && p.card.m_name == "Magus of the Bazaar")
+        { return false; }
+    }
+    out = magus_value * dmg_unit;
+    return true;
+}
+
+int GodsProvider::XenagosCombatTargetRank(const GameState& s, int,
+                                          const std::vector<int>& legal) const
+{
+    if (!PrunesGodTargetAxes()) { return 0; }
+    int best = 0, best_score = -1;
+    for (int rank = 0; rank < static_cast<int>(legal.size()); ++rank)
+    {
+        const Permanent& p = s.battlefield[static_cast<std::size_t>(legal[rank])];
+        const int score = std::max(0, CombatPowerOf(p, s)) * (CreatureHasDoubleStrike(p, s) ? 2 : 1);
+        if (score > best_score) { best = rank; best_score = score; }
+    }
+    return best;
+}
+
+int GodsProvider::AthreosCoinTargetRank(const GameState& s, int controller,
+                                        const std::vector<int>& legal) const
+{
+    if (!PrunesGodTargetAxes()) { return 0; }
+    int best = 0, best_score = -1;
+    for (int rank = 0; rank < static_cast<int>(legal.size()); ++rank)
+    {
+        const Permanent& p = s.battlefield[static_cast<std::size_t>(legal[rank])];
+        bool coined = false;
+        for (const Counter& c : p.counters)
+        { if (c.type == Counter::Type::Coin && c.count > 0) { coined = true; break; } }
+        const int score = (p.controller_index == controller && p.sac_at_end_step && !coined ? 1000000 : 0)
+                        + (!coined ? 100000 : 0) + std::max(0, CombatPowerOf(p, s));
+        if (score > best_score) { best = rank; best_score = score; }
+    }
+    return best;
+}
+
+std::vector<int> DredgeSearchChoices(const GameState& s, int controller,
+                                     const std::vector<int>& numbers)
+{
+    return ResolveProvider(s).DredgeSearchCandidates(s, controller, numbers);
+}
+
+bool DredgeSearchSingletonPolicy(const GameState& s)
+{ return ResolveProvider(s).DredgeSearchAlwaysSingleton(); }
+
 // ---- instances + selection --------------------------------------------------
 
 namespace
@@ -21875,6 +22571,7 @@ namespace
     const GenericProvider        g_generic;
     const ExtraTurnsProvider     g_extra_turns;
     const KithkinProvider        g_kithkin;
+    const GodsProvider           g_gods;
     const AngelsProvider         g_angels;
     const BrunaProvider          g_bruna;
     const ColossusHammerProvider g_colossus_hammer;
@@ -24278,6 +24975,7 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     bool fungus = false;   // Thallid/Saproling tokens -- routes to Generic BEFORE the goblin check
     bool aura = false;     // Bogle Auras -- Light-Paws' aura_cast_tutor_attach is unique to it
     bool fluctuator = false;  // Fluctuator cycling combo -- routes ABOVE anti (Enlightened Tutor)
+    bool gods = false; // Gods-specific mechanics; route above Mystic Retrieval's `anti` signature.
     // Eldrazi Displacer / Emiel flicker combo. MUST be detected and MUST return ABOVE the `anti`
     // check: Eladamri's Call carries tutor_to_hand, which is the anti-lifegain signature, and this
     // deck would otherwise inherit AntiLifegainProvider's narrowing wholesale -- the recorded
@@ -24485,6 +25183,9 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
             || (CardHasSubtype(def->card, "Kithkin")
                 && p.attack_pump_power_per_other_matching > 0))
         { kithkin = true; }
+        if (p.replenish_enchantments || p.own_creature_enters_opp_damage > 0
+            || p.tap_post_draw_discard > 0 || p.threshold_loot_cost.has_value())
+        { gods = true; }
         if (p.attack_self_pump_flat_power > 0 || p.other_nontoken_enters_counter_haste > 0)
         { jumbo_cactuar = true; }
         // Independent, Merfolk-list-specific mechanics. Do not key on Aether Vial,
@@ -25086,6 +25787,7 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // ladder), so it cannot change play. See FungusProvider's declaration for the 93.7%. The provider
     // has since gained real judgement hooks too (sac outlets, the devour ladder, the main-phase split,
     // the USER's cleanup-discard buckets), so it is no longer "Generic plus one override".
+    if (gods)        { return g_gods; }
     if (fungus)      { return g_fungus; }
     if (eldrazi)     { return g_eldrazi_flicker; }
     if (dragonstorm) { return g_dragonstorm; }

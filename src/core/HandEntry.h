@@ -1,5 +1,6 @@
 #pragma once
 #include "GameState.h"
+#include "../cards/CardDatabase.h"
 #include "EnvFlags.h"
 #include <atomic>
 #include <cstdint>
@@ -269,15 +270,218 @@ inline void EnterHand(GameState& state, int player_index, const Card& card, Hand
 //
 // Returns what DrawN returns (cards actually drawn -- fewer than n on an empty library), because
 // several call sites add it to cards_drawn_this_turn.
-inline int DrawIntoHand(GameState& state, int player_index, int n, HandEntryReason why)
+// Each attempted draw has its own replacement choice. The option list is rebuilt after
+// every attempt: a dredge can mill another dredger for the next card of a multi-draw.
+// Index zero is the ordinary draw; remaining indices refer to the supplied graveyard
+// card numbers in order. The chooser is also the human-play decision hook.
+struct DredgeChooser
+{
+    virtual ~DredgeChooser() = default;
+    virtual int Choose(const GameState&, int player_index,
+                       const std::vector<int>& graveyard_card_numbers) = 0;
+};
+// The search calls the deck provider at the live draw state. A human chooser
+// still receives the complete graveyard menu below.
+std::vector<int> DredgeSearchChoices(const GameState&, int, const std::vector<int>&);
+bool DredgeSearchSingletonPolicy(const GameState&);
+inline thread_local DredgeChooser* g_dredge_chooser = nullptr;
+struct ScriptedDredge;
+inline thread_local ScriptedDredge* g_scripted_dredge = nullptr;
+struct DredgeDrawStepProbe
+{
+    int rank = 0; // live menu rank: 0 normal, 1..n physical dredgers
+    std::vector<int> offered_numbers;
+    int selected_number = 0;
+};
+inline thread_local DredgeDrawStepProbe* g_dredge_draw_step_probe = nullptr;
+// BoundaryFan replays a prefix and asks for the first newly reached draw menu.
+// Later unpinned draws on that probe take the ordinary draw; the next replay
+// branches them after this first menu is fixed.
+inline thread_local std::vector<int>* g_dredge_boundary_first_offer = nullptr;
+
+// A searched plan records one answer for each draw that actually offers dredge.
+// Card numbers are used instead of menu ranks so the answer remains tied to the
+// physical graveyard card when an earlier replacement mills another dredger.
+struct ScriptedDredge final : DredgeChooser
+{
+    DredgeChooser* previous = nullptr;
+    ScriptedDredge* previous_script = nullptr;
+    const std::vector<int>& pins;
+    std::size_t cursor = 0;
+    std::vector<int>* first_unpinned = nullptr;
+    std::vector<int>* singleton_record = nullptr;
+
+    explicit ScriptedDredge(const std::vector<int>& choices,
+                            std::vector<int>* first_offer = nullptr,
+                            std::vector<int>* record = nullptr)
+        : previous(g_dredge_chooser), previous_script(g_scripted_dredge),
+          pins(choices), first_unpinned(first_offer), singleton_record(record)
+    { g_dredge_chooser = this; g_scripted_dredge = this; }
+    ~ScriptedDredge() override
+    { g_dredge_chooser = previous; g_scripted_dredge = previous_script; }
+
+    int Choose(const GameState& state, int player_index,
+               const std::vector<int>& numbers) override
+    {
+        if (cursor < pins.size())
+        {
+            const int card_number = pins[cursor++];
+            if (card_number == 0) { return 0; }
+            for (std::size_t i = 0; i < numbers.size(); ++i)
+            { if (numbers[i] == card_number) { return static_cast<int>(i + 1); } }
+            return 0; // a stale pin cannot select a different physical card
+        }
+        if (first_unpinned != nullptr && first_unpinned->empty())
+        {
+            *first_unpinned = DredgeSearchChoices(state, player_index, numbers);
+        }
+        ++cursor;
+        if (singleton_record != nullptr && DredgeSearchSingletonPolicy(state))
+        {
+            const std::vector<int> choice = DredgeSearchChoices(state, player_index, numbers);
+            if (choice.size() == 1)
+            {
+                singleton_record->push_back(choice.front());
+                if (choice.front() == 0) { return 0; }
+                for (std::size_t i = 0; i < numbers.size(); ++i)
+                { if (numbers[i] == choice.front()) { return static_cast<int>(i + 1); } }
+            }
+        }
+        return previous != nullptr && first_unpinned == nullptr
+            ? previous->Choose(state, player_index, numbers) : 0;
+    }
+};
+
+// Rule observers (Keranos's first actual draw, for example) receive only real
+// library draws. They may queue triggers; they must not resolve a trigger before
+// the enclosing spell or ability has finished resolving.
+struct ActualDrawObserver
+{
+    virtual ~ActualDrawObserver() = default;
+    // first_this_turn includes draws earlier in this unresolved multi-draw effect.
+    virtual void OnActualDraw(GameState&, int player_index, const Card&,
+                              bool first_this_turn) = 0;
+};
+inline thread_local ActualDrawObserver* g_actual_draw_observer = nullptr;
+void QueueKeranosActualDraw(GameState& state, int player_index, bool card_is_land);
+
+struct DrawAttemptResult
+{
+    bool satisfied = false; // a draw or successful replacement occurred
+    bool drew = false;      // only an actual draw fires draw triggers/counts
+    int card_number = 0;
+    InternedName card_name;
+    bool card_is_land = false;
+};
+
+inline DrawAttemptResult AttemptDrawIntoHand(GameState& state, int player_index,
+                                             HandEntryReason why, int prior_batch_draws = 0)
 {
     Player& p = state.players[player_index];
-    const std::size_t old_size = p.hand.size();
-    const int drew = p.library.DrawN(n, p.hand);
-    for (int i = 0; i < drew; ++i)
+    if (state.deck_has_dredge
+        && (why == HandEntryReason::Draw || why == HandEntryReason::DrawStep))
     {
-        handentry::Note(state, player_index, why);
-        handentry::NoteFirstDraw(state, player_index, p.hand[old_size + static_cast<std::size_t>(i)], why);
+        std::vector<std::size_t> eligible;
+        std::vector<int> numbers;
+        for (std::size_t i = 0; i < p.graveyard.size(); ++i)
+        {
+            const CardDefinition* def = CardDatabase::Instance().LookupCached(p.graveyard[i]);
+            if (def == nullptr || def->params.dredge <= 0
+                || p.library.size() < static_cast<std::size_t>(def->params.dredge)) { continue; }
+            eligible.push_back(i);
+            numbers.push_back(p.graveyard[i].m_number);
+        }
+        int pick = 0;
+        if (state.boundary_dredge_active && !eligible.empty())
+        {
+            if (state.scripted_boundary_dredge_cursor < state.scripted_boundary_dredge.size())
+            {
+                const int card_number = state.scripted_boundary_dredge[
+                    state.scripted_boundary_dredge_cursor++];
+                for (std::size_t i = 0; i < numbers.size(); ++i)
+                { if (numbers[i] == card_number) { pick = static_cast<int>(i + 1); break; } }
+            }
+            else if (g_dredge_boundary_first_offer != nullptr
+                     && g_dredge_boundary_first_offer->empty())
+            {
+                *g_dredge_boundary_first_offer = DredgeSearchChoices(state, player_index, numbers);
+            }
+            else if (g_dredge_chooser != nullptr && g_dredge_boundary_first_offer == nullptr)
+            { pick = g_dredge_chooser->Choose(state, player_index, numbers); }
+        }
+        else if (why == HandEntryReason::DrawStep && state.scripted_draw_dredge >= 0)
+        {
+            const int card_number = state.scripted_draw_dredge;
+            state.scripted_draw_dredge = -1;
+            for (std::size_t i = 0; i < numbers.size(); ++i)
+            { if (numbers[i] == card_number) { pick = static_cast<int>(i + 1); break; } }
+        }
+        else if (why == HandEntryReason::DrawStep && g_dredge_draw_step_probe != nullptr)
+        {
+            DredgeDrawStepProbe& probe = *g_dredge_draw_step_probe;
+            probe.offered_numbers = numbers;
+            pick = probe.rank > 0 && probe.rank <= static_cast<int>(numbers.size()) ? probe.rank : 0;
+            probe.selected_number = pick > 0 ? numbers[static_cast<std::size_t>(pick - 1)] : 0;
+        }
+        else if (!eligible.empty() && g_dredge_chooser != nullptr)
+        { pick = g_dredge_chooser->Choose(state, player_index, numbers); }
+        if (pick > 0 && pick <= static_cast<int>(eligible.size()))
+        {
+            const std::size_t gy_index = eligible[static_cast<std::size_t>(pick - 1)];
+            const CardDefinition* def = CardDatabase::Instance().LookupCached(p.graveyard[gy_index]);
+            const int mill = def->params.dredge;
+            for (int i = 0; i < mill; ++i) { p.graveyard.push_back(p.library.DrawTop()); }
+            Card returned = std::move(p.graveyard[gy_index]);
+            p.graveyard.erase(p.graveyard.begin() + static_cast<std::ptrdiff_t>(gy_index));
+            const int number = returned.m_number;
+            const InternedName name = returned.m_name;
+            const CardDefinition* returned_def = CardDatabase::Instance().LookupCached(returned);
+            const bool is_land = returned_def ? returned_def->card.IsLand() : returned.IsLand();
+            EnterHand(state, player_index, std::move(returned), HandEntryReason::Recur);
+            return {true, false, number, name, is_land};
+        }
     }
-    return drew;
+    if (p.library.empty()) { return {}; }
+    Card drawn = p.library.DrawTop();
+    const int number = drawn.m_number;
+    const InternedName name = drawn.m_name;
+    const CardDefinition* drawn_def = CardDatabase::Instance().LookupCached(drawn);
+    const bool is_land = drawn_def ? drawn_def->card.IsLand() : drawn.IsLand();
+    EnterHand(state, player_index, std::move(drawn), why);
+    if (why == HandEntryReason::Draw || why == HandEntryReason::DrawStep)
+    { QueueKeranosActualDraw(state, player_index, is_land); }
+    if ((why == HandEntryReason::Draw || why == HandEntryReason::DrawStep)
+        && g_actual_draw_observer != nullptr)
+    { g_actual_draw_observer->OnActualDraw(state, player_index, p.hand.back(),
+                                          p.cards_drawn_this_turn + prior_batch_draws == 0); }
+    return {true, true, number, name, is_land};
+}
+
+struct DrawBatchResult
+{
+    int satisfied = 0;
+    int drawn = 0;
+};
+inline DrawBatchResult DrawIntoHandDetailed(GameState& state, int player_index,
+                                             int n, HandEntryReason why,
+                                             std::vector<std::pair<int, InternedName>>* actual_draws = nullptr)
+{
+    DrawBatchResult batch;
+    for (int i = 0; i < n; ++i)
+    {
+        const DrawAttemptResult result = AttemptDrawIntoHand(state, player_index, why, batch.drawn);
+        if (!result.satisfied) { break; }
+        ++batch.satisfied;
+        batch.drawn += result.drew ? 1 : 0;
+        if (result.drew && actual_draws != nullptr)
+        { actual_draws->push_back({result.card_number, result.card_name}); }
+    }
+    return batch;
+}
+
+// Compatibility wrapper for sites that need the count of actual draws. A site
+// that tests deck-out must use DrawIntoHandDetailed::satisfied instead.
+inline int DrawIntoHand(GameState& state, int player_index, int n, HandEntryReason why)
+{
+    return DrawIntoHandDetailed(state, player_index, n, why).drawn;
 }

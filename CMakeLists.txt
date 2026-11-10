@@ -512,6 +512,12 @@ add_executable(mtg-test
     test/unit/test_manual_tap_sources.cpp
     test/unit/test_niv_payment_holes.cpp
     test/unit/test_brainstorm.cpp
+    test/unit/test_gods_careful_study.cpp
+    test/unit/test_gods_replenish.cpp
+    test/unit/test_gods_coliseum.cpp
+    test/unit/test_gods_dredge.cpp
+    test/unit/test_gods_timing.cpp
+    test/unit/test_gods_targeted.cpp
     test/unit/test_niv_brainstorm_rule.cpp
     test/unit/test_depletion_sba.cpp
     test/unit/test_izzet_mana_fidelity.cpp

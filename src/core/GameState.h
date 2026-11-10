@@ -124,6 +124,7 @@ enum GyReader : std::uint32_t
     // clause): the bit is clear exactly when no card in the deck carries the param (and set on an
     // unstamped state, deck_gy_readers' 0xFFFFFFFF default), so every other deck skips them all.
     GyR_GyCastNames     = 1u << 11,
+    GyR_BothCreatureNames = 1u << 12, // Pharika can target either player's creature cards
 };
 
 enum class Phase { Beginning, PreCombatMain, Combat, PostCombatMain, Ending };
@@ -146,6 +147,7 @@ struct StackEntry
     EntryType           type;
     Card                source;
     int                 controller_index = 0;
+    bool                cast_with_flashback = false; // exile if this cast leaves the stack
     std::vector<Target> targets;
     std::optional<int>  chosen_x;
     std::optional<int>  devour_count;          // Mycoloth (Devour 2): the SEARCHED number of creatures
@@ -1051,7 +1053,12 @@ struct GameState
     // open, so a clear bit PROVES no permanent can carry either trigger (dead-code elimination, no
     // lever). DEFAULT TRUE == run the flush (an unstamped GameState -- the scenario harness, a unit
     // test -- keeps every trigger), the only-err-true rule.
-    bool                     deck_has_draw_ping              = true;
+    bool                     deck_has_draw_ping : 1          = true;
+    // A mainboard or reachable sideboard card has dredge. Default true keeps
+    // unstamped scenario states conservative; stamped ordinary decks skip the
+    // graveyard eligibility scan at every draw.
+    bool                     deck_has_dredge : 1             = true;
+    bool                     deck_has_turn_gods : 1          = true;
     // Does the deck hold an upkeep SAC-TUTOR (CardParams::upkeep_sac_tutor_creatures: Defense of the Heart)?
     // DECK CONSTANT, stamped by StampDeckTraits (mainboard + sideboard, Garth holding it open); gates the
     // searched put-list fan (MTG_DOTH_AXIS) so every deck without one never walks its battlefield for a
@@ -1248,6 +1255,26 @@ struct GameState
     // provider's front (beyond the horizon only: the permitted playout). Consumed in CastOffSuspend; whatever is
     // left expires with the upkeep (ProcessSuspendArrivals). FUTURE-DETERMINING: folded value-gated.
     std::int16_t             scripted_suspend_tutor = -1;
+    // Physical graveyard card number for the next draw step's dredge replacement.
+    // 0 means draw normally; -1 means no searched answer is pending.
+    std::int16_t             scripted_draw_dredge = -1;
+    // Physical dredger IDs for each eligible draw between this turn's end step
+    // and the next main phase. Zero selects the ordinary draw. The searched
+    // boundary may include opponent-upkeep and own-upkeep draws before DrawStep.
+    std::vector<int>         scripted_boundary_dredge;
+    std::size_t              scripted_boundary_dredge_cursor = 0;
+    int                      scripted_boundary_klothys = -1;
+    int                      scripted_boundary_keranos = -1;
+    bool                     boundary_dredge_active = false;
+    bool                     compressed_opponent_upkeep = false;
+    bool                     keranos_first_own_draw_seen = false;
+    // Physical IDs with Athreos coin counters. Kept until a marked permanent
+    // leaves, so the death/exile event can read its last-known counter state.
+    std::vector<int>         athreos_coin_ids;
+    int                      keranos_pending_land_draws = 0;
+    int                      keranos_pending_nonland_hits = 0;
+    bool                     ephara_creature_entered_this_turn = false;
+    bool                     ephara_creature_entered_last_turn = false;
     // ORDER-CONDEMNATION snapshot (USER model, 2026-08-19: the search decides what to cast,
     // "limited to what our order allows" -- a Main1-classified card the pre-combat decision
     // passed on is CONDEMNED for the rest of the turn; "main 2 should not re-litigate the whole
@@ -1536,6 +1563,7 @@ struct GameState
     // dominance::Build() and BuildDedupKey's pending pins. An int16_t in the padding before m_provider
     // (an int here would cost +8).
     std::int16_t             scripted_grace_choice             = -1;
+    std::int16_t             scripted_athreos_coin              = -1;
     // Non-owning pointer to the deck's decision heuristics (set in GoldFishRunner::SetupGame,
     // propagated through every deep copy). Never folded into BuildSimKey. nullptr -> callers
     // use DefaultProvider() (see DecisionProviders.h), so a raw GameState stays valid.

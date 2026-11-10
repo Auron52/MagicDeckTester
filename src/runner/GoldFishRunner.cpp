@@ -5,6 +5,7 @@
 #include "../core/SpellEffects.h"   // g_pending_self_bounces (cleared per game in StampDeckTraits)
 #include "../core/GameEngine.h"
 #include "../core/GameLogger.h"
+#include "../core/MemBudget.h"
 #include "../core/HardwareConcurrency.h"
 #include "../ai/AIEngine.h"
 #include "../ai/DecisionProviders.h"
@@ -570,6 +571,8 @@ bool GoldFishRunner::DeckTouchesOpponentZones(const Decklist& deck)
             // "Target player draws X" aimed at the opponent (Stroke of Genius): a forced-draw
             // deck-out needs a library to empty (opponentdeck::ForcedDraw).
             if (def->params.draw_target_player) { return true; }
+            if (def->params.threshold_loot_cost.has_value()) { return true; }
+            if (def->params.grants_tap_mill_toughness) { return true; }
             if (def->params.attack_defending_player_reveal_land_to_hand) { return true; }
             if (def->params.attack_exile_defender_top > 0) { return true; }
         }
@@ -728,6 +731,7 @@ std::uint32_t GoldFishRunner::DeckGraveyardReaders(const Decklist& deck)
         // Haven of the Spirit Dragon / Haunted Fengraf: a graveyard-return ability reads the
         // graveyard's CREATURE cards (see GyR_CreatureNames). MISSED CLASS 5, closed 2026-10-15.
         if (p.gy_return_cost.has_value())    { m |= GyR_CreatureNames; }
+        if (p.pharika_exile_cost.has_value()) { m |= GyR_BothCreatureNames; }
         // Forge Anew: the ETB returns a graveyard EQUIPMENT card (see GyR_EquipmentNames).
         if (p.etb_return_equipment_from_gy)  { m |= GyR_EquipmentNames; }
         // Bloodghast: a GRAVEYARD landfall watcher -- whether a copy sits in our graveyard decides
@@ -953,10 +957,25 @@ RunResult GoldFishRunner::Run(const Decklist& deck, int num_games, uint64_t base
     threads.reserve(num_threads);
 
     std::atomic<int> next_game{0};
+    std::vector<std::atomic<int>> running(static_cast<std::size_t>(num_threads));
+    for (auto& slot : running) { slot.store(-1, std::memory_order_relaxed); }
+    membudget::SetCapContext([&]()
+    {
+        std::string out = "[rss-cap]   goldfish games dispatched="
+                        + std::to_string(std::min(next_game.load(std::memory_order_relaxed), num_games))
+                        + "/" + std::to_string(num_games) + "\n";
+        for (int t = 0; t < num_threads; ++t)
+        {
+            const int gi = running[static_cast<std::size_t>(t)].load(std::memory_order_acquire);
+            if (gi >= 0)
+            { out += "[rss-cap]   in flight: gi=" + std::to_string(base_game_index + gi) + "\n"; }
+        }
+        return out;
+    });
 
     for (int t = 0; t < num_threads; ++t)
     {
-        threads.emplace_back([&]()
+        threads.emplace_back([&, t]()
         {
             AIEngine   ai(profile, lookahead_depth, per_thread_timeout);
             ai.SetSearchPostCombat(needs_second_main);
@@ -967,6 +986,7 @@ RunResult GoldFishRunner::Run(const Decklist& deck, int num_games, uint64_t base
             {
                 int gi = next_game.fetch_add(1, std::memory_order_relaxed);
                 if (gi >= num_games) { break; }
+                running[static_cast<std::size_t>(t)].store(gi, std::memory_order_release);
 
                 GameState state = SetupGame(deck, base_seed + static_cast<uint64_t>(gi),
                                             base_game_index + gi);
@@ -1053,6 +1073,7 @@ RunResult GoldFishRunner::Run(const Decklist& deck, int num_games, uint64_t base
                 }
                 result.win_turns[gi]     = win_turn;
                 result.inf_life_turn[gi] = state.inf_life_turn;
+                running[static_cast<std::size_t>(t)].store(-1, std::memory_order_release);
                 // Diagnostic (MTG_DUMP_WINS, inert by default): per-game win turn, for
                 // per-game A/B diffs between builds (e.g. `join` two runs to find the
                 // games a change moved). Single-thread for ordered output. ilt= is the turn
@@ -1083,6 +1104,7 @@ RunResult GoldFishRunner::Run(const Decklist& deck, int num_games, uint64_t base
     }
 
     for (std::thread& th : threads) { th.join(); }
+    membudget::SetCapContext({});
 
     long long sum = 0;
     for (int t : result.win_turns)
@@ -1520,6 +1542,8 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         // The Niv-Mizzet draw/damage loop (GameState::deck_has_draw_ping): the four params its two
         // shared hooks (ResolveDrawTriggers, OnCreatureDealtDamageToOpponent) test.
         bool draw_ping = false;
+        bool dredge = false;
+        bool turn_gods = false;
         // Bloodghast's opponent-life conditional haste (GameState::deck_has_cond_haste).
         bool cond_haste = false;
         // Madness (GameState::deck_has_madness): an own madness cost or Falkenrath Gorger's grant.
@@ -1537,6 +1561,10 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                 const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
                 if (!d) { continue; }
                 if (d->params.garth_copy_ability)             { garth = true; }
+                if (d->params.dredge > 0)                    { dredge = true; }
+                if (d->params.keranos_first_draw || d->params.mogis_opponent_upkeep
+                    || d->params.klothys_first_main || d->params.ephara_upkeep_draw)
+                { turn_gods = true; }
                 if (d->params.ascend)                         { ascend = true; }
                 if (d->params.creature_requires_devotion > 0) { devotion = true; }
                 if (d->params.dragon_ping_on_enter)           { dragon_ping = true; }
@@ -1705,6 +1733,8 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         // Same reasoning, no lever: a clear bit proves no permanent can carry a draw trigger or a
         // damage->draw grant, so every ResolveDrawTriggers flush and the combat hook are dead code.
         state.deck_has_draw_ping           = garth || draw_ping;
+        state.deck_has_turn_gods            = garth || turn_gods;
+        state.deck_has_dredge              = garth || dredge;
         state.deck_has_cond_haste          = garth || cond_haste;
         // Same reasoning, no lever: a clear bit proves no discard can be a madness discard (the stamp
         // tests the very params MadnessCostsFor reads), so the per-discard lookup is dead code.

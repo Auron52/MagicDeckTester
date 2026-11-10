@@ -64,6 +64,9 @@ public:
     // One shared paid-cast and stack-resolution path for the real game and search rollout.
     bool CastUpkeepTutor(GameState& state, int hand_number, const std::string& target);
     bool CastMiracleFromHand(GameState& state, int hand_number);
+    // Focused lockstep hook: run the real phase primitives through the next
+    // first-main trigger, stopping before the AI chooses a spell to cast.
+    bool AdvanceToFirstMainForTest(GameState& state);
 
 private:
     AIEngine&    m_ai;
@@ -80,6 +83,7 @@ private:
     void UpkeepTail(GameState& state);
     void DrawStep(GameState& state);
     void MainPhase(GameState& state, bool is_pre_combat);
+    void BeginMainPhase(GameState& state, bool is_pre_combat);
     // `additional`: an ADDITIONAL combat phase (Moraug, Fury of Akoum) -- untaps our creatures at its beginning.
     void CombatPhase(GameState& state, bool additional = false);
     // Moraug: run the additional combats the just-finished main phase queued (GameState::pending_extra_combats).

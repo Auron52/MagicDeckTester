@@ -34,6 +34,24 @@
 // The live scry-watcher chain (Galadriel; see the SCRY WATCHERS block in SpellEffects.h).
 thread_local ScryChainState g_scry_chain;
 
+void QueueKeranosActualDraw(GameState& state, int player_index, bool card_is_land)
+{
+    if (!state.deck_has_turn_gods || player_index != state.active_player_index
+        || state.compressed_opponent_upkeep || state.keranos_first_own_draw_seen)
+    { return; }
+    // Consume the marker before any trigger can itself draw. It also records an
+    // earlier first draw when Keranos enters later that turn.
+    state.keranos_first_own_draw_seen = true;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != player_index) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d || !d->params.keranos_first_draw) { continue; }
+        if (card_is_land) { ++state.keranos_pending_land_draws; }
+        else              { ++state.keranos_pending_nonland_hits; }
+    }
+}
+
 // ---- Human-play tutor pick, asked at RESOLUTION off the LIVE zone -----------------------------
 // Shared by both of PerformTutor's human routes: the no-baked-target route (an ETB off a PUT) and
 // the CAST route (`human_repick`, below). Returns Chosen + `out` = the fetched name, Declined
@@ -1174,6 +1192,119 @@ void PerformGenesisWave(GameState& state, int controller, int x, const std::stri
     }
 }
 
+// Replenish puts every enchantment card in the graveyard onto the battlefield in one
+// event. The two passes are the Genesis Wave shape: a Purphoros returned second must
+// still see a creature returned first. The cards are not CAST, so cast watchers do
+// not fire. Aura attachment is an as-enters choice, not a spell target.
+void PerformReplenish(GameState& state, int controller, const std::string& source_name)
+{
+    Player& ap = state.players[static_cast<std::size_t>(controller)];
+    struct ReturnCard { Card card; const CardDefinition* def; };
+    std::vector<ReturnCard> regular, auras;
+    for (const Card& raw : ap.graveyard)
+    {
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(raw);
+        if (!def || !def->card.IsEnchantment()) { continue; }
+        (def->params.is_aura ? auras : regular).push_back({raw, def});
+    }
+    if (regular.empty() && auras.empty()) { return; }
+
+    struct Placed { InternedName name; int number; };
+    std::vector<Placed> placed;
+    placed.reserve(regular.size() + auras.size());
+    std::vector<int> counters_done;
+    const std::size_t pre_event_board_size = state.battlefield.size();
+    int counter_shift = 0;
+    for (const ReturnCard& item : regular)
+    {
+        if (item.def->params.enters_with_plus_counters > 0)
+        { counter_shift = DoublerShift(state, controller, /*for_tokens=*/false); break; }
+    }
+    auto put = [&](const ReturnCard& item, int host_number)
+    {
+        Permanent p;
+        p.card = item.def->card;
+        p.card.m_number = item.card.m_number;
+        p.controller_index = controller;
+        p.owner_index = controller;
+        p.entered_this_turn = true;
+        p.aura_attached_to = host_number;
+        ApplyEntersWithOnPut(p, *item.def, counter_shift, counters_done,
+                             state, pre_event_board_size);
+        state.battlefield.push_back(p);
+        placed.push_back({item.card.m_name, item.card.m_number});
+    };
+
+    // Non-Auras are placed first so an Aura can enchant a creature entering in this
+    // same event. None of the enter triggers has resolved yet.
+    for (const ReturnCard& item : regular) { put(item, 0); }
+    RefreshDevotionCreatures(state);
+    for (const ReturnCard& item : auras)
+    {
+        std::vector<int> legal;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            const Permanent& host = state.battlefield[static_cast<std::size_t>(i)];
+            if (AuraCouldEnchant(state, item.def->params, host)) { legal.push_back(i); }
+        }
+        if (legal.empty()) { continue; } // an unattached Aura stays in the graveyard
+        int host_pick = 0;
+        if (g_play_loyalty_chooser != nullptr && legal.size() > 1)
+        {
+            const int chosen = (*g_play_loyalty_chooser)(state, controller,
+                source_name + " (" + item.card.m_name.str() + ")",
+                "enchanted by " + item.card.m_name.str(), legal, host_pick);
+            if (chosen >= 0 && chosen < static_cast<int>(legal.size())) { host_pick = chosen; }
+        }
+        const int host_index = legal[static_cast<std::size_t>(host_pick)];
+        put(item, state.battlefield[static_cast<std::size_t>(host_index)].card.m_number);
+        RefreshDevotionCreatures(state);
+    }
+    if (placed.empty()) { return; }
+
+    // Move exactly the cards that entered. An unattachable Aura remains in the yard.
+    for (std::size_t i = ap.graveyard.size(); i-- > 0;)
+    {
+        const Card& raw = ap.graveyard[i];
+        const bool entered = std::any_of(placed.begin(), placed.end(), [&](const Placed& p)
+        { return p.number == raw.m_number && p.name == raw.m_name; });
+        if (entered) { ap.graveyard.erase(ap.graveyard.begin() + static_cast<std::ptrdiff_t>(i)); }
+    }
+    RefreshDevotionCreatures(state);
+    auto find_slot = [&](const Placed& item)
+    {
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+            if (q.controller_index == controller && !q.is_token && q.card.m_number == item.number
+                && q.card.m_name == item.name) { return i; }
+        }
+        return -1;
+    };
+    EntersWithPreappliedScope counters_scope(counters_done.empty() ? g_enters_with_preapplied
+                                                                     : &counters_done);
+    GraveyardEnterScope graveyard_scope;
+    GyEnterBatchScope batch_scope;
+    for (const Placed& item : placed)
+    {
+        int slot = find_slot(item);
+        if (slot < 0) { continue; }
+        FireEtbWatchers(state, controller, slot);
+        slot = find_slot(item);
+        if (slot < 0) { continue; }
+        ResolveAuraEnterTapHost(state, slot, /*respond_window=*/true);
+        FireOwnEtbTriggers(state, controller, slot, std::string(), kEtbKxHeuristic);
+    }
+    EnforceLegendRule(state, controller);
+    DrainPendingZeroToughness(state);
+    SweepOrphanedAuras(state);
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "return", source_name + ": "
+                      + std::to_string(placed.size()) + " enchantment card(s) returned");
+    }
+}
+
 // ETB library dig (Acclaimed Contender: "if you control another Knight, look at the top
 // five, you may reveal a Knight and put it into your hand; put the rest on the bottom").
 // `self` is the permanent that just entered (excluded from the "control another <subtype>"
@@ -1480,7 +1611,10 @@ int PutFromHandLegalIndex(const GameState& state, int controller, int source_id,
     {
         if (p.controller_index == controller && p.card.m_number == source_id) { src = &p; break; }
     }
-    if (src == nullptr || src->tapped || !CanTapNow(*src, state.battlefield)) { return -1; }
+    if (src == nullptr) { return -1; }
+    const CardDefinition* source_def = CardDatabase::Instance().LookupCached(src->card);
+    const bool bronze = source_def && source_def->params.bronze_put_cost.has_value();
+    if (!bronze && (src->tapped || !CanTapNow(*src, state.battlefield))) { return -1; }
     const Player& ap = state.players[controller];
     int hi = -1;
     for (int h = 0; h < static_cast<int>(ap.hand.size()); ++h)
@@ -1493,6 +1627,8 @@ int PutFromHandLegalIndex(const GameState& state, int controller, int source_id,
     const CardDefinition* sdef = CardDatabase::Instance().LookupCached(src->card);
     const CardDefinition* d    = CardDatabase::Instance().LookupCached(ap.hand[hi]);
     const Card& hc = d ? d->card : ap.hand[hi];
+    if (bronze && !(hc.IsCreature() && (hc.HasColor(Color::Red) || hc.HasType(CardType::Artifact))))
+    { return -1; }
     if (sdef && sdef->params.tap_put_from_hand_creature_only && !hc.IsCreature()) { return -1; }
     // ...and the type list itself (the enumeration's filter, re-checked here so a declared human line
     // naming a non-matching card is a no-op rather than an illegal put).
@@ -1522,9 +1658,10 @@ bool ApplyPutFromHand(GameState& state, int controller, int source_id,
     // "sacrifice it at the beginning of the next end step". All false for Stoneforge Mystic.
     const CardDefinition* sdef = CardDatabase::Instance().LookupCached(src->card);
     const bool put_haste         = sdef && sdef->params.tap_put_grants_haste;
-    const bool put_sac_at_end    = sdef && sdef->params.tap_put_sac_at_end_step;
+    const bool put_sac_at_end    = sdef && (sdef->params.tap_put_sac_at_end_step
+                                             || sdef->params.bronze_put_cost.has_value());
     const CardDefinition* d = CardDatabase::Instance().LookupCached(ap.hand[hi]);
-    src->tapped = true;
+    if (!(sdef && sdef->params.bronze_put_cost.has_value())) { src->tapped = true; }
     Card raw = ap.hand[hi];
     ap.hand.erase(ap.hand.begin() + hi);
     Permanent perm;
@@ -4532,7 +4669,8 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
         const std::vector<Color>& produces_base =
               def->params.reflecting                                  ? *rp_colors
             : def->params.mana_colors_of_graveyard_legends            ? gl_cols
-            : (def->params.etb_choose_color && EtbBtLockEnabled())
+            : ((def->params.etb_choose_color && EtbBtLockEnabled())
+                  || def->params.enters_with_mana_counters > 0)
                   ? EffectiveProducesFor(state, active, *def, &state.battlefield[i], /*in_hand=*/false)
                   : def->params.produces;
         // colored_creature_only (Unclaimed Territory / Cavern of Souls): a non-creature spell may take
@@ -4591,6 +4729,7 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
         CounterList counters_snap;
         if (has_counters) { counters_snap = state.battlefield[i].counters; }
         const int storage_snap = state.battlefield[i].storage_counters;   // burst zeroes it (undo below)
+        const int charge_snap = state.battlefield[i].charge_counters;
         const int src_max_net  = source_max_net(state.battlefield[i], *def); // captured pre-tap (storage_snap-aware)
         const int life_snap = state.players[active].life;
         const std::uint8_t mark_snap = state.battlefield[i].mana_tap_mark;   // Prevent Damage (armed only)
@@ -4612,7 +4751,8 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
         // the two abilities are separate and only the coloured one hurts, exactly the greedy
         // tap_source's guard (ManaPayment.cpp). Every other call site keeps the damage.
         auto activate = [&](const ManaPool& next, bool drip_ok = true, int storage_burn = 0,
-                            int energy_spend = 0, bool painless = false) -> bool
+                            int energy_spend = 0, bool painless = false,
+                            bool mana_counter_spend = false) -> bool
         {
             // Creature-only source on this path (see g_bt_restricted). Restored on every failed
             // return below; a success unwinds straight out and the top-level solve resets it.
@@ -4636,6 +4776,7 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
             // without going through TapSourceIntoFloat.
             if (IsPaySacSource(*def)) { g_paysac_cracked = true; }
             DecrementDepletionOnTap(state.battlefield[i]);
+            if (mana_counter_spend) { --state.battlefield[i].charge_counters; }
             if (def->params.storage_land) { state.battlefield[i].storage_counters -= storage_burn; }
             // A tap_self_damage_any_mode land (Ancient Tomb) hurts in its {C} mode too: the {C} is
             // its ONLY ability, not a painland's separate painless one. No unarmed deck runs one.
@@ -4763,6 +4904,7 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
             state.battlefield[i].tapped = tapped_snap;   // only this source was touched at this level
             if (has_counters) { state.battlefield[i].counters = counters_snap; }
             state.battlefield[i].storage_counters = storage_snap;
+            state.battlefield[i].charge_counters = charge_snap;
             if (gy_exiled_at >= 0)
             {
                 std::vector<Card>& gy = state.players[active].graveyard;
@@ -5159,7 +5301,10 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
                     const int espend = (def->params.energy_per_colored_tap > 0 && c != Color::Colorless)
                                      ? def->params.energy_per_colored_tap : 0;
                     if (activate(f, /*drip_ok=*/true, storage_burn, espend,
-                                 /*painless=*/PainlandCModeEnabled() && c == Color::Colorless))
+                                 /*painless=*/PainlandCModeEnabled() && c == Color::Colorless,
+                                 /*mana_counter_spend=*/def->params.enters_with_mana_counters > 0
+                                    && (def->params.mana_counters_are_mining
+                                        || c != def->params.produces.front())))
                     {
                         // ETB-COLOUR FORENSICS (MTG_ETB_BT_AUDIT, see EtbBtLockEnabled): the DFS is
                         // unwinding a SUCCESS, so this tap is part of the payment actually returned.
@@ -5718,6 +5863,10 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
         // you control, most of which this loop never visits. Hash the realised SET (not a count: two
         // boards with two colours each pay different pips), once, exactly as `reflecting` does below.
         if ((McDomain(d) || McScaled(d)) && !McScalingHashed()) { scaling_bail = true; }  // legacy bail-out
+        // The replay entry records tapped sources but not WHICH mode of a counter
+        // land was used. A spent Tendo/Vivid still taps for its base colour, so
+        // replaying a cached tap could remove a counter that the real payment kept.
+        if (d->params.enters_with_mana_counters > 0) { scaling_bail = true; }
         if (scaling_bail) { if (!out_ord) { return false; } continue; }
         if (McDomain(d) && !domain_done)
         {

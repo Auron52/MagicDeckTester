@@ -664,6 +664,9 @@ inline void PerformLandSearch(GameState& state, int controller, const LandSearch
                               const ManaPool* put_credit)
 {
     if (spec.count <= 0) { return; }
+    // A searched decline of an optional trigger is distinct from searching,
+    // failing to find, and shuffling. The last pin value is reserved for it.
+    if (spec.optional && pin == kLandSearchPinMask) { return; }
     Player& pl = state.players[static_cast<std::size_t>(controller)];
     // THE CREDITED CAST'S RESTRICTION (land-search gap 2): the picks earning exactly the credit the
     // cast was enumerated with. Empty restriction (no credit, or nothing earns it any more -- a

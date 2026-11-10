@@ -226,6 +226,7 @@ TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pir
         {"Extra Turns", "ExtraTurns"},       {"Kithkin", "Kithkin"},
         {"Creature Giving", "CreatureGiving"}, {"CritterLifegain", "CritterLifegain"}, {"LifegainHeliodCombo", "LifegainHeliodCombo"},
         {"Dragons", "Dragons"},               {"Dragonstorm", "Dragonstorm"},
+        {"Gods", "Gods"},
         {"EldraziDisplacerFlicker", "EldraziFlicker"}, {"FiveColour", "FiveColour"},
         {"Fluctuator", "Fluctuator"},         {"Fungus", "Fungus"},
         {"Giants", "Giants"},                 {"Goblins", "Goblins"},

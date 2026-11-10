@@ -879,6 +879,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     CardParams p;
     p.damage      = params.value("damage", 0);
     p.draw        = params.value("draw", 0);
+    p.dredge      = params.value("dredge", 0);
     p.power_bonus = params.value("power_bonus", 0);
     p.tough_bonus = params.value("tough_bonus", 0);
     p.targeting      = TargetingFromString(params.value("targeting", std::string("none")));
@@ -1077,6 +1078,11 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.enters_tapped       = params.value("enters_tapped",       false);
     p.fastland_max_other_lands = params.value("fastland_max_other_lands", -1);
     p.no_max_hand_size    = params.value("no_max_hand_size",    false);
+    p.xenagos_combat_pump = params.value("xenagos_combat_pump", false);
+    p.iroas_combat_guard = params.value("iroas_combat_guard", false);
+    p.karametra_cast_land_search = params.value("karametra_cast_land_search", false);
+    p.athreos_passage = params.value("athreos_passage", false);
+    p.athreos_shroud = params.value("athreos_shroud", false);
     p.discard_land_damage = params.value("discard_land_damage", 0);
     p.cascade_max_mv      = params.value("cascade_max_mv",      0);
     p.cascade_count       = params.value("cascade_count",       1);
@@ -1113,6 +1119,9 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     if (params.contains("sacrifice_draw_cost"))
         p.sacrifice_draw_cost = ManaCostFromString(params["sacrifice_draw_cost"].get<std::string>());
     p.enters_tapped_with_depletion = params.value("enters_tapped_with_depletion", 0);
+    p.enters_with_mana_counters = params.value("enters_with_mana_counters", 0);
+    p.mana_counters_are_mining = params.value("mana_counters_are_mining", false);
+    p.sacrifice_when_mana_counters_empty = params.value("sacrifice_when_mana_counters_empty", false);
     p.produces_amount = params.value("produces_amount", 1);
     p.storage_land         = params.value("storage_land", false);
     p.storage_charge_mode  = params.value("storage_charge_mode", std::string());
@@ -1255,6 +1264,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     if (params.contains("team_pump_cost"))
         p.team_pump_cost = ManaCostFromString(params["team_pump_cost"].get<std::string>());
     p.team_pump_power = params.value("team_pump_power", 0);
+    p.team_pump_mainphase = params.value("team_pump_mainphase", false);
     for (const std::string& s : params.value("team_pump_subtypes", json::array()))
         p.team_pump_subtypes.push_back(s);
     p.firebreathing_threshold_power  = params.value("firebreathing_threshold_power", 0);
@@ -1561,6 +1571,12 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
 
     p.expressive_iteration      = params.value("expressive_iteration", false);
     p.cast_draw                 = params.value("cast_draw", 0);
+    p.post_draw_discard         = params.value("post_draw_discard", 0);
+    p.enters_with_gy_creature_counters = params.value("enters_with_gy_creature_counters", false);
+    p.return_up_to_gy_lands     = params.value("return_up_to_gy_lands", 0);
+    if (p.post_draw_discard > 0) { p.put_back_from_hand = p.post_draw_discard; }
+    if (params.contains("flashback_cost"))
+    { p.flashback_cost = ManaCostFromString(params["flashback_cost"].get<std::string>()); }
 
     // Auras (attach-to-creature enchantments)
     p.is_aura                   = params.value("is_aura", false);
@@ -1614,6 +1630,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.chooses_creature_type     = params.value("chooses_creature_type", false);
     p.chosen_type_added_to_self = params.value("chosen_type_added_to_self", false);
     p.own_creature_enters_opp_life_loss = params.value("own_creature_enters_opp_life_loss", 0);
+    p.own_creature_enters_opp_damage = params.value("own_creature_enters_opp_damage", 0);
     // Goblin Tomb Raider: "As long as you control an artifact, this creature gets +1/+0 and has haste."
     p.static_artifact_threshold = params.value("static_artifact_threshold", 0);
     p.static_artifact_power     = params.value("static_artifact_power", 0);
@@ -1646,6 +1663,12 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.evoke_exile_color              = params.value("evoke_exile_color", std::string());
     p.etb_damage_divided_creatures   = params.value("etb_damage_divided_creatures", 0);
     p.tap_put_from_hand_creature_only = params.value("tap_put_from_hand_creature_only", false);
+    p.grants_tap_mill_toughness      = params.value("grants_tap_mill_toughness", false);
+    if (params.contains("pharika_exile_cost"))
+    { p.pharika_exile_cost = ManaCostFromString(params["pharika_exile_cost"].get<std::string>()); }
+    if (params.contains("bronze_put_cost"))
+    { p.bronze_put_cost = ManaCostFromString(params["bronze_put_cost"].get<std::string>()); }
+    p.kruphix_banks_mana = params.value("kruphix_banks_mana", false);
     p.tap_put_grants_haste           = params.value("tap_put_grants_haste", false);
     p.tap_put_sac_at_end_step        = params.value("tap_put_sac_at_end_step", false);
     p.produces_any_combination       = params.value("produces_any_combination", false);
@@ -1674,6 +1697,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.etb_reveal_put_creatures_only = params.value("etb_reveal_put_creatures_only", false);
     p.etb_reveal_put_max_mv     = params.value("etb_reveal_put_max_mv", 0);
     p.reveal_x_put_permanents   = params.value("reveal_x_put_permanents", false);
+    p.replenish_enchantments    = params.value("replenish_enchantments", false);
     p.attack_pump_power_per_other_matching = params.value("attack_pump_power_per_other_matching", 0);
     p.attack_pump_tough_per_other_matching = params.value("attack_pump_tough_per_other_matching", 0);
     p.attack_self_pump_per_other_subtype   = params.value("attack_self_pump_per_other_subtype", std::string());
@@ -1982,6 +2006,10 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.draw_target_player            = params.value("draw_target_player", false);
     p.tap_draw_cost_less_per_rad    = params.value("tap_draw_cost_less_per_rad", false);
     p.tap_draw_then_discard         = params.value("tap_draw_then_discard", false);
+    p.tap_draw_count                = params.value("tap_draw_count", 1);
+    p.tap_post_draw_discard         = params.value("tap_post_draw_discard", 0);
+    if (params.contains("threshold_loot_cost"))
+        p.threshold_loot_cost = ManaCostFromString(params["threshold_loot_cost"].get<std::string>());
     p.etb_optional_tapped_rad       = params.value("etb_optional_tapped_rad", 0);
     if (params.contains("tap_investigate_cost"))
         p.tap_investigate_cost = ManaCostFromString(params["tap_investigate_cost"].get<std::string>());
@@ -2077,6 +2105,10 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.hellbent_upkeep_draw        = params.value("hellbent_upkeep_draw", 0);
     p.hellbent_upkeep_life_loss   = params.value("hellbent_upkeep_life_loss", 0);
     p.hellbent_upkeep_each_player = params.value("hellbent_upkeep_each_player", false);
+    p.keranos_first_draw       = params.value("keranos_first_draw", false);
+    p.mogis_opponent_upkeep    = params.value("mogis_opponent_upkeep", false);
+    p.klothys_first_main      = params.value("klothys_first_main", false);
+    p.ephara_upkeep_draw      = params.value("ephara_upkeep_draw", false);
 
     // ---- Vampires B (2026-10-18): Captivating Vampire's steal + Bloodline Keeper's transform -- see
     // CardParams for each field's oracle clause.

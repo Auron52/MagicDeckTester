@@ -253,11 +253,13 @@ TEST_CASE_FIXTURE(PathOfferedPe, "Path: a self-target cast exiles our creature a
     const int sc0 = s.search_count;
     const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
     const std::vector<const TurnSolver::Plan*> self = SolePathPlans(plans, 50);
-    // The basic is the land_search_pins axis: Plains and Mountain are the two picks -> two variants.
-    REQUIRE(self.size() == 2);
+    // Path's controller may decline its optional search, in addition to choosing either basic.
+    REQUIRE(self.size() == 3);
     std::set<std::string> fetched;
     for (const TurnSolver::Plan* p : self)
     {
+        const bool declined = !p->land_search_pins.empty()
+            && p->land_search_pins.front() == kLandSearchPinMask;
         GameState roll = s;
         TurnSolver::ApplyPlan(roll, *p, true);
         GameState exec = RunExecutor(s, *p);
@@ -267,21 +269,21 @@ TEST_CASE_FIXTURE(PathOfferedPe, "Path: a self-target cast exiles our creature a
             CHECK(FindPe(*g, 50) == nullptr);                 // the Duelist is gone...
             CHECK(InZone(g->exile, 50));                       // ...into exile
             CHECK(NamedIn(g->players[0].graveyard, kPath));    // Path resolved
-            CHECK(g->search_count == sc0 + 1);                 // ONE shuffle
+            CHECK(g->search_count == sc0 + (declined ? 0 : 1));
             CHECK(g->players[0].lands_played_this_turn == 0);  // never the land drop
-            CHECK(g->battlefield.size() == 2);                 // the Plains + the fetched basic
-            CHECK(CountBf(*g, "Plains", true) + CountBf(*g, "Mountain", true) == 2);   // both tapped
-            CHECK(g->players[0].library.size() == 9);
+            CHECK(g->battlefield.size() == (declined ? 1 : 2));
+            CHECK(CountBf(*g, "Plains", true) + CountBf(*g, "Mountain", true) == (declined ? 1 : 2));
+            CHECK(g->players[0].library.size() == (declined ? 10 : 9));
         }
         CheckSameWorld(roll, exec);
-        fetched.insert(CountBf(roll, "Mountain", true) == 1 ? "Mountain" : "Plains");
+        fetched.insert(declined ? "Declined" : CountBf(roll, "Mountain", true) == 1 ? "Mountain" : "Plains");
     }
-    CHECK(fetched == std::set<std::string>{ "Mountain", "Plains" });
-    // One basic left in the library -> width 1: the self-target cast has no pin fan.
+    CHECK(fetched == std::set<std::string>{ "Declined", "Mountain", "Plains" });
+    // One basic name left still leaves the optional decline.
     GameState one = BoardPe(1, { kPath }, true, /*mountains=*/0);
     PutPe(one, "Kor Duelist", 50);
     const std::vector<TurnSolver::Plan> one_plans = TurnSolver::EnumerateMainPlans(one, true);
-    CHECK(SolePathPlans(one_plans, 50).size() == 1);
+    CHECK(SolePathPlans(one_plans, 50).size() == 2);
 }
 
 TEST_CASE_FIXTURE(PathOfferedPe, "Path: an opponent target exiles it and nothing else; the ColossusHammer provider refuses that cast")

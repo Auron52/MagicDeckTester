@@ -31,6 +31,12 @@ enum class Targeting
 // Parameters extracted from a card's JSON definition, forwarded to the template handler.
 struct CardParams
 {
+    // Phenax: each creature we control gains a tap ability that mills a target
+    // player equal to the source creature's current toughness.
+    bool grants_tap_mill_toughness = false;
+    std::optional<ManaCost> pharika_exile_cost;
+    std::optional<ManaCost> bronze_put_cost;
+    bool kruphix_banks_mana = false;
     bool cost_less_per_opponent_noncombat_damage = false;
     bool incinerator_damage_trigger = false; // transient chooser filter and Incinerator trigger marker
 
@@ -44,6 +50,7 @@ struct CardParams
     bool chain_lightning_copy = false; // damaged player/controller may pay RR and copy
     bool sacrifice_mountains_alternative = false; // Fireblast: sacrifice two Mountains instead of mana
     int draw         = 0;
+    int dredge       = 0; // optional replacement of one draw by milling this many cards
     int power_bonus  = 0;
     int tough_bonus  = 0;
     Targeting targeting = Targeting::None;
@@ -652,6 +659,12 @@ struct CardParams
     // No maximum hand size (e.g. Reliquary Tower). If true, the cleanup-step discard
     // to 7 is skipped while this permanent is on the battlefield.
     bool no_max_hand_size = false;
+    // Gods deck: combat, creature-cast, and death/leave triggers.
+    bool xenagos_combat_pump = false;
+    bool iroas_combat_guard = false;
+    bool karametra_cast_land_search = false;
+    bool athreos_passage = false;
+    bool athreos_shroud = false;
 
     // Land's Edge pattern: "Discard a land card: deal this much damage to target player."
     // When > 0 this permanent provides the ability; AI will discard all hand lands for damage.
@@ -838,6 +851,14 @@ struct CardParams
     // many depletion counters; each tap removes one and adds two mana of `produces[0]`;
     // when the last counter is removed the land is sacrificed. 0 = not a depletion land.
     int enters_tapped_with_depletion = 0;
+
+    // Gemstone Mine / Tendo Ice Bridge / Vivid Creek: counters available for the
+    // coloured mana mode. Stored in Permanent::charge_counters; Gemstone displays
+    // them as mining counters and is sacrificed after the last use. A spent Tendo
+    // or Vivid still has its independent {C} or {U} mode.
+    int  enters_with_mana_counters = 0;
+    bool mana_counters_are_mining = false;
+    bool sacrifice_when_mana_counters_empty = false;
 
     // Mana produced per tap (default 1). Depletion lands set this to 2 so one tap yields
     // two mana of `produces[0]` (the {U}{U} / {R}{R} ability). The extra mana is held in
@@ -1325,6 +1346,9 @@ struct CardParams
     std::optional<ManaCost>  team_pump_cost;
     int                      team_pump_power = 0;
     std::vector<std::string> team_pump_subtypes;
+    // A team pump that can affect a beginning-of-combat power read (Purphoros
+    // before Xenagos) must also be a searched main-phase activation.
+    bool                     team_pump_mainphase = false;
 
     // Inferno of the Star Mounts: "{R}: gets +1/+0 until end of turn. When its power becomes 20
     // THIS WAY, it deals 20 damage to any target." A threshold rider on the SELF firebreathing
@@ -2661,6 +2685,15 @@ struct CardParams
     // Magma Opus: a non-draw spell that ALSO draws on resolution ("draw two cards"). Drawn to
     // hand in both cast paths (executor + rollout) -- deterministic, lockstep. 0 = no draw rider.
     int  cast_draw = 0;
+    // Careful Study / Faithless Looting: draw, then discard this many hand cards. The
+    // existing post-draw hand-choice fan (`put_back_from_hand`) searches which cards;
+    // resolution sends them through the discard hook instead of back to the library.
+    int  post_draw_discard = 0;
+    bool enters_with_gy_creature_counters = false; // Golgari Grave-Troll
+    int  return_up_to_gy_lands = 0; // Life from the Loam
+    // Flashback: alternative cost when cast from the graveyard; that cast is exiled
+    // whenever it leaves the stack. A hand cast still uses the printed cost and graveyard.
+    std::optional<ManaCost> flashback_cost;
 
     // --- Auras (attach-to-creature enchantments; Bogles / hexproof-auras deck) ---
     // An Aura is an Enchantment that, when cast, targets a creature and enters attached to it,
@@ -2961,6 +2994,8 @@ struct CardParams
     // non-DirectDamage `continue` drops the card from enumeration entirely (the Luxurious Libation
     // trap) and it can never be cast.
     bool                     reveal_x_put_permanents = false;
+    // Replenish: return every enchantment card from our graveyard in one entry event.
+    bool                     replenish_enchantments = false;
 
     // Attack self-pump, base = other ATTACKING matching creatures (Goblin Piledriver: "Whenever
     // this attacks, it gets +2/+0 until end of turn for each other attacking Goblin"). > 0 gates
@@ -3674,6 +3709,9 @@ struct CardParams
     // (not damage) x gamesetup::OpponentHeads(). NOT opp_creature_enters_life_loss (Suture Priest:
     // the ENTRANT's controller loses, and it is the `gift` routing signature).
     int  own_creature_enters_opp_life_loss = 0;
+    // Purphoros, God of the Forge: same "another creature you control enters" scope,
+    // but this is damage (not life loss), so damage watchers must see each event.
+    int  own_creature_enters_opp_damage = 0;
     // Giada, Font of Hope: "Each OTHER Angel you control enters with an additional +1/+1 counter
     // on it for each Angel you ALREADY control." A REPLACEMENT EFFECT (CR 614), not a trigger --
     // applied in FireEtbWatchers ABOVE the FireCreatureEnterWatchers call, so the counters are on
@@ -4434,6 +4472,12 @@ struct CardParams
     // doctrine, the Neheb / Burning-Fist precedent), surfaced to a human as a `discard` decision.
     // Shared resolution (ApplyPermAbility) -> executor and rollout identical. false = a plain draw.
     bool                    tap_draw_then_discard = false;
+    // Magus of the Bazaar draws two, then discards three. Zero preserves the
+    // original one-card TapDraw ability; the discard count uses the shared
+    // post-draw selection and discard hook.
+    int                     tap_draw_count = 1;
+    int                     tap_post_draw_discard = 0;
+    std::optional<ManaCost> threshold_loot_cost;
 
     // Conservatory / Kitchen: "{4}, {T}: Investigate." Creates one Clue artifact token, whose own
     // "{2}, Sacrifice this token: Draw a card" lives on the "Clue Token" NAMED TOKEN DEF in
@@ -4648,6 +4692,10 @@ struct CardParams
     int                      hellbent_upkeep_draw        = 0;
     int                      hellbent_upkeep_life_loss   = 0;
     bool                     hellbent_upkeep_each_player = false;
+    bool                     keranos_first_draw = false;
+    bool                     mogis_opponent_upkeep = false;
+    bool                     klothys_first_main = false;
+    bool                     ephara_upkeep_draw = false;
 
     // ---- Vampires B (2026-10-18): Captivating Vampire + Bloodline Keeper // Lord of Lineage --------
     // Every field below is new and gated (0 / empty / nullopt inert), so every deck that does not carry
@@ -4846,6 +4894,7 @@ inline bool DefHasCreatureEnterWatcher(const CardParams& p)
         || p.any_creature_enters_self_counters_power
         || p.opp_creature_enters_life_loss > 0
         || p.own_creature_enters_opp_life_loss > 0    // Forerunner of the Coalition (2026-09-26)
+        || p.own_creature_enters_opp_damage > 0
         || p.enters_look_top_land_or_hand             // Risen Reef (2026-10-18)
         || p.own_creature_enters_draw > 0;            // Enduring Innocence's draw-only watcher (2026-11-10);
                                                       // Vaultborn Tyrant, the only other carrier, is

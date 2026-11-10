@@ -1,0 +1,744 @@
+{
+  "seed": 2, "game_index": 1, "win_turn": 8, "won": true,
+  "mulligan": { "count": 3, "bottom": [6, 9, 28] }, "karoo_float": 1, "fetch_activation": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1, "spell_copy_id": 1,
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 30, "name": "Magus of the Bazaar" }, { "num": 27, "name": "Kruphix, God of Horizons" }, { "num": 37, "name": "Pharika, God of Affliction" }, { "num": 12, "name": "Faithless Looting" }, { "num": 24, "name": "Karametra, God of Harvests" }, { "num": 57, "name": "Vivid Creek" }, { "num": 28, "name": "Life from the Loam" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": true,
+  "to_bottom": 1,
+  "hand": [{ "num": 44, "name": "Reflecting Pool" }, { "num": 37, "name": "Pharika, God of Affliction" }, { "num": 47, "name": "Replenish" }, { "num": 4, "name": "Careful Study" }, { "num": 12, "name": "Faithless Looting" }, { "num": 52, "name": "Stinkweed Imp" }, { "num": 40, "name": "Purphoros, God of the Forge" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 2,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 2,
+  "on_the_play": true,
+  "to_bottom": 2,
+  "hand": [{ "num": 2, "name": "Athreos, Shroud-Veiled" }, { "num": 32, "name": "Magus of the Bazaar" }, { "num": 23, "name": "Iroas, God of Victory" }, { "num": 45, "name": "Replenish" }, { "num": 46, "name": "Replenish" }, { "num": 7, "name": "City of Brass" }, { "num": 60, "name": "Xenagos, God of Revels" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 2 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 3,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 3,
+  "on_the_play": true,
+  "to_bottom": 3,
+  "hand": [{ "num": 6, "name": "Cephalid Coliseum" }, { "num": 16, "name": "Forest" }, { "num": 19, "name": "Golgari Grave-Troll" }, { "num": 15, "name": "Faithless Looting" }, { "num": 9, "name": "City of Brass" }, { "num": 28, "name": "Life from the Loam" }, { "num": 8, "name": "City of Brass" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 3 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 4,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 3,
+  "hand": [{ "num": 6, "name": "Cephalid Coliseum", "win_optimal": true }, { "num": 16, "name": "Forest", "win_optimal": true }, { "num": 19, "name": "Golgari Grave-Troll", "win_optimal": true }, { "num": 15, "name": "Faithless Looting", "win_optimal": true }, { "num": 9, "name": "City of Brass", "win_optimal": true }, { "num": 28, "name": "Life from the Loam", "win_optimal": true }, { "num": 8, "name": "City of Brass", "win_optimal": true }],
+  "ai_choice": { "index": 0, "num": 6, "name": "Cephalid Coliseum" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 3)"
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 5,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 1,
+  "bottom_total": 3,
+  "hand": [{ "num": 16, "name": "Forest", "win_optimal": true }, { "num": 19, "name": "Golgari Grave-Troll", "win_optimal": true }, { "num": 15, "name": "Faithless Looting", "win_optimal": true }, { "num": 9, "name": "City of Brass", "win_optimal": true }, { "num": 28, "name": "Life from the Loam", "win_optimal": true }, { "num": 8, "name": "City of Brass", "win_optimal": true }],
+  "ai_choice": { "index": 3, "num": 9, "name": "City of Brass" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 2 of 3)"
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 6,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 2,
+  "bottom_total": 3,
+  "hand": [{ "num": 16, "name": "Forest", "win_optimal": true }, { "num": 19, "name": "Golgari Grave-Troll", "win_optimal": true }, { "num": 15, "name": "Faithless Looting", "win_optimal": true }, { "num": 28, "name": "Life from the Loam", "win_optimal": true }, { "num": 8, "name": "City of Brass", "win_optimal": true }],
+  "ai_choice": { "index": 1, "num": 19, "name": "Golgari Grave-Troll" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 3 of 3)"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=City of Brass", "cast=Faithless Looting"], "decision": {
+  "decision_index": 7,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 8, "name": "City of Brass", "cost": "", "mv": 0, "kind": "land" }, { "num": 15, "name": "Faithless Looting", "cost": "{R}", "mv": 1, "kind": "nonpermanent", "is_draw": true }, { "num": 16, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 56, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }], "library_size": 53 },
+  "plans": [
+    { "index": 0, "summary": "land=City of Brass; cast: Faithless Looting", "declared_order_payability": "not_verified", "land": "City of Brass", "casts": ["Faithless Looting"], "actions": [{ "card": "Faithless Looting" }] },
+    { "index": 1, "summary": "land=City of Brass; cast: (nothing)", "declared_order_payability": "not_verified", "land": "City of Brass", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=Forest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 8,
+  "type": "discard",
+  "turn": 1,
+  "over_by": 2,
+  "discard_context": "effect",
+  "source": "Faithless Looting",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 19, "battlefield": [{ "name": "City of Brass", "idx": 3, "num": 8, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 16, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 38, "name": "Phenax, God of Deception", "cost": "{3}{U}{B}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Vivid Creek", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }], "library_size": 53 },
+  "ai_set": [2, 1],
+  "heuristic_default": 2,
+  "options": [{ "index": 0, "name": "Forest" }, { "index": 1, "name": "Golgari Grave-Troll" }, { "index": 2, "name": "Phenax, God of Deception" }, { "index": 3, "name": "Vivid Creek" }],
+  "note": "reply the `index` VALUE of one of the options below (the engine's draw-order hand index) -- NOT a position in the displayed `me.hand`, which is sorted by name. An index that is not in options is silently replaced by the AI's pick. Default = the AI's pick."
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 9,
+  "type": "discard",
+  "turn": 1,
+  "over_by": 1,
+  "discard_context": "effect",
+  "source": "Faithless Looting",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 19, "battlefield": [{ "name": "City of Brass", "idx": 3, "num": 8, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 16, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 38, "name": "Phenax, God of Deception", "cost": "{3}{U}{B}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Vivid Creek", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }], "library_size": 53 },
+  "ai_set": [1],
+  "heuristic_default": 1,
+  "options": [{ "index": 0, "name": "Forest" }, { "index": 1, "name": "Golgari Grave-Troll" }, { "index": 3, "name": "Vivid Creek" }],
+  "note": "reply the `index` VALUE of one of the options below (the engine's draw-order hand index) -- NOT a position in the displayed `me.hand`, which is sorted by name. An index that is not in options is silently replaced by the AI's pick. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 10,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 1, "card": "Phenax, God of Deception" }, { "turn": 1, "card": "Vivid Creek" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 19, "battlefield": [{ "name": "City of Brass", "idx": 3, "num": 8, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 16, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 57, "name": "Vivid Creek", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Faithless Looting", "Golgari Grave-Troll", "Phenax, God of Deception"], "retrace_gy": ["Faithless Looting"], "flashback_gy": ["Faithless Looting"], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }], "library_size": 53 },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 11,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 19, "battlefield": [{ "name": "City of Brass", "idx": 3, "num": 8, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 16, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 57, "name": "Vivid Creek", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Faithless Looting", "Golgari Grave-Troll", "Phenax, God of Deception"], "retrace_gy": ["Faithless Looting"], "flashback_gy": ["Faithless Looting"], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }], "library_size": 53 },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 12,
+  "type": "dredge",
+  "source": "Draw replacement",
+  "turn": 2,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 19, "battlefield": [{ "name": "City of Brass", "idx": 3, "num": 8, "is_land": true, "taps": "WUBRG" }], "vial_counters": [], "hand": [{ "num": 16, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 57, "name": "Vivid Creek", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Faithless Looting", "Golgari Grave-Troll", "Phenax, God of Deception"], "retrace_gy": ["Faithless Looting"], "flashback_gy": ["Faithless Looting"], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }], "library_size": 52 },
+  "player_index": 0,
+  "heuristic_default": 1,
+  "options": [{ "index": 0, "name": "Draw a card" }, { "index": 1, "name": "Golgari Grave-Troll" }],
+  "note": "Reply 0 to draw normally, or 1..n to mill the listed card's dredge number and return it to hand. Each draw has its own choice."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 13,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 19, "battlefield": [{ "name": "City of Brass", "idx": 3, "num": 8, "is_land": true, "taps": "WUBRG" }], "vial_counters": [], "hand": [{ "num": 16, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Vivid Creek", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Faithless Looting", "Faithless Looting", "Mogis, God of Slaughter", "Nylea, God of the Hunt", "Phenax, God of Deception", "Purphoros, Bronze-Blooded", "Reflecting Pool", "Tendo Ice Bridge"], "retrace_gy": ["Faithless Looting", "Faithless Looting"], "flashback_gy": ["Faithless Looting", "Faithless Looting"], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }], "library_size": 52 },
+  "plans": [
+    { "index": 0, "summary": "land=Vivid Creek; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Vivid Creek", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=Forest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 14,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 19, "battlefield": [{ "name": "City of Brass", "idx": 3, "num": 8, "is_land": true, "taps": "WUBRG" }, { "name": "Vivid Creek", "idx": 4, "num": 57, "tapped": true, "is_land": true, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 16, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }], "graveyard": ["Faithless Looting", "Faithless Looting", "Mogis, God of Slaughter", "Nylea, God of the Hunt", "Phenax, God of Deception", "Purphoros, Bronze-Blooded", "Reflecting Pool", "Tendo Ice Bridge"], "retrace_gy": ["Faithless Looting", "Faithless Looting"], "flashback_gy": ["Faithless Looting", "Faithless Looting"], "library_size": 48, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }], "library_size": 52 },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 15,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 19, "battlefield": [{ "name": "City of Brass", "idx": 3, "num": 8, "is_land": true, "taps": "WUBRG" }, { "name": "Vivid Creek", "idx": 4, "num": 57, "tapped": true, "is_land": true, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 16, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }], "graveyard": ["Faithless Looting", "Faithless Looting", "Mogis, God of Slaughter", "Nylea, God of the Hunt", "Phenax, God of Deception", "Purphoros, Bronze-Blooded", "Reflecting Pool", "Tendo Ice Bridge"], "retrace_gy": ["Faithless Looting", "Faithless Looting"], "flashback_gy": ["Faithless Looting", "Faithless Looting"], "library_size": 48, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }], "library_size": 52 },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "cast_order": ["**", "land=Forest", "retrace=Faithless Looting"], "decision": {
+  "decision_index": 16,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 3, "card": "Athreos, God of Passage" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 19, "battlefield": [{ "name": "City of Brass", "idx": 3, "num": 8, "is_land": true, "taps": "WUBRG" }, { "name": "Vivid Creek", "idx": 4, "num": 57, "is_land": true, "taps": "UWBRG", "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 1, "name": "Athreos, God of Passage", "cost": "{1}{W}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 16, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }], "graveyard": ["Faithless Looting", "Faithless Looting", "Mogis, God of Slaughter", "Nylea, God of the Hunt", "Phenax, God of Deception", "Purphoros, Bronze-Blooded", "Reflecting Pool", "Tendo Ice Bridge"], "retrace_gy": ["Faithless Looting", "Faithless Looting"], "flashback_gy": ["Faithless Looting", "Faithless Looting"], "library_size": 47, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }], "library_size": 51 },
+  "plans": [
+    { "index": 0, "summary": "land=Forest; cast: Athreos, God of Passage", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Athreos, God of Passage"], "actions": [{ "card": "Athreos, God of Passage" }] },
+    { "index": 1, "summary": "land=Forest; cast: Faithless Looting (flashback)", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Faithless Looting"], "actions": [{ "card": "Faithless Looting" }] },
+    { "index": 2, "summary": "land=Forest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 17,
+  "type": "discard",
+  "turn": 3,
+  "over_by": 2,
+  "discard_context": "effect",
+  "source": "Faithless Looting",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "City of Brass", "idx": 3, "num": 8, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 5, "num": 16, "tapped": true, "is_land": true }, { "name": "Vivid Creek", "idx": 4, "num": 57, "tapped": true, "is_land": true, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 1, "name": "Athreos, God of Passage", "cost": "{1}{W}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 49, "name": "Stinkweed Imp", "cost": "{2}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Tendo Ice Bridge", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Faithless Looting", "Mogis, God of Slaughter", "Nylea, God of the Hunt", "Phenax, God of Deception", "Purphoros, Bronze-Blooded", "Reflecting Pool", "Tendo Ice Bridge"], "retrace_gy": ["Faithless Looting"], "flashback_gy": ["Faithless Looting"], "library_size": 45, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }], "library_size": 51 },
+  "ai_set": [2, 0],
+  "heuristic_default": 2,
+  "options": [{ "index": 0, "name": "Golgari Grave-Troll" }, { "index": 1, "name": "Athreos, God of Passage" }, { "index": 2, "name": "Stinkweed Imp" }, { "index": 3, "name": "Tendo Ice Bridge" }],
+  "note": "reply the `index` VALUE of one of the options below (the engine's draw-order hand index) -- NOT a position in the displayed `me.hand`, which is sorted by name. An index that is not in options is silently replaced by the AI's pick. Default = the AI's pick."
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 18,
+  "type": "discard",
+  "turn": 3,
+  "over_by": 1,
+  "discard_context": "effect",
+  "source": "Faithless Looting",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "City of Brass", "idx": 3, "num": 8, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 5, "num": 16, "tapped": true, "is_land": true }, { "name": "Vivid Creek", "idx": 4, "num": 57, "tapped": true, "is_land": true, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 1, "name": "Athreos, God of Passage", "cost": "{1}{W}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 49, "name": "Stinkweed Imp", "cost": "{2}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Tendo Ice Bridge", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Faithless Looting", "Mogis, God of Slaughter", "Nylea, God of the Hunt", "Phenax, God of Deception", "Purphoros, Bronze-Blooded", "Reflecting Pool", "Tendo Ice Bridge"], "retrace_gy": ["Faithless Looting"], "flashback_gy": ["Faithless Looting"], "library_size": 45, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }], "library_size": 51 },
+  "ai_set": [],
+  "heuristic_default": 1,
+  "options": [{ "index": 1, "name": "Athreos, God of Passage" }, { "index": 2, "name": "Stinkweed Imp" }, { "index": 3, "name": "Tendo Ice Bridge" }],
+  "note": "reply the `index` VALUE of one of the options below (the engine's draw-order hand index) -- NOT a position in the displayed `me.hand`, which is sorted by name. An index that is not in options is silently replaced by the AI's pick. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 19,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 3, "card": "Stinkweed Imp" }, { "turn": 3, "card": "Tendo Ice Bridge" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "City of Brass", "idx": 3, "num": 8, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 5, "num": 16, "tapped": true, "is_land": true }, { "name": "Vivid Creek", "idx": 4, "num": 57, "tapped": true, "is_land": true, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 1, "name": "Athreos, God of Passage", "cost": "{1}{W}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Tendo Ice Bridge", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Faithless Looting", "Golgari Grave-Troll", "Mogis, God of Slaughter", "Nylea, God of the Hunt", "Phenax, God of Deception", "Purphoros, Bronze-Blooded", "Reflecting Pool", "Stinkweed Imp", "Tendo Ice Bridge"], "retrace_gy": ["Faithless Looting"], "flashback_gy": ["Faithless Looting"], "library_size": 45, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }], "library_size": 51 },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 20,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "City of Brass", "idx": 3, "num": 8, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 5, "num": 16, "tapped": true, "is_land": true }, { "name": "Vivid Creek", "idx": 4, "num": 57, "tapped": true, "is_land": true, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 1, "name": "Athreos, God of Passage", "cost": "{1}{W}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Tendo Ice Bridge", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Faithless Looting", "Golgari Grave-Troll", "Mogis, God of Slaughter", "Nylea, God of the Hunt", "Phenax, God of Deception", "Purphoros, Bronze-Blooded", "Reflecting Pool", "Stinkweed Imp", "Tendo Ice Bridge"], "retrace_gy": ["Faithless Looting"], "flashback_gy": ["Faithless Looting"], "library_size": 45, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }], "library_size": 51 },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 21,
+  "type": "dredge",
+  "source": "Draw replacement",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "City of Brass", "idx": 3, "num": 8, "is_land": true, "taps": "WUBRG" }, { "name": "Forest", "idx": 5, "num": 16, "is_land": true, "taps": "G" }, { "name": "Vivid Creek", "idx": 4, "num": 57, "is_land": true, "taps": "UWBRG", "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 1, "name": "Athreos, God of Passage", "cost": "{1}{W}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Tendo Ice Bridge", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Faithless Looting", "Golgari Grave-Troll", "Mogis, God of Slaughter", "Nylea, God of the Hunt", "Phenax, God of Deception", "Purphoros, Bronze-Blooded", "Reflecting Pool", "Stinkweed Imp", "Tendo Ice Bridge"], "retrace_gy": ["Faithless Looting"], "flashback_gy": ["Faithless Looting"], "library_size": 45, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }], "library_size": 50 },
+  "player_index": 0,
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "name": "Draw a card" }, { "index": 1, "name": "Stinkweed Imp" }, { "index": 2, "name": "Golgari Grave-Troll" }],
+  "note": "Reply 0 to draw normally, or 1..n to mill the listed card's dredge number and return it to hand. Each draw has its own choice."
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 22,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "City of Brass", "idx": 3, "num": 8, "is_land": true, "taps": "WUBRG" }, { "name": "Forest", "idx": 5, "num": 16, "is_land": true, "taps": "G" }, { "name": "Vivid Creek", "idx": 4, "num": 57, "is_land": true, "taps": "UWBRG", "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 1, "name": "Athreos, God of Passage", "cost": "{1}{W}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Tendo Ice Bridge", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Faithless Looting", "Mogis, God of Slaughter", "Nylea, God of the Hunt", "Pharika, God of Affliction", "Phenax, God of Deception", "Purphoros, Bronze-Blooded", "Purphoros, God of the Forge", "Reflecting Pool", "Replenish", "Stinkweed Imp", "Stinkweed Imp", "Tendo Ice Bridge", "Tendo Ice Bridge", "Vivid Creek"], "retrace_gy": ["Faithless Looting"], "flashback_gy": ["Faithless Looting"], "library_size": 39, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }], "library_size": 50 },
+  "plans": [
+    { "index": 0, "summary": "land=Tendo Ice Bridge; cast: Faithless Looting (flashback)", "declared_order_payability": "not_verified", "land": "Tendo Ice Bridge", "casts": ["Faithless Looting"], "actions": [{ "card": "Faithless Looting" }] },
+    { "index": 1, "summary": "land=Tendo Ice Bridge; cast: Athreos, God of Passage", "declared_order_payability": "not_verified", "land": "Tendo Ice Bridge", "casts": ["Athreos, God of Passage"], "actions": [{ "card": "Athreos, God of Passage" }] },
+    { "index": 2, "summary": "land=none; cast: Faithless Looting (flashback)", "declared_order_payability": "not_verified", "land": null, "casts": ["Faithless Looting"], "actions": [{ "card": "Faithless Looting" }] },
+    { "index": 3, "summary": "land=none; cast: Athreos, God of Passage", "declared_order_payability": "not_verified", "land": null, "casts": ["Athreos, God of Passage"], "actions": [{ "card": "Athreos, God of Passage" }] },
+    { "index": 4, "summary": "land=Tendo Ice Bridge; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Tendo Ice Bridge", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 23,
+  "type": "dredge",
+  "source": "Draw replacement",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 17, "battlefield": [{ "name": "City of Brass", "idx": 3, "num": 8, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 5, "num": 16, "tapped": true, "is_land": true }, { "name": "Vivid Creek", "idx": 4, "num": 57, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Athreos, God of Passage", "cost": "{1}{W}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Tendo Ice Bridge", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Mogis, God of Slaughter", "Nylea, God of the Hunt", "Pharika, God of Affliction", "Phenax, God of Deception", "Purphoros, Bronze-Blooded", "Purphoros, God of the Forge", "Reflecting Pool", "Replenish", "Stinkweed Imp", "Stinkweed Imp", "Tendo Ice Bridge", "Tendo Ice Bridge", "Vivid Creek"], "library_size": 39, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }], "library_size": 50 },
+  "player_index": 0,
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "name": "Draw a card" }, { "index": 1, "name": "Stinkweed Imp" }, { "index": 2, "name": "Stinkweed Imp" }],
+  "note": "Reply 0 to draw normally, or 1..n to mill the listed card's dredge number and return it to hand. Each draw has its own choice."
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 24,
+  "type": "dredge",
+  "source": "Draw replacement",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 17, "battlefield": [{ "name": "City of Brass", "idx": 3, "num": 8, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 5, "num": 16, "tapped": true, "is_land": true }, { "name": "Vivid Creek", "idx": 4, "num": 57, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Athreos, God of Passage", "cost": "{1}{W}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 49, "name": "Stinkweed Imp", "cost": "{2}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Tendo Ice Bridge", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["City of Brass", "Gemstone Mine", "Karametra, God of Harvests", "Kruphix, God of Horizons", "Mogis, God of Slaughter", "Nylea, God of the Hunt", "Pharika, God of Affliction", "Phenax, God of Deception", "Purphoros, Bronze-Blooded", "Purphoros, God of the Forge", "Reflecting Pool", "Replenish", "Stinkweed Imp", "Tendo Ice Bridge", "Tendo Ice Bridge", "Vivid Creek", "Xenagos, God of Revels"], "library_size": 34, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }], "library_size": 50 },
+  "player_index": 0,
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "name": "Draw a card" }, { "index": 1, "name": "Stinkweed Imp" }],
+  "note": "Reply 0 to draw normally, or 1..n to mill the listed card's dredge number and return it to hand. Each draw has its own choice."
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 25,
+  "type": "discard",
+  "turn": 4,
+  "over_by": 2,
+  "discard_context": "effect",
+  "source": "Faithless Looting",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 17, "battlefield": [{ "name": "City of Brass", "idx": 3, "num": 8, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 5, "num": 16, "tapped": true, "is_land": true }, { "name": "Vivid Creek", "idx": 4, "num": 57, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Athreos, God of Passage", "cost": "{1}{W}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 49, "name": "Stinkweed Imp", "cost": "{2}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Stinkweed Imp", "cost": "{2}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Tendo Ice Bridge", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Cephalid Coliseum", "City of Brass", "Gemstone Mine", "Iroas, God of Victory", "Karametra, God of Harvests", "Klothys, God of Destiny", "Kruphix, God of Horizons", "Mogis, God of Slaughter", "Nylea, God of the Hunt", "Pharika, God of Affliction", "Phenax, God of Deception", "Purphoros, Bronze-Blooded", "Purphoros, God of the Forge", "Reflecting Pool", "Replenish", "Replenish", "Tendo Ice Bridge", "Tendo Ice Bridge", "Tendo Ice Bridge", "Vivid Creek", "Xenagos, God of Revels"], "library_size": 29, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }], "library_size": 50 },
+  "ai_set": [2, 0],
+  "heuristic_default": 2,
+  "options": [{ "index": 0, "name": "Athreos, God of Passage" }, { "index": 1, "name": "Tendo Ice Bridge" }, { "index": 2, "name": "Golgari Grave-Troll" }, { "index": 3, "name": "Stinkweed Imp" }, { "index": 4, "name": "Stinkweed Imp" }],
+  "note": "reply the `index` VALUE of one of the options below (the engine's draw-order hand index) -- NOT a position in the displayed `me.hand`, which is sorted by name. An index that is not in options is silently replaced by the AI's pick. Default = the AI's pick."
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 26,
+  "type": "discard",
+  "turn": 4,
+  "over_by": 1,
+  "discard_context": "effect",
+  "source": "Faithless Looting",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 17, "battlefield": [{ "name": "City of Brass", "idx": 3, "num": 8, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 5, "num": 16, "tapped": true, "is_land": true }, { "name": "Vivid Creek", "idx": 4, "num": 57, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Athreos, God of Passage", "cost": "{1}{W}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 49, "name": "Stinkweed Imp", "cost": "{2}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Stinkweed Imp", "cost": "{2}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Tendo Ice Bridge", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Cephalid Coliseum", "City of Brass", "Gemstone Mine", "Iroas, God of Victory", "Karametra, God of Harvests", "Klothys, God of Destiny", "Kruphix, God of Horizons", "Mogis, God of Slaughter", "Nylea, God of the Hunt", "Pharika, God of Affliction", "Phenax, God of Deception", "Purphoros, Bronze-Blooded", "Purphoros, God of the Forge", "Reflecting Pool", "Replenish", "Replenish", "Tendo Ice Bridge", "Tendo Ice Bridge", "Tendo Ice Bridge", "Vivid Creek", "Xenagos, God of Revels"], "library_size": 29, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }], "library_size": 50 },
+  "ai_set": [0],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "name": "Athreos, God of Passage" }, { "index": 1, "name": "Tendo Ice Bridge" }, { "index": 3, "name": "Stinkweed Imp" }, { "index": 4, "name": "Stinkweed Imp" }],
+  "note": "reply the `index` VALUE of one of the options below (the engine's draw-order hand index) -- NOT a position in the displayed `me.hand`, which is sorted by name. An index that is not in options is silently replaced by the AI's pick. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 27,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 17, "battlefield": [{ "name": "City of Brass", "idx": 3, "num": 8, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 5, "num": 16, "tapped": true, "is_land": true }, { "name": "Vivid Creek", "idx": 4, "num": 57, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Athreos, God of Passage", "cost": "{1}{W}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Stinkweed Imp", "cost": "{2}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Tendo Ice Bridge", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Cephalid Coliseum", "City of Brass", "Gemstone Mine", "Golgari Grave-Troll", "Iroas, God of Victory", "Karametra, God of Harvests", "Klothys, God of Destiny", "Kruphix, God of Horizons", "Mogis, God of Slaughter", "Nylea, God of the Hunt", "Pharika, God of Affliction", "Phenax, God of Deception", "Purphoros, Bronze-Blooded", "Purphoros, God of the Forge", "Reflecting Pool", "Replenish", "Replenish", "Stinkweed Imp", "Tendo Ice Bridge", "Tendo Ice Bridge", "Tendo Ice Bridge", "Vivid Creek", "Xenagos, God of Revels"], "library_size": 29, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }], "library_size": 50 },
+  "plans": [
+    { "index": 0, "summary": "land=Tendo Ice Bridge; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Tendo Ice Bridge", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 28,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 17, "battlefield": [{ "name": "City of Brass", "idx": 3, "num": 8, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 5, "num": 16, "tapped": true, "is_land": true }, { "name": "Vivid Creek", "idx": 4, "num": 57, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Athreos, God of Passage", "cost": "{1}{W}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Stinkweed Imp", "cost": "{2}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Tendo Ice Bridge", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Cephalid Coliseum", "City of Brass", "Gemstone Mine", "Golgari Grave-Troll", "Iroas, God of Victory", "Karametra, God of Harvests", "Klothys, God of Destiny", "Kruphix, God of Horizons", "Mogis, God of Slaughter", "Nylea, God of the Hunt", "Pharika, God of Affliction", "Phenax, God of Deception", "Purphoros, Bronze-Blooded", "Purphoros, God of the Forge", "Reflecting Pool", "Replenish", "Replenish", "Stinkweed Imp", "Tendo Ice Bridge", "Tendo Ice Bridge", "Tendo Ice Bridge", "Vivid Creek", "Xenagos, God of Revels"], "library_size": 29, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }], "library_size": 50 },
+  "plans": [
+    { "index": 0, "summary": "land=Tendo Ice Bridge; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Tendo Ice Bridge", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 29,
+  "type": "dredge",
+  "source": "Draw replacement",
+  "turn": 5,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 17, "battlefield": [{ "name": "City of Brass", "idx": 3, "num": 8, "is_land": true, "taps": "WUBRG" }, { "name": "Forest", "idx": 5, "num": 16, "is_land": true, "taps": "G" }, { "name": "Vivid Creek", "idx": 4, "num": 57, "is_land": true, "taps": "UWBRG" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Athreos, God of Passage", "cost": "{1}{W}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Stinkweed Imp", "cost": "{2}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Tendo Ice Bridge", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Cephalid Coliseum", "City of Brass", "Gemstone Mine", "Golgari Grave-Troll", "Iroas, God of Victory", "Karametra, God of Harvests", "Klothys, God of Destiny", "Kruphix, God of Horizons", "Mogis, God of Slaughter", "Nylea, God of the Hunt", "Pharika, God of Affliction", "Phenax, God of Deception", "Purphoros, Bronze-Blooded", "Purphoros, God of the Forge", "Reflecting Pool", "Replenish", "Replenish", "Stinkweed Imp", "Tendo Ice Bridge", "Tendo Ice Bridge", "Tendo Ice Bridge", "Vivid Creek", "Xenagos, God of Revels"], "library_size": 29, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }], "library_size": 49 },
+  "player_index": 0,
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "name": "Draw a card" }, { "index": 1, "name": "Stinkweed Imp" }, { "index": 2, "name": "Golgari Grave-Troll" }],
+  "note": "Reply 0 to draw normally, or 1..n to mill the listed card's dredge number and return it to hand. Each draw has its own choice."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 30,
+  "main_ordinal": 6,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 17, "battlefield": [{ "name": "City of Brass", "idx": 3, "num": 8, "is_land": true, "taps": "WUBRG" }, { "name": "Forest", "idx": 5, "num": 16, "is_land": true, "taps": "G" }, { "name": "Vivid Creek", "idx": 4, "num": 57, "is_land": true, "taps": "UWBRG" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Athreos, God of Passage", "cost": "{1}{W}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Stinkweed Imp", "cost": "{2}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Tendo Ice Bridge", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Careful Study", "Cephalid Coliseum", "City of Brass", "Gemstone Mine", "Golgari Grave-Troll", "Iroas, God of Victory", "Karametra, God of Harvests", "Klothys, God of Destiny", "Kruphix, God of Horizons", "Magus of the Bazaar", "Mogis, God of Slaughter", "Nylea, God of the Hunt", "Pharika, God of Affliction", "Phenax, God of Deception", "Purphoros, Bronze-Blooded", "Purphoros, God of the Forge", "Reflecting Pool", "Reflecting Pool", "Reflecting Pool", "Replenish", "Replenish", "Replenish", "Stinkweed Imp", "Tendo Ice Bridge", "Tendo Ice Bridge", "Tendo Ice Bridge", "Vivid Creek", "Xenagos, God of Revels"], "library_size": 23, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }], "library_size": 49 },
+  "plans": [
+    { "index": 0, "summary": "land=Tendo Ice Bridge; cast: Athreos, God of Passage", "declared_order_payability": "not_verified", "land": "Tendo Ice Bridge", "casts": ["Athreos, God of Passage"], "actions": [{ "card": "Athreos, God of Passage" }] },
+    { "index": 1, "summary": "land=Tendo Ice Bridge; cast: Stinkweed Imp", "declared_order_payability": "not_verified", "land": "Tendo Ice Bridge", "casts": ["Stinkweed Imp"], "actions": [{ "card": "Stinkweed Imp" }] },
+    { "index": 2, "summary": "land=none; cast: Stinkweed Imp", "declared_order_payability": "not_verified", "land": null, "casts": ["Stinkweed Imp"], "actions": [{ "card": "Stinkweed Imp" }] },
+    { "index": 3, "summary": "land=Tendo Ice Bridge; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Tendo Ice Bridge", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 31,
+  "main_ordinal": 7,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 17, "battlefield": [{ "name": "City of Brass", "idx": 3, "num": 8, "is_land": true, "taps": "WUBRG" }, { "name": "Forest", "idx": 5, "num": 16, "is_land": true, "taps": "G" }, { "name": "Vivid Creek", "idx": 4, "num": 57, "is_land": true, "taps": "UWBRG" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Athreos, God of Passage", "cost": "{1}{W}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Stinkweed Imp", "cost": "{2}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Tendo Ice Bridge", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Careful Study", "Cephalid Coliseum", "City of Brass", "Gemstone Mine", "Golgari Grave-Troll", "Iroas, God of Victory", "Karametra, God of Harvests", "Klothys, God of Destiny", "Kruphix, God of Horizons", "Magus of the Bazaar", "Mogis, God of Slaughter", "Nylea, God of the Hunt", "Pharika, God of Affliction", "Phenax, God of Deception", "Purphoros, Bronze-Blooded", "Purphoros, God of the Forge", "Reflecting Pool", "Reflecting Pool", "Reflecting Pool", "Replenish", "Replenish", "Replenish", "Stinkweed Imp", "Tendo Ice Bridge", "Tendo Ice Bridge", "Tendo Ice Bridge", "Vivid Creek", "Xenagos, God of Revels"], "library_size": 23, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }], "library_size": 49 },
+  "plans": [
+    { "index": 0, "summary": "land=Tendo Ice Bridge; cast: Athreos, God of Passage", "declared_order_payability": "not_verified", "land": "Tendo Ice Bridge", "casts": ["Athreos, God of Passage"], "actions": [{ "card": "Athreos, God of Passage" }] },
+    { "index": 1, "summary": "land=Tendo Ice Bridge; cast: Stinkweed Imp", "declared_order_payability": "not_verified", "land": "Tendo Ice Bridge", "casts": ["Stinkweed Imp"], "actions": [{ "card": "Stinkweed Imp" }] },
+    { "index": 2, "summary": "land=none; cast: Stinkweed Imp", "declared_order_payability": "not_verified", "land": null, "casts": ["Stinkweed Imp"], "actions": [{ "card": "Stinkweed Imp" }] },
+    { "index": 3, "summary": "land=Tendo Ice Bridge; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Tendo Ice Bridge", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 32,
+  "type": "dredge",
+  "source": "Draw replacement",
+  "turn": 6,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 17, "battlefield": [{ "name": "City of Brass", "idx": 3, "num": 8, "is_land": true, "taps": "WUBRG" }, { "name": "Forest", "idx": 5, "num": 16, "is_land": true, "taps": "G" }, { "name": "Vivid Creek", "idx": 4, "num": 57, "is_land": true, "taps": "UWBRG" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Athreos, God of Passage", "cost": "{1}{W}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Stinkweed Imp", "cost": "{2}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Tendo Ice Bridge", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Careful Study", "Cephalid Coliseum", "City of Brass", "Gemstone Mine", "Golgari Grave-Troll", "Iroas, God of Victory", "Karametra, God of Harvests", "Klothys, God of Destiny", "Kruphix, God of Horizons", "Magus of the Bazaar", "Mogis, God of Slaughter", "Nylea, God of the Hunt", "Pharika, God of Affliction", "Phenax, God of Deception", "Purphoros, Bronze-Blooded", "Purphoros, God of the Forge", "Reflecting Pool", "Reflecting Pool", "Reflecting Pool", "Replenish", "Replenish", "Replenish", "Stinkweed Imp", "Tendo Ice Bridge", "Tendo Ice Bridge", "Tendo Ice Bridge", "Vivid Creek", "Xenagos, God of Revels"], "library_size": 23, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }], "library_size": 48 },
+  "player_index": 0,
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "name": "Draw a card" }, { "index": 1, "name": "Stinkweed Imp" }, { "index": 2, "name": "Golgari Grave-Troll" }],
+  "note": "Reply 0 to draw normally, or 1..n to mill the listed card's dredge number and return it to hand. Each draw has its own choice."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 33,
+  "main_ordinal": 8,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 17, "battlefield": [{ "name": "City of Brass", "idx": 3, "num": 8, "is_land": true, "taps": "WUBRG" }, { "name": "Forest", "idx": 5, "num": 16, "is_land": true, "taps": "G" }, { "name": "Vivid Creek", "idx": 4, "num": 57, "is_land": true, "taps": "UWBRG" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Athreos, God of Passage", "cost": "{1}{W}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 20, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Stinkweed Imp", "cost": "{2}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Tendo Ice Bridge", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Athreos, Shroud-Veiled", "Careful Study", "Cephalid Coliseum", "City of Brass", "Gemstone Mine", "Iroas, God of Victory", "Karametra, God of Harvests", "Klothys, God of Destiny", "Kruphix, God of Horizons", "Magus of the Bazaar", "Magus of the Bazaar", "Magus of the Bazaar", "Mogis, God of Slaughter", "Nylea, God of the Hunt", "Pharika, God of Affliction", "Phenax, God of Deception", "Purphoros, Bronze-Blooded", "Purphoros, God of the Forge", "Reflecting Pool", "Reflecting Pool", "Reflecting Pool", "Reflecting Pool", "Replenish", "Replenish", "Replenish", "Replenish", "Stinkweed Imp", "Tendo Ice Bridge", "Tendo Ice Bridge", "Tendo Ice Bridge", "Vivid Creek", "Vivid Creek", "Xenagos, God of Revels"], "library_size": 17, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }], "library_size": 48 },
+  "plans": [
+    { "index": 0, "summary": "land=Tendo Ice Bridge; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Tendo Ice Bridge", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=Tendo Ice Bridge; cast: Athreos, God of Passage", "declared_order_payability": "not_verified", "land": "Tendo Ice Bridge", "casts": ["Athreos, God of Passage"], "actions": [{ "card": "Athreos, God of Passage" }] },
+    { "index": 2, "summary": "land=Tendo Ice Bridge; cast: Stinkweed Imp", "declared_order_payability": "not_verified", "land": "Tendo Ice Bridge", "casts": ["Stinkweed Imp"], "actions": [{ "card": "Stinkweed Imp" }] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=none; cast: Stinkweed Imp", "declared_order_payability": "not_verified", "land": null, "casts": ["Stinkweed Imp"], "actions": [{ "card": "Stinkweed Imp" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 34,
+  "main_ordinal": 9,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 17, "battlefield": [{ "name": "City of Brass", "idx": 3, "num": 8, "is_land": true, "taps": "WUBRG" }, { "name": "Forest", "idx": 5, "num": 16, "is_land": true, "taps": "G" }, { "name": "Vivid Creek", "idx": 4, "num": 57, "is_land": true, "taps": "UWBRG" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Athreos, God of Passage", "cost": "{1}{W}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 20, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Stinkweed Imp", "cost": "{2}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Tendo Ice Bridge", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Athreos, Shroud-Veiled", "Careful Study", "Cephalid Coliseum", "City of Brass", "Gemstone Mine", "Iroas, God of Victory", "Karametra, God of Harvests", "Klothys, God of Destiny", "Kruphix, God of Horizons", "Magus of the Bazaar", "Magus of the Bazaar", "Magus of the Bazaar", "Mogis, God of Slaughter", "Nylea, God of the Hunt", "Pharika, God of Affliction", "Phenax, God of Deception", "Purphoros, Bronze-Blooded", "Purphoros, God of the Forge", "Reflecting Pool", "Reflecting Pool", "Reflecting Pool", "Reflecting Pool", "Replenish", "Replenish", "Replenish", "Replenish", "Stinkweed Imp", "Tendo Ice Bridge", "Tendo Ice Bridge", "Tendo Ice Bridge", "Vivid Creek", "Vivid Creek", "Xenagos, God of Revels"], "library_size": 17, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }], "library_size": 48 },
+  "plans": [
+    { "index": 0, "summary": "land=Tendo Ice Bridge; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Tendo Ice Bridge", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=Tendo Ice Bridge; cast: Athreos, God of Passage", "declared_order_payability": "not_verified", "land": "Tendo Ice Bridge", "casts": ["Athreos, God of Passage"], "actions": [{ "card": "Athreos, God of Passage" }] },
+    { "index": 2, "summary": "land=Tendo Ice Bridge; cast: Stinkweed Imp", "declared_order_payability": "not_verified", "land": "Tendo Ice Bridge", "casts": ["Stinkweed Imp"], "actions": [{ "card": "Stinkweed Imp" }] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=none; cast: Stinkweed Imp", "declared_order_payability": "not_verified", "land": null, "casts": ["Stinkweed Imp"], "actions": [{ "card": "Stinkweed Imp" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 35,
+  "type": "dredge",
+  "source": "Draw replacement",
+  "turn": 7,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 17, "battlefield": [{ "name": "City of Brass", "idx": 3, "num": 8, "is_land": true, "taps": "WUBRG" }, { "name": "Forest", "idx": 5, "num": 16, "is_land": true, "taps": "G" }, { "name": "Vivid Creek", "idx": 4, "num": 57, "is_land": true, "taps": "UWBRG" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Athreos, God of Passage", "cost": "{1}{W}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 20, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Stinkweed Imp", "cost": "{2}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Tendo Ice Bridge", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Athreos, Shroud-Veiled", "Careful Study", "Cephalid Coliseum", "City of Brass", "Gemstone Mine", "Iroas, God of Victory", "Karametra, God of Harvests", "Klothys, God of Destiny", "Kruphix, God of Horizons", "Magus of the Bazaar", "Magus of the Bazaar", "Magus of the Bazaar", "Mogis, God of Slaughter", "Nylea, God of the Hunt", "Pharika, God of Affliction", "Phenax, God of Deception", "Purphoros, Bronze-Blooded", "Purphoros, God of the Forge", "Reflecting Pool", "Reflecting Pool", "Reflecting Pool", "Reflecting Pool", "Replenish", "Replenish", "Replenish", "Replenish", "Stinkweed Imp", "Tendo Ice Bridge", "Tendo Ice Bridge", "Tendo Ice Bridge", "Vivid Creek", "Vivid Creek", "Xenagos, God of Revels"], "library_size": 17, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }], "library_size": 47 },
+  "player_index": 0,
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "name": "Draw a card" }, { "index": 1, "name": "Stinkweed Imp" }],
+  "note": "Reply 0 to draw normally, or 1..n to mill the listed card's dredge number and return it to hand. Each draw has its own choice."
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 36,
+  "main_ordinal": 10,
+  "type": "main_phase",
+  "turn": 7,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 17, "battlefield": [{ "name": "City of Brass", "idx": 3, "num": 8, "is_land": true, "taps": "WUBRG" }, { "name": "Forest", "idx": 5, "num": 16, "is_land": true, "taps": "G" }, { "name": "Vivid Creek", "idx": 4, "num": 57, "is_land": true, "taps": "UWBRG" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Athreos, God of Passage", "cost": "{1}{W}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 20, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Stinkweed Imp", "cost": "{2}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 49, "name": "Stinkweed Imp", "cost": "{2}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Tendo Ice Bridge", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Athreos, Shroud-Veiled", "Careful Study", "Cephalid Coliseum", "City of Brass", "Faithless Looting", "Gemstone Mine", "Iroas, God of Victory", "Karametra, God of Harvests", "Klothys, God of Destiny", "Kruphix, God of Horizons", "Life from the Loam", "Magus of the Bazaar", "Magus of the Bazaar", "Magus of the Bazaar", "Magus of the Bazaar", "Mogis, God of Slaughter", "Mystic Retrieval", "Nylea, God of the Hunt", "Pharika, God of Affliction", "Phenax, God of Deception", "Purphoros, Bronze-Blooded", "Purphoros, God of the Forge", "Reflecting Pool", "Reflecting Pool", "Reflecting Pool", "Reflecting Pool", "Replenish", "Replenish", "Replenish", "Replenish", "Stinkweed Imp", "Tendo Ice Bridge", "Tendo Ice Bridge", "Tendo Ice Bridge", "Vivid Creek", "Vivid Creek", "Xenagos, God of Revels"], "retrace_gy": ["Faithless Looting", "Mystic Retrieval"], "flashback_gy": ["Faithless Looting", "Mystic Retrieval"], "library_size": 12, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }], "library_size": 47 },
+  "plans": [
+    { "index": 0, "summary": "land=Tendo Ice Bridge; cast: Faithless Looting (flashback)", "declared_order_payability": "not_verified", "land": "Tendo Ice Bridge", "casts": ["Faithless Looting"], "actions": [{ "card": "Faithless Looting" }] },
+    { "index": 1, "summary": "land=none; cast: Faithless Looting (flashback)", "declared_order_payability": "not_verified", "land": null, "casts": ["Faithless Looting"], "actions": [{ "card": "Faithless Looting" }] },
+    { "index": 2, "summary": "land=Tendo Ice Bridge; cast: Mystic Retrieval (flashback)", "declared_order_payability": "not_verified", "land": "Tendo Ice Bridge", "casts": ["Mystic Retrieval"], "actions": [{ "card": "Mystic Retrieval" }] },
+    { "index": 3, "summary": "land=none; cast: Mystic Retrieval (flashback)", "declared_order_payability": "not_verified", "land": null, "casts": ["Mystic Retrieval"], "actions": [{ "card": "Mystic Retrieval" }] },
+    { "index": 4, "summary": "land=Tendo Ice Bridge; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Tendo Ice Bridge", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=Tendo Ice Bridge; cast: Athreos, God of Passage", "declared_order_payability": "not_verified", "land": "Tendo Ice Bridge", "casts": ["Athreos, God of Passage"], "actions": [{ "card": "Athreos, God of Passage" }] },
+    { "index": 6, "summary": "land=Tendo Ice Bridge; cast: Stinkweed Imp", "declared_order_payability": "not_verified", "land": "Tendo Ice Bridge", "casts": ["Stinkweed Imp"], "actions": [{ "card": "Stinkweed Imp" }] },
+    { "index": 7, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 8, "summary": "land=none; cast: Stinkweed Imp", "declared_order_payability": "not_verified", "land": null, "casts": ["Stinkweed Imp"], "actions": [{ "card": "Stinkweed Imp" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 37,
+  "type": "tutor_etb",
+  "source": "Mystic Retrieval",
+  "turn": 7,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 16, "battlefield": [{ "name": "City of Brass", "idx": 3, "num": 8, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 5, "num": 16, "tapped": true, "is_land": true }, { "name": "Vivid Creek", "idx": 4, "num": 57, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Athreos, God of Passage", "cost": "{1}{W}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 20, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Stinkweed Imp", "cost": "{2}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 49, "name": "Stinkweed Imp", "cost": "{2}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Tendo Ice Bridge", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Athreos, Shroud-Veiled", "Careful Study", "Cephalid Coliseum", "City of Brass", "Faithless Looting", "Gemstone Mine", "Iroas, God of Victory", "Karametra, God of Harvests", "Klothys, God of Destiny", "Kruphix, God of Horizons", "Life from the Loam", "Magus of the Bazaar", "Magus of the Bazaar", "Magus of the Bazaar", "Magus of the Bazaar", "Mogis, God of Slaughter", "Nylea, God of the Hunt", "Pharika, God of Affliction", "Phenax, God of Deception", "Purphoros, Bronze-Blooded", "Purphoros, God of the Forge", "Reflecting Pool", "Reflecting Pool", "Reflecting Pool", "Reflecting Pool", "Replenish", "Replenish", "Replenish", "Replenish", "Stinkweed Imp", "Tendo Ice Bridge", "Tendo Ice Bridge", "Tendo Ice Bridge", "Vivid Creek", "Vivid Creek", "Xenagos, God of Revels"], "retrace_gy": ["Faithless Looting"], "flashback_gy": ["Faithless Looting"], "library_size": 12, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }], "library_size": 47 },
+  "heuristic_default": 0,
+  "candidates": [{ "index": 0, "name": "Replenish" }, { "index": 1, "name": "Careful Study" }, { "index": 2, "name": "Life from the Loam" }, { "index": 3, "name": "Faithless Looting" }],
+  "note": "reply a candidate index to search that card up, or -1 to decline the optional search. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 38,
+  "main_ordinal": 11,
+  "type": "main_phase",
+  "turn": 7,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "reveals": [{ "turn": 7, "source": "Mystic Retrieval (returned from graveyard)", "cards": [{ "name": "Replenish", "disposition": "to hand" }] }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 16, "battlefield": [{ "name": "City of Brass", "idx": 3, "num": 8, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 5, "num": 16, "tapped": true, "is_land": true }, { "name": "Vivid Creek", "idx": 4, "num": 57, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Athreos, God of Passage", "cost": "{1}{W}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 20, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Replenish", "cost": "{3}{W}", "mv": 4, "kind": "nonpermanent" }, { "num": 50, "name": "Stinkweed Imp", "cost": "{2}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 49, "name": "Stinkweed Imp", "cost": "{2}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Tendo Ice Bridge", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Athreos, Shroud-Veiled", "Careful Study", "Cephalid Coliseum", "City of Brass", "Faithless Looting", "Gemstone Mine", "Iroas, God of Victory", "Karametra, God of Harvests", "Klothys, God of Destiny", "Kruphix, God of Horizons", "Life from the Loam", "Magus of the Bazaar", "Magus of the Bazaar", "Magus of the Bazaar", "Magus of the Bazaar", "Mogis, God of Slaughter", "Nylea, God of the Hunt", "Pharika, God of Affliction", "Phenax, God of Deception", "Purphoros, Bronze-Blooded", "Purphoros, God of the Forge", "Reflecting Pool", "Reflecting Pool", "Reflecting Pool", "Reflecting Pool", "Replenish", "Replenish", "Replenish", "Stinkweed Imp", "Tendo Ice Bridge", "Tendo Ice Bridge", "Tendo Ice Bridge", "Vivid Creek", "Vivid Creek", "Xenagos, God of Revels"], "retrace_gy": ["Faithless Looting"], "flashback_gy": ["Faithless Looting"], "library_size": 12, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }], "library_size": 47 },
+  "plans": [
+    { "index": 0, "summary": "land=Tendo Ice Bridge; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Tendo Ice Bridge", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 39,
+  "main_ordinal": 12,
+  "type": "main_phase",
+  "turn": 7,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 16, "battlefield": [{ "name": "City of Brass", "idx": 3, "num": 8, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 5, "num": 16, "tapped": true, "is_land": true }, { "name": "Vivid Creek", "idx": 4, "num": 57, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Athreos, God of Passage", "cost": "{1}{W}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 20, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Replenish", "cost": "{3}{W}", "mv": 4, "kind": "nonpermanent" }, { "num": 50, "name": "Stinkweed Imp", "cost": "{2}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 49, "name": "Stinkweed Imp", "cost": "{2}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Tendo Ice Bridge", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Athreos, Shroud-Veiled", "Careful Study", "Cephalid Coliseum", "City of Brass", "Faithless Looting", "Gemstone Mine", "Iroas, God of Victory", "Karametra, God of Harvests", "Klothys, God of Destiny", "Kruphix, God of Horizons", "Life from the Loam", "Magus of the Bazaar", "Magus of the Bazaar", "Magus of the Bazaar", "Magus of the Bazaar", "Mogis, God of Slaughter", "Nylea, God of the Hunt", "Pharika, God of Affliction", "Phenax, God of Deception", "Purphoros, Bronze-Blooded", "Purphoros, God of the Forge", "Reflecting Pool", "Reflecting Pool", "Reflecting Pool", "Reflecting Pool", "Replenish", "Replenish", "Replenish", "Stinkweed Imp", "Tendo Ice Bridge", "Tendo Ice Bridge", "Tendo Ice Bridge", "Vivid Creek", "Vivid Creek", "Xenagos, God of Revels"], "retrace_gy": ["Faithless Looting"], "flashback_gy": ["Faithless Looting"], "library_size": 12, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }], "library_size": 47 },
+  "plans": [
+    { "index": 0, "summary": "land=Tendo Ice Bridge; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Tendo Ice Bridge", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 40,
+  "type": "dredge",
+  "source": "Draw replacement",
+  "turn": 8,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 16, "battlefield": [{ "name": "City of Brass", "idx": 3, "num": 8, "is_land": true, "taps": "WUBRG" }, { "name": "Forest", "idx": 5, "num": 16, "is_land": true, "taps": "G" }, { "name": "Vivid Creek", "idx": 4, "num": 57, "is_land": true, "taps": "UWBRG" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Athreos, God of Passage", "cost": "{1}{W}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 20, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Replenish", "cost": "{3}{W}", "mv": 4, "kind": "nonpermanent" }, { "num": 50, "name": "Stinkweed Imp", "cost": "{2}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 49, "name": "Stinkweed Imp", "cost": "{2}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Tendo Ice Bridge", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Athreos, Shroud-Veiled", "Careful Study", "Cephalid Coliseum", "City of Brass", "Faithless Looting", "Gemstone Mine", "Iroas, God of Victory", "Karametra, God of Harvests", "Klothys, God of Destiny", "Kruphix, God of Horizons", "Life from the Loam", "Magus of the Bazaar", "Magus of the Bazaar", "Magus of the Bazaar", "Magus of the Bazaar", "Mogis, God of Slaughter", "Nylea, God of the Hunt", "Pharika, God of Affliction", "Phenax, God of Deception", "Purphoros, Bronze-Blooded", "Purphoros, God of the Forge", "Reflecting Pool", "Reflecting Pool", "Reflecting Pool", "Reflecting Pool", "Replenish", "Replenish", "Replenish", "Stinkweed Imp", "Tendo Ice Bridge", "Tendo Ice Bridge", "Tendo Ice Bridge", "Vivid Creek", "Vivid Creek", "Xenagos, God of Revels"], "retrace_gy": ["Faithless Looting"], "flashback_gy": ["Faithless Looting"], "library_size": 12, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }], "library_size": 46 },
+  "player_index": 0,
+  "heuristic_default": 2,
+  "options": [{ "index": 0, "name": "Draw a card" }, { "index": 1, "name": "Life from the Loam" }, { "index": 2, "name": "Stinkweed Imp" }],
+  "note": "Reply 0 to draw normally, or 1..n to mill the listed card's dredge number and return it to hand. Each draw has its own choice."
+}
+},
+    { "chosen": 2, "cast_order": ["**", "land=Tendo Ice Bridge", "cast=Replenish"], "decision": {
+  "decision_index": 41,
+  "main_ordinal": 13,
+  "type": "main_phase",
+  "turn": 8,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 16, "battlefield": [{ "name": "City of Brass", "idx": 3, "num": 8, "is_land": true, "taps": "WUBRG" }, { "name": "Forest", "idx": 5, "num": 16, "is_land": true, "taps": "G" }, { "name": "Vivid Creek", "idx": 4, "num": 57, "is_land": true, "taps": "UWBRG" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Athreos, God of Passage", "cost": "{1}{W}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 20, "name": "Golgari Grave-Troll", "cost": "{4}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Replenish", "cost": "{3}{W}", "mv": 4, "kind": "nonpermanent" }, { "num": 50, "name": "Stinkweed Imp", "cost": "{2}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 49, "name": "Stinkweed Imp", "cost": "{2}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Stinkweed Imp", "cost": "{2}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Tendo Ice Bridge", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Athreos, Shroud-Veiled", "Careful Study", "Cephalid Coliseum", "City of Brass", "City of Brass", "Faithless Looting", "Faithless Looting", "Gemstone Mine", "Golgari Grave-Troll", "Golgari Grave-Troll", "Iroas, God of Victory", "Karametra, God of Harvests", "Klothys, God of Destiny", "Kruphix, God of Horizons", "Life from the Loam", "Magus of the Bazaar", "Magus of the Bazaar", "Magus of the Bazaar", "Magus of the Bazaar", "Mogis, God of Slaughter", "Nylea, God of the Hunt", "Pharika, God of Affliction", "Phenax, God of Deception", "Purphoros, Bronze-Blooded", "Purphoros, God of the Forge", "Reflecting Pool", "Reflecting Pool", "Reflecting Pool", "Reflecting Pool", "Replenish", "Replenish", "Replenish", "Stinkweed Imp", "Tendo Ice Bridge", "Tendo Ice Bridge", "Tendo Ice Bridge", "Vivid Creek", "Vivid Creek", "Xenagos, God of Revels"], "retrace_gy": ["Faithless Looting", "Faithless Looting"], "flashback_gy": ["Faithless Looting", "Faithless Looting"], "library_size": 7, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }], "library_size": 46 },
+  "plans": [
+    { "index": 0, "summary": "land=Tendo Ice Bridge; cast: Faithless Looting (flashback)", "declared_order_payability": "not_verified", "land": "Tendo Ice Bridge", "casts": ["Faithless Looting"], "actions": [{ "card": "Faithless Looting" }] },
+    { "index": 1, "summary": "land=none; cast: Faithless Looting (flashback)", "declared_order_payability": "not_verified", "land": null, "casts": ["Faithless Looting"], "actions": [{ "card": "Faithless Looting" }] },
+    { "index": 2, "summary": "land=Tendo Ice Bridge; cast: Replenish", "declared_order_payability": "not_verified", "land": "Tendo Ice Bridge", "casts": ["Replenish"], "actions": [{ "card": "Replenish" }] },
+    { "index": 3, "summary": "land=Tendo Ice Bridge; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Tendo Ice Bridge", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=Tendo Ice Bridge; cast: Athreos, God of Passage", "declared_order_payability": "not_verified", "land": "Tendo Ice Bridge", "casts": ["Athreos, God of Passage"], "actions": [{ "card": "Athreos, God of Passage" }] },
+    { "index": 5, "summary": "land=Tendo Ice Bridge; cast: Stinkweed Imp", "declared_order_payability": "not_verified", "land": "Tendo Ice Bridge", "casts": ["Stinkweed Imp"], "actions": [{ "card": "Stinkweed Imp" }] },
+    { "index": 6, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=none; cast: Stinkweed Imp", "declared_order_payability": "not_verified", "land": null, "casts": ["Stinkweed Imp"], "actions": [{ "card": "Stinkweed Imp" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 8, "kind": "damage", "text": "Purphoros, God of the Forge: 2 damage to opponent (20→18)" },
+    { "turn": 8, "kind": "damage", "text": "Purphoros, God of the Forge: 2 damage to opponent (18→16)" },
+    { "turn": 8, "kind": "damage", "text": "Purphoros, God of the Forge: 2 damage to opponent (16→14)" },
+    { "turn": 8, "kind": "damage", "text": "Purphoros, God of the Forge: 2 damage to opponent (14→12)" },
+    { "turn": 8, "kind": "damage", "text": "Purphoros, God of the Forge: 2 damage to opponent (12→10)" },
+    { "turn": 8, "kind": "damage", "text": "Purphoros, God of the Forge: 2 damage to opponent (10→8)" },
+    { "turn": 8, "kind": "damage", "text": "Purphoros, God of the Forge: 2 damage to opponent (8→6)" },
+    { "turn": 8, "kind": "damage", "text": "Purphoros, God of the Forge: 2 damage to opponent (6→4)" },
+    { "turn": 8, "kind": "damage", "text": "Purphoros, God of the Forge: 2 damage to opponent (4→2)" },
+    { "turn": 8, "kind": "damage", "text": "Purphoros, God of the Forge: 2 damage to opponent (2→0)" },
+    { "turn": 8, "kind": "return", "text": "Replenish: 12 enchantment card(s) returned" }
+  ]
+}

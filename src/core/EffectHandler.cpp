@@ -220,6 +220,8 @@ void EffectHandler::MoveToGraveyard(GameState& state, const StackEntry& entry)
     // A demonstrate COPY was never a card: it ceases to exist on resolution (CR 707.10),
     // leaving nothing in any zone.
     if (entry.is_copy) { return; }
+    if (entry.cast_with_flashback)
+    { state.exile.push_back(entry.source); return; }
     // "Exile Living Wish": a self-exiling spell goes to EXILE instead. LOCKSTEP with the rollout's
     // instant/sorcery line in TurnSolver's apply_one. See CardParams::exiles_self_on_resolve for
     // why this is implemented rather than bracket-noted as inert.
@@ -524,6 +526,9 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
                     PerformTutor(state, entry.controller_index, def.params, entry.tutor_target,
                                  def.card.m_name, /*human_repick=*/true);
                 }
+                if (def.params.return_up_to_gy_lands > 0)
+                { ReturnTargetedGraveyardLands(state, entry.controller_index, entry.tutor_target,
+                                               def.params.return_up_to_gy_lands); }
                 // Crop Rotation: search a land card, put it onto the battlefield (the sacrifice-a-
                 // land additional cost is handled by the shared sacrifice_land cast path). Target =
                 // the searched tutor axis (entry.tutor_target). Lockstep with ApplyPlanDirect.
@@ -557,6 +562,10 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
                 {
                     PerformGenesisWave(state, entry.controller_index, entry.chosen_x.value_or(-1),
                                        def.card.m_name.str());
+                }
+                if (def.params.replenish_enchantments)
+                {
+                    PerformReplenish(state, entry.controller_index, def.card.m_name.str());
                 }
                 // Unearth: "Return target creature card with mana value 3 or less from your
                 // graveyard to the battlefield." Lockstep with TurnSolver::apply_one.
@@ -914,15 +923,18 @@ void EffectHandler::ResolveDirectDamage(GameState& state, const StackEntry& entr
     if (def.params.cast_draw > 0)
     {
         Player& cp = state.players[entry.controller_index];
-        const std::size_t before = cp.hand.size();
-        cp.cards_drawn_this_turn += DrawIntoHand(state, entry.controller_index,
-                                                 def.params.cast_draw, HandEntryReason::Draw);
+        std::vector<std::pair<int, InternedName>> actual_draws;
+        const DrawBatchResult draws = DrawIntoHandDetailed(
+            state, entry.controller_index, def.params.cast_draw, HandEntryReason::Draw,
+            g_reveal_logger ? &actual_draws : nullptr);
+        cp.cards_drawn_this_turn += draws.drawn;
+        if (draws.satisfied < def.params.cast_draw) { state.player_lost_on_draw = true; }
         // g_reveal_logger is null in every search/rollout scope (RevealLogPause), so this fires only
         // for the REAL game's resolution -- the same guard every reveal site uses.
         if (g_reveal_logger != nullptr)
         {
-            for (std::size_t i = before; i < cp.hand.size(); ++i)
-            { g_reveal_logger->LogDraw(cp.hand[i].m_number, cp.hand[i].m_name); }
+            for (const auto& draw : actual_draws)
+            { g_reveal_logger->LogDraw(draw.first, draw.second); }
         }
     }
 
@@ -1069,14 +1081,16 @@ void EffectHandler::ResolveDrawSpell(GameState& state, const StackEntry& entry,
         // loses (CR 104.3c, drawing from an empty library). Routed through the same loss flag the
         // draw step uses, so PlayOut ends the game. Reachable on this combo deck once a deep
         // Soulfire/cantrip dig has emptied the library; harmless for decks that never deck out.
-        int drew = DrawIntoHand(state, entry.controller_index, n, HandEntryReason::Draw);
-        controller.cards_drawn_this_turn += drew;
-        if (drew < n) { state.player_lost_on_draw = true; }
+        const DrawBatchResult draws = DrawIntoHandDetailed(state, entry.controller_index,
+                                                            n, HandEntryReason::Draw);
+        controller.cards_drawn_this_turn += draws.drawn;
+        if (draws.satisfied < n) { state.player_lost_on_draw = true; }
         // Brainstorm: "...then put two cards from your hand on top of your library in any order" --
         // PART OF THIS RESOLUTION, so it lands before any "whenever you draw" trigger (those wait for
         // the spell to finish resolving, CR 603.3). Lockstep twin: apply_one's DrawSpell branch.
         if (def.params.put_back_from_hand > 0)
-        { ResolvePutBackFromHand(state, entry.controller_index, def.params.put_back_from_hand, def.card.m_name.str()); }
+        { ResolvePutBackFromHand(state, entry.controller_index, def.params.put_back_from_hand,
+                                 def.card.m_name.str(), def.params.post_draw_discard > 0); }
     }
 
     MoveToGraveyard(state, entry);

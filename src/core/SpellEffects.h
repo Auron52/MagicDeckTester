@@ -1232,8 +1232,8 @@ inline void FireLandfallTriggers(GameState& state, int controller, int land_numb
 // Bloodghast's graveyard landfall return (FireLandfallTriggers) puts a card through the shared
 // battlefield put, defined far below; the default for `minus_counters` is added at the definition.
 inline int PutCardOntoBattlefield(GameState& state, int controller, const Card& card,
-                                  const std::string& source_name, int minus_counters,
-                                  bool as_noncreature_enchantment = false);
+                                  const std::string& source_name, int minus_counters = 0,
+                                  bool as_noncreature_enchantment = false, int owner = -1);
 inline void ApplyBlink(GameState&, int controller, int source_id, int target_id,
                        bool returns_tapped, bool permanents_ok);
 inline void FireLeavesBattlefieldTriggers(GameState&, int controller, const Card& left);
@@ -2488,6 +2488,8 @@ inline LandSearchSpec LandSearchSpecOf(const CardParams& p)
     s.optional        = p.land_search_optional;
     s.allow_partial   = p.land_search_allow_partial;
     s.subtype         = p.land_search_subtype_id;
+    if (p.karametra_cast_land_search)
+    { s.subtype_alt = SubtypeRegistry::Instance().Id("Plains"); }
     if (p.land_search_activation_cost.has_value() && p.fetch_land_types.size() >= 2)
     {
         s.subtype = SubtypeRegistry::Instance().Id(p.fetch_land_types[0]);
@@ -3079,6 +3081,7 @@ inline void TrickDraw(GameState& state, int controller, int n);
 // because FireOnCastTriggers (Niv-Mizzet, Parun's cast-trigger draw) and the activation helpers
 // above that block flush it.
 inline void ResolveDrawTriggers(GameState& state);
+inline void FlushKeranosTriggers(GameState& state);
 // RAII form of the flush: declared at the top of a shared resolution helper, it resolves every
 // pending draw trigger on EVERY exit path -- i.e. after the helper's whole effect has finished, which
 // is when CR 603.3 puts those triggers on the stack. One bool test for a deck stamped without the
@@ -3087,7 +3090,11 @@ struct DrawTriggerFlushScope
 {
     GameState& s;
     explicit DrawTriggerFlushScope(GameState& st) : s(st) {}
-    ~DrawTriggerFlushScope() { if (s.deck_has_draw_ping) { ResolveDrawTriggers(s); } }
+    ~DrawTriggerFlushScope()
+    {
+        if (s.deck_has_draw_ping) { ResolveDrawTriggers(s); }
+        if (s.deck_has_turn_gods) { FlushKeranosTriggers(s); }
+    }
     DrawTriggerFlushScope(const DrawTriggerFlushScope&)            = delete;
     DrawTriggerFlushScope& operator=(const DrawTriggerFlushScope&) = delete;
 };
@@ -3170,6 +3177,109 @@ inline void PutPlusCounters(GameState& state, Permanent& p, int n)
     AddPlusCounters(p, n << DoublerShift(state, p.controller_index, /*for_tokens=*/false));
 }
 
+// Life from the Loam's targets are physical graveyard cards, not names: two
+// copies of a land are independently targetable. A missing target simply fails
+// to resolve for that card, while surviving targets still return (CR 608.2b).
+inline void ReturnTargetedGraveyardLands(GameState& state, int controller,
+                                        const std::string& target_numbers, int maximum)
+{
+    if (target_numbers.empty() || target_numbers.front() != 'L') { return; }
+    std::size_t pos = 1;
+    int returned = 0;
+    while (pos < target_numbers.size() && returned < maximum)
+    {
+        const std::size_t end = target_numbers.find(',', pos);
+        const std::string token = target_numbers.substr(pos, end == std::string::npos
+                                                        ? end : end - pos);
+        int number = 0;
+        const auto parsed = std::from_chars(token.data(), token.data() + token.size(), number);
+        if (parsed.ec == std::errc{} && parsed.ptr == token.data() + token.size())
+        {
+            auto& gy = state.players[static_cast<std::size_t>(controller)].graveyard;
+            const auto it = std::find_if(gy.begin(), gy.end(), [&](const Card& c)
+            { return c.m_number == number && (CardDatabase::Instance().LookupCached(c)
+                ? CardDatabase::Instance().LookupCached(c)->card.IsLand() : c.IsLand()); });
+            if (it != gy.end())
+            {
+                Card card = *it;
+                gy.erase(it);
+                EnterHand(state, controller, std::move(card), HandEntryReason::Recur);
+                ++returned;
+            }
+        }
+        if (end == std::string::npos) { break; }
+        pos = end + 1;
+    }
+}
+
+inline std::vector<std::string> GraveyardLandTargetSubsets(const GameState& state,
+                                                           int controller, int maximum)
+{
+    std::vector<int> lands;
+    for (const Card& c : state.players[static_cast<std::size_t>(controller)].graveyard)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d ? d->card.IsLand() : c.IsLand()) { lands.push_back(c.m_number); }
+    }
+    std::vector<std::string> out{"L"}; // zero targets is legal
+    for (std::size_t x = 0; x < lands.size(); ++x)
+    {
+        const std::string one = "L" + std::to_string(lands[x]);
+        out.push_back(one);
+        if (maximum < 2) { continue; }
+        for (std::size_t y = x + 1; y < lands.size(); ++y)
+        {
+            const std::string two = one + "," + std::to_string(lands[y]);
+            out.push_back(two);
+            if (maximum < 3) { continue; }
+            for (std::size_t z = y + 1; z < lands.size(); ++z)
+            { out.push_back(two + "," + std::to_string(lands[z])); }
+        }
+    }
+    return out;
+}
+
+inline bool GraveyardLandTargetsLegal(const GameState& state, int controller,
+                                     const std::string& target_numbers, int maximum)
+{
+    if (target_numbers.empty() || target_numbers.front() != 'L') { return false; }
+    if (target_numbers == "L") { return true; }
+    std::vector<int> selected;
+    std::size_t pos = 1;
+    while (pos < target_numbers.size())
+    {
+        const std::size_t end = target_numbers.find(',', pos);
+        const std::string token = target_numbers.substr(pos, end == std::string::npos
+                                                        ? end : end - pos);
+        int number = 0;
+        const auto parsed = std::from_chars(token.data(), token.data() + token.size(), number);
+        if (parsed.ec != std::errc{} || parsed.ptr != token.data() + token.size()
+            || number <= 0 || std::find(selected.begin(), selected.end(), number) != selected.end())
+        { return false; }
+        const auto& gy = state.players[static_cast<std::size_t>(controller)].graveyard;
+        const auto it = std::find_if(gy.begin(), gy.end(), [&](const Card& c)
+        { return c.m_number == number && (CardDatabase::Instance().LookupCached(c)
+            ? CardDatabase::Instance().LookupCached(c)->card.IsLand() : c.IsLand()); });
+        if (it == gy.end()) { return false; }
+        selected.push_back(number);
+        if (static_cast<int>(selected.size()) > maximum) { return false; }
+        if (end == std::string::npos) { break; }
+        pos = end + 1;
+    }
+    return !selected.empty();
+}
+
+inline int GraveyardCreatureCount(const GameState& state, int controller)
+{
+    int n = 0;
+    for (const Card& c : state.players[static_cast<std::size_t>(controller)].graveyard)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d ? d->card.IsCreature() : c.IsCreature()) { ++n; }
+    }
+    return n;
+}
+
 // ---- "DOUBLE THE NUMBER OF +1/+1 COUNTERS ON <permanent>" (CR 701.10e) ---------------------------
 // "To double the number of a kind of counters on a player or permanent, give that player or
 // permanent as many counters of that kind as it already has." So it is a PUT of N more, never a
@@ -3226,7 +3336,9 @@ inline void ApplyEntersWithOnPut(Permanent& perm, const CardDefinition& d, int p
                                 std::vector<int>& done, const GameState& state,
                                 std::size_t pre_event_board_size)
 {
-    int n = d.params.enters_with_plus_counters;
+    int n = d.params.enters_with_plus_counters
+          + (d.params.enters_with_gy_creature_counters
+             ? GraveyardCreatureCount(state, perm.controller_index) : 0);
     const std::string& sub = d.params.enters_with_plus_counters_per_other_subtype;
     if (!sub.empty())
     {
@@ -5145,6 +5257,86 @@ void ApplyAttachAllEquipment(GameState& state, int controller, int balan_id);
 // chooser and emit the play event; false = a projection: provider only, no side channel.
 void FireBeginCombatAttach(GameState& state, int controller, bool live);
 
+// Xenagos, God of Revels: choose another legal creature at the beginning of
+// each combat. The combat target pin is a rank among physical creatures; the
+// Gods deck has no targeted landfall effect sharing this combat rank.
+inline void FireXenagosCombat(GameState& state, int controller, bool live = true)
+{
+    const std::size_t sources = state.battlefield.size();
+    for (std::size_t i = 0; i < sources; ++i)
+    {
+        const Permanent& source = state.battlefield[i];
+        if (source.controller_index != controller) { continue; }
+        const CardDefinition* sd = CardDatabase::Instance().LookupCached(source.card);
+        if (!sd || !sd->params.xenagos_combat_pump) { continue; }
+        const int source_num = source.card.m_number;
+        std::vector<int> legal;
+        for (int j = 0; j < static_cast<int>(state.battlefield.size()); ++j)
+        {
+            const Permanent& target = state.battlefield[static_cast<std::size_t>(j)];
+            if (target.controller_index != controller || target.card.m_number == source_num
+                || !(target.card.IsCreature() || target.is_animated)
+                || CreatureHasShroud(target, state)) { continue; }
+            legal.push_back(j);
+        }
+        if (legal.empty()) { continue; }
+        int rank = state.scripted_combat_landfall_target >= 0
+            ? static_cast<int>(state.scripted_combat_landfall_target)
+            : ResolveProvider(state).XenagosCombatTargetRank(state, controller, legal);
+        int pick = legal[std::min(rank, static_cast<int>(legal.size()) - 1)];
+        if (live && g_play_loyalty_chooser && legal.size() > 1)
+        {
+            const int chosen = (*g_play_loyalty_chooser)(state, controller,
+                source.card.m_name.str(), "gains haste and +X/+X (X = its power)", legal,
+                std::min(rank, static_cast<int>(legal.size()) - 1));
+            if (chosen >= 0 && chosen < static_cast<int>(legal.size())) { pick = legal[chosen]; }
+        }
+        Permanent& target = state.battlefield[static_cast<std::size_t>(pick)];
+        const int x = std::max(0, CombatPowerOf(target, state));
+        target.temp_power_bonus += x;
+        target.temp_tough_bonus += x;
+        target.temp_haste = true;
+    }
+}
+
+inline void PerformAthreosCoinEndStep(GameState& state, int controller)
+{
+    const int pin = state.scripted_athreos_coin;
+    state.scripted_athreos_coin = -1;
+    for (const Permanent& source : state.battlefield)
+    {
+        if (source.controller_index != controller) { continue; }
+        const CardDefinition* sd = CardDatabase::Instance().LookupCached(source.card);
+        if (!sd || !sd->params.athreos_shroud) { continue; }
+        std::vector<int> legal;
+        for (int j = 0; j < static_cast<int>(state.battlefield.size()); ++j)
+        {
+            const Permanent& target = state.battlefield[static_cast<std::size_t>(j)];
+            if (target.card.m_number == source.card.m_number
+                || !(target.card.IsCreature() || target.is_animated)
+                || CreatureHasShroud(target, state)
+                || (target.controller_index != controller && target.card.HasKeyword(Keyword::Hexproof)))
+            { continue; }
+            legal.push_back(j);
+        }
+        if (legal.empty()) { continue; }
+        int rank = pin >= 0 ? pin : ResolveProvider(state).AthreosCoinTargetRank(state, controller, legal);
+        int pick = legal[std::min(rank, static_cast<int>(legal.size()) - 1)];
+        if (g_play_loyalty_chooser && legal.size() > 1)
+        {
+            const int chosen = (*g_play_loyalty_chooser)(state, controller,
+                source.card.m_name.str(), "gets a coin counter", legal,
+                std::min(rank, static_cast<int>(legal.size()) - 1));
+            if (chosen >= 0 && chosen < static_cast<int>(legal.size())) { pick = legal[chosen]; }
+        }
+        Permanent& target = state.battlefield[static_cast<std::size_t>(pick)];
+        target.counters.Add(Counter{Counter::Type::Coin, 1});
+        const int id = target.card.m_number;
+        if (std::find(state.athreos_coin_ids.begin(), state.athreos_coin_ids.end(), id)
+            == state.athreos_coin_ids.end()) { state.athreos_coin_ids.push_back(id); }
+    }
+}
+
 // The projection's gate: does `controller` control a begin_combat_attach_all source? One pass over
 // the controller's creatures (the source is a creature), so a deck without one pays a scan and never
 // a GameState copy.
@@ -5413,6 +5605,22 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def)
 {
     int mv = cast_def.card.m_mana_cost.ManaValue();
     int active = state.active_player_index;
+    if (cast_def.card.IsCreature())
+    {
+        // Karametra triggers on the cast, before the spell enters. Each physical
+        // Karametra is a separate trigger and consumes one land-search plan pin.
+        const std::size_t sources = state.battlefield.size();
+        for (std::size_t i = 0; i < sources; ++i)
+        {
+            const Permanent& source = state.battlefield[i];
+            if (source.controller_index != active) { continue; }
+            const CardDefinition* sd = CardDatabase::Instance().LookupCached(source.card);
+            if (!sd || !sd->params.karametra_cast_land_search) { continue; }
+            const LandSearchSpec spec = LandSearchSpecOf(sd->params);
+            const int pin = ConsumeScriptedLandSearchPin();
+            PerformLandSearch(state, active, spec, source.card.m_name.str(), pin);
+        }
+    }
     const int emblem_damage = state.players[active].emblem_spell_cast_damage;
     if (emblem_damage > 0)
     {
@@ -6681,6 +6889,7 @@ inline bool HasHasteFromLords(
             const Permanent&      lord = battlefield[li];
             const CardDefinition* ldef = CardDatabase::Instance().LookupCached(lord.card);
             if (!ldef) { continue; }
+            if (ldef->params.lord_excludes_self && lord.card.m_number == creature.m_number) { continue; }
             if (ldef->params.affects_all_creatures) { return true; }
             if (all_creature_types && !ldef->params.subtypes_affected.empty()) { return true; }
             for (const std::string& sub : ldef->params.subtypes_affected)
@@ -6699,6 +6908,7 @@ inline bool HasHasteFromLords(
         if (lord.def_absent) { continue; }   // token: no definition, so never a haste lord
         const CardDefinition* ldef = CardDatabase::Instance().LookupCached(lord.card);
         if (!ldef || !ldef->params.grants_haste) { continue; }
+        if (ldef->params.lord_excludes_self && lord.card.m_number == creature.m_number) { continue; }
         // Maelstrom Wanderer: "Creatures you control have haste" -- an ALL-creatures grant
         // (affects_all_creatures), self-inclusive, matching the P/T lord scans' handling of the
         // same param. Byte-identical for every existing deck: the only prior card with
@@ -7166,6 +7376,9 @@ namespace tokenstats
 
 inline void FireCreatureEnterWatchers(GameState& state, int entered_controller, int entered_index)
 {
+    if (state.deck_has_turn_gods && entered_controller == state.active_player_index
+        && state.battlefield[entered_index].card.m_name != "Ephara, God of the Polis")
+    { state.ephara_creature_entered_this_turn = true; }
     // MTG_NO_ENTER_WATCHERS=1 -- DIAGNOSTIC BOUND ONLY, default off (byte-identical unset). Fire
     // nothing, so the walk below costs zero. This is the upper bound on what ANY optimisation of
     // this site could buy, in the same spirit as MTG_NO_M2_SOLVE. It CHANGES PLAY (no watcher
@@ -7442,6 +7655,25 @@ inline void FireCreatureEnterWatchers(GameState& state, int entered_controller, 
             state.players[opp].life -= wp.own_creature_enters_opp_life_loss * gamesetup::OpponentHeads();
             if (opp != state.active_player_index) { state.opponent_lost_life_this_turn = true; }
             if (log) { note(opp, w.card.m_name.str()); }
+        }
+        // Purphoros, God of the Forge: damage, not life loss. The loop's own-index
+        // skip enforces "another" even when Purphoros is a creature itself.
+        if (wp.own_creature_enters_opp_damage > 0 && w.controller_index == entered_controller
+            && enters_subtype_ok(wp))
+        {
+            const int opp = 1 - w.controller_index;
+            const int damage = wp.own_creature_enters_opp_damage * gamesetup::OpponentHeads();
+            const int before = state.players[opp].life;
+            state.players[opp].life -= damage;
+            RecordNoncombatDamageToPlayer(state, w.controller_index, opp, damage);
+            if (opp != state.active_player_index) { state.opponent_lost_life_this_turn = true; }
+            if (log)
+            {
+                EmitPlayEvent(state.turn_number, "damage", w.card.m_name.str() + ": "
+                              + std::to_string(damage) + " damage to opponent ("
+                              + std::to_string(before) + "\xE2\x86\x92"
+                              + std::to_string(state.players[opp].life) + ")");
+            }
         }
         // Risen Reef: "Whenever this creature or ANOTHER ELEMENTAL YOU CONTROL enters, look at the top
         // card of your library ..." -- the own-controller lane, filtered on the entrant's LIVE
@@ -8241,6 +8473,7 @@ inline TokenProto BuildTokenProto(int                              power,
         // CreatureHasLifelink tests the printed keyword, so a token swinging later gains life. The
         // first token spec in cards.json to carry it, so every existing token is byte-identical.
         else if (kw == "Lifelink")  { token.card.AddKeyword(Keyword::Lifelink); }
+        else if (kw == "Deathtouch") { token.card.AddKeyword(Keyword::Deathtouch); }
     }
     token.card.m_power     = power;
     token.card.m_toughness = toughness;
@@ -8327,6 +8560,38 @@ inline void CreateToken(
     // The card is identical for all 2^N replicas -- build it once (see TokenProto).
     const TokenProto proto = BuildTokenProto(power, toughness, subtypes, color, keywords);
     for (int i = 0; i < reps; ++i) { CreateTokenFromProto(state, controller_index, proto); }
+}
+
+// Pharika targets a physical creature card in either graveyard. The token belongs
+// to that card's owner, even when the activating player chose the other graveyard.
+inline bool ApplyPharikaExile(GameState& state, int controller, int source_id,
+                              int graveyard_owner, int target_number)
+{
+    if (graveyard_owner < 0 || graveyard_owner > 1) { return false; }
+    bool source_live = false;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller || p.card.m_number != source_id) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        source_live = d && d->params.pharika_exile_cost.has_value();
+        break;
+    }
+    if (!source_live) { return false; }
+    auto& gy = state.players[graveyard_owner].graveyard;
+    for (auto it = gy.begin(); it != gy.end(); ++it)
+    {
+        if (it->m_number != target_number) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(*it);
+        if (!(d ? d->card : *it).IsCreature()) { return false; }
+        state.exile.push_back(*it);
+        gy.erase(it);
+        TokenProto snake = BuildTokenProto(1, 1, {"Snake"}, "BG", {"Deathtouch"});
+        snake.card.AddType(CardType::Enchantment);
+        const int reps = 1 << DoublerShift(state, graveyard_owner, true);
+        for (int i = 0; i < reps; ++i) { CreateTokenFromProto(state, graveyard_owner, snake); }
+        return true;
+    }
+    return false;
 }
 
 // N identical tokens as ONE event -- the bulk form of CreateToken, for the sites that were written
@@ -9607,12 +9872,15 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index,
     {
         Permanent& e = state.battlefield[entered_index];
         const CardDefinition* ed = CardDatabase::Instance().LookupCached(e.card);
-        if (ed != nullptr && ed->params.enters_with_plus_counters > 0
+        if (ed != nullptr && (ed->params.enters_with_plus_counters > 0
+                              || ed->params.enters_with_gy_creature_counters)
             && (g_enters_with_preapplied == nullptr
                 || std::find(g_enters_with_preapplied->begin(), g_enters_with_preapplied->end(),
                              e.card.m_number) == g_enters_with_preapplied->end()))
         {
-            PutPlusCounters(state, e, ed->params.enters_with_plus_counters);
+            PutPlusCounters(state, e, ed->params.enters_with_plus_counters
+                                + (ed->params.enters_with_gy_creature_counters
+                                   ? GraveyardCreatureCount(state, e.controller_index) : 0));
             AnnihilateCounters(e);   // CR 704.5r -- a no-op unless it entered carrying -1/-1 (persist)
             if (g_play_event_sink && !g_tap_speculating)
             {
@@ -9640,7 +9908,8 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index,
         // Walking Ballista with X = 0 (or put onto the battlefield, X = 0 by CR 107.3m): a 0/0 that the
         // toughness SBA kills before any of its enter triggers resolve. Record it so those triggers do
         // not target it, and so DrainPendingZeroToughness kills it in both worlds (see the queue).
-        if (ed != nullptr && ed->params.enters_with_x_plus_counters && e.card.IsCreature()
+        if (ed != nullptr && (ed->params.enters_with_x_plus_counters
+                              || ed->params.enters_with_gy_creature_counters) && e.card.IsCreature()
             && LethalToughness(e, state) <= 0)
         {
             g_pending_zero_toughness.push_back(e.card.m_number);
@@ -10344,6 +10613,10 @@ void PerformMuxusReveal(GameState& state, int controller, const CardParams& pp);
 // SpellEffects.cpp (a per-resolution helper -- see that file's MAY-move rule).
 void PerformGenesisWave(GameState& state, int controller, int x, const std::string& source_name);
 
+// Replenish: all eligible enchantment cards return in one battlefield entry event.
+// Shared by the real resolver and the rollout; body beside PerformGenesisWave.
+void PerformReplenish(GameState& state, int controller, const std::string& source_name);
+
 // ---- Terastodon ETB-destroy heuristic (USER 2026-08-20) ---------------------------------------
 // K is the provider's (DecisionProvider::EtbDestroyK, default ProjectEtbDestroyK below); the
 // MTG_TERA_K lever that could restore the v1 shape is DELETED (no levers, USER 2026-09-30).
@@ -10515,29 +10788,34 @@ inline int ProjectEtbDestroyK(const GameState& state, int controller, const Card
 inline int DevotionTo(const GameState& state, int controller, const std::string& color)
 {
     if (color.empty()) { return 0; }
-    const char c = color[0];
+    // A two-colour devotion counts each mana symbol once if it contains either
+    // colour. In particular, {R/G} contributes one to devotion to red and green,
+    // while it contributes one to each single-colour devotion separately.
+    const auto includes = [&](char c) { return color.find(c) != std::string::npos; };
     int dev = 0;
     for (const Permanent& q : state.battlefield)
     {
         if (q.controller_index != controller) { continue; }
         const ManaCost& mc = q.card.m_mana_cost;
-        switch (c)
-        {
-            case 'W': dev += mc.white; break;
-            case 'U': dev += mc.blue;  break;
-            case 'B': dev += mc.black; break;
-            case 'R': dev += mc.red;   break;
-            case 'G': dev += mc.green; break;
-            default: break;
-        }
+        if (includes('W')) { dev += mc.white; }
+        if (includes('U')) { dev += mc.blue; }
+        if (includes('B')) { dev += mc.black; }
+        if (includes('R')) { dev += mc.red; }
+        if (includes('G')) { dev += mc.green; }
         for (int i = 0; i < mc.hybrid_count; ++i)
         {
+            const Color first  = static_cast<Color>(mc.hybrid_pair[i] >> 4);
             const Color second = static_cast<Color>(mc.hybrid_pair[i] & 0xF);
-            const bool  hit =
-                  (c == 'W' && second == Color::White) || (c == 'U' && second == Color::Blue)
-                || (c == 'B' && second == Color::Black) || (c == 'R' && second == Color::Red)
-                || (c == 'G' && second == Color::Green);
-            if (hit) { ++dev; }
+            const auto selected = [&](Color pip) {
+                return (pip == Color::White && includes('W'))
+                    || (pip == Color::Blue  && includes('U'))
+                    || (pip == Color::Black && includes('B'))
+                    || (pip == Color::Red   && includes('R'))
+                    || (pip == Color::Green && includes('G'));
+            };
+            // The flattened cost already counted the first half. Add the
+            // second half only when the first is outside the selected set.
+            if (!selected(first) && selected(second)) { ++dev; }
         }
     }
     return dev;
@@ -12145,15 +12423,15 @@ inline bool GyEnterCleanerActive(const GameState& state, int controller, int vic
 // Redcap's "damage equal to its power" reads the reduced power). Preserves the per-copy m_number
 // like the tutor-to-battlefield put. Returns the new battlefield index, or -1.
 inline int PutCardOntoBattlefield(GameState& state, int controller, const Card& card,
-                                  const std::string& source_name, int minus_counters = 0,
-                                  bool as_noncreature_enchantment)   // default from the declaration
+                                  const std::string& source_name, int minus_counters,
+                                  bool as_noncreature_enchantment, int owner)
 {
     const CardDefinition* d = CardDatabase::Instance().LookupCached(card);
     Permanent perm;
     perm.card              = d ? d->card : card;
     perm.card.m_number     = card.m_number;   // preserve per-copy id (logging / state key)
     perm.controller_index  = controller;
-    perm.owner_index       = controller;
+    perm.owner_index       = owner < 0 ? controller : owner;
     perm.entered_this_turn = true;
     // Enduring Innocence's return: "It's an enchantment. (It's not a creature.)" The type change is
     // part of how it ENTERS, so it is applied before the push -- no creature-enter watcher (another
@@ -12516,6 +12794,85 @@ inline bool SelfSacOutletUseful(const GameState& state, int controller, int sour
 // straggler `perf annotate` put 88.6% of this function on exactly those two walks' argument loads,
 // striding sizeof(Permanent). Passing the gathered list makes each death O(watchers). Every call
 // site that passes nothing keeps the original full walk, so this is inert everywhere else.
+inline void ResolveAthreosDeath(GameState& state, const Card& dead_card, bool dead_was_token)
+{
+    auto& marked = state.athreos_coin_ids;
+    const auto mark = std::find(marked.begin(), marked.end(), dead_card.m_number);
+    const bool coin = mark != marked.end();
+    if (coin) { marked.erase(mark); }
+    if (!dead_card.IsCreature()) { return; }
+
+    int owner = -1;
+    int gy_idx = -1;
+    if (!dead_was_token)
+    {
+        for (int side = 0; side < 2 && owner < 0; ++side)
+        {
+            const auto& gy = state.players[side].graveyard;
+            for (int k = 0; k < static_cast<int>(gy.size()); ++k)
+            { if (gy[k].m_number == dead_card.m_number) { owner = side; gy_idx = k; break; } }
+        }
+    }
+    // A marked creature can be owned by either player. A Shroud-Veiled source
+    // still on the battlefield returns its physical card under its controller.
+    if (coin && owner >= 0)
+    {
+        const std::size_t sources = state.battlefield.size();
+        for (std::size_t i = 0; i < sources; ++i)
+        {
+            const Permanent& source = state.battlefield[i];
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(source.card);
+            if (!d || !d->params.athreos_shroud) { continue; }
+            Card back = state.players[owner].graveyard[static_cast<std::size_t>(gy_idx)];
+            state.players[owner].graveyard.erase(state.players[owner].graveyard.begin() + gy_idx);
+            PutCardOntoBattlefield(state, source.controller_index, back,
+                                   "Athreos, Shroud-Veiled", 0, false, owner);
+            owner = -1;
+            break;
+        }
+    }
+    if (owner < 0) { return; }
+    // The passive opponent protects its board by paying when it can survive.
+    // A token cannot return and therefore provides no reason to pay.
+    for (const Permanent& source : state.battlefield)
+    {
+        if (source.controller_index != owner || source.card.m_number == dead_card.m_number) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(source.card);
+        if (!d || !d->params.athreos_passage) { continue; }
+        const int opponent = 1 - owner;
+        if (state.players[opponent].life > 3) { state.players[opponent].life -= 3; }
+        else
+        {
+            Card back = state.players[owner].graveyard[static_cast<std::size_t>(gy_idx)];
+            state.players[owner].graveyard.erase(state.players[owner].graveyard.begin() + gy_idx);
+            EnterHand(state, owner, std::move(back), HandEntryReason::Recur);
+        }
+        break;
+    }
+}
+
+inline void ResolveAthreosExile(GameState& state, const Permanent& leaving)
+{
+    auto& marked = state.athreos_coin_ids;
+    const auto mark = std::find(marked.begin(), marked.end(), leaving.card.m_number);
+    if (mark == marked.end()) { return; }
+    marked.erase(mark);
+    if (!(leaving.card.IsCreature() || leaving.is_animated) || leaving.is_token) { return; }
+    for (const Permanent& source : state.battlefield)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(source.card);
+        if (!d || !d->params.athreos_shroud) { continue; }
+        auto it = std::find_if(state.exile.begin(), state.exile.end(), [&](const Card& c)
+                       { return c.m_number == leaving.card.m_number; });
+        if (it == state.exile.end()) { return; }
+        Card back = *it;
+        state.exile.erase(it);
+        PutCardOntoBattlefield(state, source.controller_index, back,
+                               "Athreos, Shroud-Veiled", 0, false, leaving.owner_index);
+        break;
+    }
+}
+
 inline void OnCreatureDies(GameState& state, int dead_controller, const Card& dead_card,
                            bool dead_was_token, int dead_minus_counters,
                            const std::vector<int>* dwatch,
@@ -12649,7 +13006,7 @@ inline void OnCreatureDies(GameState& state, int dead_controller, const Card& de
         }
     }
 
-    if (reactions.empty()) { return; }
+    if (reactions.empty()) { ResolveAthreosDeath(state, dead_card, dead_was_token); return; }
 
     const int opp = 1 - dead_controller;
     Player&   ap  = state.players[dead_controller];
@@ -12721,6 +13078,7 @@ inline void OnCreatureDies(GameState& state, int dead_controller, const Card& de
             }
         }
     }
+    ResolveAthreosDeath(state, dead_card, dead_was_token);
 }
 
 // ---- Goblins tribal activated outlets (Krenko tap / sac-a-Goblin / Twinshot channel) -----------
@@ -13101,6 +13459,7 @@ inline void ApplyLoyaltyAbility(GameState& state, int controller, int walker_id,
                                  && (q.card.IsCreature() || q.card.HasType(CardType::Artifact));
                 const bool ajani  = q.controller_index == controller && q.card.m_number == walker_id;
                 if (!theirs && !ajani) { continue; }
+                const Permanent leaving = q;
                 const int dead_num = q.card.m_number;
                 if (!q.is_token) { state.exile.push_back(q.card); }
                 for (Permanent& e : state.battlefield)
@@ -13109,6 +13468,7 @@ inline void ApplyLoyaltyAbility(GameState& state, int controller, int walker_id,
                     if (e.aura_attached_to == dead_num) { e.aura_attached_to = 0; }
                 }
                 state.battlefield.erase(state.battlefield.begin() + i);
+                ResolveAthreosExile(state, leaving);
             }
             RefreshDevotionCreatures(state);   // Ajani's {W}{W} left devotion
             RefreshReconfigureCreatures(state);   // reconfigure (Lizard Blades): a departed host frees its piece -- RefreshReconfigureCreatures
@@ -15652,6 +16012,8 @@ inline int CanonicalSacVictim(const GameState& state, int controller, int source
 // Declared here rather than used from its definition far below: this block sits beside
 // CanonicalSacVictim (its only consumer's neighbour), which is well above the activation appliers.
 inline void ApplyPermAbility(GameState& state, int controller, int source_id, PermAbilityMode mode);
+inline void ResolvePutBackFromHand(GameState& state, int controller, int n,
+                                   const std::string& source, bool discard_instead);
 
 // The Action::sac_victim_id an emitter bakes when the victim does not exist yet. Chosen INT_MAX for
 // two reasons that both matter: no permanent can ever carry it (token ids count up from 1000), and
@@ -16375,9 +16737,11 @@ inline void ResolveCastTriggerTargets(GameState& state, int controller, const st
                           + (dead_ctrl == controller ? std::string("your ") : std::string("the opponent's "))
                           + dead.m_name.str());
         }
+        const Permanent leaving = state.battlefield[bi];
         if (destroy) { state.players[dead_owner].graveyard.push_back(dead); }
         else if (!was_token) { state.exile.push_back(dead); }   // a token ceases to exist (CR 111.7)
         state.battlefield.erase(state.battlefield.begin() + bi);
+        if (!destroy) { ResolveAthreosExile(state, leaving); }
         for (Permanent& o : state.battlefield)
         {
             if (o.equipped_to      == dead.m_number) { o.equipped_to      = 0; }
@@ -17488,6 +17852,23 @@ inline void ApplyUntapCreature(GameState& state, int controller, int source_id,
 inline std::string& NonCleanupDiscardContext()
 {
     static thread_local std::string v;
+    return v;
+}
+inline bool& NonCleanupDiscardIsEffect()
+{
+    static thread_local bool v = false;
+    return v;
+}
+// During a multi-card loot, the choices all refer to the same post-draw hand.
+// Expose the remaining picks to the viewer so it can submit them together.
+inline int& NonCleanupDiscardRemaining()
+{
+    static thread_local int v = 1;
+    return v;
+}
+inline std::vector<int>& NonCleanupDiscardAiSet()
+{
+    static thread_local std::vector<int> v;
     return v;
 }
 
@@ -20760,15 +21141,11 @@ inline void ApplyAttackDrawTriggers(GameState& state, int controller,
         if (!d || d->params.attack_draw_cards <= 0) { continue; }
         for (int k = 0; k < d->params.attack_draw_cards; ++k)
         {
-            if (pl.library.empty()) { state.player_lost_on_draw = true; return; }
-            std::size_t before = pl.hand.size();
-            DrawIntoHand(state, controller, 1, HandEntryReason::Draw);
-            pl.cards_drawn_this_turn += static_cast<int>(pl.hand.size() - before);
-            if (g_play_draw_sink)
-            {
-                for (std::size_t hi = before; hi < pl.hand.size(); ++hi)
-                { g_play_draw_sink->push_back({ state.turn_number, pl.hand[hi].m_name.str() }); }
-            }
+            const DrawAttemptResult draw = AttemptDrawIntoHand(state, controller, HandEntryReason::Draw);
+            if (!draw.satisfied) { state.player_lost_on_draw = true; return; }
+            if (draw.drew) { ++pl.cards_drawn_this_turn; }
+            if (draw.drew && g_play_draw_sink)
+            { g_play_draw_sink->push_back({ state.turn_number, draw.card_name.str() }); }
         }
     }
 }
@@ -23392,15 +23769,17 @@ inline void HellbentUpkeepResolve(GameState& state, int me, const CardParams& vp
 {
     Player& ap = state.players[static_cast<std::size_t>(me)];
     std::string drawn_names;
-    for (int k = 0; k < vp.hellbent_upkeep_draw && !ap.library.empty(); ++k)
+    for (int k = 0; k < vp.hellbent_upkeep_draw; ++k)
     {
-        Card c = ap.library.DrawTop();
-        ap.cards_drawn_this_turn += 1;
-        if (g_play_draw_sink && !g_tap_speculating) { g_play_draw_sink->push_back({ state.turn_number, c.m_name.str() }); }
-        if (g_reveal_logger) { g_reveal_logger->LogDraw(c.m_number, c.m_name.str()); }
+        const DrawAttemptResult draw = AttemptDrawIntoHand(state, me, HandEntryReason::Draw);
+        if (!draw.satisfied) { state.player_lost_on_draw = true; break; }
+        if (draw.drew) { ++ap.cards_drawn_this_turn; }
+        if (draw.drew && g_play_draw_sink && !g_tap_speculating)
+        { g_play_draw_sink->push_back({ state.turn_number, draw.card_name.str() }); }
+        if (draw.drew && g_reveal_logger)
+        { g_reveal_logger->LogDraw(draw.card_number, draw.card_name.str()); }
         if (!drawn_names.empty()) { drawn_names += ", "; }
-        drawn_names += c.m_name.str();
-        EnterHand(state, me, std::move(c), HandEntryReason::DrawStep);
+        drawn_names += draw.card_name.str();
     }
     ap.life -= vp.hellbent_upkeep_life_loss;
     if (g_play_event_sink && !g_tap_speculating)
@@ -23424,15 +23803,10 @@ inline bool PerformUpkeepHellbentDraw(GameState& state)
     if (vp == nullptr) { return true; }
     Player& ap = state.players[static_cast<std::size_t>(me)];
     if (HandHasNonStaged(ap)) { return true; }   // the trigger condition (no Visitor triggers)
-    if (ap.library.empty() && vp->hellbent_upkeep_draw > 0)
-    {
-        ap.life -= vp->hellbent_upkeep_life_loss;   // the loss still happens; the empty draw loses (CR 704.5b)
-        return false;
-    }
     // The FIRST Visitor resolves (its intervening-if still holds); its draw fills the hand, so every
     // other Visitor's re-check fails -- one resolution in total.
     HellbentUpkeepResolve(state, me, *vp, src);
-    return true;
+    return !state.player_lost_on_draw;
 }
 
 // THE OPPONENT'S UPKEEP -- PerformOpponentUpkeepHellbentDraw, at the turn boundary immediately BEFORE
@@ -23457,12 +23831,147 @@ inline bool PerformOpponentUpkeepHellbentDraw(GameState& state)
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (d == nullptr || d->params.hellbent_upkeep_draw <= 0 || !d->params.hellbent_upkeep_each_player) { continue; }
         Player& ap = state.players[static_cast<std::size_t>(me)];
-        if (ap.library.empty()) { ap.life -= d->params.hellbent_upkeep_life_loss; ok = false; continue; }
         const int drawn_before = ap.cards_drawn_this_turn;
         HellbentUpkeepResolve(state, me, d->params, p.card.m_name.str() + " (opponent's upkeep)");
+        if (state.player_lost_on_draw) { ok = false; }
         state.players[static_cast<std::size_t>(me)].cards_drawn_this_turn = drawn_before;
     }
     return ok;
+}
+
+inline void PerformMogisOpponentUpkeep(GameState& state)
+{
+    if (!state.deck_has_turn_gods) { return; }
+    const int me = state.active_player_index, opp = 1 - me;
+    int copies = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.mogis_opponent_upkeep) { ++copies; }
+    }
+    for (int k = 0; k < copies * gamesetup::OpponentHeads(); ++k)
+    {
+        int victim = -1;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+            if (p.controller_index == opp && p.card.IsCreature()) { victim = i; break; }
+        }
+        // The passive opponent chooses to sacrifice an available creature.
+        if (victim >= 0) { SacrificePermanentAt(state, opp, victim); }
+        else { dmgev::DealDamageEvent(state, me, false, false, 0, 2, 0, "Mogis, God of Slaughter"); }
+        if (OpponentHasLost(state)) { return; }
+    }
+}
+
+inline void PerformEpharaUpkeep(GameState& state)
+{
+    if (!state.deck_has_turn_gods || !state.ephara_creature_entered_last_turn) { return; }
+    const int me = state.active_player_index;
+    int copies = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.ephara_upkeep_draw) { ++copies; }
+    }
+    for (int k = 0; k < copies; ++k)
+    {
+        const DrawAttemptResult draw = AttemptDrawIntoHand(state, me, HandEntryReason::Draw);
+        if (!draw.satisfied) { state.player_lost_on_draw = true; return; }
+        if (draw.drew)
+        {
+            ++state.players[static_cast<std::size_t>(me)].cards_drawn_this_turn;
+            if (g_play_draw_sink && !g_tap_speculating)
+            { g_play_draw_sink->push_back({state.turn_number, draw.card_name.str()}); }
+            if (g_reveal_logger) { g_reveal_logger->LogDraw(draw.card_number, draw.card_name.str()); }
+        }
+    }
+}
+
+inline thread_local int* g_klothys_boundary_width_probe = nullptr;
+inline void PerformKlothysFirstMain(GameState& state)
+{
+    if (!state.deck_has_turn_gods) { return; }
+    const int me = state.active_player_index;
+    int copies = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.klothys_first_main) { ++copies; }
+    }
+    for (int k = 0; k < copies; ++k)
+    {
+        struct Candidate { int player; int number; bool land; std::string text; };
+        std::vector<Candidate> choices;
+        for (int who = 0; who < 2; ++who)
+        for (const Card& c : state.players[static_cast<std::size_t>(who)].graveyard)
+        {
+            const CardDefinition* cd = CardDatabase::Instance().LookupCached(c);
+            choices.push_back({who, c.m_number, cd ? cd->card.IsLand() : c.IsLand(),
+                (who == me ? "Your graveyard: " : "Opponent graveyard: ")
+                + c.m_name.str() + " (#" + std::to_string(c.m_number) + ")"});
+        }
+        if (choices.empty()) { continue; }
+        int pick = 0;
+        for (int i = 0; i < static_cast<int>(choices.size()); ++i)
+        { if (!choices[static_cast<std::size_t>(i)].land) { pick = i; break; } }
+        std::vector<std::pair<int, int>> modes;
+        for (int i = 0; i < static_cast<int>(choices.size()); ++i)
+        {
+            modes.emplace_back(i, static_cast<int>(Color::Red));
+            if (choices[static_cast<std::size_t>(i)].land)
+            { modes.emplace_back(i, static_cast<int>(Color::Green)); }
+        }
+        if (g_klothys_boundary_width_probe)
+        { *g_klothys_boundary_width_probe = static_cast<int>(modes.size()); }
+        int searched_color = static_cast<int>(Color::Red);
+        if (state.scripted_boundary_klothys >= 0
+            && state.scripted_boundary_klothys < static_cast<int>(modes.size()))
+        {
+            const auto [selected_pick, selected_color] = modes[static_cast<std::size_t>(state.scripted_boundary_klothys)];
+            pick = selected_pick;
+            searched_color = selected_color;
+        }
+        else if (g_play_tutor_chooser)
+        {
+            std::vector<std::string> labels;
+            for (const auto& c : choices) { labels.push_back(c.text); }
+            const int selected = (*g_play_tutor_chooser)(state, me, "Klothys, God of Destiny",
+                                                         labels, pick, {});
+            if (selected >= 0 && selected < static_cast<int>(choices.size())) { pick = selected; }
+        }
+        const Candidate chosen = choices[static_cast<std::size_t>(pick)];
+        auto& gy = state.players[static_cast<std::size_t>(chosen.player)].graveyard;
+        for (auto it = gy.begin(); it != gy.end(); ++it)
+        {
+            if (it->m_number != chosen.number) { continue; }
+            state.exile.push_back(*it);
+            gy.erase(it);
+            break;
+        }
+        if (chosen.land)
+        {
+            int color = searched_color;
+            if (g_play_etb_color_chooser)
+            {
+                const int selected = (*g_play_etb_color_chooser)(
+                    state, me, "Klothys, God of Destiny (land mana)",
+                    {static_cast<int>(Color::Red), static_cast<int>(Color::Green)}, color);
+                if (selected == static_cast<int>(Color::Green)) { color = selected; }
+            }
+            state.floating_mana.Add(static_cast<Color>(color), 1);
+        }
+        else
+        {
+            GainLife(state, me, 2);
+            dmgev::DealDamageEvent(state, me, false, false, 0, 2 * gamesetup::OpponentHeads(), 0,
+                            "Klothys, God of Destiny");
+        }
+    }
+    state.scripted_boundary_klothys = -1;
 }
 
 // FADING at upkeep (CR 702.32): "At the beginning of your upkeep, remove a fade counter from it.
@@ -24247,6 +24756,106 @@ inline int LethalToughness(const Permanent& p, const GameState& state)
     }
     t += EquipBonusFor(p, state).second;
     return t;
+}
+
+// Phenax grants this ability to every creature its controller controls. The
+// source need not be Phenax, and the amount is the source's live toughness,
+// including counters, lords, Equipment and characteristic-defining effects.
+inline bool PhenaxTapMillLive(const GameState& state, int controller, int source_id)
+{
+    bool phenax = false;
+    const Permanent* source = nullptr;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.grants_tap_mill_toughness) { phenax = true; }
+        if (p.card.m_number == source_id) { source = &p; }
+    }
+    return phenax && source != nullptr && (source->card.IsCreature() || source->is_animated) && !source->tapped
+        && CanTapNow(*source, state.battlefield);
+}
+inline int PhenaxMillAmount(const Permanent& p, const GameState& state)
+{
+    return std::max(0, LethalToughness(p, state) + AuraBonusFor(p, state).second);
+}
+inline bool ApplyPhenaxTapMill(GameState& state, int controller, int source_id, int target_player)
+{
+    if (!PhenaxTapMillLive(state, controller, source_id)
+        || target_player < 0 || target_player > 1) { return false; }
+    int amount = 0;
+    for (Permanent& p : state.battlefield)
+    {
+        if (p.controller_index == controller && p.card.m_number == source_id)
+        { amount = PhenaxMillAmount(p, state); p.tapped = true; break; }
+    }
+    if (target_player == 1)
+    { opponentdeck::MillToGraveyard(state, amount); }
+    else
+    {
+        GyShuffleBatch batch(state);
+        Player& target = state.players[0];
+        for (int i = 0; i < amount && !target.library.empty(); ++i)
+        {
+            target.graveyard.push_back(target.library.DrawTop());
+            FireGraveyardEntryTriggers(state, 0, target.graveyard.back());
+        }
+    }
+    return true;
+}
+
+// Autonomous Gods policy: one searched choice to tap every currently legal God
+// creature to mill the opponent. Resolve one tap at a time so each mill sees live toughness
+// and fires the same graveyard triggers as separate legal activations.
+inline int ApplyPhenaxGodsMassMill(GameState& state, int controller)
+{
+    std::vector<int> sources;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller || !PhenaxTapMillLive(state, controller, p.card.m_number))
+        { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && CardHasSubtype(d->card, "God")) { sources.push_back(p.card.m_number); }
+    }
+    int activated = 0;
+    for (int id : sources)
+    { activated += ApplyPhenaxTapMill(state, controller, id, 1 - controller) ? 1 : 0; }
+    return activated;
+}
+
+// At every step/phase boundary Kruphix replaces mana loss with a conversion
+// to colorless. Restricted pools remain separate; their spending restrictions
+// and the big-spell scope pointer survive the conversion.
+inline void CrossManaBoundary(GameState& state, int controller)
+{
+    bool kruphix = false;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.kruphix_banks_mana) { kruphix = true; break; }
+    }
+    if (!kruphix)
+    {
+        state.floating_mana.Clear();
+        state.floating_creature_mana.Clear();
+        state.floating_bigspell_mana.Clear();
+        state.floating_bigspell_pp = nullptr;
+        state.floating_haste_c = 0;
+        return;
+    }
+    auto convert = [](ManaPool& pool)
+    {
+        const int amount = pool.Total();
+        const int snow = std::min(pool.snow_units, amount);
+        pool.Clear();
+        pool.colorless = amount;
+        pool.snow_units = snow;
+    };
+    convert(state.floating_mana);
+    convert(state.floating_creature_mana);
+    convert(state.floating_bigspell_mana);
+    if (state.floating_bigspell_mana.Total() == 0) { state.floating_bigspell_pp = nullptr; }
 }
 
 // Ravenous Chupacabra ("When this creature enters, destroy target creature an opponent
@@ -25038,14 +25647,15 @@ inline void TrickDraw(GameState& state, int controller, int n)
 {
     if (n <= 0) { return; }
     Player& pl = state.players[controller];
-    std::size_t before = pl.hand.size();
-    int drew = DrawIntoHand(state, controller, n, HandEntryReason::Draw);
-    pl.cards_drawn_this_turn += drew;
-    if (drew < n) { state.player_lost_on_draw = true; }
+    std::vector<std::pair<int, InternedName>> actual;
+    const DrawBatchResult draws = DrawIntoHandDetailed(state, controller, n,
+                                                      HandEntryReason::Draw, &actual);
+    pl.cards_drawn_this_turn += draws.drawn;
+    if (draws.satisfied < n) { state.player_lost_on_draw = true; }
     if (g_play_draw_sink)
     {
-        for (std::size_t hi = before; hi < pl.hand.size(); ++hi)
-        { g_play_draw_sink->push_back({ state.turn_number, pl.hand[hi].m_name.str() }); }
+        for (const auto& [number, name] : actual)
+        { (void)number; g_play_draw_sink->push_back({ state.turn_number, name.str() }); }
     }
     // ...and the SAVED LOG, which this missed until 2026-09-10 while already feeding the viewer
     // sink above -- i.e. the screen showed the draw and the log did not, the exact inversion
@@ -25057,8 +25667,8 @@ inline void TrickDraw(GameState& state, int controller, int n)
     // nothing in play reads the digest, so no win turn moves.
     if (g_reveal_logger != nullptr)
     {
-        for (std::size_t hi = before; hi < pl.hand.size(); ++hi)
-        { g_reveal_logger->LogDraw(pl.hand[hi].m_number, pl.hand[hi].m_name); }
+        for (const auto& [number, name] : actual)
+        { g_reveal_logger->LogDraw(number, name); }
     }
 }
 
@@ -25330,6 +25940,100 @@ inline void EmitDrawPingEvent(const GameState& state, const DrawPingTable& t, in
 // or we have. Only the ACTIVE player's draws are tracked: the passive opponent never controls a
 // draw-trigger permanent (its permanents are scheduled spawns and gifted tokens), so its draws can
 // trigger nothing of ours ("whenever YOU draw") -- a phase-2 opponent would need a per-player mark.
+inline thread_local int* g_keranos_boundary_width_probe = nullptr;
+struct ScriptedKeranosTargets
+{
+    ScriptedKeranosTargets* previous = nullptr;
+    const std::vector<int>& pins;
+    std::size_t cursor = 0;
+    std::vector<int>* first_offer = nullptr;
+    explicit ScriptedKeranosTargets(const std::vector<int>& values, std::vector<int>* offer = nullptr);
+    ~ScriptedKeranosTargets();
+};
+inline thread_local ScriptedKeranosTargets* g_scripted_keranos_targets = nullptr;
+inline ScriptedKeranosTargets::ScriptedKeranosTargets(
+    const std::vector<int>& values, std::vector<int>* offer)
+    : previous(g_scripted_keranos_targets), pins(values), first_offer(offer)
+{ g_scripted_keranos_targets = this; }
+inline ScriptedKeranosTargets::~ScriptedKeranosTargets()
+{ g_scripted_keranos_targets = previous; }
+inline void FlushKeranosTriggers(GameState& state)
+{
+    while (state.keranos_pending_land_draws > 0 || state.keranos_pending_nonland_hits > 0)
+    {
+        if (state.keranos_pending_land_draws > 0)
+        {
+            --state.keranos_pending_land_draws;
+            const DrawAttemptResult draw = AttemptDrawIntoHand(
+                state, state.active_player_index, HandEntryReason::Draw);
+            if (!draw.satisfied) { state.player_lost_on_draw = true; return; }
+            if (draw.drew)
+            {
+                ++state.ActivePlayer().cards_drawn_this_turn;
+                if (g_play_draw_sink && !g_tap_speculating)
+                { g_play_draw_sink->push_back({state.turn_number, draw.card_name.str()}); }
+                if (g_reveal_logger) { g_reveal_logger->LogDraw(draw.card_number, draw.card_name.str()); }
+            }
+            continue;
+        }
+        --state.keranos_pending_nonland_hits;
+        const int me = state.active_player_index;
+        const int opp = 1 - me;
+        ChosenTarget target{0, opp, 0};
+        std::vector<ChosenTarget> legal{{0, opp, 0}};
+        for (int side : {opp, me})
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+            if (p.controller_index == side && BurnPermanentTargetLegal(state, me, p))
+            { legal.push_back({1, i, 0}); }
+        }
+        legal.push_back({0, me, 0});
+        if (g_keranos_boundary_width_probe)
+        { *g_keranos_boundary_width_probe = static_cast<int>(legal.size()); }
+        if (g_scripted_keranos_targets != nullptr)
+        {
+            ScriptedKeranosTargets& script = *g_scripted_keranos_targets;
+            if (script.cursor < script.pins.size())
+            {
+                const int rank = script.pins[script.cursor];
+                if (rank >= 0 && rank < static_cast<int>(legal.size()))
+                { target = legal[static_cast<std::size_t>(rank)]; }
+            }
+            else if (script.first_offer != nullptr && script.first_offer->empty())
+            {
+                for (int rank = 0; rank < static_cast<int>(legal.size()); ++rank)
+                { script.first_offer->push_back(rank); }
+            }
+            ++script.cursor;
+        }
+        if (state.scripted_boundary_keranos >= 0
+            && state.scripted_boundary_keranos < static_cast<int>(legal.size()))
+        { target = legal[static_cast<std::size_t>(state.scripted_boundary_keranos)]; }
+        if (g_play_target_chooser)
+        {
+            const CardDefinition* d = CardDatabase::Instance().Lookup("Keranos, God of Storms");
+            if (d)
+            {
+                const auto choices = (*g_play_target_chooser)(state, *d, me, 1, 3, {target});
+                if (choices.size() == 1) { target = choices.front(); }
+            }
+        }
+        state.scripted_boundary_keranos = -1;
+        if (target.kind == 0)
+        {
+            dmgev::DealDamageEvent(state, me, false, false, target.index == me ? 3 : 0,
+                            target.index == opp ? 3 : 0, 0, "Keranos, God of Storms");
+        }
+        else if (target.index >= 0 && target.index < static_cast<int>(state.battlefield.size()))
+        {
+            state.battlefield[static_cast<std::size_t>(target.index)].damage += 3;
+            dmgev::DealDamageEvent(state, me, false, false, 0, 0, 3, "Keranos, God of Storms");
+            dmgev::SbaCheckpoint(state);
+        }
+    }
+}
+
 inline void ResolveDrawTriggers(GameState& state)
 {
     if (!state.deck_has_draw_ping) { return; }
@@ -30922,6 +31626,9 @@ inline bool PermAbilitySourceLive(const GameState& state, int controller, int so
             if (ld == nullptr || state.players[controller].life < ld->params.land_search_activation_life_cost)
             { return false; }
         }
+        if (mode == PermAbilityMode::ThresholdLoot
+            && state.players[static_cast<std::size_t>(controller)].graveyard.size() < 7)
+        { return false; }
         // Khalni Heart Expedition: "Remove three quest counters" is part of the COST, so the
         // activation is impossible without them (CR 602.2b / 601.2h) -- checked before anything is
         // paid, exactly like the life gate above. A stale plan (the counters were spent) is a no-op.
@@ -31139,6 +31846,7 @@ inline const char* PermAbilityLabel(PermAbilityMode mode)
         case PermAbilityMode::TapInvestigate: return "investigate";
         case PermAbilityMode::TapDraw:        return "draw a card";
         case PermAbilityMode::SacDraw:        return "sacrifice: draw a card";
+        case PermAbilityMode::ThresholdLoot:  return "sacrifice: target player draws three, then discards three";
         // Without these two the claude-play plan menu and the executor's LogAbility both print the
         // bare "activate" default -- a human (or the claude-play oracle) would be asked to approve
         // an unnamed ability on the deck's two win conditions.
@@ -31324,6 +32032,14 @@ inline bool PingAllSelfSafe(const GameState& state, int controller, const CardDe
 // nothing.
 inline thread_local const GameState* g_perm_ability_tap_target = nullptr;
 inline thread_local std::vector<int>*  g_perm_ability_tap_sink   = nullptr;
+inline thread_local int g_threshold_loot_target = 0;
+struct ThresholdLootTargetScope
+{
+    int old;
+    explicit ThresholdLootTargetScope(int target) : old(g_threshold_loot_target)
+    { g_threshold_loot_target = target; }
+    ~ThresholdLootTargetScope() { g_threshold_loot_target = old; }
+};
 inline void ApplyPermAbility(GameState& state, int controller, int source_id, PermAbilityMode mode)
 {
     DrawTriggerFlushScope _dtf(state);   // the Niv loop: this effect's draws ping AFTER it resolves
@@ -31448,13 +32164,18 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
                     }
                 }
             }
-            else { TrickDraw(state, controller, 1); }
+            else { TrickDraw(state, controller, std::max(1, d->params.tap_draw_count)); }
             // Troyan, Gutsy Explorer: "{U}, {T}: Draw a card, then discard a card." The discard is
             // the provider's non-cleanup pick (the deck's own bucketed discard doctrine -- the Neheb /
             // Burning-Fist precedent; MTG_NONCLEANUP_SHED_WORST brackets it), surfaced to a human as
             // a `discard` decision by ChooseNonCleanupDiscardIndex itself. This shared resolution is
             // what both worlds call, so executor and rollout discard the same card.
-            if (d->params.tap_draw_then_discard)
+            if (d->params.tap_post_draw_discard > 0)
+            {
+                ResolvePutBackFromHand(state, controller, d->params.tap_post_draw_discard,
+                                       src_name, /*discard_instead=*/true);
+            }
+            else if (d->params.tap_draw_then_discard)
             {
                 Player& ap = state.players[controller];
                 const int hi = ChooseNonCleanupDiscardIndex(state, controller, src_name);
@@ -31714,6 +32435,33 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
             TrickDraw(state, controller, 1);
             break;
         }
+        case PermAbilityMode::ThresholdLoot:
+        {
+            // Both {T} and sacrifice are costs. The caller tapped this land before
+            // paying {U}; remove it before either player's first draw.
+            const Card raw = state.battlefield[static_cast<std::size_t>(idx)].card;
+            state.battlefield.erase(state.battlefield.begin() + idx);
+            state.players[static_cast<std::size_t>(controller)].graveyard.push_back(raw);
+            FireSacrificeWatchers(state, controller);
+            if (g_threshold_loot_target == 0)
+            {
+                TrickDraw(state, controller, 3);
+                ResolvePutBackFromHand(state, controller, 3, src_name, true);
+            }
+            else
+            {
+                opponentdeck::ForcedDraw(state, 3);
+                Player& opp = state.players[static_cast<std::size_t>(1 - controller)];
+                for (int i = 0; i < 3 && !opp.hand.empty(); ++i)
+                {
+                    // The passive opponent chooses its own discard. Its hand has no
+                    // play policy; choose the last card deterministically.
+                    DiscardCardFromHand(state, 1 - controller,
+                        static_cast<int>(opp.hand.size()) - 1, nullptr, src_name);
+                }
+            }
+            break;
+        }
         case PermAbilityMode::SporeSaproling:
         {
             // "Remove three spore counters from this creature: Create a 1/1 green Saproling."
@@ -31806,9 +32554,11 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
             // the human picks from every library creature card, the provider's pick preselected.
             {
                 Permanent& bq = state.battlefield[static_cast<std::size_t>(idx)];
+                const Permanent leaving = bq;
                 const int bnum = bq.card.m_number;
                 if (!bq.is_token) { state.exile.push_back(bq.card); }
                 state.battlefield.erase(state.battlefield.begin() + idx);
+                ResolveAthreosExile(state, leaving);
                 for (Permanent& o : state.battlefield)
                 {
                     if (o.equipped_to      == bnum) { o.equipped_to      = 0; }
@@ -32298,6 +33048,45 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
             break;
         }
         default: break;
+    }
+}
+
+// Provider-owned upkeep timing for a zero-mana tap/draw/discard ability.
+// The source is tapped as a cost before its shared effect resolves. This is
+// called at the same upkeep priority window by the executor and the rollout.
+inline void PerformProviderUpkeepTapDraw(GameState& state)
+{
+    const bool human_prompt = HumanPlayActive() && g_play_magus_upkeep_prompt
+        && g_play_tutor_chooser != nullptr;
+    if (HumanPlayActive() && !human_prompt) { return; }
+    const int controller = state.active_player_index;
+    std::vector<int> sources;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller || p.tapped
+            || !CanTapNow(p, state.battlefield)) { continue; }
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
+        if (def == nullptr || !def->params.tap_draw_cost
+            || def->params.tap_draw_cost->ManaValue() != 0
+            || def->params.tap_post_draw_discard <= 0
+            || !(human_prompt ? p.card.m_name == "Magus of the Bazaar"
+                             : ResolveProvider(state).UpkeepOnlyTapDraw(state, *def))) { continue; }
+        sources.push_back(p.card.m_number);
+    }
+    for (int number : sources)
+    {
+        auto it = std::find_if(state.battlefield.begin(), state.battlefield.end(),
+            [number, controller](const Permanent& p)
+            { return p.card.m_number == number && p.controller_index == controller; });
+        if (it == state.battlefield.end() || it->tapped
+            || !CanTapNow(*it, state.battlefield)) { continue; }
+        if (human_prompt && (*g_play_tutor_chooser)(state, controller,
+                "Magus of the Bazaar (upkeep ability)", {"Activate"}, -1, {}) != 0)
+        { continue; }
+        it->tapped = true;
+        ApplyPermAbility(state, controller, number, PermAbilityMode::TapDraw);
+        if (state.deck_has_turn_gods) { FlushKeranosTriggers(state); }
+        if (state.player_lost_on_draw) { break; }
     }
 }
 
@@ -39237,6 +40026,15 @@ inline const std::vector<Color>& EffectiveProducesFor(const GameState& state, in
         static const std::vector<Color> kIslandBlue{ Color::Blue };
         return kIslandBlue;
     }
+    if (perm != nullptr && def.params.enters_with_mana_counters > 0
+        && perm->charge_counters <= 0)
+    {
+        static const std::vector<Color> kNone{};
+        static const std::vector<Color> kC{ Color::Colorless };
+        static const std::vector<Color> kU{ Color::Blue };
+        if (def.params.mana_counters_are_mining) { return kNone; }
+        return def.params.produces.front() == Color::Colorless ? kC : kU;
+    }
     // (A colour-choosing LAND AURA -- Utopia Sprawl -- is not a mana source of its own: its colour rides
     // the host's tap through LandAuraProducesFor, so it never resolves here.)
     if (perm != nullptr && def.params.etb_choose_color && perm->chosen_color >= 0
@@ -40781,11 +41579,13 @@ inline bool HasReanimateTarget(const GameState& state, int controller, int max_m
 // tutor filters every zone tutor applies (empty tutor_types = any card; colour; TutorNumericFilterOk,
 // which carries Reborn Hope's multicolored conjunct), read off each card's DEFINITION. true for every
 // non-regrowth card, so the cast gates that call it are byte-identical elsewhere.
-inline bool HasGraveyardTutorTarget(const GameState& state, int controller, const CardParams& pp)
+inline bool HasGraveyardTutorTarget(const GameState& state, int controller, const CardParams& pp,
+                                   int excluded_card_number = 0)
 {
     if (!pp.tutor_from_graveyard) { return true; }
     for (const Card& gc : state.players[static_cast<std::size_t>(controller)].graveyard)
     {
+        if (excluded_card_number != 0 && gc.m_number == excluded_card_number) { continue; }
         const Card& card = ZoneCard(gc);
         bool type_ok = pp.tutor_types.empty();
         for (const std::string& t : pp.tutor_types)
@@ -42365,22 +43165,39 @@ inline std::vector<std::vector<int>> PutBackCandidates(const GameState& state, i
         { if (a.cls[i] != b.cls[i]) { return a.cls[i] > b.cls[i]; } }
         return false;
     });
-    // PER-CARD DEFAULT (DecisionProvider::PutBackRankingPerCard): the two most expendable CARDS, the less
-    // expendable on top, become candidate 0; everything else keeps its place. Same set, same count.
-    if (take <= 2 && sels.size() > 1 && ResolveProvider(state).PutBackRankingPerCard(state))
+    // PER-CARD DEFAULT: a deck can protect one physical copy of a card while
+    // discarding another. The candidate classes still fold identical outcomes;
+    // only their first/default order reads the physical-card ranking.
+    if (take <= 3 && sels.size() > 1 && ResolveProvider(state).PutBackRankingPerCard(state))
     {
         int def[2];
-        const int got = PutBackPerCardDefault(pl, ranking, take, def);
+        std::vector<int> picked;
+        if (take <= 2)
+        {
+            const int got = PutBackPerCardDefault(pl, ranking, take, def);
+            for (int j = 0; j < got; ++j) { picked.push_back(def[j]); }
+        }
+        else
+        {
+            auto offer = [&](int hi)
+            {
+                if (hi < 0 || hi >= static_cast<int>(pl.hand.size()) || !PutBackEligible(pl.hand[hi])) { return; }
+                if (std::find(picked.begin(), picked.end(), hi) == picked.end()) { picked.push_back(hi); }
+            };
+            for (int hi : ranking) { if (static_cast<int>(picked.size()) < take) { offer(hi); } }
+            for (int hi = 0; hi < static_cast<int>(pl.hand.size()) && static_cast<int>(picked.size()) < take; ++hi)
+            { offer(hi); }
+        }
         auto cls_of = [&](int hi) -> int
         {
             for (std::size_t ci = 0; ci < classes.size(); ++ci)
             { if (std::find(classes[ci].members.begin(), classes[ci].members.end(), hi) != classes[ci].members.end()) { return static_cast<int>(ci); } }
             return -1;
         };
-        if (got == take)
+        if (static_cast<int>(picked.size()) == take)
         {
-            std::vector<int> want;   // element 0 = TOP: the less expendable of the two
-            for (int j = take - 1; j >= 0; --j) { want.push_back(cls_of(def[j])); }
+            std::vector<int> want;   // the less expendable card goes first
+            for (int j = take - 1; j >= 0; --j) { want.push_back(cls_of(picked[j])); }
             auto it = std::find_if(sels.begin(), sels.end(), [&](const Sel& x) { return x.cls == want; });
             if (it != sels.end() && it != sels.begin()) { std::rotate(sels.begin(), it, it + 1); }
         }
@@ -42724,6 +43541,18 @@ struct PutBackClassCounter
             const int classes = static_cast<int>(counts.size());
             return take == 1 ? classes : classes * (classes - 1) + dups;
         }
+        if (take == 3)
+        {
+            const int classes = static_cast<int>(counts.size());
+            int pairs = 0, triples = 0;
+            for (const auto& x : counts)
+            {
+                pairs += x.second >= 2;
+                triples += x.second >= 3;
+            }
+            return classes * (classes - 1) * (classes - 2)
+                 + 3 * pairs * (classes - 1) + triples;
+        }
         std::vector<int> m;
         m.reserve(counts.size());
         for (const auto& x : counts) { m.push_back(x.second); }
@@ -42737,10 +43566,86 @@ inline int PutBackCandidateCount(const GameState& state, const std::vector<Card>
     return cc.Count(n);
 }
 
+// Rank zero for a discard/put-back of more than two cards. The reference order first
+// minimizes the sum of provider-ranked class indices, then puts the larger class
+// index first. Thus its first selection takes the earliest available classes (with
+// multiplicity), in reverse class order. Count separately without allocating every
+// ordered selection; Magus can otherwise build thousands of temporary vectors per
+// draw even when the provider searches only its default discard.
+inline std::vector<int> PutBackFirstCandidate(const GameState& state, int controller, int n)
+{
+    const Player& pl = state.players[controller];
+    struct Cls { std::uint64_t key; std::vector<int> members; int rank; };
+    std::vector<Cls> classes;
+    for (int i = 0; i < static_cast<int>(pl.hand.size()); ++i)
+    {
+        const Card& c = pl.hand[static_cast<std::size_t>(i)];
+        if (!PutBackEligible(c)) { continue; }
+        const std::uint64_t key = PutBackClassKey(state, c);
+        auto it = std::find_if(classes.begin(), classes.end(),
+                               [&](const Cls& x) { return x.key == key; });
+        if (it == classes.end()) { classes.push_back(Cls{ key, { i }, 1 << 20 }); }
+        else { it->members.push_back(i); }
+    }
+    const std::vector<int> ranking = ResolveProvider(state).PutBackRanking(state, controller);
+    for (std::size_t r = 0; r < ranking.size(); ++r)
+        for (Cls& cl : classes)
+            if (std::find(cl.members.begin(), cl.members.end(), ranking[r]) != cl.members.end())
+                cl.rank = std::min(cl.rank, static_cast<int>(r));
+    std::stable_sort(classes.begin(), classes.end(),
+                     [](const Cls& a, const Cls& b) { return a.rank < b.rank; });
+
+    if (n == 3 && ResolveProvider(state).PutBackRankingPerCard(state))
+    {
+        std::vector<int> picked;
+        picked.reserve(3);
+        auto offer = [&](int hi)
+        {
+            if (hi < 0 || hi >= static_cast<int>(pl.hand.size()) || !PutBackEligible(pl.hand[hi])) { return; }
+            if (std::find(picked.begin(), picked.end(), hi) == picked.end()) { picked.push_back(hi); }
+        };
+        for (int hi : ranking) { if (picked.size() < 3) { offer(hi); } }
+        for (int hi = 0; hi < static_cast<int>(pl.hand.size()) && picked.size() < 3; ++hi) { offer(hi); }
+        std::vector<int> out;
+        std::vector<int> taken(classes.size(), 0);
+        for (auto it = picked.rbegin(); it != picked.rend(); ++it)
+        {
+            const std::uint64_t key = PutBackClassKey(state, pl.hand[static_cast<std::size_t>(*it)]);
+            for (std::size_t ci = 0; ci < classes.size(); ++ci)
+            {
+                if (classes[ci].key != key) { continue; }
+                out.push_back(classes[ci].members[static_cast<std::size_t>(taken[ci]++)]);
+                break;
+            }
+        }
+        return out;
+    }
+
+    std::vector<int> selected;
+    for (const Cls& cl : classes)
+        for (int member : cl.members)
+        {
+            if (static_cast<int>(selected.size()) >= n) { break; }
+            selected.push_back(member);
+        }
+    // Reverse class order, but preserve each class's member order. The reference
+    // maps a repeated class to its first, second, ... hand copy in that order.
+    std::vector<int> out;
+    out.reserve(selected.size());
+    for (auto it = classes.rbegin(); it != classes.rend(); ++it)
+        for (int member : it->members)
+        {
+            if (std::find(selected.begin(), selected.end(), member) != selected.end())
+                out.push_back(member);
+        }
+    return out;
+}
+
 // Resolve the put-back: choose (pin / human / default), then move the cards from hand to the library
 // top so that pick[0] is drawn first. Shared by the executor (EffectHandler::ResolveDrawSpell) and the
 // rollout (apply_one's DrawSpell branch) -- lockstep by construction.
-inline void ResolvePutBackFromHand(GameState& state, int controller, int n, const std::string& source)
+inline void ResolvePutBackFromHand(GameState& state, int controller, int n,
+                                   const std::string& source, bool discard_instead = false)
 {
     if (n <= 0) { return; }
     // The candidate at the pinned rank (clamped) or the default (rank 0), and the list's length --
@@ -42749,11 +43654,23 @@ inline void ResolvePutBackFromHand(GameState& state, int controller, int n, cons
     int count = 0, take = 0;
     const int* pick = nullptr;
     PutBackPick fast;
+    std::vector<int> first;
     std::vector<std::vector<int>> ref;
     if (n <= 2)
     {
         fast  = PutBackPickAt(state, controller, n, want);
         count = fast.count; take = fast.take; pick = fast.idx;
+    }
+    else if (want == 0 && std::count_if(state.players[controller].hand.begin(),
+                                         state.players[controller].hand.end(), PutBackEligible) >= 3)
+    {
+        count = PutBackCandidateCount(state, state.players[controller].hand, n);
+        if (count > 0)
+        {
+            first = PutBackFirstCandidate(state, controller, n);
+            take = static_cast<int>(first.size());
+            pick = first.data();
+        }
     }
     else
     {
@@ -42789,6 +43706,40 @@ inline void ResolvePutBackFromHand(GameState& state, int controller, int n, cons
     }
     // ...a human is not asked once the game is already over (a Parun cast-trigger loop can kill ABOVE the
     // Brainstorm, which still resolves: claude-play sweep s71003) -- the default takes it silently.
+    else if (discard_instead && g_play_discard_chooser != nullptr && !OpponentHasLost(state))
+    {
+        g_putback_resolved_w = -1;
+        const Player& hp = state.players[controller];
+        for (int slot = 0; slot < take; ++slot)
+        {
+            std::vector<int> legal;
+            for (int i = 0; i < static_cast<int>(hp.hand.size()); ++i)
+            {
+                if (!PutBackEligible(hp.hand[static_cast<std::size_t>(i)])) { continue; }
+                if (std::find(chosen.begin(), chosen.end(), i) == chosen.end()) { legal.push_back(i); }
+            }
+            if (legal.empty()) { break; }
+            int def = legal.front();
+            for (int i : legal) { if (i == pick[slot]) { def = i; break; } }
+            NonCleanupDiscardContext() = source;
+            NonCleanupDiscardIsEffect() = true;
+            NonCleanupDiscardRemaining() = take - slot;
+            NonCleanupDiscardAiSet().clear();
+            for (int j = slot; j < take; ++j)
+            {
+                const int candidate = pick[j];
+                if (std::find(chosen.begin(), chosen.end(), candidate) == chosen.end())
+                { NonCleanupDiscardAiSet().push_back(candidate); }
+            }
+            const int r = (*g_play_discard_chooser)(state, controller, legal, def);
+            NonCleanupDiscardContext().clear();
+            NonCleanupDiscardIsEffect() = false;
+            NonCleanupDiscardRemaining() = 1;
+            NonCleanupDiscardAiSet().clear();
+            chosen.push_back(std::find(legal.begin(), legal.end(), r) != legal.end() ? r : def);
+        }
+        if (static_cast<int>(chosen.size()) == take) { pick = chosen.data(); }
+    }
     else if (g_play_dig_chooser != nullptr && !OpponentHasLost(state))
     {
         g_putback_resolved_w = -1;   // a human's pick is no fold's business
@@ -42865,6 +43816,19 @@ inline void ResolvePutBackFromHand(GameState& state, int controller, int n, cons
             std::fprintf(stderr, "[putback-trace] T%d real=%d want=%d count=%d hand=[%s] back=[%s]\n",
                          state.turn_number, g_real_resolution ? 1 : 0, want, count, hd.c_str(), pk.c_str());
         }
+    }
+    if (discard_instead)
+    {
+        // Both cards are selected from the post-draw hand. Remove them in descending index
+        // order so the second selection keeps its identity; the discard hook carries madness,
+        // graveyard-shuffle and discard watchers in both the executor and rollout.
+        std::vector<int> indices(pick, pick + take);
+        std::sort(indices.begin(), indices.end(), std::greater<int>());
+        std::vector<MadnessPending> pending;
+        for (int hi : indices)
+        { DiscardCardFromHand(state, controller, hi, &pending, source); }
+        ResolvePendingMadness(state, pending, MadnessWindowNow(state), MadnessPin{}, source);
+        return;
     }
     // Copy the cards out first (indices refer to the current hand), then erase highest index first.
     std::vector<Card> moved;
@@ -43756,6 +44720,9 @@ inline void EnterLand(GameState& state, const CardDefinition& def, int card_numb
         dep.count = def.params.enters_tapped_with_depletion;
         perm.counters.Add(dep);
     }
+    if (def.params.enters_with_mana_counters > 0)
+    { perm.charge_counters = def.params.enters_with_mana_counters
+                           << DoublerShift(state, perm.controller_index, /*for_tokens=*/false); }
     state.battlefield.push_back(perm);
     // The landfall HISTORY bit, set HERE and not only in OnLandEntered, because a put with
     // fire_landfall=false (Genesis Wave's simultaneous batch) reaches OnLandEntered only when a landfall
@@ -46455,6 +47422,11 @@ inline void SacrificeDepletedLands(GameState& state)
         {
             if (c.type == Counter::Type::Depletion && c.count <= 0) { depleted = true; break; }
         }
+        if (!depleted && it->charge_counters <= 0)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(it->card);
+            depleted = d && d->params.sacrifice_when_mana_counters_empty;
+        }
         if (depleted)
         {
             state.players[it->owner_index].graveyard.push_back(it->card);
@@ -47219,12 +48191,14 @@ inline void ResolveCreatureRemovalAt(GameState& state, int bi, const CardDefinit
 {
     if (bi < 0 || bi >= static_cast<int>(state.battlefield.size())) { return; }
     Permanent& target = state.battlefield[static_cast<std::size_t>(bi)];
+    const Permanent leaving = target;
     const int tgt_controller = target.controller_index;
     const int tgt_power      = target.EffectivePower();   // captured before the erase (Swords' rider)
     const int dead_num       = target.card.m_number;
     if (def.params.damage > 0) { state.exile.push_back(target.card); }   // exile
     else { state.players[static_cast<std::size_t>(tgt_controller)].graveyard.push_back(target.card); }
     state.battlefield.erase(state.battlefield.begin() + bi);
+    if (def.params.damage > 0) { ResolveAthreosExile(state, leaving); }
     RefreshDevotionCreatures(state);   // an own white permanent leaving lowers devotion (Heliod)
     for (Permanent& e : state.battlefield)
     {
@@ -47615,10 +48589,10 @@ inline int PerformDrawX(GameState& state, int controller, bool target_opponent, 
 {
     if (n <= 0) { return 0; }
     if (target_opponent) { return opponentdeck::ForcedDraw(state, n); }
-    const int drew = DrawIntoHand(state, controller, n, HandEntryReason::Draw);
-    state.players[controller].cards_drawn_this_turn += drew;
-    if (drew < n) { state.player_lost_on_draw = true; }
-    return drew;
+    const DrawBatchResult draws = DrawIntoHandDetailed(state, controller, n, HandEntryReason::Draw);
+    state.players[controller].cards_drawn_this_turn += draws.drawn;
+    if (draws.satisfied < n) { state.player_lost_on_draw = true; }
+    return draws.drawn;
 }
 
 // =================================================================================================

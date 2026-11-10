@@ -257,6 +257,7 @@ struct PermPaySnap
 {
     bool tapped;
     int  depletion;   // first Depletion entry's count; -1 = no Depletion entry
+    int  charge;
     int  storage;
     bool eaten;       // §2b: marked as sac-outlet fodder by THIS payment attempt (Permanent::pay_sac_eaten)
     std::uint8_t dmg_mark;   // Prevent Damage: Permanent::mana_tap_mark (0 on every unarmed board)
@@ -318,7 +319,7 @@ static void SnapPayFields(const std::vector<Permanent>& bf, std::vector<PermPayS
         int dep = -1;
         for (const Counter& c : bf[i].counters)
         { if (c.type == Counter::Type::Depletion) { dep = c.count; break; } }
-        out[i] = PermPaySnap{ bf[i].tapped, dep, bf[i].storage_counters, bf[i].pay_sac_eaten,
+        out[i] = PermPaySnap{ bf[i].tapped, dep, bf[i].charge_counters, bf[i].storage_counters, bf[i].pay_sac_eaten,
                               bf[i].mana_tap_mark };
     }
 }
@@ -333,6 +334,7 @@ static void RestorePayFields(std::vector<Permanent>& bf, const std::vector<PermP
     {
         Permanent& p       = bf[i];
         p.tapped           = snap[i].tapped;
+        p.charge_counters  = snap[i].charge;
         p.storage_counters = snap[i].storage;
         p.pay_sac_eaten    = snap[i].eaten;   // §2b: a failed attempt eats nothing
         p.mana_tap_mark    = snap[i].dmg_mark; // a failed attempt records no damage event
@@ -701,6 +703,11 @@ void TapSourceIntoFloat(GameState& state, int active, Permanent& p, const CardDe
             available->wild -= bonus.wild; available->wild_c -= bonus.wild_c;
         }
     }
+    // Read this tap's colours before removing the activation-cost counter. On the last
+    // use a Mine has no future mana ability, but this tap still produces its colour.
+    if (def.params.enters_with_mana_counters > 0 && p.charge_counters > 0
+        && (def.params.mana_counters_are_mining || col != def.params.produces.front()))
+    { --p.charge_counters; }
 }
 
 // ---- A CONVERSION source's tap, shared ------------------------------------------------------------
@@ -7703,9 +7710,9 @@ std::size_t CastAndResolveRemand(GameState& state, int controller, const CardDef
     if (countered) { ReturnCounteredSpellToHand(state, controller, x_card); }
     const std::size_t before = p.hand.size();
     const int want = remand_def.params.draw;
-    const int drew = DrawIntoHand(state, controller, want, HandEntryReason::Draw);
-    p.cards_drawn_this_turn += drew;
-    if (drew < want) { state.player_lost_on_draw = true; }
+    const DrawBatchResult draws = DrawIntoHandDetailed(state, controller, want, HandEntryReason::Draw);
+    p.cards_drawn_this_turn += draws.drawn;
+    if (draws.satisfied < want) { state.player_lost_on_draw = true; }
     p.graveyard.push_back(remand_card);
     // Remand has finished resolving: its draw's triggers (Niv-Mizzet's ping) go on the stack NOW,
     // above X (CR 603.3), so they resolve before an uncounterable X does. Without this flush the
@@ -10908,6 +10915,31 @@ static std::string ApplyPreTapImpl(GameState& state, const TurnSolver::PreTap& t
 
 std::string ApplyHumanPreTap(GameState& state, const TurnSolver::PreTap& t)  { return ApplyPreTapImpl(state, t, true); }
 std::string ApplyEnginePreTap(GameState& state, const TurnSolver::PreTap& t) { return ApplyPreTapImpl(state, t, false); }
+
+bool ApplyKruphixBankTap(GameState& state, int source_id, char face)
+{
+    bool kruphix = false;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.kruphix_banks_mana) { kruphix = true; break; }
+    }
+    if (!kruphix) { return false; }
+    const std::string letters = "WUBRGC";
+    const std::size_t pos = letters.find(face);
+    if (pos == std::string::npos) { return false; }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index || p.card.m_number != source_id) { continue; }
+        TurnSolver::PreTap tap;
+        tap.name = p.card.m_name.str();
+        tap.num = source_id;
+        tap.color = static_cast<int>(pos);
+        return ApplyEnginePreTap(state, tap).empty();
+    }
+    return false;
+}
 
 // ManaCostDigest (ManaPayment.h): every field of the cost, in declaration order.
 std::uint64_t ManaCostDigest(const ManaCost& c)

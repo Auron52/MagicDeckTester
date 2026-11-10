@@ -65,7 +65,10 @@ static void CollectBoardState(const GameState& state,
                              :                                             "counter";
             if (c.count != 0) { snap.counters.push_back({ kind, c.count }); }
         }
-        if (p.charge_counters != 0) { snap.counters.push_back({ "charge", p.charge_counters }); }
+        if (p.charge_counters != 0)
+        { const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+          snap.counters.push_back({ d && d->params.mana_counters_are_mining ? "mining" : "charge",
+                                    p.charge_counters }); }
         if (p.verse_counters  != 0) { snap.counters.push_back({ "verse",  p.verse_counters  }); }
         if (p.storage_counters != 0) { snap.counters.push_back({ "storage", p.storage_counters }); }
         // Spore / quest counters -- see the matching note in main.cpp's board serializer: a human
@@ -314,11 +317,21 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
     m_ai.DecideCrossingFetch(state);
     if (at <= static_cast<int>(ResumeAt::End))   { EndStep(state); }
     CleanupStep(state);
+    state.boundary_dredge_active = true;
+    state.scripted_boundary_dredge_cursor = 0;
     // EXTRA TURN NEXT (pending_extra_turns > 0): the opponent takes NO turn before it, so neither
     // their upkeep nor their notional draw happens (CR 500.7: the extra turn is taken directly after
     // this one). Lockstep twin: SimulateEndAndStartNextTurn. 0 for every deck without the card.
     auto opponent_turn = [&]()
     {
+        state.ephara_creature_entered_last_turn = state.ephara_creature_entered_this_turn;
+        state.ephara_creature_entered_this_turn = false;
+        state.compressed_opponent_upkeep = true;
+        PerformMogisOpponentUpkeep(state);
+        if (OpponentHasLost(state)) { state.compressed_opponent_upkeep = false; return; }
+        PerformEpharaUpkeep(state);
+        state.compressed_opponent_upkeep = false;
+        if (state.player_lost_on_draw) { return; }
         // Asylum Visitor at THE OPPONENT'S upkeep (Vampires A1), which precedes their notional draw below.
         // A no-op unless the opponent was dealt a hand and holds none. Lockstep twin: the rollout's.
         if (!PerformOpponentUpkeepHellbentDraw(state)) { state.player_lost_on_draw = true; }
@@ -340,6 +353,8 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
         opponent_turn();
     }
     if (!state.NextExtraTurnIsOurs() && !state.opponent_decked) { opponent_turn(); }
+    state.ephara_creature_entered_last_turn = state.ephara_creature_entered_this_turn;
+    state.ephara_creature_entered_this_turn = false;
     // DAY / NIGHT turn-based check (CR 726.3a) for the opponent's notional untap and our next one
     // (Brutal Cathar). Lockstep with SimulateEndAndStartNextTurn; no-op unless a daybound card set it.
     if (state.NextExtraTurnIsOurs()) { DayNightTurnBoundary(state); }
@@ -357,10 +372,7 @@ void GameEngine::UntapStep(GameState& state)
     state.ripple_script = RippleScript{};    // the ripple chain script is turn-scoped (lockstep twin: SimulateEndAndStartNextTurn)
     state.noncombat_damage_received_this_turn = {};
     state.pending_incinerator_damage.clear();
-    state.floating_mana = ManaPool{};   // reserve (ritual) mana empties each turn (CR 500.4); no-op for non-ritual decks
-    state.floating_creature_mana = ManaPool{};   // ...and the creature-only reserve with it (lockstep)
-    state.floating_bigspell_mana = ManaPool{}; state.floating_bigspell_pp = nullptr;   // big-spell-only reserve (lockstep)
-    state.floating_haste_c = 0;         // Generator Servant's haste tag dies with the float (lockstep)
+    CrossManaBoundary(state, state.active_player_index);
     state.spells_cast_this_turn = 0;    // STORM counter resets each turn (lockstep w/ SimulateEndAndStartNextTurn); no-op for non-storm decks
     state.mv_cast_this_turn     = 0;    // CFT damage accumulator resets with its pair
     DrainPendingZeroToughness(state);   // safety net: a 0/0 Walking Ballista entrant (lockstep w/ the rollout)
@@ -375,6 +387,7 @@ void GameEngine::UntapStep(GameState& state)
     state.scripted_fling_victim = -1;   // searched Flinger victim is per-turn (same lockstep)
     state.scripted_tectonic_mode = -1;  // searched Tectonic mode is per-turn (same lockstep)
     state.scripted_grace_choice = -1;   // searched Abiding Grace pin is per-turn (same lockstep)
+    state.scripted_athreos_coin = -1;   // searched Shroud-Veiled end-step target is per-turn
     state.scripted_tectonic_keep = -1;  // ...and its mode-B keep pin (same lockstep)
     state.scripted_bruna_gather = -1;   // searched Bruna gather subset is per-turn (same lockstep)
     state.scripted_combat_aura_swap = -1;   // searched Arcanum Wings combat swap (same lockstep)
@@ -399,6 +412,7 @@ void GameEngine::UntapStep(GameState& state)
     ap.cards_drawn_this_turn     = 0;   // Fists of Flame drawn-count resets each turn (lockstep w/ SimulateEndAndStartNextTurn)
     ap.first_draw_card_number_this_turn = 0;
     ap.pending_miracle_card_number = 0;
+    state.keranos_first_own_draw_seen = false;
     state.draw_trigger_mark      = 0;   // ...and the Niv draw-trigger watermark with it (same lockstep)
     ap.life_gained_this_turn     = 0;   // Fortifying Draught lifegain-count resets each turn (same lockstep)
     ap.cards_cycled_or_discarded_this_turn = 0;   // Hollow One cycle/discard count (same lockstep)
@@ -508,11 +522,15 @@ void GameEngine::UntapStep(GameState& state)
 void GameEngine::UpkeepStep(GameState& state)
 {
     state.step = Step::Upkeep;
+    PerformEpharaUpkeep(state);
+    if (state.deck_has_turn_gods) { FlushKeranosTriggers(state); }
+    if (state.player_lost_on_draw) { return; }
 
     // Asylum Visitor (Vampires A1): FIRST among our upkeep triggers -- see PerformUpkeepHellbentDraw.
     // Here at the top of UpkeepStep, so a ResumeAt::UpkeepTail resume never re-runs it. An empty-library
     // draw loses exactly as the draw step's. Lockstep twin: SimulateEndAndStartNextTurn.
     if (!PerformUpkeepHellbentDraw(state)) { state.player_lost_on_draw = true; }
+    if (state.deck_has_turn_gods) { FlushKeranosTriggers(state); }
 
     // Suspend (Lotus Bloom): at the controller's upkeep, remove one time counter from each suspended
     // card and CAST off suspend any whose last counter is now gone (arrive_turn <= this turn). Runs
@@ -596,7 +614,7 @@ bool GameEngine::CastUpkeepTutor(GameState& state, int hand_number, const std::s
     if (!m_ai.CastUpkeepTutor(state, hand_number, target)) { return false; }
     ResolveStack(state);
     if (UpkeepFloatClearEnabled())
-    { state.floating_mana = ManaPool{}; state.floating_haste_c = 0; }
+    { CrossManaBoundary(state, state.active_player_index); }
     return true;
 }
 
@@ -748,6 +766,7 @@ void GameEngine::UpkeepTail(GameState& state)
     // by LAST turn's tutor into play before the draw step pulls it into hand. After echo so the
     // obligation claims mana first; lockstep twin in TurnSolver::SimulateEndAndStartNextTurn.
     m_ai.ResolveUpkeepRevealTop(state);
+    if (state.deck_has_dredge) { PerformProviderUpkeepTapDraw(state); }
 
     // Human-play priority window after upkeep triggers and before the draw. A tutor-to-top
     // instant cast here supplies THIS turn's draw. The ordinary cast path pays mana and fires
@@ -820,28 +839,30 @@ void GameEngine::DrawStep(GameState& state)
     }
 
     Player& ap = state.ActivePlayer();
-    if (ap.library.empty())
+    const DrawAttemptResult draw = AttemptDrawIntoHand(state, state.active_player_index,
+                                                       HandEntryReason::DrawStep);
+    if (!draw.satisfied)
     {
         state.player_lost_on_draw = true;
         return;
     }
-    Card drawn = ap.library.DrawTop();
-    ap.cards_drawn_this_turn += 1;   // the draw step is a real CR-121 draw (Fists of Flame counts it)
-    if (state.deck_has_ripple) { ripplestats::NoteRead(state, drawn.m_number); }   // MTG_RIPPLE_STATS tripwire
+    // Dredge replaces the draw; it does not count as a card drawn or fire draw triggers.
+    if (draw.drew) { ap.cards_drawn_this_turn += 1; }
+    if (state.deck_has_turn_gods) { FlushKeranosTriggers(state); }
+    if (draw.drew && state.deck_has_ripple) { ripplestats::NoteRead(state, draw.card_number); }
     // Human-play (--claude-play) accurate draw reporting: record the per-turn draw so the viewer
     // can show exactly what was drawn this turn (nulled by RevealLogPause during search).
-    if (g_play_draw_sink) { g_play_draw_sink->push_back({ state.turn_number, drawn.m_name.str() }); }
+    if (draw.drew && g_play_draw_sink)
+    { g_play_draw_sink->push_back({ state.turn_number, draw.card_name.str() }); }
     if (m_logger)
     {
         std::vector<GameLogger::PermSnapshot> bf, obf;
         std::vector<int> hand, gy, staged;
         CollectBoardState(state, bf, hand, obf, gy, staged);
         m_logger->StartPhase(state.turn_number, "DRAW", state.in_extra_turn ? state.extra_turns_taken : 0);
-        m_logger->LogDraw(drawn.m_number, drawn.m_name);
-        hand.push_back(drawn.m_number);
+        if (draw.drew) { m_logger->LogDraw(draw.card_number, draw.card_name); }
         m_logger->CommitPhase(ap.life, state.Opponent().life, bf, hand, obf, gy, staged, PhaseLibraryTop(state));
     }
-    EnterHand(state, state.active_player_index, std::move(drawn), HandEntryReason::DrawStep);
     ResolvePendingMiracle(state, m_logger);
     DrawHowlingMineCards(state, state.active_player_index, m_logger);
     // The Niv draw/damage loop: the draw step's draw pings here, in the draw step, before the Saga
@@ -865,8 +886,31 @@ void GameEngine::DrawStep(GameState& state)
     }
 }
 
-void GameEngine::MainPhase(GameState& state, bool is_pre_combat)
+bool GameEngine::AdvanceToFirstMainForTest(GameState& state)
 {
+    RunTurnFrom(state, ResumeAt::End);
+    if (OpponentHasLost(state)) { return true; }
+    if (state.player_lost_on_draw) { return false; }
+    state.AdvanceTurnCounter();
+    UntapStep(state);
+    UpkeepStep(state);
+    if (state.player_lost_on_draw) { return false; }
+    DrawStep(state);
+    if (state.player_lost_on_draw) { return false; }
+    BeginMainPhase(state, true);
+    return true;
+}
+
+void GameEngine::BeginMainPhase(GameState& state, bool is_pre_combat)
+{
+    if (!is_pre_combat) { CrossManaBoundary(state, state.active_player_index); }
+    if (is_pre_combat)
+    {
+        state.boundary_dredge_active = false;
+        state.scripted_boundary_dredge.clear();
+        state.scripted_boundary_dredge_cursor = 0;
+        state.scripted_boundary_keranos = -1;
+    }
     state.phase = is_pre_combat ? Phase::PreCombatMain : Phase::PostCombatMain;
     if (is_pre_combat) { state.StampMain1Hand(PlayableTopLandNumber(state)); }   // main-2 land drop: newly arrived lands only (lockstep w/ SimulateEndAndStartNextTurn)
     state.step  = Step::MainPhase;
@@ -874,6 +918,12 @@ void GameEngine::MainPhase(GameState& state, bool is_pre_combat)
     // Rad counters mill at the beginning of the PREcombat main only (see ApplyRadMill). Before the
     // logger's phase marker so the mill is not attributed to a cast. Lockstep with the rollout.
     if (is_pre_combat) { ApplyRadMill(state, state.active_player_index); }
+    if (is_pre_combat) { PerformKlothysFirstMain(state); }
+}
+
+void GameEngine::MainPhase(GameState& state, bool is_pre_combat)
+{
+    BeginMainPhase(state, is_pre_combat);
 
     if (m_logger)
     {
@@ -980,9 +1030,7 @@ void GameEngine::CombatPhase(GameState& state, bool additional)
     // Mana empties when leaving the pre-combat main phase (CR 500.4): drop any reserve
     // floated this main phase. Mirrors TurnSolver::SimulateCombat (lockstep). Off
     // (MTG_NO_FLOAT_LEFTOVER) -> no-op; byte-identical for non-floating decks regardless.
-    if (FloatLeftoverManaEnabled()) { state.floating_mana = ManaPool{}; state.floating_creature_mana = ManaPool{};
-                                      state.floating_bigspell_mana = ManaPool{}; state.floating_bigspell_pp = nullptr;
-                                      state.floating_haste_c = 0; }
+    if (FloatLeftoverManaEnabled()) { CrossManaBoundary(state, state.active_player_index); }
     // ...and a Colossification ETB tap responded to with the host's mana ability lands now, at the
     // end of the phase (Permanent::etb_tap_pending). Lockstep with TurnSolver::SimulateCombat.
     ApplyPendingEtbTaps(state);
@@ -1016,6 +1064,7 @@ void GameEngine::CombatPhase(GameState& state, bool additional)
     // summoning-sick creature attack. Mirrors TurnSolver::SimulateCombat (lockstep, ONE shared
     // body). Param-gated inert for every other deck.
     FireBeginCombatAttach(state, state.active_player_index, /*live=*/true);
+    FireXenagosCombat(state, state.active_player_index);
 
     state.step = Step::DeclareAttackers;
     std::vector<Permanent*> declared = m_ai.DeclareAttackers(state);
@@ -1231,6 +1280,7 @@ void GameEngine::CombatPhase(GameState& state, bool additional)
 
 void GameEngine::EndStep(GameState& state)
 {
+    CrossManaBoundary(state, state.active_player_index);
     state.phase = Phase::Ending;
     state.step  = Step::End;
     // Abiding Grace's legal targets are fixed as its trigger goes on the stack -- the beginning of
@@ -1241,6 +1291,9 @@ void GameEngine::EndStep(GameState& state)
     // begins, with its trigger (CR 603.4) -- snapshotted here, before any beginning-of-step effect below.
     // Lockstep twin at the top of TurnSolver::SimulateEndAndStartNextTurn; 0 for every deck without it.
     const int morbid_triggers = SnapshotEndStepMorbidTriggers(state);
+    // Our coin trigger can resolve before our delayed sacrifice/exile triggers.
+    // That order preserves a marked Bronze-Blooded put through Athreos's return.
+    PerformAthreosCoinEndStep(state, state.active_player_index);
     // "Exile those tokens at the beginning of the next end step" (Twinflame token copies,
     // Permanent::exile_at_end). Swept battlefield -> exile here, BEFORE cleanup (CR 512/514
     // order). Lockstep with the top of TurnSolver::SimulateEndAndStartNextTurn; no-op for every
@@ -1249,8 +1302,10 @@ void GameEngine::EndStep(GameState& state)
     {
         if (state.battlefield[i].exile_at_end)
         {
-            state.exile.push_back(state.battlefield[i].card);
+            const Permanent leaving = state.battlefield[i];
+            state.exile.push_back(leaving.card);
             state.battlefield.erase(state.battlefield.begin() + i);
+            ResolveAthreosExile(state, leaving);
         }
     }
     // Incandescent Soulstoke's put: "Sacrifice it at the beginning of the next end step"
@@ -1284,6 +1339,7 @@ void GameEngine::EndStep(GameState& state)
 
 void GameEngine::CleanupStep(GameState& state)
 {
+    CrossManaBoundary(state, state.active_player_index);
     state.step = Step::Cleanup;
     Player& ap = state.ActivePlayer();
 
@@ -1360,8 +1416,7 @@ void GameEngine::CleanupStep(GameState& state)
     // is asked through `madness`. Lockstep twin: SimulateEndAndStartNextTurn.
     if (!madness_q.empty())
     {
-        state.floating_mana = ManaPool{}; state.floating_creature_mana = ManaPool{};
-        state.floating_bigspell_mana = ManaPool{}; state.floating_bigspell_pp = nullptr;
+        CrossManaBoundary(state, state.active_player_index);
         const MadnessHostScope _mh(&m_ai.MadnessPayer(), MadnessPin{});
         ResolvePendingMadness(state, madness_q, MadnessWindow::Cleanup, MadnessPin{}, "cleanup");
     }

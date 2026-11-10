@@ -1,0 +1,29 @@
+{
+  "merge": [
+    {
+      "cards": [
+        "Athreos, God of Passage",
+        "Athreos, Shroud-Veiled",
+        "Ephara, God of the Polis",
+        "Iroas, God of Victory",
+        "Karametra, God of Harvests",
+        "Keranos, God of Storms",
+        "Klothys, God of Destiny",
+        "Kruphix, God of Horizons",
+        "Mogis, God of Slaughter",
+        "Nylea, God of the Hunt",
+        "Pharika, God of Affliction",
+        "Phenax, God of Deception",
+        "Xenagos, God of Revels"
+      ],
+      "why": "User ruling: keep these thirteen non-Purphoros Gods together for mulligan decisions even if automatic discovery separates them. Each is a one-of Replenish payload, and the opening hand usually wants to discard it. Their exact identities can matter after the graveyard is stocked, but this table uses their payload count."
+    },
+    {
+      "cards": [
+        "Purphoros, Bronze-Blooded",
+        "Purphoros, God of the Forge"
+      ],
+      "why": "Provisional K=17 trial requested for the first feasible exhaustive mulligan table. Both are unique Purphoros payoffs; one grants haste and the other deals entry damage, so compare this merge against a K=18 split before final adoption."
+    }
+  ]
+}

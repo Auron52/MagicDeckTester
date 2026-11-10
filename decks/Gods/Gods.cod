@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cockatrice_deck version="1">
+    <deckname></deckname>
+    <comments></comments>
+    <zone name="main">
+        <card number="1" name="Keranos, God of Storms"/>
+        <card number="1" name="Mogis, God of Slaughter"/>
+        <card number="1" name="Phenax, God of Deception"/>
+        <card number="4" name="Golgari Grave-Troll"/>
+        <card number="4" name="Stinkweed Imp"/>
+        <card number="2" name="Life from the Loam"/>
+        <card number="4" name="Faithless Looting"/>
+        <card number="2" name="Careful Study"/>
+        <card number="4" name="Reflecting Pool"/>
+        <card number="2" name="Gemstone Mine"/>
+        <card number="4" name="City of Brass"/>
+        <card number="1" name="Mystic Retrieval"/>
+        <card number="1" name="Xenagos, God of Revels"/>
+        <card number="1" name="Iroas, God of Victory"/>
+        <card number="1" name="Nylea, God of the Hunt"/>
+        <card number="1" name="Pharika, God of Affliction"/>
+        <card number="1" name="Purphoros, God of the Forge"/>
+        <card number="4" name="Replenish"/>
+        <card number="2" name="Cephalid Coliseum"/>
+        <card number="4" name="Tendo Ice Bridge"/>
+        <card number="3" name="Vivid Creek"/>
+        <card number="4" name="Magus of the Bazaar"/>
+        <card number="1" name="Forest"/>
+        <card number="1" name="Klothys, God of Destiny"/>
+        <card number="1" name="Purphoros, Bronze-Blooded"/>
+        <card number="1" name="Kruphix, God of Horizons"/>
+        <card number="1" name="Karametra, God of Harvests"/>
+        <card number="1" name="Athreos, God of Passage"/>
+        <card number="1" name="Athreos, Shroud-Veiled"/>
+        <card number="1" name="Ephara, God of the Polis"/>
+    </zone>
+    <zone name="side">
+        <card number="1" name="Heliod, God of the Sun"/>
+        <card number="1" name="Heliod, Sun-Crowned"/>
+        <card number="1" name="Thassa, Deep-Dwelling"/>
+        <card number="1" name="Thassa, God of the Sea"/>
+        <card number="1" name="Erebos, Bleak-Hearted"/>
+        <card number="1" name="Erebos, God of the Dead"/>
+        <card number="1" name="Nylea, Keen-Eyed"/>
+    </zone>
+</cockatrice_deck>

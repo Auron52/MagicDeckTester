@@ -3629,6 +3629,46 @@ public:
 // preserved by inheriting its width-2 tutor, single-pick fetch or cleanup buckets. Signature: see
 // DetectDecisionProvider's `cyclone` flag (Cyclone-only params OR-ed across three cards; the deck
 // routes here once the phase 2/3 card entries carry them).
+// Gods (dredge into Replenish). Its measured search reductions live here;
+// Mystic Retrieval's tutor would otherwise route this deck to the unrelated
+// AntiLifegainProvider.
+class GodsProvider : public DeckProvider
+{
+public:
+    CertStance Certificate() const override
+    { return { CertState::Implemented, "Own land-only board with fewer than four possible mana and more than three opposing library cards cannot win this turn." }; }
+    const char* Name() const override { return "Gods"; }
+    bool ProvenWinlessThisTurn(const GameState& s, int controller) const override;
+    std::vector<std::string> TutorCandidates(
+        const GameState& s, int controller, const CardParams& pp) const override;
+    std::vector<int> DredgeSearchCandidates(
+        const GameState& s, int controller, const std::vector<int>& numbers) const override;
+    bool DredgeSearchAlwaysSingleton() const override;
+    int DredgeHumanDefault(const GameState& s, int controller,
+                            const std::vector<int>& numbers) const override;
+    std::vector<int> CleanupDiscardCandidates(
+        const GameState& s, const std::vector<std::string>* required_pieces) const override;
+    std::vector<int> CleanupDiscardShedOrder(
+        const GameState& s, const std::vector<std::string>* required_pieces) const override;
+    std::vector<int> PutBackRanking(const GameState& s, int controller) const override;
+    bool PutBackRankingPerCard(const GameState& s) const override;
+    bool PutBackSingleCandidate(const GameState& s) const override;
+    std::vector<std::string> LoamTargetSearchCandidates(
+        const GameState& s, int controller, int maximum) const override;
+    bool KeranosDamageFaceOnly(const GameState& s) const override;
+    bool UpkeepOnlyTapDraw(const GameState& s, const CardDefinition& source) const override;
+    bool PrunesGodTargetAxes() const override;
+    bool UsesPhenaxGodMassMill() const override;
+    bool RestrictsCollectedActions() const override;
+    bool CollectedActionAllowed(const GameState& s, const Action& a, bool is_pre_combat) const override;
+    bool ComboCardValue(const GameState& s, const CardDefinition& def,
+                        int dmg_unit, int& out) const override;
+    int XenagosCombatTargetRank(const GameState& s, int controller,
+                               const std::vector<int>& legal) const override;
+    int AthreosCoinTargetRank(const GameState& s, int controller,
+                             const std::vector<int>& legal) const override;
+};
+
 class CycloneProvider : public DeckProvider
 {
 public:

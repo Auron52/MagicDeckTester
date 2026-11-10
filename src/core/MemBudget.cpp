@@ -1,6 +1,7 @@
 #include "MemBudget.h"
 #include "HardwareConcurrency.h"
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstdio>
@@ -176,7 +177,9 @@ long long RssCapBytes()
     static const long long v = []{
         const double gb = [] {
             if (const char* e = std::getenv("MTG_RSS_CAP_GB")) { return std::strtod(e, nullptr); }
-            return static_cast<double>(MemTotalMb()) * 0.75 / 1024.0;
+            // Keep roughly 3.5 GiB free on this 23.5 GiB host while allowing
+            // the larger Gods search transient to use about 20 GiB by default.
+            return static_cast<double>(MemTotalMb()) * 0.85 / 1024.0;
         }();
         if (gb <= 0.0) { return 0LL; }
         return static_cast<long long>(gb * 1024.0 * 1024.0 * 1024.0);
@@ -230,18 +233,30 @@ void StartRssWatchdog(const char* tag)
         const long long cap = RssCapBytes();
         if (cap <= 0 || CurrentRssBytes() <= 0) { return; }   // off, or unreadable here
         const std::string name = tag ? tag : "mtg";
-        std::thread([cap, name] {
+        // A short diagnostic interval can catch brief plan-enumeration peaks
+        // that the ordinary two-second check misses. The default is unchanged.
+        const int poll_ms = [] {
+            const char* e = std::getenv("MTG_RSS_POLL_MS");
+            return (e && *e) ? std::clamp(std::atoi(e), 50, 2000) : 2000;
+        }();
+        std::thread([cap, name, poll_ms] {
             bool warned = false;
             for (;;)
             {
-                std::this_thread::sleep_for(std::chrono::seconds(2));
+                std::this_thread::sleep_for(std::chrono::milliseconds(poll_ms));
                 const long long rss = CurrentRssBytes();
                 if (rss <= 0) { continue; }
                 if (!warned && rss * 4 >= cap * 3)
                 {
                     warned = true;
-                    std::fprintf(stderr, "[rss-cap] %s: rss=%s is past 3/4 of the cap %s (%s)\n",
-                                 name.c_str(), Gb(rss).c_str(), Gb(cap).c_str(), MemReport().c_str());
+                    std::string ctx;
+                    {
+                        std::lock_guard<std::mutex> lk(ReportMutex());
+                        if (CapContext()) { ctx = CapContext()(); }
+                    }
+                    std::fprintf(stderr, "[rss-cap] %s: rss=%s is past 3/4 of the cap %s (%s)\n%s",
+                                 name.c_str(), Gb(rss).c_str(), Gb(cap).c_str(), MemReport().c_str(),
+                                 ctx.c_str());
                     std::fflush(stderr);
                 }
                 if (rss < cap) { continue; }
