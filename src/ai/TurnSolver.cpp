@@ -10329,9 +10329,13 @@ static bool SubsetPayableWithFiltersImpl(const GameState& state, const std::vect
                 // The plan's OWN declared host first (the enumerator emits one variant per candidate),
                 // then any untapped land -- reading the plan's choice keeps the credit honest.
                 int host = -1;
+                // A DECLARED host carries the Aura even when its payment tapped it (an Aura may enchant a
+                // tapped land): an Arbor Elf / Voyaging Satyr untap then taps it WITH the bonus. Only the
+                // undeclared fallback needs an untapped land.
                 for (const Permanent& lp : cp.battlefield)
                 {
-                    if (lp.controller_index != cp.active_player_index || lp.tapped) { continue; }
+                    if (lp.controller_index != cp.active_player_index) { continue; }
+                    if (lp.tapped && a.enchant_target <= 0) { continue; }
                     if (!lp.card.IsLand()) { continue; }
                     if (a.enchant_target > 0 && lp.card.m_number != a.enchant_target) { continue; }
                     host = lp.card.m_number; break;
@@ -10866,6 +10870,35 @@ static const CardDefinition* KickedFaceOr(const CardDefinition* d, bool kicked)
     return k != nullptr ? k : d;
 }
 
+// MANA-UNLOCK EQUIPS IN THE SEQUENTIAL WALK (MTG_SEQ_UNLOCK_EQUIP, default ON; =0 refuses them as before).
+// A haste Equipment moved onto a mana source that cannot tap yet is the one equip both apply worlds do
+// NOT leave to the trailing pass: TurnSolver::ApplyManaUnlockEquips fires it before the first cast and
+// after each one, the moment both pieces are on the battlefield, so the hasted dork funds the casts after
+// it. The walk refused every subset holding a paid equip ("unmodelled kind"), so a line that needs that
+// hasted mana could never be rescued. Jumbo Cactuar mana-clean gate jumbo-sprawlgreen-20261110, ENUM-GAP
+// (s30027377 T3): {Overgrowth, Voyaging Satyr, Chariot of Victory, equip Chariot -> Satyr, Tooth and Nail}
+// pays only with the hasted Satyr untapping the Wild Growth + Overgrowth Forest; the gate said
+// ef-walk-fail. The walk now joins the unlock's two pieces as they are cast and calls the SAME
+// ApplyManaUnlockEquips at the same points, so it pays the equip and hastes the host exactly as the apply
+// does. Every unlock must have fired by the end of the walk (else the subset is refused, as before).
+static void HasteUnlockedManaOf(const GameState& state, int host_id, ManaPool& out, ManaPool& out_nc);
+static bool SeqUnlockEquipOn()
+{
+    static const bool on = EnvOn("MTG_SEQ_UNLOCK_EQUIP", true);
+    return on;
+}
+static bool SeqWalkUnlockEquip(const GameState& state, const Action& a)
+{
+    if (a.kind != Action::Kind::Equip || a.cost.has_x || !SeqUnlockEquipOn() || !HasteDorkCreditEnabled())
+    { return false; }
+    const CardDefinition* ed = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+    if (!ed || !ed->params.equip_grants_haste) { return false; }
+    if (EquipmentAttachedTo(state, state.active_player_index, a.sac_source_id, a.sac_victim_id)) { return false; }
+    ManaPool add, add_nc;
+    HasteUnlockedManaOf(state, a.sac_victim_id, add, add_nc);
+    return add.Total() > 0;
+}
+
 // The walk over ONE fixed cast order -- SubsetPayableSequential's body, lifted out so a caller that
 // already holds the order (the EDF provider's ArrangeCastOrder range projection, via
 // TurnSolver::OrderPaysSequentially) prices it with exactly this walk. No sort, no arrangement, no
@@ -10919,6 +10952,51 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
                                  /*fresh_hold_exempt=*/true);
         }
     }
+    // MANA-UNLOCK EQUIPS (see SeqWalkUnlockEquip): the subset's unlocks, their pieces, and the firing
+    // step -- ApplyManaUnlockEquips itself, with the plan reservation it may Release() saved and restored
+    // around it (the walk is a probe and must not touch an enclosing apply's hold).
+    std::vector<Action> unlock_acts;
+    std::vector<int>    unlock_pieces;
+    for (int j : sel)
+    {
+        const Action& ea = cands[static_cast<std::size_t>(j)];
+        if (!SeqWalkUnlockEquip(state, ea)) { continue; }
+        unlock_acts.push_back(ea);
+        unlock_pieces.push_back(ea.sac_source_id);
+        unlock_pieces.push_back(ea.sac_victim_id);
+    }
+    auto fire_unlocks = [&]()
+    {
+        if (unlock_acts.empty()) { return; }
+        std::vector<int> saved_reserve = g_plan_reserved_sources;
+        std::vector<Action> fired;
+        TurnSolver::ApplyManaUnlockEquips(cp, unlock_acts, &fired);
+        g_plan_reserved_sources = std::move(saved_reserve);
+        if (_dbg)
+        {
+            std::fprintf(stderr, "[dbgseq]   unlocks fired=%zu pending=%zu float g%d pieces:", fired.size(),
+                         unlock_acts.size(), cp.floating_mana.green);
+            for (int pc : unlock_pieces)
+            {
+                const bool on = std::any_of(cp.battlefield.begin(), cp.battlefield.end(),
+                                            [&](const Permanent& p) { return p.card.m_number == pc; });
+                std::fprintf(stderr, " %d%s", pc, on ? "(bf)" : "");
+
+            }
+            std::fprintf(stderr, "\n");
+        }
+        for (const Action& f : fired)
+        {
+            for (std::size_t q = 0; q < unlock_acts.size(); ++q)
+            {
+                if (unlock_acts[q].sac_source_id != f.sac_source_id
+                    || unlock_acts[q].sac_victim_id != f.sac_victim_id) { continue; }
+                unlock_acts.erase(unlock_acts.begin() + static_cast<std::ptrdiff_t>(q));
+                break;
+            }
+        }
+    };
+    fire_unlocks();
     std::size_t vial_pos = 0;
     for (int j : ord)
     {
@@ -11129,10 +11207,16 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
             int host = -1, host_yield = -1;
             for (const Permanent& lp : cp.battlefield)
             {
-                if (lp.controller_index != cp.active_player_index || lp.tapped) { continue; }
+                if (lp.controller_index != cp.active_player_index) { continue; }
                 if (!lp.card.IsLand()) { continue; }
+                // The plan's declared host carries the Aura even when its payment tapped it (an Aura
+                // may enchant a tapped land): an Arbor Elf / Voyaging Satyr untap later taps it WITH
+                // the bonus. Jumbo Cactuar ENUM-GAP s30025119 T4: Overgrowth paid off its own Forest,
+                // then a Surrak-hasted Elf untaps that Forest for Tooth and Nail -- the walk had
+                // dropped the Aura and priced the Forest without its +2.
                 if (a.enchant_target > 0)
                 { if (lp.card.m_number == a.enchant_target) { host = lp.card.m_number; break; } continue; }
+                if (lp.tapped) { continue; }
                 const CardDefinition* ld = CardDatabase::Instance().LookupCached(lp.card);
                 const int y = ld ? PermanentManaYield(cp, lp, *ld) : 0;
                 if (y > host_yield) { host_yield = y; host = lp.card.m_number; }
@@ -11240,7 +11324,29 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
         // LAND-PUT CREDIT (Search for Tomorrow hard-cast): the basic its credit names enters
         // untapped AFTER this cast paid, so it funds a later cast and never itself.
         if (a.rock_mana.Total() > 0 && LandSearchPutsUntapped(def)) { PutLandPutCreditOnScratch(cp, a); }
+        // MANA-UNLOCK pieces join as they resolve (a fresh creature: summoning-sick until hasted), and the
+        // unlocks fire after this cast, as both apply worlds fire them.
+        if (!unlock_acts.empty() && a.hand_index >= 0
+            && a.hand_index < static_cast<int>(cp.players[cp.active_player_index].hand.size()))
+        {
+            const Card& hc = cp.players[cp.active_player_index].hand[static_cast<std::size_t>(a.hand_index)];
+            const bool piece = std::find(unlock_pieces.begin(), unlock_pieces.end(), hc.m_number) != unlock_pieces.end();
+            const bool there = std::any_of(cp.battlefield.begin(), cp.battlefield.end(),
+                                           [&](const Permanent& p) { return p.card.m_number == hc.m_number; });
+            if (piece && !there)
+            {
+                Permanent perm;
+                perm.card              = a.def->card;   // the full card (a hand Card may carry no types)
+                perm.card.m_number     = hc.m_number;
+                perm.controller_index  = cp.active_player_index;
+                perm.owner_index       = cp.active_player_index;
+                perm.entered_this_turn = true;
+                cp.battlefield.push_back(perm);
+            }
+            fire_unlocks();
+        }
     }
+    if (!unlock_acts.empty()) { return false; }   // an unlock the walk could not fire: refused, as before
     return true;
 }
 
@@ -11284,6 +11390,7 @@ static bool SubsetHasUnmodelledSeqKind(const GameState& state, const std::vector
     {
         const Action& a = cands[static_cast<std::size_t>(j)];
         if (a.kind == Action::Kind::ActivateVial) { continue; }
+        if (SeqWalkUnlockEquip(state, a)) { continue; }
         if (SeqWalkSkipsFreeAttach(state, a)) { continue; }
         if (a.kind != Action::Kind::CastFromHand || a.def == nullptr) { return true; }
     }
@@ -11351,6 +11458,7 @@ static bool SubsetPayableSequentialImpl(const GameState& state, const std::vecto
     {
         const Action& a = cands[j];
         if (a.kind == Action::Kind::ActivateVial) { continue; }        // Vial deploys cost no mana
+        if (SeqWalkUnlockEquip(state, a)) { continue; }               // the walk fires it (SeqWalkFixedOrder)
         if (SeqWalkSkipsFreeAttach(state, a)) { continue; }           // nor does a free attach
         // NOTE a SacForMana/Suspend-holding subset lands here and is refused ("unmodelled kind").
         // A rescue-only SacForMana extension was built for the dragonstorm m2 retirement
@@ -11396,7 +11504,8 @@ static bool SubsetPayableSequentialImpl(const GameState& state, const std::vecto
     if (paymemo::CanonOn() && !HumanPlayActive()
         && std::none_of(sel.begin(), sel.end(), [&](int j)
                         { const Action& a = cands[static_cast<std::size_t>(j)];
-                          return a.kind == Action::Kind::ActivateVial || IsRevealCostCast(a); }))
+                          return a.kind == Action::Kind::ActivateVial || IsRevealCostCast(a)
+                                 || SeqWalkUnlockEquip(state, a); }))   // keyed on casts only
     {
         const std::vector<int> key(order.begin(), order.end());
         std::vector<int> work = key;   // `order` is thread_local and the tail rewrites its argument
@@ -11435,7 +11544,9 @@ static bool SubsetPayableSequentialTail(const GameState& state, const std::vecto
     const bool walk_via_ops = s_sps_walk_memo && seq_rv_charged.empty()
         && std::none_of(sel.begin(), sel.end(), [&](int j)
                         { return cands[static_cast<std::size_t>(j)].kind == Action::Kind::ActivateVial
-                                 || IsRevealCostCast(cands[static_cast<std::size_t>(j)]); });
+                                 || IsRevealCostCast(cands[static_cast<std::size_t>(j)])
+                                 // OrderPaysSequentially is asked the casts only: it would not see the unlock
+                                 || SeqWalkUnlockEquip(state, cands[static_cast<std::size_t>(j)]); });
     auto run_walk = [&](const std::vector<int>& ord) -> bool
     {
         if (walk_via_ops) { return TurnSolver::OrderPaysSequentially(state, cands, ord); }
@@ -11600,6 +11711,7 @@ static bool OrderPaysSequentiallyImpl(const GameState& state, const std::vector<
     {
         const Action& a = (*use)[static_cast<std::size_t>(j)];
         if (a.kind == Action::Kind::ActivateVial) { continue; }        // Vial deploys cost no mana
+        if (SeqWalkUnlockEquip(state, a)) { continue; }               // the walk fires it (SeqWalkFixedOrder)
         if (SeqWalkSkipsFreeAttach(state, a)) { continue; }           // nor does a free attach
         if (a.kind != Action::Kind::CastFromHand || a.def == nullptr) { return false; }   // unmodelled
         ord.push_back(j);

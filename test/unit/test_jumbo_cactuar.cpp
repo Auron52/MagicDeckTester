@@ -404,3 +404,93 @@ TEST_CASE("Zenith's X-capped human tutor cannot borrow Chord's spare convoke")
     CHECK(offered == std::vector<std::string>{"Arbor Elf"});
     CHECK_FALSE(s.battlefield[elf].tapped);
 }
+
+namespace
+{
+bool HasPlanWith(const std::vector<TurnSolver::Plan>& plans, const std::vector<std::string>& casts, bool want_equip)
+{
+    return std::any_of(plans.begin(), plans.end(), [&](const TurnSolver::Plan& p)
+    {
+        std::multiset<std::string> got;
+        bool equip = false;
+        for (const Action& a : p.actions)
+        {
+            if (a.kind == Action::Kind::CastFromHand) { got.insert(a.card_name.str()); }
+            if (a.kind == Action::Kind::Equip) { equip = true; }
+        }
+        for (const std::string& c : casts) { if (got.count(c) == 0) { return false; } }
+        return equip == want_equip;
+    });
+}
+}
+
+// Mana-clean gate jumbo-sprawlgreen-20261110, ENUM-GAP s30027377 T3: Chariot of Victory's haste equip onto a
+// freshly cast Voyaging Satyr is a MANA UNLOCK (ApplyManaUnlockEquips fires it before Tooth and Nail), and the
+// hasted Satyr untapping the stacked Forest is what pays Tooth and Nail. The sequential walk refused every
+// subset with a paid equip, so the gate never offered the line.
+TEST_CASE("Jumbo Cactuar enumerates Chariot hasting a fresh Satyr that funds Tooth and Nail")
+{
+    LoadJumboCards();
+    JumboCactuarProvider provider;
+    GameState s;
+    s.active_player_index = 0;
+    s.turn_number = 3;
+    s.deck_has_land_aura = true;
+    s.m_provider = &provider;
+    PutOnBoard(s, "Forest", 10);
+    PutOnBoard(s, "Arbor Elf", 1);
+    PutOnBoard(s, "Wild Growth", 57);
+    s.battlefield.back().aura_attached_to = 10;
+    PutOnBoard(s, "Arbor Elf", 2);
+    PutOnBoard(s, "Arbor Elf", 3);
+    s.players[0].hand.push_back(CopyOf("Overgrowth", 39));
+    s.players[0].hand.push_back(CopyOf("Chariot of Victory", 5));
+    s.players[0].hand.push_back(CopyOf("Tooth and Nail", 70));
+    s.players[0].hand.push_back(CopyOf("Voyaging Satyr", 53));
+    s.players[0].library.push_back(CopyOf("Jumbo Cactuar", 33));
+
+    const auto plans = TurnSolver::EnumerateMainPlans(s, true);
+    CHECK(HasPlanWith(plans, {"Overgrowth", "Chariot of Victory", "Tooth and Nail", "Voyaging Satyr"}, true));
+}
+
+// ENUM-GAP s30025119 T4: Overgrowth is paid off its own (declared) Forest, which leaves that Forest tapped; the
+// Aura still enchants it, and a Surrak-hasted Arbor Elf untaps it for Tooth and Nail WITH the +2. The walk used
+// to attach a land Aura only to an UNTAPPED host, so it priced the Forest without the Overgrowth.
+TEST_CASE("Jumbo Cactuar walk keeps a land Aura on its tapped declared host")
+{
+    LoadJumboCards();
+    JumboCactuarProvider provider;
+    GameState s;
+    s.active_player_index = 0;
+    s.turn_number = 4;
+    s.deck_has_land_aura = true;
+    s.deck_has_creature_enter_watcher = true;
+    s.m_provider = &provider;
+    PutOnBoard(s, "Forest", 10);
+    PutOnBoard(s, "Utopia Sprawl", 49);
+    s.battlefield.back().aura_attached_to = 10;
+    s.battlefield.back().chosen_color = static_cast<int8_t>(Color::Green);
+    PutOnBoard(s, "Forest", 11);
+    PutOnBoard(s, "Overgrowth", 39);
+    s.battlefield.back().aura_attached_to = 10;
+    PutOnBoard(s, "Forest", 12);
+    PutOnBoard(s, "Surrak and Goreclaw", 43);
+    s.players[0].hand.push_back(CopyOf("Tooth and Nail", 70));
+    s.players[0].hand.push_back(CopyOf("Overgrowth", 40));
+    s.players[0].hand.push_back(CopyOf("Arbor Elf", 2));
+    s.players[0].library.push_back(CopyOf("Jumbo Cactuar", 33));
+
+    const auto plans = TurnSolver::EnumerateMainPlans(s, true);
+    const bool found = std::any_of(plans.begin(), plans.end(), [](const TurnSolver::Plan& p)
+    {
+        bool tooth = false, elf = false, over10 = false;
+        for (const Action& a : p.actions)
+        {
+            tooth  |= a.card_name.str() == "Tooth and Nail" && a.chosen_x != 2;
+            elf    |= a.card_name.str() == "Arbor Elf";
+            over10 |= a.card_name.str() == "Overgrowth" && a.enchant_target == 10;
+        }
+        return tooth && elf && over10;
+    });
+    CHECK(found);
+}

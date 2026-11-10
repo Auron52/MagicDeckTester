@@ -67,6 +67,32 @@ Source of the work: `logs/mana_clean/lastweek-20261110-shadowborn-order/report.m
   carries a bonus, so yielding loses more) and the Cloud-of-Faeries scarce-hold test -> reverted. The sound shape
   is sequence-aware: at a land-Aura payment with other pending land-Aura hosts, try both hosts and keep the one
   whose remaining casts pay (OrderPaysSequentially), i.e. the floatseq-style commit.
+* **Jumbo non-cast-order items (agent 2026-11-10 evening), mechanisms:**
+  - ENUM-GAP (337): the exact sequential walk (SubsetPayableSequential / OrderPaysSequentially) refused every
+    subset holding a PAID equip ("unmodelled kind"), so a line funded by a haste equip onto a fresh untapper
+    (Chariot -> Voyaging Satyr / Greaves -> Arbor Elf, the ApplyManaUnlockEquips hoist both apply worlds already
+    make) was never rescued (s30027377 T3, gate label ef-walk-fail). Second mechanism (s30025119 T4): the walk
+    attached a land Aura only to an UNTAPPED host, so Overgrowth paid off its own declared Forest was dropped and a
+    Surrak-hasted Elf's untap of that Forest was priced without its +2. FIX: MTG_SEQ_UNLOCK_EQUIP (default ON) --
+    the walk joins the unlock's pieces and calls the same ApplyManaUnlockEquips after each cast; a declared host
+    keeps its Aura when tapped (walk + SubsetPayableWithFilters). FIXED: both repros clean (s30027377 ENUM-GAP 19->0,
+    s30025119 8->0); units 2715/2715; smoke + regression: searched 0 slower, all searched averages unchanged (play
+    digests moved on Jumbo/EDF/Alchemist rows from newly offered lines); ONE d0 (greedy runner) game slower,
+    edf_regression_d0_s2002 gi88 6->7 (5.3210->5.3220) -- raised with the USER as d0-runner churn, accepted.
+  - DOMINATED-CREATURE (212), PARKED: payer source choice, not a gate. s30026053 T3 {Forest, Wild Growth@F10,
+    T&N}: under the own-host hold the payer pays Wild Growth's {G} with an Arbor Elf unit (untap the held F10 for
+    {G}{G}) instead of the fresh Forest#12, then over-pays T&N with Elf#2 + Satyr units (9 for 7, the float is
+    lost) while F10's own final tap is left unused. Fix shape: in TapForCost, prefer a plain land tap over an
+    untapper unit that leaves its land untapped, and never spend a 2+-mana unit on a 1-pip remainder a land pays
+    exactly. Payment-order change -> needs the full payer review; not attempted.
+  - ORACLE-GAP (129), PARKED (analyzer-side): top shape s30026952 T4 {T&N + Overgrowth@10 + act:Nylea x4}: the
+    engine over-taps (Forest#11 tapped, {G} left floating) and Nylea's pump target follows the resulting board;
+    the oracle never enumerates an over-paying payment, so no outcome matches. Second shape (s30025893 T4):
+    "Chariot on #0 by engine, #54 by oracle" -- an unattached Chariot in the engine's outcome vs the oracle's
+    attached one after a T&N put. Both need the oracle to carry the engine's own (dominated) payment as an outcome.
+  - APPLY-DROP (108) top x10: still the land-Aura host hold below; the sequence-aware shape needs the remaining
+    plan at the apply sites (ApplyPlanDirect apply_one, AIEngine CastSpellFromHand, both walks) via a scope like
+    LineUnpaidCostScope, then a state copy + OrderPaysSequentially on the rest per land-Aura cast. PARKED.
 * Open (minor): the 6 PHANTOMs left on s30020789 are mana, not victims -- {Apostle + Culling} on one Swamp.
 * ORACLE-GAP (16): Lake + Lotus Bloom recipes; "core keys differ in a field not listed" -- analyzer-side, open.
 * Chain order: build -> unit -> the s30020022 repro -> smoke (expect only Shadowborn rows to move) -> regression ->
