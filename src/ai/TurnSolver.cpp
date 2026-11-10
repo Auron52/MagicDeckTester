@@ -10920,6 +10920,10 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
         {
             // Live cost -- the same recompute the rollout's apply_one performs at cast time.
             ManaCost ec = EffectiveCost(def, cp, a.splice_count + 1);
+            // Entwined Tooth and Nail adds {2} to the printed cost in the real
+            // cast path. The rescue walk must pay it too, or it can certify a
+            // plan that the executor necessarily drops.
+            if (def.params.tooth_and_nail && a.chosen_x == 2) { ec.generic += 2; }
             if (!seq_rv_charged.empty()
                 && std::find(seq_rv_charged.begin(), seq_rv_charged.end(), j) != seq_rv_charged.end())
             { AddManaCost(ec, *def.params.reveal_or_pay_cost); }
@@ -11119,6 +11123,17 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
         // there or the walk prices the casts after it at full cost and fails a payable pair
         // (Incubator {3} then Atsushi at {R}{R} is 5 on 5; unjoined it read 3+4=7). The choosing
         // form needs its ETB type decision -- same shared helper as the real enter cascade.
+        bool enter_haste_for_mana = false;
+        if (HasteDorkCreditEnabled() && def.tmpl == CardTemplate::ManaDork)
+        {
+            for (const Permanent& p : cp.battlefield)
+            {
+                if (p.controller_index != cp.active_player_index || p.def_absent) { continue; }
+                const CardDefinition* watcher = CardDatabase::Instance().LookupCached(p.card);
+                if (watcher && watcher->params.other_nontoken_enters_counter_haste > 0)
+                { enter_haste_for_mana = true; break; }
+            }
+        }
         const bool joins_for_mana = (def.params.mana_rock && !def.card.IsCreature())
                                  || def.params.hinata_cost_reducer
                                  || !def.params.reduces_spell_subtype.empty()
@@ -11126,13 +11141,26 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
                                  || !def.params.reduces_spell_color.empty()
                                  // Thalia's tax: a taxer cast earlier in the walk must be on the
                                  // board so the live recompute taxes the noncreature casts after it.
-                                 || def.params.noncreature_spell_tax > 0;
+                                 || def.params.noncreature_spell_tax > 0
+                                 || (HasteDorkCreditEnabled()
+                                     && def.params.other_nontoken_enters_counter_haste > 0)
+                                 || enter_haste_for_mana;
         if (joins_for_mana)
         {
             Permanent perm;
             perm.card             = def.card;
             perm.controller_index = cp.active_player_index;
             perm.owner_index      = cp.active_player_index;
+            if (enter_haste_for_mana)
+            {
+                // The real enter trigger gives this new mana creature haste.
+                // Use its hand ID so the scratch payer can tap it once.
+                if (a.hand_index >= 0
+                    && a.hand_index < static_cast<int>(cp.players[cp.active_player_index].hand.size()))
+                { perm.card = cp.players[cp.active_player_index].hand[a.hand_index]; }
+                perm.entered_this_turn = true;
+                perm.temp_haste = true;
+            }
             if (def.params.chooses_creature_type)
             { perm.chosen_subtype_id = ResolveProvider(cp).ChosenCreatureSubtypeId(
                 cp, cp.active_player_index, def); }
@@ -75800,8 +75828,47 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             {
                 if (nonaura == 0 && !(s_aura_funds_aura && n_aura >= 2))
                 { _ct.label = "ef-aura-solo"; return false; }
-                if (static_cast<int>(pool.Total())
-                    + aura_bonus * (1 + ready_aura_untappers) < combined.ManaValue())
+                // A Surrak and Goreclaw cast in this subset can give a newly cast
+                // Arbor Elf haste. Its untap earns another tap of the enchanted
+                // land. This ceiling is deliberately optimistic; the sequential
+                // payment walk below decides whether the order is actually legal.
+                int fresh_aura_untappers = 0;
+                if (HasteDorkCreditEnabled())
+                {
+                    bool grants_enter_haste = false;
+                    for (const Permanent& p : state.battlefield)
+                    {
+                        if (p.controller_index != state.active_player_index || p.def_absent) { continue; }
+                        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+                        if (d && d->params.other_nontoken_enters_counter_haste > 0)
+                        { grants_enter_haste = true; break; }
+                    }
+                    for (int j : sel)
+                    {
+                        const Action& c = cands[j];
+                        if (c.kind == Action::Kind::CastFromHand && c.def
+                            && (c.def->params.other_nontoken_enters_counter_haste > 0
+                                || c.card_name.str() == "Surrak and Goreclaw"))
+                        { grants_enter_haste = true; break; }
+                    }
+                    if (grants_enter_haste)
+                    {
+                        for (int j : sel)
+                        {
+                            const Action& c = cands[j];
+                            if (c.kind == Action::Kind::CastFromHand && c.def
+                                && c.def->tmpl == CardTemplate::ManaDork)
+                            { ++fresh_aura_untappers; }
+                        }
+                    }
+                }
+                // The static pool can miss an extra tap when the newly hasted
+                // untapper follows this Aura. Let the real walk price that
+                // rare subset instead of treating this estimate as a bound.
+                if (fresh_aura_untappers == 0
+                    && static_cast<int>(pool.Total())
+                       + aura_bonus * (1 + ready_aura_untappers)
+                           < combined.ManaValue())
                 { _ct.label = "ef-aura-scalar"; return false; }
             }
             // STATIC for the same reason as the walk's own tracer read (see SubsetPayableSequential):

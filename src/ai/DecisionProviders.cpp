@@ -24012,12 +24012,14 @@ int JumboCactuarProvider::CastOrderRank(const GameState& s,
     if (name == "Utopia Sprawl")        { return 20; }
     if (name == "Overgrowth")           { return 30; }
     if (name == "Lightning Greaves")    { return 35; }
+    // Surrak gives a hand-cast untapper haste. In the same subset it must
+    // resolve before Arbor Elf and before the Tooth and Nail it can fund.
+    if (name == "Surrak and Goreclaw")  { return 37; }
     if (name == "Arbor Elf")            { return 40; }
     if (name == "Voyaging Satyr")       { return 50; }
     if (name == "Chariot of Victory")   { return 60; }
     if (name == "Nylea, God of the Hunt") { return 80; }
     if (name == "Tooth and Nail")       { return 90; }
-    if (name == "Surrak and Goreclaw")  { return 100; }
     if (name == "Green Sun's Zenith")   { return 110; }
     if (name == "Finale of Devastation") { return 120; }
     if (name == "Jumbo Cactuar")        { return 130; }

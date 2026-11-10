@@ -41,12 +41,12 @@ place. This order has no card-level ties.
 | 3 | Utopia Sprawl | 4 | 20 | Second one-mana Aura, with the color fixed to green. |
 | 4 | Overgrowth | 4 | 30 | Larger Aura after its cheap enablers. |
 | 5 | Lightning Greaves | 1 | 35 | Cast before a fresh untapper so its free equip can unlock mana. |
-| 6 | Arbor Elf | 4 | 40 | First mana untapper; existing haste equipment can attach immediately. |
-| 7 | Voyaging Satyr | 4 | 50 | Second mana untapper; existing haste equipment can attach immediately. |
-| 8 | Chariot of Victory | 4 | 60 | Cast after both untappers; its equip can still unlock mana for a later spell. |
-| 9 | Nylea, God of the Hunt | 1 | 80 | Board support after mana setup. |
-| 10 | Tooth and Nail | 4 | 90 | Fetch and put both kill pieces when entwined. |
-| 11 | Surrak and Goreclaw | 2 | 100 | Enter before Cactuar to grant its haste trigger. |
+| 6 | Surrak and Goreclaw | 2 | 37 | Enter before a newly hasted mana untapper or Cactuar. |
+| 7 | Arbor Elf | 4 | 40 | First mana untapper; existing haste equipment can attach immediately. |
+| 8 | Voyaging Satyr | 4 | 50 | Second mana untapper; existing haste equipment can attach immediately. |
+| 9 | Chariot of Victory | 4 | 60 | Cast after both untappers; its equip can still unlock mana for a later spell. |
+| 10 | Nylea, God of the Hunt | 1 | 80 | Board support after mana setup. |
+| 11 | Tooth and Nail | 4 | 90 | Fetch and put both kill pieces when entwined. |
 | 12 | Green Sun's Zenith | 4 | 110 | Tutor; its actual target can move this action earlier. |
 | 13 | Finale of Devastation | 1 | 120 | Tutor or twelve-mana haste finisher. |
 | 14 | Jumbo Cactuar | 4 | 130 | Enter after haste setup. |
