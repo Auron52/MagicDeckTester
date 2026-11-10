@@ -364,7 +364,10 @@ class ExtraTurnsProvider : public DeckProvider
 {
 public:
     bool PreferIdleTappedFirstOpeningLand(const GameState& state) const override;
+    bool LandEntrySpotsRule(const GameState& state) const override;
     int CastOrderRank(const GameState& state, const CardDefinition& def) const override;
+    void ArrangeCastOrder(const GameState& state, const std::vector<Action>& actions,
+                          std::vector<int>& order) const override;
     bool ComboCardValue(const GameState& state, const CardDefinition& def,
                         int dmg_unit, int& out) const override;
     bool ArchetypeCardValue(const GameState& state, const CardDefinition& def,

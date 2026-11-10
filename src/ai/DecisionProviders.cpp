@@ -4668,11 +4668,64 @@ bool ExtraTurnsProvider::PreferIdleTappedFirstOpeningLand(const GameState& s) co
     return on && s.turn_number == 1;
 }
 
+bool ExtraTurnsProvider::LandEntrySpotsRule(const GameState& s) const
+{
+    (void)s;
+    // DEFAULT ON; =0 restores the full land-position fan. Horn is this deck's
+    // land-play watcher. Prefer the latest payable Horn-before-land position,
+    // while keeping land-first as the searched draw-versus-mana alternative.
+    static const bool on = EnvOn("MTG_ET_HORN_SPOTS", true);
+    return on;
+}
+
 int ExtraTurnsProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
 {
     // Resolve the imprint before paying for spells that need its doubled Islands.
     if (def.params.lens_imprint_land) { return 5; }
     return DeckProvider::CastOrderRank(s, def);
+}
+
+void ExtraTurnsProvider::ArrangeCastOrder(const GameState& s, const std::vector<Action>& acts,
+                                          std::vector<int>& order) const
+{
+    // DEFAULT ON; =0 restores the prior tie. The land-position axis already searches Horn
+    // before/after the drop. This hook only resolves the Lens/Stone tie in a selected Horn
+    // line; the other casts (including the chain spell) stay in the exact-payment probe.
+    static const bool on = EnvOn("MTG_ET_LINE_ORDER", true);
+    if (!on || order.size() < 3) { return; }
+    int horn = -1, lens = -1, stone = -1, lens_count = 0;
+    for (int p = 0; p < static_cast<int>(order.size()); ++p)
+    {
+        const std::string& name = acts[static_cast<std::size_t>(order[p])].card_name.str();
+        if (name == "Horn of Greed") { horn = p; }
+        else if (name == "Extraplanar Lens") { lens = p; ++lens_count; }
+        else if (name == "Mind Stone") { stone = p; }
+    }
+    if (horn < 0 || lens < 0 || stone < 0 || lens_count != 1
+        || lens < stone || horn < stone) { return; }
+    const int imprint_id = acts[static_cast<std::size_t>(order[lens])].chosen_x;
+    if (imprint_id <= 0) { return; }
+
+    int islands = 0, live_lenses = 0;
+    bool snow_imprint = false, imprint_untapped = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != s.active_player_index) { continue; }
+        if (p.card.m_name == "Extraplanar Lens") { ++live_lenses; }
+        if (!p.tapped && p.card.m_name == "Snow-Covered Island") { ++islands; }
+        if (p.card.m_number == imprint_id && p.card.m_name == "Snow-Covered Island")
+        { snow_imprint = true; imprint_untapped = !p.tapped; }
+    }
+    // Lens must have an untapped Island left to double. A second Lens needs at
+    // least three such Islands to repay its {3} on this turn; the payment probe
+    // below handles whether rocks can fund that cast without consuming them.
+    const int doubled = islands - (imprint_untapped ? 1 : 0);
+    if (!snow_imprint || doubled < (live_lenses == 0 ? 1 : 3)) { return; }
+    std::vector<int> trial = order;
+    const int chosen_lens = trial[static_cast<std::size_t>(lens)];
+    trial.erase(trial.begin() + lens);
+    trial.insert(trial.begin() + stone, chosen_lens);
+    if (TurnSolver::OrderPaysSequentially(s, acts, trial)) { order.swap(trial); }
 }
 
 bool ExtraTurnsProvider::ComboCardValue(const GameState& s, const CardDefinition& def,

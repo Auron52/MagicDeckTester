@@ -11119,6 +11119,37 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
             }
         }
 
+        // A same-line Lens changes the yield of Islands still untapped after its
+        // payment. The subset payment walk already models this; the exact
+        // sequential order probe must do so too, or it rejects Lens-first
+        // Horn/turn-spell lines that the real cast path can pay. chosen_x=0 is
+        // the searched decline-imprint variant and joins without a bonus.
+        if (def.params.lens_imprint_land)
+        {
+            int imprint = -1;
+            if (a.chosen_x > 0)
+            {
+                for (int i = 0; i < static_cast<int>(cp.battlefield.size()); ++i)
+                {
+                    const Permanent& land = cp.battlefield[static_cast<std::size_t>(i)];
+                    if (land.controller_index == cp.active_player_index && land.card.IsLand()
+                        && land.card.m_number == a.chosen_x) { imprint = i; break; }
+                }
+                if (imprint < 0) { return false; }
+            }
+            Permanent lens;
+            lens.card = def.card;
+            lens.controller_index = cp.active_player_index;
+            lens.owner_index = cp.active_player_index;
+            if (imprint >= 0)
+            {
+                lens.lens_imprinted_land = cp.battlefield[static_cast<std::size_t>(imprint)].card.m_name;
+                cp.exile.push_back(cp.battlefield[static_cast<std::size_t>(imprint)].card);
+                cp.battlefield.erase(cp.battlefield.begin() + imprint);
+            }
+            cp.battlefield.push_back(std::move(lens));
+        }
+
         // COST REDUCERS join too (2026-09-04, dragons gi431): the live-cost recompute reads
         // reducers off the battlefield, so a resolved Dragonspeaker/Incubator/Medallion must be
         // there or the walk prices the casts after it at full cost and fails a payable pair
@@ -11135,7 +11166,8 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
                 { enter_haste_for_mana = true; break; }
             }
         }
-        const bool joins_for_mana = (def.params.mana_rock && !def.card.IsCreature())
+        const bool joins_for_mana = (def.params.mana_rock && !def.card.IsCreature()
+                                     && !def.params.lens_imprint_land)
                                  || def.params.hinata_cost_reducer
                                  || !def.params.reduces_spell_subtype.empty()
                                  || def.params.chooses_creature_type

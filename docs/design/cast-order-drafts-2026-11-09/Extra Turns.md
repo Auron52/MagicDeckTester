@@ -2,14 +2,17 @@
 
 ## Status
 
-**Reviewed order.** The table below resolves the ordering questions for Extra
+**Adopted timing rule.** The table below resolves the ordering questions for Extra
 Turns. It is a line-level rule, not a static `CastOrderRank` table: whether Horn
 draws from this land, whether acceleration fits, and whether the chain survives
 depend on the whole selected line and its exact payments. The engine searches
-the land's position relative to Horn and repairs a cast sequence that cannot
-pay. `ExtraTurnsProvider::CastOrderRank` still promotes Lens to the mana-rock
-tier; the other ordinary spells keep their generic ranks. The static cast-order
-report therefore does not fully describe the searched execution order.
+the land's position relative to Horn, now prefers the latest payable position
+after Horn, and keeps land-first as the searched alternative. In a selected
+Horn line containing Lens and Mind Stone, it moves Lens first only when the
+exact whole cast sequence pays. `ExtraTurnsProvider::CastOrderRank` still
+promotes Lens to the mana-rock tier; the other ordinary spells keep their
+generic ranks. The static cast-order report therefore does not fully describe
+the searched execution order.
 
 This order concerns **the order of actions already chosen for this
 turn**. Deciding whether to cast a card at all belongs to the plan search and
@@ -113,9 +116,24 @@ games. Those static ranks are rejected: a card-only rank cannot see the chosen
 line's mana needs, and the Horn rank can change search choices even when Horn
 is not cast on the winning turn.
 
-The existing land-position search and payment repair are the execution tools
-for this order. The reviewed preference for **acceleration + Horn before the
-land whenever the whole selected line can pay** remains a line-level decision;
-the rank report alone cannot certify that the search always chooses it. Any
-future change to enforce that preference must compare full payable lines and
-be checked against the reference wins before adoption.
+The adopted line rule was paired against both switches off on held-out seed
+7,750,000: depth zero stayed 5.6730 over 1,000 games; depth five improved
+4.7725 to 4.7700 over 400 games. Depth-five search units fell from 9.76M to
+9.33M, and games reported above the slow-game threshold fell from 14 to 8.
+The Extra Turns regression rows had eight faster searched games and one slower
+game; that one recovered its old win turn at both 4× and 16× budget. All 445
+scenarios and strict replay of the ten saved Extra Turns references passed.
+Smoke had one distinct slower seed in both 1v1 and 2HG; both copies recovered
+their old win turn at 4× budget.
+On those ten reference seeds, the search matched every human win turn and beat
+two, averaging 4.600 turns versus the human 4.800.
+
+The adopted implementation uses `ExtraTurnsProvider::LandEntrySpotsRule` to
+prefer Horn before the land when the selected plan's payment probe succeeds;
+land-first stays in search for the draw-versus-mana choice. Its
+`ArrangeCastOrder` tests the full selected sequence before moving Lens ahead
+of Mind Stone in a Horn line. The sequential payment probe now resolves Lens's
+chosen imprint, so that test sees the doubled Islands; it also respects the
+decline-imprint variant. Both switches default on (`MTG_ET_HORN_SPOTS=0`
+and `MTG_ET_LINE_ORDER=0` restore the prior behaviors). Other nominal slots
+remain guidance for the existing plan search rather than forced static ranks.

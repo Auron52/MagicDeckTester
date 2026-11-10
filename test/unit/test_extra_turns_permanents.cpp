@@ -91,6 +91,42 @@ TEST_CASE("Extra Turns searched Lens imprint gives the rollout its future mana")
     CHECK(AvailableManaPool(s).Total() == 6);
 }
 
+TEST_CASE("Extra Turns orders a mana-beneficial Lens before Stone with Horn and a turn spell")
+{
+    Load();
+    ExtraTurnsProvider policy;
+    GameState s;
+    s.m_provider = &policy;
+    s.turn_number = 5;
+    Put(s, "Snow-Covered Island", 100, true); // imprint a land already tapped
+    for (int i = 0; i < 8; ++i) { Put(s, "Snow-Covered Island", 101 + i); }
+    auto cast = [&](const char* name, int id)
+    {
+        s.players[0].hand.push_back(Copy(name, id));
+        Action a;
+        a.kind = Action::Kind::CastFromHand;
+        a.card_name = name;
+        a.def = &Def(name);
+        a.cost = a.def->card.m_mana_cost;
+        if (a.def->params.lens_imprint_land) { a.chosen_x = 100; }
+        return a;
+    };
+    const std::vector<Action> acts{
+        cast("Mind Stone", 20), cast("Extraplanar Lens", 21),
+        cast("Horn of Greed", 22), cast("Time Warp", 23)};
+    std::vector<int> order{0, 1, 2, 3};
+    CHECK(TurnSolver::OrderPaysSequentially(s, acts, order));
+    policy.ArrangeCastOrder(s, acts, order);
+    CHECK(order == std::vector<int>{1, 0, 2, 3});
+    CHECK(TurnSolver::OrderPaysSequentially(s, acts, order));
+    std::vector<Action> decline = acts;
+    decline[1].chosen_x = 0;
+    CHECK_FALSE(TurnSolver::OrderPaysSequentially(s, decline, order));
+    std::vector<int> decline_order{0, 1, 2, 3};
+    policy.ArrangeCastOrder(s, decline, decline_order);
+    CHECK(decline_order == std::vector<int>{0, 1, 2, 3});
+}
+
 TEST_CASE("Extra Turns chain trial takes Emrakul and protects Ulamog's attack turn")
 {
     Load();
