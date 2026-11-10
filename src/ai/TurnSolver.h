@@ -2696,9 +2696,6 @@ public:
     static int ChooseRealAttackLand(const GameState& state, const std::vector<int>& attackers,
                                     bool additional, int depth, int max_turns, SearchBudget* budget,
                                     bool second_main);
-    // Test hook: run the fold over an explicit plan list (the list EnumeratePlans would return).
-    static std::vector<Plan> FoldIdleLandCracksForTest(const GameState& state, bool is_pre_combat,
-                                                       std::vector<Plan> plans);
     // True inside a horizon playout -- beyond the search window, where a greedy policy is permitted.
     static bool              InRolloutPlayout();
     // True inside the depth-0 executor's greedy pick (a GreedyPermit(D0Runner) is live) -- the
