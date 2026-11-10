@@ -48119,6 +48119,22 @@ std::vector<int> FungusProvider::CleanupDiscardCandidates(
     return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
 }
 
+// ---- JumboCactuarProvider::EtbChoiceCandidates ----------------------------------------------------
+// Utopia Sprawl's colour axis was fanned over all five colours (5 variants per Sprawl cast; on the mana-clean
+// gate's seed 30024581 T4 one decision held ~6,400 menu plans, most of them Sprawl colour copies x Finale's X).
+// Every coloured mana symbol in this deck's 75 (main + side) is {G}: a W/U/B/R Sprawl's extra mana can pay only
+// generic costs, and a green one pays every generic cost too, so green dominates each other colour exactly --
+// a sound dominance prune, nothing is unfindable at any budget. Re-check if the list gains a non-green pip.
+std::vector<int> JumboCactuarProvider::EtbChoiceCandidates(const GameState& s, int controller,
+                                                           const CardDefinition& def) const
+{
+    std::vector<int> out = DecisionProvider::EtbChoiceCandidates(s, controller, def);
+    if (!(def.params.is_land_aura && def.params.etb_choose_color)) { return out; }
+    const int green = static_cast<int>(Color::Green) + 1;
+    if (std::find(out.begin(), out.end(), green) == out.end()) { return out; }
+    return { green };
+}
+
 // ---- AccomplishedAlchemistProvider::EtbChoiceCandidates -------------------------------------------
 // Utopia Sprawl's colour axis restricted to the colours the 75 can spend (G, U, W, B -- see the
 // declaration); every other ETB-choice card (Trufflesnout's mode) is the base fan unchanged.

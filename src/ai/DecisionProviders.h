@@ -2370,6 +2370,10 @@ public:
     bool ToothAndNailCandidateOk(const GameState& s, int controller, int mode,
                                  const std::vector<std::string>& library_picks,
                                  const std::vector<std::string>& hand_puts) const override;
+    // Utopia Sprawl's colour: GREEN only. Every coloured symbol in the 75 is {G}, so a non-green Sprawl
+    // pays only generic, which green pays as well -- dominated, never a line (the permitted prune).
+    std::vector<int> EtbChoiceCandidates(const GameState& s, int controller,
+                                         const CardDefinition& def) const override;
 };
 
 // StompySurprise (mono-green elf ramp). Detection keys on the deck's gated params (see the

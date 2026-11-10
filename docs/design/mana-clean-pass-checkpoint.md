@@ -44,6 +44,11 @@ Source of the work: `logs/mana_clean/lastweek-20261110-shadowborn-order/report.m
   T4). (2) s30025422 T3: the line needs an EARLY Lake crack that taps Blood Crypt for {R} before sacrificing it; the
   victim pin only looks at the current cost ({B} for Culling), not Sire's later {R}. Both are "commit the colour at
   spend against the rest of the line" (docs/design/mana-issues-carryover-2026-11.md section 3).
+* **Jumbo Cactuar CAPPED-DECISION (34,384 of 37,918): FIXED.** Utopia Sprawl's colour was fanned x5; every pip in
+  the 75 is {G}, so JumboCactuarProvider::EtbChoiceCandidates keeps green only (sound dominance, Alchemist's
+  precedent). s30024581: CAPPED-DECISION 30955->0, oracle 94 s -> 6 s; s30022536 no caps. Tiers: only Jumbo rows;
+  searched 0 slower; backstop d5 s30001 game 11 now FINISHES (was abandoned at 2e6 units) as unwon (the search
+  proves no win by T8 after a mull-to-4 hand) -> 4.00 -> 4.25 is the newly counted game, not a regression.
 * Open (minor): the 6 PHANTOMs left on s30020789 are mana, not victims -- {Apostle + Culling} on one Swamp.
 * ORACLE-GAP (16): Lake + Lotus Bloom recipes; "core keys differ in a field not listed" -- analyzer-side, open.
 * Chain order: build -> unit -> the s30020022 repro -> smoke (expect only Shadowborn rows to move) -> regression ->
