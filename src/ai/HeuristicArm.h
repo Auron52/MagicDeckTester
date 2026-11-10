@@ -842,6 +842,8 @@ enum Slot : int
     SB_MAIN1_RULE,            // MTG_SB_MAIN1_RULE  Shadowborn Apostle: the USER's main-1 rule (2026-11-04) -- a root pre-combat plan beyond the land drop is admitted only on a JETMIR TURN (an attack-ready creature of ours AND Jetmir on our battlefield, or a plan that can still deploy him before combat); every other plan is folded to its main-2 twin (ShadowbornProvider::Main1PlanAdmitted). Searched play only. The sick-turn Demon search moves to main 2 with it
     SB_CAST_ORDER,            // MTG_SB_CAST_ORDER  Shadowborn Apostle: the USER's cast order (2026-11-04): land, Dark Ritual, [Culling's hand victim], Culling the Weak, Thrumming Stone, Apostle, Reaper, Sire, Overlord, Jetmir, Demonic Tutor, Diabolic Intent, Profane Tutor, Lotus Bloom (total by name); Culling's hand victim is cast just before it; within one main the Overlord (hard cast or fetched) never follows a Jetmir fetch
     SB_RITUAL_PAYOFF,         // MTG_SB_RITUAL_PAYOFF  Shadowborn Apostle (USER 2026-11-05, "prune rituals with no payoff like we have for other decks"): a plan subset that casts a mana ritual (Dark Ritual, Culling the Weak) and spends mana on nothing that is not itself a ritual is dropped (DecisionProvider::PrunesRitualWithoutSpend; TurnSolver SubsetRitualSpendsNothing) -- its float empties at the end of the phase, so the same subset without the ritual dominates it. Search branch list and greedy policy alike. DEFAULT ON (2026-11-05, ab7/ab8)
+    ID_HINT_GAME,             // MTG_ID_HINT_GAME  CROSS-DECISION ID hint (default ON since 2026-11-10): a decision keeps the PREVIOUS decision's MTG_ID_ORDER_HINT map of the same game, and a node whose own decision has no hint for (state, depth-1) reads the previous decision's. Fills the subtrees the game line cache answered in a warm-up pass (no node was walked there, so no hint was recorded) and the passes an escalation skip never ran. Same guards as the per-decision hint (plan count, static order, interior only unless model-recorded); cleared per game. See docs/design/cross-decision-tree-reuse.md
+    INWIN_CACHE,              // MTG_INWIN_CACHE  DEPTH-FREE IN-WINDOW PROOF CACHE (default ON since 2026-11-10): a completed node's win at turn w <= T+depth-1 (inside its exhaustively searched window) and its no-win bound clipped to T+depth-1 are properties of the in-window lines only, so they answer the same state at ANY remaining depth (a win only while w is inside the querying window). Per game, so it carries both across iterative-deepening passes and across decisions. MTG_INWIN_CACHE_VERIFY=1 recomputes each hit. See docs/design/cross-decision-tree-reuse.md
     COUNT
 };
 
@@ -1628,6 +1630,8 @@ inline const char* Name(int slot)
         "MTG_SB_MAIN1_RULE",
         "MTG_SB_CAST_ORDER",
         "MTG_SB_RITUAL_PAYOFF",
+        "MTG_ID_HINT_GAME",
+        "MTG_INWIN_CACHE",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

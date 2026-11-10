@@ -4115,11 +4115,23 @@ struct Rec
     Rec* outer = nullptr;
 };
 // What an entry stores.
+// MTG_CACHE_READ_GUARD (default ON; =0 restores the pre-2026-11-10 hit rule, A/B control). A plan-cache entry
+// that charged nothing could still have READ the budget: a cut test such as `if (budget->Overrun()) skip` reads
+// "no" at store and charges no unit, so the entry looked state-free and was served after the decision had
+// overrun, where a recompute takes the cut. MTG_BP_ENUM_VERIFY=3 on Extra Turns s2068 gi66: 118 of 389 bp hits
+// were CONTENT-DIFF (a 2-plan Time Warp list served where a fresh derivation returns 0, context dec_ovr+), and
+// the hits drove 249 extra units per decision -- so units, and through the start gate play, followed plan-pool
+// RESIDENCY (default pool 57,526 units vs MTG_PLAN_CACHE_KB=1 56,198), i.e. thread interleaving in a pool.
+bool ReadGuardOn();
+bool ContextCutNow();
 struct Cost
 {
     long long dec = 0, greedy = 0, other = 0, null_attempts = 0;
     bool had_dec = false, had_greedy = false;
     bool storable = true;
+    // MTG_CACHE_READ_GUARD: the computation evaluated a budget predicate (budgetbind::t_reads), so its result
+    // can depend on budget STATE without charging a unit. Served only where the context budgets read "no cut".
+    bool budget_read = false;
     // The computation's SIDE COUNTERS, replayed on a hit exactly as the enum memo replays its own (audit
     // §6.1): the group-cap drop it contributed (groupwave max_dropped), condemnation drops, truncation
     // events and budget binds -- read downstream by the truncation watermark and the no-win store gates,
@@ -4150,6 +4162,7 @@ struct Scope
 {
     Rec rec;
     bool live = false;
+    unsigned long long reads0 = 0, binds0 = 0;
     bool meter_armed = false;
     long long meter_used = 0;
     int meter_acc = 0;
@@ -4158,6 +4171,7 @@ struct Scope
     {
         if (!On()) { return; }
         live = true;
+        reads0 = budgetbind::t_reads; binds0 = budgetbind::t_binds;
         meter_armed = decisionwork::Armed();
         meter_used = decisionwork::t_used;
         meter_acc = decisionwork::t_charge_acc;
@@ -4186,9 +4200,13 @@ struct Scope
         const bool meter_changed = meter_armed
             && (decisionwork::t_used != meter_used || decisionwork::t_charge_acc != meter_acc);
         const bool greedy_residual_changed = g_greedy_charge_acc != greedy_acc;
-        c.storable = c.other == 0 && !dec_cut && !gr_cut
+        // MTG_CACHE_READ_GUARD: a computation that read a budget predicate and saw it answer "cut" (a bind) is
+        // a cut result, a function of budget state rather than of the key; never store it.
+        c.budget_read = ReadGuardOn() && budgetbind::t_reads != reads0;
+        const bool read_cut = c.budget_read && budgetbind::t_binds != binds0;
+        c.storable = c.other == 0 && !dec_cut && !gr_cut && !read_cut
                   && !meter_changed && !greedy_residual_changed && !decisionwork::Exceeded()
-                  && !decisionwork::PricedExceeded()
+                  && !decisionwork::PricedExceededQuiet()
                   && (Mode() != 1 || (c.dec == 0 && c.greedy == 0 && rec.subsearch == 0));
         g_computations.fetch_add(1, std::memory_order_relaxed);
         if (c.dec + c.greedy + c.other > 0) { g_charging.fetch_add(1, std::memory_order_relaxed); }
@@ -4208,6 +4226,15 @@ static void CacheChargeNote(SearchBudget* budget, long long n)
         else                                       { r->other += n; }
     }
 }
+bool cachecharge::ReadGuardOn() { static const bool v = EnvOn("MTG_CACHE_READ_GUARD", true); return v; }
+bool cachecharge::ContextCutNow()
+{
+    SearchBudget* const d = g_decision_budget;
+    SearchBudget* const g = g_greedy_charge_budget;
+    return (d != nullptr && (d->ExhaustedQuiet() || d->OverrunQuiet()))
+        || (g != nullptr && (g->ExhaustedQuiet() || g->OverrunQuiet()))
+        || gamework::Abandoned() || decisionwork::Exceeded() || decisionwork::PricedExceededQuiet();
+}
 static void CacheChargeNoteNull()
 { for (cachecharge::Rec* r = cachecharge::t_rec; r != nullptr; r = r->outer) { ++r->null_attempts; } }
 void TurnSolver::NoteChargingSubsearch()
@@ -4220,12 +4247,14 @@ static bool CacheHitCharge(const cachecharge::Cost& c)
     SearchBudget* const d = g_decision_budget;
     SearchBudget* const g = g_greedy_charge_budget;
     bool ok = c.storable && c.other == 0 && !decisionwork::Exceeded();
+    if (ok && c.budget_read && cachecharge::ContextCutNow()) { ok = false; }   // MTG_CACHE_READ_GUARD
     if (ok && d != nullptr && !c.had_dec && c.null_attempts > 0) { ok = false; }
     if (ok && g != nullptr && !c.had_greedy && c.null_attempts > 0) { ok = false; }
     if (ok && !cachecharge::Affordable(d, c.dec)) { ok = false; }
     if (ok && !cachecharge::Affordable(g, c.greedy)) { ok = false; }
     if (!ok) { cachecharge::g_hits_refused.fetch_add(1, std::memory_order_relaxed); return false; }
     cachecharge::g_hits_replayed.fetch_add(1, std::memory_order_relaxed);
+    if (c.budget_read) { ++budgetbind::t_reads; }   // an enclosing computation inherits the dependence
     if (c.dec > 0 && d != nullptr)
     { ConsumeAtN(d, unitsite::kCacheHit, c.dec, /*bill=*/false); cachecharge::g_units_replayed.fetch_add(c.dec, std::memory_order_relaxed); }
     if (c.greedy > 0 && g != nullptr)
@@ -74879,8 +74908,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // MTG_BP_DERIVE_PRICED_STOP (DEFAULT ON since 2026-11-04; docs/design/budget-rebalance-checkpoint.md 11:45 and
         // docs/design/edf-tutor-pin-alias-2026-11-03.md section 4). Measured: mulligan-generation rollouts at d1/b1 (EDF,
         // LFE) whose derivations ran for HOURS end in seconds (EDF 6,058 s -> 22 s, 8,613 s -> 11 s) with the win turn
-        // identical on all 4,936 paired gen-tail lines (7 decks); in play at the shipped settings it never trips
-        // (held-out A/B, 31,588 paired games: 0 win turns and 0 UNITS moved). A breakpoint-continuation
+        // identical on all 4,936 paired gen-tail lines (7 decks). In play the 11-04 held-out A/B (31,588 paired
+        // games) moved 0 win turns and 0 UNITS, but it DOES trip in play: Extra Turns regression d5 s2002 gi66
+        // (2026-11-10) refused 13.7M subset visits. A fresh derivation after the trip returned 0 plans while a plan
+        // cache hit served the full stored list, so units depended on pool residency (other threads) -- fixed by
+        // MTG_CACHE_READ_GUARD (cachecharge: an entry that read the budget is not served once the budget has cut).
+        // A breakpoint-continuation
         // derivation is an enumeration, not a search node: it charges no unit and nothing inside it polls
         // SearchBudget::Overrun(), so a decision whose priced ceiling (MTG_DECISION_PRICED_X) has tripped keeps
         // deriving 10k-plan lists inside its horizon rollouts until each one completes. This stops the
@@ -91255,7 +91288,7 @@ inline bool On()
     return v;
 }
 inline bool InShadow() { return workctr::t_mute > 0; }
-enum : std::uint8_t { kStored = 1, kHadDec = 2, kHadGreedy = 4, kNullAtt = 8, kPinUnread = 16 };
+enum : std::uint8_t { kStored = 1, kHadDec = 2, kHadGreedy = 4, kNullAtt = 8, kPinUnread = 16, kBudgetRead = 32 };
 using Map = std::unordered_map<std::uint64_t, std::uint8_t>;
 inline thread_local Map t_enum;    // enummemo::t_cache: 0 = first-visit marker, kStored|... = promoted
 inline thread_local Map t_bp;      // bpcache::t_plans (alias entries under the pin-cleared key, kPinUnread)
@@ -91268,7 +91301,8 @@ inline std::uint64_t K(const TranspositionTable::Key& k)
 inline std::uint8_t FlagsOf(const cachecharge::Cost& c, bool pin_unread = false)
 {
     return static_cast<std::uint8_t>(kStored | (c.had_dec ? kHadDec : 0) | (c.had_greedy ? kHadGreedy : 0)
-                                     | (c.null_attempts > 0 ? kNullAtt : 0) | (pin_unread ? kPinUnread : 0));
+                                     | (c.null_attempts > 0 ? kNullAtt : 0) | (pin_unread ? kPinUnread : 0)
+                                     | (c.budget_read ? kBudgetRead : 0));
 }
 // CacheHitCharge's verdict on such an entry, without its stats or charges (both zero for a mode-1 entry).
 inline bool WouldServe(std::uint8_t f)
@@ -91276,6 +91310,7 @@ inline bool WouldServe(std::uint8_t f)
     if ((f & kStored) == 0 || decisionwork::Exceeded()) { return false; }
     if ((f & kNullAtt) != 0 && g_decision_budget != nullptr && (f & kHadDec) == 0) { return false; }
     if ((f & kNullAtt) != 0 && g_greedy_charge_budget != nullptr && (f & kHadGreedy) == 0) { return false; }
+    if ((f & kBudgetRead) != 0 && cachecharge::ContextCutNow()) { return false; }   // MTG_CACHE_READ_GUARD
     return true;
 }
 inline void NotePeak()
@@ -91995,6 +92030,9 @@ namespace treereuse
 static void M1MemoClear();   // the rollout pre-combat memo (defined with it, below)
 static void HybridLearnedStateClear();   // the value-leaf hybrid's learned R/G (defined with them, below)
 static void GameLineCacheClear();        // MTG_GAME_LINE_CACHE's per-game map (defined with it, below)
+static void IdHintGameClear();           // MTG_ID_HINT_GAME's previous-decision hint map (defined with it, below)
+static void InWinCacheClear();           // MTG_INWIN_CACHE's per-game map (defined with it, below)
+static void RolloutSuffixProbeClear();   // MTG_ROLLOUT_SUFFIX_PROBE (diagnostic)
 // DIAGNOSTIC ONLY (MTG_AA_ROUTE_APPLY_CLEARBP; AlchemistComboRouteApply): drop the breakpoint-continuation
 // caches -- the plan cache BpEnumEntryFor serves from and the canon-front memo -- exactly as their own
 // clear-all eviction does when the plan pool or the entry cap binds, so a test can force that eviction to land
@@ -92008,6 +92046,9 @@ void TurnSolver::ClearBreakpointCachesForDiagnostic()
 
 void TurnSolver::ClearPerGameCaches()
 {
+    IdHintGameClear();         // MTG_ID_HINT_GAME: the previous decision's hints are this game's only
+    InWinCacheClear();         // MTG_INWIN_CACHE (empty when off)
+    RolloutSuffixProbeClear(); // MTG_ROLLOUT_SUFFIX_PROBE (empty when off)
     plancache::RecordGamePeak();   // MTG_PLAN_POOL_STATS: the finished game's peak holding
     solvememo::t_cache.clear();
     solvememo::t_m2cache.clear();
@@ -93639,6 +93680,50 @@ static bool EtChainTrialBudgetExceeded()
         && workctr::t_priced - g_et_chain_trial_price_start >= g_et_chain_trial_price_cap;
 }
 
+
+// MTG_ROLLOUT_SUFFIX_PROBE (diagnostic, 2026-11-10; NOT unit-neutral: Extra Turns regression d3 s2002 961,979 -> 961,601 units with it on, same digest, at any pool size -- cause not found; see docs/design/cross-turn-cache-experiments.md).
+// A leaf rollout plays turn by turn; the state at each later turn boundary is where a FRESH rollout would start if
+// a deeper pass (or the next decision) makes the rollout's start an interior node -- its greedy child IS that
+// boundary. Only start keys reach the TT today. This counts, per game, how many outermost rollouts start at a key an
+// earlier rollout already passed through, whether that rollout's (result, cutoff) would answer the new query, whether
+// it agrees with the fresh result, and the fresh rollout's units. Boundaries are recorded only when the rollout's
+// first turn has no per-deck depth override (else a fresh start plays that turn differently).
+namespace sfxprobe
+{
+    inline bool On() { static const bool v = EnvOn("MTG_ROLLOUT_SUFFIX_PROBE"); return v; }
+    struct E { int result; int cutoff; std::uint64_t epoch; bool start; };
+    inline thread_local std::unordered_map<TranspositionTable::Key, E, TranspositionTable::KeyHash> t_map;
+    inline thread_local std::vector<TranspositionTable::Key> t_pending;
+    inline thread_local bool t_collect = false;
+    // [0] start-key match, [1] suffix-key match; each split same-decision / earlier-decision
+    inline std::atomic<long long> g_roll{0}, g_roll_u{0};
+    inline std::atomic<long long> g_m[2][2], g_usable[2][2], g_agree[2][2], g_u_usable[2][2], g_u_match[2][2];
+    // disagreement census: [same cutoff][stored win]
+    inline std::atomic<long long> g_eqc_usable{0}, g_eqc_agree{0}, g_dis[2][2];
+    inline std::atomic<int> g_printed{0};
+    inline void Clear() { t_map.clear(); t_pending.clear(); t_collect = false; }
+    struct Reporter
+    {
+        ~Reporter()
+        {
+            if (g_roll.load() == 0) { return; }
+            std::cerr << "[rollout-suffix-probe] rollouts=" << g_roll.load() << " units=" << g_roll_u.load();
+            const char* kn[2] = { "start", "suffix" }; const char* dn[2] = { "same_dec", "prev_dec" };
+            for (int k = 0; k < 2; ++k) for (int d = 0; d < 2; ++d)
+            {
+                std::cerr << " | " << kn[k] << "/" << dn[d] << ": match=" << g_m[k][d].load() << " usable=" << g_usable[k][d].load()
+                          << " agree=" << g_agree[k][d].load() << " u_match=" << g_u_match[k][d].load() << " u_usable=" << g_u_usable[k][d].load();
+            }
+            std::cerr << " | same_cutoff: usable=" << g_eqc_usable.load() << " agree=" << g_eqc_agree.load()
+                      << " | DIS[samecut][win]: " << g_dis[1][1].load() << "/" << g_dis[1][0].load()
+                      << " diffcut " << g_dis[0][1].load() << "/" << g_dis[0][0].load();
+            std::cerr << "\n";
+        }
+    };
+    inline Reporter g_reporter;
+}
+static void RolloutSuffixProbeClear() { sfxprobe::Clear(); }
+
 static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
                              SearchBudget* budget, int cutoff_turn,
                              bool second_main, TranspositionTable* tt,
@@ -93680,6 +93765,13 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
     if (s_rollout_stats) { g_rollout_calls.fetch_add(1, std::memory_order_relaxed); }   // deterministic telemetry
     while (state.turn_number <= max_turns)
     {
+        if (sfxprobe::t_collect && g_rollout_nest == 1 && state.turn_number > roll_start && first_turn_depth < 0)
+        {
+            TranspositionTable::Key bk = BuildSimKey(state, depth, max_turns, second_main);
+            if (CanonSimKeyOn()) { Fold(bk, FsOrderSig(state)); }
+            if (t_rollout_narrow) { Fold(bk, kRolloutNarrowTag); }
+            sfxprobe::t_pending.push_back(bk);
+        }
         if (chain_only && (g_et_chain_trial_aborted || EtChainTrialBudgetExceeded()))
         { leafeval::Publish(leafeval::kInvalid); return max_turns + 1; }
         // Branch-and-bound: a line that hasn't won by cutoff_turn cannot beat the
@@ -94678,7 +94770,61 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
     if (LeafKillOnlyVerifyOn() && LeafKillOnlyOn() && !t_ko_suppress && depth > 0
         && cutoff_turn < max_turns)
     { ko_vcopy = std::make_unique<GameState>(state); }
+    const bool sfx_on = sfxprobe::On() && tt != nullptr && g_rollout_nest == 0 && !sfxprobe::t_collect;
+    const sfxprobe::E* sfx_hit = nullptr; sfxprobe::E sfx_copy{};
+    const long long sfx_u0 = gamework::t_used;
+    if (sfx_on)
+    {
+        auto it = sfxprobe::t_map.find(key);
+        if (it != sfxprobe::t_map.end()) { sfx_copy = it->second; sfx_hit = &sfx_copy; }
+        sfxprobe::t_pending.clear();
+        sfxprobe::t_pending.push_back(key);   // [0] = this rollout's own start key
+        sfxprobe::t_collect = true;
+    }
     int result = SimulateToEndImpl(state, depth, max_turns, budget, cutoff_turn, second_main, tt);
+    if (sfx_on)
+    {
+        sfxprobe::t_collect = false;
+        const long long du = gamework::t_used - sfx_u0;
+        sfxprobe::g_roll.fetch_add(1, std::memory_order_relaxed);
+        sfxprobe::g_roll_u.fetch_add(du, std::memory_order_relaxed);
+        const bool clean = g_fs_trunc_events == trunc_at_entry && budgetbind::t_binds == binds_at_entry;
+        if (sfx_hit != nullptr)
+        {
+            const int k = sfx_hit->start ? 0 : 1, d = sfx_hit->epoch == g_decision_epoch ? 0 : 1;
+            sfxprobe::g_m[k][d].fetch_add(1, std::memory_order_relaxed);
+            sfxprobe::g_u_match[k][d].fetch_add(du, std::memory_order_relaxed);
+            const bool cwin = sfx_hit->result <= max_turns;
+            const bool usable = cwin ? (sfx_hit->result <= cutoff_turn) : (cutoff_turn <= sfx_hit->cutoff);
+            if (usable)
+            {
+                sfxprobe::g_usable[k][d].fetch_add(1, std::memory_order_relaxed);
+                sfxprobe::g_u_usable[k][d].fetch_add(du, std::memory_order_relaxed);
+                const bool fwin = result <= max_turns;
+                const bool agree = cwin ? (fwin && result == sfx_hit->result) : !fwin;
+                if (agree) { sfxprobe::g_agree[k][d].fetch_add(1, std::memory_order_relaxed); }
+                const int fc = std::min(cutoff_turn, max_turns + 1);
+                const bool samecut = fc == sfx_hit->cutoff;
+                if (samecut) { sfxprobe::g_eqc_usable.fetch_add(1); if (agree) { sfxprobe::g_eqc_agree.fetch_add(1); } }
+                if (!agree)
+                {
+                    sfxprobe::g_dis[samecut ? 1 : 0][cwin ? 1 : 0].fetch_add(1);
+                    if (sfxprobe::g_printed.fetch_add(1) < 40)
+                    {
+                        std::fprintf(stderr, "[sfx-dis] kind=%s dec=%s stored=(res %d cut %d) fresh=(res %d cut %d) t%d depth=%d ftd=%d max=%d m2=%d nest=%d\n",
+                                     k == 0 ? "start" : "suffix", d == 0 ? "same" : "prev", sfx_hit->result, sfx_hit->cutoff,
+                                     result, fc, state.turn_number, depth, t_search_leaf_first_turn_depth, max_turns, second_main ? 1 : 0, g_fsline_nest);
+                    }
+                }
+            }
+        }
+        if (clean)
+        {
+            for (std::size_t i = 0; i < sfxprobe::t_pending.size() && sfxprobe::t_map.size() < (1u << 22); ++i)
+            { sfxprobe::t_map.emplace(sfxprobe::t_pending[i], sfxprobe::E{ result, std::min(cutoff_turn, max_turns + 1), g_decision_epoch, i == 0 }); }
+        }
+        sfxprobe::t_pending.clear();
+    }
     if (ko_vcopy)
     {
         t_ko_suppress = true;
@@ -96803,6 +96949,48 @@ static inline void IdHintRecord(const TranspositionTable::Key& k, int idx, int n
     if (it != m.end()) { it->second = { idx, n, win, model }; return; }
     if (m.size() < cap) { m.emplace(k, IdHint{ idx, n, win, model }); }
 }
+// CROSS-DECISION HINT (MTG_ID_HINT_GAME, default ON since 2026-11-10; regression A/B: units -0.3% budgeted, win turns identical in all 244 jobs): the previous decision's map of THIS game is kept
+// (moved here when its owning scope closes) and a lookup that misses the current decision's map falls back to it.
+// The state key folds the ordered live library, so a draw or shuffle between decisions is a miss, never a wrong
+// hint; the plan-count guard still applies. Per GAME (cleared in ClearPerGameCaches) like every other memo, so a
+// game's play never depends on which games shared the worker. Bounded: at most two maps (current + previous).
+static inline bool IdHintGameOn()
+{
+    static const bool env = EnvOn("MTG_ID_HINT_GAME", true);
+    return heurarm::Flag(heurarm::ID_HINT_GAME, env);
+}
+namespace idhgame
+{
+inline thread_local IdHintMap t_prev;
+inline std::atomic<long long> g_lookups{0}, g_cur_hits{0}, g_prev_hits{0};
+struct Reporter
+{
+    ~Reporter()
+    {
+        if (g_lookups.load() == 0) { return; }
+        std::cerr << "[id-hint-game] lookups=" << g_lookups.load() << " cur_hits=" << g_cur_hits.load()
+                  << " prev_hits=" << g_prev_hits.load() << "\n";
+    }
+};
+inline Reporter g_reporter;
+}
+static void IdHintGameClear() { idhgame::t_prev.clear(); }
+static inline const IdHint* IdHintFind(const TranspositionTable::Key& k)
+{
+    const bool game = IdHintGameOn();
+    if (game) { idhgame::g_lookups.fetch_add(1, std::memory_order_relaxed); }
+    IdHintMap::const_iterator it = g_idh_map->find(k);
+    if (it != g_idh_map->end())
+    {
+        if (game) { idhgame::g_cur_hits.fetch_add(1, std::memory_order_relaxed); }
+        return &it->second;
+    }
+    if (!game) { return nullptr; }
+    IdHintMap::const_iterator pt = idhgame::t_prev.find(k);
+    if (pt == idhgame::t_prev.end()) { return nullptr; }
+    idhgame::g_prev_hits.fetch_add(1, std::memory_order_relaxed);
+    return &pt->second;
+}
 struct IdHintScope   // installs this decision's hint map unless an enclosing decision root already did
 {
     IdHintMap  map;
@@ -96810,7 +96998,12 @@ struct IdHintScope   // installs this decision's hint map unless an enclosing de
     bool       own;
     IdHintScope() : prev(g_idh_map), own(g_idh_map == nullptr && g_rollout_nest == 0 && IdOrderHintOn())
     { if (own) { g_idh_map = &map; } }
-    ~IdHintScope() { if (own) { g_idh_map = prev; } }
+    ~IdHintScope()
+    {
+        if (!own) { return; }
+        g_idh_map = prev;
+        if (IdHintGameOn()) { idhgame::t_prev = std::move(map); }
+    }
     IdHintScope(const IdHintScope&) = delete;
     IdHintScope& operator=(const IdHintScope&) = delete;
 };
@@ -100168,6 +100361,53 @@ namespace gamelc
     inline Reporter g_reporter;
 }
 static void GameLineCacheClear() { gamelc::Clear(); pastcut::t_rec.clear(); }
+// MTG_INWIN_CACHE (default ON since 2026-11-10; verify: 12,960 hits re-searched, 0 MATERIAL; A/B: units -0.5% budgeted, win turns identical): DEPTH-FREE IN-WINDOW PROOFS.
+// A node at turn T with remaining depth k searches turns T..T+k-1 exhaustively; only what lies past T+k-1 comes from
+// the leaf. "A leaf can never beat a win the exact search already found in-window -- it can only tie it" (see the
+// lazy leaf). So a completed node's
+//   * WIN at w <= min(cutoff, T+k-1) is the earliest win of that state at ANY depth k' whose window holds it
+//     (w <= T+k'-1): every earlier line lies inside both windows and was refuted;
+//   * NO-WIN under cutoff c proves "no win at or before min(c, T+k-1)" from in-window lines alone, which holds at any
+//     depth.
+// The game line cache and FSLineCache key on the remaining depth, so the deeper pass of a decision cannot read its
+// warm-up pass's in-window proofs, and the next decision (one turn later, same states at depth + 1) cannot read the
+// last one's. This map can. Keyed like the game line cache (gamelc::Tag: leaf, beam, second-main and labeller modes)
+// minus the depth. Per GAME. The soundness argument assumes the menu inside the window does not depend on the
+// remaining depth; MTG_INWIN_CACHE_VERIFY=1 recomputes every hit, plays the fresh answer and counts disagreements.
+namespace inwin
+{
+    static inline bool On()
+    {
+        static const bool env = EnvOn("MTG_INWIN_CACHE", true);
+        return heurarm::Flag(heurarm::INWIN_CACHE, env);
+    }
+    inline bool Verify() { static const bool v = EnvOn("MTG_INWIN_CACHE_VERIFY"); return v; }
+    inline std::size_t CapBytes()
+    { static const std::size_t v = static_cast<std::size_t>(std::max(1, EnvInt("MTG_INWIN_CACHE_MB", 24))) << 20; return v; }
+    struct Entry { TurnSolver::SearchLine line; int win; int nowin_bound; std::uint64_t order_sig; };
+    inline thread_local std::unordered_map<TranspositionTable::Key, Entry, TranspositionTable::KeyHash> t_map;
+    inline thread_local std::size_t t_bytes = 0;
+    inline std::atomic<long long> g_win_hits{0}, g_nowin_hits{0}, g_win_stores{0}, g_nowin_stores{0}, g_widen{0}, g_full{0};
+    inline std::atomic<long long> g_ver_n{0}, g_ver_bad{0}, g_ver_material{0}, g_ver_printed{0};
+    inline void Clear() { t_map.clear(); t_bytes = 0; }
+    inline TranspositionTable::Key WinKey(TranspositionTable::Key k) { Fold(k, 0x1A7E5C0DE1ULL); return k; }
+    inline TranspositionTable::Key NowinKey(TranspositionTable::Key k) { Fold(k, 0x2B0D17A3F7ULL); return k; }
+    struct Reporter
+    {
+        ~Reporter()
+        {
+            if (g_win_stores.load() + g_nowin_stores.load() == 0) { return; }
+            std::cerr << "[inwin-cache] win_hits=" << g_win_hits.load() << " nowin_hits=" << g_nowin_hits.load()
+                      << " win_stores=" << g_win_stores.load() << " nowin_stores=" << g_nowin_stores.load()
+                      << " widened=" << g_widen.load() << " full_refusals=" << g_full.load();
+            if (Verify())
+            { std::cerr << " verified=" << g_ver_n.load() << " DISAGREE=" << g_ver_bad.load() << " MATERIAL=" << g_ver_material.load(); }
+            std::cerr << "\n";
+        }
+    };
+    inline Reporter g_reporter;
+}
+static void InWinCacheClear() { inwin::Clear(); }
 
 static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int max_turns,
                                         int cutoff, bool second_main, TranspositionTable* tt,
@@ -100348,6 +100588,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     TranspositionTable::Key key, key_win, key_base;
     int dvs_read_mlt = INT_MAX;   // precise dirty-memo provenance when the carry has it
     bool gamelc_hit = false; int gamelc_hit_win = 0;   // MTG_GAME_LINE_CACHE_VERIFY: the cached answer to check
+    bool inwin_hit = false; int inwin_hit_win = 0;     // MTG_INWIN_CACHE_VERIFY: the cached answer to check
     int pastcut_cached = 0;                            // MTG_FSL_PASTCUT_VERIFY: the memo win being re-searched
     struct GamelcUnreached { const bool& hit; bool done = false; ~GamelcUnreached()
         { if (hit && !done) { gamelc::g_ver_unreached.fetch_add(1, std::memory_order_relaxed); } } } gamelc_unreached{ gamelc_hit };
@@ -100404,6 +100645,35 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     gamelc_hit = true; gamelc_hit_win = max_turns + 1; gamelc::t_hit_key = gn->first;
                 }
             }
+            }
+        }
+        // MTG_INWIN_CACHE: an in-window proof of this state from ANY remaining depth (see inwin).
+        if (inwin::On() && g_fsline_nest > 0 && !gamelc_hit)
+        {
+            const int we = state.turn_number + depth - 1;
+            TranspositionTable::Key kw = key_base;
+            const std::uint64_t osig = CanonSimKeyOn() ? FsOrderSig(state) : 0ull;
+            if (s_split_keys && CanonSimKeyOn()) { Fold(kw, osig); }
+            auto iw = inwin::t_map.find(inwin::WinKey(gamelc::Tag(kw, state)));
+            if (iw != inwin::t_map.end() && iw->second.win <= we && (iw->second.order_sig == 0 || iw->second.order_sig == osig))
+            {
+                inwin::g_win_hits.fetch_add(1, std::memory_order_relaxed);
+                if (!inwin::Verify()) { ++g_fs_memo_win_hits; return iw->second.line; }
+                inwin_hit = true; inwin_hit_win = iw->second.win;
+            }
+            else
+            {
+                auto in = inwin::t_map.find(inwin::NowinKey(gamelc::Tag(key_base, state)));
+                // The query must judge every turn up to its cutoff by the SEARCH MENU, as the proof did: a cutoff past
+                // this node's window would also count wins its leaf finds there, and the rollout plays lines a
+                // provider prunes from the menu (verify, 2026-11-10: FiveColour 2HG, turn 5 depth 1 cutoff 6 -- a
+                // depth-2 proof of "no win by 6" against a depth-1 rollout's turn-6 win).
+                if (in != inwin::t_map.end() && cutoff <= std::min(in->second.nowin_bound, we))
+                {
+                    inwin::g_nowin_hits.fetch_add(1, std::memory_order_relaxed);
+                    if (!inwin::Verify()) { ++g_fs_memo_nowin_hits; return TurnSolver::SearchLine{ max_turns + 1, {} }; }
+                    inwin_hit = true; inwin_hit_win = max_turns + 1;
+                }
             }
         }
         if (s_split_keys)
@@ -101192,15 +101462,15 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     int idh_rot = 0;   // static index rotated to the front (0 = none)
     if (idh_on && depth >= 2 && pre_view.size() > 1)
     {
-        IdHintMap::const_iterator hit = g_idh_map->find(SimKeyAtDepth(key_base, depth - 1));
-        if (hit != g_idh_map->end())
+        const IdHint* hit = IdHintFind(SimKeyAtDepth(key_base, depth - 1));
+        if (hit != nullptr)
         {
             if (g_oo_mode != 0) { ooprobe::h_found.fetch_add(1, std::memory_order_relaxed); }
-            const int idx = hit->second.idx;
-            idh_prev_win = hit->second.win;
-            const bool root_veto = bp_root && s_idh_root == 3 && !(hit->second.model && !idh_model_pass);
+            const int idx = hit->idx;
+            idh_prev_win = hit->win;
+            const bool root_veto = bp_root && s_idh_root == 3 && !(hit->model && !idh_model_pass);
             if (root_veto) { /* static root: the hint was not the model's, or this pass is not a rollout pass */ }
-            else if (hit->second.n != static_cast<int>(pre_view.size()))
+            else if (hit->n != static_cast<int>(pre_view.size()))
             { if (g_oo_mode != 0) { ooprobe::h_size_mm.fetch_add(1, std::memory_order_relaxed); } }
             else if (idx > 0 && idx < static_cast<int>(pre_view.size()))
             {
@@ -103343,6 +103613,70 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             else if (!win && it->second.nowin_bound != std::numeric_limits<int>::max()
                      && it->second.nowin_bound < std::min(cutoff, max_turns + 1))
             { it->second.nowin_bound = std::min(cutoff, max_turns + 1); }   // a wider refutation supersedes
+        }
+    }
+    // MTG_INWIN_CACHE: keep this node's in-window proofs for any depth (see inwin).
+    if (inwin::On() && lc != nullptr && !bp_root)
+    {
+        const bool complete = g_fs_trunc_events == trunc_at_entry && budgetbind::t_binds == binds_at_entry
+                           && !decisionwork::Exceeded() && !best.truncated;
+        const bool dvs_sup = g_devseq_suppress > 0 && g_devseq_latent_n != dvs_latent_at_entry;
+        if (inwin_hit && complete)
+        {
+            inwin::g_ver_n.fetch_add(1, std::memory_order_relaxed);
+            const bool fresh_win = best.win_turn <= max_turns, cached_win = inwin_hit_win <= max_turns;
+            if (fresh_win != cached_win || (fresh_win && best.win_turn != inwin_hit_win))
+            {
+                inwin::g_ver_bad.fetch_add(1, std::memory_order_relaxed);
+                if (std::min(best.win_turn, inwin_hit_win) <= cutoff)
+                {
+                    inwin::g_ver_material.fetch_add(1, std::memory_order_relaxed);
+                    if (inwin::g_ver_printed.fetch_add(1, std::memory_order_relaxed) < 12)
+                    {
+                        std::cerr << "[inwin-cache] DISAGREE job=" << (heurarm::t_job_name ? heurarm::t_job_name : "-")
+                                  << " turn=" << state.turn_number << " depth=" << depth << " cutoff=" << cutoff
+                                  << " cached=" << inwin_hit_win << " fresh=" << best.win_turn << " nest=" << g_fsline_nest << "\n";
+                    }
+                }
+            }
+        }
+        if (complete && !dvs_sup)
+        {
+            const int we = state.turn_number + depth - 1;
+            const bool win = best.win_turn <= std::min(cutoff, max_turns);
+            auto admit = [](std::size_t nb) -> bool
+            {
+                if (inwin::t_bytes + nb > inwin::CapBytes()) { inwin::g_full.fetch_add(1, std::memory_order_relaxed); return false; }
+                inwin::t_bytes += nb; return true;
+            };
+            if (win && best.win_turn <= we)
+            {
+                TranspositionTable::Key kw = key_base;
+                const std::uint64_t osig = CanonSimKeyOn() ? FsOrderSig(state) : 0ull;
+                if (s_split_keys && CanonSimKeyOn()) { Fold(kw, osig); }
+                const TranspositionTable::Key k = inwin::WinKey(gamelc::Tag(kw, state));
+                if (inwin::t_map.find(k) == inwin::t_map.end() && admit(ApproxFslBytes(best) + 64))
+                {
+                    inwin::t_map.emplace(k, inwin::Entry{ best, best.win_turn, std::numeric_limits<int>::max(), osig });
+                    inwin::g_win_stores.fetch_add(1, std::memory_order_relaxed);
+                }
+            }
+            // No win at or before b, from in-window lines alone: a win at w proves none before it.
+            const int b = std::min(win ? best.win_turn - 1 : std::min(cutoff, max_turns + 1), we);
+            if (b >= state.turn_number)
+            {
+                const TranspositionTable::Key k = inwin::NowinKey(gamelc::Tag(key_base, state));
+                auto it = inwin::t_map.find(k);
+                if (it == inwin::t_map.end())
+                {
+                    if (admit(sizeof(inwin::Entry) + 64))
+                    {
+                        inwin::t_map.emplace(k, inwin::Entry{ TurnSolver::SearchLine{ max_turns + 1, {} }, max_turns + 1, b, 0ull });
+                        inwin::g_nowin_stores.fetch_add(1, std::memory_order_relaxed);
+                    }
+                }
+                else if (it->second.nowin_bound < b) { it->second.nowin_bound = b; inwin::g_widen.fetch_add(1, std::memory_order_relaxed); }
+            }
         }
     }
     if (best.win_turn <= max_turns)

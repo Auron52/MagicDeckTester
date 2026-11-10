@@ -24,6 +24,13 @@
 #include "../core/WorkCounters.h"
 #include "../core/EnvFlags.h"
 #include "ValueArm.h"
+
+// t_reads: every budget-predicate EVALUATION that could have answered "cut" (SearchBudget::Exhausted on a finite
+// budget, SearchBudget::Overrun, an ARMED decisionwork::PricedExceeded), whatever it answered. A cached computation
+// that read one depends on budget STATE even when it charged nothing, so a hit is exact only where the same reads
+// would answer the same way (cachecharge::Cost::budget_read; MTG_CACHE_READ_GUARD). budgetbind::t_binds alone cannot
+// see this: it counts only the reads that answered true, so an entry stored before a cut looks state-free.
+namespace budgetbind { inline thread_local unsigned long long t_reads = 0; }
 namespace decisionwork
 {
 inline thread_local long long t_used  = 0;
@@ -46,7 +53,8 @@ inline thread_local int       t_charge_acc = 0;
 // budgeted decision root arms it. Kept apart from Armed(), which gates the unit meter's own billing.
 inline thread_local long long t_pr_start = 0;
 inline thread_local long long t_pr_limit = 0;   // 0 == disarmed
-inline bool PricedExceeded() { return t_pr_limit > 0 && workctr::t_priced - t_pr_start >= t_pr_limit; }
+inline bool PricedExceededQuiet() { return t_pr_limit > 0 && workctr::t_priced - t_pr_start >= t_pr_limit; }
+inline bool PricedExceeded() { if (t_pr_limit > 0) { ++budgetbind::t_reads; } return PricedExceededQuiet(); }
 // The PRICED START GATE (FullSearchLine's ladder): decline to START a pass whose projected priced cost does not fit
 // the decision's remaining priced allowance. Per-job arm "decision_priced_gate" (ValueArm) else MTG_DECISION_PRICED_GATE
 // (default OFF since 2026-11-03: it projects the next pass as prev x prev/prev2, which overshoots when the growth ratio

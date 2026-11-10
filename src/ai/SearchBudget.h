@@ -36,6 +36,7 @@
 namespace budgetbind
 {
 inline thread_local unsigned long long t_binds = 0;
+// (t_reads, the read counter beside t_binds, lives in DecisionWorkMeter.h.)
 }
 
 class SearchBudget
@@ -75,6 +76,7 @@ public:
 
     bool Exhausted() const
     {
+        if (!Unlimited()) { ++budgetbind::t_reads; }
         const bool b = !Unlimited() && m_used >= m_limit;
         if (b) { ++budgetbind::t_binds; }
         return b;
@@ -104,10 +106,17 @@ public:
         // iterative deepening commits the deepest COMPLETED pass. Disarmed by default.
         // decisionwork::PricedExceeded is the PRICED per-decision ceiling (MTG_DECISION_PRICED_X): it trips the
         // same rollback, and nothing else -- unlike Exceeded() it does not switch off caches or rollouts.
-        const bool b = (m_overrun_limit > 0 && m_used >= m_overrun_limit) || gamework::Abandoned()
-                    || decisionwork::Exceeded() || decisionwork::PricedExceeded();
+        ++budgetbind::t_reads;
+        const bool b = OverrunQuiet();
         if (b) { ++budgetbind::t_binds; }
         return b;
+    }
+    // The same predicates with no side effect on the bind / read counters (a cache's hit test).
+    bool ExhaustedQuiet() const { return !Unlimited() && m_used >= m_limit; }
+    bool OverrunQuiet() const
+    {
+        return (m_overrun_limit > 0 && m_used >= m_overrun_limit) || gamework::Abandoned()
+            || decisionwork::Exceeded() || decisionwork::PricedExceededQuiet();
     }
 
     // Units left before exhaustion, clamped to >= 0 (LLONG_MAX if unlimited).
