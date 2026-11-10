@@ -75,6 +75,8 @@ struct TopDisposition;   // core/GameLogger.h
 enum class LookKind;     // core/GameLogger.h
 #include <vector>
 
+struct Action;
+
 // THE SCORED CANTRIP ORDER's inputs (DecisionProvider::CantripReadinessOf / ScoreTopDisposition; design:
 // docs/design/cantrip-search-optimization.md §3.3). Computed ONCE per resolution, before the candidates
 // are scored.
@@ -187,6 +189,11 @@ class DecisionProvider
 {
 public:
     virtual ~DecisionProvider() = default;
+
+    // A provider may omit an early on-demand land-payment policy only when its
+    // deck's remaining decisions cannot benefit from that policy this turn.
+    virtual bool SearchEarlySacLandPolicy(const GameState&, const std::vector<Action>&) const
+    { return true; }
 
     // Which archetype provider a deck routed to -- OBSERVABILITY, not a decision input. Archetype
     // detection is by card params (SelectDecisionProvider), and it has silently MISROUTED decks three

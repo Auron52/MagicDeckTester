@@ -383,3 +383,42 @@ TEST_CASE("CG discard: every non-staged index named exactly once; a staged card 
                                 MakeCg({ kET, kET, kSP, kHeath, kHP, kEW, kWurm, kScry }, { kFor, kTG }) })
     { CheckPermutation(b, Cg(b)); }
 }
+
+TEST_CASE("CG Crop Rotation: the resolution tutor pin picks the land; the Orchard restriction stays")
+{
+    // USER 2026-11-04: "If that is in the engine there should be search, but the only deck with the card
+    // (Creature Giving) has a serious pruning heuristic which should remain." PerformLandTutorToBattlefield now
+    // consumes the resolution tutor axis's pin (Plan::tutor_choice -> ScriptedTutor), clamped into the provider's
+    // deduped candidates; the provider still restricts the menu to the Orchard while one is in the library.
+    const CardParams& pp = CardDatabase::Instance().Lookup(kCrop)->params;
+    auto put_land = [&](GameState& s) -> std::string
+    {
+        for (const Permanent& p : s.battlefield) { if (p.controller_index == 0 && p.card.IsLand()) { return p.card.m_name.str(); } }
+        return {};
+    };
+    const std::vector<std::string> no_orchard = { kHP, kFor, kTG, kBP, kOT, kSG, kSP };
+    {
+        GameState s = MakeCg({}, {}, {}, no_orchard);
+        const std::vector<std::string> cands = RankedTutorCandidates(Prov(), s, 0, pp);
+        std::vector<std::string> uniq;
+        for (const std::string& c : cands) { if (std::find(uniq.begin(), uniq.end(), c) == uniq.end()) { uniq.push_back(c); } }
+        REQUIRE(uniq.size() >= 3);
+        for (int pick : { 0, 1, 2, 99 })
+        {
+            GameState c = s;
+            g_scripted_tutor_choice = pick;
+            PerformLandTutorToBattlefield(c, 0, pp, std::string());
+            CHECK(g_scripted_tutor_choice == -1);   // consumed: it cannot leak into the apply's next tutor
+            CHECK(put_land(c) == uniq[std::min<std::size_t>(static_cast<std::size_t>(pick), uniq.size() - 1)]);
+        }
+        g_scripted_tutor_choice = -1;
+    }
+    {
+        // An Orchard in the library: the provider's restriction leaves one candidate, so every pin takes it.
+        GameState s = MakeCg({}, {}, {}, LibWithoutDoth());
+        g_scripted_tutor_choice = 2;
+        PerformLandTutorToBattlefield(s, 0, pp, std::string());
+        CHECK(put_land(s) == std::string(kOrch));
+        CHECK(g_scripted_tutor_choice == -1);
+    }
+}

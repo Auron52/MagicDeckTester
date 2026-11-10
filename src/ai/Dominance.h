@@ -600,7 +600,10 @@ static_assert(sizeof(Player) == 216,
 // prepay's kept {C} still floating, EDF only (0 elsewhere). FUTURE-DETERMINING within the phase (it orders the
 // payer's generic drain): mixed value-gated into the main-phase key (TurnSolver, beside floating_haste_c),
 // which, like floating_haste_c, Build() does not fold separately.
-static_assert(sizeof(GameState) == 1320,   // c-wild fields fit the padding after the extra-turn order stack, miracle pin and opponent count
+// The on-demand deck trait and searched early-payment pin add eight bytes after
+// the existing trait group. The trait is constant for a deck; the pin is folded
+// below when set, so equal dominance keys still imply equal future payments.
+static_assert(sizeof(GameState) == 1320,   // verify combined current fields in the integrated build
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 
@@ -998,6 +1001,7 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     { fold(0x1A61000000ull + static_cast<std::uint64_t>(s.scripted_combat_transform)); }
     if (s.scripted_militia_pride_pay >= 0)
     { fold(0x1A62000000ull + static_cast<std::uint64_t>(s.scripted_militia_pride_pay)); }
+    if (s.scripted_early_ondemand_crack) { fold(0xEA4CCA1100ull); }
     // The searched echo pin (Plan::echo_choice): FUTURE-DETERMINING across the turn boundary (set during the
     // turn's apply, consumed at the NEXT upkeep -- the scripted_upkeep_gy_reanimate class), value-gated with
     // its own domain tag so every deck without an echo card keeps its exact key.

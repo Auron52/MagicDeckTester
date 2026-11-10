@@ -1,6 +1,7 @@
-# Sacrifice-for-mana ON DEMAND (Lotus Bloom, Lake of the Dead): deferred design
+# Sacrifice-for-mana ON DEMAND (Lotus Bloom, Lake of the Dead)
 
-Status: DEFERRED (2026-11-04), queued after the main-phase/cast-order work. Not built.
+Status: implemented and validated 2026-11-06 on branch `sb-sacpayer`. See the implementation and
+validation notes below. Was deferred on 2026-11-04 until the main-phase/cast-order work landed.
 
 USER 2026-11-04 (verbatim): *"Yes, it should be on-demand and only done that way."* The payer is the ONLY route for
 these cracks: retire the Lotus Bloom / Lake of the Dead SacForMana action (step 5 below is required, not optional), and
@@ -89,3 +90,46 @@ the GT of at least three decks. That is a separate project with its own A/B. The
 already removes the observed Lake waste: the plans whose crack output is never spent. It stays correct
 (and redundant) once the on-demand payer lands. At that point remove it, together with the Lake SacForMana
 action.
+
+## Implementation (2026-11-05)
+
+* **Predicate + stamp.** `IsOnDemandSacDef` (SpellEffects.h): a one-colour lump (`sac_for_mana_amount >= 2`, no
+  `produces`, no pinned colour, no {T}-creature / haste rider, not an outlet: Lotus Bloom, Black Lotus by card data)
+  or a land crack that eats another land (`sac_for_mana_victim_land_subtype`: Lake of the Dead). Scoped per game by
+  the deck stamp `GameState::deck_has_ondemand_sac` (mainboard only; default TRUE for unstamped states), so
+  FiveColour's conjured Black Lotus keeps the Garth route.
+* **Retired action.** `CollectActions` emits no SacForMana for such a source; the pre-pass / colour fold / dup
+  clause / Dragonstorm prefix code is untouched and simply never sees one. `MTG_IDLE_CRACK_FOLD` /
+  `FoldIdleLandCracks` deleted (heurarm slot, counters and test hook with it).
+* **Payer.** `TapForCostShared` (ManaPayment.cpp) is now a wrapper over the old body (`TapForCostSharedCore`), active
+  only for the outermost payment (not a refine probe, not the oracle's float-only / scripted pass): (1) pay
+  ordinarily with every crackable land HELD; (2) else a land's plain tap, kept when the rest of the line
+  (`g_line_unpaid_cost`) still fits `AvailableManaPool` afterwards; (3) else crack, one source at a time (lands,
+  then lumps; a lump's colour = the cost's shortest pip, then the line's remaining pips, the hand's, WUBRG),
+  retrying after each; (4) else a stranding plain tap still pays this cost. Trials run on copies under
+  `RevealLogPause`, the winning recipe is replayed on the real board. The surplus floats (`floating_mana`).
+* **Supply at the gates.** `OnDemandSacSupplyNow` / `AddOnDemandSacToPool`: a lump as `amount` wild, a land crack
+  as its delta over the plain tap in its colour, one per available victim. Added to `AvailableManaPool`,
+  `AvailableManaPoolNoAttackers`, `BuildNonCreaturePool`, `BuildColorFeasibility`, `ComputeAvailableColors` and
+  `UntappedManaUpperBound`.
+* **Batch prepay.** A searched early Lake-payment policy or a line containing a paid Apostle tutor activation
+  declines joint prepay, so the payer sees the first bill before Lake is tapped for one black. The activation's
+  cost is included in the line total and removed when paid in both apply worlds.
+* **Viewer / replay.** Human auto-payment runs the same wrapper. `viewer_protocol_check.py` matches a recorded
+  Lotus / Lake crack (an action with `sacout` or `float_color`) by the §2a "plan minus its implicit pay-sac" tier.
+  Lake has no standalone pre-tap crack face: the payer offers the crack while paying a cost, as the user's
+  on-demand ruling requires. Lotus keeps `Route::SacAction` for a pay-click on that source.
+* **Tests.** `test/unit/test_shadowborn_lakeprof.cpp`: not cracked when lands pay (Lake held), cracked when needed
+  with the surplus floating, crack and plain tap exclusive, Lotus kept when lands pay and paying a colour no land
+  makes, no SacForMana plan and the crack-needing cast still offered.
+
+## Validation (2026-11-06)
+
+The current-base paired sweep contains 10,600 games across Dragonstorm, Shadowborn, and their two-headed variants.
+Every measured deck/depth cell improves: Dragonstorm d0 -17/3000 turns, d3 -13/1000, d5 -8/600, 2HG d5 -8/1000;
+Shadowborn d0 -1382/3000, d3 -7/600, d5 -2/400, 2HG d3 -40/1000. A disjoint Shadowborn d5 sample improves
+by seven turns over 1,600 games. All 49 slower searched games in the main sweep, all 20 in the disjoint sweep,
+and all ten slower searched regression games recover at depth 8 with no budget. The final source also recovers
+the five focused payer seeds. Full unit tests passed (2,616 cases), scenarios passed (419), smoke and regression
+ground truth were accepted with provenance notes, and strict reference replay found 304 exact, 462 repaired,
+one beaten, and zero failures across 767 references. The two suboptimal references remain beaten.

@@ -309,6 +309,9 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
     // MTG_LANDDRAW_CENSUS (diagnostic only, a no-op unless set): did this turn's dig chain draw a
     // land with the drop open and end with the drop unused? Read before the end step changes nothing.
     AIEngine::LandDrawCensusEndTurn(state);
+    // The executor's crossing node: a Profane Tutor fetch due at the next upkeep that the
+    // committed line left unpinned is searched here, before the crossing (no-op for every other deck / rollouts).
+    m_ai.DecideCrossingFetch(state);
     if (at <= static_cast<int>(ResumeAt::End))   { EndStep(state); }
     CleanupStep(state);
     // EXTRA TURN NEXT (pending_extra_turns > 0): the opponent takes NO turn before it, so neither
@@ -376,6 +379,7 @@ void GameEngine::UntapStep(GameState& state)
     state.scripted_combat_aura_swap = -1;   // searched Arcanum Wings combat swap (same lockstep)
     state.scripted_combat_aura_swap_in = -1;   // ...and its fixed Aura (human deferred swap)
     state.scripted_attack_land_search = -1;    // searched Primeval Titan attack pick (same lockstep)
+    state.scripted_early_ondemand_crack = false;
     state.pending_extra_combats = 0;   // Moraug: drained every turn; a turn boundary never carries one
     state.scripted_combat_land_search_crack = -1;   // ...and the in-combat Khalni crack (same lockstep)
     state.scripted_combat_landfall_target = -1;     // ...and the combat landfall-target rank (same lockstep)
@@ -513,7 +517,29 @@ void GameEngine::UpkeepStep(GameState& state)
     // card and CAST off suspend any whose last counter is now gone (arrive_turn <= this turn). Runs
     // after UntapStep, so the arrived artifact is untapped and available this turn. Mirrors the rollout
     // (SimulateEndAndStartNextTurn) -> lockstep. No-op for every deck without a suspended card.
-    ProcessSuspendArrivals(state, state.active_player_index);
+    // The executor's suspended-tutor RESOLUTION node: an uncovered search this upkeep meets
+    // (a ripple free copy no crossing could foresee) is searched where it resolves. Installed for THIS state only
+    // (every copy a search makes has another address); inert for every deck without a suspended tutor.
+    {
+        struct RealStutNodeScope
+        {
+            RealStutNodeFn fn; void* owner; const GameState* st;   // the enclosing game's (a bottom trial nests)
+            RealLandNodeFn land_fn; void* land_owner; const GameState* land_st;
+            RealStutNodeScope(AIEngine* ai, const GameState* s)
+                : fn(t_real_stut_node), owner(t_real_stut_owner), st(t_real_stut_state),
+                  land_fn(t_real_land_node), land_owner(t_real_land_owner), land_st(t_real_land_state)
+            {
+                t_real_stut_node = &AIEngine::RealStutNodeThunk; t_real_stut_owner = ai; t_real_stut_state = s;
+                t_real_land_node = &AIEngine::RealLandNodeThunk; t_real_land_owner = ai; t_real_land_state = s;
+            }
+            ~RealStutNodeScope()
+            {
+                t_real_stut_node = fn; t_real_stut_owner = owner; t_real_stut_state = st;
+                t_real_land_node = land_fn; t_real_land_owner = land_owner; t_real_land_state = land_st;
+            }
+        } _rsn(&m_ai, &state);
+        ProcessSuspendArrivals(state, state.active_player_index);
+    }
 
     // Aether Vial: add a charge counter each upkeep using an AI heuristic.
     // Stop adding when the counter count reaches the most common creature MV in hand,
@@ -1026,6 +1052,7 @@ void GameEngine::CombatPhase(GameState& state, bool additional)
     // landfall payloads pump attacking Plants this combat. Pick = the searched
     // Plan::attack_land_search_choice pin. Repairs atk_idx (a fetched Karoo's bounce erases a slot).
     // Mirrors TurnSolver::SimulateCombat (lockstep, ONE shared helper). Param-gated inert.
+    m_ai.DecideAttackLand(state, atk_idx, additional);
     FireAttackLandSearch(state, state.active_player_index, atk_idx);
     // ...then the IN-COMBAT Khalni Heart Expedition crack: an Expedition the trigger's landfalls
     // filled can be activated before damage (it has no timing restriction), so its two lands' landfall

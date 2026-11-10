@@ -5,6 +5,7 @@
 #include "SearchBudget.h"
 #include "../core/MadnessTypes.h"   // MadnessPin (Action's madness pin helpers)
 #include "../core/EnvFlags.h"      // EnvOn (MTG_PUMP_HAND_CAP)
+struct SuspendArrivalCtx;   // SpellEffects.h (the executor's suspended-tutor resolution node)
 #include <chrono>
 #include <functional>
 #include <memory>
@@ -1257,6 +1258,9 @@ public:
         //
         // Both flags are human-menu only and neither is read by the search or any digest.
         bool combo_off_offered  = false;
+        // Search alternative: the payer may crack Lake before the next eligible bill. Kept in the
+        // byte after combo_off_offered so the Plan's layout does not grow.
+        std::int8_t early_ondemand_crack = -1;
         // SEARCHED DEFENSE OF THE HEART PUT LIST (MTG_DOTH_AXIS, 2026-10-29): the NEXT upkeep's put lists, packed
         // exactly as GameState::scripted_doth_put (a rank per trigger ordinal into the resolution-time option
         // list, rank 0 = the provider's pick, + the count of ordinals it covers); -1 = write nothing. Written
@@ -2669,14 +2673,29 @@ public:
     // reports: [0] F2 exactly sized fans, [1] F3 mirror ranks declined, [2] F4 stranding ranks declined, [3] F5
     // cross-base ranks declined, [4] Q36 seed variants not emitted. Monotonic; a caller diffs around its work.
     static void              SoundFoldCounters(long long out[5]);
-    // The idle land-crack fold (MTG_IDLE_CRACK_FOLD, TurnSolver.cpp FoldIdleLandCracks): process-wide counts of
-    // crack plans tested against a crack-less sibling and folded onto it. Monotonic.
-    static void              IdleCrackFoldCounters(long long* tested, long long* folded);
     // Test hook: every crossing BoundaryFan makes from `state` -> (Profane-fetch pin recorded or -1, hand.front()).
     static std::vector<std::pair<int, std::string>> SuspendTutorBoundaryForTest(const GameState& state);
-    // Test hook: run the fold over an explicit plan list (the list EnumeratePlans would return).
-    static std::vector<Plan> FoldIdleLandCracksForTest(const GameState& state, bool is_pre_combat,
-                                                       std::vector<Plan> plans);
+    static std::vector<std::pair<int, std::string>> UpkeepLandBoundaryForTest(const GameState& state);
+    // The EXECUTOR's crossing node: an unpinned Profane Tutor fetch due at the next upkeep is
+    // searched at the end of the real turn, one crossing per resolution-state rank, iteratively deepened under
+    // `budget`; the winner is written to state.scripted_suspend_tutor and returned (-2 = nothing to decide).
+    static int ChooseRealCrossingFetch(GameState& state, int depth, int max_turns, SearchBudget* budget,
+                                       bool second_main);
+    static std::pair<int, int> ChooseRealCrossingReanimate(GameState& state, int depth, int max_turns,
+                                                           SearchBudget* budget, bool second_main);
+    static int ChooseRealCrossingLand(GameState& state, int depth, int max_turns,
+                                      SearchBudget* budget, bool second_main);
+    // ...and its RESOLUTION node: a suspended tutor's search the real upkeep meets uncovered (a ripple free copy no
+    // crossing could foresee) is searched at resolution, one copy per rank; returns the rank (-1 = one candidate).
+    static int ChooseRealResolutionFetch(const GameState& state, int controller, const CardParams& pp,
+                                         const Card& card, const SuspendArrivalCtx& ctx, int depth, int max_turns,
+                                         SearchBudget* budget, bool second_main);
+    static int ChooseRealResolutionLand(const GameState& state, int controller, const CardParams& pp,
+                                        const Card& card, const SuspendArrivalCtx& ctx, int depth, int max_turns,
+                                        SearchBudget* budget, bool second_main);
+    static int ChooseRealAttackLand(const GameState& state, const std::vector<int>& attackers,
+                                    bool additional, int depth, int max_turns, SearchBudget* budget,
+                                    bool second_main);
     // True inside a horizon playout -- beyond the search window, where a greedy policy is permitted.
     static bool              InRolloutPlayout();
     // True inside the depth-0 executor's greedy pick (a GreedyPermit(D0Runner) is live) -- the
@@ -3773,6 +3792,9 @@ public:
         int boundary_tutor = -2;
         int boundary_miracle = -2;
         int boundary_stut = -2;   // ...and Profane Tutor's off-suspend fetch (Plan::suspend_tutor_choice)
+        int boundary_grace = -2;
+        int boundary_emeria = -2;
+        int boundary_land = -2;
     };
 
     // fd-oracle diagnostic (MTG_FD_ORACLE only, inert otherwise): the smallest WIN-CLAIMING estimate

@@ -3120,6 +3120,149 @@ static const std::string& BpNameOf(const Action& a)
     return a.remand_by.empty() ? a.card_name.str() : a.remand_by.str();
 }
 
+// Per-deck search shape (sidecar value_play.ladder / .leaf, see ValuePlay), scoped to ONE decision so a pooled
+// batch's next deck on this thread starts clean. Used by TakeTurn's full-depth solve and by the executor's
+// crossing node (AIEngine::DecideCrossingFetch), so both search under the same deck shape.
+namespace {
+struct DeckShapeScope
+{
+    int prev_l, prev_w, prev_c, prev_s, prev_a, prev_lr; double prev_x, prev_fa; const std::vector<double>* prev_sr; const std::vector<double>* prev_er; std::string prev_k;
+    DeckShapeScope(const MulliganProfile& p)
+        : prev_l(valuearm::t_deck_ladder), prev_w(valuearm::t_deck_warm_none), prev_c(valuearm::t_deck_commit_model),
+          prev_s(valuearm::t_deck_single), prev_a(valuearm::t_deck_alpha_relaxed), prev_lr(valuearm::t_deck_fit_lazy_r),
+          prev_x(valuearm::t_deck_exhaust_mult), prev_fa(valuearm::t_deck_fit_alpha), prev_sr(valuearm::t_deck_esc_skip_r), prev_er(valuearm::t_deck_emul_r),
+          prev_k(valuearm::t_deck_key)
+    {
+        valuearm::t_deck_ladder    = (p.value_play.ladder != "emulated") ? 0
+                                   : (p.value_play.commit == "model") ? 2 : 1;
+        valuearm::t_deck_warm_none = (p.value_play.leaf == "none") ? 1 : 0;
+        valuearm::t_deck_commit_model = (p.value_play.commit == "model") ? 1 : 0;
+        // "single" = the FIT single pass (2); any other ladder leaves it unset (-1 => env default).
+        valuearm::t_deck_single    = (p.value_play.ladder == "single") ? 2 : -1;
+        valuearm::t_deck_alpha_relaxed = (p.value_play.alpha == "relaxed") ? 1
+                                       : (p.value_play.alpha == "strict") ? 0 : -1;
+        valuearm::t_deck_exhaust_mult = p.value_play.exhaust_mult;
+        // FIT's affordability gate multiplier and R-calibration timing. Tier 1 (they act
+        // wherever FIT acts), so they ride the shape scope rather than the vp_here params.
+        valuearm::t_deck_fit_alpha  = p.value_play.fit_alpha;
+        valuearm::t_deck_fit_lazy_r = p.value_play.fit_lazy_r;
+        valuearm::t_deck_key       = p.value_source;
+        valuearm::t_deck_esc_skip_r = &p.escalation_skip_r;
+        valuearm::t_deck_emul_r     = &p.value_play.emul_r;
+    }
+    ~DeckShapeScope() { valuearm::t_deck_ladder = prev_l; valuearm::t_deck_warm_none = prev_w; valuearm::t_deck_commit_model = prev_c;
+                        valuearm::t_deck_single = prev_s; valuearm::t_deck_alpha_relaxed = prev_a; valuearm::t_deck_fit_lazy_r = prev_lr;
+                        valuearm::t_deck_exhaust_mult = prev_x; valuearm::t_deck_fit_alpha = prev_fa; valuearm::t_deck_key = prev_k;
+                        valuearm::t_deck_esc_skip_r = prev_sr; valuearm::t_deck_emul_r = prev_er; }
+};
+}   // namespace
+
+// THE EXECUTOR'S CROSSING NODE (TurnSolver::ChooseRealCrossingFetch has the full why). Called
+// by GameEngine at the end of the real turn, after the second main and before the end step: a Profane Tutor fetch
+// due at the next upkeep that the committed line left unpinned is SEARCHED here, at this engine's depth and per-
+// decision budget and under the deck's search shape, instead of resolving the provider's front at the upkeep.
+// Never in a rollout (beyond the horizon the front is the permitted playout), the d0 runner, or human / claude
+// play (the person picks at the `tutor` prompt). A pick other than the front deviates from what the line that is
+// still queued assumed, so it clears that line (RolloutWinTurnFrom's second rule).
+void AIEngine::DecideCrossingFetch(GameState& state)
+{
+    if (m_in_rollout || m_lookahead_depth <= 0 || HumanPlayActive() || m_external_chooser) { return; }
+    UnbudgetedPlayScope _unbudgeted_play(m_budget_ms <= 0);
+    TurnSolver::SearchLeafDepthScope _sld(m_profile.search_leaf_depth, m_profile.search_leaf_first_turn_depth);
+    DeckShapeScope _shape(m_profile);
+    SearchBudget budget = DecisionBudget();
+    std::optional<GameState> _bsv;
+    GameState view = blindsearch::View(state, _bsv, 0x5354524Eull);
+    const int pin = TurnSolver::ChooseRealCrossingFetch(view, m_lookahead_depth, m_max_turns, &budget,
+                                                        m_search_post_combat);
+    if (pin != -2)
+    {
+        state.scripted_suspend_tutor = static_cast<std::int16_t>(pin);
+        if (!SuspendTutorPinIsFront(pin)) { m_committed_line.clear(); }
+    }
+    const auto reanim = TurnSolver::ChooseRealCrossingReanimate(view, m_lookahead_depth, m_max_turns, &budget,
+                                                                m_search_post_combat);
+    if (reanim.first != -2)
+    {
+        state.scripted_grace_choice = static_cast<std::int16_t>(reanim.first);
+        if (reanim.first != 0) { m_committed_line.clear(); }
+    }
+    if (reanim.second != -2)
+    {
+        state.scripted_upkeep_gy_reanimate = static_cast<std::int16_t>(reanim.second);
+        if (reanim.second != 0) { m_committed_line.clear(); }
+    }
+    const int land_pin = TurnSolver::ChooseRealCrossingLand(view, m_lookahead_depth, m_max_turns, &budget,
+                                                            m_search_post_combat);
+    if (land_pin != -2)
+    {
+        state.scripted_upkeep_land_search = land_pin;
+        if (land_pin != 0) { m_committed_line.clear(); }
+    }
+}
+// ...and its RESOLUTION node (TurnSolver::ChooseRealResolutionFetch has the why): an uncovered suspended-tutor search
+// met by the REAL upkeep is searched there, from the search's view of the real state, under the same scopes and
+// per-decision budget. Installed by GameEngine::UpkeepStep for the real state only (SpellEffects.h,
+// t_real_stut_node); never in a rollout, the d0 runner, or human / claude play. Returns the rank (-1 = the front).
+int AIEngine::DecideResolutionFetch(GameState& state, int controller, const CardParams& pp, const Card& card,
+                                    const SuspendArrivalCtx& ctx)
+{
+    if (m_in_rollout || m_lookahead_depth <= 0 || HumanPlayActive() || m_external_chooser) { return -1; }
+    UnbudgetedPlayScope _unbudgeted_play(m_budget_ms <= 0);
+    TurnSolver::SearchLeafDepthScope _sld(m_profile.search_leaf_depth, m_profile.search_leaf_first_turn_depth);
+    DeckShapeScope _shape(m_profile);
+    SearchBudget budget = DecisionBudget();
+    std::optional<GameState> _bsv;
+    const GameState& view = blindsearch::View(state, _bsv, 0x5354524Full);
+    const int rank = TurnSolver::ChooseRealResolutionFetch(view, controller, pp, card, ctx, m_lookahead_depth,
+                                                           m_max_turns, &budget, m_search_post_combat);
+    if (rank > 0) { m_committed_line.clear(); }
+    return rank;
+}
+int AIEngine::RealStutNodeThunk(void* owner, GameState& state, int controller, const CardParams& pp, const Card& card,
+                                const SuspendArrivalCtx& ctx)
+{
+    return static_cast<AIEngine*>(owner)->DecideResolutionFetch(state, controller, pp, card, ctx);
+}
+int AIEngine::DecideResolutionLand(GameState& state, int controller, const CardParams& pp, const Card& card,
+                                   const SuspendArrivalCtx& ctx)
+{
+    if (m_in_rollout || m_lookahead_depth <= 0 || HumanPlayActive() || m_external_chooser) { return -1; }
+    UnbudgetedPlayScope _unbudgeted_play(m_budget_ms <= 0);
+    TurnSolver::SearchLeafDepthScope _sld(m_profile.search_leaf_depth, m_profile.search_leaf_first_turn_depth);
+    DeckShapeScope _shape(m_profile);
+    SearchBudget budget = DecisionBudget();
+    std::optional<GameState> _bsv;
+    const GameState& view = blindsearch::View(state, _bsv, 0x534C414Eull);
+    const int rank = TurnSolver::ChooseRealResolutionLand(view, controller, pp, card, ctx, m_lookahead_depth,
+                                                          m_max_turns, &budget, m_search_post_combat);
+    if (rank > 0) { m_committed_line.clear(); }
+    return rank;
+}
+int AIEngine::RealLandNodeThunk(void* owner, GameState& state, int controller, const CardParams& pp,
+                                const Card& card, const SuspendArrivalCtx& ctx)
+{
+    return static_cast<AIEngine*>(owner)->DecideResolutionLand(state, controller, pp, card, ctx);
+}
+
+void AIEngine::DecideAttackLand(GameState& state, const std::vector<int>& attackers, bool additional)
+{
+    if (m_in_rollout || m_lookahead_depth <= 0 || HumanPlayActive() || m_external_chooser
+        || !state.deck_has_land_search) { return; }
+    UnbudgetedPlayScope _unbudgeted_play(m_budget_ms <= 0);
+    TurnSolver::SearchLeafDepthScope _sld(m_profile.search_leaf_depth, m_profile.search_leaf_first_turn_depth);
+    DeckShapeScope _shape(m_profile);
+    SearchBudget budget = DecisionBudget();
+    std::optional<GameState> _bsv;
+    const GameState& view = blindsearch::View(state, _bsv, 0x41544B4Cull);
+    const int pin = TurnSolver::ChooseRealAttackLand(view, attackers, additional, m_lookahead_depth,
+                                                     m_max_turns, &budget, m_search_post_combat);
+    if (pin < 0) { return; }
+    if (pin != state.scripted_attack_land_search) { m_committed_line.clear(); }
+    state.scripted_attack_land_search = pin;
+}
+
+
 bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         const std::function<void(GameState&)>& resolve_stack)
 {
@@ -4300,37 +4443,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                                                           m_profile.search_leaf_first_turn_depth);
                     // Per-deck search shape (sidecar value_play.ladder / .leaf, see ValuePlay): scoped to
                     // this decision so a pooled batch's next deck on this thread starts clean.
-                    struct DeckShapeScope
-                    {
-                        int prev_l, prev_w, prev_c, prev_s, prev_a, prev_lr; double prev_x, prev_fa; const std::vector<double>* prev_sr; const std::vector<double>* prev_er; std::string prev_k;
-                        DeckShapeScope(const MulliganProfile& p)
-                            : prev_l(valuearm::t_deck_ladder), prev_w(valuearm::t_deck_warm_none), prev_c(valuearm::t_deck_commit_model),
-                              prev_s(valuearm::t_deck_single), prev_a(valuearm::t_deck_alpha_relaxed), prev_lr(valuearm::t_deck_fit_lazy_r),
-                              prev_x(valuearm::t_deck_exhaust_mult), prev_fa(valuearm::t_deck_fit_alpha), prev_sr(valuearm::t_deck_esc_skip_r), prev_er(valuearm::t_deck_emul_r),
-                              prev_k(valuearm::t_deck_key)
-                        {
-                            valuearm::t_deck_ladder    = (p.value_play.ladder != "emulated") ? 0
-                                                       : (p.value_play.commit == "model") ? 2 : 1;
-                            valuearm::t_deck_warm_none = (p.value_play.leaf == "none") ? 1 : 0;
-                            valuearm::t_deck_commit_model = (p.value_play.commit == "model") ? 1 : 0;
-                            // "single" = the FIT single pass (2); any other ladder leaves it unset (-1 => env default).
-                            valuearm::t_deck_single    = (p.value_play.ladder == "single") ? 2 : -1;
-                            valuearm::t_deck_alpha_relaxed = (p.value_play.alpha == "relaxed") ? 1
-                                                           : (p.value_play.alpha == "strict") ? 0 : -1;
-                            valuearm::t_deck_exhaust_mult = p.value_play.exhaust_mult;
-                            // FIT's affordability gate multiplier and R-calibration timing. Tier 1 (they act
-                            // wherever FIT acts), so they ride the shape scope rather than the vp_here params.
-                            valuearm::t_deck_fit_alpha  = p.value_play.fit_alpha;
-                            valuearm::t_deck_fit_lazy_r = p.value_play.fit_lazy_r;
-                            valuearm::t_deck_key       = p.value_source;
-                            valuearm::t_deck_esc_skip_r = &p.escalation_skip_r;
-                            valuearm::t_deck_emul_r     = &p.value_play.emul_r;
-                        }
-                        ~DeckShapeScope() { valuearm::t_deck_ladder = prev_l; valuearm::t_deck_warm_none = prev_w; valuearm::t_deck_commit_model = prev_c;
-                                            valuearm::t_deck_single = prev_s; valuearm::t_deck_alpha_relaxed = prev_a; valuearm::t_deck_fit_lazy_r = prev_lr;
-                                            valuearm::t_deck_exhaust_mult = prev_x; valuearm::t_deck_fit_alpha = prev_fa; valuearm::t_deck_key = prev_k;
-                                            valuearm::t_deck_esc_skip_r = prev_sr; valuearm::t_deck_emul_r = prev_er; }
-                    } _shape(m_profile);
+                    DeckShapeScope _shape(m_profile);   // the deck's search shape for this decision (file scope, above TakeTurn)
                     const unsigned long long proof_trunc0 = TurnSolver::TruncEvents();
                     std::optional<GameState> _bsv;   // the blind search's view (blindsearch; off => `state`)
                     TurnSolver::SearchLine line = TurnSolver::FullSearchLineHybrid(
@@ -7023,6 +7136,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 else
                 {
                     _act_line_pay.Paid();
+                    if (sac_named) { SubManaCost(g_line_unpaid_cost, act_cost); }
                     if (ActDropAuditOn()) { g_act_fired.fetch_add(1, std::memory_order_relaxed); }
                     // Site-8 detection input (lockstep twin of the rollout's): did the gated
                     // look-at-top (Scrying Sheets / Frost Augur) move a card into hand?

@@ -2697,6 +2697,24 @@ inline int ConsumePackedLandSearchPin(int& packed)
     if (packed == 0) { packed = -1; }
     return k;
 }
+// The crossing learns each upkeep-stream menu at the state where that ordinal is consumed:
+// ripple decision, free copy's search (or its empty slot), then the arriving spell's search.
+struct UpkeepLandPickProbe
+{
+    int n = 0;
+    int size[kLandSearchPinOrdinals] = { 1, 1, 1, 1, 1 };
+};
+inline thread_local UpkeepLandPickProbe* t_upkeep_land_pick_probe = nullptr;
+inline int ConsumeUpkeepLandPin(GameState& state, int width)
+{
+    if (UpkeepLandPickProbe* pr = t_upkeep_land_pick_probe)
+    {
+        if (pr->n < kLandSearchPinOrdinals)
+        { pr->size[pr->n] = std::max(1, std::min(width, kLandSearchPinMask + 1)); }
+        ++pr->n;
+    }
+    return ConsumePackedLandSearchPin(state.scripted_upkeep_land_search);
+}
 // PROFANE TUTOR's fetch at RESOLUTION (MTG_PROFANE_RESOLVE_FAN, DEFAULT ON; =0 -> the old main-phase pin on the
 // upkeep land-search stream). See GameState::scripted_suspend_tutor and TurnSolver's BoundaryFan.
 inline bool ProfaneResolveFanOn()
@@ -2718,6 +2736,56 @@ inline void (*g_stut_unpinned_hook)(const GameState&, int controller, const Card
 // DID branch on) is not counted as an uncovered pick by the census.
 inline thread_local bool t_stut_fan_crossing = false;
 int SuspendTutorPickWidth(const GameState& state, int controller, const CardParams& pp);   // SpellEffects.cpp
+// The suspended-tutor pin (GameState::scripted_suspend_tutor) carries a COVER, the Defense of the Heart pin's shape:
+// bits 0..11 a rank per search ordinal (kLandSearchPinBits each, ordinal 0 lowest), bits 12..13 how many ordinals
+// the pin covers. An ordinal past the cover is UNCOVERED (the crossing that recorded the pin resolved fewer
+// searches than this upkeep does -- a ripple free copy the blind search could not see coming), which is what the
+// executor's resolution node (t_real_stut_node) searches. Unlike the packed land-search pin, a covered rank 0 is
+// never collapsed into "unpinned", so a decided front and an undecided search stay apart. -1 = no pin.
+constexpr int kSuspendTutorCoverShift = kLandSearchPinBits * kSuspendTutorPinOrdinals;   // 12
+inline int SuspendTutorPinCover(int pin) { return pin < 0 ? 0 : (pin >> kSuspendTutorCoverShift) & 0x3; }
+inline int SuspendTutorPinPack(int cover, const int* ranks)
+{
+    cover = std::max(0, std::min(cover, kSuspendTutorPinOrdinals));
+    int v = cover << kSuspendTutorCoverShift;
+    for (int j = 0; j < cover; ++j) { v |= (std::max(0, std::min(ranks[j], kLandSearchPinMask))) << (kLandSearchPinBits * j); }
+    return v;
+}
+// Are all the covered ranks the provider's front (rank 0)?
+inline bool SuspendTutorPinIsFront(int pin) { return pin < 0 || (pin & ((1 << kSuspendTutorCoverShift) - 1)) == 0; }
+inline int ConsumeSuspendTutorPin(int& pin)
+{
+    const int cover = SuspendTutorPinCover(pin);
+    if (cover == 0) { pin = -1; return -1; }
+    const int k = pin & kLandSearchPinMask;
+    const int rest = (pin & ((1 << kSuspendTutorCoverShift) - 1)) >> kLandSearchPinBits;
+    pin = (cover - 1 == 0) ? -1 : (((cover - 1) << kSuspendTutorCoverShift) | rest);
+    return k;
+}
+// Depth of the free casts a suspend arrival's ripple makes (ResolveSuspendRipple, below): 0 = the arrival itself.
+inline thread_local int t_suspend_ripple_depth = 0;
+// THE EXECUTOR'S RESOLUTION NODE for a suspended tutor's search: GameEngine::UpkeepStep
+// installs it around its ProcessSuspendArrivals for the REAL state only (t_real_stut_state; every copy a search
+// makes has another address), and the tutor branch of CastOffSuspend calls it for an UNCOVERED, non-nested
+// search with a choice. It returns the searched rank (-1 = take the front). The arrival context lets it finish
+// ProcessSuspendArrivals on its copies (FinishSuspendArrivalsForNode).
+struct SuspendArrivalCtx
+{
+    const std::vector<SuspendedCard>* snap      = nullptr;   // the arrivals of this upkeep, in order
+    std::size_t                       i         = 0;         // the one being cast
+    const std::vector<SuspendedCard>* remaining = nullptr;   // the not-yet-arrived ones collected so far
+};
+inline thread_local const SuspendArrivalCtx* t_suspend_arrival_ctx = nullptr;
+using RealStutNodeFn = int (*)(void* owner, GameState& state, int controller, const CardParams& pp, const Card& card,
+                               const SuspendArrivalCtx& ctx);
+inline thread_local RealStutNodeFn t_real_stut_node  = nullptr;
+inline thread_local void*          t_real_stut_owner = nullptr;
+inline thread_local const GameState* t_real_stut_state = nullptr;
+using RealLandNodeFn = int (*)(void* owner, GameState& state, int controller, const CardParams& pp,
+                               const Card& card, const SuspendArrivalCtx& ctx);
+inline thread_local RealLandNodeFn t_real_land_node = nullptr;
+inline thread_local void* t_real_land_owner = nullptr;
+inline thread_local const GameState* t_real_land_state = nullptr;
 // `put_credit` (land-search gap 2): the land-put mana credit the CAST was emitted with
 // (Action::rock_mana on a LandSearchPutsUntapped cast), which restricts the pick to the picks earning
 // exactly that credit -- see LandSearchCreditGroups. nullptr / empty = unrestricted (every other site).
@@ -2725,6 +2793,8 @@ inline void PerformLandSearch(GameState& state, int controller, const LandSearch
                               const std::string& source, int pin,
                               const char* source_suffix = nullptr,
                               const ManaPool* put_credit = nullptr);        // LandSearch.h
+inline const std::vector<std::vector<std::string>>& LandSearchPicksMemo(const GameState& state,
+                                                                         int controller, const LandSearchSpec& spec);
 inline void ApplyLandSearchActivation(GameState& state, int controller, int src_idx,
                                       const CardDefinition& def);           // LandSearch.h
 inline void FireAttackLandSearch(GameState& state, int controller, std::vector<int>& atk_idx);
@@ -22170,8 +22240,22 @@ inline void CastOffSuspend(GameState& state, int controller, const Card& card)
         }
         if (def->params.land_search_on_resolve && def->params.land_search_count > 0)
         {
-            PerformLandSearch(state, controller, LandSearchSpecOf(def->params), card.m_name.str(),
-                              ConsumePackedLandSearchPin(state.scripted_upkeep_land_search));
+            const LandSearchSpec spec = LandSearchSpecOf(def->params);
+            const bool need_width = t_upkeep_land_pick_probe != nullptr
+                || (t_real_land_node != nullptr && &state == t_real_land_state);
+            const int width = need_width ? static_cast<int>(LandSearchPicksMemo(state, controller, spec).size()) : 1;
+            int pin = ConsumeUpkeepLandPin(state, width);
+            if (width > 1 && t_real_land_node != nullptr && &state == t_real_land_state
+                && t_suspend_ripple_depth == 0 && t_suspend_arrival_ctx != nullptr)
+            {
+                const RealLandNodeFn fn = t_real_land_node;
+                t_real_land_node = nullptr;
+                const int resolved = fn(t_real_land_owner, state, controller, def->params, card,
+                                        *t_suspend_arrival_ctx);
+                t_real_land_node = fn;
+                if (resolved >= 0) { pin = resolved; }
+            }
+            PerformLandSearch(state, controller, spec, card.m_name.str(), pin);
         }
         // PROFANE TUTOR (suspend-only tutor_to_hand): "Search your library for a card, put that card
         // into your hand, then shuffle." Its target is the SAME packed upkeep pin stream as Search for
@@ -22190,8 +22274,20 @@ inline void CastOffSuspend(GameState& state, int controller, const Card& card)
             {
                 // The fetch decided at the crossing into THIS upkeep (scripted_suspend_tutor), never in a plan.
                 int packed = state.scripted_suspend_tutor;
-                pin = ConsumePackedLandSearchPin(packed);
+                pin = ConsumeSuspendTutorPin(packed);
                 state.scripted_suspend_tutor = static_cast<std::int16_t>(packed);
+                // UNCOVERED in the REAL upkeep (the committed crossing resolved fewer searches -- a ripple free
+                // copy it could not foresee): the executor's resolution node SEARCHES it here, with what is known
+                // now (AIEngine::DecideResolutionFetch). Only the arrival's own search (a
+                // nested free copy's continuation is the arrival's resolution, which no copy can finish).
+                if (pin < 0 && t_real_stut_node != nullptr && &state == t_real_stut_state
+                    && t_suspend_ripple_depth == 0 && t_suspend_arrival_ctx != nullptr)
+                {
+                    const RealStutNodeFn fn = t_real_stut_node;
+                    t_real_stut_node = nullptr;   // the node's own searches never re-enter it
+                    pin = fn(t_real_stut_owner, state, controller, def->params, card, *t_suspend_arrival_ctx);
+                    t_real_stut_node = fn;
+                }
                 if (SuspendTutorProbe* pr = t_suspend_tutor_probe)
                 {
                     if (pr->n < kSuspendTutorPinOrdinals)
@@ -22201,7 +22297,7 @@ inline void CastOffSuspend(GameState& state, int controller, const Card& card)
                 if (pin < 0 && g_stut_unpinned_hook != nullptr && !t_stut_fan_crossing)
                 { g_stut_unpinned_hook(state, controller, def->params); }
             }
-            else { pin = ConsumePackedLandSearchPin(state.scripted_upkeep_land_search); }
+            else { pin = ConsumeUpkeepLandPin(state, SuspendTutorPickWidth(state, controller, def->params)); }
             const int saved = g_scripted_tutor_choice;
             g_scripted_tutor_choice = pin;
             PerformTutor(state, controller, def->params, /*target_name=*/std::string{}, card.m_name.str(),
@@ -22567,14 +22663,44 @@ inline void ProcessSuspendArrivals(GameState& state, int controller)
     // observe a half-processed list; arrivals are cast in the order they were suspended.
     std::vector<SuspendedCard> snap = std::move(pl.suspended_cards);
     pl.suspended_cards.clear();
-    for (SuspendedCard& sc : snap)
+    const SuspendArrivalCtx* prior_ctx = t_suspend_arrival_ctx;
+    for (std::size_t i = 0; i < snap.size(); ++i)
     {
-        if (sc.arrive_turn >= 0 && sc.arrive_turn <= state.TurnSeq()) { CastOffSuspend(state, controller, sc.card); }
+        SuspendedCard& sc = snap[i];
+        if (sc.arrive_turn >= 0 && sc.arrive_turn <= state.TurnSeq())
+        {
+            // The resolution node's context (read only by the executor's node; inert everywhere else).
+            const SuspendArrivalCtx ctx{ &snap, i, &remaining };
+            t_suspend_arrival_ctx = &ctx;
+            CastOffSuspend(state, controller, sc.card);
+            t_suspend_arrival_ctx = prior_ctx;
+        }
         else                                     { remaining.push_back(std::move(sc)); }
     }
     // Re-attach anything an arrival's cascade may have added, plus the not-yet-arrived remainder.
     for (SuspendedCard& sc : pl.suspended_cards) { remaining.push_back(std::move(sc)); }
     pl.suspended_cards = std::move(remaining);
+}
+// The resolution node's continuation, on a COPY taken at the tutor branch of arrival ctx.i (the search itself
+// already performed by the caller): the rest of that instant's resolution (to the graveyard), the rest of
+// ProcessSuspendArrivals from ctx.i + 1 (same loop, same re-attach), and its pin expiry. The upkeep after the
+// arrivals is the caller's (TurnSolver's rollout twin).
+inline void FinishSuspendArrivalsForNode(GameState& state, int controller, const Card& card, const SuspendArrivalCtx& ctx)
+{
+    Player& pl = state.players[controller];
+    pl.graveyard.push_back(card);
+    std::vector<SuspendedCard> remaining = *ctx.remaining;
+    std::vector<SuspendedCard> snap = *ctx.snap;
+    for (std::size_t j = ctx.i + 1; j < snap.size(); ++j)
+    {
+        SuspendedCard& sc = snap[j];
+        if (sc.arrive_turn >= 0 && sc.arrive_turn <= state.TurnSeq()) { CastOffSuspend(state, controller, sc.card); }
+        else                                     { remaining.push_back(std::move(sc)); }
+    }
+    for (SuspendedCard& sc : pl.suspended_cards) { remaining.push_back(std::move(sc)); }
+    pl.suspended_cards = std::move(remaining);
+    state.scripted_upkeep_land_search = -1;
+    state.scripted_suspend_tutor = -1;
 }
 
 // Forbidden Orchard: "{T}: Add one mana of any color. Whenever you tap this land for mana, target
@@ -29653,6 +29779,10 @@ constexpr int kGracePinBits      = 4;
 constexpr int kGracePinMask      = (1 << kGracePinBits) - 1;
 constexpr int kGraceMaxOrdinals  = 3;   // the int16 pin holds 3 x 4 bits; a 4th+ copy takes its front
 
+// Resolution-state menus observed by the crossing that resolves this end step.
+struct GracePickProbe { int n = 0; int size[kGraceMaxOrdinals] = { 1, 1, 1 }; };
+inline thread_local GracePickProbe* t_grace_pick_probe = nullptr;
+
 inline bool HasEndStepGraceTrigger(const CardParams& p) { return p.endstep_modal_reanimate_mv >= 0; }
 
 inline GyReanimateFilter GraceFilter(const CardParams& p)
@@ -29717,6 +29847,12 @@ inline void PerformEndStepAbidingGrace(GameState& state, const std::vector<int>&
         const CardParams& pp = triggers[j]->params;
         const std::string src = triggers[j]->card.m_name.str();
         const std::vector<int> opts = GraceOptions(state, me, pp, &snapshot);
+        if (GracePickProbe* pr = t_grace_pick_probe)
+        {
+            if (pr->n < kGraceMaxOrdinals)
+            { pr->size[pr->n] = std::min<int>(static_cast<int>(opts.size()), kGracePinMask + 1); }
+            ++pr->n;
+        }
         if (opts.empty()) { continue; }   // no gain mode and no target: the ability is removed (CR 603.3c)
         int k = 0;
         if (pin >= 0 && static_cast<int>(j) < kGraceMaxOrdinals)
@@ -29795,6 +29931,14 @@ constexpr int kUpkeepReanimateDecline     = kUpkeepReanimatePinMask;   // the "y
 constexpr int kUpkeepReanimateMaxRanks    = kUpkeepReanimatePinMask;   // ranks 0..14
 constexpr int kUpkeepReanimateMaxOrdinals = 3;   // the int16 pin holds 3 x 4 bits; a 4th+ copy takes its front
 
+struct UpkeepReanimatePickProbe
+{
+    int n = 0;
+    int size[kUpkeepReanimateMaxOrdinals] = { 1, 1, 1 };
+    bool may[kUpkeepReanimateMaxOrdinals] = { false, false, false };
+};
+inline thread_local UpkeepReanimatePickProbe* t_upkeep_reanimate_pick_probe = nullptr;
+
 inline bool HasUpkeepGyReanimate(const CardParams& p) { return p.upkeep_gy_reanimate; }
 
 inline bool UpkeepGyReanimateConditionMet(const GameState& state, int controller, const CardParams& p)
@@ -29848,9 +29992,19 @@ inline void PerformUpkeepGyReanimate(GameState& state, const UpkeepGyReanimateSn
         const CardParams& pp = triggers[j]->params;
         const std::string src = triggers[j]->card.m_name.str();
         // CR 603.4: re-check the intervening if on resolution.
+        if (UpkeepReanimatePickProbe* pr = t_upkeep_reanimate_pick_probe)
+        { pr->n = std::min<int>(static_cast<int>(j) + 1, kUpkeepReanimateMaxOrdinals); }
         if (!UpkeepGyReanimateConditionMet(state, me, pp)) { continue; }
         const GyReanimateFilter f = UpkeepGyReanimateFilter(pp);
         const std::vector<int> opts = GyReanimateCandidateNames(state, me, f, &snapshot);
+        if (UpkeepReanimatePickProbe* pr = t_upkeep_reanimate_pick_probe)
+        {
+            if (static_cast<int>(j) < kUpkeepReanimateMaxOrdinals)
+            {
+                pr->size[j] = std::min<int>(static_cast<int>(opts.size()), kUpkeepReanimateMaxRanks);
+                pr->may[j] = pp.upkeep_gy_reanimate_may && !opts.empty();
+            }
+        }
         if (opts.empty()) { continue; }   // no legal target: the trigger is removed (CR 603.3d)
         int k = 0;
         if (pin >= 0 && static_cast<int>(j) < kUpkeepReanimateMaxOrdinals)
@@ -36386,6 +36540,116 @@ inline bool IsPaySacSource(const CardDefinition& def)
     return def.params.sac_for_mana_amount == 1
         && def.params.produces.empty()
         && TreasurePaySourceEnabled();
+}
+
+// ---- ON-DEMAND sac-for-mana sources (Lotus Bloom, Lake of the Dead) -----------------------------------
+// USER 2026-11-04 (verbatim): *"Lotus bloom should be sacrificed on demand by the mana system. not a direct
+// activation."* -- and on Lake of the Dead: *"it should not be sacrificing the land unless we need it."* --
+// and *"Yes, it should be on-demand and only done that way."* Design: docs/design/sac-for-mana-on-demand.md.
+//
+// Such a source is NOT a plan action: CollectActions emits no SacForMana for it, and the shared payer
+// (TapForCostShared, ManaPayment.cpp) cracks it only when the cost in hand cannot be paid without it -- the
+// dominance rule: an uncracked source leaves a superset of the board, so cracking only on need loses
+// nothing in goldfish. The crack itself is the unchanged ApplySacForMana, so the executor, the rollout and
+// the human's automatic payment run one path. The capacity is supply to every gate that may PRUNE a line
+// (AvailableManaPool and its twins, BuildColorFeasibility, ComputeAvailableColors, UntappedManaUpperBound)
+// through OnDemandSacSupplyNow below, the same over-count licence the gates already take: crediting the
+// crack can only keep a line, and the real payer no-ops the ones it cannot pay.
+//
+// The two shapes:
+//   * a one-shot LUMP of one chosen colour, the source itself sacrificed (Lotus Bloom; by card data also
+//     Black Lotus, which no stamped mainboard holds -- Garth conjures it): sac_for_mana_amount >= 2,
+//     no `produces`, no pinned colour, no {T}-creature / haste rider, not a creature-eating outlet;
+//   * a LAND crack that eats ANOTHER land (Lake of the Dead: "{T}, Sacrifice a Swamp: Add {B}{B}{B}{B}"),
+//     an alternative MODE of the land's own "{T}: Add {B}", so it is worth its amount MINUS that tap.
+// Fixed-colour self-sac lands (Dwarven Ruins, Svyelunite Temple), Generator Servant, Treasures and the
+// Skirk-style outlets keep their existing routes.
+inline bool IsOnDemandSacDef(const CardDefinition& def)
+{
+    const CardParams& q = def.params;
+    if (q.sac_for_mana_amount < 2) { return false; }
+    if (!q.sac_for_mana_victim_land_subtype.empty()) { return true; }
+    return q.produces.empty() && q.sac_for_mana_color.empty() && !q.sac_for_mana_requires_tap
+        && !q.sac_for_mana_grants_haste && !IsSacManaOutlet(q);
+}
+
+// May the active player crack `p` (an IsOnDemandSacDef permanent they control) right now? Untapped, and a
+// land crack needs a victim of its subtype other than itself. `victims_used` lets a caller walking several
+// such lands charge each crack one victim (two Lakes share the Swamps).
+inline bool OnDemandSacCrackableNow(const GameState& state, const Permanent& p, const CardDefinition& def,
+                                    int victims_used = 0)
+{
+    if (p.tapped || p.controller_index != state.active_player_index) { return false; }
+    const std::string& sub = def.params.sac_for_mana_victim_land_subtype;
+    if (sub.empty()) { return true; }
+    int n = 0;
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != p.controller_index || !q.card.IsLand()) { continue; }
+        if (q.card.m_number == p.card.m_number) { continue; }
+        if (LandHasSubtypeNow(state, q, sub) && ++n > victims_used) { return true; }
+    }
+    return false;
+}
+
+// The on-demand cracks' supply over and above what the board's ordinary scans already count: `any` units of
+// a lump whose single colour is chosen at the crack (credited WILD -- the gates are necessary conditions, so
+// "three of any one colour" read as three wild is the conservative, prune-less side), plus each land crack's
+// DELTA over its plain tap in its pinned colour (`fixed`, WUBRG + C). `mask` is the colours a crack can
+// supply (bit i = WUBRG). `skip` / `reserved_mask` exclude a source as the scans' own "as if tapped" /
+// held-source arguments do. Empty on every unstamped-false deck (one bool test).
+struct OnDemandSacSupply
+{
+    int      any      = 0;
+    int      fixed[6] = { 0, 0, 0, 0, 0, 0 };
+    unsigned mask     = 0;
+    int Total() const { return any + fixed[0] + fixed[1] + fixed[2] + fixed[3] + fixed[4] + fixed[5]; }
+};
+inline OnDemandSacSupply OnDemandSacSupplyNow(const GameState& state, const Permanent* skip = nullptr,
+                                              std::uint64_t reserved_mask = 0)
+{
+    OnDemandSacSupply out;
+    if (!state.deck_has_ondemand_sac) { return out; }
+    int lake_cracks = 0;
+    const int n = static_cast<int>(state.battlefield.size());
+    for (int i = 0; i < n; ++i)
+    {
+        const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+        if (&p == skip || p.tapped || p.controller_index != state.active_player_index) { continue; }
+        if (i < 64 && (reserved_mask & (1ull << i))) { continue; }
+        if (p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || !IsOnDemandSacDef(*d)) { continue; }
+        const CardParams& q = d->params;
+        if (q.sac_for_mana_victim_land_subtype.empty())
+        {
+            out.any += q.sac_for_mana_amount;
+            out.mask |= 0x1Fu;
+            continue;
+        }
+        if (!OnDemandSacCrackableNow(state, p, *d, lake_cracks)) { continue; }
+        ++lake_cracks;
+        const int delta = std::max(0, q.sac_for_mana_amount - std::max(1, q.produces_amount));
+        static const char kLetters[] = "WUBRGC";
+        for (int c = 0; c < 6; ++c)
+        {
+            if (!q.sac_for_mana_color.empty() && q.sac_for_mana_color[0] == kLetters[c])
+            {
+                out.fixed[c] += delta;
+                if (c < 5) { out.mask |= 1u << c; }
+            }
+        }
+    }
+    return out;
+}
+// The supply above, into a flat pool (the AvailableManaPool family's accounting).
+inline void AddOnDemandSacToPool(ManaPool& pool, const GameState& state, const Permanent* skip = nullptr)
+{
+    if (!state.deck_has_ondemand_sac) { return; }
+    const OnDemandSacSupply sup = OnDemandSacSupplyNow(state, skip);
+    pool.wild += sup.any;
+    pool.white += sup.fixed[0]; pool.blue += sup.fixed[1]; pool.black += sup.fixed[2];
+    pool.red   += sup.fixed[3]; pool.green += sup.fixed[4]; pool.colorless += sup.fixed[5];
 }
 
 // "Some payment on this thread has TAPPED a pay-sac source since the last commit." Set by the one
@@ -44534,6 +44798,24 @@ inline void PerformLandTutorToBattlefield(GameState& state, int controller_index
         // Whiff: no land left in the library. "...then shuffle" still happens (CR 701.19b).
         if (cands.empty()) { WhiffShuffle(state, controller_index, "land tutor"); return; }
         want = cands.front();
+        // THE SEARCHED PICK. USER
+        // 2026-11-04 on Crop Rotation: "If that is in the engine there should be search, but the only deck with
+        // the card (Creature Giving) has a serious pruning heuristic which should remain." The resolution tutor
+        // axis already fans this cast (Plan::tutor_choice -> ScriptedTutor); consume that pin exactly as the
+        // single-put branch of PerformTutorToBattlefield does: an index into the provider's deduped candidates
+        // at the TRUE resolution state, clamped. The provider still RESTRICTS the menu (Creature Giving: the
+        // Orchard alone while one is in the library). Consuming it here also stops the pin leaking to the next
+        // tutor of the apply.
+        tutorpin::NoteRead();
+        if (g_scripted_tutor_choice >= 0)
+        {
+            const int pick = g_scripted_tutor_choice;
+            g_scripted_tutor_choice = -1;
+            std::vector<std::string> uniq;
+            for (const std::string& c : cands)
+            { if (std::find(uniq.begin(), uniq.end(), c) == uniq.end()) { uniq.push_back(c); } }
+            want = uniq[std::min<std::size_t>(static_cast<std::size_t>(pick), uniq.size() - 1)];
+        }
     }
     int idx = -1;
     for (int i = 0; i < static_cast<int>(ap.library.size()); ++i)
@@ -45777,6 +46059,9 @@ inline int UntappedManaUpperBound(const GameState& state, bool for_creature,
                   + SacPayPlanFodderCount(state, active, so))
                * std::max(1, so.def->params.sac_outlet_add_mana_amount);
     }
+    // On-demand cracks (Lotus Bloom, Lake of the Dead): the payer cracks one when it must, so a bound blind
+    // to them would PROVE unpayable exactly the costs they exist to pay. A held source's crack is held too.
+    if (state.deck_has_ondemand_sac) { total += OnDemandSacSupplyNow(state, nullptr, reserved_mask).Total(); }
     return total;
 }
 
@@ -47671,7 +47956,7 @@ inline std::vector<Card> RippleResolveTrigger(GameState& s, int controller, cons
 // and decline. -1 = unpinned = rank 0 (the front; beyond the horizon). A free card cast here is cast by
 // CastOffSuspend itself (it resolves at once, as the arrival does); ITS ripple answers rank 0 without
 // consuming an ordinal [disclosed: unreachable for this pool -- two Profane Tutors leave nothing to match].
-inline thread_local int t_suspend_ripple_depth = 0;
+// t_suspend_ripple_depth: declared with the suspended-tutor pin (top of this file).
 inline void CastOffSuspend(GameState& state, int controller, const Card& card);
 inline void ResolveSuspendRipple(GameState& state, int controller, const CardDefinition& def)
 {
@@ -47681,7 +47966,16 @@ inline void ResolveSuspendRipple(GameState& state, int controller, const CardDef
     const bool f2 = RippleResolutionShuffles(def) && StableShuffleEnabled();
     for (std::size_t k = 0; k < ns.size(); ++k)
     {
-        int rank = nested ? -1 : ConsumePackedLandSearchPin(state.scripted_upkeep_land_search);
+        int width = 1;
+        if (!nested && t_upkeep_land_pick_probe != nullptr)
+        {
+            bool copy_in_lib = false;
+            for (const Card& lc : state.players[static_cast<std::size_t>(controller)].library)
+            { if (lc.m_name == def.card.m_name) { copy_in_lib = true; break; } }
+            const bool fixed = ResolveProvider(state).RippleFixed(state);
+            width = fixed ? 1 : f2 ? (copy_in_lib ? 2 : 1) : (copy_in_lib ? 3 : 2);
+        }
+        int rank = nested ? -1 : ConsumeUpkeepLandPin(state, width);
         if (rank < 0) { rank = 0; }
         RippleScript sc;
         sc.name = def.card.m_name; sc.pinned = true; sc.per_name = !f2;
@@ -47708,7 +48002,7 @@ inline void ResolveSuspendRipple(GameState& state, int controller, const CardDef
             CastOffSuspend(state, controller, c);
             --t_suspend_ripple_depth;
         }
-        if (!nested && !consumed_search) { (void)ConsumePackedLandSearchPin(state.scripted_upkeep_land_search); }
+        if (!nested && !consumed_search) { (void)ConsumeUpkeepLandPin(state, 1); }
     }
 }
 inline void RippleTraceNoteShuffle() { if (ripplestats::On()) { ripplestats::NoteShuffle(); } }

@@ -239,7 +239,7 @@ TEST_CASE("Profane Tutor off suspend: the upkeep pin is a rank into the resoluti
         s.players[0].library.push_back(FullCardSb("Shadowborn Apostle", 95));
         // One packed ordinal: rank `pin` for the first suspended-tutor search (-1 = unpinned = front). Since
         // MTG_PROFANE_RESOLVE_FAN (2026-11-04) it is the crossing's pin, not the main-phase upkeep stream.
-        s.scripted_suspend_tutor = static_cast<std::int16_t>(pin);
+        s.scripted_suspend_tutor = static_cast<std::int16_t>(pin < 0 ? -1 : SuspendTutorPinPack(1, &pin));   // rank + cover 1
         const std::vector<std::string> cands =
             RankedTutorCandidates(Prov(), s, 0, CardDatabase::Instance().Lookup("Profane Tutor")->params);
         REQUIRE(cands.size() >= 2);

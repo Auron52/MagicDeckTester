@@ -14,6 +14,7 @@
 #include "../core/GameLogger.h"   // g_real_resolution (TEMP MTG_TAPDBG diagnostic)
 
 #include <algorithm>
+#include <memory>
 #include <array>
 #include <chrono>
 #include <bit>          // std::popcount (the ramp-filter feed charge; MSVC has no __builtin_popcount)
@@ -6418,6 +6419,8 @@ ManaPool AvailableManaPool(const GameState& state, const Permanent* skip)
     // one null test -- with the lever off or no outlet on the board.
     AddSacPayFodderToPool(pool, state, state.active_player_index,
                           LiveSacPayOutlet(state, state.active_player_index), skip);
+    // On-demand cracks (Lotus Bloom, Lake of the Dead) are supply the payer spends when it must.
+    AddOnDemandSacToPool(pool, state, skip);
     if (FloatLeftoverManaEnabled()) { pool.AddPool(state.floating_mana); }
     // The creature-only reserve is supply for the CREATURE side of the split (this pool is the total
     // pool; BuildNonCreaturePool never credits it, exactly as it drops creature_mana_only sources).
@@ -6468,6 +6471,7 @@ ManaPool AvailableManaPoolNoAttackers(const GameState& state)
     // applies to a creature mana source, applied to fodder.
     AddSacPayFodderToPool(pool, state, active, LiveSacPayOutlet(state, active),
                           /*skip=*/nullptr, /*no_attackers=*/true);
+    AddOnDemandSacToPool(pool, state);   // see AvailableManaPool (no on-demand source attacks)
     if (FloatLeftoverManaEnabled()) { pool.AddPool(state.floating_mana); }
     if (FloatLeftoverManaEnabled()) { pool.AddPool(state.floating_creature_mana); }   // see AvailableManaPool
     if (FloatLeftoverManaEnabled()) { pool.AddPool(state.floating_bigspell_mana); }   // see AvailableManaPool
@@ -6829,6 +6833,17 @@ ColorFeasibility BuildColorFeasibility(const GameState& state, bool noncreature,
         // Free choice of colour per activation, which is exactly what "add one mana of any color"
         // is -- so add(), not add_one_of_each().
         add(smask, SacPayFodderCount(state, active, so, skip) * per);
+    }
+    // On-demand cracks (Lotus Bloom, Lake of the Dead): a lump's units as free choices of any colour (the
+    // gate's conservative side -- "three of ONE colour" is narrower, and the payer settles it), a land
+    // crack's delta over its plain tap in its own colour. Not filtered by `has_multi`: widening supply can
+    // only make this gate prune less.
+    if (state.deck_has_ondemand_sac)
+    {
+        const OnDemandSacSupply od = OnDemandSacSupplyNow(state, skip);
+        add(0x1F, od.any);
+        for (int c = 0; c < 5; ++c) { add(1 << c, od.fixed[c]); }
+        add(0, od.fixed[5]);
     }
     // The turn-scoped reserve is spendable on this phase's casts, so it is supply like any other.
     if (FloatLeftoverManaEnabled())
@@ -8814,8 +8829,8 @@ void PayRefineAfter(GameState& state, const ManaCost& cost_in, bool for_creature
 }
 } // namespace
 
-bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creature,
-                      ManaPool* available, bool honor_legacy_cco)
+static bool TapForCostSharedCore(GameState& state, const ManaCost& cost_in, bool for_creature,
+                                 ManaPool* available, bool honor_legacy_cco)
 {
     // Nesting is counted on BOTH branches now (it used to be the armed one only): the rollback
     // audit below wants the OUTERMOST failure, the same depth-1 notion the damage flush uses.
@@ -8911,6 +8926,239 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
     }
     if (ok && refine_pre) { PayRefineAfter(state, cost_in, for_creature, available, honor_legacy_cco, *refine_pre); }
     return ok;
+}
+
+// ---- ON-DEMAND SAC-FOR-MANA: the payer cracks Lotus Bloom / Lake of the Dead when a cost needs it ----------
+// USER 2026-11-04 (verbatim): *"Lotus bloom should be sacrificed on demand by the mana system. not a direct
+// activation."*, on Lake of the Dead *"it should not be sacrificing the land unless we need it"*, and *"Yes, it
+// should be on-demand and only done that way."* (docs/design/sac-for-mana-on-demand.md; IsOnDemandSacDef.)
+//
+// THE RULE IS DOMINANCE, NOT A HEURISTIC: crack only when the cost cannot be paid without the crack. An
+// uncracked source leaves the board a superset of the cracked one, so in goldfish the payer loses nothing by
+// trying the ordinary payment first. Which crack, which colour and the Lake's plain-tap-or-crack are PAYMENT
+// choices, under the standing mana-payment exemption of the no-greedy rule. The steps:
+//   1. Pay ordinarily, holding every crackable land (Lake) untapped: its plain {T}: {B} is the last resort,
+//      because tapping it forfeits the crack a later cost of the same line may need.
+//   2. Failing that, a crackable land's PLAIN tap pays this cost if the REST of the applying line
+//      (g_line_unpaid_cost) still fits the board afterwards; otherwise it would strand the line, and the
+//      crack is preferred when it pays.
+//   3. Crack, one source at a time, retrying the ordinary payment after each: a land crack, then a lump
+//      (Lotus Bloom) in the colour the cost is shortest of (then the rest of the line's pips, the hand's
+//      pips, WUBRG). The crack's surplus FLOATS for the rest of the phase (AddChosenColorFloat into
+//      floating_mana), which every later payment drains first -- the spec's leftover rule.
+// Every trial runs on a COPY under RevealLogPause (no log line, no human prompt, no play event for a crack
+// that does not happen); the winning recipe is then replayed on the real board, so the log and a human's
+// victim prompt see exactly the crack that is made. Executor, rollout and the human's automatic payment all
+// pay through this function, so the crack is made at the same cast in both apply worlds (lockstep).
+namespace {
+struct OnDemandCrack { int num; bool land; std::string color; int amount; };
+
+// The applying line's remainder AFTER this payment (mana value + coloured pips), when g_line_unpaid_cost is
+// evidently this line's hold (it still owes this cost -- the test PainAwarePay's exact-line check uses).
+static int LineRestAfter(const ManaCost& cost_in, int rest_pips[5])
+{
+    const ManaCost& lu = g_line_unpaid_cost;
+    const int cur[5]  = { cost_in.white, cost_in.blue, cost_in.black, cost_in.red, cost_in.green };
+    const int owed[5] = { lu.white, lu.blue, lu.black, lu.red, lu.green };
+    bool holds_this = lu.ManaValue() > 0 && lu.ManaValue() >= cost_in.ManaValue();
+    for (int c = 0; c < 5; ++c) { if (owed[c] < cur[c]) { holds_this = false; } }
+    for (int c = 0; c < 5; ++c) { rest_pips[c] = holds_this ? owed[c] - cur[c] : 0; }
+    return holds_this ? lu.ManaValue() - cost_in.ManaValue() : 0;
+}
+
+// A lump's colour order for paying `cost_in` on `state`: the pip this cost is shortest of on the board,
+// then this cost's coloured pips, the line's remaining pips, the hand's pips, then WUBRG. The current
+// bill's pips break a no-shortage tie: otherwise a red Lotus bill chooses white because the pool counts
+// both the Lotus and a depletion land as supply, then spends the land's last counter for the red pips.
+// Every colour is listed (a lump's three units
+// can pay a generic-only shortfall in any of them; the order only picks which colour floats on).
+static void LumpColourOrder(const GameState& state, const ManaCost& cost_in, int out[5])
+{
+    const ManaPool pool = AvailableManaPool(state);
+    const int pip[5]  = { cost_in.white, cost_in.blue, cost_in.black, cost_in.red, cost_in.green };
+    const int have[5] = { pool.white, pool.blue, pool.black, pool.red, pool.green };
+    int rest[5];
+    LineRestAfter(cost_in, rest);
+    int hand[5] = { 0, 0, 0, 0, 0 };
+    for (const Card& c : state.players[state.active_player_index].hand)
+    {
+        const ManaCost& m = c.m_mana_cost;
+        hand[0] += m.white; hand[1] += m.blue; hand[2] += m.black; hand[3] += m.red; hand[4] += m.green;
+    }
+    long long key[5];
+    for (int c = 0; c < 5; ++c)
+    {
+        const int short_by = std::max(0, pip[c] - have[c]);
+        key[c] = (static_cast<long long>(std::min(short_by, 0x7FFF)) << 48)
+               | (static_cast<long long>(std::min(pip[c], 0xFFFF)) << 32)
+               | (static_cast<long long>(std::min(rest[c], 0xFFFF)) << 16)
+               | (static_cast<long long>(std::min(hand[c], 0x1FFF)) << 3) | (4 - c);
+        out[c] = c;
+    }
+    std::sort(out, out + 5, [&](int a, int b) { return key[a] > key[b]; });
+}
+
+static bool ApplyOnDemandCrack(GameState& state, const OnDemandCrack& k)
+{
+    const std::size_t n0 = state.battlefield.size();
+    const ManaPool f0 = state.floating_mana;
+    ApplySacForMana(state, state.active_player_index, k.num, k.color, k.amount);
+    return state.battlefield.size() != n0 || state.floating_mana.Total() != f0.Total();
+}
+
+// The crackable on-demand sources on the board, land cracks first (board order), then lumps (board order).
+static void CollectOnDemandCracks(const GameState& state, std::vector<OnDemandCrack>& lands,
+                                  std::vector<OnDemandCrack>& lumps)
+{
+    int land_cracks = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index || p.tapped || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || !IsOnDemandSacDef(*d)) { continue; }
+        if (!d->params.sac_for_mana_victim_land_subtype.empty())
+        {
+            if (!OnDemandSacCrackableNow(state, p, *d, land_cracks)) { continue; }
+            ++land_cracks;
+            lands.push_back({ p.card.m_number, true, d->params.sac_for_mana_color, d->params.sac_for_mana_amount });
+        }
+        else { lumps.push_back({ p.card.m_number, false, std::string(), d->params.sac_for_mana_amount }); }
+    }
+}
+
+// The hold bits of the crackable lands on `state` (board indices, so read off the board being paid: a
+// crack's sacrifice shifts every later index).
+static std::uint64_t OnDemandLandHold(const GameState& state)
+{
+    std::vector<OnDemandCrack> lands, lumps;
+    CollectOnDemandCracks(state, lands, lumps);
+    std::uint64_t hold = 0;
+    for (const OnDemandCrack& k : lands) { hold |= SelfTapSourceHoldBit(state, k.num); }
+    return hold;
+}
+
+// Apply `recipe` to `out` and pay `cost_in` there (the remaining crackable lands held when `hold_lands`).
+static bool OnDemandPayWith(GameState& out, const std::vector<OnDemandCrack>& recipe, bool hold_lands,
+                            const ManaCost& cost_in, bool for_creature, ManaPool* avail, bool honor_legacy_cco)
+{
+    for (const OnDemandCrack& k : recipe) { if (!ApplyOnDemandCrack(out, k)) { return false; } }
+    const dmgev::PayHoldScope h(dmgev::t_pay_hold | (hold_lands ? OnDemandLandHold(out) : 0));
+    return TapForCostSharedCore(out, cost_in, for_creature, avail, honor_legacy_cco);
+}
+
+// One trial payment on a copy, quiet. Returns the recipe's success; `out` holds the paid board.
+static bool OnDemandTrial(const GameState& state, const std::vector<OnDemandCrack>& recipe, bool hold_lands,
+                          const ManaCost& cost_in, bool for_creature, ManaPool* available, ManaPool& avail_out,
+                          bool honor_legacy_cco, GameState& out)
+{
+    const RevealLogPause quiet;
+    out = state;
+    if (available != nullptr) { avail_out = *available; }
+    return OnDemandPayWith(out, recipe, hold_lands, cost_in, for_creature,
+                           available != nullptr ? &avail_out : nullptr, honor_legacy_cco);
+}
+} // namespace
+
+bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creature,
+                      ManaPool* available, bool honor_legacy_cco)
+{
+    // Outermost payments only: a nested payment, a refine probe, the oracle's float-only pass and its own
+    // scripted copy each pay as they always have (they never see a crack the outer payment did not make).
+    if (!state.deck_has_ondemand_sac || t_pay_nest != 0 || t_pay_refining || manaoracle::t_float_only
+        || (manaoracle::t_hook != nullptr && &state == manaoracle::t_hook->target))
+    { return TapForCostSharedCore(state, cost_in, for_creature, available, honor_legacy_cco); }
+    std::vector<OnDemandCrack> lands, lumps;
+    CollectOnDemandCracks(state, lands, lumps);
+    if (lands.empty() && lumps.empty())
+    { return TapForCostSharedCore(state, cost_in, for_creature, available, honor_legacy_cco); }
+    // A searched line may need the Lake's four black mana for later casts or an activation even
+    // when this individual bill is payable by tapping it for one. Try that line on a copy before
+    // committing the sacrifice. The pin remains for a later payment if no Lake is crackable yet.
+    if (state.scripted_early_ondemand_crack)
+    {
+        for (const OnDemandCrack& k : lands)
+        {
+            if (k.color.empty()) { continue; }
+            const std::unique_ptr<GameState> scratch = std::make_unique<GameState>();
+            ManaPool trial_avail;
+            if (!OnDemandTrial(state, {k}, true, cost_in, for_creature, available, trial_avail,
+                               honor_legacy_cco, *scratch)) { continue; }
+            if (OnDemandPayWith(state, {k}, true, cost_in, for_creature, available, honor_legacy_cco))
+            { state.scripted_early_ondemand_crack = false; return true; }
+            return false;
+        }
+    }
+    // 1. Ordinary payment, the crackable lands held. (A failed payment leaves the board as it found it.)
+    {
+        std::uint64_t land_hold = 0;
+        for (const OnDemandCrack& k : lands) { land_hold |= SelfTapSourceHoldBit(state, k.num); }
+        const dmgev::PayHoldScope h(dmgev::t_pay_hold | land_hold);
+        if (TapForCostSharedCore(state, cost_in, for_creature, available, honor_legacy_cco)) { return true; }
+    }
+    // The winning recipe, replayed IN PLACE on the real board (log, prompts and events see the one real
+    // crack). In place, never by assigning the trial copy back: a caller may hold references into this
+    // state's hand / battlefield across its payment, and a whole-state assignment reallocates every zone
+    // (measured: heap corruption in the smoke tier's first cut). A crack's sacrifice is the same in-payment
+    // erase the Treasure route already makes (CommitPaySacSacrifices). The replay is the trial's own
+    // deterministic computation on an identical board; should it ever fail (a human's victim pick differing
+    // from the quiet trial's fold), the crack has floated its mana and the cost reports unpaid -- the
+    // conservative side, never a phantom payment.
+    auto commit = [&](const std::vector<OnDemandCrack>& recipe, bool hold_lands) -> bool
+    { return OnDemandPayWith(state, recipe, hold_lands, cost_in, for_creature, available, honor_legacy_cco); };
+    // One heap scratch board for every trial (a GameState is large, and this runs deep in the search's stack).
+    const std::unique_ptr<GameState> scratch = std::make_unique<GameState>();
+    ManaPool trial_avail;
+    auto trial = [&](const std::vector<OnDemandCrack>& recipe, bool hold_lands) -> bool
+    {
+        return OnDemandTrial(state, recipe, hold_lands, cost_in, for_creature, available, trial_avail,
+                             honor_legacy_cco, *scratch);
+    };
+    // 2. A land's plain tap, kept when the rest of the line still fits the board afterwards.
+    bool plain_ok = false;
+    if (!lands.empty())
+    {
+        plain_ok = trial({}, false);
+        if (plain_ok)
+        {
+            int rest_pips[5];
+            const int rest = LineRestAfter(cost_in, rest_pips);
+            if (rest <= 0 || AvailableManaPool(*scratch).Total() >= rest) { return commit({}, false); }
+        }
+    }
+    // 3. Crack, one source at a time.
+    std::vector<OnDemandCrack> recipe;
+    for (const OnDemandCrack& k : lands)
+    {
+        recipe.push_back(k);
+        if (trial(recipe, true)) { return commit(recipe, true); }
+    }
+    static const char* kCol[5] = { "W", "U", "B", "R", "G" };
+    for (const OnDemandCrack& k0 : lumps)
+    {
+        // The colour is read off the board the previous cracks leave.
+        int order[5];
+        {
+            const RevealLogPause quiet;
+            *scratch = state;
+            for (const OnDemandCrack& k : recipe) { ApplyOnDemandCrack(*scratch, k); }
+            LumpColourOrder(*scratch, cost_in, order);
+        }
+        for (int c = 0; c < 5; ++c)
+        {
+            OnDemandCrack k = k0;
+            k.color = kCol[order[c]];
+            recipe.push_back(k);
+            if (trial(recipe, true)) { return commit(recipe, true); }
+            recipe.pop_back();
+        }
+        // No colour of this lump completes the payment alone: crack it in its first colour and add the next.
+        OnDemandCrack k = k0;
+        k.color = kCol[order[0]];
+        recipe.push_back(k);
+    }
+    // Nothing paid with a crack: a plain land tap that strands the rest of the line still pays THIS cost.
+    if (plain_ok) { return commit({}, false); }
+    return false;
 }
 
 // MANA ORACLE -- one scripted payment on the oracle's own copy (ManaOracle.h). The script entry's taps
