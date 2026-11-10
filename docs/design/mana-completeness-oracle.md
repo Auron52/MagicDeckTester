@@ -2284,3 +2284,14 @@ byte-identical oracle-off play. The classes include 7,128 ENUM-GAP and
 DOMINATED-HASTE flags in NivMizzetCombo, and 10,604 CAPPED flags in Snow.
 The exact classes and fresh game ranges are in
 `logs/mana_clean/due-medium-20261108/report.md`.
+
+The next fresh-seed clean-stamp extension tested nine previously clean decks
+for 100,000 games each (`clean-extension-20261109`, source `3bda5c647e7c`).
+Auras, Colossus Hammer, CritterLifegain, Giants, Knights,
+LifegainHeliodCombo, Modern RW Burn, and WhiteKnights stayed clean with
+oracle-off byte identity. Kithkin had zero issue flags but one changed
+250-game chunk, so its new verdict is **invalid**. The differing game was
+seed 30173535, game index 173535. Three focused replays matched the
+oracle-off result, leaving the original identity mismatch unexplained. The
+exact digests and replay scope are in
+`logs/mana_clean/clean-extension-20261109/report.md`.
