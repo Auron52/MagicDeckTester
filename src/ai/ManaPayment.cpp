@@ -10616,6 +10616,23 @@ static std::string ApplyPreTapImpl(GameState& state, const TurnSolver::PreTap& t
         { return reject("you control no copy of '" + t.name + "' with that id"); }
         return reject("you control no untapped '" + t.name + "'");
     }
+    if (t.sac_crack)
+    {
+        // The oracle can name the on-demand land's crack as a payment face. Human pre-taps have no
+        // such route: the human's ordinary {B} tap and the automatic payer retain their own choices.
+        if (trace) { return reject("an on-demand land crack is not a manual tap face"); }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(found->card);
+        if (d == nullptr || !IsOnDemandSacDef(*d) || d->params.sac_for_mana_victim_land_subtype.empty()
+            || !OnDemandSacCrackableNow(state, *found, *d)
+            || d->params.sac_for_mana_color != std::string(1, letter))
+        { return reject("on-demand land crack is unavailable"); }
+        const std::size_t before = state.battlefield.size();
+        ApplySacForMana(state, active, found->card.m_number, d->params.sac_for_mana_color,
+                        d->params.sac_for_mana_amount);
+        if (state.battlefield.size() >= before) { return reject("on-demand land crack was refused"); }
+        state.scripted_early_ondemand_crack = false;   // the normal payer consumes this searched pin on a crack
+        return std::string();
+    }
     // THE one legality function (see HumanPreTapOfferFor): the offer the viewer drew from IS the rule.
     const HumanPreTapOffer offer = HumanPreTapOfferFor(state, *found);
     const std::string& faces = offer.free_faces;

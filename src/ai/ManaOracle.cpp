@@ -515,6 +515,7 @@ std::string TapsText(const PayOption& o)
         s += t.name + "#" + std::to_string(t.num) + ":";
         if (!t.combo.empty()) { for (int c : t.combo) { s.push_back(kLetters[c]); } }
         else if (t.color >= 0 && t.color < 6) { s.push_back(kLetters[t.color]); }
+        if (t.sac_crack) { s += "(crack)"; }
         for (int ac : t.aura_colors) { s += "+"; s.push_back(kLetters[ac]); }
         if (i < o.creature_route.size() && o.creature_route[i])
         {
@@ -1117,9 +1118,10 @@ int UsefulColorMask(const GameState& s, const ManaCost& cost)
 
 // (t_plan_srcs -- the plan's own sources, which BuildSources keys apart -- is defined above Resources.)
 
-// THE ENUM-GAP PASS PAYS AS THE ENGINE CAN. A SacAction source -- Generator Servant, an on-board Lotus Bloom or Black
-// Lotus -- makes its mana only through a plan's own SacForMana action (both apply worlds crack it in their pre-pass;
-// the payer never does, ManaPayment.cpp "SAC ACTION"). The viewer's pre-tap offers it at payment time, so a realisation
+// THE ENUM-GAP PASS PAYS AS THE ENGINE CAN. A direct-action SacAction source such as Generator Servant
+// makes its mana only through a plan's own SacForMana action. The on-demand Lotus Bloom and Lake of the Dead
+// are different: their payer can crack them during payment, and Lake's crack has an oracle face below.
+// The viewer's pre-tap offers a direct-action source at payment time, so a realisation
 // of a gate-rejected plan WITHOUT the action could crack it mid-payment and "pay" a line the engine cannot express:
 // NivMizzetCombo eg1, 95 of 106 ENUM-GAPs (Tandem Lookout off Servant's {C}{C}; Curiosity cast onto the Servant the
 // payment then cracked; a second Servant cast with the first's haste {C} and cracked the same turn). The executable
@@ -1165,8 +1167,9 @@ std::vector<SrcClass> BuildSources(const GameState& state, bool for_creature, st
     {
         if (p.controller_index != a || p.tapped) { continue; }
         const HumanPreTapOffer o = HumanPreTapOfferFor(state, p);
-        if (t_no_sac_action && o.route == HumanPreTapOffer::Route::SacAction) { continue; }   // see t_no_sac_action
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (t_no_sac_action && o.route == HumanPreTapOffer::Route::SacAction
+            && (d == nullptr || !IsOnDemandSacDef(*d))) { continue; }   // direct plan actions only
         // RESTRICTED sources: offered to a creature spell through the oracle's own route -- a subtype-restricted one
         // (Giada) only to a spell of that subtype (the paying-spell scope: MinimalPayments sets it from the frontier).
         std::string restricted;   // the coloured faces the creature route adds ("" = none)
@@ -1310,6 +1313,20 @@ std::vector<SrcClass> BuildSources(const GameState& state, bool for_creature, st
                 Face f; f.pt = b.pt; f.pt.aura_colors = pk; f.fed = b.fed; f.creature = b.creature;
                 if (MeasureFace(state, f)) { sc.max_net = std::max(sc.max_net, f.net); sc.faces.push_back(f); }
             }
+        }
+        // Lake's crack is a second face of the land, not the one-black manual tap above. The
+        // engine's on-demand payer uses it during payment; oracle scripts otherwise miss that
+        // reachable outcome and report ORACLE-GAP for the same legal Lake line.
+        if (d != nullptr && IsOnDemandSacDef(*d) && !d->params.sac_for_mana_victim_land_subtype.empty()
+            && OnDemandSacCrackableNow(state, p, *d) && !d->params.sac_for_mana_color.empty())
+        {
+            Face f;
+            f.pt.name = sc.name;
+            f.pt.num = p.card.m_number;
+            f.pt.color = LetterIndex(d->params.sac_for_mana_color[0]);
+            f.pt.sac_crack = true;
+            if (f.pt.color >= 0 && MeasureFace(state, f))
+            { sc.max_net = std::max(sc.max_net, f.net); sc.faces.push_back(f); }
         }
         if (sc.faces.empty()) { continue; }
         by_key[key] = out.size();

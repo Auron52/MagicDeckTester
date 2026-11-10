@@ -471,6 +471,33 @@ TEST_CASE("mana oracle: a payment that makes more than its bill can float any on
     CHECK(keeps_u);
 }
 
+TEST_CASE("mana oracle: Lake's on-demand crack is distinct from its ordinary black tap")
+{
+    EnsureOracleCards();
+    GameState s = Board({ "Lake of the Dead", "Swamp" });
+    s.deck_has_ondemand_sac = true;
+    s.scripted_early_ondemand_crack = true;
+    const auto opts = manaoracle::MinimalPayments(s, Cost(0, 0, 0, 4), false, nullptr);
+    bool found_crack = false;
+    for (const manaoracle::PayOption& o : opts)
+    {
+        if (o.taps.size() != 1 || !o.taps[0].sac_crack) { continue; }
+        GameState paid = s;
+        REQUIRE(manaoracle::PerformPayTaps(paid, o));
+        CHECK(paid.floating_mana.black == 1);   // victim Swamp adds {B}, then Lake adds {B}{B}{B}{B}
+        CHECK(paid.battlefield.size() == 1);
+        CHECK_FALSE(paid.scripted_early_ondemand_crack);
+        found_crack = true;
+    }
+    CHECK(found_crack);
+
+    GameState no_victim = Board({ "Lake of the Dead" });
+    no_victim.deck_has_ondemand_sac = true;
+    const auto none = manaoracle::MinimalPayments(no_victim, Cost(0, 0, 0, 4), false, nullptr);
+    for (const manaoracle::PayOption& o : none)
+        for (const TurnSolver::PreTap& t : o.taps) { CHECK_FALSE(t.sac_crack); }
+}
+
 // EDF seed 3101 T4 (an ORACLE-GAP): a multi-unit source may pay part of a bill and float the rest when one
 // more tap covers what that rest would have paid. Forest {G} + Plains/Fertile Ground {W}+any pays {2}{G}
 // exactly, so the minimal search never taps Mariposa beside them; with Mariposa's {C} as well the Fertile
