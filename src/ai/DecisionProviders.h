@@ -3823,6 +3823,10 @@ public:
                "winless-this-turn bound must price those, plus the land drop played AFTER a payoff "
                "(Plan::land_slot) and from the library top (Courser of Kruphix)." }; }
     const char* Name() const override { return "Landfall"; }
+    // A late token payoff outranks cracking Myriad alone when the generic
+    // creature evaluator has no attack left in its six-turn estimate.
+    bool ComboCardValue(const GameState& s, const CardDefinition& def,
+                        int dmg_unit, int& out) const override;
     // THE COLOUR-SEQUENCE FETCH RULE (USER 2026-10-16): every basic land search fetches by the
     // sequence green, green, red, green, red (Myriad Landscape: the red pair once two green are out;
     // the reds left for an on-board Myriad when it is the only search left), and is PRUNED to that one

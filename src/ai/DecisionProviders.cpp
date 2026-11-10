@@ -2043,6 +2043,40 @@ void DecisionProvider::LandSearchPickOrder(const GameState& s, int controller, i
     picks = std::move(out);
 }
 
+// The greedy d0 chooser gives a non-haste creature cast on T7 zero value: its
+// six-turn attack estimate has no future attack. Avenger, Phylath and Omnath
+// instead make their damage through landfall tokens. A Myriad Landscape crack
+// scores one point and can displace the payoff entirely, even with ample mana
+// (smoke seeds 1032, 1087, 1625: each loses a T8 win). Price a payoff just
+// above the number of Myriads on this board, but only at the late-turn
+// trap, and only if the board lacks a token-making landfall watcher already.
+// If one is live, cracking Myriad is itself the payoff (d3 gi14, d0 gi588).
+// The fix belongs to the autonomous d0 runner, not the searched playout's
+// leaf policy: changing that leaf moves searched lines on budget alone.
+// This keeps searched play, earlier turns and boards without Myriad unchanged.
+bool LandfallProvider::ComboCardValue(const GameState& s, const CardDefinition& def,
+                                      int dmg_unit, int& out) const
+{
+    (void)dmg_unit;
+    if (!TurnSolver::InD0Runner() || s.turn_number < 7) { return false; }
+    const std::string& name = def.card.m_name.str();
+    if (name != "Avenger of Zendikar" && name != "Phylath, World Sculptor"
+        && name != "Omnath, Locus of Rage") { return false; }
+    int myriad = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != s.active_player_index) { continue; }
+        const std::string& board_name = p.card.m_name.str();
+        if (board_name == "Rampaging Baloths" || board_name == "Avenger of Zendikar"
+            || board_name == "Phylath, World Sculptor" || board_name == "Omnath, Locus of Rage")
+        { return false; }
+        if (board_name == "Myriad Landscape") { ++myriad; }
+    }
+    if (myriad == 0) { return false; }
+    out = myriad + 1;
+    return true;
+}
+
 // ---- LandfallProvider: the COLOUR-SEQUENCE fetch rule (USER 2026-10-16) -------------------------
 // The user's rule for the Landfall list (13 Forest, 2 Mountain), built up over one exchange:
 //   "Myriad landscape should search for Mountains unless there is only one left in the deck or we have
