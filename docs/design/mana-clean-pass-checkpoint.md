@@ -128,6 +128,20 @@ Source of the work: `logs/mana_clean/lastweek-20261110-shadowborn-order/report.m
     Culling's +4 as if it funded the casts before it. Sound tightening: in `SubsetOverclaimsSacCostVictims`, require the
     mana available BEFORE a sac-cost ritual to pay the ritual plus every cast that supplies its victim. PHANTOM is not
     an issue class.
+* **Gate `sb-orderproof-20261110` (cbe0633fe rebased as 5c3d77690140 src, PGO, games 30000-34999): 210 issues** (was
+  1,773 on 25000-29999): UNMODELED 0 (was 1,658), ORACLE-GAP 1, ENUM-GAP 2, HIDDEN-INFO 4 (disclosed), APPLY-DROP 44
+  (top x8 s-T6 Culling + Stone + Sire + Ritual + Apostle act; plus the parked need-later colour shapes), APPLY-DROP-ORDER
+  163 in 9 signatures, 6 of them ONE decision (s30033099 T6 m1: Culling > Apostle > Stone > Ritual > Sire > Apostle
+  activation pays; the provider's order drops Sire). Play identity oracle-off: byte-identical. The ORDER count rose
+  because the full order proof now FINDS paying orders the 180 cap never tried -- real cast-order misses, not new
+  defects.
+* **USER DECISION (Shadowborn cast order, not changed): APPLY-DROP-ORDER 163** (above). Shape: with Lotus Bloom up,
+  Sire of Insanity placed before the Apostle + Thrumming Stone + Ritual chain is dropped; after the ripple chain it pays
+  (Lotus {R} + a Swamp, keep-floating). Proposal for review: rank Sire after Thrumming Stone and Dark Ritual when the
+  line holds both. Not measured.
+* Note: after rebasing onto the Gods merge (f90930c9f), smoke shows 2 same-score play-digest changes
+  (bruna2hg_smoke_d5_s1001, landfall_smoke_d5_s1001). They reproduce byte-for-byte with the ORIGIN tip's binary (no
+  commit of this chain), so they come from the Gods merge; not accepted here -- owner: the Gods session.
 * Chain order: build -> unit -> the s30020022 repro -> smoke (expect only Shadowborn rows to move) -> regression ->
   `./build.sh pgo` -> Shadowborn 5,000 gate on block 25000-29999 -> record, commit, push.
 

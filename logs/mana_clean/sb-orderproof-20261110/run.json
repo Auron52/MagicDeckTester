@@ -1,0 +1,23 @@
+{
+ "name": "sb-orderproof-20261110",
+ "src": "5c3d776901408a93237dc353e0067bf0d37918c6",
+ "commit": "cbe0633febfe92d55eee0ecc1d77eb727867ddac",
+ "minutes": 30,
+ "started": "2026-11-10T23:38:34Z",
+ "decks": [
+  {
+   "key": "shadowborn_apostle",
+   "deck": "decks/Shadowborn Apostle/Shadowborn Apostle.cod",
+   "deck_sha": "a23edb97dcaeb1e61888de6616f4f35299abf43d",
+   "profile": "decks/Shadowborn Apostle/Shadowborn Apostle.profile.json",
+   "game_index": 30000,
+   "seed": 30030000,
+   "games": 5000,
+   "chunk": 171,
+   "est_ms_per_game": [
+    695.1,
+    598.2
+   ]
+  }
+ ]
+}

@@ -1490,3 +1490,15 @@ so the lower total does not by itself measure the fix's effect. Seed 30015115
 is the paired evidence that the exact-order proof recovered a previously
 unmodeled line. The remaining payable order misses and payment drops still
 need engine work before another clean gate can pass.
+
+## 2026-11-10 night: the order proof completed, the early-crack pin, hidden ripple rituals
+
+Gate `sb-victimclaim-20261110` (games 25000-29999) left 1,658 UNMODELED, all "too many actions to try every
+order" (360 distinct orders: 1,035; 720: 333; 420-2,520: 290). The PHANTOM claim now enumerates up to 5,040
+distinct orders (`kPhantomOrderBound`, ManaOracle.cpp; the YES searches keep 180, the per-decision budget still
+caps cost). Every top repro now reads PHANTOM -- the planner admitting a line only a lucky ripple could fund --
+and none an engine miss. 24 of the 28 ORACLE-GAPs were the oracle clearing `scripted_early_ondemand_crack` on a
+scripted Lake crack where the payer (Lake + Lotus Bloom, its ordinary crack) keeps it; the oracle now applies the
+payer's rule (`OracleOptionConsumesEarlyCrackPin`). 5 of 10 ENUM-GAPs paid only with a Dark Ritual that Thrumming
+Stone's ripple cast off the hidden library top: HIDDEN-INFO now. Analyzer-only; smoke and regression
+byte-identical. Parked items and diagnoses: `docs/design/mana-clean-pass-checkpoint.md`, 2026-11-10 section.
