@@ -73772,6 +73772,36 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             any_haste_dork     = true;
         }
     }
+    // A live Surrak and Goreclaw gives each new nontoken creature haste. A mana
+    // dork cast from this hand can therefore tap after it resolves, just as one
+    // equipped with Greaves can. Credit its real one-tap yield only to subsets
+    // that cast it; the cast itself must already be payable from the old pool.
+    std::vector<ManaPool> enter_haste_unlock, enter_haste_unlock_nc;
+    if (HasteDorkCreditEnabled())
+    {
+        bool live_enter_haste = false;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index || p.def_absent) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d && d->params.other_nontoken_enters_counter_haste > 0)
+            { live_enter_haste = true; break; }
+        }
+        if (live_enter_haste)
+        {
+            enter_haste_unlock.resize(cands.size());
+            enter_haste_unlock_nc.resize(cands.size());
+            for (int j = 0; j < static_cast<int>(cands.size()); ++j)
+            {
+                const Action& a = cands[j];
+                if (a.kind != Action::Kind::CastFromHand || !a.def || !a.def->card.IsCreature()
+                    || a.hand_index < 0 || a.hand_index >= static_cast<int>(state.players[state.active_player_index].hand.size()))
+                { continue; }
+                const int id = state.players[state.active_player_index].hand[a.hand_index].m_number;
+                HasteUnlockedManaOf(state, id, enter_haste_unlock[j], enter_haste_unlock_nc[j]);
+            }
+        }
+    }
     // Same-turn SCALING SOURCE widening scan (EnumeratePlans ONLY -- see the credit below).
     // State-only, so it is built ONCE here; the per-subset path is an int test plus a walk of the
     // selection. Zero live scaling sources -> every other deck/state is byte-identical.
@@ -74846,6 +74876,16 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         bool credited = false;
         int  simul_ritual_credit = 0;
         int  simul_mint_credit   = 0;   // §2a minted-Treasure credit (excluded from the surplus FILL)
+        if (!enter_haste_unlock.empty())
+        {
+            for (int j : sel)
+            {
+                if (enter_haste_unlock[j].Total() <= 0 || !pool.CanPay(cands[j].cost)) { continue; }
+                eff.AddPool(enter_haste_unlock[j]);
+                eff_nc.AddPool(enter_haste_unlock_nc[j]);
+                credited = true;
+            }
+        }
         if (any_ritual)
         {
             int ritual_credit = 0;
@@ -76336,6 +76376,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // 5-mana board), so the two must move together. 0 for every plan without an unlocking equip.
     int haste_unlock_bound = 0;
     for (const ManaPool& u : haste_unlock) { haste_unlock_bound += u.Total(); }
+    for (const ManaPool& u : enter_haste_unlock) { haste_unlock_bound += u.Total(); }
     // ... and the same addend for the same-turn METALCRAFT credit, for exactly the reason above and
     // under ManaPruneBound's own maintenance breadcrumb ("any FUTURE cost reducer credited per-subset
     // in consider() rather than baked into a.cost"). MEASURED, not anticipated: with the credit on but
@@ -76494,7 +76535,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // ...and the FIRST-EQUIP WAIVER (Forge Anew / Kili): the gate's terms bake each equip's printed
     // generic, so the waived equip would be charged in full -- the same bail, to the waiver-aware
     // scalar bound (waiver_bound above). The haste-dork precedent; the gate is default OFF.
-    if (SelectionExactManaGateEnabled() && gate_relevant && !any_haste_dork && growth_bound == 0
+    if (SelectionExactManaGateEnabled() && gate_relevant && !any_haste_dork
+        && enter_haste_unlock.empty() && growth_bound == 0
         && !any_hinata_credit && !spec_ctx.live && !any_storied && !manaoracle::t_gate_observe)
     {
         auto idx = std::make_unique<ManaGateIndex>();
