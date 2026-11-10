@@ -113,3 +113,41 @@ from two distinct Treasure Hunt seeds; both severe games are unchanged from
 their prior ground-truth outcomes and show a preexisting committed-line fidelity
 issue. The overnight acceptance header records this follow-up and retains the
 older Angels and Bruna follow-ups.
+
+## Follow-up emulation screen (2026-11-10)
+
+We tested existing emulated-ladder controls on paired seeds using the current
+Release binary. Manifests and results are in `logs/emul_fleet_2026_11_10/`.
+The 31-deck screen forced emulation on each regression deck that has a learned
+model, at each deck's play depth and budget, with 40 games per arm. Making
+depth one an exact heuristic pass changed no scored outcomes on that small
+screen. It changed play digests on Hinata, Modern RW Burn and Prevent Damage;
+the total work-unit ratio was 0.999. This is a coverage screen, not evidence
+of per-deck neutrality at scale.
+
+We then paired 150 games per arm on Landfall, Melira Pod, Modern RW Burn and
+Extra Turns. Exact depth one improved Extra Turns from 5.0400 to 4.9333 scored
+turns, but cost 1.21 times the units. It was quality-neutral on the other three;
+Modern RW Burn used 0.88 times the units, Landfall 1.004, and Melira 1.000.
+Forcing the first two depths onto the heuristic had no general benefit. A
+0.25 prediction margin made Landfall 0.0133 turns slower. On a second 200-game
+block, exact depth one moved Extra Turns 4.8950 to 4.8800 and reduced units
+to 0.86 times baseline; the direction of its cost effect therefore varies by
+seed. The other four 200-game arms, including KittyEquipment, showed no
+scored-turn improvement. Direct commitment of verified value warm-up wins
+changed no scored outcome on these five decks; across the pooled 20-job run,
+only 189 of 11,081 emulated decisions used that path.
+
+Finally, 100-game paired blocks tried leafless warm-ups. That helped Extra
+Turns from 5.1800 to 5.0600 (5.0800 when depth one was exact), but the
+shipped leafless escalation scored 4.8800 on the same games. Leafless warm-ups
+made Landfall 0.0200 turns slower and cost 1.17 times its baseline units.
+Melira, Modern RW Burn and KittyEquipment had unchanged scored averages.
+
+No tested control improved quality and cost across decks. The old emulation
+prediction assumes a common value/heuristic search tree, contradicted by the
+same-depth measurements above. Exact depth one protects the baseline line in
+some states but cannot make later reconstructed gates exact. Keep the shipped
+per-deck policies. A future redesign should measure or bound the *heuristic
+tree* cost directly and retain a completed heuristic line before spending on
+warm-ups; these experiments do not justify a global switch.
