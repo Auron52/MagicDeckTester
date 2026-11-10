@@ -596,6 +596,13 @@ struct Permanent
     bool      attacks_b0 : 1 = false;
     bool      attacks_b1 : 1 = false;
     bool      attacks_b2 : 1 = false;
+    // Enduring Innocence returned by its own dies trigger "as an enchantment (not a creature)"
+    // (CardParams::dies_return_as_noncreature_enchantment). The 8th bit of the byte above, so sizeof
+    // stays put. Set once at the return (PutCardOntoBattlefield) and never cleared: the permanent's
+    // Creature type is removed on its card copy, and this bit makes that difference visible to every
+    // key that folds per-permanent flags but not the type mask (BuildSimKey, dominance::Build, the
+    // fungibility / fold keys, the payment parity check). Never set for any other card.
+    bool      enduring_noncreature : 1 = false;
     int  AttacksThisTurn() const
     { return (attacks_b0 ? 1 : 0) | (attacks_b1 ? 2 : 0) | (attacks_b2 ? 4 : 0); }
     void SetAttacksThisTurn(int n)

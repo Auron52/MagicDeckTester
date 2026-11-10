@@ -3630,6 +3630,25 @@ struct CardParams
     int  creature_enters_min_power     = 0;
     int  own_creature_enters_draw      = 0;
     bool creature_enters_includes_self = false;
+    // Enduring Innocence: "Whenever one or more other creatures you control with power 2 or LESS enter,
+    // draw a card. This ability triggers only once each turn." A DRAW-ONLY own-lane enter watcher (no
+    // lifegain payload) read in FireCreatureEnterWatchers:
+    //   creature_enters_max_power -- the ENTRANT's live power (counters + lords + Serra Ascendant's
+    //     30-life pump, the same entered_power_now() read the min-power filter uses) must be <= this.
+    //     < 0 = no maximum (byte-identical for every other watcher).
+    //   own_creature_enters_draw_once_each_turn -- once each turn PER COPY, tracked on
+    //     Permanent::storied_draw_used_this_turn (reset at OUR untap in both worlds and already folded
+    //     everywhere a mid-turn flag must be). "One or more ... enter" fires per entrant under this cap,
+    //     which is the same thing.
+    int  creature_enters_max_power = -1;
+    bool own_creature_enters_draw_once_each_turn = false;
+    // Enduring Innocence: "When Enduring Innocence dies, if it was a creature, return it to the
+    // battlefield under its owner's control. It's an enchantment. (It's not a creature.)" OnCreatureDies:
+    // a NONTOKEN that was a creature (LKI: the battlefield copy's type mask) is returned from the
+    // graveyard through PutCardOntoBattlefield with CardType::Creature REMOVED before it enters
+    // (Permanent::enduring_noncreature), so it cannot attack, is not a creature entering, and a later
+    // death does not return it (the intervening if). false = off.
+    bool dies_return_as_noncreature_enchantment = false;
 
     // ---- TRIBAL enter-watcher filter + payloads (Angels, 2026-09-17) -------------------------
     // enters_watch_subtypes: a subtype OR-filter on the ENTERING creature, the same shape and the
@@ -4819,7 +4838,10 @@ inline bool DefHasCreatureEnterWatcher(const CardParams& p)
         || p.any_creature_enters_self_counters_power
         || p.opp_creature_enters_life_loss > 0
         || p.own_creature_enters_opp_life_loss > 0    // Forerunner of the Coalition (2026-09-26)
-        || p.enters_look_top_land_or_hand;            // Risen Reef (2026-10-18)
+        || p.enters_look_top_land_or_hand             // Risen Reef (2026-10-18)
+        || p.own_creature_enters_draw > 0;            // Enduring Innocence's draw-only watcher (2026-11-10);
+                                                      // Vaultborn Tyrant, the only other carrier, is
+                                                      // already a term (lifegain) -> byte-identical
 }
 
 // The lockstep disjunction for CardDefinition::landfall_watcher: TRUE iff FireLandfallTriggers

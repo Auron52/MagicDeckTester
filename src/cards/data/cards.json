@@ -15305,6 +15305,31 @@
     "sac_outlet_self_only": true,
     "sac_outlet_prevent_combat_damage": true
    }
+  },
+  {
+   "name": "Enduring Innocence",
+   "mana_cost": "{1}{W}{W}",
+   "types": [
+    "Enchantment",
+    "Creature"
+   ],
+   "subtypes": [
+    "Sheep",
+    "Glimmer"
+   ],
+   "keywords": [
+    "Lifelink"
+   ],
+   "power": 2,
+   "toughness": 1,
+   "oracle_text": "Lifelink\nWhenever one or more other creatures you control with power 2 or less enter, draw a card. This ability triggers only once each turn.\nWhen Enduring Innocence dies, if it was a creature, return it to the battlefield under its owner's control. It's an enchantment. (It's not a creature.) [All clauses modelled. LIFELINK: the combat core (CreatureHasLifelink; one GainLife event per lifelinking attacker). DRAW WATCHER: a draw-only own-lane creature-enter watcher (own_creature_enters_draw 1) in FireCreatureEnterWatchers, the universal enter cascade, so every entry route counts (cast, Abiding Grace return, Lurrus cast, Squadron Hawk, tokens). 'Other' = the entrant is never its own watcher; 'you control' = own lane only. 'With power 2 or less' = creature_enters_max_power 2 on the ENTRANT's live power (counters + lords + Serra Ascendant's 30-life +5/+5 pump), so a Serra entering at 30+ life (6/6), Lurrus (3/2), both Rangers and Speaker's 4/4 Angel do NOT trigger it; Hawk, Martyr, Speaker, Kami, Inspector, Mother, Farm Animals, a sub-30 Serra and a second Innocence do. 'This ability triggers only once each turn' = own_creature_enters_draw_once_each_turn, PER COPY, on Permanent::storied_draw_used_this_turn (reset at our untap in both worlds; folded into every state key): a used copy no longer triggers. 'One or more ... enter' fires per entrant under that cap, which is the same thing. The drawn card is castable in the same main phase (the hand-entry breakpoint). Empty library: the draw skips (the Kili convention, 6a). DIES-RETURN: dies_return_as_noncreature_enchantment -- OnCreatureDies, a NONTOKEN whose dying copy WAS a creature (last-known information: the battlefield copy's type mask) returns from the graveyard through PutCardOntoBattlefield with CardType::Creature REMOVED before it enters (Permanent::enduring_noncreature), so no creature-enter watcher sees it, it cannot attack or block, toughness SBAs do not apply, it keeps its draw trigger, and it can never 'die' again (the intervening if). Reachable only in HUMAN play (an own-target Umezawa's Jitte -1/-1, Curious Farm Animals' destroy); the autonomous search never kills it (passive opponent, self-only sacrifice outlets, the own-target Jitte prune). Swords to Plowshares exiles and Unexpectedly Absent puts into the library -- neither is a death, so neither returns it. Sheep/Glimmer subtypes and the Enchantment type are carried; nothing in this list reads them except the artifact-or-enchantment destroy legality.]",
+   "template": "custom",
+   "parameters": {
+    "own_creature_enters_draw": 1,
+    "creature_enters_max_power": 2,
+    "own_creature_enters_draw_once_each_turn": true,
+    "dies_return_as_noncreature_enchantment": true
+   }
   }
  ]
 }

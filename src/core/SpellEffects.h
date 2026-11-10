@@ -1232,7 +1232,8 @@ inline void FireLandfallTriggers(GameState& state, int controller, int land_numb
 // Bloodghast's graveyard landfall return (FireLandfallTriggers) puts a card through the shared
 // battlefield put, defined far below; the default for `minus_counters` is added at the definition.
 inline int PutCardOntoBattlefield(GameState& state, int controller, const Card& card,
-                                  const std::string& source_name, int minus_counters);
+                                  const std::string& source_name, int minus_counters,
+                                  bool as_noncreature_enchantment = false);
 inline void ApplyBlink(GameState&, int controller, int source_id, int target_id,
                        bool returns_tapped, bool permanents_ok);
 inline void FireLeavesBattlefieldTriggers(GameState&, int controller, const Card& left);
@@ -7337,6 +7338,36 @@ inline void FireCreatureEnterWatchers(GameState& state, int entered_controller, 
             { watcher_draw(w.controller_index, wp.own_creature_enters_draw); }
             if (log) { note(w.controller_index, w.card.m_name.str()); }
         }
+        // Enduring Innocence: "Whenever one or more OTHER creatures you control with power 2 or less
+        // enter, draw a card. This ability triggers only once each turn." A DRAW-ONLY watcher (no
+        // lifegain payload, so the block above never sees it): own lane, the entrant's LIVE power
+        // <= creature_enters_max_power, once each turn PER COPY via storied_draw_used_this_turn (a
+        // used copy no longer triggers). "Other" = the loop's entered_index skip. The watcher need not
+        // be a creature itself: a returned noncreature Innocence keeps the ability. watcher_draw adds
+        // no permanent, so `w` / `n` stay valid. Empty library: the draw skips (the Kili convention).
+        if (wp.own_creature_enters_draw > 0
+            && wp.own_creature_enters_lifegain <= 0 && !wp.own_creature_enters_lifegain_toughness
+            && w.controller_index == entered_controller
+            && (wp.creature_enters_min_power <= 0
+                || entered_power_now() >= wp.creature_enters_min_power)
+            && (wp.creature_enters_max_power < 0
+                || entered_power_now() <= wp.creature_enters_max_power)
+            && enters_subtype_ok(wp)
+            && !(wp.own_creature_enters_draw_once_each_turn && w.storied_draw_used_this_turn))
+        {
+            if (wp.own_creature_enters_draw_once_each_turn)
+            { state.battlefield[static_cast<std::size_t>(i)].storied_draw_used_this_turn = true; }
+            const int who = w.controller_index;
+            const std::string wname = w.card.m_name.str();
+            watcher_draw(who, wp.own_creature_enters_draw);
+            if (log)
+            {
+                EmitPlayEvent(state.turn_number, "ability",
+                              "\xF0\x9F\x93\x96 " + wname + ": draw a card ("
+                              + state.battlefield[static_cast<std::size_t>(entered_index)].card.m_name.str()
+                              + " entered)");
+            }
+        }
         // Youthful Valkyrie: "Whenever another Angel you control enters, put a +1/+1 counter on
         // THIS creature." Same filter family, different payload. Written through
         // state.battlefield[i], not the const ref `w`; AddPlusCounters adds no permanent, so `w`
@@ -9006,7 +9037,7 @@ inline bool LandfallTargetFoldKey(const GameState& state, const Permanent& p, st
         || p.colored_cast_lifegain_used_this_turn || p.storied_draw_used_this_turn
         || p.lifegain_counters_used_this_turn || p.once_per_turn_used
         || p.landfall_resolved_once || p.landfall_resolved_twice
-        || p.AttacksThisTurn() != 0)                                              { return false; }
+        || p.AttacksThisTurn() != 0 || p.enduring_noncreature)                   { return false; }
     if (p.chosen_color != -1 || p.garth_chosen_mask != 0 || p.chosen_keyword_mask != 0
         || p.chosen_subtype_id != 0 || p.linked_exile_number != 0)                { return false; }
     if (!static_cast<const std::string&>(p.copy_printed_name).empty()
@@ -12114,7 +12145,8 @@ inline bool GyEnterCleanerActive(const GameState& state, int controller, int vic
 // Redcap's "damage equal to its power" reads the reduced power). Preserves the per-copy m_number
 // like the tutor-to-battlefield put. Returns the new battlefield index, or -1.
 inline int PutCardOntoBattlefield(GameState& state, int controller, const Card& card,
-                                  const std::string& source_name, int minus_counters = 0)
+                                  const std::string& source_name, int minus_counters = 0,
+                                  bool as_noncreature_enchantment)   // default from the declaration
 {
     const CardDefinition* d = CardDatabase::Instance().LookupCached(card);
     Permanent perm;
@@ -12123,6 +12155,15 @@ inline int PutCardOntoBattlefield(GameState& state, int controller, const Card& 
     perm.controller_index  = controller;
     perm.owner_index       = controller;
     perm.entered_this_turn = true;
+    // Enduring Innocence's return: "It's an enchantment. (It's not a creature.)" The type change is
+    // part of how it ENTERS, so it is applied before the push -- no creature-enter watcher (another
+    // Innocence's draw, Soul Warden) ever sees a creature entering. false for every other caller.
+    if (as_noncreature_enchantment)
+    {
+        perm.card.RemoveType(CardType::Creature);
+        perm.card.AddType(CardType::Enchantment);
+        perm.enduring_noncreature = true;
+    }
     if (minus_counters > 0)
     {
         perm.counters.Add(Counter{Counter::Type::MinusOneMinusOne, minus_counters});
@@ -12133,7 +12174,8 @@ inline int PutCardOntoBattlefield(GameState& state, int controller, const Card& 
     {
         EmitPlayEvent(state.turn_number, "return",
                       "\xE2\x99\xBB\xEF\xB8\x8F " + card.m_name.str()
-                      + " -- returned to the battlefield (" + source_name + ")");
+                      + " -- returned to the battlefield (" + source_name + ")"
+                      + (as_noncreature_enchantment ? " as an enchantment (not a creature)" : ""));
     }
     FireEtbWatchers(state, controller, idx);
     FireOwnEtbTriggers(state, controller, idx, std::string(), kEtbKxHeuristic);
@@ -12555,6 +12597,36 @@ inline void OnCreatureDies(GameState& state, int dead_controller, const Card& de
                     PutCardOntoBattlefield(state, dead_controller, back, "Persist", n);
                     break;
                 }
+            }
+        }
+    }
+    // Enduring Innocence: "When Enduring Innocence dies, IF IT WAS A CREATURE, return it to the
+    // battlefield under its owner's control. It's an enchantment. (It's not a creature.)" The
+    // intervening if reads LAST-KNOWN information -- the dying battlefield copy's type mask, which is
+    // what `dead_card` is -- so the returned noncreature copy dying later (it cannot die: only a
+    // creature dies) or a destroyed enchantment never returns. A token ceases to exist (CR 111.7).
+    // Pull the newest copy of THIS card (m_number first, name as a fallback) out of the graveyard.
+    if (!dead_was_token && dead_card.IsCreature())
+    {
+        const CardDefinition* dd = CardDatabase::Instance().LookupCached(dead_card);
+        if (dd && dd->params.dies_return_as_noncreature_enchantment)
+        {
+            std::vector<Card>& gy = state.players[dead_controller].graveyard;
+            std::size_t hit = gy.size();
+            for (std::size_t g = gy.size(); g-- > 0; )
+            { if (gy[g].m_number == dead_card.m_number) { hit = g; break; } }
+            if (hit == gy.size())
+            {
+                for (std::size_t g = gy.size(); g-- > 0; )
+                { if (gy[g].m_name == dead_card.m_name) { hit = g; break; } }
+            }
+            if (hit < gy.size())
+            {
+                Card back = gy[hit];
+                gy.erase(gy.begin() + static_cast<std::ptrdiff_t>(hit));
+                GraveyardEnterScope from_gy;
+                PutCardOntoBattlefield(state, dead_controller, back, dead_card.m_name.str(), 0,
+                                       /*as_noncreature_enchantment=*/true);
             }
         }
     }
@@ -46977,6 +47049,7 @@ inline std::string RemovalSelfTargetFoldKey(const GameState& s, const Permanent&
         | (p.sac_at_end_step ? 8388608 : 0)
         | (p.landfall_resolved_once ? 16777216 : 0) | (p.landfall_resolved_twice ? 33554432 : 0));   // Scythecat Cub
     if (p.AttacksThisTurn() != 0) { k += "|atk"; add(p.AttacksThisTurn()); }   // Moraug's attack count (gated)
+    if (p.enduring_noncreature) { k += "|encr"; }   // Enduring Innocence's noncreature return (gated)
     add(p.damage); add(p.temp_power_bonus); add(p.temp_tough_bonus); add(p.pending_death_trigger);
     add(p.charge_counters); add(p.verse_counters); add(p.lore_counters); add(p.storage_counters);
     add(p.loyalty); add(p.ice_counters); add(p.age_counters); add(p.spore_counters);

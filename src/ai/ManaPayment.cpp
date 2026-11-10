@@ -399,6 +399,7 @@ static void VerifyPaySnapRestore(const std::vector<Permanent>& now,
         if (a.landfall_resolved_twice != b.landfall_resolved_twice) { fail(i, "landfall_resolved_twice"); }
         if (a.AttacksThisTurn() != b.AttacksThisTurn())             { fail(i, "attacks_this_turn"); }
         if (a.storied_draw_used_this_turn != b.storied_draw_used_this_turn) { fail(i, "storied_draw_used"); }
+        if (a.enduring_noncreature != b.enduring_noncreature) { fail(i, "enduring_noncreature"); }
         if (a.ice_counters != b.ice_counters)         { fail(i, "ice_counters"); }
         if (a.age_counters != b.age_counters)         { fail(i, "age_counters"); }
         if (a.temp_haste != b.temp_haste)             { fail(i, "temp_haste"); }

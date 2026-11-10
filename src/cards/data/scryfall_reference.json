@@ -1418,6 +1418,15 @@
     "toughness": null,
     "type_line": "Enchantment — Aura"
   },
+  "Curious Farm Animals": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{W}",
+    "oracle_text": "When this creature dies, you gain 3 life.\n{2}, Sacrifice this creature: Destroy up to one target artifact or enchantment.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Boar Elk Bird Ox"
+  },
   "Daring Buccaneer": {
     "cmc": 1.0,
     "keywords": [],
@@ -1864,6 +1873,17 @@
     "power": "15",
     "toughness": "15",
     "type_line": "Legendary Creature — Eldrazi"
+  },
+  "Enduring Innocence": {
+    "cmc": 3.0,
+    "keywords": [
+      "Lifelink"
+    ],
+    "mana_cost": "{1}{W}{W}",
+    "oracle_text": "Lifelink\nWhenever one or more other creatures you control with power 2 or less enter, draw a card. This ability triggers only once each turn.\nWhen Enduring Innocence dies, if it was a creature, return it to the battlefield under its owner's control. It's an enchantment. (It's not a creature.)",
+    "power": "2",
+    "toughness": "1",
+    "type_line": "Enchantment Creature — Sheep Glimmer"
   },
   "Enlightened Tutor": {
     "cmc": 1.0,
@@ -3185,6 +3205,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Legendary Snow Artifact"
+  },
+  "Kami of False Hope": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{W}",
+    "oracle_text": "Sacrifice this creature: Prevent all combat damage that would be dealt this turn.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Spirit"
   },
   "Karplusan Forest": {
     "cmc": 0.0,
@@ -5795,6 +5824,17 @@
     "toughness": null,
     "type_line": "Enchantment — Aura"
   },
+  "Squadron Hawk": {
+    "cmc": 2.0,
+    "keywords": [
+      "Flying"
+    ],
+    "mana_cost": "{1}{W}",
+    "oracle_text": "Flying\nWhen this creature enters, you may search your library for up to three cards named Squadron Hawk, reveal them, put them into your hand, then shuffle.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Bird"
+  },
   "Sram, Senior Edificer": {
     "cmc": 2.0,
     "keywords": [],
@@ -6308,6 +6348,17 @@
     "power": "*",
     "toughness": "*",
     "type_line": "Legendary Creature — Elder Fungus"
+  },
+  "Thraben Inspector": {
+    "cmc": 1.0,
+    "keywords": [
+      "Investigate"
+    ],
+    "mana_cost": "{W}",
+    "oracle_text": "When this creature enters, investigate. (Create a Clue token. It's an artifact with \"{2}, Sacrifice this token: Draw a card.\")",
+    "power": "1",
+    "toughness": "2",
+    "type_line": "Creature — Human Soldier"
   },
   "Three Tree City": {
     "cmc": 0.0,

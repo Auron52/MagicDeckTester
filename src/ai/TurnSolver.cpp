@@ -676,7 +676,8 @@ inline uint64_t FungibilityKey(const Permanent& p)
          | (p.once_per_turn_used ? 524288ull : 0ull)                // Stromkirk Condemned once-each-turn activation (1<<19)
          | (p.landfall_resolved_once ? 1048576ull : 0ull)           // Scythecat Cub resolved once this turn (1<<20)
          | (p.landfall_resolved_twice ? 2097152ull : 0ull)          // ... and twice (1<<21)
-         | (static_cast<uint64_t>(p.AttacksThisTurn()) << 22));     // Moraug's per-turn attack count (bits 22-24)
+         | (static_cast<uint64_t>(p.AttacksThisTurn()) << 22)       // Moraug's per-turn attack count (bits 22-24)
+         | (p.enduring_noncreature ? 33554432ull : 0ull));          // Enduring Innocence's noncreature return (1<<25)
     // Fresh-hold exemption (MTG_ETB_TREASURE_SPEND): an exempt fresh Treasure pays this turn, a
     // held one does not, so they are not fungible. Mixed only when set -> every other key unchanged.
     if (p.fresh_hold_exempt) { Mix(h, 0xF4E5F4E5ull); }
@@ -17660,6 +17661,7 @@ static bool PermIsPlainForFoldImpl(const GameState& state, const Permanent& p, i
     why = foldcensus::kLifegainCountersUsed;
     if (p.lifegain_counters_used_this_turn) { return false; }
     if (p.storied_draw_used_this_turn)      { return false; }
+    if (p.enduring_noncreature)             { return false; }   // Enduring Innocence (noncreature return)
     // Stromkirk Condemned: a used copy cannot pump again this turn, an unused one can (Vampires A2).
     if (p.once_per_turn_used)               { return false; }
     // Scythecat Cub: its next landfall puts a counter, doubles, or puts again by how often it resolved.
@@ -61319,6 +61321,7 @@ static bool HumanTwinPermanents(const GameState* state, int x, int y)
         && a.loyalty_activated_this_turn == b.loyalty_activated_this_turn
         && a.colored_cast_lifegain_used_this_turn == b.colored_cast_lifegain_used_this_turn
         && a.storied_draw_used_this_turn == b.storied_draw_used_this_turn
+        && a.enduring_noncreature == b.enduring_noncreature
         && a.once_per_turn_used == b.once_per_turn_used && a.cond_haste == b.cond_haste
         && a.landfall_resolved_once == b.landfall_resolved_once
         && a.landfall_resolved_twice == b.landfall_resolved_twice
@@ -90721,6 +90724,7 @@ static void FoldPhysicalCards(TranspositionTable::Key& k, const GameState& state
             | (static_cast<std::uint64_t>(pm.attacks_b2) << 34) | (static_cast<std::uint64_t>(pm.cond_haste) << 35)
             | (static_cast<std::uint64_t>(pm.sac_at_end_step) << 36)
             | (static_cast<std::uint64_t>(pm.lifegain_counters_used_this_turn) << 37)
+            | (static_cast<std::uint64_t>(pm.enduring_noncreature) << 38)
             | (static_cast<std::uint64_t>(pm.mana_tap_mark) << 40));
         mix(static_cast<std::uint64_t>(static_cast<std::uint8_t>(pm.chosen_color)) | (static_cast<std::uint64_t>(pm.garth_chosen_mask) << 8)
             | (static_cast<std::uint64_t>(pm.chosen_keyword_mask) << 16) | (static_cast<std::uint64_t>(pm.chosen_subtype_id) << 24));
@@ -92744,6 +92748,7 @@ static TranspositionTable::Key BuildSimKeyBase(const GameState& state, int max_t
         // Folded ONLY when SET, so every other deck keeps the EXACT prior key (no GT moves).
         if (perm.lifegain_counters_used_this_turn) { Fold(tk, 0x9A8A6); }
         if (perm.storied_draw_used_this_turn)      { Fold(tk, 0x57091); }
+        if (perm.enduring_noncreature)             { Fold(tk, 0xE1DC0); }   // Enduring Innocence returned as an enchantment
         if (perm.once_per_turn_used)               { Fold(tk, 0x0CE7A); }   // Stromkirk Condemned (Vampires A2)
         if (perm.landfall_resolved_once)           { Fold(tk, 0x5C7C1); }   // Scythecat Cub (resolved once)
         if (perm.landfall_resolved_twice)          { Fold(tk, 0x5C7C2); }   // ... and twice

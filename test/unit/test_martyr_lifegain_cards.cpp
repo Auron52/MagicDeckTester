@@ -263,3 +263,115 @@ TEST_CASE("Kami of False Hope: the self-only gate opens only with a death payoff
     CHECK(SelfSacOutletUseful(s, 0, 50));
 }
 
+
+// ---- Enduring Innocence --------------------------------------------------------------------------
+
+namespace
+{
+GameState InnoState()
+{
+    GameState s = MlState();
+    for (int k = 0; k < 10; ++k) { s.players[0].library.push_back(MlZone("Plains", 200 + k)); }
+    return s;
+}
+// A creature ENTERS (both enter cascades, as every real entry route runs them).
+void Enter(GameState& s, const char* name, int number, int controller = 0)
+{
+    const int idx = MlAdd(s, name, number, controller, /*sick=*/true);
+    FireEtbWatchers(s, controller, idx);
+    FireOwnEtbTriggers(s, controller, idx, std::string(), -1);
+}
+}   // namespace
+
+TEST_CASE("Enduring Innocence: draws once each turn, for another small creature of ours")
+{
+    GameState s = InnoState();
+    MlAdd(s, "Enduring Innocence", 60);
+    Enter(s, "Mother of Runes", 61);
+    CHECK(s.players[0].hand.size() == 1);
+    Enter(s, "Kami of False Hope", 62);
+    CHECK(s.players[0].hand.size() == 1);   // once each turn
+    Enter(s, "Kami of False Hope", 63, /*controller=*/1);
+    CHECK(s.players[0].hand.size() == 1);   // not ours
+}
+
+TEST_CASE("Enduring Innocence: the power filter reads the entrant's LIVE power")
+{
+    {   // Ranger of Eos (3/2) does not trigger it.
+        GameState s = InnoState();
+        MlAdd(s, "Enduring Innocence", 60);
+        Enter(s, "Ranger of Eos", 64);
+        int drawn = 0;
+        for (const Card& c : s.players[0].hand) { if (c.m_name.str() == "Plains") { ++drawn; } }
+        CHECK(drawn == 0);
+    }
+    {   // Serra Ascendant at 30 life is a 6/6: no draw. Below 30 she is a 1/1: draw.
+        GameState s = InnoState();
+        s.players[0].life = 30;
+        MlAdd(s, "Enduring Innocence", 60);
+        Enter(s, "Serra Ascendant", 65);
+        CHECK(s.players[0].hand.empty());
+        GameState t = InnoState();
+        t.players[0].life = 20;
+        MlAdd(t, "Enduring Innocence", 60);
+        Enter(t, "Serra Ascendant", 65);
+        CHECK(t.players[0].hand.size() == 1);
+    }
+    {   // A second Innocence (2/1) entering: the first draws; the newcomer is not "other" to itself.
+        GameState s = InnoState();
+        MlAdd(s, "Enduring Innocence", 60);
+        Enter(s, "Enduring Innocence", 66);
+        CHECK(s.players[0].hand.size() == 1);
+    }
+}
+
+TEST_CASE("Enduring Innocence: two copies each draw once; a graveyard return counts as an entry")
+{
+    GameState s = InnoState();
+    MlAdd(s, "Enduring Innocence", 60);
+    MlAdd(s, "Enduring Innocence", 67);
+    PutCardOntoBattlefield(s, 0, MlZone("Kami of False Hope", 68), "Abiding Grace", 0);
+    CHECK(s.players[0].hand.size() == 2);
+    Enter(s, "Mother of Runes", 61);
+    CHECK(s.players[0].hand.size() == 2);
+}
+
+TEST_CASE("Enduring Innocence: dies as a creature -> returns as a noncreature enchantment, once")
+{
+    GameState s = InnoState();
+    MlAdd(s, "Enduring Innocence", 70);   // the watcher that must NOT draw for the return
+    const Card dying = MlDef("Enduring Innocence").card;
+    Card dead = dying;
+    dead.m_number = 71;
+    s.players[0].graveyard.push_back(dead);   // the death site puts it there first
+    OnCreatureDies(s, 0, dead, /*was_token=*/false, 0, nullptr, 0);
+    const Permanent* back = nullptr;
+    for (const Permanent& p : s.battlefield) { if (p.card.m_number == 71) { back = &p; } }
+    REQUIRE(back != nullptr);
+    CHECK(!back->card.IsCreature());
+    CHECK(back->card.IsEnchantment());
+    CHECK(back->enduring_noncreature);
+    CHECK(s.players[0].graveyard.empty());
+    CHECK(s.players[0].hand.empty());   // not a creature entering: Innocence #70 does not draw
+
+    // The returned enchantment keeps its draw trigger.
+    Enter(s, "Kami of False Hope", 72);
+    CHECK(s.players[0].hand.size() == 2);   // #70 and the returned #71 each trigger once
+
+    // Leaving again as a NONcreature does not return it (the intervening if).
+    GameState t = InnoState();
+    Card enc = dying;
+    enc.m_number = 73;
+    enc.RemoveType(CardType::Creature);
+    t.players[0].graveyard.push_back(enc);
+    OnCreatureDies(t, 0, enc, false, 0, nullptr, 0);
+    CHECK(MlCount(t, "Enduring Innocence") == 0);
+    CHECK(t.players[0].graveyard.size() == 1);
+
+    // A token copy ceases to exist.
+    GameState u = InnoState();
+    Card tok = dying;
+    tok.m_number = 1500;
+    OnCreatureDies(u, 0, tok, /*was_token=*/true, 0, nullptr, 0);
+    CHECK(MlCount(u, "Enduring Innocence") == 0);
+}

@@ -1795,6 +1795,11 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.creature_enters_min_power     = params.value("creature_enters_min_power", 0);
     p.own_creature_enters_draw      = params.value("own_creature_enters_draw", 0);
     p.creature_enters_includes_self = params.value("creature_enters_includes_self", false);
+    p.creature_enters_max_power     = params.value("creature_enters_max_power", -1);
+    p.own_creature_enters_draw_once_each_turn =
+        params.value("own_creature_enters_draw_once_each_turn", false);
+    p.dies_return_as_noncreature_enchantment =
+        params.value("dies_return_as_noncreature_enchantment", false);
     p.enters_look_top_land_or_hand  = params.value("enters_look_top_land_or_hand", false);
     for (const std::string& s : params.value("enters_watch_subtypes", json::array()))
         p.enters_watch_subtypes.push_back(s);

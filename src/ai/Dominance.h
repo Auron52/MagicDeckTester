@@ -1447,6 +1447,7 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
         // a gain still to come this turn, so no direction survives on its own.
         if (p.lifegain_counters_used_this_turn) { mfold(0x9A8A6ull); }
         if (p.storied_draw_used_this_turn)      { mfold(0x57091ull); }
+        if (p.enduring_noncreature)             { mfold(0xE1DC0ull); }   // Enduring Innocence (noncreature return)
         // Stromkirk Condemned's "activate only once each turn" (Vampires A2): exact-match, gated on SET.
         if (p.once_per_turn_used)               { mfold(0x0CE7Aull); }
         // Scythecat Cub's "second time this turn" bits: exact-match, gated on SET (the same shape).

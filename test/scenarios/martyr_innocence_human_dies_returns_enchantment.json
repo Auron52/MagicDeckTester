@@ -1,0 +1,45 @@
+{
+  "deck": "decks/Martyr Lifegain/Martyr Lifegain.cod",
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "turn": 5,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 50,
+  "max_turns": 5,
+  "lands_played_this_turn": 1,
+  "_comment": "Martyr Lifegain (2026-11-10), Enduring Innocence's dies-return, reached the way a human can: Curious Farm Animals' sacrifice destroys our own (creature) Innocence through the '(may destroy)' dig. Innocence dies as a creature, so it returns to the battlefield as a NONcreature enchantment (the history line), not in the graveyard; the Farm's dies trigger gains 3. Innocence was summoning sick, so nothing attacks and no lifelink moves life.",
+  "battlefield": [
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Curious Farm Animals",
+      "sick": true
+    },
+    {
+      "name": "Enduring Innocence",
+      "sick": true
+    }
+  ],
+  "hand": [],
+  "human_lines": [
+    "sacout=Curious Farm Animals"
+  ],
+  "human_dig_picks": [
+    "Enduring Innocence"
+  ],
+  "expect_no_win": true,
+  "expect_active_life": 23,
+  "expect_history_contains": [
+    "as an enchantment (not a creature)"
+  ]
+}
