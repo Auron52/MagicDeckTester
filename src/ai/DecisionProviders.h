@@ -2339,6 +2339,8 @@ public:
     bool PostCreatureTutorBreakpoint(const GameState& s, const CardDefinition& d) const override;
     int CastOrderRank(const GameState& s, const CardDefinition& def) const override;
     int CastOrderActionRank(const GameState& s, const Action& a, int base_rank) const override;
+    void ArrangeCastOrder(const GameState& s, const std::vector<Action>& actions,
+                          std::vector<int>& order) const override;
     int ActivationOrderRankForAction(const GameState& s, const CardDefinition& d,
                                      const Action& a) const override;
     bool ToothAndNailCandidateOk(const GameState& s, int controller, int mode,

@@ -1,8 +1,10 @@
 #include <doctest/doctest.h>
+#include <algorithm>
 #include <set>
 
 #include "ai/Combat.h"
 #include "ai/DecisionProviders.h"
+#include "ai/ManaPayment.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
 #include "core/GameState.h"
@@ -166,6 +168,49 @@ TEST_CASE("Jumbo Cactuar has a unique cast rank for every mainboard card")
     CHECK(rank("Lightning Greaves") < rank("Arbor Elf"));
     CHECK(rank("Voyaging Satyr") < rank("Chariot of Victory"));
     CHECK(rank("Surrak and Goreclaw") < rank("Jumbo Cactuar"));
+}
+
+TEST_CASE("Jumbo Cactuar moves Overgrowth before Sprawl when only that order funds the payoffs")
+{
+    LoadJumboCards();
+    JumboCactuarProvider provider;
+    GameState s;
+    s.active_player_index = 0;
+    s.turn_number = 4;
+    s.deck_has_land_aura = true;
+    s.m_provider = &provider;
+    PutOnBoard(s, "Forest", 10);
+    PutOnBoard(s, "Utopia Sprawl", 49);
+    s.battlefield.back().aura_attached_to = 10;
+    s.battlefield.back().chosen_color = static_cast<int8_t>(Color::Green);
+    PutOnBoard(s, "Voyaging Satyr", 53);
+    PutOnBoard(s, "Wild Growth", 57);
+    s.battlefield.back().aura_attached_to = 10;
+    PutOnBoard(s, "Voyaging Satyr", 54);
+
+    auto cast = [&](const char* name, int number, int host = 0)
+    {
+        s.players[0].hand.push_back(CopyOf(name, number));
+        const CardDefinition* d = CardDatabase::Instance().Lookup(name);
+        Action a;
+        a.card_name = name;
+        a.def = d;
+        a.cost = d->card.m_mana_cost;
+        a.enchant_target = host;
+        a.is_noncreature = !d->card.IsCreature();
+        return a;
+    };
+    const std::vector<Action> acts{
+        cast("Tooth and Nail", 60), cast("Overgrowth", 39, 10),
+        cast("Finale of Devastation", 61), cast("Overgrowth", 40, 10),
+        cast("Utopia Sprawl", 50, 10)};
+    std::vector<int> order{0, 1, 2, 3, 4};
+    std::stable_sort(order.begin(), order.end(), [&](int x, int y)
+    { return CastOrderLess(s, acts[x], acts[y]); });
+    CHECK_FALSE(TurnSolver::OrderPaysSequentially(s, acts, order));
+    ApplyDeckCastArrangement(s, acts, order);
+    CHECK(order == std::vector<int>{1, 3, 4, 0, 2});
+    CHECK(TurnSolver::OrderPaysSequentially(s, acts, order));
 }
 
 TEST_CASE("Finale graveyard-only whiff preserves library order and still pumps at X ten")

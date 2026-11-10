@@ -24092,6 +24092,43 @@ int JumboCactuarProvider::CastOrderActionRank(const GameState&,
     return base_rank;
 }
 
+void JumboCactuarProvider::ArrangeCastOrder(const GameState& s,
+                                             const std::vector<Action>& acts,
+                                             std::vector<int>& order) const
+{
+    // The one-mana Aura normally precedes Overgrowth because it can pay for
+    // Overgrowth. On an already stacked Forest with untappers, the reverse can
+    // instead preserve a tap of that Forest for the expensive spells. Move only
+    // same-host copies, and only after the exact sequential walk proves that
+    // the ranked order fails while the alternative pays every cast.
+    std::vector<int> slots, moved;
+    int host = 0;
+    for (int p = 0; p < static_cast<int>(order.size()); ++p)
+    {
+        const Action& a = acts[static_cast<std::size_t>(order[p])];
+        const std::string& name = a.card_name.str();
+        if (name != "Overgrowth" && name != "Utopia Sprawl") { continue; }
+        if (a.kind != Action::Kind::CastFromHand || a.enchant_target <= 0) { return; }
+        if (host != 0 && host != a.enchant_target) { return; }
+        host = a.enchant_target;
+        slots.push_back(p);
+        moved.push_back(order[p]);
+    }
+    if (slots.size() < 2) { return; }
+    const bool has_overgrowth = std::any_of(moved.begin(), moved.end(), [&](int i)
+    { return acts[static_cast<std::size_t>(i)].card_name.str() == "Overgrowth"; });
+    const bool has_sprawl = std::any_of(moved.begin(), moved.end(), [&](int i)
+    { return acts[static_cast<std::size_t>(i)].card_name.str() == "Utopia Sprawl"; });
+    if (!has_overgrowth || !has_sprawl) { return; }
+    std::stable_partition(moved.begin(), moved.end(), [&](int i)
+    { return acts[static_cast<std::size_t>(i)].card_name.str() == "Overgrowth"; });
+    std::vector<int> trial = order;
+    for (std::size_t k = 0; k < slots.size(); ++k) { trial[static_cast<std::size_t>(slots[k])] = moved[k]; }
+    if (trial == order || TurnSolver::OrderPaysSequentially(s, acts, order)
+        || !TurnSolver::OrderPaysSequentially(s, acts, trial)) { return; }
+    order.swap(trial);
+}
+
 int JumboCactuarProvider::ActivationOrderRankForAction(
     const GameState& s, const CardDefinition& d, const Action& a) const
 {
