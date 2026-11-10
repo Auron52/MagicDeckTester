@@ -57,3 +57,13 @@ same-turn play changes. The depth-zero rows were byte-identical. Strict viewer
 replay: 787 references, zero play drift, board divergence, enumeration gaps, or
 contract failures. Smoke and regression ground truth were accepted for
 `extraturns` and `extraturns2hg`; no engine source changed.
+
+After rebasing onto the remote mana changes, Release smoke and regression
+reproduced those accepted Extra Turns digests exactly. The full strict viewer
+replay passed all 787 references with zero drift or gaps. The regenerated
+overnight slice improved 241 searched games and slowed 2 against the previous
+per-game logs; depth-zero outcomes were identical. Both slower games retained
+the same hand and draw sequence but chose a different play line. Across the
+four 300-game depth-5 Extra Turns seeds, the mean fell from 4.9458 to 4.7450
+scored turns; the 50-game 2HG seed fell from 5.1000 to 4.8800. The smoke,
+regression, and overnight aggregates were accepted on the rebased binary.

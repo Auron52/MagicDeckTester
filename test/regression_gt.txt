@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 4bded6426  date 2026-11-08
+# Regression ground truth -- commit 3baf22ffd  date 2026-11-10
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-07): Periodic baseline after adopted Cyclone, Kithkin, Shadowborn and Jumbo artifacts plus c-wild mana legality: 94/578 cells moved; searched 2375 faster versus 1189 slower; Cyclone -491t, Kithkin -882t, Shadowborn -72t, Jumbo -11t. Hinata +24t/1831 searched and Niv +3t/2225 reflect the colorless-mana legality correction reviewed in shorter tiers; EDF d0 +4t/8000. Prior Angels +0.0064t/6065 searched, Angels2HG +0.0150t/600, and Bruna +0.0122t/2131 remain follow-ups. Per-game outcome audit completed; old trace snapshot was stale and could not parse Madness, so its trace explanations were unavailable.
 # accepted-with-regressions (overnight, 2026-11-08): Modern RW Burn exhaustive keep adoption: all changed games attributed to mulligan or bottom; all overnight cells improve
@@ -6,6 +6,10 @@
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
 # --- smoke ---
+extraturns_smoke_d0_s1001=5.7220/bc297edba5f8ee3b
+extraturns_smoke_d3_s1001=4.7400/16e2ab8703085f19
+extraturns_smoke_d5_s1001=4.7300/169b23da2a1c7623
+extraturns2hg_smoke_d5_s1001=4.5600/a39e86bef261345a
 merfolk_smoke_d0_s1001=4.4960/e9b4322db7865929
 merfolk_smoke_d3_s1001=4.1800/e2d4ed3a62295b80
 merfolk_smoke_d5_s1001=4.1700/f2c8e9e392a196b1
@@ -187,6 +191,11 @@ elementals_smoke_d3_s1001=4.4600/15877bad8bb35b68
 elementals_smoke_d5_s1001=4.3360/0de4bca09ab94ef0
 
 # --- regression ---
+extraturns_regression_d0_s2002=5.6470/4e347ea1b059f9f6
+extraturns_regression_d3_s2002=4.8000/b2cd8360d339ec94
+extraturns_regression_d5_s2002=4.6533/0135b40bebae8fa1
+extraturns_regression_d5_s3003=4.6667/a406093aaccee0fe
+extraturns2hg_regression_d5_s2002=4.6000/fbc6aa5ce195c739
 cyclone_regression_d3_s30031=4.5000/9cae75a150715362
 cyclone_regression_d5_s30031=4.5000/0a4d7a7f24601daa
 shadowborn_regression_d3_s30073=4.6667/38367d12753e710e
@@ -475,6 +484,16 @@ merfolk_regression_d5_s2002=4.1800/6824241f83b7d727
 merfolk_regression_d5_s3003=4.1267/57d9c44cc412b9db
 
 # --- overnight ---
+extraturns_overnight_d0_s4004=5.6865/e5ead4c0f9dfb829
+extraturns_overnight_d0_s6006=5.6710/f28823f0c722ddbc
+extraturns_overnight_d0_s8008=5.6980/80d1ce5e8d9d9bf8
+extraturns_overnight_d0_s10010=5.7100/86da89aa7b9d022d
+extraturns_overnight_d3_s4004=4.8240/55e77892bb1c34bb
+extraturns_overnight_d5_s4004=4.7767/cf7d38bf58e5b0af
+extraturns_overnight_d5_s5005=4.7300/1073c7160bd8bdf1
+extraturns_overnight_d5_s6006=4.7233/ffeed9036b5d55af
+extraturns_overnight_d5_s7007=4.7500/9f150240f6c51bdf
+extraturns2hg_overnight_d5_s4004=4.8800/201b154da9b73df1
 cyclone_overnight_d3_s30051=5.0000/324fa7c36f5a9360
 cyclone_overnight_d5_s30051=5.0000/a3910a0eddbff923
 shadowborn_overnight_d3_s30081=5.0000/dc1cd7b8bfb17312
