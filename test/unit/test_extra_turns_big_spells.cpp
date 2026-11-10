@@ -7,6 +7,7 @@
 #include "core/SpellEffects.h"
 #include "ai/TurnSolver.h"
 #include "ai/DecisionProviders.h"
+#include "ai/ManaOracle.h"
 #include <algorithm>
 
 namespace {
@@ -307,15 +308,25 @@ TEST_CASE("Horn drawn by the land cannot validate as a pre-land cast")
 
     const auto plans = TurnSolver::EnumerateMainPlans(s, true);
     bool land_first_horn = false;
+    TurnSolver::Plan positioned_horn;
     for (const auto& plan : plans)
     {
-        if (plan.land_to_play != "Snow-Covered Island" || plan.land_slot != 0
+        if (plan.land_to_play != "Snow-Covered Island"
             || plan.actions.size() != 1) { continue; }
         const Action& a = plan.actions.front();
         if (a.kind == Action::Kind::CastFromHand && a.card_name == "Horn of Greed")
-        { land_first_horn = true; break; }
+        {
+            CHECK(plan.land_slot == 0); // no impossible cast-before-land menu entry
+            if (plan.land_slot == 0) { land_first_horn = true; positioned_horn = plan; }
+        }
     }
     REQUIRE(land_first_horn); // the fallback has a tempting land-first match
+    positioned_horn.land_slot = 1; // audit a stale/externally supplied impossible proposal
+    const auto audit = manaoracle::AuditLine(s, true, positioned_horn,
+                                             nullptr, 400, /*deep=*/false);
+    REQUIRE(audit.audited);
+    CHECK_FALSE(audit.engine_full);
+    CHECK(audit.dropped.find("Horn of Greed") != std::string::npos);
     TurnSolver::LineSpec after;
     after.has_land = true;
     after.land = "Snow-Covered Island";

@@ -1751,7 +1751,7 @@ attempted sweep.
 
 - commit: `17a1dd055`
 - seeds: 62008, 63003, 64001, 64002; games: 4
-- flags: 1 unresolved
+- flags: 0 unresolved
 
 Claude itself played all four games on the same corrected Release binary. Its win
 rounds versus the depth-5, 20-ms AI were 5/5, 5/6, 4/4, and 4/4 respectively.
@@ -1774,17 +1774,38 @@ replay has no floating mana at decisions 25 and 28. Both focused tests pass,
 including a subsequent Time Warp cast with the 6/6 land remaining untapped.
 The full unit suite passed 2,664 cases and 3,578,487 assertions.
 
-**Unresolved viewer validation flag:** seed 62008, decision 13, hand contains
-one Horn of Greed and the next Horn is drawn only by the proposed Island play.
+**Viewer validation flag resolved:** seed 62008, decision 13, the hand contains
+no Horn of Greed; the next Horn is drawn only by the proposed Island play.
 `--validate-line 'cast=Horn of Greed;landafter=Snow-Covered Island'` returns
 `accept`, plan 7, whose summary and structured plan play the Island first.
-The `landat=all` spelling does the same. The proposed land-after plan 8 is
+The `landat=all` spelling does the same; `landat=1` accepted plan 8 directly.
+The proposed land-after plan 8 is
 not payable as declared: direct replay plays the Island, draws Horn, and drops
 the attempted pre-land Horn cast. `CheckLine`'s positioned-line fallback
-intentionally matches a legal non-enumerated line to a land-first plan, but
-this case should not be accepted as the requested cast-before-land sequence.
-No illegal state transition was observed; the validator can misreport this
-human line. The Claude-play gate remains blocked until this flag is resolved.
+intentionally matches a legal non-enumerated line to a land-first plan. Its
+single-hand-cast guard now rejects this match when the cast card is absent
+from the pre-land hand and the matched plan has no earlier action that could
+draw it. `landafter=`, `landat=all`, and `landat=1` now return `illegal` with
+failed action `cast=Horn of Greed`, while the legal land-first and `landat=0`
+lines still return `accept` for plan 7. A focused unit test also accepts the land-after line
+when Horn is already in hand. No illegal state transition was observed.
+
+**Engine plan and audit flag resolved:** the old menu offered plan 8 as
+`land=Snow-Covered Island (after Horn of Greed); cast: Horn of Greed`, with one
+`CastFromHand` action. Before the decision, one Horn is on the battlefield,
+none is in hand, and the library's top card is Horn. Selecting plan 8 from
+that state plays the Island and draws the Horn, then reaches decision 14 with
+one Horn on the battlefield and one in hand: the declared pre-land cast did
+not execute. Selecting land-first plan 7 instead reaches decision 14 with two
+Horns on the battlefield and none in hand. Yet the old `--validate-line`
+audit marked plan 8 `engine_full: true`, whose documented meaning is that every
+action executed. The follow-up fix removes single-cast pre-land proposals when
+the card is absent from the starting hand and reports missing-hand casts to
+the dropped-cast sink. On the rebuilt binary, seed 62008 decision 13 still
+offers the legal land-first Horn plan at index 7, and no Horn-before-land plan;
+the focused test verifies a stale positioned Horn plan has
+`engine_full: false` with Horn in `dropped`. No illegal state transition was
+observed.
 
 The old-source 5,000-game mana-clean arm was stopped after 30 completed
 on-arm jobs and about 155,000 capped-decision lines. Its exit 143 and logs

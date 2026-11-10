@@ -63804,7 +63804,19 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 it = c;                                             // earlier-expiring staged copy wins
             }
         }
-        if (it == zone.end()) { return; }
+        if (it == zone.end())
+        {
+            // A positioned human plan can name a cast that only becomes available
+            // after its declared slot. Keep the apply silent in search, but tell
+            // the viewer/audit that this declared cast did not execute.
+            if (sink_stack.empty() && g_play_dropped_cast_sink)
+            {
+                PlayReportDrop(name, PlayDropReasonWanted()
+                    ? name + (from_graveyard ? " is not in the graveyard" : " is not in hand")
+                    : std::string());
+            }
+            return;
+        }
         // STABLE HANDLE on the chosen copy, because `it` DOES NOT SURVIVE THIS CAST'S PAYMENT.
         // A payment can now mutate this very zone: §2b eats a sac-outlet's fodder, and that death
         // fires its triggers -- Rundvelt Hordemaster's dies-impulse-exile pushes a card into the
@@ -109749,6 +109761,18 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlans(const GameState& st
     if (HumanPlayActive())
     {
         const auto& hand = state.players[state.active_player_index].hand;
+        // A single cast placed before the land cannot use a card drawn by that
+        // land. The optimistic land-first twin remains available, but its
+        // pre-land-positioned variant would silently skip the declared cast.
+        plans.erase(std::remove_if(plans.begin(), plans.end(), [&](const Plan& plan) {
+            if (plan.land_to_play.empty() || plan.land_slot == 0
+                || plan.actions.size() != 1) { return false; }
+            const Action& action = plan.actions.front();
+            if (action.kind != Action::Kind::CastFromHand) { return false; }
+            return std::none_of(hand.begin(), hand.end(), [&](const Card& card) {
+                return card.m_name == action.card_name;
+            });
+        }), plans.end());
         plans.erase(std::remove_if(plans.begin(), plans.end(), [&](const Plan& plan) {
             if (!plan.searched_order) { return false; }
             std::vector<int> pending;
