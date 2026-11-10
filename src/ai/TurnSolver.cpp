@@ -64143,12 +64143,16 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // T2: "I tried to put Wild Growth on the Conservatory and it changed it to the Yavimaya
             // Coast"). Retried UNRESERVED on failure, so a board whose only payer IS the host still
             // casts the Aura exactly as before (a failed TapForCostDirect restores atomically).
+            // An awaken cast similarly prefers to pay from other lands: tapping its chosen
+            // land needlessly forfeits that land's haste attack. Retry without the hold if
+            // the chosen land is actually needed for the spell's cost.
             int reserved_host = -1;
             // (Not on the MANA ORACLE's copy: the hold is a heuristic, and the oracle tries every payment,
             // the host's included -- see ManaOracle.h. An oracle ENGINE step makes it, as an unhooked
             // apply does: the held attempt and its retry are ONE step, so the span owns both.)
             manaoracle::EngineStepSpan _esp(state, oracle_owns);
-            if (def.params.is_land_aura && def.params.land_aura_extra_mana > 0
+            if (((def.params.is_land_aura && def.params.land_aura_extra_mana > 0)
+                  || riders.awaken)
                 && enchant_target > 0 && (!oracle_owns || _esp.h != nullptr))
             {
                 for (Permanent& lp : state.battlefield)
@@ -71216,6 +71220,14 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     // Must stay on THIS side of the draw: a chapter that reads the hand (chapter I's free cast)
     // would otherwise see a different hand in the two worlds.
     AdvanceSagas(state);
+    // Match GameEngine::DrawStep: a miracle's over-produced mana expires when
+    // the draw step ends, before the pre-combat main can spend it (CR 500.4).
+    if (FloatLeftoverManaEnabled())
+    {
+        state.floating_mana = ManaPool{}; state.floating_creature_mana = ManaPool{};
+        state.floating_bigspell_mana = ManaPool{}; state.floating_bigspell_pp = nullptr;
+        state.floating_haste_c = 0;
+    }
     // Next simulated turn opens on its pre-combat main (partner of the PostCombatMain write at the
     // end of SimulateCombat; see the note there). Write-only for every other deck.
     state.phase = Phase::PreCombatMain;

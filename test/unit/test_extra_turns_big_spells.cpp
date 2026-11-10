@@ -61,6 +61,29 @@ TEST_CASE("Temporal Mastery miracle offers exact first draw and exiles after pai
     CHECK(s.battlefield[1].tapped);
 }
 
+TEST_CASE("Draw-step miracle surplus does not enter main-phase mana pool")
+{
+    EnsureCards();
+    GameState s;
+    s.deck_has_miracle = true;
+    s.turn_number = 3;
+    Land(s, 1);
+    for (int i = 0; i < 2; ++i)
+    {
+        Permanent lens;
+        lens.card = Copy("Extraplanar Lens", 10 + i);
+        lens.controller_index = 0;
+        lens.owner_index = 0;
+        lens.lens_imprinted_land = Def("Snow-Covered Island").card.m_name;
+        s.battlefield.push_back(lens);
+    }
+    s.players[0].library.push_back(Copy("Temporal Mastery", 77));
+    s.scripted_miracle_choice = 1;
+    REQUIRE(TurnSolver::SimulateEndAndStartNextTurnForTest(s));
+    CHECK(s.pending_extra_turns == 1);
+    CHECK(s.floating_mana.Total() == 0);
+}
+
 TEST_CASE("Temporal Mastery miracle decline leaves card in hand and consumes offer")
 {
     EnsureCards();
@@ -216,6 +239,54 @@ TEST_CASE("Expropriate viewer separates the vote from the permanent taken")
     CHECK(std::none_of(match.variants.begin(), match.variants.end(), [](const auto& v)
                        { return std::any_of(v.subs.begin(), v.subs.end(), [](const auto& sub)
                                  { return sub.kind == "x" || sub.kind == "enchant"; }); }));
+}
+
+TEST_CASE("Awaken payment preserves its untapped haste land when other lands suffice")
+{
+    EnsureCards();
+    GameState s;
+    static const ExtraTurnsProvider extra_turns;
+    s.m_provider = &extra_turns;
+    s.turn_number = 5;
+    for (int i = 1; i <= 10; ++i) { Land(s, i); }
+    s.players[0].hand.push_back(Copy("Part the Waterveil", 77));
+    const auto plans = TurnSolver::EnumerateMainPlans(s, true);
+    bool found = false;
+    for (const auto& plan : plans)
+    {
+        if (plan.actions.size() != 1) { continue; }
+        const auto& cast = plan.actions.front();
+        if (cast.kind != Action::Kind::CastFromHand || !cast.awaken
+            || cast.enchant_target != 1) { continue; }
+        GameState played = s;
+        TurnSolver::ApplyPlan(played, plan, true);
+        REQUIRE(played.players[0].hand.empty());
+        const Permanent& target = played.battlefield.front();
+        CHECK_FALSE(target.tapped);
+        CHECK(target.card.IsCreature());
+        CHECK(target.card.HasKeyword(Keyword::Haste));
+        CHECK(target.EffectivePower() == 6);
+        // On a later turn, ordinary spells must also spare the now-animated land
+        // while the other Islands can cover their cost.
+        for (Permanent& permanent : played.battlefield) { permanent.tapped = false; }
+        played.players[0].hand.push_back(Copy("Time Warp", 78));
+        const auto followups = TurnSolver::EnumerateMainPlans(played, true);
+        bool cast_followup = false;
+        for (const auto& followup : followups)
+        {
+            if (followup.actions.size() != 1
+                || followup.actions.front().kind != Action::Kind::CastFromHand) { continue; }
+            GameState next = played;
+            TurnSolver::ApplyPlan(next, followup, true);
+            CHECK_FALSE(next.battlefield.front().tapped);
+            cast_followup = true;
+            break;
+        }
+        CHECK(cast_followup);
+        found = true;
+        break;
+    }
+    CHECK(found);
 }
 
 TEST_CASE("Extra Turns viewer accepts Lens into Ulamog and two turn spells")
