@@ -7,6 +7,7 @@
 #include "core/SpellEffects.h"
 #include "ai/TurnSolver.h"
 #include "ai/DecisionProviders.h"
+#include "ai/ManaOracle.h"
 #include <algorithm>
 
 namespace {
@@ -59,6 +60,29 @@ TEST_CASE("Temporal Mastery miracle offers exact first draw and exiles after pai
     CHECK(s.exile[0].m_number == 77);
     CHECK(s.battlefield[0].tapped);
     CHECK(s.battlefield[1].tapped);
+}
+
+TEST_CASE("Draw-step miracle surplus does not enter main-phase mana pool")
+{
+    EnsureCards();
+    GameState s;
+    s.deck_has_miracle = true;
+    s.turn_number = 3;
+    Land(s, 1);
+    for (int i = 0; i < 2; ++i)
+    {
+        Permanent lens;
+        lens.card = Copy("Extraplanar Lens", 10 + i);
+        lens.controller_index = 0;
+        lens.owner_index = 0;
+        lens.lens_imprinted_land = Def("Snow-Covered Island").card.m_name;
+        s.battlefield.push_back(lens);
+    }
+    s.players[0].library.push_back(Copy("Temporal Mastery", 77));
+    s.scripted_miracle_choice = 1;
+    REQUIRE(TurnSolver::SimulateEndAndStartNextTurnForTest(s));
+    CHECK(s.pending_extra_turns == 1);
+    CHECK(s.floating_mana.Total() == 0);
 }
 
 TEST_CASE("Temporal Mastery miracle decline leaves card in hand and consumes offer")
@@ -216,6 +240,121 @@ TEST_CASE("Expropriate viewer separates the vote from the permanent taken")
     CHECK(std::none_of(match.variants.begin(), match.variants.end(), [](const auto& v)
                        { return std::any_of(v.subs.begin(), v.subs.end(), [](const auto& sub)
                                  { return sub.kind == "x" || sub.kind == "enchant"; }); }));
+}
+
+TEST_CASE("Awaken payment preserves its untapped haste land when other lands suffice")
+{
+    EnsureCards();
+    GameState s;
+    static const ExtraTurnsProvider extra_turns;
+    s.m_provider = &extra_turns;
+    s.turn_number = 5;
+    for (int i = 1; i <= 10; ++i) { Land(s, i); }
+    s.players[0].hand.push_back(Copy("Part the Waterveil", 77));
+    const auto plans = TurnSolver::EnumerateMainPlans(s, true);
+    bool found = false;
+    for (const auto& plan : plans)
+    {
+        if (plan.actions.size() != 1) { continue; }
+        const auto& cast = plan.actions.front();
+        if (cast.kind != Action::Kind::CastFromHand || !cast.awaken
+            || cast.enchant_target != 1) { continue; }
+        GameState played = s;
+        TurnSolver::ApplyPlan(played, plan, true);
+        REQUIRE(played.players[0].hand.empty());
+        const Permanent& target = played.battlefield.front();
+        CHECK_FALSE(target.tapped);
+        CHECK(target.card.IsCreature());
+        CHECK(target.card.HasKeyword(Keyword::Haste));
+        CHECK(target.EffectivePower() == 6);
+        // On a later turn, ordinary spells must also spare the now-animated land
+        // while the other Islands can cover their cost.
+        for (Permanent& permanent : played.battlefield) { permanent.tapped = false; }
+        played.players[0].hand.push_back(Copy("Time Warp", 78));
+        const auto followups = TurnSolver::EnumerateMainPlans(played, true);
+        bool cast_followup = false;
+        for (const auto& followup : followups)
+        {
+            if (followup.actions.size() != 1
+                || followup.actions.front().kind != Action::Kind::CastFromHand) { continue; }
+            GameState next = played;
+            TurnSolver::ApplyPlan(next, followup, true);
+            CHECK_FALSE(next.battlefield.front().tapped);
+            cast_followup = true;
+            break;
+        }
+        CHECK(cast_followup);
+        found = true;
+        break;
+    }
+    CHECK(found);
+}
+
+TEST_CASE("Horn drawn by the land cannot validate as a pre-land cast")
+{
+    if (!HumanPlayActive()) { return; }
+    EnsureCards();
+    GameState s;
+    static const ExtraTurnsProvider extra_turns;
+    s.m_provider = &extra_turns;
+    s.turn_number = 5;
+    for (int i = 1; i <= 5; ++i) { Land(s, i); }
+    Permanent horn;
+    horn.card = Copy("Horn of Greed", 20);
+    horn.owner_index = horn.controller_index = 0;
+    s.battlefield.push_back(horn);
+    s.players[0].hand.push_back(Copy("Snow-Covered Island", 21));
+    s.players[0].library.push_back(Copy("Horn of Greed", 22));
+
+    const auto plans = TurnSolver::EnumerateMainPlans(s, true);
+    bool land_first_horn = false;
+    TurnSolver::Plan positioned_horn;
+    for (const auto& plan : plans)
+    {
+        if (plan.land_to_play != "Snow-Covered Island"
+            || plan.actions.size() != 1) { continue; }
+        const Action& a = plan.actions.front();
+        if (a.kind == Action::Kind::CastFromHand && a.card_name == "Horn of Greed")
+        {
+            CHECK(plan.land_slot == 0); // no impossible cast-before-land menu entry
+            if (plan.land_slot == 0) { land_first_horn = true; positioned_horn = plan; }
+        }
+    }
+    REQUIRE(land_first_horn); // the fallback has a tempting land-first match
+    positioned_horn.land_slot = 1; // audit a stale/externally supplied impossible proposal
+    const auto audit = manaoracle::AuditLine(s, true, positioned_horn,
+                                             nullptr, 400, /*deep=*/false);
+    REQUIRE(audit.audited);
+    CHECK_FALSE(audit.engine_full);
+    CHECK(audit.dropped.find("Horn of Greed") != std::string::npos);
+    TurnSolver::LineSpec after;
+    after.has_land = true;
+    after.land = "Snow-Covered Island";
+    after.land_slot = TurnSolver::kLandSlotAfterCasts;
+    after.casts = {"Horn of Greed"};
+    const auto rejected = TurnSolver::CheckLine(s, true, after, &plans);
+    CHECK(rejected.verdict == TurnSolver::LineCheck::Verdict::Illegal);
+    CHECK(rejected.failed_action == "cast=Horn of Greed");
+    TurnSolver::LineSpec after_first_cast = after;
+    after_first_cast.land_slot = 0;
+    after_first_cast.land_at_cast = 1;
+    after_first_cast.land_at_raw = 1;
+    const auto rejected_slot = TurnSolver::CheckLine(s, true, after_first_cast, &plans);
+    CHECK(rejected_slot.verdict == TurnSolver::LineCheck::Verdict::Illegal);
+    CHECK(rejected_slot.failed_action == "cast=Horn of Greed");
+    TurnSolver::LineSpec land_first = after;
+    land_first.land_slot = 0;
+    land_first.land_at_raw = 0;
+    const auto first = TurnSolver::CheckLine(s, true, land_first, &plans);
+    CHECK(first.verdict == TurnSolver::LineCheck::Verdict::Accept);
+
+    // The same requested order is legitimate when the Horn is already in hand.
+    s.players[0].hand.push_back(Copy("Horn of Greed", 23));
+    const auto payable_plans = TurnSolver::EnumerateMainPlans(s, true);
+    const auto accepted = TurnSolver::CheckLine(s, true, after, &payable_plans);
+    const bool legal = accepted.verdict == TurnSolver::LineCheck::Verdict::Accept
+                    || accepted.verdict == TurnSolver::LineCheck::Verdict::Choose;
+    CHECK(legal);
 }
 
 TEST_CASE("Extra Turns viewer accepts Lens into Ulamog and two turn spells")

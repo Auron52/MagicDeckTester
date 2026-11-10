@@ -10205,10 +10205,13 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
         // host on the Aura's own cost strands the follow-up cast the Aura was played to enable
         // (USER, EDF seed 2 T2 -- Wild Growth on Conservatory, then Eladamri's Call off the host's
         // {W}+bonus {G}). Retried UNRESERVED on failure, so this can only ever ADD realised casts.
+        // An awaken spell likewise prefers to pay from other lands, preserving its target's
+        // haste attack when possible. Retry without the hold if that land is needed to pay.
         // `available` is re-derived around the reservation exactly like the tap-ahead blocks above
         // (a failed TapForCost restores the board atomically).
         int reserved_host = -1;
-        if (def->params.is_land_aura && def->params.land_aura_extra_mana > 0
+        if (((def->params.is_land_aura && def->params.land_aura_extra_mana > 0)
+              || riders.awaken)
             && enchant_target > 0)
         {
             for (Permanent& lp : state.battlefield)

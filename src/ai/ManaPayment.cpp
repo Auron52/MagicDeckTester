@@ -2305,6 +2305,13 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                 // tap-order rank rather than as a rule anyone has to enforce.
                 int rank = (kind == 5) ? SacPayFodderRank(state, p, sac_outlet, &pay_doomed)
                                        : ResolveProvider(state).ManaSourceRank(state, *def);
+                // An awakened land is still a land in the card database, so its normal land
+                // rank spends it before ordinary Islands. Once it can attack, tapping it for
+                // mana costs the whole attack. Keep it behind non-attacking mana sources, but
+                // leave it available when the spell actually needs its mana.
+                if (kind == 1 && p.card.IsCreature() && def->card.IsLand()
+                    && CanAttackFull(p, state.battlefield, active)
+                    && p.EffectivePower() > 0) { rank = std::max(rank, 64); }
                 // Filter {C} mode on a generic/{C} pip: least flexible mana on the board, so it
                 // spends just after a true {C}-only source and BEFORE any coloured land -- see
                 // FilterCFirstEnabled (treasure_hunt s11: the old rank-25 read tapped the real
@@ -6452,7 +6459,8 @@ ManaPool AvailableManaPoolNoAttackers(const GameState& state)
         bool is_dork = (def->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield)) || def->params.mana_rock
                     || PaySacSpendableNow(state, p, *def);   // §2a lockstep with AvailableManaPool (a Treasure never attacks)
         if (!is_land && !is_dork) { continue; }
-        if (def->card.IsCreature() && CanAttackFull(p, state.battlefield, active))
+        if ((p.card.IsCreature() || p.is_animated)
+            && CanAttackFull(p, state.battlefield, active))
         {
             const int power = p.EffectivePower()
                 + ComputeLordBonus(p.card, state, active,

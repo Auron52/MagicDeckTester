@@ -853,6 +853,15 @@ void GameEngine::DrawStep(GameState& state)
     // unreachable: no Saga can be on the battlefield before its controller's first draw step.)
     AdvanceSagas(state);
     ResolveStack(state);
+    // Miracle can tap a Lens-boosted land during the draw step. Its surplus mana is
+    // usable for later draw-step triggers, but cannot cross into main 1 (CR 500.4).
+    // Keep this boundary in lockstep with SimulateEndAndStartNextTurn.
+    if (FloatLeftoverManaEnabled())
+    {
+        state.floating_mana = ManaPool{}; state.floating_creature_mana = ManaPool{};
+        state.floating_bigspell_mana = ManaPool{}; state.floating_bigspell_pp = nullptr;
+        state.floating_haste_c = 0;
+    }
 }
 
 void GameEngine::MainPhase(GameState& state, bool is_pre_combat)

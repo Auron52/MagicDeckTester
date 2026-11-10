@@ -63939,7 +63939,19 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 it = c;                                             // earlier-expiring staged copy wins
             }
         }
-        if (it == zone.end()) { return; }
+        if (it == zone.end())
+        {
+            // A positioned human plan can name a cast that only becomes available
+            // after its declared slot. Keep the apply silent in search, but tell
+            // the viewer/audit that this declared cast did not execute.
+            if (sink_stack.empty() && g_play_dropped_cast_sink)
+            {
+                PlayReportDrop(name, PlayDropReasonWanted()
+                    ? name + (from_graveyard ? " is not in the graveyard" : " is not in hand")
+                    : std::string());
+            }
+            return;
+        }
         // STABLE HANDLE on the chosen copy, because `it` DOES NOT SURVIVE THIS CAST'S PAYMENT.
         // A payment can now mutate this very zone: §2b eats a sac-outlet's fodder, and that death
         // fires its triggers -- Rundvelt Hordemaster's dies-impulse-exile pushes a card into the
@@ -64278,12 +64290,16 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // T2: "I tried to put Wild Growth on the Conservatory and it changed it to the Yavimaya
             // Coast"). Retried UNRESERVED on failure, so a board whose only payer IS the host still
             // casts the Aura exactly as before (a failed TapForCostDirect restores atomically).
+            // An awaken cast similarly prefers to pay from other lands: tapping its chosen
+            // land needlessly forfeits that land's haste attack. Retry without the hold if
+            // the chosen land is actually needed for the spell's cost.
             int reserved_host = -1;
             // (Not on the MANA ORACLE's copy: the hold is a heuristic, and the oracle tries every payment,
             // the host's included -- see ManaOracle.h. An oracle ENGINE step makes it, as an unhooked
             // apply does: the held attempt and its retry are ONE step, so the span owns both.)
             manaoracle::EngineStepSpan _esp(state, oracle_owns);
-            if (def.params.is_land_aura && def.params.land_aura_extra_mana > 0
+            if (((def.params.is_land_aura && def.params.land_aura_extra_mana > 0)
+                  || riders.awaken)
                 && enchant_target > 0 && (!oracle_owns || _esp.h != nullptr))
             {
                 for (Permanent& lp : state.battlefield)
@@ -71372,6 +71388,14 @@ static bool SimulateUpkeepAfterArrivals(GameState& state)
     // Must stay on THIS side of the draw: a chapter that reads the hand (chapter I's free cast)
     // would otherwise see a different hand in the two worlds.
     AdvanceSagas(state);
+    // Match GameEngine::DrawStep: a miracle's over-produced mana expires when
+    // the draw step ends, before the pre-combat main can spend it (CR 500.4).
+    if (FloatLeftoverManaEnabled())
+    {
+        state.floating_mana = ManaPool{}; state.floating_creature_mana = ManaPool{};
+        state.floating_bigspell_mana = ManaPool{}; state.floating_bigspell_pp = nullptr;
+        state.floating_haste_c = 0;
+    }
     // Next simulated turn opens on its pre-combat main (partner of the PostCombatMain write at the
     // end of SimulateCombat; see the note there). Write-only for every other deck.
     state.phase = Phase::PreCombatMain;
@@ -110068,6 +110092,18 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlans(const GameState& st
     if (HumanPlayActive())
     {
         const auto& hand = state.players[state.active_player_index].hand;
+        // A single cast placed before the land cannot use a card drawn by that
+        // land. The optimistic land-first twin remains available, but its
+        // pre-land-positioned variant would silently skip the declared cast.
+        plans.erase(std::remove_if(plans.begin(), plans.end(), [&](const Plan& plan) {
+            if (plan.land_to_play.empty() || plan.land_slot == 0
+                || plan.actions.size() != 1) { return false; }
+            const Action& action = plan.actions.front();
+            if (action.kind != Action::Kind::CastFromHand) { return false; }
+            return std::none_of(hand.begin(), hand.end(), [&](const Card& card) {
+                return card.m_name == action.card_name;
+            });
+        }), plans.end());
         plans.erase(std::remove_if(plans.begin(), plans.end(), [&](const Plan& plan) {
             if (!plan.searched_order) { return false; }
             std::vector<int> pending;
@@ -115186,6 +115222,35 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
     LineCheck exact = CheckLineExact(state_in, is_pre_combat, spec, menu);
     const bool positioned = spec.has_land
         && (spec.land_slot != 0 || spec.land_at_cast > 0 || spec.land_at_raw >= 0);
+    // A positioned one-cast plan can name a hand card drawn by the land only
+    // AFTER that cast was requested. This affects both an exact landat=<k>
+    // match and the land-first fallback used for landafter=/landat=all.
+    std::vector<Plan> own;
+    auto missing_pre_land_cast = [&](const LineCheck& answer) -> bool
+    {
+        const bool cast_before_land = spec.land_slot == kLandSlotAfterCasts
+                                   || spec.land_at_cast > 0;
+        if (!positioned || !cast_before_land || answer.verdict != LineCheck::Verdict::Accept
+            || answer.plan_index < 0 || spec.casts.size() != 1) { return false; }
+        const auto& hand = state_in.ActivePlayer().hand;
+        if (std::any_of(hand.begin(), hand.end(),
+                [&](const Card& c) { return c.m_name.str() == spec.casts.front(); })) { return false; }
+        if (menu == nullptr) { own = EnumerateMainPlans(state_in, is_pre_combat); }
+        const std::vector<Plan>& plans = menu != nullptr ? *menu : own;
+        if (static_cast<std::size_t>(answer.plan_index) >= plans.size()) { return false; }
+        const Plan& p = plans[static_cast<std::size_t>(answer.plan_index)];
+        return p.actions.size() == 1 && p.actions.front().kind == Action::Kind::CastFromHand
+            && p.actions.front().card_name.str() == spec.casts.front();
+    };
+    auto reject_missing = [&]() -> LineCheck
+    {
+        LineCheck bad;
+        bad.verdict = LineCheck::Verdict::Illegal;
+        bad.failed_action = "cast=" + spec.casts.front();
+        bad.reason = "'" + spec.casts.front() + "' is not in hand before the land plays";
+        return bad;
+    };
+    if (missing_pre_land_cast(exact)) { return reject_missing(); }
     if (exact.verdict != LineCheck::Verdict::LegalNotEnumerated || !positioned || !HumanPlayActive())
     { return exact; }
     LineSpec first = spec;
@@ -115193,6 +115258,11 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
     first.land_at_cast = 0;
     first.land_at_raw  = -1;
     LineCheck loose = CheckLineExact(state_in, is_pre_combat, first, menu);
+    // An existing Horn on the battlefield made CheckLineExact's legacy
+    // board-activation peel call the missing cast legal_not_enumerated in
+    // seed 62008. A land-first plan then drew and cast Horn, but that does
+    // not execute the human's requested cast-before-land sequence.
+    if (missing_pre_land_cast(loose)) { return reject_missing(); }
     if (loose.verdict == LineCheck::Verdict::Accept || loose.verdict == LineCheck::Verdict::Choose)
     { return loose; }
     return exact;
