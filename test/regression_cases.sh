@@ -154,6 +154,8 @@ declare -A DECK_PROF=(
 # reshape: their game counts and budgets are historical.
 
 # Seeds:  smoke=1001  regression=2002,3003  overnight=4004,5005,6006,7007
+# 2026-11-10 full rebaseline: play-row budgets follow the enabled deck sidecars;
+# keep-table rows for Extra Turns, Cyclone and Merfolk meet the Hinata game floor.
 # (counts sized from measured timings -- see test/TIMINGS.md)
 
 # smoke: ~3 min single-seed gate -- d0 full + small d3/d5 (deep-search crash check).
@@ -218,7 +220,7 @@ SMOKE_CASES=(
   "slivers    5  1001   325 20"
   "burn    0 1001 1000 0"
   "burn       3  1001   100 10"
-  "burn       5  1001   450 20"
+  "burn       5  1001   450 30"
   "th      0 1001 1000 0"
   "th         3  1001    50 10"
   "th         5  1001   175 40"
@@ -237,7 +239,7 @@ SMOKE_CASES=(
   # Kithkin: provisional WhiteKnights-class sizing; remeasure at the pinned Hinata cost gate.
   "kithkin 0 1001 1000 0"
   "kithkin 3  1001    75 10"
-  "kithkin 5  1001   325 20"
+  "kithkin 5  1001   325 30"
   "antilife 0 1001 1000 0"
   "antilife   3  1001    75 10"
   "antilife   5  1001   325 20"
@@ -286,7 +288,7 @@ SMOKE_CASES=(
   # cumulative upkeep, tutor_land_to_battlefield.
   "creature_giving 0 1001 1000 0"
   "creature_giving 3  1001    50 10"
-  "creature_giving 5  1001   150 20"
+  "creature_giving 5  1001   150 30"
   # mirrorwing: Zada/Mirrorwing copy-magnet swarm (Tier-3 trick engine; wins ~T4.8). Switched
   # 2026-08-24 from the v1-twinflame-anger list to the SHIPPING list (tournament winner + Game
   # Trail mana base; the archived v1 lives on at decks/Mirrorwing Dragon/v1-twinflame-anger/).
@@ -393,7 +395,7 @@ SMOKE_CASES=(
   # value leaf yet (the d5 cell will move when a value leaf is adopted -- regenerate GT then).
   "critter 0 1001 1000 0"
   "critter    3  1001    50 10"
-  "critter    5  1001   175 20"
+  "critter    5  1001   175 80"
   # lhc: LifegainHeliodCombo -- ADDED 2026-10-27 (analysis-LifegainHeliodCombo.md). The CritterLifegain
   # shell plus the Heliod + Walking Ballista loop, Martyr of Sands, Abiding Grace, Emeria. Own provider
   # (LifegainHeliodComboProvider, derived from CritterLifegainProvider). No keep table / value leaf yet:
@@ -471,21 +473,21 @@ SMOKE_CASES=(
   # (d3 b10 ~0.066 s/game), so the whole relevant-tier treatment costs ~7 core-s here.
   "angels2hg  5  1001   100 20"
   "slivers2hg 5  1001    50 20"
-  "burn2hg    5  1001    50 20"
+  "burn2hg    5  1001    50 30"
   "th2hg      5  1001    50 40"
   "dragonstorm2hg 5  1001    50 20"
   "auras2hg   5  1001    50 20"
-  "creature_giving2hg 5  1001    50 20"
+  "creature_giving2hg 5  1001    50 30"
   "mirrorwing2hg 5  1001    50 20"
   "stompy2hg  5  1001    50 20"
   "kittyv32hg 5  1001    50 14"
   "dragons2hg 5  1001    50 20"
   "breaching2hg 5  1001    50 20"
-  "critter2hg 5  1001    50 20"
+  "critter2hg 5  1001    50 80"
   "lhc2hg     5  1001    50 20"
   "melira2hg  5  1001    25 120"
   "pirates2hg 5  1001    50 20"
-  "soldiers2hg 5  1001    50 20"
+  "soldiers2hg 5  1001    50 30"
   # colossus2hg: a canary for Speaker of the Heavens' "at least 7 life more than your STARTING life
   # total" gate, which reads the 2HG starting life (30), and for a 30-life opponent the Hammer must reach.
   "colossus2hg 5  1001    50 20"
@@ -540,7 +542,7 @@ SMOKE_CASES=(
   # opponent-cast trigger is inert.
   "soldiers 0 1001 1000 0"
   "soldiers   3  1001    50 10"
-  "soldiers   5  1001   175 20"
+  "soldiers   5  1001   175 30"
   # pd (Prevent Damage): Tamanoa / Rhox Faithmender turn Manabarbs, Spellshock, painland and sweeper
   # self-damage into lifegain; Vito / Dina turn the lifegain into the drain. Tutors (Beseech, Living
   # Wish into a 15-card sideboard, Green Sun's Zenith) make it the widest searched menu in the repo.
@@ -685,7 +687,7 @@ REGRESSION_CASES=(
   "extraturns 3 2002  75 10"
   "extraturns 5 2002 150 20"
   "extraturns 5 3003 150 20"
-  "extraturns2hg 5 2002 25 20"
+  "extraturns2hg 5 2002 75 20"
   # Cyclone unlimited backstop: screened 30031..30033 at d3 and d5; all six games
   # finished below the 2e6-unit per-game cap. Keep this block fixed as a regression signal.
   "cyclone          3 30031 3 0"
@@ -826,8 +828,8 @@ REGRESSION_CASES=(
   "slivers    5  3003   650 20"
   "burn    0 2002 1000 0"
   "burn       3  2002   175 10"
-  "burn       5  2002   900 20"
-  "burn       5  3003   900 20"
+  "burn       5  2002   900 30"
+  "burn       5  3003   900 30"
   "th      0 2002 1000 0"
   "th         3  2002   175 10"
   "th         5  2002   600 40"
@@ -843,8 +845,8 @@ REGRESSION_CASES=(
   "whiteknights 5  3003   500 20"
   "kithkin 0 2002 1000 0"
   "kithkin 3  2002   100 10"
-  "kithkin 5  2002   500 20"
-  "kithkin 5  3003   500 20"
+  "kithkin 5  2002   500 30"
+  "kithkin 5  3003   500 30"
   # antilife: re-added at 1/10 virtual-ms (see smoke block + search-perf-investigation memory).
   "antilife 0 2002 1000 0"
   "antilife   3  2002   100 10"
@@ -886,8 +888,8 @@ REGRESSION_CASES=(
   # creature_giving: dragonstorm-mirror sizing (~6.5 min ST added; see SMOKE block for costs).
   "creature_giving 0 2002 1000 0"
   "creature_giving 3  2002   100 10"
-  "creature_giving 5  2002   425 20"
-  "creature_giving 5  3003   425 20"
+  "creature_giving 5  2002   425 30"
+  "creature_giving 5  3003   425 30"
   # mirrorwing: sizing inherited from the v1 list (~20 min ST budgeted); on the 2026-08-24
   # shipping list it actually costs ~2 min ST. See SMOKE block for the re-measured costs.
   "mirrorwing 0 2002 1000 0"
@@ -935,8 +937,8 @@ REGRESSION_CASES=(
   # critter: breaching-shaped two-seed sweep (~0.20/0.43 s/game at the gate budgets).
   "critter 0 2002 1000 0"
   "critter    3  2002   100 10"
-  "critter    5  2002   500 20"
-  "critter    5  3003   500 20"
+  "critter    5  2002   500 80"
+  "critter    5  3003   500 80"
   # lhc: LifegainHeliodCombo (see the SMOKE block) -- critter's two-seed shape.
   "lhc 0 2002 1000 0"
   "lhc        3  2002   100 10"
@@ -996,8 +998,8 @@ REGRESSION_CASES=(
   # soldiers: see the SMOKE block (pirates' counts).
   "soldiers 0 2002 1000 0"
   "soldiers   3  2002    50 10"
-  "soldiers   5  2002   200 20"
-  "soldiers   5  3003   200 20"
+  "soldiers   5  2002   200 30"
+  "soldiers   5  3003   200 30"
   # pd: see the SMOKE block. These are the GATED cells (worst searched case d5 b20 s3003).
   "pd 0 2002 1000 0"
   "pd         3  2002    25 10"
@@ -1102,17 +1104,17 @@ REGRESSION_CASES=(
 # See .claude/skills/regression-testing.md rule 7 and
 # docs/design/searched-design-audit-blind-spots.md ("Method trap: overlapping seed bases").
 OVERNIGHT_CASES=(
-  # Extra Turns entry set; expand play rows to the Hinata floor after keep adoption.
+  # Extra Turns play rows meet the Hinata floor after keep-table adoption.
   "extraturns 0 4004 2000 0"
   "extraturns 0 6006 2000 0"
   "extraturns 0 8008 2000 0"
   "extraturns 0 10010 2000 0"
   "extraturns 3 4004 125 10"
-  "extraturns 5 4004 300 20"
-  "extraturns 5 5005 300 20"
-  "extraturns 5 6006 300 20"
-  "extraturns 5 7007 300 20"
-  "extraturns2hg 5 4004 50 20"
+  "extraturns 5 4004 425 20"
+  "extraturns 5 5005 425 20"
+  "extraturns 5 6006 425 20"
+  "extraturns 5 7007 425 20"
+  "extraturns2hg 5 4004 100 20"
   # Cyclone unlimited backstop: screened 30051..30053 at d3 and d5; all six games
   # finished below the 2e6-unit per-game cap. Disjoint from the regression block.
   "cyclone          3 30051 3 0"
@@ -1261,10 +1263,10 @@ OVERNIGHT_CASES=(
   "burn    0  8008 2000 0"
   "burn    0 10010 2000 0"
   "burn       3  4004   325 10"
-  "burn       5  4004  1925 20"
-  "burn       5  5005  1925 20"
-  "burn       5  6006  1925 20"
-  "burn       5  7007  1925 20"
+  "burn       5  4004  1925 30"
+  "burn       5  5005  1925 30"
+  "burn       5  6006  1925 30"
+  "burn       5  7007  1925 30"
   "th      0 4004 2000 0"
   "th      0  6006 2000 0"
   "th      0  8008 2000 0"
@@ -1301,10 +1303,10 @@ OVERNIGHT_CASES=(
   "kithkin 0  8008 2000 0"
   "kithkin 0 10010 2000 0"
   "kithkin 3  4004   325 10"
-  "kithkin 5  4004  1925 20"
-  "kithkin 5  5005  1925 20"
-  "kithkin 5  6006  1925 20"
-  "kithkin 5  7007  1925 20"
+  "kithkin 5  4004  1925 30"
+  "kithkin 5  5005  1925 30"
+  "kithkin 5  6006  1925 30"
+  "kithkin 5  7007  1925 30"
   # antilife: re-added at 1/10 virtual-ms (see smoke block + search-perf-investigation memory).
   "antilife 0 4004 2000 0"
   "antilife 0  6006 2000 0"
@@ -1341,10 +1343,10 @@ OVERNIGHT_CASES=(
   "cyclone 3 5005  400 10"
   "cyclone 3 6006  400 10"
   "cyclone 3 7007  400 10"
-  "cyclone 5 4004  300 20"
-  "cyclone 5 5005  300 20"
-  "cyclone 5 6006  300 20"
-  "cyclone 5 7007  300 20"
+  "cyclone 5 4004  425 20"
+  "cyclone 5 5005  425 20"
+  "cyclone 5 6006  425 20"
+  "cyclone 5 7007  425 20"
   # Shadowborn FULL set (keep table adopted 2026-11-04): play rows at Hinata's floor (4 x 425), one d3 b10
   # sanity row (USER 2026-10-27: play settings over d3). Cost 0.55x Hinata per game.
   "shadowborn 0 4004 2000 0"
@@ -1403,10 +1405,10 @@ OVERNIGHT_CASES=(
   "creature_giving 0  8008 2000 0"
   "creature_giving 0 10010 2000 0"
   "creature_giving 3  4004   325 10"
-  "creature_giving 5  4004  1425 20"
-  "creature_giving 5  5005  1425 20"
-  "creature_giving 5  6006  1425 20"
-  "creature_giving 5  7007  1425 20"
+  "creature_giving 5  4004  1425 30"
+  "creature_giving 5  5005  1425 30"
+  "creature_giving 5  6006  1425 30"
+  "creature_giving 5  7007  1425 30"
   # mirrorwing: sizing inherited from the v1 list (~60 min ST budgeted, when this was the heaviest
   # suite deck per game after slivers); on the 2026-08-24 shipping list it costs ~10 min ST.
   # Deeper budgets deliberately NOT raised until a b-sweep motivates them.
@@ -1452,10 +1454,10 @@ OVERNIGHT_CASES=(
   "jumbo 3 5005 1000 20"
   "jumbo 3 6006 1000 20"
   "jumbo 3 7007 1000 20"
-  "jumbo 5 4004 500 40"
-  "jumbo 5 5005 500 40"
-  "jumbo 5 6006 500 40"
-  "jumbo 5 7007 500 40"
+  "jumbo 5 4004 500 20"
+  "jumbo 5 5005 500 20"
+  "jumbo 5 6006 500 20"
+  "jumbo 5 7007 500 20"
   # minotaur: stompy-shaped four-seed deep sweep at 2x the gate budgets (d3 b20 / d5 b40).
   # At the probed costs that is ~4x1000x0.39 s + 4x500x0.63 s ~= 47 min single-thread, pooled.
   "minotaur 0  4004 2000 0"
@@ -1532,10 +1534,10 @@ OVERNIGHT_CASES=(
   "critter 0  8008 2000 0"
   "critter 0 10010 2000 0"
   "critter    3  4004   325 10"
-  "critter    5  4004  1425 20"
-  "critter    5  5005  1425 20"
-  "critter    5  6006  1425 20"
-  "critter    5  7007  1425 20"
+  "critter    5  4004  1425 80"
+  "critter    5  5005  1425 80"
+  "critter    5  6006  1425 80"
+  "critter    5  7007  1425 80"
   # lhc: LifegainHeliodCombo (see the SMOKE block) -- the overnight FULL set (2026-10-29, just before its
   # keep-table adoption, accepted with the table ABSENT): d0 4x2000, one d3 b10 sanity row, d5 4x500 b20 (the
   # shipped play setting; above Hinata's 4x425 floor, ~0.4 s/game at d5 b20 in the 2026-10-29 held-out A/B).
@@ -1608,10 +1610,10 @@ OVERNIGHT_CASES=(
   "soldiers 0  8008 2000 0"
   "soldiers 0 10010 2000 0"
   "soldiers   3  4004   325 10"
-  "soldiers   5  4004  1425 20"
-  "soldiers   5  5005  1425 20"
-  "soldiers   5  6006  1425 20"
-  "soldiers   5  7007  1425 20"
+  "soldiers   5  4004  1425 30"
+  "soldiers   5  5005  1425 30"
+  "soldiers   5  6006  1425 30"
+  "soldiers   5  7007  1425 30"
   # pd: see the SMOKE block. RESIZED at the keep-table adoption (2026-10-12; regression-testing skill, "Sizing
   # a deck's overnight rows"; USER: resize to fix NOTABLY undersized rows, but keep a performance benefit from
   # the artifacts): d3 4x200 b20, d5 4x125 b40 (was the ledger's 4x100 / 4x75 -- 700 searched games, 1/4 of
@@ -1897,9 +1899,9 @@ OVERNIGHT_CASES=(
   "merfolk 3  5005  400 10"
   "merfolk 3  6006  400 10"
   "merfolk 3  7007  400 10"
-  "merfolk 5  4004  300 20"
-  "merfolk 5  5005  300 20"
-  "merfolk 5  6006  300 20"
-  "merfolk 5  7007  300 20"
+  "merfolk 5  4004  425 20"
+  "merfolk 5  5005  425 20"
+  "merfolk 5  6006  425 20"
+  "merfolk 5  7007  425 20"
 
 )
