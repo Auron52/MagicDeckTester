@@ -36,6 +36,9 @@ Source of the work: `logs/mana_clean/lastweek-20261110-shadowborn-order/report.m
   and rejects a claim with none left; any mid-plan body source (tokens, ripple, put/reanimate, persist...) makes it
   admit. s30020789: APPLY-DROP-ORDER 112->0, PHANTOM 100->6, UNMODELED 224->0, plans 781->527, same win turn.
   Tiers: only Shadowborn rows; searched 0 slower; every row's aggregate <= before.
+* **Gate `sb-victimclaim-20261110` (6c42d7bd4, games 25000-29999): issues 1773** (MISS 87 = APPLY-DROP 74 +
+  ENUM-GAP 10 + ORDER 3; ORACLE-GAP 28; UNMODELED 1658). Was 5429 (ORDER 554, UNMODELED 4759). Top APPLY-DROP: Sire
+  {4}{B}{R} dropped where Lotus Bloom (R, keep-floating) + Lake crack pay it (x28 T4 m2 Intent+Intent+Apostle).
 * Open (minor): the 6 PHANTOMs left on s30020789 are mana, not victims -- {Apostle + Culling} on one Swamp.
 * ORACLE-GAP (16): Lake + Lotus Bloom recipes; "core keys differ in a field not listed" -- analyzer-side, open.
 * Chain order: build -> unit -> the s30020022 repro -> smoke (expect only Shadowborn rows to move) -> regression ->

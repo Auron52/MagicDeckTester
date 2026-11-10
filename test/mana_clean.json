@@ -5770,6 +5770,50 @@
      "seed": 30020000,
      "src": "1d6ab1a69b4b2fc1187d216a0300c24e151354c4",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 74,
+      "APPLY-DROP-ORDER": 3,
+      "CONTINUATION-DIFFERS": 82,
+      "DOMINATED-LAND": 10990,
+      "DROP-COVERED": 794,
+      "ENUM-GAP": 10,
+      "ORACLE-GAP": 28,
+      "PHANTOM": 14648,
+      "UNMODELED": 1658
+     },
+     "commit": "6c42d7bd47ff15e4051b0e7164145989c6c6369f",
+     "date": "2026-11-10T14:24:54Z",
+     "decisions": 42779,
+     "deck": "decks/Shadowborn Apostle/Shadowborn Apostle.cod",
+     "deck_sha": "a23edb97dcaeb1e61888de6616f4f35299abf43d",
+     "game_index": 25000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 1773,
+     "life_breakpoints": [],
+     "ms_off": 2990954,
+     "ms_on": 3475306,
+     "report": "logs/mana_clean/sb-victimclaim-20261110/report.md",
+     "run": "sb-victimclaim-20261110",
+     "seed": 30025000,
+     "src": "005df2c411a360571e661dc3bbe83cbf6ae6cf81",
+     "verdict": "issues"
     }
    ]
   },
