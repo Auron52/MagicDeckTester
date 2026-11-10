@@ -1,0 +1,26 @@
+{
+  "jobs": [
+    {
+      "name": "dragonstorm_rollout_hold_gi31_d0",
+      "deck": "decks/Dragonstorm/Dragonstorm.cod",
+      "profile": "decks/Dragonstorm/Dragonstorm.profile.json",
+      "games": 1,
+      "seed": 1032,
+      "game_index": 31,
+      "depth": 0,
+      "budget_ms": 0,
+      "ignore_play_profile": true
+    },
+    {
+      "name": "dragonstorm_rollout_hold_gi31_d3",
+      "deck": "decks/Dragonstorm/Dragonstorm.cod",
+      "profile": "decks/Dragonstorm/Dragonstorm.profile.json",
+      "games": 1,
+      "seed": 1032,
+      "game_index": 31,
+      "depth": 3,
+      "budget_ms": 0,
+      "ignore_play_profile": true
+    }
+  ]
+}

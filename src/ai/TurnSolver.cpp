@@ -54528,11 +54528,13 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         if (pre.gift_damage && SubsetHasUnbackedGiftDamage(state, cands, sel)) { return; }
         // Payoff-prune (PrunesAcceleratorWithoutPayoff): drop a ritual-accelerant subset that casts no payoff
         // (Dragon/Dragonstorm/Apex). Provider-owned (DragonstormProvider) + MTG_UNPRUNED(payoffprune)-
-        // gated; inert for every other deck -> byte-identical. storm_in_hand feeds the storm-hold rule
-        // (a fair Dragon stops justifying a ritual when a storm is in hand); off by default.
+        // gated; inert for every other deck -> byte-identical. storm_in_hand feeds the storm-hold rule.
+        // In a searched rollout, the held-ritual policy can make a reachable early Bloom suspension
+        // look late (Dragonstorm smoke d3 s1001 gi31). Keep the policy for the real d0 runner, but let
+        // the rollout value a fair Dragon as a same-turn ritual payoff. Search branch lists are separate.
         if (payoff_prune_on
             && !DecisionUnpruned(UnprunedGate::PayoffPrune)
-            && SubsetWastesAccelerant(cands, sel, storm_in_hand)) { return; }
+            && SubsetWastesAccelerant(cands, sel, storm_in_hand && g_rollout_nest == 0)) { return; }
         // ...and its SPEND form (PrunesRitualWithoutSpend; Shadowborn): a ritual whose mana nothing in the subset
         // spends. Lockstep twin in EnumeratePlans.
         if (ritual_spend_prune_on && SubsetRitualSpendsNothing(cands, sel, &pool, ritual_spend_granter_bf, ritual_spend_named_bf)) { return; }
@@ -55004,7 +55006,8 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // An on-demand crack this subset needs, with no payoff for it (see od_payoff_live). Not cached: the
         // verdict reads the subset's payoffs, not only its mana.
         if (mana_ok && od_payoff_live
-            && SubsetWastesAccelerant(cands, sel, storm_in_hand, false, nullptr, /*implicit_accel=*/true)
+            && SubsetWastesAccelerant(cands, sel, storm_in_hand && g_rollout_nest == 0,
+                                      false, nullptr, /*implicit_accel=*/true)
             && !(without_ondemand(eff_cg).CanPay(combined) && without_ondemand(eff_nc_cg).CanPay(noncreature_combined)))
         { return; }
         // Filter/ramp-land color conversion the flat pool can't express -> real-payment fallback.
