@@ -1477,5 +1477,16 @@ UNMODELED to PHANTOM, with zero `too many actions` flags in that one-game run.
 Seed 30015427's six-action line with only one repeated pair (360 orders)
 remains UNMODELED, as do its six-unique-action plans. These are exact
 order-and-payment no-claims for the audited plan, not fixes to the 550 known
-payable order misses or 83 payment drops. A new 5,000-game census is still
-needed to quantify the gate-wide reduction.
+payable order misses or 83 payment drops.
+
+The fresh post-change gate `lastweek-20261110-shadowborn-order` covered games
+20000-24999 at source tree `1d6ab1a69b4b`. It reported 5,429 issues:
+4,759 UNMODELED, 554 APPLY-DROP-ORDER, 95 APPLY-DROP, 16 ORACLE-GAP, and
+5 ENUM-GAP. Oracle-on and oracle-off play were byte-identical. The 4,759
+UNMODELED flags still carry the `too many actions to try every order` reason;
+many top signatures have more than 180 distinct orders even after duplicate
+cards are folded. This fresh game block is different from the preceding one,
+so the lower total does not by itself measure the fix's effect. Seed 30015115
+is the paired evidence that the exact-order proof recovered a previously
+unmodeled line. The remaining payable order misses and payment drops still
+need engine work before another clean gate can pass.
