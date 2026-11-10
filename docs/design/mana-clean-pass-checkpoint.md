@@ -49,6 +49,11 @@ Source of the work: `logs/mana_clean/lastweek-20261110-shadowborn-order/report.m
   precedent). s30024581: CAPPED-DECISION 30955->0, oracle 94 s -> 6 s; s30022536 no caps. Tiers: only Jumbo rows;
   searched 0 slower; backstop d5 s30001 game 11 now FINISHES (was abandoned at 2e6 units) as unwon (the search
   proves no win by T8 after a mull-to-4 hand) -> 4.00 -> 4.25 is the newly counted game, not a regression.
+* **Gate `jumbo-sprawlgreen-20261110` (67d1ab0ce, 25000-29999): 25,065 issues** (was 37,918 on 20000-24999):
+  CAPPED-DECISION 23,692 = ONE decision (s30025605 T5: T&N modes x Finale X x GSZ X x a Greaves equip dance -- a
+  legitimate menu, no dominated copies found); ENUM-GAP 337, APPLY-DROP 108, APPLY-DROP-ORDER 429,
+  DOMINATED-CREATURE 212, ORACLE-GAP 129, UNMODELED 158. The capped decision is analyzer cost (USER question on
+  per-plan cost cuts open; caps are not raised to hide it).
 * Open (minor): the 6 PHANTOMs left on s30020789 are mana, not victims -- {Apostle + Culling} on one Swamp.
 * ORACLE-GAP (16): Lake + Lotus Bloom recipes; "core keys differ in a field not listed" -- analyzer-side, open.
 * Chain order: build -> unit -> the s30020022 repro -> smoke (expect only Shadowborn rows to move) -> regression ->
