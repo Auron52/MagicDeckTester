@@ -334,10 +334,9 @@ TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pir
         {"Kithkin", "Kithkin"},
         // GSZ can create a Chariot/Greaves host after the initial action set is built.
         {"Jumbo Cactuar", "JumboCactuar"},
-        // Martyr Lifegain (onboarding 2026-11-10): INTERIM pin to where it routes today (Umezawa's
-        // Jitte -> EquipmentProvider). Stage 4a gives it its own MartyrLifegainProvider (derived from
-        // EquipmentProvider, so play-neutral by construction) once Lurrus integration lands.
-        {"Martyr Lifegain", "Equipment"},
+        // Martyr Lifegain (onboarding 2026-11-10): its own MartyrLifegainProvider, an empty derivation
+        // of EquipmentProvider (the provider Umezawa's Jitte routed it to), routed above `equipment`.
+        {"Martyr Lifegain", "MartyrLifegain"},
     };
 
     namespace fs = std::filesystem;

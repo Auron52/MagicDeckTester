@@ -21897,6 +21897,7 @@ namespace
     const FiveColourProvider     g_fivecolour;
     const MirrorwingProvider     g_mirrorwing;
     const EquipmentProvider      g_equipment;
+    const MartyrLifegainProvider g_martyr_lifegain;
     const StompyProvider         g_stompy;
     const JumboCactuarProvider   g_jumbo_cactuar;
     const MinotaurProvider       g_minotaur;
@@ -24365,6 +24366,14 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // add -- the Lightning Greaves exclusion); and etb_creates_treasures / static_artifact_* (they
     // describe behaviour a Treasure or artifact deck would plausibly run, not this archetype).
     bool pirates = false;
+    // MARTYR LIFEGAIN (mono-W Martyr of Sands / Lurrus / Jitte). MUST return ABOVE `equipment`:
+    // Umezawa's Jitte's equip_combat_damage_charges ALONE sets that signature, so without this the
+    // deck would share EquipmentProvider with KittyEquipment. Signature = four params OR-ed across
+    // FOUR different cards (Lurrus of the Dream-Den, Kami of False Hope, Curious Farm Animals,
+    // Enduring Innocence), all new in the 2026-11-10 onboarding and carried by no other card in
+    // cards.json. Deliberately EXCLUDES Martyr of Sands (LifegainHeliodCombo), Serra Ascendant
+    // (CritterLifegain, LifegainHeliodCombo) and Speaker of the Heavens (Colossus Hammer).
+    bool martyr_lifegain = false;
     // PREVENT DAMAGE (Manabarbs / Tamanoa / Vito / Dina). MUST return ABOVE EVERYTHING: Living
     // Wish's and Beseech the Queen's tutor_to_hand set `anti` on their own, and Dina, Soul Steeper's
     // sac outlet would set `goblin` -- the archetype-neutral misroute class (ninth occurrence).
@@ -24546,6 +24555,14 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
 
         // NOTE: `is_land_aura` is deliberately NOT a term here -- see the flag's declaration.
         if (p.blink_cost.has_value() || p.etb_untap_lands > 0) { eldrazi = true; }
+
+        // Martyr Lifegain -- see the flag's declaration.
+        if (p.gy_cast_permanent_max_mv > 0 || p.sac_outlet_prevent_combat_damage
+            || p.sac_outlet_destroy_artifact_enchantment_optional
+            || p.dies_return_as_noncreature_enchantment)
+        {
+            martyr_lifegain = true;
+        }
 
         // Pirates -- see the flag's declaration for why these five and not the others.
         if (!p.reveal_or_pay_subtype.empty()
@@ -25095,6 +25112,9 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // So, exactly as the Giants note says, removing either card would not fix it and the deck has
     // to be routed above BOTH branches. Measured, not read: `mtg --batch` reported
     // provider=Goblins and then provider=Dragons for this list before each hoist.
+    // Martyr Lifegain: ABOVE `equipment` (Umezawa's Jitte) -- see the flag. A derivation of
+    // EquipmentProvider, the provider it rode before, so the routing change is play-neutral.
+    if (martyr_lifegain) { return g_martyr_lifegain; }
     if (equipment) { return g_equipment; }
     // Goblins ride GoblinsProvider. This return WINS OVER anti (Goblin Matron's tutor_to_hand would
     // otherwise set anti and misroute the deck to AntiLifegainProvider) and over th/vial/burn/generic.
