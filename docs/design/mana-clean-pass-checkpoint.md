@@ -29,11 +29,14 @@ Source of the work: `logs/mana_clean/lastweek-20261110-shadowborn-order/report.m
   TapForCostShared step 3): only after the unpinned crack fails, the payer retries with the victim pinned to each
   colour (the cost's pips first). Payments that already succeeded are unchanged. Unit tests in
   `test_shadowborn_lakeprof.cpp`.
-* **USER DECISION, not changed: 544 of 554 APPLY-DROP-ORDER** are the USER's Shadowborn cast order ("Dark Ritual,
-  <shadowborn sacrifice for culling if needed>, Culling, Thrumming stone"): with Diabolic Intent in the same plan
-  and one creature before the Stone, Culling eats it and Intent has no sacrifice. The oracle's paying order puts
-  Culling and Intent after the Stone's ripple bodies (ripple-dependent). Proposed amendment / alternative oracle
-  classification raised with the USER.
+* **FIXED (USER 2026-11-10: "We cannot choose something already marked as a sacrifice" / "a more general issue
+  with the system"): the APPLY-DROP-ORDER 554 and many PHANTOMs.** Each sac_additional_creature cast (Culling,
+  Intent) got its victim per cast, so a plan could have two sacrifice costs claim one creature; realisation then
+  dropped one. `SubsetOverclaimsSacCostVictims` (TurnSolver.cpp, both walkers) walks PlanCastOrder counting bodies
+  and rejects a claim with none left; any mid-plan body source (tokens, ripple, put/reanimate, persist...) makes it
+  admit. s30020789: APPLY-DROP-ORDER 112->0, PHANTOM 100->6, UNMODELED 224->0, plans 781->527, same win turn.
+  Tiers: only Shadowborn rows; searched 0 slower; every row's aggregate <= before.
+* Open (minor): the 6 PHANTOMs left on s30020789 are mana, not victims -- {Apostle + Culling} on one Swamp.
 * ORACLE-GAP (16): Lake + Lotus Bloom recipes; "core keys differ in a field not listed" -- analyzer-side, open.
 * Chain order: build -> unit -> the s30020022 repro -> smoke (expect only Shadowborn rows to move) -> regression ->
   `./build.sh pgo` -> Shadowborn 5,000 gate on block 25000-29999 -> record, commit, push.

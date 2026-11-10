@@ -20567,6 +20567,89 @@ static bool SubsetHasMissingTrickTarget(const GameState& state,
     return false;
 }
 
+// A VICTIM IS CLAIMED ONCE (USER 2026-11-10: "If we have issues with 2 spells wanting the same sacrifice that
+// seems like a real bug to fix. We cannot choose something already marked as a sacrifice." / "That doesn't seem
+// like an order problem, but a more general issue with the system.")
+//
+// Every hand cast with a "sacrifice a creature" additional cost (sac_additional_creature, the readiness route:
+// Culling the Weak, Diabolic Intent) gets its victim as a per-CAST variant (the SAC-ANY-CREATURE post-pass in
+// CollectActions), so nothing at emission sees the other sacrifice spells of the plan: under Shadowborn's fixed
+// victim (SacCostVictimFixed) every such cast names the SAME pick, and without it two casts can name the same
+// creature. A subset {Apostle, Culling, Intent} on an empty board was therefore a menu entry, and realising it
+// dropped one cast at its cast-time gate (CR 601.2h: no creature left to sacrifice) -- a PHANTOM plan whose board
+// is the smaller subset's, or, when the oracle could find another order, an APPLY-DROP-ORDER flag.
+//
+// THE TEST. Walk the plan's casts in the order both apply worlds realise them (PlanCastOrder: the deck's
+// CastOrderLess + ArrangeCastOrder), keeping a count of the creatures we control: the board's now, +1 per
+// creature cast, -1 per sacrifice claim. A claim met with zero bodies cannot be paid -> reject. Board
+// activations run after every cast, so they cannot supply a cast-time victim and are not walked.
+//
+// SOUND, NEVER LOSSY: it rejects only what the realisation would drop. Anything that could put a creature onto
+// the battlefield in the middle of the casts and is not a plain creature cast makes the walk UNKNOWN -> admit:
+// a token / put / reanimate / blink / cascade / free-cast parameter on a cast or an own permanent, persist or a
+// dies-trigger body on the board, and RIPPLE (a creature cast while a ripple granter is live, or with ripple of
+// its own, can bring free copies). New body routes must be added to `may_add_bodies` below.
+static bool SubsetOverclaimsSacCostVictims(const GameState& state,
+                                           const std::vector<Action>& cands,
+                                           const std::vector<int>& sel)
+{
+    int claims = 0;
+    for (int j : sel)
+    {
+        const Action& a = cands[static_cast<std::size_t>(j)];
+        if (a.kind == Action::Kind::CastFromHand && a.def != nullptr
+            && SacCreatureCostFoldsByReadiness(a.def->params)) { ++claims; }
+    }
+    if (claims < 2) { return false; }   // one claim: the emission's own victim test already covers it
+
+    auto may_add_bodies = [](const CardParams& pp) -> bool
+    {
+        return pp.etb_self_creates_tokens > 0 || pp.etb_tokens_per_land > 0 || pp.etb_other_subtype_creates_tokens
+            || !pp.etb_tokens_per_devotion_color.empty() || pp.cast_creates_tokens > 0 || pp.kicked_creates_tokens > 0
+            || pp.cast_trigger_creates_tokens > 0 || pp.cast_trigger_instant_sorcery_tokens > 0
+            || pp.frontline_copy_tokens > 0 || pp.token_copy_of_target || pp.dies_trigger_creates_tokens > 0
+            || pp.dies_trigger_copy_self_token || pp.sac_outlet_creates_tokens > 0 || pp.landfall_creates_tokens > 0
+            || pp.cascade_max_mv > 0 || pp.etb_exile_free_cast_max_mv > 0 || pp.copies_solo_targeted_spells
+            || pp.tutor_to_battlefield || pp.tutor_to_battlefield_single || pp.reanimate_creature_max_mv > 0
+            || pp.return_target_from_graveyard || pp.etb_put_creature_cards_from_hand
+            || pp.look_top_put_creature_count > 0 || !pp.etb_reveal_put_subtypes.empty() || pp.reveal_x_put_permanents
+            || pp.ltb_return_creatures > 0 || pp.can_animate || pp.persist || pp.etb_blink_permanent
+            || pp.tap_put_from_hand_cost.has_value() || pp.ripple > 0;
+    };
+
+    const int me = state.active_player_index;
+    int bodies = 0;
+    bool granter = false;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || may_add_bodies(d->params)) { return false; }
+        if (d->params.grants_ripple > 0) { granter = true; }
+        if (p.card.IsCreature()) { ++bodies; }
+    }
+    std::vector<int> order;
+    PlanCastOrder(state, cands, sel, order);
+    for (int j : order)
+    {
+        const Action& a = cands[static_cast<std::size_t>(j)];
+        const CardDefinition* d = a.def;
+        if (d == nullptr || may_add_bodies(d->params)) { return false; }
+        if (SacCreatureCostFoldsByReadiness(d->params))
+        {
+            if (bodies <= 0) { return true; }   // the victim it needs was already claimed (or never there)
+            --bodies;
+        }
+        if (d->card.IsCreature())
+        {
+            if (granter) { return false; }      // ripple can bring free copies: not countable here
+            ++bodies;
+        }
+        if (d->params.grants_ripple > 0) { granter = true; }
+    }
+    return false;
+}
+
 // Fixed-burn variants include creatures and planeswalkers still in hand so a
 // same-plan creature-then-Blaze line is reachable. Reject a subset that chose
 // one of those future targets without also selecting its cast. Otherwise the
@@ -21278,6 +21361,10 @@ struct SubsetFilterPre
     // Blood cost variant or Stromkirk Condemned's mode 4 -- the filter's exact necessary condition.
     // Same placement / lowering contract as attach_spell.
     bool vamp_outlet = true;
+    // SubsetOverclaimsSacCostVictims: some candidate is a hand cast with a "sacrifice a creature" additional
+    // cost (sac_additional_creature: Culling the Weak, Diabolic Intent) -- the filter needs two of them in one
+    // selection. Same placement / lowering contract as attach_spell.
+    bool sac_cost_claims = true;
     // ...and that filter's frozen-board facts (VampRulePre; built only when vamp_outlet is raised on the
     // unarmed path -- EMPTY MEANS NOT BUILT, the original per-subset rules run).
     VampRulePre vamp;
@@ -22052,6 +22139,7 @@ static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::v
     p.fixed_burn_target = false;
     p.equip_onto_piece = false;
     p.vamp_outlet = false;
+    p.sac_cost_claims = false;
     int sac_actions = 0;   // sac_fodder needs TWO: `outlets` there counts a subset of these
     bool best_target = false;   // a kTrickBestOwnTarget cand (MTG_MINT_CREDIT_EXACT, Mirrorwing)
     for (const Action& a : cands)
@@ -22094,6 +22182,7 @@ static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::v
                 if (a.enchant_target == kTrickBestOwnTarget)  { p.trick_target = true; best_target = true; }
                 if (a.attach_equip_id != 0)                   { p.attach_spell = true; }
                 if (d != nullptr && d->params.splice_onto_arcane) { p.splice = true; }
+                if (d != nullptr && SacCreatureCostFoldsByReadiness(d->params)) { p.sac_cost_claims = true; }
                 break;
             default: break;
         }
@@ -54652,6 +54741,9 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // Reject a targeted trick whose target is neither on the battlefield nor cast by this
         // same subset (CR 601.2c). Inert without a targeted trick -> byte-identical.
         if (pre.trick_target && SubsetHasMissingTrickTarget(state, cands, sel, pre.best_needs_body)) { return; }
+        // Reject a subset whose "sacrifice a creature" costs claim more victims than the plan can have
+        // when they are cast (USER 2026-11-10; see the helper). Lockstep twin in the other walker.
+        if (pre.sac_cost_claims && SubsetOverclaimsSacCostVictims(state, cands, sel)) { return; }
         if (pre.fixed_burn_target && SubsetHasMissingFixedBurnTarget(state, cands, sel)) { return; }
         // Reject a Magnetic Theft whose hand Equipment target is not cast by this subset, and a
         // redundant second attach of one battlefield Equipment (see the helper). Lockstep twin in the
@@ -74912,6 +75004,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // Reject a targeted trick whose target is neither on the battlefield nor cast by this
         // same subset (CR 601.2c). Inert without a targeted trick -> byte-identical.
         if (pre.trick_target && SubsetHasMissingTrickTarget(state, cands, sel, pre.best_needs_body)) { return; }
+        // Reject a subset whose "sacrifice a creature" costs claim more victims than the plan can have
+        // when they are cast (USER 2026-11-10; see the helper). Lockstep twin in the other walker.
+        if (pre.sac_cost_claims && SubsetOverclaimsSacCostVictims(state, cands, sel)) { return; }
         if (pre.fixed_burn_target && SubsetHasMissingFixedBurnTarget(state, cands, sel)) { return; }
         // Reject a Magnetic Theft whose hand Equipment target is not cast by this subset, and a
         // redundant second attach of one battlefield Equipment (see the helper). Lockstep twin in the

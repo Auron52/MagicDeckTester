@@ -625,3 +625,52 @@ TEST_CASE("INT-9 P1: Swamp + Lake in hand -> a Swamp plan AND a Lake plan, no no
     CHECK(lake > 0);
     CHECK(none == 0);
 }
+
+// ---- a victim is claimed once (USER 2026-11-10) ------------------------------------------------------------------
+// "We cannot choose something already marked as a sacrifice." One Apostle in hand, nothing on the battlefield:
+// Culling the Weak and Diabolic Intent cannot BOTH be paid, so no plan casts both (it used to be a menu entry whose
+// realisation dropped one of them). Each one alone, with the Apostle as its victim, stays on the menu.
+TEST_CASE("Sacrifice claims: two sacrifice costs never share the one creature the plan has")
+{
+    GameState s = Base9(3);
+    s.players[0].hand.push_back(Card9(kAp9, 60));
+    s.players[0].hand.push_back(Card9("Culling the Weak", 61));
+    s.players[0].hand.push_back(Card9(kIntent9, 62));
+    s.players[0].hand.push_back(Card9(kRit9, 63));
+    Lib9(s, { kSw9, kSw9, kSw9, kSw9, kSw9, kSw9 });
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true);
+    int both = 0, culling = 0, intent = 0;
+    for (const TurnSolver::Plan& p : plans)
+    {
+        bool c = false, i = false;
+        for (const Action& a : p.actions)
+        {
+            if (a.kind != Action::Kind::CastFromHand) { continue; }
+            if (a.card_name.str() == "Culling the Weak") { c = true; }
+            if (a.card_name.str() == kIntent9) { i = true; }
+        }
+        if (c && i) { ++both; }
+        if (c && !i) { ++culling; }
+        if (i && !c) { ++intent; }
+    }
+    MESSAGE("plans=", plans.size(), " culling-only=", culling, " intent-only=", intent, " both=", both);
+    CHECK(both == 0);
+    CHECK(culling > 0);
+    CHECK(intent > 0);
+    // A second creature on the battlefield funds both claims.
+    GameState t = s;
+    t.battlefield.push_back(Perm9(kAp9, 30));
+    int both2 = 0;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(t, /*is_pre_combat=*/true))
+    {
+        bool c = false, i = false;
+        for (const Action& a : p.actions)
+        {
+            if (a.kind != Action::Kind::CastFromHand) { continue; }
+            if (a.card_name.str() == "Culling the Weak") { c = true; }
+            if (a.card_name.str() == kIntent9) { i = true; }
+        }
+        if (c && i) { ++both2; }
+    }
+    CHECK(both2 > 0);
+}

@@ -1,14 +1,6 @@
-# Regression ground truth -- commit ee2e858f2  date 2026-11-10
+# Regression ground truth -- commit 5359ac24f  date 2026-11-10
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-10): Full 2026-11-10 rebaseline: 120/588 keys changed; searched overlap 64 faster, 6 slower, net 60 scored turns faster, no searched win became unwon. Five slowdowns recover at 4x budget; Modern RW Burn 2HG s7007 gi58 recovers at unlimited budget. 583 same-score searched line changes reviewed by mechanical grouping and samples. Full oracle: 588/588 matching fingerprints, 0 nonconv, 54 off-by-one fd-diverge, 3 severe flags from 2 distinct preexisting Treasure Hunt seeds (5216, 8468); legacy per-turn search wins T6, current committed-line result is unwon/T7, and disabling batch payment does not fix it. Prior Angels, Angels2HG, and Bruna small searched slowdowns remain follow-ups.
-# accepted-with-regressions (smoke, 2026-11-10): Extra Turns s1001 gi15 is one budget-churn seed in 1v1 and 2HG; both recover T5 at 4x budget. Adopted Horn spots improves regression and held-out.
-# accepted-with-regressions (regression, 2026-11-10): Extra Turns s2002 gi148 is budget churn; T4 recovered at 4x and 16x budget. Net searched wins improve across 1v1 and 2HG.
-# accepted-with-regressions (smoke, 2026-11-10): Extra Turns s1001 gi15 is one budget-churn seed in 1v1 and 2HG; both recover T5 at 4x budget. Adopted Horn spots improves regression and held-out.
-# accepted-with-regressions (regression, 2026-11-10): Extra Turns s2002 gi148 is budget churn; T4 recovered at 4x and 16x budget. Net searched wins improve across 1v1 and 2HG.
-# accepted-with-regressions (smoke, 2026-11-10): Extra Turns s1001 gi15 is one budget-churn seed in 1v1 and 2HG; both recover T5 at 4x budget. Adopted Horn spots improves regression and held-out.
-# accepted-with-regressions (regression, 2026-11-10): Extra Turns s2002 gi148 is budget churn; T4 recovered at 4x and 16x budget. Net searched wins improve across 1v1 and 2HG.
-# accepted-with-regressions (regression, 2026-11-10): Extra Turns Lens-before-Stone cast timing; searched win turns unchanged; depth-zero gi62 and gi640 one turn slower in greedy combo lines
-# accepted-with-regressions (smoke, 2026-11-10): Extra Turns Lens-before-Stone cast timing; searched win turns unchanged; depth-zero one game faster
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -61,10 +53,10 @@ cyclone_smoke_d0_s1001=8.3610/801db26870908ec5
 cyclone_smoke_d3_s1001=4.9400/f6bc7069a092a949
 cyclone_smoke_d5_s1001=4.7400/54fb5b7e0a321f20
 cyclone2hg_smoke_d3_s1001=5.0000/af9bdd10df486e96
-shadowborn_smoke_d0_s1001=7.3990/b0e18186bf8ef053
-shadowborn_smoke_d3_s1001=5.0600/8094f8e84b0ce584
-shadowborn_smoke_d5_s1001=4.8100/5402844c85d68a1b
-shadowborn2hg_smoke_d3_s1001=5.2800/e0d087e5ce050c0f
+shadowborn_smoke_d0_s1001=7.3770/33acfa973ce95b58
+shadowborn_smoke_d3_s1001=5.0400/1962b88bd526c3fe
+shadowborn_smoke_d5_s1001=4.8100/d12d056e50dd6888
+shadowborn2hg_smoke_d3_s1001=5.2800/c2ec26e8028f026b
 dragonstorm_smoke_d0_s1001=4.9620/8666da55b491a4d5
 dragonstorm_smoke_d3_s1001=4.4600/745070e2adcb336d
 dragonstorm_smoke_d5_s1001=4.4400/b9f2486bd505a595
@@ -328,11 +320,11 @@ cyclone_regression_d3_s2002=4.8533/f22dcd37081f4918
 cyclone_regression_d3_s3003=4.9333/437a6de4a37c0d52
 cyclone_regression_d5_s2002=4.7333/eb0d78511c346b04
 cyclone_regression_d5_s3003=4.7667/bdcbc678cb54ed24
-shadowborn_regression_d0_s2002=7.3690/bc1408590a69f403
-shadowborn_regression_d3_s2002=4.8400/3ac9f4e0acd84a9f
-shadowborn_regression_d3_s3003=5.0000/28c41751e937e7ba
-shadowborn_regression_d5_s2002=4.8200/01100801c0a9c1e6
-shadowborn_regression_d5_s3003=4.8133/317896ca97349c4d
+shadowborn_regression_d0_s2002=7.3570/23c1270628be5e0c
+shadowborn_regression_d3_s2002=4.8400/ff33bbde1b3cd73e
+shadowborn_regression_d3_s3003=4.9733/8e82bb1baf88f1f2
+shadowborn_regression_d5_s2002=4.8133/7e0491adbbcd7907
+shadowborn_regression_d5_s3003=4.8133/b511a89c39f47372
 dragonstorm_regression_d0_s2002=4.9950/134893a12929142d
 dragonstorm_regression_d3_s2002=4.2100/49841ce306256dbd
 dragonstorm_regression_d5_s2002=4.2988/2d431e462fb2a30e
