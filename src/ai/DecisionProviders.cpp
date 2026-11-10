@@ -49051,6 +49051,12 @@ static std::vector<std::string> AaWishBucketSet(const GameState& s, int controll
     const bool amend_blue  = heurarm::Flag(heurarm::AA_WISH_BLUE, s_blue_env);
     const bool amend_truf  = heurarm::Flag(heurarm::AA_WISH_TRUFFLE, s_truf_env);
     const bool witch_win     = AaWishWitchWinOn();
+    // With the untapper and win condition held at three mana, prefer the
+    // missing Alchemist. Still offer the mana bucket: an Elf can be the faster
+    // route to four mana (regression seed 3054), and search must retain it.
+    static const bool s_alch_first = EnvOn("MTG_AA_WISH_ALCH_FIRST", true);
+    const bool alch_first    = s_alch_first && c.mana >= 3 && c.mana < 4
+                            && !c.alchemist && c.untapper && c.wincon;
     const bool mana_lacking  = c.mana < 4;
     // A held Witch fills Untap and Wincon/Draw (2026-10-21). =0 only: the 4 life rule (Untap at a held gain >= 5)
     // and no Wincon.
@@ -49072,7 +49078,7 @@ static std::vector<std::string> AaWishBucketSet(const GameState& s, int controll
         *why += h + b + "]";
     }
     // Rank = the USER's bucket order (lower first); -1 = not offered.
-    enum : int { kElf = 0, kForest, kIsland, kAlch, kGain, kUntap, kWin };
+    enum : int { kAlchFirst = 0, kElf, kForest, kIsland, kAlch, kGain, kUntap, kWin };
     std::vector<std::pair<int, std::string>> ranked;
     bool elf_legal = false;
     for (const std::string& nm : all)
@@ -49086,7 +49092,7 @@ static std::vector<std::string> AaWishBucketSet(const GameState& s, int controll
         if (d == nullptr) { continue; }
         const CardParams& p = d->params;
         int r = -1;
-        if (p.mana_per_life_gained)                     { if (!c.alchemist) { r = kAlch; } }
+        if (p.mana_per_life_gained)                     { if (!c.alchemist) { r = alch_first ? kAlchFirst : kAlch; } }
         else if (d->card.IsCreature() && !p.mana_requires_land_subtype.empty())
                                                         { if (mana_lacking) { r = kElf; } }
         else if (d->card.IsLand())

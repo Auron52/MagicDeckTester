@@ -22380,6 +22380,22 @@ inline bool ControlsFirebreathingSource(const GameState& state, int controller)
 // is dragon-SPELLS-only; the flat pool let it fund {R} pumps, the real payment refuses).
 using FbPayer = bool (*)(GameState&, const ManaCost&);
 
+// Combat damage historically marks attackers tapped late. Before an in-combat
+// pump pays mana, make the declaration's tap visible to its payer: an attacking
+// Arbor Elf or Alchemist cannot also fund Ezuri's pump. Vigilant attackers stay
+// available. ResolveCombatDamage's later tap is idempotent.
+inline void TapDeclaredAttackersBeforePump(GameState& state, const std::vector<int>& attackers)
+{
+    static const bool s_tap_before_pump = EnvOn("MTG_ATTACK_TAP_BEFORE_PUMP", true);
+    if (!s_tap_before_pump) { return; }  // =0 replays the pre-fix combat baseline.
+    for (int idx : attackers)
+    {
+        if (idx < 0 || idx >= static_cast<int>(state.battlefield.size())) { continue; }
+        Permanent& p = state.battlefield[static_cast<std::size_t>(idx)];
+        if (!CreatureHasVigilance(p, state)) { p.tapped = true; }
+    }
+}
+
 // `attacker_indices` is taken by MUTABLE reference because a payer's successful payment can ERASE
 // battlefield entries (a tapped pay-sac Treasure is sacrificed by CommitPaySacSacrifices at the end
 // of TapForCostShared -- the same hazard SpendSurplusOnDamageSinks documents), which shifts every
@@ -48515,6 +48531,26 @@ inline AuraHostKey AuraHostBoardKey(GameState& t, int controller, bool attack_wi
                 if (h.card.m_number != a.aura_attached_to || h.def_absent) { continue; }
                 const CardDefinition* hd = CardDatabase::Instance().LookupCached(h.card);
                 if (hd != nullptr && hd->params.draw_trigger_damage > 0) { ++k.combo; }
+                break;
+            }
+        }
+    }
+    // Crab Umbra on Accomplished Alchemist is the deck's mana loop. Its untap
+    // ability is nearly blank on an ordinary dork; a combat-damage-only ranking
+    // otherwise prefers a ready Harbinger over the summoning-sick Alchemist.
+    static const bool s_aa_umbra_host = EnvOn("MTG_AA_UMBRA_HOST", true);
+    if (s_aa_umbra_host && t.deck_reads_lifegain_in_play)
+    {
+        for (const Permanent& a : t.battlefield)
+        {
+            if (a.controller_index != controller || a.def_absent || a.aura_attached_to == 0) { continue; }
+            const CardDefinition* ad = CardDatabase::Instance().LookupCached(a.card);
+            if (ad == nullptr || !ad->params.untap_enchanted_cost) { continue; }
+            for (const Permanent& h : t.battlefield)
+            {
+                if (h.card.m_number != a.aura_attached_to || h.def_absent) { continue; }
+                const CardDefinition* hd = CardDatabase::Instance().LookupCached(h.card);
+                if (hd != nullptr && hd->params.mana_per_life_gained) { ++k.combo; }
                 break;
             }
         }

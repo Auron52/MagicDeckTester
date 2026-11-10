@@ -9638,6 +9638,7 @@ void AIEngine::Firebreathe(GameState& state, std::vector<int>& attacker_indices)
     state.scripted_fb_hold = -1;
     if (attacker_indices.empty()) { return; }
     if (!ControlsFirebreathingSource(state, state.active_player_index)) { return; }
+    TapDeclaredAttackersBeforePump(state, attacker_indices);
     ManaPool pool = AvailableManaPool(state);
     // Human play (#4): let the player cap the pump. Probe the greedy-max activation count on a COPY
     // (ApplyFirebreathing takes the pool by value, so the probe does not consume it), ask the chooser

@@ -4799,7 +4799,8 @@ function freeCastPanelHtml(d){
   // `source` names the offering trigger: Maelstrom Archangel's combat charge (from hand), or a
   // cascade / Breaching Dragonstorm / Creative Technique resolution offering its found card.
   // Decline's disposition differs per mechanic (Archangel: keep hand; cascade "(cascade)":
-  // bottomed; Breaching Dragonstorm: to hand; Creative Technique: stays exiled).
+  // bottomed; Cyclone: bottomed in random order; Breaching Dragonstorm: to hand;
+  // Creative Technique: stays exiled).
   const src=d.source||'Maelstrom Archangel';
   const isArch=src.indexOf('Archangel')>=0;
   // FROM-HAND charge: a bottom prompt over a clickable hand, not a card grid in a modal. The cards
@@ -4844,7 +4845,7 @@ function freeCastPanelHtml(d){
     ? `<div class="sub"><b>${esc(src)}</b> dealt combat damage — you may cast one spell from your hand <b>without paying its mana cost</b>. This is a one-time trigger: click a spell, or decline.</div>`
     : src.indexOf('(ripple)')>=0
     ? `<div class="sub"><b>${esc(src)}</b> revealed these — you may cast any of them <b>without paying their mana costs</b>, one at a time (you are asked again after each cast, and each one cast ripples again). An additional cost (a sacrifice) is still paid. Cast no more to stop: every revealed card not cast goes to the bottom of your library in the order revealed.</div>`
-    : `<div class="sub"><b>${esc(src)}</b> found this card — you may cast it <b>without paying its mana cost</b>. Click it to cast, or decline${src.indexOf('(cascade)')>=0?' (it goes to the bottom of your library)':(src.indexOf('Creative Technique')>=0||d.operation==='suspend_cast')?' (it stays in exile)':' (it goes to your hand)'}.</div>`;
+    : `<div class="sub"><b>${esc(src)}</b> found this card — you may cast it <b>without paying its mana cost</b>. Click it to cast, or decline${src.indexOf('(cascade)')>=0||src.indexOf('Unpredictable Cyclone')>=0?' (it goes to the bottom of your library in a random order with the other exiled cards)':(src.indexOf('Creative Technique')>=0||d.operation==='suspend_cast')?' (it stays in exile)':' (it goes to your hand)'}.</div>`;
   h+=`<div class="tutgrid fc-cands">`;
   if(!cands.length) h+=`<span class="hint">No castable spell in hand.</span>`;
   cands.forEach(c=>{

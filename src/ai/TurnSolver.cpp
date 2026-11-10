@@ -71464,6 +71464,7 @@ static void SimulateOneCombatAfterTitan(GameState& state, int active, std::vecto
     { fbholdstats::Bump(fbholdstats::kPinUnread); }
     if (!atk_idx.empty() && ControlsFirebreathingSource(state, active))
     {
+        TapDeclaredAttackersBeforePump(state, atk_idx);
         // Provider-owned count (FirebreatheActivations), the SAME hook the executor reads, so the
         // rollout never pumps to a different budget than the realised combat. Negative = greedy max
         // (the default) -> byte-identical.

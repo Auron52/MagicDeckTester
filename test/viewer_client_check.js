@@ -126,6 +126,7 @@ function buildDom() {
     // handshake check needs the client's own number, not a copy of it that could drift.
     + 'window.__clientApi = CLIENT_API;'
     + 'window.__fb = { panel: firebreathePanelHtml, commit: commitFirebreathe, rollback: rollbackStep };'
+    + 'window.__fcPanel = freeCastPanelHtml;'
     + 'window.__sh = { panel: storageHoldPanelHtml, commit: commitStorageHold, rollback: rollbackStep };'
     + 'window.__co = { apply: applyAccepted, rollback: rollbackStep };'
     // Top-level `const`s are lexical bindings, not window properties — expose the two the harness
@@ -2077,6 +2078,12 @@ async function testColorlessFirstTapOrder() {
   // #4 firebreathe GUI bookkeeping (fast, DOM-only — no game needed).
   {
     const win = buildDom(); await settle(win);
+    const cyclonePrompt = win.__fcPanel({ source: 'Unpredictable Cyclone',
+      candidates: [{ index: 0, name: 'Ponder' }], heuristic_default: 0 });
+    if (!cyclonePrompt.includes('bottom of your library in a random order')
+        || cyclonePrompt.includes('goes to your hand')) {
+      anyFail = true; console.log('✗ Cyclone decline prompt gives the wrong destination');
+    } else { console.log('✓ Cyclone decline prompt says the hit is bottomed in random order'); }
     const fbFails = testFirebreatheBookkeeping(win);
     if (fbFails.length) { anyFail = true; console.log(`✗ firebreathe bookkeeping: ${fbFails.length} fail`); fbFails.forEach(m => console.log('  - ' + m)); }
     else { console.log('✓ firebreathe GUI bookkeeping (side-channel + zero-int step + undo)'); }

@@ -18,6 +18,7 @@
 #include <doctest/doctest.h>
 
 #include "ai/DecisionProviders.h"
+#include "ai/AIEngine.h"
 #include "ai/ManaPayment.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
@@ -385,6 +386,34 @@ TEST_CASE("Ezuri: {2}{G}{G}{G} gives attacking ELVES +3/+3, not other creatures"
     CHECK(ByNumAa(s, ez)->EffectiveToughness() == 5);
     CHECK(ByNumAa(s, ae)->EffectivePower() == 4);
     CHECK(ByNumAa(s, bb)->EffectivePower() == 2);
+}
+
+TEST_CASE("Ezuri combat pump cannot spend mana from its declared attackers")
+{
+    GameState s = FreshAa();
+    for (int i = 0; i < 4; ++i) { PutAa(s, "Forest"); }
+    const int elf = PutAa(s, "Arbor Elf");
+    const int alchemist = PutAa(s, "Accomplished Alchemist");
+    PutAa(s, "Ezuri, Renegade Leader");
+    std::vector<int> attackers;
+    for (int i = 4; i < static_cast<int>(s.battlefield.size()); ++i) { attackers.push_back(i); }
+    AIEngine ai;
+    ai.Firebreathe(s, attackers);
+    CHECK(ByNumAa(s, elf)->tapped);
+    CHECK(ByNumAa(s, alchemist)->tapped);
+    CHECK(ByNumAa(s, elf)->EffectivePower() == 1);
+    CHECK(ByNumAa(s, alchemist)->EffectivePower() == 2);
+}
+
+TEST_CASE("Crab Umbra chooses Accomplished Alchemist over an attacking Harbinger")
+{
+    GameState s = FreshAa();
+    s.deck_reads_lifegain_in_play = true;
+    PutAa(s, "Elvish Harbinger");
+    const int alchemist = PutAa(s, "Accomplished Alchemist", /*sick=*/true);
+    PutAa(s, "Crab Umbra");
+    const int aura = static_cast<int>(s.battlefield.size()) - 1;
+    CHECK(AuraCastHostByRank(s, 0, aura) == alchemist);
 }
 
 
@@ -2216,6 +2245,16 @@ TEST_CASE("Wish buckets: ALCHEMIST -- offered only while none is in hand or in p
     ExpectWishAa(h, { "Scholar of Athreos" });               // nothing lacking -> Scholar
     PutAa(p, "Accomplished Alchemist");
     ExpectWishAa(p, { "Scholar of Athreos" });               // in play fills the bucket too
+}
+
+TEST_CASE("Wish buckets: held Staff makes missing Alchemist urgent at three mana")
+{
+    GameState s = WishAa();
+    HandAa(s, "Staff of Domination");
+    PutAa(s, "Forest"); PutAa(s, "Forest");
+    ExpectWishAa(s, { "Arbor Elf", "Forest", "Island", "Accomplished Alchemist", "Brindle Boar" });
+    PutAa(s, "Forest");
+    ExpectWishAa(s, { "Accomplished Alchemist", "Arbor Elf", "Forest", "Island", "Brindle Boar" });
 }
 
 TEST_CASE("Wish buckets: MANA -- < 4 projected mana; hand lands count; Island only without a blue source")
