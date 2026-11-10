@@ -54,6 +54,13 @@ Source of the work: `logs/mana_clean/lastweek-20261110-shadowborn-order/report.m
   legitimate menu, no dominated copies found); ENUM-GAP 337, APPLY-DROP 108, APPLY-DROP-ORDER 429,
   DOMINATED-CREATURE 212, ORACLE-GAP 129, UNMODELED 158. The capped decision is analyzer cost (USER question on
   per-plan cost cuts open; caps are not raised to hide it).
+* **USER DECISION (Jumbo cast order, not changed): APPLY-DROP-ORDER 429** are the provider's (proposed-for-review)
+  order. Top shapes: (1) GSZ fetching Arbor Elf ranks 38, BEFORE the hand Arbor Elf (40), so with Greaves the hand
+  Elf + haste equip that would fund GSZ comes too late (s30025904 T2; order that pays: Elf > Greaves > equip > GSZ);
+  (2) Wild Growth before Overgrowth on the same Forest where Overgrowth-first pays Tooth and Nail (s30029950 T6;
+  ArrangeCastOrder's proven swap covers Utopia Sprawl only); (3) Chariot of Victory after Voyaging Satyr where
+  Chariot-first + equip pays (several). Proposed: tutor->Elf rank after the hand Elf; extend the proven Aura swap
+  to Wild Growth; Chariot's equip-funded slot. Raised with the USER.
 * Open (minor): the 6 PHANTOMs left on s30020789 are mana, not victims -- {Apostle + Culling} on one Swamp.
 * ORACLE-GAP (16): Lake + Lotus Bloom recipes; "core keys differ in a field not listed" -- analyzer-side, open.
 * Chain order: build -> unit -> the s30020022 repro -> smoke (expect only Shadowborn rows to move) -> regression ->
