@@ -33,3 +33,22 @@ is reusing `AuditPlan`'s completed `Realization` for `RollbackCore`'s `k=0`
 retry on an APPLY-DROP, but p3's many full-plan audits mean that alone is
 unlikely to remove this sizing tail. Neither candidate has been implemented
 or measured yet.
+
+## Targeted profile and implementation boundary
+
+An eight-second `perf record` of the unmodified PGO p3 replay sampled the
+turn-four tail. The largest exclusive symbols were `BuildSimKeyBase` (14.08%),
+`GameState` copy construction (7.79%) and assignment (3.46%); the remaining
+samples spread across key construction, `ApplyPlanDirect`, payment and frontier
+pruning. This is repeated full-state application and identity work, not one
+isolated slow payment routine. The one-second-cap replay gives a small,
+repeatable workload for evaluating a future cache: 198,971 applies, an exact
+class-count target under the same cap, and an oracle-on/off win turn of four.
+
+No reuse has been landed. `SiblingKey` is intentionally order-insensitive,
+while an exact `Realize` cache must preserve every choice that can change an
+apply, hidden library order, and payment-frontier order. `ActionKey` names only
+a subset of `Action` fields, so treating it as that exact key would risk
+silently reusing a result for a different plan. An exact key or equivalence
+proof is needed before the oracle can skip any of these applies while still
+claiming full audit coverage.
