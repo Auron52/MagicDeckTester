@@ -21,7 +21,7 @@ The pre-change ten-game manifest is `/tmp/codex-sb-oracle-lake-ten.json`, using 
 | `ENUM-GAP` | 0 | 1 |
 | `UNMODELED` | 0 | 0 |
 
-All ten `.wins` files are byte identical before and after. At this stage, 19 `APPLY-DROP` flags came from seed 30010014, three from seed 30010160, and the `ENUM-GAP` was seed 30010331. These were previously masked by the oracle's inability to replay Lake's crack. A focused unit case covers the crack face, one black mana remaining after a `{B}{B}{B}{B}` bill, Swamp sacrifice, pin consumption, and absence of a crack face without a victim. Its translation unit compiled, but the full isolated `mtg-test` build was stopped after seven of 245 steps to avoid contention with other builds; the unit case has not been run yet.
+All ten `.wins` files are byte identical before and after. At this stage, 19 `APPLY-DROP` flags came from seed 30010014, three from seed 30010160, and the `ENUM-GAP` was seed 30010331. These were previously masked by the oracle's inability to replay Lake's crack. A focused unit case covers the crack face, five black mana floated by pre-tapping Lake and its Swamp victim, Swamp sacrifice, pin consumption, and absence of a crack face without a victim. Its translation unit compiled, but the full isolated `mtg-test` build was stopped after seven of 245 steps to avoid contention with other builds; the unit case has not been run yet.
 
 ## Paid-suspend follow-up
 
