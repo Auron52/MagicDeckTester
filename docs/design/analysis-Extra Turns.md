@@ -1743,10 +1743,54 @@ seed 2008 did not win by the round-8 horizon. The only substantive missing
 legal line was the Horn-before-land order, now repaired. Seed 2007's
 draw-history flag was also repaired; the Lens prompt's `flicker` label remains
 cosmetically broad. No game found a confirmed rules or state-transition error
-after review. A 15-seed sweep against the final binary was attempted, but
-Claude CLI returned its weekly usage limit before any game began (reset
-November 9 at 15:00 UTC). The Claude-play gate therefore remains pending
-and must not be recorded as passed.
+after review. A 15-seed sweep attempted on November 7 was blocked by Claude
+CLI's weekly usage limit. The November 10 continuation below supersedes that
+attempted sweep.
+
+### Final-binary continuation (2026-11-10)
+
+- commit: `17a1dd055`
+- seeds: 62008, 63003, 64001, 64002; games: 4
+- flags: 1 unresolved
+
+Claude itself played all four games on the same corrected Release binary. Its win
+rounds versus the depth-5, 20-ms AI were 5/5, 5/6, 4/4, and 4/4 respectively.
+The fresh 64001 and 64002 games and the corrected 63003 game found no rules or
+state-transition errors. Seed 63003's earlier win came from keeping six cards
+that the AI mulliganed, but Claude had six-card draw foresight; this is a weak
+keep-policy hypothesis, not a confirmed AI error.
+
+The preceding nine-game discovery sweep (62001–62009) ran on the older binary.
+It found two confirmed issues: seed 62003 carried one surplus Lens-produced
+blue mana from a miracle in the draw step into main 1, and seed 62008 tapped
+the targeted 6/6 haste Island to pay Part the Waterveil while five other
+Lens-boosted Islands could pay both Part and Time Warp. A later exploratory
+63003 game also spent an already-awakened land on ordinary spells despite
+sufficient other mana. Commit `17a1dd055` clears floating mana at the draw-step
+boundary in both executor and rollout, reserves the awaken target while paying
+the awaken spell when alternatives exist, and ranks an attack-ready awakened
+land behind ordinary mana sources on later casts. The seed-62003 final-binary
+replay has no floating mana at decisions 25 and 28. Both focused tests pass,
+including a subsequent Time Warp cast with the 6/6 land remaining untapped.
+The full unit suite passed 2,664 cases and 3,578,487 assertions.
+
+**Unresolved viewer validation flag:** seed 62008, decision 13, hand contains
+one Horn of Greed and the next Horn is drawn only by the proposed Island play.
+`--validate-line 'cast=Horn of Greed;landafter=Snow-Covered Island'` returns
+`accept`, plan 7, whose summary and structured plan play the Island first.
+The `landat=all` spelling does the same. The proposed land-after plan 8 is
+not payable as declared: direct replay plays the Island, draws Horn, and drops
+the attempted pre-land Horn cast. `CheckLine`'s positioned-line fallback
+intentionally matches a legal non-enumerated line to a land-first plan, but
+this case should not be accepted as the requested cast-before-land sequence.
+No illegal state transition was observed; the validator can misreport this
+human line. The Claude-play gate remains blocked until this flag is resolved.
+
+The old-source 5,000-game mana-clean arm was stopped after 30 completed
+on-arm jobs and about 155,000 capped-decision lines. Its exit 143 and logs
+(`/tmp/mana-extra-turns-resume8-20261110.log`, `on.2.{out,err}`) are diagnostic,
+not accepted clean-gate evidence. The reference safety scan passed across
+191 checkout/worktree sets; no ground truth was accepted or rebaselined here.
 
 ### Final verification (2026-11-07)
 
