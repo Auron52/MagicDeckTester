@@ -21,7 +21,7 @@ integration serial.
 
 | card | tier | model | viewer bucket | status |
 |---|---|---|---|---|
-| Lurrus of the Dream-Den | 3 | `gy_cast_permanent_max_mv 2`: once-per-turn per-object graveyard CAST permission (reuses `once_per_turn_used`), `CastFromGraveyard` actions with `gy_cast_source_id`, executor gy-cast path through `CastSpellFromHand`, site-10 re-solve on a new legal gy card / Lurrus entry, `GyR_GyCastNames` dominance bit; Companion inert tag | B: `gycast=` verb + clickable graveyard | integrating (integrator B) |
+| Lurrus of the Dream-Den | 3 | `gy_cast_permanent_max_mv 2`: once-per-turn per-object graveyard CAST permission (reuses `once_per_turn_used`), `CastFromGraveyard` actions with `gy_cast_source_id`, executor gy-cast path through `CastSpellFromHand`, site-9 activation key per castable gy name (re-solve on a new legal gy card / Lurrus entry), `GyR_GyCastNames` dominance bit; Companion inert tag | B: `gycast=` verb + clickable graveyard | IMPLEMENTED de56cc001 (rebased 46467b0e5) |
 | Squadron Hawk | 1 | `etb_tutor_hand_count 3` + `wish_requires_name` (Ranger of Eos multi path) | A: `sac_tutor` | IMPLEMENTED f402e5aeb |
 | Kami of False Hope | 2/3 | self-only sac outlet + `sac_outlet_prevent_combat_damage` (`GameState::combat_damage_prevented_turn`, read by combat core + PendingAttackDamage) — a pure cost vs the goldfish | A: `sacout=` | IMPLEMENTED e419123be |
 | Thraben Inspector | 2 | `etb_investigate 1` -> `CreateClueTokens` in `FireOwnEtbTriggers` | A: Clue SacDraw | IMPLEMENTED f402e5aeb |
@@ -51,24 +51,29 @@ instant-speed activation not modelled.
 - "Cast Abiding Grace, then sacrifice in the same plan" may need a re-collect breakpoint.
 - Clue created at END STEP (Grace returning Inspector) cannot be cracked that turn (no instant-speed window).
 
-## Checkpoint (2026-11-10 12:40 UTC)
+Lurrus integrator B notes (2026-11-10, handoff `logs/martyr-lifegain/lurrus-handoff.md`): unit 2709/2709 (11 new in
+`test/unit/test_lurrus.cpp`, both worlds), scenarios 456/456 (4 new `martyr_lurrus_*`, each a T4 win), viewer driven via
+`--claude-play` seed 54 (`gycast_gy` listed, `gycast=` accepted). Smoke 183/183, play-changed=0. Deviation: the re-solve
+point is site 9 (an activation key per castable name), not a new site 10. Executor fix: its site-9 continuation now
+realises Lurrus casts (without it the rollout's T4 loop realised T5 even at unlimited budget). PRE-EXISTING gap left
+byte-identical: a RETRACE cast inside a site-9 continuation (and any gy cast in a site-7 Pod continuation) is applied by
+the rollout but not the executor. `test/check_plan_sig_lockstep.py` reports `fast-only ['#BB']` -- pre-existing
+(a78921c85, Extra Turns), not ours. PROVISIONAL: Companion inert; {X} permanents never offered by Lurrus (none in list).
+Untested: Hawk cast from the graveyard (ETB search) -- shared cast path, no scenario of its own.
 
-- Pushed through 20082c69e; CI green (Linux, Windows, determinism parity) on run 42809513650.
-- 20082c69e is an INTERIM routing-table pin `{"Martyr Lifegain", "Equipment"}` in
-  `test/unit/test_pirates_provider.cpp` (the folder landing without a row failed CI on both OSes).
-- Lurrus integrator B is RUNNING in the primary checkout (uncommitted src edits; logs in
-  `logs/martyr-lifegain/lurrus-build*.log`; handoff file would be `logs/martyr-lifegain/lurrus-handoff.md`).
-  Do not `git pull`/stash while its edits are uncommitted.
-- A session-only 2-hourly status timer is armed for this chain.
-- NEXT after Lurrus lands: review its report, push, watch CI; Stage 2d-bis (`audit_card_costs.py`,
-  `audit_card_fields.py`); Stage 3 coverage re-run; Stage 4a own provider `MartyrLifegainProvider` derived
-  from `EquipmentProvider` (replace the interim pin; `provider_audit.py --check`); Stage 4 profile;
-  4-bis/5j regression tiers (3x Hinata cost gate); Stage 5 (`verify_deck.py`, 5a-5h, 5c2, 5d claude-play
-  sweep fan-out); decide/propose second main + Innocence cast order (USER-owned, surfaced, defaults taken).
+## Stage 2d-bis / 3 (2026-11-10)
+- `audit_card_costs.py`: 565/565 costs match Scryfall. `audit_card_fields.py`: no hard findings. The new cards' oracle
+  advisories are the long bracket notes after the verbatim text (611 cards trip the same advisory).
+- Coverage re-run: 18/18 full, missing [].
 
 ## Provider
 
-(Stage 4a — pending)
+Stage 4a (6bbc57216): `MartyrLifegainProvider`, an EMPTY derivation of `EquipmentProvider` -- the provider Umezawa's
+Jitte routed the deck to -- so play-neutral by construction. Routed ABOVE `equipment` on four new gated params from four
+cards (Lurrus, Kami, Farm Animals, Enduring Innocence). It INHERITS KittyEquipment's judgement hooks: removal NeverCast
+(Swords / Unexpectedly Absent never cast -- the USER's 2026-10-04 goldfish ruling for Kitty), land-first / equip-last
+activation order, Kitty's cleanup-discard buckets (MTG_KE_BUCKET_DISCARD), the equip-route trial, fold opt-ins. Each is
+a provider-stage question for this deck (discard buckets are USER-owned, 5i).
 
 ## Verification
 
