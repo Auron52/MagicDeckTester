@@ -1483,3 +1483,61 @@ skipped (gi 15 @ seed 9009, gi 287 @ seed 11011) and the run resumed incremental
   different mulligan count, a different bottom, or bottom order only). `extraturns_regression_d5_s2002` differed by
   digest only (same score) in the pooled run; solo it reproduces GT 254115e71dd5ea00, so its GT was kept (pool
   residency, the P6/P7 cache work).
+
+## P4: the BP re-derivations are a read-guard refusal, not a key split (2026-11-11, IN PROGRESS, not pushed)
+
+**Root cause (measured).** P3's premise ("whole re-enumerations of the same board under DIFFERENT BP keys") does
+not hold on this tree. `MTG_BP_REENUM_CENSUS` (new, diagnostic) fingerprints each BP-derivation enumeration by the BP
+key minus its ten snapshot folds and names the folds that differ on a repeat. Base, d5 b20:
+- gi 1979 (seed 8986): 29,116 SAME-key repeats carry 24.9M of the game's 29.5M odometer visits and 59.7M of its
+  71.1M payment walks. Different-key repeats: 198 (34k visits; hand_before / plan_casts).
+- gi 1782 (seed 8789): 1,621 same-key repeats, 6.4M of 7.5M visits; 8 different-key.
+
+Every same-key repeat was a refusal by the shadow cache (`pledger::WouldServe`) under `MTG_CACHE_READ_GUARD`, with the
+decision budget EXHAUSTED (not overrun, priced ceiling not tripped). A derivation's only budget read is the priced
+ceiling poll (`decisionwork::PricedExceeded()` per odometer visit, `MTG_BP_DERIVE_PRICED_STOP`), but the guard asked
+`ContextCutNow()` for every budget reader. So once the pass ran past its budget, every lookup re-derived the
+identical list. The ~72% payment-walk repeats are the same thing: they are the payment walks inside those
+re-derivations.
+
+**Commits (branch hydras-enum-collapse).**
+- 64719a23c: priced reads are counted apart (`budgetbind::t_preads`). A priced-only entry is SERVED FREE where only
+  the budget is exhausted. `MTG_CACHE_READ_GUARD_KIND` (default ON) plus the per-job arm `read_guard_kind`; the census;
+  `test_cache_read_guard.cpp`. Measured and set aside: gi 799 went T7 -> T8 at 2.5x units (3.90M -> 9.65M), and gi
+  1979 went unwon -> T8. The priced ceiling (`MTG_DECISION_PRICED_X` = 100) had been counting those recomputes, so
+  without them it tripped much later.
+- 656d04eb6: the shadow keeps its rule (the virtual world recomputes there and counts it). The REAL cache stands in
+  for that recompute and replays the work its computation counted (`Cost::work`) through `workctr::IncReplayed`.
+  `MTG_TIER1_STATS` prints `<kind>_replayed=`, so work actually done = t_n - t_replayed.
+  - Unit tests: 2819/2819.
+  - Smoke (`MTG_PGO=0`, not accepted): 191/191 pass, 0 play changes. Units moved on 5 jobs, by -4 to -22.
+
+**Outliers, base -> 656d04eb6 (digests identical in all four; work done):**
+
+| gi | units | odometer | payment walks |
+|---|---|---|---|
+| 1782 | = | 7.54M -> 1.13M | 11.2M -> 1.59M |
+| 1979 | -177 | 29.5M -> 11.4M | 71.1M -> 27.3M |
+| 799 | -10.4k | 80.1M -> 39.1M | 59.7M -> 36.9M |
+| 25 | = | 28.4M -> 9.50M | 49.6M -> 15.8M |
+
+Wall time is indicative only (shared box). Uncontended, 1782 took 40 -> 7 s, 25 160 -> 61 s, 1979 213 -> 86 s and
+799 388 -> 193 s.
+
+**Held-out A/B (656d04eb6, one pooled batch, 2 arms x 2400 games, arms innermost, seed 7007+off, d5 b20).** Arm base is
+`read_guard_kind` false. All 48 chunk DIGESTS are identical. Win turns are identical (avg 5.5204 in both arms, 0
+slower, 0 faster). Units moved in 7 chunks (-0.012% in total). ms per game: 6060 -> 4711 (0.777x; the box was shared).
+There is no slower game, so no d8 b0 recovery is owed. Outputs: logs/hydras-p4/ab_summary.txt and ab_digests.txt.
+
+**OPEN DEFECT (blocks adoption).** 656d04eb6 is residency-dependent. A replay happens only while the REAL entry is
+resident. When it is not, the lookup recomputes, and the recompute's counted work (warm tier-1 caches) differs from
+the stored work. So the counts, and through the priced ceiling the units, depend on the byte pool. Evidence: the same
+4-game batch gave gi 1979 333,224 and then 333,176 units.
+
+The fix is to store the replay work in the SHADOW and decide from the shadow alone. On a real miss, recompute MUTED
+and replay the shadow's work. Then check that two runs of the same batch, and a small `MTG_PLAN_CACHE_KB`, give
+identical units. Handoff: logs/hydras-research/P4-handoff.md.
+
+**Open for the USER.** Even when deterministic, the replay counts the FIRST computation's work, which can be a little
+more than a recompute's. So it keeps every digest but moves units by a few per job. That is a re-price of the priced
+meter. Is that acceptable as "byte-identical play"?
