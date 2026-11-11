@@ -67,6 +67,16 @@ inline thread_local int t_mute = 0;
 // Content-pure caches consult this before every store; a refused store only costs wall.
 bool MuteNoStoreOn();
 inline bool StoresAllowed() { return t_mute == 0 || !MuteNoStoreOn(); }
+// Diagnostic tally of stores REFUSED by StoresAllowed, per site (printed under MTG_PLAN_LEDGER_STATS beside the
+// ledger's muted_recomputes) -- attributes MTG_MUTE_NO_STORE's wall cost. Counting only; never changes play.
+enum RefuseSite : int { kRefRefine = 0, kRefManaT2, kRefMana, kRefRgc, kRefSites };
+void NoteRefused(int site);
+inline bool StoresAllowedAt(int site)
+{
+    if (StoresAllowed()) { return true; }
+    NoteRefused(site);
+    return false;
+}
 inline void Inc(int k, long long n = 1) { if (t_mute != 0) { return; } t_n[k] += n; t_priced += kPriceNs[k] * n; }
 inline void BeginGame() { for (int k = 0; k < kKinds; ++k) { t_n[k] = 0; } t_priced = 0; }
 }

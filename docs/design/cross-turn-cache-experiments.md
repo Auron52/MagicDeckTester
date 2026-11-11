@@ -202,6 +202,32 @@ Worktree `.claude/worktrees/xturn`, branch `xturn-cache` rebased on origin `d4bf
   digest differs): pristine origin `d4bfb2071` reproduces the new digests exactly, so it came with the Gods merge
   `f90930c9f`, not with this work.
 
+* **Final verification (x11, rebased on origin `78e623dac`; commit `0e9960186`, LOCAL -- USER 2026-11-11: hold the push
+  until the Hinata2 artifact-queue job finishes, then fetch / rebase-if-src-moved / push):** build, 2,770 unit tests,
+  smoke 3 slower / 12 faster (net -10 game-turns), regression 4 slower / 33 faster (net -27); smoke + regression GT
+  accepted, check_gt_logs clean. Two of the slower games are T8 -> loss (shadowborn2hg smoke d3 gi9, shadowborn smoke
+  d5 gi85), both churn at 4x / 16x; shadowborn regression d5 s3003 gi135 4 -> 7 persists (single game; deck net -8);
+  the rest churn. Per deck only Gods is net slower (+3, all churn) -- the strict per-deck bar is the USER's call.
+  Residency (KB=1 vs default pool): 300 / 300 completed jobs identical on digest + units; the two KB=1 tail jobs
+  (hydras d5 s3003 gi118, alchemist d5 s2002) were stopped after 2 h at 2 / 24 workers, as in every earlier pass.
+* **Deferred measurements, DONE 2026-11-11 (build/scratch/xturn/def; one pooled 54-job batch, quiet box, Release):**
+  `MTG_MUTE_NO_STORE` is now a per-job arm lever (heurarm MUTE_NO_STORE) and the refused stores are counted per site
+  (`[plan-ledger] refused_stores ...` under MTG_PLAN_LEDGER_STATS).
+  1. **MUTE_NO_STORE wall: NO measurable cost.** 12 jobs x 2 reps per arm, interleaved: 24 / 24 pairs identical on
+     digest and units (and equal to the x11 GT run); thread ms =1 / =0 = 0.985 overall -- Alchemist 0.986, Hinata
+     0.993, Shadowborn 1.027, Gods 0.919, Gods2HG 0.936; the light controls swing 0.96-1.05 between reps, so every
+     figure is inside noise. The batch refused only 19,123 stores (all refine-memo; mana tier-1 / tier-2 and the
+     rollout game cache 0) against 2.64M muted recomputes. The earlier ~5% was the two concurrent processes, not the
+     change. **The tagged-store arm (item 2) is therefore not worth building** -- there is no wall to win back.
+  2. **Gods E3 held-out: no quality loss.** 3,900 new paired games per arm, E3 on vs off: d3 seed 50000 x1500 5.5327
+     vs 5.5340 (-2 game-turns), d5 seed 53000 x1500 5.3780 vs 5.3807 (-4), Gods2HG d5 seed 56000 x600 5.3783 vs
+     5.3783 (0), d3 seed 59000 x300 5.4633 vs 5.4533 (+3): net -3 (with the earlier ~3,200 games, ~+1 over ~7,100 --
+     neutral). Units +9.0% / +5.0% / +4.3% / +11.6%. The d3 extra is NOT aborted passes: MTG_ROLLOUT_STATS on the 300-
+     game pair shows id_pass aborted 13 vs 13 and waste_units 419k vs 420k equal, but 4,992 -> 5,062 pass starts and
+     387k -> 479k rollout calls -- the budget the hits free is spent on more completed search (the doctrine's "search
+     further"), at no quality gain on Gods. The d5 aborted-pass waste (above) is the only true waste. A gate price
+     scoped to hits the deeper pass will not see again stays an OPTION, not owed: there is no loss to repair.
+
 ## Method
 
 One pooled `mtg --batch` per experiment, both arms as per-job `flags` in the same manifest (paired seeds,

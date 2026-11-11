@@ -856,6 +856,7 @@ enum Slot : int
     JUMBO_OG_BREAKPOINT,      // MTG_JUMBO_OG_BREAKPOINT  Jumbo Cactuar (USER 2026-11-11, "if you have exactly 3 mana that you can spend outside of the land we are stacking or from the land we are stacking then it will need to do Overgrowth first"): JumboCactuarProvider::ArrangeCastOrder moves the first Overgrowth to just before the same-host Wild Growth when the spendable mana before that land's re-tap (all sources but the Elf/Satyr re-taps, without the land or with its one tap) is exactly Overgrowth's cost, the ranked order does not pay (OrderPaysSequentially) and the moved one does. ONE arrangement per line. Default ON; =0 -> ranked order
     UNTAPPER_UNLOCK_HOSTS,    // MTG_UNTAPPER_UNLOCK_HOSTS  USER 2026-11-11 (Jumbo, "Equip activations for Greaves and Chariot should always be allowed right after either chariot or the mana creatures enter"): every fresh untap-target-land source (Arbor Elf / Voyaging Satyr) is an offered haste-equip unlock host, the copy a battlefield-put tutor (GSZ / Finale) fetches included (TurnSolver TutoredUntapperHostId); ApplyManaUnlockEquips fires the chosen one as both pieces are in play. Options only. Default ON; =0 -> the single best unlock host, hand/battlefield only
     HYDRAS_BUCKET_DISCARD,    // MTG_HYDRAS_BUCKET_DISCARD  Hydras: the authored cleanup-discard BUCKET policy (analyze-deck 5i, 2026-11-11; LANDS / RAMP / DOUBLERS / Gargos / Greaves / THREATS, quota-first, net of board; HydrasProvider::CleanupDiscardCandidates). DEFAULT OFF -- a PROPOSAL the USER approves; =1 -> buckets, unset/=0 -> the generic max-MV ranking
+    MUTE_NO_STORE,            // MTG_MUTE_NO_STORE  a pledger-MUTED recompute (it stands in for a plan-cache hit that never ran) refuses stores into the content-pure caches (refine memo, mana tier-1/tier-2 promotion, rollout game cache), so units cannot follow plan-pool residency (workctr::StoresAllowed, core/WorkCounters.h). Default ON since 2026-11-11; =0 restores the stores (the per-job A/B control that prices its wall)
     COUNT
 };
 
@@ -1656,6 +1657,7 @@ inline const char* Name(int slot)
         "MTG_JUMBO_OG_BREAKPOINT",
         "MTG_UNTAPPER_UNLOCK_HOSTS",
         "MTG_HYDRAS_BUCKET_DISCARD",
+        "MTG_MUTE_NO_STORE",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

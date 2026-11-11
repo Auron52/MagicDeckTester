@@ -93649,6 +93649,7 @@ static inline void PlanCacheNoteHit(int cat)
 // unlimited one), under MTG_CACHE_HIT_CHARGE != 1 (diagnostic pricing modes) and MTG_BP_ENUM_EPOCH (diagnostic
 // scope); at X=0 nothing in play reads t_priced, so it moves wall only.
 static bool BpEnumEpochScoped();   // defined with the bp cache, below
+long long WorkctrRefusedStores(int site);   // SpellEffects.cpp
 namespace pledger
 {
 inline int MaxEmits()
@@ -93725,6 +93726,9 @@ struct Dump
         if (!EnvOn("MTG_PLAN_POOL_STATS") && !EnvOn("MTG_PLAN_LEDGER_STATS")) { return; }
         std::fprintf(stderr, "[plan-ledger] on=%d muted_recomputes=%lld forced_misses=%lld shadow_peak_keys=%lld"
                      " (per thread, 3 caches)\n", On() ? 1 : 0, g_muted.load(), g_forced.load(), g_peak.load());
+        std::fprintf(stderr, "[plan-ledger] refused_stores refine=%lld mana_t2=%lld mana=%lld rgc=%lld (MTG_MUTE_NO_STORE)\n",
+                     WorkctrRefusedStores(workctr::kRefRefine), WorkctrRefusedStores(workctr::kRefManaT2),
+                     WorkctrRefusedStores(workctr::kRefMana), WorkctrRefusedStores(workctr::kRefRgc));
     }
 };
 inline Dump g_dump;
@@ -97286,7 +97290,7 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
     {
         if (!sfx_on) { sfxprobe::t_collect = false; }
         const bool rgc_clean = g_fs_trunc_events == trunc_at_entry && budgetbind::t_binds == binds_at_entry
-                            && g_condemn_drops == drops_at_entry && workctr::StoresAllowed();
+                            && g_condemn_drops == drops_at_entry && workctr::StoresAllowedAt(workctr::kRefRgc);
         const bool win = result <= max_turns;
         if (rgc_clean && (win || (nowin_armed && NoWinStoreUngradedOn())))
         {
