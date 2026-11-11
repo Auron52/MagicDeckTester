@@ -200,6 +200,46 @@ oracle off byte-identical; record 43e700b5c):
   - 30000000), `MTG_MANA_ORACLE=3 MTG_MANA_ORACLE_TURN=3 build/Release/mtg 'decks/Angels/Angels.cod' --profile
   'decks/Angels/Angels.profile.json' --games 1 --seed <s> --game-index <gi>`.
 
+* **gods_regression_d3_s2002 drift after df06f89bd: NOT df06f89bd, NOT another commit -- a plan-cache RESIDENCY
+  flap (agent 2026-11-11). PARKED as a determinism defect; GT left as is (consistent).** The one-job run of the
+  case gives the GT digest 9a1c178f with MTG_PREPAY_LINE_REDUCER=1 AND =0, and so does the failing run's own
+  snapshot binary (`test/logs/regression/mtg.run`); a full pooled rerun of the whole regression manifest on HEAD
+  (9bf63e742) matched GT on 295/295 rows. The digest follows the shared plan pool: `MTG_PLAN_CACHE_KB=4096` on the
+  one job reproduces the failing 76f2637c exactly (units 968546, the failing run's), 65536 gives f7528bad. The row's
+  GT history already flips 76f2637c (1ab127b24) -> 9a1c178f (7a7c2079b), and the extra-turns agent saw it move with a
+  binary that had no change. Both pooled runs logged `[determinism] plan cache refused ~2,300 stores` (pool full,
+  3199/3200 MB), so the "hit-equals-miss" neutrality does not hold for Gods. Evidence: `MTG_BP_ENUM_VERIFY=3` on the
+  job reports `CONTENT-DIFF 600` of 224,108 bp hits, all Life from the Loam rows (`served=299 fresh=1`: a served list
+  of Loam target-subset variants where a fresh derivation returns one plan). Two sound candidate fixes were tried and
+  did NOT cure it (saved, unlanded: `build/scratch/p1/gods-determinism-wip.diff`): (a) bypass the bp cache while a
+  Loam target probe is in progress (the enumerator expands "L?" only when `g_loam_probe_offer == nullptr`, a context
+  no key carries); (b) a new graveyard-reader bit `GyR_GyLandNames` stamped from `return_up_to_gy_lands`, folding our
+  graveyard's land names into the sim key and Dominance (Loam's targets were in no key). With both, the digest still
+  moves with MTG_PLAN_CACHE_KB and the 600 diffs remain. Next suspect: the fresh=1 side looks like a CUT list (a
+  derivation that read an overrun budget), i.e. the MTG_CACHE_READ_GUARD class -- the Loam probe's ApplyPlanDirect
+  may consult the budget without marking `budgetbind::t_reads`. Repro: `MTG_BP_ENUM_VERIFY=3 build/Release/mtg
+  --batch build/scratch/p1/m.json --threads 32 --game-log-dir <dir>` (one job: gods_regression_d3_s2002). Until fixed,
+  this row can fail a pooled regression with no code change: re-run it alone before attributing.
+* **Dragonstorm 2HG gi37 opener hold (followups s8 Q23): PARKED with a mechanism diagnosis (agent 2026-11-11).** The
+  hold is not on HEAD (only on `worktree-agent-afe476c961652c9b8`), so HEAD plays gi37 as the off arm. Re-read the d8 b0
+  traces (`build/scratch/ds13/tr/d8_g37_h{0,1}`): the arms first differ at T4, where the hold arm spends Rite of Flame
+  + Desperate Ritual on an early Scourge of Valkas; the off arm keeps both rituals and goes off T7 (Medallion, Rite,
+  Desperate x2, Apex, Rite, Pyretic, Song, Apex, Kolaghan {3}{B}{R}, Scourge) and wins T8. Nothing at T4 is paid
+  differently (no {B} source on the board), so the hold acts only inside the T4 search's simulated T7 go-off. Its
+  drain (`SpendFloatingTowardCost`, 9eaae0e16) pays generic from the float with the held {B} added to the line's
+  NAMED demand and keeps that order while float red >= the NAMED red. An opener line's continuation is by definition
+  unnamed (Apex's seven exiled cards are re-planned on the float: Scourge RRR, Irencrag Feat RRR, Kolaghan R), so the
+  hold burns red that the continuation needs, and a payable T7 line is valued short. That is exactly the "payable line
+  made to look unpayable" the USER's 11-06 principle forbids, and it explains why only a red margin of 15 (the hold
+  never kept) recovers d8 b0. **No margin or guard can fix it**, because any colour committed to generic before the
+  continuation is known is a guess. The lossless shape is to make the hold unnecessary: generic paid from a mixed float
+  is NOT committed to a colour; the pool carries a generic debt, and a later coloured demand of k pips of colour c is
+  payable iff `float[c] >= k` and `total - k >= debt` (the floatseq "commit colour at spend" principle the USER set
+  for any-colour mana, extended to a committed mixed float). Any line payable under some fixed drain order is then
+  payable, so the search can never undervalue it, and a {B} for Kolaghan stays available whenever it can. This is a
+  ManaPool/payer-wide change (every `reserve.<colour>` reader, the oracle's payment model, the viewer's pool display),
+  so it needs its own design + full A/B; not started. The branch's payer fixes (9507fdb5c, 658b09d45) remain separate.
+
 ## Pass verdicts (this segment; earlier ones are in test/mana_clean.json and status.log)
 - galadriel: 71,000 games, 372,073 issues (MISS 453 = 425 APPLY-DROP + 28 ENUM-GAP "cast both Galadriels",
   ORACLE-GAP 6, UNMODELED 357,908 mostly "scripted payment did not pay {1}{U}{G}" / "set-aside exceeds the floating
