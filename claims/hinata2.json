@@ -10,6 +10,7 @@
  "head": "4a5fba5db48a0fe1ec506e47606c19325b4eb582",
  "heartbeat": "2026-11-11T15:57:58Z",
  "host": "8854e545ddab",
+ "land_note": "HELD for the USER: mulligan: TRADE -- quality not worse (new-vs-old -0.081214 t) but the new table costs MORE (cost 1.064x (se 0.009, 14 seeds)): the USER's call; left live on the result branch, NOT landed",
  "result_branch": "artifact-refresh/hinata2-20261111-1615",
  "resumed": "2026-11-11T15:37:49Z",
  "run_id": "hinata2-MagicDeckTester2-76d2cc-20261025T010853",
