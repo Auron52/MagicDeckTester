@@ -141,8 +141,80 @@ open items: logs/hydras-research/I3-handoff.md.
 - RULED (USER 2026-11-10, *"Second main -3 makes sense."*) — main 1 vs main 2 for Garruk -3: implemented by I3 (DeckUsesSecondMain keyed on `draw_greatest_power`; nothing moved out of main 1; the search picks the main).
 - PROVISIONAL — Gauntlet +1/+1 applied to its controller's creatures only (opp spawns are colourless and the opponent casts nothing).
 - PROVISIONAL — Three Visits never fails to find (same simplification Nature's Lore already makes).
-- USER DECISION (open) — cast order: doublers before creatures (draft recommendation) vs generic; to be A/B'd and reported.
+- RULED (USER 2026-11-10, *"Doublers and Gargos should be before the Hydras as you mentioned."*) — cast order: implemented by P1 (f4bf4ba72, `MTG_HYDRAS_CAST_ORDER`, default ON) and A/B'd below (P1 section). Keeping it ON is the USER's call; the measurement favours it.
 - Noted (no deferral): the horizon leaf does not see next turn's counter doublings; this under-credits safely.
+
+## P1 — cast order, baseline profile, cost, A/B (2026-11-11)
+
+Commits: **f4bf4ba72** (cast order + per-job levers + tests), **3223ac6c7** (Stage 4 baseline profile).
+
+**Cast order** (`HydrasProvider::CastOrderRank`, `MTG_HYDRAS_CAST_ORDER`, default ON, heurarm slot
+`HYDRAS_CAST_ORDER`; TOTAL by name): Vernal Bloom 1; Gauntlet of Power, Nissa 2; Nature's Lore, Search for
+Tomorrow, Three Visits 3; Gargos 4; Lightning Greaves 5; Garruk 6; Kalonian 7; Neverwinter / Primordial /
+Steelbane / Voracious 8. The land drop keeps its default slot (first). `=0` gives the generic tiers
+byte-for-byte (Gargos 8, creatures 10, the rest 20), which a unit test pins. Draft section 3 was checked
+against the real params and needed no change. `MTG_HYDRAS_MAX_X` became a heurarm slot (still default OFF).
+`MTG_HYDRAS_SECOND_MAIN` is new: default ON, and `=0` is only a measurement arm that prices Garruk's main 2;
+the USER ruling stands. `mtg --cast-order-report` shows Gargos as "m2". That column is the informational
+classifier only. HydrasProvider does not opt into ClassifiesMainPhases, so nothing is moved between mains.
+Verification: mtg-test 2803/2803 plus 3 new cases (test_hydras_cast_order.cpp); smoke (MTG_PGO=0, not
+accepted) shows exactly the 3 known pre-existing same-score changes and nothing else.
+
+**Stage 4 profile**: `analyze_deck.py --no-rebuild` exit 0. Card scores come from 1000 games at d5 b20. There
+is no value_play block, so play is the built-in d5 / b20. Stage-7 cost diagnostic: NO_COST_INTERACTIONS (no
+game run). Discard analysis: STATUS_QUO_OK (5 decisions in 400 games). `provider_audit.py --check` exit 0
+(Hydras -> Hydras, NotAssessed). Report: logs/hydras-p1/analyze.json.
+
+**ONE pooled batch** (Release binary, MTG_PGO not used, 32 threads, heartbeat 32/32 at 10 min; ~33 min plus
+one tail game). Contents: 4 arms x 2400 games, arms innermost in 50-game chunks, seed = 7007 + off,
+game_index = off. Also Hydras cost shapes at s2002 (100 games each) and Hinata's 4 regression rows. Scratch
+is on build/scratch/hydras-p1/; the readers are logs/hydras-p1/{mkmanifest,analyze_ab}.py. Unwon games score
+9. Arm deltas are paired, arm minus base. base = cast order ON, max X OFF, m2 ON (the shipped shape).
+
+| arm | avg | wins/2400 | paired delta vs base (se) | slower / faster | ms/game x base | units x base |
+|---|---|---|---|---|---|---|
+| base | 5.5287 | 2393 | - | - | 1 (5957 ms) | 1 |
+| cast order OFF | 5.5308 | 2393 | +0.0021 (0.0009) | 5 / 0 | 0.962 | 1.010 |
+| MAX_X ON | 5.5204 | 2393 | **-0.0083 (0.0019)** | 1 / 21 | 0.796 | 0.631 |
+| m2 OFF (2399 games) | 5.5361 | 2392 / 2399 | +0.0075 (0.0037) | 48 / 30 | 0.482 | 0.526 |
+
+(The ms and units columns are taken over the 47 chunks every arm finished. P1 killed m2-off gi 25, its own
+measurement arm, after about 31 min unfinished; base takes about 11 min on that game.)
+- Cast order: ON is better. No game is slower with ON. OFF is slower on gi 25 (7 v 6), 252, 891, 1032
+  (8 v 7) and 1724 (6 v 5). So there is no slower game of the adopted arm to re-check at b0.
+- MAX_X ON: better on average and cheaper (0.80x ms, 0.63x units). Its one slower game is gi 358 (seed 7365,
+  T6 v T5). The b20 repro matches the batch. At d5 b0 it RECOVERS to T5 with the same digest as the base
+  arm's d5 b0 line, and it takes 8.2x fewer units (337K v 2.77M). So the loss is budget-driven, not a
+  deleted line, and it meets the CLAUDE.md adoption bar on this sample. Adopting it is the USER's decision.
+- Second main: it costs **2.07x ms (1.90x units) per game** and buys 0.0075 turns (48 slower and 30 faster
+  without it). It is more than half of Hydras' d5 cost.
+
+**3x-Hinata cost** (core-ms per game, same run, same binary). `suite_gate.py --cost` cannot time a deck
+that has no suite cases, so these come from the pooled batch:
+
+| shape | Hydras | Hinata |
+|---|---|---|
+| d3 | 3,098 (b20) | 3,067 (b10) |
+| d5 | 4,809 (b20, s2002, 100 games); 6,191 (b20, s7007, 2400 games) | 5,017 (b30, s2002 + s3003 pooled) |
+| 2HG d5 | 7,110 (b20) | 7,215 (b30) = the gate's reference shape |
+
+Worst Hydras shape against the Hinata reference: about **0.99x** (2HG), or 0.86x on the large d5 sample.
+That is well under 3x. With m2 off, d5 would be about 0.40x. The cached Hinata figure (4,864) is from
+another run and binary; today's numbers are Release with one extra analyzer thread running alongside.
+**Heavy tail**: 176 games took over 30 s. gi 25 (seed 7032) takes about 11 min in every arm at under 1M
+units. Typical games run 0.087 ms per unit; the slow ones run 1.3-3.4 ms per unit (30-40x). So the tail is
+per-node cost, not units. perf on gi 1782 (seed 8789): plan enumeration under SolveSecondMainInSearch /
+BpDeriveContinuationList, plus mana payment (TapForCostSharedOnceImpl, OrderPaysSequentially,
+LandHasSubtypeNow, LandAuraBonus, PermanentManaYield; memset 8.8%). That is the Forest/doubler mana model,
+re-evaluated per node.
+
+**Open USER decisions from P1** (no default was changed):
+1. MTG_HYDRAS_MAX_X: on this sample ON is better (-0.0083 +/- 0.0019 turns, 21 faster, 1 slower, and that
+   game recovers at d5 b0) and cheaper (0.80x ms). It stays OFF until the USER rules.
+2. Cast order: ON (the USER's ruling) is +0.0021 +/- 0.0009 better than generic, with 0 slower games. It
+   ships ON.
+3. Second main: it doubles Hydras' per-game cost (2.07x) for 0.0075 turns. The USER ruling keeps it on. The
+   deck fits the 3x gate either way.
 
 ## Stage 5 verification
 
