@@ -73,7 +73,10 @@ How they apply (implementation queued in the mana-clean chain, item 5h):
 2. Overgrowth never goes before Wild Growth. Seed 30029950 T6 (Overgrowth-first pays Tooth and Nail) is therefore
    treated as a payment defect to find, not an order change. Whether the existing proven Overgrowth-before-Utopia
    Sprawl swap should also go is an open USER question.
-3. Chariot after the first Elf/Satyr: optional, may be tried and measured.
+3. Chariot after the first Elf/Satyr: optional, may be tried and measured. USER follow-up (verbatim): *"I can't
+   think of a way that with only one elf/satyr that this worder would be wrong."* and *"It pretty much has to be
+   multiples coming into play to need the chariot cast earlier."* So with one untapper in the line the current order
+   (untapper, then Chariot) stands; only a line with two or more untappers entering puts Chariot after the FIRST.
 4. Surrak and Goreclaw moves out of the 6th slot to a later default, and comes earlier only when mana allows,
    i.e. a proven swap (the earlier order pays every cast under OrderPaysSequentially), like the Aura swap.
 
