@@ -1502,3 +1502,19 @@ scripted Lake crack where the payer (Lake + Lotus Bloom, its ordinary crack) kee
 payer's rule (`OracleOptionConsumesEarlyCrackPin`). 5 of 10 ENUM-GAPs paid only with a Dark Ritual that Thrumming
 Stone's ripple cast off the hidden library top: HIDDEN-INFO now. Analyzer-only; smoke and regression
 byte-identical. Parked items and diagnoses: `docs/design/mana-clean-pass-checkpoint.md`, 2026-11-10 section.
+
+## USER ruling on Dark Ritual vs Thrumming Stone (2026-11-11, verbatim)
+
+Context: 163 APPLY-DROP-ORDER on gate sb-orderproof-20261110; the top decision (s30033099 T6) pays as Culling >
+Apostle > Stone > Ritual > Sire, while the USER's order casts Dark Ritual (rank 1) before Thrumming Stone (3).
+
+> For the shadowborn order, I had already specified that there should be the option to cast a shadowborn sacrifice
+> before Culling the Weak if there is none currently. Ritual after stone is a bit messy. I'm not entirely against
+> the idea if it is used for mana, but I don't want to provide a choice between the to help out clairvoyance. For
+> example, clairvoyance can use the ritual to clear out a no-shadowborn set of 4 cards off the top. If we want the
+> ritual to work like that, my recommendation would be to cast it after if mana allows and before if not.
+
+How it applies: NOT a searched choice between the two positions. A deterministic arrangement: when the line holds
+both Dark Ritual and Thrumming Stone, Ritual goes after Stone if the line pays that way (judged WITHOUT any mana from
+ripple-revealed cards, which are hidden information), otherwise it keeps its rank-1 slot before. The existing
+"Apostle sacrificed to Culling moves just before Culling" arrangement (the USER's earlier rule) is unchanged.
