@@ -257,6 +257,15 @@ enumeration↔execution / rollout-vs-real divergences in `ApplyPlanDirect`.
 
 ## Running a sweep (~15-20 games)
 
+The external-play protocol is model agnostic despite the `--claude-play` flag name. **The
+sweep's agents are the SAME TYPE as the parent session (USER 2026-11-11):** a Claude session
+fans out Claude agents, a Codex session fans out Codex agents. The user switches between the two
+as either runs low on budget, so the parent's type is the one with budget; never hand the sweep to
+the other type. Use distinct seeds, verify flags
+against `cards.json` and the rules, and record the actual driver in the deck ledger as
+`## Claude-play sweep` or `## Codex-play sweep`. The verification gate accepts either
+heading; do not label a Codex-run game as Claude-play.
+
 To sweep across games/decks, run one player per game and compare each to the search
 benchmark for the SAME game:
 

@@ -988,7 +988,7 @@ been an agent's call.)*
 
 ## Claude-Play Runner Skill
 
-When the user asks to **run the claude-play oracle / claude runner**, **have Claude play a deck**, or **sweep games with Claude to find bugs/misplays**, read `.claude/skills/claude-play.md` first. It is the authoritative guide for the opt-in `--claude-play` mode (a Claude agent drives main-phase decisions for verification).
+When the user asks to **run the claude-play oracle / claude runner**, **have Claude play a deck**, or **sweep games with an external agent to find bugs/misplays**, read `.claude/skills/claude-play.md` first. It is the authoritative guide for the opt-in `--claude-play` protocol. The protocol name is historical: the sweep is model agnostic. **The sweep's driver MATCHES THE PARENT AGENT (USER 2026-11-11): a Claude session spawns Claude agents, a Codex session spawns Codex agents.** The user's words: *"whatever the parent agent is should spawn the same type of agents to do the play sweep"* -- the user switches between the two as either runs low on budget, so the type the user is talking to is the one with budget. Record the actual driver as `Codex-play sweep` or `Claude-play sweep`; an explicit request for one model still requires that model.
 
 ```
 Read `.claude/skills/claude-play.md` and [play / sweep / verify a flag] ...

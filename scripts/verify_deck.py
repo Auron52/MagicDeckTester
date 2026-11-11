@@ -31,8 +31,9 @@ Gates (blocking unless noted):
   mismatch      -- engine MTG_FLAG_NONCONV + MTG_FD_ORACLE across seeds (no [nonconv]/[fd-diverge])
   play_invariants -- workstream 4a: drive the claude-play protocol auto-following engine
                    defaults; assert determinism + integrity + progress (runtime; --no-sweep skips)
-  claude_sweep  -- workstream 4b: the Claude-DRIVEN judgment sweep, recorded in the per-deck
-                   ledger ('## Claude-play sweep'); absent->SKIP, unresolved flags->FAIL, clean->PASS
+  claude_sweep  -- workstream 4b: external-agent judgment sweep, recorded under the driver's
+                   name ('## Claude-play sweep' or '## Codex-play sweep'); absent->SKIP,
+                   unresolved flags->FAIL, clean->PASS (legacy gate key retained)
   suite         -- is the deck a case in test/regression_cases.sh? No cases means NO ground truth
                    watches its play, and both expensive stages are FITTED to that play, so the
                    value-leaf and mulligan generators REFUSE outright (user directive, 2026-09-26).
@@ -563,21 +564,24 @@ def gate_suite(deck_path):
 
 
 def gate_claude_sweep(deck_path):
-    """workstream 4b (judgment half): the Claude-DRIVEN play sweep (analyze-deck 5d /
-    Workflow, one agent per game) is an expensive, user-initiated step whose result is
-    RECORDED in the per-deck ledger under '## Claude-play sweep' (commit / seeds / flags).
+    """workstream 4b (judgment half): an external-agent play sweep (analyze-deck 5d)
+    is recorded under '## Claude-play sweep' or '## Codex-play sweep' with its actual
+    driver identified (commit / seeds / flags).
     This gate enforces the record: absent -> disclosed SKIP (run it); >=1 unresolved flag
     -> blocking FAIL; clean -> PASS (staleness vs HEAD disclosed -- the live play_invariants
     gate + smoke digests track whether play changed, so the user re-runs when it does)."""
-    sec = _ledger_section(deck_path, "Claude-play sweep")
+    driver = next((name for name in ("Claude-play sweep", "Codex-play sweep")
+                   if _ledger_section(deck_path, name) is not None), None)
+    sec = _ledger_section(deck_path, driver) if driver else None
     if sec is None:
-        return Gate("claude_sweep", SKIP, True, "no Claude-play sweep recorded",
-                    disclose=["claude_sweep SKIPPED -- no '## Claude-play sweep' section in "
-                              f"{ledger_path(deck_path).relative_to(ROOT)}. Run the Claude-driven sweep "
-                              "(.claude/skills/claude-play.md, analyze-deck 5d; fan game-indices out with "
-                              "the Workflow engine), verify any flags against cards.json + the rules skill, "
+        return Gate("claude_sweep", SKIP, True, "no external play sweep recorded",
+                    disclose=["claude_sweep SKIPPED -- no '## Claude-play sweep' or "
+                              "'## Codex-play sweep' section in "
+                              f"{ledger_path(deck_path).relative_to(ROOT)}. Run an external-agent sweep "
+                              "(.claude/skills/claude-play.md, analyze-deck 5d; use distinct seeds), "
+                              "verify any flags against cards.json + the rules skill, "
                               "then record `commit:` / `seeds:` / `games:` / `flags: N unresolved` under "
-                              "that heading. play_invariants (above) already guards the protocol mechanically."])
+                              "the matching heading. play_invariants (above) guards the protocol mechanically."])
     body = "\n".join(sec)
     mflags = re.search(r"flags:\s*(\d+)\s*unresolved", body, re.I)
     mcommit = re.search(r"commit:\s*`?([0-9a-f]{7,40})`?", body, re.I)
@@ -608,7 +612,7 @@ def gate_claude_sweep(deck_path):
         return Gate("claude_sweep", FAIL, True, f"{unresolved_n} unresolved play flag(s)",
                     [("claude_sweep:unresolved", f"{unresolved_n} unresolved flag(s) in the recorded sweep")],
                     disclose)
-    return Gate("claude_sweep", PASS, True, "Claude-play sweep recorded, 0 unresolved flags", disclose=disclose)
+    return Gate("claude_sweep", PASS, True, f"{driver} recorded, 0 unresolved flags", disclose=disclose)
 
 
 # --------------------------------------------------------------------------- ledger

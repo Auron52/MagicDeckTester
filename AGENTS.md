@@ -11,5 +11,10 @@ After adding, renaming, or updating a skill's introduction, run
 `python3 scripts/sync_codex_skills.py` and include the entrypoint changes with it.
 
 Claude-specific tool names describe capabilities: use the equivalent available
-Codex tools. A requirement for Claude itself (such as the Claude-play oracle)
-still requires Claude; do not silently substitute another model.
+Codex tools. The external-play correctness sweep (the historically named
+`--claude-play` protocol) is driven by agents of the SAME type as the parent
+(USER 2026-11-11: "whatever the parent agent is should spawn the same type of
+agents to do the play sweep"): a Codex session spawns Codex agents and records
+the sweep as Codex-play; a Claude session spawns Claude agents. The user switches
+between the two when one runs low on budget. An explicit user request for a
+specific model still requires that model; do not silently substitute another.
