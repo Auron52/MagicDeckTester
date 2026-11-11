@@ -4302,6 +4302,17 @@ bool cachecharge::ReadGuardOn() { static const bool v = EnvOn("MTG_CACHE_READ_GU
 // as before -- when the priced ceiling has tripped, when the replay itself would trip it (a recompute there would
 // be interrupted), or when the game is void / the unit meter spent. A SearchBudget reader never replays.
 //
+// RESIDENCY-INDEPENDENT (Hydras P5). Under the priced ledger (pledger, the default whenever the plan pool is bounded)
+// the replay is decided and counted from the SHADOW alone: the shadow entry keeps the work its counted computation
+// counted (pledger::Ent::w), pledger::WouldReplay decides from it, pledger::Replay counts it, and only then does the
+// real cache get asked -- a resident entry is served without counting (CacheHitCharge kHitStandIn), an absent one is
+// recomputed MUTED, so the count is the same either way. (The first version decided and counted from the REAL entry;
+// an evicted entry then recomputed and counted the recompute's own, smaller, warm work, so units followed the byte
+// pool and the other workers: the same 4-game batch gave gi 1979 333,224 vs 333,176 units.) A free virtual hit of a
+// priced-only reader likewise adds the SHADOW's work to the enclosing computations (pledger::NestAdd). Without the
+// ledger (MTG_PLAN_CACHE_KB=0, an unbounded real cache, which is then the virtual one) CacheHitCharge decides from
+// the real entry as before.
+//
 // NOT byte-identical by construction: the replay is the FIRST computation's count, and a recompute's count can
 // differ (warmer tier-1 caches make it smaller; the nested correction is exact only for the shadowed caches). It moves
 // play only through workctr's readers -- the priced ceiling's trip point above all -- and is inert at an unlimited
@@ -4333,15 +4344,27 @@ void TurnSolver::NoteChargingSubsearch()
 { for (cachecharge::Rec* r = cachecharge::t_rec; r != nullptr; r = r->outer) { ++r->subsearch; } }
 // A cache HIT on an entry costing `c`: true = serve it (its units charged here, as a recompute would);
 // false = a recompute here could run differently, so the caller treats the lookup as a miss.
-// `allow_replay` false: this entry may not stand in for a recompute where the context has cut (see ReplayEligible).
-static bool CacheHitCharge(const cachecharge::Cost& c, bool allow_replay = true)
+// `how` says who decides a lookup the READ GUARD refuses (MTG_CACHE_READ_GUARD_KIND):
+//   kHitPlain / kHitPlainNoReplay -- no priced ledger (MTG_PLAN_CACHE_KB=0: the real cache IS the unlimited one, so
+//     its residency is deterministic) or a muted shadow recompute: the REAL entry's Cost::work decides and is replayed
+//     (NoReplay: this entry may not stand in, e.g. a FULL bp entry for a canon-front lookup);
+//   kHitLed -- the priced ledger served this lookup as a FREE virtual hit (pledger::WouldServe): the read guard as
+//     before; no replay, and the enclosing computations' nested work is added by the CALLER from the shadow
+//     (pledger::NestAdd), never from this entry, whose work depends on how it came to be stored;
+//   kHitStandIn -- the ledger already decided, from the SHADOW alone, that this lookup replays (pledger::WouldReplay)
+//     and has replayed the shadow's work (pledger::Replay): the real entry only stands in for the muted recompute
+//     the caller would otherwise run, so the read guard is skipped and nothing is counted here.
+enum HitHow : int { kHitPlain = 0, kHitPlainNoReplay, kHitLed, kHitStandIn };
+static bool CacheHitCharge(const cachecharge::Cost& c, int how = kHitPlain)
 {
     if (!cachecharge::On()) { return true; }
     SearchBudget* const d = g_decision_budget;
     SearchBudget* const g = g_greedy_charge_budget;
+    const bool plain = how == kHitPlain || how == kHitPlainNoReplay;
+    const bool allow_replay = how == kHitPlain;
     bool ok = c.storable && c.other == 0 && !decisionwork::Exceeded();
     bool replay = false;   // MTG_CACHE_READ_GUARD_KIND: served in place of a recompute, its counted work replayed
-    if (ok && c.budget_read && cachecharge::ContextCutNow())   // MTG_CACHE_READ_GUARD
+    if (ok && how != kHitStandIn && c.budget_read && cachecharge::ContextCutNow())   // MTG_CACHE_READ_GUARD
     {
         long long priced = 0;
         for (int k = 0; k < workctr::kKinds; ++k) { priced += workctr::kPriceNs[k] * c.work[k]; }
@@ -4369,10 +4392,11 @@ static bool CacheHitCharge(const cachecharge::Cost& c, bool allow_replay = true)
         for (int k = 0; k < workctr::kKinds; ++k) { if (c.work[k] != 0) { workctr::IncReplayed(k, c.work[k]); } }
         cachecharge::g_replays.fetch_add(1, std::memory_order_relaxed);
     }
-    else if (c.budget_read)
+    else if (c.budget_read && plain && workctr::t_mute == 0)
     {
         // A FREE hit of a budget reader: an enclosing computation recomputed where the budget has cut would
-        // recompute this one too, so its stored work belongs in the enclosing entries' replay.
+        // recompute this one too, so its stored work belongs in the enclosing entries' replay. (Under the ledger
+        // the caller adds the SHADOW's work instead -- pledger::NestAdd; inside a muted recompute nothing counts.)
         for (cachecharge::Rec* r = cachecharge::t_rec; r != nullptr; r = r->outer)
         { for (int k = 0; k < workctr::kKinds; ++k) { r->add[k] += c.work[k]; } }
     }
@@ -95765,7 +95789,17 @@ inline bool On()
 inline bool InShadow() { return workctr::t_mute > 0; }
 enum : std::uint8_t { kStored = 1, kHadDec = 2, kHadGreedy = 4, kNullAtt = 8, kPinUnread = 16, kBudgetRead = 32,
                      kBudgetReadSb = 64 };
-using Map = std::unordered_map<std::uint64_t, std::uint8_t>;
+// A shadow entry: CacheHitCharge's flags, plus -- for a PRICED-ONLY budget reader (kBudgetRead, not kBudgetReadSb),
+// the only kind a replay can serve -- the per-kind work its COUNTED computation counted (Cost::work). That work is
+// what a replay counts (MTG_CACHE_READ_GUARD_KIND), so it lives HERE and not in the real entry: the real entry may be
+// absent (byte pool, eviction, the entry cap's clear) or stored by a muted recompute that counted nothing, and a count
+// must never depend on either (see pledger::Replay).
+struct Ent
+{
+    std::uint8_t f = 0;
+    std::unique_ptr<long long[]> w;   // kKinds counts, or null
+};
+using Map = std::unordered_map<std::uint64_t, Ent>;
 inline thread_local Map t_enum;    // enummemo::t_cache: 0 = first-visit marker, kStored|... = promoted
 inline thread_local Map t_bp;      // bpcache::t_plans (alias entries under the pin-cleared key, kPinUnread)
 inline thread_local Map t_front;   // bpcanon::t_fronts
@@ -95780,6 +95814,26 @@ inline std::uint8_t FlagsOf(const cachecharge::Cost& c, bool pin_unread = false)
                                      | (c.null_attempts > 0 ? kNullAtt : 0) | (pin_unread ? kPinUnread : 0)
                                      | (c.budget_read ? kBudgetRead : 0) | (c.budget_read_sb ? kBudgetReadSb : 0));
 }
+// Record a counted computation (or, `marker`, the enum memo's first-visit marker) under `k`.
+inline void Put(Map& m, std::uint64_t k, const cachecharge::Cost& c, bool pin_unread = false)
+{
+    Ent& e = m[k];
+    e.f = FlagsOf(c, pin_unread);
+    if (c.budget_read && !c.budget_read_sb)
+    {
+        if (!e.w) { e.w.reset(new long long[workctr::kKinds]); }
+        for (int i = 0; i < workctr::kKinds; ++i) { e.w[i] = c.work[i]; }
+    }
+    else { e.w.reset(); }
+}
+inline void PutMarker(Map& m, std::uint64_t k) { Ent& e = m[k]; e.f = 0; e.w.reset(); }
+inline void CopyTo(const Ent& from, Ent& to)
+{
+    to.f = from.f;
+    if (!from.w) { to.w.reset(); return; }
+    if (!to.w) { to.w.reset(new long long[workctr::kKinds]); }
+    for (int i = 0; i < workctr::kKinds; ++i) { to.w[i] = from.w[i]; }
+}
 // CacheHitCharge's verdict on such an entry, without its stats or charges (both zero for a mode-1 entry).
 inline bool WouldServe(std::uint8_t f)
 {
@@ -95789,15 +95843,41 @@ inline bool WouldServe(std::uint8_t f)
     if ((f & kBudgetRead) != 0 && cachecharge::ContextCutNow()) { return false; }   // MTG_CACHE_READ_GUARD
     return true;
 }
-// MTG_CACHE_READ_GUARD_KIND (see cachecharge::ReplayEligible): the virtual world RECOMPUTES here -- WouldServe refused
-// the entry only because the context has cut -- but the real cache may stand in for that recompute, replaying the
-// work it counts (CacheHitCharge). The shadow's own state and counts are those of the recompute either way.
-inline bool WouldReplay(std::uint8_t f)
+inline bool WouldServe(const Ent& e) { return WouldServe(e.f); }
+inline long long PricedOf(const long long* w)
+{ long long p = 0; for (int k = 0; k < workctr::kKinds; ++k) { p += workctr::kPriceNs[k] * w[k]; } return p; }
+// MTG_CACHE_READ_GUARD_KIND (see cachecharge::ReplayEligible): WouldServe refused the entry only because the context
+// has cut, so the virtual world RECOMPUTES here -- but a priced-only reader's recompute may be stood in for by a
+// REPLAY of the work its counted computation counted, kept in the shadow. Decided from the SHADOW ALONE (flags, work,
+// the predicates now): the real cache's residency never enters it. Refused where the replay itself would trip the
+// priced ceiling (a recompute there would be interrupted).
+inline bool WouldReplay(const Ent& e)
 {
-    if ((f & kStored) == 0 || (f & kBudgetRead) == 0 || decisionwork::Exceeded()) { return false; }
+    const std::uint8_t f = e.f;
+    if (!e.w || (f & kStored) == 0 || (f & kBudgetRead) == 0 || (f & kBudgetReadSb) != 0 || decisionwork::Exceeded())
+    { return false; }
     if ((f & kNullAtt) != 0 && g_decision_budget != nullptr && (f & kHadDec) == 0) { return false; }
     if ((f & kNullAtt) != 0 && g_greedy_charge_budget != nullptr && (f & kHadGreedy) == 0) { return false; }
-    return cachecharge::ContextCutNow() && cachecharge::ReplayEligible((f & kBudgetReadSb) != 0);
+    if (!cachecharge::ContextCutNow() || !cachecharge::ReplayEligible(/*searchbudget_read=*/false)) { return false; }
+    const bool room = decisionwork::t_pr_limit <= 0
+                   || workctr::t_priced - decisionwork::t_pr_start + PricedOf(e.w.get()) < decisionwork::t_pr_limit;
+    if (!room) { cachecharge::g_replay_refused.fetch_add(1, std::memory_order_relaxed); }
+    return room;
+}
+// The replay itself: what the recompute would count, counted (and kept apart in workctr::t_replayed). The caller then
+// serves the real entry if it holds one (CacheHitCharge kHitStandIn), else recomputes MUTED -- the same count either way.
+inline void Replay(const Ent& e)
+{
+    for (int k = 0; k < workctr::kKinds; ++k) { if (e.w[k] != 0) { workctr::IncReplayed(k, e.w[k]); } }
+    cachecharge::g_replays.fetch_add(1, std::memory_order_relaxed);
+}
+// A FREE virtual hit of a priced-only reader: an enclosing computation recomputed where the context has cut would
+// recompute this one too, so the shadow's work belongs in the enclosing computations' own work (Rec::add).
+inline void NestAdd(const Ent& e)
+{
+    if (!e.w || (e.f & kBudgetRead) == 0) { return; }
+    for (cachecharge::Rec* r = cachecharge::t_rec; r != nullptr; r = r->outer)
+    { for (int k = 0; k < workctr::kKinds; ++k) { r->add[k] += e.w[k]; } }
 }
 inline void NotePeak()
 {
@@ -95841,11 +95921,11 @@ static void PledgerEnumStore(std::uint64_t lk, bool found, const cachecharge::Co
     if (found)
     {
         if (c.storable && pledger::FitsWork(nplans, emitted))
-        { pledger::t_enum[lk] = pledger::FlagsOf(c); }
+        { pledger::Put(pledger::t_enum, lk, c); }
         return;
     }
     if (pledger::t_enum.size() >= enummemo::Cap()) { pledger::t_enum.clear(); }
-    pledger::t_enum[lk] = 0;
+    pledger::PutMarker(pledger::t_enum, lk);
     pledger::NotePeak();
 }
 static long long PbLazyListBytes(const std::vector<TurnSolver::Plan>& real, const PbLazyLayout& lz)
@@ -95975,6 +96055,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
         sh_found = st != pledger::t_enum.end();
         sh_hit   = sh_found && pledger::WouldServe(st->second);
         sh_rep   = sh_found && !sh_hit && pledger::WouldReplay(st->second);   // MTG_CACHE_READ_GUARD_KIND
+        if (sh_hit) { pledger::NestAdd(st->second); }
+        if (sh_rep) { pledger::Replay(st->second); }   // counted now, whether the real cache serves or we recompute muted
     }
     pledger::Mute led_mute;
     if (it != cache.end() && it->second.epoch == g_decision_epoch && it->second.has_plans
@@ -95982,7 +96064,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
     { pledger::g_forced.fetch_add(1, std::memory_order_relaxed); }   // the unlimited cache recomputes here
     // MTG_CACHE_HIT_CHARGE: a hit is served at the units its enumeration charged, or not at all.
     if (it != cache.end() && it->second.epoch == g_decision_epoch && it->second.has_plans
-        && (!led || sh_hit || sh_rep) && !enummemo::RefuseHit() && CacheHitCharge(it->second.cost))
+        && (!led || sh_hit || sh_rep) && !enummemo::RefuseHit() && CacheHitCharge(it->second.cost, !led ? kHitPlain : sh_rep ? kHitStandIn : kHitLed))
     {
         enummemo::g_hits.fetch_add(1, std::memory_order_relaxed); PlanCacheNoteHit(plancache::kCatM1);
         PricedTraceEv("m1_real_hit", 0);
@@ -96065,7 +96147,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
     }
 
     PricedTraceEv("enum_miss_sh", sh_hit ? 1 : 0);
-    if (sh_hit) { led_mute.Arm(); }   // MTG_PLAN_PRICED_LEDGER: a free virtual-cache hit
+    if (sh_hit || sh_rep) { led_mute.Arm(); }   // MTG_PLAN_PRICED_LEDGER: a free virtual-cache hit, or a replayed one
     enummemo::g_misses.fetch_add(1, std::memory_order_relaxed);
     const bool second_visit = (it != cache.end() && it->second.epoch == g_decision_epoch);
     if (second_visit && enummemo::StatsOn()) { enummemo::g_second.fetch_add(1, std::memory_order_relaxed); }
@@ -96248,13 +96330,16 @@ static std::vector<TurnSolver::Plan> EnumeratePlansM2Memoized(const GameState& s
         sh_found = st != pledger::t_enum.end();
         sh_hit   = sh_found && pledger::WouldServe(st->second);
         sh_rep   = sh_found && !sh_hit && pledger::WouldReplay(st->second);   // MTG_CACHE_READ_GUARD_KIND
+        if (sh_hit) { pledger::NestAdd(st->second); }
+        if (sh_rep) { pledger::Replay(st->second); }   // counted now, whether the real cache serves or we recompute muted
     }
     pledger::Mute led_mute;
     if (it != cache.end() && it->second.epoch == g_decision_epoch && it->second.has_plans
         && led && !sh_hit)
     { pledger::g_forced.fetch_add(1, std::memory_order_relaxed); }   // the unlimited cache recomputes here
     if (it != cache.end() && it->second.epoch == g_decision_epoch && it->second.has_plans
-        && (!led || sh_hit || sh_rep) && !enummemo::RefuseHit() && CacheHitCharge(it->second.cost))   // MTG_CACHE_HIT_CHARGE
+        && (!led || sh_hit || sh_rep) && !enummemo::RefuseHit()
+        && CacheHitCharge(it->second.cost, !led ? kHitPlain : sh_rep ? kHitStandIn : kHitLed))   // MTG_CACHE_HIT_CHARGE
     {
         enummemo::g_hits.fetch_add(1, std::memory_order_relaxed); PlanCacheNoteHit(plancache::kCatM2);
         PricedTraceEv("m2_real_hit", 0);
@@ -96322,7 +96407,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansM2Memoized(const GameState& s
     }
 
     PricedTraceEv("enum_miss_sh", sh_hit ? 1 : 0);
-    if (sh_hit) { led_mute.Arm(); }   // MTG_PLAN_PRICED_LEDGER: a free virtual-cache hit
+    if (sh_hit || sh_rep) { led_mute.Arm(); }   // MTG_PLAN_PRICED_LEDGER: a free virtual-cache hit, or a replayed one
     enummemo::g_misses.fetch_add(1, std::memory_order_relaxed);
     const bool second_visit = (it != cache.end() && it->second.epoch == g_decision_epoch);
     const int saved_md = groupwave::g_state.max_dropped;
@@ -119381,7 +119466,9 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
         const auto st = pledger::t_bp.find(pledger::K(key));
         sh_exact = st != pledger::t_bp.end() && pledger::WouldServe(st->second);
         sh_rep   = st != pledger::t_bp.end() && !sh_exact && pledger::WouldReplay(st->second);   // MTG_CACHE_READ_GUARD_KIND
-        if (bpreenum::On()) { bpreenum::NoteLookup(st != pledger::t_bp.end() ? st->second : -1, sh_exact); }
+        if (sh_exact) { pledger::NestAdd(st->second); }
+        if (sh_rep) { pledger::Replay(st->second); }   // counted now, whether the real cache serves or we recompute muted
+        if (bpreenum::On()) { bpreenum::NoteLookup(st != pledger::t_bp.end() ? st->second.f : -1, sh_exact); }
         if (!sh_exact && cache.find(key) != cache.end()) { pledger::g_forced.fetch_add(1, std::memory_order_relaxed); }
     }
     pledger::Mute led_mute;
@@ -119664,7 +119751,8 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
                 t_bp_enum_verifying = saved_ver;
                 it = cache.find(key);
             }
-            if (it != cache.end() && CacheHitCharge(it->second.cost))
+            if (it != cache.end()
+                && CacheHitCharge(it->second.cost, !led ? kHitPlain : sh_rep ? kHitStandIn : kHitLed))
             {
                 BpSideReplay(it->second.cost);
                 PricedTraceEv("bp_real_hit", 0);
@@ -119675,7 +119763,8 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
     }
 
     PricedTraceEv("bp_miss_sh_exact", sh_exact ? 1 : 0);
-    if (sh_exact) { led_mute.Arm(); }   // the unlimited cache served the exact key: nothing below counts
+    // The unlimited cache served the exact key (or replayed it, the replay already counted): nothing below counts.
+    if (sh_exact || sh_rep) { led_mute.Arm(); }
     // THE TUTOR-PIN ALIAS (MTG_BP_TUTOR_PIN_ALIAS, DEFAULT ON; =0 keys every list on its live tutor pin as
     // before). An IDENTITY FOLD, found on EldraziDisplacerFlicker seed 5826 gi821 (docs/design/
     // edf-tutor-pin-alias-2026-11-03.md): a Living Wish plan's tutor-axis variants (Plan::tutor_choice
@@ -119711,19 +119800,23 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
         if (alias_ok)
         {
             bool sh_alias = false, sh_alias_rep = false;
-            if (led && !sh_exact)
+            if (led && !sh_exact && !sh_rep)
             {
                 const auto st = pledger::t_bp.find(pledger::K(alias_key));
-                sh_alias = st != pledger::t_bp.end() && (st->second & pledger::kPinUnread) != 0
+                sh_alias = st != pledger::t_bp.end() && (st->second.f & pledger::kPinUnread) != 0
                         && pledger::WouldServe(st->second);
-                sh_alias_rep = !sh_alias && st != pledger::t_bp.end() && (st->second & pledger::kPinUnread) != 0
+                sh_alias_rep = !sh_alias && st != pledger::t_bp.end() && (st->second.f & pledger::kPinUnread) != 0
                             && pledger::WouldReplay(st->second);   // MTG_CACHE_READ_GUARD_KIND
+                if (sh_alias) { pledger::NestAdd(st->second); }
+                if (sh_alias_rep) { pledger::Replay(st->second); }
             }
             BpEnumMap::iterator at = cache.find(alias_key);
             if (at != cache.end() && BpEnumEpochScoped() && at->second.epoch != g_decision_epoch) { at = cache.end(); }
-            if (led && !sh_exact && !sh_alias && !sh_alias_rep) { at = cache.end(); }   // the unlimited cache derives here
-            if (sh_alias) { led_mute.Arm(); }
-            if (at != cache.end() && at->second.tutor_pin_unread && CacheHitCharge(at->second.cost))
+            if (led && !sh_exact && !sh_rep && !sh_alias && !sh_alias_rep) { at = cache.end(); }   // the unlimited cache derives here
+            if (sh_alias || sh_alias_rep) { led_mute.Arm(); }
+            // Muted (sh_exact / sh_rep): the shadow already answered, so the real alias only spares the muted recompute.
+            const int alias_how = !led ? kHitPlain : (sh_rep || sh_alias_rep) ? kHitStandIn : kHitLed;
+            if (at != cache.end() && at->second.tutor_pin_unread && CacheHitCharge(at->second.cost, alias_how))
             {
                 tutorpinalias::g_hits.fetch_add(1, std::memory_order_relaxed);
                 if (tutorpinalias::VerifyOn() && !t_bp_enum_verifying)
@@ -119968,7 +120061,7 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
     {
         if (pledger::t_bp.size() >= s_bp_enum_cap) { pledger::t_bp.clear(); }
         const bool to_alias = alias_ok && pin_unread;
-        pledger::t_bp[pledger::K(to_alias ? alias_key : key)] = pledger::FlagsOf(bp_cost, pin_unread);
+        pledger::Put(pledger::t_bp, pledger::K(to_alias ? alias_key : key), bp_cost, pin_unread);
         pledger::NotePeak();
     }
     if (keyed && !bp_interrupted && !aa_cut_inside && bp_cost.storable)
@@ -120253,11 +120346,11 @@ static bool BpCanonFront(const GameState& state, bool is_pre_combat, TurnSolver:
     {
         auto it = bpcache::t_plans.find(key);
         bool sh_found = false;
-        std::uint8_t sh_f = 0;
+        pledger::Ent sh_e;   // a copy of the shadow's FULL bp entry for this key (exact, else the alias)
         if (led)
         {
             const auto st = pledger::t_bp.find(pledger::K(key));
-            if (st != pledger::t_bp.end()) { sh_found = true; sh_f = st->second; }
+            if (st != pledger::t_bp.end()) { sh_found = true; pledger::CopyTo(st->second, sh_e); }
         }
         // MTG_BP_TUTOR_PIN_ALIAS: a full list filed under the pin-cleared key (derived without reading the
         // pin, so valid under this one) serves the canon exactly as an exact-key entry does.
@@ -120286,20 +120379,24 @@ static bool BpCanonFront(const GameState& state, bool is_pre_combat, TurnSolver:
                 if (led && !sh_found)
                 {
                     const auto st = pledger::t_bp.find(pledger::K(ak));
-                    if (st != pledger::t_bp.end() && (st->second & pledger::kPinUnread) != 0)
-                    { sh_found = true; sh_f = st->second; }
+                    if (st != pledger::t_bp.end() && (st->second.f & pledger::kPinUnread) != 0)
+                    { sh_found = true; pledger::CopyTo(st->second, sh_e); }
                 }
             }
         }
-        bool sh_front_rep = false;   // MTG_CACHE_READ_GUARD_KIND: only the FRONT entry stands in for a front recompute
+        bool sh_front_rep = false;   // MTG_CACHE_READ_GUARD_KIND: only the FRONT entry replays for a front lookup
         if (led)
         {
-            sh_hit = sh_found && pledger::WouldServe(sh_f);
-            if (!sh_hit)
+            sh_hit = sh_found && pledger::WouldServe(sh_e);
+            if (sh_hit) { pledger::NestAdd(sh_e); }
+            else
             {
+                // (A FULL shadow entry never replays here: its counted work is the full list's, not the front's.)
                 const auto ft = pledger::t_front.find(pledger::K(key));
                 sh_hit = ft != pledger::t_front.end() && pledger::WouldServe(ft->second);
                 sh_front_rep = !sh_hit && ft != pledger::t_front.end() && pledger::WouldReplay(ft->second);
+                if (sh_hit) { pledger::NestAdd(ft->second); }
+                if (sh_front_rep) { pledger::Replay(ft->second); }   // counted now, served or recomputed muted
             }
             if (!sh_hit && (it != bpcache::t_plans.end() || bpcanon::t_fronts.find(key) != bpcanon::t_fronts.end()))
             { pledger::g_forced.fetch_add(1, std::memory_order_relaxed); }
@@ -120307,10 +120404,11 @@ static bool BpCanonFront(const GameState& state, bool is_pre_combat, TurnSolver:
         // MTG_CACHE_HIT_CHARGE: a full entry's derivation and the front-only one charge the same units
         // (they differ only in the put-back / Ponder / look-top clones, which no charging site builds),
         // so the full entry's cost is what the front-only recompute here would charge.
-        // (A FULL entry never replays for a front lookup: its counted work is the full list's, not the front's.)
-        if (it != bpcache::t_plans.end() && (!led || sh_hit)
+        // Without the ledger a FULL entry never replays for a front lookup (its counted work is the full list's, not
+        // the front's); under it, a replayed front (already counted) may be served from a real full entry.
+        if (it != bpcache::t_plans.end() && (!led || sh_hit || sh_front_rep)
             && !(BpEnumEpochScoped() && it->second.epoch != g_decision_epoch)
-            && CacheHitCharge(it->second.cost, /*allow_replay=*/false))
+            && CacheHitCharge(it->second.cost, !led ? kHitPlainNoReplay : sh_front_rep ? kHitStandIn : kHitLed))
         {
             BpSideReplay(it->second.cost);
             PricedTraceEv("front_full_hit", 0);
@@ -120323,7 +120421,7 @@ static bool BpCanonFront(const GameState& state, bool is_pre_combat, TurnSolver:
         const auto jt = bpcanon::t_fronts.find(key);
         if (jt != bpcanon::t_fronts.end() && (!led || sh_hit || sh_front_rep)
             && !(BpEnumEpochScoped() && jt->second.epoch != g_decision_epoch)
-            && CacheHitCharge(jt->second.cost))
+            && CacheHitCharge(jt->second.cost, !led ? kHitPlain : sh_front_rep ? kHitStandIn : kHitLed))
         {
             BpSideReplay(jt->second.cost);
             PricedTraceEv("front_hit", 0);
@@ -120332,6 +120430,7 @@ static bool BpCanonFront(const GameState& state, bool is_pre_combat, TurnSolver:
             out = jt->second.front;
             return true;
         }
+        if (sh_front_rep) { led_mute.Arm(); }   // replayed above: the recompute below is the virtual hit's
     }
     PricedTraceEv("front_miss_sh", sh_hit ? 1 : 0);
     if (sh_hit) { led_mute.Arm(); }   // MTG_PLAN_PRICED_LEDGER: a free virtual-cache hit
@@ -120374,7 +120473,7 @@ static bool BpCanonFront(const GameState& state, bool is_pre_combat, TurnSolver:
         && pledger::FitsWork(plans.size(), fr_emitted))
     {   // MTG_PLAN_PRICED_LEDGER: the shadow's store, as below (this memo has no byte budget of its own)
         if (pledger::t_front.size() >= s_cap) { pledger::t_front.clear(); }
-        pledger::t_front[pledger::K(key)] = pledger::FlagsOf(fr_cost);
+        pledger::Put(pledger::t_front, pledger::K(key), fr_cost);
         pledger::NotePeak();
     }
     if (keyed && !aa_cut_inside && !bp_interrupted && fr_cost.storable)
@@ -125768,7 +125867,7 @@ TurnSolver::ReadGuardProbe TurnSolver::ReadGuardProbeForTest(bool searchbudget_r
     SearchBudget* const sv_greedy = g_greedy_charge_budget;
     const long long sv_pr_start = decisionwork::t_pr_start, sv_pr_limit = decisionwork::t_pr_limit;
     const long long sv_priced = workctr::t_priced, sv_used = decisionwork::t_used, sv_limit = decisionwork::t_limit;
-    const long long sv_odo = workctr::t_n[workctr::kOdoVisit];
+    const long long sv_odo = workctr::t_n[workctr::kOdoVisit], sv_odo_rep = workctr::t_replayed[workctr::kOdoVisit];
     const long long sv_gw = gamework::t_used;
     const int sv_kind = valuearm::t_arm.read_guard_kind;
     const unsigned long long sv_reads = budgetbind::t_reads, sv_preads = budgetbind::t_preads, sv_binds = budgetbind::t_binds;
@@ -125796,20 +125895,60 @@ TurnSolver::ReadGuardProbe TurnSolver::ReadGuardProbeForTest(bool searchbudget_r
     r.real_exhausted   = CacheHitCharge(c);
     r.replayed_odo     = workctr::t_n[workctr::kOdoVisit] - odo0;
     r.replayed_priced  = workctr::t_priced - pr0;
-    r.shadow_exhausted = pledger::WouldServe(pledger::FlagsOf(c));
-    r.shadow_replay_exhausted = pledger::WouldReplay(pledger::FlagsOf(c));
+    pledger::Map shadow;                                     // the ledger's record of the COUNTED computation
+    pledger::Put(shadow, 1, c);
+    const pledger::Ent& e = shadow[1];
+    r.shadow_exhausted = pledger::WouldServe(e);
+    r.shadow_replay_exhausted = pledger::WouldReplay(e);
+    // RESIDENCY (the ledger's replay): the real entry here was stored by a recompute that counted only 3 visits (warm
+    // tier-1 caches, or a muted recompute's 0). Present -> it stands in (kHitStandIn counts nothing); absent -> a muted
+    // recompute counts nothing. Either way only the shadow's replay counts.
+    cachecharge::Cost warm = c;
+    warm.work[workctr::kOdoVisit] = 3;
+    if (r.shadow_replay_exhausted)
+    {
+        const long long o0 = workctr::t_n[workctr::kOdoVisit];
+        pledger::Replay(e);
+        r.standin_served = CacheHitCharge(warm, kHitStandIn);
+        r.led_present_odo = workctr::t_n[workctr::kOdoVisit] - o0;
+        const long long o1 = workctr::t_n[workctr::kOdoVisit];
+        pledger::Replay(e);
+        {
+            pledger::Mute m;
+            m.Arm(/*stat=*/false);
+            workctr::Inc(workctr::kOdoVisit, 3);             // the muted recompute's own visits
+        }
+        r.led_absent_odo = workctr::t_n[workctr::kOdoVisit] - o1;
+    }
+    r.led_hit_exhausted = CacheHitCharge(warm, kHitLed);      // the ledger's FREE-hit path keeps the plain guard
     decisionwork::t_pr_limit = workctr::t_priced - decisionwork::t_pr_start + 1;   // one ns of headroom left
     r.real_headroom = CacheHitCharge(c);
+    r.shadow_replay_headroom = pledger::WouldReplay(e);
     decisionwork::t_pr_limit = 1000000;
     workctr::t_priced = decisionwork::t_pr_start + 2000000;   // the priced ceiling has now TRIPPED
     r.real_priced   = CacheHitCharge(c);
-    r.shadow_priced = pledger::WouldServe(pledger::FlagsOf(c));
-    r.shadow_replay_priced = pledger::WouldReplay(pledger::FlagsOf(c));
+    r.shadow_priced = pledger::WouldServe(e);
+    r.shadow_replay_priced = pledger::WouldReplay(e);
+    // NESTED: an enclosing computation that is served this entry FREE (context not cut) takes the SHADOW's work into
+    // its own (pledger::NestAdd), never the real entry's (CacheHitCharge kHitLed adds nothing).
+    {
+        SearchBudget fresh(1000);
+        g_decision_budget = &fresh;
+        workctr::t_priced = decisionwork::t_pr_start;
+        cachecharge::Cost outer;
+        {
+            cachecharge::Scope sc;
+            if (pledger::WouldServe(e)) { pledger::NestAdd(e); (void)CacheHitCharge(warm, kHitLed); }
+            outer = sc.Done();
+        }
+        r.nest_odo = outer.work[workctr::kOdoVisit];
+        g_decision_budget = &dec;
+    }
     g_decision_budget = sv_dec;
     g_greedy_charge_budget = sv_greedy;
     decisionwork::t_pr_start = sv_pr_start; decisionwork::t_pr_limit = sv_pr_limit;
     workctr::t_priced = sv_priced; decisionwork::t_used = sv_used; decisionwork::t_limit = sv_limit;
-    workctr::t_n[workctr::kOdoVisit] = sv_odo;
+    workctr::t_n[workctr::kOdoVisit] = sv_odo; workctr::t_replayed[workctr::kOdoVisit] = sv_odo_rep;
     gamework::t_used = sv_gw;
     valuearm::t_arm.read_guard_kind = sv_kind;
     budgetbind::t_reads = sv_reads; budgetbind::t_preads = sv_preads; budgetbind::t_binds = sv_binds;
