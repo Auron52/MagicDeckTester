@@ -96507,7 +96507,7 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
             const uint64_t hsalt = SaltSeed(
                 state.game_seed + 0x9E3779B97F4A7C15ULL * static_cast<uint64_t>(state.TurnSeq()),
                 state.shuffle_salt_search);
-            ss.ActivePlayer().library.ShuffleUnseen(hsalt);   // keep the player's known top/bottom
+            ShuffleUnseenFuture(ss, hsalt);   // keep the player's known top/bottom
             pre_plan = TurnSolver::SolveWithLookahead(
                 ss, true, depth, max_turns, budget, false, second_main, nullptr);
         }
@@ -96662,7 +96662,7 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
                         + 0x9E3779B97F4A7C15ULL * static_cast<uint64_t>(state.TurnSeq())
                         + 7919ULL,   // distinct stream from the pre-combat reshuffle
                     state.shuffle_salt_search);
-                ss2.ActivePlayer().library.ShuffleUnseen(hsalt2);
+                ShuffleUnseenFuture(ss2, hsalt2);
                 post_plan = TurnSolver::SolveWithLookahead(
                     ss2, false, depth, max_turns, budget, false, second_main, nullptr);
             }
@@ -110623,7 +110623,7 @@ TurnSolver::Plan TurnSolver::ReshuffleAvgChoosePlan(const GameState& state, int 
         {
             const auto nc_e0 = std::chrono::steady_clock::now();
             GameState s = state;
-            s.ActivePlayer().library.ShuffleUnseen(rs);    // a sampled future keeps the KNOWN top/bottom (Library::KnownTop)
+            ShuffleUnseenFuture(s, rs);    // a sampled future keeps the KNOWN top/bottom + a revealed top (ShuffleUnseenFuture)
             s.shuffle_salt_search = rs;             // honest continuation folds this (varies per k)
             ShuffleEvalGuard   _seg(true);
             HonestTeacherGuard _htg(depth > 0);     // decouple the depth>0 continuation lookahead

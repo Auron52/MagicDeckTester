@@ -867,7 +867,7 @@ static void EmitEvalRows(const GameState& state, int max_turns, bool second_main
         const uint64_t rs = state.game_seed
                           + 0x9E3779B97F4A7C15ULL * (static_cast<uint64_t>(k) + 1)
                           + 1000003ULL * static_cast<uint64_t>(state.turn_number);
-        s.ActivePlayer().library.ShuffleUnseen(rs); // keep cards the player knows for honest labels
+        ShuffleUnseenFuture(s, rs); // keep cards the player knows (placed or revealed) for honest labels
         // Honest-teacher per-turn reshuffle (g_honest_teacher) folds shuffle_salt_search; vary it per
         // k so the K outer samples draw independent decoupled futures (else all k share one future).
         // Guarded to honest mode: leaves the non-honest rollout/searched dump path byte-unchanged.
@@ -1960,6 +1960,7 @@ inline bool NoReplay();
 inline void BlindInPlace(GameState& s, std::uint64_t h)
 {
     if (NoopOn()) { return; }
+    NoteVisibleLibraryTop(s);   // a continuously revealed top (Courser) is known, though never placed
     for (std::size_t pi = 0; pi < s.players.size(); ++pi)
     { s.players[pi].library.BlindUnknownOrder(Mix(h, 0x51ull + pi)); }
     const std::uint64_t salt = Mix(h, 0x5A17ull) | (1ull << 62);   // never the real (small) salts

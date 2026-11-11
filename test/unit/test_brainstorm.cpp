@@ -632,3 +632,35 @@ TEST_CASE("ShuffleUnseen keeps a known card below an unknown top and a known bot
     }
     CHECK(sampled_top.size() > 1);
 }
+
+// A CONTINUOUSLY REVEALED TOP (Courser of Kruphix, LibraryTopVisible; queue 5c, 2026-11-11). The player sees it
+// although he never placed it, so the sampled unseen future (ShuffleUnseenFuture: the NC search, honest labels)
+// keeps it on top; without the revealer the top is sampled like any other unknown card.
+TEST_CASE("ShuffleUnseenFuture keeps a Courser-revealed top, samples it without Courser")
+{
+    GameState s = BoardBs({}, {});
+    std::vector<Card> cards;
+    for (int i = 0; i < 8; ++i) { cards.push_back(CardBs(i % 2 ? "Ponder" : "Island", 500 + i)); }
+    s.players[0].library.assign(cards.begin(), cards.end());
+    REQUIRE(s.players[0].library.KnownTopRun() == 0);
+    const int top = s.players[0].library.RawAt(0).m_number;
+    std::set<int> blind_top, seen_top;
+    GameState with = s;
+    PutBs(with, "Courser of Kruphix", 2);
+    REQUIRE(LibraryTopVisible(with));
+    for (std::uint64_t seed = 1; seed <= 40; ++seed)
+    {
+        GameState a = s;
+        ShuffleUnseenFuture(a, seed);
+        blind_top.insert(a.players[0].library.RawAt(0).m_number);
+        GameState b = with;
+        ShuffleUnseenFuture(b, seed);
+        seen_top.insert(b.players[0].library.RawAt(0).m_number);
+        CHECK(b.players[0].library.size() == 8u);
+    }
+    CHECK(blind_top.size() > 1u);
+    REQUIRE(seen_top.size() == 1u);
+    CHECK(*seen_top.begin() == top);
+    CHECK(s.players[0].library.KnownTopRun() == 0);      // the real state's mask is untouched
+    CHECK(with.players[0].library.KnownTopRun() == 0);
+}

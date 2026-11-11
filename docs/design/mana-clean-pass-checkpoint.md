@@ -503,6 +503,21 @@ oracle off byte-identical; record 43e700b5c):
   APPLY-DROP-ORDER 99 (183), DOMINATED-CREATURE 227 (198), DOMINATED-ONESHOT 124 (66), ORACLE-GAP 2,924 (3,082),
   UNMODELED 8 (0), CAPPED 431 (591). ENUM-GAP (off-menu) and ORACLE-GAP dominate: Mirrorwing's remaining work is
   menu/oracle coverage, not payer order. Next fresh block 24000.
+* **Item 5c (agent 2026-11-11): Niv gi887 known cards -- DONE.** The port itself had ALREADY LANDED at
+  5718ccb5b (2026-11-07; followups s8 Q29): `Library::ShuffleUnseen` on main's `m_known_top` mask, called by the
+  `MTG_NC_SEARCH` policy (`ReshuffleAvgChoosePlan`), both honest-teacher continuation reshuffles and
+  `EmitEvalRows` labels; blind leaf and keep trainer unchanged per the USER ruling. Verified intact on HEAD.
+  **Gap closed now:** the mask records only cards the player PLACED; a top shown by a continuous reveal (Courser of
+  Kruphix, `LibraryTopVisible`; Landfall) is known but was never placed, so the NC search / labels / blind search
+  sampled it away. New `ShuffleUnseenFuture` / `NoteVisibleLibraryTop` (SpellEffects.h) note it on the SAMPLED COPY
+  before the reshuffle (all four ShuffleUnseen sites + `blindsearch::BlindInPlace`); the real game's mask is never
+  touched. No other engine site reveals without moving (cascade exiles go to the placed bottom block). Unit case
+  added; units 2834/2834; scenarios 461/461; smoke 195/195 and regression 309/309 byte-identical (0 play-changed;
+  827 references: 0 drift/gap). No GT to accept.
+  **Repro** (seed 1650888 = 1650001+887, game_index 887): `MTG_NC_SEARCH=1` d8 b0 wins **T5**, shipped play T5 --
+  gi887 passes the bar. Shipped play is byte-identical by construction (only sampled copies change), so no held-out
+  A/B and no Niv gate were run for 5c: a gate would re-measure unchanged play (Niv is DUE anyway: 333,811 issues on its last
+  5,000-game record, next block 10000-14999; queue item 6).
 
 ## Pass verdicts (this segment; earlier ones are in test/mana_clean.json and status.log)
 - galadriel: 71,000 games, 372,073 issues (MISS 453 = 425 APPLY-DROP + 28 ENUM-GAP "cast both Galadriels",

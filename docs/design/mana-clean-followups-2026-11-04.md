@@ -198,6 +198,9 @@ doing cases that have potential to fix the colours, not those that require more 
   the NC search and `EmitEvalRows` use it. Niv gi887 at d8/b0 under NC wins T5; the T4 menu scores Servant + Signet
   5.000 and Lookout + Signet 6.000. Full units 2631/2631; smoke 179/179; regression 286/286; 777 saved references
   replayed without drift or gaps. The blind leaf and keep trainer remain on their original paths.
+  2026-11-11 (queue 5c): a continuously REVEALED top (Courser of Kruphix, `LibraryTopVisible`) is now kept too:
+  `ShuffleUnseenFuture` notes it known on the sampled copy before `ShuffleUnseen` (NC search, honest teacher,
+  `EmitEvalRows`, blind search). Shipped play byte-identical (smoke 195/195); gi887 NC d8/b0 still T5.
   The full overnight tier on 2026-11-07 completed 578 jobs in 28m08s: 484 matched the prior GT and 94 moved. Its
   per-game audit found 2,375 faster / 1,189 slower searched games; the adopted Cyclone, Kithkin, Shadowborn and Jumbo
   artifacts produced the largest net improvements (respectively -491, -882, -72 and -11 turns), while the c-wild

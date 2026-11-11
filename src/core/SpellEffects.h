@@ -2133,6 +2133,22 @@ inline bool LibraryTopVisible(const GameState& s)
     return false;
 }
 
+// THE SAMPLED UNSEEN FUTURE (the non-clairvoyant search, honest labels, the blind search; 2026-11-11, queue 5c):
+// re-randomise only what the active player does NOT know. Library::ShuffleUnseen keeps the cards he placed
+// (put-backs, keep-on-top, the placed bottom block); a top shown by a continuous reveal (Courser of Kruphix,
+// LibraryTopVisible) is known too but was never placed, so it is noted here, on the SAMPLED COPY only, before
+// the reshuffle. Play never calls this (the real game's mask stays as its moves left it).
+inline void NoteVisibleLibraryTop(GameState& s)
+{
+    Library& lib = s.ActivePlayer().library;
+    if (!lib.empty() && LibraryTopVisible(s)) { lib.NoteKnownAt(0); }
+}
+inline void ShuffleUnseenFuture(GameState& s, uint64_t seed)
+{
+    NoteVisibleLibraryTop(s);
+    s.ActivePlayer().library.ShuffleUnseen(seed);
+}
+
 // THE BASIC-LAND PREDICATE (2026-10-15) -- the one definition every "basic land" reader shares:
 // Phylath, World Sculptor's "for each basic land you control" (etb_tokens_per_land_basic_only), and
 // every "search your library for a basic land card" (Rampant Growth, Cultivate, Search for Tomorrow,
