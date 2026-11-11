@@ -1,0 +1,63 @@
+{
+  "card_scores": {
+    "Gargos, Vicious Watcher": [
+      -0.11057608263806173
+    ],
+    "Garruk, Primal Hunter": [
+      -0.04007543611503994
+    ],
+    "Gauntlet of Power": [
+      -0.194683938861008
+    ],
+    "Kalonian Hydra": [
+      0.1057183905237542
+    ],
+    "Lightning Greaves": [
+      0.26062392532547296
+    ],
+    "Nature's Lore": [
+      0.26116719482343065,
+      -0.14148360394778692
+    ],
+    "Neverwinter Hydra": [
+      -0.1287998420844847
+    ],
+    "Nissa, Who Shakes the World": [
+      0.07645921327158955
+    ],
+    "Primordial Hydra": [
+      -0.010065042966338922,
+      -0.17725988700564965
+    ],
+    "Search for Tomorrow": [
+      0.4173760363841268,
+      0.05889819751205838
+    ],
+    "Steelbane Hydra": [
+      -0.18245325228989895
+    ],
+    "Three Visits": [
+      0.15611527115951862
+    ],
+    "Vernal Bloom": [
+      -0.17555258774628246,
+      -0.13971110584892266
+    ],
+    "Voracious Hydra": [
+      -0.10624558571284393,
+      -0.12605042016806767
+    ]
+  },
+  "hand_score_threshold": -1e+18,
+  "mulligan": {
+    "bottom_order": "count_first",
+    "curve_check": "two_drop",
+    "max_lands": 5,
+    "min_color_sources": {},
+    "min_lands": 1,
+    "min_playable": 0,
+    "required_pieces": [],
+    "stop_at": 4
+  },
+  "version": 1
+}
