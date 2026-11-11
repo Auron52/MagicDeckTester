@@ -2679,6 +2679,18 @@ public:
     // Test seam: a digest of the per-game cache state the scope above protects (sizes, byte counts,
     // epochs) -- equal before and after anything that must leave play untouched.
     static std::uint64_t PerGameCacheDigestForTest();
+    // Test seam for the plan caches' READ GUARD (cachecharge, MTG_CACHE_READ_GUARD_KIND): a computation is stored
+    // after reading the priced ceiling (and, with `searchbudget_read`, also a finite SearchBudget); then it is looked
+    // up -- by CacheHitCharge (the real caches) and by pledger::WouldServe (the shadow) -- once with the decision
+    // budget EXHAUSTED and the priced ceiling standing, and once with the priced ceiling TRIPPED. Every thread-local
+    // it touches is restored. `kind` is the per-job arm (-1 env, 0 broad guard, 1 by kind).
+    struct ReadGuardProbe
+    {
+        bool stored = false, budget_read = false, budget_read_sb = false;
+        bool real_exhausted = false, shadow_exhausted = false;   // served with the decision budget exhausted?
+        bool real_priced = false, shadow_priced = false;         // served with the priced ceiling tripped?
+    };
+    static ReadGuardProbe ReadGuardProbeForTest(bool searchbudget_read, int kind);
 
     // Committed-depth telemetry (MTG_ROLLOUT_STATS; counters only, no behaviour). Called once per
     // top-level main-phase decision with the depth iterative deepening actually COMMITTED. See the

@@ -353,6 +353,7 @@ add_executable(mtg-test
     test/unit/test_hydras_walkers.cpp
     test/unit/test_hydras_cast_order.cpp
     test/unit/test_hydras_discard.cpp
+    test/unit/test_cache_read_guard.cpp
     test/unit/test_domain_widen_partial.cpp
     test/unit/test_ramp_filter_c_feed.cpp
     test/unit/test_land_aura_order_hold.cpp
