@@ -15,6 +15,12 @@ rebaselining ground truth.
 > Review ALL searched-depth (d>0) SLOWER games; a couple of d0 examples suffice. An
 > explanation is not a measurement — and for slower games the measurement is
 > generated for you by `test/classify_turn_later.sh <mode>`.
+>
+> **Depth priority (USER 2026-11-11, verbatim):** *"I also am okay with some small regressions on depth 0. It is
+> even possible at some point I could accept losses at depth 3 in exchange for wins at play depth. However, I would
+> prefer not to do this when possible. But essentially in importance play depth > depth 3 or mulligan settings >>>
+> depth 0."* So a small d0 (greedy-runner) slowdown does not block an otherwise sound change (report it); a d3 or
+> mulligan-setting loss traded for a play-depth gain is the USER's call (surface it, prefer a change with neither).
 
 The harness lives in `test/`:
 

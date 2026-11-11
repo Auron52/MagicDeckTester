@@ -143,3 +143,14 @@ Extraplanar Lens:
   Landscape #18, imprints #28, and pays Ulamog with six Islands doubled by the Lens.
 * ORACLE-GAP 110. Example: s30000010 T5 {Island + Ulamog + Time Warp}, where the diff names Horn of Greed
   #8 "only in engine". The oracle seems to mis-model either the Lens bonus or the board the imprint leaves.
+
+## USER ruling 2026-11-11: fold identical-basic fetch pins (verbatim)
+
+> Yes, I agree with your fold for extra turns. We should not be treating the islands as different for clairvoyance
+> reasons.
+
+The deck's only basic is Snow-Covered Island. Myriad Landscape's pins choose among identical Islands, and the fetch
+shuffles; the only thing separating the plans is the seeded post-shuffle library (clairvoyance). Fold identical
+same-name basic fetch choices into one plan, engine-wide (any deck fetching identical basics), validated as a play
+change; then identify the "dig variants" and fold them only if they too differ only through hidden information;
+then re-measure the oracle cost and gate if tractable. Queued as mana-clean chain item 5l.
