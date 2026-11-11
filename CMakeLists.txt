@@ -446,6 +446,7 @@ add_executable(mtg-test
     test/unit/test_lackey_axis.cpp
     test/unit/test_combat_stable_sources.cpp
     test/unit/test_antilife_tutor.cpp
+    test/unit/test_martyr_tutor_prune.cpp
     test/unit/test_fluctuator_discard.cpp
     test/unit/test_fluctuator_order.cpp
     test/unit/test_melira_pod_discard.cpp

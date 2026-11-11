@@ -2368,6 +2368,13 @@ public:
     // deck reads its life total, and (MTG_MARTYR_JITTE_GAIN_GATE, default ON) only while the counters'
     // gain can reach a life threshold an own card reads. DecisionProviders.cpp.
     bool OffersJitteGainMode(const GameState& s) const override;
+    // THE 1-DROP TUTOR PRUNE (MTG_MARTYR_TUTOR_PRUNE, heurarm MARTYR_TUTOR_PRUNE; DEFAULT ON, USER 2026-11-11).
+    // Ranger-Captain of Eos's searched MV<=1 fetch offers only Serra Ascendant, Martyr of Sands (while none is in
+    // hand or on the battlefield and life is below the highest own life threshold) and Speaker of the Heavens,
+    // ranked in that order; Ranger of Eos's resolution-time pair ranks the same way. DecisionProviders.cpp.
+    std::vector<std::string> TutorCandidates(const GameState& s, int controller, const CardParams& pp) const override;
+    std::vector<std::string> TutorHandPutList(const GameState& s, int controller, const CardParams& pp,
+                                              int max_puts) const override;
     // THE USER'S MAIN-PHASE RULINGS OF 2026-11-10, as a provider RESTRICTION of the collected options in
     // either main (applied at CollectActions' tail: search, rollout, d0 runner and executor alike; human
     // play keeps the full set). Two levers, one hook. DecisionProviders.cpp has the rules and the record.
