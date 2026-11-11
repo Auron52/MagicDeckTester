@@ -2789,6 +2789,9 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                                     + "/" + std::to_string(tier1::t_at_peak[c]); }
                             for (int k = 0; k < workctr::kKinds; ++k)
                             { line += " " + std::string(workctr::KindName(k)) + "=" + std::to_string(workctr::t_n[k]); }
+                            // ...of which REPLAYED (counted for the priced meter, not done; MTG_CACHE_READ_GUARD_KIND).
+                            for (int k = 0; k < workctr::kKinds; ++k)
+                            { if (workctr::t_replayed[k] != 0) { line += " " + std::string(workctr::KindName(k)) + "_replayed=" + std::to_string(workctr::t_replayed[k]); } }
                             line += "\n";
                             std::lock_guard<std::mutex> lk(s_t1_mu);
                             std::fputs(line.c_str(), s_t1_f);
