@@ -145,6 +145,24 @@ Source of the work: `logs/mana_clean/lastweek-20261110-shadowborn-order/report.m
 * Chain order: build -> unit -> the s30020022 repro -> smoke (expect only Shadowborn rows to move) -> regression ->
   `./build.sh pgo` -> Shadowborn 5,000 gate on block 25000-29999 -> record, commit, push.
 
+* **Extra Turns oracle cost (agent 2026-11-11): two lossless collapses FIXED; gate PARKED.** Diagnosis is in
+  `docs/design/extra-turns-mana-oracle-sizing-2026-11-10.md` (section 2026-11-11). (1) The hit-only cut:
+  `Realize` no longer builds fail-option scripts for callers that read only the hit (ENUM-GAP checks and the
+  sibling-payment check). The 534-plan p3 decision went from 768k to 225k applies. (2) `SibPayMemo`: one
+  search per sibling per decision. Sibling-payment applies went from 4.21M to 0.11M. Flags are identical on 11
+  heavy seeds (8,938 lines). The 180 -> 5,040 order bound is inert here (at most 3 movable actions).
+  **PARKED:** a 64-game sample (games 90000+) gave a mean of at least 365 s per game, and 29 of the first ~51
+  games had a decision that spent its 300-priced-s budget. That projects to at least ~16 h for 5,000 games,
+  and the gate would fail on CAPPED-DECISION anyway. The cost is menu breadth: land-search-pin and dig
+  variants, which differ through hidden library order. Folding them is a search-side (play) change or needs a
+  proof that does not hold here. Lens issues seen (APPLY-DROP 45, ORACLE-GAP 110 on the heavy seeds) are
+  parked in the doc.
+  Validation, before the rebase onto 7a7c2079b: unit tests (oracle/mana) passed 191/191. Smoke moved only the
+  known Gods-merge pair (bruna2hg, landfall d5). Regression showed 5 same-score digest changes (extraturns d5
+  s2002, gods d3, fivecolour d3/d5, landfall d5 s3003). The pre-change binary reproduces every one, so none
+  comes from this change; GT was not accepted. After the rebase onto 7a7c2079b (whose GT accept covers those rows), smoke on
+  the rebased build passes all 187 rows.
+
 ## Pass verdicts (this segment; earlier ones are in test/mana_clean.json and status.log)
 - galadriel: 71,000 games, 372,073 issues (MISS 453 = 425 APPLY-DROP + 28 ENUM-GAP "cast both Galadriels",
   ORACLE-GAP 6, UNMODELED 357,908 mostly "scripted payment did not pay {1}{U}{G}" / "set-aside exceeds the floating

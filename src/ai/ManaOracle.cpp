@@ -299,6 +299,14 @@ thread_local long long t_dec_limit   = 0;    // > 0 inside AuditDecision: its bu
 inline long long DecisionSpentNs() { return workctr::t_priced - t_dec_start; }
 inline bool DecisionOut() { return t_dec_limit > 0 && DecisionSpentNs() >= t_dec_limit; }
 std::atomic<long long> g_dec_capped{0}, g_dec_capped_plans{0};
+// MTG_MANA_ORACLE_COST_TRACE=1 (diagnostic, default off): what each menu plan's audit (PLAN-COST) and each
+// gate-rejected plan's check (GATE-COST) cost, in applies -- where a heavy decision's work goes.
+bool CostTrace()
+{
+    static const bool v = EnvOn("MTG_MANA_ORACLE_COST_TRACE");
+    return v;
+}
+
 // MTG_MANA_ORACLE_HEAVY=<n> (diagnostic, default 0 = off): print every decision that made >= n applies (applies,
 // priced and wall ms, menu size) -- the sizing data for DecisionCapNs.
 int HeavyDecision()
@@ -341,6 +349,11 @@ std::atomic<long long> g_cls[C_N];
 std::atomic<long long> g_decisions{0}, g_plans{0}, g_plans_skipped{0}, g_applies{0}, g_frontiers{0},
                        g_pruned{0}, g_options{0}, g_engine_drop{0}, g_ms{0},
                        g_gate_rejects{0}, g_gate_rejects_checked{0}, g_gate_rejects_skipped{0};
+// Realize's HIT-ONLY cut: fail-option scripts a hit-only search did not build (each a whole subtree).
+std::atomic<long long> g_hit_only_cut{0};
+// MTG_MANA_ORACLE_COST_TRACE: applies by AuditPlan stage (its own realisation incl. the capped retry; the siblings'
+// payments; the other orders of a drop).
+std::atomic<long long> g_cost_main{0}, g_cost_sibpay{0}, g_cost_orders{0};
 // The ENUM-GAP pass's rejections of a paying realisation (EnumGapPlan): it skipped one of the plan's actions and the
 // plan without it is on the menu or checked on its own (noop); it tapped a card taken off the top of the library
 // (hidden); the menu reaches its board with every land Aura's host aside and at least its resources (host_blind).
@@ -397,6 +410,13 @@ struct Reporter
         std::fprintf(stderr, "=== MANA ORACLE classes:%s ===\n", by.empty() ? " (none)" : by.c_str());
         std::fprintf(stderr, "=== MANA ORACLE enum-gap rejections: noop=%lld hidden=%lld host_blind=%lld cont_land=%lld ===\n",
                      g_eg_noop.load(), g_eg_hidden.load(), g_eg_host_blind.load(), g_eg_cont_land.load());
+        if (CostTrace())
+        {
+            std::fprintf(stderr, "=== MANA ORACLE audit applies by stage: own=%lld sibling-payments=%lld other-orders=%lld ===\n",
+                         g_cost_main.load(), g_cost_sibpay.load(), g_cost_orders.load());
+        }
+        if (g_hit_only_cut.load() != 0)
+        { std::fprintf(stderr, "=== MANA ORACLE hit-only cuts: %lld unpayable-payment subtrees not built ===\n", g_hit_only_cut.load()); }
         if (g_route_macros.load() != 0)
         {
             std::fprintf(stderr, "=== MANA ORACLE combo routes: %lld equip-route macros audited, %lld links, %lld ms ===\n",
@@ -2493,7 +2513,7 @@ struct RealizeCursor
 Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pre, bool stop_at_full,
                     const std::vector<PayOption>& prefix = {}, bool all_engine = false,
                     const std::multiset<std::string>* want = nullptr, const OutcomeTest* accept = nullptr,
-                    RealizeCursor* cursor = nullptr)
+                    RealizeCursor* cursor = nullptr, bool hit_only = false)
 {
     Realization r;
     std::vector<std::vector<PayOption>> layer(1, prefix);
@@ -2772,6 +2792,16 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
             }
             if (opts.empty())
             {
+                // HIT-ONLY: a caller that reads nothing but the hit (`hit_only`, with stop_at_full) cannot use this
+                // branch. Every script past here carries the fail option, and a hit needs Outcome::Clean, which
+                // refuses any fail -- so neither the script nor anything it reaches can ever be a hit (accept is
+                // consulted only for a clean outcome). Not building it removes exactly the scripts that cannot
+                // answer the question; the others are applied in the same order, and the frontiers it would have
+                // reached are keyed apart from every fail-free frontier in the Pareto prune (the `failures` hash
+                // above), so no kept frontier changes. Extra Turns seed 30000003 T4 (2026-11-11): ENUM-GAP checks
+                // of plans casting Ulamog + Emrakul + three Walk the Aeons spent most of their applies paying the
+                // casts after the one that could not be paid, in every order.
+                if (hit_only && stop_at_full) { g_hit_only_cut.fetch_add(1, std::memory_order_relaxed); continue; }
                 // No way to pay this one: the cast is dropped, as the engine would drop it, and the rest
                 // of the line is still explored.
                 PayOption fail;
@@ -3438,6 +3468,26 @@ std::string RollbackCensus(const GameState& root, bool pre, const TurnSolver::Pl
          + (c.rescued ? "; MTG_PAY_ROLLBACK (forced on) recovers it" : "; MTG_PAY_ROLLBACK (forced on) does not recover it");
 }
 
+// One decision's record of its menu plans' hit-only payment searches (AuditPlan's sibling-payment check).
+struct SibPayMemo
+{
+    struct Rec
+    {
+        std::multiset<std::string> left;
+        std::uint64_t              key = 0;
+        Res                        res;
+    };
+    struct Entry
+    {
+        bool             complete = false;
+        std::vector<Rec> recs;
+    };
+    const GameState* root = nullptr;
+    bool             pre  = false;
+    std::map<const TurnSolver::Plan*, Entry> by_plan;
+};
+thread_local SibPayMemo* t_sib_memo = nullptr;
+
 void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, const EngineReal& er_in,
                const std::vector<const EngineReal*>& full_sibs,
                const std::vector<const TurnSolver::Plan*>& sib_plans);
@@ -3512,6 +3562,8 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
     for (const std::string& c : e_cast) { e_want.insert(c); }
     // ---- the complete side, in the engine's own order ----------------------------------------------
     RealizeCursor cursor;   // lever (b): the retry below continues from where this pass was cut
+    const long long main_a0 = t_dec_applies;
+    struct MainCost { const long long& a0; bool done = false; void Stop() { if (!done) { g_cost_main.fetch_add(t_dec_applies - a0); done = true; } } ~MainCost() { Stop(); } } _main_cost{ main_a0 };
     Realization r = Realize(root, plan, pre, /*stop_at_full=*/false, {}, false, nullptr, nullptr, &cursor);
     // ESCALATION (Fluctuator 2026-11-03), ALWAYS ON: a plan that hits the per-plan ceiling is realized again
     // under a 20000-apply ceiling, so only the plans that need it pay for it. CAPPED fails the mana-clean gate
@@ -3563,6 +3615,7 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
         g_cap_retry.fetch_add(1, std::memory_order_relaxed);
         if (!r.capped) { g_cap_retry_ok.fetch_add(1, std::memory_order_relaxed); }
     }
+    _main_cost.Stop();
     for (const std::string& u : r.unmodeled) { NoteUnmodeled(u); }
     if (r.capped)
     {
@@ -3628,6 +3681,18 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
         // sibling's own order; a capped or unmodelled sibling search reaches nothing (fail closed).
         if (full != nullptr && !uncovered_all.empty() && sib_plans.size() == full_sibs.size())
         {
+            // THE SIBLINGS' PAYMENTS ARE SEARCHED ONCE PER DECISION (SibPayMemo). A sibling's hit-only search applies
+            // its scripts in one fixed order and stops only at a hit, so a search that ran to its end without one
+            // has seen EVERY outcome any later search of that sibling can see (same root, same plan, same apply
+            // ceiling: the scripts each applies are a prefix of that list). Its clean, fully scripted outcomes are
+            // recorded (the hand they leave, CoreKey and Resources, read inside the search exactly where `acc` reads
+            // them), and every later question to that sibling -- another uncovered board, another plan of the same
+            // group -- is answered from the record: a hit exists in it iff the search would stop at one. A search
+            // that DID stop at a hit records nothing (it saw only a prefix), so no search is ever longer than before.
+            // Extra Turns seed 30000003 T4: groups of 16-20 plans (land-search pins, dig choices, orders) each asked
+            // every sibling the same question about the same boards.
+            SibPayMemo* const memo = (t_sib_memo != nullptr && t_sib_memo->root == &root && t_sib_memo->pre == pre)
+                                   ? t_sib_memo : nullptr;
             auto sib_pay_covers = [&](const Outcome& u)
             {
                 const std::uint64_t k = CoreKey(u.st);
@@ -3636,13 +3701,37 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
                 { return CoreKey(o.st) == k && Covers(Resources(o.st, false), ur, nullptr); };
                 for (const TurnSolver::Plan* sp : sib_plans)
                 {
-                    const Realization rs = Realize(root, *sp, pre, /*stop_at_full=*/true, {}, false, &e_want, &acc);
+                    SibPayMemo::Entry* const done = memo != nullptr ? &memo->by_plan[sp] : nullptr;
+                    if (done != nullptr && done->complete)
+                    {
+                        for (const SibPayMemo::Rec& x : done->recs)
+                        {
+                            if (x.key == k && Includes(x.left, e_want) && Covers(x.res, ur, nullptr)) { return true; }
+                        }
+                        continue;
+                    }
+                    std::vector<SibPayMemo::Rec> recs;
+                    const OutcomeTest rec_acc = [&](const Outcome& o)
+                    {
+                        // Realize asks only about clean, fully scripted outcomes; `want` is applied here instead.
+                        recs.push_back(SibPayMemo::Rec{ o.left, CoreKey(o.st), Resources(o.st, false) });
+                        const SibPayMemo::Rec& x = recs.back();
+                        return x.key == k && Includes(x.left, e_want) && Covers(x.res, ur, nullptr);
+                    };
+                    const Realization rs = done != nullptr
+                        ? Realize(root, *sp, pre, /*stop_at_full=*/true, {}, false, nullptr, &rec_acc, nullptr, /*hit_only=*/true)
+                        : Realize(root, *sp, pre, /*stop_at_full=*/true, {}, false, &e_want, &acc, nullptr, /*hit_only=*/true);
                     if (rs.hit >= 0) { return true; }
+                    // Complete unless the DECISION budget cut it (a later search would be cut elsewhere); the apply
+                    // ceiling cuts every search of this sibling at the same script, so a capped search is complete.
+                    if (done != nullptr && !DecisionOut()) { done->complete = true; done->recs = std::move(recs); }
                 }
                 return false;
             };
             const Outcome* still = nullptr;
+            const long long sp_a0 = t_dec_applies;
             for (const Outcome* u : uncovered_all) { if (!sib_pay_covers(*u)) { still = u; break; } }
+            g_cost_sibpay.fetch_add(t_dec_applies - sp_a0, std::memory_order_relaxed);
             if (still == nullptr)
             {
                 Emit(C_DROP_COVERED, root, pre, plan, dropped + "; this order pays them all too, and every board it "
@@ -3673,6 +3762,7 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
         }
         bool all_tried = true, other_partial = false;
         std::string other_why;   // the first reason another order's search was partial
+        struct OrdersCost { long long a0 = t_dec_applies; ~OrdersCost() { g_cost_orders.fetch_add(t_dec_applies - a0); } } _orders_cost;
         for (const TurnSolver::Plan& alt : OtherOrders(plan, /*with_acts=*/true, &all_tried, kPhantomOrderBound))
         {
             if (DecisionOut())
@@ -4017,7 +4107,8 @@ GapVerdict EnumGapPlan(const GameState& state, bool pre, const TurnSolver::Plan&
             }
             return true;
         };
-        const Realization r = Realize(state, t, pre, /*stop_at_full=*/true, {}, false, nullptr, &accept);
+        const Realization r = Realize(state, t, pre, /*stop_at_full=*/true, {}, false, nullptr, &accept, nullptr,
+                                      /*hit_only=*/true);
         if (r.hit < 0 || w.cls == C_N) { continue; }   // another order may reach a board the menu does not
         if (w.cls == C_ENUM_GAP) { g_rb[RB_OFF_MENU].fetch_add(1, std::memory_order_relaxed); }
         return w;
@@ -4293,6 +4384,10 @@ void AuditDecision(const GameState& state, bool is_pre_combat)
              + std::to_string(t_dec_limit / 1000000000LL) + " priced s) spent before this " + what + " was audited");
     };
     std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(state, is_pre_combat);
+    // MTG_MANA_ORACLE_ONLY_MENU=<n> (diagnostic, default 0 = off): audit only the decisions whose menu holds exactly
+    // n plans -- a cheap repro of one costly decision (the game itself plays the same with the oracle on or off).
+    static const int s_only_menu = std::max(0, EnvInt("MTG_MANA_ORACLE_ONLY_MENU", 0));
+    if (s_only_menu > 0 && plans.size() != static_cast<std::size_t>(s_only_menu)) { return; }
     const std::size_t cap = MaxPlans() > 0 ? static_cast<std::size_t>(MaxPlans()) : plans.size();
     if (plans.size() > cap)
     {
@@ -4324,14 +4419,31 @@ void AuditDecision(const GameState& state, bool is_pre_combat)
     }
     static const std::vector<const EngineReal*> kNone;
     static const std::vector<const TurnSolver::Plan*> kNoPlans;
+    SibPayMemo sib_memo;   // the menu plans' sibling-payment searches, shared by the whole decision
+    sib_memo.root = &state;
+    sib_memo.pre  = is_pre_combat;
+    struct SibMemoScope
+    {
+        SibPayMemo* saved;
+        explicit SibMemoScope(SibPayMemo* m) : saved(t_sib_memo) { t_sib_memo = m; }
+        ~SibMemoScope() { t_sib_memo = saved; }
+    } sib_memo_scope(&sib_memo);
     for (std::size_t i = 0; i < plans.size(); ++i)
     {
         if (DecisionOut()) { skip_out(plans[i], "plan"); continue; }
         const auto it = full_by_key.find(keys[i]);
         const auto pt = full_plans_by_key.find(keys[i]);
+        const long long plan_a0 = t_dec_applies;
         AuditPlan(state, is_pre_combat, plans[i], real[i], it == full_by_key.end() ? kNone : it->second,
                   pt == full_plans_by_key.end() ? kNoPlans : pt->second);
+        if (CostTrace())
+        {
+            std::lock_guard<std::mutex> lk(g_print_mu);
+            std::fprintf(stderr, "[mana-oracle] PLAN-COST %s applies=%lld engine=%s key=%s plan={%s}\n", Ctx(state, is_pre_combat).c_str(),
+                         t_dec_applies - plan_a0, real[i].Full() ? "full" : "drop", keys[i].c_str(), PlanText(plans[i]).c_str());
+        }
     }
+    const long long plan_applies = t_dec_applies;   // DECISION-COST: the menu audits' share (the rest is ENUM-GAP)
 
     // ---- ENUM-GAP: the plans a MANA GATE kept off the menu ----------------------------------------
     // The same enumeration with every mana gate in observe mode is "every plan the non-mana rules
@@ -4361,8 +4473,15 @@ void AuditDecision(const GameState& state, bool is_pre_combat)
         { g_gate_rejects_skipped.fetch_add(1, std::memory_order_relaxed); continue; }
         ++checked;
         g_gate_rejects_checked.fetch_add(1, std::memory_order_relaxed);
+        const long long gate_a0 = t_dec_applies;
         const GapVerdict v = EnumGapPlan(state, is_pre_combat, p, mv);
         if (v.cls != C_N) { Emit(v.cls, state, is_pre_combat, p, v.detail); }
+        if (CostTrace())
+        {
+            std::lock_guard<std::mutex> lk(g_print_mu);
+            std::fprintf(stderr, "[mana-oracle] GATE-COST %s applies=%lld verdict=%s key=%s plan={%s}\n", Ctx(state, is_pre_combat).c_str(),
+                         t_dec_applies - gate_a0, v.cls == C_N ? "-" : kClsName[v.cls], k.c_str(), PlanText(p).c_str());
+        }
     }
     const long long ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t0).count();
     g_ms.fetch_add(ms, std::memory_order_relaxed);
@@ -4374,8 +4493,10 @@ void AuditDecision(const GameState& state, bool is_pre_combat)
     if (DecisionOut() || (HeavyDecision() > 0 && t_dec_applies >= HeavyDecision()))
     {
         std::lock_guard<std::mutex> lk(g_print_mu);
-        std::fprintf(stderr, "[mana-oracle] DECISION-COST %s plans=%zu gate_checked=%d applies=%lld priced_ms=%lld ms=%lld%s\n",
-                     Ctx(state, is_pre_combat).c_str(), plans.size(), checked, t_dec_applies, DecisionSpentNs() / 1000000LL, ms,
+        std::fprintf(stderr, "[mana-oracle] DECISION-COST %s plans=%zu gate_checked=%d applies=%lld (menu %lld, gate %lld) "
+                             "priced_ms=%lld ms=%lld%s\n",
+                     Ctx(state, is_pre_combat).c_str(), plans.size(), checked, t_dec_applies, plan_applies,
+                     t_dec_applies - plan_applies, DecisionSpentNs() / 1000000LL, ms,
                      DecisionOut() ? (" BUDGET-SPENT skipped=" + std::to_string(dec_skipped)).c_str() : "");
     }
 }
