@@ -1,0 +1,396 @@
+{
+  "seed": 2, "game_index": 1, "win_turn": 5, "won": true,
+  "mulligan": { "count": 1, "bottom": [60] }, "karoo_float": 1, "fetch_activation": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1, "spell_copy_id": 1,
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 1, "name": "Abiding Grace" }, { "num": 14, "name": "Mother of Runes" }, { "num": 17, "name": "Plains" }, { "num": 57, "name": "Unexpectedly Absent" }, { "num": 5, "name": "Curious Farm Animals" }, { "num": 50, "name": "Squadron Hawk" }, { "num": 10, "name": "Martyr of Sands" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": true,
+  "to_bottom": 1,
+  "hand": [{ "num": 49, "name": "Speaker of the Heavens" }, { "num": 17, "name": "Plains" }, { "num": 30, "name": "Plains" }, { "num": 60, "name": "Unexpectedly Absent" }, { "num": 57, "name": "Unexpectedly Absent" }, { "num": 45, "name": "Serra Ascendant" }, { "num": 22, "name": "Plains" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 2,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 1,
+  "hand": [{ "num": 49, "name": "Speaker of the Heavens", "win_optimal": true }, { "num": 17, "name": "Plains", "win_optimal": true }, { "num": 30, "name": "Plains", "win_optimal": true }, { "num": 60, "name": "Unexpectedly Absent", "win_optimal": true }, { "num": 57, "name": "Unexpectedly Absent", "win_optimal": true }, { "num": 45, "name": "Serra Ascendant", "win_optimal": true }, { "num": 22, "name": "Plains", "win_optimal": true }],
+  "ai_choice": { "index": 1, "num": 17, "name": "Plains" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 1)"
+}
+},
+    { "chosen": 1, "cast_order": ["**", "land=Plains", "cast=Serra Ascendant"], "decision": {
+  "decision_index": 3,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 17, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 30, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 22, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 45, "name": "Serra Ascendant", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 49, "name": "Speaker of the Heavens", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Plains; cast: Speaker of the Heavens", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Speaker of the Heavens"], "actions": [{ "card": "Speaker of the Heavens" }] },
+    { "index": 1, "summary": "land=Plains; cast: Serra Ascendant", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Serra Ascendant"], "actions": [{ "card": "Serra Ascendant" }] },
+    { "index": 2, "summary": "land=Plains; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 4,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 3, "num": 17, "tapped": true, "is_land": true }, { "name": "Serra Ascendant", "idx": 4, "num": 45, "sick": true, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 30, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 22, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 49, "name": "Speaker of the Heavens", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 3, "num": 17, "tapped": true, "is_land": true }, { "name": "Serra Ascendant", "idx": 4, "num": 45, "sick": true, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 30, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 22, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 49, "name": "Speaker of the Heavens", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Plains", "cast=Serra Ascendant", "cast=Speaker of the Heavens"], "decision": {
+  "decision_index": 6,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 2, "card": "Serra Ascendant" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 3, "num": 17, "is_land": true, "taps": "W" }, { "name": "Serra Ascendant", "idx": 4, "num": 45, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 30, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 22, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 44, "name": "Serra Ascendant", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 49, "name": "Speaker of the Heavens", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Plains; cast: Serra Ascendant, Speaker of the Heavens", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Serra Ascendant", "Speaker of the Heavens"], "cast_order_canonical": ["Serra Ascendant", "Speaker of the Heavens"], "actions": [{ "card": "Serra Ascendant" }, { "card": "Speaker of the Heavens" }] },
+    { "index": 1, "summary": "land=Plains; cast: Speaker of the Heavens, Serra Ascendant", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Speaker of the Heavens", "Serra Ascendant"], "cast_order_canonical": ["Speaker of the Heavens", "Serra Ascendant"], "actions": [{ "card": "Speaker of the Heavens" }, { "card": "Serra Ascendant" }] },
+    { "index": 2, "summary": "land=Plains; cast: Speaker of the Heavens", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Speaker of the Heavens"], "actions": [{ "card": "Speaker of the Heavens" }] },
+    { "index": 3, "summary": "land=Plains; cast: Serra Ascendant", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Serra Ascendant"], "actions": [{ "card": "Serra Ascendant" }] },
+    { "index": 4, "summary": "land=none; cast: Speaker of the Heavens", "declared_order_payability": "not_verified", "land": null, "casts": ["Speaker of the Heavens"], "actions": [{ "card": "Speaker of the Heavens" }] },
+    { "index": 5, "summary": "land=none; cast: Serra Ascendant", "declared_order_payability": "not_verified", "land": null, "casts": ["Serra Ascendant"], "actions": [{ "card": "Serra Ascendant" }] },
+    { "index": 6, "summary": "land=Plains; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 7,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 3, "num": 17, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 5, "num": 30, "tapped": true, "is_land": true }, { "name": "Serra Ascendant", "idx": 4, "num": 45, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Serra Ascendant", "idx": 6, "num": 44, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Speaker of the Heavens", "idx": 7, "num": 49, "sick": true, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 22, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 57, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 2, "kind": "combat", "text": "⚔ attacked: Serra Ascendant (1) — 1 to opponent (20→19)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 21, "battlefield": [{ "name": "Plains", "idx": 3, "num": 17, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 5, "num": 30, "tapped": true, "is_land": true }, { "name": "Serra Ascendant", "idx": 4, "num": 45, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Serra Ascendant", "idx": 6, "num": 44, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Speaker of the Heavens", "idx": 7, "num": 49, "sick": true, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 22, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 57, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 53, "land_drops_left": 0, "life_gained_this_turn": 1 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 4, "cast_order": ["**", "land=Plains", "cast=Ranger-Captain of Eos"], "decision": {
+  "decision_index": 9,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 3, "card": "Ranger-Captain of Eos" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 21, "battlefield": [{ "name": "Plains", "idx": 3, "num": 17, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 5, "num": 30, "is_land": true, "taps": "W" }, { "name": "Serra Ascendant", "idx": 4, "num": 45, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Serra Ascendant", "idx": 6, "num": 44, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Speaker of the Heavens", "idx": 7, "num": 49, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 22, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 41, "name": "Ranger-Captain of Eos", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Plains; cast: Ranger-Captain of Eos → Kami of False Hope", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Kami of False Hope" }] },
+    { "index": 1, "summary": "land=Plains; cast: Ranger-Captain of Eos → Serra Ascendant", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Serra Ascendant" }] },
+    { "index": 2, "summary": "land=Plains; cast: Ranger-Captain of Eos → Mother of Runes", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Mother of Runes" }] },
+    { "index": 3, "summary": "land=Plains; cast: Ranger-Captain of Eos → Speaker of the Heavens", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Speaker of the Heavens" }] },
+    { "index": 4, "summary": "land=Plains; cast: Ranger-Captain of Eos → Martyr of Sands", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Martyr of Sands" }] },
+    { "index": 5, "summary": "land=Plains; cast: Ranger-Captain of Eos → Curious Farm Animals", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Curious Farm Animals" }] },
+    { "index": 6, "summary": "land=Plains; cast: Ranger-Captain of Eos → Thraben Inspector", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Thraben Inspector" }] },
+    { "index": 7, "summary": "land=Plains; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 8, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 35,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 10,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "reveals": [{ "turn": 3, "source": "Ranger-Captain of Eos (searched)", "cards": [{ "name": "Martyr of Sands", "disposition": "to hand" }] }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 21, "battlefield": [{ "name": "Plains", "idx": 3, "num": 17, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 5, "num": 30, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 8, "num": 22, "tapped": true, "is_land": true }, { "name": "Ranger-Captain of Eos", "idx": 9, "num": 41, "sick": true, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Serra Ascendant", "idx": 4, "num": 45, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Serra Ascendant", "idx": 6, "num": 44, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Speaker of the Heavens", "idx": 7, "num": 49, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 12, "name": "Martyr of Sands", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "src_num": 41, "activate": true, "sacout": true, "sac_count": 1 }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 11,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Serra Ascendant (1), Serra Ascendant (1), Speaker of the Heavens (1) — 3 to opponent (19→16)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 24, "battlefield": [{ "name": "Plains", "idx": 3, "num": 17, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 5, "num": 30, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 8, "num": 22, "tapped": true, "is_land": true }, { "name": "Ranger-Captain of Eos", "idx": 9, "num": 41, "sick": true, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Serra Ascendant", "idx": 4, "num": 45, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Serra Ascendant", "idx": 6, "num": 44, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Speaker of the Heavens", "idx": 7, "num": 49, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 12, "name": "Martyr of Sands", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 51, "land_drops_left": 0, "life_gained_this_turn": 3 },
+  "opponent": { "life": 16, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "src_num": 41, "activate": true, "sacout": true, "sac_count": 1 }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Plains", "cast=Martyr of Sands"], "decision": {
+  "decision_index": 12,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 4, "card": "Plains" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 24, "battlefield": [{ "name": "Plains", "idx": 3, "num": 17, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 5, "num": 30, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 8, "num": 22, "is_land": true, "taps": "W" }, { "name": "Ranger-Captain of Eos", "idx": 9, "num": 41, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Serra Ascendant", "idx": 4, "num": 45, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Serra Ascendant", "idx": 6, "num": 44, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Speaker of the Heavens", "idx": 7, "num": 49, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 12, "name": "Martyr of Sands", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 21, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 57, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 16, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Plains; cast: Martyr of Sands", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Martyr of Sands"], "actions": [{ "card": "Martyr of Sands" }] },
+    { "index": 1, "summary": "land=Plains; cast: Martyr of Sands, Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Martyr of Sands", "Ranger-Captain of Eos"], "actions": [{ "card": "Martyr of Sands" }, { "card": "Ranger-Captain of Eos", "src_num": 41, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 2, "summary": "land=none; cast: Martyr of Sands", "declared_order_payability": "not_verified", "land": null, "casts": ["Martyr of Sands"], "actions": [{ "card": "Martyr of Sands" }] },
+    { "index": 3, "summary": "land=none; cast: Martyr of Sands, Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Martyr of Sands", "Ranger-Captain of Eos"], "actions": [{ "card": "Martyr of Sands" }, { "card": "Ranger-Captain of Eos", "src_num": 41, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 4, "summary": "land=Plains; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=Plains; cast: Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "src_num": 41, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 6, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=none; cast: Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "src_num": 41, "activate": true, "sacout": true, "sac_count": 1 }] }
+  ],
+  "plans_hidden": 20,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "main_ordinal": 6,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 24, "battlefield": [{ "name": "Martyr of Sands", "idx": 11, "num": 12, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Plains", "idx": 3, "num": 17, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 5, "num": 30, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 8, "num": 22, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 10, "num": 21, "is_land": true, "taps": "W" }, { "name": "Ranger-Captain of Eos", "idx": 9, "num": 41, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Serra Ascendant", "idx": 4, "num": 45, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Serra Ascendant", "idx": 6, "num": 44, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Speaker of the Heavens", "idx": 7, "num": 49, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 57, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 16, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Martyr of Sands: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Martyr of Sands"], "actions": [{ "card": "Martyr of Sands", "src_num": 12, "activate": true, "activation_cost": "{1}", "sacout": true, "sac_count": 1 }] },
+    { "index": 1, "summary": "land=none; cast: Ranger-Captain of Eos: sac 1 creature, Martyr of Sands: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Ranger-Captain of Eos", "Martyr of Sands"], "actions": [{ "card": "Ranger-Captain of Eos", "src_num": 41, "activate": true, "sacout": true, "sac_count": 1 }, { "card": "Martyr of Sands", "src_num": 12, "activate": true, "activation_cost": "{1}", "sacout": true, "sac_count": 1 }] },
+    { "index": 2, "summary": "land=none; cast: Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "src_num": 41, "activate": true, "sacout": true, "sac_count": 1 }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 4, "decision": {
+  "decision_index": 14,
+  "main_ordinal": 7,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 4, "kind": "combat", "text": "⚔ attacked: Serra Ascendant (1), Serra Ascendant (1), Speaker of the Heavens (1), Ranger-Captain of Eos (3) — 6 to opponent (16→10)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 27, "battlefield": [{ "name": "Martyr of Sands", "idx": 11, "num": 12, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Plains", "idx": 3, "num": 17, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 5, "num": 30, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 8, "num": 22, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 10, "num": 21, "is_land": true, "taps": "W" }, { "name": "Ranger-Captain of Eos", "idx": 9, "num": 41, "tapped": true, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Serra Ascendant", "idx": 4, "num": 45, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Serra Ascendant", "idx": 6, "num": 44, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Speaker of the Heavens", "idx": 7, "num": 49, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 57, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 50, "land_drops_left": 0, "life_gained_this_turn": 3 },
+  "opponent": { "life": 10, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Speaker of the Heavens: tap for a token, Martyr of Sands: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Martyr of Sands"], "activations": ["Speaker of the Heavens"], "actions": [{ "card": "Speaker of the Heavens", "src_num": 49, "activate": true, "verb": "taptoken" }, { "card": "Martyr of Sands", "src_num": 12, "activate": true, "activation_cost": "{1}", "sacout": true, "sac_count": 1 }] },
+    { "index": 1, "summary": "land=none; cast: Speaker of the Heavens: tap for a token, Ranger-Captain of Eos: sac 1 creature, Martyr of Sands: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Ranger-Captain of Eos", "Martyr of Sands"], "activations": ["Speaker of the Heavens"], "actions": [{ "card": "Speaker of the Heavens", "src_num": 49, "activate": true, "verb": "taptoken" }, { "card": "Ranger-Captain of Eos", "src_num": 41, "activate": true, "sacout": true, "sac_count": 1 }, { "card": "Martyr of Sands", "src_num": 12, "activate": true, "activation_cost": "{1}", "sacout": true, "sac_count": 1 }] },
+    { "index": 2, "summary": "land=none; cast: Martyr of Sands: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Martyr of Sands"], "actions": [{ "card": "Martyr of Sands", "src_num": 12, "activate": true, "activation_cost": "{1}", "sacout": true, "sac_count": 1 }] },
+    { "index": 3, "summary": "land=none; cast: Ranger-Captain of Eos: sac 1 creature, Martyr of Sands: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Ranger-Captain of Eos", "Martyr of Sands"], "actions": [{ "card": "Ranger-Captain of Eos", "src_num": 41, "activate": true, "sacout": true, "sac_count": 1 }, { "card": "Martyr of Sands", "src_num": 12, "activate": true, "activation_cost": "{1}", "sacout": true, "sac_count": 1 }] },
+    { "index": 4, "summary": "land=none; cast: Speaker of the Heavens: tap for a token", "declared_order_payability": "not_verified", "land": null, "casts": [], "activations": ["Speaker of the Heavens"], "actions": [{ "card": "Speaker of the Heavens", "src_num": 49, "activate": true, "verb": "taptoken" }] },
+    { "index": 5, "summary": "land=none; cast: Speaker of the Heavens: tap for a token, Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Ranger-Captain of Eos"], "activations": ["Speaker of the Heavens"], "actions": [{ "card": "Speaker of the Heavens", "src_num": 49, "activate": true, "verb": "taptoken" }, { "card": "Ranger-Captain of Eos", "src_num": 41, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 6, "summary": "land=none; cast: Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "src_num": 41, "activate": true, "sacout": true, "sac_count": 1 }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 15,
+  "main_ordinal": 8,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 27, "battlefield": [{ "name": "4/4 Angel Token", "idx": 12, "num": 1000, "sick": true, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Martyr of Sands", "idx": 11, "num": 12, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Plains", "idx": 3, "num": 17, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 5, "num": 30, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 8, "num": 22, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 10, "num": 21, "is_land": true, "taps": "W" }, { "name": "Ranger-Captain of Eos", "idx": 9, "num": 41, "tapped": true, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Serra Ascendant", "idx": 4, "num": 45, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Serra Ascendant", "idx": 6, "num": 44, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Speaker of the Heavens", "idx": 7, "num": 49, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 57, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 50, "land_drops_left": 0, "life_gained_this_turn": 3 },
+  "opponent": { "life": 10, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Martyr of Sands: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Martyr of Sands"], "actions": [{ "card": "Martyr of Sands", "src_num": 12, "activate": true, "activation_cost": "{1}", "sacout": true, "sac_count": 1 }] },
+    { "index": 1, "summary": "land=none; cast: Ranger-Captain of Eos: sac 1 creature, Martyr of Sands: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Ranger-Captain of Eos", "Martyr of Sands"], "actions": [{ "card": "Ranger-Captain of Eos", "src_num": 41, "activate": true, "sacout": true, "sac_count": 1 }, { "card": "Martyr of Sands", "src_num": 12, "activate": true, "activation_cost": "{1}", "sacout": true, "sac_count": 1 }] },
+    { "index": 2, "summary": "land=none; cast: Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "src_num": 41, "activate": true, "sacout": true, "sac_count": 1 }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 4, "cast_order": ["**", "land=Plains", "sacout=Martyr of Sands#12"], "decision": {
+  "decision_index": 16,
+  "main_ordinal": 9,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 5, "card": "Plains" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 27, "battlefield": [{ "name": "4/4 Angel Token", "idx": 12, "num": 1000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Martyr of Sands", "idx": 11, "num": 12, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Plains", "idx": 3, "num": 17, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 5, "num": 30, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 8, "num": 22, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 10, "num": 21, "is_land": true, "taps": "W" }, { "name": "Ranger-Captain of Eos", "idx": 9, "num": 41, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Serra Ascendant", "idx": 4, "num": 45, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Serra Ascendant", "idx": 6, "num": 44, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Speaker of the Heavens", "idx": 7, "num": 49, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 29, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 57, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 10, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Plains; cast: Speaker of the Heavens: tap for a token, Martyr of Sands: sac 1 creature", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Martyr of Sands"], "activations": ["Speaker of the Heavens"], "actions": [{ "card": "Speaker of the Heavens", "src_num": 49, "activate": true, "verb": "taptoken" }, { "card": "Martyr of Sands", "src_num": 12, "activate": true, "activation_cost": "{1}", "sacout": true, "sac_count": 1 }] },
+    { "index": 1, "summary": "land=Plains; cast: Speaker of the Heavens: tap for a token, Ranger-Captain of Eos: sac 1 creature, Martyr of Sands: sac 1 creature", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Ranger-Captain of Eos", "Martyr of Sands"], "activations": ["Speaker of the Heavens"], "actions": [{ "card": "Speaker of the Heavens", "src_num": 49, "activate": true, "verb": "taptoken" }, { "card": "Ranger-Captain of Eos", "src_num": 41, "activate": true, "sacout": true, "sac_count": 1 }, { "card": "Martyr of Sands", "src_num": 12, "activate": true, "activation_cost": "{1}", "sacout": true, "sac_count": 1 }] },
+    { "index": 2, "summary": "land=none; cast: Speaker of the Heavens: tap for a token, Martyr of Sands: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Martyr of Sands"], "activations": ["Speaker of the Heavens"], "actions": [{ "card": "Speaker of the Heavens", "src_num": 49, "activate": true, "verb": "taptoken" }, { "card": "Martyr of Sands", "src_num": 12, "activate": true, "activation_cost": "{1}", "sacout": true, "sac_count": 1 }] },
+    { "index": 3, "summary": "land=none; cast: Speaker of the Heavens: tap for a token, Ranger-Captain of Eos: sac 1 creature, Martyr of Sands: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Ranger-Captain of Eos", "Martyr of Sands"], "activations": ["Speaker of the Heavens"], "actions": [{ "card": "Speaker of the Heavens", "src_num": 49, "activate": true, "verb": "taptoken" }, { "card": "Ranger-Captain of Eos", "src_num": 41, "activate": true, "sacout": true, "sac_count": 1 }, { "card": "Martyr of Sands", "src_num": 12, "activate": true, "activation_cost": "{1}", "sacout": true, "sac_count": 1 }] },
+    { "index": 4, "summary": "land=Plains; cast: Martyr of Sands: sac 1 creature", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Martyr of Sands"], "actions": [{ "card": "Martyr of Sands", "src_num": 12, "activate": true, "activation_cost": "{1}", "sacout": true, "sac_count": 1 }] },
+    { "index": 5, "summary": "land=Plains; cast: Ranger-Captain of Eos: sac 1 creature, Martyr of Sands: sac 1 creature", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Ranger-Captain of Eos", "Martyr of Sands"], "actions": [{ "card": "Ranger-Captain of Eos", "src_num": 41, "activate": true, "sacout": true, "sac_count": 1 }, { "card": "Martyr of Sands", "src_num": 12, "activate": true, "activation_cost": "{1}", "sacout": true, "sac_count": 1 }] },
+    { "index": 6, "summary": "land=none; cast: Martyr of Sands: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Martyr of Sands"], "actions": [{ "card": "Martyr of Sands", "src_num": 12, "activate": true, "activation_cost": "{1}", "sacout": true, "sac_count": 1 }] },
+    { "index": 7, "summary": "land=none; cast: Ranger-Captain of Eos: sac 1 creature, Martyr of Sands: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Ranger-Captain of Eos", "Martyr of Sands"], "actions": [{ "card": "Ranger-Captain of Eos", "src_num": 41, "activate": true, "sacout": true, "sac_count": 1 }, { "card": "Martyr of Sands", "src_num": 12, "activate": true, "activation_cost": "{1}", "sacout": true, "sac_count": 1 }] },
+    { "index": 8, "summary": "land=Plains; cast: Speaker of the Heavens: tap for a token", "declared_order_payability": "not_verified", "land": "Plains", "casts": [], "activations": ["Speaker of the Heavens"], "actions": [{ "card": "Speaker of the Heavens", "src_num": 49, "activate": true, "verb": "taptoken" }] },
+    { "index": 9, "summary": "land=Plains; cast: Speaker of the Heavens: tap for a token, Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Ranger-Captain of Eos"], "activations": ["Speaker of the Heavens"], "actions": [{ "card": "Speaker of the Heavens", "src_num": 49, "activate": true, "verb": "taptoken" }, { "card": "Ranger-Captain of Eos", "src_num": 41, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 10, "summary": "land=none; cast: Speaker of the Heavens: tap for a token", "declared_order_payability": "not_verified", "land": null, "casts": [], "activations": ["Speaker of the Heavens"], "actions": [{ "card": "Speaker of the Heavens", "src_num": 49, "activate": true, "verb": "taptoken" }] },
+    { "index": 11, "summary": "land=none; cast: Speaker of the Heavens: tap for a token, Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Ranger-Captain of Eos"], "activations": ["Speaker of the Heavens"], "actions": [{ "card": "Speaker of the Heavens", "src_num": 49, "activate": true, "verb": "taptoken" }, { "card": "Ranger-Captain of Eos", "src_num": 41, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 12, "summary": "land=Plains; cast: Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "src_num": 41, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 13, "summary": "land=none; cast: Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "src_num": 41, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 14, "summary": "land=Plains; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 15, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 17,
+  "type": "x_value",
+  "source": "Martyr of Sands",
+  "turn": 5,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 27, "battlefield": [{ "name": "4/4 Angel Token", "idx": 12, "num": 1000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Martyr of Sands", "idx": 11, "num": 12, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Plains", "idx": 3, "num": 17, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 5, "num": 30, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 8, "num": 22, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 10, "num": 21, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 13, "num": 29, "is_land": true, "taps": "W" }, { "name": "Ranger-Captain of Eos", "idx": 9, "num": 41, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Serra Ascendant", "idx": 4, "num": 45, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Serra Ascendant", "idx": 6, "num": 44, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Speaker of the Heavens", "idx": 7, "num": 49, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 57, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 10, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "x_kind": "reveal_gain",
+  "life_per_x": 3,
+  "min_x": 0,
+  "max_x": 1,
+  "heuristic_default": 1,
+  "note": "reply how many white cards to reveal for Martyr of Sands (0..1; you gain 3 life per card), or -1 for the default (1)."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 18,
+  "main_ordinal": 10,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 5, "kind": "sacrifice", "text": "💀 Martyr of Sands: sacrificed Martyr of Sands (gain 3 life)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 30, "battlefield": [{ "name": "4/4 Angel Token", "idx": 11, "num": 1000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Plains", "idx": 3, "num": 17, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 5, "num": 30, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 8, "num": 22, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 10, "num": 21, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 12, "num": 29, "is_land": true, "taps": "W" }, { "name": "Ranger-Captain of Eos", "idx": 9, "num": 41, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Serra Ascendant", "idx": 4, "num": 45, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Serra Ascendant", "idx": 6, "num": 44, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Speaker of the Heavens", "idx": 7, "num": 49, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 57, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Martyr of Sands"], "library_size": 49, "land_drops_left": 0, "life_gained_this_turn": 3 },
+  "opponent": { "life": 10, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Speaker of the Heavens: tap for a token", "declared_order_payability": "not_verified", "land": null, "casts": [], "activations": ["Speaker of the Heavens"], "actions": [{ "card": "Speaker of the Heavens", "src_num": 49, "activate": true, "verb": "taptoken" }] },
+    { "index": 1, "summary": "land=none; cast: Speaker of the Heavens: tap for a token, Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Ranger-Captain of Eos"], "activations": ["Speaker of the Heavens"], "actions": [{ "card": "Speaker of the Heavens", "src_num": 49, "activate": true, "verb": "taptoken" }, { "card": "Ranger-Captain of Eos", "src_num": 41, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 2, "summary": "land=none; cast: Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "src_num": 41, "activate": true, "sacout": true, "sac_count": 1 }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 5, "kind": "combat", "text": "⚔ attacked: Serra Ascendant (6), Serra Ascendant (6), Speaker of the Heavens (1), Ranger-Captain of Eos (3), 4/4 Angel Token (4) — 20 to opponent (10→-10)" }
+  ]
+}
