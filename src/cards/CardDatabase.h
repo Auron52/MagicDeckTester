@@ -580,6 +580,27 @@ struct CardParams
     // which dies to the toughness SBA before its enter triggers resolve (g_pending_zero_toughness).
     // X is a SEARCHED axis 0..max (GenericProvider::XCandidates). false -> every other card unchanged.
     bool enters_with_x_plus_counters = false;
+    // ---- X HYDRAS (Hydras I2, 2026-11-11) ---------------------------------------------------------------
+    // Neverwinter Hydra: "As this creature enters, roll X d6. It enters with a number of +1/+1 counters on
+    // it equal to the total of those results." With enters_with_x_plus_counters: the as-enters amount is
+    // the total of X dice with this many sides instead of X (EntersWithXCounterCount). The dice come from a
+    // seeded per-game stream (Player::dice_rolled; RollDiceTotal): rolling X dice takes the next X values,
+    // so the total is a prefix sum and no X or timing choice can re-roll it. 0 = X counters (Ballista).
+    int  enters_with_x_dice_sides = 0;
+    // Primordial Hydra: "At the beginning of your upkeep, double the number of +1/+1 counters on this
+    // creature." (PerformUpkeepDoubleSelfCounters, both upkeep sites; DoublePlusCounters, CR 701.10e).
+    bool upkeep_double_self_counters = false;
+    // Voracious Hydra: "When this creature enters, choose one -- * Double the number of +1/+1 counters on
+    // this creature. * This creature fights target creature you don't control." Both set = the modal
+    // trigger (ResolveVoraciousEtb). The mode and the fight target ride the cast's tutor_target pin
+    // (VoraciousPin*): "" = unpinned (provider default / human prompt), "VD" = double, "VF<n>" = fight
+    // the creature numbered n.
+    bool etb_modal_double_self_counters = false;
+    bool etb_modal_fight_opp_creature   = false;
+    // Steelbane Hydra: "{2}{G}, Remove a +1/+1 counter from this creature: Destroy target artifact or
+    // enchantment." (PermAbilityMode::CounterDestroyArtEnch). No {T}: repeatable, legal while
+    // summoning-sick; the counter is part of the COST (CR 602.2b). nullopt = none.
+    std::optional<ManaCost> remove_counter_destroy_art_ench_cost;
     // "{4}: Put a +1/+1 counter on this creature." (PermAbilityMode::PayCounterSelf). No {T}: repeatable
     // within a turn, legal while summoning-sick (CR 302.6); a put (PutPlusCounters). nullopt = none.
     std::optional<ManaCost> self_counter_cost;

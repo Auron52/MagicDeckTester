@@ -2477,6 +2477,18 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Gargos, Vicious Watcher": {
+    "cmc": 6.0,
+    "keywords": [
+      "Fight",
+      "Vigilance"
+    ],
+    "mana_cost": "{3}{G}{G}{G}",
+    "oracle_text": "Vigilance\nHydra spells you cast cost {4} less to cast.\nWhenever a creature you control becomes the target of a spell, Gargos fights up to one target creature you don't control.",
+    "power": "8",
+    "toughness": "7",
+    "type_line": "Legendary Creature — Hydra"
+  },
   "Garth One-Eye": {
     "cmc": 5.0,
     "keywords": [],
@@ -4383,6 +4395,18 @@
     "toughness": "2",
     "type_line": "Creature — Eldrazi Drone"
   },
+  "Neverwinter Hydra": {
+    "cmc": 2.0,
+    "keywords": [
+      "Trample",
+      "Ward"
+    ],
+    "mana_cost": "{X}{X}{G}{G}",
+    "oracle_text": "As this creature enters, roll X d6. It enters with a number of +1/+1 counters on it equal to the total of those results.\nTrample\nWard {4} (Whenever this creature becomes the target of a spell or ability an opponent controls, counter it unless that player pays {4}.)",
+    "power": "0",
+    "toughness": "0",
+    "type_line": "Creature — Hydra"
+  },
   "Nexus of Fate": {
     "cmc": 7.0,
     "keywords": [],
@@ -4784,6 +4808,17 @@
     "power": "6",
     "toughness": "6",
     "type_line": "Creature — Giant"
+  },
+  "Primordial Hydra": {
+    "cmc": 2.0,
+    "keywords": [
+      "Double"
+    ],
+    "mana_cost": "{X}{G}{G}",
+    "oracle_text": "This creature enters with X +1/+1 counters on it.\nAt the beginning of your upkeep, double the number of +1/+1 counters on this creature.\nThis creature has trample as long as it has ten or more +1/+1 counters on it.",
+    "power": "0",
+    "toughness": "0",
+    "type_line": "Creature — Hydra"
   },
   "Prodigious Growth": {
     "cmc": 6.0,
@@ -6150,6 +6185,15 @@
     "toughness": null,
     "type_line": "Enchantment — Aura"
   },
+  "Steelbane Hydra": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{X}{G}{G}",
+    "oracle_text": "This creature enters with X +1/+1 counters on it.\n{2}{G}, Remove a +1/+1 counter from this creature: Destroy target artifact or enchantment.",
+    "power": "0",
+    "toughness": "0",
+    "type_line": "Creature — Turtle Hydra"
+  },
   "Steelshaper's Gift": {
     "cmc": 1.0,
     "keywords": [],
@@ -7198,6 +7242,19 @@
     "power": null,
     "toughness": null,
     "type_line": "Land"
+  },
+  "Voracious Hydra": {
+    "cmc": 2.0,
+    "keywords": [
+      "Double",
+      "Fight",
+      "Trample"
+    ],
+    "mana_cost": "{X}{G}{G}",
+    "oracle_text": "Trample\nThis creature enters with X +1/+1 counters on it.\nWhen this creature enters, choose one —\n• Double the number of +1/+1 counters on this creature.\n• This creature fights target creature you don't control.",
+    "power": "0",
+    "toughness": "1",
+    "type_line": "Creature — Hydra"
   },
   "Voyaging Satyr": {
     "cmc": 2.0,

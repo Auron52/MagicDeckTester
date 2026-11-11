@@ -7180,7 +7180,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                                                   sac_named ? &a.tutor_target.str() : nullptr);
             // Kessig Wolf Run's searched target + X (TapTargetPump) -- lockstep twin of the rollout's.
             const bool tpump = a.ability_mode == Action::AbilityMode::TapTargetPump;
-            const bool target_pump = a.ability_mode == Action::AbilityMode::TargetPump;
+            const bool target_pump = a.ability_mode == Action::AbilityMode::TargetPump
+                                  || a.ability_mode == Action::AbilityMode::CounterDestroyArtEnch;   // Steelbane's target
             const bool untap_land = a.ability_mode == Action::AbilityMode::UntapLand;
             const TapTargetPumpPinScope _tpump_pin((tpump || target_pump || untap_land) ? a.sac_victim_id : 0,
                                                    tpump ? a.chosen_x : 0);
@@ -10199,8 +10200,9 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
         int pips = def->card.m_mana_cost.x_pips; if (pips < 1) { pips = 1; }
         effective.generic += chosen_x * pips;
         // Crackle: derive the discount from the declared count (lockstep with enumeration + rollout).
+        // Gargos-style reductions on the TOTAL (CR 601.2f) + Hinata: the one shared X discount.
         effective.generic = std::max(0, effective.generic
-                              - HinataGenericDiscount(*def, state, chosen_x,
+                              - XCastGenericDiscount(*def, state, chosen_x,
                                     IsCrackleCountSpell(*def) ? crackle_targets : -1));
         // X is now resolved into the generic cost: drop the {X} symbol so ToString()
         // prints the actual mana paid (e.g. "{4}{R}{R}") and not a stray "{X}" on top.

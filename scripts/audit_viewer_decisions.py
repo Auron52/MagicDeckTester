@@ -118,6 +118,14 @@ MANIFEST = {
     # FireOwnEtbTriggers (shared). The mode is ALSO a searched cast axis (the ETB CHOICE AXIS) for the
     # autonomous engine; human play gets no mode variants, so the unpinned cast asks.
     "etb_modal_self_counters": ("attack_mode",        positive),
+    # ---- Hydras (2026-11-11) ----
+    # Voracious Hydra's modal ENTER trigger ("double its +1/+1 counters" or "fight target creature you don't
+    # control") REUSES attack_mode with "trigger":"etb" (WriteAttackModeDecisionJson's Voracious branch),
+    # asked from FireOwnEtbTriggers only when a fight target exists; the fight TARGET then rides the shared
+    # `target` board click (g_play_loyalty_chooser). Autonomous play searches both (one cast variant per
+    # admitted target, pinned on tutor_target); HydrasProvider admits none (proof at EtbFightTargets).
+    "etb_modal_double_self_counters": ("attack_mode", truthy),
+    "etb_modal_fight_opp_creature":   ("target",      truthy),
     # ---- SelesnyaLifegain (2026-09-30) ----
     # Nykthos Paragon's "you MAY put that many +1/+1 counters on each creature you control. Do this
     # only once each turn" -> the NEW `lifegain_counters` decision type (chooser
@@ -439,6 +447,10 @@ MANIFEST = {
     "tap_target_pump_cost":          ("main_phase",  truthy),
     "target_pump_cost":              ("main_phase",  truthy),
     "untap_target_land":             ("main_phase",  truthy),
+    # Steelbane Hydra "{2}{G}, Remove a +1/+1 counter: Destroy target artifact or enchantment" (Hydras
+    # 2026-11-11): the TARGET is a main_phase plan VARIANT (one activation per legal target under human
+    # play, `destroy_target` on the action; the Nylea/TargetPump shape).
+    "remove_counter_destroy_art_ench_cost": ("main_phase", truthy),
     # Bloodghast "you MAY return this card from your graveyard to the battlefield" (landfall): the
     # existing `revive` decision from the landfall chokepoint, one 0/1 flag per graveyard copy, all
     # preselected (autonomous play resolves YES by a PROVISIONAL dominance).
@@ -779,6 +791,7 @@ BOARD_ACTIVATIONS = {
     # Kessig Wolf Run's pump: the verbless land convention (`cast=Kessig Wolf Run`), cost {X}{R}{G}.
     "tap_target_pump_cost":                      ("activate",       truthy,   "tap_target_pump_cost"),
     "target_pump_cost":                          ("activate",       truthy,   "target_pump_cost"),
+    "remove_counter_destroy_art_ench_cost":      ("activate",       truthy,   "remove_counter_destroy_art_ench_cost"),   # Steelbane Hydra
     # SelesnyaLifegain (2026-09-30). The Steppe keeps the verbless `cast=<land>` convention every
     # other land-borne PermAbilityMode uses (Shivan Gorge, Botanical Conservatory, Mariposa) -- a land
     # is never in the cast multiset for a real hand cast, so the name is unambiguous. VERIFIABLE
@@ -1186,6 +1199,11 @@ INERT_PARAMS = {
     # is the etb_choose_color -> choose_color decision. The extra mana just appears in the hand-tap
     # faces' yield and the pool, exactly as Wild Growth's does.
     "land_tap_bonus": "mana amount on every qualifying land tap (no decision; a mana ability resolving inside the tap)",
+    # X Hydras (2026-11-11): Primordial Hydra's upkeep doubling is mandatory and untargeted (a `trigger`
+    # play event); Neverwinter Hydra's X d6 is a RANDOM OUTCOME, not a choice (a `roll` play event) -- its X
+    # rides enters_with_x_plus_counters -> main_phase.
+    "upkeep_double_self_counters": "Primordial Hydra's mandatory self-doubling upkeep trigger (no target, no choice)",
+    "enters_with_x_dice_sides": "Neverwinter Hydra's dice size -- a seeded random outcome shown as a roll event, not a choice (X rides enters_with_x_plus_counters -> main_phase)",
     "land_tap_bonus_subtype": "land-tap bonus qualifying detail (rides land_tap_bonus)",
     "land_tap_bonus_basic": "land-tap bonus qualifying detail (rides land_tap_bonus)",
     "land_tap_bonus_produces": "land-tap bonus colour, or Gauntlet's colour MENU (the pick rides etb_choose_color -> choose_color)",
@@ -2022,7 +2040,8 @@ def modeled_tokens(card):
     ):
         t.add("target")
     if real_target(p.get("targeting", "none")) or p.get("spectacle_cost") \
-            or p.get("target_pump_cost") or p.get("untap_target_land"):
+            or p.get("target_pump_cost") or p.get("untap_target_land") \
+            or p.get("etb_modal_fight_opp_creature") or p.get("remove_counter_destroy_art_ench_cost"):
         t.add("target")
     if p.get("sacrifice_land"):                                            t.add("sacrifice")
     if p.get("etb_scry", 0) > 0 or p.get("cast_scry", 0) > 0:              t.add("scry")

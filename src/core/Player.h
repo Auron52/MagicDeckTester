@@ -96,6 +96,12 @@ struct Player
     // cards_drawn_this_turn; folded into the sim key under the same >0 guard, so it is 0 forever --
     // and byte-identical -- for every deck with no cycle/discard-count payload.
     int cards_cycled_or_discarded_this_turn = 0;
+    // DICE ROLLED THIS GAME (Neverwinter Hydra's X d6; Hydras I2 2026-11-11). The index into this
+    // player's seeded per-game dice stream (RollDiceTotal, SpellEffects.h): die k is a pure function of
+    // (game_seed, k, salt), so the count is the whole of the dice state. Per GAME, never reset. Folded
+    // into the sim key and the dominance key when > 0 (two states that differ only in dice consumed have
+    // different futures), so it is 0 forever -- and byte-identical -- for every deck that rolls nothing.
+    int dice_rolled = 0;
     // THE CITY'S BLESSING (CR 702.131, ASCEND -- Ocelot Pride). A player DESIGNATION, not a
     // permanent state and not a counter: once gained it is held "for the rest of the game", so
     // unlike every per-turn field above it is NEVER reset at untap and NEVER lost -- dropping back

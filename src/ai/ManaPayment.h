@@ -59,6 +59,21 @@ ManaCost EffectiveSpellCost(const CardDefinition& def, const GameState& state, i
 ManaCost EffectiveSpellCostWithBase(const CardDefinition& def, const GameState& state,
                                     const ManaCost& alternate_base);
 
+// CR 601.2f FOR {X} SPELLS (Hydras / Gargos, 2026-11-11). EffectiveSpellCost prices the PRINTED cost,
+// where X counts as 0, and floors every generic reduction at 0 -- so a reduction bigger than the printed
+// generic ("Hydra spells you cast cost {4} less" on {X}{G}{G}) was thrown away, though by 601.2f it
+// applies to the TOTAL cost once X is chosen. XSpellUnabsorbedReduction is that discarded part (0 for a
+// non-X spell and for every board without a reducer). XCastGenericDiscount is THE ONE generic discount
+// every X-cost site subtracts AFTER adding X * x_pips: the floored-away reduction plus Hinata's
+// per-target discount (which EffectiveSpellCost already skips for X spells). A single floor at 0 over the
+// sum is exact, because the printed generic is 0 whenever the excess is positive. Sites, both worlds:
+// AIEngine::CastSpellFromHand, ApplyPlanDirect, SeqWalkFixedOrder, StampM1Hand and every CollectActions
+// X branch (max X widens by the excess too). No shipped list before Hydras holds both an {X} spell and a
+// generic reducer, so the excess is 0 for every other deck.
+int XSpellUnabsorbedReduction(const CardDefinition& def, const GameState& state);
+int XCastGenericDiscount(const CardDefinition& def, const GameState& state, int chosen_x,
+                         int crackle_targets = -1);
+
 // THE REMAND RIDER's share of a cast's bill (Action::remand_by -- "cast X, then Remand it", one
 // combined action): the Remand's own EffectiveSpellCost on this board, so Hinata's per-target discount
 // applies to it (it has one target). The enumeration stamps X's cost + this into Action::cost; every

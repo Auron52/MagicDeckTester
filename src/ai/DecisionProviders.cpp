@@ -137,6 +137,8 @@ static const std::pair<const char*, UnprunedGate> kGateNames[] = {
     {"landpick",   UnprunedGate::LandPick},
     {"counterping",UnprunedGate::CounterPing},
     {"etbcolor",   UnprunedGate::EtbColor},
+    {"etbfight",   UnprunedGate::EtbFight},
+    {"counterdestroy", UnprunedGate::CounterDestroy},
 };
 
 const char* GateName(UnprunedGate g)
@@ -25187,11 +25189,11 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // cards, so a deckbuilding swap that cuts one cannot silently lose the routing:
     //   * Vernal Bloom + Nissa, Who Shakes the World + Gauntlet of Power: land_tap_bonus (the global
     //     "whenever a land is tapped for mana, add an additional" mana ability -- new 2026-11-10);
-    //   * Gauntlet of Power: chosen_color_pump_power / _tough (the chosen-colour anthem -- new).
-    // OWED (Hydras Stage-2 integration, groups I2 / I3 -- add each term HERE when its param lands):
-    //   I2: Primordial Hydra's upkeep counter doubling (upkeep_double_self_counters), Voracious Hydra's
-    //       modal double-or-fight ETB, Neverwinter Hydra's dice counters (enters_with_x_dice_sides),
-    //       Steelbane Hydra's remove-a-counter destroy activation;
+    //   * Gauntlet of Power: chosen_color_pump_power / _tough (the chosen-colour anthem -- new);
+    //   * [I2, 2026-11-11] Primordial Hydra: upkeep_double_self_counters; Neverwinter Hydra:
+    //     enters_with_x_dice_sides; Voracious Hydra: etb_modal_double_self_counters; Steelbane Hydra:
+    //     remove_counter_destroy_art_ench_cost (all new, carried by no other card).
+    // OWED (Hydras Stage-2 integration, group I3 -- add each term HERE when its param lands):
     //   I3: Kalonian Hydra's attack-trigger team counter doubling (attack_double_team_counters),
     //       Nissa's untap_land_animate / fetch_forests_tapped loyalty effects, Garruk's
     //       draw_greatest_power / wurm_tokens_per_land.
@@ -25273,7 +25275,9 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
         if (p.scry_reveal_land_to_battlefield || p.mana_colors_of_graveyard_legends) { galadriel = true; }
         if (p.enters_look_top_land_or_hand || p.mana_only_subtype_abilities) { lfe = true; }
         if (p.cycle_draw_exile_shared_type_freecast) { cyclone = true; }
-        if (p.land_tap_bonus > 0 || p.chosen_color_pump_power != 0 || p.chosen_color_pump_tough != 0)
+        if (p.land_tap_bonus > 0 || p.chosen_color_pump_power != 0 || p.chosen_color_pump_tough != 0
+            || p.upkeep_double_self_counters || p.enters_with_x_dice_sides > 0
+            || p.etb_modal_double_self_counters || p.remove_counter_destroy_art_ench_cost.has_value())
         { hydras = true; }
         if (!p.etb_replace_sacrifice_land_subtype.empty()
             || (p.tutor_to_hand && p.suspend_time_counters > 0)
@@ -48954,6 +48958,121 @@ std::vector<int> HydrasProvider::EtbChoiceCandidates(const GameState& s, int con
         if (breaks_proof(CardDatabase::Instance().LookupCached(p.card))) { return out; }
     }
     return { green };
+}
+
+// ---- HydrasProvider: the X Hydras' X axis ------------------------------------------------------------------
+// MTG_HYDRAS_MAX_X (default OFF; EnvOn). USER 2026-11-10: "I think we should play around with the maximum X and
+// it is probably not going to lose lines, since a huge creature will usually kill before we deck out." A
+// LOSSY narrowing (Garruk's -3 can draw us out off a huge body; mana held for a second spell) built at the
+// USER's request: ON, every "enters with X" Hydra cast is held to the most X its plan can pay (XCastBelowMax
+// below). It stays OFF until its A/B against the full X range is measured and the USER rules on it.
+static bool HydrasMaxXOn()
+{
+    static const bool on = EnvOn("MTG_HYDRAS_MAX_X");
+    return on;
+}
+
+// X = 0 FOR A 0/0 BODY IS DOMINATED (sound, default ON). A Primordial / Neverwinter / Steelbane Hydra cast with
+// X = 0 enters as a 0/0 and dies to the toughness SBA at once (CR 704.5f), before anything can use it. In this
+// list nothing reads a creature entering, dying, or a spell being cast (no enter/death/cast watcher, no
+// graveyard reader; Gargos's trigger needs a SPELL targeting our creature), so that cast changes nothing but
+// spends {G}{G} and the card -- strictly dominated by not casting it (the card stays in hand). The one thing
+// that keeps the body alive is a +1/+1 static: Gauntlet of Power (chosen_color_pump_tough) makes it a 1/1.
+// So X = 0 stays offered whenever a toughness pump is on our battlefield OR in our hand (a same-plan
+// Gauntlet, then the X = 0 Hydra, is a real 1/1 for {G}{G}). Voracious Hydra (0/1) is never pruned. Human
+// play and MTG_UNPRUNE=xspell keep every X.
+std::vector<int> HydrasProvider::XCandidates(const GameState& s, const CardDefinition& def,
+                                             int max_affordable) const
+{
+    std::vector<int> out = DeckProvider::XCandidates(s, def, max_affordable);
+    if (!def.params.enters_with_x_plus_counters) { return out; }
+    if (HumanPlayActive() || DecisionUnpruned(UnprunedGate::XSpell)) { return out; }
+    if (def.card.m_toughness.value_or(0) > 0) { return out; }
+    const int me = s.active_player_index;
+    auto pumps = [](const CardDefinition* d) { return d != nullptr && d->params.chosen_color_pump_tough > 0; };
+    for (const Card& c : s.players[static_cast<std::size_t>(me)].hand)
+    { if (pumps(CardDatabase::Instance().LookupCached(c))) { return out; } }
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me || p.def_absent) { continue; }
+        if (pumps(CardDatabase::Instance().LookupCached(p.card))) { return out; }
+    }
+    out.erase(std::remove(out.begin(), out.end(), 0), out.end());
+    return out;
+}
+
+// NEVERWINTER HYDRA ALWAYS AT ITS MAXIMUM AFFORDABLE X -- a USER RULING, not a dominance proof. USER
+// 2026-11-10: "For Neverwinter I would rather not have it figuring out how to game X. Trying the maximum is a
+// good way to minimize this." Its counters are X d6 from a seeded stream the search can read before choosing
+// X, so a free X would let the search pick an X whose dice happen to roll high; the maximum leaves it no such
+// lever. Applied regardless of MTG_HYDRAS_MAX_X; the other X Hydras take the same rule only with that flag ON.
+// The rule is plan-level (the LifegainHeliodCombo Ballista shape): an X cast is WASTED when the mana its plan
+// leaves unspent pays one more X step, and the walk drops that subset unless it wins this turn. "Left" is the
+// pool the walk paid from minus every selected action's cost, with NO same-plan producer credit -- so the
+// test can only under-drop (an X whose larger neighbour needs a credited Bloom stays offered), never drop
+// the plan's true maximum. Human play offers every X; MTG_UNPRUNE=xspell lifts the rule (an A/B lever).
+bool HydrasProvider::XCastBelowMax(const GameState& s, const std::vector<Action>& cands,
+                                   const std::vector<int>& sel, int j, int pool_total) const
+{
+    (void)s;
+    if (HumanPlayActive() || DecisionUnpruned(UnprunedGate::XSpell)) { return false; }
+    const Action& c = cands[static_cast<std::size_t>(j)];
+    const CardDefinition* d = CritDefOf(c);
+    if (d == nullptr || !d->params.enters_with_x_plus_counters) { return false; }
+    if (d->params.enters_with_x_dice_sides <= 0 && !HydrasMaxXOn()) { return false; }
+    int spent = 0;
+    for (int k : sel) { spent += static_cast<int>(cands[static_cast<std::size_t>(k)].cost.ManaValue()); }
+    const int pips = std::max(1, static_cast<int>(d->card.m_mana_cost.x_pips));
+    return pool_total - spent >= pips;
+}
+
+// VORACIOUS HYDRA'S FIGHT MODE IS DOMINATED (sound, default ON). Its modal ETB is "double the +1/+1 counters on
+// this creature" OR "this creature fights target creature you don't control". The opponent's creatures here
+// are GoldFishRunner::PopulateOpponentSpawns' vanilla bodies (8 of 10 games): they never attack and never block
+// (Combat.cpp has no blocker path), and nothing in this list rewards an opponent creature dying (no
+// opp-creature-dies payoff; Gargos's own fight trigger is an approved inert deferral). So a fight changes the
+// goldfish race only by DAMAGING OUR HYDRA (possibly killing it) -- while double adds X counters. Double
+// weakly dominates every fight on every board, and nothing is unfindable at any budget that could ever be
+// better. The USER on the same shape (Apex Altisaur's fight): "They do have creatures, but we would always
+// decline the ability since killing them is useless." Human play never consults this (the viewer asks the
+// mode and the target at resolution); MTG_UNPRUNE=etbfight restores every legal target.
+std::vector<int> HydrasProvider::EtbFightTargets(const GameState& s, int controller, const CardDefinition& def,
+                                                 const std::vector<int>& legal) const
+{
+    if (DecisionUnpruned(UnprunedGate::EtbFight))
+    { return DeckProvider::EtbFightTargets(s, controller, def, legal); }
+    return {};
+}
+
+// STEELBANE HYDRA: NEVER DESTROY OUR OWN ARTIFACT OR ENCHANTMENT (sound, default ON). "{2}{G}, Remove a +1/+1
+// counter: Destroy target artifact or enchantment." Our own artifacts/enchantments in this list are Gauntlet of
+// Power (Forest mana + the anthem), Vernal Bloom (Forest mana) and Lightning Greaves (haste + shroud). Nothing
+// in the list rewards one of them leaving or dying (no leaves/dies watcher, no artifact-count or
+// enchantment-count reader, no graveyard reader), and shrinking the Hydra by a counter never helps (Primordial's
+// trample and every attack want MORE counters; nothing reads counter removal). So destroying our own costs
+// {2}{G}, a counter and a mana engine or haste, and buys nothing: strictly dominated by not activating. An
+// OPPONENT's artifact/enchantment stays offered (the passive opponent never holds one here, so the admitted set
+// is empty and the search spends no branch). The proof is list-specific, so it is re-checked at runtime BY NAME:
+// an own artifact/enchantment target other than those three (a screening arm that adds one, which might pay
+// off on leaving) returns the full legal set. Human play never consults this;
+// MTG_UNPRUNE=counterdestroy restores every legal target.
+std::vector<int> HydrasProvider::CounterDestroyArtEnchTargets(const GameState& s, int controller,
+                                                              const Permanent& src,
+                                                              const std::vector<int>& legal) const
+{
+    if (DecisionUnpruned(UnprunedGate::CounterDestroy))
+    { return DeckProvider::CounterDestroyArtEnchTargets(s, controller, src, legal); }
+    static const char* const kCovered[] = { "Gauntlet of Power", "Vernal Bloom", "Lightning Greaves" };
+    std::vector<int> out;
+    for (int i : legal)
+    {
+        const Permanent& q = s.battlefield[static_cast<std::size_t>(i)];
+        if (q.controller_index != controller) { out.push_back(i); continue; }
+        bool covered = false;
+        for (const char* n : kCovered) { if (q.card.m_name.str() == n) { covered = true; break; } }
+        if (!covered) { return legal; }   // an own permanent the proof does not cover: the list changed
+    }
+    return out;
 }
 
 // ---- AccomplishedAlchemistProvider::EtbChoiceCandidates -------------------------------------------
