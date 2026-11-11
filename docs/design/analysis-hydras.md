@@ -355,16 +355,16 @@ charge applied only past the decision ceiling, is the obvious next measurement i
 - flags (each verified against cards.json and the rules; resolutions in F1 below):
   - g0 T5, BUG: same-plan Nissa x fetched-Forest under-credit. "Nissa, Nature's Lore, Three Visits, Gargos,
     Kalonian Hydra" was refused by the menu and `--validate-line`, and Voracious maxed at X=4 (6 real 8).
-    FIXED, F1-A 79703da7d.
-  - g4 T4, SUSPECT: "Vernal Bloom, Nature's Lore, Steelbane" offered X=1 only (X=2 pays). FIXED, F1-A 79703da7d.
-  - ledger gap: Neverwinter's max-X counts no same-plan producer mana. FIXED, F1-A 79703da7d.
+    FIXED, F1-A 7b621f2f7.
+  - g4 T4, SUSPECT: "Vernal Bloom, Nature's Lore, Steelbane" offered X=1 only (X=2 pays). FIXED, F1-A 7b621f2f7.
+  - ledger gap: Neverwinter's max-X counts no same-plan producer mana. FIXED, F1-A 7b621f2f7.
   - g4 T2, SUSPECT: "suspend Search for Tomorrow, Three Visits" drops Visits but read `not_verified`.
-    Detector FIXED, F1-B 36b9798ad; the realised-order engine half is deferred to the USER
+    Detector FIXED, F1-B a8f27828c; the realised-order engine half is deferred to the USER
     (docs/design/costed-suspend-realised-order.md). Not lossy for Hydras (searched second main).
-  - g2 T4, cosmetic: fight death labelled "0 toughness"; fight prompt `per_target_damage: 0`. FIXED, F1-C a31495872.
-  - g6 T3, cosmetic: prompt typo "It is fights it". FIXED, F1-C a31495872.
+  - g2 T4, cosmetic: fight death labelled "0 toughness"; fight prompt `per_target_damage: 0`. FIXED, F1-C 5bf4a7b5d.
+  - g6 T3, cosmetic: prompt typo "It is fights it". FIXED, F1-C 5bf4a7b5d.
   - g4, cosmetic: a Forest under Vernal Bloom showed `taps: G` only; `mdfc_backs` named cards not in the deck.
-    FIXED, F1-C a31495872.
+    FIXED, F1-C 5bf4a7b5d.
   - g6 T3 / g12 T3-T4, cosmetic: "X=0 Hydra + equip Greaves to it" offered with no Gauntlet. HARMLESS, kept
     (see F1).
   - g1 T6: the viewer plan cap dropped the Greaves group (documented `plans_truncated`). Not a bug; census in F1.
@@ -372,8 +372,8 @@ charge applied only past the decision ceiling, is the obvious next measurement i
 
 ## F1 — the Claude-play sweep fixes (2026-11-11)
 
-Worktree `.claude/worktrees/hydras-fix`, branch `hydras-sweep-fixes`. Commits: 79703da7d (A), 36b9798ad (B),
-a31495872 (C).
+Worktree `.claude/worktrees/hydras-fix`, branch `hydras-sweep-fixes`. Commits: 7b621f2f7 (A), a8f27828c (B),
+5bf4a7b5d (C).
 
 **A. The bonuses a plan establishes now reach the lands it fetches** (`MTG_LANDPUT_CROSS_CREDIT`, heurarm
 slot, default ON; `=0` gives the pre-F1 play).
