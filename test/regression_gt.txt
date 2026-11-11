@@ -198,9 +198,9 @@ alchemist2hg_smoke_d5_s1001=5.1600/6211554d6914a8b9
 elementals_smoke_d0_s1001=5.6110/85ecb7b43dc61e1f
 elementals_smoke_d3_s1001=4.4400/72ba596c1b285a5d
 elementals_smoke_d5_s1001=4.3360/616b849211c6c5a1
-martyr_smoke_d0_s1001=6.1300/b9de6173ff834adc
-martyr_smoke_d3_s1001=5.2200/3ac70946aba304b8
-martyr_smoke_d5_s1001=5.2800/8278b8d59a7c0e98
+martyr_smoke_d0_s1001=6.1050/3cf47e6e09477d39
+martyr_smoke_d3_s1001=5.2000/2a27881b3a3a3564
+martyr_smoke_d5_s1001=5.2700/30b16278c9bc5ee4
 martyr2hg_smoke_d5_s1001=5.4800/63c4da13cb73bea0
 
 # --- regression ---

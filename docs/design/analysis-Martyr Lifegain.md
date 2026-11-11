@@ -115,7 +115,17 @@ a provider-stage question for this deck (discard buckets are USER-owned, 5i).
   2. Even from the human's own T5 board the search does not find "Jitte: gain 2 life x2 -> Serra 6/6 -> 13
      exactly lethal" (budget 0 -> T6). Under investigation.
 
-## Checkpoint (2026-11-11 ~14:30 UTC) -- RESUME HERE
+## Checkpoint (2026-11-11 ~19:40 UTC) -- RESUME HERE
+
+LANDED (local, not yet pushed): candidate b1 rebased onto origin 7458bb952 -> 30173e3e6 / 8a23edaf9 / 01a14b2fe
+(all new defaults ON, amended split OFF). Pre-rebase full smoke on d718f7d34: 192 unchanged, only martyr_smoke
+d0/d3/d5 moved (0 slower, 2 faster); martyr2hg and LHC byte-identical. Origin meanwhile moved the martyr keys itself
+(E3 rollout cache ON) and added martyr regression keys, so the pre-rebase accept was dropped
+(kept as branch martyr-pre-rebase-1111). RUNNING: rb8 = rebuild + mtg-test + FULL smoke on the rebased tree
+(logs/martyr-lifegain/rb8-*). Next: accept martyr smoke (--deck=martyr,martyr2hg if 2hg moves), scenarios,
+check_gt_logs, push, CI watch, ref_bench (10/10), then regression + overnight tiers.
+
+### Earlier checkpoint (2026-11-11 ~14:30 UTC, history)
 
 PUSHED 7e88d9fd5 (phase-1-2-deck-analyzer): martyr smoke GT accepted (d0 6.1300, d3 5.2200, d5 5.2800, 2hg 5.5200),
 colossus unchanged; CI watch -> logs/martyr-lifegain/ci-7e88d9f.log. Post-rebase rebuild + filtered smoke RUNNING
