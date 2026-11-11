@@ -1,0 +1,35 @@
+{
+  "deck": "decks/Martyr Lifegain/Martyr Lifegain.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "active_life": 25,
+  "opponent_life": 20,
+  "library_filler": "Emrakul, the Aeons Torn",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 50,
+  "max_turns": 4,
+  "battlefield": [
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Speaker of the Heavens",
+      "sick": false
+    },
+    {
+      "name": "Umezawa's Jitte",
+      "equips": "Speaker of the Heavens",
+      "charge_counters": 1
+    }
+  ],
+  "hand": [],
+  "validate_line": "jittemode=2",
+  "expect_verdict": "accept",
+  "_comment": "MTG_MARTYR_JITTE_GAIN_GATE: life 25 and one counter (+2) reach Speaker of the Heavens' gate (27), so the gain mode IS offered."
+}

@@ -1,0 +1,33 @@
+{
+  "deck": "decks/Martyr Lifegain/Martyr Lifegain.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "active_life": 29,
+  "opponent_life": 20,
+  "library_filler": "Emrakul, the Aeons Torn",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 50,
+  "max_turns": 4,
+  "battlefield": [
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Abiding Grace"
+    },
+    {
+      "name": "Curious Farm Animals",
+      "sick": false
+    }
+  ],
+  "hand": [],
+  "validate_line": "sacout=Curious Farm Animals",
+  "expect_verdict": "accept",
+  "_comment": "MTG_MARTYR_PRUNE_FARM_AT30 (USER 2026-11-11: 'We can leave that for now, as long as we are below 30 life'): at 29 life Curious Farm Animals' {2} self-sacrifice (death -> 3 life, Abiding Grace returns it) stays on the menu. Contrast martyr_prune_farm_at30_pruned (30 life) and martyr_prune_farm_at30_off (=0, pruned at any life)."
+}

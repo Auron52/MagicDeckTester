@@ -2356,19 +2356,24 @@ public:
     const char* Name() const override { return "MartyrLifegain"; }
     // SPEAKER OF THE HEAVENS' NARROW SECOND MAIN -- ColossusHammerProvider's lever, shared body
     // (MTG_SPEAKER_M2; default ON, PROVISIONAL: main 1 vs main 2 is the USER's call). Opens after combat
-    // only when a live Speaker passes its life gate; admits only that activation. DecisionProviders.cpp.
+    // only when a live Speaker passes its life gate; admits only that activation -- or (MTG_MARTYR_SPEAKER_M2_JITTE,
+    // default ON) while a gated Speaker is below its gate and Jitte's gain reaches it, also that gain mode.
+    // DecisionProviders.cpp.
     bool RestrictedSecondMainLive(const GameState& s) const override;
     bool MayOpenRestrictedSecondMain() const override { return true; }
     bool RestrictedSecondMainAdmits(const GameState& s, const Action& a) const override;
     // UMEZAWA'S JITTE "you gain 2 life" (MTG_MARTYR_JITTE_GAIN, heurarm MARTYR_JITTE_GAIN; DEFAULT
-    // OFF pending the USER, since it relaxes the 2026-08-14 "+2/+2 only" doctrine for this deck).
-    // Opens the gain mode ALONE while the deck reads its life total. DecisionProviders.cpp.
+    // ON since the USER ruling of 2026-11-11, "Jitte-gain makes sense if it can hit breakpoints"; it
+    // relaxes the 2026-08-14 "+2/+2 only" doctrine for this deck). Opens the gain mode ALONE while the
+    // deck reads its life total, and (MTG_MARTYR_JITTE_GAIN_GATE, default ON) only while the counters'
+    // gain can reach a life threshold an own card reads. DecisionProviders.cpp.
     bool OffersJitteGainMode(const GameState& s) const override;
     // THE USER'S MAIN-PHASE RULINGS OF 2026-11-10, as a provider RESTRICTION of the collected options in
     // either main (applied at CollectActions' tail: search, rollout, d0 runner and executor alike; human
     // play keeps the full set). Two levers, one hook. DecisionProviders.cpp has the rules and the record.
     //   MTG_MARTYR_PRUNE_SACS (heurarm MARTYR_PRUNE_SACS; DEFAULT ON, USER-approved): never offer Kami of
-    //     False Hope's or Curious Farm Animals' self-sacrifice.
+    //     False Hope's self-sacrifice, nor Curious Farm Animals' while life >= 30 (MTG_MARTYR_PRUNE_FARM_AT30,
+    //     USER 2026-11-11).
     //   MTG_MARTYR_MAIN_SPLIT (heurarm MARTYR_MAIN_SPLIT; DEFAULT OFF, an EXPERIMENT the USER decides):
     //     main 1 keeps only the "white cards to hand" fetchers and the Serra-pumping Martyr; every other
     //     cast moves to the full searched second main GoldFishRunner::DeckUsesSecondMain opens for it.

@@ -30391,6 +30391,27 @@ bool TurnSolver::BpAbilityDeltaOn()
 
 namespace {
 
+// MTG_BP_SPEAKER_GATE (DEFAULT ON; =0 -> the life gate is read at plan start only), heurarm BP_SPEAKER_GATE.
+// Breakpoint SITE 9 for a RELATIVE life gate: Speaker of the Heavens' "{T}: create a 4/4 Angel. Activate only
+// if you have at least 7 life more than your starting life total". The gate was read on the board a plan
+// STARTED from, so a gain INSIDE the main -- Martyr of Sands' sacrifice, Umezawa's Jitte's gain mode, Curious
+// Farm Animals' death -- could not unlock the Angel in that main at any budget (verified unfindable at
+// --depth 5 --budget-ms 0; MartyrLifegainProvider's "(A) MARTYR FOR SPEAKER"). Two halves, ONE reader:
+//   * CollectActivationKeys emits kActTapTokenLive for an own life-gated tap_token source passing
+//     TapTokenSourceLive, so crossing the gate mid-plan presents a NEW key and the delta rule re-plans
+//     (both worlds: the executor's site-9 twin reads the same enumerator);
+//   * PlanOpensBreakpoint marks site 9 for a plan holding a life-gaining action while an own untapped,
+//     able-to-tap life-gated source is below its gate, so the fan-out gives that plan its variants.
+// The search still BRANCHES (the continuation is candidate k of EnumerateBreakpointPlans; site 9 is
+// searched-only). SCOPED BY VALIDITY: only a board holding a life-gated tap-token source (Speaker) is
+// touched. Colossus Hammer plays Speaker too, but has no main-phase lifegain, so its key never appears
+// mid-plan (present at plan start or absent throughout) and no plan of it is marked: byte-identical.
+bool BpSpeakerGateOn()
+{
+    static const bool on = EnvOn("MTG_BP_SPEAKER_GATE", true);   // DEFAULT ON; =0 disables
+    return heurarm::Flag(heurarm::BP_SPEAKER_GATE, on);
+}
+
 // One ABILITY = one key, so a permanent whose other abilities are unchanged still registers a newly
 // activatable one (the Thallid reaching its third counter). Packed into a scalar rather than kept as
 // a struct so the snapshot is a flat sorted vector that the gate can binary-search. m_number is a
@@ -30422,7 +30443,10 @@ enum : uint64_t {
     kActBronzePut = 213, kActKruphixBank = 214,
     // Hydras (I3): Nissa's +1 untapped a land (and may have floated its mana) -- the Chandra +RR shape --
     // and Garruk's +1 / -6 made creature tokens a haste Equipment can move onto this turn.
-    kActLoyaltyUntapContinuation = 215, kActLoyaltyTokenContinuation = 216
+    kActLoyaltyUntapContinuation = 215, kActLoyaltyTokenContinuation = 216,
+    // Speaker of the Heavens (2026-11-11, MTG_BP_SPEAKER_GATE): a life-gated {T} token source that is
+    // LIVE now -- see CollectActivationKeys.
+    kActTapTokenLive = 217
 };
 inline uint64_t ActKey(int m_number, uint64_t ability)
 { return (static_cast<uint64_t>(static_cast<uint32_t>(m_number)) << 8) | ability; }
@@ -30842,6 +30866,16 @@ void CollectActivationKeys(const GameState& state, int ctrl, const Permanent& p,
             out.push_back(ActKey(num, kActGyCast) | ((o.card->m_name_hash & 0xFFFFFFull) << 40));
         }
     }
+
+    // SPEAKER OF THE HEAVENS' LIFE GATE (MTG_BP_SPEAKER_GATE; OUT-OF-BAND slot, the Khalni shape). The
+    // activation's whole legality is TapTokenSourceLive (untapped, CR 302.6, life >= start + N) -- the SAME
+    // predicate the enumerator and both apply sites read -- so the key is present exactly while the
+    // activation is legal. A gain that crosses the gate mid-plan makes it NEW (the delta rule re-plans onto
+    // the Angel in the same main); a Speaker already live at plan start (a declined tap) offers the same key
+    // on both sides and arms nothing. Life-gated sources only: Sliver Hive / Bloodline Keeper never key here.
+    if (pp.tap_token_cost.has_value() && pp.tap_token_min_life_above_start > 0 && BpSpeakerGateOn()
+        && TapTokenSourceLive(state, p, *d))
+    { out.push_back(ActKey(num, kActTapTokenLive)); }
 }
 
 // MTG_SAC_FODDER_ACT_MAKER: does a permanent we control carry a MANA-COSTED token ability
@@ -81951,7 +81985,11 @@ static bool PlanActionMayGainLife(const Action& a, bool enter_watch)
                 || pp.etb_modal_lifegain > 0 || pp.etb_lifegain > 0 || EnterLifegainWatcher(pp)
                 || (enter_watch && d->card.IsCreature());
         case Action::Kind::SacCreatureOutlet:
-            return pp.sac_outlet_lifegain > 0 || pp.own_creature_dies_lifegain > 0;
+            // dies_trigger_self_gain: a self-sacrifice outlet whose own death gains life (Curious Farm
+            // Animals, "When this creature dies, you gain 3 life"; only it is both an outlet and that
+            // trigger, so the Alchemist / Ballista routes of every other deck are unchanged).
+            return pp.sac_outlet_lifegain > 0 || pp.own_creature_dies_lifegain > 0
+                || (pp.sac_creature_outlet && pp.dies_trigger_self_gain > 0);
         case Action::Kind::ActivatePermAbility:
             return a.ability_mode == Action::AbilityMode::TapLifegain
                 || a.ability_mode == Action::AbilityMode::SacLifePerCreature
@@ -82703,6 +82741,23 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
             if (w->params.lifegain_target_own_counter) { heliod = true; }
         }
         if (ping_bump && heliod) { alch = true; }
+        // Speaker of the Heavens' BELOW-THE-GATE route (MTG_BP_SPEAKER_GATE): an own untapped, able-to-tap
+        // life-gated tap-token source whose gate (start + N) is above our life -- a gain this plan makes can
+        // cross it and present kActTapTokenLive anew, the same "a gain grows an activation" shape. An UNTAP is
+        // inert here (the source is untapped already). false for every board without such a source.
+        if (!alch && BpSpeakerGateOn())
+        {
+            const int life = state.players[static_cast<std::size_t>(state.active_player_index)].life;
+            for (const Permanent& perm : state.battlefield)
+            {
+                if (perm.controller_index != state.active_player_index || perm.def_absent || perm.tapped) { continue; }
+                const CardDefinition* w = CardDatabase::Instance().LookupCached(perm.card);
+                if (w == nullptr || !w->params.tap_token_cost.has_value()) { continue; }
+                const int n = w->params.tap_token_min_life_above_start;
+                if (n > 0 && life < gamesetup::StartingLife() + n && CanTapNow(perm, state.battlefield))
+                { alch = true; break; }
+            }
+        }
         // The closed-form untap LOOP (chunk C2b) always ends in the kActUntapLoopFunded re-plan, even
         // when its mana creature is TAPPED at plan start (the loop's first activation untaps it).
         for (const Action& a : p.actions)

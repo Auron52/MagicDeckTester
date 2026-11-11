@@ -1,0 +1,38 @@
+{
+  "deck": "decks/Martyr Lifegain/Martyr Lifegain.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "active_life": 21,
+  "opponent_life": 6,
+  "library_filler": "Emrakul, the Aeons Torn",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 200,
+  "max_turns": 4,
+  "battlefield": [
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Speaker of the Heavens",
+      "sick": false
+    }
+  ],
+  "hand": [
+    "Martyr of Sands",
+    "Ranger of Eos",
+    "Ranger of Eos"
+  ],
+  "env": {
+    "MTG_MARTYR_MAIN_SPLIT": "1",
+    "MTG_MARTYR_SPLIT_AMEND": "0",
+    "MTG_BP_SPEAKER_GATE": "0"
+  },
+  "_comment": "NEGATIVE CONTROL for martyr_bp_speaker_martyr_same_main.json: MTG_BP_SPEAKER_GATE=0 reads Speaker's gate at plan start only, so main 2's Martyr gain cannot unlock the Angel in that main and there is no T4 kill.",
+  "expect_no_win": true
+}

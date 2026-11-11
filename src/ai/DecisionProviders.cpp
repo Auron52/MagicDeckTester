@@ -57913,15 +57913,114 @@ bool ColossusHammerProvider::RestrictedSecondMainAdmits(const GameState& s, cons
 // DOES create other things in combat -- Jitte counters (a "gain 2 life" spend could be what crosses
 // the gate), and the attack itself (sacrificing Kami / Farm Animals / Martyr AFTER they attacked) --
 // and none of those is admitted: they are the deck-level main-2 question, which is the USER's.
+//
+// THE ONE EXCEPTION: JITTE'S GAIN FOR SPEAKER (MTG_MARTYR_SPEAKER_M2_JITTE, heurarm MARTYR_SPEAKER_M2_JITTE;
+// DEFAULT ON). The phase ALSO opens while an own untapped, able-to-tap Speaker is BELOW its gate and the Jitte
+// gain could reach it (life + own counters x charge_lifegain >= start + 7, and OffersJitteGainMode holds), and
+// then also admits Jitte's gain mode -- "attack, gain 2 in main 2, tap Speaker". The counters were made in
+// combat, so the line did not exist before the phase did; the Angel itself arrives through Speaker's mid-main
+// breakpoint (MTG_BP_SPEAKER_GATE, TurnSolver kActTapTokenLive), whose continuation the menu's first clause
+// admits. A pure function of the post-combat state (life, tapped, counters), as the hook requires; the search
+// still branches over it (pass, or the gain), so it is a restriction, never a pick.
+namespace
+{
+bool MartyrJitteGainGateOn()
+{
+    static const bool on = EnvOn("MTG_MARTYR_JITTE_GAIN_GATE", true);   // DEFAULT ON (USER 2026-11-11); =0 ungated
+    return heurarm::Flag(heurarm::MARTYR_JITTE_GAIN_GATE, on);
+}
+
+bool MartyrSpeakerM2JitteOn()
+{
+    static const bool on = EnvOn("MTG_MARTYR_SPEAKER_M2_JITTE", true);   // DEFAULT ON; =0 -> Speaker's tap alone
+    return heurarm::Flag(heurarm::MARTYR_SPEAKER_M2_JITTE, on);
+}
+
+// The most life the own Jittes' charge counters can gain now: sum of counters x charge_lifegain, over the same
+// sources the enumerator offers the gain mode on (a charged combat-damage-charge Equipment). A superset of one
+// plan's reach: a plan spends at most one JitteModeAbility per Jitte (ActivationFamilyKey), and further gains
+// come through breakpoints.
+int MartyrJitteGainAvailable(const GameState& s)
+{
+    const int me = s.active_player_index;
+    int gain = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me || p.charge_counters <= 0) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.is_equipment && d->params.equip_combat_damage_charges > 0
+            && d->params.charge_lifegain > 0)
+        { gain += p.charge_counters * d->params.charge_lifegain; }
+    }
+    return gain;
+}
+
+// The life threshold B a card reads (0 = none): Serra Ascendant's life_threshold_pump_life, Speaker of the
+// Heavens' StartingLife() + tap_token_min_life_above_start (relative: 27 in Standard, 37 in 2HG).
+int MartyrLifeThresholdOf(const CardDefinition* d)
+{
+    if (d == nullptr) { return 0; }
+    const CardParams& pp = d->params;
+    if (pp.life_threshold_pump_life > 0) { return pp.life_threshold_pump_life; }
+    if (pp.tap_token_cost.has_value() && pp.tap_token_min_life_above_start > 0)
+    { return gamesetup::StartingLife() + pp.tap_token_min_life_above_start; }
+    return 0;
+}
+
+// Some threshold B read by an own card with life < B <= life + gain. The reader may be on the battlefield, in
+// hand or in the graveyard (Lurrus recasts an MV<=2 Serra) -- a superset is fine. Integer test first.
+bool MartyrThresholdWithin(const GameState& s, int gain)
+{
+    if (gain <= 0) { return false; }
+    const int me = s.active_player_index;
+    const Player& pl = s.players[static_cast<std::size_t>(me)];
+    const int life = pl.life;
+    auto hit = [&](const CardDefinition* d)
+    {
+        const int b = MartyrLifeThresholdOf(d);
+        return b > life && b <= life + gain;
+    };
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index == me && hit(CardDatabase::Instance().LookupCached(p.card))) { return true; }
+    }
+    for (const Card& c : pl.hand)      { if (hit(CardDatabase::Instance().LookupCached(c))) { return true; } }
+    for (const Card& c : pl.graveyard) { if (hit(CardDatabase::Instance().LookupCached(c))) { return true; } }
+    return false;
+}
+
+// The Jitte clause of Speaker's narrow main 2 (without OffersJitteGainMode, which the member adds): an own
+// untapped, able-to-tap life-gated source BELOW its gate that the available Jitte gain reaches.
+bool MartyrSpeakerJitteM2Clause(const GameState& s)
+{
+    if (!SpeakerM2Enabled() || !MartyrSpeakerM2JitteOn()) { return false; }
+    const int gain = MartyrJitteGainAvailable(s);
+    if (gain <= 0) { return false; }
+    const int me = s.active_player_index;
+    const int life = s.players[static_cast<std::size_t>(me)].life;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!IsLifeGatedTapTokenSource(d)) { continue; }
+        const int gate = gamesetup::StartingLife() + d->params.tap_token_min_life_above_start;
+        if (life < gate && life + gain >= gate && CanTapNow(p, s.battlefield)) { return true; }
+    }
+    return false;
+}
+}   // namespace
+
 bool MartyrLifegainProvider::RestrictedSecondMainLive(const GameState& s) const
 {
-    return SpeakerSecondMainLive(s);
+    return SpeakerSecondMainLive(s) || (MartyrSpeakerJitteM2Clause(s) && OffersJitteGainMode(s));
 }
 
 bool MartyrLifegainProvider::RestrictedSecondMainAdmits(const GameState& s, const Action& a) const
 {
-    (void)s;
-    return SpeakerSecondMainAdmits(a);
+    if (SpeakerSecondMainAdmits(a)) { return true; }
+    // Jitte's gain mode, while it can still lift a live-but-gated Speaker over its gate. CollectActions emitted
+    // it only under OffersJitteGainMode, so the clause is the whole remaining test.
+    return a.kind == Action::Kind::JitteModeAbility && a.gy_exile_mode == 2 && MartyrSpeakerJitteM2Clause(s);
 }
 
 // Umezawa's Jitte's gain mode for Martyr Lifegain (MTG_MARTYR_JITTE_GAIN). Found by the Stage 5d
@@ -57931,12 +58030,19 @@ bool MartyrLifegainProvider::RestrictedSecondMainAdmits(const GameState& s, cons
 // it for +2/+2 ... no reason to use any other mode in goldfishing"). That premise fails in a deck
 // whose life total is a resource. This ADDS a searched option (no-greedy compliant); the search still
 // weighs it against combat's +2/+2 spend. Gated on the deck stamp deck_reads_life_total, the same
-// stamp that keeps Martyr of Sands' self-lifegain outlet on the menu. DEFAULT OFF: relaxing a USER
-// ruling is the USER's call -- the A/B result goes to them.
+// stamp that keeps Martyr of Sands' self-lifegain outlet on the menu.
+// DEFAULT ON since the USER ruling of 2026-11-11: "Jitte-gain makes sense if it can hit breakpoints." =0 closes it.
+// THE BREAKPOINT GATE (MTG_MARTYR_JITTE_GAIN_GATE, heurarm MARTYR_JITTE_GAIN_GATE; DEFAULT ON, =0 ungated): the
+// mode is offered only while some life threshold B read by an own card -- Serra Ascendant's 30, Speaker of the
+// Heavens' start + 7 -- lies in (life, life + own counters x charge_lifegain]. Below every threshold's reach, or
+// above all of them, a counter spent on 2 life buys nothing this deck reads, and combat's +2/+2 keeps it. A
+// RESTRICTION of the searched options (the search still weighs the gain against the pump), never a pick.
 bool MartyrLifegainProvider::OffersJitteGainMode(const GameState& s) const
 {
-    static const bool on = EnvOn("MTG_MARTYR_JITTE_GAIN", false);
-    return heurarm::Flag(heurarm::MARTYR_JITTE_GAIN, on) && s.deck_reads_life_total;
+    static const bool on = EnvOn("MTG_MARTYR_JITTE_GAIN", true);   // DEFAULT ON (USER 2026-11-11); =0 closes it
+    if (!heurarm::Flag(heurarm::MARTYR_JITTE_GAIN, on) || !s.deck_reads_life_total) { return false; }
+    if (!MartyrJitteGainGateOn()) { return true; }
+    return MartyrThresholdWithin(s, MartyrJitteGainAvailable(s));
 }
 
 // ---- MartyrLifegainProvider: the USER's main-phase rulings of 2026-11-10 (CollectedActionAllowed) ----------
@@ -57950,6 +58056,8 @@ bool MartyrLifegainProvider::OffersJitteGainMode(const GameState& s) const
 //     search, in either main. A provider prune of options (heuristic: the bodies' deaths do pay -- Grace's
 //     MV-1 return, the Farm's 3 life -- so this is a judgement the USER made, not a dominance proof).
 //     Human play keeps both (CollectActions skips this hook under HumanPlayActive()).
+//     AMENDED 2026-11-11 for Farm Animals (MTG_MARTYR_PRUNE_FARM_AT30, below): its sacrifice is a life engine
+//     (death -> 3 life, Abiding Grace returns it), so it is pruned only at 30+ life. Kami's prune is unchanged.
 //
 // (2) THE MAIN SPLIT (MTG_MARTYR_MAIN_SPLIT, heurarm MARTYR_MAIN_SPLIT; DEFAULT OFF -- an EXPERIMENT, adoption
 //     is the USER's). USER 2026-11-10: "perhaps we should move almost everything to main 2 instead. So for
@@ -57991,6 +58099,28 @@ bool MartyrPruneFarmOn()
 {
     static const bool on = EnvOn("MTG_MARTYR_PRUNE_FARM", true);
     return MartyrPruneSacsOn() && heurarm::Flag(heurarm::MARTYR_PRUNE_FARM, on);
+}
+
+// THE FARM PRUNE AT 30+ (MTG_MARTYR_PRUNE_FARM_AT30, heurarm MARTYR_PRUNE_FARM_AT30; DEFAULT ON, =0 -> pruned at
+// every life total). USER 2026-11-11, on being shown that the unpruned search loops Curious Farm Animals' {2}
+// sacrifice (its death gains 3, Abiding Grace returns it at end step) to push life over Serra Ascendant's 30:
+// "Oh right. I forgot there was a death trigger on the animals. We can leave that for now, as long as we are
+// below 30 life." So the sacrifice is pruned only while the active player's life is >= 30 -- the USER's literal
+// number, Serra's threshold -- and stays on the menu below it. In 2HG (shared team life starts at 30) this
+// prunes Farm from the first turn, while Speaker of the Heavens' 2HG gate is 37: the 30 is a literal, not
+// Serra's param, and not Speaker's relative gate, so a 2HG Farm-for-Speaker line is refused (USER's call).
+constexpr int kMartyrFarmPruneLife = 30;
+bool MartyrPruneFarmAt30On()
+{
+    static const bool on = EnvOn("MTG_MARTYR_PRUNE_FARM_AT30", true);   // DEFAULT ON (USER 2026-11-11); =0 -> always
+    return heurarm::Flag(heurarm::MARTYR_PRUNE_FARM_AT30, on);
+}
+
+bool MartyrFarmPrunedNow(const GameState& s)
+{
+    if (!MartyrPruneFarmOn()) { return false; }
+    return !MartyrPruneFarmAt30On()
+        || s.players[static_cast<std::size_t>(s.active_player_index)].life >= kMartyrFarmPruneLife;
 }
 
 bool MartyrSplitCaptainM1On()
@@ -58038,7 +58168,8 @@ bool MartyrGainPumpsSerra(const GameState& s)
 //   (A) MARTYR FOR SPEAKER. Speaker of the Heavens' Angel needs life >= start + 7 WHEN IT IS ENUMERATED. A
 //       Martyr gain in the same main does not re-open the menu (the sacrifice is a positioned outlet, not a
 //       breakpoint), so "main 2: cast Martyr, sacrifice it, tap Speaker" is UNFINDABLE -- verified on a scenario
-//       at --depth 5 --budget-ms 0 (Speaker idle, Martyr sacrificed, no Angel). Unsplit play gains in main 1 and
+//       at --depth 5 --budget-ms 0 (Speaker idle, Martyr sacrificed, no Angel). [2026-11-11: now reachable in
+//       the SAME main through Speaker's mid-main breakpoint, MTG_BP_SPEAKER_GATE (TurnSolver kActTapTokenLive).] Unsplit play gains in main 1 and
 //       taps in Speaker's narrow post-combat main; the split moved the gain to main 2 and the Angel slipped a turn
 //       (8 std + 6 2HG first divergences). So Martyr's cast + sacrifice are also admitted while an own life-gated
 //       token source (tap_token_min_life_above_start > 0: Speaker) can {T} this turn and life is below its gate --
@@ -58129,7 +58260,7 @@ bool MartyrLifegainProvider::CollectedActionAllowed(const GameState& s, const Ac
     const CardDefinition* d = a.def != nullptr ? a.def : CardDatabase::Instance().Lookup(a.card_name.str());
     if (d == nullptr) { return true; }
     if (sac && d->params.sac_outlet_prevent_combat_damage && MartyrPruneKamiOn()) { return false; }
-    if (sac && d->params.sac_outlet_destroy_artifact_enchantment_optional && MartyrPruneFarmOn()) { return false; }
+    if (sac && d->params.sac_outlet_destroy_artifact_enchantment_optional && MartyrFarmPrunedNow(s)) { return false; }
     if (!is_pre_combat || !MartyrMainSplitOn()) { return true; }
     // MAIN 1 under the split.
     const bool amend = MartyrSplitAmendOn();

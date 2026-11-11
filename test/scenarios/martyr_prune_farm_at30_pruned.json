@@ -1,0 +1,33 @@
+{
+  "deck": "decks/Martyr Lifegain/Martyr Lifegain.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "active_life": 30,
+  "opponent_life": 20,
+  "library_filler": "Emrakul, the Aeons Torn",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 50,
+  "max_turns": 4,
+  "battlefield": [
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Abiding Grace"
+    },
+    {
+      "name": "Curious Farm Animals",
+      "sick": false
+    }
+  ],
+  "hand": [],
+  "validate_line": "sacout=Curious Farm Animals",
+  "expect_verdict": "legal_not_enumerated",
+  "_comment": "MTG_MARTYR_PRUNE_FARM_AT30: at 30 life (Serra Ascendant's threshold, the USER's literal number) Curious Farm Animals' self-sacrifice is pruned."
+}

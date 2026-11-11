@@ -58,7 +58,7 @@
   "Squadron Hawk"
  ],
  "_comment": [
-  "Negative control for martyr_jitte_gain_hawk_serra_lethal: with the gain mode closed (the 2026-08-14 USER '+2/+2 only' doctrine), the same turn-5 kill is not found."
+  "Negative control for martyr_jitte_gain_hawk_serra_lethal: with the gain mode closed by MTG_MARTYR_JITTE_GAIN=0 (the 2026-08-14 USER '+2/+2 only' doctrine; the default is ON since the USER ruling of 2026-11-11, 'Jitte-gain makes sense if it can hit breakpoints'), the same turn-5 kill is not found."
  ],
  "env": {
   "MTG_MARTYR_JITTE_GAIN": "0"

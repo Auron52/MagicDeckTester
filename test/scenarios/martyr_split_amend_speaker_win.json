@@ -33,5 +33,5 @@
     "MTG_MARTYR_SPLIT_AMEND": "1"
   },
   "expect_win_turn": 4,
-  "_comment": "MTG_MARTYR_SPLIT_AMEND (A), end to end: main 1 Martyr (21 -> 27), Speaker attacks (vigilance, lifelink 28), main 2 Angel, T4 Speaker + Angel + Martyr-less board kill from 6. Under the plain split main 2 casts Martyr and no Angel is ever made in time (no win, even at --budget-ms 0)."
+  "_comment": "MTG_MARTYR_SPLIT_AMEND (A), end to end: main 1 Martyr (21 -> 27), Speaker attacks (vigilance, lifelink 28), main 2 Angel, T4 Speaker + Angel + Martyr-less board kill from 6. Under the plain split main 2 casts Martyr and, before Speaker's mid-main breakpoint (MTG_BP_SPEAKER_GATE, 2026-11-11), no Angel was ever made in time (no win, even at --budget-ms 0); the breakpoint now taps Speaker after main 2's Martyr gain too -- see martyr_bp_speaker_martyr_same_main.json."
 }

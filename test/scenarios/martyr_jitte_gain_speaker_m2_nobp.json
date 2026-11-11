@@ -1,0 +1,40 @@
+{
+  "deck": "decks/Martyr Lifegain/Martyr Lifegain.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "active_life": 24,
+  "opponent_life": 8,
+  "library_filler": "Emrakul, the Aeons Torn",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 200,
+  "max_turns": 5,
+  "battlefield": [
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Speaker of the Heavens",
+      "sick": false
+    },
+    {
+      "name": "Umezawa's Jitte",
+      "equips": "Speaker of the Heavens",
+      "charge_counters": 0
+    }
+  ],
+  "hand": [],
+  "env": {
+    "MTG_BP_SPEAKER_GATE": "0"
+  },
+  "_comment": "NEGATIVE CONTROL for martyr_jitte_gain_speaker_m2.json: MTG_BP_SPEAKER_GATE=0 -- main 2 opens and Jitte gains 2 (25 -> 27), but the gate was read at plan start, so Speaker's activation is not reached in that main and there is no T5 kill.",
+  "expect_no_win": true
+}

@@ -1,0 +1,35 @@
+{
+  "deck": "decks/Martyr Lifegain/Martyr Lifegain.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "active_life": 20,
+  "opponent_life": 20,
+  "library_filler": "Emrakul, the Aeons Torn",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 50,
+  "max_turns": 4,
+  "battlefield": [
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Speaker of the Heavens",
+      "sick": false
+    },
+    {
+      "name": "Umezawa's Jitte",
+      "equips": "Speaker of the Heavens",
+      "charge_counters": 1
+    }
+  ],
+  "hand": [],
+  "validate_line": "jittemode=2",
+  "expect_verdict": "legal_not_enumerated",
+  "_comment": "MTG_MARTYR_JITTE_GAIN_GATE (USER 2026-11-11: 'Jitte-gain makes sense if it can hit breakpoints'): life 20, one counter (+2 at most), Speaker's gate 27, no Serra anywhere -- no threshold in (20, 22], so the gain mode is NOT offered. Contrast martyr_jitte_gain_gate_off_offered (gate =0) and martyr_jitte_gain_gate_reaches_speaker (life 25)."
+}

@@ -1,0 +1,41 @@
+{
+  "deck": "decks/Martyr Lifegain/Martyr Lifegain.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "active_life": 21,
+  "opponent_life": 6,
+  "library_filler": "Emrakul, the Aeons Torn",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 200,
+  "max_turns": 4,
+  "battlefield": [
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Speaker of the Heavens",
+      "sick": false
+    }
+  ],
+  "hand": [
+    "Martyr of Sands",
+    "Ranger of Eos",
+    "Ranger of Eos"
+  ],
+  "env": {
+    "MTG_MARTYR_MAIN_SPLIT": "1",
+    "MTG_MARTYR_SPLIT_AMEND": "0"
+  },
+  "_comment": "MTG_BP_SPEAKER_GATE (Speaker of the Heavens' life gate as a mid-main breakpoint, TurnSolver kActTapTokenLive), under the PLAIN main split (Martyr of Sands refused in main 1 without a Serra). T3: Speaker attacks (vigilance, lifelink: 21 -> 22, opponent 6 -> 5); main 2 casts Martyr and sacrifices it revealing both Rangers (+6 -> 28 >= 20 + 7), which presents Speaker's activation as a NEW key, so site 9 re-plans and taps Speaker for the 4/4 Angel in the SAME main; T4 Speaker + Angel = 5, exact. Before the breakpoint the gate was read at plan start and the Angel was unfindable at --depth 5 --budget-ms 0 (logs/martyr-lifegain/split-rootcause.md). Control: martyr_bp_speaker_martyr_same_main_off.json.",
+  "expect_log_sequence": [
+    "T3 MAIN_2 CAST_SPELL Martyr of Sands",
+    "T3 MAIN_2 ABILITY Speaker of the Heavens"
+  ],
+  "expect_win_turn": 4
+}

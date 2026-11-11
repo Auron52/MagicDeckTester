@@ -1,0 +1,41 @@
+{
+  "deck": "decks/Martyr Lifegain/Martyr Lifegain.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "active_life": 24,
+  "opponent_life": 8,
+  "library_filler": "Emrakul, the Aeons Torn",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 200,
+  "max_turns": 5,
+  "battlefield": [
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Speaker of the Heavens",
+      "sick": false
+    },
+    {
+      "name": "Umezawa's Jitte",
+      "equips": "Speaker of the Heavens",
+      "charge_counters": 0
+    }
+  ],
+  "hand": [],
+  "_comment": "MTG_MARTYR_SPEAKER_M2_JITTE + MTG_BP_SPEAKER_GATE: 'attack, gain 2 in main 2, tap Speaker'. T4: the Jitte'd Speaker attacks (24 -> 25 life, opponent 8 -> 7, two charge counters). Speaker is below its gate (27) but the counters reach it, so the narrow post-combat main opens with Jitte's gain mode on its menu: gain 2 -> 27, Speaker's activation is a new key, the breakpoint taps Speaker for the Angel. T5: Speaker 1 + 2 (the last counter) + Angel 4 = 7, exact. Without the Angel T5 reaches 5 at most. Controls: _off (MTG_MARTYR_SPEAKER_M2_JITTE=0, no main 2) and _nobp (MTG_BP_SPEAKER_GATE=0, the gain lands but no Angel).",
+  "expect_log_sequence": [
+    "T4 MAIN_2 ABILITY Umezawa's Jitte",
+    "T4 MAIN_2 ABILITY Speaker of the Heavens"
+  ],
+  "expect_win_turn": 5
+}

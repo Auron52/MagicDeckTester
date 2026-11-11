@@ -1,0 +1,36 @@
+{
+  "deck": "decks/Martyr Lifegain/Martyr Lifegain.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "active_life": 20,
+  "opponent_life": 20,
+  "library_filler": "Emrakul, the Aeons Torn",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 50,
+  "max_turns": 4,
+  "battlefield": [
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Abiding Grace"
+    },
+    {
+      "name": "Curious Farm Animals",
+      "sick": false
+    }
+  ],
+  "hand": [],
+  "validate_line": "sacout=Curious Farm Animals",
+  "expect_verdict": "legal_not_enumerated",
+  "env": {
+    "MTG_MARTYR_PRUNE_FARM_AT30": "0"
+  },
+  "_comment": "Control for martyr_prune_farm_below30_offered: MTG_MARTYR_PRUNE_FARM_AT30=0 restores the 2026-11-10 prune at every life total (20 here)."
+}
