@@ -237,3 +237,112 @@ by the X ruling below.
 - Neverwinter Hydra: *"For Neverwinter I would rather not have it figuring out how to game X. Trying the
   maximum is a good way to minimize this."* -> Neverwinter casts at maximum affordable X so the search
   cannot pick X against the known dice results.
+
+## P2/P3: max X adopted; the budget-vs-wall outliers (2026-11-11)
+
+**Max X ADOPTED, default ON (f3e68c6fa).** USER 2026-11-11: *"Max x sounds good. Honestly, almost anything
+that measures better and is cheaper is a good option."* The ruling answers P1's open decision 1 (-0.0083 +/-
+0.0019 turns, 0.80x ms, 0.63x units over 2400 paired games; the one slower game, gi 358, recovers at d5 b0).
+`EnvOn("MTG_HYDRAS_MAX_X", true)`; `=0` gives back the full X range. The heurarm slot, the comments and
+test_x_hydras.cpp now name the ruling. The unit test checks both the default and the `=0` slot.
+
+**The problem.** At d5 b20, the slow Hydras games ran at 1.3-3.4 ms per unit, against 0.087 for a typical
+game. Units did not charge the work that took the time.
+
+**Root cause.** Gargos (`reduces_spell_subtype` Hydra, 4) sets `block` in the selection-exact odometer gate.
+So every selection that held him passed the gate. The flat gate then rejected them, and the ef rescue walk
+ran on every one. That walk is `SubsetPayableSequential`: a GameState copy plus a real payment per cast.
+- gi 1782: 2.39M walks, all but 4 false, about 74 G cycles.
+- Units charged none of that work: 26.6M odometer visits and 9.1M payments came to 70k units.
+
+A second leak survived the reducer fix. gi 1979 still walked 10.9M times, all false.
+`LandTapCrossBoundCredit` gave a bonus across all candidates, which admitted Gargos + Nature's Lore / Search /
+Three Visits selections. The bonus came from Vernal Bloom / Nissa / Gauntlet in hand, even when they were not
+selected.
+
+**The commits.**
+- e1220eb61: payment builds the Islandized-land face on demand (`unique_ptr`). It used to be an empty
+  `std::optional<CardDefinition>`, which GCC zero-filled at about 10.8 KB per source per pip; that memset was
+  7.5-14% of the outliers' time. Byte-identical: 11 games, digests and units equal. About 3-5% wall.
+- 09268788b: `MTG_SEL_GATE_EXACT`, default ON, heurarm slot `SEL_GATE_EXACT`. `SelGateExactRefuses` in
+  TurnSolver.cpp runs at the EnumeratePlans odometer's two emission sites. It changes two terms:
+  1. a generic same-turn reducer's discount is bounded at min(generic, the selected reducers' steps) per
+     cast, instead of passing every selection outright;
+  2. the land-tap x land-put cross term counts only the SELECTED bonus sources.
+
+  It is SOUND: `MTG_SEL_GATE_EXACT_VERIFY=1` refused 23.9M (gi 1782), 26.9M (gi 1979) and 75.7M (gi 25)
+  selections with 0 VIOLATIONS. It moves play only through the work-priced decision ceilings, which now trip
+  later.
+
+**Outlier numbers (P2, 11 games, d5 b20; the digests were identical in all three arms: the pre-P2 binary, gate
+off, gate on).** ms per unit, base -> gate on:
+
+| gi | base | gate on |
+|---|---|---|
+| 1774 | 1.80 | 0.62 |
+| 1782 | 1.33 | 0.63 |
+| 2062 | 1.25 | 0.46 |
+| 1979 | 1.53 | 1.01 |
+| 1034 | 0.50 | 0.27 |
+| 132 | 0.71 | 0.36 |
+| 313 | 0.18 | 0.10 |
+| 25 | 0.36 | 0.21 |
+| 252 | 0.77 | 0.62 |
+| 28 (typical) | 0.052 | 0.048 |
+
+- Total wall: 1559 s -> 1057 s.
+- gi 1782: odometer visits 26.6M -> 3.5M, payments 9.1M -> 4.4M.
+- gi 1774: odometer visits 28.8M -> 2.8M, payments 42.3M -> 9.2M.
+- The gate-off slot moved units (not digests) on gi 28 / 313 by +50. Adding a heurarm slot changes the
+  BP-key arm-hash constant.
+
+**Held-out A/B (P3).** One pooled batch on the f3e68c6fa binary (Release, MTG_PGO not used, 32 threads):
+- 3 arms x 2400 games, arms innermost in 50-game chunks; seed = 7007 + off, game_index = off.
+- d5 b20, profile attached. Max X is ON in every arm (the default).
+- The heartbeat was 32/32 at 10 min. The run took about 15 min.
+- Unwon games score 9. Deltas are paired, arm minus base. Scripts: logs/hydras-p3/run_ab.sh and
+  logs/hydras-p2/mkab.py. Summary: logs/hydras-p3/ab_summary.txt.
+
+| arm | avg | wins/2400 | paired delta vs base (se) | slower / faster | ms/game (x base) | units x base |
+|---|---|---|---|---|---|---|
+| base (gate OFF) | 5.5204 | 2393 | - | - | 4436 (1) | 1 |
+| gate (ON, shipped) | 5.5204 | 2392 | +0.0000 (0.0006) | 1 / 1 | 3450 (0.778) | 1.022 |
+| gatechg (gate + MTG_ENUM_CHARGE w4) | 5.5263 | 2393 | +0.0058 (0.0016) | 14 / 0 | 2107 (0.475) | 1.779 * |
+
+\* gatechg's units include the charged enumeration work, so they are not comparable with the other two arms.
+Its ms figure is the real cost.
+- The base arm reproduces P1's MAX_X ON arm exactly (5.5204). The cost fell from P1's 4742 ms/game to 4436,
+  which is e1220eb61.
+- Games over 30 s: 50 in base, 38 in gate, 20 in gatechg. The slowest game in base and gate is now gi 799
+  (seed 7806): 724 s in base, 673 s in gate. The slowest in gatechg is 212 s.
+- Gate's slower game is gi 1979 (seed 8986): unwon in the gate arm, T8 in base. Gate's faster game is gi 1782
+  (T5 v T6).
+- **Recovery of gi 1979 at `--depth 8 --budget-ms 0`, profile attached:** gate wins on T7, which is earlier
+  than base's T8 at b20. The base arm at d8 b0 plays the identical game (same digest c8b8efa08c9df3a6, same
+  249,844 units). So the loss is the d5 b20 budget, not a deleted line. The gate meets the adoption bar on
+  this sample: net 0.0000, and every slower game recovers.
+  The single-game b20 repros match the batch. Base wins on T8 at 152,646 units; gate is unwon at 333,353
+  units. Those are the A/B's units, so the batch result is a faithful repro.
+  (logs/hydras-p3/rec_manifest.json, rec.out, rec_wins.txt.)
+
+**Not addressed.**
+- **Breakpoint-continuation re-enumeration.** In gi 1782, 63% of the odometer visits (16.7M of 26.6M) are
+  whole re-enumerations of the same board. They happen inside BP continuation derivations under different
+  BP keys: 1262 of 12563 EnumeratePlans calls.
+- The pay census still shows about 72% content-repeat walks across enumerations (gi 1979).
+
+The remaining tail is these two plus genuine sequencing walks: gi 1979 still runs about 1.0 ms/unit, gi 25
+about 0.21, and gi 799 is the new worst game. A collapse or a cache of the per-board enumeration across BP
+keys is the next lever. It is a sound identity fold if the BP key does not change the plan list.
+
+**OPEN USER DECISION: `MTG_ENUM_CHARGE` for Hydras.** It charges enumeration work to the budget. It is
+default OFF, and turning it on is the USER's decision. There is no per-deck opt-in hook yet. The gatechg arm
+measures it at w4:
+- cost: 0.475x ms per game (2107 v 4436), and the 30 s tail falls from 50 games to 20;
+- quality: +0.0058 +/- 0.0016 turns, 14 slower and 0 faster;
+- **all 14 slower games recover at d8 b0** to base's turn: gi 252, 278, 841, 1419, 1614, 1748, 1857, 2062,
+  2068, 2210 and 2320 on T5; gi 559, 694 and 1811 on T6.
+
+So the loss is pure re-pricing (the charge is inert at unlimited budget). But on Hydras' own aggregate it is
++0.0058, and the CLAUDE.md bar is net <= 0. It does not meet the bar as it stands. A smaller weight, or a
+charge applied only past the decision ceiling, is the obvious next measurement if the USER wants it.
