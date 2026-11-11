@@ -807,6 +807,10 @@ lhc_regression_d5_s3003	2751
 lhc_smoke_d0_s1001	1
 lhc_smoke_d3_s1001	3487
 lhc_smoke_d5_s1001	2051
+martyr2hg_smoke_d5_s1001	177228
+martyr_smoke_d0_s1001	1
+martyr_smoke_d3_s1001	66355
+martyr_smoke_d5_s1001	107968
 melira2hg_smoke_d3_s1001	30735
 melira2hg_smoke_d5_s1001	139423
 melira_overnight_d0_s10010	1

@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 0d7ff66f2  date 2026-11-11
+# Regression ground truth -- commit c9f10c44e  date 2026-11-11
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-10): Full 2026-11-10 rebaseline: 120/588 keys changed; searched overlap 64 faster, 6 slower, net 60 scored turns faster, no searched win became unwon. Five slowdowns recover at 4x budget; Modern RW Burn 2HG s7007 gi58 recovers at unlimited budget. 583 same-score searched line changes reviewed by mechanical grouping and samples. Full oracle: 588/588 matching fingerprints, 0 nonconv, 54 off-by-one fd-diverge, 3 severe flags from 2 distinct preexisting Treasure Hunt seeds (5216, 8468); legacy per-turn search wins T6, current committed-line result is unwon/T7, and disabling batch payment does not fix it. Prior Angels, Angels2HG, and Bruna small searched slowdowns remain follow-ups.
 # accepted-with-regressions (regression, 2026-11-11): jumbo d3/d5 s2002 gi28:6->7 draws diverge T4; recovers T6 at d8 b0 both arms
@@ -197,6 +197,10 @@ alchemist2hg_smoke_d5_s1001=5.1600/6211554d6914a8b9
 elementals_smoke_d0_s1001=5.6110/85ecb7b43dc61e1f
 elementals_smoke_d3_s1001=4.4600/15877bad8bb35b68
 elementals_smoke_d5_s1001=4.3360/616b849211c6c5a1
+martyr_smoke_d0_s1001=6.1300/b9de6173ff834adc
+martyr_smoke_d3_s1001=5.2200/a4bbe77811f7c09a
+martyr_smoke_d5_s1001=5.2800/0e36901d8d661305
+martyr2hg_smoke_d5_s1001=5.5200/c3034fd418086db2
 
 # --- regression ---
 hydras_regression_d0_s2002=6.0320/773d5978c83fd6c9
