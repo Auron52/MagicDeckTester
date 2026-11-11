@@ -5,12 +5,13 @@
  },
  "deck": "hinata2",
  "frozen": "ae41aaad0b9bf6051bd86c5baa9373aec10f81cb",
- "heartbeat": "2026-11-11T15:37:49Z",
+ "head": "4a5fba5db48a0fe1ec506e47606c19325b4eb582",
+ "heartbeat": "2026-11-11T15:43:01Z",
  "host": "8854e545ddab",
  "resumed": "2026-11-11T15:37:49Z",
  "run_id": "hinata2-MagicDeckTester2-76d2cc-20261025T010853",
  "score": 1.089,
- "stage": "mulligan",
+ "stage": "valueleaf",
  "stages": [
   "mulligan",
   "valueleaf"
