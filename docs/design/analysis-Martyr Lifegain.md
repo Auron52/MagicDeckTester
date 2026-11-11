@@ -115,36 +115,25 @@ a provider-stage question for this deck (discard buckets are USER-owned, 5i).
   2. Even from the human's own T5 board the search does not find "Jitte: gain 2 life x2 -> Serra 6/6 -> 13
      exactly lethal" (budget 0 -> T6). Under investigation.
 
-## Checkpoint (2026-11-10 ~21:00 UTC) -- RESUME HERE
+## Checkpoint (2026-11-11 ~06:00 UTC) -- RESUME HERE
 
-Pushed: through d6b1c6b12 (Lurrus 46467b0e5, own provider 6bbc57216); CI green on 42843623386 (both OSes).
-UNCOMMITTED in the primary checkout (orchestrator's, keep): `src/ai/DecisionProviders.{h,cpp}` + `src/ai/HeuristicArm.h`
-(MartyrLifegainProvider opens Speaker's NARROW second main, shared body with ColossusHammer -- SpeakerSecondMainLive /
-SpeakerSecondMainAdmits; MTG_SPEAKER_M2 default ON, PROVISIONAL); `src/main.cpp` (sac_tutor note for "(put in HAND)");
-`test/regression_cases.sh` (martyr + martyr2hg rows, all three tiers + backstop 30201/30301); `test/suite_cost.json`
-(martyr entry SCALED to hinata's committed number -- hinata's own entry deliberately NOT updated: this box inflates ms
-~9x); `decks/Martyr Lifegain/Martyr Lifegain.profile.json` (Stage 4 profile, untracked). User's own edits
-`.vscode/settings.json`, `test/ref_bench.json`: never touch.
-Box: 12-thread i5-1235U laptop, 10 GB (not the 32-CPU box) -- use --threads 12.
+Local, NOT pushed (rebased onto origin b827b1fcc): 79123b78a ledger, 6f422bb8b Speaker narrow M2 + suite rows +
+profile + cost entry, b783672c9 Jitte gain lever (MTG_MARTYR_JITTE_GAIN default OFF) + rulings. Pre-rebase full smoke
+on 0a80480da: 183/183 unchanged, play-changed=0, 4 NEW martyr keys (accept dropped: origin moved, re-measure).
 
-Speaker M2 A/B (held-out, one pooled batch, `build/scratch/martyr/m2ab/`): std 600 games d5 b20 seed 71001:
-5.5400 -> 5.4083 (81 faster / 2 slower; both slower, gi174/gi417, recover to T5 at b200 and b0); 2HG 200 games
-seed 72001: 5.7300 -> 5.6200 (22 faster / 0 slower). Kept ON (provisional) -> REPORT to the USER.
+RUNNING (primary): `logs/martyr-lifegain/rb2-*` chain = rebuild -> mtg-test -> full smoke; marker rb2-smoke.DONE.
+Then: inspect -> `regression.sh --smoke --accept` (back up GT first) -> check_gt_logs -> commit GT -> push -> watch CI.
+RUNNING: 5c2 `leaf_tiebreak_check.py` (24,000 games; ~3.7k done at 02:37 UTC; slow on the shared 12-thread box)
+-> logs/martyr-lifegain/tiebreak.log.
+RUNNING (agent, worktree .claude/worktrees/martyr-split, branch martyr-split, WIP 4825e1092): Kami/Farm prune
+(MTG_MARTYR_PRUNE_SACS, ON, USER-approved), main split (MTG_MARTYR_MAIN_SPLIT, OFF, experiment), Ranger-Captain
+sub-flag, Martyr-loop route (MTG_REVEAL_CONT_PRECAST, ON: two Martyrs cast-sac-cast-sac was unfindable at d8/b0
+because a continuation's sac always trailed its casts). 7-arm pooled A/B -> logs/martyr-lifegain/split-ab.md.
+Handoff: logs/martyr-lifegain/split-handoff.md.
 
-RUNNING: (1) Opus agent root-causing the gi14 Jitte miss (from the human's T5 board, "Jitte gain 2 life x2 -> Serra
-6/6 -> 13 exactly lethal" is unfindable at budget 0); handoff would be `logs/martyr-lifegain/jitte-miss-handoff.md`.
-It may rebuild build/Release with temporary prints -- after it finishes, verify `git diff` has no instrumentation and
-REBUILD clean. (2) `leaf_tiebreak_check.py` (5c2) -> `logs/martyr-lifegain/tiebreak.log`.
-Smoke tier for martyr ran once on the pre-M2 binary (not accepted); tier chain stopped (play changed).
-
-NEXT: act on the Jitte finding (fix if a sound searched option/breakpoint; scenario test) -> rebuild -> unit tests ->
-full smoke (play-changed must be ColossusHammer-neutral: shared body) -> commit src + rows -> run
-`logs/martyr-lifegain/tiers.sh` (smoke, regression, overnight for --deck=martyr,martyr2hg) -> inspect -> accept each
-tier with the SAME --deck -> `python3 test/check_gt_logs.py` -> commit GT + push + watch CI. Then 5a nonconv/fd-diverge,
-5b multi-depth, 5h `audit_viewer_decisions.py`, 5i discard bucket PROPOSAL (inherited Kitty buckets today),
-`verify_deck.py --write-ledger`, Stage 6 report (repeat USER questions: second main [Speaker narrow M2 kept ON; wider
-attack-then-sac main 2]; Innocence cast order; discard buckets; provisional deferrals: Companion inert, Hawk full
-count, end-step Clue, Kami/Farm Animals instant speed, {X} not Lurrus-castable). CronDelete 7869914f at the end.
+NEXT after the A/B: report to the USER (split, Captain, Jitte gain); land prune + loop route if they clear the bar;
+then the regression + overnight tiers for martyr (accept with --deck=martyr,martyr2hg), 5a/5b/5h/5i,
+verify_deck.py --write-ledger, Stage 6 report. Cron 7869914f (session-only status timer) stays until the end.
 
 ## USER rulings (2026-11-10, verbatim)
 
