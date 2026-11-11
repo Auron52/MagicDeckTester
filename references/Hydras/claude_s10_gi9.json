@@ -1,0 +1,456 @@
+{
+  "seed": 10, "game_index": 9, "win_turn": 6, "won": true,
+  "mulligan": { "count": 1, "bottom": [50] }, "karoo_float": 1, "fetch_activation": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1, "spell_copy_id": 1,
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 1, "name": "Forest" }, { "num": 42, "name": "Primordial Hydra" }, { "num": 29, "name": "Kalonian Hydra" }, { "num": 57, "name": "Voracious Hydra" }, { "num": 30, "name": "Kalonian Hydra" }, { "num": 2, "name": "Forest" }, { "num": 3, "name": "Forest" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": true,
+  "to_bottom": 1,
+  "hand": [{ "num": 16, "name": "Forest" }, { "num": 58, "name": "Voracious Hydra" }, { "num": 46, "name": "Search for Tomorrow" }, { "num": 24, "name": "Gargos, Vicious Watcher" }, { "num": 47, "name": "Search for Tomorrow" }, { "num": 51, "name": "Three Visits" }, { "num": 50, "name": "Steelbane Hydra" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 6, "decision": {
+  "decision_index": 2,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 1,
+  "hand": [{ "num": 16, "name": "Forest", "win_optimal": true }, { "num": 58, "name": "Voracious Hydra", "win_optimal": true }, { "num": 46, "name": "Search for Tomorrow", "win_optimal": true }, { "num": 24, "name": "Gargos, Vicious Watcher", "win_optimal": true }, { "num": 47, "name": "Search for Tomorrow", "win_optimal": true }, { "num": 51, "name": "Three Visits", "win_optimal": true }, { "num": 50, "name": "Steelbane Hydra", "win_optimal": true }],
+  "ai_choice": { "index": 3, "num": 24, "name": "Gargos, Vicious Watcher" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 1)"
+}
+},
+    { "chosen": 1, "cast_order": ["**", "land=Forest", "suspend=Search for Tomorrow"], "decision": {
+  "decision_index": 3,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 16, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 24, "name": "Gargos, Vicious Watcher", "cost": "{3}{G}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 46, "name": "Search for Tomorrow", "cost": "{2}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 47, "name": "Search for Tomorrow", "cost": "{2}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 51, "name": "Three Visits", "cost": "{1}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 58, "name": "Voracious Hydra", "cost": "{X}{G}{G}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Forest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=Forest; cast: Search for Tomorrow (suspend)", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Search for Tomorrow"], "actions": [{ "card": "Search for Tomorrow", "verb": "suspend" }] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 4,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 1, "kind": "suspend", "text": "⌛ Search for Tomorrow -- suspended (arrives T3)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 4, "num": 16, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 24, "name": "Gargos, Vicious Watcher", "cost": "{3}{G}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Search for Tomorrow", "cost": "{2}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 51, "name": "Three Visits", "cost": "{1}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 58, "name": "Voracious Hydra", "cost": "{X}{G}{G}", "mv": 2, "kind": "permanent", "is_creature": true }], "exile": [{ "name": "Search for Tomorrow", "kind": "suspend", "reason": "suspend", "time_counters": 2, "arrive_turn": 3 }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 4, "num": 16, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 24, "name": "Gargos, Vicious Watcher", "cost": "{3}{G}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Search for Tomorrow", "cost": "{2}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 51, "name": "Three Visits", "cost": "{1}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 58, "name": "Voracious Hydra", "cost": "{X}{G}{G}", "mv": 2, "kind": "permanent", "is_creature": true }], "exile": [{ "name": "Search for Tomorrow", "kind": "suspend", "reason": "suspend", "time_counters": 2, "arrive_turn": 3 }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Forest", "cast=Three Visits"], "decision": {
+  "decision_index": 6,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 2, "card": "Forest" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 4, "num": 16, "is_land": true, "taps": "G" }], "vial_counters": [], "hand": [{ "num": 19, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 24, "name": "Gargos, Vicious Watcher", "cost": "{3}{G}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Search for Tomorrow", "cost": "{2}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 51, "name": "Three Visits", "cost": "{1}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 58, "name": "Voracious Hydra", "cost": "{X}{G}{G}", "mv": 2, "kind": "permanent", "is_creature": true }], "exile": [{ "name": "Search for Tomorrow", "kind": "suspend", "reason": "suspend", "time_counters": 1, "arrive_turn": 3 }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Forest; cast: Three Visits", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Three Visits"], "actions": [{ "card": "Three Visits" }] },
+    { "index": 1, "summary": "land=Forest; cast: Search for Tomorrow (suspend), Three Visits", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Search for Tomorrow", "Three Visits"], "actions": [{ "card": "Search for Tomorrow", "verb": "suspend" }, { "card": "Three Visits" }] },
+    { "index": 2, "summary": "land=Forest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Forest; cast: Voracious Hydra (X=0)", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Voracious Hydra"], "actions": [{ "card": "Voracious Hydra" }] },
+    { "index": 4, "summary": "land=Forest; cast: Search for Tomorrow (suspend)", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Search for Tomorrow"], "actions": [{ "card": "Search for Tomorrow", "verb": "suspend" }] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 6, "summary": "land=none; cast: Search for Tomorrow (suspend)", "declared_order_payability": "not_verified", "land": null, "casts": ["Search for Tomorrow"], "actions": [{ "card": "Search for Tomorrow", "verb": "suspend" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 7,
+  "type": "tutor_etb",
+  "source": "Three Visits -- land onto the battlefield",
+  "turn": 2,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 4, "num": 16, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 6, "num": 19, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 24, "name": "Gargos, Vicious Watcher", "cost": "{3}{G}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Search for Tomorrow", "cost": "{2}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 58, "name": "Voracious Hydra", "cost": "{X}{G}{G}", "mv": 2, "kind": "permanent", "is_creature": true }], "exile": [{ "name": "Search for Tomorrow", "kind": "suspend", "reason": "suspend", "time_counters": 1, "arrive_turn": 3 }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "heuristic_default": 0,
+  "candidates": [{ "index": 0, "name": "Forest" }],
+  "note": "reply a candidate index to search that card up, or -1 to decline the optional search. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 2, "kind": "tutor", "text": "🔎 Three Visits: Forest onto the battlefield" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 4, "num": 16, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 6, "num": 19, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 7, "num": 6, "is_land": true, "taps": "G" }], "vial_counters": [], "hand": [{ "num": 24, "name": "Gargos, Vicious Watcher", "cost": "{3}{G}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Search for Tomorrow", "cost": "{2}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 58, "name": "Voracious Hydra", "cost": "{X}{G}{G}", "mv": 2, "kind": "permanent", "is_creature": true }], "exile": [{ "name": "Search for Tomorrow", "kind": "suspend", "reason": "suspend", "time_counters": 1, "arrive_turn": 3 }], "graveyard": ["Three Visits"], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Search for Tomorrow (suspend)", "declared_order_payability": "not_verified", "land": null, "casts": ["Search for Tomorrow"], "actions": [{ "card": "Search for Tomorrow", "verb": "suspend" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 4, "num": 16, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 6, "num": 19, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 7, "num": 6, "is_land": true, "taps": "G" }], "vial_counters": [], "hand": [{ "num": 24, "name": "Gargos, Vicious Watcher", "cost": "{3}{G}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Search for Tomorrow", "cost": "{2}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 58, "name": "Voracious Hydra", "cost": "{X}{G}{G}", "mv": 2, "kind": "permanent", "is_creature": true }], "exile": [{ "name": "Search for Tomorrow", "kind": "suspend", "reason": "suspend", "time_counters": 1, "arrive_turn": 3 }], "graveyard": ["Three Visits"], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Search for Tomorrow (suspend)", "declared_order_payability": "not_verified", "land": null, "casts": ["Search for Tomorrow"], "actions": [{ "card": "Search for Tomorrow", "verb": "suspend" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 10,
+  "type": "tutor_etb",
+  "source": "Search for Tomorrow -- basic land onto the battlefield",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 4, "num": 16, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 6, "num": 19, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 7, "num": 6, "is_land": true, "taps": "G" }], "vial_counters": [], "hand": [{ "num": 24, "name": "Gargos, Vicious Watcher", "cost": "{3}{G}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Search for Tomorrow", "cost": "{2}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 58, "name": "Voracious Hydra", "cost": "{X}{G}{G}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": ["Three Visits"], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "heuristic_default": 0,
+  "candidates": [{ "index": 0, "name": "Forest" }],
+  "note": "reply a candidate index to search that card up, or -1 to decline the optional search. Default = the AI's pick."
+}
+},
+    { "chosen": 12, "cast_order": ["**", "suspend=Search for Tomorrow", "cast=Three Visits"], "decision": {
+  "decision_index": 11,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 3, "card": "Three Visits" }],
+  "events": [{ "turn": 3, "kind": "suspend", "text": "⌛ Search for Tomorrow -- cast off suspend" }, { "turn": 3, "kind": "tutor", "text": "🔎 Search for Tomorrow: Forest onto the battlefield" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 4, "num": 16, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 6, "num": 19, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 7, "num": 6, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 9, "num": 4, "is_land": true, "taps": "G" }], "vial_counters": [], "hand": [{ "num": 24, "name": "Gargos, Vicious Watcher", "cost": "{3}{G}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Search for Tomorrow", "cost": "{2}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 52, "name": "Three Visits", "cost": "{1}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 58, "name": "Voracious Hydra", "cost": "{X}{G}{G}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": ["Search for Tomorrow", "Three Visits"], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Voracious Hydra (X=2)", "declared_order_payability": "not_verified", "land": null, "casts": ["Voracious Hydra"], "actions": [{ "card": "Voracious Hydra", "x": 2 }] },
+    { "index": 1, "summary": "land=none; cast: Three Visits, Voracious Hydra (X=1)", "declared_order_payability": "not_verified", "land": null, "casts": ["Three Visits", "Voracious Hydra"], "cast_order_canonical": ["Three Visits", "Voracious Hydra"], "actions": [{ "card": "Three Visits" }, { "card": "Voracious Hydra", "x": 1 }] },
+    { "index": 2, "summary": "land=none; cast: Voracious Hydra (X=1), Three Visits", "declared_order_payability": "known_drops", "land": null, "drops": ["Three Visits"], "casts": ["Voracious Hydra", "Three Visits"], "cast_order_canonical": ["Voracious Hydra", "Three Visits"], "actions": [{ "card": "Voracious Hydra", "x": 1 }, { "card": "Three Visits" }] },
+    { "index": 3, "summary": "land=none; cast: Voracious Hydra (X=1)", "declared_order_payability": "not_verified", "land": null, "casts": ["Voracious Hydra"], "actions": [{ "card": "Voracious Hydra", "x": 1 }] },
+    { "index": 4, "summary": "land=none; cast: Voracious Hydra (X=1), Search for Tomorrow (suspend)", "declared_order_payability": "not_verified", "land": null, "casts": ["Voracious Hydra", "Search for Tomorrow"], "actions": [{ "card": "Voracious Hydra", "x": 1 }, { "card": "Search for Tomorrow", "verb": "suspend" }] },
+    { "index": 5, "summary": "land=none; cast: Search for Tomorrow, Three Visits", "declared_order_payability": "not_verified", "land": null, "casts": ["Search for Tomorrow", "Three Visits"], "cast_order_canonical": ["Search for Tomorrow", "Three Visits"], "actions": [{ "card": "Search for Tomorrow" }, { "card": "Three Visits" }] },
+    { "index": 6, "summary": "land=none; cast: Search for Tomorrow", "declared_order_payability": "not_verified", "land": null, "casts": ["Search for Tomorrow"], "actions": [{ "card": "Search for Tomorrow" }] },
+    { "index": 7, "summary": "land=none; cast: Search for Tomorrow, Voracious Hydra (X=0)", "declared_order_payability": "not_verified", "land": null, "casts": ["Search for Tomorrow", "Voracious Hydra"], "cast_order_canonical": ["Search for Tomorrow", "Voracious Hydra"], "actions": [{ "card": "Search for Tomorrow" }, { "card": "Voracious Hydra" }] },
+    { "index": 8, "summary": "land=none; cast: Voracious Hydra (X=0), Search for Tomorrow", "declared_order_payability": "known_drops", "land": null, "drops": ["Search for Tomorrow"], "casts": ["Voracious Hydra", "Search for Tomorrow"], "cast_order_canonical": ["Voracious Hydra", "Search for Tomorrow"], "actions": [{ "card": "Voracious Hydra" }, { "card": "Search for Tomorrow" }] },
+    { "index": 9, "summary": "land=none; cast: Three Visits", "declared_order_payability": "not_verified", "land": null, "casts": ["Three Visits"], "actions": [{ "card": "Three Visits" }] },
+    { "index": 10, "summary": "land=none; cast: Three Visits, Voracious Hydra (X=0)", "declared_order_payability": "not_verified", "land": null, "casts": ["Three Visits", "Voracious Hydra"], "cast_order_canonical": ["Three Visits", "Voracious Hydra"], "actions": [{ "card": "Three Visits" }, { "card": "Voracious Hydra" }] },
+    { "index": 11, "summary": "land=none; cast: Voracious Hydra (X=0), Three Visits", "declared_order_payability": "not_verified", "land": null, "casts": ["Voracious Hydra", "Three Visits"], "cast_order_canonical": ["Voracious Hydra", "Three Visits"], "actions": [{ "card": "Voracious Hydra" }, { "card": "Three Visits" }] },
+    { "index": 12, "summary": "land=none; cast: Search for Tomorrow (suspend), Three Visits", "declared_order_payability": "not_verified", "land": null, "casts": ["Search for Tomorrow", "Three Visits"], "actions": [{ "card": "Search for Tomorrow", "verb": "suspend" }, { "card": "Three Visits" }] },
+    { "index": 13, "summary": "land=none; cast: Three Visits, Voracious Hydra (X=0), Search for Tomorrow (suspend)", "declared_order_payability": "not_verified", "land": null, "casts": ["Three Visits", "Voracious Hydra", "Search for Tomorrow"], "cast_order_canonical": ["Three Visits", "Voracious Hydra"], "actions": [{ "card": "Three Visits" }, { "card": "Voracious Hydra" }, { "card": "Search for Tomorrow", "verb": "suspend" }] },
+    { "index": 14, "summary": "land=none; cast: Voracious Hydra (X=0), Three Visits, Search for Tomorrow (suspend)", "declared_order_payability": "known_drops", "land": null, "drops": ["Three Visits"], "casts": ["Voracious Hydra", "Three Visits", "Search for Tomorrow"], "cast_order_canonical": ["Voracious Hydra", "Three Visits"], "actions": [{ "card": "Voracious Hydra" }, { "card": "Three Visits" }, { "card": "Search for Tomorrow", "verb": "suspend" }] },
+    { "index": 15, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 16, "summary": "land=none; cast: Voracious Hydra (X=0)", "declared_order_payability": "not_verified", "land": null, "casts": ["Voracious Hydra"], "actions": [{ "card": "Voracious Hydra" }] },
+    { "index": 17, "summary": "land=none; cast: Search for Tomorrow (suspend)", "declared_order_payability": "not_verified", "land": null, "casts": ["Search for Tomorrow"], "actions": [{ "card": "Search for Tomorrow", "verb": "suspend" }] },
+    { "index": 18, "summary": "land=none; cast: Voracious Hydra (X=0), Search for Tomorrow (suspend)", "declared_order_payability": "not_verified", "land": null, "casts": ["Voracious Hydra", "Search for Tomorrow"], "actions": [{ "card": "Voracious Hydra" }, { "card": "Search for Tomorrow", "verb": "suspend" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 12,
+  "type": "tutor_etb",
+  "source": "Three Visits -- land onto the battlefield",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 4, "num": 16, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 6, "num": 19, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 7, "num": 6, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 9, "num": 4, "is_land": true, "taps": "G" }], "vial_counters": [], "hand": [{ "num": 24, "name": "Gargos, Vicious Watcher", "cost": "{3}{G}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Voracious Hydra", "cost": "{X}{G}{G}", "mv": 2, "kind": "permanent", "is_creature": true }], "exile": [{ "name": "Search for Tomorrow", "kind": "suspend", "reason": "suspend", "time_counters": 2, "arrive_turn": 5 }], "graveyard": ["Search for Tomorrow", "Three Visits"], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "heuristic_default": 0,
+  "candidates": [{ "index": 0, "name": "Forest" }],
+  "note": "reply a candidate index to search that card up, or -1 to decline the optional search. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 3, "kind": "suspend", "text": "⌛ Search for Tomorrow -- suspended (arrives T5)" }, { "turn": 3, "kind": "tutor", "text": "🔎 Three Visits: Forest onto the battlefield" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 4, "num": 16, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 6, "num": 19, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 7, "num": 6, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 9, "num": 4, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 10, "num": 13, "is_land": true, "taps": "G" }], "vial_counters": [], "hand": [{ "num": 24, "name": "Gargos, Vicious Watcher", "cost": "{3}{G}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Voracious Hydra", "cost": "{X}{G}{G}", "mv": 2, "kind": "permanent", "is_creature": true }], "exile": [{ "name": "Search for Tomorrow", "kind": "suspend", "reason": "suspend", "time_counters": 2, "arrive_turn": 5 }], "graveyard": ["Search for Tomorrow", "Three Visits", "Three Visits"], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=none; cast: Voracious Hydra (X=0)", "declared_order_payability": "not_verified", "land": null, "casts": ["Voracious Hydra"], "actions": [{ "card": "Voracious Hydra" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 14,
+  "main_ordinal": 6,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 4, "num": 16, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 6, "num": 19, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 7, "num": 6, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 9, "num": 4, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 10, "num": 13, "is_land": true, "taps": "G" }], "vial_counters": [], "hand": [{ "num": 24, "name": "Gargos, Vicious Watcher", "cost": "{3}{G}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Voracious Hydra", "cost": "{X}{G}{G}", "mv": 2, "kind": "permanent", "is_creature": true }], "exile": [{ "name": "Search for Tomorrow", "kind": "suspend", "reason": "suspend", "time_counters": 2, "arrive_turn": 5 }], "graveyard": ["Search for Tomorrow", "Three Visits", "Three Visits"], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=none; cast: Voracious Hydra (X=0)", "declared_order_payability": "not_verified", "land": null, "casts": ["Voracious Hydra"], "actions": [{ "card": "Voracious Hydra" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 15,
+  "main_ordinal": 7,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 4, "card": "Kalonian Hydra" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 4, "num": 16, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 6, "num": 19, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 7, "num": 6, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 9, "num": 4, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 10, "num": 13, "is_land": true, "taps": "G" }], "vial_counters": [], "hand": [{ "num": 24, "name": "Gargos, Vicious Watcher", "cost": "{3}{G}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Kalonian Hydra", "cost": "{3}{G}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Voracious Hydra", "cost": "{X}{G}{G}", "mv": 2, "kind": "permanent", "is_creature": true }], "exile": [{ "name": "Search for Tomorrow", "kind": "suspend", "reason": "suspend", "time_counters": 1, "arrive_turn": 5 }], "graveyard": ["Search for Tomorrow", "Three Visits", "Three Visits"], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Voracious Hydra (X=3)", "declared_order_payability": "not_verified", "land": null, "casts": ["Voracious Hydra"], "actions": [{ "card": "Voracious Hydra", "x": 3 }] },
+    { "index": 1, "summary": "land=none; cast: Voracious Hydra (X=2)", "declared_order_payability": "not_verified", "land": null, "casts": ["Voracious Hydra"], "actions": [{ "card": "Voracious Hydra", "x": 2 }] },
+    { "index": 2, "summary": "land=none; cast: Kalonian Hydra", "declared_order_payability": "not_verified", "land": null, "casts": ["Kalonian Hydra"], "actions": [{ "card": "Kalonian Hydra" }] },
+    { "index": 3, "summary": "land=none; cast: Voracious Hydra (X=1)", "declared_order_payability": "not_verified", "land": null, "casts": ["Voracious Hydra"], "actions": [{ "card": "Voracious Hydra", "x": 1 }] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=none; cast: Voracious Hydra (X=0)", "declared_order_payability": "not_verified", "land": null, "casts": ["Voracious Hydra"], "actions": [{ "card": "Voracious Hydra" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 16,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 4, "kind": "etb", "text": "Kalonian Hydra enters with 4 +1/+1 counters" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 4, "num": 16, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 6, "num": 19, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 7, "num": 6, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 9, "num": 4, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 10, "num": 13, "tapped": true, "is_land": true }, { "name": "Kalonian Hydra", "idx": 11, "num": 32, "sick": true, "is_land": false, "power": 4, "toughness": 4, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 4 }] }], "vial_counters": [], "hand": [{ "num": 24, "name": "Gargos, Vicious Watcher", "cost": "{3}{G}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Voracious Hydra", "cost": "{X}{G}{G}", "mv": 2, "kind": "permanent", "is_creature": true }], "exile": [{ "name": "Search for Tomorrow", "kind": "suspend", "reason": "suspend", "time_counters": 1, "arrive_turn": 5 }], "graveyard": ["Search for Tomorrow", "Three Visits", "Three Visits"], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 17,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 4, "num": 16, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 6, "num": 19, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 7, "num": 6, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 9, "num": 4, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 10, "num": 13, "tapped": true, "is_land": true }, { "name": "Kalonian Hydra", "idx": 11, "num": 32, "sick": true, "is_land": false, "power": 4, "toughness": 4, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 4 }] }], "vial_counters": [], "hand": [{ "num": 24, "name": "Gargos, Vicious Watcher", "cost": "{3}{G}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Voracious Hydra", "cost": "{X}{G}{G}", "mv": 2, "kind": "permanent", "is_creature": true }], "exile": [{ "name": "Search for Tomorrow", "kind": "suspend", "reason": "suspend", "time_counters": 1, "arrive_turn": 5 }], "graveyard": ["Search for Tomorrow", "Three Visits", "Three Visits"], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 18,
+  "type": "tutor_etb",
+  "source": "Search for Tomorrow -- basic land onto the battlefield",
+  "turn": 5,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 4, "num": 16, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 6, "num": 19, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 7, "num": 6, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 9, "num": 4, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 10, "num": 13, "is_land": true, "taps": "G" }, { "name": "Kalonian Hydra", "idx": 11, "num": 32, "is_land": false, "power": 4, "toughness": 4, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 4 }] }], "vial_counters": [], "hand": [{ "num": 24, "name": "Gargos, Vicious Watcher", "cost": "{3}{G}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Voracious Hydra", "cost": "{X}{G}{G}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": ["Search for Tomorrow", "Three Visits", "Three Visits"], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "heuristic_default": 0,
+  "candidates": [{ "index": 0, "name": "Forest" }],
+  "note": "reply a candidate index to search that card up, or -1 to decline the optional search. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 19,
+  "main_ordinal": 8,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 5, "card": "Kalonian Hydra" }],
+  "events": [{ "turn": 5, "kind": "suspend", "text": "⌛ Search for Tomorrow -- cast off suspend" }, { "turn": 5, "kind": "tutor", "text": "🔎 Search for Tomorrow: Forest onto the battlefield" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 4, "num": 16, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 6, "num": 19, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 7, "num": 6, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 9, "num": 4, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 10, "num": 13, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 12, "num": 12, "is_land": true, "taps": "G" }, { "name": "Kalonian Hydra", "idx": 11, "num": 32, "is_land": false, "power": 4, "toughness": 4, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 4 }] }], "vial_counters": [], "hand": [{ "num": 24, "name": "Gargos, Vicious Watcher", "cost": "{3}{G}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 30, "name": "Kalonian Hydra", "cost": "{3}{G}{G}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Voracious Hydra", "cost": "{X}{G}{G}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": ["Search for Tomorrow", "Search for Tomorrow", "Three Visits", "Three Visits"], "library_size": 46, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Voracious Hydra (X=4)", "declared_order_payability": "not_verified", "land": null, "casts": ["Voracious Hydra"], "actions": [{ "card": "Voracious Hydra", "x": 4 }] },
+    { "index": 1, "summary": "land=none; cast: Gargos, Vicious Watcher", "declared_order_payability": "not_verified", "land": null, "casts": ["Gargos, Vicious Watcher"], "actions": [{ "card": "Gargos, Vicious Watcher" }] },
+    { "index": 2, "summary": "land=none; cast: Voracious Hydra (X=3)", "declared_order_payability": "not_verified", "land": null, "casts": ["Voracious Hydra"], "actions": [{ "card": "Voracious Hydra", "x": 3 }] },
+    { "index": 3, "summary": "land=none; cast: Voracious Hydra (X=2)", "declared_order_payability": "not_verified", "land": null, "casts": ["Voracious Hydra"], "actions": [{ "card": "Voracious Hydra", "x": 2 }] },
+    { "index": 4, "summary": "land=none; cast: Kalonian Hydra", "declared_order_payability": "not_verified", "land": null, "casts": ["Kalonian Hydra"], "actions": [{ "card": "Kalonian Hydra" }] },
+    { "index": 5, "summary": "land=none; cast: Voracious Hydra (X=1)", "declared_order_payability": "not_verified", "land": null, "casts": ["Voracious Hydra"], "actions": [{ "card": "Voracious Hydra", "x": 1 }] },
+    { "index": 6, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=none; cast: Voracious Hydra (X=0)", "declared_order_payability": "not_verified", "land": null, "casts": ["Voracious Hydra"], "actions": [{ "card": "Voracious Hydra" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 20,
+  "type": "attack_mode",
+  "source": "Voracious Hydra",
+  "turn": 5,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 4, "num": 16, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 6, "num": 19, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 7, "num": 6, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 9, "num": 4, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 10, "num": 13, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 12, "num": 12, "tapped": true, "is_land": true }, { "name": "Kalonian Hydra", "idx": 11, "num": 32, "is_land": false, "power": 4, "toughness": 4, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 4 }] }, { "name": "Voracious Hydra", "idx": 13, "num": 58, "sick": true, "is_land": false, "power": 4, "toughness": 5, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 4 }] }], "vial_counters": [], "hand": [{ "num": 24, "name": "Gargos, Vicious Watcher", "cost": "{3}{G}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 30, "name": "Kalonian Hydra", "cost": "{3}{G}{G}", "mv": 5, "kind": "permanent", "is_creature": true }], "graveyard": ["Search for Tomorrow", "Search for Tomorrow", "Three Visits", "Three Visits"], "library_size": 46, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "heuristic_default": 0,
+  "trigger":"etb",
+  "options":[{"index":0,"text":"Double the number of +1/+1 counters on this creature"},{"index":1,"text":"This creature fights target creature you don't control"}],
+  "note": "reply 0 to double its +1/+1 counters or 1 to fight; the fight target is a separate board decision."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 21,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 5, "kind": "etb_mode", "text": "Voracious Hydra -- chose: double its +1/+1 counters (+4)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 4, "num": 16, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 6, "num": 19, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 7, "num": 6, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 9, "num": 4, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 10, "num": 13, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 12, "num": 12, "tapped": true, "is_land": true }, { "name": "Kalonian Hydra", "idx": 11, "num": 32, "is_land": false, "power": 4, "toughness": 4, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 4 }] }, { "name": "Voracious Hydra", "idx": 13, "num": 58, "sick": true, "is_land": false, "power": 8, "toughness": 9, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 8 }] }], "vial_counters": [], "hand": [{ "num": 24, "name": "Gargos, Vicious Watcher", "cost": "{3}{G}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 30, "name": "Kalonian Hydra", "cost": "{3}{G}{G}", "mv": 5, "kind": "permanent", "is_creature": true }], "graveyard": ["Search for Tomorrow", "Search for Tomorrow", "Three Visits", "Three Visits"], "library_size": 46, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 22,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 5, "kind": "trigger", "text": "Kalonian Hydra -- attack: doubled the +1/+1 counters on 2 creatures (+12)" }, { "turn": 5, "kind": "combat", "text": "⚔ attacked: Kalonian Hydra (8) — 8 to opponent (20→12)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 4, "num": 16, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 6, "num": 19, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 7, "num": 6, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 9, "num": 4, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 10, "num": 13, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 12, "num": 12, "tapped": true, "is_land": true }, { "name": "Kalonian Hydra", "idx": 11, "num": 32, "tapped": true, "is_land": false, "power": 8, "toughness": 8, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 8 }] }, { "name": "Voracious Hydra", "idx": 13, "num": 58, "sick": true, "is_land": false, "power": 16, "toughness": 17, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 16 }] }], "vial_counters": [], "hand": [{ "num": 24, "name": "Gargos, Vicious Watcher", "cost": "{3}{G}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 30, "name": "Kalonian Hydra", "cost": "{3}{G}{G}", "mv": 5, "kind": "permanent", "is_creature": true }], "graveyard": ["Search for Tomorrow", "Search for Tomorrow", "Three Visits", "Three Visits"], "library_size": 46, "land_drops_left": 1 },
+  "opponent": { "life": 12, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 23,
+  "main_ordinal": 9,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 6, "card": "Gauntlet of Power" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 4, "num": 16, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 6, "num": 19, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 7, "num": 6, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 9, "num": 4, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 10, "num": 13, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 12, "num": 12, "is_land": true, "taps": "G" }, { "name": "Kalonian Hydra", "idx": 11, "num": 32, "is_land": false, "power": 8, "toughness": 8, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 8 }] }, { "name": "Voracious Hydra", "idx": 13, "num": 58, "is_land": false, "power": 16, "toughness": 17, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 16 }] }], "vial_counters": [], "hand": [{ "num": 24, "name": "Gargos, Vicious Watcher", "cost": "{3}{G}{G}{G}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Gauntlet of Power", "cost": "{5}", "mv": 5, "kind": "permanent" }, { "num": 30, "name": "Kalonian Hydra", "cost": "{3}{G}{G}", "mv": 5, "kind": "permanent", "is_creature": true }], "graveyard": ["Search for Tomorrow", "Search for Tomorrow", "Three Visits", "Three Visits"], "library_size": 45, "land_drops_left": 1 },
+  "opponent": { "life": 12, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Gauntlet of Power", "declared_order_payability": "not_verified", "land": null, "casts": ["Gauntlet of Power"], "actions": [{ "card": "Gauntlet of Power" }] },
+    { "index": 1, "summary": "land=none; cast: Gargos, Vicious Watcher", "declared_order_payability": "not_verified", "land": null, "casts": ["Gargos, Vicious Watcher"], "actions": [{ "card": "Gargos, Vicious Watcher" }] },
+    { "index": 2, "summary": "land=none; cast: Kalonian Hydra", "declared_order_payability": "not_verified", "land": null, "casts": ["Kalonian Hydra"], "actions": [{ "card": "Kalonian Hydra" }] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 6, "kind": "trigger", "text": "Kalonian Hydra -- attack: doubled the +1/+1 counters on 2 creatures (+24)" },
+    { "turn": 6, "kind": "combat", "text": "⚔ attacked: Kalonian Hydra (16), Voracious Hydra (32) — 48 to opponent (12→-36)" }
+  ]
+}
