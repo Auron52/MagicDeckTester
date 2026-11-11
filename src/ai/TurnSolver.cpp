@@ -51309,6 +51309,18 @@ struct ManaGateTerm
     int gain  = 0;   // ritual_float + rock_mana.Total() this action ADDS to the turn's mana
     int gy    = 0;   // 1 if it is a Rite-of-Flame-style graveyard self-scaling ritual (triangular)
     int block = 0;   // 1 if selecting it disables the gate (same-turn reducer / affinity discount)
+    // MTG_SEL_GATE_EXACT (see SelGateExactRefuses): `soft` = this term blocks ONLY because it is a GENERIC
+    // same-turn cost reducer (Medallion / Warchief / Gargos / Incubator), whose discount is bounded;
+    // `red` = the most generic it takes off each later cast (colour 1 + subtype max(1, amount), the live
+    // EffectiveCost's own steps); `gen` = this action's generic, the most any discount can take off it.
+    int soft  = 0;
+    int red   = 0;
+    int gen   = 0;
+    // ...and the land-tap x land-put CROSS term, kept apart so the emission test can price it on the
+    // SELECTION (LandTapCrossBoundCredit credits every bonus source among the CANDIDATES to every land-put,
+    // selected or not): `picks` = a land-put cast's untapped picks, `ltb` = a cast bonus source's bonus.
+    int picks = 0;
+    int ltb   = 0;
 };
 
 struct ManaGateIndex
@@ -51318,6 +51330,7 @@ struct ManaGateIndex
     int  ind_gain_all = 0;                   // SUM gain over the `independent` actions (outer headroom)
     int  ind_gy_all   = 0;                   // SUM gy   over the `independent` actions
     bool ind_block    = false;               // any independent action would disable the gate
+    int  ltb_all      = 0;                   // LandTapBonusCandSum(cands): the cross term's cands-wide bonus
 };
 
 // Rite-of-Flame graveyard escalation: k copies cast this turn float +0,+1,...,+k-1 extra as each
@@ -51448,8 +51461,26 @@ static bool BuildManaGateIndex(const ManaPool& pool, const std::vector<Action>& 
                                || a.def->params.cost_less_per_opponent_noncombat_damage)
                               || a.def->params.chooses_creature_type))
                    || ActionColoredReducerDef(a) != nullptr) ? 1 : 0;   // Ragemonger pip credit
+        t.gen = std::max(0, a.cost.generic);
+        if (ltb_sum > 0 && a.kind == Action::Kind::CastFromHand && a.def != nullptr)
+        {
+            if (LandSearchPutsUntapped(*a.def))
+            { t.picks = std::max(0, a.def->params.land_search_count - a.def->params.land_search_to_hand); }
+            if (a.def->params.land_tap_bonus > 0) { t.ltb = a.def->params.land_tap_bonus; }
+        }
+        if (t.block && a.def != nullptr && ActionColoredReducerDef(a) == nullptr
+            && !a.def->params.affinity_for_subtype && a.def->params.cost_less_per_cycle_or_discard <= 0
+            && !a.def->params.cost_less_per_opponent_noncombat_damage)
+        {
+            // Only the generic reducers are left to have set `block`.
+            t.soft = 1;
+            t.red  = (a.def->params.reduces_spell_color.empty() ? 0 : 1)
+                   + ((!a.def->params.reduces_spell_subtype.empty() || a.def->params.chooses_creature_type)
+                      ? std::max(1, a.def->params.reduces_spell_subtype_amount) : 0);
+        }
     }
     out.pool_total   = pool.Total();
+    out.ltb_all      = ltb_sum;
     out.ind_gain_all = 0;
     out.ind_gy_all   = 0;
     out.ind_block    = false;
@@ -51460,6 +51491,81 @@ static bool BuildManaGateIndex(const ManaPool& pool, const std::vector<Action>& 
         if (out.term[b].block) { out.ind_block = true; }
     }
     return true;
+}
+
+// THE SELECTION-EXACT EMISSION TEST (MTG_SEL_GATE_EXACT, DEFAULT ON; =0 -> the gate as before). Hydras P2,
+// 2026-11-11. Two places where the selection-exact gate was not selection-exact, priced exactly at emission:
+//
+// (1) A GENERIC SAME-TURN COST REDUCER. A selection holding one (Gargos "Hydra spells cost {4} less", Ruby
+// Medallion, Goblin Warchief, Urza's Incubator) sets `block`, and the gate then PASSES it outright because
+// the discount is per-subset. On a Hydras hand holding Gargos that is every odometer position containing
+// him, crossed with the X axes of the X Hydras, and each one the flat gate rejects goes on to the
+// sequential payability walk (SubsetPayableSequential: a GameState copy plus a real payment per cast).
+// Seed 8789 gi 1782: 2.39M walks, all but 4 false; the search unit charges none of them, so a 47k-unit
+// decision ran 34 s. The discount is BOUNDED: a reducer lowers only the generic of later casts, by at most
+// its own step per cast, never below zero, so whatever the cast order the subset's own reducers save at
+// most SUM over its casts of min(that cast's generic, R), R = the selected reducers' steps summed (colour
+// 1, subtype max(1, amount) -- the live EffectiveCost's steps). The flat credit (SameTurnReducerDiscountFor:
+// min(matching reducers, generic) per cast) and the live cost in the walks and the executor (each step off
+// the generic the battlefield's reducers left; a reducer already on the battlefield is in a.cost) are both
+// inside that bound.
+//
+// (2) THE LAND-TAP x LAND-PUT CROSS TERM. LandTapCrossBoundCredit credits every land-put candidate with
+// EVERY bonus source among the candidates (Vernal Bloom, Nissa, Gauntlet in hand), selected or not. Only a
+// bonus source the selection casts can raise a fetched land's yield in that selection's line (one already
+// on the battlefield is in the land-put's own credit), so on the selection the term is
+// picks(selected land-puts) x bonus(selected sources). Seed 8986 gi 1979: with (1) alone 10.9M walks, all
+// false, every one a Gargos + Nature's Lore / Search / Three Visits selection the cands-wide term admitted.
+//
+// WHY IT IS SOUND: the same standard as the gate itself. The mana side is the gate's own budget (pool +
+// every selected gain + the graveyard ritual term), the bound it already trusts for every selection, with
+// only the cross term restricted to the selection; the cost side is the selection's cost less the bounded
+// discount. A selection whose cost exceeds that budget is one no admission path can pay (flat gate, filter
+// rescue, sequential walk). Any OTHER gate-disabling term (affinity, Hollow One, the noncombat discount, a
+// Ragemonger) still passes outright, and the caller arms this only where no other per-subset credit is live
+// (metalcraft, the equip waiver, dork growth, the cost reframe; the gate is not built at all under the
+// Hinata or spectacle credits). A selection with neither shape is exactly the gate proper's test (it
+// passed) and is not re-tested. It removes work only, but the work-priced ceilings (the priced decision
+// ceiling, MTG_BP_DERIVE_PRICED_STOP) then trip later, so a decision they bound can search further: play
+// moves only through them. MTG_SEL_GATE_EXACT_VERIFY=1 evaluates every refused selection anyway and counts
+// any that emits a plan (must be 0; printed at exit).
+static bool SelGateExactOn()
+{
+    static const bool env = EnvOn("MTG_SEL_GATE_EXACT", true);   // DEFAULT ON; =0 -> the gate as before
+    return heurarm::Flag(heurarm::SEL_GATE_EXACT, env);           // per-job slot: its A/B pools into one batch
+}
+namespace selgate
+{
+inline bool VerifyOn() { static const bool v = EnvOn("MTG_SEL_GATE_EXACT_VERIFY"); return v; }
+inline std::atomic<long long> g_refused{0}, g_violations{0};
+struct Dump
+{
+    ~Dump()
+    {
+        if (!VerifyOn()) { return; }
+        std::fprintf(stderr, "[sel-gate-exact] refused=%lld VIOLATIONS=%lld\n", g_refused.load(), g_violations.load());
+    }
+};
+inline Dump g_dump;
+}
+static bool SelGateExactRefuses(const ManaGateIndex& gate, const std::vector<int>& sel)
+{
+    int cost = 0, gain = 0, gy = 0, red = 0, picks = 0, ltb = 0;
+    for (int j : sel)
+    {
+        const ManaGateTerm& t = gate.term[static_cast<std::size_t>(j)];
+        if (t.block && !t.soft) { return false; }   // another per-subset discount: not measurable
+        cost += t.cost; gain += t.gain; gy += t.gy; red += t.red; picks += t.picks; ltb += t.ltb;
+    }
+    const bool cross_over = picks > 0 && ltb < gate.ltb_all;
+    if (red <= 0 && !cross_over) { return false; }   // exactly the gate proper's test, which passed it
+    long long need = cost;
+    if (red > 0) { for (int j : sel) { need -= std::min(gate.term[static_cast<std::size_t>(j)].gen, red); } }
+    // The cross term on the selection: every selected land-put x every SELECTED bonus source.
+    const long long budget = static_cast<long long>(gate.pool_total) + gain
+                           - static_cast<long long>(picks) * gate.ltb_all + static_cast<long long>(picks) * ltb
+                           + ManaGateTriangular(gy);
+    return need > budget;
 }
 
 // THE GATE RADIX CUT (MTG_MANA_GATE_WALK_CUT, default ON; =0 is the hatch) -- MTG_MANA_WALK_CUT's
@@ -78158,6 +78264,38 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     }
     const ManaGateIndex* gate    = gate_owned.get();      // null -> legacy scalar path
     const bool           gate_on = (gate != nullptr);
+    // MTG_SEL_GATE_EXACT (see SelGateExactRefuses): the odometer's emissions pass through this. Armed only
+    // where the reducer discount is the one per-subset credit in play (no metalcraft equip credit, no
+    // first-equip waiver, no scaled-dork growth, no cost reframe).
+    const bool red_gate = gate_on && SelGateExactOn() && !CostReframeEnabled() && !any_metalcraft
+                       && waiver_bound == 0 && growth_bound == 0;
+    auto eval_and_push_gated = [&](const std::vector<int>& s)
+    {
+        if (red_gate && SelGateExactRefuses(*gate, s))
+        {
+            selgate::g_refused.fetch_add(1, std::memory_order_relaxed);
+            if (!selgate::VerifyOn())
+            {
+                (void)dupactfold::Take();   // the provenance flags the caller set for THIS selection
+                (void)foldsel::Take();
+                return;
+            }
+            const long long e0 = workctr::t_n[workctr::kPlanEmit];
+            eval_and_push(s);
+            if (workctr::t_n[workctr::kPlanEmit] != e0)
+            {
+                const long long n = selgate::g_violations.fetch_add(1, std::memory_order_relaxed);
+                if (n < 8)
+                {
+                    std::string nm;
+                    for (int j : s) { nm += cands[static_cast<std::size_t>(j)].card_name.str() + ","; }
+                    std::fprintf(stderr, "[sel-gate-exact] VIOLATION t%d [%s]\n", state.turn_number, nm.c_str());
+                }
+            }
+            return;
+        }
+        eval_and_push(s);
+    };
     // Precompute the accelerant-prefix order ONCE (choice-independent); per-choice check is a cheap walk.
     std::vector<int> accel_order;
     if (accel_prefix_on && any_accel) { BuildAccelPrefixOrder(cands, groups, group_hand_index, accel_order); }
@@ -78954,7 +79092,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 // a claim to CHECK at runtime, not to argue.
                 if (FoldSearchOdometerOn(state)) { foldsel::g_from_odometer = true; }
                 if (daf_twin) { dupactfold::t_twin = true; }
-                eval_and_push(sel);
+                eval_and_push_gated(sel);   // MTG_SEL_GATE_EXACT
                 if (enum_priced_stop) { break; }
             }
             // RADIX CUT (MTG_EQUIP_DEP_SKIP): every position until digit `dep_cut` next changes
@@ -79029,7 +79167,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                                has_ind_accel, copy_class, equip_deps,
                                /*sac_dup_live=*/pre.dup_source && (pre.dup_clause & kDupSacMana) != 0,
                                [](const std::vector<int>&) { return true; },
-                               eval_and_push, [&]
+                               eval_and_push_gated, [&]   // MTG_SEL_GATE_EXACT
                                {
                                    if (!enum_priced_stop && g_bp_enum_depth == 0 && decisionwork::PricedExceeded())
                                    {
