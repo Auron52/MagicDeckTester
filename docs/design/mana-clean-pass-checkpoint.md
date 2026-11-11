@@ -175,6 +175,27 @@ Source of the work: `logs/mana_clean/lastweek-20261110-shadowborn-order/report.m
 * Chain order: build -> unit -> the s30020022 repro -> smoke (expect only Shadowborn rows to move) -> regression ->
   `./build.sh pgo` -> Shadowborn 5,000 gate on block 25000-29999 -> record, commit, push.
 
+* **Jumbo items 5m/5n (USER rulings 2026-11-11): FIXED in play, gate WORSE -- USER DECISION.** One commit
+  (`Jumbo 5m/5n: ...`) + GT accept. 5n `JumboOvergrowthAtBreakpoint` (`MTG_JUMBO_OG_BREAKPOINT`): s30035557 T4 clean.
+  5m `MTG_UNTAPPER_UNLOCK_HOSTS`: every fresh Elf/Satyr, and the copy GSZ/Finale puts, is an offered haste-equip
+  unlock host. The last hole was `BuildEquipPieceDeps` (its cast-group mask knew only hand numbers, so the
+  odometer never selected an equip onto the tutored copy). s30036180 T3 now carries no MISS class.
+  ManaOracle `KindText` is now a switch: the table was 4 kinds out of step, so "attachall:" in every older
+  report meant **Equip**. Tiers: only Jumbo rows; smoke 0 slower; regression net -4 turn-games; the one slower game
+  (s2002 gi28, draws diverge T4) recovers T6 at d8 b0. Held-out A/B (one batch, levers off vs on, same seeds as
+  5h): d5 4.0580 -> 4.0557 (15 faster / 8 slower), d3 4.0633 -> 4.0620; the off arm reproduces 5h byte-for-byte.
+  **Gate `jumbo-5mn-20261111` (PGO, src e59de76cbcef): sized by `--minutes` to 45,000 games (40000-84999; I omitted
+  `--games 5000`).** 85,154 issues. Per 5k games: APPLY-DROP 705 (was 156), APPLY-DROP-ORDER 670 (was 336),
+  CAPPED-DECISION 66,046 flags from 12 decisions. Play identity: byte-identical. **Attribution** (1,000 games of the
+  block, oracle on, one batch): levers off -> APPLY-DROP 28 / ORDER 30 / CAPPED 899; 5n-only identical to off;
+  both on -> 88 / 88 / 4,306. So the whole rise is 5m: the plans it offers (top: T4 GSZ->Elf + Satyr + Greaves x2 +
+  Tooth and Nail, s30061937 x95, s30065549 x40) are ones the engine's payment cannot realise. The oracle pays them by
+  re-making 3+ earlier mana decisions (re-tap scheduling around the untapper). This is a payment-path defect that the
+  new menu exposes; before, the lines were simply not offered. **USER DECISION:** keep 5m ON (play is better and it is
+  the USER's ruling) and fix the untapper re-tap payment next, or hold it OFF until that payment fix lands. I left it
+  ON. Not done: Sprawl / other-land Overgrowth (s30037731, s30037871, s30039942, s30035570, s30036569), still a
+  pending USER question. A Chariot Elf->Satyr move is a possible follow-up.
+
 * **Extra Turns oracle cost (agent 2026-11-11): two lossless collapses FIXED; gate PARKED.** Diagnosis is in
   `docs/design/extra-turns-mana-oracle-sizing-2026-11-10.md` (section 2026-11-11). (1) The hit-only cut:
   `Realize` no longer builds fail-option scripts for callers that read only the hit (ENUM-GAP checks and the
