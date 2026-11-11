@@ -96105,7 +96105,8 @@ static bool EtChainTrialBudgetExceeded()
 // it agrees with the fresh result, and the fresh rollout's units. Boundaries are recorded only when the rollout's
 // first turn has no per-deck depth override (else a fresh start plays that turn differently).
 static std::uint64_t SfxProbeCtx(const GameState& state);   // defined after gamelc: the leaf/beam/m2/labeller modes
-// E3 -- GAME-PERSISTENT ROLLOUT CACHE (MTG_ROLLOUT_GAME_CACHE, experimental, default OFF; heurarm ROLLOUT_GAME_CACHE).
+// E3 -- GAME-PERSISTENT ROLLOUT CACHE (MTG_ROLLOUT_GAME_CACHE, default ON since 2026-11-11 by USER
+// adoption after the held-out A/B; heurarm ROLLOUT_GAME_CACHE).
 // The leaf table (TranspositionTable) lives for one decision, and only a rollout's START key reaches it; the states a
 // rollout passes at its later turn boundaries are thrown away. The next decision of the same game starts many rollouts
 // on exactly those states: MTG_ROLLOUT_SUFFIX_PROBE measured 6.8% of rollout units (1.9% of all units, regression
@@ -96144,7 +96145,7 @@ namespace rgc
 }
 static bool RolloutGameCacheOn()
 {
-    static const bool env = EnvOn("MTG_ROLLOUT_GAME_CACHE");
+    static const bool env = EnvOn("MTG_ROLLOUT_GAME_CACHE", true);
     return heurarm::Flag(heurarm::ROLLOUT_GAME_CACHE, env);
 }
 namespace sfxprobe

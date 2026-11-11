@@ -91,10 +91,14 @@ struct Both { int on; int off; TurnSolver::KillOnlyTally t_on; TurnSolver::KillO
 
 Both Run(const GameState& s, int cutoff, bool second_main = true)
 {
+    // Each arm is a fresh GAME: the game-persistent caches (E3's rollout map among them) would otherwise answer
+    // an arm from an earlier arm's or an earlier test case's rollouts, and the tallies would count no rollout.
     Both b{};
+    TurnSolver::ClearPerGameCaches();
     b.on = TurnSolver::SimulateToEndForTest(s, 1, kMaxTurns, cutoff, second_main, &b.t_on);
     {
         ArmScope off(heurarm::LEAF_KILL_ONLY, 0);
+        TurnSolver::ClearPerGameCaches();
         b.off = TurnSolver::SimulateToEndForTest(s, 1, kMaxTurns, cutoff, second_main, &b.t_off);
     }
     return b;
@@ -307,10 +311,12 @@ TEST_CASE("Kill-only m2 no-reach: Vampires vouches no post-combat kill, so the k
         GameState s = NoKillBoard();
         s.players[1].life = opp;        // 2: Bloodghast's attack kills in COMBAT, which the cut leaves alone
         TurnSolver::KillOnlyTally on, off;
+        TurnSolver::ClearPerGameCaches();   // each arm a fresh game (see Run)
         const int w_on = TurnSolver::SimulateToEndForTest(s, 1, kMaxTurns, 6, true, &on, kBig);
         int w_off = 0;
         {
             ArmScope o(heurarm::KO_M2_NO_REACH, 0);
+            TurnSolver::ClearPerGameCaches();
             w_off = TurnSolver::SimulateToEndForTest(s, 1, kMaxTurns, 6, true, &off, kBig);
         }
         CHECK(w_on == w_off);

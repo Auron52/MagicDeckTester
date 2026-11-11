@@ -453,6 +453,7 @@ TEST_CASE("Brainstorm: the put-back price and the nested overrun bail are inert 
         heurarm::t_arm[heurarm::PUTBACK_PRICE]  = static_cast<std::int8_t>(price);
         heurarm::t_arm[heurarm::LA_NESTED_BAIL] = static_cast<std::int8_t>(bail);
         const long long c0 = TurnSolver::PutBackPriceCharged();
+        TurnSolver::ClearPerGameCaches();   // each solve a fresh game: E3's rollout map would serve the next arm
         const TurnSolver::Plan p = TurnSolver::SolveWithLookahead(s, true, 2, 8, b, b != nullptr, false, nullptr);
         if (charged != nullptr) { *charged = TurnSolver::PutBackPriceCharged() - c0; }
         heurarm::t_arm = saved;

@@ -152,6 +152,52 @@ Worktree `.claude/worktrees/xturn`, branch `xturn-cache` rebased on origin `d4bf
   game-turns (Niv -4, Niv 2HG -1, Hinata 2HG -1); the one "+1" is a budget-0 backstop row where E3 FINISHED a game the
   base abandoned at its 2M-unit ceiling (3 played vs 2) -- no slower game. Units +0.7%, thread-ms -3.4% (contended).
   Default OFF pending the USER's call.
+* **E3 ADOPTED, default ON (USER 2026-11-11: "Okay, let's try it out").** Unit tests needed per-arm
+  `ClearPerGameCaches()` (test_leaf_kill_only, test_brainstorm): each arm is a fresh game, and E3 otherwise answered a
+  later arm from an earlier one. Tiers vs the fixes-only GT: smoke 11 faster / 3 slower, regression 26 faster / 4
+  slower; 6 of the 7 slower recover at 4x/16x budget; shadowborn d5 s3003 gi135 (T4->T7) persists, but E3 OFF also plays
+  T7 at 16x and at d8 b0 (same digest) -- the T4 was a truncated-search line. Units on the regression tier:
+  same-play budgeted +0.13%, budget-0 rows -1.7%, changed-play +1.9%. Residency with E3 on: the whole regression
+  manifest at `MTG_PLAN_CACHE_KB=1` equals the default pool on digest and units.
+  **Gods is the one deck net slower:** regression seeds +3 game-turns (d3 +2/+2, d5 -1), held-out 4004/5005 0 over 200,
+  11011..14014 +1 over 800 (d3 -1/+2, d5 identical play). And Gods d5 plays IDENTICALLY with E3 yet spends +3..+11%
+  units (+6.5% over the 800 games).
+* **Gods unit cost ROOT-CAUSED; the gate-price fix (`MTG_RGC_GATE_PRICE`) was REJECTED and deleted.** `MTG_ROLLOUT_STATS` on Gods d5 h13013
+  (identical play both arms): id_pass aborted 2 -> 4, wasted units 15,982 -> 241,558 (0.7% -> 9.6%), rollout calls
+  71k -> 89k -- the whole +258k. The iterative-deepening start gates project the next pass as c_prev x growth, and an E3
+  hit is free, so a pass E3 answered looks cheap; the gate starts a deeper pass whose rollouts are mostly NEW states,
+  it overruns and is rolled back. Fix: each E3 entry records what its rollout (or, for a boundary key, its suffix) cost;
+  a served hit adds that to `rgc::t_served`, and both start gates add the pass's served delta to c_prev. Gate-only:
+  charging, the budget and the priced meter are unchanged. Held-out 4004/5005, all decks, 3 arms pooled (228 jobs):
+  E3 on -6.0 game-turns / units +0.83%; E3 + gate price -6.0 game-turns (same decks: Niv -4, Niv2HG -1, Hinata2HG -1)
+  / units -0.16%; gate price moves 4 job digests vs E3 alone; Gods units +1.8% -> -3.0%, Gods2HG +0.7% -> -3.5%.
+  **Rejected on the tiers (x9, vs the E3-on GT):** smoke 9 slower / 3 faster, regression 12 slower / 2 faster, net
+  +23 game-turns -- Shadowborn +13 (regression; 44 games changed, 10 slower, 0 faster), +5 smoke, Shadowborn2HG +3;
+  Gods itself -2 smoke / +1 regression. The held-out A/B had 3 games per Shadowborn job, so it could not see this.
+  Likely mechanism: on Shadowborn the deeper pass hits E3 again, so pricing the served units as if they would be paid
+  again blocks passes that would have finished; on Gods the deeper pass reaches new states. A sound version must tell
+  those apart (e.g. probe the next pass's hit rate) rather than price every hit. Patch kept at
+  `logs/xturn/rgc-gate-price-rejected.patch` (gitignored). E3 ships without it; Gods stays the one deck net slower
+  (+~4 game-turns over ~1,300 games, all churn) and Gods d5 spends ~+6.5% units -- surfaced to the USER.
+* **`MTG_MUTE_NO_STORE` wall cost:** same binary, Alchemist d5 s2002, two concurrent 12-thread arms: 1,240 s (ON) vs
+  1,180 s (OFF) thread time, +5%, identical digest and units. It is the price of units not following the plan pool.
+  **DEFERRED (USER 2026-11-11: "Let's measure it in more detail when other runs are finished."):** that is one job
+  with concurrent arms, so it is a ballpark only. Owed, once the box is free (no generation, no tier run):
+  1. Wall A/B `MTG_MUTE_NO_STORE=1` vs `=0`, same binary, `MTG_PGO=0` on both, ONE pooled batch with the arms
+     interleaved job-by-job, across several decks (the heavy plan-pool overflowers -- Alchemist d5, Hinata d5, Gods d5,
+     Shadowborn d5 -- plus a few light decks as controls). Digest and units must be identical per job; report thread
+     time per deck, and count muted recomputes and refused stores (add a counter) so the cost is attributed.
+  2. Candidate cheaper fix to measure in the same batch as a third arm: let a muted recompute STORE again, but tag each
+     entry it creates with the priced work it cost; the first hit on a tagged entry charges that cost to the priced
+     meter and clears the tag. That reproduces the unlimited-pool trace (there the entry would not exist, the lookup
+     would miss, do the work and store it) while keeping the wall saving. Precondition to verify: recomputing a key
+     costs the same priced work wherever it happens. Gate: the KB=1 residency check (digest + units, every job).
+  3. **Gods with E3 (USER 2026-11-11 asked whether it is seed-specific):** over ~3,200 Gods games so far the net is
+     ~+4 game-turns and every classified slower game recovers at 4x/16x, so no evidence yet of a real quality loss; the
+     unit cost (+6.5% at d5) is the aborted-pass mechanism above. Owed when the box is free: a paired held-out Gods /
+     Gods2HG sample, E3 off vs on, d3 and d5, a few thousand games, one pooled batch -- plus `MTG_ROLLOUT_STATS` waste at
+     d3. If the loss is real, build a gate price that only charges hits the deeper pass will NOT see again (e.g. probe the
+     next pass's hit rate), and re-test it on Shadowborn, which the blanket version cost +13.
 * **Origin GT is stale for 4 regression jobs** (gods d3 s2002, fivecolour d3/d5 s2002, landfall d5 s3003; avg equal,
   digest differs): pristine origin `d4bfb2071` reproduces the new digests exactly, so it came with the Gods merge
   `f90930c9f`, not with this work.
