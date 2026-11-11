@@ -37,17 +37,17 @@ Three Visits + Nissa's static · E Nissa's loyalty abilities + Garruk.
 | Card | Tier | Status | Viewer bucket | Notes |
 |---|---|---|---|---|
 | Kalonian Hydra | 3 | researched (A-counter-doublers.md) | none | enters_with_plus_counters 4 (Mossborn route). New `attack_double_team_counters` via shared DoublePlusCounters helper at the same point in GameEngine::CombatPhase and SimulateOneCombatAfterTitan (declared attackers only, doubles every own creature). REQUIRED projection addend in PendingAttackDamageImpl (else a lone swing reads 4 not 8). Add param to DeckFeedsCombat. Scryfall 'Double' keyword must be omitted (loader throws). |
-| Primordial Hydra | 2 | implemented (I2 @HASH@) | A (X plan variants) | enters_with_x_plus_counters + new upkeep_double_self_counters (PerformUpkeepDoubleSelfCounters in GameEngine::UpkeepTail and SimulateEndAndStartNextTurn, after the spore upkeep; DoublePlusCounters). Conditional trample INERT (approved). X = 0 pruned by HydrasProvider (0/0 dies; kept beside a Gauntlet). Trample/Double not tagged. |
-| Voracious Hydra | 2-3 | implemented (I2 @HASH@) | attack_mode (etb) + target (fight) | enters_with_x + etb_modal_double_self_counters / etb_modal_fight_opp_creature. Fight modelled (CR 701.14: mutual damage, lethal at the enter-cascade drain). Mode+target searched on tutor_target (`VF<n>`, #VM in both plan signatures); HydrasProvider::EtbFightTargets admits none (proof: opp spawns never block/attack; USER Apex ruling). Human: attack_mode (trigger etb) then the loyalty target chooser. |
-| Neverwinter Hydra | 2-3 | implemented (I2 @HASH@) | A (X plan variants); dice = roll event | enters_with_x_dice_sides 6: RollDiceTotal from a seeded per-game prefix stream (Player::dice_rolled, folded into sim + dominance keys when > 0; salted like Fengraf). Both enter sites call EntersWithXCounterCount once. USER ruling: always max affordable X (HydrasProvider::XCastBelowMax, regardless of MTG_HYDRAS_MAX_X); human play offers every X. Ward/Trample inert tags. |
-| Steelbane Hydra | 3 | implemented (I2 @HASH@) | main_phase (activation per target) | remove_counter_destroy_art_ench_cost -> PermAbilityMode::CounterDestroyArtEnch (no {T}; counter is the cost; target on sac_victim_id via the TapTargetPumpPin at both apply sites; ResolveCounterDestroyArtEnch). CounterDestroyArtEnchTargets hook: base = all legal; HydrasProvider drops our own Gauntlet/Bloom/Greaves (proof in code; any other own art/ench returns the full set). Sorcery-speed timing (approved deferral). |
+| Primordial Hydra | 2 | implemented (I2 30dda4a48; verified + fixed I2b c6ba8603b) | A (X plan variants) | enters_with_x_plus_counters + new upkeep_double_self_counters (PerformUpkeepDoubleSelfCounters in GameEngine::UpkeepTail and SimulateEndAndStartNextTurn, after the spore upkeep; DoublePlusCounters). Conditional trample INERT (approved). X = 0 pruned by HydrasProvider (0/0 dies; kept beside a Gauntlet). Trample/Double not tagged. |
+| Voracious Hydra | 2-3 | implemented (I2 30dda4a48; verified + fixed I2b c6ba8603b) | attack_mode (etb) + target (fight) | enters_with_x + etb_modal_double_self_counters / etb_modal_fight_opp_creature. Fight modelled (CR 701.14: mutual damage, lethal at the enter-cascade drain). Mode+target searched on tutor_target (`VF<n>`, #VM in both plan signatures); HydrasProvider::EtbFightTargets admits none (proof: opp spawns never block/attack; USER Apex ruling). Human: attack_mode (trigger etb) then the loyalty target chooser. |
+| Neverwinter Hydra | 2-3 | implemented (I2 30dda4a48; verified + fixed I2b c6ba8603b) | A (X plan variants); dice = roll event | enters_with_x_dice_sides 6: RollDiceTotal from a seeded per-game prefix stream (Player::dice_rolled, folded into sim + dominance keys when > 0; salted like Fengraf). Both enter sites call EntersWithXCounterCount once. USER ruling: always max affordable X (HydrasProvider::XCastBelowMax, regardless of MTG_HYDRAS_MAX_X); human play offers every X. Ward/Trample inert tags. |
+| Steelbane Hydra | 3 | implemented (I2 30dda4a48; verified + fixed I2b c6ba8603b) | main_phase (activation per target) | remove_counter_destroy_art_ench_cost -> PermAbilityMode::CounterDestroyArtEnch (no {T}; counter is the cost; target on sac_victim_id via the TapTargetPumpPin at both apply sites; ResolveCounterDestroyArtEnch). CounterDestroyArtEnchTargets hook: base = all legal; HydrasProvider drops our own Gauntlet/Bloom/Greaves (proof in code; any other own art/ench returns the full set). Sorcery-speed timing (approved deferral). |
 | Nissa, Who Shakes the World (loyalty) | 3 | researched (E-walkers.md) | A (target, plan variants) | Loyalty 5; +1 permanent animation (0/0 Elemental, 3 counters, vigilance, haste, untap) as new `untap_land_animate` in shared ApplyLoyaltyAbility (Part the Waterveil awaken code); untap mana via new breakpoint key (Chandra +RR precedent). Two proposed target shortcuts (tap untapped target for mana first; prefer tapped Forest) — VET as exact dominance folds before adopting. -8: Forest count is searched (chosen_x into plan signature, guarded). Mana-ceiling prune must not prune while an unactivated Nissa is on board. Gauntlet does NOT pump the animated land (colourless); Kalonian DOES double it. |
 | Garruk, Primal Hunter | 3 | researched (E-walkers.md) | A | Loyalty 3. +1 Beast, -3 draw = greatest power (counters+Gauntlet), -6 Wurm per land. REQUIRED: flag -3 draws in PlanOpensBreakpoint (bit 10) or drawn cards get one fixed follow-up (Jared -6 same hole). |
 | Three Visits | 1 | implemented (294e1317e; verified I1b) | A (tutor_etb) | Same params as Nature's Lore; untapped; no routing signature. |
 | Vernal Bloom | 3 | implemented (294e1317e; verified I1b) | none | New `land_tap_bonus*` params fed into the land-aura bonus machinery (LandAuraBonus / LandAuraAddToPool / LandAuraColorMask / fold) + deck flag, so ~60 land-mana counting sites see it without per-site edits. |
 | Nissa, Who Shakes the World (static) | 2 | implemented (294e1317e; verified I1b; loyalty abilities PENDING I3) | none | Same machinery, Forests her controller taps. Same-turn credit needed (coordinate with loyalty work). |
 | Gauntlet of Power | 3 | implemented (294e1317e; verified I1b) | A (choose_color) | Colour via Utopia Sprawl searched choice; provider may prune to green WITH PROOF (all lands basic Forest, all creatures green, opp spawns colourless). +1/+1 = new ComputeLordBonus pass. Must be excluded from EffectiveProducesFor like Sprawl. |
-| Gargos, Vicious Watcher | 3 | implemented (I2 @HASH@) | none (fight trigger inert) | reduces_spell_subtype Hydra / amount 4. 601.2f fix: XSpellUnabsorbedReduction + XCastGenericDiscount at every X-cost site (executor, ApplyPlanDirect, SeqWalkFixedOrder, StampM1Hand, every CollectActions X branch). Fight trigger = approved inert deferral (bracket note). Legendary; Fight/Double not tagged (audit MODELED_ELSEWHERE). |
+| Gargos, Vicious Watcher | 3 | implemented (I2 30dda4a48; verified + fixed I2b c6ba8603b) | none (fight trigger inert) | reduces_spell_subtype Hydra / amount 4. 601.2f fix: XSpellUnabsorbedReduction + XCastGenericDiscount at every X-cost site (executor, ApplyPlanDirect, SeqWalkFixedOrder, StampM1Hand, every CollectActions X branch). Fight trigger = approved inert deferral (bracket note). Legendary; Fight/Double not tagged (audit MODELED_ELSEWHERE). |
 
 ### Mana-core defects the integration must fix (D-mana.md)
 1. PaymentManaCovers returns unpayable with an empty aura list on a Bloom board — CollectLandAuraFold must include the new bonus.
@@ -85,6 +85,36 @@ landfall_smoke_d5_s1001 gi83 + gi98). PRE-EXISTING, not I1: a binary built from 
 (src tree 1deeef4ed, pre-I1) reproduces the same three digests, and parent vs 294e1317e is byte-identical on
 both keys. The drift is already in the parent tree (most likely the Gods merge f90930c9f, which combined two
 engine sides); its owner should root-cause or accept it. Not an I1 leak.
+
+I2 status (30dda4a48, verified and reviewed by I2b c6ba8603b, 2026-11-11): Primordial, Voracious, Neverwinter,
+Steelbane and Gargos implemented; CR 601.2f (a reduction applies to the TOTAL cost after X) at every X-cost site;
+defect 6 (same-plan X potential) fixed. I2b verification: `./build.sh` exit 0; `mtg-test` full suite PASS
+(2790 cases, incl. 13 in test/unit/test_x_hydras.cpp and the 12 in test_land_tap_bonus.cpp);
+`audit_card_costs.py` all 596 match; `audit_card_fields.py`: the five I2 cards match every hard field (oracle
+advisories only; the 6 pre-existing Gods keyword mismatches unchanged); `provider_audit.py --check` exit 0;
+`audit_viewer_decisions.py --no-sweep` exit 0; coverage: every name `full` except Kalonian and Garruk (I3).
+Smoke (`MTG_PGO=0`, NOT accepted): 185 configs unchanged, slower=0, faster=0; only the 3 known pre-existing
+same-score changes (bruna2hg_smoke_d5_s1001 gi10, landfall_smoke_d5_s1001 gi83 + gi98), digests identical to
+I1b's run, so the shared X-cost changes left every existing X-spell deck byte-identical.
+I2b review fixes and additions:
+- Neverwinter max X under Gargos: `HydrasProvider::XCastBelowMax` tested "left >= x_pips", but under Gargos the
+  {4} absorbs the first X steps, so X = 1 and X = 2 both cost {G}{G} and X = 1 survived as a non-maximal X
+  (against the USER ruling). It now prices the NEXT X step's marginal generic exactly as CollectActions prices
+  X (printed + X * pips - XCastGenericDiscount); with no reducer that is x_pips, as before.
+- New focused test: the largest X is an enumerated, applied plan after a same-turn Vernal Bloom, Gauntlet of
+  Power, Nissa, Nature's Lore under live doublers, Gargos, and Bloom -> Neverwinter (unlimited enumeration).
+- New lockstep test: Voracious's rollout fight variant resolves exactly as the executor's fight pin.
+- I1b's "the 12 land-tap cases passed" was a STALE binary: its unit log shows 2765 cases (none from
+  test_land_tap_bonus.cpp), because line 120 named a field that never existed (`land_search_subtype`; the
+  CardParams member has been `land_search_subtype_id` since 743586a37), so mtg-test failed to compile and the
+  previous binary ran. I2 did NOT rename anything; its one-line fix is correct, and I2b added a `!= 0` check so
+  the Three Visits / Nature's Lore comparison cannot pass vacuously. All 12 cases now run and pass.
+- `land_search_subtype` (Nature's Lore / Three Visits) was an unclassified param in the viewer self-guard:
+  classified INERT (a search filter, like `land_search_basic_only`). PENDING USER sign-off.
+Open / for later: Neverwinter's max-X rule counts no same-plan producer credit, so in a plan that also casts a
+Bloom / Gauntlet / Nissa a below-maximum Neverwinter X can survive (it can only under-drop, never remove the
+true maximum); human-play check of the Voracious mode/target prompts and Steelbane's `destroy_target` label is
+owed; MTG_HYDRAS_MAX_X A/B; cast order (USER-ruled, after all cards).
 
 ## Integration plan (serial, one fresh agent per group, each builds + unit-tests + commits)
 - I1 mana core: Vernal Bloom, Gauntlet, Three Visits, Nissa static (card entry w/ static only if loyalty not yet in), defects 1-5, HydrasProvider skeleton + signature.
