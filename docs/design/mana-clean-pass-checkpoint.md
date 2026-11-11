@@ -455,6 +455,29 @@ oracle off byte-identical; record 43e700b5c):
   thread-reuse state carried between games of DIFFERENT decks on a worker, or a cross-thread shared input
   (GameWorkMeter late_limit / PublishTo). Regression GT NOT accepted (an accept would bake in whichever ET digest
   the run happened to produce); see `logs/mana-clean-chain/5i-handoff.md`.
+* **Item 5i CLOSED (agent 2026-11-11 evening, pushed dbd56b648).** Rebased the 9-commit chain onto origin's
+  4ac44b926..81a532649. **One mechanism kept:** origin's `DecisionProvider::EnumerationContextKey` (folded by
+  BuildBreakpointKey, plus the Loam-probe bit) covers every input our `PlanCacheContextKey` folded (full/guard
+  root Magus, guard graveyard land count, t_probe, plus DecisionUnpruned which ours lacked), so ours was dropped
+  in the rebase; what 5i adds on top is the PricedExceeded read count and the muted, guard-aware
+  MTG_BP_ENUM_VERIFY (commit 712d95f92; b05ad387b's title still says "accept gods smoke GT" but after the rebase
+  it carries only docs -- origin had already accepted the cold-cache Gods rows). Small caveat in origin's key:
+  under the non-default MTG_GODS_LOAM_SINGLE=7 it reads the full root where the hook reads the
+  SolveWithLookahead root (default mode 9 is exact). **Post-rebase:** units 2833/2833; smoke 195 pass / 0
+  changed; regression 309 pass / 0 changed (no accept needed; check_gt_logs 1108 consistent); Gods d3/d5 s2002 +
+  ET d3 s2002 identical digest AND units at default / KB=1 / KB=65536 / --threads 4, equal to GT. CI
+  43073515164 green (Linux + Windows). **Held-out Gods A/B** (pre-5i b1bf4f8a5 vs dbd56b648; d3 s71000 x1000,
+  d5 s73000 x1000, Gods2HG d5 s75000 x300): byte-identical, same digests and units -- play-neutral.
+  **ET pooled flake (gi34 -> 639a950d): not reproduced on the current tree; PARKED with a diagnosis.**
+  Thread history does NOT carry it: --threads 1, gi34 alone / after gi0-33 of its own job / after one game of
+  each of the 170 other searched regression jobs -> identical digest f1d9f642 AND units 32,131. Plan pool size
+  does not either (KB 1..64M). The only channel left is cross-thread: the plan-cache byte pool is GLOBAL
+  (plancache::PoolUsed), so when a store is refused depends on other workers; a residency-dependent unit leak
+  shows only pooled. Origin's MTG_MUTE_NO_STORE (4ac44b926, a muted recompute stores nothing) closed one such
+  leak and our read-count fix another; both flaky runs (5k, 5i pre-rebase) predate the mute fix. Since the
+  rebase, 3 of 3 full pooled regression manifests (the tier run + P1 + P2, build/scratch/claude1111/et) match
+  GT on every game of all 309 jobs. If it recurs: rerun with MTG_PLAN_POOL_STATS=1 and compare the refused count
+  around ET d3 gi34, then MTG_BP_ENUM_VERIFY=3 on that pooled manifest.
 
 ## Pass verdicts (this segment; earlier ones are in test/mana_clean.json and status.log)
 - galadriel: 71,000 games, 372,073 issues (MISS 453 = 425 APPLY-DROP + 28 ENUM-GAP "cast both Galadriels",
