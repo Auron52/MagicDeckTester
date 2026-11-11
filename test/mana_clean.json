@@ -3307,6 +3307,53 @@
      "seed": 30040000,
      "src": "e59de76cbcef8fa66ae1c83499d68ba650eb4de9",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 82,
+      "APPLY-DROP-ORDER": 669,
+      "CAPPED-DECISION": 11817,
+      "CONTINUATION-DIFFERS": 1617,
+      "DECISION-COST": 3,
+      "DOMINATED-CREATURE": 295,
+      "DOMINATED-LAND": 133308,
+      "DROP-COVERED": 470,
+      "ENUM-GAP": 232,
+      "HIDDEN-INFO": 2,
+      "ORACLE-GAP": 150,
+      "PHANTOM": 10956
+     },
+     "commit": "f19b09182571a23b9c62d9d01a03efbedb9c50ad",
+     "date": "2026-11-11T12:25:09Z",
+     "decisions": 35952,
+     "deck": "decks/Jumbo Cactuar/Jumbo Cactuar.cod",
+     "deck_sha": "d4bb1e60e05f9036b3482f46e5ee6d4f230c0479",
+     "game_index": 85000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 13245,
+     "life_breakpoints": [],
+     "ms_off": 631435,
+     "ms_on": 7664824,
+     "report": "logs/mana_clean/jumbo-5o-20261111/report.md",
+     "run": "jumbo-5o-20261111",
+     "seed": 30085000,
+     "src": "6c2652cb9d1d1c1f1713a8b20d07e05b724149c8",
+     "verdict": "issues"
     }
    ]
   },

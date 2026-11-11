@@ -196,6 +196,35 @@ Source of the work: `logs/mana_clean/lastweek-20261110-shadowborn-order/report.m
   ON. Not done: Sprawl / other-land Overgrowth (s30037731, s30037871, s30039942, s30035570, s30036569), still a
   pending USER question. A Chariot Elf->Satyr move is a possible follow-up.
 
+* **Jumbo item 5o (agent 2026-11-11): untapper payment defect FIXED; CAPPED-DECISION PARKED; ORDER rise = USER
+  DECISION.** Commit `Jumbo 5o: drain a hasted untapper ...` (`MTG_HASTE_HOST_DRAIN`, heurarm slot, default ON).
+  Root cause (s30061937 / s30065549 T4): `ApplyManaUnlockEquips` moved Greaves Elf -> Satyr as soon as the Satyr
+  entered, with the Elf still untapped (Satyr was paid from GSZ's float), so the Elf lost haste and its re-tap of
+  the Overgrowth Forest was stranded; Tooth and Nail dropped. Fix: before an unlock/release moves a haste
+  Equipment off a fresh single-colour mana dork that cannot tap without it (proved on a copy; skipped when a later
+  equip re-hastes it), tap the dork into the float (`DrainOutgoingHasteHost`, via `ApplyEnginePreTap`). Sound:
+  mana only added, the dork could neither tap nor attack afterwards, no colour chosen. Unit test
+  `drains a hasted Arbor Elf before Greaves moves` (fails with the lever off). 1,020-game oracle check (attr
+  block 40000-41019, 5m on): APPLY-DROP 88 -> 25 (levers-off arm 28), ORDER 88 -> 83, CAPPED 4,306 unchanged.
+  Tiers: only Jumbo rows, 0 slower / 0 faster (6 same-score line changes: the drained mana now funds Chariot /
+  Overgrowth / Cactuar a turn early); after rebasing on 78e623dac both tiers byte-identical to the accepted GT,
+  817 refs 0 drift. Held-out A/B (d5 b20 7100001 x3000, d3 b10 7200001 x1500): 4.0557 = 4.0557, 4.0620 = 4.0620,
+  0 slower / 0 faster, 4+4 play-changed; the off arm reproduces 5mn-on byte-for-byte. Gate: **`jumbo-5o-20261111`** (PGO, src 6c2652cb9d1d, block 85000-89999, 5,000 games): 13,245 issues, play byte-identical oracle off. Per 5k: APPLY-DROP 82 (was 705), APPLY-DROP-ORDER 669 (was 670), ENUM-GAP 232, DOMINATED-CREATURE 295, ORACLE-GAP 150, CAPPED-DECISION 11,817 from 3 decisions (top s30086403 T4, a T&N + GSZ + Chariot + Finale menu). Remaining top APPLY-DROP: T3 Overgrowth@11 + T&N + Wild Growth@10 + Overgrowth@10 (x20), no equip -- a separate Aura-order shape. Next fresh block 90000.
+  **ORDER rise (USER DECISION, cast order is USER-owned):** the residual 5m ORDER flags are T3 GSZ->Elf +
+  Overgrowth + a haste equip (s30040847, s30040679, s30040145, ...): the ranked order casts Overgrowth before GSZ,
+  but only GSZ -> equip -> Overgrowth pays (the hasted Elf's re-tap funds Overgrowth). Proposal: move the
+  untapper-fetching GSZ (and its unlock equip) ahead of Overgrowth only when `OrderPaysSequentially` fails for the
+  ranked order and passes for the swap (the 5h Surrak pattern). Not implemented.
+  **CAPPED-DECISION (PARKED, oracle cost, not play):** in the 1,020 games only two decisions cap: s30040027 T4
+  (2,950 plans, 2,296 unaudited; new with 5m) and s30040159 T4 (1,740 plans, 899 -> 2,010). The menus are the
+  board's equip-host variants x ~276 Tooth and Nail pick/put variants per shape (T&N x2 + Satyr + Greaves 529,
+  six shapes at 276); each tight two-T&N line (18 of 18 mana) is unpayable in the engine order, so it runs the
+  full order search to its 2,000-apply cap and the rollback census. A lossless oracle collapse would key audits on
+  the plan's mana-relevant projection, but T&N's picks are NOT mana-irrelevant (Surrak hastes dorks for the second
+  T&N), so no safe fold was found; raising `MTG_MANA_ORACLE_DECISION_S` only buys verdicts. Repro:
+  `MTG_MANA_ORACLE=3 MTG_MANA_ORACLE_TURN=4 build/Release/mtg 'decks/Jumbo Cactuar/Jumbo Cactuar.cod' --profile
+  'decks/Jumbo Cactuar/Jumbo Cactuar.profile.json' --games 1 --seed 30040027 --game-index 40027`.
+
 * **Extra Turns oracle cost (agent 2026-11-11): two lossless collapses FIXED; gate PARKED.** Diagnosis is in
   `docs/design/extra-turns-mana-oracle-sizing-2026-11-10.md` (section 2026-11-11). (1) The hit-only cut:
   `Realize` no longer builds fail-option scripts for callers that read only the hit (ENUM-GAP checks and the
