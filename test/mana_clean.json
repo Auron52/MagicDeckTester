@@ -325,6 +325,47 @@
      "seed": 30210000,
      "src": "ab70b55063d8590842503c3532e40aed88ee831e",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "DOMINATED-LAND": 569,
+      "DROP-COVERED": 8,
+      "PHANTOM": 1032
+     },
+     "commit": "8806c4c671550d5f0d03d4f6dc7f0207dffa2697",
+     "date": "2026-11-11T23:50:28Z",
+     "decisions": 41298,
+     "deck": "decks/Angels/Angels.cod",
+     "deck_sha": "ced0b9f503eaea0474cd7dbce64f0c64bd00eddf",
+     "game_index": 215000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION",
+      "DOMINATED-LIFE"
+     ],
+     "issues": 0,
+     "life_breakpoints": [
+      "Righteous Valkyrie"
+     ],
+     "ms_off": 121338,
+     "ms_on": 278892,
+     "report": "logs/mana_clean/angels-5d-20261111/report.md",
+     "run": "angels-5d-20261111",
+     "seed": 30215000,
+     "src": "eb92162cd2169e4df8bebcd52c51022b30161dc7",
+     "verdict": "clean"
     }
    ]
   },
@@ -3400,6 +3441,51 @@
      "run": "jumbo-5p-20261111",
      "seed": 30090000,
      "src": "de68d358376639d9e2c187e55b121ad084c08933",
+     "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 72,
+      "APPLY-DROP-ORDER": 592,
+      "CONTINUATION-DIFFERS": 1389,
+      "DOMINATED-CREATURE": 120,
+      "DOMINATED-LAND": 121411,
+      "DROP-COVERED": 694,
+      "ENUM-GAP": 502,
+      "HIDDEN-INFO": 1,
+      "ORACLE-GAP": 164,
+      "PHANTOM": 8000
+     },
+     "commit": "8806c4c671550d5f0d03d4f6dc7f0207dffa2697",
+     "date": "2026-11-11T23:54:19Z",
+     "decisions": 35709,
+     "deck": "decks/Jumbo Cactuar/Jumbo Cactuar.cod",
+     "deck_sha": "d4bb1e60e05f9036b3482f46e5ee6d4f230c0479",
+     "game_index": 95000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 1450,
+     "life_breakpoints": [],
+     "ms_off": 539154,
+     "ms_on": 5674348,
+     "report": "logs/mana_clean/jumbo-5d-20261111/report.md",
+     "run": "jumbo-5d-20261111",
+     "seed": 30095000,
+     "src": "eb92162cd2169e4df8bebcd52c51022b30161dc7",
      "verdict": "issues"
     }
    ]
