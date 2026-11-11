@@ -57,6 +57,26 @@ hand-cast Cactuar, still resolve Surrak first. The card-level table is a
 proposed order for user review; the viewer repro and regression checks below
 measure its effects.
 
+### USER cast-order rulings (2026-11-11)
+
+The table above was never reviewed until 2026-11-11. The USER's words, verbatim:
+
+> If we are going to value GSZ and Finale based on the target, which I think is fair, then yes they should always
+> go after the cheaper cast-from-hand option. I don't understand how Overgrowth ever goes before Wild Growth, I
+> don't think it should. Casting chariot after the first Elf/Satyr might make sense, but it is relatively tricky to
+> specify. If you want to try that, it would be okay. Also, Surrak and Goreclaw is risky in the 6th spot there. It
+> seems like the kind of card you want to put earlier only if mana allows.
+
+How they apply (implementation queued in the mana-clean chain, item 5h):
+1. A Zenith/Finale ranked by its target goes AFTER a hand-cast copy of that target (Elf, Surrak, Cactuar alike;
+   the current target ranks 38/95/125 put Elf and Cactuar tutors before the hand copy).
+2. Overgrowth never goes before Wild Growth. Seed 30029950 T6 (Overgrowth-first pays Tooth and Nail) is therefore
+   treated as a payment defect to find, not an order change. Whether the existing proven Overgrowth-before-Utopia
+   Sprawl swap should also go is an open USER question.
+3. Chariot after the first Elf/Satyr: optional, may be tried and measured.
+4. Surrak and Goreclaw moves out of the 6th slot to a later default, and comes earlier only when mana allows,
+   i.e. a proven swap (the earlier order pays every cast under OrderPaysSequentially), like the Aura swap.
+
 ### Ability activation order
 
 The table below has one distinct priority per activation type. An activation
