@@ -902,6 +902,7 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
             // resolution, so this is a default, not a commitment).
             case Action::Kind::ActivateLoyalty:
                 tag = LoyaltyActionLabel(a.card_name.str(), a.loyalty_ability);
+                if (a.chosen_x > 0) { tag += " (" + std::to_string(a.chosen_x - 1) + ")"; }   // Nissa -8's count
                 if (a.enchant_target > 0) { tag += " \xE2\x86\x92 " + EnchantTargetName(s, a.enchant_target); }
                 if (a.card_name == "Chandra, Torch of Defiance" && a.loyalty_ability == 0)
                 {
@@ -9497,6 +9498,13 @@ static int RunScenario(const std::filesystem::path& scenario_path)
             if (const int pc = e.value("plus_counters", 0); pc > 0) { p.counters.Add(Counter::Type::PlusOnePlusOne, pc); }
             p.temp_lifelink     = e.value("temp_lifelink", false);
             p.hone_counters     = e.value("hone_counters", 0);
+            // A staged planeswalker's loyalty (Permanent::loyalty is the source of truth; the Loyalty counter
+            // mirrors it for the viewer). Only when the fixture names it, so every existing fixture is unchanged.
+            if (e.contains("loyalty"))
+            {
+                p.loyalty = e.at("loyalty").get<int>();
+                p.counters.Add(Counter::Type::Loyalty, p.loyalty);
+            }
             // Depletion counters (Remote Farm / Peat Bog), which the land drop stamps on entry and a
             // staged permanent never gets -- without them a depletion land reads as already spent.
             if (const int dc = e.value("depletion_counters", 0); dc > 0)

@@ -1204,6 +1204,9 @@ INERT_PARAMS = {
     # play event); Neverwinter Hydra's X d6 is a RANDOM OUTCOME, not a choice (a `roll` play event) -- its X
     # rides enters_with_x_plus_counters -> main_phase.
     "upkeep_double_self_counters": "Primordial Hydra's mandatory self-doubling upkeep trigger (no target, no choice)",
+    # Hydras I3 (2026-11-11): Kalonian Hydra's attack trigger is mandatory and untargeted; several copies'
+    # triggers commute (each doubles what the last left), so their order is not a choice either.
+    "attack_double_team_counters": "Kalonian Hydra's mandatory team counter doubling on attack (no target, no choice; copies commute)",
     "enters_with_x_dice_sides": "Neverwinter Hydra's dice size -- a seeded random outcome shown as a roll event, not a choice (X rides enters_with_x_plus_counters -> main_phase)",
     "land_tap_bonus_subtype": "land-tap bonus qualifying detail (rides land_tap_bonus)",
     "land_tap_bonus_basic": "land-tap bonus qualifying detail (rides land_tap_bonus)",
@@ -1980,8 +1983,8 @@ def expected_for_card(card):
     loyalty_effects = {a.get("effect") for a in p.get("loyalty_abilities", [])}
     if "exile_top_cast_or_damage" in loyalty_effects:
         exp.add("free_cast")  # paid_cast=true; reuses the optional-cast protocol
-    if loyalty_effects & {"damage_target_creature", "emblem_spell_cast_damage"}:
-        exp.add("target")
+    if loyalty_effects & {"damage_target_creature", "emblem_spell_cast_damage", "untap_land_animate"}:
+        exp.add("target")   # Nissa +1: the land target, asked at resolution over the full legal set
     # X spells: {X} in the mana cost -> chosen_x plan variant (rides main_phase)
     if "{X}" in (card.get("mana_cost") or ""):
         exp.add("main_phase")
@@ -2036,7 +2039,7 @@ def modeled_tokens(card):
     p = card.get("parameters", {}) or {}
     t = set()
     if p.get("incinerator_damage_trigger") or p.get("tap_graveyard_exile_damage", 0) > 0 or any(
-        a.get("effect") in {"damage_target_creature", "emblem_spell_cast_damage"}
+        a.get("effect") in {"damage_target_creature", "emblem_spell_cast_damage", "untap_land_animate"}
         for a in p.get("loyalty_abilities", [])
     ):
         t.add("target")
@@ -2067,8 +2070,9 @@ def modeled_tokens(card):
             or p.get("tutor_library_position", 0) > 1 \
             or p.get("tutor_to_battlefield_single") or p.get("tutor_land_to_battlefield") \
             or p.get("look_top_put_creature_count", 0) > 0 \
-            or p.get("tooth_and_nail") or p.get("finale_of_devastation"):
-        t.add("search")
+            or p.get("tooth_and_nail") or p.get("finale_of_devastation") \
+            or any(a.get("effect") == "fetch_forests_tapped" for a in p.get("loyalty_abilities", [])):
+        t.add("search")   # Nissa -8: the COUNT of Forests rides main_phase plan variants (chosen_x)
     # Natural Order's "sacrifice a green creature" additional cost is a modeled plan-variant
     # choice (sac victim variants), so its "sacrifice a/an" phrase is covered.
     if p.get("sac_additional_creature_color"):

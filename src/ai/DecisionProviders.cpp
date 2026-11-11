@@ -25193,10 +25193,10 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     //   * [I2, 2026-11-11] Primordial Hydra: upkeep_double_self_counters; Neverwinter Hydra:
     //     enters_with_x_dice_sides; Voracious Hydra: etb_modal_double_self_counters; Steelbane Hydra:
     //     remove_counter_destroy_art_ench_cost (all new, carried by no other card).
-    // OWED (Hydras Stage-2 integration, group I3 -- add each term HERE when its param lands):
-    //   I3: Kalonian Hydra's attack-trigger team counter doubling (attack_double_team_counters),
-    //       Nissa's untap_land_animate / fetch_forests_tapped loyalty effects, Garruk's
-    //       draw_greatest_power / wurm_tokens_per_land.
+    //   * [I3, 2026-11-11] Kalonian Hydra: attack_double_team_counters; Nissa, Who Shakes the World's
+    //     untap_land_animate / fetch_forests_tapped and Garruk, Primal Hunter's draw_greatest_power /
+    //     wurm_tokens_per_land LOYALTY EFFECTS (effect strings, all new, carried by no other walker).
+    //     Garruk's beast_token_33 is NOT a term: a 3/3 token maker is any green walker's.
     // EXCLUDED, with reasons: Lightning Greaves (equip_grants_haste/shroud -- a colourless staple any
     // deck may add, the Dragons exclusion); Nature's Lore / Three Visits / Search for Tomorrow
     // (land_search_* -- generic green ramp); Gargos's reduces_spell_subtype (archetype-NEUTRAL: it is
@@ -25277,8 +25277,14 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
         if (p.cycle_draw_exile_shared_type_freecast) { cyclone = true; }
         if (p.land_tap_bonus > 0 || p.chosen_color_pump_power != 0 || p.chosen_color_pump_tough != 0
             || p.upkeep_double_self_counters || p.enters_with_x_dice_sides > 0
-            || p.etb_modal_double_self_counters || p.remove_counter_destroy_art_ench_cost.has_value())
+            || p.etb_modal_double_self_counters || p.remove_counter_destroy_art_ench_cost.has_value()
+            || p.attack_double_team_counters)
         { hydras = true; }
+        for (const auto& ab : p.loyalty_abilities)
+        {
+            if (ab.effect == "untap_land_animate" || ab.effect == "fetch_forests_tapped"
+                || ab.effect == "draw_greatest_power" || ab.effect == "wurm_tokens_per_land") { hydras = true; }
+        }
         if (!p.etb_replace_sacrifice_land_subtype.empty()
             || (p.tutor_to_hand && p.suspend_time_counters > 0)
             || p.sac_named_count > 0

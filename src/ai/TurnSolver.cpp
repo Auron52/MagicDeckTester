@@ -12267,6 +12267,42 @@ static int CountAttackAttachPump(const GameState& state, int active,
     return AttackersCombatDamage(t, nums) - before;
 }
 
+// Projection twin of Kalonian Hydra's attack trigger (ApplyAttackDoubleTeamCounters): each attacking copy
+// doubles the +1/+1 counters on every creature we control in the declare-attackers step, BEFORE damage, so
+// a lone Kalonian swings for 8, not the 4 its body reads (the Dwalin hone lesson: a missing addend
+// under-projects every attack and is an fd-diverge generator). Closed form, no state copy, exactly the
+// arithmetic DoublePlusCounters performs: the net count c = max(0, plus - minus) (CR 704.5q annihilation
+// first), then k times c = min(c + (min(c, cap) << s), cap) with s = this board's counter-doubler shift
+// (a doubling is a put, CR 701.10e). Only the ATTACKERS' gain reaches this combat; it is measured on the
+// same CombatPowerOf / double-strike pair AttackersCombatDamage uses (max(0, power) both sides). The
+// non-attackers' doubled counters are a later turn's value, the search's to see. Returns 0 with no
+// Kalonian among the attackers, so every other deck's projection is byte-identical.
+static int CountAttackDoubleTeamCountersPump(const GameState& state, int active,
+                                             const std::vector<const Permanent*>& attackers)
+{
+    int k = 0;
+    for (const Permanent* p : attackers)
+    {
+        if (p->controller_index != active || p->def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p->card);
+        if (d != nullptr && d->params.attack_double_team_counters) { ++k; }
+    }
+    if (k == 0) { return 0; }
+    const int sh = DoublerShift(state, active, /*for_tokens=*/false);
+    int gain = 0;
+    for (const Permanent* p : attackers)
+    {
+        const int c0 = std::max(0, PlusCountersOn(*p) - MinusCountersOn(*p));
+        if (c0 <= 0) { continue; }
+        int c = c0;
+        for (int t = 0; t < k; ++t) { c = std::min(c + (std::min(c, kPlusCounterCap) << sh), kPlusCounterCap); }
+        const int pw0 = CombatPowerOf(*p, state);
+        const int pw1 = pw0 + (c - c0);
+        gain += (std::max(0, pw1) - std::max(0, pw0)) * (CreatureHasDoubleStrike(*p, state) ? 2 : 1);
+    }
+    return gain;
+}
+
 static int PendingAttackDamageImpl(const GameState& state);
 
 // Ardenn, Intrepid Archaeologist (begin_combat_attach_all): the realised combat re-attaches the
@@ -12396,6 +12432,8 @@ static int PendingAttackDamageImpl(const GameState& state)
     // Dwalin: the hone trigger resolves IN the declare-attackers step, so the +1/+0 per
     // counter applies to THIS combat. Without this the search reads the pre-trigger power.
     dmg += CountAttackHonePump(state, active, attackers);
+    // Kalonian Hydra: the team counter doubling resolves IN the declare-attackers step (this combat).
+    dmg += CountAttackDoubleTeamCountersPump(state, active, attackers);
     // Bruna's gather + Arcanum Wings' in-combat swap: the Auras land on attackers THIS combat.
     dmg += CountAttackGatherPump(state, active, attackers);
     // Primeval Titan's attack trigger: the fetched lands' landfall pumps land on attackers THIS combat.
@@ -30020,6 +30058,19 @@ bool TurnSolver::SnowLookFoundPlayable(const GameState& state, const CardDefinit
 // continuation overrode the plan's own loyalty choice). A declined activation was activatable when
 // the plan STARTED, so its key is in the snapshot, so it is not new, so it does not arm. The
 // guarantee is stronger than the proxy's and it is structural rather than incidental.
+// A haste-granting Equipment `ctrl` controls (Lightning Greaves): the condition under which a creature token
+// made mid-phase is a new same-turn equip host (Garruk's kActLoyaltyTokenContinuation / its bit-9 mark).
+static bool OwnHasteEquipmentOnBattlefield(const GameState& state, int ctrl)
+{
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != ctrl) { continue; }
+        const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+        if (qd != nullptr && qd->params.is_equipment && qd->params.equip_grants_haste) { return true; }
+    }
+    return false;
+}
+
 bool TurnSolver::BpAbilityDeltaOn()
 {
     // Routed through heurarm so BOTH arms fit one pooled batch: a bare `static const bool` is read
@@ -30058,7 +30109,10 @@ enum : uint64_t {
     // Distinct activation keys for the graveyard cast permission and Gods.
     kActGyCast = 210,
     kActPhenaxMill = 211, kActPharikaExile = 212,
-    kActBronzePut = 213, kActKruphixBank = 214
+    kActBronzePut = 213, kActKruphixBank = 214,
+    // Hydras (I3): Nissa's +1 untapped a land (and may have floated its mana) -- the Chandra +RR shape --
+    // and Garruk's +1 / -6 made creature tokens a haste Equipment can move onto this turn.
+    kActLoyaltyUntapContinuation = 215, kActLoyaltyTokenContinuation = 216
 };
 inline uint64_t ActKey(int m_number, uint64_t ability)
 { return (static_cast<uint64_t>(static_cast<uint32_t>(m_number)) << 8) | ability; }
@@ -30157,6 +30211,26 @@ void CollectActivationKeys(const GameState& state, int ctrl, const Permanent& p,
     {
         for (const auto& ab : pp.loyalty_abilities)
         { if (ab.effect == "add_red_mana") { out.push_back(ActKey(num, kActLoyaltyManaContinuation)); break; } }
+    }
+    // Nissa, Who Shakes the World: once she has activated this turn, her +1 may have untapped a land (and
+    // floated its mana), which no enumeration made before it could spend. Keyed on the activation itself
+    // (the +1 is the only ability that leaves her on the battlefield, barring a -8 from above 8, where the
+    // spurious key only costs an empty continuation -- the safe direction). A walker activated before the
+    // plan started already holds the key in the snapshot, so it never re-arms.
+    // Garruk, Primal Hunter: after his +1 / -6 the new Beast / Wurms are hosts a haste Equipment (Lightning
+    // Greaves, equip {0}) can move onto THIS turn -- an Equip no earlier enumeration could offer. Only while
+    // such an Equipment is ours, and only while Garruk survives (a -6 from exactly 6 bins him, so that line's
+    // same-turn equip is not reached; disclosed in the card note).
+    if (p.loyalty_activated_this_turn)
+    {
+        for (const auto& ab : pp.loyalty_abilities)
+        {
+            if (ab.effect == "untap_land_animate")
+            { out.push_back(ActKey(num, kActLoyaltyUntapContinuation)); break; }
+            if ((ab.effect == "beast_token_33" || ab.effect == "wurm_tokens_per_land")
+                && OwnHasteEquipmentOnBattlefield(state, ctrl))
+            { out.push_back(ActKey(num, kActLoyaltyTokenContinuation)); break; }
+        }
     }
 
     // The PermAbilityMode sinks (the ModeSpec table in CollectActions). {T} modes need an untapped,
@@ -33937,6 +34011,14 @@ static int OptimisticTurnMana(const GameState& state)
         // actually tap right now.
         if (d && d->params.mana_per_life_gained && !p.tapped && CanTapNow(p, state.battlefield))
         { return kNoManaCeiling; }
+        // NISSA, WHO SHAKES THE WORLD (+1: untap target land): an unactivated Nissa can untap a land this
+        // phase (and float its mana first), so the turn's mana is not what the board plainly produces --
+        // decline to prune while one could still activate (the budget-can-grow precedent).
+        if (d && !p.loyalty_activated_this_turn && p.loyalty > 0)
+        {
+            for (const auto& ab : d->params.loyalty_abilities)
+            { if (ab.effect == "untap_land_animate") { return kNoManaCeiling; } }
+        }
         // SAC-FOR-MANA (Treasure token / Lotus Bloom / Black Lotus). AvailableManaPool deliberately
         // does NOT count these -- they are modelled as an ACTION (Kind::SacForMana), not a source --
         // so without crediting them here the ceiling under-counts by exactly the mana the line means
@@ -43453,6 +43535,110 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     { Action cast = a; cast.tutor_target = option; cast.ponder_keep = 1; cast.eval = DMG;
                       actions.push_back(std::move(cast)); }
                     continue;
+                }
+                else if (ab.effect == "untap_land_animate")
+                {
+                    // Nissa, Who Shakes the World +1 (SpellEffects.h ResolveUntapLandAnimate). The TARGET is
+                    // searched: one action per IDENTITY CLASS of legal target, plus the "up to one" ZERO-target
+                    // action (always offered: it is weakly worse in this list, but that is a list-level
+                    // argument, not an identity, so the engine does not take it).
+                    // THE TARGET FOLD IS AN EXACT IDENTITY FOLD. A "plain" land -- no counters of any kind, no
+                    // storage/charge counters, nothing attached, no chosen colour, not a token -- differs from
+                    // another plain land of the SAME definition only by its per-copy number and whether it is
+                    // tapped (entered_this_turn is moot: the animated land has haste, and a noncreature land
+                    // taps for mana regardless). Within such a class a TAPPED member weakly dominates an untapped
+                    // one: +1 on tapped T leaves {T animated untapped, U untapped}; +1 on untapped U (with the
+                    // pre-tap fold) leaves {U animated untapped, T tapped, U's mana floating} -- and the first
+                    // board reaches the second by tapping U for mana, the two lands being interchangeable. So
+                    // the class needs ONE action: its first tapped member, else its first untapped one. Any
+                    // land that is not plain is its own singleton class (every such target is searched).
+                    // The continuation that spends the untapped land / float is the site-9 key
+                    // kActLoyaltyUntapContinuation (the Chandra +RR precedent). HUMAN PLAY: one representative
+                    // target plus the zero-target action; the full legal set is asked at resolution.
+                    std::vector<std::pair<const CardDefinition*, int>> cls;   // (def, chosen member number)
+                    std::vector<bool> cls_tapped;
+                    for (const Permanent& q : state.battlefield)
+                    {
+                        if (!NissaAnimateTargetLegal(state, state.active_player_index, q)) { continue; }
+                        const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+                        bool attached = false;
+                        for (const Permanent& e : state.battlefield)
+                        {
+                            if (e.aura_attached_to == q.card.m_number || e.equipped_to == q.card.m_number)
+                            { attached = true; break; }
+                        }
+                        const bool plain = qd != nullptr && !q.is_token && q.counters.empty() && !attached
+                                        && q.storage_counters == 0 && q.charge_counters == 0
+                                        && q.chosen_color < 0;
+                        int k = -1;
+                        if (plain)
+                        {
+                            for (int c = 0; c < static_cast<int>(cls.size()); ++c)
+                            { if (cls[c].first == qd) { k = c; break; } }
+                        }
+                        if (k < 0)
+                        {
+                            cls.push_back({ plain ? qd : nullptr, q.card.m_number });
+                            cls_tapped.push_back(q.tapped);
+                        }
+                        else if (q.tapped && !cls_tapped[k]) { cls[k].second = q.card.m_number; cls_tapped[k] = true; }
+                        if (HumanPlayActive() && !cls.empty()) { break; }
+                    }
+                    const int body = ab.amount * DMG * std::max(1, ExpectedAttacks(state));
+                    for (const auto& c : cls)
+                    {
+                        Action a;
+                        a.kind = Action::Kind::ActivateLoyalty; a.card_name = p.card.m_name;
+                        a.hand_index = -1; a.cost = ManaCost{}; a.sac_source_id = p.card.m_number;
+                        a.loyalty_ability = li; a.enchant_target = c.second; a.eval = body; a.is_noncreature = true;
+                        actions.push_back(std::move(a));
+                    }
+                    ev = 1;   // the zero-target action (banks the loyalty), emitted below
+                }
+                else if (ab.effect == "fetch_forests_tapped")
+                {
+                    // Nissa -8: the COUNT of Forest cards to put is the searched choice (any number, 0..F),
+                    // carried as chosen_x = count + 1 (0 = unpinned = all, the stranded-call default). Not
+                    // provably "all": a same-main land search cast after it would find nothing. Every count is
+                    // offered, to the search and to a human alike.
+                    int forests = 0;
+                    for (const Card& c : ap.library)
+                    {
+                        const CardDefinition* cd = CardDatabase::Instance().LookupCached(c);
+                        if (cd != nullptr && cd->card.IsLand() && CardHasSubtype(cd->card, "Forest")) { ++forests; }
+                    }
+                    for (int n = 0; n <= forests; ++n)
+                    {
+                        Action a;
+                        a.kind = Action::Kind::ActivateLoyalty; a.card_name = p.card.m_name;
+                        a.hand_index = -1; a.cost = ManaCost{}; a.sac_source_id = p.card.m_number;
+                        a.loyalty_ability = li; a.chosen_x = n + 1; a.eval = std::max(1, n * DMG / 2);
+                        a.is_noncreature = true;
+                        actions.push_back(std::move(a));
+                    }
+                    continue;
+                }
+                else if (ab.effect == "beast_token_33")
+                {
+                    // Garruk +1: a 3/3 that attacks from next turn (or this turn under Lightning Greaves, via
+                    // the kActLoyaltyTokenContinuation site-9 key). Ordering score only.
+                    ev = 3 * DMG * std::max(0, ExpectedAttacks(state) - 1);
+                    if (ev <= 0) { ev = 1; }
+                }
+                else if (ab.effect == "draw_greatest_power")
+                {
+                    // Garruk -3: draws the greatest power among our creatures AT RESOLUTION. Never gated on
+                    // the pre-plan board: the activation trails the plan's casts, so a Hydra cast in the same
+                    // plan is on the board when it resolves. Ordering score only (the rollout prices it).
+                    ev = std::max(1, GreatestPowerAmongOwnCreatures(state, state.active_player_index) * DMG / 2);
+                }
+                else if (ab.effect == "wurm_tokens_per_land")
+                {
+                    int lands = 0;
+                    for (const Permanent& q : state.battlefield)
+                    { if (q.controller_index == state.active_player_index && q.card.IsLand()) { ++lands; } }
+                    ev = lands * ab.amount * DMG * std::max(0, ExpectedAttacks(state) - 1);
+                    if (ev <= 0) { ev = 1; }
                 }
                 else if (ab.effect == "add_red_mana") { ev = ab.amount * DMG; }
                 else if (ab.effect == "emblem_spell_cast_damage") { ev = ab.amount * 3 * DMG; }
@@ -70460,7 +70646,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             };
             const PaidExileCastScope chandra_host(&chandra_cast);
             ApplyLoyaltyAbility(state, state.active_player_index, a.sac_source_id, a.loyalty_ability,
-                                a.enchant_target, a.tutor_target, a.ponder_keep == 1);
+                                a.enchant_target, a.tutor_target, a.ponder_keep == 1, a.chosen_x - 1);
         }
         else if (a.kind == Action::Kind::GarthActivate)
         {
@@ -71748,6 +71934,10 @@ static void SimulateOneCombatAfterTitan(GameState& state, int active, std::vecto
             atk_idx.push_back(i);
         }
     }
+
+    // Kalonian Hydra's team counter doubling (declared copies only). Mirrors GameEngine::CombatPhase
+    // (lockstep, ONE shared helper, same point: after the token block, before the attack pumps).
+    ApplyAttackDoubleTeamCounters(state, active, atk_idx, declared_n);
 
     // Goblins attack-trigger self-pumps (Piledriver +2/+0 per other attacking Goblin; Muxus +1/+1
     // per other Goblin you control): applied at declare-attackers BEFORE the damage loop reads power,
@@ -74098,6 +74288,7 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
             case Action::Kind::ActivateLoyalty:
                 w.Begin(kSigM); w.Put("PW#"); w.Int(act.sac_source_id); w.Put('a'); w.Int(act.loyalty_ability);
                 w.Put('t'); w.Int(act.enchant_target);
+                if (act.chosen_x > 0) { w.Put('x'); w.Int(act.chosen_x); }   // Nissa -8's count (0 elsewhere)
                 if (act.ponder_keep >= 0) { w.Put('c'); w.Put(act.tutor_target); w.Put('k'); w.Int(act.ponder_keep); }
                 w.End(); break;
             case Action::Kind::GarthActivate:
@@ -79406,6 +79597,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                     msf.push_back("PW#" + std::to_string(act.sac_source_id)
                                   + "a" + std::to_string(act.loyalty_ability)
                                   + "t" + std::to_string(act.enchant_target)
+                                  + (act.chosen_x > 0 ? "x" + std::to_string(act.chosen_x) : std::string())
                                   + (act.ponder_keep >= 0 ? "c" + act.tutor_target.str() + "k" + std::to_string(act.ponder_keep) : std::string())); break;
                 // Garth: which name is a distinct decision (once-per-game each -- core invariant).
                 case Action::Kind::GarthActivate:
@@ -81437,6 +81629,23 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
             const CardDefinition* d = CardDatabase::Instance().Lookup(a.card_name);
             if (d && a.loyalty_ability >= 0 && a.loyalty_ability < static_cast<int>(d->params.loyalty_abilities.size())
                 && d->params.loyalty_abilities[a.loyalty_ability].effect == "add_red_mana") { mask |= 1 << 9; }
+            if (d && a.loyalty_ability >= 0 && a.loyalty_ability < static_cast<int>(d->params.loyalty_abilities.size()))
+            {
+                const std::string& eff = d->params.loyalty_abilities[a.loyalty_ability].effect;
+                // Nissa +1's untapped land / float (kActLoyaltyUntapContinuation), and Garruk's +1 / -6
+                // tokens under a haste Equipment (kActLoyaltyTokenContinuation): the continuation that
+                // spends them is SEARCHED (bp_choice variants), never an unchallengeable front pick.
+                if (eff == "untap_land_animate") { mask |= 1 << 9; }
+                if ((eff == "beast_token_33" || eff == "wurm_tokens_per_land")
+                    && OwnHasteEquipmentOnBattlefield(state, state.active_player_index)) { mask |= 1 << 9; }
+                // Garruk -3's draws arm the hand-entry breakpoint (site 10) at section level; marked so
+                // the cards drawn can be played/cast that phase by a searched continuation (the Niv
+                // tap-draw clause below; the auras gi428 lesson).
+                // Jared Carthalion's -6 (regrow_multicolored: a multicolored card back to hand, plus a draw
+                // when it was all five colours) is the same class: a trailing activation that puts cards in hand.
+                if ((eff == "draw_greatest_power" || eff == "regrow_multicolored")
+                    && BpPutInHandEnabled() && BpHandEntryEnabled()) { mask |= 1 << 10; }
+            }
         }
         // Site 7: a Pod activation with a REAL fetch while a second Pod stands by -- the fetch
         // is a new sac victim no pre-fetch enumeration could offer (see the header note at
@@ -117082,7 +117291,10 @@ static std::string LineSummaryOfPlan(const TurnSolver::Plan& p, const GameState*
         // so the activation looked like it never happened (2026-09-02 item 1: "Activating Oko is
         // not listed in the history").
         else if (a.kind == Action::Kind::ActivateLoyalty)
-        { cast_names.push_back(LoyaltyActionLabel(a.card_name.str(), a.loyalty_ability)); }
+        {
+            cast_names.push_back(LoyaltyActionLabel(a.card_name.str(), a.loyalty_ability)
+                                 + (a.chosen_x > 0 ? " (" + std::to_string(a.chosen_x - 1) + ")" : std::string()));
+        }
         else if (a.kind == Action::Kind::AttachAllEquipment)
         { cast_names.push_back(a.card_name + ": attach all Equipment"); }
         // The COUNT rides the label, because it is the only thing distinguishing "this bundles the
@@ -119313,8 +119525,11 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
                     // inline here, and Bolas's -2 was missing from it -- the dialog offered a raw
                     // "-2: steal_creature" next to a plain-English "+3: destroy a noncreature
                     // permanent", the only ability of the three walkers that read as source code.)
+                    // An "any number" COUNT (Nissa -8, chosen_x = count + 1) is part of the decision, so it
+                    // rides the description or the dedup would fold every count onto the first.
                     const std::string desc =
-                        LoyaltyAbilityText(adef->params.loyalty_abilities[a.loyalty_ability]);
+                        LoyaltyAbilityText(adef->params.loyalty_abilities[a.loyalty_ability])
+                        + (a.chosen_x > 0 ? " -- " + std::to_string(a.chosen_x - 1) + " Forest(s)" : std::string());
                     addSub(a.card_name + " " + desc, a.card_name + " ability", desc,
                            a.card_name, "loyalty");
                 }

@@ -1,0 +1,39 @@
+{
+  "deck": "decks/Hydras/Hydras.cod",
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "on_the_play": true,
+  "active_life": 20,
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 0,
+  "max_turns": 7,
+  "turn": 5,
+  "opponent_life": 8,
+  "expect_win_turn": 5,
+  "battlefield": [
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Lightning Greaves"
+    }
+  ],
+  "hand": [
+    "Kalonian Hydra"
+  ],
+  "_comment": "Hydras I3: cast Kalonian Hydra, equip Lightning Greaves ({0}), attack: its attack trigger doubles its four counters BEFORE damage, so the lone swing deals 8 -- exactly lethal. Needs the realised doubling AND the projection addend (a 4-damage read would never see this kill)."
+}

@@ -91,6 +91,16 @@ bool GoldFishRunner::DeckUsesSecondMain(const Decklist& deck)
         // 2c-bis "resources generated during combat" bucket), and a main-2 swap can use mana combat
         // did not need. Without the second main that recast line is inexpressible.
         if (def->params.aura_swap_cost.has_value()) { return true; }
+        // GARRUK, PRIMAL HUNTER (Hydras, 2026-11-11; USER: *"Second main -3 makes sense."*). "-3: Draw cards
+        // equal to the greatest power among creatures you control" reads the power at RESOLUTION, and
+        // COMBAT raises it: Kalonian Hydra's attack trigger doubles every creature's +1/+1 counters before
+        // damage. So the post-combat -3 draws more than any pre-combat one could -- the 2c-bis "resources
+        // generated during combat" bucket. Loyalty activations are enumerated in every main the walker has
+        // not yet activated in, so the search chooses main 1 or main 2 for it; nothing is moved out of
+        // main 1 (the phase filter is a provider opt-in Hydras does not take). Keyed on the effect, which
+        // no other card in cards.json carries, so no other deck's main phases move.
+        for (const auto& ab : def->params.loyalty_abilities)
+        { if (ab.effect == "draw_greatest_power") { return true; } }
         // MELIRA POD (2026-09-04). Birthing Pod (pod_mv_delta): the classic line is "attack with
         // Kitchen Finks / Murderous Redcap, THEN sac the attacker to Pod post-combat" -- banking
         // the combat damage AND the ladder climb off one body; a single main forces the trade.
@@ -441,6 +451,11 @@ bool GoldFishRunner::DeckFeedsCombat(const Decklist& deck)
         // lost by a list revision, and this function's own comment says the WIDE direction is safe.
         if (p.attack_team_pump_per_life_gained)                              { return true; }
         if (p.attack_with_n_threshold > 0)                                   { return true; }   // Harbin's attack-threshold pump
+        // Kalonian Hydra: a counter body cast PRE-combat is doubled by this combat's attack trigger (a
+        // summoning-sick one too), so a pre-combat cast feeds the attack. Hydras also reads true via
+        // Lightning Greaves (is_equipment); this keeps a Greaves-less list from collapsing every cast to
+        // main 2 (the WIDE, safe direction).
+        if (p.attack_double_team_counters)                                   { return true; }
         if (p.life_threshold_pump_life > 0)                                  { return true; }   // Serra Ascendant's +5/+5
         if (p.static_artifact_threshold > 0)                                 { return true; }   // Goblin Tomb Raider's +1/+0 + haste
         if (p.pt_equals_snow_permanents_you_control

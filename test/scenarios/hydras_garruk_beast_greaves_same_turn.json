@@ -1,0 +1,32 @@
+{
+  "deck": "decks/Hydras/Hydras.cod",
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "on_the_play": true,
+  "active_life": 20,
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 0,
+  "max_turns": 7,
+  "turn": 5,
+  "opponent_life": 3,
+  "expect_win_turn": 5,
+  "battlefield": [
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Lightning Greaves"
+    },
+    {
+      "name": "Garruk, Primal Hunter",
+      "loyalty": 3
+    }
+  ],
+  "hand": [],
+  "_comment": "Hydras I3 item 5: Garruk +1 makes a 3/3 Beast; Lightning Greaves (equip {0}) moves onto it in the searched site-9 continuation (kActLoyaltyTokenContinuation) and the Beast attacks the same turn for exactly 3."
+}

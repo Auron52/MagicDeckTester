@@ -590,6 +590,13 @@ struct CardParams
     // Primordial Hydra: "At the beginning of your upkeep, double the number of +1/+1 counters on this
     // creature." (PerformUpkeepDoubleSelfCounters, both upkeep sites; DoublePlusCounters, CR 701.10e).
     bool upkeep_double_self_counters = false;
+    // Kalonian Hydra: "Whenever this creature attacks, double the number of +1/+1 counters on each creature
+    // you control." One trigger per DECLARED copy (CR 508.2a; a creature put onto the battlefield attacking
+    // never triggers it), resolving in the declare-attackers step BEFORE damage, so the doubled counters
+    // swing this combat (ApplyAttackDoubleTeamCounters at the same point of GameEngine::CombatPhase and
+    // SimulateOneCombatAfterTitan; DoublePlusCounters, CR 701.10e). The attack projection carries its
+    // addend (CountAttackDoubleTeamCountersPump in PendingAttackDamageImpl).
+    bool attack_double_team_counters = false;
     // Voracious Hydra: "When this creature enters, choose one -- * Double the number of +1/+1 counters on
     // this creature. * This creature fights target creature you don't control." Both set = the modal
     // trigger (the Voracious block in FireOwnEtbTriggersBody, SpellEffects.h). The mode and the fight

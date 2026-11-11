@@ -7791,7 +7791,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             };
             const PaidExileCastScope chandra_host(&chandra_cast);
             ApplyLoyaltyAbility(state, state.active_player_index, a.sac_source_id, a.loyalty_ability,
-                                a.enchant_target, a.tutor_target, a.ponder_keep == 1);
+                                a.enchant_target, a.tutor_target, a.ponder_keep == 1, a.chosen_x - 1);
             log_loyalty_if_fired(b, a.loyalty_ability);
         }
         else if (a.kind == Action::Kind::GarthActivate)
