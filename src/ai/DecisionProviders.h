@@ -3711,6 +3711,12 @@ public:
     // Steelbane Hydra's destroy: only opponent-controlled targets are offered (proof at the definition).
     std::vector<int> CounterDestroyArtEnchTargets(const GameState& s, int controller, const Permanent& src,
                                                   const std::vector<int>& legal) const override;
+    // MTG_HYDRAS_CAST_ORDER -- the USER's cast order (2026-11-10: "Doublers and Gargos should be before the
+    // Hydras"): Vernal Bloom, Gauntlet / Nissa, the land fetches, Gargos, Greaves, Garruk, Kalonian, the X
+    // Hydras last. DEFAULT ON; =0 => DeckProvider::CastOrderRank byte-for-byte. Ties go to the NAME.
+    int         CastOrderRank(const GameState&, const CardDefinition&) const override;
+    const char* CastOrderTierName(int rank) const override;
+    bool        CastOrderTotalByName() const override;
 };
 
 class CycloneProvider : public DeckProvider

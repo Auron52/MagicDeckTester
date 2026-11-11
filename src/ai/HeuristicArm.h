@@ -845,6 +845,9 @@ enum Slot : int
     ID_HINT_GAME,             // MTG_ID_HINT_GAME  CROSS-DECISION ID hint (default ON since 2026-11-10): a decision keeps the PREVIOUS decision's MTG_ID_ORDER_HINT map of the same game, and a node whose own decision has no hint for (state, depth-1) reads the previous decision's. Fills the subtrees the game line cache answered in a warm-up pass (no node was walked there, so no hint was recorded) and the passes an escalation skip never ran. Same guards as the per-decision hint (plan count, static order, interior only unless model-recorded); cleared per game. See docs/design/cross-decision-tree-reuse.md
     INWIN_CACHE,              // MTG_INWIN_CACHE  DEPTH-FREE IN-WINDOW PROOF CACHE (default ON since 2026-11-10): a completed node's win at turn w <= T+depth-1 (inside its exhaustively searched window) and its no-win bound clipped to T+depth-1 are properties of the in-window lines only, so they answer the same state at ANY remaining depth (a win only while w is inside the querying window). Per game, so it carries both across iterative-deepening passes and across decisions. MTG_INWIN_CACHE_VERIFY=1 recomputes each hit. See docs/design/cross-decision-tree-reuse.md
     GODS_PHARIKA_GOD_ONE,    // MTG_GODS_PHARIKA_GOD_ONE  experimental: one own-graveyard God fuel target per Pharika state
+    HYDRAS_CAST_ORDER,        // MTG_HYDRAS_CAST_ORDER    Hydras TOTAL cast order (USER 2026-11-10: "Doublers and Gargos should be before the Hydras"): Vernal Bloom, Gauntlet / Nissa, the land fetches, Gargos, Greaves / Garruk / Kalonian, the X Hydras last (HydrasProvider::CastOrderRank). Default ON; =0 -> the generic tiers
+    HYDRAS_MAX_X,             // MTG_HYDRAS_MAX_X         Hydras: every "enters with X" Hydra held to the most X its plan can pay (USER-requested LOSSY narrowing, 2026-11-10). Default OFF until the USER rules on its A/B; =1 enables
+    HYDRAS_SECOND_MAIN,       // MTG_HYDRAS_SECOND_MAIN   Hydras: Garruk, Primal Hunter's draw_greatest_power opens the searched post-combat main (USER 2026-11-10: "Second main -3 makes sense."). Default ON; =0 is the MEASUREMENT arm that prices the main 2 (GoldFishRunner::DeckUsesSecondMain)
     COUNT
 };
 
@@ -1634,6 +1637,9 @@ inline const char* Name(int slot)
         "MTG_ID_HINT_GAME",
         "MTG_INWIN_CACHE",
         "MTG_GODS_PHARIKA_GOD_ONE",
+        "MTG_HYDRAS_CAST_ORDER",
+        "MTG_HYDRAS_MAX_X",
+        "MTG_HYDRAS_SECOND_MAIN",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
