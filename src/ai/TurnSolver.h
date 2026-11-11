@@ -2679,16 +2679,20 @@ public:
     // Test seam: a digest of the per-game cache state the scope above protects (sizes, byte counts,
     // epochs) -- equal before and after anything that must leave play untouched.
     static std::uint64_t PerGameCacheDigestForTest();
-    // Test seam for the plan caches' READ GUARD (cachecharge, MTG_CACHE_READ_GUARD_KIND): a computation is stored
-    // after reading the priced ceiling (and, with `searchbudget_read`, also a finite SearchBudget); then it is looked
-    // up -- by CacheHitCharge (the real caches) and by pledger::WouldServe (the shadow) -- once with the decision
-    // budget EXHAUSTED and the priced ceiling standing, and once with the priced ceiling TRIPPED. Every thread-local
-    // it touches is restored. `kind` is the per-job arm (-1 env, 0 broad guard, 1 by kind).
+    // Test seam for the plan caches' READ GUARD (cachecharge, MTG_CACHE_READ_GUARD_KIND): a computation counts 5
+    // odometer visits after reading the priced ceiling (and, with `searchbudget_read`, also a finite SearchBudget) and
+    // is stored; then it is looked up -- by CacheHitCharge (the real caches) and by pledger::WouldServe / WouldReplay
+    // (the shadow) -- with the decision budget EXHAUSTED and the priced ceiling standing, then with too little priced
+    // headroom left for the replay, then with the ceiling TRIPPED. Every thread-local it touches is restored. `kind`
+    // is the per-job arm (-1 env, 0 off, 1 on).
     struct ReadGuardProbe
     {
         bool stored = false, budget_read = false, budget_read_sb = false;
-        bool real_exhausted = false, shadow_exhausted = false;   // served with the decision budget exhausted?
-        bool real_priced = false, shadow_priced = false;         // served with the priced ceiling tripped?
+        long long work_odo = 0;                                   // the stored Cost::work odometer count
+        bool real_exhausted = false, shadow_exhausted = false, shadow_replay_exhausted = false;
+        long long replayed_odo = 0, replayed_priced = 0;          // what the exhausted-budget hit counted
+        bool real_headroom = false;                               // served when the replay would trip the ceiling?
+        bool real_priced = false, shadow_priced = false, shadow_replay_priced = false;   // ceiling tripped
     };
     static ReadGuardProbe ReadGuardProbeForTest(bool searchbudget_read, int kind);
 
