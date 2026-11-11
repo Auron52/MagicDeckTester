@@ -58045,6 +58045,122 @@ bool MartyrLifegainProvider::OffersJitteGainMode(const GameState& s) const
     return MartyrThresholdWithin(s, MartyrJitteGainAvailable(s));
 }
 
+// ---- MartyrLifegainProvider: THE 1-DROP TUTOR PRUNE (MTG_MARTYR_TUTOR_PRUNE) ------------------------------------
+//
+// USER 2026-11-11: "add a heuristic prune for the 1-drop search to get only Martyr (if we don't have one and need
+// the lifegain), Serra Ascendant or Speaker of the Heavens. Usually it will be Serra Ascendant I would imagine, so
+// that should rank first." Ranger-Captain of Eos ("search your library for a creature card with mana value 1 or
+// less") and Ranger of Eos (up to two) otherwise also reach Mother of Runes, Thraben Inspector, Kami of False Hope
+// and Curious Farm Animals. A provider RESTRICTION + ORDER of the searched candidates (the search still branches
+// over every admitted name); a heuristic judgement the USER made, not a dominance proof.
+//   * Serra Ascendant first (life_threshold_pump_life), then Martyr of Sands (sac_outlet_lifegain_per_revealed_
+//     color) when admitted, then Speaker of the Heavens (a life-gated tap_token source).
+//   * Martyr's admission, the AGENT'S READING of the ruling (surfaced to the USER): "don't have one" = no Martyr of
+//     Sands in hand or on the battlefield; "need the lifegain" = life below the HIGHEST life threshold an own card
+//     reads (MartyrLifeThresholdOf over the deck's Serra / Speaker definitions: 30 in Standard, 37 in 2HG).
+//   * Fallback: if nothing is admissible (none of the three left in the library, or only a Martyr that is not
+//     needed), the generic full list -- the fetch is never wasted.
+//   * Ranger of Eos's pair is a RESOLUTION-time list (TutorHandPutList, no cast axis -- the existing architecture):
+//     the admitted names first, DISTINCT names before second copies, then the remaining legal cards in library
+//     order to fill "up to two".
+// Human play: TutorCandidates returns the full list under the unpruned Tutor gate (RankedTutorCandidates puts this
+// ranking first); the pair keeps the sac_tutor chooser. =0 -> the generic list and the default pair.
+namespace
+{
+bool MartyrTutorPruneOn()
+{
+    static const bool on = EnvOn("MTG_MARTYR_TUTOR_PRUNE", true);   // DEFAULT ON (USER 2026-11-11); =0 -> generic
+    return heurarm::Flag(heurarm::MARTYR_TUTOR_PRUNE, on);
+}
+
+// 0 = Serra Ascendant, 1 = Martyr of Sands, 2 = Speaker of the Heavens, -1 = not one of the three. By parameters,
+// not names (the deck's three MV<=1 payoffs).
+int MartyrTutorRole(const CardDefinition* d)
+{
+    if (d == nullptr) { return -1; }
+    const CardParams& pp = d->params;
+    if (pp.life_threshold_pump_life > 0) { return 0; }
+    if (!pp.sac_outlet_lifegain_per_revealed_color.empty()) { return 1; }
+    if (IsLifeGatedTapTokenSource(d)) { return 2; }
+    return -1;
+}
+
+// The ordered admitted names (Serra, Martyr-if-admitted, Speaker) among `legal`; empty = fall back.
+std::vector<std::string> MartyrTutorAdmitted(const GameState& s, int controller, const std::vector<std::string>& legal)
+{
+    const Player& pl = s.players[static_cast<std::size_t>(controller)];
+    std::array<std::vector<std::string>, 3> by_role;
+    int top_threshold = 0;
+    for (const std::string& n : legal)
+    {
+        const CardDefinition* d = CardDatabase::Instance().Lookup(n);
+        const int role = MartyrTutorRole(d);
+        if (role >= 0) { by_role[static_cast<std::size_t>(role)].push_back(n); }
+        top_threshold = std::max(top_threshold, MartyrLifeThresholdOf(d));
+    }
+    // The threshold readers may already be out of the library: count the deck's own copies anywhere we can see.
+    auto widen = [&](const CardDefinition* d) { top_threshold = std::max(top_threshold, MartyrLifeThresholdOf(d)); };
+    for (const Card& c : pl.hand)      { widen(CardDatabase::Instance().LookupCached(c)); }
+    for (const Card& c : pl.graveyard) { widen(CardDatabase::Instance().LookupCached(c)); }
+    for (const Permanent& p : s.battlefield)
+    { if (p.controller_index == controller) { widen(CardDatabase::Instance().LookupCached(p.card)); } }
+    if (!by_role[1].empty())
+    {
+        bool have_martyr = false;
+        for (const Card& c : pl.hand)
+        { if (MartyrTutorRole(CardDatabase::Instance().LookupCached(c)) == 1) { have_martyr = true; break; } }
+        for (const Permanent& p : s.battlefield)
+        {
+            if (have_martyr) { break; }
+            if (p.controller_index == controller && MartyrTutorRole(CardDatabase::Instance().LookupCached(p.card)) == 1)
+            { have_martyr = true; }
+        }
+        const bool need_gain = pl.life < top_threshold;
+        if (have_martyr || !need_gain) { by_role[1].clear(); }
+    }
+    std::vector<std::string> out;
+    for (const auto& v : by_role) { out.insert(out.end(), v.begin(), v.end()); }
+    return out;
+}
+}   // namespace
+
+std::vector<std::string>
+MartyrLifegainProvider::TutorCandidates(const GameState& s, int controller, const CardParams& pp) const
+{
+    std::vector<std::string> legal = GenericProvider::TutorCandidates(s, controller, pp);
+    if (!MartyrTutorPruneOn() || DecisionUnpruned(UnprunedGate::Tutor) || legal.size() <= 1) { return legal; }
+    // Only the MV<=1 creature fetch (both Rangers); any other tutor this deck may gain keeps the generic list.
+    if (pp.tutor_max_mv != 1) { return legal; }
+    std::vector<std::string> admitted = MartyrTutorAdmitted(s, controller, legal);
+    return admitted.empty() ? legal : admitted;
+}
+
+std::vector<std::string>
+MartyrLifegainProvider::TutorHandPutList(const GameState& s, int controller, const CardParams& pp, int max_puts) const
+{
+    if (!MartyrTutorPruneOn() || pp.tutor_max_mv != 1)
+    { return DecisionProvider::TutorHandPutList(s, controller, pp, max_puts); }
+    // Every legal library copy (the default's filter), one entry per copy, in library order.
+    std::vector<std::string> copies = DecisionProvider::TutorHandPutList(s, controller, pp, 1 << 20);
+    std::vector<std::string> names;
+    for (const std::string& n : copies)
+    { if (std::find(names.begin(), names.end(), n) == names.end()) { names.push_back(n); } }
+    const std::vector<std::string> admitted = MartyrTutorAdmitted(s, controller, names);
+    std::vector<std::string> out;
+    std::vector<int> used(copies.size(), 0);
+    auto take = [&](const std::string& n)
+    {
+        if (static_cast<int>(out.size()) >= max_puts) { return; }
+        for (std::size_t i = 0; i < copies.size(); ++i)
+        { if (!used[i] && copies[i] == n) { used[i] = 1; out.push_back(n); return; } }
+    };
+    for (const std::string& n : admitted) { take(n); }   // distinct admitted names, ranked
+    for (const std::string& n : admitted) { take(n); }   // then their second copies
+    for (std::size_t i = 0; i < copies.size() && static_cast<int>(out.size()) < max_puts; ++i)
+    { if (!used[i]) { used[i] = 1; out.push_back(copies[i]); } }   // fill "up to two" in library order
+    return out;
+}
+
 // ---- MartyrLifegainProvider: the USER's main-phase rulings of 2026-11-10 (CollectedActionAllowed) ----------
 //
 // (1) THE KAMI / FARM ANIMALS PRUNE (MTG_MARTYR_PRUNE_SACS, heurarm MARTYR_PRUNE_SACS; DEFAULT ON). USER
