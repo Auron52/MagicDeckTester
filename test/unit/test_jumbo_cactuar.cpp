@@ -313,7 +313,11 @@ TEST_CASE("Jumbo Cactuar never casts Overgrowth before a same-host Wild Growth")
     CHECK(ArrangedNames(s, acts) == std::vector<std::string>{"Wild Growth", "Overgrowth", "Tooth and Nail"});
 }
 
-TEST_CASE("Jumbo Cactuar moves Overgrowth before Sprawl when only that order funds the payoffs")
+// USER 2026-11-11: "I can't see why we would want Utopia Sprawl after Overgrowth." The swap that used to
+// rescue this line is gone. Sprawl-first is unpayable BY COUNT, not by a payment defect: Forest#10 is tapped
+// three times (once, then two Satyr untaps). Sprawl first yields 3 + 4 + 8 = 15; Overgrowth first yields
+// 3 + 5 + 8 = 16, which is the 16 the five casts cost. The search keeps the sub-lines (e.g. without Sprawl).
+TEST_CASE("Jumbo Cactuar keeps Utopia Sprawl before Overgrowth even when only the reverse funds the payoffs")
 {
     LoadJumboCards();
     JumboCactuarProvider provider;
@@ -351,9 +355,11 @@ TEST_CASE("Jumbo Cactuar moves Overgrowth before Sprawl when only that order fun
     std::stable_sort(order.begin(), order.end(), [&](int x, int y)
     { return CastOrderLess(s, acts[x], acts[y]); });
     CHECK_FALSE(TurnSolver::OrderPaysSequentially(s, acts, order));
+    const std::vector<int> ranked = order;
     ApplyDeckCastArrangement(s, acts, order);
-    CHECK(order == std::vector<int>{1, 3, 4, 0, 2});
-    CHECK(TurnSolver::OrderPaysSequentially(s, acts, order));
+    CHECK(order == ranked);
+    CHECK(acts[static_cast<std::size_t>(order[0])].card_name.str() == "Utopia Sprawl");
+    CHECK(TurnSolver::OrderPaysSequentially(s, acts, std::vector<int>{1, 3, 4, 0, 2}));
 }
 
 TEST_CASE("Jumbo Cactuar enumerates a newly hasted Arbor Elf funding Tooth and Nail")

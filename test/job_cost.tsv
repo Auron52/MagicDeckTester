@@ -414,7 +414,7 @@ extraturns_overnight_d5_s5005	23364
 extraturns_overnight_d5_s6006	22159
 extraturns_overnight_d5_s7007	26672
 extraturns_regression_d0_s2002	1
-extraturns_regression_d3_s2002	12796
+extraturns_regression_d3_s2002	14085
 extraturns_regression_d5_s2002	13160
 extraturns_regression_d5_s3003	14251
 extraturns_smoke_d0_s1001	1
@@ -657,13 +657,13 @@ jumbo_overnight_d5_s5005	10943
 jumbo_overnight_d5_s6006	8284
 jumbo_overnight_d5_s7007	9394
 jumbo_regression_d0_s2002	1
-jumbo_regression_d3_s2002	4871
+jumbo_regression_d3_s2002	4870
 jumbo_regression_d3_s30001	5275
 jumbo_regression_d5_s2002	5493
-jumbo_regression_d5_s30001	44535
+jumbo_regression_d5_s30001	44530
 jumbo_regression_d5_s3003	5268
 jumbo_smoke_d0_s1001	1
-jumbo_smoke_d3_s1001	3904
+jumbo_smoke_d3_s1001	3903
 jumbo_smoke_d5_s1001	3965
 kithkin_overnight_d0_s10010	1
 kithkin_overnight_d0_s4004	1

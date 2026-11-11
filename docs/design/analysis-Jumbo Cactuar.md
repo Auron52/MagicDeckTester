@@ -57,15 +57,13 @@ Jumbo Cactuar at 135. Thus two Zeniths, or Zenith plus a hand-cast Cactuar,
 still resolve Surrak first.
 
 Set-level rules (`JumboCactuarProvider::ArrangeCastOrder`, applied in this order
-after the rank sort):
+after the rank sort). The land Auras are never reordered: Overgrowth always
+follows both one-mana Auras.
 1. Chariot of Victory: when two or more untapper entries (a hand Arbor Elf or
    Voyaging Satyr, or a tutor fetching one) are in the line, the first Chariot
    cast moves to right after the FIRST untapper. With one untapper the rank
    order stands.
-2. Overgrowth before a same-host Utopia Sprawl only when the ranked order fails
-   and the swapped order pays every cast (OrderPaysSequentially). Never before
-   Wild Growth.
-3. Surrak and Goreclaw moves to just before the first untapper entry ahead of
+2. Surrak and Goreclaw moves to just before the first untapper entry ahead of
    it when the moved order pays every cast (OrderPaysSequentially).
 
 ### USER cast-order rulings (2026-11-11)
@@ -82,8 +80,14 @@ How they apply (implementation queued in the mana-clean chain, item 5h):
 1. A Zenith/Finale ranked by its target goes AFTER a hand-cast copy of that target (Elf, Surrak, Cactuar alike;
    the current target ranks 38/95/125 put Elf and Cactuar tutors before the hand copy).
 2. Overgrowth never goes before Wild Growth. Seed 30029950 T6 (Overgrowth-first pays Tooth and Nail) is therefore
-   treated as a payment defect to find, not an order change. Whether the existing proven Overgrowth-before-Utopia
-   Sprawl swap should also go is an open USER question.
+   treated as a payment defect to find, not an order change. USER follow-up on the old proven
+   Overgrowth-before-Utopia Sprawl swap (verbatim): *"Yes, I can't see why we would want Utopia Sprawl after
+   Overgrowth."* The swap is removed; Overgrowth never goes before either one-mana Aura.
+   Finding (2026-11-11): neither s30029950 T6 nor the swap's unit-test board is a payment defect. With one
+   enchanted Forest tapped three times (once, then two untaps), the cheap Aura first makes the second tap happen
+   before Overgrowth enters: s30029950 yields 3 + 4 + 6 = 13 Wild-Growth-first vs 3 + 5 + 6 = 14
+   Overgrowth-first, for a 14-mana line (WG 1 + Overgrowth 3 + Chariot 3 + T&N 7). No payment of the
+   Aura-first order reaches 14; the search keeps the sub-lines (e.g. Overgrowth + Chariot + T&N, 13 mana).
 3. Chariot after the first Elf/Satyr: optional, may be tried and measured. USER follow-up (verbatim): *"I can't
    think of a way that with only one elf/satyr that this worder would be wrong."* and *"It pretty much has to be
    multiples coming into play to need the chariot cast earlier."* So with one untapper in the line the current order

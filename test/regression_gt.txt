@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 968a8a449  date 2026-11-11
+# Regression ground truth -- commit 997a8f071  date 2026-11-11
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-10): Full 2026-11-10 rebaseline: 120/588 keys changed; searched overlap 64 faster, 6 slower, net 60 scored turns faster, no searched win became unwon. Five slowdowns recover at 4x budget; Modern RW Burn 2HG s7007 gi58 recovers at unlimited budget. 583 same-score searched line changes reviewed by mechanical grouping and samples. Full oracle: 588/588 matching fingerprints, 0 nonconv, 54 off-by-one fd-diverge, 3 severe flags from 2 distinct preexisting Treasure Hunt seeds (5216, 8468); legacy per-turn search wins T6, current committed-line result is unwon/T7, and disabling batch payment does not fix it. Prior Angels, Angels2HG, and Bruna small searched slowdowns remain follow-ups.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
@@ -82,9 +82,9 @@ fivecolour_smoke_d5_s1001=4.7840/019c1b44733f7aad
 stompy_smoke_d0_s1001=4.8170/0254d80bf9c7c5cf
 stompy_smoke_d3_s1001=3.9800/e2e95d4626254be2
 stompy_smoke_d5_s1001=4.0000/12c9e20788d4ea9d
-jumbo_smoke_d0_s1001=5.6300/9554d6d8d08a13f5
+jumbo_smoke_d0_s1001=5.6250/10f6fd7cd09dd1a2
 jumbo_smoke_d3_s1001=3.9400/376391b22ec93742
-jumbo_smoke_d5_s1001=3.9714/c7a3aa2707c724a4
+jumbo_smoke_d5_s1001=3.9714/f5ac1b0a06331a19
 minotaur_smoke_d0_s1001=5.3050/948ae97fa1052211
 minotaur_smoke_d3_s1001=4.9867/c2ccc2adcb805a03
 minotaur_smoke_d5_s1001=4.8954/e73569ee4e3d2ade
@@ -361,7 +361,7 @@ stompy_regression_d0_s2002=4.8580/ddc27e701ff83999
 stompy_regression_d3_s2002=4.1400/29cd2e05d4bcb99d
 stompy_regression_d5_s2002=4.1000/9fbcebdbc6b697f6
 stompy_regression_d5_s3003=4.0560/415f29b0a90fb76e
-jumbo_regression_d0_s2002=5.5460/540b4a124612f6ce
+jumbo_regression_d0_s2002=5.5470/c6b389e7a4b8716f
 jumbo_regression_d3_s2002=4.2400/42869927f9744e9c
 jumbo_regression_d5_s2002=4.0840/c70c440c62601a45
 jumbo_regression_d5_s3003=4.0740/6a5b7309b1eb8b51
