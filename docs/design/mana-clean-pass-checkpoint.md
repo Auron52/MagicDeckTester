@@ -225,6 +225,39 @@ Source of the work: `logs/mana_clean/lastweek-20261110-shadowborn-order/report.m
   `MTG_MANA_ORACLE=3 MTG_MANA_ORACLE_TURN=4 build/Release/mtg 'decks/Jumbo Cactuar/Jumbo Cactuar.cod' --profile
   'decks/Jumbo Cactuar/Jumbo Cactuar.profile.json' --games 1 --seed 30040027 --game-index 40027`.
 
+* **Jumbo item 5p (agent 2026-11-11): Utopia Sprawl FIXED; other-land Overgrowth + two-move case = USER DECISIONS.**
+  Commit `Jumbo 5p: Utopia Sprawl joins ...` (9b94d41d7, local). USER (verbatim): *"Utopia Sprawl is essentially
+  identical in this deck, so you can treat anything I say about wild growth here as applying to utopia sprawl."*
+  `JumboOvergrowthAtBreakpoint` now moves the first Overgrowth before the first same-land Wild Growth OR Utopia
+  Sprawl (conditions unchanged). s30039942 T4 and s30035570 T4 have no APPLY-DROP-ORDER now (lever on; off still
+  flags). Units 2828/2828 (the old "keeps Sprawl before Overgrowth" board IS the breakpoint, so it now asserts
+  the move with the lever on and the ranked order with it off); scenarios 459/459. Tiers: only Jumbo rows. Smoke
+  searched 0 slower / 0 faster, 1 same-score play change (d5 gi109); d0 gi109 5->7: the moved T3 order pays one
+  more cast (Finale of Devastation) and the greedy d0 runner spends it, losing T4's Tooth and Nail. That is the
+  permitted greedy runner, not a payment defect. Regression searched 0/0/0, d0 gi315 5->4, 817 refs 0 drift.
+  Held-out A/B (new binary vs the 5o on-arm, same seeds): d5 4.0557 = 4.0557 (0/0, 2 same-score), d3 byte-identical.
+  GT accepted for both tiers. Gate: **`jumbo-5p-20261111`** (PGO, src de68d3583766, block 90000-94999, 5,000 games): 8,036 issues, play byte-identical oracle off. Per 5k (vs 5o block 85000): APPLY-DROP 38 (82), APPLY-DROP-ORDER 636 (669), ENUM-GAP 457 (232), DOMINATED-CREATURE 284 (295), ORACLE-GAP 192 (150), CAPPED-DECISION 6,429 from 1 decision (11,817 / 3). The ENUM-GAP rise is block variance: the top 11 ENUM-GAP seeds give identical counts with MTG_JUMBO_OG_BREAKPOINT 0 and 1. Overgrowth-before-Aura ORDER flags left: same-land Overgrowth-first 2 flags / 1 board (s30094939 T4, Overgrowth@11 + WG@11 + T&N + Greaves equip; a hasted-Elf line the sequential check does not price, not chased), other-land 15 / 3 boards, and the 5o GSZ-first shape 20 / 4. Next fresh block 95000.
+  **Other-land diagnosis (s30037731, s30037871; T3, no untapper on board):** Forest#10 carries Wild Growth + Sprawl
+  (3 mana), Forest#11 is bare (1). The line is GSZ X=1 (2) + Overgrowth@11 (3) + one more one-mana Aura@10 (1) = 6
+  from 4 mana. It can only pay if Overgrowth enters on an UNTAPPED Forest#11, which then taps for 3. So every cast
+  before Overgrowth has to come from Forest#10, whose 3 is exactly Overgrowth's cost. The ranked order (Aura@10,
+  Overgrowth, GSZ) taps #11 or spends #10's mana first and reaches only 4 + 1. This is the 5n breakpoint with the
+  host taken as Overgrowth's own land: outside (all but #11) = 3 = cost. The existing code already computes
+  outside/stacked off Overgrowth's host; the only thing keeping it from firing is the same-host test on the
+  Aura. **USER DECISION (not implemented; the USER said keep the original order for another land):** drop the
+  same-land requirement on the Aura, so at the breakpoint Overgrowth moves before the first one-mana Aura on ANY
+  land when the ranked order fails and the moved one pays (moved order Overgrowth > Aura@10 > GSZ pays 3 + 3 = 6
+  on both repros). It only ORDERS: Overgrowth's host land stays a searched choice. Frequency: 2 boards / 10 flags
+  in the jumbo-userorder 5k block, 1 board / 5 flags in the jumbo-5o 5k block. Both are T3 lines without an
+  untapper, the case the USER said stacking is usually right because of the untaps.
+  **Two-move diagnosis (s30036569 T3):** Forest#10 + Wild Growth, Forest#11 dropped this turn, Arbor Elf + Satyr;
+  the line is WG@10 + Sprawl@10 + Overgrowth@10 + Finale X=1 + T&N = 15. Breakpoint holds (outside 1 + stacked 2
+  = 3), but Overgrowth-FIRST does not pay (3 + 4 + 6 = 13): with outside mana left, it is better to put the one
+  Aura it can buy on the host BEFORE the host's first tap. Aura (Forest#11) -> host taps for 3 -> Overgrowth;
+  re-taps 5 + 6, for 1 + 3 + 5 + 6 = 15. General form: at the breakpoint, Overgrowth goes after the first j = min(outside, number of
+  same-host one-mana Auras ranked ahead) of those Auras (j = 0 is the current rule). **USER DECISION (not
+  implemented; the USER's rule says "Overgrowth first"):** adopt that refinement as a fallback, used when
+  Overgrowth-first does not pay. Frequency: 1 board / 51 flags in jumbo-userorder 5k, 0 in jumbo-5o 5k.
 * **Extra Turns oracle cost (agent 2026-11-11): two lossless collapses FIXED; gate PARKED.** Diagnosis is in
   `docs/design/extra-turns-mana-oracle-sizing-2026-11-10.md` (section 2026-11-11). (1) The hit-only cut:
   `Realize` no longer builds fail-option scripts for callers that read only the hit (ENUM-GAP checks and the
