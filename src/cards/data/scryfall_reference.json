@@ -560,6 +560,15 @@
     "toughness": "3",
     "type_line": "Creature — Human Knight"
   },
+  "Berserk": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{G}",
+    "oracle_text": "Cast this spell only before the combat damage step.\nTarget creature gains trample and gets +X/+0 until end of turn, where X is its power. At the beginning of the next end step, destroy that creature if it attacked this turn.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
+  },
   "Beseech the Queen": {
     "cmc": 6.0,
     "keywords": [],
@@ -2230,6 +2239,15 @@
     "toughness": null,
     "type_line": "Artifact"
   },
+  "Fire-Lit Thicket": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{T}: Add {C}.\n{R/G}, {T}: Add {R}{R}, {R}{G}, or {G}{G}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
   "Fireblast": {
     "cmc": 6.0,
     "keywords": [],
@@ -3666,6 +3684,17 @@
     "toughness": "3",
     "type_line": "Creature — Angel Warrior"
   },
+  "Legion Leadership": {
+    "cmc": 2.0,
+    "keywords": [
+      "Double"
+    ],
+    "mana_cost": "{1}{R/W}",
+    "oracle_text": "Until end of turn, double target creature's power and it gains first strike.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
+  },
   "Legion Lieutenant": {
     "cmc": 2.0,
     "keywords": [],
@@ -4141,6 +4170,15 @@
     "power": "2",
     "toughness": "1",
     "type_line": "Artifact Creature — Shapeshifter"
+  },
+  "Might of Old Krosa": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{G}",
+    "oracle_text": "Target creature gets +2/+2 until end of turn. If you cast this spell during your main phase, that creature gets +4/+4 until end of turn instead.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
   },
   "Militia's Pride": {
     "cmc": 2.0,
@@ -6056,6 +6094,15 @@
     "toughness": null,
     "type_line": "Enchantment"
   },
+  "Spellskite": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{2}",
+    "oracle_text": "{U/P}: Change a target of target spell or ability to this creature. ({U/P} can be paid with either {U} or 2 life.)",
+    "power": "0",
+    "toughness": "4",
+    "type_line": "Artifact Creature — Phyrexian Horror"
+  },
   "Spider Umbra": {
     "cmc": 1.0,
     "keywords": [
@@ -6605,6 +6652,17 @@
     "power": null,
     "toughness": null,
     "type_line": "Sorcery"
+  },
+  "Temur Battle Rage": {
+    "cmc": 2.0,
+    "keywords": [
+      "Ferocious"
+    ],
+    "mana_cost": "{1}{R}",
+    "oracle_text": "Target creature gains double strike until end of turn.\nFerocious — That creature also gains trample until end of turn if you control a creature with power 4 or greater.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
   },
   "Tendo Ice Bridge": {
     "cmc": 0.0,
@@ -7190,6 +7248,17 @@
     "toughness": "2",
     "type_line": "Creature — Goblin Shaman"
   },
+  "Vines of Vastwood": {
+    "cmc": 1.0,
+    "keywords": [
+      "Kicker"
+    ],
+    "mana_cost": "{G}",
+    "oracle_text": "Kicker {G} (You may pay an additional {G} as you cast this spell.)\nTarget creature can't be the target of spells or abilities your opponents control this turn. If this spell was kicked, that creature gets +4/+4 until end of turn.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
+  },
   "Vitaspore Thallid": {
     "cmc": 2.0,
     "keywords": [],
@@ -7343,6 +7412,15 @@
     "power": "1",
     "toughness": "1",
     "type_line": "Creature — Elf"
+  },
+  "Wild Defiance": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{G}",
+    "oracle_text": "Whenever a creature you control becomes the target of an instant or sorcery spell, that creature gets +3/+3 until end of turn.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment"
   },
   "Wild Growth": {
     "cmc": 1.0,
