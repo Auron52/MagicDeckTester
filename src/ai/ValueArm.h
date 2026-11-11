@@ -157,6 +157,7 @@ struct Arm
     int         plan_priced_ledger_max_emits = -1;   // MTG_PLAN_PRICED_LEDGER_MAX_EMITS: -1 env | 0 unlimited | >0 virtual admission ceiling
     int         decision_priced_gate = -1;   // priced START GATE: -1 env (MTG_DECISION_PRICED_GATE, default OFF) | 0 off | 1 on
     int         bp_priced_stop    = -1;   // MTG_BP_DERIVE_PRICED_STOP (BpDerivePricedStopOn): -1 env | 0 off | 1 on
+    int         read_guard_kind   = -1;   // MTG_CACHE_READ_GUARD_KIND (cachecharge::ReadCutNow): -1 env | 0 off | 1 on
     int         sac_dup_fold      = -1;   // MTG_SAC_DUP_WALK_FOLD (sacdupfold::On): -1 env | 0 off | 1 on
     int         dup_action_fold   = -1;   // MTG_DUP_ACTION_FOLD (dupactfold::On): -1 env | 0 off | 1 on
     int         two_stage_fold_prefix = -1; // MTG_TWO_STAGE_FOLD_PREFIX: -1 env | 0 off | 1 on

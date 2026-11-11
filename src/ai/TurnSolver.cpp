@@ -4163,6 +4163,7 @@ struct Rec
 // RESIDENCY (default pool 57,526 units vs MTG_PLAN_CACHE_KB=1 56,198), i.e. thread interleaving in a pool.
 bool ReadGuardOn();
 bool ContextCutNow();
+bool ReadCutNow(bool searchbudget_read);
 struct Cost
 {
     long long dec = 0, greedy = 0, other = 0, null_attempts = 0;
@@ -4171,6 +4172,7 @@ struct Cost
     // MTG_CACHE_READ_GUARD: the computation evaluated a budget predicate (budgetbind::t_reads), so its result
     // can depend on budget STATE without charging a unit. Served only where the context budgets read "no cut".
     bool budget_read = false;
+    bool budget_read_sb = false;   // ...and a SearchBudget predicate was among those reads (not only the priced ceiling)
     // The computation's SIDE COUNTERS, replayed on a hit exactly as the enum memo replays its own (audit
     // §6.1): the group-cap drop it contributed (groupwave max_dropped), condemnation drops, truncation
     // events and budget binds -- read downstream by the truncation watermark and the no-win store gates,
@@ -4201,7 +4203,7 @@ struct Scope
 {
     Rec rec;
     bool live = false;
-    unsigned long long reads0 = 0, binds0 = 0;
+    unsigned long long reads0 = 0, binds0 = 0, preads0 = 0;
     bool meter_armed = false;
     long long meter_used = 0;
     int meter_acc = 0;
@@ -4210,7 +4212,7 @@ struct Scope
     {
         if (!On()) { return; }
         live = true;
-        reads0 = budgetbind::t_reads; binds0 = budgetbind::t_binds;
+        reads0 = budgetbind::t_reads; binds0 = budgetbind::t_binds; preads0 = budgetbind::t_preads;
         meter_armed = decisionwork::Armed();
         meter_used = decisionwork::t_used;
         meter_acc = decisionwork::t_charge_acc;
@@ -4242,6 +4244,7 @@ struct Scope
         // MTG_CACHE_READ_GUARD: a computation that read a budget predicate and saw it answer "cut" (a bind) is
         // a cut result, a function of budget state rather than of the key; never store it.
         c.budget_read = ReadGuardOn() && budgetbind::t_reads != reads0;
+        c.budget_read_sb = c.budget_read && (budgetbind::t_reads - reads0) != (budgetbind::t_preads - preads0);
         const bool read_cut = c.budget_read && budgetbind::t_binds != binds0;
         c.storable = c.other == 0 && !dec_cut && !gr_cut && !read_cut
                   && !meter_changed && !greedy_residual_changed && !decisionwork::Exceeded()
@@ -4266,6 +4269,39 @@ static void CacheChargeNote(SearchBudget* budget, long long n)
     }
 }
 bool cachecharge::ReadGuardOn() { static const bool v = EnvOn("MTG_CACHE_READ_GUARD", true); return v; }
+// ---- THE READ GUARD, BY THE PREDICATE THAT WAS READ (MTG_CACHE_READ_GUARD_KIND, DEFAULT ON; =0 -> ContextCutNow for
+// every entry that read a budget, as before; per-job arm "read_guard_kind"). Hydras P4 2026-11-11.
+//
+// The guard refuses a stored computation that read a budget predicate once a predicate it read would answer
+// differently now. It used to ask ContextCutNow() for EVERY such entry -- the decision budget exhausted or overrun
+// included -- but a breakpoint-continuation derivation's only budget read is the PRICED ceiling: eval_and_push polls
+// decisionwork::PricedExceeded() per odometer visit (MTG_BP_DERIVE_PRICED_STOP) and nothing in it polls a
+// SearchBudget. Once the decision budget was merely EXHAUSTED (the running pass finishing past it -- not overrun,
+// priced ceiling not tripped), every bp-cache / canon-front lookup was refused and its derivation re-run from scratch,
+// with the identical result, at every breakpoint the rest of the pass reached: Hydras d5 b20 gi 1979 re-derived 28.6k
+// lists that way (24.9M of the game's 29.5M odometer visits, 59.7M of its 71.1M payment walks), gi 1782 1.6k
+// (6.4M of 7.5M visits). Every one was a shadow-cache refusal with the decision budget exhausted and the priced
+// ceiling NOT tripped (MTG_BP_REENUM_CENSUS).
+//
+// THE RULE NOW. An entry whose reads were ALL priced reads (budgetbind::t_preads moved with t_reads) is refused only
+// when the priced ceiling has tripped (or the game is void / the unit meter is spent -- the predicates the derivation
+// also stops on); any SearchBudget read keeps the full ContextCutNow test. The stored computation's priced reads
+// all answered "not tripped" (a tripped derivation is interrupted and never stored), so serving it while the ceiling
+// still stands is what the guard was for. Real cache and shadow (pledger::WouldServe) ask the same question, so
+// residency still cannot move a count. NOT byte-identical by construction: the shadow now serves (free) lookups it
+// used to count as recomputes, so workctr::t_priced -- and through it the priced ceiling's trip point -- can move in
+// a decision whose ceiling trips. Inert at an unlimited budget (the ceiling is disarmed there and no read is counted).
+static bool ReadGuardKindOn()
+{
+    static const bool env = EnvOn("MTG_CACHE_READ_GUARD_KIND", true);   // DEFAULT ON; =0 restores the broad guard
+    const int a = valuearm::t_arm.read_guard_kind;
+    return a >= 0 ? a != 0 : env;
+}
+bool cachecharge::ReadCutNow(bool searchbudget_read)
+{
+    if (searchbudget_read || !ReadGuardKindOn()) { return ContextCutNow(); }
+    return gamework::Abandoned() || decisionwork::Exceeded() || decisionwork::PricedExceededQuiet();
+}
 bool cachecharge::ContextCutNow()
 {
     SearchBudget* const d = g_decision_budget;
@@ -4286,14 +4322,15 @@ static bool CacheHitCharge(const cachecharge::Cost& c)
     SearchBudget* const d = g_decision_budget;
     SearchBudget* const g = g_greedy_charge_budget;
     bool ok = c.storable && c.other == 0 && !decisionwork::Exceeded();
-    if (ok && c.budget_read && cachecharge::ContextCutNow()) { ok = false; }   // MTG_CACHE_READ_GUARD
+    if (ok && c.budget_read && cachecharge::ReadCutNow(c.budget_read_sb)) { ok = false; }   // MTG_CACHE_READ_GUARD(_KIND)
     if (ok && d != nullptr && !c.had_dec && c.null_attempts > 0) { ok = false; }
     if (ok && g != nullptr && !c.had_greedy && c.null_attempts > 0) { ok = false; }
     if (ok && !cachecharge::Affordable(d, c.dec)) { ok = false; }
     if (ok && !cachecharge::Affordable(g, c.greedy)) { ok = false; }
     if (!ok) { cachecharge::g_hits_refused.fetch_add(1, std::memory_order_relaxed); return false; }
     cachecharge::g_hits_replayed.fetch_add(1, std::memory_order_relaxed);
-    if (c.budget_read) { ++budgetbind::t_reads; }   // an enclosing computation inherits the dependence
+    if (c.budget_read)   // an enclosing computation inherits the dependence -- and its kind
+    { ++budgetbind::t_reads; if (!c.budget_read_sb) { ++budgetbind::t_preads; } }
     if (c.dec > 0 && d != nullptr)
     { ConsumeAtN(d, unitsite::kCacheHit, c.dec, /*bill=*/false); cachecharge::g_units_replayed.fetch_add(c.dec, std::memory_order_relaxed); }
     if (c.greedy > 0 && g != nullptr)
@@ -95600,7 +95637,8 @@ inline bool On()
     return v;
 }
 inline bool InShadow() { return workctr::t_mute > 0; }
-enum : std::uint8_t { kStored = 1, kHadDec = 2, kHadGreedy = 4, kNullAtt = 8, kPinUnread = 16, kBudgetRead = 32 };
+enum : std::uint8_t { kStored = 1, kHadDec = 2, kHadGreedy = 4, kNullAtt = 8, kPinUnread = 16, kBudgetRead = 32,
+                     kBudgetReadSb = 64 };
 using Map = std::unordered_map<std::uint64_t, std::uint8_t>;
 inline thread_local Map t_enum;    // enummemo::t_cache: 0 = first-visit marker, kStored|... = promoted
 inline thread_local Map t_bp;      // bpcache::t_plans (alias entries under the pin-cleared key, kPinUnread)
@@ -95614,7 +95652,7 @@ inline std::uint8_t FlagsOf(const cachecharge::Cost& c, bool pin_unread = false)
 {
     return static_cast<std::uint8_t>(kStored | (c.had_dec ? kHadDec : 0) | (c.had_greedy ? kHadGreedy : 0)
                                      | (c.null_attempts > 0 ? kNullAtt : 0) | (pin_unread ? kPinUnread : 0)
-                                     | (c.budget_read ? kBudgetRead : 0));
+                                     | (c.budget_read ? kBudgetRead : 0) | (c.budget_read_sb ? kBudgetReadSb : 0));
 }
 // CacheHitCharge's verdict on such an entry, without its stats or charges (both zero for a mode-1 entry).
 inline bool WouldServe(std::uint8_t f)
@@ -95622,7 +95660,7 @@ inline bool WouldServe(std::uint8_t f)
     if ((f & kStored) == 0 || decisionwork::Exceeded()) { return false; }
     if ((f & kNullAtt) != 0 && g_decision_budget != nullptr && (f & kHadDec) == 0) { return false; }
     if ((f & kNullAtt) != 0 && g_greedy_charge_budget != nullptr && (f & kHadGreedy) == 0) { return false; }
-    if ((f & kBudgetRead) != 0 && cachecharge::ContextCutNow()) { return false; }   // MTG_CACHE_READ_GUARD
+    if ((f & kBudgetRead) != 0 && cachecharge::ReadCutNow((f & kBudgetReadSb) != 0)) { return false; }   // MTG_CACHE_READ_GUARD(_KIND)
     return true;
 }
 inline void NotePeak()
@@ -117857,6 +117895,126 @@ std::vector<TurnSolver::Plan> TurnSolver::UntapLoopKillPlans(const GameState& st
     return out;
 }
 
+// ---- MTG_BP_REENUM_CENSUS (DIAGNOSTIC, print-only, default OFF) --------------------------------------
+// Hydras P4 (2026-11-11). Counts the breakpoint-continuation derivations whose ENUMERATION
+// (EnumeratePlansWithLand) re-walks a board a previous derivation already walked, and names the
+// BpEnumBuildKey snapshot fields that split the two derivations' cache keys. `base` = the BP key with
+// the ten snapshot folds left out (BuildBreakpointKey(cont_list) + arm + rollout-narrow + physical
+// cards + front-only + lazy request); `sig[f]` = what fold f would add. A repeat whose base matches
+// but whose sigs differ is a re-enumeration the BP cache cannot serve. Visits are odometer visits
+// (workctr kOdoVisit) INCLUSIVE of nested derivations; `saved` counts only repeats not nested inside
+// another repeat, so it never double counts. Mutex-free: thread-local tables, merged at exit.
+// Reads counters and globals only -- play is byte-identical with it on.
+namespace bpreenum
+{
+inline bool On() { static const bool v = EnvOn("MTG_BP_REENUM_CENSUS"); return v; }
+enum Field : int { kSite = 0, kNoPump, kHand, kActs, kReserved, kManaBefore, kCasts, kAllPaths, kSiteDef,
+                   kSiteAct, kFields };
+inline const char* FieldName(int f)
+{
+    static const char* n[kFields] = { "cantrip_site", "no_pump", "hand_before", "acts_before", "land_reserved",
+                                      "mana_before", "plan_casts", "allpaths", "site_def", "site_act" };
+    return n[f];
+}
+struct Totals
+{
+    std::mutex mu;
+    long long sb_reads = 0, p_reads_only = 0, no_reads = 0;   // derivations' enumerations by the budget reads they made
+    long long calls = 0, odo = 0, pay = 0, rep_same = 0, rep_same_odo = 0, rep_diff = 0, rep_diff_odo = 0,
+              rep_diff_pay = 0, rep_same_pay = 0;
+    long long mask_n[1 << kFields] = {}, mask_odo[1 << kFields] = {};
+    ~Totals()
+    {
+        if (!On()) { return; }
+        std::fprintf(stderr, "[bp-reenum] reads: searchbudget=%lld priced_only=%lld none=%lld\n", sb_reads, p_reads_only, no_reads);
+        std::fprintf(stderr, "[bp-reenum] calls=%lld odo=%lld pay=%lld | repeat_same_key=%lld odo=%lld pay=%lld"
+                     " | repeat_diff_key=%lld odo=%lld pay=%lld\n", calls, odo, pay, rep_same, rep_same_odo,
+                     rep_same_pay, rep_diff, rep_diff_odo, rep_diff_pay);
+        for (int m = 0; m < (1 << kFields); ++m)
+        {
+            if (mask_n[m] == 0) { continue; }
+            std::string s;
+            for (int f = 0; f < kFields; ++f) { if ((m >> f) & 1) { s += std::string(s.empty() ? "" : "+") + FieldName(f); } }
+            std::fprintf(stderr, "[bp-reenum]   differ={%s} calls=%lld odo=%lld\n", s.c_str(), mask_n[m], mask_odo[m]);
+        }
+    }
+};
+inline Totals g_tot;
+struct Sigs { std::uint64_t v[kFields]; };
+inline thread_local std::unordered_map<TranspositionTable::Key, std::vector<Sigs>, TranspositionTable::KeyHash> t_seen;
+inline thread_local int t_in_repeat = 0;
+inline thread_local int t_probe_depth = 0;
+inline thread_local int t_last_kind = -1;      // the latest probe's verdict (0 new, 1 same key, 2 diff key)
+inline thread_local long long t_last_odo = 0;
+// Why the BP caches did not keep a derivation: bit 0 front-only (canon), 1 unkeyed, 2 interrupted,
+// 3 AA cut, 4 unstorable, 5 charged dec, 6 charged greedy, 7 charged other, 8 null attempts, 9 budget read.
+struct Why
+{
+    std::mutex mu;
+    long long n[2][1024] = {}, odo[2][1024] = {};
+    ~Why()
+    {
+        if (!On()) { return; }
+        for (int r = 0; r < 2; ++r)
+        {
+            for (int m = 0; m < 1024; ++m)
+            {
+                if (n[r][m] == 0) { continue; }
+                std::fprintf(stderr, "[bp-reenum-why] %s why=0x%03x n=%lld odo=%lld\n", r ? "REPEAT" : "first ",
+                             m, n[r][m], odo[r][m]);
+            }
+        }
+    }
+};
+inline Why g_why;
+// The SHADOW's verdict at each BpEnumEntryFor lookup (pledger::t_bp): absent / first-visit / stored and
+// served / stored and refused, the refusal split by what refused it. Bits: 0 Exceeded, 1 null-attempt,
+// 2 read guard, 3 decision budget exhausted, 4 decision overrun, 5 priced exceeded, 6 abandoned,
+// 7 greedy budget cut.
+struct Lookups
+{
+    std::mutex mu;
+    long long absent = 0, unstored = 0, served = 0, refused[256] = {};
+    ~Lookups()
+    {
+        if (!On()) { return; }
+        std::fprintf(stderr, "[bp-reenum-lookup] absent=%lld unstored=%lld served=%lld\n", absent, unstored, served);
+        for (int m = 0; m < 256; ++m)
+        { if (refused[m] != 0) { std::fprintf(stderr, "[bp-reenum-lookup]   refused why=0x%02x n=%lld\n", m, refused[m]); } }
+    }
+};
+inline Lookups g_look;
+inline void NoteLookup(int flags, bool served)
+{
+    std::lock_guard<std::mutex> lk(g_look.mu);
+    if (flags < 0) { ++g_look.absent; return; }
+    if ((flags & pledger::kStored) == 0) { ++g_look.unstored; return; }
+    if (served) { ++g_look.served; return; }
+    SearchBudget* const d = g_decision_budget;
+    SearchBudget* const g = g_greedy_charge_budget;
+    int m = 0;
+    if (decisionwork::Exceeded()) { m |= 1; }
+    if ((flags & pledger::kNullAtt) != 0) { m |= 2; }
+    if ((flags & pledger::kBudgetRead) != 0 && cachecharge::ReadCutNow((flags & pledger::kBudgetReadSb) != 0)) { m |= 4; }
+    if (d != nullptr && d->ExhaustedQuiet()) { m |= 8; }
+    if (d != nullptr && d->OverrunQuiet()) { m |= 16; }
+    if (decisionwork::PricedExceededQuiet()) { m |= 32; }
+    if (gamework::Abandoned()) { m |= 64; }
+    if (g != nullptr && (g->ExhaustedQuiet() || g->OverrunQuiet())) { m |= 128; }
+    ++g_look.refused[m];
+}
+inline void NoteWhy(bool front, bool keyed, bool interrupted, bool aa_cut, const cachecharge::Cost& c)
+{
+    if (!On() || t_last_kind < 0) { return; }
+    const int m = (front ? 1 : 0) | (keyed ? 0 : 2) | (interrupted ? 4 : 0) | (aa_cut ? 8 : 0)
+                | (c.storable ? 0 : 16) | (c.dec > 0 ? 32 : 0) | (c.greedy > 0 ? 64 : 0) | (c.other > 0 ? 128 : 0)
+                | (c.null_attempts > 0 ? 256 : 0) | (c.budget_read ? 512 : 0);
+    const int r = t_last_kind == 1 ? 1 : 0;
+    std::lock_guard<std::mutex> lk(g_why.mu);
+    ++g_why.n[r][m]; g_why.odo[r][m] += t_last_odo;
+    t_last_kind = -1;
+}
+}   // namespace bpreenum
 // THE CONTINUATION LIST: derive, rank, and apply the condemnation MARKING (drop modes 2 and 3).
 //
 // Factored out of BpEnumEntryFor for two reasons, one of which is a correctness one. (1) The enum
@@ -117880,6 +118038,7 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
                                                               CandOrder* ord_out = nullptr)
 {
     if (interrupted_out != nullptr) { *interrupted_out = false; }
+    bpreenum::t_last_kind = -1;
     routetape::Suspend _rts;   // a continuation DERIVATION is not a route link's own resolution
     const int  mode   = BpCondemnDropMode();
     const bool demote = (mode == 2);   // condemned lines ranked LAST (list keeps every entry)
@@ -117937,7 +118096,80 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
     if (ord_out != nullptr) { *ord_out = CandOrder{}; }
     const bool lazy_req = lz_out != nullptr && ord_out != nullptr && BpLazyCandsOn() && !HumanPlayActive()
                        && !skip && !front_only;
-    if (derived.empty()) { derived = EnumeratePlansWithLand(state, is_pre_combat, lazy_req ? &lz : nullptr); }
+    if (derived.empty())
+    {
+        // MTG_BP_REENUM_CENSUS (diagnostic; see bpreenum): fingerprint this enumeration before it runs.
+        const bool rc = bpreenum::On();
+        int rkind = 0, rmask = 0;
+        long long ro0 = 0, rp0 = 0;
+        unsigned long long rr0 = 0, rpr0 = 0;
+        if (rc)
+        {
+            TranspositionTable::Key rbase = BuildBreakpointKey(state, is_pre_combat, /*cont_list=*/true);
+            std::uint64_t armh = 0;
+            for (int ai = 0; ai < heurarm::COUNT; ++ai)
+            { armh = armh * 131 + static_cast<std::uint8_t>(heurarm::t_arm[static_cast<std::size_t>(ai)] + 1); }
+            Fold(rbase, armh ^ 0xA53CULL);
+            if (t_rollout_narrow) { Fold(rbase, kRolloutNarrowTag); }
+            FoldPhysicalCards(rbase, state);
+            Fold(rbase, front_only ? 0xF1ull : 0xF2ull);
+            Fold(rbase, lazy_req ? 0x1Aull : 0x1Bull);
+            bpreenum::Sigs rs{};
+            auto seq = [](std::uint64_t seed, auto const& v) { std::uint64_t h = seed;
+                for (auto x : v) { h = (h ^ static_cast<std::uint64_t>(x)) * 1099511628211ull; } return h | 1ull; };
+            rs.v[bpreenum::kSite]       = g_cantrip_order_site ? (g_cantrip_order_site->card.m_name_hash | 1ull) : 0;
+            rs.v[bpreenum::kNoPump]     = static_cast<std::uint64_t>(g_untap_loop_no_pump);
+            rs.v[bpreenum::kHand]       = g_bp_hand_before ? seq(0xB17Full, *g_bp_hand_before) : 0;
+            rs.v[bpreenum::kActs]       = g_bp_acts_before ? seq(0xAC75ull, *g_bp_acts_before) : 0;
+            rs.v[bpreenum::kReserved]   = g_land_drop_reserved ? 1 : 0;
+            rs.v[bpreenum::kManaBefore] = static_cast<std::uint64_t>(g_bp_mana_sources_before + 1);
+            rs.v[bpreenum::kCasts]      = g_bp_plan_casts ? seq(0xC0A5ull, *g_bp_plan_casts) : 0;
+            rs.v[bpreenum::kAllPaths]   = g_bp_allpaths_empty ? 1 : 0;
+            rs.v[bpreenum::kSiteDef]    = g_bp_site_def ? (g_bp_site_def->card.m_name_hash | 1ull) : 0;
+            rs.v[bpreenum::kSiteAct]    = g_bp_site_activated ? 1 : 0;
+            std::vector<bpreenum::Sigs>& seen = bpreenum::t_seen[rbase];
+            if (!seen.empty())
+            {
+                rkind = 2;
+                for (const bpreenum::Sigs& o : seen)
+                { if (std::memcmp(o.v, rs.v, sizeof rs.v) == 0) { rkind = 1; break; } }
+                if (rkind == 2)
+                { for (int f = 0; f < bpreenum::kFields; ++f) { if (seen[0].v[f] != rs.v[f]) { rmask |= 1 << f; } } }
+            }
+            if (rkind != 1 && seen.size() < 64) { seen.push_back(rs); }
+            if (bpreenum::t_seen.size() > 2000000u) { bpreenum::t_seen.clear(); }
+            ro0 = workctr::t_n[workctr::kOdoVisit]; rp0 = workctr::t_n[workctr::kPay];
+            rr0 = budgetbind::t_reads; rpr0 = budgetbind::t_preads;
+            if (rkind != 0) { ++bpreenum::t_in_repeat; }
+            ++bpreenum::t_probe_depth;
+        }
+        derived = EnumeratePlansWithLand(state, is_pre_combat, lazy_req ? &lz : nullptr);
+        if (rc)
+        {
+            --bpreenum::t_probe_depth;
+            if (rkind != 0) { --bpreenum::t_in_repeat; }
+            const long long odo = workctr::t_n[workctr::kOdoVisit] - ro0, pay = workctr::t_n[workctr::kPay] - rp0;
+            bpreenum::t_last_kind = rkind; bpreenum::t_last_odo = odo;
+            std::lock_guard<std::mutex> lk(bpreenum::g_tot.mu);
+            ++bpreenum::g_tot.calls;
+            {
+                const unsigned long long dr = budgetbind::t_reads - rr0, dp = budgetbind::t_preads - rpr0;
+                if (dr == 0) { ++bpreenum::g_tot.no_reads; }
+                else if (dr == dp) { ++bpreenum::g_tot.p_reads_only; }
+                else { ++bpreenum::g_tot.sb_reads; }
+            }
+            if (bpreenum::t_probe_depth == 0) { bpreenum::g_tot.odo += odo; bpreenum::g_tot.pay += pay; }
+            if (rkind != 0 && bpreenum::t_in_repeat == 0)
+            {
+                if (rkind == 1) { ++bpreenum::g_tot.rep_same; bpreenum::g_tot.rep_same_odo += odo; bpreenum::g_tot.rep_same_pay += pay; }
+                else
+                {
+                    ++bpreenum::g_tot.rep_diff; bpreenum::g_tot.rep_diff_odo += odo; bpreenum::g_tot.rep_diff_pay += pay;
+                    ++bpreenum::g_tot.mask_n[rmask]; bpreenum::g_tot.mask_odo[rmask] += odo;
+                }
+            }
+        }
+    }
     const bool bp_interrupted = g_bp_derive_interrupted;
     g_bp_derive_interrupted = bp_outer_interrupted || bp_interrupted;
     if (bp_interrupted)
@@ -119010,6 +119242,7 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
     {
         const auto st = pledger::t_bp.find(pledger::K(key));
         sh_exact = st != pledger::t_bp.end() && pledger::WouldServe(st->second);
+        if (bpreenum::On()) { bpreenum::NoteLookup(st != pledger::t_bp.end() ? st->second : -1, sh_exact); }
         if (!sh_exact && cache.find(key) != cache.end()) { pledger::g_forced.fetch_add(1, std::memory_order_relaxed); }
     }
     pledger::Mute led_mute;
@@ -119446,6 +119679,7 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
     cachecharge::Cost bp_cost = bp_ccs.Done();
     bp_cost.ctx = bp_ctx;
     BpSideEnd(bp_side, bp_cost);
+    if (bpreenum::On()) { bpreenum::NoteWhy(false, keyed, bp_interrupted, AlchemistComboRouteCuts() != aa_cuts0, bp_cost); }
     PlanCacheNoteComputation(plancache::kCatBp, gamework::t_used - bp_u0);
     if (bpderive::On()) { --bpderive::t_depth; }
     const bool aa_cut_inside = AlchemistComboRouteCuts() != aa_cuts0;
@@ -119974,6 +120208,7 @@ static bool BpCanonFront(const GameState& state, bool is_pre_combat, TurnSolver:
     cachecharge::Cost fr_cost = fr_ccs.Done();
     BpSideEnd(fr_side, fr_cost);
     const bool aa_cut_inside = AlchemistComboRouteCuts() != aa_cuts0;
+    if (bpreenum::On()) { bpreenum::NoteWhy(true, true, bp_interrupted, aa_cut_inside, fr_cost); }
     if (s_rollout_stats) { bpcanon::g_derives.fetch_add(1, std::memory_order_relaxed); }
     static const bool s_verify = EnvOn("MTG_BP_CANON_FRONT_VERIFY");
     if (s_verify)
@@ -125381,6 +125616,48 @@ TurnSolver::ObserverIsolationScope::~ObserverIsolationScope()
     g_decision_epoch           = v.epoch;
 }
 
+TurnSolver::ReadGuardProbe TurnSolver::ReadGuardProbeForTest(bool searchbudget_read, int kind)
+{
+    ReadGuardProbe r;
+    SearchBudget* const sv_dec = g_decision_budget;
+    SearchBudget* const sv_greedy = g_greedy_charge_budget;
+    const long long sv_pr_start = decisionwork::t_pr_start, sv_pr_limit = decisionwork::t_pr_limit;
+    const long long sv_priced = workctr::t_priced, sv_used = decisionwork::t_used, sv_limit = decisionwork::t_limit;
+    const long long sv_gw = gamework::t_used;
+    const int sv_kind = valuearm::t_arm.read_guard_kind;
+    const unsigned long long sv_reads = budgetbind::t_reads, sv_preads = budgetbind::t_preads, sv_binds = budgetbind::t_binds;
+    valuearm::t_arm.read_guard_kind = kind;
+    decisionwork::t_limit = 0;   // the unit meter disarmed: only the budgets under test can cut
+    SearchBudget dec(1000);
+    g_decision_budget = &dec;
+    g_greedy_charge_budget = nullptr;
+    decisionwork::t_pr_start = workctr::t_priced;
+    decisionwork::t_pr_limit = 1000000;   // armed, far from tripping
+    cachecharge::Cost c;
+    {
+        cachecharge::Scope sc;
+        (void)decisionwork::PricedExceeded();                // the derivation's per-visit priced poll
+        if (searchbudget_read) { (void)dec.Exhausted(); }    // a SearchBudget poll (answers "not cut")
+        c = sc.Done();
+    }
+    r.stored = c.storable;
+    r.budget_read = c.budget_read;
+    r.budget_read_sb = c.budget_read_sb;
+    dec.Consume(1000);                                       // the decision budget is now EXHAUSTED, not overrun
+    r.real_exhausted   = CacheHitCharge(c);
+    r.shadow_exhausted = pledger::WouldServe(pledger::FlagsOf(c));
+    workctr::t_priced += 2000000;                           // the priced ceiling has now TRIPPED
+    r.real_priced   = CacheHitCharge(c);
+    r.shadow_priced = pledger::WouldServe(pledger::FlagsOf(c));
+    g_decision_budget = sv_dec;
+    g_greedy_charge_budget = sv_greedy;
+    decisionwork::t_pr_start = sv_pr_start; decisionwork::t_pr_limit = sv_pr_limit;
+    workctr::t_priced = sv_priced; decisionwork::t_used = sv_used; decisionwork::t_limit = sv_limit;
+    gamework::t_used = sv_gw;
+    valuearm::t_arm.read_guard_kind = sv_kind;
+    budgetbind::t_reads = sv_reads; budgetbind::t_preads = sv_preads; budgetbind::t_binds = sv_binds;
+    return r;
+}
 std::uint64_t TurnSolver::PerGameCacheDigestForTest()
 {
     std::uint64_t h = 0xC0FFEEull;
