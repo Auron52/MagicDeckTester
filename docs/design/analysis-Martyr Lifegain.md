@@ -115,7 +115,26 @@ a provider-stage question for this deck (discard buckets are USER-owned, 5i).
   2. Even from the human's own T5 board the search does not find "Jitte: gain 2 life x2 -> Serra 6/6 -> 13
      exactly lethal" (budget 0 -> T6). Under investigation.
 
-## Checkpoint (2026-11-11 ~21:30 UTC) -- RESUME HERE
+## Checkpoint (2026-11-11 ~23:15 UTC) -- RESUME HERE
+
+1-DROP TUTOR PRUNE (USER request below) BUILT + MEASURED + LANDED LOCALLY: 7d2bb4f37 (cherry-pick of worktree
+d34e16db7) on bf1784395, not pushed (4-hour window opens ~01:12 UTC). MTG_MARTYR_TUTOR_PRUNE (heurarm
+MARTYR_TUTOR_PRUNE, default ON). Rule as built: Ranger-Captain's searched MV<=1 fetch offers Serra Ascendant, Martyr
+of Sands (only with no Martyr in hand/battlefield AND life below the highest own life threshold: 30 std, 37 2HG),
+Speaker of the Heavens -- in that order (Martyr second, an agent choice: surfaced); generic list when none is
+admissible. Ranger of Eos's pair (a RESOLUTION-time list, TutorHandPutList -- no cast axis, existing architecture)
+ranks the same names, distinct names first, then fills in library order. Unit tests test_martyr_tutor_prune.cpp (5).
+HELD-OUT A/B (build/scratch/martyr/ab5, d5 b20, seeds std 79001 x600, 2HG 80001 x200, p0 = prune off vs p1 = on):
+  std 5.3350 -> 5.3167 (11 faster, 0 slower, net -11), wall -22%, units -20%
+  2HG 5.6400 -> 5.6250 (3 faster, 0 slower, net -3), wall -29%, units -22%
+  -> clears the bar with no slower game to recover.
+The rb9 regression run was CONTAMINATED (my own `suite_gate.py --cost` probe ran a tier in the same test/logs/regression
+dir and overwrote its manifest; killed) -- NOT accepted. Running now: scenarios -> full smoke -> clean
+`--regression --deck=martyr,martyr2hg` (logs/martyr-lifegain/tp-*.log, DONE marker tp-chain.DONE). Then accept
+smoke + regression, ref_bench, cost gate ALONE, overnight tier, Stage 5 remainder, mullgen, valueleaf.
+CI on 6b3dea976: green (windows, ubuntu, determinism parity).
+
+### Checkpoint (2026-11-11 ~21:30 UTC, history)
 
 PUSHED 6b3dea976 (21:12 UTC; next shared-branch push no earlier than ~01:12 UTC, 4-hour rule): candidate b1 landed
 (all new defaults ON, amended split OFF) + martyr smoke GT (d0 6.1050, d3 5.2000, d5 5.2700; 2hg 5.4800 unchanged).
