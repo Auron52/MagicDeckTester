@@ -154,3 +154,54 @@ shuffles; the only thing separating the plans is the seeded post-shuffle library
 same-name basic fetch choices into one plan, engine-wide (any deck fetching identical basics), validated as a play
 change; then identify the "dig variants" and fold them only if they too differ only through hidden information;
 then re-measure the oracle cost and gate if tractable. Queued as mana-clean chain item 5l.
+
+## Item 5l result (2026-11-11): the premise was wrong; nothing to fold; PARKED
+
+**The identical-basic fold the USER approved already exists, engine-wide, and has for a long time.**
+`LandSearchClasses` (`src/core/LandSearch.h`) folds every copy and behavioural twin of a land into one class
+before any pick is built. "Which Snow-Covered Island" has never been a branch. Myriad Landscape's pick list on
+the 980-plan p3 decision (seed 30000003, T4 m1) is exactly three entries:
+`{Island, Island}`, `{Island}`, `{}`.
+
+**What the pins actually choose is HOW MANY Islands to fetch (2, 1 or 0), not which ones.** The section above
+said otherwise, and that wording is what the 2026-11-11 ruling was given on. It was a misdiagnosis.
+Myriad carries `land_search_allow_partial: true`. The deck analysis set this deliberately
+(`docs/design/analysis-Extra Turns.md`, "Myriad Landscape's maximal-pick dominance is unsound in this deck:
+removing both basics from a library can make an extra-turn draw engine deck us sooner"). Library size is real
+information, so fetching one Island instead of two is a real decision and not a clairvoyance twin.
+
+**The 980-plan menu, broken down by a temporary sibling-diff probe (114 sibling keys):**
+* 528 plans are the Mind Stone **dig twin**: 264 base plans (`dig_choice 2`) and 264 no-dig twins (`0`).
+  The dig source in this deck is Mind Stone's `{1}, {T}, Sacrifice: draw a card`. Sacrificing a rock to draw
+  or keeping it is a real-information decision, not a clairvoyance twin. The search side already folds a
+  twin whose base did not dig (`DigFoldMemo`). The oracle cannot reuse the base's verdict, because its own
+  alternative payments can leave the `{1}` that makes the base dig.
+* 452 plans are **count pins**: 244 with one Myriad activation pinned to 1 or 0 Islands, and 208 with two
+  activations in a 3x3 product. "Which Myriad" is not an axis: the activation-source fold (`equiv_tag`)
+  already numbers the two Myriads as one class.
+
+**What removing the count axis would buy: not enough.** The 11 heavy seeds
+(`build/scratch/et1110/heavy.json`) were run oracle-on (`MTG_MANA_ORACLE=2`, 11 threads, Release at
+b8489f322 plus temporary env probes; the probes are reverted).
+
+| arm | wall | applies (DECISION-COST) | decisions that hit the 300-priced-s budget | CAPPED-DECISION flags |
+|---|---|---|---|---|
+| shipped (0/1/2 picks) | 4:53 | 13.0M | 7 | 10,265 |
+| drop the `{}` pick | 4:35 | 7.5M | 6 | 10,144 |
+| no partial picks (2 only, i.e. `allow_partial` off) | 4:29 | 7.5M | 6 | 10,143 |
+
+All three arms win on the same turn in all 11 games. Even dropping the whole count axis, which is a lossy
+change to a deliberate deck policy, leaves about 10k CAPPED-DECISION flags on 11 games. CAPPED-DECISION fails
+the gate, so a 5,000-game gate would still fail on cost. The budget-bound decisions take their full 300
+priced seconds whatever the menu width, so wall falls only 8%.
+
+* `{}` (crack Myriad and fetch nothing) is dominated in real-information terms by not activating at all in
+  THIS deck. Its only upside is the seeded post-shuffle library. It is NOT dominated engine-wide: Myriad is
+  also in Unpredictable Cyclone (Brainstorm/Ponder leave a known top that a shuffle clears), and
+  graveyard-land watchers exist. The existing "nothing legal to find" crack clamp (TurnSolver.cpp,
+  SacLandSearch) carries the same unguarded argument. Removing `{}` would be a sound collapse only with a
+  per-state predicate (no known library top, no land-to-graveyard or land-leaves watcher). It buys 0.4%
+  CAPPED and ~6% wall here, so it was not implemented.
+
+**Verdict: 5l PARKED.** No identity fold is available. The gate stays untractable (the earlier ~16 h+
+estimate with half the games CAPPED stands). See the checkpoint doc's 5l bullet for the USER decision.

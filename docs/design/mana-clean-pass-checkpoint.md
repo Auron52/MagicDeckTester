@@ -275,6 +275,23 @@ Source of the work: `logs/mana_clean/lastweek-20261110-shadowborn-order/report.m
   s2002, gods d3, fivecolour d3/d5, landfall d5 s3003). The pre-change binary reproduces every one, so none
   comes from this change; GT was not accepted. After the rebase onto 7a7c2079b (whose GT accept covers those rows), smoke on
   the rebased build passes all 187 rows.
+* **Item 5l (agent 2026-11-11): identical-basic fetch fold: NOTHING TO FOLD, PARKED. USER DECISION below.** The
+  fold the USER approved already exists engine-wide: `LandSearchClasses` (core/LandSearch.h) makes copies and
+  behavioural twins one class, so "which Island" was never a branch. The sizing doc's claim that Myriad's pins
+  "choose which Islands" was wrong. On the 980-plan p3 decision the pick list is `{II}`, `{I}`, `{}`, so the pins
+  choose HOW MANY Islands to fetch. That is `land_search_allow_partial`, set deliberately in the deck analysis
+  because library size matters on an extra-turn draw engine (deck-out). The "dig variants" are Mind Stone's
+  sac-draw no-dig twins (528 of the 980 plans). Taking a draw or keeping the rock is a real-information choice.
+  Neither axis is a clairvoyance twin. "Which Myriad" is already folded (`equiv_tag`). Measured on the 11 heavy
+  seeds (oracle on): shipped 4:53 wall, 10,265 CAPPED flags, 7 budget-spent decisions; dropping `{}` 4:35 /
+  10,144 / 6; no partial picks at all 4:29 / 10,143 / 6. So even the lossy option leaves the gate failing on
+  CAPPED-DECISION, and no gate was run. No src change was landed (the probes were reverted). Details:
+  `docs/design/extra-turns-mana-oracle-sizing-2026-11-10.md`, "Item 5l result".
+  **USER DECISION (5l):** the 2026-11-11 ruling was given on a wrong description. Options: (a) leave Extra Turns
+  parked on oracle cost (recommended: no menu narrowing gets under the CAPPED bar); (b) raise the per-decision
+  oracle budget for this deck only, or accept CAPPED-DECISION as disclosed for it (a gate-policy call); (c) drop
+  Myriad's `{}` pick behind a per-state soundness predicate (no known library top, no land-to-graveyard watcher).
+  Option (c) is a sound collapse but small: about 1% CAPPED and 6% wall. Not implemented.
 
 ## 2026-11-11: near-clean decks (breachingdragonstorm, soldiers, burn, minotaur, fluctuator, vampires, angels)
 Gate `nearclean-20261111` (src ab70b5506, PGO, 5,000 games each on the next fresh block; play identity with the
