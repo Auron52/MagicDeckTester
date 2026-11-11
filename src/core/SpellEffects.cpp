@@ -5539,6 +5539,14 @@ struct ManaCacheEntry
     bool          work_known = true;
 };
 inline thread_local std::unordered_map<std::uint64_t, ManaCacheEntry> g_mana_cache;
+// THE MUTE OVERLAY (Hydras P5). A solve under workctr::t_mute -- the plan caches' priced ledger recomputing what its
+// deterministic virtual cache served or replayed, which happens only when the REAL plan cache missed, i.e. depending
+// on the shared byte pool and the other workers -- must leave no trace in g_mana_cache: an entry it stored would be hit
+// later by COUNTED work, which would then count fewer payments / state keys, so workctr::t_priced (the priced
+// ceiling's input) would follow residency (the same batch moved gi 1979 by 148 units between --threads 32 and 8). So
+// such a solve reads g_mana_cache, stores into this overlay instead (so the recompute still reuses its own solves),
+// and the overlay is emptied when the outermost mute ends (ManaCacheMuteEnd). Never read outside a mute.
+inline thread_local std::unordered_map<std::uint64_t, ManaCacheEntry> g_mana_mute;
 // TIER-2 OVERFLOW (core/Tier2Overflow.h; MTG_TIER2_OVERFLOW, DEFAULT ON). When the fixed tier-1 allocation
 // fills, the wholesale clear SPILLS every entry here instead of dropping it, and a tier-1 miss looks here
 // before solving. A hit is PROMOTED back into tier 1 through the same store path a recompute would take, so
@@ -6244,6 +6252,7 @@ void ManaCacheObserverSwap(bool restore)
 }
 
 std::size_t ManaCacheSizeForTest() { return g_mana_cache.size(); }
+void ManaCacheMuteEnd() { g_mana_mute.clear(); }
 
 void ManaCacheClearPerGame()
 {
@@ -6689,10 +6698,16 @@ static bool TapForCostBacktrackTop(GameState& state, const ManaCost& cost,
                 }
             }
         }
-        if (it != g_mana_cache.end() && it->second.verify == mk2)
+        const ManaCacheEntry* mc_mute_hit = nullptr;   // the mute overlay's entry (see g_mana_mute)
+        if (!(it != g_mana_cache.end() && it->second.verify == mk2) && workctr::t_mute != 0 && !g_mana_mute.empty())
+        {
+            const auto mt = g_mana_mute.find(mk1);
+            if (mt != g_mana_mute.end() && mt->second.verify == mk2) { mc_mute_hit = &mt->second; }
+        }
+        if ((it != g_mana_cache.end() && it->second.verify == mk2) || mc_mute_hit != nullptr)
         {
             if (tapstats::Enabled()) { tapstats::g_mc_hit.fetch_add(1, std::memory_order_relaxed); }
-            const ManaCacheEntry& e = it->second;
+            const ManaCacheEntry& e = mc_mute_hit != nullptr ? *mc_mute_hit : it->second;
             // MTG_MANA_CACHE_VERIFY_TAPS (diagnostic, needs MTG_MANA_CACHE_VERIFY): also compare the BOARD the
             // replay leaves with the board the real solve leaves (which permanents it tapped, counters, life).
             static const bool s_vtaps = EnvOn("MTG_MANA_CACHE_VERIFY_TAPS");
@@ -6989,9 +7004,13 @@ static bool TapForCostBacktrackTop(GameState& state, const ManaCost& cost,
 
     // ---- Store (negatives always; a positive records its tap-set + the two order-dependent deltas) --
     // Never inside a muted recompute (workctr::StoresAllowed): it stands in for a plan-cache hit that did not run.
-    if (mc_active && workctr::StoresAllowedAt(workctr::kRefMana))
+    // Such a solve stores into the MUTE OVERLAY instead (g_mana_mute; emptied when the outermost mute ends), so a
+    // long muted recompute still reuses its own solves while leaving no trace in g_mana_cache.
+    const bool mc_store_real = mc_active && workctr::StoresAllowedAt(workctr::kRefMana);
+    const bool mc_store_mute = mc_active && !mc_store_real && workctr::t_mute != 0;
+    if (mc_store_real || mc_store_mute)
     {
-        if (g_mana_cache.size() > 500000) { McTier1Clear(); g_mana_cache_bytes = 0; tier1::Set(tier1::kMana, 0); }   // bound cross-rollout growth
+        if (mc_store_real && g_mana_cache.size() > 500000) { McTier1Clear(); g_mana_cache_bytes = 0; tier1::Set(tier1::kMana, 0); }   // bound cross-rollout growth
         ManaCacheEntry e; e.verify = mk2; e.payable = ok; e.drip_life = 0; e.self_life = 0;
         e.energy_spent = 0;
         e.dbg_pay_ctx = mc_ctx_pay; e.dbg_traits = mc_ctx_traits;   // pre-solve context (0 unless overflow/verify)
@@ -7056,7 +7075,12 @@ static bool TapForCostBacktrackTop(GameState& state, const ManaCost& cost,
         }
         if (tapstats::Enabled() && !storable)
         { tapstats::g_mc_unstorable.fetch_add(1, std::memory_order_relaxed); }
-        if (storable) { McTier1Insert(mk1, std::move(e)); }
+        if (storable && mc_store_real) { McTier1Insert(mk1, std::move(e)); }
+        else if (storable)
+        {
+            if (g_mana_mute.size() >= 65536) { g_mana_mute.clear(); }   // bound one long muted recompute
+            g_mana_mute.insert_or_assign(mk1, std::move(e));
+        }
     }
     // §2a: sacrifice the Treasures this solve cracked. AFTER the cache store above, so the stored
     // entry describes the same board the live solve produced (hit/miss lockstep). Done here rather

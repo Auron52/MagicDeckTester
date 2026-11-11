@@ -775,7 +775,7 @@ TEST_CASE("mana cache: attaching a land aura splits the key (no stale unpayable 
 // A MUTED RECOMPUTE LEAVES NO TRACE (Hydras P5). Under workctr::t_mute the plan caches' priced ledger recomputes
 // what its virtual cache served (or replayed); whether that recompute runs at all depends on the real plan cache's
 // residency, so an entry it stored would let later COUNTED payments count less, and units would follow the byte pool.
-TEST_CASE("mana cache: a solve under workctr::t_mute reads the cache but stores nothing")
+TEST_CASE("mana cache: a solve under workctr::t_mute leaves no entry once the mute ends")
 {
     EnsureCards();
     ManaCacheClearPerGame();
@@ -787,6 +787,7 @@ TEST_CASE("mana cache: a solve under workctr::t_mute reads the cache but stores 
         ++workctr::t_mute;
         CHECK_FALSE(TapForCostBacktrack(b, cost, /*for_creature=*/false, ManaPool{}, nullptr, nullptr, &leftover));
         --workctr::t_mute;
+        ManaCacheMuteEnd();   // what pledger::Mute does when the outermost mute ends: drop the mute overlay
     }
     CHECK(ManaCacheSizeForTest() == 0);
     {

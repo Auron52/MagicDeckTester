@@ -48985,6 +48985,8 @@ void ManaCacheClearPerGame();
 void ManaCacheObserverSwap(bool restore);
 // Test seam: this thread's tier-1 payable-mana cache entry count.
 std::size_t ManaCacheSizeForTest();
+// The outermost workctr mute has ended (TurnSolver.cpp pledger::Mute): drop what solves under it stored (g_mana_mute).
+void ManaCacheMuteEnd();
 
 // TapForCostBacktrack -- body in SpellEffects.cpp (see the header note above).
 // `src_cands` (threaded, nullptr at the top-level call) is the controller's structural mana sources
