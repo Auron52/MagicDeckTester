@@ -363,3 +363,26 @@ TEST_CASE("prepay mixed: a stage never taps a source that cannot pay it -- Pirat
         CHECK(TappedDh(s) == std::vector<bool>{ true, true });
     }
 }
+
+// Not a depletion case either: the whole-turn prepay prices a SAME-LINE coloured-pip reducer
+// (MTG_PREPAY_LINE_REDUCER). Minotaur mana-clean s30273945 T4: vial Ragemonger + Neheb, the Worthy {1}{R} +
+// Boros Reckoner {R/W}{R/W}{R/W} off Mountain + Rakdos Carnarium. Ragemonger is still in hand when the prepay
+// runs (Vial puts ride the cast sequence), so the board-only price was {1}{R}{R}{R}{R} -> UNPAYABLE -> the
+// per-cast greedy paid Neheb's {1} with the Mountain and the Karoo's {B}{R} could not pay {R}{R}. Priced
+// with the reducer the bill is {1}{R/W}{R/W}: the Karoo + Mountain pay it jointly.
+TEST_CASE("prepay line reducer: a vialed Ragemonger discounts the line's Minotaur casts -- Minotaur s30273945 T4")
+{
+    EnsureCardsDh();
+    GameState s = BoardDh({ LandDh("Mountain"), LandDh("Rakdos Carnarium") });
+    Card c1 = CardDatabase::Instance().Lookup("Neheb, the Worthy")->card; c1.m_number = 1;
+    Card c2 = CardDatabase::Instance().Lookup("Boros Reckoner")->card;    c2.m_number = 2;
+    Card c3 = CardDatabase::Instance().Lookup("Ragemonger")->card;        c3.m_number = 3;
+    s.players[0].hand = { c1, c2, c3 };
+    Action vial;
+    vial.kind      = Action::Kind::ActivateVial;
+    vial.card_name = c3.m_name;
+    const std::vector<Action> line = { CastDh("Neheb, the Worthy", 0), CastDh("Boros Reckoner", 1), vial };
+    CHECK(TurnSolver::BatchPrepayMainCasts(s, line));
+    CHECK(TappedDh(s) == std::vector<bool>{ true, true });
+    CHECK(s.floating_mana.Total() == 3);
+}

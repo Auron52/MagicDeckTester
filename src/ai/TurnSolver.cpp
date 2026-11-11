@@ -59564,6 +59564,50 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             || (d->params.spectacle_cost.has_value() && !state.opponent_lost_life_this_turn))
         { return Pp(PP_DYNAMIC_COST); }
         ManaCost ec = EffectiveCost(*d, state);
+        // SAME-LINE COLOURED-PIP REDUCER (MTG_PREPAY_LINE_REDUCER, default ON; =0 -> the board-only
+        // price). EffectiveCost prices this cast on the CURRENT board, but a Ragemonger the line puts
+        // with Aether Vial (or casts earlier in the line) is not on it yet: Vial puts ride the cast
+        // sequence (USER 2026-10-06), so they resolve AFTER this call. The bill then carried the
+        // unreduced pips, read combined-UNPAYABLE, and the per-cast greedy stranded the line (Minotaur
+        // mana-clean s30273945 T4: vial Ragemonger + Neheb {1} + Boros Reckoner {R/W}{R/W} off Mountain
+        // + Rakdos Carnarium -- the greedy paid Neheb's {1} with the Mountain and the Karoo's {B}{R}
+        // could not pay {R}{R}). Priced exactly as the enumeration credits it
+        // (SameTurnColoredReducerPipCredit): a vialed reducer discounts every matching cast, a cast
+        // reducer only the casts after it. A reducer already off the hand (resolved) is on the board
+        // and EffectiveCost has it, so only entries whose card is still in hand count. Payment only:
+        // every cast still reprices live, and a short pre-load is paid per cast.
+        static const bool s_line_reducer = EnvOn("MTG_PREPAY_LINE_REDUCER", true);
+        if (s_line_reducer && !a.evoke)
+        {
+            for (const Action& r : acts)
+            {
+                if (&r == &a) { break; }   // a vial put anywhere, a cast reducer only before `a`
+                const CardDefinition* rd = ActionColoredReducerDef(r);
+                if (rd == nullptr || !(r.kind == Action::Kind::ActivateVial || r.kind == Action::Kind::CastFromHand))
+                { continue; }
+                bool in_hand = false;
+                for (const Card& hc : state.players[active].hand) { if (hc.m_name == r.card_name) { in_hand = true; break; } }
+                if (!in_hand) { continue; }
+                bool match = false;
+                for (const std::string& cs : d->card.m_subtypes)
+                { if (cs == rd->params.reduces_subtype_colored_subtype) { match = true; break; } }
+                if (match) { ApplyColoredPipReduction(ec, rd->params.reduces_subtype_colored_cost.value()); }
+            }
+            for (std::size_t ri = static_cast<std::size_t>(&a - acts.data()) + 1; ri < acts.size(); ++ri)
+            {
+                const Action& r = acts[ri];   // a later vial put: the enumeration credits it to every cast
+                if (r.kind != Action::Kind::ActivateVial) { continue; }
+                const CardDefinition* rd = ActionColoredReducerDef(r);
+                if (rd == nullptr) { continue; }
+                bool in_hand = false;
+                for (const Card& hc : state.players[active].hand) { if (hc.m_name == r.card_name) { in_hand = true; break; } }
+                if (!in_hand) { continue; }
+                bool match = false;
+                for (const std::string& cs : d->card.m_subtypes)
+                { if (cs == rd->params.reduces_subtype_colored_subtype) { match = true; break; } }
+                if (match) { ApplyColoredPipReduction(ec, rd->params.reduces_subtype_colored_cost.value()); }
+            }
+        }
         // Evoke variant (Reveillark): the alternate cost IS the bill (lockstep with a.cost).
         if (a.evoke && d->params.evoke_cost.has_value()) { ec = *d->params.evoke_cost; }
         // Phyrexian variant ({G/P} -- Birthing Pod): the life-paid pips come OFF the joint bill,
