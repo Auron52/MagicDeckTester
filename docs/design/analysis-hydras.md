@@ -1434,3 +1434,16 @@ _none_ -- every blocking gate is green or already signed off.
 - claude_sweep recorded at commit b7a4d6eb8 (HEAD 061e7e47d6ef); re-run if play changed since (play_invariants + smoke digests track play live).
 
 <!-- verify_deck:end -->
+
+## Mulligan profile (2026-11-11, first version)
+`bash scripts/mullgen.sh run decks/Hydras fast` at 438bf8b4c (src 4fb4b4fa76, PGO+LTO), 12:39-15:53 UTC, alone on the box.
+- **K = 14** (the USER predicted 14): Nature's Lore (+1 merged, x6), Forest x23, Gargos x2, Garruk x1, Gauntlet x2,
+  Kalonian x4, Greaves x1, Neverwinter x3, Nissa x1, Primordial x4, Search for Tomorrow x4, Steelbane x1, Vernal
+  Bloom x4, Voracious x4. 67,431 distinct hands (41,626 size-7). Generation setting screened: d1 b1 (rho 0.985,
+  fidelity 0.998, 0.10x play cost), written to `Hydras.profile.json`.
+- **Validation:** keep (table vs static) **-0.183 t**, 5/5 seeds, t -16.7; confounded bottoming **-0.063 t**, 6/6, t -33.8.
+  ACCEPTED.
+- **GT:** smoke + regression accepted; only the 11 hydras/hydras2hg keys moved, every one faster (-0.027 to -0.241 t).
+  `keep_adoption_attribution.py`: every changed game is a different mulligan count or a different bottom,
+  **0 unexplained**, baselines reproduced on both sides. Overnight GT left to the periodic overnight run (its own
+  outstanding accept is the USER's call); the overnight ENTRY-set rows were NOT expanded (open question to the USER).
