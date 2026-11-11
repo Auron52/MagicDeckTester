@@ -412,3 +412,23 @@ plausible reading, NOT verified game by game: its build-up is not priced at zero
 is, because the draw/ping loop is assembled from a handful of named pieces, not
 accumulated, and a horizon position that has assembled it usually HAS dealt damage (Niv pings on the turn a
 draw follows it), so opponent life still separates the better no-win lines.
+
+## 4e. Hydras keeps the default (2026-11-11 — unbindable)
+
+`scripts/leaf_tiebreak_check.py decks/Hydras/Hydras.cod` at the deck's PLAY settings (d5 b20) on `66050a983`,
+both arms in one pooled batch per run, 32 workers. The first run (12 blocks, seed base 1,000,000) read NO SIGN and
+suggested ~25 blocks; the re-run added 13 disjoint blocks (seed base 2,200,000), so the two are additive:
+
+| run | paired | net turns | worse | better |
+|---|---|---|---|---|
+| blocks 1-12 | 12,000 | -3 | 1 | 4 |
+| blocks 13-25 | 13,000 | +1 | 1 | 0 |
+| **ALL** | **25,000** | **-2** | **2** | **4** |
+
+6 changed games of 25,000 paired (0.024% binding), still below the 20-game floor; a decisive sample would need
+~131 blocks. **KEEP THE DEFAULT (ON), no override**: at this binding rate the lever moves Hydras' average by at
+most ~0.0002 turns per game either way. The deck kills inside the horizon (T5-T6 at d5), so a rollout rarely
+reaches the horizon without a win; and when one does, its value is combat damage that opponent life measures
+(a Hydra's counters become damage within a turn), not the stored-value shape that made Dragonstorm and Snow opt
+out. Ledger: `docs/design/analysis-hydras.md` 5c2.
+

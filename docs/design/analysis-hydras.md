@@ -247,8 +247,7 @@ prompt; every list below is the FULL option list, checked against the board):
 | Nissa -8 count | same frame | every count 0..15 = every Forest left in the library (15), alone and inside larger plans. 6,100 plans; the JSON shows the top 200 (`plans_total`, `MTG_PLAY_PLANS_CAP`), the engine-side list is complete |
 | Garruk +1 / -3 | s18 gi5, T4 | both offered (loyalty 4; -6 correctly absent) |
 | Garruk -6 | s22 gi5, T6 (loyalty 6) | +1, -3 and -6 all offered (11 plans each) |
-| Steelbane destroy target | s2 gi5, T4 | an activation per legal target: the only artifact/enchantment out is our own Lightning Greaves, and the human IS offered it (HydrasProvider's own-permanent prune is search-only) |
-STEELBANE_MORE
+| Steelbane destroy target | s2 gi5, T4, `1,1,0,0,1,0,0,0,2,0,0,0` then plan 1 (Vernal Bloom) | after the Bloom resolves, the continuation offers one activation per legal target: Lightning Greaves AND Vernal Bloom, both ours. The human sees every target; HydrasProvider's own-permanent prune is search-only |
 
 **`land_search_subtype` -- why it is INERT as a decision (needs the USER's sign-off).** The param is Nature's
 Lore's and Three Visits' "search your library for a **Forest** card": a LEGALITY filter
@@ -579,3 +578,142 @@ move.
     alone passed it, and the combination moves it;
   - regression `--deck=alchemist,alchemist2hg`: unchanged (0 changed);
   - accepted deck-filtered (`--smoke --deck=alchemist2hg`), sign 0.
+
+### 5c2 — horizon-honest tie-break
+
+`leaf_tiebreak_check.py decks/Hydras/Hydras.cod` at PLAY settings (d5 b20), both arms in one pooled batch per
+run, binary 66050a983, `MTG_PGO=0`, 32 workers (heartbeat 32/32). The first run (12 blocks x 1000, seed base
+1,000,000) read NO SIGN (5 changed games) and suggested ~25 blocks, so the re-run added 13 DISJOINT blocks (seed
+base 2,200,000) instead of replaying the first 12; the counts are additive. `logs/hydras-v1/leaf_summary.txt`,
+`leafb_summary.txt`.
+
+| run | paired | net turns | worse | better | changed |
+|---|---|---|---|---|---|
+| blocks 1-12 (half A / half B: -1 / -2) | 12,000 | -3 | 1 | 4 | 5 |
+| blocks 13-25 (half A / half B: +1 / 0) | 13,000 | +1 | 1 | 0 | 1 |
+| **all 25 blocks** | **25,000** | **-2** | **2** | **4** | **6 (0.024%)** |
+
+**Verdict: the tie-break is UNBINDABLE on Hydras; KEEP THE DEFAULT (ON), no provider override.** It still read
+NO SIGN at 25,000 paired games (the script now asks for ~131 blocks, about 5 h of the box, to reach 20 changed
+games). That run was not made: at 6 changed games in 25,000 the lever moves the average by at most
+~0.0002 turns per game in either direction, and the script's own rule applies ("a lever that never fires costs the
+deck nothing"). Why it cannot fire: the deck wins inside the horizon (T5-T6, d5), so a rollout rarely reaches the
+horizon without a win, and when it does, Hydras' damage is combat that opponent life already measures (its stored
+value -- counters on a Hydra -- turns into damage within a turn). Recorded in
+`docs/design/horizon-honest-leaf.md` §4e.
+
+### 5i — discard: the BUCKET policy (PROPOSAL for the USER; built DEFAULT OFF)
+
+**Does the deck reach the cleanup site?** Barely. Hydras discards ONLY at cleanup: no card in the list has a
+discard cost or a discard trigger, so the non-cleanup sites (`MTG_NONCLEANUP_SHED_WORST`'s axis) do not exist
+here. The evidence pass (`analyze_deck.py --discard-analysis --no-rebuild`: 400 games, d3 b10, the searched
+labeller) found **6 real cleanup sheds in 400 games (0.015 per game)**, every one a TIE (multi-optimal 100%:
+whichever card goes, the searched result is the same), generic regret 0; verdict STATUS_QUO_OK, no derived order,
+so no order A/B was owed. The ON re-run (same config, `MTG_HYDRAS_BUCKET_DISCARD=1`) found 5 sheds, all ties,
+**regret 0, optimal 100%**: the rule-vs-searched gate is clean (nothing to classify as churn or clairvoyance).
+The deck dumps its hand: 23 Forests and X sinks mean it is rarely holding eight cards at end of turn.
+
+**The policy** (`HydrasProvider::CleanupDiscardCandidates`, `MTG_HYDRAS_BUCKET_DISCARD`, heurarm slot, DEFAULT
+OFF; unset / `=0` is the generic max-MV ranking byte-for-byte, pinned by `test_hydras_discard.cpp`). Roles are read
+off each card's PARAMS, never its name:
+
+| bucket | cards | quota (net of board) |
+|---|---|---|
+| LANDS | Forest | 2 while fewer than 5 lands are out, else 1 (the land drop) |
+| RAMP | Nature's Lore, Three Visits, Search for Tomorrow | 1 while fewer than 6 lands are out; Lore / Visits ({1}{G}, untapped) before Search |
+| DOUBLERS | Vernal Bloom, Gauntlet of Power, Nissa | 2 minus the doublers already out; castable-next-turn first, then cheapest (Bloom) |
+| GARGOS | Gargos | 1 unless one is out; a second copy (or one beside Gargos) is a DEAD legend and sheds first |
+| GREAVES | Lightning Greaves | 1 unless one is out |
+| THREATS | the five Hydras, Garruk | the catch-all, floor of TWO. Castable-next-turn first, then Kalonian > Voracious > Primordial > Neverwinter > Steelbane > Garruk |
+
+Keep ladder, most protected first: land 1, threat 1, doubler 1, land 2 (<5 lands out), threat 2, ramp 1 (<6
+lands out), Gargos, doubler 2, Greaves, the other threats, the other lands, the other doublers, the other ramp,
+anything unclassified, the dead legends. The shed order is the ladder read backwards, and every hand card is
+named (an ORDER, not a narrowing: the executor's searched cleanup still trials the whole hand; the rollout takes
+index 0). Prefix-stable (unit-tested), so one consultation serves a multi-card cleanup.
+
+*Why spare lands outrank spare doublers:* the games end on T5-T6, so a spare Forest (a free drop worth 1-4 mana at
+once) beats a spare doubler (4-5 mana before it returns anything). The USER's own cleanup agrees:
+`references/Hydras/claude_s5_gi4.json` T5 shed the dead Gargos and then a spare Vernal Bloom (Bloom + Gauntlet
+out), keeping three Forests and Search for Tomorrow, where the generic rule picks Kalonian Hydra. The policy
+reproduces both sheds (a unit test pins it).
+
+*Doubts, for the USER:* the threat order is a value judgement (Voracious ahead of Primordial because its 2X
+arrives at once; Garruk last as the only non-Hydra); the land/ramp thresholds (5 and 6 lands) are judgement, not
+measured; Greaves is kept ahead of overflow threats only while none is out.
+
+**Validation: ONE pooled batch, the bound and the policy together** (`logs/hydras-v1/mk5i.py`; summary
+`logs/hydras-v1/ab5i_summary.txt`). 3 arms x 2400 games, arms innermost in 50-game chunks, held-out seeds
+120001 + off (no tier uses them), game_index = off, d5 b20 (play), profile attached, `MTG_SHED_STATS=1`, binary
+66050a983 (Release, 32 workers, heartbeat 32/32 at 10 min, ~23 min). Unwon scores 9; deltas paired, arm minus base.
+
+| arm | avg | wins/2400 | paired delta (se) | slower / faster | ms/game (x base) | units x base |
+|---|---|---|---|---|---|---|
+| base (generic max-MV, shipped) | 5.5171 | 2397 | - | - | 2938 (1) | 1 |
+| **bucket** (`MTG_HYDRAS_BUCKET_DISCARD=1`) | 5.5167 | 2397 | **-0.0004 (0.0004)** | **0 / 1** | 2896 (0.986) | 0.985 |
+| worst (base + `MTG_SHED_WORST`: rollout sheds the LAST-ranked card) | 5.5175 | 2395 | +0.0004 (0.0007) | 2 / 1 | 2914 (0.992) | 0.986 |
+
+- **The bound closes the axis.** Best-vs-worst is +0.0004 +/- 0.0007 turns per game: no ranking can be worth more
+  than that, so the shed order is worth nothing measurable on Hydras at play settings. The worst arm's two
+  slower games (gi 1000 and gi 2291, both T8 -> unwon) are what an inverted rule costs at the extreme.
+- **The policy fires and is harmless.** Real sheds: 114 in 7,200 games (0.016 per game). Rollout sheds: 8.36M
+  (2.81 cards per shedding cleanup, hand sizes 8-23), so the RANKING is consulted constantly inside the search
+  even though real play rarely sheds. Of 979,354 policy calls, 92.6% put a different card at index 0 than the
+  generic rule (the generic rule sheds the highest mana value first: Gargos (6), then Kalonian / Gauntlet / Nissa /
+  Garruk (5), while an X Hydra counts 2-4 in hand; the buckets shed spare ramp / doublers / lands first). It still moves the aggregate by -0.0004 with no slower game, and costs 1.4% less.
+- The one faster game, gi 977 (T8 -> T7), is faster in the WORST arm too, so it is a perturbation of the
+  rollouts' card flow, not evidence the ranking is good.
+- It meets the CLAUDE.md bar (net <= 0 on a large held-out sample; no slower game to recover). The suite tiers
+  (smoke / regression / overnight) were not re-accepted: the policy is OFF, so they cannot move.
+
+**PROPOSAL for the USER:** adopt the bucket policy default ON (doctrine quality, the USER's own s5 gi4 shed
+reproduced, rollout fidelity; measured neutral-to-slightly-better and 1.4% cheaper), or leave it OFF on the
+strength of the bound (the axis is worth nothing on this deck either way). Recommendation: **ON**, because it is
+free, matches the USER's hand-played shed, and makes the rollout stop throwing away Gargos and
+Kalonian first. The decision is the USER's; it stays OFF until then.
+
+## Stage 6 — report (V1, 2026-11-11)
+
+1. **Cards implemented**: all 15 names `full` (I1-I3, F1; tiers in the Stage 2 table). No card work in V1.
+2. **Mulligan profile**: the Stage-4 baseline only (no keep table, no value leaf). Generation is the parent's
+   next step; V1 started none.
+3. **Win turn** (accepted GT, d5 b20 play): regression 5.4133 (s2002) / 5.5600 (s3003), overnight 5.47-5.59,
+   2HG 5.7467; d0 6.03. The USER's 10 references: search 5.30 vs human 5.60 (0/10 short).
+4. **Verification**: 5h PASS (every prompt surfaced with its full list; the auditor's one blind spot fixed);
+   5b monotone and plausible, no game slower at d5 than d3 (nothing for 5c); 5c2 below; 5d claude-play sweep
+   recorded clean (16/16, b7a4d6eb8, flags fixed in F1); 5i: the deck almost never sheds (0.016 per game) and the
+   best-vs-worst bound is +0.0004 +/- 0.0007, so the axis is closed; the bucket policy is a proposal, OFF.
+   verify_deck below.
+5. **6a disclosure** (read from the code, `HydrasProvider` in src/ai/DecisionProviders.{h,cpp}, routing pinned
+   in test_pirates_provider.cpp):
+
+| assumption / heuristic | source | class | cost / why safe |
+|---|---|---|---|
+| single passive opponent: never blocks, casts, gains life; its 1/1..6/6 spawns (8 of 10 gi patterns) never block or attack | engine | global | Hydras win by combat; nothing here needs an interacting opponent |
+| clairvoyant search over a known library; Neverwinter's dice from a seeded per-game stream | engine | global | Neverwinter is held to its MAX X (below), so the search cannot pick X against the dice |
+| second main ON (`DeckUsesSecondMain` keyed on Garruk's `draw_greatest_power`; `MTG_HYDRAS_SECOND_MAIN`) | runner | USER ruling | costs 2.07x per game (P1) for 0.0075 turns |
+| play at d5 b20, built-in (no value_play block) | profile | setting | at equal budget d5 = d3 on 150/150 games (5b) |
+| Gauntlet colour pruned to GREEN (`EtbChoiceCandidates`) | provider | pruning, proved | every land a basic Forest, every creature green, opp spawns colourless; the runtime composition check returns the full fan if the list breaks that. Human: all five colours |
+| X = 0 dropped for a 0/0 Hydra (`XCandidates`) unless a Gauntlet is on board or in hand | provider | pruning, sound | a 0/0 dies at once and nothing reads it. Note: the in-HAND exception admits a doomed X = 0 cast when the Gauntlet is not castable that turn (5h observation) |
+| Neverwinter always at MAX affordable X (`XCastBelowMax`) | provider | USER ruling | stops the search gaming the dice |
+| every other X Hydra at MAX X (`MTG_HYDRAS_MAX_X`) | provider | LOSSY narrowing, USER-adopted | -0.0083 turns, 0.80x ms; could miss "smaller X + hold mana" lines |
+| Voracious's fight mode never offered to the search (`EtbFightTargets`) | provider | pruning, proved | opp creatures never block or attack, so killing one changes nothing. Human: both modes, every target |
+| Steelbane destroys only OPPONENT artifacts/enchantments (`CounterDestroyArtEnchTargets`) | provider | pruning, proved | ours are Gauntlet / Bloom / Greaves, all upside; the opponent has none, so in practice the activation is never searched. Human: every target incl. ours |
+| the USER's cast order (`MTG_HYDRAS_CAST_ORDER`) | provider | ORDER only, USER ruling | +0.0021 better than generic, 0 slower games |
+| cleanup discard: generic max-MV (the bucket policy is built, OFF) | provider | heuristic (rollout index 0) | axis bound = 0 (5i) |
+| `MTG_SEL_GATE_EXACT`, `MTG_LANDPUT_CROSS_CREDIT`, Nissa's +1 identity-class fold | engine | sound fold / correctness | verified (P2/F1): 0 violations, the fix is better and cheaper |
+| Gargos's fight trigger, trample (Kalonian / Primordial), Steelbane at sorcery speed, Nissa's -8 emblem, Gauntlet's +1/+1 to our creatures only, Three Visits / Nature's Lore never fail to find | cards.json | approved deferrals (USER 2026-11-10) | inert against this opponent and this list |
+| `land_search_subtype` classified INERT (5h) | audit manifest | PENDING USER sign-off | a legality filter; non-binding here (only basic Forests) |
+
+   Play viewer: every card choice is surfaced (no auto-resolved decision in this list); the only prompt-free
+   collapse is Voracious's mode when the opponent has no creature (the fight mode has no legal target).
+6. **Accepted deferrals**: the six above (USER 2026-11-10, *"All of the deferrals are okay."*).
+7. **Open questions for the USER** (none blocks anything):
+   - `land_search_subtype` INERT: sign off?
+   - discard buckets: adopt `MTG_HYDRAS_BUCKET_DISCARD` ON (recommended; -0.0004, 0 slower, 0.986x) or keep OFF?
+   - `MTG_ENUM_CHARGE` for Hydras (P3, still open).
+   - The costed-suspend realised order (F1-B, docs/design/costed-suspend-realised-order.md, still open).
+   - Optional: tighten the X = 0 in-hand-Gauntlet exception (moves play).
+   - Information only: at equal budget d5 played identically to d3 on 150 games; play depth stays the USER's.
+
+V1_TAIL
