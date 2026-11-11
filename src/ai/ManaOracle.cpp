@@ -887,7 +887,7 @@ bool Covers(const Res& a, const Res& b, bool* strict)
 // bill from one board, thousands of times a game (EDF seed 1130464 gi463: 3.1M candidates, the tables ~18% of the
 // game's time -- AttachedKey walks the battlefield per permanent). MTG_ORACLE_COVERS_VERIFY=1 checks every fast
 // answer against the tables.
-// THE {C} FOLD of the payment refine (MTG_PAY_EXCESS_RELEASE, item 5d). Set only for RefinePaymentImpl's extent, and
+// THE {C} FOLD of the payment refine (MTG_PAY_REFINE_C_FOLD, item 5d half 2). Set only for RefinePaymentImpl's extent, and
 // only in a deck with no {C} pip (GameState::deck_spends_c_pip false): there a floating {C} can pay a generic pip and
 // nothing else, and every other unit of the same pool can pay that generic too (the GenericCFirstScope fold the payer
 // already makes on that same bit), so a {C} the engine's payment floated is covered by any surplus unit of the
@@ -2158,7 +2158,7 @@ static bool RefinePaymentImpl(const GameState& pre, const GameState& post, const
         bool prev;
         explicit CFoldScope(bool on) : prev(t_cover_c_fold) { t_cover_c_fold = on; }
         ~CFoldScope() { t_cover_c_fold = prev; }
-    } _cfold(!pre.deck_spends_c_pip && PayExcessReleaseOn());
+    } _cfold(!pre.deck_spends_c_pip && PayRefineCFoldOn());
     int victim_idx = -1;
     {
         if (RefineVictimSpentOn() && g_pay_sac_victim != 0)
@@ -2366,8 +2366,8 @@ bool RefinePayment(const GameState& pre, const GameState& post, const ManaCost& 
     k.bill     = ManaCostDigest(cost);
     k.ctx      = (for_creature ? 1 : 0) | (creature_ability ? 2 : 0) | (PayingCreatureAbility() ? 4 : 0)
                | (useful << 3) | (no_trade ? (1 << 12) : 0) | (RefineVictimSpentOn() ? (1 << 13) : 0);
-    // The {C} fold (MTG_PAY_EXCESS_RELEASE) changes the answer, and ctx's high bits are the subtype sources' below.
-    if (!pre.deck_spends_c_pip && PayExcessReleaseOn()) { k.bill ^= 0xC0F0'1D5D'0000'0001ULL; }
+    // The {C} fold (MTG_PAY_REFINE_C_FOLD) changes the answer, and ctx's high bits are the subtype sources' below.
+    if (!pre.deck_spends_c_pip && PayRefineCFoldOn()) { k.bill ^= 0xC0F0'1D5D'0000'0001ULL; }
     // The PAYING identity, where a SUBTYPE source reads it (Giada / Smokebraider: the spell's subtype, the ability
     // source's): the same bill on the same board is a different table for an Elemental and for a Metallic Mimic. One
     // bit per such source on the board (or holding the reserve), so every other board keeps its key.

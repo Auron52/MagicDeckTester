@@ -541,12 +541,20 @@ inline bool PayRefineOn()
 
 // MTG_PAY_EXCESS_RELEASE (2026-11-11, item 5d of the mana-clean chain; DEFAULT ON, =0 -> as before): release a source
 // a payment's mana exceeded its bill by, where the release is a dominance. Read by the whole-turn prepay's give-back
-// (TurnSolver BatchPrepayMainCasts, MTG_PREPAY_SHRINK) and by the per-cast refine (ManaOracle RefinePaymentImpl).
+// (TurnSolver BatchPrepayMainCasts, MTG_PREPAY_SHRINK). The per-cast refine's half is MTG_PAY_REFINE_C_FOLD.
 // See heurarm::PAY_EXCESS_RELEASE for the two mechanisms and their repros.
 inline bool PayExcessReleaseOn()
 {
     static const bool env_on = EnvOn("MTG_PAY_EXCESS_RELEASE", true);
     return heurarm::Flag(heurarm::PAY_EXCESS_RELEASE, env_on);
+}
+
+// MTG_PAY_REFINE_C_FOLD (2026-11-11, item 5d half 2; DEFAULT ON, =0 -> as before): the per-cast refine's {C} fold
+// (ManaOracle t_cover_c_fold). Split from MTG_PAY_EXCESS_RELEASE, which now gates only the prepay give-back.
+inline bool PayRefineCFoldOn()
+{
+    static const bool env_on = EnvOn("MTG_PAY_REFINE_C_FOLD", true);
+    return heurarm::Flag(heurarm::PAY_REFINE_C_FOLD, env_on);
 }
 
 // MTG_REAL_PAY_SCRIPT (2026-10-28; DEFAULT OFF pending its A/B, =1 -> on): real play pays the chosen plan with the

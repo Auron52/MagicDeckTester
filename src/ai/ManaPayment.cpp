@@ -10981,6 +10981,32 @@ bool OracleOptionConsumesEarlyCrackPin(const GameState& state, const std::vector
 std::string ApplyHumanPreTap(GameState& state, const TurnSolver::PreTap& t)  { return ApplyPreTapImpl(state, t, true); }
 std::string ApplyEnginePreTap(GameState& state, const TurnSolver::PreTap& t) { return ApplyPreTapImpl(state, t, false); }
 
+// Terastodon's doomed-source drain (SpellEffects.h g_tera_drain_hook, MTG_TERA_DRAIN_DOOMED): the destroy loop's
+// untapped basic-land victim taps for its one colour through the payer's own pre-tap route. A refusal taps
+// nothing (the old behaviour).
+namespace {
+struct TeraDrainInstaller
+{
+    static void Drain(GameState& state, int controller, int num)
+    {
+        if (controller != state.active_player_index) { return; }
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.card.m_number != num || p.controller_index != controller) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d == nullptr || d->params.produces.size() != 1) { return; }
+            TurnSolver::PreTap t;
+            t.name  = p.card.m_name.str();
+            t.num   = num;
+            t.color = static_cast<int>(d->params.produces[0]);
+            (void)ApplyEnginePreTap(state, t);
+            return;
+        }
+    }
+    TeraDrainInstaller() { g_tera_drain_hook = &Drain; }
+} s_tera_drain_installer;
+}
+
 bool ApplyKruphixBankTap(GameState& state, int source_id, char face)
 {
     bool kruphix = false;

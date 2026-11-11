@@ -377,3 +377,25 @@ TEST_CASE("Terastodon victims (human): a forced pick is not asked")
     CHECK(Count(s, true) == 0);
     CHECK(Count(s, false) == 3);
 }
+
+// MTG_TERA_DRAIN_DOOMED (item 5d of the mana-clean chain; Stompy regression s2002 gi412): an UNTAPPED Forest the
+// destroy loop eats is tapped for {G} first, so its mana floats instead of dying with it. A tapped victim adds
+// nothing, and the arm =0 keeps the old behaviour (the land dies untapped, nothing floats).
+TEST_CASE("Terastodon taps an untapped Forest victim for {G} before destroying it (MTG_TERA_DRAIN_DOOMED)")
+{
+    EnsureCardsLoadedTK();
+    for (int arm : { 0, 1 })
+    {
+        CAPTURE(arm);
+        FixedKProvider two(2);
+        GameState s = TerastodonBoard(&two);
+        s.battlefield[0].tapped = true;   // one tapped Forest: eaten first, adds nothing
+        heurarm::t_arm[heurarm::TERA_DRAIN_DOOMED] = static_cast<std::int8_t>(arm);
+        FireOwnEtbTriggers(s, 0, 3, std::string(), kEtbKxHeuristic);
+        heurarm::t_arm[heurarm::TERA_DRAIN_DOOMED] = -1;
+        CHECK(Count(s, true) == 1);
+        CHECK(Count(s, false) == 2);
+        CHECK(s.floating_mana.green == arm);   // the second victim was untapped: drained only under the arm
+        CHECK(s.floating_mana.Total() == arm);
+    }
+}
