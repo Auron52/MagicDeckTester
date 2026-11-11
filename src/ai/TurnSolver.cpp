@@ -95815,7 +95815,8 @@ struct Mute
         ++workctr::t_mute;
         if (stat) { g_muted.fetch_add(1, std::memory_order_relaxed); }
     }
-    ~Mute() { if (on) { --workctr::t_mute; } }
+    // The outermost mute ending: what the payable-mana cache stored under it is dropped (ManaCacheMuteEnd).
+    ~Mute() { if (on && --workctr::t_mute == 0) { ManaCacheMuteEnd(); } }
 };
 inline void ClearGame() { t_enum.clear(); t_bp.clear(); t_front.clear(); t_enum_epoch = ~0ull; }
 struct Dump
