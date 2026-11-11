@@ -47,6 +47,7 @@ import argparse, collections, datetime, hashlib, json, os, re, subprocess, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import deck_registry                                   # noqa: E402
 import esc_skip_calibrate as cal                       # noqa: E402
+import batch_journal as bj                             # noqa: E402  (per-game resume)
 from engine_bin import engine_bin, kind                # noqa: E402
 
 HEADROOM_MIN = 0.04            # USER 2026-10-13; gates the CEILING, not the projection (USER: 2-3% is worth it)
@@ -58,6 +59,15 @@ ISO_MAX = 100                  # more moved games than this is not flicker; do n
 
 def now():
     return datetime.datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
+
+
+# A keep-table generation's journal and its rolling/dated backups (<raw>.journal, .journal.bak1, .journal.spec.*,
+# .journal.backup-<stamp>) are the GENERATOR's resume state: only ExhaustiveKeep opens them (<out_raw> + ".journal"),
+# play reads the finished keep table. They cannot move a game, so they are not play inputs; hashing them read ~1.2 GB
+# per variant directory over 9p (Hinata2's grid: 27 dirs, ~34 GB per fingerprint). Not to be confused with a batch's
+# own per-game journal (MTG_BATCH_RESUME), which lives in the stage's work dir and is never hashed here.
+def is_generation_journal(name):
+    return '.journal' in name
 
 
 def inputs_fp(mtg, jobs):
@@ -76,19 +86,26 @@ def inputs_fp(mtg, jobs):
     dirs = {os.path.dirname(os.path.abspath(j[k])) for j in jobs for k in ('deck', 'profile') if j.get(k)}
     for d in sorted(dirs):
         for f in sorted(os.listdir(d)):
-            if os.path.isfile(os.path.join(d, f)):
+            if os.path.isfile(os.path.join(d, f)) and not is_generation_journal(f):
                 add(os.path.join(d, f))
     for f in ('src/cards/data/cards.json', 'src/ai/data/heuristic_defaults.env'):
         if os.path.isfile(f):
             add(f)
     for k in sorted(os.environ):
-        if k.startswith('MTG_'):
+        if k.startswith('MTG_') and not k.startswith(FP_IGNORED_ENV):
             h.update(f'{k}={os.environ[k]}\n'.encode())
     return h.hexdigest()
 
 
+# Read-outs that cannot move a game (the engine's resume key skips the same ones, BatchRunner.cpp): a different
+# heartbeat file or slow-game threshold between a stop and its re-launch must not discard finished work. Unset,
+# they hash exactly as before.
+FP_IGNORED_ENV = ('MTG_BATCH_HEARTBEAT', 'MTG_SLOW_GAME_MS', 'MTG_BATCH_RESUME', 'MTG_BATCH_DIAG_KILL_AFTER', 'MTG_PGO')
+
+
 def run_batch(mtg, work, label, jobs):
-    """Run ONE pooled batch; reuse a finished one whose manifest AND input contents are unchanged (resume)."""
+    """Run ONE pooled batch; reuse a finished one whose manifest AND input contents are unchanged, and resume an
+    unfinished one game by game from its journal (scripts/batch_journal.py)."""
     man = os.path.join(work, label + '.manifest.json')
     log, err = os.path.join(work, label + '.log'), os.path.join(work, label + '.err')
     fpf = os.path.join(work, label + '.inputs.sha256')
@@ -104,8 +121,9 @@ def run_batch(mtg, work, label, jobs):
     open(man, 'w').write(text)
     print(f"[E.6] {label}: {len(jobs)} jobs, {sum(j['games'] for j in jobs)} games ({mtg}, {kind(mtg)})", flush=True)
     env = dict(os.environ, MTG_ESC_SKIP_LOG='1')
-    with open(log, 'w') as lo, open(err, 'w') as er:
-        rc = subprocess.run([mtg, '--batch', man, '--threads', '0'], stdout=lo, stderr=er, env=env).returncode
+    # GAME BY GAME (USER 2026-11-04): resume a stopped batch from its journal. The wrapper keeps the recorded
+    # games' [gdg]/[esk] stderr lines, which this stage parses, and drops those of the games it replays.
+    rc = bj.run_batch(mtg, man, log, err, os.path.join(work, label + '.journal'), env=env, key=fp, tag='[E.6]')
     if rc != 0 or '=== BATCH done' not in open(log, errors='replace').read():
         raise RuntimeError(f"{label} batch failed (exit {rc}; 137 = SIGKILL, think OOM) -- see {err}")
     open(fpf, 'w').write(fp + '\n')

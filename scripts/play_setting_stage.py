@@ -72,6 +72,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import deck_registry                                   # noqa: E402
 import esc_skip_stage as esk                           # noqa: E402  (inputs_fp: the resume fingerprint)
+import batch_journal as bj                             # noqa: E402  (per-game resume)
 from engine_bin import engine_bin, kind                # noqa: E402
 
 DEFAULT_PLAY = (5, 20)          # MulliganProfile::BuiltinDefaultPlay(): what a sidecar with no enabled block plays
@@ -157,7 +158,8 @@ def phase_e_shapes(deck, shape_log):
 
 
 def run_batch(mtg, work, label, jobs):
-    """ONE pooled batch; a finished one whose manifest AND input contents are unchanged is reused (resume)."""
+    """ONE pooled batch; a finished one whose manifest AND input contents are unchanged is reused, and an
+    unfinished one resumes game by game from its journal (scripts/batch_journal.py)."""
     man = os.path.join(work, label + '.manifest.json')
     log, err = os.path.join(work, label + '.log'), os.path.join(work, label + '.err')
     fpf = os.path.join(work, label + '.inputs.sha256')
@@ -172,12 +174,66 @@ def run_batch(mtg, work, label, jobs):
         os.remove(fpf)
     open(man, 'w').write(text)
     print(f"[E.7] {label}: {len(jobs)} jobs, {sum(j['games'] for j in jobs)} games ({mtg}, {kind(mtg)})", flush=True)
-    with open(log, 'w') as lo, open(err, 'w') as er:
-        rc = subprocess.run([mtg, '--batch', man, '--threads', '0'], stdout=lo, stderr=er).returncode
+    # GAME BY GAME (USER 2026-11-04: "We should be saving game by game results."): a stopped batch resumes from
+    # its journal and replays only the unfinished games (scripts/batch_journal.py). The journal is run state:
+    # it lives in the work dir on the host drive, and the engine moves it aside itself if any input changed.
+    # A stopped batch with NO journal (launched before it existed) keeps its finished JOBS instead: job-level
+    # salvage, guarded by the launch stamp (USER 2026-11-05: "yes, we should salvage what we can of the Hinata
+    # run."; scripts/batch_journal.py). Only the job lines are read below, and salvage supplies all of them.
+    rc = bj.run_batch(mtg, man, log, err, os.path.join(work, label + '.journal'), key=fp, tag='[E.7]')
     if rc != 0 or '=== BATCH done' not in open(log, errors='replace').read():
         raise RuntimeError(f"{label} batch failed (exit {rc}; 137 = SIGKILL, think OOM) -- see {err}")
     open(fpf, 'w').write(fp + '\n')
     return log
+
+
+def salvage_dry_run(mtg, work, label, jobs, dry_root, real_root):
+    """--salvage-dry-run: what a re-launch of this stage would do with a stopped batch, playing nothing.
+    The variants were rebuilt under dry_root; the jobs are mapped back onto the real work dir's paths, then:
+    is the manifest the re-launch writes byte-identical to the one on disk, is every rebuilt variant folder
+    identical to the one the stopped run read (same file names, same symlink targets, same bytes), and what
+    does batch_journal decide (salvaged / to run) under the inputs key the re-launch would compute."""
+    def real(p):
+        return real_root + p[len(dry_root):] if p.startswith(dry_root) else p
+    rjobs = [dict(j, deck=real(j['deck']), profile=real(j['profile'])) for j in jobs]
+    man = os.path.join(work, label + '.manifest.json')
+    log = os.path.join(work, label + '.log')
+    ok = True
+    text = json.dumps({'jobs': rjobs}, indent=1)
+    same = os.path.exists(man) and open(man).read() == text
+    print(f"[E.7] dry run: manifest {man} {'IDENTICAL to' if same else 'DIFFERS from'} the re-launch's "
+          f"({len(rjobs)} jobs)")
+    ok &= same
+    nd = nf = 0
+    for dd in sorted({os.path.dirname(j[k]) for j in jobs for k in ('deck', 'profile')}):
+        rd, nd = real(dd), nd + 1
+        fa = sorted(os.listdir(dd))
+        fb = sorted(os.listdir(rd)) if os.path.isdir(rd) else None
+        if fa != fb:
+            print(f"[E.7] dry run: {rd}: file list differs from the rebuild")
+            ok = False
+            continue
+        for f in fa:
+            pa, pb = os.path.join(dd, f), os.path.join(rd, f)
+            nf += 1
+            if os.path.islink(pa) or os.path.islink(pb):
+                eq = os.path.islink(pa) and os.path.islink(pb) and os.path.realpath(pa) == os.path.realpath(pb)
+            else:
+                eq = open(pa, 'rb').read() == open(pb, 'rb').read()
+            if not eq:
+                print(f"[E.7] dry run: {pb} differs from the rebuild")
+                ok = False
+    print(f"[E.7] dry run: {nd} variant folder(s), {nf} file(s) compared with a fresh rebuild: "
+          f"{'all identical' if ok else 'DIFFERENCES above'}")
+    fp = esk.inputs_fp(mtg, rjobs)
+    plan, why = bj.salvage_plan(mtg, man, log, os.path.join(work, label + '.journal'), fp)
+    print(f"[E.7] dry run: inputs key {fp}")
+    if plan:
+        print(f"[E.7] dry run: SALVAGE {len(plan['carried'])} finished job(s) of {len(plan['jobs'])}; "
+              f"{len(plan['rest'])} job(s) / {sum(j['games'] for j in plan['rest'])} games to run")
+    else:
+        print(f"[E.7] dry run: NO SALVAGE -- {why}")
+    return 0 if ok and plan else 2
 
 
 def install(path, doc):
@@ -203,6 +259,9 @@ def main():
                     help="the deck's phase-E shape log (<queue>/m_<key>_shape.log): grid its other shapes too")
     ap.add_argument('--live', action='append', default=[], metavar='KEY=FILE',
                     help='measure as if FILE were the live sidecar (a what-if; refused with --write)')
+    ap.add_argument('--salvage-dry-run', metavar='SCRATCH',
+                    help='play nothing: rebuild the variants under SCRATCH and report what a re-launch would '
+                         'salvage from a stopped batch in --work (batch_journal.py job-level salvage)')
     a = ap.parse_args()
     shape_logs = dict(x.split('=', 1) for x in a.phase_e)
     live_over = dict(x.split('=', 1) for x in a.live)
@@ -222,6 +281,11 @@ def main():
     work = a.work or os.path.join('logs', 'play_stage', '+'.join(sorted(d.key for d in decks)))
     os.makedirs(work, exist_ok=True)
     vroot = os.path.join(work, 'variants')
+    dry = a.salvage_dry_run
+    if dry:
+        if a.write:
+            sys.exit("--salvage-dry-run plays and installs nothing: it cannot be combined with --write")
+        real_vroot, vroot = vroot, os.path.join(os.path.abspath(dry), 'variants')
     mtg = engine_bin('mtg')
     notes, report, plan = [], [], {}
 
@@ -265,6 +329,8 @@ def main():
             m = re.search(r'[-_]d(\d+)b(\d+)_s', j['name'])
             return (-int(m.group(2)), -int(m.group(1))) if m else (0, 0)
         jobs.sort(key=dearest_first)
+        if dry:
+            sys.exit(salvage_dry_run(mtg, work, 'grid', jobs, vroot, real_vroot))
         log = run_batch(mtg, work, 'grid', jobs)
         lines = open(log, errors='replace').read().splitlines()
         for k, p in plan.items():
