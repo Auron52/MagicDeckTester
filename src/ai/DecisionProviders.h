@@ -3719,6 +3719,12 @@ public:
     int         CastOrderRank(const GameState&, const CardDefinition&) const override;
     const char* CastOrderTierName(int rank) const override;
     bool        CastOrderTotalByName() const override;
+    // MTG_HYDRAS_BUCKET_DISCARD -- the authored cleanup-discard BUCKET policy (analyze-deck 5i, 2026-11-11):
+    // LANDS / RAMP / DOUBLERS / Gargos / Greaves / THREATS, quota-first and net of board, every hand card named
+    // (an ORDER, not a narrowing: the executor's searched cleanup still trials the whole hand). DEFAULT OFF until
+    // the USER approves it (discard buckets are the USER's call); unset / =0 -> the generic max-MV ranking.
+    std::vector<int> CleanupDiscardCandidates(
+        const GameState& s, const std::vector<std::string>* required_pieces) const override;
 };
 
 class CycloneProvider : public DeckProvider

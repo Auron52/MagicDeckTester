@@ -49279,6 +49279,171 @@ const char* HydrasProvider::CastOrderTierName(int rank) const
     return rank >= kHydrasUnlisted ? "NOT IN THE HYDRAS ORDER: after every listed card, by name" : nullptr;
 }
 
+// ---- HydrasProvider: the cleanup-discard BUCKET policy (MTG_HYDRAS_BUCKET_DISCARD) -------------------------
+// analyze-deck 5i, authored 2026-11-11 as a PROPOSAL for the USER (who approves discard buckets). DEFAULT OFF:
+// =0 / unset -> GenericProvider::CleanupDiscardCandidates (the max-MV fallback), byte-identical. Per-job
+// overridable (heurarm) so ON and OFF pool in one batch. Every role is read off the card's PARAMS through its
+// definition (a hand card is a name-only placeholder), never its name.
+//
+// THE BUCKETS (the USER doctrine of 2026-08-21: quota-first, net of board, threats are the catch-all):
+//   LANDS     basic Forests: the land drops. Two kept while fewer than five lands are out, else one.
+//   RAMP      Nature's Lore / Three Visits / Search for Tomorrow (land_search_on_resolve): one kept while
+//             fewer than six lands are out (an extra land that taps for 2-4 under the doublers).
+//   DOUBLERS  Vernal Bloom / Gauntlet of Power / Nissa (land_tap_bonus): the engine. Quota two NET OF BOARD
+//             (each one adds a {G} per Forest tap, so they stack; a third is overflow, kept after threats).
+//   GARGOS    the Hydra reducer (reduces_spell_subtype Hydra): one, unless one is already out. A second
+//             copy in hand, or one beside Gargos on the battlefield, is a DEAD legend and sheds first.
+//   GREAVES   the haste Equipment: one, unless one is already out.
+//   THREATS   the five Hydras and Garruk: the catch-all, with a floor of TWO. Value order (kept first):
+//             Kalonian (doubles every attacker's counters) > Voracious (enters with 2X) > Primordial (doubles
+//             each upkeep) > Neverwinter (2 pips per X) > Steelbane > Garruk. A threat castable next turn
+//             (distance-to-playable, rule 4) is kept before one that is not.
+// THE KEEP LADDER (most protected first): land 1, threat 1, doubler 1, land 2 (<5 lands out), threat 2,
+// ramp 1 (<6 lands out), Gargos, doubler 2, Greaves, the other threats, the other lands, the other doublers,
+// the other ramp, anything unclassified, the dead legends. Spare lands outrank spare doublers because the
+// games end by turn 5-6: a land drop is free and adds its mana at once, a spare doubler costs a turn's mana
+// first (the USER's own cleanup in references/Hydras/claude_s5_gi4.json shed the dead Gargos, then the spare
+// Vernal Bloom beside Bloom + Gauntlet, keeping three Forests and Search for Tomorrow). The SHED ORDER is that ladder read backwards,
+// and EVERY hand card is named (the full ranking, not one index): the executor's searched cleanup still trials
+// the whole hand, the rollout takes index 0. Prefix-stable (CleanupDiscardShedStable's default): every
+// quota reads only the BOARD and the ladder's own fill order, so removing the last-ranked card leaves every
+// earlier rung unchanged.
+static bool HydrasBucketDiscardOn()
+{
+    static const bool on = EnvOn("MTG_HYDRAS_BUCKET_DISCARD");   // DEFAULT OFF (USER approves); =1 -> buckets
+    return heurarm::Flag(heurarm::HYDRAS_BUCKET_DISCARD, on);
+}
+
+std::vector<int> HydrasProvider::CleanupDiscardCandidates(const GameState& s,
+                                                          const std::vector<std::string>* required_pieces) const
+{
+    if (!HydrasBucketDiscardOn()) { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+    const int me = s.active_player_index;
+    const Player& ap = s.players[static_cast<std::size_t>(me)];
+    const int n = static_cast<int>(ap.hand.size());
+    if (n <= 0) { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+    auto at = [](int i) { return static_cast<std::size_t>(i); };
+    auto def_of = [](const Card& c) { return CardDatabase::Instance().LookupCached(c); };
+
+    // ---- board census (net of board) ---------------------------------------------------------------
+    int board_lands = 0, board_bonus = 0, board_doublers = 0;
+    bool board_gargos = false, board_equip = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        if (p.card.IsLand()) { ++board_lands; continue; }
+        const CardDefinition* d = def_of(p.card);
+        if (d == nullptr) { continue; }
+        if (d->params.land_tap_bonus > 0) { ++board_doublers; board_bonus += d->params.land_tap_bonus; }
+        if (d->params.reduces_spell_subtype == "Hydra") { board_gargos = true; }
+        if (d->params.is_equipment) { board_equip = true; }
+    }
+
+    // ---- partition the hand --------------------------------------------------------------------------
+    std::vector<const CardDefinition*> defs(at(n), nullptr);
+    for (int i = 0; i < n; ++i) { if (!ap.hand[at(i)].m_is_staged) { defs[at(i)] = def_of(ap.hand[at(i)]); } }
+    std::vector<char> dup(at(n), 0);
+    MarkDuplicateLegendsInHand(s, defs, dup);
+    std::vector<int> lands, ramp, doublers, gargos, greaves, threats, other, dead;
+    bool hand_land = false;
+    for (int i = 0; i < n; ++i)
+    {
+        const Card& hc = ap.hand[at(i)];
+        if (hc.m_is_staged) { continue; }
+        const CardDefinition* d = defs[at(i)];
+        if (CleanupDiscardIsLand(hc)) { lands.push_back(i); hand_land = true; continue; }
+        if (d == nullptr)             { other.push_back(i); continue; }
+        if (dup[at(i)])               { dead.push_back(i); continue; }
+        const CardParams& p = d->params;
+        if (p.land_tap_bonus > 0)                       { doublers.push_back(i); continue; }
+        if (p.land_search_on_resolve)                   { ramp.push_back(i); continue; }
+        if (p.reduces_spell_subtype == "Hydra")         { if (board_gargos) { dead.push_back(i); } else { gargos.push_back(i); } continue; }
+        if (p.is_equipment)                             { greaves.push_back(i); continue; }
+        if (d->card.IsCreature() || p.loyalty_start > 0) { threats.push_back(i); continue; }
+        other.push_back(i);
+    }
+
+    // Next turn's mana, roughly: the lands out plus one land drop, each Forest tapping for 1 + the doublers out.
+    const int next_mana = (board_lands + (hand_land ? 1 : 0)) * (1 + board_bonus);
+    auto min_cost = [&](int i) -> int
+    {
+        const CardDefinition* d = defs[at(i)];
+        const int mv = CleanupDiscardManaValue(ap.hand[at(i)]);
+        if (d != nullptr && d->params.enters_with_x_plus_counters)
+        { return mv + (d->params.enters_with_x_dice_sides > 0 ? 2 : 1); }   // X = 1 ({X}{X} for Neverwinter)
+        return mv;
+    };
+    auto threat_value = [&](int i) -> int
+    {
+        const CardParams& p = defs[at(i)]->params;
+        if (p.attack_double_team_counters)   { return 0; }   // Kalonian Hydra
+        if (p.etb_modal_double_self_counters) { return 1; }   // Voracious Hydra
+        if (p.upkeep_double_self_counters)    { return 2; }   // Primordial Hydra
+        if (p.enters_with_x_dice_sides > 0)   { return 3; }   // Neverwinter Hydra
+        if (p.enters_with_x_plus_counters)    { return 4; }   // Steelbane Hydra
+        if (p.loyalty_start > 0)              { return 5; }   // Garruk
+        return 6;
+    };
+    // Best kept first: castable next turn, then the role's own key, then hand index (deterministic).
+    std::stable_sort(threats.begin(), threats.end(), [&](int a, int b)
+    {
+        const bool fa = min_cost(a) > next_mana, fb = min_cost(b) > next_mana;
+        if (fa != fb) { return !fa; }
+        const int va = threat_value(a), vb = threat_value(b);
+        if (va != vb) { return va < vb; }
+        return a < b;
+    });
+    std::stable_sort(doublers.begin(), doublers.end(), [&](int a, int b)
+    {
+        const int ca = min_cost(a), cb = min_cost(b);
+        const bool fa = ca > next_mana, fb = cb > next_mana;
+        if (fa != fb) { return !fa; }
+        if (ca != cb) { return ca < cb; }      // Vernal Bloom (4) before Nissa / Gauntlet (5)
+        return a < b;
+    });
+    std::stable_sort(ramp.begin(), ramp.end(), [&](int a, int b)
+    {
+        const bool sa = defs[at(a)]->params.suspend_time_counters > 0, sb = defs[at(b)]->params.suspend_time_counters > 0;
+        if (sa != sb) { return !sa; }          // Nature's Lore / Three Visits (untapped, {1}{G}) before Search
+        return a < b;
+    });
+
+    // ---- the keep ladder -----------------------------------------------------------------------------
+    std::vector<int> keep;
+    keep.reserve(at(n));
+    std::size_t li = 0, ti = 0, di = 0, ri = 0;
+    auto take = [&](std::vector<int>& v, std::size_t& k) { if (k < v.size()) { keep.push_back(v[k++]); } };
+    const int doubler_quota = std::max(0, 2 - board_doublers);
+    take(lands, li);                                         // land 1: the next land drop
+    take(threats, ti);                                       // threat 1
+    if (doubler_quota >= 1) { take(doublers, di); }          // doubler 1 (net of board)
+    if (board_lands < 5) { take(lands, li); }                // land 2, early
+    take(threats, ti);                                       // threat 2: the threat floor
+    if (board_lands < 6) { take(ramp, ri); }                 // ramp 1
+    if (!gargos.empty()) { keep.push_back(gargos.front()); } // Gargos (a second copy is in `dead`)
+    if (doubler_quota >= 2) { take(doublers, di); }          // doubler 2
+    if (!board_equip) { for (int i : greaves) { keep.push_back(i); break; } }   // Greaves
+    while (ti < threats.size())  { take(threats, ti); }      // the other threats: extra spells are threats
+    while (li < lands.size())    { take(lands, li); }        // spare lands: a FREE drop, +1..4 mana at once
+    while (di < doublers.size()) { take(doublers, di); }     // spare doublers: 4-5 mana to deploy
+    while (ri < ramp.size())     { take(ramp, ri); }         // spare ramp: the most expendable
+    for (std::size_t k = 1; k < gargos.size(); ++k) { keep.push_back(gargos[k]); }   // cannot fire (dup -> dead)
+    { bool first = true; for (int i : greaves) { if (!first || board_equip) { keep.push_back(i); } first = false; } }
+    for (int i : other) { keep.push_back(i); }
+    for (int i : dead)  { keep.push_back(i); }
+
+    // The shed order is the ladder read backwards; staged / protected cards fall through to the shared tiers.
+    std::vector<int> shed(keep.rbegin(), keep.rend());
+    if (ShedStats::Enabled())
+    {
+        const std::vector<int> out = CleanupDiscardRankingWithOrder(s, required_pieces, shed);
+        const std::vector<int> gen = GenericProvider::CleanupDiscardCandidates(s, required_pieces);
+        ShedStats::CountPolicy(!out.empty() && !gen.empty() && out.front() != gen.front());
+        return out;
+    }
+    return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
+}
+
 // ---- AccomplishedAlchemistProvider::EtbChoiceCandidates -------------------------------------------
 // Utopia Sprawl's colour axis restricted to the colours the 75 can spend (G, U, W, B -- see the
 // declaration); every other ETB-choice card (Trufflesnout's mode) is the base fan unchanged.

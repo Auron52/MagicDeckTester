@@ -218,7 +218,95 @@ re-evaluated per node.
 
 ## Stage 5 verification
 
-(not started)
+V1 (2026-11-11), worktree `.claude/worktrees/hydras`, binary built at dac7cf590 (src tree 587dcce67), snapshot
+`build/scratch/hydras-v1/bin/mtg`. Scripts and summaries: `logs/hydras-v1/`.
+
+### 5h — play-viewer decision surface
+
+**Auditor.** `audit_viewer_decisions.py decks/Hydras/Hydras.cod decks/Hydras/Hydras.profile.json` (exit 0):
+15 definitions; expected types `attack_mode`, `choose_color`, `target`, `tutor_etb`; the 40-game sweep from
+seed 9001 surfaced all four. **5h PASS, 0 HARD MISS, 0 UNVERIFIED**, so no `--verify-card` run was owed.
+(`logs/hydras-v1/audit5h.txt`.)
+
+**Oracle-text advisories, triaged.**
+- Voracious Hydra `modal`: a blind spot in the cross-check, not a dropped choice. The mode IS modelled
+  (`etb_modal_double_self_counters` -> `attack_mode`, trigger etb) and surfaces with both modes (repro below).
+  `modeled_tokens()` now maps that param to `modal`, so the advisory is gone.
+- Gargos `target` ("fights up to one target creature you don't control"): the approved inert deferral (no
+  spell in the list targets a creature we control). Disclosed in 6a.
+
+**Human-play repros** (`--claude-play`, `logs/hydras-v1/drive5h.py` drives a goal-seeking line and stops at the
+prompt; every list below is the FULL option list, checked against the board):
+
+| prompt | seed / gi / CSV | what the human is offered |
+|---|---|---|
+| Gauntlet of Power colour | s4 gi5, `1,1,0,0,0,-1,-1,0,5,0,-1,-1,6` | `choose_color`: White, Blue, Black, Red, Green (default Green) |
+| Voracious Hydra mode | s4 gi5, `1,1,0,0` then plan 1 | `attack_mode` (trigger etb): 0 double the counters, 1 fight |
+| Voracious Hydra fight target | s4, `1,1,0,0,1,1`, gi 2 / 3 / 9 / 4 / 6 | `target`: every opponent creature -- 4 x 1/1, 2 x 2/2, 2 x 1/1, 1, 1. On gi 7 / 8 the opponent has no creature on T2, so the fight mode has no legal target and the mode is not asked (CR 700.2b): correct |
+| Nissa +1 | s9 gi5, the `drv_nissa8_9` CSV (T7) | two plans: the target plan -> `target` listing the 5 NONCREATURE Forests (the 3 Forests her earlier +1s animated are correctly excluded), and the zero-target plan ("up to one") |
+| Nissa -8 count | same frame | every count 0..15 = every Forest left in the library (15), alone and inside larger plans. 6,100 plans; the JSON shows the top 200 (`plans_total`, `MTG_PLAY_PLANS_CAP`), the engine-side list is complete |
+| Garruk +1 / -3 | s18 gi5, T4 | both offered (loyalty 4; -6 correctly absent) |
+| Garruk -6 | s22 gi5, T6 (loyalty 6) | +1, -3 and -6 all offered (11 plans each) |
+| Steelbane destroy target | s2 gi5, T4 | an activation per legal target: the only artifact/enchantment out is our own Lightning Greaves, and the human IS offered it (HydrasProvider's own-permanent prune is search-only) |
+STEELBANE_MORE
+
+**`land_search_subtype` -- why it is INERT as a decision (needs the USER's sign-off).** The param is Nature's
+Lore's and Three Visits' "search your library for a **Forest** card": a LEGALITY filter
+(`LandSearchSpec::subtype`, applied in LandSearch.h's candidate test: a library land without the Forest subtype
+is not a legal find). It creates no choice of its own. The choice -- WHICH card, or none -- is the `tutor_etb`
+prompt that `land_search_on_resolve` already raises, and that prompt is built from the filtered list, so the
+filter decides what the prompt lists, not whether there is one. The references show it: 11 `tutor_etb` prompts
+from Nature's Lore / Three Visits across the USER's 10 games. For **Hydras** the filter is moreover non-binding:
+the only land in the 60 is the basic Forest (23), so every candidate is a Forest either way and the prompt
+offers one identity class (`Forest`) or the decline. It would bind only in a list holding non-Forest lands
+(it excludes them) or nonbasic Forests (it admits them where `land_search_basic_only` would not): Skyshroud
+Claim and Karametra carry it too; no other suite deck plays one of the four cards except Gods (Karametra,
+alongside a single Forest). The audit row stays INERT, marked PENDING the USER.
+
+**Observations, not defects.**
+- Steelbane's menu offers the activation only against permanents on the board when the frame is
+  enumerated: in "Vernal Bloom, Steelbane: destroy ... -> Lightning Greaves" the Bloom cast earlier in the same
+  plan is not offered as a target (the human reaches it through the segment re-prompt). Destroying our own
+  doubler is never wanted; not worth a change.
+- `HydrasProvider::XCandidates` keeps X = 0 for Primordial / Neverwinter / Steelbane whenever a Gauntlet is in
+  HAND, even when the Gauntlet cannot be cast in the same plan. Regression s2002 gi 8 (d5 b20, T7) casts
+  Neverwinter at X = 0 on T2 beside a hand Gauntlet: a 0/0 that dies and wastes the card. The game still wins
+  on T7, and d5 b200 and d5 b0 (unlimited) play the same T2 cast and the same T7 win, so it cost nothing
+  there and the search rates it a tie. A tighter exception (a Gauntlet on the
+  battlefield, or castable in the plan before the Hydra) is a possible follow-up; it would move play, so it is
+  the USER's call.
+
+### 5b — multi-depth sanity
+
+Accepted GT (`test/regression_gt.txt`), `hydras*` keys:
+
+| tier | d0 | d3 (b10) | d5 (b20) | 2HG d5 |
+|---|---|---|---|---|
+| smoke s1001 | 6.0600 | 5.5800 | 5.5500 | 5.9600 |
+| regression s2002 / s3003 | 6.0320 | 5.4267 | 5.4133 / 5.5600 | 5.7467 |
+| overnight s4004-s10010 | 6.02-6.07 | 5.6080 | 5.47-5.59 | 5.9000 |
+
+**Monotone** at every tier: d0 > d3 >= d5. **Plausible**: the deck ramps on T1-T3 and kills with one or two big
+X Hydras; 59% of d5 wins land on T5, 36% on T6, 3% on T7 (s2002, 150 games), and the USER's 10 references play
+5.60 against the search's 5.30. 2HG's 30 team life costs ~0.3 turns.
+
+**Per-game, current binary** (`logs/hydras-v1/mk5b.py`, ONE pooled batch, `MTG_DUMP_WINS=1`; it reproduces the
+accepted GT digests exactly: d0 773d5978, d3 b10 597af3b8, d5 b20 f3d66977). Summary: `logs/hydras-v1/b5_summary.txt`.
+
+| pair (s2002) | paired | d5 slower | d5 faster |
+|---|---|---|---|
+| d5 b20 vs d3 b10 (the suite rows) | 75 | **0** | 1 (gi 40, T6 -> T5) |
+| d5 b20 vs d3 **b20** (same budget) | 150 | **0** | **0** (identical win turns, different lines) |
+| d3 b10 vs d0 | 75 | 0 | 26 |
+
+The accepted GT agrees on the other seed sets: smoke s1001 (50 paired) 0 slower / 1 faster; overnight s4004
+(125) 0 slower / 2 faster, and the two games unwon at d5 there (gi 86, 94) are unwon at d3 with the same digest
+(no Hydra reachable). **There is no game slower at d5 than at d3, so nothing needs a 5c classification.**
+The one moved game, gi 40, is a BUDGET effect: d3 also wins it on T5 at b20.
+Finding worth stating plainly: **at equal budget, d5 buys nothing over d3 on this sample** (150/150 identical
+win turns), at 1.50x the core time (312 s v 208 s for 150 games). The deck's turn is decided by "ramp, then
+the largest X Hydra" and two plies see it. Play depth is the USER's setting (the depth floor of 5 is a USER
+rule), so this is information, not a proposal to drop depth.
 
 ## Approved deferrals
 

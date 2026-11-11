@@ -2170,6 +2170,11 @@ def modeled_tokens(card):
     # ExileOppCreatureUntilLeaves, offered whenever more than one opponent creature is legal).
     if p.get("etb_choose_keyword_count", 0) > 0:
         t.add("modal")
+    # Voracious Hydra's "choose one -- double the counters / fight" IS the `attack_mode` (trigger etb)
+    # pick at resolution, then the fight's `target` click (Hydras 5h, 2026-11-11, verified by a
+    # --choices repro that shows both modes and every opponent creature).
+    if p.get("etb_modal_double_self_counters"):
+        t.add("modal")
     if p.get("etb_or_transform_exile_opp_creature_until_leaves"):
         t.add("target")
     # Vampires B: Captivating Vampire's "Gain control of target creature" IS the `target` board-click
