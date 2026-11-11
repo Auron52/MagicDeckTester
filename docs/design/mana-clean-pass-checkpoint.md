@@ -419,6 +419,43 @@ oracle off byte-identical; record 43e700b5c):
      HEAD-side cost of the historical WUBRG generic order on opener lines: it burns an off-colour float that an
      unseen continuation (Kolaghan's {B}) needs. That is the defect the hold was built to hedge.
 
+* **Item 5i (agent 2026-11-11): plan-cache determinism FIXED (commit "5i: plan-cache determinism").** The
+  gods_regression_d3_s2002 drift was NOT residency of a sound cache: the breakpoint continuation cache served
+  lists derived under a different CONTEXT. Repro shrank to one game, one thread: gi39 (seed 2041, d3 b10) gives
+  b168127794e9caa5 at the default pool and 90830d658bf3fc1e with MTG_PLAN_CACHE_KB=1 or MTG_NO_BP_ENUM_CACHE=1.
+  MTG_BP_VERIFY_STATE_SWAP named it: served=299, re-derived on the STORED state = 1, on the hit state = 1, i.e. the
+  same state, a different answer. **Leak:** `GodsProvider::LoamTargetSearchCandidates` reads three inputs outside
+  its state -- the FULL search root (a Magus of the Bazaar there keeps the 299-entry physical-copy menu), the guard
+  root (graveyard land count, Magus) and the mulligan-trial flag (`turncensus::t_probe`) -- and the cache keyed on
+  the state only. A second, smaller leak: the Loam target probe (`g_loam_probe_offer`, sentinel "L?" left
+  unexpanded inside the probe) was in no key either. **Fix (lossless, keys only):** new
+  `DecisionProvider::PlanCacheContextKey` (0 by default; Gods returns exactly the facts its hook reads, through a
+  shared `ReadGodsLoamCtx`, hook behaviour byte-identical), folded with the probe bit in `FoldPhysicalCards` (m1/m2
+  enum memo + bp cache). Also: `decisionwork::PricedExceeded` now counts a budget READ even with the ceiling
+  disarmed, so an entry derived without a ceiling is refused by MTG_CACHE_READ_GUARD where the ceiling has tripped
+  (sound: a refused hit recomputes). **The verifier was perturbing play**, which is why the 2026-11-11 WIP fixes
+  looked ineffective: MTG_BP_ENUM_VERIFY's re-derivation ran unmuted, advanced `workctr::t_priced`, tripped the
+  priced ceiling earlier than play and then reported cut lists it had caused (the verify run played a different
+  game: Gods 98a4357d vs 76f2637c). It now re-derives MUTED (exactly play's ledger recompute) and skips hits the
+  read guard refuses. **Proof:** Gods d3 s2002 + Extra Turns d3/d5 s2002 give identical digest AND units at the
+  default pool, KB=1, KB=65536 and --threads 32/8/4; MTG_BP_ENUM_VERIFY=3 CONTENT-DIFF **0 of 302,384** hits (was
+  1,543 on Gods, 18-34 on ET), and the verify run now plays the same games as plain play. Extra Turns gi34/gi62
+  could not be reproduced in any isolated configuration before or after (GT digests at every pool size); the ET
+  CONTENT-DIFFs were all priced-ceiling cases (verifier-caused or read-guard-refused), so the pooled flake is
+  most likely the same priced-ceiling/pool class, now covered by the read fix -- not proven by a reproduction.
+  **GT:** smoke moved only gods_smoke_d3_s1001 (play-changed, score 5.36 unchanged); the pre-5i binary with
+  MTG_PLAN_CACHE_KB=1 gives the new digest 37dbb911 exactly, so the old GT was the warm-cache artifact. Accepted.
+  **Regression (rebased tree bb597608d, Release):** 299 pass, 3 play-changed at same score: gods d3 s2002 gi39
+  (-> 76f2637c, the cold-cache digest, explained) and gods d5 s2002 gi39 (-> 9ea56514; same game, same fix, the
+  old-binary KB=1 check was NOT yet run for it), plus **extraturns d3 s2002 gi34 -> 639a950d AGAIN** (the exact
+  digest the 5k agent saw). A direct pooled rerun of the same manifest/binary (`build/scratch/claude1110/5i/R1`)
+  gave the GT digest for ET (gi34 f1d9f642) and the same Gods digests. So the ET flake survives this fix:
+  intermittent, pooled-only (2 of 4 full pooled runs), not plan-pool size (single game invariant at
+  MTG_PLAN_CACHE_KB 2..16384), not tier-2 (refused=0), bp verifier clean. NOT FIXED -> next suspects are
+  thread-reuse state carried between games of DIFFERENT decks on a worker, or a cross-thread shared input
+  (GameWorkMeter late_limit / PublishTo). Regression GT NOT accepted (an accept would bake in whichever ET digest
+  the run happened to produce); see `logs/mana-clean-chain/5i-handoff.md`.
+
 ## Pass verdicts (this segment; earlier ones are in test/mana_clean.json and status.log)
 - galadriel: 71,000 games, 372,073 issues (MISS 453 = 425 APPLY-DROP + 28 ENUM-GAP "cast both Galadriels",
   ORACLE-GAP 6, UNMODELED 357,908 mostly "scripted payment did not pay {1}{U}{G}" / "set-aside exceeds the floating
