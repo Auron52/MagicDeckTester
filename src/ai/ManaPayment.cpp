@@ -489,6 +489,46 @@ void TapSourceIntoFloat(GameState& state, int active, Permanent& p, const CardDe
       { std::fprintf(stderr, "[tapdbg] tap %s col=%d energy=%d\n",
                      def.card.m_name.str().c_str(), (int)col,
                      state.players[active].energy_counters); } }
+    // TEMP AUDIT (MTG_PAY_HEDGE_AUDIT, default off, count-only): would the Mirrorwing hedge rules ever
+    // fire? H1 = a creature that could attack taps on a copy-magnet attack turn while an untapped land
+    // makes this colour; H2 = a Treasure cracks while an untapped land makes this colour. Supersets of
+    // the rules (no cantrip / draw-to-come test), so a zero here proves the rules inert.
+    { static const int s_ha = EnvInt("MTG_PAY_HEDGE_AUDIT", 0);
+      if (s_ha > 0 && !p.tapped)
+      {
+          const bool paysac = IsPaySacSource(def);
+          const bool crea = p.card.IsCreature() && !def.card.IsLand() && p.EffectivePower() > 0
+                            && CanAttackFull(p, state.battlefield, active);
+          const PlanTraits* pt = CurrentPlanTraits();
+          const bool h1ctx = crea && pt != nullptr && pt->copy_magnet_live && pt->attack_matters && !pt->main2;
+          if (paysac || h1ctx)
+          {
+              const Permanent* alt = nullptr;
+              for (const Permanent& q : state.battlefield)
+              {
+                  if (&q == &p || q.controller_index != active || q.tapped || !q.card.IsLand()) { continue; }
+                  const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+                  if (qd == nullptr || !CanTapNow(q, state.battlefield)) { continue; }
+                  for (Color c : EffectiveProducesFor(state, active, *qd, &q))
+                  { if (c == col || payledger::t_cur_pip_any) { alt = &q; break; } }
+                  if (alt) { break; }
+              }
+              static std::atomic<long> s_cnt[2][2][2];   // [rule][real][alt]
+              const int real = g_real_resolution ? 1 : 0;
+              s_cnt[paysac ? 1 : 0][real][alt ? 1 : 0].fetch_add(1, std::memory_order_relaxed);
+              struct Dump { ~Dump() {
+                  std::fprintf(stderr, "[hedge-audit] H1 sim=%ld/%ld real=%ld/%ld  H2 sim=%ld/%ld real=%ld/%ld (alt-land/total)\n",
+                      s_cnt[0][0][1].load(), s_cnt[0][0][0].load() + s_cnt[0][0][1].load(),
+                      s_cnt[0][1][1].load(), s_cnt[0][1][0].load() + s_cnt[0][1][1].load(),
+                      s_cnt[1][0][1].load(), s_cnt[1][0][0].load() + s_cnt[1][0][1].load(),
+                      s_cnt[1][1][1].load(), s_cnt[1][1][0].load() + s_cnt[1][1][1].load()); } };
+              static Dump s_dump;
+              if (alt && (real || s_ha > 2) && s_ha > 1)
+              { std::fprintf(stderr, "[hedge-audit] %s%s T%d tap %s col=%d any=%d opener=%d alt=%s\n", paysac ? "H2" : "H1", real ? "" : "-sim",
+                             state.turn_number, def.card.m_name.str().c_str(), (int)col,
+                             (int)payledger::t_cur_pip_any, (int)g_line_opens_unseen, alt->card.m_name.str().c_str()); }
+          }
+      } }
     p.tapped = true;
     // Rollback audit (count-only, real play): this tap and the alternatives it had.
     if (payledger::On() && g_real_resolution)
@@ -2723,6 +2763,65 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                 { goto dh_reselect; }
             }
             if (best_i < 0) { return false; }
+            // MIRRORWING HEDGES H1 / H2 (USER 2026-11-06, followups s8 Q25b: "build both"; A/B levers,
+            // default OFF). Both apply only while the applying line casts a card that reveals new castables
+            // (g_line_opens_unseen: a cantrip, a dig) -- the draw the hedge guards against.
+            //   H1 (MTG_PAY_HEDGE_H1): on a pre-combat main with a copy magnet live and an eligible attacker,
+            //       a creature that could attack is not tapped while an untapped land can pay this pip (a
+            //       floating surplus accepted).
+            //   H2 (MTG_PAY_HEDGE_H2): a Treasure pays only a pip no untapped land can.
+            // The land must pass usable() (a reserved / held-for-the-line source stays held), so the hedge
+            // only overrides the ranking key's bands (depletion hold, waste, pain), never a reservation.
+            { static const bool e_h1 = EnvOn("MTG_PAY_HEDGE_H1"), e_h2 = EnvOn("MTG_PAY_HEDGE_H2");
+              const bool s_h1 = heurarm::Flag(heurarm::PAY_HEDGE_H1, e_h1);
+              const bool s_h2 = heurarm::Flag(heurarm::PAY_HEDGE_H2, e_h2);
+              if ((s_h1 || s_h2) && g_line_opens_unseen && best_kind == 1)
+              {
+                  const Permanent& bp = state.battlefield[best_i];
+                  const CardDefinition* bd = bp.def_absent ? nullptr : CardDatabase::Instance().LookupCached(bp.card);
+                  bool fire = false;
+                  if (bd != nullptr && !bp.card.IsLand())
+                  {
+                      if (s_h2 && IsPaySacSource(*bd)) { fire = true; }
+                      if (!fire && s_h1 && bp.card.IsCreature() && bp.EffectivePower() > 0
+                          && CanAttackFull(bp, state.battlefield, active))
+                      {
+                          const PlanTraits* hpt = CurrentPlanTraits();
+                          fire = hpt != nullptr && hpt->copy_magnet_live && hpt->attack_matters && !hpt->main2;
+                      }
+                  }
+                  if (fire)
+                  {
+                      int land_i = -1, land_rank = 1 << 30;
+                      for (int i = 0; i < bn; ++i)
+                      {
+                          const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+                          if (q.controller_index != active || q.tapped || q.def_absent || !q.card.IsLand()
+                              || q.card.IsCreature()) { continue; }
+                          const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+                          if (qd == nullptr || qd->params.is_filter || qd->params.any_color_filter
+                              || !usable(q, *qd)) { continue; }
+                          const std::vector<Color>& prod = pay_produces(*qd, &q);
+                          bool makes = any ? !prod.empty() : false;
+                          if (!any) { for (Color c : prod) { if (c == needed) { makes = true; break; } } }
+                          if (!makes) { continue; }
+                          const int r = ResolveProvider(state).ManaSourceRank(state, *qd);
+                          if (r < land_rank) { land_rank = r; land_i = i; }
+                      }
+                      if (land_i >= 0)
+                      {
+                          best_i = land_i; best_rank = land_rank;
+                          // Fire census for the A/B (MTG_PAY_HEDGE_AUDIT): [rule][real].
+                          static std::atomic<long> s_fire[2][2];
+                          s_fire[IsPaySacSource(*bd) ? 1 : 0][g_real_resolution ? 1 : 0].fetch_add(1, std::memory_order_relaxed);
+                          struct FireDump { ~FireDump() {
+                              if (EnvInt("MTG_PAY_HEDGE_AUDIT", 0) > 0)
+                              { std::fprintf(stderr, "[hedge-fire] H1 sim=%ld real=%ld  H2 sim=%ld real=%ld\n",
+                                             s_fire[0][0].load(), s_fire[0][1].load(), s_fire[1][0].load(), s_fire[1][1].load()); } } };
+                          static FireDump s_fd;
+                      }
+                  }
+              } }
             if (nddbg)
             { std::fprintf(stderr, "[nddbg]   -> %s kind=%d rank=%d key=(%d %d %d %d)\n",
                            state.battlefield[best_i].card.m_name.str().c_str(),

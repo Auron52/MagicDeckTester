@@ -858,6 +858,8 @@ enum Slot : int
     HYDRAS_BUCKET_DISCARD,    // MTG_HYDRAS_BUCKET_DISCARD  Hydras: the authored cleanup-discard BUCKET policy (analyze-deck 5i, 2026-11-11; LANDS / RAMP / DOUBLERS / Gargos / Greaves / THREATS, quota-first, net of board; HydrasProvider::CleanupDiscardCandidates). DEFAULT OFF -- a PROPOSAL the USER approves; =1 -> buckets, unset/=0 -> the generic max-MV ranking
     MUTE_NO_STORE,            // MTG_MUTE_NO_STORE  a pledger-MUTED recompute (it stands in for a plan-cache hit that never ran) refuses stores into the content-pure caches (refine memo, mana tier-1/tier-2 promotion, rollout game cache), so units cannot follow plan-pool residency (workctr::StoresAllowed, core/WorkCounters.h). Default ON since 2026-11-11; =0 restores the stores (the per-job A/B control that prices its wall)
     HASTE_HOST_DRAIN,         // MTG_HASTE_HOST_DRAIN  item 5o (mana-clean, Jumbo s30061937): before a planned unlock/release moves a haste Equipment off a fresh single-colour mana dork that cannot tap without it, tap that dork into the float (TurnSolver DrainOutgoingHasteHost). A mana-payment dominance. Default ON; =0 -> the move strands the dork as before
+    PAY_HEDGE_H1,             // MTG_PAY_HEDGE_H1  Mirrorwing hedge H1 (USER 2026-11-06, followups s8 Q25b): while the applying line casts a breakpoint opener (cantrip), on a pre-combat main with a copy magnet live and an eligible attacker, a creature that could attack is not tapped for a pip an untapped usable land can pay (a floating surplus accepted). DEFAULT OFF (A/B lever)
+    PAY_HEDGE_H2,             // MTG_PAY_HEDGE_H2  Mirrorwing hedge H2 (same ruling): while the applying line casts a breakpoint opener, a Treasure pays only a pip no untapped usable land can. DEFAULT OFF (A/B lever)
     COUNT
 };
 
@@ -1660,6 +1662,8 @@ inline const char* Name(int slot)
         "MTG_HYDRAS_BUCKET_DISCARD",
         "MTG_MUTE_NO_STORE",
         "MTG_HASTE_HOST_DRAIN",
+        "MTG_PAY_HEDGE_H1",
+        "MTG_PAY_HEDGE_H2",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
