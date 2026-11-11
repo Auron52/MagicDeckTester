@@ -887,6 +887,16 @@ bool Covers(const Res& a, const Res& b, bool* strict)
 // bill from one board, thousands of times a game (EDF seed 1130464 gi463: 3.1M candidates, the tables ~18% of the
 // game's time -- AttachedKey walks the battlefield per permanent). MTG_ORACLE_COVERS_VERIFY=1 checks every fast
 // answer against the tables.
+// THE {C} FOLD of the payment refine (MTG_PAY_EXCESS_RELEASE, item 5d). Set only for RefinePaymentImpl's extent, and
+// only in a deck with no {C} pip (GameState::deck_spends_c_pip false): there a floating {C} can pay a generic pip and
+// nothing else, and every other unit of the same pool can pay that generic too (the GenericCFirstScope fold the payer
+// already makes on that same bit), so a {C} the engine's payment floated is covered by any surplus unit of the
+// candidate's same pool. Angels mana-clean s30210844 T3: Serra the Benevolent's {2}{W}{W} off Plains + Remote Farm +
+// Sol Ring floated {C}; Remote Farm + Sol Ring pays it exactly and gives the Plains back, whose re-tap makes a {W} --
+// the per-key compare refused it, and Lightstall Inquisitor's {W} had to tap Giada. A haste-tagged {C} is compared
+// on its own (floating_haste_c) and so never folds. The mana oracle's own verdicts never set it.
+thread_local bool t_cover_c_fold = false;
+
 bool CoversBoards(const GameState& x, const GameState& y, bool with_float, bool* strict)
 {
     const int a = x.active_player_index;
@@ -929,13 +939,25 @@ bool CoversBoards(const GameState& x, const GameState& y, bool with_float, bool*
             const ManaPool& g = *ys[i];
             const int u[7] = { f.white, f.blue, f.black, f.red, f.green, f.colorless, f.wild };
             const int v[7] = { g.white, g.blue, g.black, g.red, g.green, g.colorless, g.wild };
+            if (t_cover_c_fold && u[5] < v[5])
+            {
+                // Spend the other keys' surplus on the {C} deficit; what is left over is still a strict gain.
+                int spare = 0;
+                for (int c = 0; c < 7; ++c) { if (c != 5 && u[c] > v[c]) { spare += u[c] - v[c]; } }
+                const int need = v[5] - u[5];
+                if (spare < need) { ok = false; break; }
+                for (int c = 0; c < 7; ++c) { if (c != 5 && u[c] < v[c]) { ok = false; break; } }
+                if (!ok) { break; }
+                if (spare > need) { st = true; }
+                continue;
+            }
             for (int c = 0; c < 7; ++c) { if (u[c] < v[c]) { ok = false; break; } if (u[c] > v[c]) { st = true; } }
         }
         if (x.floating_haste_c < y.floating_haste_c) { ok = false; }
         if (x.floating_haste_c > y.floating_haste_c) { st = true; }
     }
     static const bool s_verify = EnvOn("MTG_ORACLE_COVERS_VERIFY");
-    if (s_verify)
+    if (s_verify && !t_cover_c_fold)
     {
         bool st2 = false;
         const bool ok2 = Covers(Resources(x, with_float), Resources(y, with_float), &st2);
@@ -2130,6 +2152,13 @@ static bool RefinePaymentImpl(const GameState& pre, const GameState& post, const
     // "released", first in order) over {Mystic, Archdruid} (the Forest released), and Worldly Tutor's {G} had no
     // source left (APPLY-DROP). Read as tapped, the victim neither counts toward `rel` nor makes a candidate strictly
     // better, so a candidate giving back a real source wins and one giving back only the victim is no improvement.
+    // The {C} fold (t_cover_c_fold, above CoversBoards) for this refine's acceptance tests, restored on every exit.
+    struct CFoldScope
+    {
+        bool prev;
+        explicit CFoldScope(bool on) : prev(t_cover_c_fold) { t_cover_c_fold = on; }
+        ~CFoldScope() { t_cover_c_fold = prev; }
+    } _cfold(!pre.deck_spends_c_pip && PayExcessReleaseOn());
     int victim_idx = -1;
     {
         if (RefineVictimSpentOn() && g_pay_sac_victim != 0)
@@ -2337,6 +2366,8 @@ bool RefinePayment(const GameState& pre, const GameState& post, const ManaCost& 
     k.bill     = ManaCostDigest(cost);
     k.ctx      = (for_creature ? 1 : 0) | (creature_ability ? 2 : 0) | (PayingCreatureAbility() ? 4 : 0)
                | (useful << 3) | (no_trade ? (1 << 12) : 0) | (RefineVictimSpentOn() ? (1 << 13) : 0);
+    // The {C} fold (MTG_PAY_EXCESS_RELEASE) changes the answer, and ctx's high bits are the subtype sources' below.
+    if (!pre.deck_spends_c_pip && PayExcessReleaseOn()) { k.bill ^= 0xC0F0'1D5D'0000'0001ULL; }
     // The PAYING identity, where a SUBTYPE source reads it (Giada / Smokebraider: the spell's subtype, the ability
     // source's): the same bill on the same board is a different table for an Elemental and for a Metallic Mimic. One
     // bit per such source on the board (or holding the reserve), so every other board keeps its key.

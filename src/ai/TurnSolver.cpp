@@ -61974,7 +61974,18 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             { newly |= (1ull << i); ++newly_n; }
         }
         // A counted float covers part of the bill, so fewer taps were ever needed (0 without one).
-        if (newly_n > combined.ManaValue() - bt_start.Total())
+        // MULTI-UNIT TAPS (MTG_PAY_EXCESS_RELEASE, item 5d): the source count is the wrong trigger when a tap makes
+        // two or more (an Arbor Elf unit off a Sprawled Forest, Sol Ring, Remote Farm). Jumbo mana-clean s30091733
+        // T3 {Overgrowth onto Forest#10, Chariot of Victory}, {5}{G} with the host held: the solve tapped Arbor Elf
+        // x2 + Voyaging Satyr (two each) + Forest#11 -- seven mana off four sources for a bill of six, so the
+        // give-back never ran and a {G} floated away where Forest#11 was never needed. Here the trigger is the
+        // MANA the solve made over the bill, and a give-back is kept only as a STRICT SUBSET of the solve's own
+        // taps: the units it no longer makes are exactly the released source's, which that source can make
+        // again, so the release is a dominance and decides no colour.
+        const bool src_over  = newly_n > combined.ManaValue() - bt_start.Total();
+        const bool mana_over = !src_over && newly_n >= 2 && produced.Total() > combined.ManaValue()
+                            && PayExcessReleaseOn();
+        if (src_over || mana_over)
         {
             // Flexibility = how many distinct colours the source can add. A source we cannot price
             // sorts last (released only if nothing better works).
@@ -62056,7 +62067,19 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                                                     /*tapped_mask=*/0, /*untapped_max=*/-1,
                                                     /*reserved_mask=*/trial, /*out_full_pool=*/&p2)
                                  && PrepayColoursFit(p2, combined, nullptr, nullptr);
-                if (o2 && !(pain_guard && state.players[active].life < best_la)
+                bool subset_ok = true;
+                if (o2 && mana_over)
+                {
+                    // Every source this re-solve taps was tapped by the payment it replaces (best_bf), and at
+                    // least the candidate is given back. Anything else is a swap, which this trigger never makes.
+                    subset_ok = state.battlefield.size() == best_bf.size();
+                    for (std::size_t i = 0; i < state.battlefield.size() && subset_ok; ++i)
+                    {
+                        if (state.battlefield[i].tapped && !best_bf[i].tapped) { subset_ok = false; }
+                    }
+                    if (subset_ok && state.battlefield[static_cast<std::size_t>(c)].tapped) { subset_ok = false; }
+                }
+                if (o2 && subset_ok && !(pain_guard && state.players[active].life < best_la)
                        && !(pain_guard && PayEnergyLastOn() && state.players[active].energy_counters < best_ea))
                 {
                     hold          = trial;
