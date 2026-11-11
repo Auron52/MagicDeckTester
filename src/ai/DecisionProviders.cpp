@@ -57849,6 +57849,21 @@ bool MartyrLifegainProvider::RestrictedSecondMainAdmits(const GameState& s, cons
     return SpeakerSecondMainAdmits(a);
 }
 
+// Umezawa's Jitte's gain mode for Martyr Lifegain (MTG_MARTYR_JITTE_GAIN). Found by the Stage 5d
+// claude-play sweep (s61015 gi14): from 27 life with two counters, gain 2 twice -> 31 life -> Serra
+// Ascendant is 6/6 and the attack is exactly lethal a turn early, a line the search could not see at
+// any depth or budget because the mode is never enumerated (the 2026-08-14 USER doctrine: "always use
+// it for +2/+2 ... no reason to use any other mode in goldfishing"). That premise fails in a deck
+// whose life total is a resource. This ADDS a searched option (no-greedy compliant); the search still
+// weighs it against combat's +2/+2 spend. Gated on the deck stamp deck_reads_life_total, the same
+// stamp that keeps Martyr of Sands' self-lifegain outlet on the menu. DEFAULT OFF: relaxing a USER
+// ruling is the USER's call -- the A/B result goes to them.
+bool MartyrLifegainProvider::OffersJitteGainMode(const GameState& s) const
+{
+    static const bool on = EnvOn("MTG_MARTYR_JITTE_GAIN", false);
+    return heurarm::Flag(heurarm::MARTYR_JITTE_GAIN, on) && s.deck_reads_life_total;
+}
+
 // ---- Path to Exile: the opponent-target prune (OffersRemovalCast) ------------------------------
 //
 // Path to Exile: "Exile target creature. Its controller may search their library for a basic land

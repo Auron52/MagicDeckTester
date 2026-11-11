@@ -44498,15 +44498,21 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         const bool jitte_modes_open = HumanPlayActive()
                                    || DecisionUnpruned(UnprunedGate::JitteMode)
                                    || ResolveProvider(state).OffersJitteNonCombatModes(state);
+        // The gain mode ALONE may be opened by a deck whose life total is a resource
+        // (OffersJitteGainMode; Martyr Lifegain, MTG_MARTYR_JITTE_GAIN). -1/-1 and the main-phase
+        // pump stay behind jitte_modes_open.
+        const bool jitte_gain_open = jitte_modes_open
+                                  || ResolveProvider(state).OffersJitteGainMode(state);
         for (const Permanent& p : state.battlefield)
         {
-            if (!jitte_modes_open) { break; }
+            if (!jitte_gain_open) { break; }
             if (p.controller_index != state.active_player_index) { continue; }
             if (p.charge_counters <= 0) { continue; }
             const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
             if (!pd || !pd->params.is_equipment
                 || pd->params.equip_combat_damage_charges <= 0) { continue; }
-            if (pd->params.charge_minus_power != 0 || pd->params.charge_minus_tough != 0)
+            if (jitte_modes_open
+                && (pd->params.charge_minus_power != 0 || pd->params.charge_minus_tough != 0))
             {
                 const bool open_own = HumanPlayActive();
                 for (const Permanent& t : state.battlefield)
@@ -44560,7 +44566,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // Gated on being ATTACHED: "equipped creature" is not a target, so an unattached Jitte's
             // activation is legal but does nothing -- a guaranteed no-op, which a plan menu must
             // never contain (the Wirewood Lodge / ActivatePump rule).
-            if (pd->params.charge_pump_power != 0 || pd->params.charge_pump_tough != 0)
+            if (jitte_modes_open
+                && (pd->params.charge_pump_power != 0 || pd->params.charge_pump_tough != 0))
             {
                 bool has_host = false;
                 if (p.equipped_to > 0)

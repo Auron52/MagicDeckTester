@@ -2496,6 +2496,16 @@ public:
         return false;
     }
 
+    // OffersJitteGainMode -- the "you gain 2 life" mode ALONE (not -1/-1, not the main-phase pump),
+    // for a deck whose life total is itself a resource (Martyr Lifegain: Serra Ascendant is +5/+5 at
+    // 30 life, so two counters of gain can be worth five damage). DEFAULT false: the 2026-08-14 USER
+    // doctrine above stands for every deck that does not override this.
+    virtual bool OffersJitteGainMode(const GameState& s) const
+    {
+        (void)s;
+        return false;
+    }
+
     // RedirectPumpOntoRemovalTarget -- Anti-Lifegain pump-then-Swords: just before a lifegain-equals-
     // power removal (Swords to Plowshares) exiles opponent creature `target_bi`, fire a free-alt
     // Invigorate from hand onto THAT creature (the exile's life loss grows by the pump) instead of

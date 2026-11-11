@@ -2360,6 +2360,10 @@ public:
     bool RestrictedSecondMainLive(const GameState& s) const override;
     bool MayOpenRestrictedSecondMain() const override { return true; }
     bool RestrictedSecondMainAdmits(const GameState& s, const Action& a) const override;
+    // UMEZAWA'S JITTE "you gain 2 life" (MTG_MARTYR_JITTE_GAIN, heurarm MARTYR_JITTE_GAIN; DEFAULT
+    // OFF pending the USER, since it relaxes the 2026-08-14 "+2/+2 only" doctrine for this deck).
+    // Opens the gain mode ALONE while the deck reads its life total. DecisionProviders.cpp.
+    bool OffersJitteGainMode(const GameState& s) const override;
 };
 
 // The new Jumbo Cactuar and Surrak mechanics identify this deck without

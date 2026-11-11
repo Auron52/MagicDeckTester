@@ -1,0 +1,68 @@
+{
+ "deck": "decks/Martyr Lifegain/Martyr Lifegain.cod",
+ "turn": 5,
+ "on_the_play": true,
+ "active_life": 27,
+ "opponent_life": 13,
+ "library_filler": "Plains",
+ "library_size": 30,
+ "depth": 3,
+ "budget_ms": 50,
+ "lands_played_this_turn": 1,
+ "battlefield": [
+  {
+   "name": "Plains"
+  },
+  {
+   "name": "Plains"
+  },
+  {
+   "name": "Plains"
+  },
+  {
+   "name": "Plains"
+  },
+  {
+   "name": "Speaker of the Heavens",
+   "sick": false
+  },
+  {
+   "name": "Umezawa's Jitte",
+   "equips": "Speaker of the Heavens",
+   "charge_counters": 2
+  },
+  {
+   "name": "Serra Ascendant",
+   "sick": false
+  },
+  {
+   "name": "Enduring Innocence",
+   "sick": false
+  },
+  {
+   "token": true,
+   "power": 4,
+   "toughness": 4,
+   "subtypes": [
+    "Angel"
+   ],
+   "color": "W",
+   "keywords": [
+    "Flying"
+   ],
+   "controller": 0,
+   "sick": false
+  }
+ ],
+ "hand": [
+  "Squadron Hawk"
+ ],
+ "_comment": [
+  "Negative control for martyr_jitte_gain_hawk_serra_lethal: with the gain mode closed (the 2026-08-14 USER '+2/+2 only' doctrine), the same turn-5 kill is not found."
+ ],
+ "env": {
+  "MTG_MARTYR_JITTE_GAIN": "0"
+ },
+ "max_turns": 5,
+ "expect_no_win": true
+}

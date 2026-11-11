@@ -1,0 +1,68 @@
+{
+ "deck": "decks/Martyr Lifegain/Martyr Lifegain.cod",
+ "turn": 5,
+ "on_the_play": true,
+ "active_life": 27,
+ "opponent_life": 13,
+ "library_filler": "Plains",
+ "library_size": 30,
+ "depth": 3,
+ "budget_ms": 50,
+ "lands_played_this_turn": 1,
+ "battlefield": [
+  {
+   "name": "Plains"
+  },
+  {
+   "name": "Plains"
+  },
+  {
+   "name": "Plains"
+  },
+  {
+   "name": "Plains"
+  },
+  {
+   "name": "Speaker of the Heavens",
+   "sick": false
+  },
+  {
+   "name": "Umezawa's Jitte",
+   "equips": "Speaker of the Heavens",
+   "charge_counters": 2
+  },
+  {
+   "name": "Serra Ascendant",
+   "sick": false
+  },
+  {
+   "name": "Enduring Innocence",
+   "sick": false
+  },
+  {
+   "token": true,
+   "power": 4,
+   "toughness": 4,
+   "subtypes": [
+    "Angel"
+   ],
+   "color": "W",
+   "keywords": [
+    "Flying"
+   ],
+   "controller": 0,
+   "sick": false
+  }
+ ],
+ "hand": [
+  "Squadron Hawk"
+ ],
+ "_comment": [
+  "Martyr Lifegain claude-play sweep s61015 gi14: at 27 life with two Jitte counters, gain 2 twice -> 31 life -> Serra Ascendant 6/6, and the attack is exactly lethal on 13. Reachable only when the provider opens Jitte's gain mode (MTG_MARTYR_JITTE_GAIN, MartyrLifegainProvider::OffersJitteGainMode); the second gain arrives through Squadron Hawk's hand-entry breakpoint. An EMPTY hand still misses (one JitteModeAbility per plan, no gain count variant) -- a known open gap, see the analysis ledger."
+ ],
+ "env": {
+  "MTG_MARTYR_JITTE_GAIN": "1"
+ },
+ "max_turns": 5,
+ "expect_win_turn": 5
+}

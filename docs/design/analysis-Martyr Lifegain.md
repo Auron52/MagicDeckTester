@@ -146,6 +146,29 @@ tier with the SAME --deck -> `python3 test/check_gt_logs.py` -> commit GT + push
 attack-then-sac main 2]; Innocence cast order; discard buckets; provisional deferrals: Companion inert, Hawk full
 count, end-step Clue, Kami/Farm Animals instant speed, {X} not Lurrus-castable). CronDelete 7869914f at the end.
 
+## USER rulings (2026-11-10, verbatim)
+
+1. *"The Narrow speaker version is fine for the most part. We can heuristically prune the kami and farm animals
+   sacrifice abilities. Only Martyr is a bit questionable and we might want to test that once we are done. The
+   tricky part is that you want to activate that early to gain more life and doing it before attacking is important
+   to make Serra Ascendant larger, so most likely main 2 isn't crucial there."*
+2. *"However, I am wondering whether perhaps we should move almost everything to main 2 instead. So for example, we
+   could have only have Squadron Hawk and Ranger of Eos, (Cards that add more white in hand) in main 1. Martyr and
+   Martyr sacrifice would go in main 1 if we need the lifegain to pump Serra and the beginning of Main 2 otherwise.
+   The martyrs would be played and activations would happen immediately after in a loop if you had multiples.
+   (because playing them all first is ineffecient)"*
+3. *"I geuss ideally we would also split Squadron Hawk with targets which should be main 1 vs Squadron Hawk without
+   targets which should be main 2."*
+
+Reading taken (surfaced to the user): Speaker narrow M2 APPROVED. Kami of False Hope / Curious Farm Animals sac
+abilities PRUNED from the autonomous menu (both mains). The "almost everything to main 2" split is an EXPERIMENT to
+build and A/B (Main 1 = Hawk/Ranger while they have a fetch target -- the same "adds white cards to hand" reading
+applied to Ranger of Eos; Martyr cast+sac in main 1 only when the gain pumps an attacking Serra; everything else
+main 2; equips/Jitte stay main 1 since they feed combat), then report.
+
+Umezawa's Jitte gain mode (Stage 5d gi14 root cause): opening it relaxes the 2026-08-14 USER "+2/+2 only"
+doctrine, so it ships as `MTG_MARTYR_JITTE_GAIN` DEFAULT OFF pending the user, with an A/B.
+
 ## Provisional decisions awaiting the user
 
 (none yet)
