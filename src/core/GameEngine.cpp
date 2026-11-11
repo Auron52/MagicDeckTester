@@ -1139,6 +1139,11 @@ void GameEngine::CombatPhase(GameState& state, bool additional)
         }
     }
 
+    // Kalonian Hydra: each DECLARED copy doubles the +1/+1 counters on every creature we control, after
+    // every counter-putting attack trigger above (CR 603.3b, doubling-last dominant) and before anything
+    // reads power. Mirrors SimulateOneCombatAfterTitan (lockstep, ONE shared helper). Param-gated inert.
+    ApplyAttackDoubleTeamCounters(state, state.active_player_index, atk_idx, declared_n);
+
     // Goblins attack-trigger self-pumps (Piledriver +2/+0 per other attacking Goblin; Muxus +1/+1
     // per other Goblin you control): applied at declare-attackers BEFORE the damage loop reads power,
     // as until-end-of-turn temp bonuses. Mirrors TurnSolver::SimulateCombat (lockstep). Gated inert.

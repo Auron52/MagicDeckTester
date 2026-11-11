@@ -13908,16 +13908,82 @@
     "Nissa"
    ],
    "keywords": [],
-   "oracle_text": "Whenever you tap a Forest for mana, add an additional {G}.\n+1: Put three +1/+1 counters on up to one target noncreature land you control. Untap it. It becomes a 0/0 Elemental creature with vigilance and haste that's still a land.\n−8: You get an emblem with \"Lands you control have indestructible.\" Search your library for any number of Forest cards, put them onto the battlefield tapped, then shuffle. [STATIC: land_tap_bonus 1 + subtype Forest + produces G + land_tap_bonus_you_only -- the Vernal Bloom machinery restricted to Forests HER CONTROLLER taps ('whenever YOU tap'): a triggered mana ability (CR 605.1b/605.4a) credited inside every tap by the land-Aura readers, executor and rollout; a cast Nissa carries the same-plan credit of the Forests left untapped after her cost (MTG_LANDTAP_CAST_CREDIT). Enters with loyalty 5. PENDING (Hydras integration group I3): the +1 and -8 LOYALTY ABILITIES are NOT YET IMPLEMENTED -- until I3 lands them she resolves as a loyalty-5 permanent whose only effect is the static.]",
+   "oracle_text": "Whenever you tap a Forest for mana, add an additional {G}.\n+1: Put three +1/+1 counters on up to one target noncreature land you control. Untap it. It becomes a 0/0 Elemental creature with vigilance and haste that's still a land.\n−8: You get an emblem with \"Lands you control have indestructible.\" Search your library for any number of Forest cards, put them onto the battlefield tapped, then shuffle. [STATIC: land_tap_bonus 1 + subtype Forest + produces G + land_tap_bonus_you_only -- the Vernal Bloom machinery restricted to Forests HER CONTROLLER taps ('whenever YOU tap'): a triggered mana ability (CR 605.1b/605.4a) credited inside every tap by the land-Aura readers, executor and rollout; a cast Nissa carries the same-plan credit of the Forests left untapped after her cost (MTG_LANDTAP_CAST_CREDIT). Enters with loyalty 5; one loyalty ability per turn, usable the turn she lands (breakpoint site 9, post-entry). Vs the passive opponent she is never attacked, so loyalty only moves by her own abilities (-8 from exactly 8 bins her). +1 = untap_land_animate: the TARGET is SEARCHED (enchant_target) over identity classes of noncreature lands we control -- plain lands of one definition fold to one action, a TAPPED member preferred (exact: the untapped one is reachable from it by tapping it for mana) -- plus the 'up to one' zero-target action. An UNTAPPED basic target is first tapped for mana into the pool (a mana ability may always be activated first, and floating mana can be left unspent: the no-pre-tap resolution is weakly dominated). Then three +1/+1 counters, untap, and it PERMANENTLY becomes a 0/0 Elemental creature with vigilance and haste that is still a land (no duration in the text; the Awaken shape). The untapped land / float is spent by a SEARCHED site-9 continuation (kActLoyaltyUntapContinuation, the Chandra +RR precedent), and the mana-ceiling prune stands down while an unactivated Nissa is out. Still a Forest, so this static, Vernal Bloom and Gauntlet of Power all fire on its tap; COLOURLESS ('becomes a creature' sets no colour), so Gauntlet's green anthem does not reach it; Kalonian Hydra's attack trigger does double its counters. Gargos does not trigger (a loyalty ability is not a spell). -8 = fetch_forests_tapped: the COUNT of Forest cards put is SEARCHED (every count 0..F, chosen_x = count + 1, to the search and to a human), they enter tapped, then the library is shuffled (also on a whiff or a zero choice, CR 701.19b); which copies when the library holds DIFFERENT Forest cards is not a choice here (identical basics in this list). PARTIAL (approved deferral 2026-11-10): the -8 emblem 'Lands you control have indestructible' is a NO-OP -- nothing in this game destroys our lands (passive opponent; no land destruction in the list).]",
    "template": "custom",
    "parameters": {
     "loyalty_start": 5,
+    "loyalty_abilities": [
+     {
+      "delta": 1,
+      "effect": "untap_land_animate",
+      "amount": 3
+     },
+     {
+      "delta": -8,
+      "effect": "fetch_forests_tapped"
+     }
+    ],
     "land_tap_bonus": 1,
     "land_tap_bonus_subtype": "Forest",
     "land_tap_bonus_produces": [
      "G"
     ],
     "land_tap_bonus_you_only": true
+   }
+  },
+  {
+   "name": "Kalonian Hydra",
+   "mana_cost": "{3}{G}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Hydra"
+   ],
+   "keywords": [
+    "Trample"
+   ],
+   "power": 0,
+   "toughness": 0,
+   "oracle_text": "Trample\nThis creature enters with four +1/+1 counters on it.\nWhenever this creature attacks, double the number of +1/+1 counters on each creature you control. [ENTERS WITH (clause 2): enters_with_plus_counters 4 -- the as-enters replacement (CR 614.1c) at the universal enter cascade, every route, doubler-aware (the Mossborn Hydra precedent). ATTACK TRIGGER (clause 3): attack_double_team_counters -- one trigger per DECLARED copy (CR 508.2a; a creature put onto the battlefield attacking never triggers it), resolving in the declare-attackers step BEFORE damage, so the doubled counters swing THIS combat (a lone Kalonian attacks for 8). ONE shared helper at the same point of both combats (GameEngine::CombatPhase / TurnSolver's SimulateOneCombatAfterTitan): after every counter-putting attack trigger and the attack-token block, before the attack pumps (CR 603.3b: doubling last is dominant, 2(c + a) >= 2c + a). EACH creature we control is doubled -- attacking or not, summoning-sick or not, Kalonian itself and Nissa's animated lands included -- through DoublePlusCounters (CR 701.10e: a put, so a counter doubler applies again; clamped at 2^20). Two Kalonians = two triggers = x4 (they commute: no order to choose). PROJECTION: the search's attack projection carries the same doubling of the attackers' counters (CountAttackDoubleTeamCountersPump), so it never reads the swing at the body's printed counters. Mandatory, untargeted: no viewer decision. The 'Double' keyword ACTION is not a keyword tag. TRAMPLE is carried and INERT (approved deferral 2026-11-10): the passive opponent's creatures never block (no blocker path; Keyword::Trample has no reader).]",
+   "template": "custom",
+   "parameters": {
+    "enters_with_plus_counters": 4,
+    "attack_double_team_counters": true
+   }
+  },
+  {
+   "name": "Garruk, Primal Hunter",
+   "mana_cost": "{2}{G}{G}{G}",
+   "types": [
+    "Planeswalker"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Garruk"
+   ],
+   "keywords": [],
+   "oracle_text": "+1: Create a 3/3 green Beast creature token.\n−3: Draw cards equal to the greatest power among creatures you control.\n−6: Create a 6/6 green Wurm creature token for each land you control. [Enters with loyalty 3; one loyalty ability per turn, usable the turn he lands (breakpoint site 9, post-entry, which runs after the plan's casts). Vs the passive opponent he is never attacked, so loyalty only moves by his own abilities: -3 the turn he lands bins him (3 - 3 = 0); -6 is reachable three turns after. +1 = beast_token_33 through the shared CreateToken (green: Gauntlet of Power's anthem reaches it). -3 = draw_greatest_power: the greatest power among creatures we control AT RESOLUTION (counters, anthems, Equipment, animated lands -- CombatPowerOf), a real CR 121 draw (TrickDraw). The draws arm the hand-entry breakpoint (site 10), marked so the drawn cards are castable that phase by a searched continuation. SECOND MAIN (USER 2026-11-10: 'Second main -3 makes sense'): the deck plays a searched post-combat main (GoldFishRunner::DeckUsesSecondMain, keyed on this effect), so the -3 may be activated in main 1 OR main 2 -- after Kalonian Hydra's attack trigger has doubled the counters it reads -- the search's choice. -6 = wurm_tokens_per_land: one 6/6 green Wurm per land we control at resolution (Nissa's animated Forests are still lands), via CreateTokens. LIGHTNING GREAVES: after a +1 or -6 with a haste Equipment ours, a SEARCHED site-9 continuation (kActLoyaltyTokenContinuation) can equip the new token and attack with it the same turn -- except after a -6 from exactly 6, which bins Garruk and so cannot key it (that same-turn Wurm equip is not reached). No clause deferred.]",
+   "template": "custom",
+   "parameters": {
+    "loyalty_start": 3,
+    "loyalty_abilities": [
+     {
+      "delta": 1,
+      "effect": "beast_token_33"
+     },
+     {
+      "delta": -3,
+      "effect": "draw_greatest_power"
+     },
+     {
+      "delta": -6,
+      "effect": "wurm_tokens_per_land",
+      "amount": 6
+     }
+    ]
    }
   },
   {

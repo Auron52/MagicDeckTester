@@ -1051,6 +1051,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     // X Hydras (Hydras I2) -- see CardParams.
     p.enters_with_x_dice_sides       = params.value("enters_with_x_dice_sides", 0);
     p.upkeep_double_self_counters    = params.value("upkeep_double_self_counters", false);
+    p.attack_double_team_counters    = params.value("attack_double_team_counters", false);   // Kalonian Hydra
     p.etb_modal_double_self_counters = params.value("etb_modal_double_self_counters", false);
     p.etb_modal_fight_opp_creature   = params.value("etb_modal_fight_opp_creature", false);
     if (params.contains("remove_counter_destroy_art_ench_cost"))

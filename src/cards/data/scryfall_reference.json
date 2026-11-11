@@ -2489,6 +2489,15 @@
     "toughness": "7",
     "type_line": "Legendary Creature — Hydra"
   },
+  "Garruk, Primal Hunter": {
+    "cmc": 5.0,
+    "keywords": [],
+    "mana_cost": "{2}{G}{G}{G}",
+    "oracle_text": "+1: Create a 3/3 green Beast creature token.\n−3: Draw cards equal to the greatest power among creatures you control.\n−6: Create a 6/6 green Wurm creature token for each land you control.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Legendary Planeswalker — Garruk"
+  },
   "Garth One-Eye": {
     "cmc": 5.0,
     "keywords": [],
@@ -3323,6 +3332,18 @@
     "power": null,
     "toughness": null,
     "type_line": "Legendary Snow Artifact"
+  },
+  "Kalonian Hydra": {
+    "cmc": 5.0,
+    "keywords": [
+      "Double",
+      "Trample"
+    ],
+    "mana_cost": "{3}{G}{G}",
+    "oracle_text": "Trample\nThis creature enters with four +1/+1 counters on it.\nWhenever this creature attacks, double the number of +1/+1 counters on each creature you control.",
+    "power": "0",
+    "toughness": "0",
+    "type_line": "Creature — Hydra"
   },
   "Kami of False Hope": {
     "cmc": 1.0,

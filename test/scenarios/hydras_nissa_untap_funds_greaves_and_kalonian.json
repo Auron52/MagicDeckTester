@@ -1,0 +1,35 @@
+{
+  "deck": "decks/Hydras/Hydras.cod",
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "on_the_play": true,
+  "active_life": 20,
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 0,
+  "max_turns": 7,
+  "turn": 5,
+  "opponent_life": 8,
+  "expect_win_turn": 5,
+  "battlefield": [
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Nissa, Who Shakes the World",
+      "loyalty": 5
+    }
+  ],
+  "hand": [
+    "Kalonian Hydra",
+    "Lightning Greaves"
+  ],
+  "_comment": "Hydras I3: three Forests tap for {G}{G} each under Nissa's static = 6 mana; Kalonian ({3}{G}{G}) + Lightning Greaves ({2}) need 7. Nissa's +1 untaps a Forest (or taps it for mana first, then untaps it) for 2 more, and the site-9 continuation (kActLoyaltyUntapContinuation) spends it: cast both, equip, Kalonian swings for 8. Without the +1 mana no line deals 8 this turn."
+}

@@ -3388,6 +3388,55 @@ inline void PerformUpkeepDoubleSelfCounters(GameState& state)
     }
 }
 
+// ---- KALONIAN HYDRA's ATTACK TRIGGER (attack_double_team_counters) ------------------------------------
+// "Whenever this creature attacks, double the number of +1/+1 counters on each creature you control."
+// One trigger per DECLARED copy (indices [0, declared_n) of atk_idx: CR 508.2a; a creature put onto the
+// battlefield attacking was never declared, CR 508.4), resolving in the declare-attackers step, so the
+// doubled counters deal damage THIS combat. EACH creature we control at resolution is doubled -- attacking
+// or not, summoning-sick or not, Kalonian itself and animated lands (Nissa's Elemental Forests) included --
+// through DoublePlusCounters (CR 701.10e: a put, so a counter doubler applies again; clamped at
+// kPlusCounterCap). Several copies' triggers commute (each doubles whatever the previous one left), so their
+// order is not a choice. Called by BOTH combat sites at the same relative point (GameEngine::CombatPhase and
+// TurnSolver's SimulateOneCombatAfterTitan: after the attack-token block, before the attack pumps), so a
+// doubling resolves after every attack trigger that puts counters (CR 603.3b: ours to order, and
+// 2(c + a) >= 2c + a makes doubling-last dominant). The projection twin is CountAttackDoubleTeamCountersPump
+// (TurnSolver.cpp). Mandatory, untargeted: no decision. Returns the number of triggers that resolved.
+inline int ApplyAttackDoubleTeamCounters(GameState& state, int controller, const std::vector<int>& atk_idx,
+                                         int declared_n)
+{
+    int triggers = 0;
+    std::string src_name;
+    const int bf = static_cast<int>(state.battlefield.size());
+    for (int k = 0; k < declared_n && k < static_cast<int>(atk_idx.size()); ++k)
+    {
+        const int i = atk_idx[static_cast<std::size_t>(k)];
+        if (i < 0 || i >= bf) { continue; }
+        const Permanent& a = state.battlefield[static_cast<std::size_t>(i)];
+        if (a.controller_index != controller || a.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(a.card);
+        if (d != nullptr && d->params.attack_double_team_counters) { ++triggers; src_name = a.card.m_name.str(); }
+    }
+    for (int t = 0; t < triggers; ++t)
+    {
+        int added = 0;
+        int bodies = 0;
+        for (Permanent& q : state.battlefield)   // DoublePlusCounters never reallocates the battlefield
+        {
+            if (q.controller_index != controller) { continue; }
+            if (!q.card.IsCreature() && !q.is_animated) { continue; }
+            const int a = DoublePlusCounters(state, q);
+            if (a > 0) { added += a; ++bodies; }
+        }
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "trigger",
+                          src_name + " -- attack: doubled the +1/+1 counters on " + std::to_string(bodies)
+                          + " creature" + (bodies == 1 ? "" : "s") + " (+" + std::to_string(added) + ")");
+        }
+    }
+    return triggers;
+}
+
 // ---- AS-ENTERS +1/+1 COUNTERS ON A SIMULTANEOUS MULTI-PUT (CardParams::enters_with_plus_counters) ---
 // The as-enters counters are applied at the universal enter cascade (FireEtbWatchers) for every
 // SINGLE entry. A multi-put whose entrants enter SIMULTANEOUSLY (Genesis Wave, Defense of the Heart,
@@ -13509,6 +13558,13 @@ inline std::string LoyaltyAbilityText(const CardParams::LoyaltyAbilityParam& ab)
                                                   + std::to_string(ab.amount) + "/+"
                                                   + std::to_string(ab.amount)) :
         ab.effect == "emblem_damage_floor"     ? "emblem: damage can't reduce your life below 1" :
+        ab.effect == "untap_land_animate"      ? ("put " + std::to_string(ab.amount)
+                                                  + " +1/+1 counters on up to one noncreature land; untap it; "
+                                                    "it becomes a 0/0 Elemental with vigilance and haste") :
+        ab.effect == "fetch_forests_tapped"    ? "emblem: lands have indestructible; put any number of Forests onto the battlefield tapped" :
+        ab.effect == "beast_token_33"          ? "create a 3/3 green Beast" :
+        ab.effect == "draw_greatest_power"     ? "draw cards equal to the greatest power among your creatures" :
+        ab.effect == "wurm_tokens_per_land"    ? "create a 6/6 green Wurm for each land you control" :
         ab.effect == "exile_all_opponent_artifacts_creatures"
                                                ? ("at " + std::to_string(ab.amount)
                                                   + "+ life over starting: exile Ajani and your opponents' artifacts and creatures") :
@@ -13527,8 +13583,19 @@ inline std::string LoyaltyActionLabel(const std::string& walker_name, int abilit
     return walker_name + ": " + LoyaltyAbilityText(d->params.loyalty_abilities[ability_index]);
 }
 
+// Nissa, Who Shakes the World's +1 / -8 and Garruk, Primal Hunter's -3 / -6 resolvers (defined below,
+// beside ResolveAwakenLand, where the targeting and mana primitives they use are in scope).
+inline bool NissaAnimateTargetLegal(const GameState& s, int controller, const Permanent& q);
+inline void ResolveUntapLandAnimate(GameState& s, int controller, int target_number, int counters);
+inline int  ResolveFetchForestsTapped(GameState& s, int controller, int count);
+inline int  GreatestPowerAmongOwnCreatures(const GameState& s, int controller);
+
+// `count` (default -1 = every legal card): the searched COUNT of an "any number" ability (Nissa's -8:
+// Forests to put). Both callers pass Action::chosen_x - 1, so an action with no pinned count (chosen_x 0)
+// reads -1 and every other ability ignores it.
 inline void ApplyLoyaltyAbility(GameState& state, int controller, int walker_id, int ability_index,
-                                int elk_target = 0, const std::string& cast_option = std::string(), bool cast_take = false)
+                                int elk_target = 0, const std::string& cast_option = std::string(), bool cast_take = false,
+                                int count = -1)
 {
     NoncombatTriggerScope noncombat_triggers(state);
     DrawTriggerFlushScope _dtf(state);   // the Niv loop: this effect's draws ping AFTER it resolves
@@ -13860,6 +13927,78 @@ inline void ApplyLoyaltyAbility(GameState& state, int controller, int walker_id,
         // even though the effect is not. It is deliberately NOT enumerated for the autonomous
         // search (a VALUE gate in CollectActions, the Ajani-0 precedent) but stays reachable in
         // human play, where narrowing a legal choice is forbidden.
+    }
+    else if (ab.effect == "untap_land_animate")
+    {
+        // Nissa, Who Shakes the World +1: "Put three +1/+1 counters on up to one target noncreature land
+        // you control. Untap it. It becomes a 0/0 Elemental creature with vigilance and haste that's still a
+        // land." The target is SEARCHED (elk_target = its m_number; 0 = the "up to one" ZERO-target choice,
+        // which still banks the loyalty). A target that is no longer legal at resolution (gone, or already
+        // a creature) is not affected (CR 608.2b; the cost is paid). HUMAN PLAY: a targeted plan action is
+        // re-asked here over the FULL rules-legal set (the representative target the enumerator offered is
+        // only the default); the zero-target action asks nothing.
+        if (elk_target != 0)
+        {
+            int pick = -1;
+            for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+            {
+                const Permanent& q = state.battlefield[i];
+                if (q.card.m_number == elk_target && NissaAnimateTargetLegal(state, controller, q)) { pick = i; break; }
+            }
+            pick = human_target(ab_sign, "given three +1/+1 counters, untapped and made a 0/0 Elemental "
+                                         "creature land with vigilance and haste",
+                                [&](const Permanent& q) { return NissaAnimateTargetLegal(state, controller, q); },
+                                pick);
+            if (pick >= 0)
+            { ResolveUntapLandAnimate(state, controller, state.battlefield[pick].card.m_number, ab.amount); }
+        }
+    }
+    else if (ab.effect == "fetch_forests_tapped")
+    {
+        // Nissa -8: "You get an emblem with 'Lands you control have indestructible.' Search your library
+        // for any number of Forest cards, put them onto the battlefield tapped, then shuffle." The COUNT is
+        // the searched choice (`count`; -1 = all). THE EMBLEM IS A NO-OP (approved deferral 2026-11-10):
+        // nothing in this game destroys our lands (passive opponent; no land destruction in the list), so it
+        // has zero reachable applications. The loyalty cost is real (paid above; -8 from 8 bins Nissa).
+        const int put = ResolveFetchForestsTapped(state, controller, count);
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "ability",
+                          d->card.m_name.str() + " -8: emblem (lands have indestructible); put "
+                          + std::to_string(put) + " Forest" + (put == 1 ? "" : "s")
+                          + " onto the battlefield tapped, then shuffled");
+        }
+    }
+    else if (ab.effect == "beast_token_33")
+    {
+        // Garruk, Primal Hunter +1: "Create a 3/3 green Beast creature token." Through the SHARED
+        // CreateToken (green, so Gauntlet of Power's green anthem reaches it; doublers; the enter cascade).
+        CreateToken(state, controller, 3, 3, {"Beast"}, "G", {});
+    }
+    else if (ab.effect == "draw_greatest_power")
+    {
+        // Garruk -3: "Draw cards equal to the greatest power among creatures you control." Read at
+        // RESOLUTION (CR 608.2h) over every creature we control -- animated lands included -- by the
+        // power combat would use (CombatPowerOf: counters, anthems such as Gauntlet of Power, Equipment,
+        // Auras). A real CR 121 draw (TrickDraw: cards_drawn_this_turn, viewer + log sinks, deck-out).
+        // The DrawTriggerFlushScope above defers any per-draw pings until the ability has resolved.
+        const int n = GreatestPowerAmongOwnCreatures(state, controller);
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "ability",
+                          d->card.m_name.str() + " -3: greatest power " + std::to_string(n) + " -- draw "
+                          + std::to_string(n) + " card" + (n == 1 ? "" : "s"));
+        }
+        TrickDraw(state, controller, n);
+    }
+    else if (ab.effect == "wurm_tokens_per_land")
+    {
+        // Garruk -6: "Create a 6/6 green Wurm creature token for each land you control." Lands counted at
+        // resolution (an animated Forest is still a land), one event through the bulk CreateTokens.
+        int lands = 0;
+        for (const Permanent& q : state.battlefield)
+        { if (q.controller_index == controller && q.card.IsLand()) { ++lands; } }
+        CreateTokens(state, controller, lands, ab.amount, ab.amount, {"Wurm"}, "G");
     }
     else if (ab.effect == "kavu_token")
     {
@@ -48160,6 +48299,121 @@ inline bool ResolveAwakenLand(GameState& s, int controller, int card_number, int
     p.card.AddKeyword(Keyword::Haste);
     PutPlusCounters(s, p, counters);
     return true;
+}
+
+// ---- NISSA, WHO SHAKES THE WORLD / GARRUK, PRIMAL HUNTER (Hydras I3, 2026-11-11) -------------------------
+// Nissa +1's target restriction: "target noncreature land you control" (an animated land is a creature,
+// so it is not a legal target again). Shared by the enumerator, the resolution and the human chooser.
+inline bool NissaAnimateTargetLegal(const GameState& s, int controller, const Permanent& q)
+{
+    return q.controller_index == controller && q.card.IsLand() && !q.card.IsCreature() && !q.is_animated
+        && SpellCanTargetPermanent(s, controller, q);
+}
+
+// The PRE-TAP FOLD (an exact weak dominance, the ApplyActivatedUntap pretap_live precedent): when the
+// target is UNTAPPED, the controller may tap it for mana first -- mana abilities can be activated whenever
+// the player holds priority (CR 605.3a), and the mana stays in the pool until the phase ends (CR 500.4;
+// there is no mana burn) -- and THEN resolve the +1, which untaps it. That leaves the board identical to
+// "+1 on the untapped land" PLUS a floating pool, and a floating pool can always be left unspent, so the
+// no-pre-tap resolution is weakly dominated and is not offered. Restricted to a BASIC land, whose tap has
+// no cost and no side effect (no painland damage, depletion, energy, storage or opponent lifegain) and
+// produces a single colour, so the tap is a pure gain and its colour is not a choice. Any other land is
+// simply untapped. Then: three +1/+1 counters (BEFORE it becomes a creature -- the oracle order), untap,
+// and it PERMANENTLY becomes a 0/0 Elemental creature with vigilance and haste that is still a land (no
+// duration in the text; the Awaken shape -- the battlefield object only, so it is a plain land in every
+// other zone). Colourless: "becomes a creature" sets no colour, so a green anthem does not reach it.
+inline void ResolveUntapLandAnimate(GameState& s, int controller, int target_number, int counters)
+{
+    auto find = [&]() -> int
+    {
+        for (int i = 0; i < static_cast<int>(s.battlefield.size()); ++i)
+        { if (s.battlefield[static_cast<std::size_t>(i)].card.m_number == target_number) { return i; } }
+        return -1;
+    };
+    int i = find();
+    if (i < 0) { return; }
+    {
+        Permanent& t = s.battlefield[static_cast<std::size_t>(i)];
+        const CardDefinition* td = CardDatabase::Instance().LookupCached(t.card);
+        if (!t.tapped && td != nullptr && IsBasicLandCard(*td) && CanTapNow(t, s.battlefield))
+        {
+            const std::vector<Color>& prod = EffectiveProducesFor(s, controller, *td, &t);
+            if (prod.size() == 1)
+            {
+                TapSourceIntoFloat(s, controller, t, *td, prod.front(), s.floating_mana, nullptr,
+                                   /*for_creature=*/false, nullptr);
+            }
+        }
+    }
+    i = find();
+    if (i < 0) { return; }
+    Permanent& t = s.battlefield[static_cast<std::size_t>(i)];
+    PutPlusCounters(s, t, counters);
+    // Mana-payment rollback (src/ai/PayRollback.h): an untap EFFECT fired this turn.
+    s.pay_ledger.NoteUntapEffect(s.TurnSeq(), s.active_player_index);
+    t.tapped = false;
+    t.card.AddType(CardType::Creature);
+    t.card.m_power = 0;
+    t.card.m_toughness = 0;
+    if (!CardHasSubtype(t.card, "Elemental")) { t.card.m_subtypes.push_back("Elemental"); }
+    t.card.AddKeyword(Keyword::Vigilance);
+    t.card.AddKeyword(Keyword::Haste);
+    RefreshCounterThresholdKeywords(t);
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(s.turn_number, "ability",
+                      "Nissa +1: " + t.card.m_name.str() + " untapped and became a "
+                      + std::to_string(PlusCountersOn(t)) + "/" + std::to_string(PlusCountersOn(t))
+                      + " Elemental creature land with vigilance and haste");
+    }
+}
+
+// Nissa -8's search: "any number of Forest cards" ("Forest card" = a card with the Forest land subtype,
+// read off the DEFINITION -- a library card is a name-only placeholder), put onto the battlefield TAPPED,
+// then shuffle. `count` < 0 = all of them; otherwise min(count, found). The copies are taken in library
+// order (identical basics in every list that runs the card; a list with nonbasic Forests would make WHICH
+// ones a further choice -- not modelled, disclosed in the card note). Searching is unconditional, so the
+// library is shuffled even when nothing (or zero by choice) is put (CR 701.19b). Returns the number put.
+inline int ResolveFetchForestsTapped(GameState& s, int controller, int count)
+{
+    Player& pl = s.players[static_cast<std::size_t>(controller)];
+    std::vector<Card> taken;
+    for (int i = 0; i < static_cast<int>(pl.library.size()); )
+    {
+        if (count >= 0 && static_cast<int>(taken.size()) >= count) { break; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(pl.library[i]);
+        if (d != nullptr && d->card.IsLand() && CardHasSubtype(d->card, "Forest"))
+        {
+            taken.push_back(pl.library[i]);
+            pl.library.erase(pl.library.begin() + i);
+            continue;
+        }
+        ++i;
+    }
+    for (const Card& c : taken)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d != nullptr)
+        { EnterLand(s, *d, c.m_number, /*resolve_full_etb=*/false, /*fire_landfall=*/true, LandEntryTap::ForcedTapped); }
+    }
+    if (taken.empty() && count != 0) { WhiffShuffle(s, controller, "Nissa -8 Forest search"); }
+    else                             { ShuffleAfterSearch(s, controller); }
+    return static_cast<int>(taken.size());
+}
+
+// Garruk -3's X: the greatest power among creatures `controller` controls (animated lands included), by the
+// power combat reads (CombatPowerOf). 0 with no creature, and never negative (drawing a negative number of
+// cards draws none, CR 107.1b).
+inline int GreatestPowerAmongOwnCreatures(const GameState& s, int controller)
+{
+    int best = 0;
+    for (const Permanent& q : s.battlefield)
+    {
+        if (q.controller_index != controller) { continue; }
+        if (!q.card.IsCreature() && !q.is_animated) { continue; }
+        best = std::max(best, CombatPowerOf(q, s));
+    }
+    return best;
 }
 
 // CAN THIS FREE-CAST HIT BE CAST AT ALL? -- the ONE legality test every "you may cast it without paying
