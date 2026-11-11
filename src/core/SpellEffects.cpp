@@ -6243,6 +6243,8 @@ void ManaCacheObserverSwap(bool restore)
     if (restore) { s_map.clear(); s_bytes = 0; s_t2.Clear(); }
 }
 
+std::size_t ManaCacheSizeForTest() { return g_mana_cache.size(); }
+
 void ManaCacheClearPerGame()
 {
     static const bool s_keep = EnvOn("MTG_LEGACY_MANA_CACHE_ACROSS_GAMES");

@@ -24,9 +24,25 @@ TEST_CASE("read guard: a priced-only reader is served by replay while only the d
     CHECK(r.replayed_odo == 5);               // counting what the recompute counts
     CHECK(r.replayed_priced == 5 * workctr::kPriceNs[workctr::kOdoVisit]);
     CHECK_FALSE(r.real_headroom);             // a replay that would trip the ceiling recomputes instead
+    CHECK_FALSE(r.shadow_replay_headroom);
     CHECK_FALSE(r.real_priced);               // the ceiling it read has tripped
     CHECK_FALSE(r.shadow_priced);
     CHECK_FALSE(r.shadow_replay_priced);
+}
+
+TEST_CASE("read guard: the ledger's replay counts the SHADOW's work, whether or not the real entry is resident")
+{
+    // The defect this pins (Hydras P4): replay used to be decided and counted from the REAL entry, so a lookup the
+    // real cache had evicted recomputed and counted the recompute's (smaller, warm) work instead -- units followed
+    // residency. Now the shadow decides and counts; the real entry (which counted 3 visits, not 5) only stands in.
+    const TurnSolver::ReadGuardProbe r = TurnSolver::ReadGuardProbeForTest(/*searchbudget_read=*/false, /*kind=*/1);
+    REQUIRE(r.shadow_replay_exhausted);
+    CHECK(r.standin_served);                  // a resident real entry is served without its own guard or count
+    CHECK(r.led_present_odo == 5);            // resident: the shadow's 5, not the real entry's 3
+    CHECK(r.led_absent_odo == 5);             // absent: the muted recompute's 3 are not counted either
+    CHECK(r.led_present_odo == r.led_absent_odo);
+    CHECK_FALSE(r.led_hit_exhausted);         // a FREE ledger hit keeps the plain guard (the shadow refused it)
+    CHECK(r.nest_odo == 5);                   // an enclosing computation inherits the shadow's work, not the real 3
 }
 
 TEST_CASE("read guard: a SearchBudget reader keeps the plain guard")
