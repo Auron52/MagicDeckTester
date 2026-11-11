@@ -587,6 +587,26 @@ launch unless the user requests a restart.
     projection inflated on every axis. The user: *"We shouldn't be running it with the value leaf.
     Those should absolutely be serial."*
 
+- **PUSH TO THE SHARED BRANCH AT MOST ONCE EVERY 4 HOURS PER SESSION (user directive, 2026-11-11).**
+  The user's words: *"change your push rhythm to once every 4 hours"*, *"every 4 hours to the shared
+  branch. Other branches are okay if you have need beyond that"*, and *"In an ideal situation this will
+  lead to the 4-hour period ending up different for every agent and thereby much less thrashing."*
+  * **Why:** several sessions push to the same branch. Every push forces the others to rebase (and, when
+    `src` or GT replays, rebuild and re-run smoke), and CI uses `cancel-in-progress`, so frequent pushes
+    keep cancelling each other's Windows / determinism-parity runs. Fewer, batched pushes per session --
+    with each session's window falling at a different time -- cut that churn.
+  * **How:** commit locally as you go; integrate and push the shared branch (currently
+    `phase-1-2-deck-analyzer`) in ONE batch at most every 4 hours, counted from your session's last push
+    there. Each push still follows the normal steps: `scripts/check_references_safe.py`, rebase (never
+    merge), rebuild + smoke + `test/check_gt_logs.py` when replayed `src`/GT require it, then a background
+    CI watch.
+  * **Subagents do not push the shared branch;** the parent session does, in its window. Put this in
+    every brief.
+  * **Other branches are exempt:** a `wip/*`, `backup/*` or other personal branch may be pushed whenever
+    needed (e.g. to protect work before a risky step).
+  * **References are NOT throttled:** a new user reference still goes to `origin/references-autosave` at
+    once (see the play-server hard rules above); this rule never delays protecting one.
+
 - **After pushing platform-sensitive code, WATCH CI and report the Windows result.**
   `.github/workflows/build.yml` builds on **ubuntu-latest AND windows-latest** on every push
   (any branch) that touches `src/**`, `test/unit/**`, `CMakeLists.txt`, `CMakePresets.json`,
