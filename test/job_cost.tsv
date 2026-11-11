@@ -1,7 +1,7 @@
 # Per-job work UNITS per game, from the last accepted run of each key (test/lib/job_cost.py).
 # Scheduling only (regression.sh turns it into the job's LPT weight) -- never a result.
 alchemist2hg_smoke_d3_s1001	26439
-alchemist2hg_smoke_d5_s1001	32775
+alchemist2hg_smoke_d5_s1001	31962
 alchemist_overnight_d0_s10010	1
 alchemist_overnight_d0_s4004	1
 alchemist_overnight_d0_s6006	1

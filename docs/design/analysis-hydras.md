@@ -355,16 +355,16 @@ charge applied only past the decision ceiling, is the obvious next measurement i
 - flags (each verified against cards.json and the rules; resolutions in F1 below):
   - g0 T5, BUG: same-plan Nissa x fetched-Forest under-credit. "Nissa, Nature's Lore, Three Visits, Gargos,
     Kalonian Hydra" was refused by the menu and `--validate-line`, and Voracious maxed at X=4 (6 real 8).
-    FIXED, F1-A 1c1296b7f.
-  - g4 T4, SUSPECT: "Vernal Bloom, Nature's Lore, Steelbane" offered X=1 only (X=2 pays). FIXED, F1-A 1c1296b7f.
-  - ledger gap: Neverwinter's max-X counts no same-plan producer mana. FIXED, F1-A 1c1296b7f.
+    FIXED, F1-A 79703da7d.
+  - g4 T4, SUSPECT: "Vernal Bloom, Nature's Lore, Steelbane" offered X=1 only (X=2 pays). FIXED, F1-A 79703da7d.
+  - ledger gap: Neverwinter's max-X counts no same-plan producer mana. FIXED, F1-A 79703da7d.
   - g4 T2, SUSPECT: "suspend Search for Tomorrow, Three Visits" drops Visits but read `not_verified`.
-    Detector FIXED, F1-B e79ff8f86; the realised-order engine half is deferred to the USER
+    Detector FIXED, F1-B 36b9798ad; the realised-order engine half is deferred to the USER
     (docs/design/costed-suspend-realised-order.md). Not lossy for Hydras (searched second main).
-  - g2 T4, cosmetic: fight death labelled "0 toughness"; fight prompt `per_target_damage: 0`. FIXED, F1-C 7afa4d869.
-  - g6 T3, cosmetic: prompt typo "It is fights it". FIXED, F1-C 7afa4d869.
+  - g2 T4, cosmetic: fight death labelled "0 toughness"; fight prompt `per_target_damage: 0`. FIXED, F1-C a31495872.
+  - g6 T3, cosmetic: prompt typo "It is fights it". FIXED, F1-C a31495872.
   - g4, cosmetic: a Forest under Vernal Bloom showed `taps: G` only; `mdfc_backs` named cards not in the deck.
-    FIXED, F1-C 7afa4d869.
+    FIXED, F1-C a31495872.
   - g6 T3 / g12 T3-T4, cosmetic: "X=0 Hydra + equip Greaves to it" offered with no Gauntlet. HARMLESS, kept
     (see F1).
   - g1 T6: the viewer plan cap dropped the Greaves group (documented `plans_truncated`). Not a bug; census in F1.
@@ -372,8 +372,8 @@ charge applied only past the decision ceiling, is the obvious next measurement i
 
 ## F1 — the Claude-play sweep fixes (2026-11-11)
 
-Worktree `.claude/worktrees/hydras-fix`, branch `hydras-sweep-fixes`. Commits: 1c1296b7f (A), e79ff8f86 (B),
-7afa4d869 (C).
+Worktree `.claude/worktrees/hydras-fix`, branch `hydras-sweep-fixes`. Commits: 79703da7d (A), 36b9798ad (B),
+a31495872 (C).
 
 **A. The bonuses a plan establishes now reach the lands it fetches** (`MTG_LANDPUT_CROSS_CREDIT`, heurarm
 slot, default ON; `=0` gives the pre-F1 play).
@@ -483,3 +483,11 @@ move.
   UNCHANGED aggregate (only the digest moved). `check_gt_logs.py`: 1097 consistent, 0 stale. The overnight
   `hydras*` keys are left to the periodic overnight run (CLAUDE.md).
 - `ref_bench.py --deck Hydras`: search 5.300 vs the USER's 5.600, 0/10 short. Unchanged.
+- **After the rebase onto 496b4ae35** (Shadowborn's `SB_RITUAL_AFTER_STONE` slot):
+  - rebuilt; `mtg-test` 2824/2824;
+  - full smoke: every `hydras*` key matched the accepted GT;
+  - ONE other key moved: `alchemist2hg_smoke_d5_s1001`, gi 8, T6 -> T6 (same score, line changed). Its
+    cause is the second new heurarm slot changing the BP-key arm-hash constant (the P2 note): both slots
+    alone passed it, and the combination moves it;
+  - regression `--deck=alchemist,alchemist2hg`: unchanged (0 changed);
+  - accepted deck-filtered (`--smoke --deck=alchemist2hg`), sign 0.

@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 606aa62be  date 2026-11-11
+# Regression ground truth -- commit 36708f6e5  date 2026-11-11
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-10): Full 2026-11-10 rebaseline: 120/588 keys changed; searched overlap 64 faster, 6 slower, net 60 scored turns faster, no searched win became unwon. Five slowdowns recover at 4x budget; Modern RW Burn 2HG s7007 gi58 recovers at unlimited budget. 583 same-score searched line changes reviewed by mechanical grouping and samples. Full oracle: 588/588 matching fingerprints, 0 nonconv, 54 off-by-one fd-diverge, 3 severe flags from 2 distinct preexisting Treasure Hunt seeds (5216, 8468); legacy per-turn search wins T6, current committed-line result is unwon/T7, and disabling batch payment does not fix it. Prior Angels, Angels2HG, and Bruna small searched slowdowns remain follow-ups.
 # accepted-with-regressions (smoke, 2026-11-10): Ezuri attacker mana legality: d3 gi24 and d5 gi24,75,95,137,138 lose formerly illegal combat speed; Umbra host shifts d5 gi109 later and gi110 earlier; d0 improves overall
@@ -199,7 +199,7 @@ vampires2hg_smoke_d5_s1001=4.9200/0b72f177dad4a7bb
 alchemist_smoke_d0_s1001=6.2780/f06bffebfd402ce3
 alchemist_smoke_d3_s1001=5.0600/d9194ec08f6237dd
 alchemist_smoke_d5_s1001=4.9667/a9ec035f0988f6ea
-alchemist2hg_smoke_d5_s1001=5.1600/8e7536b38b7970fe
+alchemist2hg_smoke_d5_s1001=5.1600/6211554d6914a8b9
 elementals_smoke_d0_s1001=5.6110/85ecb7b43dc61e1f
 elementals_smoke_d3_s1001=4.4600/15877bad8bb35b68
 elementals_smoke_d5_s1001=4.3360/616b849211c6c5a1
