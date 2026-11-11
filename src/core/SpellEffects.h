@@ -48983,6 +48983,8 @@ void ManaCacheClearPerGame();
 // its byte count, tier 2) with an empty per-thread stash; restore=true swaps it back and drops what the
 // observer stored (its tier-2 bytes return to the shared pool).
 void ManaCacheObserverSwap(bool restore);
+// Test seam: this thread's tier-1 payable-mana cache entry count.
+std::size_t ManaCacheSizeForTest();
 
 // TapForCostBacktrack -- body in SpellEffects.cpp (see the header note above).
 // `src_cands` (threaded, nullptr at the top-level call) is the controller's structural mana sources

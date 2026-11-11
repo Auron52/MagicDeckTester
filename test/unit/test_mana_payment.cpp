@@ -20,6 +20,7 @@
 #include "core/GameState.h"
 #include "core/EnvFlags.h"            // EnvPut -- portable setenv (MSVC has only _putenv_s)
 #include "core/SpellEffects.h"        // CreatureAbilityPayScope (D12 payment context)
+#include "core/WorkCounters.h"        // workctr::t_mute (the priced ledger's muted recompute)
 #include "core/HeuristicDefaults.h"   // ResolveHeuristicDefaultsPath: exe-relative path walk
 
 #include <string>
@@ -769,6 +770,32 @@ TEST_CASE("mana cache: attaching a land aura splits the key (no stale unpayable 
     ManaPool leftover;
     CHECK(TapForCostBacktrack(s, cost, /*for_creature=*/false, ManaPool{},
                               nullptr, nullptr, &leftover));
+}
+
+// A MUTED RECOMPUTE LEAVES NO TRACE (Hydras P5). Under workctr::t_mute the plan caches' priced ledger recomputes
+// what its virtual cache served (or replayed); whether that recompute runs at all depends on the real plan cache's
+// residency, so an entry it stored would let later COUNTED payments count less, and units would follow the byte pool.
+TEST_CASE("mana cache: a solve under workctr::t_mute reads the cache but stores nothing")
+{
+    EnsureCards();
+    ManaCacheClearPerGame();
+    const GameState s = MakeBoard({"Adarkar Wastes"});
+    const ManaCost cost = Cost(1, 0, 0, 0, 0, /*g=*/1);   // {1}{G}: unpayable, and a negative is always stored
+    {
+        GameState b = s;
+        ManaPool leftover;
+        ++workctr::t_mute;
+        CHECK_FALSE(TapForCostBacktrack(b, cost, /*for_creature=*/false, ManaPool{}, nullptr, nullptr, &leftover));
+        --workctr::t_mute;
+    }
+    CHECK(ManaCacheSizeForTest() == 0);
+    {
+        GameState b = s;
+        ManaPool leftover;
+        CHECK_FALSE(TapForCostBacktrack(b, cost, /*for_creature=*/false, ManaPool{}, nullptr, nullptr, &leftover));
+    }
+    CHECK(ManaCacheSizeForTest() == 1);   // the same solve, counted, stores as before
+    ManaCacheClearPerGame();
 }
 
 // MANA-CACHE KEY vs SCALED MANA DORKS (2026-10-06, the pooled-suite-only SelesnyaLifegain play

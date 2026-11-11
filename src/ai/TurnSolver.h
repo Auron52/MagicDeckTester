@@ -2692,7 +2692,14 @@ public:
         bool real_exhausted = false, shadow_exhausted = false, shadow_replay_exhausted = false;
         long long replayed_odo = 0, replayed_priced = 0;          // what the exhausted-budget hit counted
         bool real_headroom = false;                               // served when the replay would trip the ceiling?
+        bool shadow_replay_headroom = false;                      // ...and the ledger's verdict there
         bool real_priced = false, shadow_priced = false, shadow_replay_priced = false;   // ceiling tripped
+        // The ledger's replay is RESIDENCY-INDEPENDENT: counted from the shadow whether the real entry (which counted
+        // a different 3 visits) is present and stands in, or absent and recomputed muted.
+        bool standin_served = false;
+        long long led_present_odo = -1, led_absent_odo = -1;
+        bool led_hit_exhausted = false;                           // kHitLed with the decision budget exhausted
+        long long nest_odo = -1;                                  // an enclosing computation's work after a free hit
     };
     static ReadGuardProbe ReadGuardProbeForTest(bool searchbudget_read, int kind);
 
