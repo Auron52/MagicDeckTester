@@ -1,0 +1,37 @@
+{
+  "deck": "decks/Martyr Lifegain/Martyr Lifegain.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "active_life": 21,
+  "opponent_life": 6,
+  "library_filler": "Emrakul, the Aeons Torn",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 200,
+  "max_turns": 4,
+  "battlefield": [
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Speaker of the Heavens",
+      "sick": false
+    }
+  ],
+  "hand": [
+    "Martyr of Sands",
+    "Ranger of Eos",
+    "Ranger of Eos"
+  ],
+  "env": {
+    "MTG_MARTYR_MAIN_SPLIT": "1",
+    "MTG_MARTYR_SPLIT_AMEND": "1"
+  },
+  "expect_win_turn": 4,
+  "_comment": "MTG_MARTYR_SPLIT_AMEND (A), end to end: main 1 Martyr (21 -> 27), Speaker attacks (vigilance, lifelink 28), main 2 Angel, T4 Speaker + Angel + Martyr-less board kill from 6. Under the plain split main 2 casts Martyr and no Angel is ever made in time (no win, even at --budget-ms 0)."
+}

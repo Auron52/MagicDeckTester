@@ -1,0 +1,38 @@
+{
+  "deck": "decks/Martyr Lifegain/Martyr Lifegain.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "active_life": 21,
+  "opponent_life": 20,
+  "library_filler": "Emrakul, the Aeons Torn",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 50,
+  "max_turns": 4,
+  "battlefield": [
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Speaker of the Heavens",
+      "sick": false
+    }
+  ],
+  "hand": [
+    "Martyr of Sands",
+    "Ranger of Eos",
+    "Ranger of Eos"
+  ],
+  "env": {
+    "MTG_MARTYR_MAIN_SPLIT": "1",
+    "MTG_MARTYR_SPLIT_AMEND": "1"
+  },
+  "validate_line": "cast=Martyr of Sands",
+  "expect_verdict": "accept",
+  "_comment": "MTG_MARTYR_SPLIT_AMEND (A): an untapped, non-sick Speaker of the Heavens and life 21 < 20+7, so main 1 admits Martyr of Sands -- its gain must land before main 2, where Speaker's Angel is enumerated (a same-main Martyr gain cannot enable the Angel; logs/martyr-lifegain/split-rootcause.md). Contrast martyr_split_amend_speaker_main1_off."
+}

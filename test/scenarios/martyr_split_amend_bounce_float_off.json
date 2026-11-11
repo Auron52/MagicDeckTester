@@ -1,0 +1,30 @@
+{
+  "deck": "decks/Martyr Lifegain/Martyr Lifegain.cod",
+  "turn": 2,
+  "on_the_play": true,
+  "resume_at": "main1",
+  "lands_played_this_turn": 0,
+  "active_life": 20,
+  "opponent_life": 20,
+  "library_filler": "Emrakul, the Aeons Torn",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 50,
+  "max_turns": 4,
+  "battlefield": [
+    {
+      "name": "Plains"
+    }
+  ],
+  "hand": [
+    "Orzhov Basilica",
+    "Thraben Inspector"
+  ],
+  "env": {
+    "MTG_MARTYR_MAIN_SPLIT": "1",
+    "MTG_MARTYR_SPLIT_AMEND": "0"
+  },
+  "validate_line": "cast=Thraben Inspector",
+  "expect_verdict": "legal_not_enumerated",
+  "_comment": "Control for martyr_split_amend_bounce_float: the plain split refuses the Inspector in main 1."
+}

@@ -57977,6 +57977,22 @@ bool MartyrPruneSacsOn()
     return heurarm::Flag(heurarm::MARTYR_PRUNE_SACS, on);
 }
 
+// Per-card sub-flags of the prune (orchestrator 2026-11-11: Farm Animals' sac is a real life engine with Abiding
+// Grace's MV-1 return -- std gi157 loops it to put Serra over 30 -- so the two prunes are measured separately).
+// Each card is pruned only while the umbrella AND its own sub-flag are on; both sub-flags default ON, so the
+// shipped behaviour is unchanged until the USER picks a variant.
+bool MartyrPruneKamiOn()
+{
+    static const bool on = EnvOn("MTG_MARTYR_PRUNE_KAMI", true);
+    return MartyrPruneSacsOn() && heurarm::Flag(heurarm::MARTYR_PRUNE_KAMI, on);
+}
+
+bool MartyrPruneFarmOn()
+{
+    static const bool on = EnvOn("MTG_MARTYR_PRUNE_FARM", true);
+    return MartyrPruneSacsOn() && heurarm::Flag(heurarm::MARTYR_PRUNE_FARM, on);
+}
+
 bool MartyrSplitCaptainM1On()
 {
     static const bool on = EnvOn("MTG_MARTYR_SPLIT_CAPTAIN_M1", true);   // DEFAULT ON within the split; =0 -> main 2
@@ -58015,6 +58031,78 @@ bool MartyrGainPumpsSerra(const GameState& s)
     return false;
 }
 
+// ---- THE AMENDED SPLIT (MTG_MARTYR_SPLIT_AMEND, heurarm MARTYR_SPLIT_AMEND; sub-flag of the split, DEFAULT OFF) ----
+// Root cause of the split measuring slower (logs/martyr-lifegain/split-rootcause.md, 2026-11-11; 42 std + 14 2HG
+// slower games replayed against the unsplit arm). Three main-1 refusals cost a real resource the second main
+// cannot give back, so the amendment re-admits exactly those, and nothing else:
+//   (A) MARTYR FOR SPEAKER. Speaker of the Heavens' Angel needs life >= start + 7 WHEN IT IS ENUMERATED. A
+//       Martyr gain in the same main does not re-open the menu (the sacrifice is a positioned outlet, not a
+//       breakpoint), so "main 2: cast Martyr, sacrifice it, tap Speaker" is UNFINDABLE -- verified on a scenario
+//       at --depth 5 --budget-ms 0 (Speaker idle, Martyr sacrificed, no Angel). Unsplit play gains in main 1 and
+//       taps in Speaker's narrow post-combat main; the split moved the gain to main 2 and the Angel slipped a turn
+//       (8 std + 6 2HG first divergences). So Martyr's cast + sacrifice are also admitted while an own life-gated
+//       token source (tap_token_min_life_above_start > 0: Speaker) can {T} this turn and life is below its gate --
+//       the USER's own "Martyr in main 1 if we need the lifegain", applied to the deck's second life reader.
+//   (B) THE BOUNCE-LAND FLOAT. "Tap the Plains, cast, THEN play Orzhov Basilica returning the tapped Plains" is a
+//       free mana; refusing the cast in main 1 forced the Basilica down first (bouncing an UNTAPPED land) with
+//       nothing to spend on, a lost mana (14 std first divergences). So every cast is admitted while the land
+//       drop is unused, a bounce land (etb_bounce_land) is in hand and an untapped land is in play.
+//   (C) EQUIPMENT BEFORE COMBAT. Umezawa's Jitte only earns counters if it is equipped before damage, and equip
+//       is sorcery-speed, so the cast must be in main 1: admitted while an own creature can attack this turn.
+// All three RESTRICT less; nothing is picked (CLAUDE.md NO GREEDY): what is admitted is still searched.
+bool MartyrSplitAmendOn()
+{
+    static const bool on = EnvOn("MTG_MARTYR_SPLIT_AMEND", false);   // DEFAULT OFF (experiment; the USER decides)
+    return heurarm::Flag(heurarm::MARTYR_SPLIT_AMEND, on);
+}
+
+// (A) An own life-gated token source (Speaker) that can {T} this turn while life is below its gate.
+bool MartyrGainFeedsSpeaker(const GameState& s)
+{
+    const int me = s.active_player_index;
+    const int life = s.players[static_cast<std::size_t>(me)].life;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || !d->params.tap_token_cost.has_value()) { continue; }
+        const int n = d->params.tap_token_min_life_above_start;
+        if (n <= 0 || life >= gamesetup::StartingLife() + n) { continue; }
+        if (CanTapNow(p, s.battlefield)) { return true; }
+    }
+    return false;
+}
+
+// (B) The land drop is unused, a bounce land is in hand, and an untapped land could pay a cast before it.
+bool MartyrBounceFloatLive(const GameState& s)
+{
+    const Player& me = s.players[static_cast<std::size_t>(s.active_player_index)];
+    if (me.lands_played_this_turn >= me.LandDropsAvailable()) { return false; }
+    bool bounce_in_hand = false;
+    for (const Card& c : me.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d != nullptr && d->card.IsLand() && d->params.etb_bounce_land) { bounce_in_hand = true; break; }
+    }
+    if (!bounce_in_hand) { return false; }
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index == s.active_player_index && p.card.IsLand() && !p.tapped) { return true; }
+    }
+    return false;
+}
+
+// (C) An own creature that can attack this combat (so an Equipment cast now can be equipped before damage).
+bool MartyrAttackerReady(const GameState& s)
+{
+    const int me = s.active_player_index;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index == me && CanAttackFull(p, s.battlefield, me)) { return true; }
+    }
+    return false;
+}
+
 bool IsMartyrRevealOutlet(const CardDefinition* d)
 {
     return d != nullptr && d->params.sac_creature_outlet && d->params.sac_outlet_lifegain > 0
@@ -58040,14 +58128,18 @@ bool MartyrLifegainProvider::CollectedActionAllowed(const GameState& s, const Ac
     if (!cast && !sac) { return true; }
     const CardDefinition* d = a.def != nullptr ? a.def : CardDatabase::Instance().Lookup(a.card_name.str());
     if (d == nullptr) { return true; }
-    if (sac && MartyrPruneSacsOn()
-        && (d->params.sac_outlet_prevent_combat_damage || d->params.sac_outlet_destroy_artifact_enchantment_optional))
-    { return false; }
+    if (sac && d->params.sac_outlet_prevent_combat_damage && MartyrPruneKamiOn()) { return false; }
+    if (sac && d->params.sac_outlet_destroy_artifact_enchantment_optional && MartyrPruneFarmOn()) { return false; }
     if (!is_pre_combat || !MartyrMainSplitOn()) { return true; }
     // MAIN 1 under the split.
-    if (IsMartyrRevealOutlet(d)) { return MartyrGainPumpsSerra(s); }   // Martyr's cast AND its sacrifice
+    const bool amend = MartyrSplitAmendOn();
+    if (IsMartyrRevealOutlet(d))                                       // Martyr's cast AND its sacrifice
+    { return MartyrGainPumpsSerra(s) || (amend && MartyrGainFeedsSpeaker(s)); }
     if (sac) { return true; }                                          // every other outlet: as before
-    return MartyrFetcherLive(s, *d);
+    if (MartyrFetcherLive(s, *d)) { return true; }
+    if (!amend) { return false; }
+    if (MartyrBounceFloatLive(s)) { return true; }                     // (B) cast before the bounce land
+    return d->params.is_equipment && MartyrAttackerReady(s);           // (C) equip before combat
 }
 
 // ---- Path to Exile: the opponent-target prune (OffersRemovalCast) ------------------------------

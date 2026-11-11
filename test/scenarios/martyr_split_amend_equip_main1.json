@@ -1,0 +1,42 @@
+{
+  "deck": "decks/Martyr Lifegain/Martyr Lifegain.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "active_life": 20,
+  "opponent_life": 20,
+  "library_filler": "Emrakul, the Aeons Torn",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 50,
+  "max_turns": 4,
+  "battlefield": [
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Mother of Runes",
+      "sick": false
+    }
+  ],
+  "hand": [
+    "Umezawa's Jitte"
+  ],
+  "env": {
+    "MTG_MARTYR_MAIN_SPLIT": "1",
+    "MTG_MARTYR_SPLIT_AMEND": "1"
+  },
+  "validate_line": "cast=Umezawa's Jitte",
+  "expect_verdict": "accept",
+  "_comment": "MTG_MARTYR_SPLIT_AMEND (C): an attack-ready Mother of Runes, so main 1 admits Umezawa's Jitte -- cast and equip before combat, the only way it earns counters this turn."
+}
