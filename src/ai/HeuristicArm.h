@@ -850,6 +850,7 @@ enum Slot : int
     HYDRAS_SECOND_MAIN,       // MTG_HYDRAS_SECOND_MAIN   Hydras: Garruk, Primal Hunter's draw_greatest_power opens the searched post-combat main (USER 2026-11-10: "Second main -3 makes sense."). Default ON; =0 is the MEASUREMENT arm that prices the main 2 (GoldFishRunner::DeckUsesSecondMain)
     SEL_GATE_EXACT,           // MTG_SEL_GATE_EXACT       the selection-exact odometer gate, priced exactly at emission (SelGateExactRefuses, TurnSolver.cpp): a GENERIC same-turn cost reducer's discount is bounded (min(generic, the selected reducers' steps) per cast) instead of passing every selection holding one outright, and the land-tap x land-put cross term counts only the SELECTED bonus sources. SOUND (MTG_SEL_GATE_EXACT_VERIFY counts violations, must be 0); moves play only through work-priced ceilings. Default ON; =0 -> the gate as before. Hydras P2 2026-11-11
     SB_RITUAL_AFTER_STONE,    // MTG_SB_RITUAL_AFTER_STONE  Shadowborn Apostle (USER 2026-11-11, "cast it after if mana allows and before if not"): in a line casting both Dark Ritual and Thrumming Stone, ShadowbornProvider::ArrangeCastOrder moves the Ritual(s) to just after the Stone when the exact sequential walk (TurnSolver::OrderPaysSequentially, which credits no ripple-revealed mana) pays that order; else Ritual keeps rank 1 before the Stone. ONE arrangement per line (no new plans). Default ON; =0 -> Ritual always before the Stone
+    LANDPUT_CROSS_CREDIT,     // MTG_LANDPUT_CROSS_CREDIT  the bonuses a plan ESTABLISHES reach the lands it fetches (Hydras Claude-play sweep F1, 2026-11-11): the credited flat pools add each selected land-tap bonus source's bonus on the selected land-puts' picks (LandPutCrossCredit), the land-put class filter still finds its pick once such a source is live (LandSearchCreditFilter), and the max-X test counts the exact same-plan producer mana (XMaxSamePlanExactCredit). A CORRECTNESS fix. Default ON; =0 -> the pre-F1 play (the A/B arm)
     COUNT
 };
 
@@ -1644,6 +1645,7 @@ inline const char* Name(int slot)
         "MTG_HYDRAS_SECOND_MAIN",
         "MTG_SEL_GATE_EXACT",
         "MTG_SB_RITUAL_AFTER_STONE",
+        "MTG_LANDPUT_CROSS_CREDIT",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

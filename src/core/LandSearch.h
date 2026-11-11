@@ -469,6 +469,15 @@ inline std::vector<std::vector<std::string>> LandSearchPicks(const GameState& s,
 // no enters-tapped rule (AddSourceToPool's own credit for it); one uncreditable pick (a non-basic, a
 // tapland, nothing to find) withdraws the credit from the whole cast, so a basic-only untapped search is
 // the only shape credited today. No basic in the library -> no credit at all.
+// MTG_LANDPUT_CROSS_CREDIT (DEFAULT ON; =0 -> the pre-F1 play, the A/B arm): the bonuses a plan ESTABLISHES
+// reach the lands it fetches -- LandSearchCreditFilter's fallback below and TurnSolver's LandPutCrossCredit /
+// XMaxSamePlanExactCredit. A correctness fix (Hydras Claude-play sweep F1, 2026-11-11); per-job slot so the
+// A/B runs as one pooled batch.
+inline bool LandPutCrossCreditOn()
+{
+    static const bool env = EnvOn("MTG_LANDPUT_CROSS_CREDIT", true);
+    return heurarm::Flag(heurarm::LANDPUT_CROSS_CREDIT, env);
+}
 inline bool LandSearchPutsUntapped(const CardDefinition& d)
 {
     const CardParams& p = d.params;
@@ -526,6 +535,36 @@ inline void LandSearchCreditFilter(const GameState& s, const LandSearchSpec& spe
     ManaPool c;
     for (std::size_t i = 0; i < ms.pick_defs.size(); ++i)
     { if (LandSearchPickCredit(s, spec, ms.pick_defs[i], c) && c == credit) { out.push_back(static_cast<int>(i)); } }
+    if (!out.empty() || !s.deck_has_land_tap_bonus || !LandPutCrossCreditOn()) { return; }
+    // A BONUS SOURCE THAT ARRIVED SINCE THE CREDIT WAS STAMPED (Hydras sweep F1, 2026-11-11). `credit` is the
+    // pick class's WHOLE first tap on the board the cast was ENUMERATED on (LandSearchPickCredit adds every live
+    // Vernal Bloom / Gauntlet / Nissa bonus). A bonus source cast EARLIER IN THE SAME PLAN (Nissa, then Nature's
+    // Lore) is live by the time this filter runs -- at the real resolution and on the real-payment walks'
+    // scratch board -- so every pick's credit here is LARGER than the stamp and the exact match finds nothing.
+    // The walk (PutLandPutCreditOnScratch) then put no land at all, and the resolution fell back to the
+    // unrestricted list (with the restricted list's pin). A bonus only ever ADDS mana of the colour the basic
+    // already makes, so the class is still recognisable: the picks whose bonus-free credit is within the stamp
+    // and whose live credit covers it. For picks of the same size whose battlefield part holds at most two
+    // basics this is exactly one class (equal colour support => equal multiset), the only shape a credited
+    // search has. Reached only when the exact match is empty, so every board the stamp still describes is
+    // unchanged.
+    ManaPool base;
+    const int ctrl = s.active_player_index;
+    auto covers = [](const ManaPool& big, const ManaPool& small)
+    {
+        return big.white >= small.white && big.blue >= small.blue && big.black >= small.black
+            && big.red >= small.red && big.green >= small.green && big.colorless >= small.colorless
+            && big.wild >= small.wild;
+    };
+    for (std::size_t i = 0; i < ms.pick_defs.size(); ++i)
+    {
+        const std::vector<const CardDefinition*>& pick = ms.pick_defs[i];
+        if (!LandSearchPickCredit(s, spec, pick, c, ctrl)) { continue; }
+        base.Clear();
+        const int bf = LandSearchBattlefieldCount(spec, static_cast<int>(pick.size()));
+        for (int k = 0; k < bf; ++k) { AddSourceToPool(base, s, *pick[static_cast<std::size_t>(k)]); }
+        if (covers(credit, base) && covers(c, credit)) { out.push_back(static_cast<int>(i)); }
+    }
 }
 
 // ---- THE EXTENDED PICK LIST: a PUT Karoo's bounce (land-search gap 3, 2026-10-15) ------------------

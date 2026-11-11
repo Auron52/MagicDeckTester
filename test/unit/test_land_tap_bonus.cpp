@@ -348,3 +348,118 @@ TEST_CASE("HydrasProvider: Gauntlet pruned to green only while the list provably
     // Other ETB-choice cards are the base fan, unchanged.
     CHECK(hp.EtbChoiceCandidates(s, 0, DefLtb("Trufflesnout")) == std::vector<int>{ 1, 2 });
 }
+
+// ---- Hydras Claude-play sweep F1 (2026-11-11): bonuses the PLAN ITSELF establishes reach the lands it fetches.
+
+namespace
+{
+int CountOnBoardLtb(const GameState& t, const std::string& name)
+{
+    int n = 0;
+    for (const Permanent& q : t.battlefield) { if (q.card.m_name.str() == name) { ++n; } }
+    return n;
+}
+int PlusCountersOfLtb(const GameState& t, const std::string& name)
+{
+    for (const Permanent& q : t.battlefield) { if (q.card.m_name.str() == name) { return PlusCountersOn(q); } }
+    return -1;
+}
+}   // namespace
+
+TEST_CASE("F1: a same-plan Vernal Bloom doubles the Forest Nature's Lore fetches (seed 50004 T4: Steelbane X = 2)")
+{
+    // Six Forests. Bloom {3}{G} taps four; the two left tap for {G}{G}; Lore {1}{G} takes one; the fetched
+    // Forest taps for {G}{G} under the Bloom -> {G}{G}{G}{G} = Steelbane Hydra {X}{G}{G} at X = 2.
+    GameState s = FreshLtb(6);
+    static const HydrasProvider hp; s.m_provider = &hp;   // the deck's cast order: Bloom, Lore, then the Hydra
+    HandLtb(s, "Vernal Bloom");
+    HandLtb(s, "Nature's Lore");
+    HandLtb(s, "Steelbane Hydra");
+    int best_x = -1;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
+    {
+        const Action* sb = CastOfLtb(p, "Steelbane Hydra");
+        if (sb == nullptr || CastOfLtb(p, "Vernal Bloom") == nullptr || CastOfLtb(p, "Nature's Lore") == nullptr)
+        { continue; }
+        if (sb->chosen_x <= best_x) { continue; }
+        // Every such plan must really cast all three in the rollout.
+        GameState t = s;
+        TurnSolver::ApplyPlan(t, p, true);
+        CHECK(CountOnBoardLtb(t, "Vernal Bloom") == 1);
+        CHECK(CountOnBoardLtb(t, "Steelbane Hydra") == 1);
+        CHECK(PlusCountersOfLtb(t, "Steelbane Hydra") == sb->chosen_x);
+        best_x = sb->chosen_x;
+    }
+    CHECK(best_x == 2);
+}
+
+TEST_CASE("F1: Nissa cast earlier in the plan credits each fetched Forest (seed 50000 T5: Gargos + Kalonian)")
+{
+    // A Bloom on the board, four untapped Forests and a floating {G}. Nissa {3}{G}{G}: the float and two
+    // doubled Forests. The other two Forests now tap for {G}{G}{G}; Nature's Lore and Three Visits each take
+    // two of that and each fetched Forest taps for {G}{G}{G} as well -> 8 left = Gargos {3}{G}{G}{G} +
+    // Kalonian Hydra {3}{G}{G} less Gargos's {4} = {G}{G}.
+    GameState s = FreshLtb(4);
+    static const HydrasProvider hp; s.m_provider = &hp;   // the deck's cast order: Nissa, fetches, Gargos, Kalonian
+    PutLtb(s, "Vernal Bloom");
+    s.floating_mana.green = 1;
+    for (const char* nm : { "Nissa, Who Shakes the World", "Nature's Lore", "Three Visits",
+                            "Gargos, Vicious Watcher", "Kalonian Hydra" })
+    { HandLtb(s, nm); }
+    bool found = false;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
+    {
+        if (CastOfLtb(p, "Nissa, Who Shakes the World") == nullptr || CastOfLtb(p, "Nature's Lore") == nullptr
+            || CastOfLtb(p, "Three Visits") == nullptr || CastOfLtb(p, "Gargos, Vicious Watcher") == nullptr
+            || CastOfLtb(p, "Kalonian Hydra") == nullptr) { continue; }
+        found = true;
+        GameState t = s;
+        TurnSolver::ApplyPlan(t, p, true);
+        CHECK(CountOnBoardLtb(t, "Gargos, Vicious Watcher") == 1);
+        CHECK(CountOnBoardLtb(t, "Kalonian Hydra") == 1);
+    }
+    CHECK(found);
+}
+
+TEST_CASE("F1: the land-put class filter still finds the pick after a same-plan bonus source arrives")
+{
+    // The credit stamped on the pre-Nissa board ({G}{G}: Forest + Bloom) must still name the Forest class once
+    // Nissa is out (every Forest pick now credits {G}{G}{G}): before the fix the filter came back EMPTY, so the
+    // real-payment walk put no land and the resolution lost the restriction.
+    GameState s = FreshLtb(2);
+    PutLtb(s, "Vernal Bloom");
+    const LandSearchSpec spec = LandSearchSpecOf(DefLtb("Nature's Lore").params);
+    const std::vector<ManaPool> g = LandSearchCreditGroups(s, 0, spec);
+    REQUIRE(g.size() == 1);
+    CHECK(g[0].green == 2);
+    PutLtb(s, "Nissa, Who Shakes the World");
+    std::vector<int> idx;
+    LandSearchCreditFilter(s, spec, LandSearchMemoSlot(s, 0, spec), g[0], idx);
+    CHECK(!idx.empty());
+    // A stamp no pick can explain (a Mountain-class credit on a Forest-only library) still matches nothing.
+    ManaPool red; red.red = 1;
+    LandSearchCreditFilter(s, spec, LandSearchMemoSlot(s, 0, spec), red, idx);
+    CHECK(idx.empty());
+}
+
+TEST_CASE("F1: Neverwinter's always-max X counts the same-plan Bloom (only the true maximum is offered)")
+{
+    // Eight Forests. Vernal Bloom {3}{G} taps four; the four left tap for {G}{G} -> 8 = Neverwinter Hydra
+    // {X}{X}{G}{G} at X = 3. The max-X rule used to count the board pool alone, so X = 1 and X = 2 (whose
+    // next step needs the Bloom's mana) survived beside X = 3, against the USER's always-max ruling.
+    GameState s = FreshLtb(8);
+    static const HydrasProvider hp; s.m_provider = &hp;
+    HandLtb(s, "Vernal Bloom");
+    HandLtb(s, "Neverwinter Hydra");
+    std::set<int> xs;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
+    {
+        const Action* nw = CastOfLtb(p, "Neverwinter Hydra");
+        if (nw == nullptr || CastOfLtb(p, "Vernal Bloom") == nullptr) { continue; }
+        xs.insert(nw->chosen_x);
+        GameState t = s;
+        TurnSolver::ApplyPlan(t, p, true);
+        CHECK(CountOnBoardLtb(t, "Neverwinter Hydra") == 1);
+    }
+    CHECK(xs == std::set<int>{ 3 });
+}

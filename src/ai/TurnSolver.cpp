@@ -9700,6 +9700,131 @@ static int LandTapCastColor(const GameState& state, const Action& a)
     return ResolveProvider(state).EtbChosenColor(state, state.active_player_index, *a.def);
 }
 
+// THE SAME-PLAN LAND-TAP x LAND-PUT CREDIT, exact (Hydras Claude-play sweep F1, 2026-11-11; seed 50000 T5,
+// seed 50004 T4). Two same-plan credits are each stamped off the board the plan was enumerated on: a
+// land-tap bonus source's (SamePlanLandTapBonusCredit) counts only lands ALREADY on the board, and a
+// land-put cast's (LandSearchPickCredit, Action::rock_mana) counts only bonus sources already on the board.
+// So the line "Nissa, then Nature's Lore, then Three Visits" credited each fetched Forest {G}{G} (Forest +
+// the live Bloom) when it taps for {G}{G}{G} once Nissa is out -- one short per fetched Forest, which kept
+// "... Gargos, Kalonian Hydra" (and Voracious X = 6) off the menu, and "Vernal Bloom, Nature's Lore,
+// Steelbane" at X = 1 where X = 2 pays. LandTapCrossBoundCredit covered only the odometer's scalar bound.
+// This is the term the credited flat pools (Solve's consider() and EnumeratePlans, lockstep) add for a
+// selected (source, land-put) pair: the source's bonus on every untapped pick of the put's credit class
+// that the source's filter admits (a Forest for Bloom / Nissa, a basic of the locked colour for Gauntlet).
+// Credited only when the realised order casts the source FIRST (CastOrderLess -- every apply world's
+// order), so the fetched land is tapped with the bonus live; the other order earns nothing here, which
+// can only under-credit. 0 for every deck without a land-tap bonus source.
+static ManaPool LandPutCrossCredit(const GameState& state, const Action& src, const Action& put)
+{
+    ManaPool out;
+    if (!IsLandTapCreditCast(src) || src.hand_index == put.hand_index) { return out; }
+    if (put.kind != Action::Kind::CastFromHand || put.def == nullptr || put.rock_mana.Total() <= 0
+        || !LandSearchPutsUntapped(*put.def)) { return out; }
+    if (!CastOrderLess(state, src, put)) { return out; }
+    const CardParams& p = src.def->params;
+    Color c;
+    if (p.etb_choose_color)
+    {
+        const int col = LandTapCastColor(state, src);
+        if (col < 0 || col >= 5) { return out; }
+        c = static_cast<Color>(col);
+    }
+    else
+    {
+        if (p.land_tap_bonus_produces.size() != 1) { return out; }
+        c = p.land_tap_bonus_produces[0];
+    }
+    const int me = state.active_player_index;
+    const LandSearchSpec spec = LandSearchSpecOf(put.def->params);
+    thread_local std::vector<int> idx;
+    const landsearchmemo::Slot& ms = LandSearchMemoSlot(state, me, spec);
+    LandSearchCreditFilter(state, spec, ms, put.rock_mana, idx);
+    if (idx.empty()) { return out; }
+    const std::vector<const CardDefinition*>& pick = ms.pick_defs[static_cast<std::size_t>(idx.front())];
+    const int bf = LandSearchBattlefieldCount(spec, static_cast<int>(pick.size()));
+    for (int k = 0; k < bf; ++k)
+    {
+        const CardDefinition* d = pick[static_cast<std::size_t>(k)];
+        if (d != nullptr && LandTapBonusQualifies(state, p, c, me, me, *d, nullptr)) { out.Add(c, p.land_tap_bonus); }
+    }
+    return out;
+}
+// Every (source, land-put) pair among `cands` that earns a cross credit, precomputed once per
+// enumeration (a handful of pairs at most; empty for every deck without a land-tap bonus source).
+struct LandPutCrossPair { int src = -1; int put = -1; ManaPool credit; };
+static void CollectLandPutCrossPairs(const GameState& state, const std::vector<Action>& cands,
+                                     std::vector<LandPutCrossPair>& out)
+{
+    out.clear();
+    if (!state.deck_has_land_tap_bonus || !state.deck_has_land_search || !LandPutCrossCreditOn()) { return; }
+    for (std::size_t s = 0; s < cands.size(); ++s)
+    {
+        if (!IsLandTapCreditCast(cands[s])) { continue; }
+        for (std::size_t q = 0; q < cands.size(); ++q)
+        {
+            const ManaPool c = LandPutCrossCredit(state, cands[s], cands[q]);
+            if (c.Total() > 0) { out.push_back({ static_cast<int>(s), static_cast<int>(q), c }); }
+        }
+    }
+}
+// The cross credit of the selected pairs.
+static ManaPool SelectedLandPutCross(const std::vector<LandPutCrossPair>& pairs, const std::vector<int>& sel)
+{
+    ManaPool out;
+    for (const LandPutCrossPair& pr : pairs)
+    {
+        if (std::find(sel.begin(), sel.end(), pr.src) == sel.end()) { continue; }
+        if (std::find(sel.begin(), sel.end(), pr.put) == sel.end()) { continue; }
+        out.AddPool(pr.credit);
+    }
+    return out;
+}
+// THE SAME-PLAN MANA AN {X} CAST'S "BELOW MAX" TEST MAY COUNT (DecisionProvider::XCastBelowMax; Hydras sweep
+// F1, the ledger's "Neverwinter's max-X counts no same-plan producer credit"). That test drops an X cast when
+// the mana its plan leaves unspent pays one more X step, so the mana it counts must NEVER exceed what the
+// line really has -- an over-count would drop the true maximum. It used to count the board pool alone, so
+// "Nissa / Bloom / Nature's Lore, then Neverwinter" kept a below-maximum X beside the maximum (against the
+// USER's always-max ruling). This adds only the terms that are exact in the realised (CastOrderLess) order:
+//   * every selected credited land-put's first tap (rock_mana: the fetched basic with the bonuses live at
+//     emission), while the library holds a basic for each of them;
+//   * the FIRST selected land-tap bonus source's own credit (the untapped qualifying lands left after its
+//     cost -- exact when it is cast first; a second source's credit is priced off a board without the
+//     first and can over-count, so it is left out);
+//   * the selected land-tap x land-put cross credit (LandPutCrossCredit, exact by construction).
+// Every other producer stays uncounted, as before (an under-count only keeps a below-max X offered).
+static int XMaxSamePlanExactCredit(const GameState& state, const std::vector<Action>& cands,
+                                   const std::vector<int>& sel, const std::vector<LandPutCrossPair>& cross)
+{
+    if (!state.deck_has_land_tap_bonus || !LandPutCrossCreditOn()) { return 0; }
+    int total = 0, picks = 0;
+    const Action* first_src = nullptr;
+    for (int j : sel)
+    {
+        const Action& a = cands[static_cast<std::size_t>(j)];
+        if (a.kind != Action::Kind::CastFromHand || a.def == nullptr || a.rock_mana.Total() <= 0) { continue; }
+        if (LandSearchPutsUntapped(*a.def))
+        {
+            total += static_cast<int>(a.rock_mana.Total());
+            picks += std::max(0, a.def->params.land_search_count - a.def->params.land_search_to_hand);
+        }
+        else if (IsLandTapCreditCast(a) && (first_src == nullptr || CastOrderLess(state, a, *first_src)))
+        { first_src = &a; }
+    }
+    if (picks > 0)
+    {
+        int basics = 0;
+        for (const Card& c : state.players[static_cast<std::size_t>(state.active_player_index)].library)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d != nullptr && IsBasicLandCard(*d)) { ++basics; }
+        }
+        if (basics < picks) { return 0; }   // a search can whiff: count nothing rather than guess
+    }
+    if (first_src != nullptr) { total += static_cast<int>(first_src->rock_mana.Total()); }
+    total += static_cast<int>(SelectedLandPutCross(cross, sel).Total());
+    return total;
+}
+
 // True = the subset provably cannot be paid (see above); false = not provable, run the walk.
 static bool SpwfProvablySupplyShort(const GameState& state, const std::vector<Action>& cands,
                                     const std::vector<int>& sel)
@@ -55264,6 +55389,9 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     // Cheap scan -> the credit below is inert for every deck without such a rock.
     bool any_rock = false;
     for (const Action& ra : cands) { if (ra.rock_mana.Total() > 0) { any_rock = true; break; } }
+    // The same-plan land-tap x land-put pairs (LandPutCrossCredit; empty unless both shapes are here).
+    std::vector<LandPutCrossPair> lp_cross;   // no allocation while empty
+    CollectLandPutCrossPairs(state, cands, lp_cross);
     // A same-subset sac float (an on-board Lotus's crack, Garth's conjure-and-crack) for the colour-
     // presence widening (MTG_SUBSET_SAC_COLOR). Inert for every deck without one.
     bool any_sac_float = false;
@@ -56052,7 +56180,17 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                 rock_costs.colorless += rc.colorless; rock_costs.generic += rc.generic;
                 sel_rock = true;
             }
-            if (sel_rock && pool.CanPay(rock_costs)) { eff.AddPool(rock_prod); eff_nc.AddPool(rock_prod); credited = true; }
+            if (sel_rock && pool.CanPay(rock_costs))
+            {
+                eff.AddPool(rock_prod); eff_nc.AddPool(rock_prod); credited = true;
+                // ...plus each selected bonus source's bonus on the lands the selected land-puts fetch
+                // (LandPutCrossCredit). Lockstep twin in the other enumerator.
+                if (!lp_cross.empty())
+                {
+                    const ManaPool x = SelectedLandPutCross(lp_cross, sel);
+                    eff.AddPool(x); eff_nc.AddPool(x);
+                }
+            }
             else if (sel_rock && RockSeqCreditOn())   // rocks that fund each other (see SequencedRockProduction)
             {
                 const ManaPool seq = SequencedRockProduction(pool, cands, sel);
@@ -56607,7 +56745,8 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             {
                 const Action& c = cands[j];
                 if (c.kind != Action::Kind::CastFromHand || !c.cost.has_x) { continue; }
-                if (ResolveProvider(state).XCastBelowMax(state, cands, sel, j, static_cast<int>(pool.Total())))
+                if (ResolveProvider(state).XCastBelowMax(state, cands, sel, j, static_cast<int>(pool.Total())
+                                                         + XMaxSamePlanExactCredit(state, cands, sel, lp_cross)))
                 { iren_waste = true; break; }
             }
         }
@@ -75290,6 +75429,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // Same-turn mana-rock ramp scan (mirrors Solve). Inert without a non-creature rock.
     bool any_rock = false;
     for (const Action& ra : cands) { if (ra.rock_mana.Total() > 0) { any_rock = true; break; } }
+    // The same-plan land-tap x land-put pairs (LandPutCrossCredit; empty unless both shapes are here).
+    std::vector<LandPutCrossPair> lp_cross;   // no allocation while empty
+    CollectLandPutCrossPairs(state, cands, lp_cross);
     // A same-subset sac float (an on-board Lotus's crack, Garth's conjure-and-crack) for the colour-
     // presence widening (MTG_SUBSET_SAC_COLOR). Inert for every deck without one.
     bool any_sac_float = false;
@@ -76572,7 +76714,17 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 rock_costs.colorless += rc.colorless; rock_costs.generic += rc.generic;
                 sel_rock = true;
             }
-            if (sel_rock && pool.CanPay(rock_costs)) { eff.AddPool(rock_prod); eff_nc.AddPool(rock_prod); credited = true; }
+            if (sel_rock && pool.CanPay(rock_costs))
+            {
+                eff.AddPool(rock_prod); eff_nc.AddPool(rock_prod); credited = true;
+                // ...plus each selected bonus source's bonus on the lands the selected land-puts fetch
+                // (LandPutCrossCredit). Lockstep twin in the other enumerator.
+                if (!lp_cross.empty())
+                {
+                    const ManaPool x = SelectedLandPutCross(lp_cross, sel);
+                    eff.AddPool(x); eff_nc.AddPool(x);
+                }
+            }
             else if (sel_rock && RockSeqCreditOn())   // rocks that fund each other (see SequencedRockProduction)
             {
                 const ManaPool seq = SequencedRockProduction(pool, cands, sel);
@@ -77767,7 +77919,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             {
                 const Action& c = cands[j];
                 if (c.kind != Action::Kind::CastFromHand || !c.cost.has_x) { continue; }
-                if (ResolveProvider(state).XCastBelowMax(state, cands, sel, j, static_cast<int>(pool.Total())))
+                if (ResolveProvider(state).XCastBelowMax(state, cands, sel, j, static_cast<int>(pool.Total())
+                                                         + XMaxSamePlanExactCredit(state, cands, sel, lp_cross)))
                 { iren_waste = true; break; }
             }
         }

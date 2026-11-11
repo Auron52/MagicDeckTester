@@ -49056,9 +49056,11 @@ std::vector<int> HydrasProvider::XCandidates(const GameState& s, const CardDefin
 // lever. Applied regardless of MTG_HYDRAS_MAX_X; the other X Hydras take the same rule only with that flag ON.
 // The rule is plan-level (the LifegainHeliodCombo Ballista shape): an X cast is WASTED when the mana its plan
 // leaves unspent pays one more X step, and the walk drops that subset unless it wins this turn. "Left" is the
-// pool the walk paid from minus every selected action's cost, with NO same-plan producer credit -- so the
-// test can only under-drop (an X whose larger neighbour needs a credited Bloom stays offered), never drop
-// the plan's true maximum. Human play offers every X; MTG_UNPRUNE=xspell lifts the rule (an A/B lever).
+// pool the walk paid from plus the same-plan producer mana that is EXACT in the realised order (the
+// enumerators' XMaxSamePlanExactCredit: a fetched basic's first tap, the first land-tap bonus source's credit,
+// the land-tap x land-put cross credit; Hydras sweep F1, 2026-11-11), minus every selected action's cost --
+// so the test can only under-drop (a producer it does not count keeps a below-max X offered), never drop the
+// plan's true maximum. Human play offers every X; MTG_UNPRUNE=xspell lifts the rule (an A/B lever).
 // ONE MORE X STEP costs its MARGINAL generic, not always x_pips: under Gargos (CR 601.2f, the reduction comes
 // off X) the {4} absorbs the first X steps, so Neverwinter X = 1 and X = 2 both cost {G}{G} and X = 1 is below
 // the maximum with NOTHING left over (I2b 2026-11-11; the x_pips test kept it). The marginal is priced the way
