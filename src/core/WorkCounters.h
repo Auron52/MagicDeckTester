@@ -78,5 +78,11 @@ inline bool StoresAllowedAt(int site)
     return false;
 }
 inline void Inc(int k, long long n = 1) { if (t_mute != 0) { return; } t_n[k] += n; t_priced += kPriceNs[k] * n; }
-inline void BeginGame() { for (int k = 0; k < kKinds; ++k) { t_n[k] = 0; } t_priced = 0; }
+// REPLAYED work (MTG_CACHE_READ_GUARD_KIND, TurnSolver.cpp cachecharge): counted into t_n / t_priced exactly as Inc
+// counts it, because the priced meter must see what the recompute a cache hit stood in for would have counted -- but
+// NOT done. t_replayed keeps it apart so a census can report the work actually done (t_n - t_replayed).
+inline thread_local long long t_replayed[kKinds] = {};
+inline void IncReplayed(int k, long long n)
+{ if (t_mute != 0) { return; } t_n[k] += n; t_priced += kPriceNs[k] * n; t_replayed[k] += n; }
+inline void BeginGame() { for (int k = 0; k < kKinds; ++k) { t_n[k] = 0; t_replayed[k] = 0; } t_priced = 0; }
 }
