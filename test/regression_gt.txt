@@ -5,6 +5,10 @@
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
 # --- smoke ---
+hydras_smoke_d0_s1001=6.0600/a4fe9761a8ca548e
+hydras_smoke_d3_s1001=5.5800/6215fb31d906a68c
+hydras_smoke_d5_s1001=5.5500/26129ed4d9c7b8aa
+hydras2hg_smoke_d5_s1001=5.9600/ef37838fad7e36f9
 extraturns_smoke_d0_s1001=5.6980/85f9b9dba82fb5d7
 extraturns_smoke_d3_s1001=4.7400/01ae387c53685a23
 extraturns_smoke_d5_s1001=4.7300/7fe10742e31e5f06
@@ -194,6 +198,13 @@ elementals_smoke_d3_s1001=4.4600/15877bad8bb35b68
 elementals_smoke_d5_s1001=4.3360/616b849211c6c5a1
 
 # --- regression ---
+hydras_regression_d0_s2002=6.0320/710aae075f9abb5d
+hydras_regression_d3_s2002=5.4267/eed077a611a0e392
+hydras_regression_d5_s2002=5.4133/6b1b552bd4962bb3
+hydras_regression_d5_s3003=5.5600/4f4019cb2c11c267
+hydras2hg_regression_d5_s2002=5.7467/4c6b120d861eba83
+hydras_regression_d3_s30001=5.4000/da3a26feaece2293
+hydras_regression_d5_s30001=5.4000/da3a26feaece2293
 extraturns_regression_d0_s2002=5.6440/f59fae9fa37713d9
 extraturns_regression_d3_s2002=4.7600/eeb5ad1c5082292b
 extraturns_regression_d5_s2002=4.6467/54516573ed1896f8
@@ -491,6 +502,18 @@ merfolk_regression_d5_s2002=4.1800/6824241f83b7d727
 merfolk_regression_d5_s3003=4.1267/ec2e843240108e92
 
 # --- overnight ---
+hydras_overnight_d0_s4004=6.0710/db5cebcbf4ba5e02
+hydras_overnight_d0_s6006=6.0525/7bebd77da7dbb91e
+hydras_overnight_d0_s8008=6.0200/6a756ec5338e67df
+hydras_overnight_d0_s10010=6.0415/7a4ccb331b57cf34
+hydras_overnight_d3_s4004=5.6080/c5c3549df332eb40
+hydras_overnight_d5_s4004=5.5933/75e1e230449f2dde
+hydras_overnight_d5_s5005=5.5333/94c911ec8f853155
+hydras_overnight_d5_s6006=5.4700/08f5cef3e33f40a1
+hydras_overnight_d5_s7007=5.5167/f3acbf69589c833a
+hydras2hg_overnight_d5_s4004=5.9000/1191b42389eade45
+hydras_overnight_d3_s30106=5.6000/7fbcc58d5c7a06f0
+hydras_overnight_d5_s30106=5.6000/7fbcc58d5c7a06f0
 extraturns_overnight_d0_s4004=5.6865/e5ead4c0f9dfb829
 extraturns_overnight_d0_s6006=5.6710/f28823f0c722ddbc
 extraturns_overnight_d0_s8008=5.6980/80d1ce5e8d9d9bf8

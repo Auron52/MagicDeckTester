@@ -88,6 +88,7 @@ declare -A DECK_FILE=(
   [alchemist]=decks/AccomplishedAlchemist/AccomplishedAlchemist.cod
   [elementals]=decks/LandfallElementals/LandfallElementals.cod
   [extraturns]="decks/Extra Turns/Extra Turns.cod"
+  [hydras]=decks/Hydras/Hydras.cod
 )
 declare -A DECK_PROF=(
   [fungusv3]=decks/Fungus/Fungus.profile.json
@@ -138,6 +139,7 @@ declare -A DECK_PROF=(
   [alchemist]=decks/AccomplishedAlchemist/AccomplishedAlchemist.profile.json
   [elementals]=decks/LandfallElementals/LandfallElementals.profile.json
   [extraturns]="decks/Extra Turns/Extra Turns.profile.json"
+  [hydras]=decks/Hydras/Hydras.profile.json
 )
 
 # PLAY-SETTING SHAPE (USER 2026-10-27: "I would cut d3 b10 games to run more at play settings. d3 b10 is a nice
@@ -168,6 +170,13 @@ declare -A DECK_PROF=(
 # into turn 11 -- legal but volatile), and slivers actively spins on its heavy tail. The
 # deeper/generous budgets live in OVERNIGHT instead. See search-perf-investigation memory.
 SMOKE_CASES=(
+  # Hydras: ENTRY set (no keep table, no value leaf) at its built-in d5/b20 play setting, extraturns
+  # sizing. No card scales with opponents or reads starting life, so hydras2hg is the small searched
+  # 2HG canary every deck carries (30 team life lengthens the clock). analysis-hydras.md.
+  "hydras     0  1001 1000  0"
+  "hydras     3  1001   50 10"
+  "hydras     5  1001  100 20"
+  "hydras2hg  5  1001   25 20"
   # Extra Turns entry at its built-in d5/b20 play setting. Expropriate and
   # Eldrazi attacks warrant a 2HG row.
   "extraturns 0 1001 1000 0"
@@ -689,6 +698,16 @@ SMOKE_CASES=(
 # (see SMOKE block). slivers must stay low regardless -- it spins on its heavy tail (s2002 d5
 # was 16.5 min at budget 200) for zero benefit. d0 has no search. Only antilife is new here.
 REGRESSION_CASES=(
+  # Hydras: ENTRY set, two d5/b20 play blocks + one d3/b10 sanity row (see the SMOKE block).
+  "hydras     0  2002 1000  0"
+  "hydras     3  2002   75 10"
+  "hydras     5  2002  150 20"
+  "hydras     5  3003  150 20"
+  "hydras2hg  5  2002   75 20"
+  # Hydras unlimited backstop: screened 30001..30020 at d3 and d5 (abandon_units 2e6, MTG_SLOW_GAME_MS=5000).
+  # 30013 hits the cap at d5 (18 s at d3); 30001..30005 are all under 5 s at both depths. Disjoint from overnight.
+  "hydras           3 30001   5 0"
+  "hydras           5 30001   5 0"
   # Extra Turns: two independent play blocks before the keep table.
   "extraturns 0 2002 1000 0"
   "extraturns 3 2002  75 10"
@@ -1116,6 +1135,22 @@ REGRESSION_CASES=(
 # See .claude/skills/regression-testing.md rule 7 and
 # docs/design/searched-design-audit-blind-spots.md ("Method trap: overlapping seed bases").
 OVERNIGHT_CASES=(
+  # Hydras: overnight ENTRY set before its keep table (d0 4x2000, d5 4x300 b20 play rows, one d3 b10
+  # sanity row, one 2HG canary). Expand to the FULL set just before the keep table is adopted.
+  "hydras     0  4004 2000  0"
+  "hydras     0  6006 2000  0"
+  "hydras     0  8008 2000  0"
+  "hydras     0 10010 2000  0"
+  "hydras     3  4004  125 10"
+  "hydras     5  4004  300 20"
+  "hydras     5  5005  300 20"
+  "hydras     5  6006  300 20"
+  "hydras     5  7007  300 20"
+  "hydras2hg  5  4004  100 20"
+  # Hydras unlimited backstop: 30101..30120 screened (30101 hits the 2e6 cap at d3 and d5, 30105 ~7 s);
+  # the 30106 block (5 games, re-screened at its own base) runs under 1 s per game at both depths.
+  "hydras           3 30106   5 0"
+  "hydras           5 30106   5 0"
   # Extra Turns play rows meet the Hinata floor after keep-table adoption.
   "extraturns 0 4004 2000 0"
   "extraturns 0 6006 2000 0"
