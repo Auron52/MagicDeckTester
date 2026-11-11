@@ -1,0 +1,451 @@
+{
+  "seed": 1, "game_index": 0, "win_turn": 5, "won": true,
+  "mulligan": { "count": 2, "bottom": [57, 58] }, "karoo_float": 1, "fetch_activation": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1, "spell_copy_id": 1,
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 17, "name": "Plains" }, { "num": 38, "name": "Ranger-Captain of Eos" }, { "num": 10, "name": "Martyr of Sands" }, { "num": 6, "name": "Enduring Innocence" }, { "num": 57, "name": "Unexpectedly Absent" }, { "num": 18, "name": "Plains" }, { "num": 8, "name": "Kami of False Hope" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": false,
+  "to_bottom": 1,
+  "hand": [{ "num": 36, "name": "Ranger of Eos" }, { "num": 42, "name": "Serra Ascendant" }, { "num": 58, "name": "Unexpectedly Absent" }, { "num": 57, "name": "Unexpectedly Absent" }, { "num": 25, "name": "Plains" }, { "num": 32, "name": "Plains" }, { "num": 17, "name": "Plains" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 2,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 2,
+  "on_the_play": false,
+  "to_bottom": 2,
+  "hand": [{ "num": 52, "name": "Squadron Hawk" }, { "num": 58, "name": "Unexpectedly Absent" }, { "num": 34, "name": "Plains" }, { "num": 47, "name": "Speaker of the Heavens" }, { "num": 57, "name": "Unexpectedly Absent" }, { "num": 7, "name": "Enduring Innocence" }, { "num": 28, "name": "Plains" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 2 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 4, "decision": {
+  "decision_index": 3,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 2,
+  "hand": [{ "num": 52, "name": "Squadron Hawk", "win_optimal": true }, { "num": 58, "name": "Unexpectedly Absent", "win_optimal": true }, { "num": 34, "name": "Plains", "win_optimal": true }, { "num": 47, "name": "Speaker of the Heavens", "win_optimal": true }, { "num": 57, "name": "Unexpectedly Absent", "win_optimal": true }, { "num": 7, "name": "Enduring Innocence", "win_optimal": true }, { "num": 28, "name": "Plains", "win_optimal": true }],
+  "ai_choice": { "index": 5, "num": 7, "name": "Enduring Innocence" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 2)"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 4,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 1,
+  "bottom_total": 2,
+  "hand": [{ "num": 52, "name": "Squadron Hawk", "win_optimal": true }, { "num": 58, "name": "Unexpectedly Absent", "win_optimal": true }, { "num": 34, "name": "Plains", "win_optimal": true }, { "num": 47, "name": "Speaker of the Heavens", "win_optimal": true }, { "num": 7, "name": "Enduring Innocence", "win_optimal": true }, { "num": 28, "name": "Plains", "win_optimal": true }],
+  "ai_choice": { "index": 4, "num": 7, "name": "Enduring Innocence" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 2 of 2)"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Plains", "cast=Speaker of the Heavens"], "decision": {
+  "decision_index": 5,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 1, "card": "Martyr of Sands" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 7, "name": "Enduring Innocence", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 12, "name": "Martyr of Sands", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 34, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 28, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 47, "name": "Speaker of the Heavens", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Plains; cast: Speaker of the Heavens", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Speaker of the Heavens"], "actions": [{ "card": "Speaker of the Heavens" }] },
+    { "index": 1, "summary": "land=Plains; cast: Martyr of Sands", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Martyr of Sands"], "actions": [{ "card": "Martyr of Sands" }] },
+    { "index": 2, "summary": "land=Plains; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 5,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 3, "num": 34, "tapped": true, "is_land": true }, { "name": "Speaker of the Heavens", "idx": 4, "num": 47, "sick": true, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 7, "name": "Enduring Innocence", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 12, "name": "Martyr of Sands", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 28, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 52, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 7,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 3, "num": 34, "tapped": true, "is_land": true }, { "name": "Speaker of the Heavens", "idx": 4, "num": 47, "sick": true, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 7, "name": "Enduring Innocence", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 12, "name": "Martyr of Sands", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 28, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 52, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Plains", "cast=Squadron Hawk"], "decision": {
+  "decision_index": 8,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 2, "card": "Plains" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 3, "num": 34, "is_land": true, "taps": "W" }, { "name": "Speaker of the Heavens", "idx": 4, "num": 47, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 7, "name": "Enduring Innocence", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 12, "name": "Martyr of Sands", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 28, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 30, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 52, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Plains; cast: Squadron Hawk", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Squadron Hawk"], "actions": [{ "card": "Squadron Hawk" }] },
+    { "index": 1, "summary": "land=Plains; cast: Martyr of Sands", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Martyr of Sands"], "actions": [{ "card": "Martyr of Sands" }] },
+    { "index": 2, "summary": "land=none; cast: Martyr of Sands", "declared_order_payability": "not_verified", "land": null, "casts": ["Martyr of Sands"], "actions": [{ "card": "Martyr of Sands" }] },
+    { "index": 3, "summary": "land=Plains; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 10,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": [1, 1, 1], "decision": {
+  "decision_index": 9,
+  "type": "sac_tutor",
+  "source": "Squadron Hawk (put in HAND)",
+  "turn": 2,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 3, "num": 34, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 5, "num": 28, "tapped": true, "is_land": true }, { "name": "Speaker of the Heavens", "idx": 4, "num": 47, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Squadron Hawk", "idx": 6, "num": 52, "sick": true, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 7, "name": "Enduring Innocence", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 12, "name": "Martyr of Sands", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 30, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "max_puts": 3,
+  "ai_set": [0, 1, 2],
+  "candidates": [{ "index": 0, "def": true, "name": "Squadron Hawk" }, { "index": 1, "def": true, "name": "Squadron Hawk" }, { "index": 2, "def": true, "name": "Squadron Hawk" }],
+  "note": "reply one int per candidate (1 = put this card into your hand), up to max_puts total. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 12,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 2, "kind": "tutor", "text": "🔍 Squadron Hawk -- searched to hand (Squadron Hawk)" }, { "turn": 2, "kind": "tutor", "text": "🔍 Squadron Hawk -- searched to hand (Squadron Hawk)" }, { "turn": 2, "kind": "tutor", "text": "🔍 Squadron Hawk -- searched to hand (Squadron Hawk)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 3, "num": 34, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 5, "num": 28, "tapped": true, "is_land": true }, { "name": "Speaker of the Heavens", "idx": 4, "num": 47, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Squadron Hawk", "idx": 6, "num": 52, "sick": true, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 7, "name": "Enduring Innocence", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 12, "name": "Martyr of Sands", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 30, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 51, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 2, "kind": "combat", "text": "⚔ attacked: Speaker of the Heavens (1) — 1 to opponent (20→19)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 21, "battlefield": [{ "name": "Plains", "idx": 3, "num": 34, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 5, "num": 28, "tapped": true, "is_land": true }, { "name": "Speaker of the Heavens", "idx": 4, "num": 47, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Squadron Hawk", "idx": 6, "num": 52, "sick": true, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 7, "name": "Enduring Innocence", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 12, "name": "Martyr of Sands", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 30, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 51, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 0, "life_gained_this_turn": 1 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 3, "cast_order": ["**", "land=Plains", "cast=Martyr of Sands"], "decision": {
+  "decision_index": 14,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 3, "card": "Abiding Grace" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 21, "battlefield": [{ "name": "Plains", "idx": 3, "num": 34, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 5, "num": 28, "is_land": true, "taps": "W" }, { "name": "Speaker of the Heavens", "idx": 4, "num": 47, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Squadron Hawk", "idx": 6, "num": 52, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 2, "name": "Abiding Grace", "cost": "{2}{W}", "mv": 3, "kind": "permanent" }, { "num": 7, "name": "Enduring Innocence", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 12, "name": "Martyr of Sands", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 30, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 51, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Plains; cast: Enduring Innocence", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Enduring Innocence"], "actions": [{ "card": "Enduring Innocence" }] },
+    { "index": 1, "summary": "land=Plains; cast: Martyr of Sands, Squadron Hawk", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Martyr of Sands", "Squadron Hawk"], "cast_order_canonical": ["Martyr of Sands", "Squadron Hawk"], "actions": [{ "card": "Martyr of Sands" }, { "card": "Squadron Hawk" }] },
+    { "index": 2, "summary": "land=Plains; cast: Squadron Hawk, Martyr of Sands", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Squadron Hawk", "Martyr of Sands"], "cast_order_canonical": ["Squadron Hawk", "Martyr of Sands"], "actions": [{ "card": "Squadron Hawk" }, { "card": "Martyr of Sands" }] },
+    { "index": 3, "summary": "land=Plains; cast: Martyr of Sands", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Martyr of Sands"], "actions": [{ "card": "Martyr of Sands" }] },
+    { "index": 4, "summary": "land=Plains; cast: Squadron Hawk", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Squadron Hawk"], "actions": [{ "card": "Squadron Hawk" }] },
+    { "index": 5, "summary": "land=none; cast: Martyr of Sands", "declared_order_payability": "not_verified", "land": null, "casts": ["Martyr of Sands"], "actions": [{ "card": "Martyr of Sands" }] },
+    { "index": 6, "summary": "land=none; cast: Squadron Hawk", "declared_order_payability": "not_verified", "land": null, "casts": ["Squadron Hawk"], "actions": [{ "card": "Squadron Hawk" }] },
+    { "index": 7, "summary": "land=Plains; cast: Abiding Grace", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Abiding Grace"], "actions": [{ "card": "Abiding Grace" }] },
+    { "index": 8, "summary": "land=Plains; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 9, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 25,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 15,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 21, "battlefield": [{ "name": "Martyr of Sands", "idx": 8, "num": 12, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Plains", "idx": 3, "num": 34, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 5, "num": 28, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 7, "num": 30, "is_land": true, "taps": "W" }, { "name": "Speaker of the Heavens", "idx": 4, "num": 47, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Squadron Hawk", "idx": 6, "num": 52, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 2, "name": "Abiding Grace", "cost": "{2}{W}", "mv": 3, "kind": "permanent" }, { "num": 7, "name": "Enduring Innocence", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Martyr of Sands: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Martyr of Sands"], "actions": [{ "card": "Martyr of Sands", "src_num": 12, "activate": true, "activation_cost": "{1}", "sacout": true, "sac_count": 1 }] },
+    { "index": 1, "summary": "land=none; cast: Squadron Hawk", "declared_order_payability": "not_verified", "land": null, "casts": ["Squadron Hawk"], "actions": [{ "card": "Squadron Hawk" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 5, "decision": {
+  "decision_index": 16,
+  "type": "x_value",
+  "source": "Martyr of Sands",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 21, "battlefield": [{ "name": "Martyr of Sands", "idx": 8, "num": 12, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Plains", "idx": 3, "num": 34, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 5, "num": 28, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 7, "num": 30, "is_land": true, "taps": "W" }, { "name": "Speaker of the Heavens", "idx": 4, "num": 47, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Squadron Hawk", "idx": 6, "num": 52, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 2, "name": "Abiding Grace", "cost": "{2}{W}", "mv": 3, "kind": "permanent" }, { "num": 7, "name": "Enduring Innocence", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "x_kind": "reveal_gain",
+  "life_per_x": 3,
+  "min_x": 0,
+  "max_x": 5,
+  "heuristic_default": 5,
+  "note": "reply how many white cards to reveal for Martyr of Sands (0..5; you gain 3 life per card), or -1 for the default (5)."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 17,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 3, "kind": "sacrifice", "text": "💀 Martyr of Sands: sacrificed Martyr of Sands (gain 15 life)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 36, "battlefield": [{ "name": "Plains", "idx": 3, "num": 34, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 5, "num": 28, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 7, "num": 30, "is_land": true, "taps": "W" }, { "name": "Speaker of the Heavens", "idx": 4, "num": 47, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Squadron Hawk", "idx": 6, "num": 52, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 2, "name": "Abiding Grace", "cost": "{2}{W}", "mv": 3, "kind": "permanent" }, { "num": 7, "name": "Enduring Innocence", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": ["Martyr of Sands"], "library_size": 49, "land_drops_left": 0, "life_gained_this_turn": 15 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Speaker of the Heavens: tap for a token", "declared_order_payability": "not_verified", "land": null, "casts": [], "activations": ["Speaker of the Heavens"], "actions": [{ "card": "Speaker of the Heavens", "src_num": 47, "activate": true, "verb": "taptoken" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 18,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Speaker of the Heavens (1), Squadron Hawk (1) — 2 to opponent (19→17)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 37, "battlefield": [{ "name": "Plains", "idx": 3, "num": 34, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 5, "num": 28, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 7, "num": 30, "is_land": true, "taps": "W" }, { "name": "Speaker of the Heavens", "idx": 4, "num": 47, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Squadron Hawk", "idx": 6, "num": 52, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 2, "name": "Abiding Grace", "cost": "{2}{W}", "mv": 3, "kind": "permanent" }, { "num": 7, "name": "Enduring Innocence", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": ["Martyr of Sands"], "library_size": 49, "land_drops_left": 0, "life_gained_this_turn": 16 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Speaker of the Heavens: tap for a token", "declared_order_payability": "not_verified", "land": null, "casts": [], "activations": ["Speaker of the Heavens"], "actions": [{ "card": "Speaker of the Heavens", "src_num": 47, "activate": true, "verb": "taptoken" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 19,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 37, "battlefield": [{ "name": "4/4 Angel Token", "idx": 8, "num": 1000, "sick": true, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Plains", "idx": 3, "num": 34, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 5, "num": 28, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 7, "num": 30, "is_land": true, "taps": "W" }, { "name": "Speaker of the Heavens", "idx": 4, "num": 47, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Squadron Hawk", "idx": 6, "num": 52, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 2, "name": "Abiding Grace", "cost": "{2}{W}", "mv": 3, "kind": "permanent" }, { "num": 7, "name": "Enduring Innocence", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": ["Martyr of Sands"], "library_size": 49, "land_drops_left": 0, "life_gained_this_turn": 16 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 20,
+  "main_ordinal": 6,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 4, "card": "Unexpectedly Absent" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 37, "battlefield": [{ "name": "4/4 Angel Token", "idx": 8, "num": 1000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Plains", "idx": 3, "num": 34, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 5, "num": 28, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 7, "num": 30, "is_land": true, "taps": "W" }, { "name": "Speaker of the Heavens", "idx": 4, "num": 47, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Squadron Hawk", "idx": 6, "num": 52, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 2, "name": "Abiding Grace", "cost": "{2}{W}", "mv": 3, "kind": "permanent" }, { "num": 7, "name": "Enduring Innocence", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Martyr of Sands"], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Enduring Innocence, Speaker of the Heavens: tap for a token", "declared_order_payability": "not_verified", "land": null, "casts": ["Enduring Innocence"], "activations": ["Speaker of the Heavens"], "actions": [{ "card": "Enduring Innocence" }, { "card": "Speaker of the Heavens", "src_num": 47, "activate": true, "verb": "taptoken" }] },
+    { "index": 1, "summary": "land=none; cast: Enduring Innocence", "declared_order_payability": "not_verified", "land": null, "casts": ["Enduring Innocence"], "actions": [{ "card": "Enduring Innocence" }] },
+    { "index": 2, "summary": "land=none; cast: Squadron Hawk, Speaker of the Heavens: tap for a token", "declared_order_payability": "not_verified", "land": null, "casts": ["Squadron Hawk"], "activations": ["Speaker of the Heavens"], "actions": [{ "card": "Squadron Hawk" }, { "card": "Speaker of the Heavens", "src_num": 47, "activate": true, "verb": "taptoken" }] },
+    { "index": 3, "summary": "land=none; cast: Squadron Hawk", "declared_order_payability": "not_verified", "land": null, "casts": ["Squadron Hawk"], "actions": [{ "card": "Squadron Hawk" }] },
+    { "index": 4, "summary": "land=none; cast: Abiding Grace, Speaker of the Heavens: tap for a token", "declared_order_payability": "not_verified", "land": null, "casts": ["Abiding Grace"], "activations": ["Speaker of the Heavens"], "actions": [{ "card": "Abiding Grace" }, { "card": "Speaker of the Heavens", "src_num": 47, "activate": true, "verb": "taptoken" }] },
+    { "index": 5, "summary": "land=none; cast: Abiding Grace", "declared_order_payability": "not_verified", "land": null, "casts": ["Abiding Grace"], "actions": [{ "card": "Abiding Grace" }] },
+    { "index": 6, "summary": "land=none; cast: Speaker of the Heavens: tap for a token", "declared_order_payability": "not_verified", "land": null, "casts": [], "activations": ["Speaker of the Heavens"], "actions": [{ "card": "Speaker of the Heavens", "src_num": 47, "activate": true, "verb": "taptoken" }] },
+    { "index": 7, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 10,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 21,
+  "main_ordinal": 7,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 37, "battlefield": [{ "name": "4/4 Angel Token", "idx": 8, "num": 1000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Enduring Innocence", "idx": 9, "num": 7, "sick": true, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Plains", "idx": 3, "num": 34, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 5, "num": 28, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 7, "num": 30, "tapped": true, "is_land": true }, { "name": "Speaker of the Heavens", "idx": 4, "num": 47, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Squadron Hawk", "idx": 6, "num": 52, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 2, "name": "Abiding Grace", "cost": "{2}{W}", "mv": 3, "kind": "permanent" }, { "num": 51, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Martyr of Sands"], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Speaker of the Heavens: tap for a token", "declared_order_payability": "not_verified", "land": null, "casts": [], "activations": ["Speaker of the Heavens"], "actions": [{ "card": "Speaker of the Heavens", "src_num": 47, "activate": true, "verb": "taptoken" }] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 22,
+  "main_ordinal": 8,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 4, "kind": "combat", "text": "⚔ attacked: Speaker of the Heavens (1), Squadron Hawk (1), 4/4 Angel Token (4) — 6 to opponent (17→11)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 38, "battlefield": [{ "name": "4/4 Angel Token", "idx": 8, "num": 1000, "tapped": true, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Enduring Innocence", "idx": 9, "num": 7, "sick": true, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Plains", "idx": 3, "num": 34, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 5, "num": 28, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 7, "num": 30, "tapped": true, "is_land": true }, { "name": "Speaker of the Heavens", "idx": 4, "num": 47, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Squadron Hawk", "idx": 6, "num": 52, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 2, "name": "Abiding Grace", "cost": "{2}{W}", "mv": 3, "kind": "permanent" }, { "num": 51, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Martyr of Sands"], "library_size": 48, "land_drops_left": 1, "life_gained_this_turn": 1 },
+  "opponent": { "life": 11, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Speaker of the Heavens: tap for a token", "declared_order_payability": "not_verified", "land": null, "casts": [], "activations": ["Speaker of the Heavens"], "actions": [{ "card": "Speaker of the Heavens", "src_num": 47, "activate": true, "verb": "taptoken" }] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 23,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 38, "battlefield": [{ "name": "4/4 Angel Token", "idx": 8, "num": 1000, "tapped": true, "is_land": false, "power": 4, "toughness": 4 }, { "name": "4/4 Angel Token", "idx": 10, "num": 1001, "sick": true, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Enduring Innocence", "idx": 9, "num": 7, "sick": true, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Plains", "idx": 3, "num": 34, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 5, "num": 28, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 7, "num": 30, "tapped": true, "is_land": true }, { "name": "Speaker of the Heavens", "idx": 4, "num": 47, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Squadron Hawk", "idx": 6, "num": 52, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 2, "name": "Abiding Grace", "cost": "{2}{W}", "mv": 3, "kind": "permanent" }, { "num": 51, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Martyr of Sands"], "library_size": 48, "land_drops_left": 1, "life_gained_this_turn": 1 },
+  "opponent": { "life": 11, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 24,
+  "main_ordinal": 9,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 5, "card": "Ranger-Captain of Eos" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 38, "battlefield": [{ "name": "4/4 Angel Token", "idx": 8, "num": 1000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "4/4 Angel Token", "idx": 10, "num": 1001, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Enduring Innocence", "idx": 9, "num": 7, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Plains", "idx": 3, "num": 34, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 5, "num": 28, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 7, "num": 30, "is_land": true, "taps": "W" }, { "name": "Speaker of the Heavens", "idx": 4, "num": 47, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Squadron Hawk", "idx": 6, "num": 52, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 2, "name": "Abiding Grace", "cost": "{2}{W}", "mv": 3, "kind": "permanent" }, { "num": 40, "name": "Ranger-Captain of Eos", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Martyr of Sands"], "library_size": 47, "land_drops_left": 1 },
+  "opponent": { "life": 11, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Ranger-Captain of Eos → Kami of False Hope, Speaker of the Heavens: tap for a token", "declared_order_payability": "not_verified", "land": null, "casts": ["Ranger-Captain of Eos"], "activations": ["Speaker of the Heavens"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Kami of False Hope" }, { "card": "Speaker of the Heavens", "src_num": 47, "activate": true, "verb": "taptoken" }] },
+    { "index": 1, "summary": "land=none; cast: Ranger-Captain of Eos → Serra Ascendant, Speaker of the Heavens: tap for a token", "declared_order_payability": "not_verified", "land": null, "casts": ["Ranger-Captain of Eos"], "activations": ["Speaker of the Heavens"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Serra Ascendant" }, { "card": "Speaker of the Heavens", "src_num": 47, "activate": true, "verb": "taptoken" }] },
+    { "index": 2, "summary": "land=none; cast: Ranger-Captain of Eos → Curious Farm Animals, Speaker of the Heavens: tap for a token", "declared_order_payability": "not_verified", "land": null, "casts": ["Ranger-Captain of Eos"], "activations": ["Speaker of the Heavens"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Curious Farm Animals" }, { "card": "Speaker of the Heavens", "src_num": 47, "activate": true, "verb": "taptoken" }] },
+    { "index": 3, "summary": "land=none; cast: Ranger-Captain of Eos → Martyr of Sands, Speaker of the Heavens: tap for a token", "declared_order_payability": "not_verified", "land": null, "casts": ["Ranger-Captain of Eos"], "activations": ["Speaker of the Heavens"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Martyr of Sands" }, { "card": "Speaker of the Heavens", "src_num": 47, "activate": true, "verb": "taptoken" }] },
+    { "index": 4, "summary": "land=none; cast: Ranger-Captain of Eos → Mother of Runes, Speaker of the Heavens: tap for a token", "declared_order_payability": "not_verified", "land": null, "casts": ["Ranger-Captain of Eos"], "activations": ["Speaker of the Heavens"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Mother of Runes" }, { "card": "Speaker of the Heavens", "src_num": 47, "activate": true, "verb": "taptoken" }] },
+    { "index": 5, "summary": "land=none; cast: Ranger-Captain of Eos → Speaker of the Heavens, Speaker of the Heavens: tap for a token", "declared_order_payability": "not_verified", "land": null, "casts": ["Ranger-Captain of Eos"], "activations": ["Speaker of the Heavens"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Speaker of the Heavens" }, { "card": "Speaker of the Heavens", "src_num": 47, "activate": true, "verb": "taptoken" }] },
+    { "index": 6, "summary": "land=none; cast: Ranger-Captain of Eos → Thraben Inspector, Speaker of the Heavens: tap for a token", "declared_order_payability": "not_verified", "land": null, "casts": ["Ranger-Captain of Eos"], "activations": ["Speaker of the Heavens"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Thraben Inspector" }, { "card": "Speaker of the Heavens", "src_num": 47, "activate": true, "verb": "taptoken" }] },
+    { "index": 7, "summary": "land=none; cast: Ranger-Captain of Eos → Kami of False Hope", "declared_order_payability": "not_verified", "land": null, "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Kami of False Hope" }] },
+    { "index": 8, "summary": "land=none; cast: Ranger-Captain of Eos → Serra Ascendant", "declared_order_payability": "not_verified", "land": null, "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Serra Ascendant" }] },
+    { "index": 9, "summary": "land=none; cast: Ranger-Captain of Eos → Curious Farm Animals", "declared_order_payability": "not_verified", "land": null, "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Curious Farm Animals" }] },
+    { "index": 10, "summary": "land=none; cast: Ranger-Captain of Eos → Martyr of Sands", "declared_order_payability": "not_verified", "land": null, "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Martyr of Sands" }] },
+    { "index": 11, "summary": "land=none; cast: Ranger-Captain of Eos → Mother of Runes", "declared_order_payability": "not_verified", "land": null, "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Mother of Runes" }] },
+    { "index": 12, "summary": "land=none; cast: Ranger-Captain of Eos → Speaker of the Heavens", "declared_order_payability": "not_verified", "land": null, "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Speaker of the Heavens" }] },
+    { "index": 13, "summary": "land=none; cast: Ranger-Captain of Eos → Thraben Inspector", "declared_order_payability": "not_verified", "land": null, "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Thraben Inspector" }] },
+    { "index": 14, "summary": "land=none; cast: Squadron Hawk, Speaker of the Heavens: tap for a token", "declared_order_payability": "not_verified", "land": null, "casts": ["Squadron Hawk"], "activations": ["Speaker of the Heavens"], "actions": [{ "card": "Squadron Hawk" }, { "card": "Speaker of the Heavens", "src_num": 47, "activate": true, "verb": "taptoken" }] },
+    { "index": 15, "summary": "land=none; cast: Abiding Grace, Speaker of the Heavens: tap for a token", "declared_order_payability": "not_verified", "land": null, "casts": ["Abiding Grace"], "activations": ["Speaker of the Heavens"], "actions": [{ "card": "Abiding Grace" }, { "card": "Speaker of the Heavens", "src_num": 47, "activate": true, "verb": "taptoken" }] },
+    { "index": 16, "summary": "land=none; cast: Squadron Hawk", "declared_order_payability": "not_verified", "land": null, "casts": ["Squadron Hawk"], "actions": [{ "card": "Squadron Hawk" }] },
+    { "index": 17, "summary": "land=none; cast: Abiding Grace", "declared_order_payability": "not_verified", "land": null, "casts": ["Abiding Grace"], "actions": [{ "card": "Abiding Grace" }] },
+    { "index": 18, "summary": "land=none; cast: Speaker of the Heavens: tap for a token", "declared_order_payability": "not_verified", "land": null, "casts": [], "activations": ["Speaker of the Heavens"], "actions": [{ "card": "Speaker of the Heavens", "src_num": 47, "activate": true, "verb": "taptoken" }] },
+    { "index": 19, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 70,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 5, "kind": "combat", "text": "⚔ attacked: Speaker of the Heavens (1), Squadron Hawk (1), 4/4 Angel Token (4), Enduring Innocence (2), 4/4 Angel Token (4) — 12 to opponent (11→-1)" }
+  ]
+}
