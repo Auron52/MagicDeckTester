@@ -1,13 +1,7 @@
-# Regression ground truth -- commit 36708f6e5  date 2026-11-11
+# Regression ground truth -- commit 0d7ff66f2  date 2026-11-11
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-10): Full 2026-11-10 rebaseline: 120/588 keys changed; searched overlap 64 faster, 6 slower, net 60 scored turns faster, no searched win became unwon. Five slowdowns recover at 4x budget; Modern RW Burn 2HG s7007 gi58 recovers at unlimited budget. 583 same-score searched line changes reviewed by mechanical grouping and samples. Full oracle: 588/588 matching fingerprints, 0 nonconv, 54 off-by-one fd-diverge, 3 severe flags from 2 distinct preexisting Treasure Hunt seeds (5216, 8468); legacy per-turn search wins T6, current committed-line result is unwon/T7, and disabling batch payment does not fix it. Prior Angels, Angels2HG, and Bruna small searched slowdowns remain follow-ups.
-# accepted-with-regressions (smoke, 2026-11-10): Ezuri attacker mana legality: d3 gi24 and d5 gi24,75,95,137,138 lose formerly illegal combat speed; Umbra host shifts d5 gi109 later and gi110 earlier; d0 improves overall
-# accepted-with-regressions (regression, 2026-11-10): AA 2026-11-10: 17 searched turn-later games audited against all-flags-off baseline; each recovers its old turn with attacker-tapping fix disabled, so prior Ezuri lines could spend mana from declared attackers. Refined Wish ordering recovers seed 3054 gi51 T6. 60 same-turn searched line changes reviewed; focused rules and viewer tests pass.
-# accepted-with-regressions (regression, 2026-11-10): Shared-branch integration: standard seed 2016 gi14 and 2HG seed 2041 gi39 each one turn slower at 20ms; both recover at 4x budget; strict references pass
-# accepted-with-regressions (smoke, 2026-11-10): Merged-tree full smoke: 0 slower/0 faster. FiveColour d0 13 same-turn play changes from attacker tapping before pump (attacking Birds/Faeburrow no longer fund pump). Bruna2HG d5 gi10 and Landfall d5 gi83,gi98 same-turn line changes persist with all three AA flags off: inherited from Gods engine merge f90930c9f, not this fix.
-# accepted-with-regressions (regression, 2026-11-11): Merged-tree full regression: searched 0 slower/0 faster. FiveColour d0 gi932 T5->T6 is the attacker-tap legality fix (old T5 paid Shivan pumps with attacking Birds/Faeburrow/Deathrite; best legal T5 is 19 dmg) plus 9 same-turn d0 changes; FiveColour d5 s3003 gi168 same-turn line change, also this fix. Gods d3 s2002 gi39, FiveColour d3/d5 s2002 gi42, Landfall d5 s3003 gi43 persist with all three AA flags off: inherited from Gods engine merge f90930c9f. Strict references 0 drift.
-# accepted-with-regressions (smoke, 2026-11-11): AA Living Wish amendments for USER report seed 23742 (MTG_AA_WISH_COMBO_FIRST: combo buckets ahead of mana at 3 mana; MTG_AA_WISH_UNTAP_NET: a mana-neutral Staff loop leaves Untap lacking). Smoke searched 0 slower/0 faster, 3 same-turn line changes; d0 6.2950->6.2780 (15 slower/16 faster). Cyclone human-only Remand change byte-identical.
-# accepted-with-regressions (regression, 2026-11-11): AA Living Wish amendments for USER report seed 23742 (MTG_AA_WISH_COMBO_FIRST + MTG_AA_WISH_UNTAP_NET). Searched: d5 s2002 gi12 T6->T7 is churn (recovers to T6 at 4x and 16x budget; T2 wish fetch diverges the draws), 14 same-turn line changes; d0 6.3310->6.2830. Cyclone human-only Remand change byte-identical. Strict references 0 drift.
+# accepted-with-regressions (regression, 2026-11-11): jumbo d3/d5 s2002 gi28:6->7 draws diverge T4; recovers T6 at d8 b0 both arms
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -94,8 +88,8 @@ stompy_smoke_d0_s1001=4.8170/0254d80bf9c7c5cf
 stompy_smoke_d3_s1001=3.9800/e2e95d4626254be2
 stompy_smoke_d5_s1001=4.0000/12c9e20788d4ea9d
 jumbo_smoke_d0_s1001=5.6250/10f6fd7cd09dd1a2
-jumbo_smoke_d3_s1001=3.9400/376391b22ec93742
-jumbo_smoke_d5_s1001=3.9714/f5ac1b0a06331a19
+jumbo_smoke_d3_s1001=3.9400/b9ce2f8f00609bd6
+jumbo_smoke_d5_s1001=3.9657/253ceb23bb6c08b9
 minotaur_smoke_d0_s1001=5.3050/948ae97fa1052211
 minotaur_smoke_d3_s1001=4.9867/c2ccc2adcb805a03
 minotaur_smoke_d5_s1001=4.8954/e73569ee4e3d2ade
@@ -265,8 +259,8 @@ goblins_regression_d3_s30001=3.7500/91809def39c75fce
 goblins_regression_d5_s30001=3.7500/91809def39c75fce
 hinata_regression_d3_s30001=5.4000/dc809bb9e08d2f85
 hinata_regression_d5_s30001=5.4000/db27f852782561fd
-jumbo_regression_d3_s30001=4.2500/0126cf004aac3306
-jumbo_regression_d5_s30001=4.2500/3c12ff364903cf3b
+jumbo_regression_d3_s30001=4.2500/093712beec5968b7
+jumbo_regression_d5_s30001=4.2500/4e11ac11d1db0ede
 kittyv3_regression_d3_s30301=3.4000/20266003fb5e888b
 kittyv3_regression_d5_s30301=3.4000/20266003fb5e888b
 knights_regression_d3_s30001=4.3500/5dc667b9fee7d29e
@@ -379,10 +373,10 @@ stompy_regression_d0_s2002=4.8580/ddc27e701ff83999
 stompy_regression_d3_s2002=4.1400/29cd2e05d4bcb99d
 stompy_regression_d5_s2002=4.1000/9fbcebdbc6b697f6
 stompy_regression_d5_s3003=4.0560/415f29b0a90fb76e
-jumbo_regression_d0_s2002=5.5470/c6b389e7a4b8716f
-jumbo_regression_d3_s2002=4.2400/42869927f9744e9c
-jumbo_regression_d5_s2002=4.0840/c70c440c62601a45
-jumbo_regression_d5_s3003=4.0740/6a5b7309b1eb8b51
+jumbo_regression_d0_s2002=5.5460/cb942642d35f9eb6
+jumbo_regression_d3_s2002=4.2500/ceaa030eafc51080
+jumbo_regression_d5_s2002=4.0860/d983596583355e8c
+jumbo_regression_d5_s3003=4.0640/dcac5a508a2792ec
 minotaur_regression_d0_s2002=5.3100/0d522c9d270f350f
 minotaur_regression_d3_s2002=4.8800/2192c7cd2cc8d894
 minotaur_regression_d5_s2002=4.8780/c3f0de692d29640b
