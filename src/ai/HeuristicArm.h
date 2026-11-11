@@ -851,6 +851,8 @@ enum Slot : int
     SEL_GATE_EXACT,           // MTG_SEL_GATE_EXACT       the selection-exact odometer gate, priced exactly at emission (SelGateExactRefuses, TurnSolver.cpp): a GENERIC same-turn cost reducer's discount is bounded (min(generic, the selected reducers' steps) per cast) instead of passing every selection holding one outright, and the land-tap x land-put cross term counts only the SELECTED bonus sources. SOUND (MTG_SEL_GATE_EXACT_VERIFY counts violations, must be 0); moves play only through work-priced ceilings. Default ON; =0 -> the gate as before. Hydras P2 2026-11-11
     SB_RITUAL_AFTER_STONE,    // MTG_SB_RITUAL_AFTER_STONE  Shadowborn Apostle (USER 2026-11-11, "cast it after if mana allows and before if not"): in a line casting both Dark Ritual and Thrumming Stone, ShadowbornProvider::ArrangeCastOrder moves the Ritual(s) to just after the Stone when the exact sequential walk (TurnSolver::OrderPaysSequentially, which credits no ripple-revealed mana) pays that order; else Ritual keeps rank 1 before the Stone. ONE arrangement per line (no new plans). Default ON; =0 -> Ritual always before the Stone
     LANDPUT_CROSS_CREDIT,     // MTG_LANDPUT_CROSS_CREDIT  the bonuses a plan ESTABLISHES reach the lands it fetches (Hydras Claude-play sweep F1, 2026-11-11): the credited flat pools add each selected land-tap bonus source's bonus on the selected land-puts' picks (LandPutCrossCredit), the land-put class filter still finds its pick once such a source is live (LandSearchCreditFilter), and the max-X test counts the exact same-plan producer mana (XMaxSamePlanExactCredit). A CORRECTNESS fix. Default ON; =0 -> the pre-F1 play (the A/B arm)
+    JUMBO_OG_BREAKPOINT,      // MTG_JUMBO_OG_BREAKPOINT  Jumbo Cactuar (USER 2026-11-11, "if you have exactly 3 mana that you can spend outside of the land we are stacking or from the land we are stacking then it will need to do Overgrowth first"): JumboCactuarProvider::ArrangeCastOrder moves the first Overgrowth to just before the same-host Wild Growth when the spendable mana before that land's re-tap (all sources but the Elf/Satyr re-taps, without the land or with its one tap) is exactly Overgrowth's cost, the ranked order does not pay (OrderPaysSequentially) and the moved one does. ONE arrangement per line. Default ON; =0 -> ranked order
+    UNTAPPER_UNLOCK_HOSTS,    // MTG_UNTAPPER_UNLOCK_HOSTS  USER 2026-11-11 (Jumbo, "Equip activations for Greaves and Chariot should always be allowed right after either chariot or the mana creatures enter"): every fresh untap-target-land source (Arbor Elf / Voyaging Satyr) is an offered haste-equip unlock host, the copy a battlefield-put tutor (GSZ / Finale) fetches included (TurnSolver TutoredUntapperHostId); ApplyManaUnlockEquips fires the chosen one as both pieces are in play. Options only. Default ON; =0 -> the single best unlock host, hand/battlefield only
     COUNT
 };
 
@@ -1646,6 +1648,8 @@ inline const char* Name(int slot)
         "MTG_SEL_GATE_EXACT",
         "MTG_SB_RITUAL_AFTER_STONE",
         "MTG_LANDPUT_CROSS_CREDIT",
+        "MTG_JUMBO_OG_BREAKPOINT",
+        "MTG_UNTAPPER_UNLOCK_HOSTS",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

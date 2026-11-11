@@ -95,6 +95,36 @@ How they apply (implementation queued in the mana-clean chain, item 5h):
 4. Surrak and Goreclaw moves out of the 6th slot to a later default, and comes earlier only when mana allows,
    i.e. a proven swap (the earlier order pays every cast under OrderPaysSequentially), like the Aura swap.
 
+### USER equip-placement and Overgrowth-breakpoint rulings (2026-11-11, items 5m / 5n)
+
+Equip placement (5m), verbatim:
+
+> Equip activations for Greaves and Chariot should always be allowed right after either chariot or the mana
+> creatures enter. (in addition to Cactuar at the end)
+
+and, on whether this forces anything (verbatim): *"Exactly, nothing is forced, but if it does choose to equip there
+it can."*
+
+Overgrowth before Wild Growth (5n), verbatim:
+
+> For the overgrowth case I see it now. The problem is almost certainly something that happens with specific mana
+> breakpoints. So, for example, if you have exactly 3 mana that you can spend outside of the land we are stacking or
+> from the land we are stacking then it will need to do Overgrowth first. With anything else, it likely works fine.
+> So for example if you have 4 mana outside of that land we can cast Wild Growth + Overgrowth safely and if we have 2
+> Wild Growth + Overgrowth that also works, since the land still gives an extra 2 from the 2 wild growth. I think we
+> could make a rule for this that allows this very narrowly.
+
+How they apply:
+1. (5m) A haste-Equipment equip (Lightning Greaves, Chariot of Victory) onto EVERY fresh Arbor Elf / Voyaging Satyr
+   entering this turn is an offered option -- hand casts and the copy a Green Sun's Zenith / Finale of Devastation
+   puts alike -- and fires (ApplyManaUnlockEquips) the moment both pieces are on the battlefield, i.e. right after
+   the Equipment or the untapper enters. The search branches on it; nothing is forced. Trailing equips onto Cactuar
+   are unchanged. `MTG_UNTAPPER_UNLOCK_HOSTS` (default ON).
+2. (5n) Overgrowth moves to just before a same-land Wild Growth only at the breakpoint: the mana spendable before
+   that land's untap-and-retap (every source but the Elf/Satyr re-taps, without the land or with its one tap) is
+   exactly Overgrowth's cost, the ranked order does not pay every cast and the moved order does. One arrangement per
+   line. Utopia Sprawl and Auras on another land keep the ranked order. `MTG_JUMBO_OG_BREAKPOINT` (default ON).
+
 ### Ability activation order
 
 The table below has one distinct priority per activation type. An activation

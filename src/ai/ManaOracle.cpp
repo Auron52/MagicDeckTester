@@ -494,17 +494,52 @@ std::string BoardText(const GameState& s)
     return "board=[" + bf + "] hand=[" + hand + "] " + fl + " life=" + std::to_string(s.players[a].life);
 }
 
+// A switch, not a positional table: the table fell out of step with Action::Kind (four kinds inserted
+// mid-enum), so every report's "attachall:" was really an Equip. -Wswitch now flags a missing kind.
 const char* KindText(Action::Kind k)
 {
-    static const char* kNames[] = {
-        "cast", "retrace", "vial", "landsedge", "playland", "dig", "suspend", "sac", "tapfortokens",
-        "sacoutlet", "channel", "garth", "loyalty", "equip", "gy-return", "gy-play", "gy-exile",
-        "attachall", "putfromhand", "jitte", "revealtop", "pump", "animate", "tapfortokenpay", "untapcreature",
-        "blink", "act", "pod", "gy-exilegrow", "comboroute", "eternalize", "attachallfree", "auraswap",
-        "untap"
-    };
-    const int i = static_cast<int>(k);
-    return (i >= 0 && i < static_cast<int>(sizeof(kNames) / sizeof(kNames[0]))) ? kNames[i] : "kind?";
+    switch (k)
+    {
+        case Action::Kind::CastFromHand: return "cast";
+        case Action::Kind::CastFromGraveyard: return "retrace";
+        case Action::Kind::ActivateVial: return "vial";
+        case Action::Kind::DiscardToLandsEdge: return "landsedge";
+        case Action::Kind::PlayLand: return "playland";
+        case Action::Kind::DigDraw: return "dig";
+        case Action::Kind::Suspend: return "suspend";
+        case Action::Kind::SacForMana: return "sac";
+        case Action::Kind::TapForTokens: return "tapfortokens";
+        case Action::Kind::TapMillToughness: return "tapmill";
+        case Action::Kind::PharikaExile: return "pharika";
+        case Action::Kind::BronzePut: return "bronzeput";
+        case Action::Kind::BankManaTap: return "banktap";
+        case Action::Kind::SacCreatureOutlet: return "sacoutlet";
+        case Action::Kind::Channel: return "channel";
+        case Action::Kind::GarthActivate: return "garth";
+        case Action::Kind::ActivateLoyalty: return "loyalty";
+        case Action::Kind::Equip: return "equip";
+        case Action::Kind::GraveyardReturnAbility: return "gy-return";
+        case Action::Kind::GraveyardPlayAbility: return "gy-play";
+        case Action::Kind::GraveyardExileAbility: return "gy-exile";
+        case Action::Kind::AttachAllEquipment: return "attachall";
+        case Action::Kind::PutFromHandAbility: return "putfromhand";
+        case Action::Kind::JitteModeAbility: return "jitte";
+        case Action::Kind::ActivateRevealTop: return "revealtop";
+        case Action::Kind::ActivatePump: return "pump";
+        case Action::Kind::AnimateLand: return "animate";
+        case Action::Kind::TapForTokenPay: return "tapfortokenpay";
+        case Action::Kind::UntapCreature: return "untapcreature";
+        case Action::Kind::ActivateBlink: return "blink";
+        case Action::Kind::ActivatePermAbility: return "act";
+        case Action::Kind::ActivatePod: return "pod";
+        case Action::Kind::GraveyardExileGrow: return "gy-exilegrow";
+        case Action::Kind::ComboRoute: return "comboroute";
+        case Action::Kind::Eternalize: return "eternalize";
+        case Action::Kind::AttachAllFreeEquipment: return "attachallfree";
+        case Action::Kind::AuraSwap: return "auraswap";
+        case Action::Kind::ActivateUntap: return "untap";
+    }
+    return "kind?";
 }
 
 // The plan as EVERY action it holds (a one-line menu summary can elide some).

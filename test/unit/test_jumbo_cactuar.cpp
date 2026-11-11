@@ -4,6 +4,7 @@
 
 #include "ai/Combat.h"
 #include "ai/DecisionProviders.h"
+#include "ai/HeuristicArm.h"
 #include "ai/ManaPayment.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
@@ -640,6 +641,130 @@ TEST_CASE("Jumbo Cactuar walk keeps a land Aura on its tapped declared host")
             over10 |= a.card_name.str() == "Overgrowth" && a.enchant_target == 10;
         }
         return tooth && elf && over10;
+    });
+    CHECK(found);
+}
+
+// ---- USER 2026-11-11 item 5n: Overgrowth before Wild Growth at the exact mana breakpoint only ------------------
+// "if you have exactly 3 mana that you can spend outside of the land we are stacking or from the land we are
+// stacking then it will need to do Overgrowth first. With anything else, it likely works fine."
+namespace
+{
+struct JumboArm
+{
+    heurarm::Arm saved;
+    JumboArm() : saved(heurarm::t_arm) {}
+    JumboArm& Set(heurarm::Slot slot, int v) { heurarm::t_arm[static_cast<int>(slot)] = static_cast<std::int8_t>(v); return *this; }
+    ~JumboArm() { heurarm::t_arm = saved; }
+};
+
+// Gate jumbo-userorder-20261111 s30035557 T4: one Forest carrying two Utopia Sprawls (3 mana from the stacked land,
+// nothing outside it), Arbor Elf and Voyaging Satyr ready to re-tap it.
+GameState OvergrowthBreakpointBoard(JumboCactuarProvider& provider, int extra_forests)
+{
+    GameState s;
+    s.active_player_index = 0;
+    s.turn_number = 4;
+    s.deck_has_land_aura = true;
+    s.m_provider = &provider;
+    PutOnBoard(s, "Forest", 10);
+    PutOnBoard(s, "Utopia Sprawl", 51);
+    s.battlefield.back().aura_attached_to = 10;
+    s.battlefield.back().chosen_color = static_cast<int8_t>(Color::Green);
+    PutOnBoard(s, "Voyaging Satyr", 55);
+    PutOnBoard(s, "Utopia Sprawl", 49);
+    s.battlefield.back().aura_attached_to = 10;
+    s.battlefield.back().chosen_color = static_cast<int8_t>(Color::Green);
+    PutOnBoard(s, "Arbor Elf", 3);
+    for (int i = 0; i < extra_forests; ++i) { PutOnBoard(s, "Forest", 20 + i); }
+    return s;
+}
+}
+
+TEST_CASE("Jumbo Cactuar casts Overgrowth before a same-land Wild Growth only at the 3-mana breakpoint")
+{
+    LoadJumboCards();
+    JumboCactuarProvider provider;
+    const std::vector<std::string> ranked{"Wild Growth", "Overgrowth", "Chariot of Victory", "Tooth and Nail"};
+    {
+        // Breakpoint (stacked land 3, outside 0): Wild Growth first yields 3 + 4 + 6 = 13 of the 14 the line costs;
+        // Overgrowth first 3 + 5 + 6 = 14.
+        JumboArm arm; arm.Set(heurarm::JUMBO_OG_BREAKPOINT, 1);
+        GameState s = OvergrowthBreakpointBoard(provider, 0);
+        const std::vector<Action> acts{JumboCast(s, "Overgrowth", 39, 10), JumboCast(s, "Tooth and Nail", 60),
+                                       JumboCast(s, "Chariot of Victory", 5), JumboCast(s, "Wild Growth", 57, 10)};
+        CHECK(ArrangedNames(s, acts)
+              == std::vector<std::string>{"Overgrowth", "Wild Growth", "Chariot of Victory", "Tooth and Nail"});
+        JumboArm off; off.Set(heurarm::JUMBO_OG_BREAKPOINT, 0);
+        CHECK(ArrangedNames(s, acts) == ranked);
+    }
+    {
+        // Off the breakpoint (one more Forest outside: outside 1, with the stacked land 4): ranked order, whatever pays.
+        JumboArm arm; arm.Set(heurarm::JUMBO_OG_BREAKPOINT, 1);
+        GameState s = OvergrowthBreakpointBoard(provider, 1);
+        const std::vector<Action> acts{JumboCast(s, "Overgrowth", 39, 10), JumboCast(s, "Tooth and Nail", 60),
+                                       JumboCast(s, "Chariot of Victory", 5), JumboCast(s, "Wild Growth", 57, 10)};
+        CHECK(ArrangedNames(s, acts) == ranked);
+    }
+    {
+        // At the breakpoint but the ranked order pays (no Tooth and Nail): nothing moves.
+        JumboArm arm; arm.Set(heurarm::JUMBO_OG_BREAKPOINT, 1);
+        GameState s = OvergrowthBreakpointBoard(provider, 0);
+        const std::vector<Action> acts{JumboCast(s, "Overgrowth", 39, 10), JumboCast(s, "Wild Growth", 57, 10)};
+        CHECK(ArrangedNames(s, acts) == std::vector<std::string>{"Wild Growth", "Overgrowth"});
+    }
+    {
+        // Utopia Sprawl is not part of the rule.
+        JumboArm arm; arm.Set(heurarm::JUMBO_OG_BREAKPOINT, 1);
+        GameState s = OvergrowthBreakpointBoard(provider, 0);
+        const std::vector<Action> acts{JumboCast(s, "Overgrowth", 39, 10), JumboCast(s, "Tooth and Nail", 60),
+                                       JumboCast(s, "Chariot of Victory", 5), JumboCast(s, "Utopia Sprawl", 50, 10)};
+        CHECK(ArrangedNames(s, acts)
+              == std::vector<std::string>{"Utopia Sprawl", "Overgrowth", "Chariot of Victory", "Tooth and Nail"});
+    }
+}
+
+// ---- USER 2026-11-11 item 5m: equips onto each entering untapper are OFFERED, the tutored one included ---------
+// "Equip activations for Greaves and Chariot should always be allowed right after either chariot or the mana
+// creatures enter." Gate jumbo-userorder-20261111 s30036180 T3: {GSZ->Arbor Elf, Chariot, Voyaging Satyr} costs 8;
+// four lands + the old Satyr's re-tap make 6, and only Chariot onto the TUTORED Elf (fired as the Elf enters,
+// before the Satyr) adds the 2 that pays the Satyr.
+TEST_CASE("Jumbo Cactuar offers Chariot onto the Arbor Elf a Green Sun's Zenith puts")
+{
+    LoadJumboCards();
+    JumboCactuarProvider provider;
+    GameState s;
+    s.active_player_index = 0;
+    s.turn_number = 3;
+    s.deck_has_land_aura = true;
+    s.m_provider = &provider;
+    PutOnBoard(s, "Forest", 10);
+    PutOnBoard(s, "Wild Growth", 57);
+    s.battlefield.back().aura_attached_to = 10;
+    PutOnBoard(s, "Forest", 11);
+    PutOnBoard(s, "Voyaging Satyr", 53);
+    PutOnBoard(s, "Forest", 12);
+    s.players[0].lands_played_this_turn = 1;
+    s.players[0].hand.push_back(CopyOf("Voyaging Satyr", 54));
+    s.players[0].hand.push_back(CopyOf("Green Sun's Zenith", 90));
+    s.players[0].hand.push_back(CopyOf("Chariot of Victory", 5));
+    s.players[0].hand.push_back(CopyOf("Jumbo Cactuar", 33));
+    s.players[0].library.push_back(CopyOf("Forest", 13));
+    s.players[0].library.push_back(CopyOf("Arbor Elf", 1));
+    s.players[0].library.push_back(CopyOf("Arbor Elf", 2));
+
+    const auto plans = TurnSolver::EnumerateMainPlans(s, true);
+    const bool found = std::any_of(plans.begin(), plans.end(), [](const TurnSolver::Plan& p)
+    {
+        bool gsz_elf = false, chariot = false, satyr = false, equip_elf = false;
+        for (const Action& a : p.actions)
+        {
+            gsz_elf   |= a.card_name.str() == "Green Sun's Zenith" && a.tutor_target.str() == "Arbor Elf";
+            chariot   |= a.kind == Action::Kind::CastFromHand && a.card_name.str() == "Chariot of Victory";
+            satyr     |= a.card_name.str() == "Voyaging Satyr";
+            equip_elf |= a.kind == Action::Kind::Equip && a.sac_victim_id == 1;   // the first library copy
+        }
+        return gsz_elf && chariot && satyr && equip_elf;
     });
     CHECK(found);
 }

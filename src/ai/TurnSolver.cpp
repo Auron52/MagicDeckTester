@@ -11068,6 +11068,50 @@ static const CardDefinition* KickedFaceOr(const CardDefinition* d, bool kicked)
 // ApplyManaUnlockEquips at the same points, so it pays the equip and hastes the host exactly as the apply
 // does. Every unlock must have fired by the end of the walk (else the subset is refused, as before).
 static void HasteUnlockedManaOf(const GameState& state, int host_id, ManaPool& out, ManaPool& out_nc);
+
+// UNTAPPER UNLOCK HOSTS (MTG_UNTAPPER_UNLOCK_HOSTS, default ON; =0 -> the single best unlock host, hand and
+// battlefield only, as before). USER 2026-11-11 (Jumbo Cactuar, verbatim): "Equip activations for Greaves and
+// Chariot should always be allowed right after either chariot or the mana creatures enter. (in addition to Cactuar
+// at the end)" and "Exactly, nothing is forced, but if it does choose to equip there it can." A haste equip onto
+// a fresh untap-target-land source (Arbor Elf / Voyaging Satyr) is a MANA UNLOCK that ApplyManaUnlockEquips fires
+// the moment both pieces are on the battlefield -- i.e. right after the Equipment or the untapper enters. Two
+// holes kept those options off the menu: the unlock host was the ONE best mana host (so with an Elf and a Satyr
+// entering, only one was ever offered), and an untapper a battlefield-put tutor (Green Sun's Zenith, Finale of
+// Devastation) brings in was no host at all. Mana-clean gate jumbo-userorder-20261111 s30036180 T3: {GSZ->Elf,
+// Chariot, Satyr} pays 8 of 8 only with Chariot onto the TUTORED Elf; the offered Chariot -> hand Satyr fires
+// after the Satyr, too late, and the line drops the Satyr. Options only: the search still branches on each, and
+// nothing is fired that the plan did not choose. Restricted to untap-target-land sources (no other deck runs one
+// beside a haste Equipment), so the added menu is at most (haste Equipments) x (Elf, Satyr) per frame.
+static bool UntapperUnlockHostsOn()
+{
+    static const bool on = EnvOn("MTG_UNTAPPER_UNLOCK_HOSTS", true);
+    return heurarm::Flag(heurarm::UNTAPPER_UNLOCK_HOSTS, on);
+}
+
+// An untap-target-land mana creature (Arbor Elf, Voyaging Satyr): the hosts the rule above opens.
+static bool IsUntapperUnlockDef(const CardDefinition* d)
+{
+    return d != nullptr && d->card.IsCreature() && d->tmpl == CardTemplate::ManaDork
+        && !d->params.mana_requires_land_subtype.empty();
+}
+
+// The library card a battlefield-put tutor cast `a` brings in -- the FIRST library copy of its target, which is
+// the put's own rule (SpellEffects' tutor put: "find+remove the first library copy ... preserving its per-copy
+// number") -- when that card is an untapper unlock host; else 0. The Equip names that copy's number, so once the
+// tutor resolves the host is on the battlefield under the same number in every apply world.
+static int TutoredUntapperHostId(const GameState& state, const Action& a)
+{
+    if (!UntapperUnlockHostsOn() || a.kind != Action::Kind::CastFromHand || a.tutor_target.empty()) { return 0; }
+    const CardDefinition* td = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+    if (td == nullptr || !(td->params.tutor_mv_max_is_x || td->params.finale_of_devastation)) { return 0; }
+    for (const Card& c : state.players[state.active_player_index].library)
+    {
+        if (c.m_name != a.tutor_target) { continue; }
+        return IsUntapperUnlockDef(CardDatabase::Instance().LookupCached(c)) ? c.m_number : 0;
+    }
+    return 0;
+}
+
 static bool SeqUnlockEquipOn()
 {
     static const bool on = EnvOn("MTG_SEQ_UNLOCK_EQUIP", true);
@@ -11533,6 +11577,24 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
                 perm.owner_index       = cp.active_player_index;
                 perm.entered_this_turn = true;
                 cp.battlefield.push_back(perm);
+            }
+            // A TUTORED untapper host (TutoredUntapperHostId) enters as the tutor resolves.
+            if (const int tid = TutoredUntapperHostId(state, a); tid > 0
+                && std::find(unlock_pieces.begin(), unlock_pieces.end(), tid) != unlock_pieces.end()
+                && std::none_of(cp.battlefield.begin(), cp.battlefield.end(),
+                                [&](const Permanent& p) { return p.card.m_number == tid; }))
+            {
+                const CardDefinition* hd = CardDatabase::Instance().LookupInterned(a.tutor_target);
+                if (hd != nullptr)
+                {
+                    Permanent perm;
+                    perm.card              = hd->card;
+                    perm.card.m_number     = tid;
+                    perm.controller_index  = cp.active_player_index;
+                    perm.owner_index       = cp.active_player_index;
+                    perm.entered_this_turn = true;
+                    cp.battlefield.push_back(perm);
+                }
             }
             fire_unlocks();
         }
@@ -15115,6 +15177,7 @@ static bool SubsetHasStrandedEquip(const GameState& state,
             if (d.kind != Action::Kind::CastFromHand || d.hand_index < 0
                 || d.hand_index >= (int)ap.hand.size()) { continue; }
             if (ap.hand[d.hand_index].m_number == num) { return true; }
+            if (TutoredUntapperHostId(state, d) == num) { return true; }   // a tutored untapper host
         }
         return false;
     };
@@ -17221,6 +17284,17 @@ static void HasteUnlockedManaOf(const GameState& state, int host_id, ManaPool& o
     {
         for (const Card& c : state.players[active].hand)
         { if (c.m_number == host_id) { d = CardDatabase::Instance().LookupCached(c); break; } }
+        // A TUTORED untapper (see TutoredUntapperHostId): the library copy the plan's tutor puts.
+        if (!d && UntapperUnlockHostsOn())
+        {
+            for (const Card& c : state.players[active].library)
+            {
+                if (c.m_number != host_id) { continue; }
+                const CardDefinition* ld = CardDatabase::Instance().LookupCached(c);
+                if (IsUntapperUnlockDef(ld)) { d = ld; }
+                break;
+            }
+        }
         if (!d || !d->card.IsCreature()) { return; }
         if (d->tmpl != CardTemplate::ManaDork && !d->params.mana_rock) { return; }
     }
@@ -17845,6 +17919,11 @@ std::vector<int> TurnSolver::ManaUnlockColorReserve(const GameState& state,
         if (!hd)
         {
             for (const Card& c : ap.hand)
+            { if (c.m_number == a.sac_victim_id) { hd = CardDatabase::Instance().LookupCached(c); break; } }
+        }
+        if (!hd && UntapperUnlockHostsOn())   // a tutored untapper host (TutoredUntapperHostId)
+        {
+            for (const Card& c : ap.library)
             { if (c.m_number == a.sac_victim_id) { hd = CardDatabase::Instance().LookupCached(c); break; } }
         }
         if (!hd) { continue; }
@@ -25446,7 +25525,9 @@ static void BuildEquipPieceDeps(const GameState& state, const std::vector<Action
                 const Action& d = cands[j];
                 if (d.kind != Action::Kind::CastFromHand) { continue; }
                 if (d.hand_index < 0 || d.hand_index >= static_cast<int>(ap.hand.size())) { continue; }
-                if (ap.hand[d.hand_index].m_number != num) { continue; }
+                // The hand card itself, or a tutored untapper host this cast puts (TutoredUntapperHostId)
+                // -- the same two identities SubsetHasStrandedEquip's cast_here() accepts.
+                if (ap.hand[d.hand_index].m_number != num && TutoredUntapperHostId(state, d) != num) { continue; }
                 mask |= 1ull << h;
                 break;
             }
@@ -25462,6 +25543,7 @@ static void BuildEquipPieceDeps(const GameState& state, const std::vector<Action
             if (d.kind != Action::Kind::CastFromHand) { continue; }
             if (d.hand_index < 0 || d.hand_index >= static_cast<int>(ap.hand.size())) { continue; }
             if (ap.hand[d.hand_index].m_number == num) { return true; }
+            if (TutoredUntapperHostId(state, d) == num) { return true; }
         }
         return false;
     };
@@ -42790,6 +42872,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 // restores the greedy-scope offer (A/B hatch).
                 static const bool s_unlock_greedy = EnvOn("MTG_UNLOCK_HOST_GREEDY");
                 int unlock_id = 0;
+                const bool untapper_unlock_scope = UntapperUnlockHostsOn() && ed->params.equip_grants_haste
+                    && HasteDorkCreditEnabled() && (g_search_candidate_enum || s_unlock_greedy || HumanPlayActive());
                 if (ed->params.equip_grants_haste && HasteDorkCreditEnabled()
                     && (g_search_candidate_enum || s_unlock_greedy || HumanPlayActive()))
                 {
@@ -43040,6 +43124,11 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         // Stoneforge tap-put enable (doctrine 4b).
                         bool kept = (unpark_id != 0 && h.id == unpark_id)
                                  || (unlock_id != 0 && h.id == unlock_id);
+                        // Every fresh untapper is an unlock option (UntapperUnlockHostsOn), not only the
+                        // single best mana host -- the same searched scope as unlock_id.
+                        if (!kept && untapper_unlock_scope && h.fresh && !h.haste
+                            && IsUntapperUnlockDef(host_stats(h.id).def))
+                        { kept = true; }
                         if (s_consolidate && ed->params.equip_grants_haste
                             && ((kemba_id != 0 && h.id == kemba_id)
                                 || (stoneforge_id != 0 && h.id == stoneforge_id)))
@@ -43106,6 +43195,44 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     }
                     a.is_noncreature = true;
                     actions.push_back(std::move(a));
+                }
+            }
+
+            // ---- TUTORED UNTAPPER UNLOCK HOSTS (UntapperUnlockHostsOn; see TutoredUntapperHostId) -----
+            // A haste Equipment onto the untapper a same-frame tutor puts: one Equip per (Equipment, fetched
+            // copy), fired by ApplyManaUnlockEquips right after the tutor resolves. Searched scope only, as
+            // the unlock host above; the stranded-equip gate requires the tutor in the same subset.
+            {
+                static const bool s_unlock_greedy2 = EnvOn("MTG_UNLOCK_HOST_GREEDY");
+                if (UntapperUnlockHostsOn() && HasteDorkCreditEnabled()
+                    && (g_search_candidate_enum || s_unlock_greedy2 || HumanPlayActive()))
+                {
+                    std::vector<int> lib_hosts;
+                    for (const Action& t : actions)
+                    {
+                        const int id = TutoredUntapperHostId(state, t);
+                        if (id > 0 && std::find(lib_hosts.begin(), lib_hosts.end(), id) == lib_hosts.end())
+                        { lib_hosts.push_back(id); }
+                    }
+                    for (std::size_t e = 0; e < equips.size() && !lib_hosts.empty(); ++e)
+                    {
+                        const CardDefinition* ed = equips[e].first;
+                        if (!ed->params.equip_grants_haste || ed->params.equip_min_power > 0) { continue; }
+                        for (int id : lib_hosts)
+                        {
+                            Action a;
+                            a.kind           = Action::Kind::Equip;
+                            a.card_name      = equips[e].second->m_name;
+                            a.hand_index     = -1;
+                            a.cost           = ManaCost{};
+                            a.cost.generic   = EquipCostGenericNow(state, state.active_player_index, *ed, id);
+                            a.sac_source_id  = equips[e].second->m_number;
+                            a.sac_victim_id  = id;
+                            a.eval           = DMG;
+                            a.is_noncreature = true;
+                            actions.push_back(std::move(a));
+                        }
+                    }
                 }
             }
 
@@ -49601,6 +49728,8 @@ static int PlanGroupKey(const GameState& state, const Action& a,
         for (const Permanent& p : state.battlefield)
         { if (const int key = host_key(p.card)) { return key; } }
         for (const Card& c : state.players[state.active_player_index].hand)
+        { if (const int key = host_key(c)) { return key; } }
+        for (const Card& c : state.players[state.active_player_index].library)   // a tutored untapper host
         { if (const int key = host_key(c)) { return key; } }
     }
     if (!s_off && a.kind == Action::Kind::SacForMana

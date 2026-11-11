@@ -24958,6 +24958,78 @@ void JumboSurrakEarlyIfPaid(const GameState& s, const std::vector<Action>& acts,
     trial.insert(trial.begin() + first_untapper, moved);
     if (TurnSolver::OrderPaysSequentially(s, acts, trial)) { order.swap(trial); }
 }
+
+// USER 2026-11-11 (item 5n), verbatim: "For the overgrowth case I see it now. The problem is almost certainly
+// something that happens with specific mana breakpoints. So, for example, if you have exactly 3 mana that you can
+// spend outside of the land we are stacking or from the land we are stacking then it will need to do Overgrowth
+// first. With anything else, it likely works fine. ... I think we could make a rule for this that allows this very
+// narrowly." ONE deterministic arrangement per line (no new plan, no branch): the first Overgrowth moves to just
+// before the same-host Wild Growth ranked ahead of it only when ALL of
+//   (1) the BREAKPOINT holds: the mana spendable before the stacked land's next untap-and-retap -- every source
+//       but the Arbor Elf / Voyaging Satyr re-taps, counted either without the stacked land (O) or with its one
+//       tap (O + S) -- is exactly Overgrowth's cost, so Wild Growth + Overgrowth cannot both enter before that
+//       re-tap while Overgrowth alone can;
+//   (2) the ranked (USER) order does NOT pay every cast (TurnSolver::OrderPaysSequentially);
+//   (3) the moved order DOES.
+// A one-mana Aura on another land, Utopia Sprawl, and every board off the breakpoint keep the ranked order.
+// MTG_JUMBO_OG_BREAKPOINT=0 -> the ranked order always.
+bool JumboOvergrowthBreakpointOn()
+{
+    static const bool on = EnvOn("MTG_JUMBO_OG_BREAKPOINT", true);
+    return heurarm::Flag(heurarm::JUMBO_OG_BREAKPOINT, on);
+}
+
+void JumboOvergrowthAtBreakpoint(const GameState& s, const std::vector<Action>& acts, std::vector<int>& order)
+{
+    int og = -1;
+    for (int p = 0; p < static_cast<int>(order.size()); ++p)
+    {
+        const Action& a = acts[static_cast<std::size_t>(order[static_cast<std::size_t>(p)])];
+        if (a.kind == Action::Kind::CastFromHand && a.card_name.str() == "Overgrowth" && a.enchant_target > 0)
+        { og = p; break; }
+    }
+    if (og < 0) { return; }
+    const Action& oga = acts[static_cast<std::size_t>(order[static_cast<std::size_t>(og)])];
+    const int land = oga.enchant_target;
+    int wg = -1;
+    for (int p = 0; p < og; ++p)
+    {
+        const Action& a = acts[static_cast<std::size_t>(order[static_cast<std::size_t>(p)])];
+        if (a.kind == Action::Kind::CastFromHand && a.card_name.str() == "Wild Growth" && a.enchant_target == land)
+        { wg = p; break; }
+    }
+    if (wg < 0) { return; }
+    const Permanent* host = nullptr;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index == s.active_player_index && p.card.m_number == land) { host = &p; break; }
+    }
+    if (host == nullptr) { return; }
+    const int total = AvailableManaPool(s, nullptr).Total();
+    const int stacked = host->tapped ? 0 : total - AvailableManaPool(s, host).Total();
+    int retaps = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != s.active_player_index || p.tapped) { continue; }
+        if (UntapLandSourceDef(s, p) == nullptr) { continue; }
+        retaps += total - AvailableManaPool(s, &p).Total();
+    }
+    const int outside = total - stacked - retaps;
+    const int cost = oga.cost.ManaValue();
+    static const bool dbg = EnvOn("MTG_DBG_JUMBO_OG");
+    if (dbg)
+    {
+        std::fprintf(stderr, "[jumbo-og] T%d land#%d outside=%d stacked=%d retaps=%d cost=%d\n", s.turn_number, land,
+                     outside, stacked, retaps, cost);
+    }
+    if (outside != cost && outside + stacked != cost) { return; }
+    if (TurnSolver::OrderPaysSequentially(s, acts, order)) { return; }
+    std::vector<int> trial = order;
+    const int moved = trial[static_cast<std::size_t>(og)];
+    trial.erase(trial.begin() + og);
+    trial.insert(trial.begin() + wg, moved);
+    if (TurnSolver::OrderPaysSequentially(s, acts, trial)) { order.swap(trial); }
+}
 }
 
 void JumboCactuarProvider::ArrangeCastOrder(const GameState& s,
@@ -24966,9 +25038,11 @@ void JumboCactuarProvider::ArrangeCastOrder(const GameState& s,
 {
     // USER 2026-11-11: Overgrowth never goes before either one-mana Aura ("I don't understand how
     // Overgrowth ever goes before Wild Growth" / "I can't see why we would want Utopia Sprawl after
-    // Overgrowth"), so the rank order of the land Auras is final and nothing here moves them.
+    // Overgrowth") -- except the USER's later narrow breakpoint rule for a same-land Wild Growth
+    // (JumboOvergrowthAtBreakpoint, item 5n).
     JumboChariotAfterFirstUntapper(acts, order);
     JumboSurrakEarlyIfPaid(s, acts, order);
+    if (JumboOvergrowthBreakpointOn()) { JumboOvergrowthAtBreakpoint(s, acts, order); }
 }
 
 int JumboCactuarProvider::ActivationOrderRankForAction(
