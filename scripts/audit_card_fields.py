@@ -94,6 +94,8 @@ MODELED_ELSEWHERE_KEYWORDS = {
     # battlefield keyword tags. Their CardParams paths are reviewed in the
     # Extra Turns analysis ledger.
     "buyback", "miracle", "awaken",
+    "dredge", "mill",  # draw replacement and keyword action, modeled by the draw hook
+    "flashback",  # flashback_cost is a graveyard cast cost; flashed spells exile on leaving the stack.
     "entwine",  # Tooth and Nail's {2} mode cost is modeled by tooth_and_nail.
     "affinity", "treasure",
     # Food: token-type keyword (like treasure) -- Oko's Food-making is modeled structurally
