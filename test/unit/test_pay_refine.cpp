@@ -215,3 +215,40 @@ TEST_CASE("payment: the refine never trades a floated unit for a source where a 
     CHECK(TappedPr(kept, brush));                  // an untapper in the deck: the engine's float stands
     CHECK(kept.floating_mana.Total() >= greedy.floating_mana.Total());
 }
+
+// MTG_PAY_EXCESS_RELEASE (item 5d of the mana-clean chain), the refine's {C} fold. Angels mana-clean s30210844 T3:
+// Plains, Remote Farm ({T}: {W}{W}) and Sol Ring ({T}: {C}{C}) up, Serra the Benevolent {2}{W}{W}. The greedy pays
+// the first {W} off the Plains, the second off the Farm (a {W} floats), the generic drains that {W} and then Sol
+// Ring, so a {C} floats away. The Farm and Sol Ring pay exactly; the Plains given back re-makes a {W}, which covers
+// that {C} in a deck with no {C} pip -- and never in one that has one (deck_spends_c_pip, EDF).
+TEST_CASE("payment: Remote Farm + Sol Ring pay {2}{W}{W} and give the Plains back in a deck with no {C} pip (MTG_PAY_EXCESS_RELEASE, Angels s30210844)")
+{
+    for (int arm : { 0, 1 })
+    {
+        for (bool cpip : { false, true })
+        {
+            CAPTURE(arm);
+            CAPTURE(cpip);
+            GameState s = BoardPr(3);
+            s.deck_spends_c_pip = cpip;
+            int num = 1;
+            const int plains = PutPr(s, num, "Plains");
+            const int farm   = PutPr(s, num, "Remote Farm");
+            const int ring   = PutPr(s, num, "Sol Ring");
+            const ManaCost serra = CardDatabase::Instance().Lookup("Serra the Benevolent")->card.m_mana_cost;
+            GameState g = s;
+            heurarm::t_arm[heurarm::PAY_EXCESS_RELEASE] = static_cast<std::int8_t>(arm);
+            const bool ok = PayPr(g, serra, /*for_creature=*/true, 1);
+            heurarm::t_arm[heurarm::PAY_EXCESS_RELEASE] = -1;
+            REQUIRE(ok);
+            CHECK(TappedPr(g, farm));
+            CHECK(TappedPr(g, ring));
+            if (arm == 1 && !cpip)
+            {
+                CHECK_FALSE(TappedPr(g, plains));
+                CHECK(g.floating_mana.Total() == 0);
+            }
+            else { CHECK(TappedPr(g, plains)); CHECK(g.floating_mana.colorless == 1); }   // the defect, pinned
+        }
+    }
+}
