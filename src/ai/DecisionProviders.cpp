@@ -49011,10 +49011,14 @@ std::vector<int> HydrasProvider::XCandidates(const GameState& s, const CardDefin
 // pool the walk paid from minus every selected action's cost, with NO same-plan producer credit -- so the
 // test can only under-drop (an X whose larger neighbour needs a credited Bloom stays offered), never drop
 // the plan's true maximum. Human play offers every X; MTG_UNPRUNE=xspell lifts the rule (an A/B lever).
+// ONE MORE X STEP costs its MARGINAL generic, not always x_pips: under Gargos (CR 601.2f, the reduction comes
+// off X) the {4} absorbs the first X steps, so Neverwinter X = 1 and X = 2 both cost {G}{G} and X = 1 is below
+// the maximum with NOTHING left over (I2b 2026-11-11; the x_pips test kept it). The marginal is priced the way
+// CollectActions prices every X (printed generic + X * pips - XCastGenericDiscount, floored at 0) on this
+// state, so with no reducer it is exactly x_pips, as before.
 bool HydrasProvider::XCastBelowMax(const GameState& s, const std::vector<Action>& cands,
                                    const std::vector<int>& sel, int j, int pool_total) const
 {
-    (void)s;
     if (HumanPlayActive() || DecisionUnpruned(UnprunedGate::XSpell)) { return false; }
     const Action& c = cands[static_cast<std::size_t>(j)];
     const CardDefinition* d = CritDefOf(c);
@@ -49023,7 +49027,10 @@ bool HydrasProvider::XCastBelowMax(const GameState& s, const std::vector<Action>
     int spent = 0;
     for (int k : sel) { spent += static_cast<int>(cands[static_cast<std::size_t>(k)].cost.ManaValue()); }
     const int pips = std::max(1, static_cast<int>(d->card.m_mana_cost.x_pips));
-    return pool_total - spent >= pips;
+    const int printed = EffectiveSpellCost(*d, s).generic;
+    auto generic_at = [&](int x) { return std::max(0, printed + x * pips - XCastGenericDiscount(*d, s, x)); };
+    const int marginal = generic_at(c.chosen_x + 1) - generic_at(c.chosen_x);
+    return pool_total - spent >= marginal;
 }
 
 // VORACIOUS HYDRA'S FIGHT MODE IS DOMINATED (sound, default ON). Its modal ETB is "double the +1/+1 counters on

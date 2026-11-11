@@ -592,9 +592,9 @@ struct CardParams
     bool upkeep_double_self_counters = false;
     // Voracious Hydra: "When this creature enters, choose one -- * Double the number of +1/+1 counters on
     // this creature. * This creature fights target creature you don't control." Both set = the modal
-    // trigger (ResolveVoraciousEtb). The mode and the fight target ride the cast's tutor_target pin
-    // (VoraciousPin*): "" = unpinned (provider default / human prompt), "VD" = double, "VF<n>" = fight
-    // the creature numbered n.
+    // trigger (the Voracious block in FireOwnEtbTriggersBody, SpellEffects.h). The mode and the fight
+    // target ride the cast's tutor_target pin (VoraciousPin*): "VF<n>" = fight the creature numbered n,
+    // anything else (incl. unpinned) = double; human play is asked at resolution.
     bool etb_modal_double_self_counters = false;
     bool etb_modal_fight_opp_creature   = false;
     // Steelbane Hydra: "{2}{G}, Remove a +1/+1 counter from this creature: Destroy target artifact or

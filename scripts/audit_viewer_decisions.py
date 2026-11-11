@@ -937,6 +937,7 @@ INERT_PARAMS = {
     "horn_draw_on_land_play": "mandatory draw for each Horn when a land is played; no player choice",
     "mine_extra_draw": "mandatory additional draw at each player's draw step while untapped; no player choice",
     "land_search_basic_only": "search FILTER ('basic land card', the Basic supertype) -- legality, not a choice; the pick rides tutor_etb",
+    "land_search_subtype": "search FILTER (Nature's Lore / Three Visits: 'a Forest card', the Forest land SUBTYPE, basic or not) -- legality, not a choice; the pick rides tutor_etb (Hydras I2b 2026-11-11; pending USER sign-off)",
     "land_search_share_land_type": "search FILTER (Myriad Landscape: the picks share a land type) -- legality, not a choice; the second tutor_etb prompt offers only matching basics",
     "land_search_to_hand": "DESTINATION split (Cultivate: one to the battlefield, one to hand) -- the human's prompt order IS the split (prompt 1 = battlefield, prompt 2 = hand); the search fans every ordered split",
     "land_search_tapped": "static entry state of the found land(s) ('onto the battlefield tapped') -- not a choice",

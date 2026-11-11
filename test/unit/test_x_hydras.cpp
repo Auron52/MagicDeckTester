@@ -10,7 +10,10 @@
 //  5. Primordial's upkeep doubling in both worlds; Neverwinter's dice are a prefix stream shared by both worlds.
 //  6. Voracious: double in both worlds, the fight pin, and the fight variants (Generic emits, Hydras prunes).
 //  7. Steelbane: the activation's targets, its resolution, and the HydrasProvider prune.
-//  8. HydrasProvider: X = 0 prune for 0/0 bodies, Neverwinter's maximum-X rule.
+//  8. HydrasProvider: X = 0 prune for 0/0 bodies, Neverwinter's maximum-X rule (incl. under Gargos, where the
+//     next X step can cost nothing).
+//  9. (I2b) Every affordable X is reachable after a same-turn Vernal Bloom / Gauntlet / Nissa / land-put / Gargos.
+// 10. (I2b) Voracious's fight variant applies in the rollout exactly as the executor's fight pin resolves.
 #include <doctest/doctest.h>
 
 #include "ai/AIEngine.h"
@@ -457,4 +460,166 @@ TEST_CASE("HydrasProvider: X = 0 dropped for a doomed 0/0, kept for Voracious an
     pr.cost.generic = 1;
     pr.chosen_x = 1;
     CHECK(!hp.XCastBelowMax(g, std::vector<Action>{ pr }, { 0 }, 0, 6));
+}
+
+// ---- EVERY AFFORDABLE X IS REACHABLE AFTER A SAME-TURN PRODUCER (I2b, 2026-11-11) -------------------------
+// The brief's completeness requirement for the X Hydras: a line that first casts something that makes the
+// Hydra's X bigger THIS TURN -- a land-tap doubler (Vernal Bloom, Gauntlet of Power), a land-put under a live
+// doubler (Nature's Lore), or Gargos (601.2f: its {4} comes off X) -- and then casts the Hydra at the largest X
+// that line can pay must be an enumerated plan, and applying it must put exactly that many counters on the
+// Hydra. Each case sizes the board so that the line's X is strictly larger than anything the pre-cast board
+// alone could pay for the Hydra (or, for Gargos, larger than the board pays after Gargos's own cost without
+// the reduction), so an enumerator that sized X off the root board (defect 6) or priced X before the
+// reduction (601.2f) fails here. Unlimited enumeration (EnumerateMainPlansExhaustive, no budget).
+namespace
+{
+bool LineReachesX(const GameState& s, const std::vector<std::string>& first, const std::string& hydra,
+                  int hydra_number, int want_x)
+{
+    bool truncated = false;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlansExhaustive(s, true, nullptr, &truncated))
+    {
+        int x = -1;
+        std::size_t have = 0;
+        for (const Action& a : p.actions)
+        {
+            if (a.card_name.str() == hydra && a.kind == Action::Kind::CastFromHand) { x = a.chosen_x; }
+            for (const std::string& f : first) { if (a.card_name.str() == f) { ++have; } }
+        }
+        if (x != want_x || have != first.size()) { continue; }
+        GameState t = s;
+        TurnSolver::ApplyPlan(t, p, true);
+        INFO("line: ", hydra, " X = ", want_x);
+        CHECK(CountersXh(t, hydra_number) == want_x);
+        return CountersXh(t, hydra_number) == want_x;
+    }
+    return false;
+}
+}   // namespace
+
+TEST_CASE("X Hydras: the largest X is reachable after a same-turn Vernal Bloom, Gauntlet, land-put or Gargos")
+{
+    LoadXh();
+    SUBCASE("Vernal Bloom then Primordial: 10 Forests pay X = 8 alone, X = 10 after the Bloom")
+    {
+        GameState s = FreshXh();
+        ForestsXh(s, 10);
+        s.players[0].hand.push_back(CardXh("Vernal Bloom", 1));
+        s.players[0].hand.push_back(CardXh("Primordial Hydra", 2));
+        CHECK(LineReachesX(s, { "Vernal Bloom" }, "Primordial Hydra", 2, 10));
+    }
+    SUBCASE("Gauntlet of Power (green) then Primordial: 12 Forests pay X = 10 alone, X = 12 after it")
+    {
+        GameState s = FreshXh();
+        ForestsXh(s, 12);
+        s.players[0].hand.push_back(CardXh("Gauntlet of Power", 1));
+        s.players[0].hand.push_back(CardXh("Primordial Hydra", 2));
+        CHECK(LineReachesX(s, { "Gauntlet of Power" }, "Primordial Hydra", 2, 12));
+    }
+    SUBCASE("Nissa (her Forest static) then Primordial: 12 Forests pay X = 10 alone, X = 12 after her")
+    {
+        GameState s = FreshXh();
+        ForestsXh(s, 12);
+        s.players[0].hand.push_back(CardXh("Nissa, Who Shakes the World", 1));
+        s.players[0].hand.push_back(CardXh("Primordial Hydra", 2));
+        CHECK(LineReachesX(s, { "Nissa, Who Shakes the World" }, "Primordial Hydra", 2, 12));
+    }
+    SUBCASE("Vernal Bloom then Neverwinter ({X}{X}): 10 Forests pay X = 4 alone, X = 5 after the Bloom")
+    {
+        GameState s = FreshXh();
+        ForestsXh(s, 10);
+        s.players[0].hand.push_back(CardXh("Vernal Bloom", 1));
+        s.players[0].hand.push_back(CardXh("Neverwinter Hydra", 2));
+        bool truncated = false;
+        bool seen = false;
+        for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlansExhaustive(s, true, nullptr, &truncated))
+        {
+            bool bloom = false; int x = -1;
+            for (const Action& a : p.actions)
+            {
+                if (a.card_name.str() == "Vernal Bloom") { bloom = true; }
+                if (a.card_name.str() == "Neverwinter Hydra") { x = a.chosen_x; }
+            }
+            if (bloom && x == 5) { seen = true; break; }
+        }
+        CHECK(seen);
+    }
+    SUBCASE("Nature's Lore under Bloom + Gauntlet then Primordial: 4 Forests pay X = 10, the fetched Forest X = 11")
+    {
+        GameState s = FreshXh();
+        ForestsXh(s, 4);
+        PutXh(s, "Vernal Bloom", 1);
+        const int g = PutXh(s, "Gauntlet of Power", 3);
+        s.battlefield[static_cast<std::size_t>(g)].chosen_color = static_cast<int8_t>(Color::Green);
+        for (int i = 0; i < 6; ++i) { s.players[0].library.push_back(CardXh("Forest", 200 + i)); }
+        s.players[0].hand.push_back(CardXh("Nature's Lore", 4));
+        s.players[0].hand.push_back(CardXh("Primordial Hydra", 2));
+        CHECK(LineReachesX(s, { "Nature's Lore" }, "Primordial Hydra", 2, 11));
+    }
+    SUBCASE("Gargos then Primordial: 8 Forests leave 2 after Gargos, and its {4} makes that X = 4")
+    {
+        GameState s = FreshXh();
+        s.deck_has_cost_reducer = true;
+        ForestsXh(s, 8);
+        s.players[0].hand.push_back(CardXh("Gargos, Vicious Watcher", 1));
+        s.players[0].hand.push_back(CardXh("Primordial Hydra", 2));
+        CHECK(LineReachesX(s, { "Gargos, Vicious Watcher" }, "Primordial Hydra", 2, 4));
+    }
+}
+
+TEST_CASE("HydrasProvider: Neverwinter's maximum X counts Gargos's {4} (the next X step can be free)")
+{
+    LoadXh();
+    const HydrasProvider hp;
+    GameState g = FreshXh();
+    g.deck_has_cost_reducer = true;
+    PutXh(g, "Gargos, Vicious Watcher", 1);
+    ForestsXh(g, 2);
+    g.players[0].hand.push_back(CardXh("Neverwinter Hydra", 3));
+    const CardDefinition& nwd = DefXh("Neverwinter Hydra");
+    // Two Forests: X = 1 ({2} - 4) and X = 2 ({4} - 4) both cost {G}{G}; X = 3 costs {2}{G}{G}.
+    const std::vector<Action> acts = TurnSolver::CollectActionsForTest(g, true);
+    const Action* x1 = CastAt(acts, "Neverwinter Hydra", 1);
+    const Action* x2 = CastAt(acts, "Neverwinter Hydra", 2);
+    REQUIRE(x1 != nullptr);
+    REQUIRE(x2 != nullptr);
+    CHECK(x1->cost.ManaValue() == 2);
+    CHECK(x2->cost.ManaValue() == 2);
+    CHECK(CastAt(acts, "Neverwinter Hydra", 3) == nullptr);
+    std::vector<Action> cands{ *x1 };
+    cands[0].def = &nwd;
+    CHECK(hp.XCastBelowMax(g, cands, { 0 }, 0, 2));     // X = 2 is free on top: below the maximum
+    cands[0] = *x2;
+    cands[0].def = &nwd;
+    CHECK(!hp.XCastBelowMax(g, cands, { 0 }, 0, 2));    // X = 3 needs {2} more: the maximum
+}
+
+TEST_CASE("Voracious Hydra lockstep: the rollout's fight variant matches the executor's fight pin")
+{
+    LoadXh();
+    // Same board as the executor fight case above: the 3/4 Hydra fights an opponent 1/2, kills it, keeps
+    // its 3 counters (not doubled) and carries 1 damage.
+    GameState s = FreshXh();
+    ForestsXh(s, 5);
+    const int oi = PutXh(s, "Forest", 50, /*controller=*/1);
+    s.battlefield[static_cast<std::size_t>(oi)].card = CardXh("Voracious Hydra", 50);
+    PutPlusCounters(s, s.battlefield[static_cast<std::size_t>(oi)], 1);
+    s.players[0].hand.push_back(CardXh("Voracious Hydra", 1));
+    bool truncated = false;
+    bool seen = false;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlansExhaustive(s, true, nullptr, &truncated))
+    {
+        const Action* va = nullptr;
+        for (const Action& a : p.actions) { if (a.card_name.str() == "Voracious Hydra") { va = &a; } }
+        if (va == nullptr || va->chosen_x != 3 || VoraciousPinFightTarget(va->tutor_target.str()) != 50) { continue; }
+        GameState t = s;
+        TurnSolver::ApplyPlan(t, p, true);
+        CHECK(CountersXh(t, 1) == 3);
+        CHECK(ByNumXh(t, 50) == nullptr);
+        REQUIRE(ByNumXh(t, 1) != nullptr);
+        CHECK(ByNumXh(t, 1)->damage == 1);
+        seen = true;
+        break;
+    }
+    CHECK(seen);
 }
