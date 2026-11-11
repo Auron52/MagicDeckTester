@@ -165,6 +165,16 @@ profile"; mullgen.sh run, alone on the box). Cron 7869914f (session-only) stays 
 3. *"I geuss ideally we would also split Squadron Hawk with targets which should be main 1 vs Squadron Hawk without
    targets which should be main 2."*
 
+### USER rulings (2026-11-11, verbatim)
+
+4. *"Jitte-gain makes sense if it can hit breakpoints."* -- read as: Umezawa's Jitte's gain-2 mode is ON for this deck
+   (relaxing the 2026-08-14 "+2/+2 only" doctrine here), offered while the counters' gain can carry life across a
+   threshold an own card reads (Serra Ascendant 30, Speaker of the Heavens start+7); and Speaker's gate becomes a
+   mid-main BREAKPOINT so a gain re-opens the menu for the Angel. Both readings are being built (agent brief 11-11).
+5. *"Oh right. I forgot there was a death trigger on the animals. We can leave that for now, as long as we are below
+   30 life."* -- Curious Farm Animals' sacrifice stays on the menu below 30 life and is pruned at 30+. Kami's prune
+   is unchanged (USER ruling 1).
+
 Reading taken (surfaced to the user): Speaker narrow M2 APPROVED. Kami of False Hope / Curious Farm Animals sac
 abilities PRUNED from the autonomous menu (both mains). The "almost everything to main 2" split is an EXPERIMENT to
 build and A/B (Main 1 = Hawk/Ranger while they have a fetch target -- the same "adds white cards to hand" reading
