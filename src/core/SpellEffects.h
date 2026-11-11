@@ -48706,7 +48706,7 @@ inline bool CycleFreeCastTakeDominated(const GameState& s, int controller, const
 // in a restrictor's budget for it. Null = no Remand option.
 // `provider_gate` = consult DecisionProvider::AdmitRemandOnFreeCast. It is a SEARCH prune (Cyclone: USER
 // 2026-10-27, "I would probably heuristically prune remanding either Ulamog"), so HUMAN PLAY passes false: a
-// human is offered every legal Remand (USER 2026-11-11, seed 23746: "Not able to remand cycled cards").
+// human is offered every legal Remand (another player's viewer report relayed 2026-11-11, seed 23746: "Not able to remand cycled cards").
 inline const CardDefinition* CycleFreeCastRemand(const GameState& s, int controller, const CardDefinition& hit,
                                                  const ManaPool& pool, bool provider_gate = true)
 {

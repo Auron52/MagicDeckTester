@@ -1506,12 +1506,15 @@ a1937cded0ab6f58, d5 9bd0e14ec876faa9, critter d0 ccb5b47d5ef529c9, melira d0 0f
 not in the suite, so nothing else could move. Not accepted. Unit: mtg-test 1512 / 1512 (13 new wish cases, also
 green under `MTG_UNPRUNE=tutor` and `MTG_UNPRUNED=1`); scenarios 228 / 228.
 
-### USER reports on seed 23742 (2026-11-11) -- two wish amendments, DEFAULT ON
+### Other player's reports on seed 23742 (2026-11-11) -- two wish amendments, DEFAULT ON, AWAITING THE USER
 
-The USER's viewer reports, verbatim: "Living Wish suggested getting Arbor Elf instead of a combo piece" (T2: two
+Another player's viewer reports (NOT the USER's; relayed by the USER), verbatim: "Living Wish suggested getting Arbor Elf instead of a combo piece" (T2: two
 Forests + Wild Growth = 3 projected mana; Accomplished Alchemist and two Staffs of Domination in hand) and, later,
 "suggested getting Scholar of Atheros instead of Galvanic Alchemist" (T5: Utopia Sprawl, Brindle Boar, Living Wish
-off a board with the Alchemist in play and a Staff in hand). Asked to fix them: "Okay, let's try to fix them."
+off a board with the Alchemist in play and two Staffs of Domination in HAND, neither castable that turn: the line
+spends all six mana). The USER, on the reports: "Okay, let's try to fix them." The Wish buckets are the USER's own
+rule (2026-10-20), so both amendments change a USER-owned rule on the strength of another player's preference; the
+other player gave no reasons, so the readings below are inferred.
 
 * `MTG_AA_WISH_COMBO_FIRST` (default ON; supersedes the 2026-11-10 `MTG_AA_WISH_ALCH_FIRST`, which only covered a
   missing Alchemist). At exactly 3 projected mana every lacking COMBO bucket (Alchemist, Lifegain, Untap,
@@ -1527,7 +1530,7 @@ off a board with the Alchemist in play and a Staff in hand). Asked to fix them: 
   and 16x budget). d0 improves: smoke 6.2950 -> 6.2780, regression 6.3310 -> 6.2830. Strict references 0 drift.
   Both GT tiers accepted with notes. Unit cases: "COMBO FIRST at three mana -- seed 23742 T2" and "a mana-neutral
   Staff loop leaves Untap lacking -- seed 23742 T5". `=0` on either flag restores the prior reading.
-* OPEN for the USER: these are readings of two reports, generalised -- confirm (a) combo before mana at exactly 3
+* OPEN for the USER (the rule's owner): these are inferred readings of another player's two reports, generalised -- confirm (a) combo before mana at exactly 3
   mana in every state, not only with the Alchemist in hand, and (b) the Staff-at-4-life reading of "instead of
   Galvanic Alchemist".
 

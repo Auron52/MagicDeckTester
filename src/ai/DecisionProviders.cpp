@@ -49433,7 +49433,7 @@ static std::vector<std::string> AaWishBucketSet(const GameState& s, int controll
     const bool amend_blue  = heurarm::Flag(heurarm::AA_WISH_BLUE, s_blue_env);
     const bool amend_truf  = heurarm::Flag(heurarm::AA_WISH_TRUFFLE, s_truf_env);
     const bool witch_win     = AaWishWitchWinOn();
-    // COMBO PIECES FIRST AT THREE MANA (USER report 2026-11-11, AA seed 23742 T2: "Living Wish suggested getting
+    // COMBO PIECES FIRST AT THREE MANA (another player's viewer report relayed 2026-11-11, AA seed 23742 T2: "Living Wish suggested getting
     // Arbor Elf instead of a combo piece"; MTG_AA_WISH_COMBO_FIRST, DEFAULT ON, =0 -> the 2026-11-10 ALCH_FIRST
     // reading below). One mana short of the Alchemist's four, every lacking combo bucket (Alchemist, Lifegain,
     // Untap, Wincon) ranks AHEAD of the mana bucket; the mana bucket is still offered after them (an Elf can be
@@ -49447,7 +49447,7 @@ static std::vector<std::string> AaWishBucketSet(const GameState& s, int controll
     // A held Witch fills Untap and Wincon/Draw (2026-10-21). =0 only: the 4 life rule (Untap at a held gain >= 5)
     // and no Wincon.
     const bool witch_untaps  = c.witch && (witch_win || c.gain_total >= 5);
-    // A MANA-NEUTRAL UNTAPPER IS NOT ONE (USER report 2026-11-11, AA seed 23742 T5: "suggested getting Scholar of
+    // A MANA-NEUTRAL UNTAPPER IS NOT ONE (another player's viewer report relayed 2026-11-11, AA seed 23742 T5: "suggested getting Scholar of
     // Atheros instead of Galvanic Alchemist"; MTG_AA_WISH_UNTAP_NET, DEFAULT ON, =0 -> any held untapper fills
     // Untap). The Alchemist taps for X = the life gained; an untap loop that costs >= X makes no mana. Staff of
     // Domination's is {3} + {1} (its own untap) = 4, so with only Brindle Boar's 4 held it is neutral and Untap is

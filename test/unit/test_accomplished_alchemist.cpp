@@ -2258,7 +2258,7 @@ TEST_CASE("Wish buckets: held Staff makes missing Alchemist urgent at three mana
     ExpectWishAa(s, { "Accomplished Alchemist", "Brindle Boar", "Arbor Elf", "Forest", "Island" });
 }
 
-// USER report 2026-11-11, AA seed 23742 T2: "Living Wish suggested getting Arbor Elf instead of a combo piece".
+// another player's viewer report relayed 2026-11-11, AA seed 23742 T2: "Living Wish suggested getting Arbor Elf instead of a combo piece".
 // Two Forests + Wild Growth (3 mana), Alchemist and two Staffs in hand: the Boar ranks ahead of the Elf.
 TEST_CASE("Wish buckets: COMBO FIRST at three mana -- seed 23742 T2, the Boar ahead of Arbor Elf")
 {
@@ -2274,7 +2274,7 @@ TEST_CASE("Wish buckets: COMBO FIRST at three mana -- seed 23742 T2, the Boar ah
     ExpectWishAa(two, { "Arbor Elf", "Forest", "Island", "Brindle Boar" });
 }
 
-// USER report 2026-11-11, AA seed 23742 T5: "suggested getting Scholar of Atheros instead of Galvanic Alchemist".
+// another player's viewer report relayed 2026-11-11, AA seed 23742 T5: "suggested getting Scholar of Atheros instead of Galvanic Alchemist".
 // Staff of Domination's untap loop ({3} + its own {1}) is mana-neutral at X = 4 (Brindle Boar), so it does not
 // fill Untap there; Galvanic Alchemist's {2}{U} nets +1. With 6 life (Nourish) the Staff nets and Scholar stands.
 TEST_CASE("Wish buckets: a mana-neutral Staff loop leaves Untap lacking -- seed 23742 T5, Galvanic not Scholar")

@@ -276,7 +276,7 @@ hand (cycle it again); Emrakul (cant_be_countered) resolves and the Remand is a 
 Ulamog by `DecisionProvider::AdmitRemandOnFreeCast` (generic hook, default admit all; CycloneProvider:
 refuse a counterable spell with a TARGETED cast trigger -- properties, not names). The prune is the SEARCH's only:
 since 2026-11-11 HUMAN PLAY skips it (`CycleFreeCastRemand(..., provider_gate=false)` under the free-cast chooser),
-after the USER's viewer report on seed 23746 ("Not able to remand cycled cards": a cycled Street Wraith walked to
+after another player's viewer report on seed 23746 (relayed by the USER) ("Not able to remand cycled cards": a cycled Street Wraith walked to
 Ulamog, the Infinite Gyre with Remand in hand and no Remand prompt). With two Remands the chain prompt still stands
 on its own when the single Remand is declined on a provider-refused hit. HAND-CAST self-Remand:
 `DecisionProvider::AdmitRemandRider` (default admit all) read in CollectActions' remand post-pass;
