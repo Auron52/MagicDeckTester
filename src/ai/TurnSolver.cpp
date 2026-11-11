@@ -81087,7 +81087,31 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             else if (a.kind == Action::Kind::ActivateVial) { puts.push_back(a); puts_at.push_back(ai); }
             else { fixed.push_back(a); }
         }
-        if (reorder.size() < 2) { if (!attach_order_illegal(p)) { ordered.push_back(std::move(p)); } continue; }
+        if (reorder.size() < 2)
+        {
+            if (attach_order_illegal(p)) { continue; }
+            // A MANA-COSTED SUSPEND (Search for Tomorrow {G}, Profane Tutor {1}{B}, Rift Bolt {R}) is paid by
+            // the pre-cast pass of BOTH apply worlds, ahead of every cast, while the flat pools price the
+            // plan as a bag -- so "suspend Search for Tomorrow, Three Visits" off two Forests passes them
+            // (Visits' fetched Forest would pay the suspend) yet the realised order spends a Forest on the
+            // suspend and drops Visits (Hydras sweep, seed 50004 T2). With one hand cast there is no ordering
+            // to permute, so the drop probe below never ran and the plan read `not_verified`. Probe it here
+            // once, the same way, so the menu says `known_drops`. Viewer-only (HumanPlayActive); a plan
+            // without such a suspend is pushed exactly as before.
+            if (g_order_drop_label && HumanPlayActive() && reorder.size() == 1
+                && std::any_of(p.actions.begin(), p.actions.end(), [](const Action& a)
+                   { return a.kind == Action::Kind::Suspend && a.cost.ManaValue() > 0; }))
+            {
+                std::vector<std::string> dropped;
+                g_enum_drop_names = &dropped;
+                GameState copy = state;
+                ApplyPlanDirect(copy, p, is_pre_combat);
+                g_enum_drop_names = nullptr;
+                p.would_drop = std::move(dropped);
+            }
+            ordered.push_back(std::move(p));
+            continue;
+        }
 
         // Candidate orderings to try. Dragonstorm (WantsCastOrderingSearch) uses the TARGETED generator
         // (cheapest-first chain + Irencrag-before-finisher + Medallion-position + Desperate/Seething splice
