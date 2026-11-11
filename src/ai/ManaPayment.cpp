@@ -2214,14 +2214,18 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                         && GrantedBodyCanTap(mana_grant, p, state.battlefield))
                     { def = &GrantFaceFor(mana_grant, p); }
                 }
-                std::optional<CardDefinition> island_def;
+                // A unique_ptr, NOT std::optional<CardDefinition>: GCC zero-fills an empty optional's ~10.8 KB
+                // payload at construction, and this runs once per battlefield permanent per pip on every
+                // payment (perf, Hydras seed 8781 gi 1774: memset 14% of the game). Built only for an
+                // Islandized land; byte-identical.
+                std::unique_ptr<CardDefinition> island_def;
                 if (def != nullptr && LandTypeChangedToIsland(state, p))
                 {
-                    island_def.emplace(*def);
+                    island_def = std::make_unique<CardDefinition>(*def);
                     island_def->params = CardParams{};
                     island_def->params.produces = { Color::Blue };
                     island_def->tmpl = CardTemplate::BasicLand;
-                    def = &*island_def;
+                    def = island_def.get();
                 }
                 // DO NOT BAIL ON A MISSING DEFINITION HERE. TAPPING needs one (the produces list,
                 // the filter params); EATING does not -- the outlet is the permission and the body is

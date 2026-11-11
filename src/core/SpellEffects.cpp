@@ -4600,14 +4600,18 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
         // CR 305.7: an Islandized land loses its printed rules text, including all
         // alternate mana modes, restrictions and tap costs. Use a plain blue source
         // for this payment branch; its live attached Aura bonus remains on the permanent.
-        std::optional<CardDefinition> island_def;
+        // A unique_ptr, NOT std::optional<CardDefinition>: GCC zero-fills an empty optional's ~10.8 KB
+        // payload at construction, and this runs once per battlefield permanent per pip on every
+        // payment (perf, Hydras seed 8781 gi 1774: memset 14% of the game). Built only for an
+        // Islandized land; byte-identical.
+        std::unique_ptr<CardDefinition> island_def;
         if (LandTypeChangedToIsland(state, state.battlefield[i]))
         {
-            island_def.emplace(*def);
+            island_def = std::make_unique<CardDefinition>(*def);
             island_def->params = CardParams{};
             island_def->params.produces = { Color::Blue };
             island_def->tmpl = CardTemplate::BasicLand;
-            def = &*island_def;
+            def = island_def.get();
         }
         const bool is_src = (def->tmpl == CardTemplate::BasicLand)
                          || (def->tmpl == CardTemplate::ManaDork && CanTapNow(state.battlefield[i], state.battlefield))
