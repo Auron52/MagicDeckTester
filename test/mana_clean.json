@@ -6228,6 +6228,50 @@
      "seed": 30030000,
      "src": "5c3d776901408a93237dc353e0067bf0d37918c6",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 68,
+      "APPLY-DROP-ORDER": 7,
+      "CONTINUATION-DIFFERS": 208,
+      "DOMINATED-LAND": 11105,
+      "DROP-COVERED": 685,
+      "ENUM-GAP": 3,
+      "HIDDEN-INFO": 2,
+      "ORACLE-GAP": 1,
+      "PHANTOM": 18388
+     },
+     "commit": "496b4ae3507f0659443a187aa49b39a0610c1bd7",
+     "date": "2026-11-11T08:11:49Z",
+     "decisions": 42819,
+     "deck": "decks/Shadowborn Apostle/Shadowborn Apostle.cod",
+     "deck_sha": "a23edb97dcaeb1e61888de6616f4f35299abf43d",
+     "game_index": 35000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 79,
+     "life_breakpoints": [],
+     "ms_off": 3623198,
+     "ms_on": 4667557,
+     "report": "logs/mana_clean/sb-ritualstone5k-20261111/report.md",
+     "run": "sb-ritualstone5k-20261111",
+     "seed": 30035000,
+     "src": "f055ad5ee7e1361b8228ec7357843cfaf4f222de",
+     "verdict": "issues"
     }
    ]
   },

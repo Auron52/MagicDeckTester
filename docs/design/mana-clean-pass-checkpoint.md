@@ -155,6 +155,20 @@ Source of the work: `logs/mana_clean/lastweek-20261110-shadowborn-order/report.m
   Sire of Insanity placed before the Apostle + Thrumming Stone + Ritual chain is dropped; after the ripple chain it pays
   (Lotus {R} + a Swamp, keep-floating). Proposal for review: rank Sire after Thrumming Stone and Dark Ritual when the
   line holds both. Not measured.
+* **FIXED (item 5j): USER ruling 2026-11-11, Dark Ritual vs Thrumming Stone** (496b4ae35). `ShadowbornProvider::
+  ArrangeCastOrder` moves the Ritual(s) to just after the Stone when `TurnSolver::OrderPaysSequentially` pays that order;
+  else Ritual keeps rank 1. The walk resolves a ritual off its card, so ripple-revealed (chain) mana never counts. ONE
+  arrangement per line; a unit test shows the plan count is unchanged (14/22/24 on 4/6/7 Swamps, arm on and off).
+  `MTG_SB_RITUAL_AFTER_STONE`, default ON. The Culling-victim placement is unchanged. The USER's earlier rule (a hand
+  Apostle as Culling's victim when none is on the battlefield) still holds through `SacCostVictimVariant`. Repro s30033099 T6: MISS 0.
+  Tiers: only Shadowborn rows moved. Smoke d5 4.81->4.80, d3 =, d0 7.377->7.388, 2HG d3 5.28->5.30. All 5 regression rows
+  improved (d5 s2002 4.813->4.780). All 4 searched slower games are churn (recover at 4x/16x). Held-out A/B off->on:
+  d5 b20 7300001 x3000 4.8013->4.7817, d3 b10 7400001 x3000 4.8803->4.8610, 2HG d3 b10 7500001 x2000 5.0565->5.0355.
+  GT accepted. After rebasing onto 644619789, smoke shows alchemist2hg_smoke_d5 with the same score and a new digest.
+  That comes from that Alchemist commit, so it is not accepted here.
+* **Gate `sb-ritualstone5k-20261111` (src f055ad5ee7e1, PGO, games 35000-39999): 79 issues** (was 210): APPLY-DROP-ORDER 7
+  (was 163), APPLY-DROP 68 (top x28 T4 m2 Apostle + Culling + Intent + Stone; x24 T5 m2 Sire + Intent + Apostle),
+  ENUM-GAP 3, ORACLE-GAP 1. Play identity with the oracle off: byte-identical.
 * Note: after rebasing onto the Gods merge (f90930c9f), smoke shows 2 same-score play-digest changes
   (bruna2hg_smoke_d5_s1001, landfall_smoke_d5_s1001). They reproduce byte-for-byte with the ORIGIN tip's binary (no
   commit of this chain), so they come from the Gods merge; not accepted here -- owner: the Gods session.
