@@ -4,10 +4,13 @@
   "valueleaf": "em:63f552c7e70c9e1c2c09"
  },
  "deck": "hinata2",
+ "detail": "mulligan: TRADE -- quality not worse (new-vs-old -0.081214 t) but the new table costs MORE (cost 1.064x (se 0.009, 14 seeds)): the USER's call; left live on the result branch, NOT landed; valueleaf: ADOPTED (live sidecar's eval_model replaced)",
+ "finished": "2026-11-11T16:15:45Z",
  "frozen": "ae41aaad0b9bf6051bd86c5baa9373aec10f81cb",
  "head": "4a5fba5db48a0fe1ec506e47606c19325b4eb582",
  "heartbeat": "2026-11-11T15:57:58Z",
  "host": "8854e545ddab",
+ "result_branch": "artifact-refresh/hinata2-20261111-1615",
  "resumed": "2026-11-11T15:37:49Z",
  "run_id": "hinata2-MagicDeckTester2-76d2cc-20261025T010853",
  "score": 1.089,
@@ -17,6 +20,6 @@
   "valueleaf"
  ],
  "started": "2026-10-25T01:08:53Z",
- "state": "running",
+ "state": "done",
  "worker": "MagicDeckTester2-76d2cc"
 }
